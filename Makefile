@@ -10,7 +10,7 @@ APP_URL ?= http://localhost:18090
 export CLUSTER_NAME
 export IMAGE_NAME
 
-.PHONY: help setup env sync doctor dev lint format test check build-image k8s-up k8s-deploy k8s-status k8s-down k8s up status down api-health api-ping urls open-docs clean
+.PHONY: help setup env sync doctor dev lint format test check docker-build docker-up docker-dev docker-test docker-shell docker-logs docker-down build-image k8s-up k8s-deploy k8s-status k8s-down k8s up status down api-health api-ping urls open-docs clean
 
 help: ## 사용 가능한 공통 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,6 +44,27 @@ test: ## 린트와 테스트 실행
 	bash scripts/test.sh
 
 check: doctor test ## 개발 전/커밋 전 전체 점검
+
+docker-build: ## Docker 개발 이미지 빌드
+	docker compose build api
+
+docker-up: ## Docker 개발 서버 백그라운드 실행
+	docker compose up -d api
+
+docker-dev: ## Docker 개발 서버 포그라운드 실행
+	docker compose up api
+
+docker-test: ## Docker 안에서 린트와 테스트 실행
+	docker compose run --rm api bash scripts/test.sh
+
+docker-shell: ## Docker 개발 컨테이너 셸 접속
+	docker compose run --rm api bash
+
+docker-logs: ## Docker 개발 서버 로그 확인
+	docker compose logs -f api
+
+docker-down: ## Docker 개발 서버 종료
+	docker compose down
 
 build-image: ## 로컬 Docker 이미지 빌드
 	bash scripts/build-image.sh
