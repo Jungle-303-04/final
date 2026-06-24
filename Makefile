@@ -6,6 +6,8 @@ CLUSTER_NAME ?= final-kubernetes
 IMAGE_NAME ?= final-api:local
 DEV_URL ?= http://localhost:8000
 APP_URL ?= http://localhost:18090
+COMPOSE_FILE ?= deploy/docker/compose.yaml
+DOCKER_COMPOSE := docker compose --env-file .env -f $(COMPOSE_FILE)
 
 export CLUSTER_NAME
 export IMAGE_NAME
@@ -45,26 +47,26 @@ test: ## 린트와 테스트 실행
 
 check: doctor test ## 개발 전/커밋 전 전체 점검
 
-docker-build: ## Docker 개발 이미지 빌드
-	docker compose build api
+docker-build: env ## Docker 개발 이미지 빌드
+	$(DOCKER_COMPOSE) build api
 
-docker-up: ## Docker 개발 서버 백그라운드 실행
-	docker compose up -d api
+docker-up: env ## Docker 개발 서버 백그라운드 실행
+	$(DOCKER_COMPOSE) up -d api
 
-docker-dev: ## Docker 개발 서버 포그라운드 실행
-	docker compose up api
+docker-dev: env ## Docker 개발 서버 포그라운드 실행
+	$(DOCKER_COMPOSE) up api
 
-docker-test: ## Docker 안에서 린트와 테스트 실행
-	docker compose run --rm api bash scripts/test.sh
+docker-test: env ## Docker 안에서 린트와 테스트 실행
+	$(DOCKER_COMPOSE) run --rm api bash scripts/test.sh
 
-docker-shell: ## Docker 개발 컨테이너 셸 접속
-	docker compose run --rm api bash
+docker-shell: env ## Docker 개발 컨테이너 셸 접속
+	$(DOCKER_COMPOSE) run --rm api bash
 
-docker-logs: ## Docker 개발 서버 로그 확인
-	docker compose logs -f api
+docker-logs: env ## Docker 개발 서버 로그 확인
+	$(DOCKER_COMPOSE) logs -f api
 
-docker-down: ## Docker 개발 서버 종료
-	docker compose down
+docker-down: env ## Docker 개발 서버 종료
+	$(DOCKER_COMPOSE) down
 
 build-image: ## 로컬 Docker 이미지 빌드
 	bash scripts/build-image.sh
@@ -121,3 +123,4 @@ open-docs: ## API 문서 브라우저 열기
 clean: ## Python 캐시와 테스트 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
 	find app tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find . -name .DS_Store -delete
