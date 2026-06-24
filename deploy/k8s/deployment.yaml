@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: final-api
+  labels:
+    app.kubernetes.io/name: final-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: final-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: final-api
+    spec:
+      containers:
+        - name: final-api
+          image: final-api:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: APP_ENV
+              value: local-kubernetes
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
