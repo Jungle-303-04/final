@@ -6,7 +6,7 @@
 
 - `main`: 최종 안정 브랜치입니다. 직접 push하지 않습니다.
 - `dev`: 팀 통합 브랜치입니다. 기능 PR은 먼저 여기로 들어옵니다.
-- `user/<nickname>/<task>`: 개인 작업 브랜치입니다. 예: `user/woonyong/dummy-api`.
+- `user/<nickname>/<task>`: 개인 작업 브랜치입니다. 예: `user/woonyong/rca-worker`.
 
 사용자별로 브랜치를 완전히 고정해서 오래 쓰면 충돌과 stale 상태가 자주 생깁니다. 대신 닉네임을 prefix로 쓰고, 작업 단위는 짧게 끊습니다.
 
@@ -35,7 +35,7 @@ GitHub에서 Pull Request를 만듭니다.
 커밋 제목은 한국어 키워드를 포함합니다.
 
 ```text
-feat: 더미 API / 통신 검증 / 응답 포맷
+feat: EDA worker / 이벤트 처리 / 대시보드 반영
 docs: 팀 실행 문서 / 브랜치 규칙 / 시크릿 정책
 ci: GitHub Actions / 테스트 / Docker 검증
 ```
