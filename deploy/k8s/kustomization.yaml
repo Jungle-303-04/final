@@ -3,5 +3,8 @@ kind: Kustomization
 namespace: final-app
 resources:
   - namespace.yaml
+  - postgres-secret.yaml
+  - postgres-service.yaml
+  - postgres-statefulset.yaml
   - deployment.yaml
   - service.yaml

@@ -1,13 +1,15 @@
 [project]
-name = "sw-ai-final"
+name = "project-k"
 version = "0.1.0"
-description = "FastAPI service for the SW AI final project"
+description = "FastAPI service for Project K"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.116.0",
     "prometheus-fastapi-instrumentator>=8.0.2",
+    "psycopg[binary]>=3.3.4",
     "pydantic-settings>=2.10.0",
+    "sqlmodel>=0.0.38",
     "uvicorn[standard]>=0.34.0",
 ]
 

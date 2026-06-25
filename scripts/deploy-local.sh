@@ -8,6 +8,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "${ROOT_DIR}/scripts/build-image.sh"
 kind load docker-image "${IMAGE_NAME}" --name "${CLUSTER_NAME}"
 kubectl --context "kind-${CLUSTER_NAME}" apply -k "${ROOT_DIR}/deploy/k8s"
+kubectl --context "kind-${CLUSTER_NAME}" -n final-app rollout status statefulset/final-postgres --timeout=180s
 kubectl --context "kind-${CLUSTER_NAME}" -n final-app rollout restart deploy/final-api
 kubectl --context "kind-${CLUSTER_NAME}" -n final-app rollout status deploy/final-api --timeout=180s
 
