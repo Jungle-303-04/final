@@ -3,13 +3,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from collections.abc import Awaitable, Callable
 
 from uvicorn import Config, Server
 
 from eda_platform.core import env
 from eda_platform.gateway import create_app
+from eda_platform.roles import ServiceRole
 from eda_platform.target_agent import TargetClusterAgent, run_fake_telemetry, run_node_collector
 from eda_platform.workflows import WORKERS, WorkerRuntime
+
+RoleRunner = Callable[[], Awaitable[None]]
 
 
 async def run_gateway() -> None:
@@ -18,31 +22,58 @@ async def run_gateway() -> None:
     ).serve()
 
 
-async def amain() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "role", help="gateway, worker role, target-agent, fake telemetry role, or node-collector"
-    )
-    role = parser.parse_args().role
-    os.environ.setdefault("SERVICE_NAME", role)
+async def run_target_agent() -> None:
+    await TargetClusterAgent().run()
 
-    if role == "gateway":
-        await run_gateway()
-        return
-    if role == "target-agent":
-        await TargetClusterAgent().run()
-        return
-    if role == "node-collector":
-        await run_node_collector()
-        return
-    if role in {"fake-prometheus", "fake-loki", "fake-otel"}:
-        await run_fake_telemetry(role.replace("fake-", ""))
-        return
-    if role in WORKERS:
-        subject, handler_factory = WORKERS[role]
-        await WorkerRuntime(role, subject, handler_factory).run()
-        return
-    raise SystemExit(f"unknown role: {role}")
+
+async def run_fake_prometheus() -> None:
+    await run_fake_telemetry("prometheus")
+
+
+async def run_fake_loki() -> None:
+    await run_fake_telemetry("loki")
+
+
+async def run_fake_otel() -> None:
+    await run_fake_telemetry("otel")
+
+
+def worker_runner(role: ServiceRole) -> RoleRunner:
+    async def run_worker() -> None:
+        subject, handler_factory = WORKERS[role.value]
+        await WorkerRuntime(role.value, subject, handler_factory).run()
+
+    return run_worker
+
+
+def build_role_runners() -> dict[ServiceRole, RoleRunner]:
+    return {
+        ServiceRole.GATEWAY: run_gateway,
+        ServiceRole.TARGET_AGENT: run_target_agent,
+        ServiceRole.NODE_COLLECTOR: run_node_collector,
+        ServiceRole.FAKE_PROMETHEUS: run_fake_prometheus,
+        ServiceRole.FAKE_LOKI: run_fake_loki,
+        ServiceRole.FAKE_OTEL: run_fake_otel,
+        ServiceRole.GITOPS_SYNC_WORKER: worker_runner(ServiceRole.GITOPS_SYNC_WORKER),
+        ServiceRole.COMMAND_WORKER: worker_runner(ServiceRole.COMMAND_WORKER),
+        ServiceRole.RCA_WORKER: worker_runner(ServiceRole.RCA_WORKER),
+        ServiceRole.DASHBOARD_PROJECTION_SERVICE: worker_runner(
+            ServiceRole.DASHBOARD_PROJECTION_SERVICE
+        ),
+        ServiceRole.AUDIT_TIMELINE_SERVICE: worker_runner(ServiceRole.AUDIT_TIMELINE_SERVICE),
+    }
+
+
+def parse_args() -> ServiceRole:
+    parser = argparse.ArgumentParser(description="Run one EDA platform service role.")
+    parser.add_argument("role", choices=ServiceRole.values())
+    return ServiceRole.from_raw(parser.parse_args().role)
+
+
+async def amain() -> None:
+    role = parse_args()
+    os.environ.setdefault("SERVICE_NAME", role.value)
+    await build_role_runners()[role]()
 
 
 def main() -> None:

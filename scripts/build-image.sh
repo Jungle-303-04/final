@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-final-api:local}"
+IMAGE_NAME="${IMAGE_NAME:-eda-platform:local}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-docker build -t "${IMAGE_NAME}" -f "${ROOT_DIR}/deploy/docker/Dockerfile" "${ROOT_DIR}"
+docker build -t "${IMAGE_NAME}" "${ROOT_DIR}/services/eda_platform"
