@@ -1,4 +1,4 @@
-# SW AI Final
+# Project K
 
 FastAPI 기반 백엔드 프로젝트입니다. 팀원은 macOS와 Windows WSL에서 같은 명령으로 개발하고, Docker Compose와 로컬 Kubernetes(kind)에서 동일한 API 동작을 확인합니다.
 
