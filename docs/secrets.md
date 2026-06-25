@@ -5,7 +5,7 @@
 ## 로컬
 
 - `.env`는 개인 PC 전용입니다.
-- `.env.example`만 커밋합니다.
+- `config/env/app.env.example`만 커밋합니다.
 - `.env`는 `.gitignore`에 포함되어야 합니다.
 
 ```bash
@@ -31,7 +31,7 @@ CI/CD에서 필요한 값은 GitHub Actions Secrets를 씁니다.
 
 ## 팀 공유가 필요할 때
 
-초반에는 `.env.example`에 키 이름만 공유하고 실제 값은 메신저에 붙이지 않습니다. 값 공유가 잦아지면 1Password, Doppler 같은 팀용 시크릿 도구를 검토합니다.
+초반에는 `config/env/app.env.example`에 키 이름만 공유하고 실제 값은 메신저에 붙이지 않습니다. 값 공유가 잦아지면 1Password, Doppler 같은 팀용 시크릿 도구를 검토합니다.
 
 ## 금지
 

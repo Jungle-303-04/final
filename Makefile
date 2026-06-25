@@ -7,6 +7,7 @@ IMAGE_NAME ?= final-api:local
 DEV_URL ?= http://localhost:8000
 APP_URL ?= http://localhost:18090
 COMPOSE_FILE ?= deploy/docker/compose.yaml
+ENV_TEMPLATE ?= config/env/app.env.example
 DOCKER_COMPOSE := docker compose --env-file .env -f $(COMPOSE_FILE)
 
 export CLUSTER_NAME
@@ -23,7 +24,7 @@ env: ## .env 파일 생성
 	@if [[ -f .env ]]; then \
 		echo ".env already exists"; \
 	else \
-		cp .env.example .env; \
+		cp "$(ENV_TEMPLATE)" .env; \
 		echo "created .env"; \
 	fi
 
