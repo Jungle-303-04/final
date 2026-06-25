@@ -1,0 +1,3 @@
+creation_rules:
+  - path_regex: secrets/eda/.*\.enc\.yaml$
+    age: "age1replace-with-team-recipient"
