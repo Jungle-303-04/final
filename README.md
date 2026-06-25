@@ -1,18 +1,22 @@
-# EDA Platform
+# Service
 
 Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 구현입니다.
 
-이 repo의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `services/eda_platform`입니다. 하나의 Docker image를 만들고, Kubernetes Deployment마다 다른 role을 실행해 여러 서비스 인스턴스로 나눕니다.
+이 repo의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `service`입니다. 하나의 Docker image를 만들고, Kubernetes Deployment마다 다른 role을 실행해 여러 서비스 인스턴스로 나눕니다.
 
 ## 구조
 
 ```text
-services/eda_platform      EDA 서비스 코드
-deploy/eda                 management/target kind 클러스터 manifests
-scripts/eda-*.sh           실행, 상태 확인, smoke, scale, pod 복구 스크립트
-secrets/eda                SOPS/age 시크릿 템플릿
-config/env                 로컬 env 템플릿
-tests                      EDA 단위 테스트
+service      gateway/workers/target/shared 코드
+  gateway    HTTP API, OAuth, dashboard API
+  workers    gitops, command, rca, dashboard, audit workers
+  target     target cluster agent, telemetry adapters
+  shared     DB, NATS, schemas
+deploy       management/target kind 클러스터 manifests
+scripts      실행, 상태 확인, smoke, scale, pod 복구 스크립트
+secrets      SOPS/age 시크릿 템플릿
+config/env   로컬 env 템플릿
+tests        단위 테스트
 ```
 
 ## 처음 실행
@@ -37,7 +41,7 @@ make down
 
 ## 서비스 role
 
-각 role은 같은 image에서 다른 프로세스로 실행됩니다.
+각 role은 같은 image에서 다른 프로세스로 실행됩니다. 코드 폴더도 실행 경계에 맞춰 `gateway`, `workers`, `target`, `shared`로 나눕니다.
 
 ```text
 gateway                       Management API Gateway
@@ -70,6 +74,7 @@ make kill-pod DEPLOYMENT=rca-worker
 
 ## 문서
 
-- [docs/eda-platform.md](docs/eda-platform.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/service-split-plan.md](docs/service-split-plan.md)
 - [docs/secrets.md](docs/secrets.md)
 - [docs/team-workflow.md](docs/team-workflow.md)

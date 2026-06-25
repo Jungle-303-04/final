@@ -2,9 +2,9 @@ SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
-IMAGE_NAME ?= eda-platform:local
-MGMT_CLUSTER ?= eda-management
-TARGET_CLUSTER ?= eda-target
+IMAGE_NAME ?= service:local
+MGMT_CLUSTER ?= management
+TARGET_CLUSTER ?= target
 ENV_TEMPLATE ?= config/env/app.env.example
 
 export IMAGE_NAME
@@ -33,40 +33,40 @@ doctor: ## 로컬 필수 도구 점검
 	bash scripts/doctor.sh
 
 lint: ## Ruff 린트 검사
-	uv run ruff check services/eda_platform tests
+	uv run ruff check service tests
 
 format: ## Ruff 포맷 적용
-	uv run ruff format services/eda_platform tests
+	uv run ruff format service tests
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
 
 check: doctor test ## 개발 전/커밋 전 전체 점검
 
-build-image: ## EDA 플랫폼 Docker 이미지 빌드
+build-image: ## service Docker 이미지 빌드
 	bash scripts/build-image.sh
 
 up: ## management/target kind 클러스터 실행
-	bash scripts/eda-up.sh
+	bash scripts/up.sh
 
 down: ## management/target kind 클러스터 삭제
-	bash scripts/eda-down.sh
+	bash scripts/down.sh
 
 status: ## management/target 리소스 상태 확인
-	bash scripts/eda-status.sh
+	bash scripts/status.sh
 
 smoke: ## 전체 이벤트 사이클 smoke 테스트
-	bash scripts/eda-smoke.sh
+	bash scripts/smoke.sh
 
 scale: ## management worker scale. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
 	@test -n "$(DEPLOYMENT)" && test -n "$(REPLICAS)"
-	bash scripts/eda-scale.sh "$(DEPLOYMENT)" "$(REPLICAS)"
+	bash scripts/scale.sh "$(DEPLOYMENT)" "$(REPLICAS)"
 
 kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYMENT=rca-worker
 	@test -n "$(DEPLOYMENT)"
-	bash scripts/eda-kill-pod.sh "$(DEPLOYMENT)"
+	bash scripts/kill-pod.sh "$(DEPLOYMENT)"
 
 clean: ## Python 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
-	find services tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find service tests -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -name .DS_Store -delete

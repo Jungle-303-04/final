@@ -1,7 +1,8 @@
 import pytest
-from eda_platform.core import event
-from eda_platform.schemas import CommandRequest, GitHubWebhookRequest
 from pydantic import ValidationError
+
+from service.shared.core import event
+from service.shared.schemas import CommandRequest, GitHubWebhookRequest
 
 
 def test_command_request_allows_only_sandbox_namespace() -> None:

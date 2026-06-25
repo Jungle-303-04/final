@@ -1,5 +1,5 @@
 [project]
-name = "eda-platform"
+name = "service"
 version = "0.1.0"
 description = "Event-driven Kubernetes operations platform"
 readme = "README.md"
@@ -21,7 +21,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["services/eda_platform"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
