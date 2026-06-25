@@ -37,7 +37,9 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def event(subject: str, source: str, payload: dict[str, Any], correlation_id: str | None = None) -> dict[str, Any]:
+def event(
+    subject: str, source: str, payload: dict[str, Any], correlation_id: str | None = None
+) -> dict[str, Any]:
     return {
         "event_id": str(uuid.uuid4()),
         "subject": subject,
@@ -362,4 +364,3 @@ async def publish_and_record(
     evt = await bus.publish(subject, source, payload, correlation_id)
     db.record_event(evt)
     return evt
-
