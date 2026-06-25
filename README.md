@@ -9,7 +9,7 @@ make setup
 make check
 ```
 
-`make setup`은 `.env.example`을 기준으로 `.env`를 만들고 Python 의존성을 동기화합니다.
+`make setup`은 `config/env/app.env.example`을 기준으로 `.env`를 만들고 Python 의존성을 동기화합니다.
 
 ## 개발할 때
 
