@@ -5,11 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY services/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . ./service
+COPY packages ./packages
+COPY services ./services
 
 EXPOSE 8000
 
-ENTRYPOINT ["python", "-m", "service.main"]
+ENTRYPOINT ["python", "-m", "services.main"]

@@ -14,19 +14,20 @@ External systems that are not available locally are represented by replaceable a
 ## Service Layout
 
 ```text
- service
-  + gateway                  Management API Gateway, OAuth/session, dashboard APIs
-  + workers
-    + gitops.py              Git webhook -> manifest/diff/command
-    + command.py             command policy -> target agent queue
-    + rca.py                 evidence -> RCA -> safe PR event
-    + dashboard.py           dashboard read model projection
-    + audit.py               immutable audit timeline
-    + runtime.py             common JetStream worker runtime
-    + registry.py            role -> subject -> handler mapping
-  + target                   Target Cluster Agent and fake telemetry adapters
-  + shared                   DB, NATS, schemas, shared contracts
-  + main.py                  role-based service entrypoint
+ services
+  + management-api-gateway       HTTP boundary, OAuth/session, dashboard APIs
+  + gitops-sync-worker           Git webhook -> manifest/diff/command
+  + command-worker               command policy -> target agent queue
+  + rca-worker                   evidence -> RCA -> safe PR event
+  + dashboard-projection-service dashboard read model projection
+  + audit-timeline-service       immutable audit timeline
+  + target-cluster-agent         Target Cluster Agent and telemetry adapters
+  + registry.py                  role -> service folder -> runner mapping
+  + main.py                      role-based process entrypoint
+
++ packages
+  + shared                       DB, NATS, schemas, roles
+  + worker_runtime               common JetStream worker runtime
 
 + deploy
   + kind                          two-cluster kind configs

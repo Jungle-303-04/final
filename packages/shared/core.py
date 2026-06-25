@@ -12,21 +12,27 @@ import psycopg
 from nats.js.errors import NotFoundError
 from psycopg.rows import dict_row
 
-STREAM_NAME = "SERVICE_EVENTS"
-STREAM_SUBJECTS = [
-    "oauth.>",
-    "git.>",
-    "manifest.>",
-    "desired.>",
-    "cluster.>",
-    "evidence.>",
-    "command.>",
-    "rca.>",
-    "safe_pr.>",
-    "dashboard.>",
-    "audit.>",
-    "agent.>",
-]
+from packages.shared.constants import (
+    DEFAULT_DATABASE_URL,
+    DEFAULT_NATS_URL,
+    DEFAULT_SERVICE_NAME,
+    GITHUB_PROVIDER,
+    LOCAL_USER_ID,
+    REQUIRED_GITHUB_SCOPE,
+    SERVICE_NAME_ENV,
+    STREAM_NAME,
+    STREAM_SUBJECTS,
+)
+
+DATABASE_URL_ENV = "DATABASE_URL"
+NATS_URL_ENV = "NATS_URL"
+DEFAULT_OAUTH_SCOPES = ["profile", "email"]
+TOKEN_REF_PREFIX = "vault://oauth"
+FAKE_ENCRYPTED_TOKEN_NOTE = "fake encrypted provider token payload"
+TOKEN_EXPIRES_IN_SECONDS = 3600
+DASHBOARD_LIMIT = 25
+DEPENDENCY_RETRY_LIMIT = 60
+DEPENDENCY_RETRY_DELAY_SECONDS = 2
 
 
 def env(name: str, default: str) -> str:
@@ -52,7 +58,7 @@ def event(
 
 class Database:
     def __init__(self) -> None:
-        self.url = env("DATABASE_URL", "postgresql://service:service@postgresql:5432/service")
+        self.url = env(DATABASE_URL_ENV, DEFAULT_DATABASE_URL)
 
     def connect(self):
         return psycopg.connect(self.url, row_factory=dict_row)
@@ -191,17 +197,17 @@ class Database:
 
     def save_oauth_account(self, payload: dict[str, Any]) -> dict[str, Any]:
         provider = payload["provider"]
-        user_id = payload.get("user_id", "local-user")
-        scopes = payload.get("scopes") or ["profile", "email"]
-        if provider == "github" and "repo" not in scopes:
-            scopes.append("repo")
-        token_ref = f"vault://oauth/{provider}/{user_id}/{uuid.uuid4()}"
+        user_id = payload.get("user_id", LOCAL_USER_ID)
+        scopes = payload.get("scopes") or DEFAULT_OAUTH_SCOPES.copy()
+        if provider == GITHUB_PROVIDER and REQUIRED_GITHUB_SCOPE not in scopes:
+            scopes.append(REQUIRED_GITHUB_SCOPE)
+        token_ref = f"{TOKEN_REF_PREFIX}/{provider}/{user_id}/{uuid.uuid4()}"
         provider_user = payload.get("provider_user") or f"{provider}-{user_id}"
         encrypted_payload = {
-            "note": "fake encrypted provider token payload",
+            "note": FAKE_ENCRYPTED_TOKEN_NOTE,
             "access_token": f"fake-{provider}-access-token",
             "refresh_token": f"fake-{provider}-refresh-token",
-            "expires_at": int(time.time()) + 3600,
+            "expires_at": int(time.time()) + TOKEN_EXPIRES_IN_SECONDS,
         }
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -241,10 +247,11 @@ class Database:
                     """
                     select token_ref
                     from oauth_accounts
-                    where provider = 'github' and status = 'connected'
+                    where provider = %s and status = 'connected'
                     order by updated_at desc
                     limit 1
-                    """
+                    """,
+                    (GITHUB_PROVIDER,),
                 )
                 row = cur.fetchone()
                 return row["token_ref"] if row else None
@@ -281,28 +288,33 @@ class Database:
                     select correlation_id, status, summary, last_event, payload, updated_at
                     from dashboard_cards
                     order by updated_at desc
-                    limit 25
-                    """
+                    limit %s
+                    """,
+                    (DASHBOARD_LIMIT,),
                 )
                 return list(cur.fetchall())
 
 
 class EventBus:
     def __init__(self) -> None:
-        self.url = env("NATS_URL", "nats://nats:4222")
+        self.url = env(NATS_URL_ENV, DEFAULT_NATS_URL)
         self.nc = None
         self.js = None
 
     async def connect(self) -> None:
-        for attempt in range(60):
+        for attempt in range(DEPENDENCY_RETRY_LIMIT):
             try:
-                self.nc = await nats.connect(self.url, name=env("SERVICE_NAME", "service"))
+                self.nc = await nats.connect(
+                    self.url, name=env(SERVICE_NAME_ENV, DEFAULT_SERVICE_NAME)
+                )
                 self.js = self.nc.jetstream()
                 await self.ensure_stream()
                 return
             except Exception as exc:
-                print(f"waiting for nats ({attempt + 1}/60): {exc}", flush=True)
-                await asyncio_sleep(2)
+                print(
+                    f"waiting for nats ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}", flush=True
+                )
+                await asyncio_sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
         raise RuntimeError("NATS is not available")
 
     async def ensure_stream(self) -> None:
@@ -343,13 +355,16 @@ async def asyncio_sleep(seconds: float) -> None:
 
 
 async def wait_for_database(db: Database) -> None:
-    for attempt in range(60):
+    for attempt in range(DEPENDENCY_RETRY_LIMIT):
         try:
             db.init()
             return
         except Exception as exc:
-            print(f"waiting for postgres ({attempt + 1}/60): {exc}", flush=True)
-            await asyncio_sleep(2)
+            print(
+                f"waiting for postgres ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}",
+                flush=True,
+            )
+            await asyncio_sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
     raise RuntimeError("PostgreSQL is not available")
 
 
