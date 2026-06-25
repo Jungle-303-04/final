@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "title": "첫 번째 더미 작업",
+    "status": "ready",
+    "owner": "woonyong"
+  },
+  {
+    "id": 2,
+    "title": "API 통신 확인",
+    "status": "in_progress",
+    "owner": "team"
+  },
+  {
+    "id": 3,
+    "title": "Kubernetes 배포 확인",
+    "status": "todo",
+    "owner": "team"
+  }
+]
