@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Any
 
 from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.shared.core import Database, EventBus, env, publish_and_record
+from packages.shared.contracts import EventPublisher, EventRecorder, RepoChangeStore
+from packages.shared.core import env, publish_and_record
 
 SERVICE_NAME = "gitops-sync-worker"
 DEFAULT_APP_NAME = "checkout-api"
@@ -22,9 +22,10 @@ SYNC_RISK = "sandbox-only"
 
 
 class GitOpsSyncWorkflow:
-    def __init__(self, bus: EventBus, db: Database) -> None:
+    def __init__(self, bus: EventPublisher, repo: RepoChangeStore, events: EventRecorder) -> None:
         self.bus = bus
-        self.db = db
+        self.repo = repo
+        self.events = events
 
     async def handle(self, evt: dict[str, Any]) -> None:
         payload = evt["payload"]
@@ -35,15 +36,7 @@ class GitOpsSyncWorkflow:
             "replicas": payload.get("replicas", DEFAULT_REPLICAS),
             "namespace": SANDBOX_NAMESPACE,
         }
-        with self.db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into repo_changes (correlation_id, commit_sha, manifest)
-                    values (%s, %s, %s)
-                    """,
-                    (evt["correlation_id"], commit_sha, json.dumps(manifest)),
-                )
+        self.repo.save_repo_change(evt["correlation_id"], commit_sha, manifest)
 
         rendered = {
             "apiVersion": MANIFEST_API_VERSION,
@@ -60,7 +53,7 @@ class GitOpsSyncWorkflow:
         }
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.GIT_CHANGED,
             SERVICE_NAME,
             {"commit_sha": commit_sha, "manifest": manifest},
@@ -68,7 +61,7 @@ class GitOpsSyncWorkflow:
         )
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.MANIFEST_RENDERED,
             SERVICE_NAME,
             {"rendered_manifest": rendered},
@@ -76,7 +69,7 @@ class GitOpsSyncWorkflow:
         )
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.DESIRED_DIFF_DETECTED,
             SERVICE_NAME,
             {"diff": diff},
@@ -84,7 +77,7 @@ class GitOpsSyncWorkflow:
         )
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.COMMAND_REQUESTED,
             SERVICE_NAME,
             {

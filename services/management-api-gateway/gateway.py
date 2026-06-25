@@ -175,48 +175,19 @@ class ManagementApiGateway:
         ) -> dict[str, Any]:
             deadline = time.time() + min(timeout, MAX_COMMAND_POLL_SECONDS)
             while time.time() < deadline:
-                with self.db.connect() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            select command_id, correlation_id, cluster_id, action, payload
-                            from agent_commands
-                            where cluster_id = %s and status = %s
-                            order by created_at
-                            limit 1
-                            """,
-                            (cluster_id, COMMAND_STATUS_QUEUED),
-                        )
-                        row = cur.fetchone()
-                        if row:
-                            cur.execute(
-                                """
-                                update agent_commands
-                                set status = %s, updated_at = now()
-                                where command_id = %s
-                                """,
-                                (COMMAND_STATUS_LEASED, row["command_id"]),
-                            )
-                            return {"command": row}
+                row = self.db.lease_agent_command(
+                    cluster_id, COMMAND_STATUS_QUEUED, COMMAND_STATUS_LEASED
+                )
+                if row:
+                    return {"command": row}
                 await asyncio.sleep(COMMAND_POLL_SLEEP_SECONDS)
             return {"command": None}
 
         @app.post("/agent/commands/{command_id}/result")
         async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
             result = payload.model_dump()
-            with self.db.connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        update agent_commands
-                        set status = %s, result = %s, updated_at = now()
-                        where command_id = %s
-                        returning correlation_id
-                        """,
-                        (result["status"], json.dumps(result), command_id),
-                    )
-                    row = cur.fetchone()
-            if not row:
+            correlation_id = self.db.complete_agent_command(command_id, result)
+            if not correlation_id:
                 raise HTTPException(
                     status_code=COMMAND_NOT_FOUND_STATUS_CODE,
                     detail=COMMAND_NOT_FOUND_MESSAGE,
@@ -227,7 +198,7 @@ class ManagementApiGateway:
                 EventSubject.COMMAND_COMPLETED,
                 SERVICE_NAME,
                 {"command_id": command_id, "result": result},
-                row["correlation_id"],
+                correlation_id,
             )
             return {"accepted": True, "event_id": evt["event_id"]}
 

@@ -5,7 +5,6 @@ import os
 import time
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 import nats
 import psycopg
@@ -22,6 +21,15 @@ from packages.shared.constants import (
     SERVICE_NAME_ENV,
     STREAM_NAME,
     STREAM_SUBJECTS,
+)
+from packages.shared.contracts import (
+    CommandRecord,
+    Event,
+    EventPublisher,
+    EventRecorder,
+    EventSubscription,
+    InitializableStore,
+    JsonObject,
 )
 
 DATABASE_URL_ENV = "DATABASE_URL"
@@ -44,8 +52,8 @@ def now_iso() -> str:
 
 
 def event(
-    subject: str, source: str, payload: dict[str, Any], correlation_id: str | None = None
-) -> dict[str, Any]:
+    subject: str, source: str, payload: JsonObject, correlation_id: str | None = None
+) -> Event:
     return {
         "event_id": str(uuid.uuid4()),
         "subject": subject,
@@ -177,7 +185,7 @@ class Database:
                 for statement in ddl:
                     cur.execute(statement)
 
-    def record_event(self, evt: dict[str, Any]) -> None:
+    def record_event(self, evt: Event) -> None:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -195,7 +203,7 @@ class Database:
                     ),
                 )
 
-    def save_oauth_account(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
         user_id = payload.get("user_id", LOCAL_USER_ID)
         scopes = payload.get("scopes") or DEFAULT_OAUTH_SCOPES.copy()
@@ -256,7 +264,121 @@ class Database:
                 row = cur.fetchone()
                 return row["token_ref"] if row else None
 
-    def upsert_dashboard(self, evt: dict[str, Any], status: str, summary: str) -> None:
+    def save_repo_change(self, correlation_id: str, commit_sha: str, manifest: JsonObject) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into repo_changes (correlation_id, commit_sha, manifest)
+                    values (%s, %s, %s)
+                    """,
+                    (correlation_id, commit_sha, json.dumps(manifest)),
+                )
+
+    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into agent_commands (
+                        command_id,
+                        correlation_id,
+                        cluster_id,
+                        action,
+                        payload,
+                        status,
+                        updated_at
+                    )
+                    values (%s, %s, %s, %s, %s, %s, now())
+                    on conflict (command_id) do nothing
+                    """,
+                    (
+                        plan["command_id"],
+                        correlation_id,
+                        plan["cluster_id"],
+                        plan["action"],
+                        json.dumps(plan),
+                        status,
+                    ),
+                )
+
+    def lease_agent_command(
+        self, cluster_id: str, queued_status: str, leased_status: str
+    ) -> CommandRecord | None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select command_id, correlation_id, cluster_id, action, payload
+                    from agent_commands
+                    where cluster_id = %s and status = %s
+                    order by created_at
+                    limit 1
+                    """,
+                    (cluster_id, queued_status),
+                )
+                row = cur.fetchone()
+                if row:
+                    cur.execute(
+                        """
+                        update agent_commands
+                        set status = %s, updated_at = now()
+                        where command_id = %s
+                        """,
+                        (leased_status, row["command_id"]),
+                    )
+                return dict(row) if row else None
+
+    def complete_agent_command(self, command_id: str, result: JsonObject) -> str | None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update agent_commands
+                    set status = %s, result = %s, updated_at = now()
+                    where command_id = %s
+                    returning correlation_id
+                    """,
+                    (result["status"], json.dumps(result), command_id),
+                )
+                row = cur.fetchone()
+                return row["correlation_id"] if row else None
+
+    def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "insert into evidence (correlation_id, kind, payload) values (%s, %s, %s)",
+                    (correlation_id, kind, json.dumps(payload)),
+                )
+
+    def save_rca_report(
+        self, correlation_id: str, root_cause: str, action: str, payload: JsonObject
+    ) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into rca_reports (correlation_id, root_cause, action, payload)
+                    values (%s, %s, %s, %s)
+                    """,
+                    (correlation_id, root_cause, action, json.dumps(payload)),
+                )
+
+    def save_pull_request(
+        self, correlation_id: str, pr_url: str, title: str, body: str, status: str
+    ) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into pull_requests (correlation_id, pr_url, title, body, status)
+                    values (%s, %s, %s, %s, %s)
+                    """,
+                    (correlation_id, pr_url, title, body, status),
+                )
+
+    def upsert_dashboard(self, evt: Event, status: str, summary: str) -> None:
         payload = {
             "last_event_id": evt["event_id"],
             "last_source": evt["source"],
@@ -280,7 +402,7 @@ class Database:
                     (evt["correlation_id"], status, summary, evt["subject"], json.dumps(payload)),
                 )
 
-    def list_dashboard(self) -> list[dict[str, Any]]:
+    def list_dashboard(self) -> list[JsonObject]:
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -293,6 +415,23 @@ class Database:
                     (DASHBOARD_LIMIT,),
                 )
                 return list(cur.fetchall())
+
+    def append_audit_log(self, evt: Event) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into audit_log (event_id, subject, source, correlation_id, payload)
+                    values (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        evt["event_id"],
+                        evt["subject"],
+                        evt["source"],
+                        evt["correlation_id"],
+                        json.dumps(evt["payload"]),
+                    ),
+                )
 
 
 class EventBus:
@@ -330,16 +469,16 @@ class EventBus:
         self,
         subject: str,
         source: str,
-        payload: dict[str, Any],
+        payload: JsonObject,
         correlation_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> Event:
         assert self.js is not None
         evt = event(subject, source, payload, correlation_id)
         await self.js.publish(subject, json.dumps(evt).encode())
         print(f"published {subject} correlation={evt['correlation_id']}", flush=True)
         return evt
 
-    async def subscribe(self, subject: str, durable: str):
+    async def subscribe(self, subject: str, durable: str) -> EventSubscription:
         assert self.js is not None
         return await self.js.pull_subscribe(subject, durable=durable, stream=STREAM_NAME)
 
@@ -354,7 +493,7 @@ async def asyncio_sleep(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-async def wait_for_database(db: Database) -> None:
+async def wait_for_database(db: InitializableStore) -> None:
     for attempt in range(DEPENDENCY_RETRY_LIMIT):
         try:
             db.init()
@@ -369,13 +508,13 @@ async def wait_for_database(db: Database) -> None:
 
 
 async def publish_and_record(
-    bus: EventBus,
-    db: Database,
+    bus: EventPublisher,
+    db: EventRecorder,
     subject: str,
     source: str,
-    payload: dict[str, Any],
+    payload: JsonObject,
     correlation_id: str | None = None,
-) -> dict[str, Any]:
+) -> Event:
     evt = await bus.publish(subject, source, payload, correlation_id)
     db.record_event(evt)
     return evt
