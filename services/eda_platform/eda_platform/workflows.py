@@ -14,7 +14,9 @@ Handler = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class WorkerRuntime:
-    def __init__(self, role: str, subject: str, handler_factory: Callable[[EventBus, Database], Handler]) -> None:
+    def __init__(
+        self, role: str, subject: str, handler_factory: Callable[[EventBus, Database], Handler]
+    ) -> None:
         self.role = role
         self.subject = subject
         self.db = Database()
@@ -71,7 +73,10 @@ class GitOpsSyncWorkflow:
         with self.db.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "insert into repo_changes (correlation_id, commit_sha, manifest) values (%s, %s, %s)",
+                    """
+                    insert into repo_changes (correlation_id, commit_sha, manifest)
+                    values (%s, %s, %s)
+                    """,
                     (evt["correlation_id"], commit_sha, json.dumps(manifest)),
                 )
 
@@ -88,9 +93,30 @@ class GitOpsSyncWorkflow:
             "actual_image": "ghcr.io/project/checkout-api:previous",
             "risk": "sandbox-only",
         }
-        await publish_and_record(self.bus, self.db, "git.changed", "gitops-sync-worker", {"commit_sha": commit_sha, "manifest": manifest}, evt["correlation_id"])
-        await publish_and_record(self.bus, self.db, "manifest.rendered", "gitops-sync-worker", {"rendered_manifest": rendered}, evt["correlation_id"])
-        await publish_and_record(self.bus, self.db, "desired.diff.detected", "gitops-sync-worker", {"diff": diff}, evt["correlation_id"])
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "git.changed",
+            "gitops-sync-worker",
+            {"commit_sha": commit_sha, "manifest": manifest},
+            evt["correlation_id"],
+        )
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "manifest.rendered",
+            "gitops-sync-worker",
+            {"rendered_manifest": rendered},
+            evt["correlation_id"],
+        )
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "desired.diff.detected",
+            "gitops-sync-worker",
+            {"diff": diff},
+            evt["correlation_id"],
+        )
         await publish_and_record(
             self.bus,
             self.db,
@@ -133,7 +159,14 @@ class CommandWorkflow:
             "namespace": namespace,
             "steps": ["validate policy", "route target cluster", "queue for agent"],
         }
-        await publish_and_record(self.bus, self.db, "command.dispatch.ready", "command-worker", {"plan": plan}, evt["correlation_id"])
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "command.dispatch.ready",
+            "command-worker",
+            {"plan": plan},
+            evt["correlation_id"],
+        )
         await publish_and_record(
             self.bus,
             self.db,
@@ -146,8 +179,15 @@ class CommandWorkflow:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    insert into agent_commands
-                        (command_id, correlation_id, cluster_id, action, payload, status, updated_at)
+                    insert into agent_commands (
+                        command_id,
+                        correlation_id,
+                        cluster_id,
+                        action,
+                        payload,
+                        status,
+                        updated_at
+                    )
                     values (%s, %s, %s, %s, %s, 'queued', now())
                     on conflict (command_id) do nothing
                     """,
@@ -191,24 +231,62 @@ class RcaWorkflow:
 
         with self.db.connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("insert into evidence (correlation_id, kind, payload) values (%s, %s, %s)", (evt["correlation_id"], "rca_bundle", json.dumps(evidence)))
                 cur.execute(
-                    "insert into rca_reports (correlation_id, root_cause, action, payload) values (%s, %s, %s, %s)",
-                    (evt["correlation_id"], root_cause, action, json.dumps({"evidence_ref": evidence["object_ref"]})),
+                    "insert into evidence (correlation_id, kind, payload) values (%s, %s, %s)",
+                    (evt["correlation_id"], "rca_bundle", json.dumps(evidence)),
                 )
                 cur.execute(
-                    "insert into pull_requests (correlation_id, pr_url, title, body, status) values (%s, %s, %s, %s, 'created')",
-                    (evt["correlation_id"], pr_url, "Safe rollback proposal for checkout-api", f"RCA: {root_cause}\n\nAction: {action}"),
+                    """
+                    insert into rca_reports (correlation_id, root_cause, action, payload)
+                    values (%s, %s, %s, %s)
+                    """,
+                    (
+                        evt["correlation_id"],
+                        root_cause,
+                        action,
+                        json.dumps({"evidence_ref": evidence["object_ref"]}),
+                    ),
+                )
+                cur.execute(
+                    """
+                    insert into pull_requests (correlation_id, pr_url, title, body, status)
+                    values (%s, %s, %s, %s, 'created')
+                    """,
+                    (
+                        evt["correlation_id"],
+                        pr_url,
+                        "Safe rollback proposal for checkout-api",
+                        f"RCA: {root_cause}\n\nAction: {action}",
+                    ),
                 )
 
-        await publish_and_record(self.bus, self.db, "evidence.built", "rca-worker", {"evidence": evidence}, evt["correlation_id"])
-        await publish_and_record(self.bus, self.db, "rca.completed", "rca-worker", {"root_cause": root_cause, "action": action, "evidence_ref": evidence["object_ref"]}, evt["correlation_id"])
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "evidence.built",
+            "rca-worker",
+            {"evidence": evidence},
+            evt["correlation_id"],
+        )
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "rca.completed",
+            "rca-worker",
+            {"root_cause": root_cause, "action": action, "evidence_ref": evidence["object_ref"]},
+            evt["correlation_id"],
+        )
         await publish_and_record(
             self.bus,
             self.db,
             "safe_pr.created",
             "rca-worker",
-            {"pr_url": pr_url, "provider": "github", "token_ref": token_ref, "mode": "fake_github_api_call"},
+            {
+                "pr_url": pr_url,
+                "provider": "github",
+                "token_ref": token_ref,
+                "mode": "fake_github_api_call",
+            },
             evt["correlation_id"],
         )
 
@@ -226,7 +304,14 @@ class DashboardProjectionWorkflow:
             status = "attention"
         summary = f"{evt['subject']} from {evt['source']}"
         self.db.upsert_dashboard(evt, status, summary)
-        await publish_and_record(self.bus, self.db, "dashboard.updated", "dashboard-projection-service", {"summary": summary, "status": status}, evt["correlation_id"])
+        await publish_and_record(
+            self.bus,
+            self.db,
+            "dashboard.updated",
+            "dashboard-projection-service",
+            {"summary": summary, "status": status},
+            evt["correlation_id"],
+        )
 
 
 class AuditTimelineWorkflow:
@@ -241,15 +326,26 @@ class AuditTimelineWorkflow:
                     insert into audit_log (event_id, subject, source, correlation_id, payload)
                     values (%s, %s, %s, %s, %s)
                     """,
-                    (evt["event_id"], evt["subject"], evt["source"], evt["correlation_id"], json.dumps(evt["payload"])),
+                    (
+                        evt["event_id"],
+                        evt["subject"],
+                        evt["source"],
+                        evt["correlation_id"],
+                        json.dumps(evt["payload"]),
+                    ),
                 )
 
 
 WORKERS: dict[str, tuple[str, Callable[[EventBus, Database], Handler]]] = {
-    "gitops-sync-worker": ("git.webhook.received", lambda bus, db: GitOpsSyncWorkflow(bus, db).handle),
+    "gitops-sync-worker": (
+        "git.webhook.received",
+        lambda bus, db: GitOpsSyncWorkflow(bus, db).handle,
+    ),
     "command-worker": ("command.requested", lambda bus, db: CommandWorkflow(bus, db).handle),
     "rca-worker": ("cluster.evidence.received", lambda bus, db: RcaWorkflow(bus, db).handle),
-    "dashboard-projection-service": (">", lambda bus, db: DashboardProjectionWorkflow(bus, db).handle),
+    "dashboard-projection-service": (
+        ">",
+        lambda bus, db: DashboardProjectionWorkflow(bus, db).handle,
+    ),
     "audit-timeline-service": (">", lambda bus, db: AuditTimelineWorkflow(bus, db).handle),
 }
-

@@ -41,7 +41,9 @@ class TargetClusterAgent:
     async def ship_evidence(self, client: httpx.AsyncClient) -> None:
         while True:
             try:
-                response = await client.post(f"{self.base_url}/agent/evidence", json=self.fake_evidence())
+                response = await client.post(
+                    f"{self.base_url}/agent/evidence", json=self.fake_evidence()
+                )
                 print(f"evidence shipped status={response.status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
@@ -57,7 +59,12 @@ class TargetClusterAgent:
                 response.raise_for_status()
                 command = response.json().get("command")
                 if command:
-                    print(f"agent executing command {command['command_id']} action={command['action']}", flush=True)
+                    command_id = command["command_id"]
+                    action = command["action"]
+                    print(
+                        f"agent executing command {command_id} action={action}",
+                        flush=True,
+                    )
                     await asyncio.sleep(2)
                     await client.post(
                         f"{self.base_url}/agent/commands/{command['command_id']}/result",
@@ -76,10 +83,17 @@ class TargetClusterAgent:
         return {
             "cluster_id": self.cluster_id,
             "kubernetes": {
-                "pods": [{"name": "checkout-api-7f8d", "status": "CrashLoopBackOff", "restarts": 4}],
+                "pods": [
+                    {"name": "checkout-api-7f8d", "status": "CrashLoopBackOff", "restarts": 4}
+                ],
                 "events": ["readiness probe failed", "back-off restarting failed container"],
             },
-            "metrics": {"source": "fake-prometheus", "cpu": 0.83, "memory_mb": 512, "http_5xx_rate": 0.19},
+            "metrics": {
+                "source": "fake-prometheus",
+                "cpu": 0.83,
+                "memory_mb": 512,
+                "http_5xx_rate": 0.19,
+            },
             "logs": [
                 {"source": "fake-loki", "line": "ERROR readiness check failed: downstream timeout"},
                 {"source": "fake-loki", "line": "WARN rollback candidate detected"},
@@ -98,20 +112,44 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
     @app.get("/{path:path}")
     async def catch_all(path: str) -> dict[str, Any]:
         if kind == "prometheus":
-            return {"status": "success", "data": {"resultType": "vector", "result": [{"metric": {"pod": "checkout-api"}, "value": [time.time(), "0.19"]}]}}
+            return {
+                "status": "success",
+                "data": {
+                    "resultType": "vector",
+                    "result": [{"metric": {"pod": "checkout-api"}, "value": [time.time(), "0.19"]}],
+                },
+            }
         if kind == "loki":
-            return {"status": "success", "data": {"result": [{"stream": {"pod": "checkout-api"}, "values": [[str(int(time.time() * 1e9)), "ERROR readiness check failed"]]}]}}
+            return {
+                "status": "success",
+                "data": {
+                    "result": [
+                        {
+                            "stream": {"pod": "checkout-api"},
+                            "values": [
+                                [str(int(time.time() * 1e9)), "ERROR readiness check failed"]
+                            ],
+                        }
+                    ]
+                },
+            }
         return {"status": "ok", "telemetry": "fake-otel", "path": path}
 
     return app
 
 
 async def run_fake_telemetry(kind: str) -> None:
-    await Server(Config(create_fake_telemetry_app(kind), host="0.0.0.0", port=int(env("PORT", "8000")), log_level="info")).serve()
+    await Server(
+        Config(
+            create_fake_telemetry_app(kind),
+            host="0.0.0.0",
+            port=int(env("PORT", "8000")),
+            log_level="info",
+        )
+    ).serve()
 
 
 async def run_node_collector() -> None:
     while True:
         print("fake node collector scraped node/log/runtime metrics", flush=True)
         await asyncio.sleep(15)
-

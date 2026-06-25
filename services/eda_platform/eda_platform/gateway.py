@@ -10,6 +10,14 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from eda_platform.auth import OAuthAuthService, RedisSessionStore
 from eda_platform.core import Database, EventBus, publish_and_record, wait_for_database
+from eda_platform.schemas import (
+    AgentConnectRequest,
+    AgentEvidenceRequest,
+    CommandRequest,
+    CommandResultRequest,
+    GitHubWebhookRequest,
+    OAuthCallbackRequest,
+)
 
 
 class ManagementApiGateway:
@@ -50,7 +58,9 @@ class ManagementApiGateway:
             return {"authenticated": True, "user_id": current.user_id, "roles": current.roles}
 
         @app.get("/auth/oauth/{provider}/start")
-        async def oauth_start(provider: str, user_id: str = "local-user", scopes: str = "profile,email") -> dict[str, Any]:
+        async def oauth_start(
+            provider: str, user_id: str = "local-user", scopes: str = "profile,email"
+        ) -> dict[str, Any]:
             scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
             if provider == "github" and "repo" not in scope_list:
                 scope_list.append("repo")
@@ -60,53 +70,82 @@ class ManagementApiGateway:
                 self.db,
                 "oauth.start.requested",
                 "management-api-gateway",
-                {"provider": provider, "user_id": user_id, "scopes": scope_list, "state": response["state"]},
+                {
+                    "provider": provider,
+                    "user_id": user_id,
+                    "scopes": scope_list,
+                    "state": response["state"],
+                },
             )
             return response
 
         @app.post("/auth/oauth/{provider}/callback")
-        async def oauth_callback(provider: str, request: Request) -> dict[str, Any]:
-            payload = await request.json()
-            result = await self.auth.callback(provider, payload)
+        async def oauth_callback(provider: str, payload: OAuthCallbackRequest) -> dict[str, Any]:
+            result = await self.auth.callback(provider, payload.model_dump())
             account = result["account"]
-            evt = await publish_and_record(self.bus, self.db, "oauth.connected", "management-api-gateway", account)
-            return {"accepted": True, "event_id": evt["event_id"], "token_ref": account["token_ref"], "session": result["session"]}
+            evt = await publish_and_record(
+                self.bus, self.db, "oauth.connected", "management-api-gateway", account
+            )
+            return {
+                "accepted": True,
+                "event_id": evt["event_id"],
+                "token_ref": account["token_ref"],
+                "session": result["session"],
+            }
 
         @app.post("/github/webhook")
-        async def github_webhook(request: Request) -> dict[str, Any]:
-            payload = await request.json()
-            evt = await publish_and_record(self.bus, self.db, "git.webhook.received", "management-api-gateway", payload)
+        async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
+            evt = await publish_and_record(
+                self.bus,
+                self.db,
+                "git.webhook.received",
+                "management-api-gateway",
+                payload.model_dump(),
+            )
             return {"accepted": True, "event": evt}
 
         @app.post("/agent/connect")
-        async def agent_connect(request: Request) -> dict[str, Any]:
-            payload = await request.json()
-            evt = await publish_and_record(self.bus, self.db, "agent.connected", "management-api-gateway", payload)
+        async def agent_connect(payload: AgentConnectRequest) -> dict[str, Any]:
+            evt = await publish_and_record(
+                self.bus, self.db, "agent.connected", "management-api-gateway", payload.model_dump()
+            )
             return {"accepted": True, "event_id": evt["event_id"]}
 
         @app.post("/agent/evidence")
-        async def agent_evidence(request: Request) -> dict[str, Any]:
-            payload = await request.json()
+        async def agent_evidence(payload: AgentEvidenceRequest) -> dict[str, Any]:
+            evidence = payload.model_dump()
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 "cluster.evidence.received",
                 "management-api-gateway",
-                payload,
-                payload.get("correlation_id"),
+                evidence,
+                payload.correlation_id,
             )
-            return {"accepted": True, "event_id": evt["event_id"], "correlation_id": evt["correlation_id"]}
+            return {
+                "accepted": True,
+                "event_id": evt["event_id"],
+                "correlation_id": evt["correlation_id"],
+            }
 
         @app.post("/commands")
-        async def commands(request: Request) -> dict[str, Any]:
+        async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
             current = await self.auth.require_session(request)
-            payload = await request.json()
-            payload["requested_by"] = current.user_id
-            evt = await publish_and_record(self.bus, self.db, "command.requested", "management-api-gateway", payload)
-            return {"accepted": True, "event_id": evt["event_id"], "correlation_id": evt["correlation_id"]}
+            command = payload.model_dump()
+            command["requested_by"] = current.user_id
+            evt = await publish_and_record(
+                self.bus, self.db, "command.requested", "management-api-gateway", command
+            )
+            return {
+                "accepted": True,
+                "event_id": evt["event_id"],
+                "correlation_id": evt["correlation_id"],
+            }
 
         @app.get("/agent/commands/poll")
-        async def poll_command(cluster_id: str = "target-cluster-01", timeout: int = 10) -> dict[str, Any]:
+        async def poll_command(
+            cluster_id: str = "target-cluster-01", timeout: int = 10
+        ) -> dict[str, Any]:
             deadline = time.time() + min(timeout, 30)
             while time.time() < deadline:
                 with self.db.connect() as conn:
@@ -123,14 +162,21 @@ class ManagementApiGateway:
                         )
                         row = cur.fetchone()
                         if row:
-                            cur.execute("update agent_commands set status = 'leased', updated_at = now() where command_id = %s", (row["command_id"],))
+                            cur.execute(
+                                """
+                                update agent_commands
+                                set status = 'leased', updated_at = now()
+                                where command_id = %s
+                                """,
+                                (row["command_id"],),
+                            )
                             return {"command": row}
                 await asyncio.sleep(1)
             return {"command": None}
 
         @app.post("/agent/commands/{command_id}/result")
-        async def command_result(command_id: str, request: Request) -> dict[str, Any]:
-            payload = await request.json()
+        async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
+            result = payload.model_dump()
             with self.db.connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -140,7 +186,7 @@ class ManagementApiGateway:
                         where command_id = %s
                         returning correlation_id
                         """,
-                        (payload.get("status", "completed"), json.dumps(payload), command_id),
+                        (result["status"], json.dumps(result), command_id),
                     )
                     row = cur.fetchone()
             if not row:
@@ -150,7 +196,7 @@ class ManagementApiGateway:
                 self.db,
                 "command.completed",
                 "management-api-gateway",
-                {"command_id": command_id, "result": payload},
+                {"command_id": command_id, "result": result},
                 row["correlation_id"],
             )
             return {"accepted": True, "event_id": evt["event_id"]}

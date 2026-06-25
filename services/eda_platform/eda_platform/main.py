@@ -13,12 +13,16 @@ from eda_platform.workflows import WORKERS, WorkerRuntime
 
 
 async def run_gateway() -> None:
-    await Server(Config(create_app(), host="0.0.0.0", port=int(env("PORT", "8000")), log_level="info")).serve()
+    await Server(
+        Config(create_app(), host="0.0.0.0", port=int(env("PORT", "8000")), log_level="info")
+    ).serve()
 
 
 async def amain() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("role", help="gateway, worker role, target-agent, fake telemetry role, or node-collector")
+    parser.add_argument(
+        "role", help="gateway, worker role, target-agent, fake telemetry role, or node-collector"
+    )
     role = parser.parse_args().role
     os.environ.setdefault("SERVICE_NAME", role)
 
@@ -47,4 +51,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

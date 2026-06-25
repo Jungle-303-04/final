@@ -37,7 +37,11 @@ class RedisSessionStore:
         client = self._client()
         token = secrets.token_urlsafe(32)
         session = AuthSession(token=token, user_id=user_id, roles=roles or ["owner"])
-        await client.setex(f"session:{token}", self.ttl_seconds, json.dumps({"user_id": session.user_id, "roles": session.roles}))
+        await client.setex(
+            f"session:{token}",
+            self.ttl_seconds,
+            json.dumps({"user_id": session.user_id, "roles": session.roles}),
+        )
         return session
 
     async def get_session(self, token: str | None) -> AuthSession | None:
@@ -47,7 +51,9 @@ class RedisSessionStore:
         if not raw:
             return None
         payload = json.loads(raw)
-        return AuthSession(token=token, user_id=payload["user_id"], roles=list(payload.get("roles", [])))
+        return AuthSession(
+            token=token, user_id=payload["user_id"], roles=list(payload.get("roles", []))
+        )
 
     async def save_oauth_state(self, state: str, payload: dict[str, Any]) -> None:
         await self._client().setex(f"oauth_state:{state}", 600, json.dumps(payload))
@@ -83,7 +89,9 @@ class OAuthAuthService:
 
     async def start(self, provider: str, user_id: str, scopes: list[str]) -> dict[str, Any]:
         state = str(uuid.uuid4())
-        await self.sessions.save_oauth_state(state, {"provider": provider, "user_id": user_id, "scopes": scopes})
+        await self.sessions.save_oauth_state(
+            state, {"provider": provider, "user_id": user_id, "scopes": scopes}
+        )
         return {
             "provider": provider,
             "state": state,
@@ -121,4 +129,4 @@ class OAuthAuthService:
             return request.headers["x-session-token"]
         if request.cookies.get("eda_session"):
             return request.cookies["eda_session"]
-        return request.query_params.get("session_token")
+        return None
