@@ -35,7 +35,7 @@ GitHub에서 Pull Request를 만듭니다.
 커밋 제목은 한국어 키워드를 포함합니다.
 
 ```text
-feat: EDA worker / 이벤트 처리 / 대시보드 반영
+feat: worker / 이벤트 처리 / 대시보드 반영
 docs: 팀 실행 문서 / 브랜치 규칙 / 시크릿 정책
 ci: GitHub Actions / 테스트 / Docker 검증
 ```
