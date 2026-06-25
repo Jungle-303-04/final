@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Any
 
 from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.shared.core import Database, EventBus, publish_and_record
+from packages.shared.contracts import AgentCommandQueue, EventPublisher, EventRecorder
+from packages.shared.core import publish_and_record
 
 SERVICE_NAME = "command-worker"
 AGENT_ROUTE_CHANNEL = "agent-poll"
@@ -16,9 +16,12 @@ COMMAND_STATUS_QUEUED = "queued"
 
 
 class CommandWorkflow:
-    def __init__(self, bus: EventBus, db: Database) -> None:
+    def __init__(
+        self, bus: EventPublisher, commands: AgentCommandQueue, events: EventRecorder
+    ) -> None:
         self.bus = bus
-        self.db = db
+        self.commands = commands
+        self.events = events
 
     async def handle(self, evt: dict[str, Any]) -> None:
         payload = evt["payload"]
@@ -26,7 +29,7 @@ class CommandWorkflow:
         if namespace != SANDBOX_NAMESPACE:
             await publish_and_record(
                 self.bus,
-                self.db,
+                self.events,
                 EventSubject.COMMAND_REJECTED,
                 SERVICE_NAME,
                 {"reason": SANDBOX_WRITE_REJECT_REASON, "requested": payload},
@@ -43,7 +46,7 @@ class CommandWorkflow:
         }
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.COMMAND_DISPATCH_READY,
             SERVICE_NAME,
             {"plan": plan},
@@ -51,7 +54,7 @@ class CommandWorkflow:
         )
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.COMMAND_DISPATCHED,
             SERVICE_NAME,
             {
@@ -60,34 +63,10 @@ class CommandWorkflow:
             },
             evt["correlation_id"],
         )
-        with self.db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into agent_commands (
-                        command_id,
-                        correlation_id,
-                        cluster_id,
-                        action,
-                        payload,
-                        status,
-                        updated_at
-                    )
-                    values (%s, %s, %s, %s, %s, %s, now())
-                    on conflict (command_id) do nothing
-                    """,
-                    (
-                        plan["command_id"],
-                        evt["correlation_id"],
-                        plan["cluster_id"],
-                        plan["action"],
-                        json.dumps(plan),
-                        COMMAND_STATUS_QUEUED,
-                    ),
-                )
+        self.commands.queue_agent_command(evt["correlation_id"], plan, COMMAND_STATUS_QUEUED)
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.COMMAND_QUEUED_FOR_AGENT,
             SERVICE_NAME,
             {"command_id": plan["command_id"], "cluster_id": plan["cluster_id"]},

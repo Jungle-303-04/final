@@ -13,5 +13,5 @@ async def run() -> None:
     await WorkerRuntime(
         SERVICE_NAME,
         SUBSCRIBE_SUBJECT,
-        lambda bus, db: CommandWorkflow(bus, db).handle,
+        lambda bus, db: CommandWorkflow(bus, db, db).handle,
     ).run()

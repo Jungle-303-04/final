@@ -13,5 +13,5 @@ async def run() -> None:
     await WorkerRuntime(
         SERVICE_NAME,
         SUBSCRIBE_SUBJECT,
-        lambda bus, db: RcaWorkflow(bus, db).handle,
+        lambda bus, db: RcaWorkflow(bus, db, db, db).handle,
     ).run()

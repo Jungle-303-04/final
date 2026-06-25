@@ -5,13 +5,16 @@ import json
 import signal
 from collections.abc import Callable
 
-from packages.shared.contracts import EventHandler
+from packages.shared.contracts import EventConsumerBus, EventHandler
 from packages.shared.core import Database, EventBus, wait_for_database
 
 
 class WorkerRuntime:
     def __init__(
-        self, role: str, subject: str, handler_factory: Callable[[EventBus, Database], EventHandler]
+        self,
+        role: str,
+        subject: str,
+        handler_factory: Callable[[EventConsumerBus, Database], EventHandler],
     ) -> None:
         self.role = role
         self.subject = subject
