@@ -14,7 +14,8 @@ from packages.shared.constants import (
     DEFAULT_SESSION_TTL_SECONDS,
     SESSION_COOKIE_NAME,
 )
-from packages.shared.core import Database, env
+from packages.shared.contracts import OAuthAccountStore, SessionStore
+from packages.shared.core import env
 
 REDIS_URL_ENV = "REDIS_URL"
 SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
@@ -113,7 +114,7 @@ class RedisSessionStore:
 
 
 class OAuthAuthService:
-    def __init__(self, db: Database, sessions: RedisSessionStore) -> None:
+    def __init__(self, db: OAuthAccountStore, sessions: SessionStore) -> None:
         self.db = db
         self.sessions = sessions
 

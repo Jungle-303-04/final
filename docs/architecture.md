@@ -38,6 +38,19 @@ External systems that are not available locally are represented by replaceable a
 + secrets                     SOPS/age secret-sharing templates
 ```
 
+## Ports And Adapters
+
+공통 인터페이스는 `packages/shared/contracts.py`에 둡니다. 서비스 코드는 가능한 한
+PostgreSQL, NATS, httpx 같은 구현체가 아니라 아래 포트에 의존합니다.
+
+- `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream 교체 가능 경계
+- `RepoChangeStore`, `AgentCommandQueue`, `RcaStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
+- `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
+- `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
+
+현재 concrete adapter는 `packages/shared/core.py`의 `Database`, `EventBus`와
+`services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`입니다.
+
 ## Minimal Running Services
 
 Management cluster:

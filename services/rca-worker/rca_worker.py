@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
 from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER, EventSubject
-from packages.shared.core import Database, EventBus, publish_and_record
+from packages.shared.contracts import EventPublisher, EventRecorder, OAuthAccountStore, RcaStore
+from packages.shared.core import publish_and_record
 
 SERVICE_NAME = "rca-worker"
 ROOT_CAUSE = "Image rollout introduced failing readiness checks"
@@ -21,9 +21,17 @@ PR_STATUS_CREATED = "created"
 
 
 class RcaWorkflow:
-    def __init__(self, bus: EventBus, db: Database) -> None:
+    def __init__(
+        self,
+        bus: EventPublisher,
+        rca_store: RcaStore,
+        oauth_accounts: OAuthAccountStore,
+        events: EventRecorder,
+    ) -> None:
         self.bus = bus
-        self.db = db
+        self.rca_store = rca_store
+        self.oauth_accounts = oauth_accounts
+        self.events = events
 
     async def handle(self, evt: dict[str, Any]) -> None:
         evidence = {
@@ -36,43 +44,26 @@ class RcaWorkflow:
         }
         pr_number = int(time.time()) % PR_NUMBER_MODULO
         pr_url = f"{PR_URL_PREFIX}/{pr_number}"
-        token_ref = self.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
+        token_ref = self.oauth_accounts.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
 
-        with self.db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "insert into evidence (correlation_id, kind, payload) values (%s, %s, %s)",
-                    (evt["correlation_id"], EVIDENCE_KIND, json.dumps(evidence)),
-                )
-                cur.execute(
-                    """
-                    insert into rca_reports (correlation_id, root_cause, action, payload)
-                    values (%s, %s, %s, %s)
-                    """,
-                    (
-                        evt["correlation_id"],
-                        ROOT_CAUSE,
-                        RECOMMENDED_ACTION,
-                        json.dumps({"evidence_ref": evidence["object_ref"]}),
-                    ),
-                )
-                cur.execute(
-                    """
-                    insert into pull_requests (correlation_id, pr_url, title, body, status)
-                    values (%s, %s, %s, %s, %s)
-                    """,
-                    (
-                        evt["correlation_id"],
-                        pr_url,
-                        PR_TITLE,
-                        f"RCA: {ROOT_CAUSE}\n\nAction: {RECOMMENDED_ACTION}",
-                        PR_STATUS_CREATED,
-                    ),
-                )
+        self.rca_store.save_evidence(evt["correlation_id"], EVIDENCE_KIND, evidence)
+        self.rca_store.save_rca_report(
+            evt["correlation_id"],
+            ROOT_CAUSE,
+            RECOMMENDED_ACTION,
+            {"evidence_ref": evidence["object_ref"]},
+        )
+        self.rca_store.save_pull_request(
+            evt["correlation_id"],
+            pr_url,
+            PR_TITLE,
+            f"RCA: {ROOT_CAUSE}\n\nAction: {RECOMMENDED_ACTION}",
+            PR_STATUS_CREATED,
+        )
 
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.EVIDENCE_BUILT,
             SERVICE_NAME,
             {"evidence": evidence},
@@ -80,7 +71,7 @@ class RcaWorkflow:
         )
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.RCA_COMPLETED,
             SERVICE_NAME,
             {
@@ -92,7 +83,7 @@ class RcaWorkflow:
         )
         await publish_and_record(
             self.bus,
-            self.db,
+            self.events,
             EventSubject.SAFE_PR_CREATED,
             SERVICE_NAME,
             {

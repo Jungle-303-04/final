@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from uvicorn import Config, Server
 
 from packages.shared.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
+from packages.shared.contracts import CommandRecord, JsonObject, ManagementPlaneClient
 from packages.shared.core import env
 
 DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
@@ -49,53 +50,90 @@ OTEL_SLOW_SPAN = "GET /checkout"
 NODE_COLLECTOR_MESSAGE = "fake node collector scraped node/log/runtime metrics"
 
 
+class HttpManagementPlaneClient:
+    def __init__(self, base_url: str, timeout_seconds: int = HTTP_TIMEOUT_SECONDS) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.client = httpx.AsyncClient(timeout=timeout_seconds)
+
+    async def __aenter__(self) -> HttpManagementPlaneClient:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.close()
+
+    async def close(self) -> None:
+        await self.client.aclose()
+
+    async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
+        await self.client.post(
+            f"{self.base_url}/agent/connect",
+            json={
+                "cluster_id": cluster_id,
+                "agent_id": agent_id,
+                "capabilities": capabilities,
+            },
+        )
+
+    async def ship_evidence(self, evidence: JsonObject) -> int:
+        response = await self.client.post(f"{self.base_url}/agent/evidence", json=evidence)
+        return response.status_code
+
+    async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
+        response = await self.client.get(
+            f"{self.base_url}/agent/commands/poll",
+            params={"cluster_id": cluster_id, "timeout": timeout_seconds},
+        )
+        response.raise_for_status()
+        return response.json().get("command")
+
+    async def complete_command(self, command_id: str, result: JsonObject) -> None:
+        await self.client.post(f"{self.base_url}/agent/commands/{command_id}/result", json=result)
+
+
 class TargetClusterAgent:
-    def __init__(self) -> None:
+    def __init__(self, client: ManagementPlaneClient | None = None) -> None:
         self.base_url = env(MANAGEMENT_BASE_URL_ENV, DEFAULT_MANAGEMENT_BASE_URL).rstrip("/")
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
+        self.client = client
 
     async def run(self) -> None:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-            await self.register(client)
-            await asyncio.gather(self.ship_evidence(client), self.poll_commands(client))
+        if self.client is not None:
+            await self.run_with_client(self.client)
+            return
+        async with HttpManagementPlaneClient(self.base_url) as client:
+            await self.run_with_client(client)
 
-    async def register(self, client: httpx.AsyncClient) -> None:
+    async def run_with_client(self, client: ManagementPlaneClient) -> None:
+        await self.register(client)
+        await asyncio.gather(self.ship_evidence(client), self.poll_commands(client))
+
+    async def register(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                await client.post(
-                    f"{self.base_url}/agent/connect",
-                    json={
-                        "cluster_id": self.cluster_id,
-                        "agent_id": env(HOSTNAME_ENV, DEFAULT_AGENT_ID),
-                        "capabilities": AGENT_CAPABILITIES,
-                    },
+                await client.register_agent(
+                    self.cluster_id,
+                    env(HOSTNAME_ENV, DEFAULT_AGENT_ID),
+                    AGENT_CAPABILITIES,
                 )
                 return
             except Exception as exc:
                 print(f"agent waiting for management gateway: {exc}", flush=True)
                 await asyncio.sleep(REGISTER_RETRY_DELAY_SECONDS)
 
-    async def ship_evidence(self, client: httpx.AsyncClient) -> None:
+    async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                response = await client.post(
-                    f"{self.base_url}/agent/evidence", json=self.fake_evidence()
-                )
-                print(f"evidence shipped status={response.status_code}", flush=True)
+                status_code = await client.ship_evidence(self.fake_evidence())
+                print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
             await asyncio.sleep(self.interval)
 
-    async def poll_commands(self, client: httpx.AsyncClient) -> None:
+    async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                response = await client.get(
-                    f"{self.base_url}/agent/commands/poll",
-                    params={"cluster_id": self.cluster_id, "timeout": COMMAND_POLL_TIMEOUT_SECONDS},
-                )
-                response.raise_for_status()
-                command = response.json().get("command")
+                command = await client.poll_command(self.cluster_id, COMMAND_POLL_TIMEOUT_SECONDS)
                 if command:
                     command_id = command["command_id"]
                     action = command["action"]
@@ -104,9 +142,9 @@ class TargetClusterAgent:
                         flush=True,
                     )
                     await asyncio.sleep(COMMAND_EXECUTION_DELAY_SECONDS)
-                    await client.post(
-                        f"{self.base_url}/agent/commands/{command['command_id']}/result",
-                        json={
+                    await client.complete_command(
+                        command_id,
+                        {
                             "status": COMMAND_COMPLETED_STATUS,
                             "cluster_id": self.cluster_id,
                             "applied": True,
@@ -117,7 +155,7 @@ class TargetClusterAgent:
                 print(f"command polling failed: {exc}", flush=True)
                 await asyncio.sleep(COMMAND_RETRY_DELAY_SECONDS)
 
-    def fake_evidence(self) -> dict[str, Any]:
+    def fake_evidence(self) -> JsonObject:
         return {
             "cluster_id": self.cluster_id,
             "kubernetes": {
