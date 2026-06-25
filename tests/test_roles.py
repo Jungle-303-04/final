@@ -1,5 +1,5 @@
-from eda_platform.main import build_role_runners
-from eda_platform.roles import ServiceRole
+from service.main import build_role_runners
+from service.roles import ServiceRole
 
 
 def test_service_role_values_are_cli_friendly() -> None:
