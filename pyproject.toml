@@ -1,5 +1,5 @@
 [project]
-name = "service"
+name = "services"
 version = "0.1.0"
 description = "Event-driven Kubernetes operations platform"
 readme = "README.md"

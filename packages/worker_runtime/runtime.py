@@ -3,17 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import signal
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Callable
 
-from service.shared.core import Database, EventBus, wait_for_database
-
-Handler = Callable[[dict[str, Any]], Awaitable[None]]
+from packages.shared.contracts import EventHandler
+from packages.shared.core import Database, EventBus, wait_for_database
 
 
 class WorkerRuntime:
     def __init__(
-        self, role: str, subject: str, handler_factory: Callable[[EventBus, Database], Handler]
+        self, role: str, subject: str, handler_factory: Callable[[EventBus, Database], EventHandler]
     ) -> None:
         self.role = role
         self.subject = subject

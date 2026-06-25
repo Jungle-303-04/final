@@ -33,10 +33,10 @@ doctor: ## 로컬 필수 도구 점검
 	bash scripts/doctor.sh
 
 lint: ## Ruff 린트 검사
-	uv run ruff check service tests
+	uv run ruff check services packages tests
 
 format: ## Ruff 포맷 적용
-	uv run ruff format service tests
+	uv run ruff format services packages tests
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
@@ -68,5 +68,5 @@ kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYM
 
 clean: ## Python 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
-	find service tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find services packages tests -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -name .DS_Store -delete

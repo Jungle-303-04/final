@@ -5,12 +5,19 @@ import json
 import time
 from typing import Any
 
+from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from service.gateway.auth import OAuthAuthService, RedisSessionStore
-from service.shared.core import Database, EventBus, publish_and_record, wait_for_database
-from service.shared.schemas import (
+from packages.shared.constants import (
+    DEFAULT_TARGET_CLUSTER_ID,
+    GITHUB_PROVIDER,
+    LOCAL_USER_ID,
+    REQUIRED_GITHUB_SCOPE,
+    EventSubject,
+)
+from packages.shared.core import Database, EventBus, publish_and_record, wait_for_database
+from packages.shared.schemas import (
     AgentConnectRequest,
     AgentEvidenceRequest,
     CommandRequest,
@@ -19,6 +26,21 @@ from service.shared.schemas import (
     OAuthCallbackRequest,
 )
 
+SERVICE_NAME = "management-api-gateway"
+APP_TITLE = "Management API Gateway"
+APP_VERSION = "0.1.0"
+DEFAULT_SCOPES = "profile,email"
+DEFAULT_AGENT_COMMAND_POLL_SECONDS = 10
+MAX_COMMAND_POLL_SECONDS = 30
+COMMAND_POLL_SLEEP_SECONDS = 1
+DASHBOARD_STREAM_INTERVAL_SECONDS = 2
+COMMAND_NOT_FOUND_STATUS_CODE = 404
+GATEWAY_ERROR_STATUS_CODE = 500
+COMMAND_NOT_FOUND_MESSAGE = "command not found"
+COMMAND_STATUS_QUEUED = "queued"
+COMMAND_STATUS_LEASED = "leased"
+EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
+
 
 class ManagementApiGateway:
     def __init__(self) -> None:
@@ -26,7 +48,7 @@ class ManagementApiGateway:
         self.bus = EventBus()
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
-        self.app = FastAPI(title="Management API Gateway", version="0.1.0")
+        self.app = FastAPI(title=APP_TITLE, version=APP_VERSION)
         self.configure_routes()
 
     def configure_routes(self) -> None:
@@ -45,7 +67,7 @@ class ManagementApiGateway:
 
         @app.get("/healthz")
         async def healthz() -> dict[str, str]:
-            return {"status": "ok", "service": "management-api-gateway"}
+            return {"status": "ok", "service": SERVICE_NAME}
 
         @app.get("/readyz")
         async def readyz() -> dict[str, str]:
@@ -59,17 +81,17 @@ class ManagementApiGateway:
 
         @app.get("/auth/oauth/{provider}/start")
         async def oauth_start(
-            provider: str, user_id: str = "local-user", scopes: str = "profile,email"
+            provider: str, user_id: str = LOCAL_USER_ID, scopes: str = DEFAULT_SCOPES
         ) -> dict[str, Any]:
             scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
-            if provider == "github" and "repo" not in scope_list:
-                scope_list.append("repo")
+            if provider == GITHUB_PROVIDER and REQUIRED_GITHUB_SCOPE not in scope_list:
+                scope_list.append(REQUIRED_GITHUB_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
             await publish_and_record(
                 self.bus,
                 self.db,
-                "oauth.start.requested",
-                "management-api-gateway",
+                EventSubject.OAUTH_START_REQUESTED,
+                SERVICE_NAME,
                 {
                     "provider": provider,
                     "user_id": user_id,
@@ -84,7 +106,7 @@ class ManagementApiGateway:
             result = await self.auth.callback(provider, payload.model_dump())
             account = result["account"]
             evt = await publish_and_record(
-                self.bus, self.db, "oauth.connected", "management-api-gateway", account
+                self.bus, self.db, EventSubject.OAUTH_CONNECTED, SERVICE_NAME, account
             )
             return {
                 "accepted": True,
@@ -98,8 +120,8 @@ class ManagementApiGateway:
             evt = await publish_and_record(
                 self.bus,
                 self.db,
-                "git.webhook.received",
-                "management-api-gateway",
+                EventSubject.GIT_WEBHOOK_RECEIVED,
+                SERVICE_NAME,
                 payload.model_dump(),
             )
             return {"accepted": True, "event": evt}
@@ -107,7 +129,11 @@ class ManagementApiGateway:
         @app.post("/agent/connect")
         async def agent_connect(payload: AgentConnectRequest) -> dict[str, Any]:
             evt = await publish_and_record(
-                self.bus, self.db, "agent.connected", "management-api-gateway", payload.model_dump()
+                self.bus,
+                self.db,
+                EventSubject.AGENT_CONNECTED,
+                SERVICE_NAME,
+                payload.model_dump(),
             )
             return {"accepted": True, "event_id": evt["event_id"]}
 
@@ -117,8 +143,8 @@ class ManagementApiGateway:
             evt = await publish_and_record(
                 self.bus,
                 self.db,
-                "cluster.evidence.received",
-                "management-api-gateway",
+                EventSubject.CLUSTER_EVIDENCE_RECEIVED,
+                SERVICE_NAME,
                 evidence,
                 payload.correlation_id,
             )
@@ -134,7 +160,7 @@ class ManagementApiGateway:
             command = payload.model_dump()
             command["requested_by"] = current.user_id
             evt = await publish_and_record(
-                self.bus, self.db, "command.requested", "management-api-gateway", command
+                self.bus, self.db, EventSubject.COMMAND_REQUESTED, SERVICE_NAME, command
             )
             return {
                 "accepted": True,
@@ -144,9 +170,10 @@ class ManagementApiGateway:
 
         @app.get("/agent/commands/poll")
         async def poll_command(
-            cluster_id: str = "target-cluster-01", timeout: int = 10
+            cluster_id: str = DEFAULT_TARGET_CLUSTER_ID,
+            timeout: int = DEFAULT_AGENT_COMMAND_POLL_SECONDS,
         ) -> dict[str, Any]:
-            deadline = time.time() + min(timeout, 30)
+            deadline = time.time() + min(timeout, MAX_COMMAND_POLL_SECONDS)
             while time.time() < deadline:
                 with self.db.connect() as conn:
                     with conn.cursor() as cur:
@@ -154,24 +181,24 @@ class ManagementApiGateway:
                             """
                             select command_id, correlation_id, cluster_id, action, payload
                             from agent_commands
-                            where cluster_id = %s and status = 'queued'
+                            where cluster_id = %s and status = %s
                             order by created_at
                             limit 1
                             """,
-                            (cluster_id,),
+                            (cluster_id, COMMAND_STATUS_QUEUED),
                         )
                         row = cur.fetchone()
                         if row:
                             cur.execute(
                                 """
                                 update agent_commands
-                                set status = 'leased', updated_at = now()
+                                set status = %s, updated_at = now()
                                 where command_id = %s
                                 """,
-                                (row["command_id"],),
+                                (COMMAND_STATUS_LEASED, row["command_id"]),
                             )
                             return {"command": row}
-                await asyncio.sleep(1)
+                await asyncio.sleep(COMMAND_POLL_SLEEP_SECONDS)
             return {"command": None}
 
         @app.post("/agent/commands/{command_id}/result")
@@ -190,12 +217,15 @@ class ManagementApiGateway:
                     )
                     row = cur.fetchone()
             if not row:
-                raise HTTPException(status_code=404, detail="command not found")
+                raise HTTPException(
+                    status_code=COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=COMMAND_NOT_FOUND_MESSAGE,
+                )
             evt = await publish_and_record(
                 self.bus,
                 self.db,
-                "command.completed",
-                "management-api-gateway",
+                EventSubject.COMMAND_COMPLETED,
+                SERVICE_NAME,
                 {"command_id": command_id, "result": result},
                 row["correlation_id"],
             )
@@ -216,15 +246,15 @@ class ManagementApiGateway:
                     encoded = json.dumps(self.db.list_dashboard(), default=str)
                     if encoded != last:
                         last = encoded
-                        yield f"event: dashboard.updated\ndata: {encoded}\n\n"
-                    await asyncio.sleep(2)
+                        yield f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
+                    await asyncio.sleep(DASHBOARD_STREAM_INTERVAL_SECONDS)
 
-            return StreamingResponse(events(), media_type="text/event-stream")
+            return StreamingResponse(events(), media_type=EVENT_STREAM_MEDIA_TYPE)
 
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             print(f"gateway error: {exc}", flush=True)
-            return JSONResponse(status_code=500, content={"error": str(exc)})
+            return JSONResponse(status_code=GATEWAY_ERROR_STATUS_CODE, content={"error": str(exc)})
 
 
 def create_app() -> FastAPI:

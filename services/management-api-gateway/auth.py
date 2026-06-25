@@ -9,7 +9,30 @@ from typing import Any
 from fastapi import HTTPException, Request
 from redis.asyncio import Redis
 
-from service.shared.core import Database, env
+from packages.shared.constants import (
+    DEFAULT_REDIS_URL,
+    DEFAULT_SESSION_TTL_SECONDS,
+    SESSION_COOKIE_NAME,
+)
+from packages.shared.core import Database, env
+
+REDIS_URL_ENV = "REDIS_URL"
+SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
+SESSION_KEY_PREFIX = "session"
+OAUTH_STATE_KEY_PREFIX = "oauth_state"
+RATE_LIMIT_KEY_PREFIX = "rate"
+OAUTH_STATE_TTL_SECONDS = 600
+SESSION_TOKEN_BYTES = 32
+DEFAULT_RATE_LIMIT = 120
+RATE_LIMIT_WINDOW_SECONDS = 60
+OWNER_ROLE = "owner"
+AUTHORIZATION_HEADER = "authorization"
+BEARER_PREFIX = "bearer "
+SESSION_TOKEN_HEADER = "x-session-token"
+OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
+RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
+AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
+REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
 
 
 @dataclass(frozen=True)
@@ -21,8 +44,8 @@ class AuthSession:
 
 class RedisSessionStore:
     def __init__(self) -> None:
-        self.url = env("REDIS_URL", "redis://redis:6379/0")
-        self.ttl_seconds = int(env("SESSION_TTL_SECONDS", "86400"))
+        self.url = env(REDIS_URL_ENV, DEFAULT_REDIS_URL)
+        self.ttl_seconds = int(env(SESSION_TTL_ENV, DEFAULT_SESSION_TTL_SECONDS))
         self.client: Redis | None = None
 
     async def connect(self) -> None:
@@ -35,10 +58,10 @@ class RedisSessionStore:
 
     async def create_session(self, user_id: str, roles: list[str] | None = None) -> AuthSession:
         client = self._client()
-        token = secrets.token_urlsafe(32)
-        session = AuthSession(token=token, user_id=user_id, roles=roles or ["owner"])
+        token = secrets.token_urlsafe(SESSION_TOKEN_BYTES)
+        session = AuthSession(token=token, user_id=user_id, roles=roles or [OWNER_ROLE])
         await client.setex(
-            f"session:{token}",
+            f"{SESSION_KEY_PREFIX}:{token}",
             self.ttl_seconds,
             json.dumps({"user_id": session.user_id, "roles": session.roles}),
         )
@@ -47,7 +70,7 @@ class RedisSessionStore:
     async def get_session(self, token: str | None) -> AuthSession | None:
         if not token:
             return None
-        raw = await self._client().get(f"session:{token}")
+        raw = await self._client().get(f"{SESSION_KEY_PREFIX}:{token}")
         if not raw:
             return None
         payload = json.loads(raw)
@@ -56,29 +79,36 @@ class RedisSessionStore:
         )
 
     async def save_oauth_state(self, state: str, payload: dict[str, Any]) -> None:
-        await self._client().setex(f"oauth_state:{state}", 600, json.dumps(payload))
+        await self._client().setex(
+            f"{OAUTH_STATE_KEY_PREFIX}:{state}", OAUTH_STATE_TTL_SECONDS, json.dumps(payload)
+        )
 
     async def consume_oauth_state(self, state: str | None) -> dict[str, Any] | None:
         if not state:
             return None
-        key = f"oauth_state:{state}"
+        key = f"{OAUTH_STATE_KEY_PREFIX}:{state}"
         raw = await self._client().get(key)
         if raw:
             await self._client().delete(key)
             return dict(json.loads(raw))
         return None
 
-    async def check_rate_limit(self, key: str, limit: int = 120, window_seconds: int = 60) -> None:
-        redis_key = f"rate:{key}"
+    async def check_rate_limit(
+        self,
+        key: str,
+        limit: int = DEFAULT_RATE_LIMIT,
+        window_seconds: int = RATE_LIMIT_WINDOW_SECONDS,
+    ) -> None:
+        redis_key = f"{RATE_LIMIT_KEY_PREFIX}:{key}"
         count = await self._client().incr(redis_key)
         if count == 1:
             await self._client().expire(redis_key, window_seconds)
         if count > limit:
-            raise HTTPException(status_code=429, detail="rate limit exceeded")
+            raise HTTPException(status_code=429, detail=RATE_LIMIT_EXCEEDED_MESSAGE)
 
     def _client(self) -> Redis:
         if self.client is None:
-            raise RuntimeError("Redis session store is not connected")
+            raise RuntimeError(REDIS_NOT_CONNECTED_MESSAGE)
         return self.client
 
 
@@ -95,14 +125,14 @@ class OAuthAuthService:
         return {
             "provider": provider,
             "state": state,
-            "authorization_url": f"https://oauth.example.local/{provider}/authorize?state={state}",
+            "authorization_url": f"{OAUTH_AUTHORIZE_BASE_URL}/{provider}/authorize?state={state}",
         }
 
     async def callback(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:
         state_payload = await self.sessions.consume_oauth_state(payload.get("state"))
         merged = {**(state_payload or {}), **payload, "provider": provider}
         account = self.db.save_oauth_account(merged)
-        session = await self.sessions.create_session(account["user_id"], ["owner"])
+        session = await self.sessions.create_session(account["user_id"], [OWNER_ROLE])
         return {
             "account": account,
             "session": {
@@ -116,17 +146,17 @@ class OAuthAuthService:
         token = self._extract_token(request)
         session = await self.sessions.get_session(token)
         if session is None:
-            raise HTTPException(status_code=401, detail="authentication required")
+            raise HTTPException(status_code=401, detail=AUTHENTICATION_REQUIRED_MESSAGE)
         await self.sessions.check_rate_limit(session.user_id)
         return session
 
     @staticmethod
     def _extract_token(request: Request) -> str | None:
-        authorization = request.headers.get("authorization", "")
-        if authorization.lower().startswith("bearer "):
+        authorization = request.headers.get(AUTHORIZATION_HEADER, "")
+        if authorization.lower().startswith(BEARER_PREFIX):
             return authorization.split(" ", 1)[1].strip()
-        if request.headers.get("x-session-token"):
-            return request.headers["x-session-token"]
-        if request.cookies.get("service_session"):
-            return request.cookies["service_session"]
+        if request.headers.get(SESSION_TOKEN_HEADER):
+            return request.headers[SESSION_TOKEN_HEADER]
+        if request.cookies.get(SESSION_COOKIE_NAME):
+            return request.cookies[SESSION_COOKIE_NAME]
         return None

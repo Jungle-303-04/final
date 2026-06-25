@@ -1,31 +1,43 @@
 # Service Split Plan
 
-현재 코드는 하나의 monorepo와 하나의 Docker image를 사용하지만, 폴더는 아키텍처 박스 기준으로 나눕니다.
-Kubernetes에서는 같은 image를 role 인자로 다르게 실행해서 `gateway`, `worker`, `target-agent` 인스턴스를 분리합니다.
+현재 코드는 하나의 monorepo와 하나의 Docker image를 사용하지만, 폴더는 실행될 마이크로서비스 기준으로 나눕니다.
+Kubernetes에서는 같은 image를 role 인자로 다르게 실행해서 `services/<service-name>` 인스턴스를 분리합니다.
 
 ## Current Folder Mapping
 
 ```text
-service/gateway
+services/management-api-gateway
   Management API Gateway
   OAuth/session
   command/dashboard/agent HTTP boundary
 
-service/workers
+services/gitops-sync-worker
   GitOps / Desired State
-  Command / Control
-  RCA / Evidence
-  Read Model / Audit
 
-service/target
+services/command-worker
+  Command / Control
+
+services/rca-worker
+  RCA / Evidence
+
+services/dashboard-projection-service
+  Read Model / Dashboard Projection
+
+services/audit-timeline-service
+  Audit Timeline
+
+services/target-cluster-agent
   Target Cluster Agent
   telemetry adapters
   command receiver
 
-service/shared
+packages/shared
   NATS JetStream contract
   PostgreSQL access
   request/command/event schemas
+
+packages/worker_runtime
+  shared JetStream worker runtime
 
 deploy
   management cluster manifests
@@ -38,11 +50,11 @@ secrets
 
 ## Split Order
 
-1. `service/gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`로 나눕니다.
-2. `service/workers`의 DB query를 repository 객체로 분리합니다.
-3. `dashboard` 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 `service/dashboard`로 분리합니다.
-4. 실제 GitHub PR 생성이 들어가면 `Safe PR`을 `service/integrations/github` 또는 별도 worker로 분리합니다.
-5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `target` adapter를 provider별 파일로 분리합니다.
+1. `services/management-api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`로 나눕니다.
+2. 각 service의 DB query를 repository 객체로 분리합니다.
+3. `dashboard` 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리합니다.
+4. 실제 GitHub PR 생성이 들어가면 `Safe PR`을 `services/safe-pr-service`로 분리합니다.
+5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target-cluster-agent` adapter를 provider별 파일로 분리합니다.
 6. 배포 운영이 무거워지면 하나의 image를 서비스별 image로 나눕니다.
 
 ## Rules
