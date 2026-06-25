@@ -8,8 +8,9 @@ class Settings(BaseSettings):
     app_env: str = "local"
     app_version: str = "0.1.0"
     log_level: str = "info"
+    database_url: str = "sqlite:///./.data/local.db"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 @lru_cache

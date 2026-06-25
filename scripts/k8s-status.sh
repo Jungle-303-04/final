@@ -9,7 +9,7 @@ kubectl config current-context 2>/dev/null || true
 
 echo
 echo "==> Pods"
-kubectl -n final-app get deploy,svc,pod -o wide 2>/dev/null || true
+kubectl -n final-app get deploy,statefulset,svc,pvc,pod -o wide 2>/dev/null || true
 
 cat <<EOF
 
