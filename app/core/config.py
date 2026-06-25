@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "sw-ai-final"
+    app_name: str = "Project K"
     app_env: str = "local"
     app_version: str = "0.1.0"
     log_level: str = "info"
