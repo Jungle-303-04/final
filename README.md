@@ -2,16 +2,22 @@
 
 Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 구현입니다.
 
-이 repo의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `service`입니다. 하나의 Docker image를 만들고, Kubernetes Deployment마다 다른 role을 실행해 여러 서비스 인스턴스로 나눕니다.
+이 repo의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `services/<service-name>`입니다. 하나의 Docker image를 만들고, Kubernetes Deployment마다 다른 service runner를 실행해 여러 서비스 인스턴스로 나눕니다.
 
 ## 구조
 
 ```text
-service      gateway/workers/target/shared 코드
-  gateway    HTTP API, OAuth, dashboard API
-  workers    gitops, command, rca, dashboard, audit workers
-  target     target cluster agent, telemetry adapters
-  shared     DB, NATS, schemas
+services
+  management-api-gateway
+  gitops-sync-worker
+  command-worker
+  rca-worker
+  dashboard-projection-service
+  audit-timeline-service
+  target-cluster-agent
+packages
+  shared                 DB, NATS, schemas, roles
+  worker_runtime         JetStream worker runtime
 deploy       management/target kind 클러스터 manifests
 scripts      실행, 상태 확인, smoke, scale, pod 복구 스크립트
 secrets      SOPS/age 시크릿 템플릿
@@ -41,7 +47,7 @@ make down
 
 ## 서비스 role
 
-각 role은 같은 image에서 다른 프로세스로 실행됩니다. 코드 폴더도 실행 경계에 맞춰 `gateway`, `workers`, `target`, `shared`로 나눕니다.
+각 role은 같은 image에서 다른 프로세스로 실행됩니다. 코드 폴더는 실행 경계에 맞춰 `services/<service-name>`로 나눕니다.
 
 ```text
 gateway                       Management API Gateway

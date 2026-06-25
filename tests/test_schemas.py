@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from service.shared.core import event
-from service.shared.schemas import CommandRequest, GitHubWebhookRequest
+from packages.shared.core import event
+from packages.shared.schemas import CommandRequest, GitHubWebhookRequest
 
 
 def test_command_request_allows_only_sandbox_namespace() -> None:
