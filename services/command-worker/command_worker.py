@@ -22,7 +22,11 @@ class CommandWorkflow:
         command = CommandPayload(evt[PAYLOAD])
         policy = self.policy.evaluate(command)
         if not policy.allowed:
-            await self.reject(evt, command, policy.reason or "command policy rejected")
+            await self.reject(
+                evt,
+                command,
+                policy.reason or Settings.DEFAULT_POLICY_REJECT_REASON,
+            )
             return
 
         await self.dispatcher.dispatch(evt, CommandPlan.from_payload(command))
