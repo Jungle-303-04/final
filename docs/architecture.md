@@ -23,11 +23,9 @@ services
   + audit-timeline-service       변경 불가능한 audit timeline
   + target-cluster-agent         Target Cluster Agent와 telemetry adapter
   + node-collector               선택형 DaemonSet node/runtime metrics source
-  + registry.py                  role -> service folder -> runner mapping
-  + main.py                      role 기반 process entrypoint
 
 packages
-  + shared                       DB, NATS, schema, role
+  + shared                       DB, NATS, schema, service bootstrap
   + worker_runtime               공통 JetStream worker runtime
 
 deploy
@@ -38,6 +36,26 @@ deploy
 scripts/*.sh                    양쪽 클러스터 로컬 운영 스크립트
 secrets                         SOPS/age 기반 secret 공유 템플릿
 ```
+
+## 실행 단위
+
+각 Kubernetes workload는 중앙 dispatcher에 role 문자열을 넘기지 않는다. Deployment/DaemonSet이 각 서비스 entrypoint를 직접 실행한다.
+
+```text
+management-api-gateway        -> python services/management-api-gateway/runner.py
+gitops-sync-worker            -> python services/gitops-sync-worker/runner.py
+command-worker                -> python services/command-worker/runner.py
+rca-worker                    -> python services/rca-worker/runner.py
+dashboard-projection-service  -> python services/dashboard-projection-service/runner.py
+audit-timeline-service        -> python services/audit-timeline-service/runner.py
+target-cluster-agent          -> python services/target-cluster-agent/runner.py
+optional-node-collector       -> python services/node-collector/runner.py
+fake-prometheus               -> python services/target-cluster-agent/fake_prometheus.py
+fake-loki                     -> python services/target-cluster-agent/fake_loki.py
+fake-otel                     -> python services/target-cluster-agent/fake_otel.py
+```
+
+현재는 Docker image를 하나만 빌드하지만, 실행 파일 경계가 이미 서비스별로 갈라져 있다. 이후 운영 부담이 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 분리한다.
 
 ## 포트와 어댑터
 

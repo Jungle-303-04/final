@@ -8,15 +8,16 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from agent import TargetClusterAgent
+from agent import run_fake_telemetry
 
 from packages.shared.service_bootstrap import run_service
 
-SERVICE_NAME = "target-cluster-agent"
+SERVICE_NAME = "fake-otel"
+TELEMETRY_KIND = "otel"
 
 
 async def run() -> None:
-    await TargetClusterAgent().run()
+    await run_fake_telemetry(TELEMETRY_KIND)
 
 
 def main() -> None:
