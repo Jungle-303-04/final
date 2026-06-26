@@ -12,7 +12,8 @@
   "subject": "command.requested",
   "source": "api-gateway",
   "correlation_id": "uuid-or-business-flow-id",
-  "timestamp": "2026-06-26T00:00:00Z",
+  "causation_id": null,
+  "created_at": "2026-06-26T00:00:00Z",
   "payload": {}
 }
 ```
@@ -22,6 +23,8 @@
 - `subject`는 routing 계약이다.
 - `source`는 이벤트를 만든 서비스다.
 - `correlation_id`는 하나의 업무 흐름을 여러 서비스 사이에서 연결한다.
+- `causation_id`는 이 이벤트를 만든 직접 원인 이벤트의 `event_id`다. 사용자가 처음 요청한 root 이벤트는 `null`을 사용한다.
+- `created_at`은 envelope가 만들어진 UTC ISO 시각이다.
 - `payload`는 raw string이나 array가 아니라 JSON object여야 한다.
 - provider token, session token, kubeconfig, `.env` 값은 이벤트에 넣지 않는다.
 
@@ -63,6 +66,8 @@ await self.events.publish(
 
 Gateway code는 호환성을 위해 `publish_and_record(...)`를 사용할 수 있다. 새 worker code는 `EventClient`를 우선 사용한다.
 
+Worker handler 안에서 발행하는 후속 이벤트는 `causation_id`를 직접 넘기지 않아도 된다. `WorkerRuntime`이 현재 처리 중인 원본 이벤트를 context로 잡고, `RecordedEventClient`가 자동으로 원본 `event_id`를 `causation_id`에 넣는다.
+
 ## 구독
 
 각 worker의 구독 위치는 자기 서비스 폴더의 `settings.py`다. Runner는 구독 subject를 직접 쓰지 않고 `SUBSCRIPTION`만 넘긴다.
@@ -96,6 +101,41 @@ WorkerService.from_subscription(
 | RCA Worker | `services/rca-worker/settings.py` | `cluster.evidence.received` |
 | Dashboard Projection Service | `services/dashboard-projection-service/settings.py` | `>` |
 | Audit Timeline Service | `services/audit-timeline-service/settings.py` | `>` |
+
+## 큐 처리 알고리즘
+
+현재 큐 정책은 MVP 기준으로 아래 조합을 사용한다.
+
+```text
+NATS JetStream durable pull consumer
+-> handler 단위 at-least-once delivery
+-> event_processing idempotency ledger
+-> bounded retry
+-> DLQ 저장
+-> 운영자 확인 후 replay
+```
+
+선택 기준:
+
+- exactly-once는 목표가 아니다. 중복 처리는 `event_processing`과 업무 테이블의 stable id로 막는다.
+- 서비스 간 직접 HTTP 호출 순서를 큐에 숨기지 않는다. 선후행은 `command.requested -> command.dispatch.ready -> command.dispatched`처럼 subject 전이로 표현한다.
+- MVP에서는 worker별 `fetch_batch_size=1`로 시작한다. 처리 순서와 디버깅을 쉽게 만들기 위해서다.
+- 처리량이 필요해지면 worker replica 수, durable consumer 분리, batch size 조정 순서로 확장한다.
+- 무한 재시도는 금지한다. 같은 이벤트가 계속 실패하면 운영자가 볼 수 있도록 DLQ로 이동한다.
+- 전역 순서 보장은 하지 않는다. 순서가 중요한 흐름은 `correlation_id`와 상태 전이 검증으로 보호한다.
+
+현재 구현 기준:
+
+| 항목 | 기준 |
+| --- | --- |
+| stream | `SERVICE_EVENTS` |
+| subject set | `packages/contracts/event_bus/subjects.py`의 `STREAM_SUBJECTS` |
+| durable name | 기본값은 `service_name` |
+| delivery | at-least-once |
+| retry | 최대 3회, 기본 delay 2초 |
+| batch | MVP 기본 1개 |
+| idempotency | `event_processing(event_id, consumer)` primary key |
+| DLQ subject | `dead_letter.created` |
 
 ## 처리 상태
 
@@ -153,7 +193,7 @@ GET  /dead-letters
 POST /dead-letters/{dead_letter_id}/replay
 ```
 
-두 endpoint 모두 유효한 session이 필요하다. Replay는 원본 payload를 원본 subject로 새 `event_id`와 함께 다시 발행한 뒤 dead letter row를 `replayed`로 표시한다.
+두 endpoint 모두 유효한 session이 필요하다. Replay는 원본 payload를 원본 subject로 새 `event_id`와 함께 다시 발행한다. 이때 `correlation_id`는 유지하고 `causation_id`는 원본 실패 이벤트의 `event_id`로 기록한 뒤 dead letter row를 `replayed`로 표시한다.
 
 ## Transaction과 순서 정책
 

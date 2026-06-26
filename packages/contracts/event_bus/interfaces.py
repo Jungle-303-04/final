@@ -31,6 +31,7 @@ class EventPublisher(Protocol):
         source: str,
         payload: JsonObject,
         correlation_id: str | None = None,
+        causation_id: str | None = None,
     ) -> Event: ...
 
 
@@ -45,6 +46,7 @@ class EventClient(Protocol):
         source: str,
         payload: JsonObject,
         correlation_id: str | None = None,
+        causation_id: str | None = None,
     ) -> Event: ...
 
 
