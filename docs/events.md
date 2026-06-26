@@ -2,8 +2,6 @@
 
 이 문서는 이벤트를 작성, 발행, 구독, 재시도, 재처리할 때 따르는 작업 규칙이다.
 
-처음 분석하는 담당자는 먼저 [event-bus-learning-guide.md](event-bus-learning-guide.md)를 읽고, 이 문서를 source of truth로 사용한다.
-
 ## 이벤트 Envelope
 
 모든 이벤트는 같은 envelope 구조를 사용한다.
