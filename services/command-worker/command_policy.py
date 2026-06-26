@@ -70,7 +70,7 @@ class CommandPolicy:
     def __init__(self, rules: tuple[PolicyRule, ...] | None = None) -> None:
         self.rules = rules or (
             PolicyRule(
-                name="sandbox_namespace",
+                name=Settings.SANDBOX_NAMESPACE_POLICY_NAME,
                 field=Gateway.NAMESPACE,
                 expected=Sandbox.NAMESPACE,
                 default=Sandbox.NAMESPACE,
