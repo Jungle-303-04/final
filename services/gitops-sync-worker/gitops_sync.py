@@ -4,8 +4,8 @@ import uuid
 from typing import Any
 
 from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.shared.contracts import EventPublisher, EventRecorder, RepoChangeStore
-from packages.shared.core import env, publish_and_record
+from packages.shared.contracts import EventClient, RepoChangeStore
+from packages.shared.core import env
 
 SERVICE_NAME = "gitops-sync-worker"
 DEFAULT_APP_NAME = "checkout-api"
@@ -22,10 +22,9 @@ SYNC_RISK = "sandbox-only"
 
 
 class GitOpsSyncWorkflow:
-    def __init__(self, bus: EventPublisher, repo: RepoChangeStore, events: EventRecorder) -> None:
-        self.bus = bus
-        self.repo = repo
+    def __init__(self, events: EventClient, repo: RepoChangeStore) -> None:
         self.events = events
+        self.repo = repo
 
     async def handle(self, evt: dict[str, Any]) -> None:
         payload = evt["payload"]
@@ -51,33 +50,25 @@ class GitOpsSyncWorkflow:
             "actual_image": PREVIOUS_IMAGE,
             "risk": SYNC_RISK,
         }
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.GIT_CHANGED,
             SERVICE_NAME,
             {"commit_sha": commit_sha, "manifest": manifest},
             evt["correlation_id"],
         )
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.MANIFEST_RENDERED,
             SERVICE_NAME,
             {"rendered_manifest": rendered},
             evt["correlation_id"],
         )
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.DESIRED_DIFF_DETECTED,
             SERVICE_NAME,
             {"diff": diff},
             evt["correlation_id"],
         )
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.COMMAND_REQUESTED,
             SERVICE_NAME,
             {

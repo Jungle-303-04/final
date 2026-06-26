@@ -36,6 +36,10 @@ class FakeEventPublisher:
         return created
 
 
+class FakeEventClient(FakeEventPublisher):
+    pass
+
+
 class FakeEventRecorder:
     def __init__(self) -> None:
         self.recorded: list[dict[str, Any]] = []
@@ -76,10 +80,9 @@ def test_publish_and_record_uses_event_ports() -> None:
 def test_command_workflow_queues_agent_command_through_port() -> None:
     async def run() -> None:
         module = load_module(COMMAND_WORKER_PATH, "test_command_worker")
-        publisher = FakeEventPublisher()
-        recorder = FakeEventRecorder()
+        events = FakeEventClient()
         queue = FakeAgentCommandQueue()
-        workflow = module.CommandWorkflow(publisher, queue, recorder)
+        workflow = module.CommandWorkflow(events, queue)
 
         await workflow.handle(
             {
@@ -97,7 +100,7 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
         assert correlation_id == "corr-2"
         assert plan["cluster_id"] == "target-cluster-01"
         assert status == "queued"
-        assert [evt["subject"] for evt in recorder.recorded] == [
+        assert [evt["subject"] for evt in events.published] == [
             "command.dispatch.ready",
             "command.dispatched",
             "command.queued_for_agent",

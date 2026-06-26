@@ -3,15 +3,16 @@ from __future__ import annotations
 from command_worker import CommandWorkflow
 
 from packages.shared.constants import EventSubject
-from packages.worker_runtime import WorkerRuntime
+from packages.worker_runtime import EventHandlerSpec, WorkerRuntime
 
 SERVICE_NAME = "command-worker"
 SUBSCRIBE_SUBJECT = EventSubject.COMMAND_REQUESTED
 
 
 async def run() -> None:
-    await WorkerRuntime(
-        SERVICE_NAME,
-        SUBSCRIBE_SUBJECT,
-        lambda bus, db: CommandWorkflow(bus, db, db).handle,
-    ).run()
+    spec = EventHandlerSpec(
+        service_name=SERVICE_NAME,
+        subject=SUBSCRIBE_SUBJECT,
+        handler_factory=lambda events, db: CommandWorkflow(events, db).handle,
+    )
+    await WorkerRuntime(spec).run()

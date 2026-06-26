@@ -31,6 +31,7 @@ STREAM_SUBJECTS = [
     "dashboard.>",
     "audit.>",
     "agent.>",
+    "dead_letter.>",
 ]
 
 
@@ -53,9 +54,17 @@ class EventSubject(StrEnum):
     RCA_COMPLETED = "rca.completed"
     SAFE_PR_CREATED = "safe_pr.created"
     DASHBOARD_UPDATED = "dashboard.updated"
+    DEAD_LETTER_CREATED = "dead_letter.created"
 
 
 class DashboardStatus(StrEnum):
     RUNNING = "running"
     DONE = "done"
     ATTENTION = "attention"
+
+
+class EventProcessingStatus(StrEnum):
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    RETRYING = "retrying"
+    DEAD_LETTERED = "dead_lettered"
