@@ -1,7 +1,8 @@
 FROM python:3.13.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -13,4 +14,4 @@ COPY services ./services
 
 EXPOSE 8000 9100
 
-ENTRYPOINT ["python", "-m", "services.main"]
+CMD ["python", "services/management-api-gateway/runner.py"]

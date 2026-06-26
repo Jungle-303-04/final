@@ -1,1 +1,1 @@
-"""Shared DB, NATS, schemas, and role contracts."""
+"""Shared DB, NATS, schemas, and service contracts."""
