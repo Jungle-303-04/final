@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from node_collector import SERVICE_NAME, run
+from node_collector import run
+from settings import SERVICE_NAME
 
 from packages.runtime.service import AsyncService
 

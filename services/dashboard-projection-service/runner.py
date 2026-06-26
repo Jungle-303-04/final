@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from dashboard_projection import DashboardProjectionWorkflow
+from settings import SERVICE_NAME, SUBSCRIBE_SUBJECT
 
 from packages.runtime.service import WorkerService
-
-SERVICE_NAME = "dashboard-projection-service"
-SUBSCRIBE_SUBJECT = ">"
 
 
 def main() -> None:

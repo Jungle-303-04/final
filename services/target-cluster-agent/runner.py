@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from agent import TargetClusterAgent
+from settings import TARGET_AGENT_SERVICE_NAME
 
 from packages.runtime.service import AsyncService
-
-SERVICE_NAME = "target-cluster-agent"
 
 
 async def run() -> None:
@@ -12,7 +11,7 @@ async def run() -> None:
 
 
 def main() -> None:
-    AsyncService(SERVICE_NAME, run).run()
+    AsyncService(TARGET_AGENT_SERVICE_NAME, run).run()
 
 
 if __name__ == "__main__":

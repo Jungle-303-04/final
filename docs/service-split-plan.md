@@ -1,40 +1,50 @@
 # 서비스 분리 계획
 
-현재 코드는 하나의 monorepo에서 시작하지만, 실행 단위는 `services/<service-name>` 마이크로서비스 인스턴스로 분리한다.
+현재 코드는 하나의 monorepo에서 시작하지만, 실행 단위는 `services/<service-name>` 마이크로서비스 인스턴스로 완전히 분리한다.
 Kubernetes에서는 중앙 role dispatcher를 사용하지 않고 각 Deployment/DaemonSet이 서비스 entrypoint를 직접 실행한다.
+
+단일 FastAPI 앱 안의 모듈식 모놀리식은 금지한다. 서비스가 죽으면 Kubernetes가 다시 생성하고, 남은 흐름은 event retry, DLQ, queue/storage 계약으로 복구되어야 한다.
 
 ## 현재 폴더 매핑
 
 ```text
-services/management-api-gateway
-  Management API Gateway
+services/api-gateway
+  API Gateway
   OAuth/session
   command/dashboard/agent HTTP 경계
+  settings.py: route limit, session, polling, error policy
 
 services/gitops-sync-worker
   GitOps / Desired State
+  settings.py: manifest render 기본값, diff 정책, 구독 subject
 
 services/command-worker
   Command / Control
+  settings.py: command policy, queue status, 구독 subject
 
 services/rca-worker
   RCA / Evidence
+  settings.py: RCA 기본 메시지, Safe PR mode, 구독 subject
 
 services/dashboard-projection-service
   Read Model / Dashboard Projection
+  settings.py: projection 상태 규칙, 구독 subject
 
 services/audit-timeline-service
   Audit Timeline
+  settings.py: 구독 subject
 
 services/target-cluster-agent
   Target Cluster Agent
   telemetry adapter
   command receiver
+  settings.py: agent 연결, fake telemetry, polling 간격
 
 services/node-collector
   선택형 DaemonSet collector
   node/runtime metrics endpoint
   Loki 스타일 collector를 위한 stdout log sample
+  settings.py: node sample, scrape port, collect interval
 
 packages/config
   env, 상수, 시간 helper
@@ -69,7 +79,7 @@ secrets
 ## 현재 실행 매핑
 
 ```text
-management-api-gateway        -> python services/management-api-gateway/runner.py
+api-gateway        -> python services/api-gateway/runner.py
 gitops-sync-worker            -> python services/gitops-sync-worker/runner.py
 command-worker                -> python services/command-worker/runner.py
 rca-worker                    -> python services/rca-worker/runner.py
@@ -84,20 +94,24 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 
 ## 추가 분리 순서
 
-1. `services/management-api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
+1. `services/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
 2. 각 service의 DB query를 repository 객체로 분리한다.
 3. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
 4. 실제 GitHub PR 생성이 들어가면 `Safe PR`을 `services/safe-pr-service`로 분리한다.
 5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target-cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `services/node-collector`에서 확장한다.
-6. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 하나의 image를 서비스별 image로 나눈다.
+6. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 공통 base layer 위에서 서비스별 image로 나눈다.
 
 ## 규칙
 
 - 먼저 service/process 경계를 유지하고, 파일은 책임별로 나눈다.
 - 서비스 workflow는 `packages/contracts/interfaces.py` 포트에 의존하고 concrete adapter는 runtime/composition 경계에서 주입한다.
 - service runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
+- 서비스별 설정은 반드시 `services/<service-name>/settings.py`에 둔다.
+- 여러 서비스가 공유하는 값만 `packages/config`로 승격한다.
 - 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둔다.
 - DB schema는 공유 PostgreSQL에서 시작하되 schema/table ownership을 문서화한다.
 - 외부 write 권한은 gateway/auth/policy를 지나게 한다.
 - target cluster는 outbound 연결을 기본값으로 둔다.
 - production write는 기본 금지하고 `sandbox` namespace부터 허용한다.
+- 새 서비스는 runner, Deployment/DaemonSet, health/restart 검증, 소유 WBS/이슈를 함께 추가한다.
+- PR에서 서비스 경계를 합치거나 role dispatcher로 회귀하면 merge하지 않는다.

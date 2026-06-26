@@ -14,8 +14,16 @@ def load_node_collector_module():
         raise RuntimeError(f"cannot load module: {NODE_COLLECTOR_PATH}")
     module = importlib.util.module_from_spec(spec)
     sys.modules["test_node_collector_module"] = module
-    spec.loader.exec_module(module)
-    return module
+    previous_settings = sys.modules.pop("settings", None)
+    sys.path.insert(0, str(NODE_COLLECTOR_PATH.parent))
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(NODE_COLLECTOR_PATH.parent))
+        sys.modules.pop("settings", None)
+        if previous_settings is not None:
+            sys.modules["settings"] = previous_settings
 
 
 def test_node_collector_snapshot_uses_downward_api_identity() -> None:

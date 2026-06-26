@@ -19,7 +19,7 @@
 | 역할 | 자유롭게 변경 가능 | 변경 전 조율 필요 |
 | --- | --- | --- |
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
-| Gateway/Auth | `services/management-api-gateway`, auth/session schema | event subject, DB schema, target agent protocol |
+| Gateway/Auth | `services/api-gateway`, auth/session schema | event subject, DB schema, target agent protocol |
 | GitOps/Command | `services/gitops-sync-worker`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
 | RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service`, Safe PR logic | GitHub token scope, command payload, dashboard read model |
 | Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |

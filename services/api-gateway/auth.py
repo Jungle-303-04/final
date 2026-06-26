@@ -8,6 +8,25 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 from redis.asyncio import Redis
+from settings import (
+    AUTHENTICATION_REQUIRED_MESSAGE,
+    AUTHORIZATION_HEADER,
+    BEARER_PREFIX,
+    DEFAULT_RATE_LIMIT,
+    OAUTH_AUTHORIZE_BASE_URL,
+    OAUTH_STATE_KEY_PREFIX,
+    OAUTH_STATE_TTL_SECONDS,
+    OWNER_ROLE,
+    RATE_LIMIT_EXCEEDED_MESSAGE,
+    RATE_LIMIT_KEY_PREFIX,
+    RATE_LIMIT_WINDOW_SECONDS,
+    REDIS_NOT_CONNECTED_MESSAGE,
+    REDIS_URL_ENV,
+    SESSION_KEY_PREFIX,
+    SESSION_TOKEN_BYTES,
+    SESSION_TOKEN_HEADER,
+    SESSION_TTL_ENV,
+)
 
 from packages.config.constants import (
     DEFAULT_REDIS_URL,
@@ -16,24 +35,6 @@ from packages.config.constants import (
 )
 from packages.config.settings import env
 from packages.contracts.interfaces import OAuthAccountStore, SessionStore
-
-REDIS_URL_ENV = "REDIS_URL"
-SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
-SESSION_KEY_PREFIX = "session"
-OAUTH_STATE_KEY_PREFIX = "oauth_state"
-RATE_LIMIT_KEY_PREFIX = "rate"
-OAUTH_STATE_TTL_SECONDS = 600
-SESSION_TOKEN_BYTES = 32
-DEFAULT_RATE_LIMIT = 120
-RATE_LIMIT_WINDOW_SECONDS = 60
-OWNER_ROLE = "owner"
-AUTHORIZATION_HEADER = "authorization"
-BEARER_PREFIX = "bearer "
-SESSION_TOKEN_HEADER = "x-session-token"
-OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
-RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
-AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
-REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
 
 
 @dataclass(frozen=True)

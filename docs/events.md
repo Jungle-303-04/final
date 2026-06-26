@@ -10,7 +10,7 @@
 {
   "event_id": "uuid",
   "subject": "command.requested",
-  "source": "management-api-gateway",
+  "source": "api-gateway",
   "correlation_id": "uuid-or-business-flow-id",
   "timestamp": "2026-06-26T00:00:00Z",
   "payload": {}

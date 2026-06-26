@@ -41,6 +41,13 @@ kind load docker-image "${IMAGE_NAME}" --name "${MGMT_CLUSTER}"
 kind load docker-image "${IMAGE_NAME}" --name "${TARGET_CLUSTER}"
 
 echo "==> deploying management plane"
+kubectl --context "kind-${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/namespace.yaml"
+kubectl --context "kind-${MGMT_CLUSTER}" -n management delete \
+  deploy/management-api-gateway \
+  svc/management-api-gateway \
+  deploy/api-gateway \
+  svc/api-gateway \
+  --ignore-not-found
 kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${ROOT_DIR}/deploy/management"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
@@ -53,12 +60,12 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulse
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
 for deploy in \
-  management-api-gateway \
+  api-gateway \
   gitops-sync-worker command-worker rca-worker \
   dashboard-projection-service audit-timeline-service; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout restart "deploy/${deploy}"
 done
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/management-api-gateway --timeout=180s
+kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api-gateway --timeout=180s
 
 for deploy in \
   gitops-sync-worker command-worker rca-worker \

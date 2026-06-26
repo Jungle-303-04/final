@@ -2,13 +2,15 @@
 
 Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 구현입니다.
 
-이 repository의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `services/<service-name>`입니다. 하나의 monorepo에서 시작하지만 Kubernetes Deployment/DaemonSet은 각 서비스 폴더의 entrypoint를 직접 실행해 서로 다른 서비스 인스턴스로 분리합니다.
+이 repository의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `services/<service-name>`입니다. 처음부터 완전 분리 마이크로서비스로 만들며, Kubernetes Deployment/DaemonSet은 각 서비스 폴더의 entrypoint를 직접 실행해 서로 다른 서비스 인스턴스로 분리합니다.
+
+단일 FastAPI 앱, role dispatcher, 서비스 간 직접 함수 호출로 회귀하지 않습니다. 한 서비스 pod가 죽어도 Kubernetes가 다시 생성하고, 다른 서비스는 event, DLQ, read model, queue/storage 계약을 기준으로 가능한 범위에서 계속 동작해야 합니다.
 
 ## 구조
 
 ```text
 services
-  management-api-gateway
+  api-gateway
   gitops-sync-worker
   command-worker
   rca-worker
@@ -51,22 +53,23 @@ make down
 
 ## 서비스 역할
 
-각 서비스는 같은 base image를 공유할 수 있지만 실행 프로세스는 분리합니다. Kubernetes workload는 role 문자열을 넘기지 않고 `python services/<service-name>/runner.py`처럼 각 서비스 entrypoint를 직접 실행합니다.
+각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python services/<service-name>/runner.py`처럼 서비스별 entrypoint로 분리한다.
 
 새 서비스 runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService` 중 하나를 사용합니다. 서비스 폴더에서 `WorkerRuntime`, NATS client, PostgreSQL connection을 직접 조립하지 않습니다.
+각 서비스가 직접 제어하는 설정은 `services/<service-name>/settings.py`에 둡니다. 팀원은 자기 서비스의 `settings.py`를 우선 수정하고, 여러 서비스가 공유하는 값만 `packages/config`로 올립니다.
 
 ```text
-management-api-gateway        관리 API Gateway
-gitops-sync-worker            Git webhook -> manifest/diff/command
-command-worker                command policy/dispatch/agent queue
-rca-worker                    evidence -> RCA -> safe PR
-dashboard-projection-service  dashboard read model
-audit-timeline-service        audit log
-target-cluster-agent          대상 클러스터 outbound agent
-fake-prometheus               fake metrics source
-fake-loki                     fake logs source
-fake-otel                     fake trace source
-node-collector                선택형 DaemonSet collector
+api-gateway                  관리 API Gateway
+gitops-sync-worker           Git webhook -> manifest/diff/command
+command-worker               command policy/dispatch/agent queue
+rca-worker                   evidence -> RCA -> safe PR
+dashboard-projection-service dashboard read model
+audit-timeline-service       audit log
+target-cluster-agent         대상 클러스터 outbound agent
+fake-prometheus              fake metrics source
+fake-loki                    fake logs source
+fake-otel                    fake trace source
+node-collector               선택형 DaemonSet collector
 ```
 
 ## 검증
@@ -83,6 +86,8 @@ scale/recovery 확인:
 make scale DEPLOYMENT=rca-worker REPLICAS=2
 make kill-pod DEPLOYMENT=rca-worker
 ```
+
+이 명령은 마이크로서비스 복구 기준 확인용이다. pod 삭제 뒤 Deployment가 다시 생성되어야 하며, retry/DLQ/read model이 남은 흐름을 복구할 수 있어야 한다.
 
 ## 문서
 
