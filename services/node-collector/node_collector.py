@@ -30,6 +30,15 @@ from settings import (
 from uvicorn import Config, Server
 
 from packages.config.settings import env
+from packages.contracts.gateway import fields as gateway_fields
+from packages.contracts.gateway import routes as gateway_routes
+
+KIND_FIELD = "kind"
+NODE_FIELD = "node"
+SAMPLE_FIELD = "sample"
+NODE_RUNTIME_SAMPLE_KIND = "node_runtime_sample"
+SNAPSHOT_PATH = "/snapshot"
+METRICS_PATH = "/metrics"
 
 
 @dataclass(frozen=True)
@@ -108,9 +117,9 @@ class NodeCollector:
             print(
                 json.dumps(
                     {
-                        "service": SERVICE_NAME,
-                        "kind": "node_runtime_sample",
-                        "sample": self.snapshot().to_payload(),
+                        gateway_fields.SERVICE: SERVICE_NAME,
+                        KIND_FIELD: NODE_RUNTIME_SAMPLE_KIND,
+                        SAMPLE_FIELD: self.snapshot().to_payload(),
                     },
                     ensure_ascii=False,
                 ),
@@ -133,15 +142,19 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
         if task:
             task.cancel()
 
-    @app.get("/healthz")
+    @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
-        return {"status": "ok", "service": SERVICE_NAME, "node": node_collector.node_name}
+        return {
+            gateway_fields.STATUS: gateway_fields.STATUS_OK,
+            gateway_fields.SERVICE: SERVICE_NAME,
+            NODE_FIELD: node_collector.node_name,
+        }
 
-    @app.get("/snapshot")
+    @app.get(SNAPSHOT_PATH)
     async def snapshot() -> dict[str, object]:
         return node_collector.snapshot().to_payload()
 
-    @app.get("/metrics", response_class=PlainTextResponse)
+    @app.get(METRICS_PATH, response_class=PlainTextResponse)
     async def metrics() -> PlainTextResponse:
         return PlainTextResponse(
             node_collector.prometheus_metrics(),

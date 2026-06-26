@@ -36,7 +36,10 @@ from packages.config.constants import (
     LOCAL_USER_ID,
     REQUIRED_GITHUB_SCOPE,
 )
+from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID, PAYLOAD
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway import fields as gateway_fields
+from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
@@ -72,21 +75,28 @@ class ApiGateway:
             await self.bus.close()
             await self.sessions.close()
 
-        @app.get("/healthz")
+        @app.get(gateway_routes.HEALTHZ_PATH)
         async def healthz() -> dict[str, str]:
-            return {"status": "ok", "service": SERVICE_NAME}
+            return {
+                gateway_fields.STATUS: gateway_fields.STATUS_OK,
+                gateway_fields.SERVICE: SERVICE_NAME,
+            }
 
-        @app.get("/readyz")
+        @app.get(gateway_routes.READYZ_PATH)
         async def readyz() -> dict[str, str]:
             self.db.init()
-            return {"status": "ready"}
+            return {gateway_fields.STATUS: gateway_fields.STATUS_READY}
 
-        @app.get("/auth/session")
+        @app.get(gateway_routes.AUTH_SESSION_PATH)
         async def session(request: Request) -> dict[str, Any]:
             current = await self.auth.require_session(request)
-            return {"authenticated": True, "user_id": current.user_id, "roles": current.roles}
+            return {
+                gateway_fields.AUTHENTICATED: True,
+                gateway_fields.USER_ID: current.user_id,
+                gateway_fields.ROLES: current.roles,
+            }
 
-        @app.get("/auth/oauth/{provider}/start")
+        @app.get(gateway_routes.OAUTH_START_PATH)
         async def oauth_start(
             provider: str, user_id: str = LOCAL_USER_ID, scopes: str = DEFAULT_SCOPES
         ) -> dict[str, Any]:
@@ -100,29 +110,29 @@ class ApiGateway:
                 EventSubject.OAUTH_START_REQUESTED,
                 SERVICE_NAME,
                 {
-                    "provider": provider,
-                    "user_id": user_id,
-                    "scopes": scope_list,
-                    "state": response["state"],
+                    gateway_fields.PROVIDER: provider,
+                    gateway_fields.USER_ID: user_id,
+                    gateway_fields.SCOPES: scope_list,
+                    gateway_fields.STATE: response[gateway_fields.STATE],
                 },
             )
             return response
 
-        @app.post("/auth/oauth/{provider}/callback")
+        @app.post(gateway_routes.OAUTH_CALLBACK_PATH)
         async def oauth_callback(provider: str, payload: OAuthCallbackRequest) -> dict[str, Any]:
             result = await self.auth.callback(provider, payload.model_dump())
-            account = result["account"]
+            account = result[gateway_fields.ACCOUNT]
             evt = await publish_and_record(
                 self.bus, self.db, EventSubject.OAUTH_CONNECTED, SERVICE_NAME, account
             )
             return {
-                "accepted": True,
-                "event_id": evt["event_id"],
-                "token_ref": account["token_ref"],
-                "session": result["session"],
+                gateway_fields.ACCEPTED: True,
+                EVENT_ID: evt[EVENT_ID],
+                gateway_fields.TOKEN_REF: account[gateway_fields.TOKEN_REF],
+                gateway_fields.SESSION: result[gateway_fields.SESSION],
             }
 
-        @app.post("/github/webhook")
+        @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
         async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
             evt = await publish_and_record(
                 self.bus,
@@ -131,9 +141,9 @@ class ApiGateway:
                 SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {"accepted": True, "event": evt}
+            return {gateway_fields.ACCEPTED: True, gateway_fields.EVENT: evt}
 
-        @app.post("/agent/connect")
+        @app.post(gateway_routes.AGENT_CONNECT_PATH)
         async def agent_connect(payload: AgentConnectRequest) -> dict[str, Any]:
             evt = await publish_and_record(
                 self.bus,
@@ -142,9 +152,9 @@ class ApiGateway:
                 SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {"accepted": True, "event_id": evt["event_id"]}
+            return {gateway_fields.ACCEPTED: True, EVENT_ID: evt[EVENT_ID]}
 
-        @app.post("/agent/evidence")
+        @app.post(gateway_routes.AGENT_EVIDENCE_PATH)
         async def agent_evidence(payload: AgentEvidenceRequest) -> dict[str, Any]:
             evidence = payload.model_dump()
             evt = await publish_and_record(
@@ -156,35 +166,35 @@ class ApiGateway:
                 payload.correlation_id,
             )
             return {
-                "accepted": True,
-                "event_id": evt["event_id"],
-                "correlation_id": evt["correlation_id"],
+                gateway_fields.ACCEPTED: True,
+                EVENT_ID: evt[EVENT_ID],
+                CORRELATION_ID: evt[CORRELATION_ID],
             }
 
-        @app.post("/commands")
+        @app.post(gateway_routes.COMMANDS_PATH)
         async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
             current = await self.auth.require_session(request)
             command = payload.model_dump()
-            command["requested_by"] = current.user_id
+            command[gateway_fields.REQUESTED_BY] = current.user_id
             evt = await publish_and_record(
                 self.bus, self.db, EventSubject.COMMAND_REQUESTED, SERVICE_NAME, command
             )
             return {
-                "accepted": True,
-                "event_id": evt["event_id"],
-                "correlation_id": evt["correlation_id"],
+                gateway_fields.ACCEPTED: True,
+                EVENT_ID: evt[EVENT_ID],
+                CORRELATION_ID: evt[CORRELATION_ID],
             }
 
-        @app.get("/dead-letters")
+        @app.get(gateway_routes.DEAD_LETTERS_PATH)
         async def dead_letters(
             request: Request,
             limit: int = DEFAULT_DEAD_LETTER_LIMIT,
         ) -> dict[str, Any]:
             await self.auth.require_session(request)
             bounded_limit = max(1, min(limit, MAX_DEAD_LETTER_LIMIT))
-            return {"dead_letters": self.db.list_dead_letters(bounded_limit)}
+            return {gateway_fields.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)}
 
-        @app.post("/dead-letters/{dead_letter_id}/replay")
+        @app.post(gateway_routes.DEAD_LETTER_REPLAY_PATH)
         async def replay_dead_letter(request: Request, dead_letter_id: int) -> dict[str, Any]:
             await self.auth.require_session(request)
             dead_letter = self.db.get_dead_letter(dead_letter_id)
@@ -193,7 +203,7 @@ class ApiGateway:
                     status_code=COMMAND_NOT_FOUND_STATUS_CODE,
                     detail=DEAD_LETTER_NOT_FOUND_MESSAGE,
                 )
-            if dead_letter["status"] == "replayed":
+            if dead_letter[gateway_fields.STATUS] == gateway_fields.STATUS_REPLAYED:
                 raise HTTPException(
                     status_code=CONFLICT_STATUS_CODE,
                     detail=DEAD_LETTER_REPLAYED_MESSAGE,
@@ -204,13 +214,18 @@ class ApiGateway:
                 self.db,
                 dead_letter["original_subject"],
                 SERVICE_NAME,
-                dead_letter["payload"],
-                dead_letter["correlation_id"],
+                dead_letter[PAYLOAD],
+                dead_letter[CORRELATION_ID],
+                dead_letter["original_event_id"],
             )
-            self.db.mark_dead_letter_replayed(dead_letter_id, evt["event_id"])
-            return {"accepted": True, "dead_letter_id": dead_letter_id, "replay_event": evt}
+            self.db.mark_dead_letter_replayed(dead_letter_id, evt[EVENT_ID])
+            return {
+                gateway_fields.ACCEPTED: True,
+                gateway_fields.DEAD_LETTER_ID: dead_letter_id,
+                gateway_fields.REPLAY_EVENT: evt,
+            }
 
-        @app.get("/agent/commands/poll")
+        @app.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
         async def poll_command(
             cluster_id: str = DEFAULT_TARGET_CLUSTER_ID,
             timeout: int = DEFAULT_AGENT_COMMAND_POLL_SECONDS,
@@ -221,11 +236,11 @@ class ApiGateway:
                     cluster_id, COMMAND_STATUS_QUEUED, COMMAND_STATUS_LEASED
                 )
                 if row:
-                    return {"command": row}
+                    return {gateway_fields.COMMAND: row}
                 await asyncio.sleep(COMMAND_POLL_SLEEP_SECONDS)
-            return {"command": None}
+            return {gateway_fields.COMMAND: None}
 
-        @app.post("/agent/commands/{command_id}/result")
+        @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
         async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
             result = payload.model_dump()
             correlation_id = self.db.complete_agent_command(command_id, result)
@@ -239,17 +254,17 @@ class ApiGateway:
                 self.db,
                 EventSubject.COMMAND_COMPLETED,
                 SERVICE_NAME,
-                {"command_id": command_id, "result": result},
+                {gateway_fields.COMMAND_ID: command_id, gateway_fields.RESULT: result},
                 correlation_id,
             )
-            return {"accepted": True, "event_id": evt["event_id"]}
+            return {gateway_fields.ACCEPTED: True, EVENT_ID: evt[EVENT_ID]}
 
-        @app.get("/dashboard/query")
+        @app.get(gateway_routes.DASHBOARD_QUERY_PATH)
         async def dashboard_query(request: Request) -> dict[str, Any]:
             await self.auth.require_session(request)
-            return {"cards": self.db.list_dashboard()}
+            return {gateway_fields.CARDS: self.db.list_dashboard()}
 
-        @app.get("/dashboard/stream")
+        @app.get(gateway_routes.DASHBOARD_STREAM_PATH)
         async def dashboard_stream(request: Request) -> StreamingResponse:
             await self.auth.require_session(request)
 
@@ -267,7 +282,10 @@ class ApiGateway:
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             print(f"gateway error: {exc}", flush=True)
-            return JSONResponse(status_code=GATEWAY_ERROR_STATUS_CODE, content={"error": str(exc)})
+            return JSONResponse(
+                status_code=GATEWAY_ERROR_STATUS_CODE,
+                content={gateway_fields.ERROR: str(exc)},
+            )
 
 
 def create_app() -> FastAPI:
