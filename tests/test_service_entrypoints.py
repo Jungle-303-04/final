@@ -9,16 +9,19 @@ SERVICE_ENTRYPOINTS = {
         "services/api-gateway/runner.py",
         "FastApiService(",
     ),
-    "gitops-sync-worker": ("services/gitops-sync-worker/runner.py", "WorkerService("),
-    "command-worker": ("services/command-worker/runner.py", "WorkerService("),
-    "rca-worker": ("services/rca-worker/runner.py", "WorkerService("),
+    "gitops-sync-worker": (
+        "services/gitops-sync-worker/runner.py",
+        "WorkerService.from_subscription(",
+    ),
+    "command-worker": ("services/command-worker/runner.py", "WorkerService.from_subscription("),
+    "rca-worker": ("services/rca-worker/runner.py", "WorkerService.from_subscription("),
     "dashboard-projection-service": (
         "services/dashboard-projection-service/runner.py",
-        "WorkerService(",
+        "WorkerService.from_subscription(",
     ),
     "audit-timeline-service": (
         "services/audit-timeline-service/runner.py",
-        "WorkerService(",
+        "WorkerService.from_subscription(",
     ),
     "target-cluster-agent": ("services/target-cluster-agent/runner.py", "AsyncService("),
     "node-collector": ("services/node-collector/runner.py", "AsyncService("),
@@ -63,9 +66,30 @@ def test_worker_entrypoints_use_shared_runtime_helper() -> None:
     for relative_path in WORKER_ENTRYPOINTS:
         source = read_project_file(relative_path)
 
-        assert "WorkerService(" in source
+        assert "WorkerService.from_subscription(" in source
         assert "EventHandlerSpec" not in source
         assert "WorkerRuntime" not in source
+
+
+def test_worker_subscriptions_are_declared_in_service_settings() -> None:
+    for relative_path in WORKER_ENTRYPOINTS:
+        settings_path = str(Path(relative_path).parent / "settings.py")
+        source = read_project_file(settings_path)
+
+        assert "SUBSCRIPTION = WorkerSubscription(" in source
+        assert "subject=" in source
+        assert "SUBSCRIBE_SUBJECT" not in source
+
+
+def test_contracts_are_grouped_by_boundary() -> None:
+    assert (ROOT_DIR / "packages" / "contracts" / "gateway" / "requests.py").exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subjects.py").exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subscriptions.py").exists()
+    assert not (ROOT_DIR / "packages" / "contracts" / "schemas.py").exists()
+
+    constants = read_project_file("packages/config/constants.py")
+    assert "class EventSubject" not in constants
+    assert "class EventProcessingStatus" not in constants
 
 
 def test_central_role_dispatcher_is_removed() -> None:

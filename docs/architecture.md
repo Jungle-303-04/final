@@ -28,7 +28,10 @@ services
 
 packages
   + config                       env, 상수, 시간 helper
-  + contracts                    Protocol port와 Pydantic request schema
+  + contracts                    gateway/event_bus/dashboard 계약과 Protocol port
+    - gateway                    API Gateway 요청 Pydantic schema
+    - event_bus                  stream, subject, subscription, event port
+    - dashboard                  dashboard read model status 계약
   + events                       event envelope, NATS JetStream, DLQ event sink
   + storage                      PostgreSQL 저장소와 schema 초기화
   + runtime                      FastAPI/worker/async service 실행 객체
@@ -76,10 +79,12 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 
 ## 포트와 어댑터
 
-공통 인터페이스는 `packages/contracts/interfaces.py`에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
+공통 인터페이스는 `packages/contracts` 하위 계약 폴더에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
 
+- `packages/contracts/event_bus`: stream, subject, worker subscription, event publish/consume 경계
 - `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream을 교체할 수 있는 경계
 - `EventClient`: 서비스 코드가 사용하는 publish 경계
+- `packages/contracts/gateway`: API Gateway HTTP 요청 schema
 - `RepoChangeStore`, `AgentCommandQueue`, `RcaStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
@@ -92,7 +97,7 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 - `WorkerService`: JetStream subject 구독 worker process
 - `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
 
-서비스 폴더에서 `EventHandlerSpec`, `WorkerRuntime`, NATS client를 직접 조립하지 않는다. 새 worker는 `WorkerService(service_name, subject, handler_factory).run()` 형태로 추가한다.
+서비스 폴더에서 `EventHandlerSpec`, `WorkerRuntime`, NATS client를 직접 조립하지 않는다. 새 worker는 자기 `settings.py`에 `SUBSCRIPTION = WorkerSubscription(...)`을 선언하고 runner에서는 `WorkerService.from_subscription(SUBSCRIPTION, handler_factory).run()` 형태로 추가한다.
 
 서비스별 설정은 각 서비스 폴더의 `settings.py`가 소유한다.
 
@@ -102,7 +107,7 @@ services/command-worker/settings.py
 services/target-cluster-agent/settings.py
 ```
 
-팀원이 자기 담당 서비스를 수정할 때는 먼저 해당 `settings.py`를 확인한다. 여러 서비스가 공유해야 하는 기본값, enum, event subject만 `packages/config`에 둔다.
+팀원이 자기 담당 서비스를 수정할 때는 먼저 해당 `settings.py`를 확인한다. 구독 subject는 각 worker `settings.py`의 `SUBSCRIPTION`에서 확인한다. 여러 서비스가 공유하는 event subject와 stream 계약은 `packages/contracts/event_bus`에 둔다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 

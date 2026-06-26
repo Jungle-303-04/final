@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from packages.config.constants import EventSubject
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.event_bus.subscriptions import WorkerSubscription
 
 SERVICE_NAME = "rca-worker"
-SUBSCRIBE_SUBJECT = EventSubject.CLUSTER_EVIDENCE_RECEIVED
+SUBSCRIPTION = WorkerSubscription(
+    service_name=SERVICE_NAME,
+    subject=EventSubject.CLUSTER_EVIDENCE_RECEIVED,
+)
 
 ROOT_CAUSE = "Image rollout introduced failing readiness checks"
 RECOMMENDED_ACTION = "Open a safe PR to pin the previous image tag"

@@ -22,7 +22,8 @@ Git 변경을 받아 manifest render, desired diff, command 생성까지 이어�
 
 ## 코드 규칙
 
-- Worker runner는 `WorkerService`로 구독한다.
+- Worker 구독은 각 서비스 `settings.py`의 `SUBSCRIPTION`에 선언한다.
+- Worker runner는 `WorkerService.from_subscription(...)`으로 실행한다.
 - Worker는 `EventClient`로 발행한다.
 - `correlation_id`를 유지한다.
 - handler write는 idempotent하거나 conflict-safe해야 한다.
@@ -30,7 +31,7 @@ Git 변경을 받아 manifest render, desired diff, command 생성까지 이어�
 
 ## PR 체크리스트
 
-- 새 event subject가 `EventSubject`와 `docs/events.md`에 있음
+- 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
 - manifest/diff/command 흐름 테스트 존재
 - raw NATS 사용 없음
 - command payload 변경 시 Gateway/Auth와 Target/Telemetry에 공유

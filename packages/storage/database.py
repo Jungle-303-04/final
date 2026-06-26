@@ -13,16 +13,15 @@ from packages.config.constants import (
     GITHUB_PROVIDER,
     LOCAL_USER_ID,
     REQUIRED_GITHUB_SCOPE,
-    EventProcessingStatus,
 )
 from packages.config.settings import env
 from packages.config.time import now_iso
+from packages.contracts.event_bus.interfaces import Event, JsonObject
+from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.contracts.interfaces import (
     CommandRecord,
-    Event,
     EventProcessingRecord,
     InitializableStore,
-    JsonObject,
 )
 
 DATABASE_URL_ENV = "DATABASE_URL"

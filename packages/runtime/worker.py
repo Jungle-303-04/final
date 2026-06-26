@@ -6,8 +6,13 @@ import signal
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from packages.config.constants import EventProcessingStatus
-from packages.contracts.interfaces import EventClient, EventConsumerBus, EventHandler, EventMessage
+from packages.contracts.event_bus.interfaces import (
+    EventClient,
+    EventConsumerBus,
+    EventHandler,
+    EventMessage,
+)
+from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.events.bus import DeadLetterSink, EventBus, RecordedEventClient
 from packages.storage.database import Database, wait_for_database
 

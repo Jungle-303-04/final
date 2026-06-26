@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Any
 
-from packages.config.constants import EventProcessingStatus
+from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.events.envelope import event
 from packages.runtime.worker import EventProcessor, EventRetryPolicy
 
