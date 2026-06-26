@@ -23,6 +23,7 @@
 - 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
 - PR 기준: `dev` base draft PR
 - 변경 가능 범위: 아래 작업 경계 표와 각 member guide
+- 자동화 권한: 읽기, 점검, 제안만 허용한다. commit, push, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경은 팀원이 명시적으로 요청한 작업 세션에서만 수행한다.
 
 ## 작업 경계
 

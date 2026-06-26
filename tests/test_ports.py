@@ -63,7 +63,9 @@ class FakeAgentCommandQueue:
     def __init__(self) -> None:
         self.queued: list[tuple[str, dict[str, Any], str]] = []
 
-    def queue_agent_command(self, correlation_id: str, plan: dict[str, Any], status: str) -> None:
+    async def queue_agent_command(
+        self, correlation_id: str, plan: dict[str, Any], status: str
+    ) -> None:
         self.queued.append((correlation_id, plan, status))
 
 

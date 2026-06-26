@@ -177,6 +177,9 @@ GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 
 팀원 Codex 자동화는 `docs/team/codex-automation.md`의 공통 프롬프트를 사용한다.
 각 팀원은 자기 GitHub ID만 지정하고, issue/PR/역할은 현재 문서와 GitHub 상태에서 매번 다시 계산한다.
+정기 자동화는 읽기, 점검, 제안만 수행한다.
+자동화가 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 직접 수행하면 안 된다.
+commit과 PR은 팀원이 필요를 판단하고 명시적으로 요청한 작업 세션에서만 수행한다.
 
 Merge 기준:
 
