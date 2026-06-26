@@ -4,9 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final, Protocol
 
-from settings import PolicyRuleConfig
+from command_config import PolicyRuleConfig
 
-from packages.config.constants import Sandbox, Target
 from packages.contracts.gateway.fields import Gateway
 
 
@@ -23,18 +22,18 @@ class Payload:
         return self.raw.get(field, default)
 
     @property
-    def namespace(self) -> str:
-        return self.value(Gateway.NAMESPACE, Sandbox.NAMESPACE)
+    def namespace(self) -> str | None:
+        return self.value(Gateway.NAMESPACE)
 
     @property
-    def cluster_id(self) -> str:
-        return self.value(Gateway.CLUSTER_ID, Target.DEFAULT_CLUSTER_ID)
+    def cluster_id(self) -> str | None:
+        return self.value(Gateway.CLUSTER_ID)
 
     @property
-    def action(self) -> str:
+    def action(self) -> str | None:
         return self.value(Gateway.ACTION)
 
-    def rejected_payload(self, reason: str) -> dict[str, Any]:
+    def rejected_event_payload(self, reason: str) -> dict[str, Any]:
         return {
             Field.REASON: reason,
             Field.REQUESTED: self.raw,
@@ -68,10 +67,6 @@ class EqualsRule:
             default=config.default,
         )
 
-    @classmethod
-    def from_config(cls, config: PolicyRuleConfig) -> EqualsRule:
-        return cls.build(config)
-
 
 @dataclass(frozen=True)
 class Result:
@@ -86,6 +81,11 @@ class Result:
     def reject(cls, reason: str) -> Result:
         return cls(False, reason)
 
+    def require_reason(self) -> str:
+        if self.reason is None:
+            raise ValueError("policy rejection requires reason")
+        return self.reason
+
 
 class PolicyPort(Protocol):
     def evaluate(self, command: Payload) -> Result: ...
@@ -99,10 +99,6 @@ class Policy:
     def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
         rules: list[Rule] = [EqualsRule.build(config) for config in configs]
         return cls(rules)
-
-    @classmethod
-    def from_config(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
-        return cls.build(configs)
 
     def evaluate(self, command: Payload) -> Result:
         for rule in self.rules:

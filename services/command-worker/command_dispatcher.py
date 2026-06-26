@@ -30,9 +30,18 @@ class Plan:
         return cls(
             {
                 Gateway.COMMAND_ID: str(uuid.uuid4()),
-                Gateway.CLUSTER_ID: command.cluster_id or config.default_cluster_id,
-                Gateway.ACTION: command.action or config.default_command_action,
-                Gateway.NAMESPACE: command.namespace or config.default_namespace,
+                Gateway.CLUSTER_ID: command.value(
+                    Gateway.CLUSTER_ID,
+                    config.default_cluster_id,
+                ),
+                Gateway.ACTION: command.value(
+                    Gateway.ACTION,
+                    config.default_command_action,
+                ),
+                Gateway.NAMESPACE: command.value(
+                    Gateway.NAMESPACE,
+                    config.default_namespace,
+                ),
                 Field.STEPS: list(config.policy_steps),
             }
         )

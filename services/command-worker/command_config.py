@@ -21,7 +21,6 @@ class CommandConfig:
     default_namespace: str
     default_cluster_id: str
     default_command_action: str
-    default_policy_reject_reason: str
     command_status_queued: str
     policy_rules: tuple[PolicyRuleConfig, ...]
 
@@ -33,6 +32,5 @@ class CommandConfigPort(Protocol):
     default_namespace: str
     default_cluster_id: str
     default_command_action: str
-    default_policy_reject_reason: str
     command_status_queued: str
     policy_rules: tuple[PolicyRuleConfig, ...]
