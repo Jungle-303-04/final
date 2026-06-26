@@ -13,6 +13,22 @@
 | `ummfieg` | `ummfieg` | RCA/Safe PR, Audit, Dashboard Projection |
 | `minmings111` | `minmings111` | Target/Telemetry |
 
+## 등록된 정기 자동화
+
+관리자 환경에는 5명 모두의 담당 범위를 감시하는 Codex cron 자동화가 등록되어 있다.
+각 자동화는 2시간마다 한 번씩 실행되며, 실행 시점마다 이 문서와 WIKI 프롬프트, GitHub Issue/PR 상태를 다시 읽어 담당 기준을 갱신한다.
+
+| 자동화 ID | GitHub ID | 성격 |
+| --- | --- | --- |
+| `final-woonyong-kr` | `woonyong-kr` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
+| `final-jcbbbbbb` | `JCBBBBBB` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
+| `final-jeonwoohyun-hydromel` | `JEONWOOHYUN-hydromel` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
+| `final-ummfieg` | `ummfieg` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
+| `final-minmings111` | `minmings111` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
+
+정기 자동화는 브랜치를 전환하거나 코드를 직접 구현하지 않는다.
+구현은 각 담당자의 작업 Codex가 수행하고, 정기 자동화는 현재 문서 기준 준수 여부와 다음 행동을 정리한다.
+
 ## 자동화 프롬프트
 
 아래 프롬프트를 팀원 각자의 Codex 자동화에 그대로 넣고, 첫 줄의 GitHub ID만 바꾼다.
