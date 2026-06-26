@@ -18,7 +18,7 @@ RCA_WORKER_DIR = "rca-worker"
 DASHBOARD_PROJECTION_DIR = "dashboard-projection-service"
 AUDIT_TIMELINE_DIR = "audit-timeline-service"
 TARGET_AGENT_DIR = "target-cluster-agent"
-NODE_COLLECTOR_RUNNER = "run_node_collector"
+NODE_COLLECTOR_DIR = "node-collector"
 FAKE_PROMETHEUS_RUNNER = "run_fake_prometheus"
 FAKE_LOKI_RUNNER = "run_fake_loki"
 FAKE_OTEL_RUNNER = "run_fake_otel"
@@ -47,9 +47,7 @@ SERVICE_REGISTRY: dict[ServiceRole, ServiceEntry] = {
         ServiceRole.AUDIT_TIMELINE_SERVICE, AUDIT_TIMELINE_DIR
     ),
     ServiceRole.TARGET_AGENT: ServiceEntry(ServiceRole.TARGET_AGENT, TARGET_AGENT_DIR),
-    ServiceRole.NODE_COLLECTOR: ServiceEntry(
-        ServiceRole.NODE_COLLECTOR, TARGET_AGENT_DIR, NODE_COLLECTOR_RUNNER
-    ),
+    ServiceRole.NODE_COLLECTOR: ServiceEntry(ServiceRole.NODE_COLLECTOR, NODE_COLLECTOR_DIR),
     ServiceRole.FAKE_PROMETHEUS: ServiceEntry(
         ServiceRole.FAKE_PROMETHEUS, TARGET_AGENT_DIR, FAKE_PROMETHEUS_RUNNER
     ),

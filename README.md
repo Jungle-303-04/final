@@ -15,6 +15,7 @@ services
   dashboard-projection-service
   audit-timeline-service
   target-cluster-agent
+  node-collector
 packages
   shared                 DB, NATS, schemas, roles
   worker_runtime         JetStream worker runtime
