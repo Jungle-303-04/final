@@ -18,9 +18,11 @@ from settings import (
     TARGET_CLUSTER_ENV,
 )
 
-from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE
 from packages.config.settings import env
-from packages.contracts.interfaces import EventClient, RepoChangeStore
+from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.interfaces import RepoChangeStore
 
 
 class GitOpsSyncWorkflow:

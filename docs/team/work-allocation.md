@@ -47,7 +47,7 @@
 ## 팀 간 계약 규칙
 
 - 새 API route: Gateway/Auth가 PR을 열고 schema/docs를 수정한다.
-- 새 event subject: 담당자가 `EventSubject`, `docs/events.md`, test를 함께 수정한다.
+- 새 event subject: 담당자가 `packages/contracts/event_bus/subjects.py`, `docs/events.md`, test를 함께 수정한다.
 - 새 DB table: 담당자가 `Database.init`, docs, test coverage를 함께 수정한다.
 - 새 Kubernetes permission: Target/Telemetry가 PR에서 RBAC 범위를 설명한다.
 - dashboard 의존성이 생기는 API 변경: 현재는 Gateway/Auth와 Platform/Integration이 문서에 먼저 남긴다.

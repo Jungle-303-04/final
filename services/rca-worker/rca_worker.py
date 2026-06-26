@@ -17,8 +17,10 @@ from settings import (
     SERVICE_NAME,
 )
 
-from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER, EventSubject
-from packages.contracts.interfaces import EventClient, OAuthAccountStore, RcaStore
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER
+from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.interfaces import OAuthAccountStore, RcaStore
 
 
 class RcaWorkflow:

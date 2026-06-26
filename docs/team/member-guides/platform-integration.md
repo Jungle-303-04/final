@@ -19,7 +19,7 @@
 
 ## 현재 책임
 
-- `EventClient`, `WorkerService`, retry, DLQ, replay 계약을 유지한다.
+- `packages/contracts/event_bus`, `EventClient`, `WorkerService`, retry, DLQ, replay 계약을 유지한다.
 - CI가 실패한 PR이 merge되지 않도록 GitHub Actions와 branch protection 기준을 관리한다.
 - 배포 스크립트와 수요일 demo 검증 흐름을 유지한다.
 - DB/event 원자성이 필요해지는 시점에 outbox relay 도입 여부를 결정한다.

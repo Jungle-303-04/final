@@ -12,8 +12,10 @@ from settings import (
     SERVICE_NAME,
 )
 
-from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.contracts.interfaces import AgentCommandQueue, EventClient
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE
+from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.interfaces import AgentCommandQueue
 
 
 class CommandWorkflow:

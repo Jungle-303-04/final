@@ -10,7 +10,8 @@ from uvicorn import Config, Server
 
 from packages.config.constants import DEFAULT_HTTP_PORT, SERVICE_NAME_ENV
 from packages.config.settings import env
-from packages.contracts.interfaces import EventClient, EventHandler
+from packages.contracts.event_bus.interfaces import EventClient, EventHandler
+from packages.contracts.event_bus.subscriptions import WorkerSubscription
 from packages.runtime.worker import EventHandlerSpec, WorkerRuntime
 from packages.storage.database import Database
 
@@ -62,6 +63,19 @@ class WorkerService:
     subject: str
     handler_factory: WorkerHandlerFactory
     durable_name: str | None = None
+
+    @classmethod
+    def from_subscription(
+        cls,
+        subscription: WorkerSubscription,
+        handler_factory: WorkerHandlerFactory,
+    ) -> WorkerService:
+        return cls(
+            subscription.service_name,
+            subscription.subject,
+            handler_factory,
+            subscription.durable_name,
+        )
 
     def run(self) -> None:
         AsyncService(self.service_name, self.serve).run()

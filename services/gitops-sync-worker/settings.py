@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from packages.config.constants import EventSubject
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.event_bus.subscriptions import WorkerSubscription
 
 SERVICE_NAME = "gitops-sync-worker"
-SUBSCRIBE_SUBJECT = EventSubject.GIT_WEBHOOK_RECEIVED
+SUBSCRIPTION = WorkerSubscription(
+    service_name=SERVICE_NAME,
+    subject=EventSubject.GIT_WEBHOOK_RECEIVED,
+)
 
 DEFAULT_APP_NAME = "checkout-api"
 DEFAULT_IMAGE = "ghcr.io/project/checkout-api:bad"

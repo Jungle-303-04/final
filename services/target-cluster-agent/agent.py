@@ -46,7 +46,8 @@ from uvicorn import Config, Server
 
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
 from packages.config.settings import env
-from packages.contracts.interfaces import CommandRecord, JsonObject, ManagementPlaneClient
+from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 
 class HttpManagementPlaneClient:

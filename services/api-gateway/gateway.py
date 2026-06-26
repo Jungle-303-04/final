@@ -35,9 +35,9 @@ from packages.config.constants import (
     GITHUB_PROVIDER,
     LOCAL_USER_ID,
     REQUIRED_GITHUB_SCOPE,
-    EventSubject,
 )
-from packages.contracts.schemas import (
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
     CommandRequest,
