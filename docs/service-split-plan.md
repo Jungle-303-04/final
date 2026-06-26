@@ -44,6 +44,8 @@ packages/shared
 
 packages/worker_runtime
   shared JetStream worker runtime
+  EventHandlerSpec subscription boundary
+  retry / event_processing / DLQ policy
 
 deploy
   management cluster manifests
@@ -67,6 +69,7 @@ secrets
 
 - 먼저 role/process 경계를 유지하고, 파일만 책임별로 나눕니다.
 - 서비스 workflow는 `packages/shared/contracts.py` 포트에 의존하고 concrete adapter는 runner/composition 경계에서 주입합니다.
+- 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둡니다.
 - DB schema는 공유 PostgreSQL에서 시작하되 schema/table ownership을 문서화합니다.
 - 외부 write 권한은 gateway/auth/policy를 지나게 합니다.
 - target cluster는 outbound 연결만 기본값으로 둡니다.

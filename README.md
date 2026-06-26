@@ -82,6 +82,7 @@ make kill-pod DEPLOYMENT=rca-worker
 ## 문서
 
 - [docs/architecture.md](docs/architecture.md)
+- [docs/events.md](docs/events.md)
 - [docs/service-split-plan.md](docs/service-split-plan.md)
 - [docs/secrets.md](docs/secrets.md)
 - [docs/team-workflow.md](docs/team-workflow.md)
