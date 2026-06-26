@@ -1,27 +1,31 @@
-# Team Conventions
+# 팀 컨벤션
 
-This document is the shared rulebook for code style, branch naming, pull requests, review, and CI.
+이 문서는 코드 스타일, 브랜치 이름, Pull Request, 리뷰, CI에 대한 팀 공통 규칙이다.
 
-## Source Of Truth
+## 기준 문서
 
-- Product/WBS source: `WIKI/projects/final`.
-- Runnable source: this repository.
-- Architecture source: `docs/architecture.md`, `docs/events.md`, `docs/service-split-plan.md`.
-- If code and docs disagree, update docs in the same PR.
+- 제품/WBS 기준: `WIKI/projects/final`
+- 실행 코드 기준: 이 repository
+- 아키텍처 기준: `docs/architecture.md`, `docs/events.md`, `docs/service-split-plan.md`
+- 코드와 문서가 다르면 같은 PR에서 문서도 함께 수정한다.
 
-## Five-Person Ownership
+## 5인 담당 영역
 
-| Role | Primary folders | Primary docs |
+대시보드는 별도 담당으로 세지 않는다. 현재 5개 역할은 구현 흐름을 기준으로 나눈다.
+
+| 역할 | 주 담당 폴더 | 주 담당 문서 |
 | --- | --- | --- |
 | Platform/Integration | `packages/shared`, `packages/worker_runtime`, `deploy`, `scripts`, `.github` | `docs/events.md`, `docs/team/conventions.md` |
 | Gateway/Auth | `services/management-api-gateway`, `packages/shared/schemas.py` | `docs/team/member-guides/gateway-auth.md` |
-| Workflow/RCA | `services/gitops-sync-worker`, `services/command-worker`, `services/rca-worker`, `services/audit-timeline-service` | `docs/events.md`, `docs/team/member-guides/workflow-rca.md` |
+| GitOps/Command | `services/gitops-sync-worker`, `services/command-worker` | `docs/team/member-guides/gitops-command.md` |
+| RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service` | `docs/team/member-guides/rca-safe-pr.md` |
 | Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
-| Dashboard/Docs | dashboard UI folder when added, `services/dashboard-projection-service`, WIKI docs | `docs/team/member-guides/dashboard-docs.md` |
 
-## Branch Rules
+`services/dashboard-projection-service`와 dashboard 관련 문서는 현재 공통 read model 영역으로 둔다. UI가 실제로 추가되면 별도 담당을 다시 만든다.
 
-Use short-lived branches.
+## 브랜치 규칙
+
+짧게 쓰고 빨리 합치는 브랜치를 사용한다.
 
 ```text
 feat/<owner>/<topic>
@@ -31,42 +35,42 @@ ci/<owner>/<topic>
 refactor/<owner>/<topic>
 ```
 
-Examples:
+예시:
 
 ```text
 feat/gateway/github-oauth
-feat/workflow/safe-pr-client
+feat/gitops/manifest-render
+feat/rca/safe-pr-client
 feat/target/prometheus-adapter
-docs/platform/wbs-update
 ci/platform/pr-gate
 ```
 
-Rules:
+규칙:
 
-- `main` is protected and must not receive direct pushes.
-- Work branches target `main` unless the team explicitly creates a temporary integration branch.
-- Rebase or merge from `main` before requesting review if your branch is stale.
-- Keep each PR focused on one ownership area or one vertical slice.
+- `main`은 보호 브랜치이며 직접 push하지 않는다.
+- 작업 브랜치는 팀이 별도 통합 브랜치를 만들지 않는 한 `main`으로 PR을 보낸다.
+- 브랜치가 오래되면 리뷰 요청 전에 `main`을 반영한다.
+- PR 하나는 하나의 담당 영역 또는 하나의 vertical slice에 집중한다.
 
-## Commit Rules
+## 커밋 규칙
 
-Use this format:
+아래 형식을 사용한다.
 
 ```text
-type: short Korean summary
+type: 짧은 한국어 요약
 ```
 
-Allowed types:
+허용 type:
 
-- `feat`: new user-visible or runtime behavior
-- `fix`: bug fix
-- `refactor`: structure change without behavior change
-- `docs`: documentation only
-- `test`: tests only
-- `ci`: GitHub Actions or automation
-- `chore`: dependency or maintenance
+- `feat`: 새 기능 또는 실행 동작 추가
+- `fix`: 버그 수정
+- `refactor`: 동작 변경 없는 구조 개선
+- `docs`: 문서만 변경
+- `test`: 테스트만 변경
+- `ci`: GitHub Actions 또는 자동화
+- `chore`: 의존성, 정리, 유지보수
 
-Examples:
+예시:
 
 ```text
 feat: GitHub OAuth adapter 추가
@@ -75,57 +79,57 @@ docs: 팀 PR 규칙과 역할 분배 추가
 ci: PR 필수 검증 workflow 추가
 ```
 
-## Python Code Style
+## Python 코드 스타일
 
-- Prefer clear names over short names.
-- Keep constants near the top of the file if only that file uses them.
-- Put shared constants in `packages/shared/constants.py`.
-- Use `Protocol` ports in `packages/shared/contracts.py` for replaceable boundaries.
-- Keep service workflows dependent on ports, not concrete NATS/PostgreSQL clients.
-- Use dataclasses for small immutable value objects.
-- Avoid broad `except Exception` outside process boundaries. Runtime/process edge code may catch and convert to DLQ.
-- Do not put secrets in events, logs, fixtures, docs, screenshots, or tests.
+- 짧은 이름보다 의미가 분명한 이름을 우선한다.
+- 한 파일에서만 쓰는 상수는 해당 파일 상단에 둔다.
+- 여러 파일이 공유하는 상수는 `packages/shared/constants.py`에 둔다.
+- 교체 가능한 경계는 `packages/shared/contracts.py`의 `Protocol` port로 표현한다.
+- 서비스 workflow는 concrete NATS/PostgreSQL client가 아니라 port에 의존한다.
+- 작은 불변 값 객체에는 dataclass를 사용한다.
+- process 경계 밖에서 넓은 `except Exception`을 남발하지 않는다. Runtime/process edge에서는 예외를 잡아 DLQ로 전환할 수 있다.
+- secret은 event, log, fixture, docs, screenshot, test에 넣지 않는다.
 
-Naming:
+이름 규칙:
 
-| Item | Style | Example |
+| 대상 | 스타일 | 예시 |
 | --- | --- | --- |
-| Module/file | `snake_case.py` | `gateway.py`, `node_collector.py` |
-| Class | `PascalCase` | `CommandWorkflow`, `EventHandlerSpec` |
-| Function/method | `snake_case` verb phrase | `publish_event`, `record_dead_letter` |
-| Constant | `UPPER_SNAKE_CASE` | `MAX_DEAD_LETTER_LIMIT` |
-| Event subject | `<domain>.<thing>.<verb>` | `command.requested` |
-| Service folder | kebab-case | `management-api-gateway` |
+| module/file | `snake_case.py` | `gateway.py`, `node_collector.py` |
+| class | `PascalCase` | `CommandWorkflow`, `EventHandlerSpec` |
+| function/method | 동사형 `snake_case` | `publish_event`, `record_dead_letter` |
+| constant | `UPPER_SNAKE_CASE` | `MAX_DEAD_LETTER_LIMIT` |
+| event subject | `<domain>.<thing>.<verb>` | `command.requested` |
+| service folder | `kebab-case` | `management-api-gateway` |
 
-## Event Rules
+## 이벤트 규칙
 
-- Publish through `EventClient`.
-- Subscribe through `EventHandlerSpec`.
-- Add new event subjects to `EventSubject` and `docs/events.md`.
-- Each event payload must be a JSON object.
-- Each business flow must preserve `correlation_id`.
-- Handler writes must be idempotent or safe for at-least-once delivery.
-- A handler must finish local work before ack; `WorkerRuntime` owns ack/nak/DLQ.
+- 발행은 `EventClient`를 사용한다.
+- 구독은 `EventHandlerSpec`을 사용한다.
+- 새 event subject는 `EventSubject`와 `docs/events.md`에 함께 추가한다.
+- event payload는 JSON object여야 한다.
+- 하나의 업무 흐름은 `correlation_id`를 유지한다.
+- handler write는 at-least-once delivery에 안전하도록 idempotent하게 작성한다.
+- handler는 local work를 끝낸 뒤 ack되어야 한다. `ack/nak/DLQ`는 `WorkerRuntime`이 담당한다.
 
-## API Rules
+## API 규칙
 
-- Gateway owns external HTTP.
-- Workers do not expose HTTP routes.
-- UI calls Gateway only.
-- Request/response validation uses Pydantic schemas.
-- Write commands must pass auth and policy checks.
-- Production namespace write is forbidden until the team explicitly changes the policy.
+- 외부 HTTP는 Gateway만 담당한다.
+- Worker는 HTTP route를 노출하지 않는다.
+- UI는 Gateway만 호출한다.
+- Request/response 검증은 Pydantic schema를 사용한다.
+- Write command는 auth와 policy check를 반드시 지난다.
+- 팀이 명시적으로 정책을 바꾸기 전까지 production namespace write는 금지한다.
 
-## Testing Rules
+## 테스트 규칙
 
-Before opening PR:
+PR을 열기 전:
 
 ```bash
 make check
 python3 -m py_compile $(find services packages -name '*.py' -print)
 ```
 
-Before a Wednesday demo:
+수요일 데모 전:
 
 ```bash
 make build-image
@@ -134,48 +138,48 @@ make smoke
 make status
 ```
 
-PR cannot merge unless GitHub Actions CI passes.
+GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 
-Required GitHub branch protection for `main`:
+`main` 보호 브랜치에 필요한 설정:
 
-- Require a pull request before merging.
-- Require at least 1 approval.
-- Require status checks to pass.
-- Required checks:
+- Pull Request 필수
+- 최소 1명 승인 필수
+- status check 통과 필수
+- 필수 check:
   - `Python lint and tests`
   - `Kubernetes manifest and image checks`
-- Require conversation resolution before merging.
-- Block force pushes.
-- Block branch deletion.
+- conversation resolve 필수
+- force push 금지
+- branch deletion 금지
 
-## PR Rules
+## PR 규칙
 
-Every PR must include:
+모든 PR은 아래 내용을 포함한다.
 
-- What changed
-- Why it changed
-- How to test
-- Risk/rollback note
-- WIKI/docs update note when architecture, workflow, API, or schedule changed
+- 무엇을 바꿨는지
+- 왜 바꿨는지
+- 어떻게 테스트했는지
+- 위험과 rollback 방법
+- 아키텍처, workflow, API, 일정이 바뀐 경우 WIKI/docs 수정 여부
 
-Merge criteria:
+Merge 기준:
 
-- CI green
-- At least one human review
-- No unrelated files
-- No raw secrets
-- Tests added or updated for behavior changes
-- Relevant member guide checklist satisfied
+- CI 통과
+- 사람 리뷰 1명 이상
+- 관련 없는 파일 없음
+- raw secret 없음
+- 동작 변경에는 테스트 추가 또는 수정
+- 담당 member guide checklist 충족
 
-## Review Rules
+## 리뷰 규칙
 
-Reviewers should block PRs for:
+Reviewer는 아래 경우 PR을 막는다.
 
-- broken CI
-- missing tests for changed behavior
-- event subject added without docs
-- worker directly using raw NATS instead of `EventClient`
-- HTTP route added outside Gateway
-- target write outside `sandbox`
-- secrets committed or logged
-- docs/WIKI not updated for architecture changes
+- CI 실패
+- 동작 변경에 대한 테스트 누락
+- event subject 추가 후 문서 누락
+- worker가 `EventClient` 대신 raw NATS 직접 사용
+- Gateway 밖에 HTTP route 추가
+- target write가 `sandbox` 밖으로 확장
+- secret commit 또는 log 출력
+- 아키텍처 변경 후 docs/WIKI 미수정
