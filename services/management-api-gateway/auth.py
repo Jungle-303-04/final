@@ -9,13 +9,13 @@ from typing import Any
 from fastapi import HTTPException, Request
 from redis.asyncio import Redis
 
-from packages.shared.constants import (
+from packages.config.constants import (
     DEFAULT_REDIS_URL,
     DEFAULT_SESSION_TTL_SECONDS,
     SESSION_COOKIE_NAME,
 )
-from packages.shared.contracts import OAuthAccountStore, SessionStore
-from packages.shared.core import env
+from packages.config.settings import env
+from packages.contracts.interfaces import OAuthAccountStore, SessionStore
 
 REDIS_URL_ENV = "REDIS_URL"
 SESSION_TTL_ENV = "SESSION_TTL_SECONDS"

@@ -17,8 +17,11 @@ services
   target-cluster-agent
   node-collector
 packages
-  shared                 DB, NATS, schema, service bootstrap
-  worker_runtime         JetStream worker runtime
+  config                 env, 상수, 시간 helper
+  contracts              Protocol port, Pydantic request schema
+  events                 event envelope, NATS JetStream, DLQ event sink
+  storage                PostgreSQL 저장소와 schema 초기화
+  runtime                FastAPI/worker/async service 실행 객체
 deploy       management/target kind 클러스터 manifest
 scripts      실행, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
@@ -49,6 +52,8 @@ make down
 ## 서비스 역할
 
 각 서비스는 같은 base image를 공유할 수 있지만 실행 프로세스는 분리합니다. Kubernetes workload는 role 문자열을 넘기지 않고 `python services/<service-name>/runner.py`처럼 각 서비스 entrypoint를 직접 실행합니다.
+
+새 서비스 runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService` 중 하나를 사용합니다. 서비스 폴더에서 `WorkerRuntime`, NATS client, PostgreSQL connection을 직접 조립하지 않습니다.
 
 ```text
 management-api-gateway        관리 API Gateway

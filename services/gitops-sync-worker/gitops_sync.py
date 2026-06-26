@@ -3,9 +3,9 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.shared.contracts import EventClient, RepoChangeStore
-from packages.shared.core import env
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
+from packages.config.settings import env
+from packages.contracts.interfaces import EventClient, RepoChangeStore
 
 SERVICE_NAME = "gitops-sync-worker"
 DEFAULT_APP_NAME = "checkout-api"

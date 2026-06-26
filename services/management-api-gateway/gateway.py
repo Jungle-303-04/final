@@ -9,15 +9,14 @@ from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from packages.shared.constants import (
+from packages.config.constants import (
     DEFAULT_TARGET_CLUSTER_ID,
     GITHUB_PROVIDER,
     LOCAL_USER_ID,
     REQUIRED_GITHUB_SCOPE,
     EventSubject,
 )
-from packages.shared.core import Database, EventBus, publish_and_record, wait_for_database
-from packages.shared.schemas import (
+from packages.contracts.schemas import (
     AgentConnectRequest,
     AgentEvidenceRequest,
     CommandRequest,
@@ -25,6 +24,8 @@ from packages.shared.schemas import (
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
+from packages.events.bus import EventBus, publish_and_record
+from packages.storage.database import Database, wait_for_database
 
 SERVICE_NAME = "management-api-gateway"
 APP_TITLE = "Management API Gateway"

@@ -25,8 +25,11 @@ services
   + node-collector               선택형 DaemonSet node/runtime metrics source
 
 packages
-  + shared                       DB, NATS, schema, service bootstrap
-  + worker_runtime               공통 JetStream worker runtime
+  + config                       env, 상수, 시간 helper
+  + contracts                    Protocol port와 Pydantic request schema
+  + events                       event envelope, NATS JetStream, DLQ event sink
+  + storage                      PostgreSQL 저장소와 schema 초기화
+  + runtime                      FastAPI/worker/async service 실행 객체
 
 deploy
   + kind                         두 개의 kind cluster 설정
@@ -59,7 +62,7 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 
 ## 포트와 어댑터
 
-공통 인터페이스는 `packages/shared/contracts.py`에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
+공통 인터페이스는 `packages/contracts/interfaces.py`에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
 
 - `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream을 교체할 수 있는 경계
 - `EventClient`: 서비스 코드가 사용하는 publish 경계
@@ -67,7 +70,15 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
 
-현재 concrete adapter는 `packages/shared/core.py`의 `Database`, `EventBus`와 `services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
+현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `EventBus`, `services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
+
+각 service runner는 `packages/runtime/service.py`의 실행 객체만 사용한다.
+
+- `FastApiService`: HTTP API process
+- `WorkerService`: JetStream subject 구독 worker process
+- `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
+
+서비스 폴더에서 `EventHandlerSpec`, `WorkerRuntime`, NATS client를 직접 조립하지 않는다. 새 worker는 `WorkerService(service_name, subject, handler_factory).run()` 형태로 추가한다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 
@@ -123,7 +134,7 @@ Target Cluster Agent
 실패한 event 처리:
 
 ```text
-WorkerRuntime
+packages/runtime/worker.py
 -> event_processing retrying
 -> NATS nak
 -> max attempts 초과

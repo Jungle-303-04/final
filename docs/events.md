@@ -65,18 +65,17 @@ Gateway code는 호환성을 위해 `publish_and_record(...)`를 사용할 수 �
 
 ## 구독
 
-Worker runner는 `EventHandlerSpec`으로 구독을 정의한다.
+Worker runner는 `WorkerService`로 구독을 정의한다.
 
 ```python
-spec = EventHandlerSpec(
-    service_name="command-worker",
-    subject=EventSubject.COMMAND_REQUESTED,
-    handler_factory=lambda events, db: CommandWorkflow(events, db).handle,
-)
-await WorkerRuntime(spec).run()
+WorkerService(
+    "command-worker",
+    EventSubject.COMMAND_REQUESTED,
+    lambda events, db: CommandWorkflow(events, db).handle,
+).run()
 ```
 
-durable consumer 이름은 기본적으로 `service_name`을 사용한다. 한 서비스가 여러 독립 consumer를 가져야 하면 `durable_name`을 명시한다.
+`WorkerService`는 내부에서 `EventHandlerSpec`과 `WorkerRuntime`을 만든다. durable consumer 이름은 기본적으로 `service_name`을 사용한다. 한 서비스가 여러 독립 consumer를 가져야 하면 `durable_name`을 명시한다.
 
 ## 처리 상태
 

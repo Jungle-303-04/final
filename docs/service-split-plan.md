@@ -36,17 +36,26 @@ services/node-collector
   node/runtime metrics endpoint
   Loki 스타일 collector를 위한 stdout log sample
 
-packages/shared
-  NATS JetStream contract
-  PostgreSQL access
-  request/command/event schema
-  Protocol port
-  service bootstrap
+packages/config
+  env, 상수, 시간 helper
 
-packages/worker_runtime
-  공통 JetStream worker runtime
-  EventHandlerSpec subscription 경계
-  retry / event_processing / DLQ 정책
+packages/contracts
+  Protocol port
+  request/command/event schema
+
+packages/events
+  NATS JetStream adapter
+  event envelope
+  recorded publish / DLQ event sink
+
+packages/storage
+  PostgreSQL access
+  schema 초기화
+  event_processing / dead letter / 업무 저장소
+
+packages/runtime
+  FastApiService / WorkerService / AsyncService 실행 객체
+  worker retry / event_processing / DLQ 정책
 
 deploy
   management cluster manifest
@@ -85,7 +94,8 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 ## 규칙
 
 - 먼저 service/process 경계를 유지하고, 파일은 책임별로 나눈다.
-- 서비스 workflow는 `packages/shared/contracts.py` 포트에 의존하고 concrete adapter는 runner/composition 경계에서 주입한다.
+- 서비스 workflow는 `packages/contracts/interfaces.py` 포트에 의존하고 concrete adapter는 runtime/composition 경계에서 주입한다.
+- service runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
 - 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둔다.
 - DB schema는 공유 PostgreSQL에서 시작하되 schema/table ownership을 문서화한다.
 - 외부 write 권한은 gateway/auth/policy를 지나게 한다.

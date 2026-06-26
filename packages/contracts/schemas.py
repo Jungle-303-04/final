@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, LOCAL_USER_ID, SANDBOX_NAMESPACE
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, LOCAL_USER_ID, SANDBOX_NAMESPACE
 
 DEFAULT_OAUTH_SCOPES = ["profile", "email"]
 DEFAULT_WEBHOOK_IMAGE = "ghcr.io/project/checkout-api:bad"

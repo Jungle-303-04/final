@@ -5,7 +5,8 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-from packages.shared.core import event, publish_and_record
+from packages.events.bus import publish_and_record
+from packages.events.envelope import event
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 COMMAND_WORKER_PATH = ROOT_DIR / "services" / "command-worker" / "command_worker.py"
