@@ -54,7 +54,7 @@ jobs:
 
       - name: Validate target manifests offline
         run: |
-          sed 's#__MANAGEMENT_BASE_URL__#http://management-api-gateway.management:8000#g' \
+          sed 's#__MANAGEMENT_BASE_URL__#http://api-gateway.management:8000#g' \
             deploy/target/target.yaml \
             | docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
               -strict \

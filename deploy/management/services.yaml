@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: management-api-gateway
+  name: api-gateway
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: management-api-gateway
+      app: api-gateway
   template:
     metadata:
       labels:
-        app: management-api-gateway
+        app: api-gateway
     spec:
       containers:
         - name: gateway
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/management-api-gateway/runner.py"]
+          command: ["python", "services/api-gateway/runner.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -38,12 +38,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: management-api-gateway
+  name: api-gateway
   namespace: management
 spec:
   type: NodePort
   selector:
-    app: management-api-gateway
+    app: api-gateway
   ports:
     - name: http
       port: 8000

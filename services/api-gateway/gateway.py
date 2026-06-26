@@ -8,6 +8,27 @@ from typing import Any
 from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from settings import (
+    APP_TITLE,
+    APP_VERSION,
+    COMMAND_NOT_FOUND_MESSAGE,
+    COMMAND_NOT_FOUND_STATUS_CODE,
+    COMMAND_POLL_SLEEP_SECONDS,
+    COMMAND_STATUS_LEASED,
+    COMMAND_STATUS_QUEUED,
+    CONFLICT_STATUS_CODE,
+    DASHBOARD_STREAM_INTERVAL_SECONDS,
+    DEAD_LETTER_NOT_FOUND_MESSAGE,
+    DEAD_LETTER_REPLAYED_MESSAGE,
+    DEFAULT_AGENT_COMMAND_POLL_SECONDS,
+    DEFAULT_DEAD_LETTER_LIMIT,
+    DEFAULT_SCOPES,
+    EVENT_STREAM_MEDIA_TYPE,
+    GATEWAY_ERROR_STATUS_CODE,
+    MAX_COMMAND_POLL_SECONDS,
+    MAX_DEAD_LETTER_LIMIT,
+    SERVICE_NAME,
+)
 
 from packages.config.constants import (
     DEFAULT_TARGET_CLUSTER_ID,
@@ -27,28 +48,8 @@ from packages.contracts.schemas import (
 from packages.events.bus import EventBus, publish_and_record
 from packages.storage.database import Database, wait_for_database
 
-SERVICE_NAME = "management-api-gateway"
-APP_TITLE = "Management API Gateway"
-APP_VERSION = "0.1.0"
-DEFAULT_SCOPES = "profile,email"
-DEFAULT_AGENT_COMMAND_POLL_SECONDS = 10
-MAX_COMMAND_POLL_SECONDS = 30
-COMMAND_POLL_SLEEP_SECONDS = 1
-DASHBOARD_STREAM_INTERVAL_SECONDS = 2
-COMMAND_NOT_FOUND_STATUS_CODE = 404
-CONFLICT_STATUS_CODE = 409
-GATEWAY_ERROR_STATUS_CODE = 500
-COMMAND_NOT_FOUND_MESSAGE = "command not found"
-DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
-DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
-COMMAND_STATUS_QUEUED = "queued"
-COMMAND_STATUS_LEASED = "leased"
-EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
-DEFAULT_DEAD_LETTER_LIMIT = 50
-MAX_DEAD_LETTER_LIMIT = 100
 
-
-class ManagementApiGateway:
+class ApiGateway:
     def __init__(self) -> None:
         self.db = Database()
         self.bus = EventBus()
@@ -270,4 +271,4 @@ class ManagementApiGateway:
 
 
 def create_app() -> FastAPI:
-    return ManagementApiGateway().app
+    return ApiGateway().app

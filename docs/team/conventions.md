@@ -16,7 +16,7 @@
 | 역할 | 주 담당 폴더 | 주 담당 문서 |
 | --- | --- | --- |
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `deploy`, `scripts`, `.github` | `docs/events.md`, `docs/team/conventions.md` |
-| Gateway/Auth | `services/management-api-gateway`, `packages/contracts/schemas.py` | `docs/team/member-guides/gateway-auth.md` |
+| Gateway/Auth | `services/api-gateway`, `packages/contracts/schemas.py` | `docs/team/member-guides/gateway-auth.md` |
 | GitOps/Command | `services/gitops-sync-worker`, `services/command-worker` | `docs/team/member-guides/gitops-command.md` |
 | RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service` | `docs/team/member-guides/rca-safe-pr.md` |
 | Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
@@ -85,10 +85,12 @@ ci: PR 필수 검증 workflow 추가
 - 짧은 이름보다 의미가 분명한 이름을 우선한다.
 - 한 파일에서만 쓰는 상수는 해당 파일 상단에 둔다.
 - 여러 파일이 공유하는 상수는 `packages/config/constants.py`에 둔다.
+- 특정 서비스만 쓰는 설정은 `services/<service-name>/settings.py`에 둔다.
 - 교체 가능한 경계는 `packages/contracts/interfaces.py`의 `Protocol` port로 표현한다.
 - HTTP, worker, async loop 실행은 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
 - 서비스 폴더에서 NATS client, PostgreSQL connection, `WorkerRuntime`을 직접 조립하지 않는다.
 - 서비스 workflow는 concrete NATS/PostgreSQL client가 아니라 port에 의존한다.
+- runner에는 `SERVICE_NAME`, `SUBSCRIBE_SUBJECT`, polling interval 같은 설정값을 직접 쓰지 않는다.
 - 작은 불변 값 객체에는 dataclass를 사용한다.
 - process 경계 밖에서 넓은 `except Exception`을 남발하지 않는다. Runtime/process edge에서는 예외를 잡아 DLQ로 전환할 수 있다.
 - secret은 event, log, fixture, docs, screenshot, test에 넣지 않는다.
@@ -102,7 +104,7 @@ ci: PR 필수 검증 workflow 추가
 | function/method | 동사형 `snake_case` | `publish_event`, `record_dead_letter` |
 | constant | `UPPER_SNAKE_CASE` | `MAX_DEAD_LETTER_LIMIT` |
 | event subject | `<domain>.<thing>.<verb>` | `command.requested` |
-| service folder | `kebab-case` | `management-api-gateway` |
+| service folder | `kebab-case` | `api-gateway` |
 
 ## 이벤트 규칙
 
@@ -122,6 +124,10 @@ ci: PR 필수 검증 workflow 추가
 - Request/response 검증은 Pydantic schema를 사용한다.
 - Write command는 auth와 policy check를 반드시 지난다.
 - 팀이 명시적으로 정책을 바꾸기 전까지 production namespace write는 금지한다.
+- 처음부터 완전 분리 마이크로서비스로 구현한다.
+- 서비스는 `services/<service-name>/runner.py`와 Kubernetes Deployment/DaemonSet 경계를 유지한다.
+- 단일 FastAPI 앱, role dispatcher, 서비스 간 직접 함수 호출 구조로 회귀하지 않는다.
+- 서비스 pod 삭제 뒤 재기동과 retry/DLQ/read model 복구 가능성을 확인한다.
 
 ## 테스트 규칙
 
@@ -186,3 +192,5 @@ Reviewer는 아래 경우 PR을 막는다.
 - target write가 `sandbox` 밖으로 확장
 - secret commit 또는 log 출력
 - 아키텍처 변경 후 docs/WIKI 미수정
+- 마이크로서비스 분리 실행 경계를 약화하는 변경
+- health/restart/DLQ 없이 단일 프로세스 내부 호출에 의존하는 변경

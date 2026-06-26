@@ -3,20 +3,22 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from settings import (
+    EVIDENCE_KIND,
+    MISSING_GITHUB_TOKEN_REF,
+    OBJECT_EVIDENCE_PREFIX,
+    PR_MODE,
+    PR_NUMBER_MODULO,
+    PR_STATUS_CREATED,
+    PR_TITLE,
+    PR_URL_PREFIX,
+    RECOMMENDED_ACTION,
+    ROOT_CAUSE,
+    SERVICE_NAME,
+)
+
 from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER, EventSubject
 from packages.contracts.interfaces import EventClient, OAuthAccountStore, RcaStore
-
-SERVICE_NAME = "rca-worker"
-ROOT_CAUSE = "Image rollout introduced failing readiness checks"
-RECOMMENDED_ACTION = "Open a safe PR to pin the previous image tag"
-PR_TITLE = "Safe rollback proposal for checkout-api"
-PR_MODE = "fake_github_api_call"
-MISSING_GITHUB_TOKEN_REF = "missing-github-oauth-fallback"
-OBJECT_EVIDENCE_PREFIX = "object://evidence"
-EVIDENCE_KIND = "rca_bundle"
-PR_URL_PREFIX = "https://github.example.local/project/repo/pull"
-PR_NUMBER_MODULO = 100000
-PR_STATUS_CREATED = "created"
 
 
 class RcaWorkflow:

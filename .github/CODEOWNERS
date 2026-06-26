@@ -3,16 +3,19 @@
 #
 # 예시:
 # * @org/platform-lead
-# /services/management-api-gateway/ @org/gateway-auth
+# /services/api-gateway/ @org/gateway-auth
 # /services/target-cluster-agent/ @org/target-telemetry
 #
 # 권장 담당 영역:
-# /packages/shared/                         @org/platform-integration
-# /packages/worker_runtime/                 @org/platform-integration
+# /packages/config/                         @org/platform-integration
+# /packages/contracts/                      @org/platform-integration
+# /packages/events/                         @org/platform-integration
+# /packages/runtime/                        @org/platform-integration
+# /packages/storage/                        @org/platform-integration
 # /.github/                                 @org/platform-integration
 # /deploy/                                  @org/platform-integration
 # /scripts/                                 @org/platform-integration
-# /services/management-api-gateway/         @org/gateway-auth
+# /services/api-gateway/                    @org/gateway-auth
 # /services/gitops-sync-worker/             @org/gitops-command
 # /services/command-worker/                 @org/gitops-command
 # /services/rca-worker/                     @org/rca-safe-pr

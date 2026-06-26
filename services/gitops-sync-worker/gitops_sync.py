@@ -3,22 +3,24 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from settings import (
+    DEFAULT_APP_NAME,
+    DEFAULT_IMAGE,
+    DEFAULT_REPLICAS,
+    MANIFEST_API_VERSION,
+    MANIFEST_KIND,
+    PREVIOUS_IMAGE,
+    RESOURCE_REF,
+    SERVICE_NAME,
+    SYNC_ACTION,
+    SYNC_REASON,
+    SYNC_RISK,
+    TARGET_CLUSTER_ENV,
+)
+
 from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
 from packages.config.settings import env
 from packages.contracts.interfaces import EventClient, RepoChangeStore
-
-SERVICE_NAME = "gitops-sync-worker"
-DEFAULT_APP_NAME = "checkout-api"
-DEFAULT_IMAGE = "ghcr.io/project/checkout-api:bad"
-PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
-DEFAULT_REPLICAS = 2
-TARGET_CLUSTER_ENV = "TARGET_CLUSTER_ID"
-MANIFEST_API_VERSION = "apps/v1"
-MANIFEST_KIND = "Deployment"
-RESOURCE_REF = "deployment/checkout-api"
-SYNC_ACTION = "apply_sandbox_manifest"
-SYNC_REASON = "sync rendered manifest to sandbox namespace"
-SYNC_RISK = "sandbox-only"
 
 
 class GitOpsSyncWorkflow:

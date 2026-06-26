@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from gateway import create_app
+from settings import SERVICE_NAME
 
 from packages.runtime.service import FastApiService
-
-SERVICE_NAME = "management-api-gateway"
 
 
 def main() -> None:

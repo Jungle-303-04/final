@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from command_worker import CommandWorkflow
+from settings import SERVICE_NAME, SUBSCRIBE_SUBJECT
 
-from packages.config.constants import EventSubject
 from packages.runtime.service import WorkerService
-
-SERVICE_NAME = "command-worker"
-SUBSCRIBE_SUBJECT = EventSubject.COMMAND_REQUESTED
 
 
 def main() -> None:
