@@ -88,3 +88,4 @@ make kill-pod DEPLOYMENT=rca-worker
 - [docs/team-workflow.md](docs/team-workflow.md)
 - [docs/team/conventions.md](docs/team/conventions.md)
 - [docs/team/work-allocation.md](docs/team/work-allocation.md)
+- [outputs/final-wbs-20260626/나만무_상세_WBS.xlsx](outputs/final-wbs-20260626/나만무_상세_WBS.xlsx)
