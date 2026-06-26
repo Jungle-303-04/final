@@ -20,9 +20,29 @@ from settings import (
 
 from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE
 from packages.config.settings import env
+from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
 from packages.contracts.event_bus.interfaces import EventClient
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway import fields as gateway_fields
 from packages.contracts.interfaces import RepoChangeStore
+
+ACTUAL_IMAGE_FIELD = "actual_image"
+APP_FIELD = "app"
+API_VERSION_FIELD = "apiVersion"
+COMMIT_SHA_FIELD = "commit_sha"
+DESIRED_IMAGE_FIELD = "desired_image"
+DIFF_FIELD = "diff"
+IMAGE_FIELD = "image"
+KIND_FIELD = "kind"
+MANIFEST_FIELD = "manifest"
+METADATA_FIELD = "metadata"
+NAME_FIELD = "name"
+PREVIOUS_IMAGE_FIELD = "previous_image"
+RENDERED_MANIFEST_FIELD = "rendered_manifest"
+REPLICAS_FIELD = "replicas"
+RESOURCE_FIELD = "resource"
+RISK_FIELD = "risk"
+SPEC_FIELD = "spec"
 
 
 class GitOpsSyncWorkflow:
@@ -31,56 +51,62 @@ class GitOpsSyncWorkflow:
         self.repo = repo
 
     async def handle(self, evt: dict[str, Any]) -> None:
-        payload = evt["payload"]
-        commit_sha = payload.get("commit_sha") or str(uuid.uuid4())[:8]
+        payload = evt[PAYLOAD]
+        commit_sha = payload.get(COMMIT_SHA_FIELD) or str(uuid.uuid4())[:8]
         manifest = {
-            "app": DEFAULT_APP_NAME,
-            "image": payload.get("image", DEFAULT_IMAGE),
-            "replicas": payload.get("replicas", DEFAULT_REPLICAS),
-            "namespace": SANDBOX_NAMESPACE,
+            APP_FIELD: DEFAULT_APP_NAME,
+            IMAGE_FIELD: payload.get(IMAGE_FIELD, DEFAULT_IMAGE),
+            REPLICAS_FIELD: payload.get(REPLICAS_FIELD, DEFAULT_REPLICAS),
+            gateway_fields.NAMESPACE: SANDBOX_NAMESPACE,
         }
-        self.repo.save_repo_change(evt["correlation_id"], commit_sha, manifest)
+        self.repo.save_repo_change(evt[CORRELATION_ID], commit_sha, manifest)
 
         rendered = {
-            "apiVersion": MANIFEST_API_VERSION,
-            "kind": MANIFEST_KIND,
-            "metadata": {"name": manifest["app"], "namespace": manifest["namespace"]},
-            "spec": {"replicas": manifest["replicas"], "image": manifest["image"]},
+            API_VERSION_FIELD: MANIFEST_API_VERSION,
+            KIND_FIELD: MANIFEST_KIND,
+            METADATA_FIELD: {
+                NAME_FIELD: manifest[APP_FIELD],
+                gateway_fields.NAMESPACE: manifest[gateway_fields.NAMESPACE],
+            },
+            SPEC_FIELD: {
+                REPLICAS_FIELD: manifest[REPLICAS_FIELD],
+                IMAGE_FIELD: manifest[IMAGE_FIELD],
+            },
         }
         diff = {
-            "resource": RESOURCE_REF,
-            "namespace": SANDBOX_NAMESPACE,
-            "desired_image": rendered["spec"]["image"],
-            "actual_image": PREVIOUS_IMAGE,
-            "risk": SYNC_RISK,
+            RESOURCE_FIELD: RESOURCE_REF,
+            gateway_fields.NAMESPACE: SANDBOX_NAMESPACE,
+            DESIRED_IMAGE_FIELD: rendered[SPEC_FIELD][IMAGE_FIELD],
+            ACTUAL_IMAGE_FIELD: PREVIOUS_IMAGE,
+            RISK_FIELD: SYNC_RISK,
         }
         await self.events.publish(
             EventSubject.GIT_CHANGED,
             SERVICE_NAME,
-            {"commit_sha": commit_sha, "manifest": manifest},
-            evt["correlation_id"],
+            {COMMIT_SHA_FIELD: commit_sha, MANIFEST_FIELD: manifest},
+            evt[CORRELATION_ID],
         )
         await self.events.publish(
             EventSubject.MANIFEST_RENDERED,
             SERVICE_NAME,
-            {"rendered_manifest": rendered},
-            evt["correlation_id"],
+            {RENDERED_MANIFEST_FIELD: rendered},
+            evt[CORRELATION_ID],
         )
         await self.events.publish(
             EventSubject.DESIRED_DIFF_DETECTED,
             SERVICE_NAME,
-            {"diff": diff},
-            evt["correlation_id"],
+            {DIFF_FIELD: diff},
+            evt[CORRELATION_ID],
         )
         await self.events.publish(
             EventSubject.COMMAND_REQUESTED,
             SERVICE_NAME,
             {
-                "cluster_id": env(TARGET_CLUSTER_ENV, DEFAULT_TARGET_CLUSTER_ID),
-                "action": SYNC_ACTION,
-                "namespace": SANDBOX_NAMESPACE,
+                gateway_fields.CLUSTER_ID: env(TARGET_CLUSTER_ENV, DEFAULT_TARGET_CLUSTER_ID),
+                gateway_fields.ACTION: SYNC_ACTION,
+                gateway_fields.NAMESPACE: SANDBOX_NAMESPACE,
                 "reason": SYNC_REASON,
-                "diff": diff,
+                DIFF_FIELD: diff,
             },
-            evt["correlation_id"],
+            evt[CORRELATION_ID],
         )
