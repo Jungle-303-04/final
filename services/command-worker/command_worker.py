@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from command_dispatcher import CommandDispatcher, CommandPlan
-from command_policy import CommandPayload, CommandPolicy
-from settings import Settings
+from command_dispatcher import (
+    CommandDispatcher,
+    CommandDispatchPort,
+    CommandPlanner,
+    DefaultCommandPlanner,
+)
+from command_policy import CommandPayload, CommandPolicy, CommandPolicyPort
+from settings import CommandConfigPort, Settings
 
 from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
 from packages.contracts.event_bus.interfaces import EventClient
@@ -13,10 +18,20 @@ from packages.contracts.interfaces import AgentCommandQueue
 
 
 class CommandWorkflow:
-    def __init__(self, events: EventClient, commands: AgentCommandQueue) -> None:
+    def __init__(
+        self,
+        events: EventClient,
+        commands: AgentCommandQueue,
+        config: CommandConfigPort = Settings.CONFIG,
+        policy: CommandPolicyPort | None = None,
+        planner: CommandPlanner | None = None,
+        dispatcher: CommandDispatchPort | None = None,
+    ) -> None:
         self.events = events
-        self.policy = CommandPolicy()
-        self.dispatcher = CommandDispatcher(events, commands)
+        self.config = config
+        self.policy = policy or CommandPolicy.from_config(config.policy_rules)
+        self.planner = planner or DefaultCommandPlanner(config)
+        self.dispatcher = dispatcher or CommandDispatcher(events, commands, config)
 
     async def handle(self, evt: dict[str, Any]) -> None:
         command = CommandPayload(evt[PAYLOAD])
@@ -25,16 +40,16 @@ class CommandWorkflow:
             await self.reject(
                 evt,
                 command,
-                policy.reason or Settings.DEFAULT_POLICY_REJECT_REASON,
+                policy.reason or self.config.default_policy_reject_reason,
             )
             return
 
-        await self.dispatcher.dispatch(evt, CommandPlan.from_payload(command))
+        await self.dispatcher.dispatch(evt, self.planner.build(command))
 
     async def reject(self, evt: dict[str, Any], command: CommandPayload, reason: str) -> None:
         await self.events.publish(
             EventSubject.COMMAND_REJECTED,
-            Settings.SERVICE_NAME,
+            self.config.service_name,
             command.rejected_payload(reason),
             evt[CORRELATION_ID],
         )

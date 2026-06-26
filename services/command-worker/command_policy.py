@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
-from settings import Settings
+from settings import PolicyRuleConfig
 
 from packages.config.constants import Sandbox, Target
 from packages.contracts.gateway.fields import Gateway
@@ -31,7 +31,7 @@ class CommandPayload:
 
     @property
     def action(self) -> str:
-        return self.value(Gateway.ACTION, Settings.DEFAULT_COMMAND_ACTION)
+        return self.value(Gateway.ACTION)
 
     def rejected_payload(self, reason: str) -> dict[str, Any]:
         return {
@@ -40,8 +40,14 @@ class CommandPayload:
         }
 
 
+class PolicyRule(Protocol):
+    reason: str
+
+    def allows(self, command: CommandPayload) -> bool: ...
+
+
 @dataclass(frozen=True)
-class PolicyRule:
+class FieldEqualsRule:
     name: str
     field: str
     expected: Any
@@ -50,6 +56,16 @@ class PolicyRule:
 
     def allows(self, command: CommandPayload) -> bool:
         return command.value(self.field, self.default) == self.expected
+
+    @classmethod
+    def from_config(cls, config: PolicyRuleConfig) -> FieldEqualsRule:
+        return cls(
+            name=config.name,
+            field=config.field,
+            expected=config.expected,
+            reason=config.reason,
+            default=config.default,
+        )
 
 
 @dataclass(frozen=True)
@@ -66,17 +82,17 @@ class PolicyResult:
         return cls(False, reason)
 
 
+class CommandPolicyPort(Protocol):
+    def evaluate(self, command: CommandPayload) -> PolicyResult: ...
+
+
 class CommandPolicy:
-    def __init__(self, rules: tuple[PolicyRule, ...] | None = None) -> None:
-        self.rules = rules or (
-            PolicyRule(
-                name=Settings.SANDBOX_NAMESPACE_POLICY_NAME,
-                field=Gateway.NAMESPACE,
-                expected=Sandbox.NAMESPACE,
-                default=Sandbox.NAMESPACE,
-                reason=Settings.SANDBOX_WRITE_REJECT_REASON,
-            ),
-        )
+    def __init__(self, rules: tuple[PolicyRule, ...]) -> None:
+        self.rules = rules
+
+    @classmethod
+    def from_config(cls, rules: tuple[PolicyRuleConfig, ...]) -> CommandPolicy:
+        return cls(tuple(FieldEqualsRule.from_config(rule) for rule in rules))
 
     def evaluate(self, command: CommandPayload) -> PolicyResult:
         for rule in self.rules:
