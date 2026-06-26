@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final, Protocol
 
@@ -40,14 +41,14 @@ class CommandPayload:
         }
 
 
-class PolicyRule(Protocol):
+class Rule(Protocol):
     reason: str
 
     def allows(self, command: CommandPayload) -> bool: ...
 
 
 @dataclass(frozen=True)
-class FieldEqualsRule:
+class EqualsRule:
     name: str
     field: str
     expected: Any
@@ -58,7 +59,7 @@ class FieldEqualsRule:
         return command.value(self.field, self.default) == self.expected
 
     @classmethod
-    def from_config(cls, config: PolicyRuleConfig) -> FieldEqualsRule:
+    def build(cls, config: PolicyRuleConfig) -> EqualsRule:
         return cls(
             name=config.name,
             field=config.field,
@@ -66,6 +67,10 @@ class FieldEqualsRule:
             reason=config.reason,
             default=config.default,
         )
+
+    @classmethod
+    def from_config(cls, config: PolicyRuleConfig) -> EqualsRule:
+        return cls.build(config)
 
 
 @dataclass(frozen=True)
@@ -82,17 +87,27 @@ class PolicyResult:
         return cls(False, reason)
 
 
-class CommandPolicyPort(Protocol):
+class Evaluator(Protocol):
     def evaluate(self, command: CommandPayload) -> PolicyResult: ...
 
 
+PolicyRule = Rule
+FieldEqualsRule = EqualsRule
+CommandPolicyPort = Evaluator
+
+
 class CommandPolicy:
-    def __init__(self, rules: tuple[PolicyRule, ...]) -> None:
-        self.rules = rules
+    def __init__(self, rules: Sequence[Rule]) -> None:
+        self.rules: tuple[Rule, ...] = tuple(rules)
 
     @classmethod
-    def from_config(cls, rules: tuple[PolicyRuleConfig, ...]) -> CommandPolicy:
-        return cls(tuple(FieldEqualsRule.from_config(rule) for rule in rules))
+    def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> CommandPolicy:
+        rules: list[Rule] = [EqualsRule.build(config) for config in configs]
+        return cls(rules)
+
+    @classmethod
+    def from_config(cls, configs: tuple[PolicyRuleConfig, ...]) -> CommandPolicy:
+        return cls.build(configs)
 
     def evaluate(self, command: CommandPayload) -> PolicyResult:
         for rule in self.rules:
