@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from command_worker import CommandWorkflow
-from settings import SERVICE_NAME, SUBSCRIBE_SUBJECT
+from settings import SUBSCRIPTION
 
 from packages.runtime.service import WorkerService
 
 
 def main() -> None:
-    WorkerService(
-        SERVICE_NAME,
-        SUBSCRIBE_SUBJECT,
+    WorkerService.from_subscription(
+        SUBSCRIPTION,
         lambda events, db: CommandWorkflow(events, db).handle,
     ).run()
 

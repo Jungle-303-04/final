@@ -9,8 +9,10 @@ from settings import (
     TERMINAL_SUCCESS_SUBJECTS,
 )
 
-from packages.config.constants import DashboardStatus, EventSubject
-from packages.contracts.interfaces import DashboardReadModel, EventClient
+from packages.contracts.dashboard.status import DashboardStatus
+from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.interfaces import DashboardReadModel
 
 
 class DashboardProjectionWorkflow:

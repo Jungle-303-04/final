@@ -19,8 +19,11 @@ services
   target-cluster-agent
   node-collector
 packages
-  config                 env, 상수, 시간 helper
-  contracts              Protocol port, Pydantic request schema
+  config                 env, runtime 기본값, 시간 helper
+  contracts              gateway/event_bus/dashboard 계약과 Protocol port
+    gateway              API Gateway 요청 schema
+    event_bus            stream, subject, subscription, publish/consume port
+    dashboard            dashboard status 계약
   events                 event envelope, NATS JetStream, DLQ event sink
   storage                PostgreSQL 저장소와 schema 초기화
   runtime                FastAPI/worker/async service 실행 객체
@@ -56,7 +59,7 @@ make down
 각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python services/<service-name>/runner.py`처럼 서비스별 entrypoint로 분리한다.
 
 새 서비스 runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService` 중 하나를 사용합니다. 서비스 폴더에서 `WorkerRuntime`, NATS client, PostgreSQL connection을 직접 조립하지 않습니다.
-각 서비스가 직접 제어하는 설정은 `services/<service-name>/settings.py`에 둡니다. 팀원은 자기 서비스의 `settings.py`를 우선 수정하고, 여러 서비스가 공유하는 값만 `packages/config`로 올립니다.
+각 서비스가 직접 제어하는 설정은 `services/<service-name>/settings.py`에 둡니다. Worker 구독은 자기 서비스 `settings.py`의 `SUBSCRIPTION`에서 확인합니다. 여러 서비스가 공유하는 이벤트 subject와 stream 계약은 `packages/contracts/event_bus`에 둡니다.
 
 ```text
 api-gateway                  관리 API Gateway

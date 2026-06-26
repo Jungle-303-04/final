@@ -10,13 +10,9 @@ from packages.config.constants import (
     DEFAULT_NATS_URL,
     DEFAULT_SERVICE_NAME,
     SERVICE_NAME_ENV,
-    STREAM_NAME,
-    STREAM_SUBJECTS,
-    EventSubject,
 )
 from packages.config.settings import env
-from packages.contracts.interfaces import (
-    DeadLetterStore,
+from packages.contracts.event_bus.interfaces import (
     Event,
     EventClient,
     EventPublisher,
@@ -24,6 +20,8 @@ from packages.contracts.interfaces import (
     EventSubscription,
     JsonObject,
 )
+from packages.contracts.event_bus.subjects import STREAM_NAME, STREAM_SUBJECTS, EventSubject
+from packages.contracts.interfaces import DeadLetterStore
 from packages.events.envelope import event
 
 NATS_URL_ENV = "NATS_URL"
@@ -139,4 +137,3 @@ async def publish_and_record(
     correlation_id: str | None = None,
 ) -> Event:
     return await RecordedEventClient(bus, db).publish(subject, source, payload, correlation_id)
-

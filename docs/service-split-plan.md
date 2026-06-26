@@ -50,8 +50,19 @@ packages/config
   env, 상수, 시간 helper
 
 packages/contracts
+  gateway/event_bus/dashboard 계약
   Protocol port
-  request/command/event schema
+
+packages/contracts/gateway
+  API Gateway 요청 schema
+
+packages/contracts/event_bus
+  stream subject
+  worker subscription
+  publish/consume port
+
+packages/contracts/dashboard
+  dashboard status 계약
 
 packages/events
   NATS JetStream adapter
@@ -104,10 +115,12 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 ## 규칙
 
 - 먼저 service/process 경계를 유지하고, 파일은 책임별로 나눈다.
-- 서비스 workflow는 `packages/contracts/interfaces.py` 포트에 의존하고 concrete adapter는 runtime/composition 경계에서 주입한다.
+- 서비스 workflow는 `packages/contracts` 포트에 의존하고 concrete adapter는 runtime/composition 경계에서 주입한다.
 - service runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
 - 서비스별 설정은 반드시 `services/<service-name>/settings.py`에 둔다.
-- 여러 서비스가 공유하는 값만 `packages/config`로 승격한다.
+- worker 구독은 각 worker `settings.py`의 `SUBSCRIPTION = WorkerSubscription(...)`으로 선언한다.
+- event subject, stream, subscription 타입은 `packages/contracts/event_bus`에서 관리한다.
+- 여러 서비스가 공유하는 runtime/env 기본값만 `packages/config`로 승격한다.
 - 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둔다.
 - DB schema는 공유 PostgreSQL에서 시작하되 schema/table ownership을 문서화한다.
 - 외부 write 권한은 gateway/auth/policy를 지나게 한다.

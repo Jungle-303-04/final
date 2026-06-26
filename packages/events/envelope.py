@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from packages.config.time import now_iso
-from packages.contracts.interfaces import Event, JsonObject
+from packages.contracts.event_bus.interfaces import Event, JsonObject
 
 
 def event(
@@ -20,4 +20,3 @@ def event(
         "timestamp": now_iso(),
         "payload": payload,
     }
-

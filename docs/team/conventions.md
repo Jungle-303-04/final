@@ -16,7 +16,7 @@
 | 역할 | 주 담당 폴더 | 주 담당 문서 |
 | --- | --- | --- |
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `deploy`, `scripts`, `.github` | `docs/events.md`, `docs/team/conventions.md` |
-| Gateway/Auth | `services/api-gateway`, `packages/contracts/schemas.py` | `docs/team/member-guides/gateway-auth.md` |
+| Gateway/Auth | `services/api-gateway`, `packages/contracts/gateway`, `packages/contracts/event_bus` | `docs/team/member-guides/gateway-auth.md` |
 | GitOps/Command | `services/gitops-sync-worker`, `services/command-worker` | `docs/team/member-guides/gitops-command.md` |
 | RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service` | `docs/team/member-guides/rca-safe-pr.md` |
 | Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
@@ -84,13 +84,15 @@ ci: PR 필수 검증 workflow 추가
 
 - 짧은 이름보다 의미가 분명한 이름을 우선한다.
 - 한 파일에서만 쓰는 상수는 해당 파일 상단에 둔다.
-- 여러 파일이 공유하는 상수는 `packages/config/constants.py`에 둔다.
+- 여러 파일이 공유하는 runtime/env 기본값은 `packages/config/constants.py`에 둔다.
+- Gateway 요청 계약은 `packages/contracts/gateway`에 둔다.
+- EventBus subject, stream, subscription 계약은 `packages/contracts/event_bus`에 둔다.
 - 특정 서비스만 쓰는 설정은 `services/<service-name>/settings.py`에 둔다.
 - 교체 가능한 경계는 `packages/contracts/interfaces.py`의 `Protocol` port로 표현한다.
 - HTTP, worker, async loop 실행은 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
 - 서비스 폴더에서 NATS client, PostgreSQL connection, `WorkerRuntime`을 직접 조립하지 않는다.
 - 서비스 workflow는 concrete NATS/PostgreSQL client가 아니라 port에 의존한다.
-- runner에는 `SERVICE_NAME`, `SUBSCRIBE_SUBJECT`, polling interval 같은 설정값을 직접 쓰지 않는다.
+- runner에는 `SERVICE_NAME`, `SUBSCRIPTION`, polling interval 같은 설정값을 직접 쓰지 않는다.
 - 작은 불변 값 객체에는 dataclass를 사용한다.
 - process 경계 밖에서 넓은 `except Exception`을 남발하지 않는다. Runtime/process edge에서는 예외를 잡아 DLQ로 전환할 수 있다.
 - secret은 event, log, fixture, docs, screenshot, test에 넣지 않는다.
@@ -109,8 +111,9 @@ ci: PR 필수 검증 workflow 추가
 ## 이벤트 규칙
 
 - 발행은 `EventClient`를 사용한다.
-- 구독은 runner에서 `WorkerService`를 사용한다.
-- 새 event subject는 `EventSubject`와 `docs/events.md`에 함께 추가한다.
+- 구독은 각 worker `settings.py`의 `SUBSCRIPTION = WorkerSubscription(...)`으로 선언한다.
+- runner는 `WorkerService.from_subscription(SUBSCRIPTION, ...)`만 호출한다.
+- 새 event subject는 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 함께 추가한다.
 - event payload는 JSON object여야 한다.
 - 하나의 업무 흐름은 `correlation_id`를 유지한다.
 - handler write는 at-least-once delivery에 안전하도록 idempotent하게 작성한다.

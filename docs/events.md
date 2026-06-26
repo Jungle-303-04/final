@@ -48,7 +48,7 @@
 
 ## 발행
 
-서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다.
+서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리한다.
 
 ```python
 await self.events.publish(
@@ -65,17 +65,37 @@ Gateway code는 호환성을 위해 `publish_and_record(...)`를 사용할 수 �
 
 ## 구독
 
-Worker runner는 `WorkerService`로 구독을 정의한다.
+각 worker의 구독 위치는 자기 서비스 폴더의 `settings.py`다. Runner는 구독 subject를 직접 쓰지 않고 `SUBSCRIPTION`만 넘긴다.
 
 ```python
-WorkerService(
-    "command-worker",
-    EventSubject.COMMAND_REQUESTED,
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.event_bus.subscriptions import WorkerSubscription
+
+SERVICE_NAME = "command-worker"
+SUBSCRIPTION = WorkerSubscription(
+    service_name=SERVICE_NAME,
+    subject=EventSubject.COMMAND_REQUESTED,
+)
+```
+
+```python
+WorkerService.from_subscription(
+    SUBSCRIPTION,
     lambda events, db: CommandWorkflow(events, db).handle,
 ).run()
 ```
 
-`WorkerService`는 내부에서 `EventHandlerSpec`과 `WorkerRuntime`을 만든다. durable consumer 이름은 기본적으로 `service_name`을 사용한다. 한 서비스가 여러 독립 consumer를 가져야 하면 `durable_name`을 명시한다.
+`WorkerService`는 내부에서 `EventHandlerSpec`과 `WorkerRuntime`을 만든다. durable consumer 이름은 기본적으로 `service_name`을 사용한다. 한 서비스가 여러 독립 consumer를 가져야 하면 `WorkerSubscription(..., durable_name="...")`을 명시한다.
+
+현재 worker 구독 위치:
+
+| 서비스 | 설정 파일 | 구독 subject |
+| --- | --- | --- |
+| GitOps Sync Worker | `services/gitops-sync-worker/settings.py` | `git.webhook.received` |
+| Command Worker | `services/command-worker/settings.py` | `command.requested` |
+| RCA Worker | `services/rca-worker/settings.py` | `cluster.evidence.received` |
+| Dashboard Projection Service | `services/dashboard-projection-service/settings.py` | `>` |
+| Audit Timeline Service | `services/audit-timeline-service/settings.py` | `>` |
 
 ## 처리 상태
 
