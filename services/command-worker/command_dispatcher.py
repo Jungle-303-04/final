@@ -4,8 +4,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Final, Protocol
 
-from command_policy import CommandPayload
-from settings import CommandConfigPort
+from command_config import CommandConfigPort
+from command_policy import Payload
 
 from packages.contracts.event_bus.fields import CORRELATION_ID
 from packages.contracts.event_bus.interfaces import EventClient
@@ -22,17 +22,17 @@ class Field:
 
 
 @dataclass(frozen=True)
-class CommandPlan:
+class Plan:
     data: dict[str, Any]
 
     @classmethod
-    def from_payload(cls, command: CommandPayload, config: CommandConfigPort) -> CommandPlan:
+    def build(cls, command: Payload, config: CommandConfigPort) -> Plan:
         return cls(
             {
                 Gateway.COMMAND_ID: str(uuid.uuid4()),
-                Gateway.CLUSTER_ID: command.cluster_id,
-                Gateway.ACTION: command.value(Gateway.ACTION, config.default_command_action),
-                Gateway.NAMESPACE: command.namespace,
+                Gateway.CLUSTER_ID: command.cluster_id or config.default_cluster_id,
+                Gateway.ACTION: command.action or config.default_command_action,
+                Gateway.NAMESPACE: command.namespace or config.default_namespace,
                 Field.STEPS: list(config.policy_steps),
             }
         )
@@ -45,10 +45,10 @@ class CommandPlan:
     def cluster_id(self) -> str:
         return self.data[Gateway.CLUSTER_ID]
 
-    def ready_payload(self) -> dict[str, Any]:
+    def ready_event_payload(self) -> dict[str, Any]:
         return {Field.PLAN: self.data}
 
-    def dispatch_payload(self, config: CommandConfigPort) -> dict[str, Any]:
+    def dispatched_event_payload(self, config: CommandConfigPort) -> dict[str, Any]:
         return {
             Field.PLAN: self.data,
             Field.ROUTE: {
@@ -57,30 +57,30 @@ class CommandPlan:
             },
         }
 
-    def queued_payload(self) -> dict[str, Any]:
+    def queued_event_payload(self) -> dict[str, Any]:
         return {
             Gateway.COMMAND_ID: self.command_id,
             Gateway.CLUSTER_ID: self.cluster_id,
         }
 
 
-class CommandPlanner(Protocol):
-    def build(self, command: CommandPayload) -> CommandPlan: ...
+class Planner(Protocol):
+    def build(self, command: Payload) -> Plan: ...
 
 
-class CommandDispatchPort(Protocol):
-    async def dispatch(self, evt: dict[str, Any], plan: CommandPlan) -> None: ...
+class DispatchPort(Protocol):
+    async def dispatch(self, evt: dict[str, Any], plan: Plan) -> None: ...
 
 
-class DefaultCommandPlanner:
+class DefaultPlanner:
     def __init__(self, config: CommandConfigPort) -> None:
         self.config = config
 
-    def build(self, command: CommandPayload) -> CommandPlan:
-        return CommandPlan.from_payload(command, self.config)
+    def build(self, command: Payload) -> Plan:
+        return Plan.build(command, self.config)
 
 
-class CommandDispatcher:
+class Dispatcher:
     def __init__(
         self,
         events: EventClient,
@@ -91,17 +91,34 @@ class CommandDispatcher:
         self.commands = commands
         self.config = config
 
-    async def dispatch(self, evt: dict[str, Any], plan: CommandPlan) -> None:
-        await self.emit(evt, EventSubject.COMMAND_DISPATCH_READY, plan.ready_payload())
-        await self.emit(evt, EventSubject.COMMAND_DISPATCHED, plan.dispatch_payload(self.config))
+    async def dispatch(self, evt: dict[str, Any], plan: Plan) -> None:
+        await self.publish_event(
+            evt,
+            EventSubject.COMMAND_DISPATCH_READY,
+            plan.ready_event_payload(),
+        )
+        await self.publish_event(
+            evt,
+            EventSubject.COMMAND_DISPATCHED,
+            plan.dispatched_event_payload(self.config),
+        )
         self.commands.queue_agent_command(
             evt[CORRELATION_ID],
             plan.data,
             self.config.command_status_queued,
         )
-        await self.emit(evt, EventSubject.COMMAND_QUEUED_FOR_AGENT, plan.queued_payload())
+        await self.publish_event(
+            evt,
+            EventSubject.COMMAND_QUEUED_FOR_AGENT,
+            plan.queued_event_payload(),
+        )
 
-    async def emit(self, evt: dict[str, Any], subject: str, payload: dict[str, Any]) -> None:
+    async def publish_event(
+        self,
+        evt: dict[str, Any],
+        subject: str,
+        payload: dict[str, Any],
+    ) -> None:
         await self.events.publish(
             subject,
             self.config.service_name,

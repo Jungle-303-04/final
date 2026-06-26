@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from command_dispatcher import (
-    CommandDispatcher,
-    CommandDispatchPort,
-    CommandPlanner,
-    DefaultCommandPlanner,
+    DefaultPlanner,
+    DispatchPort,
+    Dispatcher,
+    Planner,
 )
-from command_policy import CommandPayload, CommandPolicy, CommandPolicyPort
+from command_policy import Payload, Policy, PolicyPort
 from settings import CommandConfigPort, Settings
 
 from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
@@ -23,18 +23,18 @@ class CommandWorkflow:
         events: EventClient,
         commands: AgentCommandQueue,
         config: CommandConfigPort = Settings.CONFIG,
-        policy: CommandPolicyPort | None = None,
-        planner: CommandPlanner | None = None,
-        dispatcher: CommandDispatchPort | None = None,
+        policy: PolicyPort | None = None,
+        planner: Planner | None = None,
+        dispatcher: DispatchPort | None = None,
     ) -> None:
         self.events = events
         self.config = config
-        self.policy = policy or CommandPolicy.from_config(config.policy_rules)
-        self.planner = planner or DefaultCommandPlanner(config)
-        self.dispatcher = dispatcher or CommandDispatcher(events, commands, config)
+        self.policy = policy or Policy.build(config.policy_rules)
+        self.planner = planner or DefaultPlanner(config)
+        self.dispatcher = dispatcher or Dispatcher(events, commands, config)
 
     async def handle(self, evt: dict[str, Any]) -> None:
-        command = CommandPayload(evt[PAYLOAD])
+        command = Payload(evt[PAYLOAD])
         policy = self.policy.evaluate(command)
         if not policy.allowed:
             await self.reject(
@@ -46,7 +46,7 @@ class CommandWorkflow:
 
         await self.dispatcher.dispatch(evt, self.planner.build(command))
 
-    async def reject(self, evt: dict[str, Any], command: CommandPayload, reason: str) -> None:
+    async def reject(self, evt: dict[str, Any], command: Payload, reason: str) -> None:
         await self.events.publish(
             EventSubject.COMMAND_REJECTED,
             self.config.service_name,
