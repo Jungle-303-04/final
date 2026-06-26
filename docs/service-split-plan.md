@@ -128,3 +128,5 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 - production write는 기본 금지하고 `sandbox` namespace부터 허용한다.
 - 새 서비스는 runner, Deployment/DaemonSet, health/restart 검증, 소유 WBS/이슈를 함께 추가한다.
 - PR에서 서비스 경계를 합치거나 role dispatcher로 회귀하면 merge하지 않는다.
+- 운영 배포 기준은 `docs/operations-deployment.md`와 `deploy/eks/README.md`를 따른다.
+- Fargate 전제 workload와 managed node group 전제 workload를 섞어서 설명하지 않는다.
