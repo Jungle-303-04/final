@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from command_policy import CommandPayload
-from settings import Settings
+from settings import CommandConfigPort
 
 from packages.contracts.event_bus.fields import CORRELATION_ID
 from packages.contracts.event_bus.interfaces import EventClient
@@ -26,14 +26,14 @@ class CommandPlan:
     data: dict[str, Any]
 
     @classmethod
-    def from_payload(cls, command: CommandPayload) -> CommandPlan:
+    def from_payload(cls, command: CommandPayload, config: CommandConfigPort) -> CommandPlan:
         return cls(
             {
                 Gateway.COMMAND_ID: str(uuid.uuid4()),
                 Gateway.CLUSTER_ID: command.cluster_id,
-                Gateway.ACTION: command.action,
+                Gateway.ACTION: command.value(Gateway.ACTION, config.default_command_action),
                 Gateway.NAMESPACE: command.namespace,
-                Field.STEPS: Settings.POLICY_STEPS,
+                Field.STEPS: list(config.policy_steps),
             }
         )
 
@@ -48,11 +48,11 @@ class CommandPlan:
     def ready_payload(self) -> dict[str, Any]:
         return {Field.PLAN: self.data}
 
-    def dispatch_payload(self) -> dict[str, Any]:
+    def dispatch_payload(self, config: CommandConfigPort) -> dict[str, Any]:
         return {
             Field.PLAN: self.data,
             Field.ROUTE: {
-                Field.CHANNEL: Settings.AGENT_ROUTE_CHANNEL,
+                Field.CHANNEL: config.agent_route_channel,
                 Gateway.CLUSTER_ID: self.cluster_id,
             },
         }
@@ -64,25 +64,47 @@ class CommandPlan:
         }
 
 
+class CommandPlanner(Protocol):
+    def build(self, command: CommandPayload) -> CommandPlan: ...
+
+
+class CommandDispatchPort(Protocol):
+    async def dispatch(self, evt: dict[str, Any], plan: CommandPlan) -> None: ...
+
+
+class DefaultCommandPlanner:
+    def __init__(self, config: CommandConfigPort) -> None:
+        self.config = config
+
+    def build(self, command: CommandPayload) -> CommandPlan:
+        return CommandPlan.from_payload(command, self.config)
+
+
 class CommandDispatcher:
-    def __init__(self, events: EventClient, commands: AgentCommandQueue) -> None:
+    def __init__(
+        self,
+        events: EventClient,
+        commands: AgentCommandQueue,
+        config: CommandConfigPort,
+    ) -> None:
         self.events = events
         self.commands = commands
+        self.config = config
 
     async def dispatch(self, evt: dict[str, Any], plan: CommandPlan) -> None:
         await self.emit(evt, EventSubject.COMMAND_DISPATCH_READY, plan.ready_payload())
-        await self.emit(evt, EventSubject.COMMAND_DISPATCHED, plan.dispatch_payload())
+        await self.emit(evt, EventSubject.COMMAND_DISPATCHED, plan.dispatch_payload(self.config))
         self.commands.queue_agent_command(
             evt[CORRELATION_ID],
             plan.data,
-            Settings.COMMAND_STATUS_QUEUED,
+            self.config.command_status_queued,
         )
         await self.emit(evt, EventSubject.COMMAND_QUEUED_FOR_AGENT, plan.queued_payload())
 
     async def emit(self, evt: dict[str, Any], subject: str, payload: dict[str, Any]) -> None:
         await self.events.publish(
             subject,
-            Settings.SERVICE_NAME,
+            self.config.service_name,
             payload,
             evt[CORRELATION_ID],
         )
