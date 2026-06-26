@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from packages.shared.contracts import AuditLogStore
+from packages.contracts.interfaces import AuditLogStore
 
 
 class AuditTimelineWorkflow:

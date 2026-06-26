@@ -22,7 +22,7 @@ Git 변경을 받아 manifest render, desired diff, command 생성까지 이어�
 
 ## 코드 규칙
 
-- Worker는 `EventHandlerSpec`으로 구독한다.
+- Worker runner는 `WorkerService`로 구독한다.
 - Worker는 `EventClient`로 발행한다.
 - `correlation_id`를 유지한다.
 - handler write는 idempotent하거나 conflict-safe해야 한다.
@@ -38,4 +38,4 @@ Git 변경을 받아 manifest render, desired diff, command 생성까지 이어�
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `docs/events.md`, `packages/worker_runtime/runtime.py`, `services/gitops-sync-worker`, `services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.
+이 영역을 작업할 때는 `docs/events.md`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `services/gitops-sync-worker`, `services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.

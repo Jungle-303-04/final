@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.shared.contracts import AgentCommandQueue, EventClient
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
+from packages.contracts.interfaces import AgentCommandQueue, EventClient
 
 SERVICE_NAME = "command-worker"
 AGENT_ROUTE_CHANNEL = "agent-poll"

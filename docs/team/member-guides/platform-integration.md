@@ -6,8 +6,11 @@
 
 ## 담당 영역
 
-- `packages/shared`
-- `packages/worker_runtime`
+- `packages/config`
+- `packages/contracts`
+- `packages/events`
+- `packages/storage`
+- `packages/runtime`
 - `.github`
 - `deploy`
 - `scripts`
@@ -16,7 +19,7 @@
 
 ## 현재 책임
 
-- `EventClient`, `EventHandlerSpec`, retry, DLQ, replay 계약을 유지한다.
+- `EventClient`, `WorkerService`, retry, DLQ, replay 계약을 유지한다.
 - CI가 실패한 PR이 merge되지 않도록 GitHub Actions와 branch protection 기준을 관리한다.
 - 배포 스크립트와 수요일 demo 검증 흐름을 유지한다.
 - DB/event 원자성이 필요해지는 시점에 outbox relay 도입 여부를 결정한다.
@@ -34,10 +37,10 @@
 
 - `make check` 통과
 - CI workflow가 required check로 유지됨
-- 새 shared contract에 최소 1개 테스트 존재
+- 새 공통 contract에 최소 1개 테스트 존재
 - architecture/runtime 변경이 문서에 설명됨
 - 다른 service owner 동작을 바꾼 경우 사전 조율 기록 존재
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `packages/shared`, `packages/worker_runtime`, `docs/events.md`, `.github`를 먼저 읽어라. 변경 범위를 좁게 유지하고 각 service의 공개 계약을 깨지 마라.
+이 영역을 작업할 때는 `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `docs/events.md`, `.github`를 먼저 읽어라. 변경 범위를 좁게 유지하고 각 service의 공개 계약을 깨지 마라.

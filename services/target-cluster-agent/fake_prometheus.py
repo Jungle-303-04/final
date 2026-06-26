@@ -1,16 +1,8 @@
 from __future__ import annotations
 
-# ruff: noqa: E402
-import sys
-from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parents[2]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
 from agent import run_fake_telemetry
 
-from packages.shared.service_bootstrap import run_service
+from packages.runtime.service import AsyncService
 
 SERVICE_NAME = "fake-prometheus"
 TELEMETRY_KIND = "prometheus"
@@ -21,7 +13,7 @@ async def run() -> None:
 
 
 def main() -> None:
-    run_service(SERVICE_NAME, run)
+    AsyncService(SERVICE_NAME, run).run()
 
 
 if __name__ == "__main__":
