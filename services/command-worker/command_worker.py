@@ -4,8 +4,7 @@ import uuid
 from typing import Any
 
 from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
-from packages.shared.contracts import AgentCommandQueue, EventPublisher, EventRecorder
-from packages.shared.core import publish_and_record
+from packages.shared.contracts import AgentCommandQueue, EventClient
 
 SERVICE_NAME = "command-worker"
 AGENT_ROUTE_CHANNEL = "agent-poll"
@@ -16,20 +15,15 @@ COMMAND_STATUS_QUEUED = "queued"
 
 
 class CommandWorkflow:
-    def __init__(
-        self, bus: EventPublisher, commands: AgentCommandQueue, events: EventRecorder
-    ) -> None:
-        self.bus = bus
-        self.commands = commands
+    def __init__(self, events: EventClient, commands: AgentCommandQueue) -> None:
         self.events = events
+        self.commands = commands
 
     async def handle(self, evt: dict[str, Any]) -> None:
         payload = evt["payload"]
         namespace = payload.get("namespace", SANDBOX_NAMESPACE)
         if namespace != SANDBOX_NAMESPACE:
-            await publish_and_record(
-                self.bus,
-                self.events,
+            await self.events.publish(
                 EventSubject.COMMAND_REJECTED,
                 SERVICE_NAME,
                 {"reason": SANDBOX_WRITE_REJECT_REASON, "requested": payload},
@@ -44,17 +38,13 @@ class CommandWorkflow:
             "namespace": namespace,
             "steps": POLICY_STEPS,
         }
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.COMMAND_DISPATCH_READY,
             SERVICE_NAME,
             {"plan": plan},
             evt["correlation_id"],
         )
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.COMMAND_DISPATCHED,
             SERVICE_NAME,
             {
@@ -64,9 +54,7 @@ class CommandWorkflow:
             evt["correlation_id"],
         )
         self.commands.queue_agent_command(evt["correlation_id"], plan, COMMAND_STATUS_QUEUED)
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.COMMAND_QUEUED_FOR_AGENT,
             SERVICE_NAME,
             {"command_id": plan["command_id"], "cluster_id": plan["cluster_id"]},

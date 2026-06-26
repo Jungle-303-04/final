@@ -21,10 +21,15 @@ from packages.shared.constants import (
     SERVICE_NAME_ENV,
     STREAM_NAME,
     STREAM_SUBJECTS,
+    EventProcessingStatus,
+    EventSubject,
 )
 from packages.shared.contracts import (
     CommandRecord,
+    DeadLetterStore,
     Event,
+    EventClient,
+    EventProcessingRecord,
     EventPublisher,
     EventRecorder,
     EventSubscription,
@@ -41,6 +46,7 @@ TOKEN_EXPIRES_IN_SECONDS = 3600
 DASHBOARD_LIMIT = 25
 DEPENDENCY_RETRY_LIMIT = 60
 DEPENDENCY_RETRY_DELAY_SECONDS = 2
+ERROR_MESSAGE_LIMIT = 2000
 
 
 def env(name: str, default: str) -> str:
@@ -49,6 +55,10 @@ def env(name: str, default: str) -> str:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def compact_error(error: str) -> str:
+    return error[:ERROR_MESSAGE_LIMIT]
 
 
 def event(
@@ -157,6 +167,33 @@ class Database:
             )
             """,
             """
+            create table if not exists event_processing (
+                event_id text not null,
+                consumer text not null,
+                subject text not null,
+                correlation_id text not null,
+                status text not null,
+                attempts integer not null default 0,
+                last_error text,
+                created_at timestamptz not null default now(),
+                updated_at timestamptz not null default now(),
+                primary key (event_id, consumer)
+            )
+            """,
+            """
+            create table if not exists event_dead_letters (
+                id bigserial primary key,
+                original_event_id text not null,
+                original_subject text not null,
+                consumer text not null,
+                correlation_id text not null,
+                attempts integer not null,
+                error text not null,
+                payload jsonb not null,
+                created_at timestamptz not null default now()
+            )
+            """,
+            """
             create table if not exists oauth_accounts (
                 id bigserial primary key,
                 user_id text not null,
@@ -202,6 +239,140 @@ class Database:
                         json.dumps(evt["payload"]),
                     ),
                 )
+
+    def begin_event_processing(self, evt: Event, consumer: str) -> EventProcessingRecord:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into event_processing (
+                        event_id,
+                        consumer,
+                        subject,
+                        correlation_id,
+                        status,
+                        attempts,
+                        updated_at
+                    )
+                    values (%s, %s, %s, %s, %s, 0, now())
+                    on conflict (event_id, consumer) do nothing
+                    """,
+                    (
+                        evt["event_id"],
+                        consumer,
+                        evt["subject"],
+                        evt["correlation_id"],
+                        EventProcessingStatus.PROCESSING,
+                    ),
+                )
+                cur.execute(
+                    """
+                    update event_processing
+                    set attempts = attempts + 1,
+                        status = %s,
+                        last_error = null,
+                        updated_at = now()
+                    where event_id = %s
+                      and consumer = %s
+                      and status not in (%s, %s)
+                    returning status, attempts
+                    """,
+                    (
+                        EventProcessingStatus.PROCESSING,
+                        evt["event_id"],
+                        consumer,
+                        EventProcessingStatus.PROCESSED,
+                        EventProcessingStatus.DEAD_LETTERED,
+                    ),
+                )
+                row = cur.fetchone()
+                if row:
+                    return {"status": row["status"], "attempts": row["attempts"]}
+
+                cur.execute(
+                    """
+                    select status, attempts
+                    from event_processing
+                    where event_id = %s and consumer = %s
+                    """,
+                    (evt["event_id"], consumer),
+                )
+                existing = cur.fetchone()
+                return dict(existing) if existing else {"status": "unknown", "attempts": 0}
+
+    def finish_event_processing(self, evt: Event, consumer: str) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update event_processing
+                    set status = %s,
+                        last_error = null,
+                        updated_at = now()
+                    where event_id = %s and consumer = %s
+                    """,
+                    (EventProcessingStatus.PROCESSED, evt["event_id"], consumer),
+                )
+
+    def fail_event_processing(self, evt: Event, consumer: str, error: str, status: str) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update event_processing
+                    set status = %s,
+                        last_error = %s,
+                        updated_at = now()
+                    where event_id = %s and consumer = %s
+                    """,
+                    (
+                        status,
+                        compact_error(error),
+                        evt["event_id"],
+                        consumer,
+                    ),
+                )
+
+    def record_dead_letter(
+        self, evt: Event, consumer: str, error: str, attempts: int
+    ) -> JsonObject:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into event_dead_letters (
+                        original_event_id,
+                        original_subject,
+                        consumer,
+                        correlation_id,
+                        attempts,
+                        error,
+                        payload
+                    )
+                    values (%s, %s, %s, %s, %s, %s, %s)
+                    returning id, created_at
+                    """,
+                    (
+                        evt["event_id"],
+                        evt["subject"],
+                        consumer,
+                        evt["correlation_id"],
+                        attempts,
+                        compact_error(error),
+                        json.dumps(evt["payload"]),
+                    ),
+                )
+                row = cur.fetchone()
+                return {
+                    "dead_letter_id": row["id"],
+                    "original_event_id": evt["event_id"],
+                    "original_subject": evt["subject"],
+                    "consumer": consumer,
+                    "correlation_id": evt["correlation_id"],
+                    "attempts": attempts,
+                    "error": compact_error(error),
+                    "created_at": row["created_at"].isoformat(),
+                }
 
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
@@ -487,6 +658,50 @@ class EventBus:
             await self.nc.drain()
 
 
+class RecordedEventClient:
+    def __init__(self, publisher: EventPublisher, recorder: EventRecorder) -> None:
+        self.publisher = publisher
+        self.recorder = recorder
+
+    async def publish(
+        self,
+        subject: str,
+        source: str,
+        payload: JsonObject,
+        correlation_id: str | None = None,
+    ) -> Event:
+        evt = await self.publisher.publish(subject, source, payload, correlation_id)
+        self.recorder.record_event(evt)
+        return evt
+
+
+class DeadLetterSink:
+    def __init__(
+        self,
+        events: EventClient,
+        store: DeadLetterStore,
+        source: str,
+    ) -> None:
+        self.events = events
+        self.store = store
+        self.source = source
+
+    async def capture(
+        self,
+        evt: Event,
+        consumer: str,
+        error: Exception,
+        attempts: int,
+    ) -> Event:
+        dead_letter = self.store.record_dead_letter(evt, consumer, str(error), attempts)
+        return await self.events.publish(
+            EventSubject.DEAD_LETTER_CREATED,
+            self.source,
+            dead_letter,
+            evt["correlation_id"],
+        )
+
+
 async def asyncio_sleep(seconds: float) -> None:
     import asyncio
 
@@ -515,6 +730,4 @@ async def publish_and_record(
     payload: JsonObject,
     correlation_id: str | None = None,
 ) -> Event:
-    evt = await bus.publish(subject, source, payload, correlation_id)
-    db.record_event(evt)
-    return evt
+    return await RecordedEventClient(bus, db).publish(subject, source, payload, correlation_id)
