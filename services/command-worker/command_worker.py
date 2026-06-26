@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from command_config import CommandConfigPort
 from command_dispatcher import (
     DefaultPlanner,
-    DispatchPort,
     Dispatcher,
+    DispatchPort,
     Planner,
 )
 from command_policy import Payload, Policy, PolicyPort
-from settings import CommandConfigPort, Settings
+from settings import Settings
 
 from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
 from packages.contracts.event_bus.interfaces import EventClient
@@ -29,9 +30,13 @@ class CommandWorkflow:
     ) -> None:
         self.events = events
         self.config = config
-        self.policy = policy or Policy.build(config.policy_rules)
-        self.planner = planner or DefaultPlanner(config)
-        self.dispatcher = dispatcher or Dispatcher(events, commands, config)
+        self.policy = policy if policy is not None else Policy.build(config.policy_rules)
+        self.planner = planner if planner is not None else DefaultPlanner(config)
+        self.dispatcher = (
+            dispatcher
+            if dispatcher is not None
+            else Dispatcher(events, commands, config)
+        )
 
     async def handle(self, evt: dict[str, Any]) -> None:
         command = Payload(evt[PAYLOAD])
@@ -40,7 +45,7 @@ class CommandWorkflow:
             await self.reject(
                 evt,
                 command,
-                policy.reason or self.config.default_policy_reject_reason,
+                policy.require_reason(),
             )
             return
 
@@ -50,6 +55,6 @@ class CommandWorkflow:
         await self.events.publish(
             EventSubject.COMMAND_REJECTED,
             self.config.service_name,
-            command.rejected_payload(reason),
+            command.rejected_event_payload(reason),
             evt[CORRELATION_ID],
         )
