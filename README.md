@@ -86,3 +86,5 @@ make kill-pod DEPLOYMENT=rca-worker
 - [docs/service-split-plan.md](docs/service-split-plan.md)
 - [docs/secrets.md](docs/secrets.md)
 - [docs/team-workflow.md](docs/team-workflow.md)
+- [docs/team/conventions.md](docs/team/conventions.md)
+- [docs/team/work-allocation.md](docs/team/work-allocation.md)
