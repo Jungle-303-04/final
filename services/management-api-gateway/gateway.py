@@ -35,11 +35,16 @@ MAX_COMMAND_POLL_SECONDS = 30
 COMMAND_POLL_SLEEP_SECONDS = 1
 DASHBOARD_STREAM_INTERVAL_SECONDS = 2
 COMMAND_NOT_FOUND_STATUS_CODE = 404
+CONFLICT_STATUS_CODE = 409
 GATEWAY_ERROR_STATUS_CODE = 500
 COMMAND_NOT_FOUND_MESSAGE = "command not found"
+DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
+DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
 COMMAND_STATUS_QUEUED = "queued"
 COMMAND_STATUS_LEASED = "leased"
 EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
+DEFAULT_DEAD_LETTER_LIMIT = 50
+MAX_DEAD_LETTER_LIMIT = 100
 
 
 class ManagementApiGateway:
@@ -167,6 +172,41 @@ class ManagementApiGateway:
                 "event_id": evt["event_id"],
                 "correlation_id": evt["correlation_id"],
             }
+
+        @app.get("/dead-letters")
+        async def dead_letters(
+            request: Request,
+            limit: int = DEFAULT_DEAD_LETTER_LIMIT,
+        ) -> dict[str, Any]:
+            await self.auth.require_session(request)
+            bounded_limit = max(1, min(limit, MAX_DEAD_LETTER_LIMIT))
+            return {"dead_letters": self.db.list_dead_letters(bounded_limit)}
+
+        @app.post("/dead-letters/{dead_letter_id}/replay")
+        async def replay_dead_letter(request: Request, dead_letter_id: int) -> dict[str, Any]:
+            await self.auth.require_session(request)
+            dead_letter = self.db.get_dead_letter(dead_letter_id)
+            if dead_letter is None:
+                raise HTTPException(
+                    status_code=COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=DEAD_LETTER_NOT_FOUND_MESSAGE,
+                )
+            if dead_letter["status"] == "replayed":
+                raise HTTPException(
+                    status_code=CONFLICT_STATUS_CODE,
+                    detail=DEAD_LETTER_REPLAYED_MESSAGE,
+                )
+
+            evt = await publish_and_record(
+                self.bus,
+                self.db,
+                dead_letter["original_subject"],
+                SERVICE_NAME,
+                dead_letter["payload"],
+                dead_letter["correlation_id"],
+            )
+            self.db.mark_dead_letter_replayed(dead_letter_id, evt["event_id"])
+            return {"accepted": True, "dead_letter_id": dead_letter_id, "replay_event": evt}
 
         @app.get("/agent/commands/poll")
         async def poll_command(
