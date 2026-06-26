@@ -19,6 +19,7 @@ from settings import (
     CRASHING_POD_STATUS,
     DEFAULT_AGENT_ID,
     DEFAULT_MANAGEMENT_BASE_URL,
+    DEFAULT_PROMETHEUS_BASE_URL,
     DEFAULT_SERVICE_PORT,
     EVIDENCE_INTERVAL_ENV,
     FAKE_HTTP_5XX_RATE,
@@ -36,6 +37,7 @@ from settings import (
     LOKI_WARNING_LINE,
     MANAGEMENT_BASE_URL_ENV,
     OTEL_SLOW_SPAN,
+    PROMETHEUS_BASE_URL_ENV,
     PROMETHEUS_VECTOR_VALUE,
     REGISTER_RETRY_DELAY_SECONDS,
     SERVICE_HOST,
@@ -93,6 +95,9 @@ class HttpManagementPlaneClient:
 class TargetClusterAgent:
     def __init__(self, client: ManagementPlaneClient | None = None) -> None:
         self.base_url = env(MANAGEMENT_BASE_URL_ENV, DEFAULT_MANAGEMENT_BASE_URL).rstrip("/")
+        self.prometheus_base_url = env(
+            PROMETHEUS_BASE_URL_ENV, DEFAULT_PROMETHEUS_BASE_URL
+        ).rstrip("/")
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
@@ -124,11 +129,20 @@ class TargetClusterAgent:
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                status_code = await client.ship_evidence(self.fake_evidence())
+                status_code = await client.ship_evidence(await self.collect_evidence())
                 print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
             await asyncio.sleep(self.interval)
+
+    # TODO : NOT yet : collect_evidence
+    async def collect_evidence(self) -> JsonObject:
+        evidence = self.fake_evidence()
+        evidence["metrics"] = await self.collect_prometheus_metrics()
+        return evidence
+
+    async def collect_prometheus_metrics(self) -> JsonObject:
+        return {"": ""}
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
