@@ -9,11 +9,7 @@ from contextvars import ContextVar
 import nats
 from nats.js.errors import NotFoundError
 
-from packages.config.constants import (
-    DEFAULT_NATS_URL,
-    DEFAULT_SERVICE_NAME,
-    SERVICE_NAME_ENV,
-)
+from packages.config.constants import Nats, Runtime
 from packages.config.settings import env
 from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID
 from packages.contracts.event_bus.interfaces import (
@@ -48,7 +44,7 @@ def event_causation(causation_id: str) -> Iterator[None]:
 
 class EventBus:
     def __init__(self) -> None:
-        self.url = env(NATS_URL_ENV, DEFAULT_NATS_URL)
+        self.url = env(NATS_URL_ENV, Nats.DEFAULT_URL)
         self.nc = None
         self.js = None
 
@@ -57,7 +53,7 @@ class EventBus:
             try:
                 self.nc = await nats.connect(
                     self.url,
-                    name=env(SERVICE_NAME_ENV, DEFAULT_SERVICE_NAME),
+                    name=env(Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME),
                 )
                 self.js = self.nc.jetstream()
                 await self.ensure_stream()
