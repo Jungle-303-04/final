@@ -96,7 +96,6 @@ make kill-pod DEPLOYMENT=rca-worker
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/events.md](docs/events.md)
-- [docs/event-bus-learning-guide.md](docs/event-bus-learning-guide.md)
 - [docs/operations-deployment.md](docs/operations-deployment.md)
 - [docs/service-split-plan.md](docs/service-split-plan.md)
 - [docs/secrets.md](docs/secrets.md)
