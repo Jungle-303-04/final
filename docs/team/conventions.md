@@ -25,28 +25,29 @@
 
 ## 브랜치 규칙
 
-짧게 쓰고 빨리 합치는 브랜치를 사용한다.
+짧게 쓰고 빨리 합치는 브랜치를 사용한다. 브랜치 이름에는 담당 역할명이 아니라 작업자의 GitHub ID를 넣는다.
 
 ```text
-feat/<owner>/<topic>
-fix/<owner>/<topic>
-docs/<owner>/<topic>
-ci/<owner>/<topic>
-refactor/<owner>/<topic>
+feat/<git-id>/<topic>
+fix/<git-id>/<topic>
+docs/<git-id>/<topic>
+ci/<git-id>/<topic>
+refactor/<git-id>/<topic>
 ```
 
 예시:
 
 ```text
-feat/gateway/github-oauth
-feat/gitops/manifest-render
-feat/rca/safe-pr-client
-feat/target/prometheus-adapter
-ci/platform/pr-gate
+feat/woonyong/github-oauth
+feat/hayden/manifest-render
+feat/jiyoon/safe-pr-client
+feat/minsu/prometheus-adapter
+ci/woonyong/pr-gate
 ```
 
 규칙:
 
+- `<git-id>`는 GitHub username을 그대로 쓴다. 역할명인 `gateway`, `gitops`, `platform` 같은 값은 쓰지 않는다.
 - `main`은 보호 브랜치이며 직접 push하지 않는다.
 - 작업 브랜치는 팀이 별도 통합 브랜치를 만들지 않는 한 `main`으로 PR을 보낸다.
 - 브랜치가 오래되면 리뷰 요청 전에 `main`을 반영한다.

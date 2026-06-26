@@ -6,7 +6,7 @@
 - `docs/team/work-allocation.md`
 - `docs/team/member-guides/*.md`
 
-처음에는 `main`, `dev`, `user/<nickname>/<task>` 세 단계를 쓰면 가장 덜 헷갈린다.
+처음에는 `main`, `dev`, `feat/<git-id>/<task>` 세 단계를 쓰면 가장 덜 헷갈린다.
 
 현재 GitHub PR 규칙은 `main` 보호를 기본값으로 둔다. 팀이 `dev`를 실제 통합 브랜치로 만들면 아래 `dev` 흐름을 사용하고, 그렇지 않으면 기능 브랜치에서 `main`으로 PR을 보낸다.
 
@@ -14,17 +14,19 @@
 
 - `main`: 최종 안정 브랜치다. 직접 push하지 않는다.
 - `dev`: 팀 통합 브랜치다. 기능 PR은 먼저 여기로 들어온다.
-- `user/<nickname>/<task>`: 개인 작업 브랜치다. 예: `user/woonyong/rca-worker`.
+- `feat/<git-id>/<task>`: 개인 작업 브랜치다. 예: `feat/woonyong/rca-worker`.
 
 새 작업에는 다음 형식을 더 권장한다.
 
 ```text
-feat/<owner>/<topic>
-fix/<owner>/<topic>
-docs/<owner>/<topic>
-ci/<owner>/<topic>
-refactor/<owner>/<topic>
+feat/<git-id>/<topic>
+fix/<git-id>/<topic>
+docs/<git-id>/<topic>
+ci/<git-id>/<topic>
+refactor/<git-id>/<topic>
 ```
+
+`<git-id>`에는 각자의 GitHub username을 그대로 넣는다. 역할명인 `gateway`, `gitops`, `platform` 같은 값을 넣으면 담당자가 헷갈리므로 쓰지 않는다.
 
 사용자별로 브랜치를 오래 고정하면 충돌과 stale 상태가 자주 생긴다. 대신 작업 단위로 짧게 브랜치를 만들고 PR로 빠르게 합친다.
 
@@ -33,14 +35,14 @@ refactor/<owner>/<topic>
 ```bash
 git switch dev
 git pull origin dev
-git switch -c user/<nickname>/<task>
+git switch -c feat/<git-id>/<task>
 ```
 
 작업 후:
 
 ```bash
 make check
-git push origin user/<nickname>/<task>
+git push origin feat/<git-id>/<task>
 ```
 
 GitHub에서 Pull Request를 만든다.
@@ -77,7 +79,7 @@ GitHub Actions `CI` workflow를 required status check로 설정한다. CI가 실
 ```bash
 git switch dev
 git pull
-git switch -c user/<nickname>/<task>
+git switch -c feat/<git-id>/<task>
 ```
 
 그리고 PR 대상은 대부분 `dev`다.
