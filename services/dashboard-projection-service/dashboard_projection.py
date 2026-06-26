@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from packages.shared.constants import DashboardStatus, EventSubject
-from packages.shared.contracts import DashboardReadModel, EventClient
+from packages.config.constants import DashboardStatus, EventSubject
+from packages.contracts.interfaces import DashboardReadModel, EventClient
 
 SERVICE_NAME = "dashboard-projection-service"
 TERMINAL_SUCCESS_SUBJECTS = {EventSubject.SAFE_PR_CREATED, EventSubject.COMMAND_COMPLETED}

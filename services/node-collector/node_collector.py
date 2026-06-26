@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from uvicorn import Config, Server
 
-from packages.shared.core import env
+from packages.config.settings import env
 
 SERVICE_NAME = "node-collector"
 SERVICE_HOST = "0.0.0.0"

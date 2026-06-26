@@ -8,9 +8,9 @@ import httpx
 from fastapi import FastAPI
 from uvicorn import Config, Server
 
-from packages.shared.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
-from packages.shared.contracts import CommandRecord, JsonObject, ManagementPlaneClient
-from packages.shared.core import env
+from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
+from packages.config.settings import env
+from packages.contracts.interfaces import CommandRecord, JsonObject, ManagementPlaneClient
 
 DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
 MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"

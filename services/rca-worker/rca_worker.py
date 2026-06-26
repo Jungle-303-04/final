@@ -3,8 +3,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER, EventSubject
-from packages.shared.contracts import EventClient, OAuthAccountStore, RcaStore
+from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER, EventSubject
+from packages.contracts.interfaces import EventClient, OAuthAccountStore, RcaStore
 
 SERVICE_NAME = "rca-worker"
 ROOT_CAUSE = "Image rollout introduced failing readiness checks"

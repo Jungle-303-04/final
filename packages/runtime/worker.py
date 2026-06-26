@@ -6,15 +6,10 @@ import signal
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from packages.shared.constants import EventProcessingStatus
-from packages.shared.contracts import EventClient, EventConsumerBus, EventHandler, EventMessage
-from packages.shared.core import (
-    Database,
-    DeadLetterSink,
-    EventBus,
-    RecordedEventClient,
-    wait_for_database,
-)
+from packages.config.constants import EventProcessingStatus
+from packages.contracts.interfaces import EventClient, EventConsumerBus, EventHandler, EventMessage
+from packages.events.bus import DeadLetterSink, EventBus, RecordedEventClient
+from packages.storage.database import Database, wait_for_database
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 2

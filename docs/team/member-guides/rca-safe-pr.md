@@ -22,7 +22,7 @@
 
 ## 코드 규칙
 
-- Worker는 `EventHandlerSpec`으로 구독한다.
+- Worker runner는 `WorkerService`로 구독한다.
 - Worker는 `EventClient`로 발행한다.
 - `correlation_id`를 유지한다.
 - RCA output은 근거 없는 추론보다 확인된 evidence를 우선한다.
@@ -38,4 +38,4 @@
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/rca-worker`, `services/audit-timeline-service`, `packages/worker_runtime/runtime.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
+이 영역을 작업할 때는 `services/rca-worker`, `services/audit-timeline-service`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
