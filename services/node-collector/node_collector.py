@@ -8,26 +8,7 @@ from typing import Final
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
-from settings import (
-    COLLECT_INTERVAL_ENV,
-    DEFAULT_COLLECT_INTERVAL_SECONDS,
-    DEFAULT_NODE_NAME,
-    DEFAULT_POD_NAME,
-    DEFAULT_POD_NAMESPACE,
-    DEFAULT_SERVICE_PORT,
-    LOG_LEVEL,
-    METRIC_CONTENT_TYPE,
-    NODE_NAME_ENV,
-    POD_NAME_ENV,
-    POD_NAMESPACE_ENV,
-    RUNTIME_NAME,
-    SAMPLE_CPU_USAGE_RATIO,
-    SAMPLE_FILESYSTEM_USAGE_RATIO,
-    SAMPLE_MEMORY_WORKING_SET_BYTES,
-    SERVICE_HOST,
-    SERVICE_NAME,
-    SERVICE_PORT_ENV,
-)
+from settings import Settings
 from uvicorn import Config, Server
 
 from packages.config.settings import env
@@ -77,10 +58,10 @@ class NodeCollector:
     @classmethod
     def from_env(cls) -> NodeCollector:
         return cls(
-            node_name=env(NODE_NAME_ENV, DEFAULT_NODE_NAME),
-            pod_name=env(POD_NAME_ENV, DEFAULT_POD_NAME),
-            namespace=env(POD_NAMESPACE_ENV, DEFAULT_POD_NAMESPACE),
-            interval_seconds=int(env(COLLECT_INTERVAL_ENV, DEFAULT_COLLECT_INTERVAL_SECONDS)),
+            node_name=env(Settings.NODE_NAME_ENV, Settings.DEFAULT_NODE_NAME),
+            pod_name=env(Settings.POD_NAME_ENV, Settings.DEFAULT_POD_NAME),
+            namespace=env(Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE),
+            interval_seconds=int(env(Settings.COLLECT_INTERVAL_ENV, Settings.DEFAULT_COLLECT_INTERVAL_SECONDS)),
         )
 
     def snapshot(self) -> NodeRuntimeSample:
@@ -89,10 +70,10 @@ class NodeCollector:
             pod_name=self.pod_name,
             namespace=self.namespace,
             timestamp=datetime.now(UTC).isoformat(),
-            cpu_usage_ratio=SAMPLE_CPU_USAGE_RATIO,
-            memory_working_set_bytes=SAMPLE_MEMORY_WORKING_SET_BYTES,
-            filesystem_usage_ratio=SAMPLE_FILESYSTEM_USAGE_RATIO,
-            runtime=RUNTIME_NAME,
+            cpu_usage_ratio=Settings.SAMPLE_CPU_USAGE_RATIO,
+            memory_working_set_bytes=Settings.SAMPLE_MEMORY_WORKING_SET_BYTES,
+            filesystem_usage_ratio=Settings.SAMPLE_FILESYSTEM_USAGE_RATIO,
+            runtime=Settings.RUNTIME_NAME,
         )
 
     def prometheus_metrics(self) -> str:
@@ -122,7 +103,7 @@ class NodeCollector:
             print(
                 json.dumps(
                     {
-                        Gateway.SERVICE: SERVICE_NAME,
+                        Gateway.SERVICE: Settings.SERVICE_NAME,
                         Field.KIND: NODE_RUNTIME_SAMPLE_KIND,
                         Field.SAMPLE: self.snapshot().to_payload(),
                     },
@@ -135,7 +116,7 @@ class NodeCollector:
 
 def create_app(collector: NodeCollector | None = None) -> FastAPI:
     node_collector = collector or NodeCollector.from_env()
-    app = FastAPI(title=SERVICE_NAME)
+    app = FastAPI(title=Settings.SERVICE_NAME)
 
     @app.on_event("startup")
     async def startup() -> None:
@@ -151,7 +132,7 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
     async def healthz() -> dict[str, str]:
         return {
             Gateway.STATUS: Gateway.STATUS_OK,
-            Gateway.SERVICE: SERVICE_NAME,
+            Gateway.SERVICE: Settings.SERVICE_NAME,
             Field.NODE: node_collector.node_name,
         }
 
@@ -163,7 +144,7 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
     async def metrics() -> PlainTextResponse:
         return PlainTextResponse(
             node_collector.prometheus_metrics(),
-            media_type=METRIC_CONTENT_TYPE,
+            media_type=Settings.METRIC_CONTENT_TYPE,
         )
 
     return app
@@ -173,8 +154,8 @@ async def run() -> None:
     await Server(
         Config(
             create_app(),
-            host=SERVICE_HOST,
-            port=int(env(SERVICE_PORT_ENV, DEFAULT_SERVICE_PORT)),
-            log_level=LOG_LEVEL,
+            host=Settings.SERVICE_HOST,
+            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
+            log_level=Settings.LOG_LEVEL,
         )
     ).serve()

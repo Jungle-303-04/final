@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from settings import (
-    FAILED_SUBJECT_SUFFIX,
-    REJECTED_SUBJECT_SUFFIX,
-    SERVICE_NAME,
-    TERMINAL_SUCCESS_SUBJECTS,
-)
+from settings import Settings
 
 from packages.contracts.dashboard.status import DashboardStatus
 from packages.contracts.event_bus.interfaces import EventClient
@@ -25,12 +20,12 @@ class DashboardProjectionWorkflow:
             return
         status = (
             DashboardStatus.DONE
-            if evt["subject"] in TERMINAL_SUCCESS_SUBJECTS
+            if evt["subject"] in Settings.TERMINAL_SUCCESS_SUBJECTS
             else DashboardStatus.RUNNING
         )
         if (
-            evt["subject"].endswith(REJECTED_SUBJECT_SUFFIX)
-            or evt["subject"].endswith(FAILED_SUBJECT_SUFFIX)
+            evt["subject"].endswith(Settings.REJECTED_SUBJECT_SUFFIX)
+            or evt["subject"].endswith(Settings.FAILED_SUBJECT_SUFFIX)
             or evt["subject"] == EventSubject.DEAD_LETTER_CREATED
         ):
             status = DashboardStatus.ATTENTION
@@ -38,7 +33,7 @@ class DashboardProjectionWorkflow:
         self.dashboard.upsert_dashboard(evt, status, summary)
         await self.events.publish(
             EventSubject.DASHBOARD_UPDATED,
-            SERVICE_NAME,
+            Settings.SERVICE_NAME,
             {"summary": summary, "status": status},
             evt["correlation_id"],
         )
