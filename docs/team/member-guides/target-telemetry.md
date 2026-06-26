@@ -1,41 +1,40 @@
-# Member Guide: Target / Telemetry
+# 멤버 가이드: Target / Telemetry
 
-## Mission
+## 미션
 
-Own target cluster integration, Kubernetes evidence, telemetry adapters, RBAC, and node/runtime collection.
+대상 클러스터 연동, Kubernetes evidence, telemetry adapter, RBAC, node/runtime 수집을 담당한다.
 
-## Owned Areas
+## 담당 영역
 
 - `services/target-cluster-agent`
 - `services/node-collector`
 - `deploy/target`
-- fake and real Prometheus/Loki/OTel adapters
-- ServiceAccount/RBAC manifests
+- fake/real Prometheus, Loki, OTel adapter
+- ServiceAccount/RBAC manifest
 
-## Current Responsibilities
+## 현재 책임
 
-- Add real Prometheus query adapter.
-- Add real Loki query adapter.
-- Decide how Node Collector metrics/logs reach management storage.
-- Keep target agent outbound-only by default.
+- 실제 Prometheus query adapter를 추가한다.
+- 실제 Loki query adapter를 추가한다.
+- Node Collector metrics/logs가 management storage로 전달되는 방식을 확정한다.
+- Target Agent는 기본적으로 outbound-only 구조를 유지한다.
 
-## Coding Rules
+## 코드 규칙
 
-- Target agent calls Management Gateway, not NATS.
-- Keep writes limited to `sandbox` namespace.
-- RBAC must be least-privilege.
-- Fake telemetry remains as fallback.
-- Node Collector must expose `/metrics` and structured stdout logs without secrets.
+- Target Agent는 NATS가 아니라 Management Gateway를 호출한다.
+- write 권한은 `sandbox` namespace로 제한한다.
+- RBAC는 최소 권한 원칙을 따른다.
+- fake telemetry는 fallback으로 유지한다.
+- Node Collector는 secret 없이 `/metrics`와 structured stdout log를 제공한다.
 
-## PR Checklist
+## PR 체크리스트
 
-- Target manifests render with dry-run.
-- RBAC scope is explained in PR.
-- `make up`, `make smoke`, `make status` are checked before demo.
-- Telemetry evidence schema changes are coordinated with Workflow/RCA and Dashboard.
-- No kubeconfig or token is committed.
+- target manifest dry-run 통과
+- PR에 RBAC 범위 설명 포함
+- demo 전 `make up`, `make smoke`, `make status` 확인
+- telemetry evidence schema 변경 시 RCA/Safe PR 담당자와 조율
+- kubeconfig나 token commit 없음
 
-## Codex Instruction
+## Codex 지시문
 
-When working in this lane, read `deploy/target/target.yaml`, `services/target-cluster-agent/agent.py`, `services/node-collector/node_collector.py`, and `docs/events.md` first.
-
+이 영역을 작업할 때는 `deploy/target/target.yaml`, `services/target-cluster-agent/agent.py`, `services/node-collector/node_collector.py`, `docs/events.md`를 먼저 읽어라.
