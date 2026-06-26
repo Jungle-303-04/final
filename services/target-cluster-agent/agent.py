@@ -21,7 +21,6 @@ COMMAND_POLL_TIMEOUT_SECONDS = 15
 COMMAND_EXECUTION_DELAY_SECONDS = 2
 REGISTER_RETRY_DELAY_SECONDS = 3
 COMMAND_RETRY_DELAY_SECONDS = 3
-NODE_COLLECT_INTERVAL_SECONDS = 15
 SERVICE_HOST = "0.0.0.0"
 SERVICE_PORT_ENV = "PORT"
 HOSTNAME_ENV = "HOSTNAME"
@@ -47,7 +46,6 @@ COMMAND_RESULT_MESSAGE = "fake Kubernetes action applied in sandbox namespace"
 LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
 LOKI_WARNING_LINE = "WARN rollback candidate detected"
 OTEL_SLOW_SPAN = "GET /checkout"
-NODE_COLLECTOR_MESSAGE = "fake node collector scraped node/log/runtime metrics"
 
 
 class HttpManagementPlaneClient:
@@ -233,9 +231,3 @@ async def run_fake_telemetry(kind: str) -> None:
             log_level=LOG_LEVEL,
         )
     ).serve()
-
-
-async def run_node_collector() -> None:
-    while True:
-        print(NODE_COLLECTOR_MESSAGE, flush=True)
-        await asyncio.sleep(NODE_COLLECT_INTERVAL_SECONDS)

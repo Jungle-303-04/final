@@ -31,6 +31,11 @@ services/target-cluster-agent
   telemetry adapters
   command receiver
 
+services/node-collector
+  Optional DaemonSet collector
+  node/runtime metrics endpoint
+  stdout log samples for Loki-style collectors
+
 packages/shared
   NATS JetStream contract
   PostgreSQL access
@@ -55,7 +60,7 @@ secrets
 2. 각 service의 DB query를 repository 객체로 분리합니다.
 3. `dashboard` 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리합니다.
 4. 실제 GitHub PR 생성이 들어가면 `Safe PR`을 `services/safe-pr-service`로 분리합니다.
-5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target-cluster-agent` adapter를 provider별 파일로 분리합니다.
+5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target-cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `services/node-collector`에서 확장합니다.
 6. 배포 운영이 무거워지면 하나의 image를 서비스별 image로 나눕니다.
 
 ## Rules

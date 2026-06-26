@@ -22,6 +22,7 @@ External systems that are not available locally are represented by replaceable a
   + dashboard-projection-service dashboard read model projection
   + audit-timeline-service       immutable audit timeline
   + target-cluster-agent         Target Cluster Agent and telemetry adapters
+  + node-collector               optional DaemonSet node/runtime metrics source
   + registry.py                  role -> service folder -> runner mapping
   + main.py                      role-based process entrypoint
 
@@ -69,10 +70,10 @@ Management cluster:
 Target cluster:
 
 - `target-cluster-agent`
+- `node-collector` as `optional-node-collector` DaemonSet
 - `fake-prometheus`
 - `fake-loki`
 - `fake-otel`
-- `optional-node-collector`
 - Kubernetes `ServiceAccount/RBAC`
 
 ## Event Cycle
