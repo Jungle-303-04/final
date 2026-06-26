@@ -6,6 +6,7 @@ from typing import Any, Protocol
 Event = dict[str, Any]
 JsonObject = dict[str, Any]
 CommandRecord = dict[str, Any]
+EventProcessingRecord = dict[str, Any]
 EventHandler = Callable[[Event], Awaitable[None]]
 
 
@@ -39,6 +40,16 @@ class EventRecorder(Protocol):
     def record_event(self, evt: Event) -> None: ...
 
 
+class EventClient(Protocol):
+    async def publish(
+        self,
+        subject: str,
+        source: str,
+        payload: JsonObject,
+        correlation_id: str | None = None,
+    ) -> Event: ...
+
+
 class EventConsumerBus(EventPublisher, Protocol):
     async def connect(self) -> None: ...
 
@@ -49,6 +60,20 @@ class EventConsumerBus(EventPublisher, Protocol):
 
 class InitializableStore(Protocol):
     def init(self) -> None: ...
+
+
+class EventProcessingStore(EventRecorder, Protocol):
+    def begin_event_processing(self, evt: Event, consumer: str) -> EventProcessingRecord: ...
+
+    def finish_event_processing(self, evt: Event, consumer: str) -> None: ...
+
+    def fail_event_processing(self, evt: Event, consumer: str, error: str, status: str) -> None: ...
+
+
+class DeadLetterStore(Protocol):
+    def record_dead_letter(
+        self, evt: Event, consumer: str, error: str, attempts: int
+    ) -> JsonObject: ...
 
 
 class OAuthAccountStore(Protocol):

@@ -4,8 +4,7 @@ import time
 from typing import Any
 
 from packages.shared.constants import DEFAULT_TARGET_CLUSTER_ID, GITHUB_PROVIDER, EventSubject
-from packages.shared.contracts import EventPublisher, EventRecorder, OAuthAccountStore, RcaStore
-from packages.shared.core import publish_and_record
+from packages.shared.contracts import EventClient, OAuthAccountStore, RcaStore
 
 SERVICE_NAME = "rca-worker"
 ROOT_CAUSE = "Image rollout introduced failing readiness checks"
@@ -23,15 +22,13 @@ PR_STATUS_CREATED = "created"
 class RcaWorkflow:
     def __init__(
         self,
-        bus: EventPublisher,
+        events: EventClient,
         rca_store: RcaStore,
         oauth_accounts: OAuthAccountStore,
-        events: EventRecorder,
     ) -> None:
-        self.bus = bus
+        self.events = events
         self.rca_store = rca_store
         self.oauth_accounts = oauth_accounts
-        self.events = events
 
     async def handle(self, evt: dict[str, Any]) -> None:
         evidence = {
@@ -61,17 +58,13 @@ class RcaWorkflow:
             PR_STATUS_CREATED,
         )
 
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.EVIDENCE_BUILT,
             SERVICE_NAME,
             {"evidence": evidence},
             evt["correlation_id"],
         )
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.RCA_COMPLETED,
             SERVICE_NAME,
             {
@@ -81,9 +74,7 @@ class RcaWorkflow:
             },
             evt["correlation_id"],
         )
-        await publish_and_record(
-            self.bus,
-            self.events,
+        await self.events.publish(
             EventSubject.SAFE_PR_CREATED,
             SERVICE_NAME,
             {
