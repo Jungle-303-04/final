@@ -44,14 +44,22 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Render management manifests
-        run: kubectl kustomize deploy/management >/tmp/management-rendered.yaml
+      - name: Validate management manifests offline
+        run: |
+          kubectl kustomize deploy/management \
+            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
+              -strict \
+              -ignore-missing-schemas \
+              -summary
 
-      - name: Validate target manifests client-side
+      - name: Validate target manifests offline
         run: |
           sed 's#__MANAGEMENT_BASE_URL__#http://management-api-gateway.management:8000#g' \
             deploy/target/target.yaml \
-            | kubectl apply --dry-run=client --validate=false -f -
+            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
+              -strict \
+              -ignore-missing-schemas \
+              -summary
 
       - name: Build service image
         run: docker build -f services/Dockerfile -t service:ci .
