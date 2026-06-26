@@ -1,6 +1,6 @@
 # 5인 작업 분배
 
-이 문서는 프로젝트를 5개의 명확한 담당 영역으로 나눈다. 각 팀원은 자신의 영역에 맞는 member guide를 Codex 지시 문서로 사용할 수 있다.
+이 문서는 프로젝트를 5개의 명확한 담당 영역으로 나눈다. 각 팀원은 `docs/team/codex-automation.md`의 공통 프롬프트와 자신의 영역에 맞는 member guide를 Codex 지시 문서로 사용할 수 있다.
 
 대시보드는 이번 5인 분배에서 제외한다. 현재 dashboard projection은 공통 read model로 유지하고, 실제 UI 구현을 시작할 때 별도 담당을 다시 정한다.
 
@@ -13,6 +13,16 @@
 | 3번 | GitOps/Command | Git webhook부터 manifest/diff/command 생성까지 담당 | manifest render와 command.requested 흐름 |
 | 4번 | RCA/Safe PR | evidence 기반 RCA, audit, Safe PR 흐름 담당 | Safe PR client와 RCA event test |
 | 5번 | Target/Telemetry | 대상 cluster agent, Kubernetes/RBAC, telemetry adapter 담당 | 실제 Prometheus/Loki evidence 수집 경로 |
+
+## Codex 자동화
+
+5명 모두 같은 자동화 프롬프트를 사용한다.
+팀원별 차이는 `TEAM_MEMBER_GITHUB_ID` 값 하나뿐이며, 자동화는 GitHub issue, PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 계산한다.
+
+- 공통 프롬프트: `docs/team/codex-automation.md`
+- 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
+- PR 기준: `dev` base draft PR
+- 변경 가능 범위: 아래 작업 경계 표와 각 member guide
 
 ## 작업 경계
 
