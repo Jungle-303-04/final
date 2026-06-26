@@ -1,3 +1,4 @@
+from packages.contracts.gateway import fields, routes
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
@@ -14,4 +15,6 @@ __all__ = [
     "CommandResultRequest",
     "GitHubWebhookRequest",
     "OAuthCallbackRequest",
+    "fields",
+    "routes",
 ]

@@ -47,6 +47,8 @@ from uvicorn import Config, Server
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway import fields as gateway_fields
+from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 
@@ -66,28 +68,34 @@ class HttpManagementPlaneClient:
 
     async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
         await self.client.post(
-            f"{self.base_url}/agent/connect",
+            f"{self.base_url}{gateway_routes.AGENT_CONNECT_PATH}",
             json={
-                "cluster_id": cluster_id,
-                "agent_id": agent_id,
-                "capabilities": capabilities,
+                gateway_fields.CLUSTER_ID: cluster_id,
+                gateway_fields.AGENT_ID: agent_id,
+                gateway_fields.CAPABILITIES: capabilities,
             },
         )
 
     async def ship_evidence(self, evidence: JsonObject) -> int:
-        response = await self.client.post(f"{self.base_url}/agent/evidence", json=evidence)
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.AGENT_EVIDENCE_PATH}",
+            json=evidence,
+        )
         return response.status_code
 
     async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
         response = await self.client.get(
-            f"{self.base_url}/agent/commands/poll",
-            params={"cluster_id": cluster_id, "timeout": timeout_seconds},
+            f"{self.base_url}{gateway_routes.AGENT_COMMAND_POLL_PATH}",
+            params={gateway_fields.CLUSTER_ID: cluster_id, "timeout": timeout_seconds},
         )
         response.raise_for_status()
-        return response.json().get("command")
+        return response.json().get(gateway_fields.COMMAND)
 
     async def complete_command(self, command_id: str, result: JsonObject) -> None:
-        await self.client.post(f"{self.base_url}/agent/commands/{command_id}/result", json=result)
+        await self.client.post(
+            f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
+            json=result,
+        )
 
 
 class TargetClusterAgent:
@@ -135,8 +143,8 @@ class TargetClusterAgent:
             try:
                 command = await client.poll_command(self.cluster_id, COMMAND_POLL_TIMEOUT_SECONDS)
                 if command:
-                    command_id = command["command_id"]
-                    action = command["action"]
+                    command_id = command[gateway_fields.COMMAND_ID]
+                    action = command[gateway_fields.ACTION]
                     print(
                         f"agent executing command {command_id} action={action}",
                         flush=True,
@@ -145,10 +153,10 @@ class TargetClusterAgent:
                     await client.complete_command(
                         command_id,
                         {
-                            "status": COMMAND_COMPLETED_STATUS,
-                            "cluster_id": self.cluster_id,
-                            "applied": True,
-                            "message": COMMAND_RESULT_MESSAGE,
+                            gateway_fields.STATUS: COMMAND_COMPLETED_STATUS,
+                            gateway_fields.CLUSTER_ID: self.cluster_id,
+                            gateway_fields.APPLIED: True,
+                            gateway_fields.MESSAGE: COMMAND_RESULT_MESSAGE,
                         },
                     )
             except Exception as exc:
@@ -157,7 +165,7 @@ class TargetClusterAgent:
 
     def fake_evidence(self) -> JsonObject:
         return {
-            "cluster_id": self.cluster_id,
+            gateway_fields.CLUSTER_ID: self.cluster_id,
             "kubernetes": {
                 "pods": [
                     {
@@ -188,11 +196,14 @@ class TargetClusterAgent:
 def create_fake_telemetry_app(kind: str) -> FastAPI:
     app = FastAPI(title=f"fake-{kind}")
 
-    @app.get("/healthz")
+    @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
-        return {"status": "ok", "service": f"fake-{kind}"}
+        return {
+            gateway_fields.STATUS: gateway_fields.STATUS_OK,
+            gateway_fields.SERVICE: f"fake-{kind}",
+        }
 
-    @app.get("/{path:path}")
+    @app.get(gateway_routes.FAKE_TELEMETRY_CATCH_ALL_PATH)
     async def catch_all(path: str) -> dict[str, Any]:
         if kind == "prometheus":
             return {

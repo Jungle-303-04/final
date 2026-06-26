@@ -13,9 +13,18 @@ from settings import (
 )
 
 from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE
+from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
 from packages.contracts.event_bus.interfaces import EventClient
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway import fields as gateway_fields
 from packages.contracts.interfaces import AgentCommandQueue
+
+CHANNEL_FIELD = "channel"
+PLAN_FIELD = "plan"
+REASON_FIELD = "reason"
+REQUESTED_FIELD = "requested"
+ROUTE_FIELD = "route"
+STEPS_FIELD = "steps"
 
 
 class CommandWorkflow:
@@ -24,43 +33,52 @@ class CommandWorkflow:
         self.commands = commands
 
     async def handle(self, evt: dict[str, Any]) -> None:
-        payload = evt["payload"]
-        namespace = payload.get("namespace", SANDBOX_NAMESPACE)
+        payload = evt[PAYLOAD]
+        namespace = payload.get(gateway_fields.NAMESPACE, SANDBOX_NAMESPACE)
         if namespace != SANDBOX_NAMESPACE:
             await self.events.publish(
                 EventSubject.COMMAND_REJECTED,
                 SERVICE_NAME,
-                {"reason": SANDBOX_WRITE_REJECT_REASON, "requested": payload},
-                evt["correlation_id"],
+                {REASON_FIELD: SANDBOX_WRITE_REJECT_REASON, REQUESTED_FIELD: payload},
+                evt[CORRELATION_ID],
             )
             return
 
         plan = {
-            "command_id": str(uuid.uuid4()),
-            "cluster_id": payload.get("cluster_id", DEFAULT_TARGET_CLUSTER_ID),
-            "action": payload.get("action", DEFAULT_COMMAND_ACTION),
-            "namespace": namespace,
-            "steps": POLICY_STEPS,
+            gateway_fields.COMMAND_ID: str(uuid.uuid4()),
+            gateway_fields.CLUSTER_ID: payload.get(
+                gateway_fields.CLUSTER_ID,
+                DEFAULT_TARGET_CLUSTER_ID,
+            ),
+            gateway_fields.ACTION: payload.get(gateway_fields.ACTION, DEFAULT_COMMAND_ACTION),
+            gateway_fields.NAMESPACE: namespace,
+            STEPS_FIELD: POLICY_STEPS,
         }
         await self.events.publish(
             EventSubject.COMMAND_DISPATCH_READY,
             SERVICE_NAME,
-            {"plan": plan},
-            evt["correlation_id"],
+            {PLAN_FIELD: plan},
+            evt[CORRELATION_ID],
         )
         await self.events.publish(
             EventSubject.COMMAND_DISPATCHED,
             SERVICE_NAME,
             {
-                "plan": plan,
-                "route": {"channel": AGENT_ROUTE_CHANNEL, "cluster_id": plan["cluster_id"]},
+                PLAN_FIELD: plan,
+                ROUTE_FIELD: {
+                    CHANNEL_FIELD: AGENT_ROUTE_CHANNEL,
+                    gateway_fields.CLUSTER_ID: plan[gateway_fields.CLUSTER_ID],
+                },
             },
-            evt["correlation_id"],
+            evt[CORRELATION_ID],
         )
-        self.commands.queue_agent_command(evt["correlation_id"], plan, COMMAND_STATUS_QUEUED)
+        self.commands.queue_agent_command(evt[CORRELATION_ID], plan, COMMAND_STATUS_QUEUED)
         await self.events.publish(
             EventSubject.COMMAND_QUEUED_FOR_AGENT,
             SERVICE_NAME,
-            {"command_id": plan["command_id"], "cluster_id": plan["cluster_id"]},
-            evt["correlation_id"],
+            {
+                gateway_fields.COMMAND_ID: plan[gateway_fields.COMMAND_ID],
+                gateway_fields.CLUSTER_ID: plan[gateway_fields.CLUSTER_ID],
+            },
+            evt[CORRELATION_ID],
         )
