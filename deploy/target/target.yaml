@@ -85,7 +85,7 @@ spec:
         - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          args: ["fake-prometheus"]
+          command: ["python", "services/target-cluster-agent/fake_prometheus.py"]
           ports:
             - containerPort: 8000
 ---
@@ -120,7 +120,7 @@ spec:
         - name: fake-loki
           image: service:local
           imagePullPolicy: IfNotPresent
-          args: ["fake-loki"]
+          command: ["python", "services/target-cluster-agent/fake_loki.py"]
           ports:
             - containerPort: 8000
 ---
@@ -155,7 +155,7 @@ spec:
         - name: fake-otel
           image: service:local
           imagePullPolicy: IfNotPresent
-          args: ["fake-otel"]
+          command: ["python", "services/target-cluster-agent/fake_otel.py"]
           ports:
             - containerPort: 8000
 ---
@@ -193,7 +193,7 @@ spec:
         - name: node-collector
           image: service:local
           imagePullPolicy: IfNotPresent
-          args: ["node-collector"]
+          command: ["python", "services/node-collector/runner.py"]
           env:
             - name: PORT
               value: "9100"
@@ -235,7 +235,7 @@ spec:
         - name: target-cluster-agent
           image: service:local
           imagePullPolicy: IfNotPresent
-          args: ["target-agent"]
+          command: ["python", "services/target-cluster-agent/runner.py"]
           env:
             - name: TARGET_CLUSTER_ID
               value: target-cluster-01
