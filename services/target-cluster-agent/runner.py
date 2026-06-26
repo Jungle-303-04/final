@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from agent import TargetClusterAgent, run_fake_telemetry
-from agent import run_node_collector as run_collector
 
 PROMETHEUS_KIND = "prometheus"
 LOKI_KIND = "loki"
@@ -10,10 +9,6 @@ OTEL_KIND = "otel"
 
 async def run() -> None:
     await TargetClusterAgent().run()
-
-
-async def run_node_collector() -> None:
-    await run_collector()
 
 
 async def run_fake_prometheus() -> None:
