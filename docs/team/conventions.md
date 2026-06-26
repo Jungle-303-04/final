@@ -7,6 +7,7 @@
 - 제품/WBS 기준: `WIKI/projects/final`
 - 실행 코드 기준: 이 repository
 - 아키텍처 기준: `docs/architecture.md`, `docs/events.md`, `docs/service-split-plan.md`
+- 팀원 Codex 자동화 기준: `docs/team/codex-automation.md`
 - 코드와 문서가 다르면 같은 PR에서 문서도 함께 수정한다.
 
 ## 5인 담당 영역
@@ -173,6 +174,9 @@ GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 - 어떻게 테스트했는지
 - 위험과 rollback 방법
 - 아키텍처, workflow, API, 일정이 바뀐 경우 WIKI/docs 수정 여부
+
+팀원 Codex 자동화는 `docs/team/codex-automation.md`의 공통 프롬프트를 사용한다.
+각 팀원은 자기 GitHub ID만 지정하고, issue/PR/역할은 현재 문서와 GitHub 상태에서 매번 다시 계산한다.
 
 Merge 기준:
 
