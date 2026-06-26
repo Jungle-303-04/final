@@ -6,6 +6,7 @@ import signal
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from packages.contracts.event_bus.fields import EVENT_ID
 from packages.contracts.event_bus.interfaces import (
     EventClient,
     EventConsumerBus,
@@ -13,7 +14,7 @@ from packages.contracts.event_bus.interfaces import (
     EventMessage,
 )
 from packages.contracts.event_bus.processing import EventProcessingStatus
-from packages.events.bus import DeadLetterSink, EventBus, RecordedEventClient
+from packages.events.bus import DeadLetterSink, EventBus, RecordedEventClient, event_causation
 from packages.storage.database import Database, wait_for_database
 
 DEFAULT_MAX_ATTEMPTS = 3
@@ -68,7 +69,8 @@ class EventProcessor:
 
         attempts = int(processing["attempts"])
         try:
-            await self.handler(evt)
+            with event_causation(evt[EVENT_ID]):
+                await self.handler(evt)
             self.db.finish_event_processing(evt, self.service_name)
             await message.ack()
         except Exception as exc:

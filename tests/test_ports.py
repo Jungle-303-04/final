@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from packages.events.bus import publish_and_record
+from packages.events.bus import RecordedEventClient, event_causation, publish_and_record
 from packages.events.envelope import event
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -40,8 +40,9 @@ class FakeEventPublisher:
         source: str,
         payload: dict[str, Any],
         correlation_id: str | None = None,
+        causation_id: str | None = None,
     ) -> dict[str, Any]:
-        created = event(subject, source, payload, correlation_id)
+        created = event(subject, source, payload, correlation_id, causation_id)
         self.published.append(created)
         return created
 
@@ -81,6 +82,27 @@ def test_publish_and_record_uses_event_ports() -> None:
         )
 
         assert created["correlation_id"] == "corr-1"
+        assert publisher.published == [created]
+        assert recorder.recorded == [created]
+
+    asyncio.run(run())
+
+
+def test_recorded_event_client_inherits_current_causation_id() -> None:
+    async def run() -> None:
+        publisher = FakeEventPublisher()
+        recorder = FakeEventRecorder()
+        client = RecordedEventClient(publisher, recorder)
+
+        with event_causation("parent-event-1"):
+            created = await client.publish(
+                "command.dispatched",
+                "command-worker",
+                {"command_id": "cmd-1"},
+                "corr-1",
+            )
+
+        assert created["causation_id"] == "parent-event-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
 
