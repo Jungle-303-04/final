@@ -47,7 +47,7 @@ from uvicorn import Config, Server
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.gateway import fields as gateway_fields
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
@@ -70,9 +70,9 @@ class HttpManagementPlaneClient:
         await self.client.post(
             f"{self.base_url}{gateway_routes.AGENT_CONNECT_PATH}",
             json={
-                gateway_fields.CLUSTER_ID: cluster_id,
-                gateway_fields.AGENT_ID: agent_id,
-                gateway_fields.CAPABILITIES: capabilities,
+                Gateway.CLUSTER_ID: cluster_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.CAPABILITIES: capabilities,
             },
         )
 
@@ -86,10 +86,10 @@ class HttpManagementPlaneClient:
     async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_COMMAND_POLL_PATH}",
-            params={gateway_fields.CLUSTER_ID: cluster_id, "timeout": timeout_seconds},
+            params={Gateway.CLUSTER_ID: cluster_id, "timeout": timeout_seconds},
         )
         response.raise_for_status()
-        return response.json().get(gateway_fields.COMMAND)
+        return response.json().get(Gateway.COMMAND)
 
     async def complete_command(self, command_id: str, result: JsonObject) -> None:
         await self.client.post(
@@ -143,8 +143,8 @@ class TargetClusterAgent:
             try:
                 command = await client.poll_command(self.cluster_id, COMMAND_POLL_TIMEOUT_SECONDS)
                 if command:
-                    command_id = command[gateway_fields.COMMAND_ID]
-                    action = command[gateway_fields.ACTION]
+                    command_id = command[Gateway.COMMAND_ID]
+                    action = command[Gateway.ACTION]
                     print(
                         f"agent executing command {command_id} action={action}",
                         flush=True,
@@ -153,10 +153,10 @@ class TargetClusterAgent:
                     await client.complete_command(
                         command_id,
                         {
-                            gateway_fields.STATUS: COMMAND_COMPLETED_STATUS,
-                            gateway_fields.CLUSTER_ID: self.cluster_id,
-                            gateway_fields.APPLIED: True,
-                            gateway_fields.MESSAGE: COMMAND_RESULT_MESSAGE,
+                            Gateway.STATUS: COMMAND_COMPLETED_STATUS,
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.APPLIED: True,
+                            Gateway.MESSAGE: COMMAND_RESULT_MESSAGE,
                         },
                     )
             except Exception as exc:
@@ -165,7 +165,7 @@ class TargetClusterAgent:
 
     def fake_evidence(self) -> JsonObject:
         return {
-            gateway_fields.CLUSTER_ID: self.cluster_id,
+            Gateway.CLUSTER_ID: self.cluster_id,
             "kubernetes": {
                 "pods": [
                     {
@@ -199,8 +199,8 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
     @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
         return {
-            gateway_fields.STATUS: gateway_fields.STATUS_OK,
-            gateway_fields.SERVICE: f"fake-{kind}",
+            Gateway.STATUS: Gateway.STATUS_OK,
+            Gateway.SERVICE: f"fake-{kind}",
         }
 
     @app.get(gateway_routes.FAKE_TELEMETRY_CATCH_ALL_PATH)
