@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import nats
 from nats.js.errors import NotFoundError
@@ -12,6 +15,7 @@ from packages.config.constants import (
     SERVICE_NAME_ENV,
 )
 from packages.config.settings import env
+from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID
 from packages.contracts.event_bus.interfaces import (
     Event,
     EventClient,
@@ -27,6 +31,19 @@ from packages.events.envelope import event
 NATS_URL_ENV = "NATS_URL"
 DEPENDENCY_RETRY_LIMIT = 60
 DEPENDENCY_RETRY_DELAY_SECONDS = 2
+CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
+    "current_event_causation_id",
+    default=None,
+)
+
+
+@contextmanager
+def event_causation(causation_id: str) -> Iterator[None]:
+    token = CURRENT_CAUSATION_ID.set(causation_id)
+    try:
+        yield
+    finally:
+        CURRENT_CAUSATION_ID.reset(token)
 
 
 class EventBus:
@@ -68,11 +85,12 @@ class EventBus:
         source: str,
         payload: JsonObject,
         correlation_id: str | None = None,
+        causation_id: str | None = None,
     ) -> Event:
         assert self.js is not None
-        evt = event(subject, source, payload, correlation_id)
+        evt = event(subject, source, payload, correlation_id, causation_id)
         await self.js.publish(subject, json.dumps(evt).encode())
-        print(f"published {subject} correlation={evt['correlation_id']}", flush=True)
+        print(f"published {subject} correlation={evt[CORRELATION_ID]}", flush=True)
         return evt
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
@@ -95,8 +113,15 @@ class RecordedEventClient:
         source: str,
         payload: JsonObject,
         correlation_id: str | None = None,
+        causation_id: str | None = None,
     ) -> Event:
-        evt = await self.publisher.publish(subject, source, payload, correlation_id)
+        evt = await self.publisher.publish(
+            subject,
+            source,
+            payload,
+            correlation_id,
+            causation_id or CURRENT_CAUSATION_ID.get(),
+        )
         self.recorder.record_event(evt)
         return evt
 
@@ -124,7 +149,8 @@ class DeadLetterSink:
             EventSubject.DEAD_LETTER_CREATED,
             self.source,
             dead_letter,
-            evt["correlation_id"],
+            evt[CORRELATION_ID],
+            evt[EVENT_ID],
         )
 
 
@@ -135,5 +161,12 @@ async def publish_and_record(
     source: str,
     payload: JsonObject,
     correlation_id: str | None = None,
+    causation_id: str | None = None,
 ) -> Event:
-    return await RecordedEventClient(bus, db).publish(subject, source, payload, correlation_id)
+    return await RecordedEventClient(bus, db).publish(
+        subject,
+        source,
+        payload,
+        correlation_id,
+        causation_id,
+    )

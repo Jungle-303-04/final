@@ -62,6 +62,7 @@ class FakeDeadLetters:
             consumer,
             {"original_event_id": evt["event_id"], "attempts": attempts},
             evt["correlation_id"],
+            evt["event_id"],
         )
 
 
