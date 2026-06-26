@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +18,16 @@ def load_module(path: Path, name: str):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load module: {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    previous_settings = sys.modules.pop("settings", None)
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(path.parent))
+        sys.modules.pop("settings", None)
+        if previous_settings is not None:
+            sys.modules["settings"] = previous_settings
 
 
 class FakeEventPublisher:

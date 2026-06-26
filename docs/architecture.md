@@ -4,6 +4,8 @@
 
 로컬에서 바로 붙일 수 없는 외부 시스템은 교체 가능한 어댑터로 표현하지만, 실행 구조 자체는 실제 운영 구조를 따른다.
 
+- 처음부터 완전 분리된 마이크로서비스로 구현한다.
+- 단일 FastAPI 앱, role dispatcher, 모듈식 모놀리식 구조는 금지한다.
 - 관리 영역과 대상 Kubernetes는 별도 kind 클러스터로 실행한다.
 - 관리 영역의 서비스들은 NATS JetStream을 통해 비동기로 통신한다.
 - 저장소는 Kubernetes workload로 분리해 실행한다.
@@ -15,7 +17,7 @@
 
 ```text
 services
-  + management-api-gateway       HTTP 경계, OAuth/session, dashboard API
+  + api-gateway       HTTP 경계, OAuth/session, dashboard API
   + gitops-sync-worker           Git webhook -> manifest/diff/command
   + command-worker               command policy -> target agent queue
   + rca-worker                   evidence -> RCA -> safe PR event
@@ -45,7 +47,7 @@ secrets                         SOPS/age 기반 secret 공유 템플릿
 각 Kubernetes workload는 중앙 dispatcher에 role 문자열을 넘기지 않는다. Deployment/DaemonSet이 각 서비스 entrypoint를 직접 실행한다.
 
 ```text
-management-api-gateway        -> python services/management-api-gateway/runner.py
+api-gateway        -> python services/api-gateway/runner.py
 gitops-sync-worker            -> python services/gitops-sync-worker/runner.py
 command-worker                -> python services/command-worker/runner.py
 rca-worker                    -> python services/rca-worker/runner.py
@@ -58,7 +60,19 @@ fake-loki                     -> python services/target-cluster-agent/fake_loki.
 fake-otel                     -> python services/target-cluster-agent/fake_otel.py
 ```
 
-현재는 Docker image를 하나만 빌드하지만, 실행 파일 경계가 이미 서비스별로 갈라져 있다. 이후 운영 부담이 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 분리한다.
+서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 runner, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
+
+## 복구와 장애 격리
+
+각 서비스는 독립적으로 죽고 다시 떠야 한다. 특정 worker pod가 죽어도 Kubernetes Deployment가 다시 생성하고, NATS retry/DLQ, PostgreSQL read model, command queue를 통해 남은 흐름을 복구한다.
+
+| 기준 | 설명 |
+| --- | --- |
+| health | HTTP 서비스는 `/healthz`, worker/agent는 runner 생존과 log/event 처리 상태로 확인한다. |
+| restart | `scripts/kill-pod.sh <deployment>` 뒤 Deployment가 새 pod를 만든다. |
+| retry | worker handler 실패는 `event_processing` retry 상태를 거쳐 DLQ로 이동한다. |
+| isolation | 한 서비스 장애가 다른 서비스 process를 같이 죽이면 안 된다. |
+| state | session, event, command, audit, read model은 외부 store에 둔다. |
 
 ## 포트와 어댑터
 
@@ -80,13 +94,23 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 
 서비스 폴더에서 `EventHandlerSpec`, `WorkerRuntime`, NATS client를 직접 조립하지 않는다. 새 worker는 `WorkerService(service_name, subject, handler_factory).run()` 형태로 추가한다.
 
+서비스별 설정은 각 서비스 폴더의 `settings.py`가 소유한다.
+
+```text
+services/api-gateway/settings.py
+services/command-worker/settings.py
+services/target-cluster-agent/settings.py
+```
+
+팀원이 자기 담당 서비스를 수정할 때는 먼저 해당 `settings.py`를 확인한다. 여러 서비스가 공유해야 하는 기본값, enum, event subject만 `packages/config`에 둔다.
+
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 
 ## 최소 실행 서비스
 
 관리 클러스터:
 
-- `management-api-gateway`
+- `api-gateway`
 - `gitops-sync-worker`
 - `command-worker`
 - `rca-worker`
@@ -110,7 +134,7 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 
 ```text
 GitHub webhook
--> Management API Gateway
+-> API Gateway
 -> NATS git.webhook.received
 -> GitOps Sync Worker
 -> NATS command.requested
@@ -120,7 +144,7 @@ GitHub webhook
 -> NATS command.completed
 
 Target Cluster Agent
--> Management API Gateway /agent/evidence
+-> API Gateway /agent/evidence
 -> NATS cluster.evidence.received
 -> RCA Worker
 -> evidence.built -> rca.completed -> safe_pr.created

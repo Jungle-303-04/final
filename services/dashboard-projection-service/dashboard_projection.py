@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from settings import (
+    FAILED_SUBJECT_SUFFIX,
+    REJECTED_SUBJECT_SUFFIX,
+    SERVICE_NAME,
+    TERMINAL_SUCCESS_SUBJECTS,
+)
+
 from packages.config.constants import DashboardStatus, EventSubject
 from packages.contracts.interfaces import DashboardReadModel, EventClient
-
-SERVICE_NAME = "dashboard-projection-service"
-TERMINAL_SUCCESS_SUBJECTS = {EventSubject.SAFE_PR_CREATED, EventSubject.COMMAND_COMPLETED}
-REJECTED_SUBJECT_SUFFIX = "rejected"
-FAILED_SUBJECT_SUFFIX = "failed"
 
 
 class DashboardProjectionWorkflow:

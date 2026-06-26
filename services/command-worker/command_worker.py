@@ -3,15 +3,17 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from settings import (
+    AGENT_ROUTE_CHANNEL,
+    COMMAND_STATUS_QUEUED,
+    DEFAULT_COMMAND_ACTION,
+    POLICY_STEPS,
+    SANDBOX_WRITE_REJECT_REASON,
+    SERVICE_NAME,
+)
+
 from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE, EventSubject
 from packages.contracts.interfaces import AgentCommandQueue, EventClient
-
-SERVICE_NAME = "command-worker"
-AGENT_ROUTE_CHANNEL = "agent-poll"
-POLICY_STEPS = ["validate policy", "route target cluster", "queue for agent"]
-DEFAULT_COMMAND_ACTION = "rollout_restart"
-SANDBOX_WRITE_REJECT_REASON = "only sandbox namespace writes are allowed"
-COMMAND_STATUS_QUEUED = "queued"
 
 
 class CommandWorkflow:

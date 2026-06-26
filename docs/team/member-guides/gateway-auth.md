@@ -6,7 +6,7 @@
 
 ## 담당 영역
 
-- `services/management-api-gateway`
+- `services/api-gateway`
 - `packages/contracts/schemas.py`
 - OAuth/session/token vault 흐름
 - command/dashboard/dead-letter HTTP route
@@ -36,4 +36,4 @@
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/management-api-gateway/gateway.py`, `services/management-api-gateway/auth.py`, `packages/contracts/schemas.py`, `docs/team/conventions.md`를 먼저 읽어라.
+이 영역을 작업할 때는 `services/api-gateway/gateway.py`, `services/api-gateway/auth.py`, `packages/contracts/schemas.py`, `docs/team/conventions.md`를 먼저 읽어라.
