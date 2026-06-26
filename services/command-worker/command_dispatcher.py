@@ -101,28 +101,28 @@ class Dispatcher:
         self.config = config
 
     async def dispatch(self, evt: dict[str, Any], plan: Plan) -> None:
-        await self.publish_event(
+        await self.emit(
             evt,
             EventSubject.COMMAND_DISPATCH_READY,
             plan.ready_event_payload(),
         )
-        await self.publish_event(
+        await self.emit(
             evt,
             EventSubject.COMMAND_DISPATCHED,
             plan.dispatched_event_payload(self.config),
         )
-        self.commands.queue_agent_command(
+        await self.commands.queue_agent_command(
             evt[CORRELATION_ID],
             plan.data,
             self.config.command_status_queued,
         )
-        await self.publish_event(
+        await self.emit(
             evt,
             EventSubject.COMMAND_QUEUED_FOR_AGENT,
             plan.queued_event_payload(),
         )
 
-    async def publish_event(
+    async def emit(
         self,
         evt: dict[str, Any],
         subject: str,

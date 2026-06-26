@@ -61,13 +61,17 @@ class RepoChangeStore(Protocol):
 
 
 class AgentCommandQueue(Protocol):
-    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None: ...
+    async def queue_agent_command(
+        self, correlation_id: str, plan: JsonObject, status: str
+    ) -> None: ...
 
-    def lease_agent_command(
+    async def lease_agent_command(
         self, cluster_id: str, queued_status: str, leased_status: str
     ) -> CommandRecord | None: ...
 
-    def complete_agent_command(self, command_id: str, result: JsonObject) -> str | None: ...
+    async def complete_agent_command(
+        self, command_id: str, result: JsonObject
+    ) -> str | None: ...
 
 
 class RcaStore(Protocol):
