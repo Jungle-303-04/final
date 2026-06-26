@@ -13,8 +13,8 @@ from settings import Settings
 from packages.config.constants import Auth, GitHub, Target
 from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID, PAYLOAD
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
@@ -209,7 +209,7 @@ class ApiGateway:
         ) -> dict[str, Any]:
             deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
             while time.time() < deadline:
-                row = self.db.lease_agent_command(
+                row = await self.db.lease_agent_command(
                     cluster_id, Settings.COMMAND_STATUS_QUEUED, Settings.COMMAND_STATUS_LEASED
                 )
                 if row:
@@ -220,7 +220,7 @@ class ApiGateway:
         @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
         async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
             result = payload.model_dump()
-            correlation_id = self.db.complete_agent_command(command_id, result)
+            correlation_id = await self.db.complete_agent_command(command_id, result)
             if not correlation_id:
                 raise HTTPException(
                     status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,

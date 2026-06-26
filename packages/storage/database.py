@@ -52,6 +52,9 @@ class Database:
     def connect(self):
         return psycopg.connect(self.url, row_factory=dict_row)
 
+    async def connect_async(self):
+        return await psycopg.AsyncConnection.connect(self.url, row_factory=dict_row)
+
     def init(self) -> None:
         ddl = [
             """
@@ -491,10 +494,12 @@ class Database:
                     (correlation_id, commit_sha, json.dumps(manifest)),
                 )
 
-    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+    async def queue_agent_command(
+        self, correlation_id: str, plan: JsonObject, status: str
+    ) -> None:
+        async with await self.connect_async() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     insert into agent_commands (
                         command_id,
@@ -518,12 +523,12 @@ class Database:
                     ),
                 )
 
-    def lease_agent_command(
+    async def lease_agent_command(
         self, cluster_id: str, queued_status: str, leased_status: str
     ) -> CommandRecord | None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+        async with await self.connect_async() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     select command_id, correlation_id, cluster_id, action, payload
                     from agent_commands
@@ -533,9 +538,9 @@ class Database:
                     """,
                     (cluster_id, queued_status),
                 )
-                row = cur.fetchone()
+                row = await cur.fetchone()
                 if row:
-                    cur.execute(
+                    await cur.execute(
                         """
                         update agent_commands
                         set status = %s, updated_at = now()
@@ -545,10 +550,12 @@ class Database:
                     )
                 return dict(row) if row else None
 
-    def complete_agent_command(self, command_id: str, result: JsonObject) -> str | None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
+    async def complete_agent_command(
+        self, command_id: str, result: JsonObject
+    ) -> str | None:
+        async with await self.connect_async() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
                     """
                     update agent_commands
                     set status = %s, result = %s, updated_at = now()
@@ -557,7 +564,7 @@ class Database:
                     """,
                     (result["status"], json.dumps(result), command_id),
                 )
-                row = cur.fetchone()
+                row = await cur.fetchone()
                 return row["correlation_id"] if row else None
 
     def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None:
