@@ -1,0 +1,24 @@
+# Replace the placeholder owners with real GitHub users or teams.
+# GitHub ignores commented lines, so this file is safe before team handles are finalized.
+#
+# Example:
+# * @org/platform-lead
+# /services/management-api-gateway/ @org/gateway-auth
+# /services/target-cluster-agent/ @org/target-telemetry
+#
+# Suggested ownership lanes:
+# /packages/shared/                         @org/platform-integration
+# /packages/worker_runtime/                 @org/platform-integration
+# /.github/                                 @org/platform-integration
+# /deploy/                                  @org/platform-integration
+# /scripts/                                 @org/platform-integration
+# /services/management-api-gateway/         @org/gateway-auth
+# /services/gitops-sync-worker/             @org/workflow-rca
+# /services/command-worker/                 @org/workflow-rca
+# /services/rca-worker/                     @org/workflow-rca
+# /services/audit-timeline-service/         @org/workflow-rca
+# /services/dashboard-projection-service/   @org/dashboard-docs
+# /services/target-cluster-agent/           @org/target-telemetry
+# /services/node-collector/                 @org/target-telemetry
+# /docs/team/                               @org/dashboard-docs
+# /docs/events.md                           @org/platform-integration
