@@ -13,6 +13,22 @@
 - OAuth provider token은 Dashboard 상태가 아니라 Token Vault record로 관리한다.
 - Dashboard와 command API는 Gateway OAuth flow가 발급한 session을 요구한다.
 
+## 운영 배포 기준
+
+운영 배포 기준은 [operations-deployment.md](operations-deployment.md)를 따른다.
+
+현재 제품 구조는 그대로 유지한다. EKS 발표자료에서 흡수할 부분은 제품 내부 흐름이 아니라 배포 substrate, node type, 권한, 관측성 기준이다.
+
+| 항목 | 기준 |
+| --- | --- |
+| 관리 클러스터 | EKS managed node group 중심으로 검토 |
+| Fargate | stateless API/worker 일부만 후보 |
+| node-collector | DaemonSet이므로 Fargate-only 배치 금지 |
+| stateful store | 운영 후보는 RDS, ElastiCache, S3 같은 managed service |
+| target 연결 | target-cluster-agent outbound 연결 유지 |
+| 권한 | OAuth/session, AWS IAM/IRSA, Kubernetes ServiceAccount/RBAC를 분리 |
+| 관측성 | CloudWatch, Prometheus, Loki, OTel을 provider adapter로 수용 |
+
 ## 서비스 배치
 
 ```text
