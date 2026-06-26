@@ -8,12 +8,7 @@ import uuid
 import psycopg
 from psycopg.rows import dict_row
 
-from packages.config.constants import (
-    DEFAULT_DATABASE_URL,
-    GITHUB_PROVIDER,
-    LOCAL_USER_ID,
-    REQUIRED_GITHUB_SCOPE,
-)
+from packages.config.constants import Auth, GitHub, Postgres
 from packages.config.settings import env
 from packages.config.time import now_iso
 from packages.contracts.event_bus.interfaces import Event, JsonObject
@@ -52,7 +47,7 @@ def serialize_dead_letter(row: JsonObject) -> JsonObject:
 
 class Database:
     def __init__(self) -> None:
-        self.url = env(DATABASE_URL_ENV, DEFAULT_DATABASE_URL)
+        self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
 
     def connect(self):
         return psycopg.connect(self.url, row_factory=dict_row)
@@ -426,10 +421,10 @@ class Database:
 
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
-        user_id = payload.get("user_id", LOCAL_USER_ID)
+        user_id = payload.get("user_id", Auth.LOCAL_USER_ID)
         scopes = payload.get("scopes") or DEFAULT_OAUTH_SCOPES.copy()
-        if provider == GITHUB_PROVIDER and REQUIRED_GITHUB_SCOPE not in scopes:
-            scopes.append(REQUIRED_GITHUB_SCOPE)
+        if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scopes:
+            scopes.append(GitHub.REQUIRED_SCOPE)
         token_ref = f"{TOKEN_REF_PREFIX}/{provider}/{user_id}/{uuid.uuid4()}"
         provider_user = payload.get("provider_user") or f"{provider}-{user_id}"
         encrypted_payload = {
@@ -480,7 +475,7 @@ class Database:
                     order by updated_at desc
                     limit 1
                     """,
-                    (GITHUB_PROVIDER,),
+                    (GitHub.PROVIDER,),
                 )
                 row = cur.fetchone()
                 return row["token_ref"] if row else None

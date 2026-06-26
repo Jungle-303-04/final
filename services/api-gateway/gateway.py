@@ -8,34 +8,9 @@ from typing import Any
 from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from settings import (
-    APP_TITLE,
-    APP_VERSION,
-    COMMAND_NOT_FOUND_MESSAGE,
-    COMMAND_NOT_FOUND_STATUS_CODE,
-    COMMAND_POLL_SLEEP_SECONDS,
-    COMMAND_STATUS_LEASED,
-    COMMAND_STATUS_QUEUED,
-    CONFLICT_STATUS_CODE,
-    DASHBOARD_STREAM_INTERVAL_SECONDS,
-    DEAD_LETTER_NOT_FOUND_MESSAGE,
-    DEAD_LETTER_REPLAYED_MESSAGE,
-    DEFAULT_AGENT_COMMAND_POLL_SECONDS,
-    DEFAULT_DEAD_LETTER_LIMIT,
-    DEFAULT_SCOPES,
-    EVENT_STREAM_MEDIA_TYPE,
-    GATEWAY_ERROR_STATUS_CODE,
-    MAX_COMMAND_POLL_SECONDS,
-    MAX_DEAD_LETTER_LIMIT,
-    SERVICE_NAME,
-)
+from settings import Settings
 
-from packages.config.constants import (
-    DEFAULT_TARGET_CLUSTER_ID,
-    GITHUB_PROVIDER,
-    LOCAL_USER_ID,
-    REQUIRED_GITHUB_SCOPE,
-)
+from packages.config.constants import Auth, GitHub, Target
 from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID, PAYLOAD
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway.fields import Gateway
@@ -58,7 +33,7 @@ class ApiGateway:
         self.bus = EventBus()
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
-        self.app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+        self.app = FastAPI(title=Settings.APP_TITLE, version=Settings.APP_VERSION)
         self.configure_routes()
 
     def configure_routes(self) -> None:
@@ -79,7 +54,7 @@ class ApiGateway:
         async def healthz() -> dict[str, str]:
             return {
                 Gateway.STATUS: Gateway.STATUS_OK,
-                Gateway.SERVICE: SERVICE_NAME,
+                Gateway.SERVICE: Settings.SERVICE_NAME,
             }
 
         @app.get(gateway_routes.READYZ_PATH)
@@ -98,17 +73,19 @@ class ApiGateway:
 
         @app.get(gateway_routes.OAUTH_START_PATH)
         async def oauth_start(
-            provider: str, user_id: str = LOCAL_USER_ID, scopes: str = DEFAULT_SCOPES
+            provider: str,
+            user_id: str = Auth.LOCAL_USER_ID,
+            scopes: str = Settings.DEFAULT_SCOPES,
         ) -> dict[str, Any]:
             scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
-            if provider == GITHUB_PROVIDER and REQUIRED_GITHUB_SCOPE not in scope_list:
-                scope_list.append(REQUIRED_GITHUB_SCOPE)
+            if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scope_list:
+                scope_list.append(GitHub.REQUIRED_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
             await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.OAUTH_START_REQUESTED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 {
                     Gateway.PROVIDER: provider,
                     Gateway.USER_ID: user_id,
@@ -123,7 +100,7 @@ class ApiGateway:
             result = await self.auth.callback(provider, payload.model_dump())
             account = result[Gateway.ACCOUNT]
             evt = await publish_and_record(
-                self.bus, self.db, EventSubject.OAUTH_CONNECTED, SERVICE_NAME, account
+                self.bus, self.db, EventSubject.OAUTH_CONNECTED, Settings.SERVICE_NAME, account
             )
             return {
                 Gateway.ACCEPTED: True,
@@ -138,7 +115,7 @@ class ApiGateway:
                 self.bus,
                 self.db,
                 EventSubject.GIT_WEBHOOK_RECEIVED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
             return {Gateway.ACCEPTED: True, Gateway.EVENT: evt}
@@ -149,7 +126,7 @@ class ApiGateway:
                 self.bus,
                 self.db,
                 EventSubject.AGENT_CONNECTED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
             return {Gateway.ACCEPTED: True, EVENT_ID: evt[EVENT_ID]}
@@ -161,7 +138,7 @@ class ApiGateway:
                 self.bus,
                 self.db,
                 EventSubject.CLUSTER_EVIDENCE_RECEIVED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 evidence,
                 payload.correlation_id,
             )
@@ -177,7 +154,7 @@ class ApiGateway:
             command = payload.model_dump()
             command[Gateway.REQUESTED_BY] = current.user_id
             evt = await publish_and_record(
-                self.bus, self.db, EventSubject.COMMAND_REQUESTED, SERVICE_NAME, command
+                self.bus, self.db, EventSubject.COMMAND_REQUESTED, Settings.SERVICE_NAME, command
             )
             return {
                 Gateway.ACCEPTED: True,
@@ -188,10 +165,10 @@ class ApiGateway:
         @app.get(gateway_routes.DEAD_LETTERS_PATH)
         async def dead_letters(
             request: Request,
-            limit: int = DEFAULT_DEAD_LETTER_LIMIT,
+            limit: int = Settings.DEFAULT_DEAD_LETTER_LIMIT,
         ) -> dict[str, Any]:
             await self.auth.require_session(request)
-            bounded_limit = max(1, min(limit, MAX_DEAD_LETTER_LIMIT))
+            bounded_limit = max(1, min(limit, Settings.MAX_DEAD_LETTER_LIMIT))
             return {Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)}
 
         @app.post(gateway_routes.DEAD_LETTER_REPLAY_PATH)
@@ -200,20 +177,20 @@ class ApiGateway:
             dead_letter = self.db.get_dead_letter(dead_letter_id)
             if dead_letter is None:
                 raise HTTPException(
-                    status_code=COMMAND_NOT_FOUND_STATUS_CODE,
-                    detail=DEAD_LETTER_NOT_FOUND_MESSAGE,
+                    status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=Settings.DEAD_LETTER_NOT_FOUND_MESSAGE,
                 )
             if dead_letter[Gateway.STATUS] == Gateway.STATUS_REPLAYED:
                 raise HTTPException(
-                    status_code=CONFLICT_STATUS_CODE,
-                    detail=DEAD_LETTER_REPLAYED_MESSAGE,
+                    status_code=Settings.CONFLICT_STATUS_CODE,
+                    detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
                 )
 
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 dead_letter["original_subject"],
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 dead_letter[PAYLOAD],
                 dead_letter[CORRELATION_ID],
                 dead_letter["original_event_id"],
@@ -227,17 +204,17 @@ class ApiGateway:
 
         @app.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
         async def poll_command(
-            cluster_id: str = DEFAULT_TARGET_CLUSTER_ID,
-            timeout: int = DEFAULT_AGENT_COMMAND_POLL_SECONDS,
+            cluster_id: str = Target.DEFAULT_CLUSTER_ID,
+            timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
         ) -> dict[str, Any]:
-            deadline = time.time() + min(timeout, MAX_COMMAND_POLL_SECONDS)
+            deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
             while time.time() < deadline:
                 row = self.db.lease_agent_command(
-                    cluster_id, COMMAND_STATUS_QUEUED, COMMAND_STATUS_LEASED
+                    cluster_id, Settings.COMMAND_STATUS_QUEUED, Settings.COMMAND_STATUS_LEASED
                 )
                 if row:
                     return {Gateway.COMMAND: row}
-                await asyncio.sleep(COMMAND_POLL_SLEEP_SECONDS)
+                await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
             return {Gateway.COMMAND: None}
 
         @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
@@ -246,14 +223,14 @@ class ApiGateway:
             correlation_id = self.db.complete_agent_command(command_id, result)
             if not correlation_id:
                 raise HTTPException(
-                    status_code=COMMAND_NOT_FOUND_STATUS_CODE,
-                    detail=COMMAND_NOT_FOUND_MESSAGE,
+                    status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=Settings.COMMAND_NOT_FOUND_MESSAGE,
                 )
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.COMMAND_COMPLETED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 {Gateway.COMMAND_ID: command_id, Gateway.RESULT: result},
                 correlation_id,
             )
@@ -275,15 +252,15 @@ class ApiGateway:
                     if encoded != last:
                         last = encoded
                         yield f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
-                    await asyncio.sleep(DASHBOARD_STREAM_INTERVAL_SECONDS)
+                    await asyncio.sleep(Settings.DASHBOARD_STREAM_INTERVAL_SECONDS)
 
-            return StreamingResponse(events(), media_type=EVENT_STREAM_MEDIA_TYPE)
+            return StreamingResponse(events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE)
 
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             print(f"gateway error: {exc}", flush=True)
             return JSONResponse(
-                status_code=GATEWAY_ERROR_STATUS_CODE,
+                status_code=Settings.GATEWAY_ERROR_STATUS_CODE,
                 content={Gateway.ERROR: str(exc)},
             )
 
