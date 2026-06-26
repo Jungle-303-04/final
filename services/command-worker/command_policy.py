@@ -16,7 +16,7 @@ class Field:
 
 
 @dataclass(frozen=True)
-class CommandPayload:
+class Payload:
     raw: dict[str, Any]
 
     def value(self, field: str, default: Any = None) -> Any:
@@ -44,7 +44,7 @@ class CommandPayload:
 class Rule(Protocol):
     reason: str
 
-    def allows(self, command: CommandPayload) -> bool: ...
+    def allows(self, command: Payload) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class EqualsRule:
     reason: str
     default: Any = None
 
-    def allows(self, command: CommandPayload) -> bool:
+    def allows(self, command: Payload) -> bool:
         return command.value(self.field, self.default) == self.expected
 
     @classmethod
@@ -74,43 +74,38 @@ class EqualsRule:
 
 
 @dataclass(frozen=True)
-class PolicyResult:
+class Result:
     allowed: bool
     reason: str | None = None
 
     @classmethod
-    def allow(cls) -> PolicyResult:
+    def allow(cls) -> Result:
         return cls(True)
 
     @classmethod
-    def reject(cls, reason: str) -> PolicyResult:
+    def reject(cls, reason: str) -> Result:
         return cls(False, reason)
 
 
-class Evaluator(Protocol):
-    def evaluate(self, command: CommandPayload) -> PolicyResult: ...
+class PolicyPort(Protocol):
+    def evaluate(self, command: Payload) -> Result: ...
 
 
-PolicyRule = Rule
-FieldEqualsRule = EqualsRule
-CommandPolicyPort = Evaluator
-
-
-class CommandPolicy:
+class Policy:
     def __init__(self, rules: Sequence[Rule]) -> None:
         self.rules: tuple[Rule, ...] = tuple(rules)
 
     @classmethod
-    def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> CommandPolicy:
+    def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
         rules: list[Rule] = [EqualsRule.build(config) for config in configs]
         return cls(rules)
 
     @classmethod
-    def from_config(cls, configs: tuple[PolicyRuleConfig, ...]) -> CommandPolicy:
+    def from_config(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
         return cls.build(configs)
 
-    def evaluate(self, command: CommandPayload) -> PolicyResult:
+    def evaluate(self, command: Payload) -> Result:
         for rule in self.rules:
             if not rule.allows(command):
-                return PolicyResult.reject(rule.reason)
-        return PolicyResult.allow()
+                return Result.reject(rule.reason)
+        return Result.allow()
