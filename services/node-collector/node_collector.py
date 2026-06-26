@@ -4,6 +4,7 @@ import asyncio
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from typing import Final
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
@@ -30,12 +31,16 @@ from settings import (
 from uvicorn import Config, Server
 
 from packages.config.settings import env
-from packages.contracts.gateway import fields as gateway_fields
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway import routes as gateway_routes
 
-KIND_FIELD = "kind"
-NODE_FIELD = "node"
-SAMPLE_FIELD = "sample"
+
+class Field:
+    KIND: Final[str] = "kind"
+    NODE: Final[str] = "node"
+    SAMPLE: Final[str] = "sample"
+
+
 NODE_RUNTIME_SAMPLE_KIND = "node_runtime_sample"
 SNAPSHOT_PATH = "/snapshot"
 METRICS_PATH = "/metrics"
@@ -117,9 +122,9 @@ class NodeCollector:
             print(
                 json.dumps(
                     {
-                        gateway_fields.SERVICE: SERVICE_NAME,
-                        KIND_FIELD: NODE_RUNTIME_SAMPLE_KIND,
-                        SAMPLE_FIELD: self.snapshot().to_payload(),
+                        Gateway.SERVICE: SERVICE_NAME,
+                        Field.KIND: NODE_RUNTIME_SAMPLE_KIND,
+                        Field.SAMPLE: self.snapshot().to_payload(),
                     },
                     ensure_ascii=False,
                 ),
@@ -145,9 +150,9 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
     @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
         return {
-            gateway_fields.STATUS: gateway_fields.STATUS_OK,
-            gateway_fields.SERVICE: SERVICE_NAME,
-            NODE_FIELD: node_collector.node_name,
+            Gateway.STATUS: Gateway.STATUS_OK,
+            Gateway.SERVICE: SERVICE_NAME,
+            Field.NODE: node_collector.node_name,
         }
 
     @app.get(SNAPSHOT_PATH)
