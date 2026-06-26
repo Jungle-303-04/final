@@ -61,6 +61,17 @@ def compact_error(error: str) -> str:
     return error[:ERROR_MESSAGE_LIMIT]
 
 
+def iso_or_none(value: object) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None
+
+
+def serialize_dead_letter(row: JsonObject) -> JsonObject:
+    item = dict(row)
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["replayed_at"] = iso_or_none(item.get("replayed_at"))
+    return item
+
+
 def event(
     subject: str, source: str, payload: JsonObject, correlation_id: str | None = None
 ) -> Event:
@@ -190,9 +201,18 @@ class Database:
                 attempts integer not null,
                 error text not null,
                 payload jsonb not null,
+                status text not null default 'open',
+                replayed_at timestamptz,
+                replay_event_id text,
                 created_at timestamptz not null default now()
             )
             """,
+            """
+            alter table event_dead_letters
+            add column if not exists status text not null default 'open'
+            """,
+            "alter table event_dead_letters add column if not exists replayed_at timestamptz",
+            "alter table event_dead_letters add column if not exists replay_event_id text",
             """
             create table if not exists oauth_accounts (
                 id bigserial primary key,
@@ -372,7 +392,72 @@ class Database:
                     "attempts": attempts,
                     "error": compact_error(error),
                     "created_at": row["created_at"].isoformat(),
+                    "status": "open",
                 }
+
+    def list_dead_letters(self, limit: int) -> list[JsonObject]:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select id,
+                           original_event_id,
+                           original_subject,
+                           consumer,
+                           correlation_id,
+                           attempts,
+                           error,
+                           payload,
+                           status,
+                           replayed_at,
+                           replay_event_id,
+                           created_at
+                    from event_dead_letters
+                    order by created_at desc
+                    limit %s
+                    """,
+                    (limit,),
+                )
+                return [serialize_dead_letter(row) for row in cur.fetchall()]
+
+    def get_dead_letter(self, dead_letter_id: int) -> JsonObject | None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select id,
+                           original_event_id,
+                           original_subject,
+                           consumer,
+                           correlation_id,
+                           attempts,
+                           error,
+                           payload,
+                           status,
+                           replayed_at,
+                           replay_event_id,
+                           created_at
+                    from event_dead_letters
+                    where id = %s
+                    """,
+                    (dead_letter_id,),
+                )
+                row = cur.fetchone()
+                return serialize_dead_letter(row) if row else None
+
+    def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update event_dead_letters
+                    set status = 'replayed',
+                        replayed_at = now(),
+                        replay_event_id = %s
+                    where id = %s
+                    """,
+                    (replay_event_id, dead_letter_id),
+                )
 
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
