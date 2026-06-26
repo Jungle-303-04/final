@@ -45,12 +45,15 @@ External systems that are not available locally are represented by replaceable a
 PostgreSQL, NATS, httpx 같은 구현체가 아니라 아래 포트에 의존합니다.
 
 - `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream 교체 가능 경계
+- `EventClient`: service code가 사용하는 publish 경계
 - `RepoChangeStore`, `AgentCommandQueue`, `RcaStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
 
 현재 concrete adapter는 `packages/shared/core.py`의 `Database`, `EventBus`와
 `services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`입니다.
+
+Event 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따릅니다.
 
 ## Minimal Running Services
 
@@ -99,6 +102,18 @@ Every event
 -> Dashboard Projection Service
 -> Dashboard read model
 -> Dashboard query/stream from Gateway
+```
+
+Failed event handling:
+
+```text
+WorkerRuntime
+-> event_processing retrying
+-> NATS nak
+-> max attempts
+-> event_dead_letters
+-> dead_letter.created
+-> Gateway /dead-letters replay
 ```
 
 ## OAuth Flow
