@@ -1,16 +1,16 @@
-## Summary
+## 요약
 
 - 
 
-## Owner Lane
+## 담당 영역
 
 - [ ] Platform/Integration
 - [ ] Gateway/Auth
-- [ ] Workflow/RCA
+- [ ] GitOps/Command
+- [ ] RCA/Safe PR
 - [ ] Target/Telemetry
-- [ ] Dashboard/Docs
 
-## Change Type
+## 변경 종류
 
 - [ ] feat
 - [ ] fix
@@ -20,25 +20,24 @@
 - [ ] ci
 - [ ] chore
 
-## Test Evidence
+## 테스트 증거
 
 - [ ] `make check`
 - [ ] `uv run pytest -q`
 - [ ] `python -m compileall -q services packages`
-- [ ] `make smoke` if runtime/deploy/event flow changed
-- [ ] WIKI `make check` if WIKI changed
+- [ ] runtime/deploy/event 흐름이 바뀐 경우 `make smoke`
+- [ ] WIKI를 바꾼 경우 WIKI `make check`
 
-## Contract Checklist
+## 계약 체크리스트
 
-- [ ] New/changed event subjects are in `EventSubject` and `docs/events.md`
-- [ ] New/changed API fields are in Pydantic schemas
-- [ ] Worker code uses `EventClient` and `EventHandlerSpec`
-- [ ] Target write remains limited to `sandbox`
-- [ ] No secrets, tokens, kubeconfig, or `.env` values included
-- [ ] WIKI/docs updated when architecture, API, workflow, or schedule changed
+- [ ] 새 event subject 또는 변경된 event subject가 `EventSubject`와 `docs/events.md`에 반영됨
+- [ ] 새 API field 또는 변경된 API field가 Pydantic schema에 반영됨
+- [ ] Worker code가 `EventClient`와 `EventHandlerSpec`을 사용함
+- [ ] Target write가 `sandbox`로 제한됨
+- [ ] secret, token, kubeconfig, `.env` 값이 포함되지 않음
+- [ ] architecture, API, workflow, schedule이 바뀐 경우 WIKI/docs를 수정함
 
-## Risk / Rollback
+## 위험 / 되돌리기
 
-- Risk:
-- Rollback:
-
+- 위험:
+- 되돌리기:

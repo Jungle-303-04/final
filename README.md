@@ -1,8 +1,8 @@
-# Service
+# 서비스
 
 Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 구현입니다.
 
-이 repo의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `services/<service-name>`입니다. 하나의 Docker image를 만들고, Kubernetes Deployment마다 다른 service runner를 실행해 여러 서비스 인스턴스로 나눕니다.
+이 repository의 실행 기준은 `app/` 단일 FastAPI 앱이 아니라 `services/<service-name>`입니다. 하나의 Docker image를 만들고, Kubernetes Deployment마다 다른 service runner를 실행해 여러 서비스 인스턴스로 나눕니다.
 
 ## 구조
 
@@ -17,10 +17,10 @@ services
   target-cluster-agent
   node-collector
 packages
-  shared                 DB, NATS, schemas, roles
+  shared                 DB, NATS, schema, role
   worker_runtime         JetStream worker runtime
-deploy       management/target kind 클러스터 manifests
-scripts      실행, 상태 확인, smoke, scale, pod 복구 스크립트
+deploy       management/target kind 클러스터 manifest
+scripts      실행, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
 config/env   로컬 env 템플릿
 tests        단위 테스트
@@ -46,22 +46,22 @@ make smoke
 make down
 ```
 
-## 서비스 role
+## 서비스 역할
 
 각 role은 같은 image에서 다른 프로세스로 실행됩니다. 코드 폴더는 실행 경계에 맞춰 `services/<service-name>`로 나눕니다.
 
 ```text
-gateway                       Management API Gateway
+gateway                       관리 API Gateway
 gitops-sync-worker            Git webhook -> manifest/diff/command
 command-worker                command policy/dispatch/agent queue
 rca-worker                    evidence -> RCA -> safe PR
 dashboard-projection-service  dashboard read model
 audit-timeline-service        audit log
-target-agent                  target cluster outbound agent
+target-agent                  대상 클러스터 outbound agent
 fake-prometheus               fake metrics source
 fake-loki                     fake logs source
 fake-otel                     fake trace source
-node-collector                optional DaemonSet collector
+node-collector                선택형 DaemonSet collector
 ```
 
 ## 검증

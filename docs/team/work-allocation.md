@@ -1,52 +1,53 @@
-# Five-Person Work Allocation
+# 5인 작업 분배
 
-This document maps the project into five clear ownership lanes. Each teammate can give their Codex instance the matching member guide as the operating instruction.
+이 문서는 프로젝트를 5개의 명확한 담당 영역으로 나눈다. 각 팀원은 자신의 영역에 맞는 member guide를 Codex 지시 문서로 사용할 수 있다.
 
-## Role Summary
+대시보드는 이번 5인 분배에서 제외한다. 현재 dashboard projection은 공통 read model로 유지하고, 실제 UI 구현을 시작할 때 별도 담당을 다시 정한다.
 
-| Person | Role | Main objective | First demo contribution |
+## 역할 요약
+
+| 인원 | 역할 | 핵심 목표 | 첫 데모 기여 |
 | --- | --- | --- | --- |
-| Member 1 | Platform/Integration | Keep event runtime, contracts, CI, deploy, and merges stable | CI gate, DLQ scenario, release-ready smoke |
-| Member 2 | Gateway/Auth | Own all external HTTP, session, OAuth, command API, DLQ API | GitHub OAuth real adapter path |
-| Member 3 | Workflow/RCA | Own GitOps, command workflow, RCA, Safe PR, audit | Safe PR client and event tests |
-| Member 4 | Target/Telemetry | Own target agent, Kubernetes/RBAC, Prometheus/Loki/OTel, node collector | real telemetry evidence path |
-| Member 5 | Dashboard/Docs | Own dashboard UI/read model/docs/demo script | query/stream/command UI and weekly demo script |
+| 1번 | Platform/Integration | event runtime, contract, CI, deploy, merge 안정화 | CI gate, DLQ scenario, smoke 자동화 |
+| 2번 | Gateway/Auth | 외부 HTTP, session, OAuth, command API, DLQ API 담당 | GitHub OAuth 실제 adapter 연결 경로 |
+| 3번 | GitOps/Command | Git webhook부터 manifest/diff/command 생성까지 담당 | manifest render와 command.requested 흐름 |
+| 4번 | RCA/Safe PR | evidence 기반 RCA, audit, Safe PR 흐름 담당 | Safe PR client와 RCA event test |
+| 5번 | Target/Telemetry | 대상 cluster agent, Kubernetes/RBAC, telemetry adapter 담당 | 실제 Prometheus/Loki evidence 수집 경로 |
 
-## Work Boundaries
+## 작업 경계
 
-| Role | Can change freely | Must coordinate before changing |
+| 역할 | 자유롭게 변경 가능 | 변경 전 조율 필요 |
 | --- | --- | --- |
-| Platform/Integration | `packages/shared`, `packages/worker_runtime`, `.github`, `deploy`, `scripts` | service workflow behavior, UI routes |
-| Gateway/Auth | `services/management-api-gateway`, auth/session schemas | event subjects, DB schema, target agent protocol |
-| Workflow/RCA | worker services, RCA/Safe PR logic, audit timeline | Gateway routes, target RBAC, UI state model |
+| Platform/Integration | `packages/shared`, `packages/worker_runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
+| Gateway/Auth | `services/management-api-gateway`, auth/session schema | event subject, DB schema, target agent protocol |
+| GitOps/Command | `services/gitops-sync-worker`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
+| RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service`, Safe PR logic | GitHub token scope, command payload, dashboard read model |
 | Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
-| Dashboard/Docs | dashboard UI folder, dashboard projection, WIKI | event contract, API schema, deploy manifests |
 
-## Current Gaps As Of 2026-06-26
+## 2026-06-26 기준 미흡한 부분
 
-| Gap | Owner | Notes |
+| 미흡한 부분 | 담당 | 메모 |
 | --- | --- | --- |
-| Real GitHub OAuth token exchange | Gateway/Auth | Replace fake adapter while preserving Token Vault flow |
-| Real GitHub PR creation | Workflow/RCA | Safe PR client should be feature-flagged |
-| Prometheus/Loki real adapters | Target/Telemetry | Keep fake adapters as fallback |
-| Dashboard UI | Dashboard/Docs | Use Gateway only: query, stream, command, DLQ |
-| Outbox decision | Platform/Integration | Decide before real PR side effects become critical |
-| Wednesday demo scripts | Dashboard/Docs + Platform | Every Wednesday must have runnable demo |
+| 실제 GitHub OAuth token exchange | Gateway/Auth | fake adapter를 교체하되 Token Vault 흐름은 유지 |
+| manifest render와 desired diff 정교화 | GitOps/Command | GitOps event와 command 생성 테스트 필요 |
+| 실제 GitHub PR 생성 | RCA/Safe PR | Safe PR client는 feature flag로 보호 |
+| Prometheus/Loki 실제 adapter | Target/Telemetry | fake adapter는 fallback으로 유지 |
+| outbox 도입 여부 | Platform/Integration | 실제 PR side effect 전 결정 |
+| 수요일 demo script | Platform/Integration + 각 담당자 | 매주 수요일은 실행 가능한 demo 필요 |
 
-## Weekly Coordination
+## 주간 협업 흐름
 
-- Monday: assign PRs from WBS.
-- Tuesday: integration freeze by evening.
-- Wednesday morning: only demo rehearsal and critical fixes.
-- Wednesday report: show a running demo, not only slides.
-- Thursday/Friday: feature implementation.
-- Weekend: documentation cleanup and integration risk reduction.
+- 월요일: WBS에서 이번 주 PR 단위 확정
+- 화요일: 저녁 전 integration freeze
+- 수요일 오전: demo rehearsal과 critical fix만 진행
+- 수요일 보고: slide가 아니라 실행 demo를 보여준다
+- 목요일/금요일: 기능 구현
+- 주말: 문서 정리와 integration risk 감소
 
-## Cross-Team Contract Rules
+## 팀 간 계약 규칙
 
-- New API route: Gateway/Auth opens PR and updates schema/docs.
-- New event subject: owner opens PR and updates `EventSubject`, `docs/events.md`, tests.
-- New DB table: owner updates `Database.init`, docs, and test coverage.
-- New Kubernetes permission: Target/Telemetry opens PR and explains RBAC scope.
-- New UI dependency on API: Dashboard/Docs adds API contract note first.
-
+- 새 API route: Gateway/Auth가 PR을 열고 schema/docs를 수정한다.
+- 새 event subject: 담당자가 `EventSubject`, `docs/events.md`, test를 함께 수정한다.
+- 새 DB table: 담당자가 `Database.init`, docs, test coverage를 함께 수정한다.
+- 새 Kubernetes permission: Target/Telemetry가 PR에서 RBAC 범위를 설명한다.
+- dashboard 의존성이 생기는 API 변경: 현재는 Gateway/Auth와 Platform/Integration이 문서에 먼저 남긴다.
