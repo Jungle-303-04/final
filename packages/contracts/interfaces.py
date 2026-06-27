@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from packages.contracts.event_bus.interfaces import (
-    Event,
+    EventEnvelope,
     EventRecorder,
     JsonObject,
 )
@@ -17,23 +17,31 @@ class InitializableStore(Protocol):
 
 
 class EventProcessingStore(EventRecorder, Protocol):
-    def begin_event_processing(self, evt: Event, consumer: str) -> EventProcessingRecord: ...
+    def begin_event_processing(
+        self, evt: EventEnvelope, consumer: str
+    ) -> EventProcessingRecord: ...
 
-    def finish_event_processing(self, evt: Event, consumer: str) -> None: ...
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str
+    ) -> None: ...
 
-    def fail_event_processing(self, evt: Event, consumer: str, error: str, status: str) -> None: ...
+    def fail_event_processing(
+        self, evt: EventEnvelope, consumer: str, error: str, status: str
+    ) -> None: ...
 
 
 class DeadLetterStore(Protocol):
     def record_dead_letter(
-        self, evt: Event, consumer: str, error: str, attempts: int
+        self, evt: EventEnvelope, consumer: str, error: str, attempts: int
     ) -> JsonObject: ...
 
     def list_dead_letters(self, limit: int) -> list[JsonObject]: ...
 
     def get_dead_letter(self, dead_letter_id: int) -> JsonObject | None: ...
 
-    def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> None: ...
+    def mark_dead_letter_replayed(
+        self, dead_letter_id: int, replay_event_id: str
+    ) -> None: ...
 
 
 class OAuthAccountStore(Protocol):
@@ -43,13 +51,19 @@ class OAuthAccountStore(Protocol):
 
 
 class SessionStore(Protocol):
-    async def create_session(self, user_id: str, roles: list[str] | None = None) -> Any: ...
+    async def create_session(
+        self, user_id: str, roles: list[str] | None = None
+    ) -> Any: ...
 
     async def get_session(self, token: str | None) -> Any | None: ...
 
-    async def save_oauth_state(self, state: str, payload: JsonObject) -> None: ...
+    async def save_oauth_state(
+        self, state: str, payload: JsonObject
+    ) -> None: ...
 
-    async def consume_oauth_state(self, state: str | None) -> JsonObject | None: ...
+    async def consume_oauth_state(
+        self, state: str | None
+    ) -> JsonObject | None: ...
 
     async def check_rate_limit(self, key: str) -> None: ...
 
@@ -61,35 +75,52 @@ class RepoChangeStore(Protocol):
 
 
 class AgentCommandQueue(Protocol):
-    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None: ...
+    async def queue_agent_command(
+        self, correlation_id: str, plan: JsonObject, status: str
+    ) -> None: ...
 
-    def lease_agent_command(
+    async def lease_agent_command(
         self, cluster_id: str, queued_status: str, leased_status: str
     ) -> CommandRecord | None: ...
 
-    def complete_agent_command(self, command_id: str, result: JsonObject) -> str | None: ...
+    async def complete_agent_command(
+        self, command_id: str, result: JsonObject
+    ) -> str | None: ...
 
 
 class RcaStore(Protocol):
-    def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None: ...
+    def save_evidence(
+        self, correlation_id: str, kind: str, payload: JsonObject
+    ) -> None: ...
 
     def save_rca_report(
-        self, correlation_id: str, root_cause: str, action: str, payload: JsonObject
+        self,
+        correlation_id: str,
+        root_cause: str,
+        action: str,
+        payload: JsonObject,
     ) -> None: ...
 
     def save_pull_request(
-        self, correlation_id: str, pr_url: str, title: str, body: str, status: str
+        self,
+        correlation_id: str,
+        pr_url: str,
+        title: str,
+        body: str,
+        status: str,
     ) -> None: ...
 
 
 class DashboardReadModel(Protocol):
-    def upsert_dashboard(self, evt: Event, status: str, summary: str) -> None: ...
+    def upsert_dashboard(
+        self, evt: EventEnvelope, status: str, summary: str
+    ) -> None: ...
 
     def list_dashboard(self) -> list[JsonObject]: ...
 
 
 class AuditLogStore(Protocol):
-    def append_audit_log(self, evt: Event) -> None: ...
+    def append_audit_log(self, evt: EventEnvelope) -> None: ...
 
 
 class ManagementPlaneClient(Protocol):
@@ -99,6 +130,10 @@ class ManagementPlaneClient(Protocol):
 
     async def ship_evidence(self, evidence: JsonObject) -> int: ...
 
-    async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None: ...
+    async def poll_command(
+        self, cluster_id: str, timeout_seconds: int
+    ) -> CommandRecord | None: ...
 
-    async def complete_command(self, command_id: str, result: JsonObject) -> None: ...
+    async def complete_command(
+        self, command_id: str, result: JsonObject
+    ) -> None: ...
