@@ -30,7 +30,7 @@
 | 역할 | 자유롭게 변경 가능 | 변경 전 조율 필요 |
 | --- | --- | --- |
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
-| Gateway/Auth | `services/api-gateway`, auth/session schema | event subject, DB schema, target agent protocol |
+| Gateway/Auth | `services/api-gateway`, `packages/contracts/gateway`, `packages/contracts/identity`, `packages/contracts/integrations`, `packages/contracts/security` | event subject, shared DB schema, target agent protocol |
 | GitOps/Command | `services/gitops-sync-worker`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
 | RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service`, Safe PR logic | GitHub token scope, command payload, dashboard read model |
 | Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
@@ -39,7 +39,7 @@
 
 | 미흡한 부분 | 담당 | 메모 |
 | --- | --- | --- |
-| 실제 GitHub OAuth token exchange | Gateway/Auth | fake adapter를 교체하되 Token Vault 흐름은 유지 |
+| Gateway/Auth 최종 권한 모델 | Gateway/Auth | 일반 로그인, Redis session, org/project role, integration target/credential, Token Broker를 단계별로 구현 |
 | manifest render와 desired diff 정교화 | GitOps/Command | GitOps event와 command 생성 테스트 필요 |
 | 실제 GitHub PR 생성 | RCA/Safe PR | Safe PR client는 feature flag로 보호 |
 | Prometheus/Loki 실제 adapter | Target/Telemetry | fake adapter는 fallback으로 유지 |
