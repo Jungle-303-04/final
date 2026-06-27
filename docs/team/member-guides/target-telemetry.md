@@ -111,15 +111,18 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 
 ## 작업 시작 순서
 
-처음에는 아래 순서만 따른다.
+Management Gateway API 계약은 아직 구현 중이므로 처음부터 Agent-Gateway 계약을 고정하지 않는다. 먼저 Prometheus를 독립적으로 설치하고, 더미 데이터를 넣고, 다시 query로 꺼내는 폐쇄 루프를 만든다.
 
-1. Agent HTTP 계약과 fake client를 정리한다.
-2. `POST /agent/connect`, `POST /agent/evidence`, command poll/result 흐름을 붙인다.
-3. Kubernetes API로 pod/event 상태를 읽어 fake evidence가 아닌 실제 evidence를 만든다.
-4. Node Collector가 `/metrics`를 제공하게 한다.
-5. Prometheus query adapter 하나를 붙인다.
-6. Loki 또는 OTel은 Prometheus 흐름이 안정된 뒤 하나만 붙인다.
-7. raw telemetry를 `MetricEvidence`, `LogEvidence`, `PodEvidence`, `TraceEvidence`로 축약한다.
+1. Prometheus를 Helm으로 설치하고 values/dry-run 기준을 정리한다.
+2. 더미 `/metrics` exporter를 만들어 Prometheus가 scrape하게 한다.
+3. Prometheus query API로 더미 metric을 직접 조회한다.
+4. Prometheus query를 코드 구조로 감싼다.
+5. Target Agent 안에 더미 query API를 만들고, 받은 query를 Prometheus에 실행한다.
+6. Agent가 Prometheus 결과를 더미 response/evidence 형태로 돌려준다.
+7. Kubernetes API로 pod/event evidence를 수집한다.
+8. Node Collector `/metrics`를 구현하고 Prometheus에 scrape시킨다.
+9. Node Collector metric을 Agent query API로 다시 꺼내본다.
+10. 그 다음 Gateway API 계약이 준비되면 실제 `POST /agent/evidence` 흐름과 연결한다.
 
 상세 Phase는 [구현 Phase 계획](target-telemetry-implementation-plan.md)을 따른다.
 
