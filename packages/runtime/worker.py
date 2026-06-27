@@ -7,11 +7,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from packages.contracts.event_bus.fields import EVENT_ID
 from packages.contracts.event_bus.interfaces import (
-    Event,
     EventClient,
     EventConsumerBus,
+    EventEnvelope,
     EventHandler,
     EventMessage,
 )
@@ -57,22 +56,22 @@ class EventHandlerSpec:
 
 
 class Codec(Protocol):
-    def decode(self, message: EventMessage) -> Event: ...
+    def decode(self, message: EventMessage) -> EventEnvelope: ...
 
 
 class JsonCodec:
-    def decode(self, message: EventMessage) -> Event:
-        return json.loads(message.data.decode())
+    def decode(self, message: EventMessage) -> EventEnvelope:
+        return EventEnvelope.from_mapping(json.loads(message.data.decode()))
 
 
 class DeadLetterPort(Protocol):
     async def capture(
         self,
-        evt: Event,
+        evt: EventEnvelope,
         consumer: str,
         error: Exception,
         attempts: int,
-    ) -> Event: ...
+    ) -> EventEnvelope: ...
 
 
 class EventProcessor:
@@ -104,7 +103,7 @@ class EventProcessor:
 
         attempts = int(processing["attempts"])
         try:
-            with event_causation(evt[EVENT_ID]):
+            with event_causation(evt.event_id):
                 await self.handler(evt)
             self.ledger.finish(evt)
             await message.ack()
@@ -114,7 +113,7 @@ class EventProcessor:
     async def fail(
         self,
         message: EventMessage,
-        evt: Event,
+        evt: EventEnvelope,
         error: Exception,
         attempts: int,
     ) -> None:

@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from packages.events.bus import (
@@ -24,6 +25,7 @@ def load_module(path: Path, name: str):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load module: {path}")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     previous_settings = sys.modules.pop("settings", None)
     sys.path.insert(0, str(path.parent))
     try:
@@ -89,7 +91,7 @@ def test_publish_and_record_uses_event_ports() -> None:
             "corr-1",
         )
 
-        assert created["correlation_id"] == "corr-1"
+        assert created.correlation_id == "corr-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
 
@@ -110,7 +112,7 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
                 "corr-1",
             )
 
-        assert created["causation_id"] == "parent-event-1"
+        assert created.causation_id == "parent-event-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
 
@@ -125,14 +127,16 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
         workflow = module.CommandWorkflow(events, queue)
 
         await workflow.handle(
-            {
-                "payload": {
+            event(
+                "command.requested",
+                "test",
+                {
                     "cluster_id": "target-cluster-01",
                     "action": "rollout_restart",
                     "namespace": "sandbox",
                 },
-                "correlation_id": "corr-2",
-            }
+                "corr-2",
+            )
         )
 
         assert len(queue.queued) == 1
@@ -140,10 +144,33 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
         assert correlation_id == "corr-2"
         assert plan["cluster_id"] == "target-cluster-01"
         assert status == "queued"
-        assert [evt["subject"] for evt in events.published] == [
+        assert [evt.subject for evt in events.published] == [
             "command.dispatch.ready",
             "command.dispatched",
             "command.queued_for_agent",
         ]
 
     asyncio.run(run())
+
+
+def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
+    policy = load_module(
+        ROOT_DIR / "services" / "command-worker" / "command_policy.py",
+        "test_command_policy",
+    )
+    rule = policy.EqualsRule(
+        name="sandbox_namespace",
+        field="namespace",
+        expected="sandbox",
+        reason="only sandbox namespace writes are allowed",
+        default="sandbox",
+    )
+    engine = policy.Policy([rule])
+
+    dict_target = policy.Payload({"namespace": "sandbox"})
+    model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
+    rejected = policy.ModelLookup(SimpleNamespace(namespace="production"))
+
+    assert engine.evaluate(dict_target).allowed is True
+    assert engine.evaluate(model_target).allowed is True
+    assert engine.evaluate(rejected).allowed is False

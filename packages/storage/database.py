@@ -18,7 +18,10 @@ from sqlalchemy.ext.asyncio import (
 from packages.config.constants import Auth, GitHub, Postgres
 from packages.config.settings import env
 from packages.config.time import now_iso
-from packages.contracts.event_bus.interfaces import Event, JsonObject
+from packages.contracts.event_bus.interfaces import (
+    EventEnvelope,
+    JsonObject,
+)
 from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.contracts.interfaces import (
     CommandRecord,
@@ -104,16 +107,16 @@ class DatabaseConnection:
 
 
 class EventRepository(DatabaseConnection):
-    def record_event(self, evt: Event) -> None:
+    def record_event(self, evt: EventEnvelope) -> None:
         table = EventModel.__table__
         statement = (
             pg_insert(table)
             .values(
-                event_id=evt["event_id"],
-                subject=evt["subject"],
-                source=evt["source"],
-                correlation_id=evt["correlation_id"],
-                payload=evt["payload"],
+                event_id=evt.event_id,
+                subject=evt.subject,
+                source=evt.source,
+                correlation_id=evt.correlation_id,
+                payload=evt.payload,
             )
             .on_conflict_do_nothing(index_elements=[table.c.event_id])
         )
@@ -121,7 +124,7 @@ class EventRepository(DatabaseConnection):
             conn.execute(statement)
 
     def begin_event_processing(
-        self, evt: Event, consumer: str
+        self, evt: EventEnvelope, consumer: str
     ) -> EventProcessingRecord:
         table = EventProcessing.__table__
         with self.connection() as conn:
@@ -138,15 +141,15 @@ class EventRepository(DatabaseConnection):
             )
 
     def insert_event_processing(
-        self, conn: Connection, table: Any, evt: Event, consumer: str
+        self, conn: Connection, table: Any, evt: EventEnvelope, consumer: str
     ) -> None:
         statement = (
             pg_insert(table)
             .values(
-                event_id=evt["event_id"],
+                event_id=evt.event_id,
                 consumer=consumer,
-                subject=evt["subject"],
-                correlation_id=evt["correlation_id"],
+                subject=evt.subject,
+                correlation_id=evt.correlation_id,
                 status=EventProcessingStatus.PROCESSING,
                 attempts=0,
                 updated_at=func.now(),
@@ -158,11 +161,11 @@ class EventRepository(DatabaseConnection):
         conn.execute(statement)
 
     def claim_event_processing(
-        self, conn: Connection, table: Any, evt: Event, consumer: str
+        self, conn: Connection, table: Any, evt: EventEnvelope, consumer: str
     ) -> JsonObject | None:
         statement = (
             update(table)
-            .where(table.c.event_id == evt["event_id"])
+            .where(table.c.event_id == evt.event_id)
             .where(table.c.consumer == consumer)
             .where(
                 table.c.status.not_in(
@@ -184,21 +187,23 @@ class EventRepository(DatabaseConnection):
         return row_dict(row) if row else None
 
     def get_event_processing(
-        self, conn: Connection, table: Any, evt: Event, consumer: str
+        self, conn: Connection, table: Any, evt: EventEnvelope, consumer: str
     ) -> JsonObject | None:
         statement = select(table.c.status, table.c.attempts).where(
-            table.c.event_id == evt["event_id"],
+            table.c.event_id == evt.event_id,
             table.c.consumer == consumer,
         )
         row = conn.execute(statement).mappings().first()
         return row_dict(row) if row else None
 
-    def finish_event_processing(self, evt: Event, consumer: str) -> None:
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str
+    ) -> None:
         table = EventProcessing.__table__
         statement = (
             update(table)
             .where(
-                table.c.event_id == evt["event_id"],
+                table.c.event_id == evt.event_id,
                 table.c.consumer == consumer,
             )
             .values(
@@ -211,13 +216,13 @@ class EventRepository(DatabaseConnection):
             conn.execute(statement)
 
     def fail_event_processing(
-        self, evt: Event, consumer: str, error: str, status: str
+        self, evt: EventEnvelope, consumer: str, error: str, status: str
     ) -> None:
         table = EventProcessing.__table__
         statement = (
             update(table)
             .where(
-                table.c.event_id == evt["event_id"],
+                table.c.event_id == evt.event_id,
                 table.c.consumer == consumer,
             )
             .values(
@@ -232,19 +237,19 @@ class EventRepository(DatabaseConnection):
 
 class DeadLetterRepository(DatabaseConnection):
     def record_dead_letter(
-        self, evt: Event, consumer: str, error: str, attempts: int
+        self, evt: EventEnvelope, consumer: str, error: str, attempts: int
     ) -> JsonObject:
         table = EventDeadLetter.__table__
         statement = (
             pg_insert(table)
             .values(
-                original_event_id=evt["event_id"],
-                original_subject=evt["subject"],
+                original_event_id=evt.event_id,
+                original_subject=evt.subject,
                 consumer=consumer,
-                correlation_id=evt["correlation_id"],
+                correlation_id=evt.correlation_id,
                 attempts=attempts,
                 error=compact_error(error),
-                payload=evt["payload"],
+                payload=evt.payload,
                 status="open",
             )
             .returning(table.c.id, table.c.created_at)
@@ -253,10 +258,10 @@ class DeadLetterRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().one()
         return {
             "dead_letter_id": row["id"],
-            "original_event_id": evt["event_id"],
-            "original_subject": evt["subject"],
+            "original_event_id": evt.event_id,
+            "original_subject": evt.subject,
             "consumer": consumer,
-            "correlation_id": evt["correlation_id"],
+            "correlation_id": evt.correlation_id,
             "attempts": attempts,
             "error": compact_error(error),
             "created_at": row["created_at"].isoformat(),
@@ -509,19 +514,21 @@ class RcaRepository(DatabaseConnection):
 
 
 class DashboardRepository(DatabaseConnection):
-    def upsert_dashboard(self, evt: Event, status: str, summary: str) -> None:
+    def upsert_dashboard(
+        self, evt: EventEnvelope, status: str, summary: str
+    ) -> None:
         payload = {
-            "last_event_id": evt["event_id"],
-            "last_source": evt["source"],
-            "last_payload": evt["payload"],
+            "last_event_id": evt.event_id,
+            "last_source": evt.source,
+            "last_payload": evt.payload,
             "updated_at": now_iso(),
         }
         table = DashboardCard.__table__
         insert_statement = pg_insert(table).values(
-            correlation_id=evt["correlation_id"],
+            correlation_id=evt.correlation_id,
             status=status,
             summary=summary,
-            last_event=evt["subject"],
+            last_event=evt.subject,
             payload=payload,
             updated_at=func.now(),
         )
@@ -551,14 +558,14 @@ class DashboardRepository(DatabaseConnection):
 
 
 class AuditLogRepository(DatabaseConnection):
-    def append_audit_log(self, evt: Event) -> None:
+    def append_audit_log(self, evt: EventEnvelope) -> None:
         table = AuditLog.__table__
         statement = pg_insert(table).values(
-            event_id=evt["event_id"],
-            subject=evt["subject"],
-            source=evt["source"],
-            correlation_id=evt["correlation_id"],
-            payload=evt["payload"],
+            event_id=evt.event_id,
+            subject=evt.subject,
+            source=evt.source,
+            correlation_id=evt.correlation_id,
+            payload=evt.payload,
         )
         with self.connection() as conn:
             conn.execute(statement)

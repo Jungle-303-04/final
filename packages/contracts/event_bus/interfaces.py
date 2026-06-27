@@ -1,7 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol, TypedDict
+
+from packages.contracts.event_bus.fields import (
+    CAUSATION_ID,
+    CORRELATION_ID,
+    CREATED_AT,
+    EVENT_ID,
+    PAYLOAD,
+    SOURCE,
+    SUBJECT,
+)
 
 JsonObject = dict[str, Any]
 
@@ -16,11 +27,45 @@ class Event(TypedDict):
     payload: JsonObject
 
 
-EventHandler = Callable[[Event], Awaitable[None]]
+@dataclass(frozen=True)
+class EventEnvelope:
+    event_id: str
+    subject: str
+    source: str
+    correlation_id: str
+    causation_id: str | None
+    created_at: str
+    payload: JsonObject
+
+    @classmethod
+    def from_mapping(cls, raw: Mapping[str, Any]) -> EventEnvelope:
+        return cls(
+            event_id=raw[EVENT_ID],
+            subject=raw[SUBJECT],
+            source=raw[SOURCE],
+            correlation_id=raw[CORRELATION_ID],
+            causation_id=raw.get(CAUSATION_ID),
+            created_at=raw[CREATED_AT],
+            payload=raw[PAYLOAD],
+        )
+
+    def to_dict(self) -> Event:
+        return {
+            EVENT_ID: self.event_id,
+            SUBJECT: self.subject,
+            SOURCE: self.source,
+            CORRELATION_ID: self.correlation_id,
+            CAUSATION_ID: self.causation_id,
+            CREATED_AT: self.created_at,
+            PAYLOAD: self.payload,
+        }
+
+
+EventHandler = Callable[[EventEnvelope], Awaitable[None]]
 
 
 class HandlesEvent(Protocol):
-    async def handle(self, evt: Event) -> None: ...
+    async def handle(self, evt: EventEnvelope) -> None: ...
 
 
 class EventMessage(Protocol):
@@ -45,11 +90,11 @@ class EventPublisher(Protocol):
         payload: JsonObject,
         correlation_id: str | None = None,
         causation_id: str | None = None,
-    ) -> Event: ...
+    ) -> EventEnvelope: ...
 
 
 class EventRecorder(Protocol):
-    def record_event(self, evt: Event) -> None: ...
+    def record_event(self, evt: EventEnvelope) -> None: ...
 
 
 class EventClient(Protocol):
@@ -60,7 +105,7 @@ class EventClient(Protocol):
         payload: JsonObject,
         correlation_id: str | None = None,
         causation_id: str | None = None,
-    ) -> Event: ...
+    ) -> EventEnvelope: ...
 
 
 class EventConsumerBus(EventPublisher, Protocol):

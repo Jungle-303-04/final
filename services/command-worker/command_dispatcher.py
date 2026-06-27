@@ -1,94 +1,49 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
-from typing import Any, Final, Protocol
+from typing import Any, Protocol
 
 from command_config import CommandConfigPort
-from command_policy import Payload
+from command_policy import Lookup
 
-from packages.contracts.event_bus.fields import CORRELATION_ID
-from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.interfaces import EventClient, EventEnvelope
+from packages.contracts.event_bus.payloads import (
+    CommandDispatchedPayload,
+    CommandDispatchReadyPayload,
+    CommandQueuedForAgentPayload,
+    Plan,
+    Route,
+)
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.interfaces import AgentCommandQueue
 
 
-class Field:
-    CHANNEL: Final[str] = "channel"
-    PLAN: Final[str] = "plan"
-    ROUTE: Final[str] = "route"
-    STEPS: Final[str] = "steps"
-
-
-@dataclass(frozen=True)
-class Plan:
-    data: dict[str, Any]
-
-    @classmethod
-    def build(cls, command: Payload, config: CommandConfigPort) -> Plan:
-        return cls(
-            {
-                Gateway.COMMAND_ID: str(uuid.uuid4()),
-                Gateway.CLUSTER_ID: command.value(
-                    Gateway.CLUSTER_ID,
-                    config.default_cluster_id,
-                ),
-                Gateway.ACTION: command.value(
-                    Gateway.ACTION,
-                    config.default_command_action,
-                ),
-                Gateway.NAMESPACE: command.value(
-                    Gateway.NAMESPACE,
-                    config.default_namespace,
-                ),
-                Field.STEPS: list(config.policy_steps),
-            }
-        )
-
-    @property
-    def command_id(self) -> str:
-        return self.data[Gateway.COMMAND_ID]
-
-    @property
-    def cluster_id(self) -> str:
-        return self.data[Gateway.CLUSTER_ID]
-
-    def ready_event_payload(self) -> dict[str, Any]:
-        return {Field.PLAN: self.data}
-
-    def dispatched_event_payload(
-        self, config: CommandConfigPort
-    ) -> dict[str, Any]:
-        return {
-            Field.PLAN: self.data,
-            Field.ROUTE: {
-                Field.CHANNEL: config.agent_route_channel,
-                Gateway.CLUSTER_ID: self.cluster_id,
-            },
-        }
-
-    def queued_event_payload(self) -> dict[str, Any]:
-        return {
-            Gateway.COMMAND_ID: self.command_id,
-            Gateway.CLUSTER_ID: self.cluster_id,
-        }
-
-
 class Planner(Protocol):
-    def build(self, command: Payload) -> Plan: ...
+    def build(self, command: Lookup) -> Plan: ...
 
 
 class DispatchPort(Protocol):
-    async def dispatch(self, evt: dict[str, Any], plan: Plan) -> None: ...
+    async def dispatch(self, evt: EventEnvelope, plan: Plan) -> None: ...
 
 
 class DefaultPlanner:
     def __init__(self, config: CommandConfigPort) -> None:
         self.config = config
 
-    def build(self, command: Payload) -> Plan:
-        return Plan.build(command, self.config)
+    def build(self, command: Lookup) -> Plan:
+        config = self.config
+        return Plan(
+            command_id=str(uuid.uuid4()),
+            cluster_id=command.value(
+                Gateway.CLUSTER_ID, config.default_cluster_id
+            ),
+            action=command.value(Gateway.ACTION, config.default_command_action),
+            namespace=command.value(
+                Gateway.NAMESPACE, config.default_namespace
+            ),
+            steps=list(config.policy_steps),
+        )
 
 
 class Dispatcher:
@@ -102,31 +57,39 @@ class Dispatcher:
         self.commands = commands
         self.config = config
 
-    async def dispatch(self, evt: dict[str, Any], plan: Plan) -> None:
+    async def dispatch(self, evt: EventEnvelope, plan: Plan) -> None:
         await self.emit(
             evt,
             EventSubject.COMMAND_DISPATCH_READY,
-            plan.ready_event_payload(),
+            CommandDispatchReadyPayload(plan=plan).to_payload(),
         )
         await self.emit(
             evt,
             EventSubject.COMMAND_DISPATCHED,
-            plan.dispatched_event_payload(self.config),
+            CommandDispatchedPayload(
+                plan=plan,
+                route=Route(
+                    channel=self.config.agent_route_channel,
+                    cluster_id=plan.cluster_id,
+                ),
+            ).to_payload(),
         )
         await self.commands.queue_agent_command(
-            evt[CORRELATION_ID],
-            plan.data,
+            evt.correlation_id,
+            plan.to_payload(),
             self.config.command_status_queued,
         )
         await self.emit(
             evt,
             EventSubject.COMMAND_QUEUED_FOR_AGENT,
-            plan.queued_event_payload(),
+            CommandQueuedForAgentPayload(
+                command_id=plan.command_id, cluster_id=plan.cluster_id
+            ).to_payload(),
         )
 
     async def emit(
         self,
-        evt: dict[str, Any],
+        evt: EventEnvelope,
         subject: str,
         payload: dict[str, Any],
     ) -> None:
@@ -134,5 +97,5 @@ class Dispatcher:
             subject,
             self.config.service_name,
             payload,
-            evt[CORRELATION_ID],
+            evt.correlation_id,
         )

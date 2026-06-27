@@ -9,11 +9,10 @@ from typing import Any
 
 from packages.config.constants import Nats, Runtime
 from packages.config.settings import env
-from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID
 from packages.contracts.event_bus.interfaces import (
-    Event,
     EventBus,
     EventClient,
+    EventEnvelope,
     EventPublisher,
     EventRecorder,
     EventSubscription,
@@ -111,12 +110,12 @@ class NatsEventBus(EventBus):
         payload: JsonObject,
         correlation_id: str | None = None,
         causation_id: str | None = None,
-    ) -> Event:
+    ) -> EventEnvelope:
         assert self.js is not None
         evt = event(subject, source, payload, correlation_id, causation_id)
-        await self.js.publish(subject, json.dumps(evt).encode())
+        await self.js.publish(subject, json.dumps(evt.to_dict()).encode())
         print(
-            f"published {subject} correlation={evt[CORRELATION_ID]}", flush=True
+            f"published {subject} correlation={evt.correlation_id}", flush=True
         )
         return evt
 
@@ -145,7 +144,7 @@ class RecordedEventClient:
         payload: JsonObject,
         correlation_id: str | None = None,
         causation_id: str | None = None,
-    ) -> Event:
+    ) -> EventEnvelope:
         evt = await self.publisher.publish(
             subject,
             source,
@@ -170,11 +169,11 @@ class DeadLetterSink:
 
     async def capture(
         self,
-        evt: Event,
+        evt: EventEnvelope,
         consumer: str,
         error: Exception,
         attempts: int,
-    ) -> Event:
+    ) -> EventEnvelope:
         dead_letter = self.store.record_dead_letter(
             evt, consumer, str(error), attempts
         )
@@ -182,8 +181,8 @@ class DeadLetterSink:
             EventSubject.DEAD_LETTER_CREATED,
             self.source,
             dead_letter,
-            evt[CORRELATION_ID],
-            evt[EVENT_ID],
+            evt.correlation_id,
+            evt.event_id,
         )
 
 
@@ -195,7 +194,7 @@ async def publish_and_record(
     payload: JsonObject,
     correlation_id: str | None = None,
     causation_id: str | None = None,
-) -> Event:
+) -> EventEnvelope:
     return await RecordedEventClient(bus, db).publish(
         subject,
         source,

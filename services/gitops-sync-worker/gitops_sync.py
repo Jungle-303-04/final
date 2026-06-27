@@ -1,38 +1,26 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Final
 
 from settings import Settings
 
 from packages.config.constants import Sandbox, Target
 from packages.config.settings import env
-from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
-from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.interfaces import EventClient, EventEnvelope
+from packages.contracts.event_bus.payloads import (
+    CommandRequestedPayload,
+    DesiredDiffPayload,
+    Diff,
+    GitChangedPayload,
+    Manifest,
+    ManifestRenderedPayload,
+    RenderedManifest,
+    RenderedMetadata,
+    RenderedSpec,
+)
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.gateway.fields import Gateway
+from packages.contracts.gateway.requests import GitHubWebhookRequest
 from packages.contracts.interfaces import RepoChangeStore
-
-
-class Field:
-    ACTUAL_IMAGE: Final[str] = "actual_image"
-    APP: Final[str] = "app"
-    API_VERSION: Final[str] = "apiVersion"
-    COMMIT_SHA: Final[str] = "commit_sha"
-    DESIRED_IMAGE: Final[str] = "desired_image"
-    DIFF: Final[str] = "diff"
-    IMAGE: Final[str] = "image"
-    KIND: Final[str] = "kind"
-    MANIFEST: Final[str] = "manifest"
-    METADATA: Final[str] = "metadata"
-    NAME: Final[str] = "name"
-    PREVIOUS_IMAGE: Final[str] = "previous_image"
-    REASON: Final[str] = "reason"
-    RENDERED_MANIFEST: Final[str] = "rendered_manifest"
-    REPLICAS: Final[str] = "replicas"
-    RESOURCE: Final[str] = "resource"
-    RISK: Final[str] = "risk"
-    SPEC: Final[str] = "spec"
 
 
 class GitOpsSyncWorkflow:
@@ -40,67 +28,64 @@ class GitOpsSyncWorkflow:
         self.events = events
         self.repo = repo
 
-    async def handle(self, evt: dict[str, Any]) -> None:
-        payload = evt[PAYLOAD]
-        commit_sha = payload.get(Field.COMMIT_SHA) or str(uuid.uuid4())[:8]
-        manifest = {
-            Field.APP: Settings.DEFAULT_APP_NAME,
-            Field.IMAGE: payload.get(Field.IMAGE, Settings.DEFAULT_IMAGE),
-            Field.REPLICAS: payload.get(
-                Field.REPLICAS, Settings.DEFAULT_REPLICAS
+    async def handle(self, evt: EventEnvelope) -> None:
+        data = GitHubWebhookRequest.model_validate(evt.payload)
+        commit_sha = data.commit_sha or str(uuid.uuid4())[:8]
+        manifest = Manifest(
+            app=Settings.DEFAULT_APP_NAME,
+            image=data.image,
+            replicas=data.replicas,
+            namespace=Sandbox.NAMESPACE,
+        )
+        self.repo.save_repo_change(
+            evt.correlation_id, commit_sha, manifest.to_payload()
+        )
+        rendered = RenderedManifest(
+            apiVersion=Settings.MANIFEST_API_VERSION,
+            kind=Settings.MANIFEST_KIND,
+            metadata=RenderedMetadata(
+                name=manifest.app, namespace=manifest.namespace
             ),
-            Gateway.NAMESPACE: Sandbox.NAMESPACE,
-        }
-        self.repo.save_repo_change(evt[CORRELATION_ID], commit_sha, manifest)
-
-        rendered = {
-            Field.API_VERSION: Settings.MANIFEST_API_VERSION,
-            Field.KIND: Settings.MANIFEST_KIND,
-            Field.METADATA: {
-                Field.NAME: manifest[Field.APP],
-                Gateway.NAMESPACE: manifest[Gateway.NAMESPACE],
-            },
-            Field.SPEC: {
-                Field.REPLICAS: manifest[Field.REPLICAS],
-                Field.IMAGE: manifest[Field.IMAGE],
-            },
-        }
-        diff = {
-            Field.RESOURCE: Settings.RESOURCE_REF,
-            Gateway.NAMESPACE: Sandbox.NAMESPACE,
-            Field.DESIRED_IMAGE: rendered[Field.SPEC][Field.IMAGE],
-            Field.ACTUAL_IMAGE: Settings.PREVIOUS_IMAGE,
-            Field.RISK: Settings.SYNC_RISK,
-        }
+            spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
+        )
+        diff = Diff(
+            resource=Settings.RESOURCE_REF,
+            namespace=Sandbox.NAMESPACE,
+            desired_image=rendered.spec.image,
+            actual_image=Settings.PREVIOUS_IMAGE,
+            risk=Settings.SYNC_RISK,
+        )
         await self.events.publish(
             EventSubject.GIT_CHANGED,
             Settings.SERVICE_NAME,
-            {Field.COMMIT_SHA: commit_sha, Field.MANIFEST: manifest},
-            evt[CORRELATION_ID],
+            GitChangedPayload(
+                commit_sha=commit_sha, manifest=manifest
+            ).to_payload(),
+            evt.correlation_id,
         )
         await self.events.publish(
             EventSubject.MANIFEST_RENDERED,
             Settings.SERVICE_NAME,
-            {Field.RENDERED_MANIFEST: rendered},
-            evt[CORRELATION_ID],
+            ManifestRenderedPayload(rendered_manifest=rendered).to_payload(),
+            evt.correlation_id,
         )
         await self.events.publish(
             EventSubject.DESIRED_DIFF_DETECTED,
             Settings.SERVICE_NAME,
-            {Field.DIFF: diff},
-            evt[CORRELATION_ID],
+            DesiredDiffPayload(diff=diff).to_payload(),
+            evt.correlation_id,
         )
         await self.events.publish(
             EventSubject.COMMAND_REQUESTED,
             Settings.SERVICE_NAME,
-            {
-                Gateway.CLUSTER_ID: env(
+            CommandRequestedPayload(
+                cluster_id=env(
                     Settings.TARGET_CLUSTER_ENV, Target.DEFAULT_CLUSTER_ID
                 ),
-                Gateway.ACTION: Settings.SYNC_ACTION,
-                Gateway.NAMESPACE: Sandbox.NAMESPACE,
-                Field.REASON: Settings.SYNC_REASON,
-                Field.DIFF: diff,
-            },
-            evt[CORRELATION_ID],
+                action=Settings.SYNC_ACTION,
+                namespace=Sandbox.NAMESPACE,
+                reason=Settings.SYNC_REASON,
+                diff=diff,
+            ).to_payload(),
+            evt.correlation_id,
         )
