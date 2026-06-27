@@ -200,6 +200,98 @@ GitOps Sync Worker 규칙:
 - 관측 스택 변경은 별도 이슈/PR에서 platform install로 다룬다.
 - 사용자가 직접 운영하는 Prometheus를 GitOps로 관리하려는 경우에는 `project_id`, `target_type`, `owner=customer` 같은 명시적 구분이 필요하다. 기본값은 제외다.
 
+## 사용자 커스텀 Prometheus가 필요하면 어떻게 하는가?
+
+사용자가 “우리 팀 Prometheus도 GitOps로 관리하고 싶다”고 말하는 경우가 생길 수 있다. 이때는 우리 플랫폼용 Prometheus를 사용자에게 같이 쓰게 하는 것이 아니라, 사용자용 Prometheus stack을 별도로 설치하는 개념으로 본다.
+
+두 Prometheus의 역할은 다르다.
+
+```text
+우리 플랫폼용 Prometheus
+  목적: 우리 시스템이 target cluster 상태를 관측하기 위해 사용
+  owner: platform
+  purpose: internal_observability
+  gitops_managed: false
+  기본 GitOps workload diff 대상: 제외
+
+사용자 커스텀 Prometheus
+  목적: 사용자가 자기 서비스/조직 운영을 위해 사용
+  owner: customer
+  purpose: customer_monitoring
+  gitops_managed: true 가능
+  기본 GitOps workload diff 대상: 명시적으로 허용한 경우만 포함
+```
+
+왜 분리해야 하는가:
+
+- 우리 플랫폼용 Prometheus는 RCA/evidence 수집에 필요한 “우리 시스템의 눈”이다.
+- 사용자가 scrape config, retention, RBAC, alert rule을 바꾸면 우리 관측 경로가 깨질 수 있다.
+- 사용자 Prometheus는 사용자의 운영 정책과 비용, 저장 기간, alert rule이 들어가므로 우리 내부 관측 도구와 lifecycle이 다르다.
+- 두 stack을 섞으면 장애가 났을 때 “우리 시스템 문제인지 사용자 설정 문제인지” 구분하기 어렵다.
+
+따라서 사용자 커스텀 Prometheus를 허용하려면 아래처럼 분리한다.
+
+```text
+namespace: observability-system
+  prometheus-platform
+  loki-platform
+  otel-collector-platform
+  owner = platform
+  gitops_managed = false
+
+namespace: user-monitoring 또는 team-a-monitoring
+  prometheus-user
+  grafana-user
+  alertmanager-user
+  owner = customer
+  gitops_managed = true 가능
+```
+
+분리 조건:
+
+- namespace 분리
+- Helm release name 분리
+- ServiceAccount/RBAC 분리
+- storage/PVC 분리
+- ingress/service 분리
+- secret 분리
+- resource quota/limit 적용
+- cluster-wide 권한은 별도 승인
+
+GitOps에서 구분할 최소 메타데이터:
+
+```text
+ManifestScope
+  owner: platform | customer
+  purpose: internal_observability | customer_monitoring | workload
+  gitops_managed: true | false
+  risk_level: namespace | cluster
+```
+
+예시:
+
+```text
+우리 Prometheus
+  owner = platform
+  purpose = internal_observability
+  gitops_managed = false
+  risk_level = cluster
+
+사용자 앱 Deployment
+  owner = customer
+  purpose = workload
+  gitops_managed = true
+  risk_level = namespace
+
+사용자 Prometheus
+  owner = customer
+  purpose = customer_monitoring
+  gitops_managed = true
+  risk_level = cluster
+```
+
+현재 프로젝트에서는 사용자 커스텀 Prometheus까지 구현하지 않는다. 하지만 문서와 경로 설계는 나중에 이 구분을 추가할 수 있게 잡아둔다.
+
 ## Prometheus는 Helm 기반으로 설치해도 되는가?
 
 가능하다. 오히려 처음에는 Helm 기반 설치가 낫다.
