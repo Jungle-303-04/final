@@ -29,8 +29,12 @@ def event(
         EVENT_ID: event_id,
         SUBJECT: subject,
         SOURCE: source,
-        CORRELATION_ID: correlation_id or payload.get(CORRELATION_ID) or event_id,
-        CAUSATION_ID: causation_id or payload.get(CAUSATION_ID) or ROOT_CAUSATION_ID,
+        CORRELATION_ID: correlation_id
+        or payload.get(CORRELATION_ID)
+        or event_id,
+        CAUSATION_ID: causation_id
+        or payload.get(CAUSATION_ID)
+        or ROOT_CAUSATION_ID,
         CREATED_AT: now_iso(),
         PAYLOAD: payload,
     }

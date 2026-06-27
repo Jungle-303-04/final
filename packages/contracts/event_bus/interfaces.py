@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 
-Event = dict[str, Any]
 JsonObject = dict[str, Any]
+
+
+class Event(TypedDict):
+    event_id: str
+    subject: str
+    source: str
+    correlation_id: str
+    causation_id: str | None
+    created_at: str
+    payload: JsonObject
+
+
 EventHandler = Callable[[Event], Awaitable[None]]
 
 
@@ -21,7 +32,9 @@ class EventMessage(Protocol):
 
 
 class EventSubscription(Protocol):
-    async def fetch(self, batch: int, timeout: float | None = None) -> Sequence[EventMessage]: ...
+    async def fetch(
+        self, batch: int, timeout: float | None = None
+    ) -> Sequence[EventMessage]: ...
 
 
 class EventPublisher(Protocol):
@@ -53,6 +66,12 @@ class EventClient(Protocol):
 class EventConsumerBus(EventPublisher, Protocol):
     async def connect(self) -> None: ...
 
-    async def subscribe(self, subject: str, durable: str) -> EventSubscription: ...
+    async def subscribe(
+        self, subject: str, durable: str
+    ) -> EventSubscription: ...
 
     async def close(self) -> None: ...
+
+
+class EventBus(EventConsumerBus, Protocol):
+    pass

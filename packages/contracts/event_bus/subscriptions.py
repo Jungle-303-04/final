@@ -5,6 +5,12 @@ from dataclasses import dataclass
 ALL_EVENTS_SUBJECT = ">"
 
 
+def durable_name(service_name: str, name: str | None = None) -> str:
+    if name is None:
+        return service_name
+    return name
+
+
 @dataclass(frozen=True)
 class WorkerSubscription:
     service_name: str
@@ -13,4 +19,4 @@ class WorkerSubscription:
 
     @property
     def durable(self) -> str:
-        return self.durable_name or self.service_name
+        return durable_name(self.service_name, self.durable_name)

@@ -16,8 +16,15 @@ from packages.contracts.event_bus.interfaces import (
     EventMessage,
 )
 from packages.contracts.event_bus.processing import EventProcessingStatus
-from packages.contracts.interfaces import EventProcessingRecord, EventProcessingStore
-from packages.events.bus import DeadLetterSink, EventBus, RecordedEventClient, event_causation
+from packages.contracts.event_bus.subscriptions import durable_name
+from packages.contracts.interfaces import EventProcessingStore
+from packages.events.bus import (
+    DeadLetterSink,
+    NatsEventBus,
+    RecordedEventClient,
+    event_causation,
+)
+from packages.runtime.ledger import Ledger
 
 if TYPE_CHECKING:
     from packages.storage.database import Database
@@ -46,9 +53,7 @@ class EventHandlerSpec:
 
     @property
     def durable(self) -> str:
-        if self.durable_name is None:
-            return self.service_name
-        return self.durable_name
+        return durable_name(self.service_name, self.durable_name)
 
 
 class Codec(Protocol):
@@ -70,35 +75,6 @@ class DeadLetterPort(Protocol):
     ) -> Event: ...
 
 
-class Ledger:
-    def __init__(self, store: EventProcessingStore, consumer: str) -> None:
-        self.store = store
-        self.consumer = consumer
-
-    def begin(self, evt: Event) -> EventProcessingRecord:
-        self.store.record_event(evt)
-        return self.store.begin_event_processing(evt, self.consumer)
-
-    def finish(self, evt: Event) -> None:
-        self.store.finish_event_processing(evt, self.consumer)
-
-    def retry(self, evt: Event, error: Exception) -> None:
-        self.store.fail_event_processing(
-            evt,
-            self.consumer,
-            str(error),
-            EventProcessingStatus.RETRYING,
-        )
-
-    def dead_letter(self, evt: Event, error: Exception) -> None:
-        self.store.fail_event_processing(
-            evt,
-            self.consumer,
-            str(error),
-            EventProcessingStatus.DEAD_LETTERED,
-        )
-
-
 class EventProcessor:
     def __init__(
         self,
@@ -115,7 +91,9 @@ class EventProcessor:
         self.dead_letters = dead_letters
         self.retry_policy = retry_policy
         self.codec = codec if codec is not None else JsonCodec()
-        self.ledger = ledger if ledger is not None else Ledger(store, service_name)
+        self.ledger = (
+            ledger if ledger is not None else Ledger(store, service_name)
+        )
 
     async def process(self, message: EventMessage) -> None:
         evt = self.codec.decode(message)
@@ -142,7 +120,9 @@ class EventProcessor:
     ) -> None:
         if attempts >= self.retry_policy.max_attempts:
             self.ledger.dead_letter(evt, error)
-            await self.dead_letters.capture(evt, self.service_name, error, attempts)
+            await self.dead_letters.capture(
+                evt, self.service_name, error, attempts
+            )
             await message.ack()
             return
 
@@ -162,7 +142,7 @@ class WorkerRuntime:
             from packages.storage.database import Database
 
             db = Database()
-        self.bus = bus if bus is not None else EventBus()
+        self.bus = bus if bus is not None else NatsEventBus()
         self.db = db
 
     async def run(self) -> None:
@@ -170,7 +150,9 @@ class WorkerRuntime:
 
         await wait_for_database(self.db)
         await self.bus.connect()
-        sub = await self.bus.subscribe(self.spec.subject, durable=self.spec.durable)
+        sub = await self.bus.subscribe(
+            self.spec.subject, durable=self.spec.durable
+        )
         events = RecordedEventClient(self.bus, self.db)
         handler = self.spec.handler_factory(events, self.db)
         processor = EventProcessor(
@@ -183,7 +165,10 @@ class WorkerRuntime:
         stopping = asyncio.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
-        print(f"{self.spec.service_name} subscribed to {self.spec.subject}", flush=True)
+        print(
+            f"{self.spec.service_name} subscribed to {self.spec.subject}",
+            flush=True,
+        )
 
         while not stopping.is_set():
             try:
@@ -194,7 +179,9 @@ class WorkerRuntime:
             except TimeoutError:
                 continue
             except Exception as exc:
-                print(f"{self.spec.service_name} fetch error: {exc}", flush=True)
+                print(
+                    f"{self.spec.service_name} fetch error: {exc}", flush=True
+                )
                 await asyncio.sleep(1)
                 continue
 
@@ -202,7 +189,18 @@ class WorkerRuntime:
                 try:
                     await processor.process(message)
                 except Exception as exc:
-                    print(f"{self.spec.service_name} processor error: {exc}", flush=True)
-                    await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
+                    print(
+                        f"{self.spec.service_name} processor error: {exc}",
+                        flush=True,
+                    )
+                    await message.nak(
+                        delay=self.spec.retry_policy.retry_delay_seconds
+                    )
 
         await self.bus.close()
+        dispose_async = getattr(self.db, "dispose_async", None)
+        if dispose_async is not None:
+            await dispose_async()
+        dispose = getattr(self.db, "dispose", None)
+        if dispose is not None:
+            dispose()
