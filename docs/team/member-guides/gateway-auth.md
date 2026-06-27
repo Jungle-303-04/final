@@ -946,6 +946,1203 @@ POST /credentials
 POST /credential-bindings
 ```
 
+
+### 10-A. Target / Telemetry Evidence를 위해 필요한 Gateway API 목록
+
+이 섹션은 Target / Telemetry 작업자와 Gateway/Auth 작업자가 같이 맞춰야 하는 API 목록이다.
+
+핵심 원칙:
+
+```text
+Target Agent는 raw telemetry 전체를 Gateway로 보내지 않는다.
+Target Agent는 EvidenceDraft 또는 축약된 evidence만 Gateway로 보낸다.
+Gateway는 evidence를 검증하고 cluster.evidence.received event를 발행한다.
+Gateway는 secret, token, kubeconfig, Authorization header를 event payload에 넣지 않는다.
+```
+
+현재 코드에 이미 있는 endpoint:
+
+```text
+POST /agent/connect
+POST /agent/evidence
+GET  /agent/commands/poll
+POST /agent/commands/{command_id}/result
+GET  /dashboard/query
+GET  /dashboard/stream
+```
+
+하지만 현재 endpoint는 MVP 수준이다. 최종 구조에서는 project, agent identity, target, action, credential_ref를 모두 고려해야 한다.
+
+#### API 구현 우선순위
+
+| Phase | API 묶음 | 왜 필요한가 |
+| --- | --- | --- |
+| 0 | health/session | Gateway가 살아 있고 인증 상태를 확인한다. |
+| 1 | project/target 등록 | 어떤 project의 어떤 cluster/datasource인지 식별한다. |
+| 2 | agent 등록/heartbeat | Target Agent가 어떤 cluster를 대표하는지 확인한다. |
+| 3 | evidence 수신 | Agent가 축약한 증거를 Gateway가 event로 넘긴다. |
+| 4 | evidence 조회/debug | 팀원이 보낸 evidence가 저장/발행됐는지 확인한다. |
+| 5 | observability query proxy | 나중에 UI나 Gateway가 Prometheus/Loki query를 안전하게 요청한다. |
+
+처음 구현은 Phase 0~3까지만 끝내도 된다. Phase 4는 디버깅에 도움이 크고, Phase 5는 권한 모델이 준비된 뒤에 한다.
+
+### 10-B. Phase 0 — 기본 상태와 인증 API
+
+#### `GET /healthz`
+
+현재 있음.
+
+목적:
+
+```text
+프로세스가 떠 있는지 확인한다.
+DB/NATS/Redis 연결 성공까지 보장하지 않는다.
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "service": "api-gateway"
+}
+```
+
+테스트:
+
+```text
+tests/test_gateway_health.py
+  - healthz returns 200
+  - response contains service name
+```
+
+#### `GET /readyz`
+
+현재 있음.
+
+목적:
+
+```text
+Gateway가 요청을 받을 준비가 됐는지 확인한다.
+DB init 또는 DB 연결 확인이 포함된다.
+```
+
+Response:
+
+```json
+{
+  "status": "ready"
+}
+```
+
+테스트:
+
+```text
+tests/test_gateway_health.py
+  - readyz initializes database
+  - readyz returns 200
+```
+
+#### `POST /auth/login`
+
+추가 필요.
+
+목적:
+
+```text
+우리 서비스 사용자를 로그인시킨다.
+GitHub/Grafana/Prometheus 계정 로그인이 아니다.
+```
+
+Request:
+
+```json
+{
+  "email": "woonyong@example.com",
+  "password": "local-dev-password"
+}
+```
+
+Response:
+
+```json
+{
+  "authenticated": true,
+  "user_id": "user_local",
+  "session": {
+    "session_token": "opaque-random-token"
+  }
+}
+```
+
+Cookie:
+
+```text
+Set-Cookie: service_session=<token>; HttpOnly; Secure; SameSite=Lax; Path=/
+```
+
+보안 규칙:
+
+- password 평문 저장 금지.
+- response에 password hash 반환 금지.
+- session에는 최소 `user_id`, `roles`, `expires_at`만 둔다.
+- project 권한은 session payload만 믿지 말고 DB에서 다시 확인한다.
+
+테스트:
+
+```text
+tests/test_gateway_login.py
+  - valid email/password returns session
+  - wrong password returns 401
+  - response does not include password_hash
+```
+
+#### `GET /auth/session`
+
+현재 있음.
+
+목적:
+
+```text
+현재 요청의 session이 유효한지 확인한다.
+프론트엔드가 새로고침 후 로그인 상태를 복구할 때 사용한다.
+```
+
+Request header 후보:
+
+```text
+Cookie: service_session=<token>
+Authorization: Bearer <session_token>
+x-session-token: <session_token>
+```
+
+Response:
+
+```json
+{
+  "authenticated": true,
+  "user_id": "user_local",
+  "roles": ["owner"]
+}
+```
+
+테스트:
+
+```text
+tests/test_gateway_login.py
+  - missing session returns 401
+  - cookie session works
+  - bearer session works
+```
+
+### 10-C. Phase 1 — Project와 Integration Target API
+
+Evidence는 반드시 project와 연결되어야 한다. 그래야 나중에 “누가 어느 cluster의 evidence를 볼 수 있는가”를 검사할 수 있다.
+
+#### `POST /projects`
+
+추가 필요.
+
+목적:
+
+```text
+우리 서비스 내부 project를 만든다.
+project는 repo, cluster, datasource, dashboard 권한을 묶는 상위 단위다.
+```
+
+Request:
+
+```json
+{
+  "name": "final-project",
+  "slug": "final",
+  "description": "Krafton Jungle final project"
+}
+```
+
+Response:
+
+```json
+{
+  "project_id": "project_final",
+  "name": "final-project",
+  "slug": "final"
+}
+```
+
+권한:
+
+```text
+require_session 필요.
+처음 MVP에서는 로그인 사용자에게 owner membership을 자동 부여해도 된다.
+```
+
+테스트:
+
+```text
+tests/test_projects.py
+  - logged in user can create project
+  - anonymous user cannot create project
+  - created project grants owner membership
+```
+
+#### `POST /integrations/targets`
+
+추가 필요.
+
+목적:
+
+```text
+외부 도구 또는 target cluster를 project에 연결한다.
+Prometheus datasource, Loki datasource, Kubernetes cluster, GitHub repo가 모두 target이다.
+```
+
+Target Agent/Evidence를 위해 먼저 필요한 target:
+
+```text
+provider=kubernetes, target_type=cluster
+provider=prometheus, target_type=datasource
+provider=loki, target_type=datasource
+provider=opentelemetry, target_type=collector
+```
+
+Kubernetes cluster 등록 Request:
+
+```json
+{
+  "project_id": "project_final",
+  "provider": "kubernetes",
+  "target_type": "cluster",
+  "target_ref": "target-cluster-01",
+  "environment": "dev",
+  "metadata": {
+    "namespace_default": "sandbox",
+    "agent_id": "agent_local_01"
+  }
+}
+```
+
+Prometheus datasource 등록 Request:
+
+```json
+{
+  "project_id": "project_final",
+  "provider": "prometheus",
+  "target_type": "datasource",
+  "target_ref": "prometheus-target-01",
+  "environment": "dev",
+  "metadata": {
+    "base_url": "http://prometheus.monitoring.svc:9090",
+    "query_mode": "direct"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "target_id": "target_prometheus_01",
+  "project_id": "project_final",
+  "provider": "prometheus",
+  "target_type": "datasource",
+  "target_ref": "prometheus-target-01",
+  "environment": "dev"
+}
+```
+
+보안 규칙:
+
+- `metadata.base_url`은 secret이 아니다.
+- bearer token, basic password, kubeconfig는 `metadata`에 넣지 않는다.
+- 인증정보는 `credentials.secret_ref`로만 연결한다.
+
+테스트:
+
+```text
+tests/test_integration_targets.py
+  - project member can register prometheus target
+  - anonymous user cannot register target
+  - target with secret-looking metadata is rejected or redacted
+  - unknown provider is rejected
+```
+
+#### `GET /projects/{project_id}/integration-targets`
+
+추가 필요.
+
+목적:
+
+```text
+project에 연결된 repo, cluster, datasource 목록을 조회한다.
+프론트엔드 설정 화면과 debug 화면에서 사용한다.
+```
+
+Response:
+
+```json
+{
+  "targets": [
+    {
+      "target_id": "target_prometheus_01",
+      "provider": "prometheus",
+      "target_type": "datasource",
+      "target_ref": "prometheus-target-01",
+      "environment": "dev",
+      "status": "active"
+    }
+  ]
+}
+```
+
+권한:
+
+```text
+require_session 필요.
+project member만 조회 가능.
+```
+
+### 10-D. Phase 2 — Agent 등록과 상태 API
+
+Target Agent는 Gateway에 evidence와 command result를 보내는 주체다. 최종 구조에서는 Agent도 project/cluster에 묶어야 한다.
+
+#### `POST /agent/connect`
+
+현재 있음. 보강 필요.
+
+현재 Request:
+
+```json
+{
+  "cluster_id": "target-cluster-01",
+  "agent_id": "agent_local_01",
+  "capabilities": ["metrics", "logs", "kubernetes_events"]
+}
+```
+
+권장 Request:
+
+```json
+{
+  "project_id": "project_final",
+  "cluster_id": "target-cluster-01",
+  "agent_id": "agent_local_01",
+  "agent_version": "0.1.0",
+  "capabilities": ["metrics", "logs", "kubernetes_events"],
+  "observability": {
+    "prometheus_target_id": "target_prometheus_01",
+    "loki_target_id": "target_loki_01"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "event_id": "evt_...",
+  "agent": {
+    "agent_id": "agent_local_01",
+    "cluster_id": "target-cluster-01",
+    "status": "connected"
+  }
+}
+```
+
+발행 event:
+
+```text
+subject: agent.connected
+payload:
+  project_id
+  cluster_id
+  agent_id
+  capabilities
+  observability target refs
+```
+
+보안/권한:
+
+```text
+MVP: agent shared token 또는 local dev 허용.
+최종: agent enrollment token 필요.
+일반 user session과 agent 인증은 분리한다.
+```
+
+테스트:
+
+```text
+tests/test_agent_gateway.py
+  - connect publishes agent.connected
+  - connect rejects unknown project_id
+  - connect rejects cluster target not in project
+```
+
+#### `GET /agent/status`
+
+추가 필요. 디버깅용으로 유용하다.
+
+목적:
+
+```text
+현재 등록된 agent와 마지막 heartbeat 시간을 확인한다.
+```
+
+Query:
+
+```text
+project_id=project_final
+cluster_id=target-cluster-01
+```
+
+Response:
+
+```json
+{
+  "agents": [
+    {
+      "agent_id": "agent_local_01",
+      "cluster_id": "target-cluster-01",
+      "status": "connected",
+      "last_seen_at": "2026-06-27T13:00:00Z",
+      "capabilities": ["metrics", "logs"]
+    }
+  ]
+}
+```
+
+권한:
+
+```text
+require_session 필요.
+project member만 조회 가능.
+```
+
+### 10-E. Phase 3 — Evidence 수신 API
+
+#### `POST /agent/evidence`
+
+현재 있음. Target/Telemetry에서 가장 중요한 API다.
+
+목적:
+
+```text
+Target Agent가 축약된 evidence를 Gateway로 보낸다.
+Gateway는 request를 검증하고 cluster.evidence.received event를 발행한다.
+```
+
+현재 Request 구조:
+
+```json
+{
+  "cluster_id": "target-cluster-01",
+  "correlation_id": null,
+  "kubernetes": {},
+  "metrics": {},
+  "logs": [],
+  "traces": {}
+}
+```
+
+권장 Request 구조:
+
+```json
+{
+  "project_id": "project_final",
+  "cluster_id": "target-cluster-01",
+  "agent_id": "agent_local_01",
+  "correlation_id": "corr_optional_existing_flow",
+  "observed_at": "2026-06-27T13:00:00Z",
+  "evidence": [
+    {
+      "kind": "metric",
+      "summary": "checkout-api 5xx rate latest value is 0.19",
+      "severity": "warning",
+      "signals": {
+        "namespace": "sandbox",
+        "service": "checkout-api",
+        "metric": "demo_http_5xx_rate",
+        "latest": 0.19,
+        "threshold": 0.1
+      },
+      "source_ref": {
+        "provider": "prometheus",
+        "target_id": "target_prometheus_01",
+        "query": "demo_http_5xx_rate",
+        "window": "5m"
+      }
+    }
+  ]
+}
+```
+
+MVP에서는 기존 request를 유지해도 된다. 다만 새 구현은 `evidence` list 구조로 이동하는 것을 목표로 둔다.
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "event_id": "evt_...",
+  "correlation_id": "corr_..."
+}
+```
+
+발행 event:
+
+```text
+subject: cluster.evidence.received
+payload:
+  project_id
+  cluster_id
+  agent_id
+  observed_at
+  evidence[]
+  correlation_id
+```
+
+Gateway가 해야 할 검증:
+
+```text
+1. request schema 검증(extra forbid)
+2. project_id가 존재하는가
+3. cluster_id가 project의 kubernetes target인가
+4. agent_id가 해당 cluster에 등록됐는가
+5. evidence 개수가 너무 많지 않은가
+6. summary 길이가 너무 길지 않은가
+7. logs/snippet에 secret 패턴이 없는가
+8. source_ref.target_id가 project 소속인가
+9. event payload에 credential/token/password가 없는가
+```
+
+초기 제한값 후보:
+
+```text
+max evidence items: 50
+max summary length: 500
+max log snippet length: 1000
+max request body: 1MB
+```
+
+보안 규칙:
+
+- `Authorization` header를 payload에 넣지 않는다.
+- kubeconfig를 payload에 넣지 않는다.
+- Prometheus/Loki bearer token을 payload에 넣지 않는다.
+- raw log 전체를 payload에 넣지 않는다.
+- source_ref에는 target_id/query/window처럼 추적 가능한 정보만 넣는다.
+
+테스트:
+
+```text
+tests/test_agent_evidence_api.py
+  - valid evidence request publishes cluster.evidence.received
+  - response includes event_id and correlation_id
+  - unknown project_id returns 404 or 403
+  - unknown cluster_id returns 403
+  - evidence with secret-like field is rejected
+  - too many evidence items returns 422
+  - extra unknown field returns 422
+```
+
+처음 구현 단위:
+
+```text
+PR 1: 기존 AgentEvidenceRequest에 project_id, agent_id, observed_at, evidence list 추가
+PR 2: /agent/evidence route에서 schema만 검증하고 event 발행
+PR 3: project/cluster/agent 존재 검사 추가
+PR 4: secret redaction/reject 검사 추가
+PR 5: tests/test_agent_evidence_api.py 추가
+```
+
+### 10-F. Phase 4 — Evidence 조회와 디버깅 API
+
+이 API는 운영 기능이라기보다 팀원이 “내가 보낸 evidence가 들어왔나?”를 확인하기 위한 API다.
+
+#### `GET /projects/{project_id}/evidence`
+
+추가 필요.
+
+목적:
+
+```text
+project 기준으로 최근 evidence event 또는 저장된 evidence를 조회한다.
+```
+
+Query:
+
+```text
+cluster_id=target-cluster-01
+kind=metric
+limit=20
+```
+
+Response:
+
+```json
+{
+  "evidence": [
+    {
+      "event_id": "evt_...",
+      "correlation_id": "corr_...",
+      "cluster_id": "target-cluster-01",
+      "kind": "metric",
+      "summary": "checkout-api 5xx rate latest value is 0.19",
+      "observed_at": "2026-06-27T13:00:00Z"
+    }
+  ]
+}
+```
+
+권한:
+
+```text
+require_session 필요.
+project member만 조회 가능.
+```
+
+구현 주의:
+
+```text
+처음에는 DB evidence table을 그대로 읽어도 된다.
+나중에는 dashboard projection read model과 합칠 수 있다.
+```
+
+테스트:
+
+```text
+tests/test_evidence_query_api.py
+  - project member can list evidence
+  - non member cannot list evidence
+  - limit is bounded
+  - response does not include raw secret fields
+```
+
+#### `GET /projects/{project_id}/evidence/{event_id}`
+
+추가 필요.
+
+목적:
+
+```text
+특정 evidence event의 상세 내용을 확인한다.
+디버깅과 RCA 화면에서 사용한다.
+```
+
+Response:
+
+```json
+{
+  "event_id": "evt_...",
+  "correlation_id": "corr_...",
+  "subject": "cluster.evidence.received",
+  "payload": {
+    "cluster_id": "target-cluster-01",
+    "evidence": []
+  }
+}
+```
+
+보안:
+
+```text
+payload를 반환하기 전에 secret-like key를 redaction한다.
+```
+
+### 10-G. Phase 5 — Observability Query Proxy API
+
+이 API는 바로 만들지 않아도 된다. 하지만 최종 Gateway 설계에는 필요하다.
+
+목적:
+
+```text
+프론트엔드나 운영자가 Prometheus/Loki query를 직접 datasource에 보내지 않고 Gateway를 통해 요청한다.
+Gateway가 project 권한, target 권한, action 권한을 검사한 뒤 adapter를 호출한다.
+```
+
+#### `POST /projects/{project_id}/observability/query`
+
+추가 후보.
+
+Request:
+
+```json
+{
+  "target_id": "target_prometheus_01",
+  "provider": "prometheus",
+  "action": "query_range",
+  "query": "demo_http_5xx_rate",
+  "start": "2026-06-27T12:55:00Z",
+  "end": "2026-06-27T13:00:00Z",
+  "step": "30s"
+}
+```
+
+Response:
+
+```json
+{
+  "target_id": "target_prometheus_01",
+  "provider": "prometheus",
+  "result_type": "matrix",
+  "result": []
+}
+```
+
+권한 흐름:
+
+```text
+1. require_session
+2. project membership 확인
+3. target이 project 소속인지 확인
+4. AccessPolicy가 action=query_range 허용하는지 확인
+5. TokenBroker.issue(actor, project, target, action)
+6. PrometheusAdapter.query_range(...)
+7. raw response를 bounded response로 잘라 반환
+```
+
+보안 규칙:
+
+- query timeout 필수.
+- response size limit 필수.
+- target_id가 다른 project 소속이면 403.
+- token은 adapter 내부에서만 사용하고 response/event/log에 남기지 않는다.
+
+처음에는 구현하지 말고 문서/이슈만 둔다. Target Agent가 먼저 Prometheus를 직접 query해서 EvidenceDraft를 만드는 흐름이 우선이다.
+
+
+### 10-G-2. GitOps Polling을 위한 Gateway API
+
+이 프로젝트의 GitOps 기본 입력은 webhook이 아니라 polling이다. Gateway/Auth는 어떤 repo와 branch를 주기적으로 확인할지 등록하고, Git Poller Worker가 그 설정을 읽어 새 commit/merge를 감지하게 만든다.
+
+그래서 Gateway/Auth 쪽에는 “어떤 repo를 주기적으로 볼 것인가”를 등록하고 조회하는 API가 필요하다.
+
+핵심 설계:
+
+```text
+Gateway/Auth
+  repo target, credential binding, polling 설정을 관리한다.
+
+Git Poller Worker
+  Gateway DB 또는 API에서 watch target을 읽는다.
+  TokenBroker로 repo read credential을 발급받는다.
+  Git provider adapter로 최신 commit/merge 상태를 확인한다.
+  새 변경이면 git.changed event를 발행한다.
+```
+
+중요:
+
+```text
+Gateway route가 직접 GitHub polling을 돌리지 않는다.
+Gateway는 polling 설정과 권한 경계를 관리한다.
+주기 실행은 worker/scheduler가 맡는다.
+```
+
+#### 필요한 API 요약
+
+| API | 지금 필요한가 | 목적 |
+| --- | --- | --- |
+| `POST /projects/{project_id}/git-watch-targets` | 필요 | repo/branch polling 등록 |
+| `GET /projects/{project_id}/git-watch-targets` | 필요 | 등록된 watch 목록 확인 |
+| `GET /projects/{project_id}/git-watch-targets/{watch_id}` | 필요 | watch 상세와 마지막 관찰 상태 확인 |
+| `PATCH /projects/{project_id}/git-watch-targets/{watch_id}` | 나중 | interval/enabled/branch 변경 |
+| `POST /projects/{project_id}/git-watch-targets/{watch_id}/poll` | 디버그용 필요 | 수동으로 한 번 polling trigger |
+| `GET /projects/{project_id}/git-changes` | 디버그용 필요 | 감지된 commit/merge 이력 확인 |
+
+#### `POST /projects/{project_id}/git-watch-targets`
+
+목적:
+
+```text
+특정 repo/branch를 주기적으로 확인하도록 등록한다.
+```
+
+전제:
+
+```text
+GitHub repo는 이미 integration target으로 등록되어 있어야 한다.
+해당 target에는 read_repo 가능한 credential binding이 있어야 한다.
+```
+
+Request:
+
+```json
+{
+  "target_id": "target_github_final",
+  "repo_ref": "Jungle-303-04/final",
+  "branch": "dev",
+  "mode": "branch_head",
+  "interval_seconds": 60,
+  "enabled": true
+}
+```
+
+`mode` 후보:
+
+```text
+branch_head
+  branch 최신 commit_sha를 본다.
+  MVP에서 가장 먼저 구현한다.
+
+merged_pr
+  새로 merge된 PR을 본다.
+  PR 메타데이터가 필요할 때 추가한다.
+
+release_tag
+  새 tag 또는 release를 본다.
+  나중에 추가한다.
+```
+
+Response:
+
+```json
+{
+  "watch_id": "git_watch_final_dev",
+  "project_id": "project_final",
+  "target_id": "target_github_final",
+  "repo_ref": "Jungle-303-04/final",
+  "branch": "dev",
+  "mode": "branch_head",
+  "interval_seconds": 60,
+  "enabled": true,
+  "last_seen_commit_sha": null,
+  "last_polled_at": null
+}
+```
+
+권한:
+
+```text
+require_session
+project member 확인
+AccessPolicy action=read_repo 확인
+credential binding에 read_repo 포함 확인
+```
+
+보안:
+
+- GitHub token/PAT는 request에 넣지 않는다.
+- credential은 `/credentials`, `/credential-bindings`로 먼저 등록한다.
+- response에도 token을 넣지 않는다.
+
+테스트:
+
+```text
+tests/test_git_watch_targets.py
+  - project maintainer can create watch target
+  - viewer cannot create watch target
+  - target from another project is rejected
+  - target without read_repo binding is rejected
+```
+
+#### `GET /projects/{project_id}/git-watch-targets`
+
+목적:
+
+```text
+현재 project에서 어떤 repo/branch를 polling 중인지 보여준다.
+```
+
+Response:
+
+```json
+{
+  "watch_targets": [
+    {
+      "watch_id": "git_watch_final_dev",
+      "target_id": "target_github_final",
+      "repo_ref": "Jungle-303-04/final",
+      "branch": "dev",
+      "mode": "branch_head",
+      "enabled": true,
+      "interval_seconds": 60,
+      "last_seen_commit_sha": "abc123",
+      "last_polled_at": "2026-06-27T13:00:00Z"
+    }
+  ]
+}
+```
+
+권한:
+
+```text
+project member만 조회 가능.
+```
+
+#### `POST /projects/{project_id}/git-watch-targets/{watch_id}/poll`
+
+목적:
+
+```text
+주기를 기다리지 않고 지금 한 번 확인하라고 요청한다.
+디버깅과 데모에 필요하다.
+```
+
+이 API가 직접 GitHub를 호출하는 방식은 피한다.
+
+권장 흐름:
+
+```text
+Gateway
+  -> git.poll.tick event 발행
+  -> Git Poller Worker가 처리
+```
+
+Request:
+
+```json
+{
+  "reason": "manual_debug"
+}
+```
+
+Response:
+
+```json
+{
+  "accepted": true,
+  "event_id": "evt_...",
+  "watch_id": "git_watch_final_dev"
+}
+```
+
+발행 event:
+
+```text
+subject: git.poll.tick
+payload:
+  project_id
+  watch_id
+  target_id
+  repo_ref
+  branch
+  reason
+  requested_by
+```
+
+권한:
+
+```text
+maintainer 이상 권장.
+viewer는 수동 poll trigger 불가.
+```
+
+테스트:
+
+```text
+tests/test_git_watch_poll_api.py
+  - maintainer can trigger poll event
+  - viewer cannot trigger poll event
+  - disabled watch target cannot be manually polled unless force option exists
+```
+
+#### `GET /projects/{project_id}/git-changes`
+
+목적:
+
+```text
+polling으로 감지한 commit/merge 이력을 조회한다.
+팀원이 "커밋했는데 시스템이 봤나?"를 확인할 수 있다.
+```
+
+Query:
+
+```text
+repo_ref=Jungle-303-04/final
+branch=dev
+limit=20
+```
+
+Response:
+
+```json
+{
+  "changes": [
+    {
+      "change_id": "git_change_001",
+      "detected_by": "polling",
+      "change_type": "commit",
+      "repo_ref": "Jungle-303-04/final",
+      "branch": "dev",
+      "commit_sha": "abc123",
+      "event_id": "evt_...",
+      "detected_at": "2026-06-27T13:00:00Z"
+    }
+  ]
+}
+```
+
+권한:
+
+```text
+project member만 조회 가능.
+```
+
+#### Git polling에서 필요한 DB 상태
+
+MVP 테이블 후보:
+
+```text
+git_watch_targets
+  id
+  project_id
+  target_id
+  repo_ref
+  branch
+  mode
+  interval_seconds
+  enabled
+  last_seen_commit_sha
+  last_seen_merge_sha
+  last_polled_at
+  created_by
+  created_at
+  updated_at
+
+git_changes
+  id
+  project_id
+  watch_id
+  target_id
+  repo_ref
+  branch
+  commit_sha
+  change_type
+  detected_by
+  event_id
+  detected_at
+```
+
+중복 방지 규칙:
+
+```text
+(project_id, watch_id, commit_sha, change_type) unique
+```
+
+이 unique key가 있어야 polling이 여러 번 돌아도 같은 commit으로 command가 중복 생성되지 않는다.
+
+#### Git polling event 연결
+
+| 단계 | 주체 | 처리 | event |
+| --- | --- | --- | --- |
+| 1 | Gateway API | 수동 poll 요청 수신 | `git.poll.tick` |
+| 2 | Scheduler | 주기 poll tick 생성 | `git.poll.tick` |
+| 3 | Git Poller Worker | repo 최신 상태 조회 | `git.repo.observed` |
+| 4 | Git Poller Worker | 이전 상태와 비교 | 새 commit이면 `git.changed` |
+| 5 | GitOps Sync Worker | manifest render/diff | `manifest.rendered`, `desired.diff.detected` |
+| 6 | GitOps Sync Worker | command 요청 | `command.requested` |
+
+#### 현재 수준에서 필요한 최소 API
+
+기본 사이클을 돌리려면 아래만 먼저 있으면 된다.
+
+```text
+POST /integrations/targets
+GET  /projects/{project_id}/integration-targets
+POST /credentials
+POST /credential-bindings
+POST /projects/{project_id}/git-watch-targets
+GET  /projects/{project_id}/git-watch-targets
+POST /projects/{project_id}/git-watch-targets/{watch_id}/poll
+GET  /projects/{project_id}/git-changes
+```
+
+왜 이 정도가 최소인가:
+
+- `integrations/targets`: 어떤 repo를 볼지 알아야 한다.
+- `credentials/bindings`: repo를 읽을 권한이 있어야 한다.
+- `git-watch-targets`: 어떤 branch를 주기적으로 볼지 알아야 한다.
+- `GET git-watch-targets`: polling 설정이 제대로 저장됐는지 확인할 수 있어야 한다.
+- manual `poll`: 주기를 기다리지 않고 데모/테스트할 수 있어야 한다.
+- `git-changes`: 시스템이 commit/merge를 봤는지 확인할 수 있어야 한다.
+
+#### 앞으로 필요한 API
+
+```text
+PATCH /projects/{project_id}/git-watch-targets/{watch_id}
+  interval_seconds, enabled, branch 변경
+
+DELETE /projects/{project_id}/git-watch-targets/{watch_id}
+  polling 중지
+
+POST /projects/{project_id}/git-watch-targets/{watch_id}/reset
+  last_seen_commit_sha를 특정 값으로 재설정
+
+GET /projects/{project_id}/git-watch-targets/{watch_id}/runs
+  polling 실행 이력 조회
+
+GET /projects/{project_id}/git-changes/{change_id}
+  특정 change 상세와 연결된 event/correlation 조회
+```
+
+### 10-H. Gateway API와 Event 연결표
+
+| HTTP API | Gateway가 하는 일 | 발행 event | 소비자 |
+| --- | --- | --- | --- |
+| `POST /agent/connect` | agent 등록/heartbeat 수신 | `agent.connected` | dashboard/audit |
+| `POST /agent/evidence` | evidence 검증 후 수신 | `cluster.evidence.received` | rca-worker, dashboard, audit |
+| `POST /commands` | 사용자 command 요청 수신 | `command.requested` | command-worker |
+| `POST /agent/commands/{id}/result` | agent command 결과 수신 | `command.completed` | dashboard/audit |
+| `POST /dead-letters/{id}/replay` | DLQ replay | 원 subject 재발행 | 원래 consumer |
+
+규칙:
+
+```text
+Gateway는 외부 HTTP 요청을 event로 바꾸는 경계다.
+Gateway route에서 worker 로직을 직접 실행하지 않는다.
+Gateway route에서 provider API를 직접 호출하지 않는다.
+Gateway route에서 secret을 event payload에 넣지 않는다.
+```
+
+### 10-I. Target/Telemetry 담당과 맞출 계약
+
+Gateway/Auth 담당이 혼자 정하면 안 되는 값:
+
+```text
+EvidenceDraft kind 목록
+severity 목록
+signals에 들어갈 최소 field
+source_ref 구조
+max evidence item 개수
+log snippet 최대 길이
+cluster_id와 project_id 매핑 방식
+agent 인증 방식
+```
+
+초기 합의안:
+
+```text
+kind: metric | log | pod | kubernetes_event | trace
+severity: info | warning | critical
+source_ref.provider: kubernetes | prometheus | loki | opentelemetry
+source_ref.target_id: integration target id
+```
+
+Target/Telemetry 담당이 먼저 구현할 것:
+
+```text
+services/target-cluster-agent/evidence.py
+  raw -> EvidenceDraft 변환
+
+tests/test_target_metric_evidence.py
+  Prometheus raw fixture -> EvidenceDraft
+```
+
+Gateway/Auth 담당이 먼저 구현할 것:
+
+```text
+packages/contracts/gateway/requests.py
+  AgentEvidenceRequest 강화
+
+services/api-gateway/gateway.py
+  /agent/evidence validation 강화
+
+tests/test_agent_evidence_api.py
+  valid request -> cluster.evidence.received event 발행 검증
+```
+
+
 `POST /auth/login`
 
 Request:
