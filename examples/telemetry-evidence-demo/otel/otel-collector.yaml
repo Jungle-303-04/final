@@ -1,0 +1,19 @@
+receivers:
+  filelog:
+    include:
+      - /shared/demo-app.log
+    start_at: beginning
+
+processors:
+  batch:
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch]
+      exporters: [debug]
