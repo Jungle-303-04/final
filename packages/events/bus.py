@@ -37,13 +37,11 @@ CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
 
 def nats_client() -> Any:
     import nats
-
     return nats
 
 
 def nats_not_found_error() -> type[Exception]:
     from nats.js.errors import NotFoundError
-
     return NotFoundError
 
 
