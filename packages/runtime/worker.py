@@ -5,17 +5,22 @@ import json
 import signal
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
 from packages.contracts.event_bus.fields import EVENT_ID
 from packages.contracts.event_bus.interfaces import (
+    Event,
     EventClient,
     EventConsumerBus,
     EventHandler,
     EventMessage,
 )
 from packages.contracts.event_bus.processing import EventProcessingStatus
+from packages.contracts.interfaces import EventProcessingRecord, EventProcessingStore
 from packages.events.bus import DeadLetterSink, EventBus, RecordedEventClient, event_causation
-from packages.storage.database import Database, wait_for_database
+
+if TYPE_CHECKING:
+    from packages.storage.database import Database
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 2
@@ -41,7 +46,57 @@ class EventHandlerSpec:
 
     @property
     def durable(self) -> str:
-        return self.durable_name or self.service_name
+        if self.durable_name is None:
+            return self.service_name
+        return self.durable_name
+
+
+class Codec(Protocol):
+    def decode(self, message: EventMessage) -> Event: ...
+
+
+class JsonCodec:
+    def decode(self, message: EventMessage) -> Event:
+        return json.loads(message.data.decode())
+
+
+class DeadLetterPort(Protocol):
+    async def capture(
+        self,
+        evt: Event,
+        consumer: str,
+        error: Exception,
+        attempts: int,
+    ) -> Event: ...
+
+
+class Ledger:
+    def __init__(self, store: EventProcessingStore, consumer: str) -> None:
+        self.store = store
+        self.consumer = consumer
+
+    def begin(self, evt: Event) -> EventProcessingRecord:
+        self.store.record_event(evt)
+        return self.store.begin_event_processing(evt, self.consumer)
+
+    def finish(self, evt: Event) -> None:
+        self.store.finish_event_processing(evt, self.consumer)
+
+    def retry(self, evt: Event, error: Exception) -> None:
+        self.store.fail_event_processing(
+            evt,
+            self.consumer,
+            str(error),
+            EventProcessingStatus.RETRYING,
+        )
+
+    def dead_letter(self, evt: Event, error: Exception) -> None:
+        self.store.fail_event_processing(
+            evt,
+            self.consumer,
+            str(error),
+            EventProcessingStatus.DEAD_LETTERED,
+        )
 
 
 class EventProcessor:
@@ -49,20 +104,22 @@ class EventProcessor:
         self,
         service_name: str,
         handler: EventHandler,
-        db: Database,
-        dead_letters: DeadLetterSink,
+        store: EventProcessingStore,
+        dead_letters: DeadLetterPort,
         retry_policy: EventRetryPolicy,
+        codec: Codec | None = None,
+        ledger: Ledger | None = None,
     ) -> None:
         self.service_name = service_name
         self.handler = handler
-        self.db = db
         self.dead_letters = dead_letters
         self.retry_policy = retry_policy
+        self.codec = codec if codec is not None else JsonCodec()
+        self.ledger = ledger if ledger is not None else Ledger(store, service_name)
 
     async def process(self, message: EventMessage) -> None:
-        evt = json.loads(message.data.decode())
-        self.db.record_event(evt)
-        processing = self.db.begin_event_processing(evt, self.service_name)
+        evt = self.codec.decode(message)
+        processing = self.ledger.begin(evt)
         if processing["status"] != EventProcessingStatus.PROCESSING:
             await message.ack()
             return
@@ -71,21 +128,26 @@ class EventProcessor:
         try:
             with event_causation(evt[EVENT_ID]):
                 await self.handler(evt)
-            self.db.finish_event_processing(evt, self.service_name)
+            self.ledger.finish(evt)
             await message.ack()
         except Exception as exc:
-            if attempts >= self.retry_policy.max_attempts:
-                self.db.fail_event_processing(
-                    evt, self.service_name, str(exc), EventProcessingStatus.DEAD_LETTERED
-                )
-                await self.dead_letters.capture(evt, self.service_name, exc, attempts)
-                await message.ack()
-                return
+            await self.fail(message, evt, exc, attempts)
 
-            self.db.fail_event_processing(
-                evt, self.service_name, str(exc), EventProcessingStatus.RETRYING
-            )
-            await message.nak(delay=self.retry_policy.retry_delay_seconds)
+    async def fail(
+        self,
+        message: EventMessage,
+        evt: Event,
+        error: Exception,
+        attempts: int,
+    ) -> None:
+        if attempts >= self.retry_policy.max_attempts:
+            self.ledger.dead_letter(evt, error)
+            await self.dead_letters.capture(evt, self.service_name, error, attempts)
+            await message.ack()
+            return
+
+        self.ledger.retry(evt, error)
+        await message.nak(delay=self.retry_policy.retry_delay_seconds)
 
 
 class WorkerRuntime:
@@ -96,10 +158,16 @@ class WorkerRuntime:
         db: Database | None = None,
     ) -> None:
         self.spec = spec
-        self.db = db or Database()
-        self.bus = bus or EventBus()
+        if db is None:
+            from packages.storage.database import Database
+
+            db = Database()
+        self.bus = bus if bus is not None else EventBus()
+        self.db = db
 
     async def run(self) -> None:
+        from packages.storage.database import wait_for_database
+
         await wait_for_database(self.db)
         await self.bus.connect()
         sub = await self.bus.subscribe(self.spec.subject, durable=self.spec.durable)

@@ -5,9 +5,7 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-
-import nats
-from nats.js.errors import NotFoundError
+from typing import Any
 
 from packages.config.constants import Nats, Runtime
 from packages.config.settings import env
@@ -33,6 +31,18 @@ CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
 )
 
 
+def nats_client() -> Any:
+    import nats
+
+    return nats
+
+
+def nats_not_found_error() -> type[Exception]:
+    from nats.js.errors import NotFoundError
+
+    return NotFoundError
+
+
 @contextmanager
 def event_causation(causation_id: str) -> Iterator[None]:
     token = CURRENT_CAUSATION_ID.set(causation_id)
@@ -49,6 +59,7 @@ class EventBus:
         self.js = None
 
     async def connect(self) -> None:
+        nats = nats_client()
         for attempt in range(DEPENDENCY_RETRY_LIMIT):
             try:
                 self.nc = await nats.connect(
@@ -68,11 +79,12 @@ class EventBus:
 
     async def ensure_stream(self) -> None:
         assert self.js is not None
+        not_found = nats_not_found_error()
         try:
             info = await self.js.stream_info(STREAM_NAME)
             subjects = sorted(set(info.config.subjects or []) | set(STREAM_SUBJECTS))
             await self.js.update_stream(name=STREAM_NAME, subjects=subjects, storage="file")
-        except NotFoundError:
+        except not_found:
             await self.js.add_stream(name=STREAM_NAME, subjects=STREAM_SUBJECTS, storage="file")
 
     async def publish(
