@@ -20,6 +20,8 @@ from packages.contracts.event_bus.interfaces import (
     JsonObject,
 )
 from packages.contracts.event_bus.subjects import (
+    STREAM_MAX_AGE_SECONDS,
+    STREAM_MAX_BYTES,
     STREAM_NAME,
     STREAM_SUBJECTS,
     EventSubject,
@@ -107,11 +109,19 @@ class NatsEventBus(EventBus):
                 set(info.config.subjects or []) | set(STREAM_SUBJECTS)
             )
             await self.js.update_stream(
-                name=STREAM_NAME, subjects=subjects, storage="file"
+                name=STREAM_NAME,
+                subjects=subjects,
+                storage="file",
+                max_age=STREAM_MAX_AGE_SECONDS,
+                max_bytes=STREAM_MAX_BYTES,
             )
         except not_found:
             await self.js.add_stream(
-                name=STREAM_NAME, subjects=STREAM_SUBJECTS, storage="file"
+                name=STREAM_NAME,
+                subjects=STREAM_SUBJECTS,
+                storage="file",
+                max_age=STREAM_MAX_AGE_SECONDS,
+                max_bytes=STREAM_MAX_BYTES,
             )
 
     async def emit(

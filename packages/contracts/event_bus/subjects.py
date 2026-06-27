@@ -5,6 +5,11 @@ from enum import StrEnum
 # NATS JetStream 스트림 이름. 모든 서비스 이벤트가 이 한 스트림에 쌓인다.
 STREAM_NAME = "SERVICE_EVENTS"
 
+# 스트림 보존 한계. 무한 증가/암묵적 드롭을 막는 위생 설정.
+# discard 기본값은 old(가득 차면 오래된 것부터 제거). max_age 는 초 단위.
+STREAM_MAX_AGE_SECONDS = 7 * 24 * 60 * 60  # 7일
+STREAM_MAX_BYTES = 1024 * 1024 * 1024  # 1 GiB
+
 # 스트림이 받는 subject 와일드카드. 도메인별로 "<도메인>.>" 한 줄씩.
 # 새 도메인 이벤트를 추가하면 여기 와일드카드도 함께 추가해야 한다.
 STREAM_SUBJECTS = [
