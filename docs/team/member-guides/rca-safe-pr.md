@@ -25,6 +25,8 @@
 - Worker 구독은 각 서비스 `settings.py`의 `SUBSCRIPTION`에 선언한다.
 - Worker runner는 `WorkerService.from_subscription(...)`으로 실행한다.
 - Worker는 `EventClient`로 발행한다.
+- Handler는 `EventEnvelope`를 받고 `evt.payload`로 입력을 읽는다.
+- 발행 payload는 `packages/contracts/event_bus/payloads.py`의 dataclass를 사용한다.
 - `correlation_id`를 유지한다.
 - RCA output은 근거 없는 추론보다 확인된 evidence를 우선한다.
 - GitHub PR 생성에는 provider token을 event에 넣지 말고 Token Vault reference를 사용한다.
@@ -32,7 +34,9 @@
 ## PR 체크리스트
 
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
+- 새/변경 event payload가 `packages/contracts/event_bus/payloads.py`에 있음
 - RCA/Safe PR 동작 테스트 존재
+- handler가 `EventEnvelope`와 payload DTO 흐름을 유지함
 - raw NATS 사용 없음
 - 실제 GitHub write는 feature flag 또는 policy guard로 보호
 - audit/dashboard 영향이 문서화됨
