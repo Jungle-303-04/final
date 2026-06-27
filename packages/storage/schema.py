@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text, UniqueConstraint, func
-from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -16,9 +15,8 @@ def text_column() -> Mapped[str]:
     return mapped_column(Text, nullable=False)
 
 
-def jsonb_column(default: str | None = None) -> Mapped[dict[str, Any]]:
-    server_default = sql_text(default) if default is not None else None
-    return mapped_column(JSONB, nullable=False, server_default=server_default)
+def jsonb_column() -> Mapped[dict[str, Any]]:
+    return mapped_column(JSONB, nullable=False)
 
 
 def created_at_column() -> Mapped[Any]:
@@ -29,7 +27,7 @@ def updated_at_column() -> Mapped[Any]:
     return mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
 
-class Event(Base):
+class EventModel(Base):
     __tablename__ = "events"
 
     event_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -92,7 +90,7 @@ class AgentCommand(Base):
     action: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
     status: Mapped[str] = text_column()
-    result: Mapped[dict[str, Any]] = jsonb_column("'{}'::jsonb")
+    result: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
 
@@ -129,7 +127,7 @@ class EventProcessing(Base):
     subject: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sql_text("0"))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
@@ -146,7 +144,7 @@ class EventDeadLetter(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     error: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=sql_text("'open'"))
+    status: Mapped[str] = text_column()
     replayed_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True))
     replay_event_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[Any] = created_at_column()
@@ -178,9 +176,3 @@ class TokenVault(Base):
 
 
 metadata = Base.metadata
-
-SCHEMA_UPGRADES = (
-    "alter table event_dead_letters add column if not exists status text not null default 'open'",
-    "alter table event_dead_letters add column if not exists replayed_at timestamptz",
-    "alter table event_dead_letters add column if not exists replay_event_id text",
-)
