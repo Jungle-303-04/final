@@ -6,11 +6,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from packages.events.bus import RecordedEventClient, event_causation, publish_and_record
+from packages.events.bus import (
+    RecordedEventClient,
+    event_causation,
+    publish_and_record,
+)
 from packages.events.envelope import event
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-COMMAND_WORKER_PATH = ROOT_DIR / "services" / "command-worker" / "command_worker.py"
+COMMAND_WORKER_PATH = (
+    ROOT_DIR / "services" / "command-worker" / "command_worker.py"
+)
 
 
 def load_module(path: Path, name: str):
