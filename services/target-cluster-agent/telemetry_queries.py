@@ -10,26 +10,26 @@ class PrometheusInstantQuery:
     promql: str
 
 
-# Managing only "what query to send"
+# Connection-check queries that are expected to exist in the local target cluster.
 PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = (
     PrometheusInstantQuery(
-        metric_name="http_5xx_rate",
-        description="HTTP 5xx request rate in the sandbox namespace over 5 minutes.",
-        promql='sum(rate(http_requests_total{namespace="sandbox",status=~"5.."}[5m]))',
+        metric_name="scrape_targets_up",
+        description="Prometheus scrape target health for the target cluster.",
+        promql="up",
     ),
     PrometheusInstantQuery(
-        metric_name="cpu_usage_seconds_rate",
-        description="Container CPU usage rate in the sandbox namespace over 5 minutes.",
-        promql=(
-            'sum(rate(container_cpu_usage_seconds_total{namespace="sandbox",container!="POD"}[5m]))'
-        ),
+        metric_name="target_pod_info",
+        description="Pods discovered by kube-state-metrics in the target namespace.",
+        promql='kube_pod_info{namespace="target"}',
     ),
     PrometheusInstantQuery(
-        metric_name="request_latency_p95",
-        description="95th percentile HTTP request latency in the sandbox namespace over 5 minutes.",
-        promql=(
-            "histogram_quantile(0.95, "
-            'sum(rate(http_request_duration_seconds_bucket{namespace="sandbox"}[5m])) by (le))'
-        ),
+        metric_name="target_deployment_replicas",
+        description="Deployment replica counts reported by kube-state-metrics.",
+        promql='kube_deployment_status_replicas{namespace="target"}',
+    ),
+    PrometheusInstantQuery(
+        metric_name="node_collector_cpu_usage_ratio",
+        description="Demo node runtime CPU ratio exposed by optional-node-collector.",
+        promql="node_collector_cpu_usage_ratio",
     ),
 )
