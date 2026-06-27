@@ -140,6 +140,15 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 - provider token, kubeconfig, AWS credential을 event payload나 log에 남기지 않는다.
 - 새로운 외부 egress 목적지가 생기면 문서에 추가한다.
 
+## 개선 계획
+
+운영 수준으로 올리기 전 아래 항목은 별도 작업으로 추적한다.
+
+| 항목 | 계획 | 이유 |
+| --- | --- | --- |
+| CI integration smoke | `make up && make smoke`를 nightly 또는 수동 dispatch job으로 추가한다. PR 필수 check에는 Docker import smoke를 먼저 두고, 실제 kind E2E는 비용과 실행 시간을 분리해 운영한다. | uv 기반 unit CI와 Docker/runtime 환경 차이를 잡고, NATS/PostgreSQL/Redis/Kubernetes 조합 부팅 실패를 조기에 발견한다. |
+| Secret provider 경계 | fake OAuth token 저장을 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 fake 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
+
 ## 참고 문서
 
 - AWS EKS Fargate: https://docs.aws.amazon.com/eks/latest/userguide/fargate.html

@@ -8,8 +8,12 @@ from typing import Any
 
 from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    create_async_engine,
+)
 
 from packages.config.constants import Auth, GitHub, Postgres
 from packages.config.settings import env
@@ -67,9 +71,13 @@ def row_dict(row: Any) -> JsonObject:
     return dict(row)
 
 
-class Database:
+class DatabaseConnection:
     def __init__(self) -> None:
         self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
+        self.engine: Engine = create_engine(self.sqlalchemy_url)
+        self.async_engine: AsyncEngine = create_async_engine(
+            self.sqlalchemy_url
+        )
 
     @property
     def sqlalchemy_url(self) -> str:
@@ -77,29 +85,25 @@ class Database:
 
     @contextmanager
     def connection(self):
-        engine = create_engine(self.sqlalchemy_url)
-        try:
-            with engine.begin() as conn:
-                yield conn
-        finally:
-            engine.dispose()
+        with self.engine.begin() as conn:
+            yield conn
 
     @asynccontextmanager
     async def async_connection(self):
-        engine = create_async_engine(self.sqlalchemy_url)
-        try:
-            async with engine.begin() as conn:
-                yield conn
-        finally:
-            await engine.dispose()
+        async with self.async_engine.begin() as conn:
+            yield conn
 
     def init(self) -> None:
-        engine = create_engine(self.sqlalchemy_url)
-        try:
-            metadata.create_all(engine)
-        finally:
-            engine.dispose()
+        metadata.create_all(self.engine)
 
+    def dispose(self) -> None:
+        self.engine.dispose()
+
+    async def dispose_async(self) -> None:
+        await self.async_engine.dispose()
+
+
+class EventRepository(DatabaseConnection):
     def record_event(self, evt: Event) -> None:
         table = EventModel.__table__
         statement = (
@@ -116,7 +120,9 @@ class Database:
         with self.connection() as conn:
             conn.execute(statement)
 
-    def begin_event_processing(self, evt: Event, consumer: str) -> EventProcessingRecord:
+    def begin_event_processing(
+        self, evt: Event, consumer: str
+    ) -> EventProcessingRecord:
         table = EventProcessing.__table__
         with self.connection() as conn:
             self.insert_event_processing(conn, table, evt, consumer)
@@ -125,7 +131,11 @@ class Database:
                 return {"status": row["status"], "attempts": row["attempts"]}
 
             existing = self.get_event_processing(conn, table, evt, consumer)
-            return row_dict(existing) if existing else {"status": "unknown", "attempts": 0}
+            return (
+                row_dict(existing)
+                if existing
+                else {"status": "unknown", "attempts": 0}
+            )
 
     def insert_event_processing(
         self, conn: Connection, table: Any, evt: Event, consumer: str
@@ -141,7 +151,9 @@ class Database:
                 attempts=0,
                 updated_at=func.now(),
             )
-            .on_conflict_do_nothing(index_elements=[table.c.event_id, table.c.consumer])
+            .on_conflict_do_nothing(
+                index_elements=[table.c.event_id, table.c.consumer]
+            )
         )
         conn.execute(statement)
 
@@ -185,7 +197,10 @@ class Database:
         table = EventProcessing.__table__
         statement = (
             update(table)
-            .where(table.c.event_id == evt["event_id"], table.c.consumer == consumer)
+            .where(
+                table.c.event_id == evt["event_id"],
+                table.c.consumer == consumer,
+            )
             .values(
                 status=EventProcessingStatus.PROCESSED,
                 last_error=None,
@@ -195,11 +210,16 @@ class Database:
         with self.connection() as conn:
             conn.execute(statement)
 
-    def fail_event_processing(self, evt: Event, consumer: str, error: str, status: str) -> None:
+    def fail_event_processing(
+        self, evt: Event, consumer: str, error: str, status: str
+    ) -> None:
         table = EventProcessing.__table__
         statement = (
             update(table)
-            .where(table.c.event_id == evt["event_id"], table.c.consumer == consumer)
+            .where(
+                table.c.event_id == evt["event_id"],
+                table.c.consumer == consumer,
+            )
             .values(
                 status=status,
                 last_error=compact_error(error),
@@ -209,6 +229,8 @@ class Database:
         with self.connection() as conn:
             conn.execute(statement)
 
+
+class DeadLetterRepository(DatabaseConnection):
     def record_dead_letter(
         self, evt: Event, consumer: str, error: str, attempts: int
     ) -> JsonObject:
@@ -243,7 +265,9 @@ class Database:
 
     def list_dead_letters(self, limit: int) -> list[JsonObject]:
         table = EventDeadLetter.__table__
-        statement = select(table).order_by(table.c.created_at.desc()).limit(limit)
+        statement = (
+            select(table).order_by(table.c.created_at.desc()).limit(limit)
+        )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [serialize_dead_letter(row) for row in rows]
@@ -255,16 +279,24 @@ class Database:
             row = conn.execute(statement).mappings().first()
         return serialize_dead_letter(row) if row else None
 
-    def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> None:
+    def mark_dead_letter_replayed(
+        self, dead_letter_id: int, replay_event_id: str
+    ) -> None:
         table = EventDeadLetter.__table__
         statement = (
             update(table)
             .where(table.c.id == dead_letter_id)
-            .values(status="replayed", replayed_at=func.now(), replay_event_id=replay_event_id)
+            .values(
+                status="replayed",
+                replayed_at=func.now(),
+                replay_event_id=replay_event_id,
+            )
         )
         with self.connection() as conn:
             conn.execute(statement)
 
+
+class OAuthRepository(DatabaseConnection):
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
         user_id = payload.get("user_id", Auth.LOCAL_USER_ID)
@@ -320,7 +352,10 @@ class Database:
         table = OAuthAccount.__table__
         statement = (
             select(table.c.token_ref)
-            .where(table.c.provider == GitHub.PROVIDER, table.c.status == "connected")
+            .where(
+                table.c.provider == GitHub.PROVIDER,
+                table.c.status == "connected",
+            )
             .order_by(table.c.updated_at.desc())
             .limit(1)
         )
@@ -328,7 +363,11 @@ class Database:
             row = conn.execute(statement).mappings().first()
         return row["token_ref"] if row else None
 
-    def save_repo_change(self, correlation_id: str, commit_sha: str, manifest: JsonObject) -> None:
+
+class RepoChangeRepository(DatabaseConnection):
+    def save_repo_change(
+        self, correlation_id: str, commit_sha: str, manifest: JsonObject
+    ) -> None:
         table = RepoChange.__table__
         statement = pg_insert(table).values(
             correlation_id=correlation_id,
@@ -338,6 +377,8 @@ class Database:
         with self.connection() as conn:
             conn.execute(statement)
 
+
+class AgentCommandRepository(DatabaseConnection):
     async def queue_agent_command(
         self, correlation_id: str, plan: JsonObject, status: str
     ) -> None:
@@ -371,18 +412,27 @@ class Database:
                 table.c.action,
                 table.c.payload,
             )
-            .where(table.c.cluster_id == cluster_id, table.c.status == queued_status)
+            .where(
+                table.c.cluster_id == cluster_id,
+                table.c.status == queued_status,
+            )
             .order_by(table.c.created_at)
             .limit(1)
         )
         async with self.async_connection() as conn:
             row = (await conn.execute(find_statement)).mappings().first()
             if row:
-                await self.mark_agent_command_leased(conn, table, row["command_id"], leased_status)
+                await self.mark_agent_command_leased(
+                    conn, table, row["command_id"], leased_status
+                )
             return row_dict(row) if row else None
 
     async def mark_agent_command_leased(
-        self, conn: AsyncConnection, table: Any, command_id: str, leased_status: str
+        self,
+        conn: AsyncConnection,
+        table: Any,
+        command_id: str,
+        leased_status: str,
     ) -> None:
         statement = (
             update(table)
@@ -398,14 +448,20 @@ class Database:
         statement = (
             update(table)
             .where(table.c.command_id == command_id)
-            .values(status=result["status"], result=result, updated_at=func.now())
+            .values(
+                status=result["status"], result=result, updated_at=func.now()
+            )
             .returning(table.c.correlation_id)
         )
         async with self.async_connection() as conn:
             row = (await conn.execute(statement)).mappings().first()
         return row["correlation_id"] if row else None
 
-    def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None:
+
+class RcaRepository(DatabaseConnection):
+    def save_evidence(
+        self, correlation_id: str, kind: str, payload: JsonObject
+    ) -> None:
         table = Evidence.__table__
         statement = pg_insert(table).values(
             correlation_id=correlation_id,
@@ -416,7 +472,11 @@ class Database:
             conn.execute(statement)
 
     def save_rca_report(
-        self, correlation_id: str, root_cause: str, action: str, payload: JsonObject
+        self,
+        correlation_id: str,
+        root_cause: str,
+        action: str,
+        payload: JsonObject,
     ) -> None:
         table = RcaReport.__table__
         statement = pg_insert(table).values(
@@ -429,7 +489,12 @@ class Database:
             conn.execute(statement)
 
     def save_pull_request(
-        self, correlation_id: str, pr_url: str, title: str, body: str, status: str
+        self,
+        correlation_id: str,
+        pr_url: str,
+        title: str,
+        body: str,
+        status: str,
     ) -> None:
         table = PullRequest.__table__
         statement = pg_insert(table).values(
@@ -442,6 +507,8 @@ class Database:
         with self.connection() as conn:
             conn.execute(statement)
 
+
+class DashboardRepository(DatabaseConnection):
     def upsert_dashboard(self, evt: Event, status: str, summary: str) -> None:
         payload = {
             "last_event_id": evt["event_id"],
@@ -473,11 +540,17 @@ class Database:
 
     def list_dashboard(self) -> list[JsonObject]:
         table = DashboardCard.__table__
-        statement = select(table).order_by(table.c.updated_at.desc()).limit(DASHBOARD_LIMIT)
+        statement = (
+            select(table)
+            .order_by(table.c.updated_at.desc())
+            .limit(DASHBOARD_LIMIT)
+        )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [row_dict(row) for row in rows]
 
+
+class AuditLogRepository(DatabaseConnection):
     def append_audit_log(self, evt: Event) -> None:
         table = AuditLog.__table__
         statement = pg_insert(table).values(
@@ -491,14 +564,31 @@ class Database:
             conn.execute(statement)
 
 
+class Database(
+    EventRepository,
+    DeadLetterRepository,
+    OAuthRepository,
+    RepoChangeRepository,
+    AgentCommandRepository,
+    RcaRepository,
+    DashboardRepository,
+    AuditLogRepository,
+):
+    pass
+
+
 async def wait_for_database(db: InitializableStore) -> None:
     for attempt in range(DEPENDENCY_RETRY_LIMIT):
         try:
             db.init()
             return
         except Exception as exc:
+            message = (
+                f"waiting for postgres "
+                f"({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
+            )
             print(
-                f"waiting for postgres ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}",
+                message,
                 flush=True,
             )
             await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)

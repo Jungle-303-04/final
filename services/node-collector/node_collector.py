@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Final
@@ -12,8 +14,8 @@ from settings import Settings
 from uvicorn import Config, Server
 
 from packages.config.settings import env
-from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.fields import Gateway
 
 
 class Field:
@@ -60,8 +62,15 @@ class NodeCollector:
         return cls(
             node_name=env(Settings.NODE_NAME_ENV, Settings.DEFAULT_NODE_NAME),
             pod_name=env(Settings.POD_NAME_ENV, Settings.DEFAULT_POD_NAME),
-            namespace=env(Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE),
-            interval_seconds=int(env(Settings.COLLECT_INTERVAL_ENV, Settings.DEFAULT_COLLECT_INTERVAL_SECONDS)),
+            namespace=env(
+                Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE
+            ),
+            interval_seconds=int(
+                env(
+                    Settings.COLLECT_INTERVAL_ENV,
+                    Settings.DEFAULT_COLLECT_INTERVAL_SECONDS,
+                )
+            ),
         )
 
     def snapshot(self) -> NodeRuntimeSample:
@@ -83,14 +92,23 @@ class NodeCollector:
             [
                 "# HELP node_collector_cpu_usage_ratio Node CPU usage ratio.",
                 "# TYPE node_collector_cpu_usage_ratio gauge",
-                f"node_collector_cpu_usage_ratio{{{labels}}} {sample.cpu_usage_ratio}",
-                "# HELP node_collector_memory_working_set_bytes Node memory working set.",
+                (
+                    f"node_collector_cpu_usage_ratio{{{labels}}} "
+                    f"{sample.cpu_usage_ratio}"
+                ),
+                (
+                    "# HELP node_collector_memory_working_set_bytes "
+                    "Node memory working set."
+                ),
                 "# TYPE node_collector_memory_working_set_bytes gauge",
                 (
                     f"node_collector_memory_working_set_bytes{{{labels}}} "
                     f"{sample.memory_working_set_bytes}"
                 ),
-                "# HELP node_collector_filesystem_usage_ratio Node filesystem usage ratio.",
+                (
+                    "# HELP node_collector_filesystem_usage_ratio "
+                    "Node filesystem usage ratio."
+                ),
                 "# TYPE node_collector_filesystem_usage_ratio gauge",
                 f"node_collector_filesystem_usage_ratio{{{labels}}} "
                 f"{sample.filesystem_usage_ratio}",
@@ -116,17 +134,18 @@ class NodeCollector:
 
 def create_app(collector: NodeCollector | None = None) -> FastAPI:
     node_collector = collector or NodeCollector.from_env()
-    app = FastAPI(title=Settings.SERVICE_NAME)
 
-    @app.on_event("startup")
-    async def startup() -> None:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.log_task = asyncio.create_task(node_collector.log_forever())
+        try:
+            yield
+        finally:
+            task = getattr(app.state, "log_task", None)
+            if task:
+                task.cancel()
 
-    @app.on_event("shutdown")
-    async def shutdown() -> None:
-        task = getattr(app.state, "log_task", None)
-        if task:
-            task.cancel()
+    app = FastAPI(title=Settings.SERVICE_NAME, lifespan=lifespan)
 
     @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
@@ -155,7 +174,9 @@ async def run() -> None:
         Config(
             create_app(),
             host=Settings.SERVICE_HOST,
-            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
+            port=int(
+                env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)
+            ),
             log_level=Settings.LOG_LEVEL,
         )
     ).serve()

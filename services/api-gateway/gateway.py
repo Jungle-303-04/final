@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from auth import OAuthAuthService, RedisSessionStore
@@ -11,7 +13,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from settings import Settings
 
 from packages.config.constants import Auth, GitHub, Target
-from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID, PAYLOAD
+from packages.contracts.event_bus.fields import (
+    CORRELATION_ID,
+    EVENT_ID,
+    PAYLOAD,
+)
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
@@ -23,32 +29,38 @@ from packages.contracts.gateway.requests import (
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
-from packages.events.bus import EventBus, publish_and_record
+from packages.events.bus import NatsEventBus, publish_and_record
 from packages.storage.database import Database, wait_for_database
 
 
 class ApiGateway:
     def __init__(self) -> None:
         self.db = Database()
-        self.bus = EventBus()
+        self.bus = NatsEventBus()
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
-        self.app = FastAPI(title=Settings.APP_TITLE, version=Settings.APP_VERSION)
+        self.app = FastAPI(
+            title=Settings.APP_TITLE,
+            version=Settings.APP_VERSION,
+            lifespan=self.lifespan,
+        )
         self.configure_routes()
+
+    @asynccontextmanager
+    async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
+        await wait_for_database(self.db)
+        await self.sessions.connect()
+        await self.bus.connect()
+        try:
+            yield
+        finally:
+            await self.bus.close()
+            await self.sessions.close()
+            await self.db.dispose_async()
+            self.db.dispose()
 
     def configure_routes(self) -> None:
         app = self.app
-
-        @app.on_event("startup")
-        async def startup() -> None:
-            await wait_for_database(self.db)
-            await self.sessions.connect()
-            await self.bus.connect()
-
-        @app.on_event("shutdown")
-        async def shutdown() -> None:
-            await self.bus.close()
-            await self.sessions.close()
 
         @app.get(gateway_routes.HEALTHZ_PATH)
         async def healthz() -> dict[str, str]:
@@ -77,8 +89,13 @@ class ApiGateway:
             user_id: str = Auth.LOCAL_USER_ID,
             scopes: str = Settings.DEFAULT_SCOPES,
         ) -> dict[str, Any]:
-            scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
-            if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scope_list:
+            scope_list = [
+                scope.strip() for scope in scopes.split(",") if scope.strip()
+            ]
+            if (
+                provider == GitHub.PROVIDER
+                and GitHub.REQUIRED_SCOPE not in scope_list
+            ):
                 scope_list.append(GitHub.REQUIRED_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
             await publish_and_record(
@@ -96,11 +113,17 @@ class ApiGateway:
             return response
 
         @app.post(gateway_routes.OAUTH_CALLBACK_PATH)
-        async def oauth_callback(provider: str, payload: OAuthCallbackRequest) -> dict[str, Any]:
+        async def oauth_callback(
+            provider: str, payload: OAuthCallbackRequest
+        ) -> dict[str, Any]:
             result = await self.auth.callback(provider, payload.model_dump())
             account = result[Gateway.ACCOUNT]
             evt = await publish_and_record(
-                self.bus, self.db, EventSubject.OAUTH_CONNECTED, Settings.SERVICE_NAME, account
+                self.bus,
+                self.db,
+                EventSubject.OAUTH_CONNECTED,
+                Settings.SERVICE_NAME,
+                account,
             )
             return {
                 Gateway.ACCEPTED: True,
@@ -110,7 +133,9 @@ class ApiGateway:
             }
 
         @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
-        async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
+        async def github_webhook(
+            payload: GitHubWebhookRequest,
+        ) -> dict[str, Any]:
             evt = await publish_and_record(
                 self.bus,
                 self.db,
@@ -132,7 +157,9 @@ class ApiGateway:
             return {Gateway.ACCEPTED: True, EVENT_ID: evt[EVENT_ID]}
 
         @app.post(gateway_routes.AGENT_EVIDENCE_PATH)
-        async def agent_evidence(payload: AgentEvidenceRequest) -> dict[str, Any]:
+        async def agent_evidence(
+            payload: AgentEvidenceRequest,
+        ) -> dict[str, Any]:
             evidence = payload.model_dump()
             evt = await publish_and_record(
                 self.bus,
@@ -149,12 +176,18 @@ class ApiGateway:
             }
 
         @app.post(gateway_routes.COMMANDS_PATH)
-        async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
+        async def commands(
+            request: Request, payload: CommandRequest
+        ) -> dict[str, Any]:
             current = await self.auth.require_session(request)
             command = payload.model_dump()
             command[Gateway.REQUESTED_BY] = current.user_id
             evt = await publish_and_record(
-                self.bus, self.db, EventSubject.COMMAND_REQUESTED, Settings.SERVICE_NAME, command
+                self.bus,
+                self.db,
+                EventSubject.COMMAND_REQUESTED,
+                Settings.SERVICE_NAME,
+                command,
             )
             return {
                 Gateway.ACCEPTED: True,
@@ -169,10 +202,14 @@ class ApiGateway:
         ) -> dict[str, Any]:
             await self.auth.require_session(request)
             bounded_limit = max(1, min(limit, Settings.MAX_DEAD_LETTER_LIMIT))
-            return {Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)}
+            return {
+                Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)
+            }
 
         @app.post(gateway_routes.DEAD_LETTER_REPLAY_PATH)
-        async def replay_dead_letter(request: Request, dead_letter_id: int) -> dict[str, Any]:
+        async def replay_dead_letter(
+            request: Request, dead_letter_id: int
+        ) -> dict[str, Any]:
             await self.auth.require_session(request)
             dead_letter = self.db.get_dead_letter(dead_letter_id)
             if dead_letter is None:
@@ -207,10 +244,14 @@ class ApiGateway:
             cluster_id: str = Target.DEFAULT_CLUSTER_ID,
             timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
         ) -> dict[str, Any]:
-            deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
+            deadline = time.time() + min(
+                timeout, Settings.MAX_COMMAND_POLL_SECONDS
+            )
             while time.time() < deadline:
                 row = await self.db.lease_agent_command(
-                    cluster_id, Settings.COMMAND_STATUS_QUEUED, Settings.COMMAND_STATUS_LEASED
+                    cluster_id,
+                    Settings.COMMAND_STATUS_QUEUED,
+                    Settings.COMMAND_STATUS_LEASED,
                 )
                 if row:
                     return {Gateway.COMMAND: row}
@@ -218,9 +259,13 @@ class ApiGateway:
             return {Gateway.COMMAND: None}
 
         @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
-        async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
+        async def command_result(
+            command_id: str, payload: CommandResultRequest
+        ) -> dict[str, Any]:
             result = payload.model_dump()
-            correlation_id = await self.db.complete_agent_command(command_id, result)
+            correlation_id = await self.db.complete_agent_command(
+                command_id, result
+            )
             if not correlation_id:
                 raise HTTPException(
                     status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
@@ -251,10 +296,17 @@ class ApiGateway:
                     encoded = json.dumps(self.db.list_dashboard(), default=str)
                     if encoded != last:
                         last = encoded
-                        yield f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
-                    await asyncio.sleep(Settings.DASHBOARD_STREAM_INTERVAL_SECONDS)
+                        yield (
+                            f"event: {EventSubject.DASHBOARD_UPDATED}\n"
+                            f"data: {encoded}\n\n"
+                        )
+                    await asyncio.sleep(
+                        Settings.DASHBOARD_STREAM_INTERVAL_SECONDS
+                    )
 
-            return StreamingResponse(events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE)
+            return StreamingResponse(
+                events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE
+            )
 
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
