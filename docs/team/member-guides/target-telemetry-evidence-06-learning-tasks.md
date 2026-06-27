@@ -166,7 +166,7 @@ uv run pytest tests/test_node_collector.py
 선택 실행:
 
 ```bash
-python services/node-collector/runner.py
+python services/node-collector/app.py
 ```
 
 다른 터미널:

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from packages.config.logs import get_logger
 from packages.contracts.event_bus.interfaces import (
     EventClient,
     EventConsumerBus,
@@ -22,11 +23,14 @@ from packages.events.bus import (
     NatsEventBus,
     RecordedEventClient,
     event_causation,
+    event_context,
 )
 from packages.runtime.ledger import Ledger
 
 if TYPE_CHECKING:
     from packages.storage.database import Database
+
+logger = get_logger("worker")
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 2
@@ -102,6 +106,8 @@ class EventProcessor:
             return
 
         attempts = int(processing["attempts"])
+        context = {**event_context(evt), "consumer": self.service_name}
+        logger.info("handling", extra={"context": context})
         try:
             with event_causation(evt.event_id):
                 await self.handler(evt)
@@ -117,15 +123,24 @@ class EventProcessor:
         error: Exception,
         attempts: int,
     ) -> None:
+        context = {
+            **event_context(evt),
+            "consumer": self.service_name,
+            "attempts": attempts,
+        }
         if attempts >= self.retry_policy.max_attempts:
             self.ledger.dead_letter(evt, error)
             await self.dead_letters.capture(
                 evt, self.service_name, error, attempts
             )
+            logger.error(
+                "dead_letter", extra={"context": context}, exc_info=error
+            )
             await message.ack()
             return
 
         self.ledger.retry(evt, error)
+        logger.warning("retry", extra={"context": context}, exc_info=error)
         await message.nak(delay=self.retry_policy.retry_delay_seconds)
 
 
@@ -164,10 +179,11 @@ class WorkerRuntime:
         stopping = asyncio.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
-        print(
-            f"{self.spec.service_name} subscribed to {self.spec.subject}",
-            flush=True,
-        )
+        lifecycle = {
+            "consumer": self.spec.service_name,
+            "subject": self.spec.subject,
+        }
+        logger.info("subscribed", extra={"context": lifecycle})
 
         while not stopping.is_set():
             try:
@@ -178,8 +194,8 @@ class WorkerRuntime:
             except TimeoutError:
                 continue
             except Exception as exc:
-                print(
-                    f"{self.spec.service_name} fetch error: {exc}", flush=True
+                logger.warning(
+                    "fetch_error", extra={"context": lifecycle}, exc_info=exc
                 )
                 await asyncio.sleep(1)
                 continue
@@ -188,9 +204,10 @@ class WorkerRuntime:
                 try:
                     await processor.process(message)
                 except Exception as exc:
-                    print(
-                        f"{self.spec.service_name} processor error: {exc}",
-                        flush=True,
+                    logger.error(
+                        "processor_error",
+                        extra={"context": lifecycle},
+                        exc_info=exc,
                     )
                     await message.nak(
                         delay=self.spec.retry_policy.retry_delay_seconds

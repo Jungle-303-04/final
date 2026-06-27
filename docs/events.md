@@ -131,12 +131,19 @@ SUBSCRIPTION = WorkerSubscription(
 )
 ```
 
+`rca-worker`, `command-worker` 는 App(한 파일) 방식으로 마이그레이션됐다:
+
 ```python
-WorkerService.from_subscription(
-    SUBSCRIPTION,
-    lambda events, db: CommandWorkflow(events, db).handle,
-).run()
+app = App("command-worker")
+
+@app.sub(CommandRequestedPayload)        # 구독
+async def on_command_requested(evt, ctx):
+    yield CommandDispatchReadyPayload(...)  # 다음 이벤트는 yield
+
+app.run()
 ```
+
+아직 옛 구조인 서비스는 `WorkerService.from_subscription(...)` 를 쓴다.
 
 `WorkerService`는 내부에서 `EventHandlerSpec`과 `WorkerRuntime`을 만든다. durable consumer 이름은 기본적으로 `service_name`을 사용한다. 한 서비스가 여러 독립 consumer를 가져야 하면 `WorkerSubscription(..., durable_name="...")`을 명시한다.
 
@@ -145,8 +152,8 @@ WorkerService.from_subscription(
 | 서비스 | 설정 파일 | 구독 subject |
 | --- | --- | --- |
 | GitOps Sync Worker | `services/gitops-sync-worker/settings.py` | `git.webhook.received` |
-| Command Worker | `services/command-worker/settings.py` | `command.requested` |
-| RCA Worker | `services/rca-worker/settings.py` | `cluster.evidence.received` |
+| Command Worker (App) | `services/command-worker/app.py` | `command.requested` |
+| RCA Worker (App) | `services/rca-worker/app.py` | `cluster.evidence.received` |
 | Dashboard Projection Service | `services/dashboard-projection-service/settings.py` | `>` |
 | Audit Timeline Service | `services/audit-timeline-service/settings.py` | `>` |
 

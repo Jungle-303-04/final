@@ -120,7 +120,7 @@ ci: PR 필수 검증 workflow 추가
 | 대상 | 스타일 | 예시 |
 | --- | --- | --- |
 | module/file | `snake_case.py` | `gateway.py`, `node_collector.py` |
-| class | `PascalCase` | `CommandWorkflow`, `WorkerService` |
+| class | `PascalCase` | `App`, `WorkerService`, `Policy` |
 | function/method | 동사형 `snake_case` | `publish_event`, `record_dead_letter` |
 | constant | `UPPER_SNAKE_CASE` | `MAX_DEAD_LETTER_LIMIT` |
 | event subject | `<domain>.<thing>.<verb>` | `command.requested` |
@@ -149,7 +149,7 @@ ci: PR 필수 검증 workflow 추가
 - Write command는 auth와 policy check를 반드시 지난다.
 - 팀이 명시적으로 정책을 바꾸기 전까지 production namespace write는 금지한다.
 - 처음부터 완전 분리 마이크로서비스로 구현한다.
-- 서비스는 `services/<service-name>/runner.py`와 Kubernetes Deployment/DaemonSet 경계를 유지한다.
+- 서비스는 `services/<service-name>/app.py`와 Kubernetes Deployment/DaemonSet 경계를 유지한다.
 - 단일 FastAPI 앱, role dispatcher, 서비스 간 직접 함수 호출 구조로 회귀하지 않는다.
 - 서비스 pod 삭제 뒤 재기동과 retry/DLQ/read model 복구 가능성을 확인한다.
 

@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from uvicorn import Config, Server
 
 from packages.config.constants import Runtime
+from packages.config.logs import configure_logging
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventClient, EventHandler
 from packages.contracts.event_bus.subscriptions import WorkerSubscription
@@ -31,6 +32,7 @@ class AsyncService:
 
     def run(self) -> None:
         os.environ.setdefault(Runtime.SERVICE_NAME_ENV, self.service_name)
+        configure_logging(self.service_name)
         asyncio.run(self.runner())
 
 

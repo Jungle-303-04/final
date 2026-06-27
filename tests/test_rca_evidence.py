@@ -6,10 +6,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from packages.events.envelope import event
+from packages.contracts.event_bus.payloads import ClusterEvidenceReceived
+from packages.contracts.event_bus.registry import EventContext
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-RCA_WORKER_PATH = ROOT_DIR / "services" / "rca-worker" / "rca_worker.py"
+RCA_WORKER_PATH = ROOT_DIR / "services" / "rca-worker" / "app.py"
 
 
 def load_module(path: Path, name: str):
@@ -30,90 +31,58 @@ def load_module(path: Path, name: str):
             sys.modules["settings"] = previous_settings
 
 
-class FakeEvents:
+class FakeDb:
     def __init__(self) -> None:
-        self.published: list[Any] = []
+        self.evidence: list[Any] = []
+        self.reports: list[Any] = []
+        self.pull_requests: list[Any] = []
 
-    async def publish(
-        self,
-        subject: str,
-        source: str,
-        payload: dict[str, Any],
-        correlation_id: str | None = None,
-        causation_id: str | None = None,
-    ) -> Any:
-        evt = event(subject, source, payload, correlation_id, causation_id)
-        self.published.append(evt)
-        return evt
+    def latest_github_token_ref(self) -> str | None:
+        return None
 
-
-class FakeRcaStore:
-    def __init__(self) -> None:
-        self.evidence: list[tuple[str, str, dict[str, Any]]] = []
-        self.reports: list[tuple[str, str, str]] = []
-        self.pull_requests: list[tuple[str, str]] = []
-
-    def save_evidence(
-        self, correlation_id: str, kind: str, payload: dict[str, Any]
-    ) -> None:
+    def save_evidence(self, correlation_id, kind, payload) -> None:
         self.evidence.append((correlation_id, kind, payload))
 
     def save_rca_report(
-        self,
-        correlation_id: str,
-        root_cause: str,
-        action: str,
-        payload: dict[str, Any],
+        self, correlation_id, root_cause, action, payload
     ) -> None:
         self.reports.append((correlation_id, root_cause, action))
 
     def save_pull_request(
-        self,
-        correlation_id: str,
-        pr_url: str,
-        title: str,
-        body: str,
-        status: str,
+        self, correlation_id, pr_url, title, body, status
     ) -> None:
         self.pull_requests.append((correlation_id, pr_url))
 
 
-class FakeOAuthAccounts:
-    def latest_github_token_ref(self) -> str | None:
-        return None
+def test_rca_subscriber_yields_typed_event_chain() -> None:
+    module = load_module(RCA_WORKER_PATH, "test_rca_worker")
+    db = FakeDb()
+    payload = ClusterEvidenceReceived(
+        cluster_id="target-cluster-01",
+        kubernetes={"pods": []},
+        metrics={"cpu": 0.8},
+        logs=[{"line": "boom"}],
+        traces={"slow_span": "GET /x"},
+        correlation_id="corr-9",
+    )
+    ctx = EventContext(
+        event_id="evt-1",
+        subject="cluster.evidence.received",
+        correlation_id="corr-9",
+        causation_id=None,
+        db=db,
+    )
 
+    async def run() -> list[Any]:
+        return [out async for out in module.on_cluster_evidence(payload, ctx)]
 
-def test_rca_validates_evidence_and_emits_safe_pr() -> None:
-    async def run() -> None:
-        module = load_module(RCA_WORKER_PATH, "test_rca_worker")
-        events = FakeEvents()
-        rca_store = FakeRcaStore()
-        workflow = module.RcaWorkflow(events, rca_store, FakeOAuthAccounts())
+    outs = asyncio.run(run())
 
-        evt = event(
-            "cluster.evidence.received",
-            "api-gateway",
-            {
-                "cluster_id": "target-cluster-01",
-                "correlation_id": "corr-9",
-                "kubernetes": {"pods": []},
-                "metrics": {"cpu": 0.8},
-                "logs": [{"line": "boom"}],
-                "traces": {"slow_span": "GET /x"},
-            },
-            "corr-9",
-        )
-
-        await workflow.handle(evt)
-
-        # 검증된 evidence가 저장되고 안전 PR까지 발행된다.
-        assert rca_store.evidence[0][0] == "corr-9"
-        assert rca_store.pull_requests and rca_store.reports
-        subjects = [e.subject for e in events.published]
-        assert subjects == [
-            "evidence.built",
-            "rca.completed",
-            "safe_pr.created",
-        ]
-
-    asyncio.run(run())
+    # 한 핸들러가 yield 로 세 이벤트를 체이닝 (타입 있는 payload).
+    assert [out.__subject__ for out in outs] == [
+        "evidence.built",
+        "rca.completed",
+        "safe_pr.created",
+    ]
+    # 부수효과(저장)도 일어났다.
+    assert db.evidence and db.reports and db.pull_requests

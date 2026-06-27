@@ -193,7 +193,7 @@ spec:
         - name: node-collector
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/node-collector/runner.py"]
+          command: ["python", "services/node-collector/app.py"]
           env:
             - name: PORT
               value: "9100"
@@ -235,7 +235,7 @@ spec:
         - name: target-cluster-agent
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/runner.py"]
+          command: ["python", "services/target-cluster-agent/app.py"]
           env:
             - name: TARGET_CLUSTER_ID
               value: target-cluster-01
