@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.events.bus import (
     RecordedEventClient,
     event_causation,
@@ -40,7 +41,7 @@ def load_module(path: Path, name: str):
 
 class FakeEventPublisher:
     def __init__(self) -> None:
-        self.published: list[dict[str, Any]] = []
+        self.published: list[EventEnvelope] = []
 
     async def publish(
         self,
@@ -49,7 +50,7 @@ class FakeEventPublisher:
         payload: dict[str, Any],
         correlation_id: str | None = None,
         causation_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> EventEnvelope:
         created = event(subject, source, payload, correlation_id, causation_id)
         self.published.append(created)
         return created
@@ -61,9 +62,9 @@ class FakeEventClient(FakeEventPublisher):
 
 class FakeEventRecorder:
     def __init__(self) -> None:
-        self.recorded: list[dict[str, Any]] = []
+        self.recorded: list[EventEnvelope] = []
 
-    def record_event(self, evt: dict[str, Any]) -> None:
+    def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
 
 
