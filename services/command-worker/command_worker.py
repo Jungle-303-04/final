@@ -28,15 +28,18 @@ class CommandWorkflow:
         planner: Planner | None = None,
         dispatcher: DispatchPort | None = None,
     ) -> None:
+        if policy is None:
+            policy = Policy.build(config.policy_rules)
+        if planner is None:
+            planner = DefaultPlanner(config)
+        if dispatcher is None:
+            dispatcher = Dispatcher(events, commands, config)
+
         self.events = events
         self.config = config
-        self.policy = policy if policy is not None else Policy.build(config.policy_rules)
-        self.planner = planner if planner is not None else DefaultPlanner(config)
-        self.dispatcher = (
-            dispatcher
-            if dispatcher is not None
-            else Dispatcher(events, commands, config)
-        )
+        self.policy = policy
+        self.planner = planner
+        self.dispatcher = dispatcher
 
     async def handle(self, evt: dict[str, Any]) -> None:
         command = Payload(evt[PAYLOAD])
