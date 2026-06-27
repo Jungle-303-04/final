@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from packages.contracts.event_bus.payloads import ClusterEvidenceReceived
-from packages.contracts.event_bus.registry import EventContext
+from packages.runtime.app import EventContext
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 RCA_WORKER_PATH = ROOT_DIR / "services" / "rca-worker" / "app.py"
