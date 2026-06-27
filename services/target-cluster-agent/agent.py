@@ -192,10 +192,10 @@ class TargetClusterAgent:
     # Convert Prometheus response shapes into a stable evidence-friendly structure.
     def normalize_prometheus_payload(self, payload: JsonObject) -> JsonObject:
         data = payload.get("data", {})
-        result_type = data.get("resultType")
-        result = data.get("result", [])
+        result_type = data.get("resultType") # vector, matrix, scalar, string
+        result = data.get("result", []) 
 
-        if result_type == "vector":
+        if result_type == "vector": # time series values
             samples = []
             for item in result:
                 raw_value = item.get("value", [])
@@ -213,7 +213,7 @@ class TargetClusterAgent:
                 "raw": payload,
             }
 
-        return {
+        return { # other result type(not vector)
             "result_type": result_type,
             "result": result,
             "raw": payload,
