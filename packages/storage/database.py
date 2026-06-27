@@ -599,4 +599,4 @@ async def wait_for_database(db: InitializableStore) -> None:
                 flush=True,
             )
             await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-    raise RuntimeError("PostgreSQL is not available")
+    raise RuntimeError("PostgreSQL 에 연결할 수 없다")
