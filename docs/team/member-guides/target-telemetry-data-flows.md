@@ -4,6 +4,46 @@
 
 이 문서는 Kubernetes 정보, Prometheus metric, Loki log, OpenTelemetry trace가 우리 Management Gateway까지 어떻게 흘러오는지 설명한다.
 
+## 현재 프로젝트 기준 상태
+
+먼저 현재 repo에 이미 있는 것과 아직 없는 것을 구분한다.
+
+현재 있는 것:
+
+- `services/target-cluster-agent/fake_prometheus.py`
+  - 실제 Prometheus가 아니다.
+  - `agent.py`의 `create_fake_telemetry_app("prometheus")`를 실행한다.
+  - Prometheus처럼 생긴 JSON을 고정으로 반환하는 fake server다.
+  - scrape 저장소도 없고 PromQL query engine도 없다.
+
+- `services/node-collector/node_collector.py`
+  - 이미 `GET /metrics` endpoint가 있다.
+  - Prometheus text format 형태로 sample metric을 반환한다.
+  - 첫 real Prometheus scrape target으로 쓰기 좋다.
+
+- `deploy/target/target.yaml`
+  - `fake-prometheus`, `fake-loki`, `fake-otel` Deployment가 있다.
+  - `optional-node-collector` DaemonSet이 있다.
+  - `optional-node-collector` pod template에 `prometheus.io/scrape`, `prometheus.io/path`, `prometheus.io/port` annotation이 있다.
+
+아직 없는 것:
+
+- real Prometheus Helm values.
+- real Prometheus 설치 README.
+- Prometheus가 node-collector를 scrape하는 실제 검증.
+- Prometheus query API를 호출하는 Python client.
+- Agent debug query API.
+- Prometheus query 결과를 `MetricEvidence`로 축약하는 코드.
+
+따라서 첫 구현 목표는 이것이다.
+
+```text
+fake-prometheus를 키우지 않는다.
+real Prometheus를 설치한다.
+이미 있는 node-collector /metrics를 Prometheus가 scrape하게 한다.
+Prometheus query API로 node_collector_* metric을 다시 꺼낸다.
+```
+
 ## 두 방향을 분리한다
 
 Target/Telemetry 작업은 두 가지 방향이 있다.

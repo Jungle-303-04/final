@@ -35,6 +35,7 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 | 2 | [Telemetry 데이터 흐름](target-telemetry-data-flows.md) | Kubernetes 정보를 어떻게 수집/주입/조회할지 설계할 때 |
 | 3 | [Evidence 모델](target-telemetry-evidence-model.md) | Gateway/RCA로 어떤 데이터를 보낼지 정할 때 |
 | 4 | [구현 Phase 계획](target-telemetry-implementation-plan.md) | PR/커밋 단위로 작업을 시작할 때 |
+| 5 | [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md) | 실제 파일을 고치고 테스트할 때 |
 
 ## 담당 영역
 
@@ -125,6 +126,7 @@ Management Gateway API 계약은 아직 구현 중이므로 처음부터 Agent-G
 10. 그 다음 Gateway API 계약이 준비되면 실제 `POST /agent/evidence` 흐름과 연결한다.
 
 상세 Phase는 [구현 Phase 계획](target-telemetry-implementation-plan.md)을 따른다.
+실제 구현은 [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md)의 PR 단위 체크리스트를 그대로 따라간다.
 
 ## PR 체크리스트
 
