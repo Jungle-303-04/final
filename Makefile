@@ -11,7 +11,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync doctor lint format test check build-image up down status smoke scale kill-pod clean
+.PHONY: help setup env sync doctor lint format test events check build-image up down status smoke scale kill-pod clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -40,6 +40,9 @@ format: ## Ruff 포맷 적용
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
+
+events: ## 등록된 이벤트/구독자 한눈에 보기
+	uv run python scripts/events.py
 
 check: doctor test ## 개발 전/커밋 전 전체 점검
 

@@ -17,7 +17,7 @@ spec:
         - name: gateway
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/api-gateway/runner.py"]
+          command: ["python", "services/api-gateway/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -69,7 +69,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops-sync-worker/runner.py"]
+          command: ["python", "services/gitops-sync-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -95,7 +95,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/command-worker/runner.py"]
+          command: ["python", "services/command-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -121,7 +121,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/rca-worker/runner.py"]
+          command: ["python", "services/rca-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -147,7 +147,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/dashboard-projection-service/runner.py"]
+          command: ["python", "services/dashboard-projection-service/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -173,7 +173,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/audit-timeline-service/runner.py"]
+          command: ["python", "services/audit-timeline-service/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service

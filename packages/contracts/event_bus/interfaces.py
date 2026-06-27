@@ -1,18 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Any, Protocol, TypedDict
-
-from packages.contracts.event_bus.fields import (
-    CAUSATION_ID,
-    CORRELATION_ID,
-    CREATED_AT,
-    EVENT_ID,
-    PAYLOAD,
-    SOURCE,
-    SUBJECT,
-)
+from dataclasses import dataclass, fields
+from typing import Any, Protocol, TypedDict, cast
 
 JsonObject = dict[str, Any]
 
@@ -45,28 +35,15 @@ class EventEnvelope:
     created_at: str
     payload: JsonObject
 
+    # 필드 이름의 단일 출처는 이 dataclass. 직렬화는 거기서 파생한다.
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> EventEnvelope:
-        return cls(
-            event_id=raw[EVENT_ID],
-            subject=raw[SUBJECT],
-            source=raw[SOURCE],
-            correlation_id=raw[CORRELATION_ID],
-            causation_id=raw.get(CAUSATION_ID),
-            created_at=raw[CREATED_AT],
-            payload=raw[PAYLOAD],
-        )
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in raw.items() if k in known})
 
     def to_dict(self) -> Event:
-        return {
-            EVENT_ID: self.event_id,
-            SUBJECT: self.subject,
-            SOURCE: self.source,
-            CORRELATION_ID: self.correlation_id,
-            CAUSATION_ID: self.causation_id,
-            CREATED_AT: self.created_at,
-            PAYLOAD: self.payload,
-        }
+        data = {f.name: getattr(self, f.name) for f in fields(self)}
+        return cast(Event, data)
 
 
 # 워커가 구독한 이벤트 1건을 처리하는 함수 시그니처.
@@ -96,7 +73,7 @@ class EventSubscription(Protocol):
 
 
 class EventPublisher(Protocol):
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,
@@ -112,8 +89,8 @@ class EventRecorder(Protocol):
 
 
 class EventClient(Protocol):
-    # publish = 브로커 발행 + 저장 + causation 자동 연결(RecordedEventClient).
-    async def publish(
+    # emit = 브로커 발행 + 저장 + causation 자동 연결(RecordedEventClient).
+    async def emit(
         self,
         subject: str,
         source: str,

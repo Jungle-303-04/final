@@ -8,17 +8,17 @@ from types import SimpleNamespace
 from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.contracts.event_bus.payloads import CommandRequestedPayload
+from packages.contracts.event_bus.registry import EventContext
 from packages.events.bus import (
     RecordedEventClient,
+    emit_and_record,
     event_causation,
-    publish_and_record,
 )
 from packages.events.envelope import event
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-COMMAND_WORKER_PATH = (
-    ROOT_DIR / "services" / "command-worker" / "command_worker.py"
-)
+COMMAND_WORKER_PATH = ROOT_DIR / "services" / "command-worker" / "app.py"
 
 
 def load_module(path: Path, name: str):
@@ -43,7 +43,7 @@ class FakeEventPublisher:
     def __init__(self) -> None:
         self.published: list[EventEnvelope] = []
 
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,
@@ -83,7 +83,7 @@ def test_publish_and_record_uses_event_ports() -> None:
         publisher = FakeEventPublisher()
         recorder = FakeEventRecorder()
 
-        created = await publish_and_record(
+        created = await emit_and_record(
             publisher,
             recorder,
             "command.requested",
@@ -106,7 +106,7 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
         client = RecordedEventClient(publisher, recorder)
 
         with event_causation("parent-event-1"):
-            created = await client.publish(
+            created = await client.emit(
                 "command.dispatched",
                 "command-worker",
                 {"command_id": "cmd-1"},
@@ -120,38 +120,41 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
     asyncio.run(run())
 
 
-def test_command_workflow_queues_agent_command_through_port() -> None:
-    async def run() -> None:
-        module = load_module(COMMAND_WORKER_PATH, "test_command_worker")
-        events = FakeEventClient()
-        queue = FakeAgentCommandQueue()
-        workflow = module.CommandWorkflow(events, queue)
+def test_command_subscriber_emits_dispatch_chain() -> None:
+    module = load_module(COMMAND_WORKER_PATH, "test_command_app")
+    queue = FakeAgentCommandQueue()
+    payload = CommandRequestedPayload.from_payload(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": {},
+        }
+    )
+    ctx = EventContext(
+        event_id="evt-1",
+        subject="command.requested",
+        correlation_id="corr-2",
+        causation_id=None,
+        db=queue,
+    )
 
-        await workflow.handle(
-            event(
-                "command.requested",
-                "test",
-                {
-                    "cluster_id": "target-cluster-01",
-                    "action": "rollout_restart",
-                    "namespace": "sandbox",
-                },
-                "corr-2",
-            )
-        )
+    async def run() -> list[Any]:
+        return [out async for out in module.on_command_requested(payload, ctx)]
 
-        assert len(queue.queued) == 1
-        correlation_id, plan, status = queue.queued[0]
-        assert correlation_id == "corr-2"
-        assert plan["cluster_id"] == "target-cluster-01"
-        assert status == "queued"
-        assert [evt.subject for evt in events.published] == [
-            "command.dispatch.ready",
-            "command.dispatched",
-            "command.queued_for_agent",
-        ]
+    outs = asyncio.run(run())
 
-    asyncio.run(run())
+    assert [out.__subject__ for out in outs] == [
+        "command.dispatch.ready",
+        "command.dispatched",
+        "command.queued_for_agent",
+    ]
+    assert len(queue.queued) == 1
+    correlation_id, plan, status = queue.queued[0]
+    assert correlation_id == "corr-2"
+    assert plan["cluster_id"] == "target-cluster-01"
+    assert status == "queued"
 
 
 def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
