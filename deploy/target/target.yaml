@@ -1,3 +1,4 @@
+# target/sandbox Namespace
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -8,6 +9,7 @@ kind: Namespace
 metadata:
   name: sandbox
 ---
+# target-cluster-agent RBAC
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -66,6 +68,7 @@ subjects:
     name: target-cluster-agent
     namespace: target
 ---
+# fake telemetry services
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -85,7 +88,8 @@ spec:
         - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/fake_prometheus.py"]
+          command:
+            ["python", "services/target-cluster-agent/fake_prometheus.py"]
           ports:
             - containerPort: 8000
 ---
@@ -171,6 +175,7 @@ spec:
     - port: 8000
       targetPort: 8000
 ---
+# optional-node-collector DaemonSet
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -215,6 +220,7 @@ spec:
             - name: metrics
               containerPort: 9100
 ---
+# target-cluster-agent Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -241,5 +247,7 @@ spec:
               value: target-cluster-01
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
+            - name: PROMETHEUS_BASE_URL
+              value: "http://prometheus.target.svc:9090"
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"
