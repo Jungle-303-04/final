@@ -11,7 +11,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync doctor lint format test check build-image up down status smoke scale kill-pod clean
+.PHONY: help setup env sync doctor lint format test check build-image up install-telemetry down status smoke scale kill-pod clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -48,6 +48,9 @@ build-image: ## service Docker 이미지 빌드
 
 up: ## management/target kind 클러스터 실행
 	bash scripts/up.sh
+
+install-telemetry: ## target 클러스터에 telemetry Helm charts 설치
+	bash scripts/install-telemetry.sh
 
 down: ## management/target kind 클러스터 삭제
 	bash scripts/down.sh
