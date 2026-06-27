@@ -26,11 +26,13 @@
 - provider access token을 event payload에 넣지 않는다.
 - route handler는 input validation, auth/policy, event publish 순서로 작성한다.
 - request payload field를 추가하기 전에 schema를 먼저 추가한다.
+- Gateway가 event를 발행할 때도 `EventClient`/`publish_and_record` 경계를 사용하고 payload contract를 깨지 않는다.
 
 ## PR 체크리스트
 
 - 새 endpoint의 auth 동작이 문서화됨
 - 새 request schema가 알 수 없거나 위험한 field를 거부함
+- Gateway가 발행하는 event subject/payload 변경이 `subjects.py`, `payloads.py`, `docs/events.md`에 반영됨
 - `make check` 통과
 - Gateway smoke path 유지
 - UI에 보이는 route가 바뀌면 WIKI/API docs 수정

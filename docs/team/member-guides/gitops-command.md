@@ -25,6 +25,8 @@ Git 변경을 받아 manifest render, desired diff, command 생성까지 이어�
 - Worker 구독은 각 서비스 `settings.py`의 `SUBSCRIPTION`에 선언한다.
 - Worker runner는 `WorkerService.from_subscription(...)`으로 실행한다.
 - Worker는 `EventClient`로 발행한다.
+- Handler는 `EventEnvelope`를 받고 `evt.payload`로 입력을 읽는다.
+- 발행 payload는 `packages/contracts/event_bus/payloads.py`의 dataclass를 사용한다.
 - `correlation_id`를 유지한다.
 - handler write는 idempotent하거나 conflict-safe해야 한다.
 - workflow code에서 직접 ack/nak하지 않는다. ack/nak는 runtime 책임이다.
@@ -32,7 +34,9 @@ Git 변경을 받아 manifest render, desired diff, command 생성까지 이어�
 ## PR 체크리스트
 
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
+- 새/변경 event payload가 `packages/contracts/event_bus/payloads.py`에 있음
 - manifest/diff/command 흐름 테스트 존재
+- handler가 `EventEnvelope`와 payload DTO 흐름을 유지함
 - raw NATS 사용 없음
 - command payload 변경 시 Gateway/Auth와 Target/Telemetry에 공유
 - audit/dashboard 영향이 있으면 문서화

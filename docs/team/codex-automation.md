@@ -95,7 +95,7 @@ GitHub에서 매번 확인한다:
 5. PR 업데이트 필요 사항: 변경 파일, 테스트 결과, 문서 갱신 필요 여부, merge 금지 사유를 실행 보고에 정리한다. PR 본문이나 댓글은 직접 수정하지 않는다.
 
 문서 동기화:
-- event subject, API route, schema, DB table, Kubernetes 권한, WBS 일정, 역할 기준이 바뀌면 source docs와 WIKI 갱신 필요 여부를 보고한다.
+- event subject/payload, API route, schema, DB table, Kubernetes 권한, WBS 일정, 역할 기준이 바뀌면 source docs와 WIKI 갱신 필요 여부를 보고한다.
 - 회의에서 결정된 변경은 프로젝트 회의록과 핵심 문서 반영 필요 여부를 보고한다.
 - WIKI 갱신이 필요하면 수정해야 할 파일과 내용을 실행 보고에 남긴다. 자동화가 WIKI 파일을 직접 수정하거나 PR 댓글을 작성하지 않는다.
 
