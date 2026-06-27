@@ -96,7 +96,7 @@ class NatsEventBus(EventBus):
                     flush=True,
                 )
                 await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-        raise RuntimeError("NATS is not available")
+        raise RuntimeError("NATS 에 연결할 수 없다")
 
     async def ensure_stream(self) -> None:
         assert self.js is not None
