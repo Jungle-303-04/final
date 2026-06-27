@@ -287,6 +287,8 @@ Prometheus/Loki/OTel 설치 YAML과 사용자 workload GitOps diff 대상을 분
 - install/uninstall README.
 - GitOps Sync Worker workload 후보 제외 규칙 문서화.
 - chart version pinning.
+- 플랫폼용 Prometheus와 사용자 커스텀 Prometheus의 구분 기준 문서화.
+- `owner`, `purpose`, `gitops_managed`, `risk_level` 같은 manifest scope 초안 정리.
 
 하지 말 것:
 
@@ -299,3 +301,4 @@ Prometheus/Loki/OTel 설치 YAML과 사용자 workload GitOps diff 대상을 분
 - Helm template 또는 dry-run 통과.
 - observability 경로가 GitOps workload diff 후보에서 제외됨.
 - RBAC 범위가 PR에 설명됨.
+- 사용자 커스텀 Prometheus 요구가 생겨도 플랫폼용 Prometheus와 같은 release/namespace/RBAC를 공유하지 않도록 설계됨.
