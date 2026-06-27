@@ -1,30 +1,20 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Final
 
 from settings import Settings
 
-from packages.config.constants import GitHub, Target
-from packages.contracts.event_bus.fields import CORRELATION_ID, PAYLOAD
-from packages.contracts.event_bus.interfaces import EventClient
+from packages.config.constants import GitHub
+from packages.contracts.event_bus.interfaces import EventClient, EventEnvelope
+from packages.contracts.event_bus.payloads import (
+    Evidence,
+    EvidenceBuiltPayload,
+    RcaCompletedPayload,
+    SafePrCreatedPayload,
+)
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.gateway.fields import Gateway
+from packages.contracts.gateway.requests import AgentEvidenceRequest
 from packages.contracts.interfaces import OAuthAccountStore, RcaStore
-
-
-class Field:
-    ACTION: Final[str] = "action"
-    EVIDENCE: Final[str] = "evidence"
-    EVIDENCE_REF: Final[str] = "evidence_ref"
-    KUBERNETES: Final[str] = "kubernetes"
-    LOGS: Final[str] = "logs"
-    METRICS: Final[str] = "metrics"
-    MODE: Final[str] = "mode"
-    OBJECT_REF: Final[str] = "object_ref"
-    PR_URL: Final[str] = "pr_url"
-    ROOT_CAUSE: Final[str] = "root_cause"
-    TRACES: Final[str] = "traces"
 
 
 class RcaWorkflow:
@@ -38,21 +28,19 @@ class RcaWorkflow:
         self.rca_store = rca_store
         self.oauth_accounts = oauth_accounts
 
-    async def handle(self, evt: dict[str, Any]) -> None:
+    async def handle(self, evt: EventEnvelope) -> None:
         evidence_ref = (
-            f"{Settings.OBJECT_EVIDENCE_PREFIX}/{evt[CORRELATION_ID]}.json"
+            f"{Settings.OBJECT_EVIDENCE_PREFIX}/{evt.correlation_id}.json"
         )
-        evidence = {
-            Gateway.CLUSTER_ID: evt[PAYLOAD].get(
-                Gateway.CLUSTER_ID,
-                Target.DEFAULT_CLUSTER_ID,
-            ),
-            Field.KUBERNETES: evt[PAYLOAD].get(Field.KUBERNETES, {}),
-            Field.METRICS: evt[PAYLOAD].get(Field.METRICS, {}),
-            Field.LOGS: evt[PAYLOAD].get(Field.LOGS, []),
-            Field.TRACES: evt[PAYLOAD].get(Field.TRACES, {}),
-            Field.OBJECT_REF: evidence_ref,
-        }
+        data = AgentEvidenceRequest.model_validate(evt.payload)
+        evidence = Evidence(
+            cluster_id=data.cluster_id,
+            kubernetes=data.kubernetes,
+            metrics=data.metrics,
+            logs=data.logs,
+            traces=data.traces,
+            object_ref=evidence_ref,
+        )
         pr_number = int(time.time()) % Settings.PR_NUMBER_MODULO
         pr_url = f"{Settings.PR_URL_PREFIX}/{pr_number}"
         token_ref = (
@@ -61,16 +49,20 @@ class RcaWorkflow:
         )
 
         self.rca_store.save_evidence(
-            evt[CORRELATION_ID], Settings.EVIDENCE_KIND, evidence
+            evt.correlation_id, Settings.EVIDENCE_KIND, evidence.to_payload()
         )
         self.rca_store.save_rca_report(
-            evt[CORRELATION_ID],
+            evt.correlation_id,
             Settings.ROOT_CAUSE,
             Settings.RECOMMENDED_ACTION,
-            {Field.EVIDENCE_REF: evidence[Field.OBJECT_REF]},
+            RcaCompletedPayload(
+                root_cause=Settings.ROOT_CAUSE,
+                action=Settings.RECOMMENDED_ACTION,
+                evidence_ref=evidence.object_ref,
+            ).to_payload(),
         )
         self.rca_store.save_pull_request(
-            evt[CORRELATION_ID],
+            evt.correlation_id,
             pr_url,
             Settings.PR_TITLE,
             "\n\n".join(
@@ -85,27 +77,27 @@ class RcaWorkflow:
         await self.events.publish(
             EventSubject.EVIDENCE_BUILT,
             Settings.SERVICE_NAME,
-            {Field.EVIDENCE: evidence},
-            evt[CORRELATION_ID],
+            EvidenceBuiltPayload(evidence=evidence).to_payload(),
+            evt.correlation_id,
         )
         await self.events.publish(
             EventSubject.RCA_COMPLETED,
             Settings.SERVICE_NAME,
-            {
-                Field.ROOT_CAUSE: Settings.ROOT_CAUSE,
-                Field.ACTION: Settings.RECOMMENDED_ACTION,
-                Field.EVIDENCE_REF: evidence[Field.OBJECT_REF],
-            },
-            evt[CORRELATION_ID],
+            RcaCompletedPayload(
+                root_cause=Settings.ROOT_CAUSE,
+                action=Settings.RECOMMENDED_ACTION,
+                evidence_ref=evidence.object_ref,
+            ).to_payload(),
+            evt.correlation_id,
         )
         await self.events.publish(
             EventSubject.SAFE_PR_CREATED,
             Settings.SERVICE_NAME,
-            {
-                Field.PR_URL: pr_url,
-                Gateway.PROVIDER: GitHub.PROVIDER,
-                Gateway.TOKEN_REF: token_ref,
-                Field.MODE: Settings.PR_MODE,
-            },
-            evt[CORRELATION_ID],
+            SafePrCreatedPayload(
+                pr_url=pr_url,
+                provider=GitHub.PROVIDER,
+                token_ref=token_ref,
+                mode=Settings.PR_MODE,
+            ).to_payload(),
+            evt.correlation_id,
         )
