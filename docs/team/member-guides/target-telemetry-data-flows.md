@@ -146,11 +146,36 @@ Kubernetes API pod/event 조회
 
 ## 우리 프로젝트의 우선순위
 
-1. Kubernetes API로 pod 상태와 event를 직접 읽어 evidence 생성.
-2. Node Collector `/metrics`로 기본 node/runtime metric 제공.
-3. Prometheus query adapter로 metric 조회.
-4. Loki query adapter로 log snippet 조회.
-5. OTel trace adapter는 마지막에 추가.
+Management Gateway API 계약이 아직 고정되지 않은 동안에는 Gateway 전송부터 만들지 않는다. 먼저 Prometheus만으로 독립적인 폐쇄 루프를 만든다.
+
+```text
+Prometheus Helm 설치
+  -> 더미 /metrics exporter
+  -> Prometheus scrape
+  -> Prometheus query API
+  -> Agent debug query API
+  -> 더미 MetricEvidence response
+```
+
+그 다음 실제 Kubernetes와 연결한다.
+
+1. Prometheus Helm 설치와 dry-run.
+2. 더미 `/metrics` exporter를 Prometheus에 scrape시킴.
+3. Prometheus query API로 더미 metric 조회.
+4. Agent debug query API가 query를 받아 Prometheus에 실행.
+5. query 결과를 더미 MetricEvidence로 축약.
+6. Kubernetes API로 pod 상태와 event를 직접 읽어 evidence 재료 생성.
+7. Node Collector `/metrics`로 기본 node/runtime metric 제공.
+8. Node Collector metric을 Prometheus에서 query로 다시 회수.
+9. Gateway API 계약이 준비되면 `POST /agent/evidence`로 연결.
+10. Loki query adapter와 OTel trace adapter는 마지막에 추가.
+
+이 순서의 장점:
+
+- Gateway 계약이 바뀌어도 Prometheus 설치/query 작업은 버리지 않는다.
+- 작업자가 Prometheus scrape/query 개념을 먼저 손으로 확인할 수 있다.
+- Kubernetes API와 Node Collector를 붙이기 전에 metric 입출력 구조를 이해할 수 있다.
+- 나중에 Gateway 계약이 준비되면 debug API를 실제 client adapter로 바꾸면 된다.
 
 ## GitOps diff 대상과 observability 설치물은 분리한다
 
