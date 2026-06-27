@@ -9,13 +9,13 @@ from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.payloads import CommandRequestedPayload
-from packages.contracts.event_bus.registry import EventContext
 from packages.events.bus import (
     RecordedEventClient,
     emit_and_record,
     event_causation,
 )
 from packages.events.envelope import event
+from packages.runtime.app import EventContext
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 COMMAND_WORKER_PATH = ROOT_DIR / "services" / "command-worker" / "app.py"

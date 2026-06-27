@@ -24,9 +24,8 @@ from packages.contracts.event_bus.payloads import (
     Plan,
     Route,
 )
-from packages.contracts.event_bus.registry import EventContext
 from packages.contracts.gateway.fields import Gateway
-from packages.runtime.app import App
+from packages.runtime.app import App, EventContext
 
 app = App("command-worker")
 

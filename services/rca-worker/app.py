@@ -18,8 +18,7 @@ from packages.contracts.event_bus.payloads import (
     RcaCompletedPayload,
     SafePrCreatedPayload,
 )
-from packages.contracts.event_bus.registry import EventContext
-from packages.runtime.app import App
+from packages.runtime.app import App, EventContext
 
 app = App("rca-worker")
 

@@ -19,13 +19,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from packages.contracts.event_bus.registry import (
-    Subscription,
-    events,
-    make_event_handler,
-    wants_ctx,
-)
+from packages.contracts.event_bus.registry import Subscription, events
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.runtime.checks import (
+    require_handler_signature,
+    require_registered,
+    require_single_handler,
+    require_unique_handler,
+)
+from packages.runtime.dispatch import EventContext, make_event_handler
+
+# 서비스는 App 과 EventContext 를 함께 쓰므로 여기서 재노출한다.
+__all__ = ["App", "EventContext"]
 
 
 class App:
@@ -34,17 +39,13 @@ class App:
         self._handlers: dict[EventSubject, Subscription] = {}
 
     def sub(self, payload_type: type) -> Callable[..., Any]:
-        subject = getattr(payload_type, "__subject__", None)
-        if subject is None:
-            raise TypeError(
-                f"{payload_type.__name__} 은 @events.reg 로 먼저 등록해야 한다"
-            )
+        subject = require_registered(payload_type)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            if subject in self._handlers:
-                existing = self._handlers[subject].fn.__name__
-                raise TypeError(f"{subject} 구독자가 이미 있다: {existing}")
-            sub = Subscription(subject, payload_type, fn, wants_ctx(fn))
+            require_unique_handler(self._handlers, subject)
+            sub = Subscription(
+                subject, payload_type, fn, require_handler_signature(fn)
+            )
             self._handlers[subject] = sub
             events.note_handler(self.name, sub)  # 카탈로그 표시용
             return fn
@@ -58,11 +59,7 @@ class App:
         )
         from packages.runtime.service import WorkerService
 
-        if len(self._handlers) != 1:
-            raise RuntimeError(
-                f"{self.name}: 핸들러가 정확히 1개여야 한다"
-                f"(현재 {len(self._handlers)})"
-            )
+        require_single_handler(self.name, self._handlers)
         sub = next(iter(self._handlers.values()))
         worker_sub = WorkerSubscription(
             service_name=self.name, subject=sub.subject
