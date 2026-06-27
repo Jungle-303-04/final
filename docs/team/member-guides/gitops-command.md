@@ -2,13 +2,15 @@
 
 ## 미션
 
-Git webhook 입력을 받아 Kubernetes manifest 변화로 해석하고, 안전한 command plan으로 바꿔 Target Agent가 가져갈 수 있는 queue까지 연결한다.
+Git provider를 주기적으로 polling해서 새 commit/merge를 감지하고, Kubernetes manifest 변화로 해석한 뒤 안전한 command plan으로 바꿔 Target Agent가 가져갈 수 있는 queue까지 연결한다.
 
 이 담당자는 이벤트 시스템 내부 구현을 모두 알 필요는 없다. 다만 worker는 이벤트를 받아서 처리하고, 다음 이벤트를 발행한다는 규칙을 지켜야 한다.
 
 ```text
-Gateway
-  -> git.webhook.received
+Git Poller
+  -> git.poll.tick
+  -> git.repo.observed
+  -> git.changed
 
 GitOps Sync Worker
   -> git.changed
@@ -29,7 +31,9 @@ Target Agent
 ## 담당 영역
 
 - `services/gitops-sync-worker`
+- `services/git-poller-worker` 또는 `services/gitops-sync-worker/git_poller.py`
 - `services/command-worker`
+- git watch target polling
 - manifest render
 - desired state diff
 - command 생성과 dispatch 준비
@@ -39,7 +43,8 @@ Target Agent
 
 ## 현재 책임
 
-- Git webhook event를 `git.changed`, `manifest.rendered`, `desired.diff.detected` 흐름으로 정리한다.
+- Git polling 결과를 `git.changed`, `manifest.rendered`, `desired.diff.detected` 흐름으로 정리한다.
+- webhook은 기본 GitOps 사이클에서 사용하지 않는다.
 - diff 결과가 안전한 command payload로 변환되게 만든다.
 - command는 production write가 아니라 `sandbox` 또는 demo namespace 기준으로 제한한다.
 - command 생성과 dispatch 준비 event에 대한 테스트를 추가한다.
@@ -80,7 +85,7 @@ Worker 담당자가 꼭 알아야 할 것:
 | Phase | PR 목표 | 왜 이 단위인가 |
 | --- | --- | --- |
 | 1 | GitOps worker 입력/출력 계약 정리 | event 흐름의 첫 단추를 고정한다. |
-| 2 | Webhook payload -> GitChanged 변환 | Git 입력을 내부 표준 event로 바꾼다. |
+| 2 | Git polling observation -> GitChanged 변환 | polling 결과를 내부 표준 event로 바꾼다. |
 | 3 | Manifest render DTO와 fake renderer | 실제 Git/Kustomize 없이 다음 담당자가 작업 가능하다. |
 | 4 | Desired diff DTO와 diff detector | command 생성 전에 변경 내용을 구조화한다. |
 | 5 | CommandRequested payload 생성 | Gateway/Command Worker 연결점을 만든다. |
@@ -104,16 +109,16 @@ GitOps Sync Worker가 어떤 event를 받고 어떤 event를 발행하는지 계
 
 구현할 것:
 
-- `EventSubject.GIT_WEBHOOK_RECEIVED` 구독 확인.
+- `git.poll.tick`, `git.repo.observed`, `git.changed` 계약 후보 확인.
 - `GitChangedPayload`, `RenderedManifestPayload`, `DesiredDiffDetectedPayload`, `CommandRequestedPayload` 확인 또는 보강.
 - 각 payload의 필수 필드 정리.
 - `docs/events.md`에 입력/출력 흐름 표 추가.
 
 생각할 것:
 
-- payload에 원본 webhook 전체를 넣을 필요가 있는가?
-- repo, commit_sha, branch, installation_id 같은 추적 필드가 있는가?
-- secret이나 webhook signature가 event에 들어가지 않는가?
+- repo, commit_sha, branch, target_id 같은 추적 필드가 있는가?
+- polling 결과에 provider token이나 raw credential이 섞이지 않는가?
+- 같은 commit을 여러 번 보더라도 중복 command가 생기지 않는가?
 
 하지 말 것:
 
@@ -125,43 +130,44 @@ GitOps Sync Worker가 어떤 event를 받고 어떤 event를 발행하는지 계
 - payload DTO `to_payload()` 결과가 기대 field를 가진다.
 - worker settings의 subscription subject가 문서와 일치한다.
 
-## Phase 2. Webhook payload -> GitChanged 변환
+## Phase 2. Git polling observation -> GitChanged 변환
 
 목표:
 
 ```text
-Gateway가 발행한 webhook event를 내부 GitChanged event로 변환한다.
+Git Poller가 관찰한 repo 상태를 내부 GitChanged event로 변환한다.
 ```
 
 왜 해야 하는가:
 
-- 외부 GitHub webhook 형식을 내부 서비스 전체에 퍼뜨리면 나중에 GitLab을 붙이기 어렵다.
+- GitHub/GitLab provider별 응답 형식을 내부 서비스 전체에 퍼뜨리면 확장이 어렵다.
 - 내부 worker들은 `GitChangedPayload`만 알면 된다.
-- correlation 흐름을 시작점부터 유지해야 dashboard/audit이 한 요청으로 묶인다.
+- polling은 같은 commit을 반복해서 볼 수 있으므로 중복 방지가 핵심이다.
 
 구현할 것:
 
-- `GitWebhookReceived` 입력 검증.
-- repository, branch, commit_sha 추출.
-- `git.changed` 발행.
-- 잘못된 webhook payload는 명확한 실패 처리.
+- `GitRepoObserved` 입력 검증.
+- repo_ref, branch, head_commit_sha 추출.
+- 마지막으로 처리한 commit_sha와 비교.
+- 새 commit이면 `git.changed` 발행.
+- 같은 commit이면 아무 event도 발행하지 않음.
 
 생각할 것:
 
-- push event만 지원할지, PR event도 지원할지.
+- 처음에는 branch 최신 commit만 볼지, merge PR까지 볼지.
 - branch filter가 필요한지.
-- 같은 commit event가 중복 들어오면 안전한지.
+- 첫 관찰 때 command를 만들지 baseline만 저장할지.
 
 하지 말 것:
 
-- GitHub raw payload 전체를 다른 event에 그대로 복사하지 않는다.
+- provider raw response 전체를 다른 event에 그대로 복사하지 않는다.
 - provider token을 event에 넣지 않는다.
 
 테스트:
 
-- 정상 webhook -> `git.changed` 발행.
+- 새 commit 관찰 -> `git.changed` 발행.
+- 같은 commit 재관찰 -> event 없음.
 - 필수 field 누락 -> 실패.
-- correlation_id 유지.
 
 ## Phase 3. Manifest render DTO와 fake renderer
 
@@ -362,7 +368,7 @@ Command Worker가 command.requested를 받아 범용 policy rule로 허용/거�
 목표:
 
 ```text
-Webhook에서 command queued까지 fake bus/fake db로 한 줄 흐름을 검증한다.
+polling으로 감지한 git.changed에서 command queued까지 fake bus/fake db로 한 줄 흐름을 검증한다.
 ```
 
 왜 해야 하는가:
@@ -375,7 +381,7 @@ Webhook에서 command queued까지 fake bus/fake db로 한 줄 흐름을 검증�
 
 - fake EventClient.
 - fake command queue.
-- webhook input fixture.
+- git.repo.observed 또는 git.changed input fixture.
 - expected subjects list.
 
 테스트:
@@ -398,6 +404,210 @@ Webhook에서 command queued까지 fake bus/fake db로 한 줄 흐름을 검증�
 - command payload 변경 시 Gateway/Auth와 Target/Telemetry에 공유
 - audit/dashboard 영향이 있으면 문서화
 - policy 실패는 DLQ가 아니라 command.rejected로 끝나는지 확인
+
+## Git polling이 기본 입력인 이유
+
+이 프로젝트의 GitOps 입력은 webhook이 아니라 polling이다.
+
+```text
+Scheduler 또는 수동 poll 요청
+  -> git.poll.tick
+  -> Git provider adapter가 repo 최신 상태 조회
+  -> git.repo.observed
+  -> 이전 observed state와 비교
+  -> 새 commit 또는 merge 발견
+  -> git.changed
+```
+
+중요한 설계 원칙:
+
+```text
+외부 Git provider가 먼저 알려주는 구조가 아니다.
+우리 시스템이 주기적으로 물어보고 차이를 발견한다.
+그 뒤 내부 흐름은 git.changed부터 시작한다.
+```
+
+## Git polling 기본 사이클
+
+가장 작은 사이클:
+
+```text
+1. repo target 등록
+2. polling interval 등록
+3. poller가 주기적으로 repo default branch 최신 commit 조회
+4. 마지막으로 본 commit_sha와 비교
+5. 달라졌으면 git.changed 발행
+6. 현재 observed state 저장
+7. GitOps Sync Worker가 manifest.rendered -> desired.diff.detected -> command.requested 진행
+```
+
+PR merge까지 보고 싶을 때:
+
+```text
+1. repo pull requests 또는 branch 상태 조회
+2. merged_at이 새로 생긴 PR 찾기
+3. merge_commit_sha 확인
+4. 이미 처리한 merge_commit_sha인지 확인
+5. 처음 보는 merge면 git.changed 발행
+```
+
+처음 MVP에서는 commit polling만 한다.
+
+```text
+default branch 최신 commit_sha 비교
+```
+
+그 다음 PR merge polling을 추가한다.
+
+```text
+merged PR 목록 또는 branch protection/check 상태 확인
+```
+
+## polling에서 반드시 저장해야 하는 상태
+
+Polling은 이전 상태와 비교해야 하므로 DB 상태가 필요하다.
+
+최소 테이블 후보:
+
+```text
+git_watch_targets
+  id
+  project_id
+  target_id
+  provider
+  repo_ref
+  branch
+  enabled
+  interval_seconds
+  last_seen_commit_sha
+  last_seen_merge_sha
+  last_polled_at
+  created_at
+  updated_at
+
+git_observations
+  id
+  watch_target_id
+  observed_commit_sha
+  observed_branch
+  observed_at
+  provider_payload_ref 또는 summary
+  changed
+```
+
+MVP에서는 `git_watch_targets`만 있어도 된다.
+
+주의:
+
+- provider token은 이 테이블에 넣지 않는다.
+- repo 접근 credential은 target/credential binding으로 찾는다.
+- event payload에는 token을 넣지 않고 `target_id`, `repo_ref`, `commit_sha`만 넣는다.
+
+## polling event 계약 후보
+
+나중에 `packages/contracts/event_bus/subjects.py`, `payloads.py`, `docs/events.md`에 반영한다.
+
+```text
+git.poll.tick
+  "이 repo target을 지금 확인해라"
+
+git.repo.observed
+  "repo를 조회했더니 현재 상태가 이렇다"
+
+git.changed
+  "이전 상태와 비교했을 때 처리해야 할 새 commit/merge가 있다"
+```
+
+`git.poll.tick` payload 후보:
+
+```json
+{
+  "project_id": "project_final",
+  "target_id": "target_github_final",
+  "repo_ref": "Jungle-303-04/final",
+  "branch": "dev",
+  "reason": "interval"
+}
+```
+
+`git.repo.observed` payload 후보:
+
+```json
+{
+  "project_id": "project_final",
+  "target_id": "target_github_final",
+  "repo_ref": "Jungle-303-04/final",
+  "branch": "dev",
+  "head_commit_sha": "abc123",
+  "observed_at": "2026-06-27T13:00:00Z"
+}
+```
+
+`git.changed` payload 후보:
+
+```json
+{
+  "project_id": "project_final",
+  "target_id": "target_github_final",
+  "repo_ref": "Jungle-303-04/final",
+  "branch": "dev",
+  "commit_sha": "abc123",
+  "change_type": "commit",
+  "detected_by": "polling"
+}
+```
+
+Polling으로 만든 `git.changed`가 downstream의 유일한 표준 입력이다.
+
+## polling 담당 코드 후보
+
+처음에는 GitOps Sync Worker에 모두 넣지 말고, 역할을 나눠 생각한다.
+
+```text
+services/git-poller-worker
+  주기적으로 repo target을 확인하고 git.changed를 발행
+
+services/gitops-sync-worker
+  git.changed를 받아 render/diff/command 흐름 진행
+```
+
+아직 서비스가 많아지는 것이 부담이면 `services/gitops-sync-worker` 내부에 poller 모듈을 둘 수 있다.
+
+```text
+services/gitops-sync-worker/git_poller.py
+services/gitops-sync-worker/git_provider.py
+services/gitops-sync-worker/git_state.py
+```
+
+하지만 handler 책임은 분리한다.
+
+```text
+Poller
+  repo 상태 관찰
+
+GitOps Sync
+  관찰 결과를 manifest/diff/command로 처리
+```
+
+## polling 테스트 목록
+
+```text
+tests/test_git_polling.py
+  - first observation stores commit but does not create command by default
+  - new commit emits git.changed
+  - same commit emits no duplicate git.changed
+  - merge commit emits git.changed with change_type=merge
+  - provider failure raises retryable error
+  - forbidden credential does not read provider API
+```
+
+처음 구현에서는 아래 3개만 먼저 한다.
+
+```text
+1. same commit -> no event
+2. new commit -> git.changed
+3. provider error -> runtime retry
+```
 
 ## 처음 읽을 파일
 
