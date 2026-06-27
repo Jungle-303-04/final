@@ -6,11 +6,9 @@ from typing import Any, Protocol
 
 from command_config import PolicyRuleConfig
 
-from packages.contracts.gateway.fields import Gateway
-
 
 class Lookup(Protocol):
-    """Reads a value by field name. Rules depend on this, not on dict."""
+    """이름으로 값을 읽는다. 룰은 dict 가 아니라 이 인터페이스에 의존한다."""
 
     def value(self, field: str, default: Any = None) -> Any: ...
 
@@ -23,18 +21,6 @@ class Payload:
 
     def value(self, field: str, default: Any = None) -> Any:
         return self.raw.get(field, default)
-
-    @property
-    def namespace(self) -> str | None:
-        return self.value(Gateway.NAMESPACE)
-
-    @property
-    def cluster_id(self) -> str | None:
-        return self.value(Gateway.CLUSTER_ID)
-
-    @property
-    def action(self) -> str | None:
-        return self.value(Gateway.ACTION)
 
 
 @dataclass(frozen=True)
@@ -90,7 +76,7 @@ class Result:
 
     def require_reason(self) -> str:
         if self.reason is None:
-            raise ValueError("policy rejection requires reason")
+            raise ValueError("정책 거부에는 reason 이 필요하다")
         return self.reason
 
 
