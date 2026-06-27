@@ -562,6 +562,7 @@ raw telemetry 전체를 넘기지 않는다.
 
 | 순서 | 문서 | 무엇을 이해하는가 |
 | --- | --- | --- |
+| 0 | [처음부터 따라하기](target-telemetry-evidence-00-start-here.md) | 데모 실행부터 구현 후보까지 한 번에 따라가는 방법 |
 | 1 | [Evidence 쉬운 해설](target-telemetry-evidence-01-basics.md) | Evidence가 뭔지, raw data와 무엇이 다른지 |
 | 2 | [Source별 데이터 해석](target-telemetry-evidence-02-sources.md) | Kubernetes, Prometheus, Loki, OTel에서 뭘 볼 수 있는지 |
 | 3 | [신호 추출 기준](target-telemetry-evidence-03-signals.md) | 어떤 값을 뽑으면 의미 있는지 |
