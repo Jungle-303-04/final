@@ -41,3 +41,16 @@ OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
 RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
 AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
 REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
+INVALID_CREDENTIALS_MESSAGE = "invalid email or password"
+USER_STATUS_ACTIVE = "active"
+
+LOCAL_LOGIN_EMAIL_ENV = "LOCAL_LOGIN_EMAIL"
+LOCAL_LOGIN_PASSWORD_ENV = "LOCAL_LOGIN_PASSWORD"
+AUTH_COOKIE_SECURE_ENV = "AUTH_COOKIE_SECURE"
+DEFAULT_LOCAL_LOGIN_EMAIL = "local@example.com"
+DEFAULT_LOCAL_LOGIN_PASSWORD = "local-password"
+DEFAULT_LOCAL_LOGIN_DISPLAY_NAME = "Local User"
+
+# 로컬 smoke는 http://localhost 로 도는 경우가 많아서 기본값은 false다.
+# 운영 HTTPS 배포에서는 AUTH_COOKIE_SECURE=true 로 올려야 브라우저 cookie 보안 기준에 맞는다.
+DEFAULT_AUTH_COOKIE_SECURE = "false"
