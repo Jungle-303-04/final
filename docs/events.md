@@ -27,6 +27,27 @@
 - `created_at`은 envelope가 만들어진 UTC ISO 시각이다.
 - `payload`는 raw string이나 array가 아니라 JSON object여야 한다.
 - provider token, session token, kubeconfig, `.env` 값은 이벤트에 넣지 않는다.
+- 코드 안에서는 `dict` 인덱싱 대신 `EventEnvelope` 속성으로 접근한다. 예: `evt.subject`, `evt.payload`, `evt.correlation_id`.
+
+계약 위치:
+
+| 항목 | 파일 |
+| --- | --- |
+| envelope 객체 | `packages/contracts/event_bus/interfaces.py`의 `EventEnvelope` |
+| wire/storage dict | `packages/contracts/event_bus/interfaces.py`의 `Event` |
+| envelope 생성 | `packages/events/envelope.py`의 `event(...)` |
+
+## 이벤트 Payload
+
+발행 payload는 `packages/contracts/event_bus/payloads.py`에 dataclass 계약으로 둔다.
+
+규칙:
+
+- 새 이벤트 본문은 `<EventName>Payload` 클래스로 추가한다.
+- payload 안에 들어가는 값 객체는 `Manifest`, `Diff`, `Plan`, `Evidence`처럼 접미사 없는 명사로 둔다.
+- 서비스 workflow는 임의 dict를 직접 조립하기보다 payload 객체를 만들고 `to_payload()`로 발행한다.
+- Python 필드명은 `snake_case`를 사용한다. 외부 wire key가 `apiVersion`처럼 camelCase여야 하면 `field(metadata={"payload_name": "apiVersion"})` 별칭을 사용한다.
+- 입력 payload 검증은 gateway request schema 또는 worker 입력 Pydantic schema에서 처리하고, 출력 payload 구성은 `payloads.py`의 dataclass로 처리한다.
 
 ## Subject 이름 규칙
 
@@ -51,13 +72,30 @@
 
 ## 발행
 
-서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리한다.
+서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/payloads.py`의 payload 객체를 우선 사용한다.
 
 ```python
+from packages.contracts.event_bus.payloads import CommandRequestedPayload, Diff
+from packages.contracts.event_bus.subjects import EventSubject
+
+diff = Diff(
+    resource="deployment/demo",
+    namespace="sandbox",
+    desired_image="demo:v2",
+    actual_image="demo:v1",
+    risk="low",
+)
+
 await self.events.publish(
     EventSubject.COMMAND_REQUESTED,
     SERVICE_NAME,
-    {"cluster_id": "target-cluster-01", "namespace": "sandbox"},
+    CommandRequestedPayload(
+        cluster_id="target-cluster-01",
+        action="rollout_restart",
+        namespace="sandbox",
+        reason="desired diff detected",
+        diff=diff,
+    ).to_payload(),
     correlation_id,
 )
 ```
@@ -67,6 +105,16 @@ await self.events.publish(
 Gateway code는 호환성을 위해 `publish_and_record(...)`를 사용할 수 있다. 새 worker code는 `EventClient`를 우선 사용한다.
 
 Worker handler 안에서 발행하는 후속 이벤트는 `causation_id`를 직접 넘기지 않아도 된다. `WorkerRuntime`이 현재 처리 중인 원본 이벤트를 context로 잡고, `RecordedEventClient`가 자동으로 원본 `event_id`를 `causation_id`에 넣는다.
+
+Handler는 `EventEnvelope`를 받는다.
+
+```python
+async def handle(self, evt: EventEnvelope) -> None:
+    payload = evt.payload
+    correlation_id = evt.correlation_id
+```
+
+`ack`, `nak`, DLQ 이동은 workflow가 직접 처리하지 않는다. 이 책임은 `packages/runtime/worker.py`의 `EventProcessor`에 있다.
 
 ## 구독
 

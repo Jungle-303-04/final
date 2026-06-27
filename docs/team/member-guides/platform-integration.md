@@ -19,7 +19,7 @@
 
 ## 현재 책임
 
-- `packages/contracts/event_bus`, `EventClient`, `WorkerService`, retry, DLQ, replay 계약을 유지한다.
+- `packages/contracts/event_bus`, `EventEnvelope`, payload DTO, `EventClient`, `WorkerService`, retry, DLQ, replay 계약을 유지한다.
 - CI가 실패한 PR이 merge되지 않도록 GitHub Actions와 branch protection 기준을 관리한다.
 - 배포 스크립트와 수요일 demo 검증 흐름을 유지한다.
 - DB/event 원자성이 필요해지는 시점에 outbox relay 도입 여부를 결정한다.
@@ -30,6 +30,7 @@
 - 교체 가능한 infrastructure는 `Protocol` interface로 표현한다.
 - runtime error handling은 runtime/process edge code에 모은다.
 - service workflow가 raw NATS client를 import하지 않게 한다.
+- service workflow가 raw event dict에 의존하지 않고 `EventEnvelope`와 payload DTO를 사용하게 한다.
 - 상수는 의미 있는 이름으로 명시한다.
 - 클래스는 바뀌는 이유가 하나가 되도록 작게 유지한다.
 
@@ -38,6 +39,7 @@
 - `make check` 통과
 - CI workflow가 required check로 유지됨
 - 새 공통 contract에 최소 1개 테스트 존재
+- 새 event payload 계약이 `payloads.py`와 테스트에 반영됨
 - architecture/runtime 변경이 문서에 설명됨
 - 다른 service owner 동작을 바꾼 경우 사전 조율 기록 존재
 

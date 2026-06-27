@@ -46,7 +46,7 @@ packages
   + config                       env, 상수, 시간 helper
   + contracts                    gateway/event_bus/dashboard 계약과 Protocol port
     - gateway                    API Gateway 요청 Pydantic schema
-    - event_bus                  stream, subject, subscription, event port
+    - event_bus                  stream, subject, subscription, envelope, payload 계약
     - dashboard                  dashboard read model status 계약
   + events                       event envelope, NATS JetStream, DLQ event sink
   + storage                      PostgreSQL 저장소와 schema 초기화
@@ -97,15 +97,17 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 
 공통 인터페이스는 `packages/contracts` 하위 계약 폴더에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
 
-- `packages/contracts/event_bus`: stream, subject, worker subscription, event publish/consume 경계
+- `packages/contracts/event_bus`: stream, subject, worker subscription, envelope, payload, event publish/consume 경계
 - `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream을 교체할 수 있는 경계
 - `EventClient`: 서비스 코드가 사용하는 publish 경계
+- `EventEnvelope`: workflow handler가 받는 이벤트 객체. 서비스 코드는 `evt["payload"]` 대신 `evt.payload`처럼 속성 접근을 사용한다.
+- `packages/contracts/event_bus/payloads.py`: 서비스가 발행하는 event payload dataclass 계약. wire key 별칭이 필요하면 payload class에서만 관리한다.
 - `packages/contracts/gateway`: API Gateway HTTP 요청 schema
 - `RepoChangeStore`, `AgentCommandQueue`, `RcaStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
 
-현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `EventBus`, `services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
+현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `NatsEventBus`, `services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
 
 각 service runner는 `packages/runtime/service.py`의 실행 객체만 사용한다.
 
@@ -123,7 +125,7 @@ services/command-worker/settings.py
 services/target-cluster-agent/settings.py
 ```
 
-팀원이 자기 담당 서비스를 수정할 때는 먼저 해당 `settings.py`를 확인한다. 구독 subject는 각 worker `settings.py`의 `SUBSCRIPTION`에서 확인한다. 여러 서비스가 공유하는 event subject와 stream 계약은 `packages/contracts/event_bus`에 둔다.
+팀원이 자기 담당 서비스를 수정할 때는 먼저 해당 `settings.py`를 확인한다. 구독 subject는 각 worker `settings.py`의 `SUBSCRIPTION`에서 확인한다. 여러 서비스가 공유하는 event subject, payload, stream 계약은 `packages/contracts/event_bus`에 둔다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 
