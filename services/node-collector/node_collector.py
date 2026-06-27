@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from typing import Final
+from enum import StrEnum
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
@@ -18,10 +18,10 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 
 
-class Field:
-    KIND: Final[str] = "kind"
-    NODE: Final[str] = "node"
-    SAMPLE: Final[str] = "sample"
+class Field(StrEnum):
+    KIND = "kind"
+    NODE = "node"
+    SAMPLE = "sample"
 
 
 NODE_RUNTIME_SAMPLE_KIND = "node_runtime_sample"
