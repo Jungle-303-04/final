@@ -168,7 +168,327 @@ Phase 7. 추상화 확정
 | 6 | Prometheus read_metrics가 GitHub와 같은 권한 모델로 동작 |
 | 7 | 새 provider 추가 시 enum/action/adapter만 추가하면 됨 |
 
-## 3. 용어
+## 3. Phase별 상세 구현 지침
+
+이 섹션은 담당자가 각 단계에서 무슨 생각을 하며 구현해야 하는지 설명한다.
+
+### Phase 1. 일반 로그인
+
+목표:
+
+```text
+우리 서비스 계정으로 로그인하고, Redis session으로 현재 사용자를 확인한다.
+```
+
+왜 해야 하는가:
+
+- GitHub OAuth는 GitHub 계정 연결에는 유용하지만, Grafana, Prometheus, DB, Kubernetes 같은 다른 도구 권한을 대표하지 못한다.
+- 우리 서비스의 조직, 프로젝트, 역할 권한은 우리 DB가 소유해야 한다.
+- Gateway가 외부 HTTP 경계이므로 사용자 인증도 Gateway에서 일관되게 끝내는 것이 가장 단순하다.
+- session 기반이면 로그아웃, 강제 만료, 권한 변경 반영이 쉽다.
+
+구현할 것:
+
+- `LoginRequest(email, password)` schema.
+- `POST /auth/login`.
+- `POST /auth/logout`.
+- 기존 `GET /auth/session` 재사용.
+- Redis session 생성/조회/삭제.
+- 브라우저용 HttpOnly cookie 설정.
+- CLI/test용 `Authorization: Bearer <session_token>` 허용.
+
+생각할 것:
+
+- password가 response, event, log에 남지 않는가?
+- 로그인 실패 응답이 너무 자세해서 user enumeration이 생기지 않는가?
+- session TTL은 너무 길지 않은가?
+- cookie는 운영에서 `Secure=true`가 기본인가?
+- 로컬 개발에서만 `Secure=false`를 허용하는 설정이 있는가?
+
+하지 말 것:
+
+- JWT에 role/project 권한을 넣지 않는다.
+- session token에 의미 있는 정보를 넣지 않는다.
+- OAuth callback을 기본 로그인으로 확장하지 않는다.
+
+테스트:
+
+- 정상 로그인 후 `/auth/session` 성공.
+- 틀린 password는 401.
+- logout 후 같은 session은 401.
+- unknown request field는 거부.
+- password가 응답/event/log에 없음.
+
+### Phase 2. 내부 권한 확인
+
+목표:
+
+```text
+로그인한 사용자가 어떤 organization과 project에서 어떤 역할인지 확인한다.
+```
+
+왜 해야 하는가:
+
+- 로그인은 “누구인가”만 말한다.
+- 권한은 “어느 project에서 무엇을 할 수 있는가”를 별도로 판단해야 한다.
+- 조직 관리자와 프로젝트 관리자는 다르다.
+- 모든 외부 도구 credential 사용은 결국 project 권한으로 제한되어야 한다.
+
+구현할 것:
+
+- `User`, `Organization`, `OrganizationMember`, `Project`, `ProjectMember`.
+- organization role: `org_owner`, `org_admin`, `org_member`.
+- project role: `project_owner`, `maintainer`, `developer`, `viewer`.
+- `require_organization_role(...)`.
+- `require_project_role(...)`.
+- 최소 project 조회 API.
+- 보호 API 하나에 project 권한 검사 연결. 첫 대상은 `/commands`를 권장한다.
+
+생각할 것:
+
+- org_admin이 모든 project command를 실행해도 되는가? 기본은 안 된다.
+- project 권한이 없는 사용자가 dashboard를 볼 수 있는가? 기본은 안 된다.
+- project 생성은 organization 권한인가? 맞다.
+- command 실행은 project 권한인가? 맞다.
+- role 이름이 너무 추상적이지 않은가? action 테스트로 의미를 고정한다.
+
+하지 말 것:
+
+- `roles=["owner"]` 같은 session 내부 role만 믿고 위험 API를 허용하지 않는다.
+- organization role과 project role을 같은 컬럼/값으로 섞지 않는다.
+- 모든 사용자를 owner로 두고 다음 단계로 넘어가지 않는다.
+
+테스트:
+
+- project member는 보호 API 접근 가능.
+- project member가 아니면 403.
+- `org_admin`이어도 project member가 아니면 command 실행 불가.
+- `viewer`는 command 실행 불가.
+- `project_owner`는 command 실행 가능.
+
+### Phase 3. 도구 하나만 연결
+
+목표:
+
+```text
+GitHub repo 하나를 외부 도구 target으로 등록하고 credential을 secret_ref로 연결한다.
+```
+
+왜 해야 하는가:
+
+- 모든 도구를 한 번에 추상화하면 실제 필요한 필드가 보이지 않는다.
+- GitHub repo 하나만 붙이면 target, credential, binding의 최소 구조를 검증할 수 있다.
+- secret 저장과 secret 노출 방지를 먼저 굳혀야 이후 도구 확장이 안전하다.
+
+구현할 것:
+
+- `Provider.GITHUB`.
+- `TargetType.REPO`.
+- `AuthMethod.GITHUB_APP`, `AuthMethod.PAT`.
+- `IntegrationTarget`.
+- `CredentialRef`.
+- `CredentialBinding`.
+- `POST /integrations/targets`.
+- `POST /credentials`.
+- `POST /credential-bindings`.
+
+생각할 것:
+
+- credential 등록 request에는 secret이 들어오지만 response에는 절대 나가면 안 된다.
+- credential을 DB plain column에 넣지 않고 `secret_ref`만 남기는가?
+- target은 반드시 project에 속하는가?
+- 같은 repo를 여러 project가 쓸 수 있는가? 가능하지만 target은 project별로 따로 두는 것을 기본으로 한다.
+- GitHub App과 PAT의 차이를 내부 권한 모델에 새기지 말고 auth_method로만 둔다.
+
+하지 말 것:
+
+- GitHub token을 event payload에 넣지 않는다.
+- `latest_github_token_ref()`처럼 전역 최신 token을 사용하는 구조로 확장하지 않는다.
+- GitHub 전용 컬럼을 공통 target 테이블에 과하게 늘리지 않는다.
+
+테스트:
+
+- GitHub repo target 등록 성공.
+- project member가 아니면 target 등록 403.
+- credential 등록 response에 raw secret 없음.
+- credential binding은 허용된 action만 받음.
+
+### Phase 4. 도구 사용 권한
+
+목표:
+
+```text
+사용자가 특정 project의 특정 target에서 특정 action을 할 수 있는지 판단한다.
+```
+
+왜 해야 하는가:
+
+- “project에 접근 가능”과 “GitHub PR 생성 가능”은 다르다.
+- credential이 있어도 그 credential이 모든 action에 쓰이면 안 된다.
+- role 권한과 credential binding 권한이 모두 통과해야 한다.
+
+구현할 것:
+
+- `IntegrationAction.READ_REPO`.
+- `IntegrationAction.CREATE_PR`.
+- `AccessRequest(actor_id, project_id, target_id, action)`.
+- `AccessDecision`.
+- `AccessPolicy.evaluate(request)`.
+
+권한 검사 순서:
+
+```text
+1. actor가 로그인된 user인가?
+2. actor가 project member인가?
+3. actor의 project role이 action을 허용하는가?
+4. target이 project에 속하는가?
+5. target에 credential binding이 있는가?
+6. binding의 allowed_actions에 action이 있는가?
+```
+
+생각할 것:
+
+- role 권한과 credential 권한 중 하나만 통과하면 되는가? 아니다. 둘 다 통과해야 한다.
+- `project_owner`도 credential binding이 없으면 외부 도구를 쓸 수 있는가? 아니다.
+- target이 다른 project 소속이면 어떻게 하는가? 무조건 거부한다.
+- 실패 reason은 운영자가 이해할 수 있어야 하지만 secret 정보는 포함하면 안 된다.
+
+하지 말 것:
+
+- provider별 if문으로 권한을 검사하지 않는다.
+- Gateway route마다 권한 로직을 복붙하지 않는다.
+- action 문자열을 route 내부에 하드코딩해 흩뿌리지 않는다.
+
+테스트:
+
+- viewer는 `create_pr` 거부.
+- maintainer는 `create_pr` 허용.
+- binding에 없는 action은 거부.
+- target project mismatch는 거부.
+
+### Phase 5. Token Broker 도입
+
+목표:
+
+```text
+worker/service가 vault나 credential 저장소를 직접 읽지 못하게 한다.
+```
+
+왜 해야 하는가:
+
+- secret 접근 지점을 한 곳으로 모아야 감사와 회수가 가능하다.
+- worker가 GitHub PAT인지 GitHub App token인지 알 필요가 없다.
+- provider별 credential 발급 방식 차이를 adapter 뒤에 숨길 수 있다.
+- policy 실패 시 secret을 아예 읽지 않는 구조가 필요하다.
+
+구현할 것:
+
+- `SecretVault` Protocol.
+- `TokenBroker` Protocol.
+- `IssuedCredential`.
+- `DefaultTokenBroker.issue(request)`.
+- fake/in-memory vault.
+- secret access audit hook 또는 최소 log.
+
+생각할 것:
+
+- TokenBroker가 policy를 먼저 검사하는가?
+- policy 실패 때 vault read가 호출되지 않는가?
+- IssuedCredential을 event payload에 다시 넣는 실수를 막았는가?
+- secret 만료/회전 필드는 어디에 둘 것인가?
+- worker는 `target_id + action`만 알고 동작할 수 있는가?
+
+하지 말 것:
+
+- worker가 `token_vault` 테이블을 직접 조회하지 않는다.
+- `credential_id`만 알면 secret을 바로 읽을 수 있게 하지 않는다.
+- TokenBroker가 provider API 호출까지 모두 떠안지 않는다. provider 호출은 adapter 책임이다.
+
+테스트:
+
+- policy 실패 시 vault read 미호출.
+- policy 성공 시 IssuedCredential 반환.
+- worker 코드에 raw vault read 없음.
+- IssuedCredential이 event payload로 발행되지 않음.
+
+### Phase 6. 두 번째 도구 추가
+
+목표:
+
+```text
+Prometheus datasource를 추가해 공통 모델이 GitHub 전용이 아니었는지 검증한다.
+```
+
+왜 해야 하는가:
+
+- 추상화는 도구 두 개째 붙일 때 검증된다.
+- GitHub repo와 Prometheus datasource가 같은 target/binding/policy 모델로 동작하면 Loki, Grafana, DB도 붙일 수 있다.
+- provider별 차이는 adapter에만 있어야 한다.
+
+구현할 것:
+
+- `Provider.PROMETHEUS`.
+- `TargetType.DATASOURCE`.
+- `IntegrationAction.READ_METRICS`.
+- `IntegrationAction.QUERY_RANGE`.
+- Prometheus target 등록 테스트.
+- read_metrics 권한 테스트.
+
+생각할 것:
+
+- Prometheus는 write가 거의 없고 read 중심인데 같은 action 모델로 표현되는가?
+- datasource URL 같은 접속 정보는 target metadata인가 secret인가? 인증 정보는 secret, endpoint 식별자는 target metadata다.
+- query_range 결과를 event payload에 넣을 때 크기 제한이 필요한가?
+
+하지 말 것:
+
+- `github_*`라는 이름의 공통 테이블/필드를 재사용하지 않는다.
+- Prometheus 전용 credential 로직을 Gateway route에 넣지 않는다.
+- metrics query 권한을 dashboard 조회 권한과 무조건 같게 보지 않는다.
+
+테스트:
+
+- Prometheus target 등록 성공.
+- developer는 `read_metrics` 허용.
+- viewer는 정책에 따라 `read_metrics` 허용/거부를 명확히 테스트.
+- GitHub 테스트가 깨지지 않음.
+
+### Phase 7. 추상화 확정
+
+목표:
+
+```text
+새 provider를 붙일 때 enum/action/adapter만 추가하면 되는 구조로 고정한다.
+```
+
+왜 해야 하는가:
+
+- 최종 제품은 GitHub만 쓰지 않는다.
+- Loki, Grafana, PostgreSQL, OTel, Kubernetes credential이 모두 같은 관리 체계에 들어와야 한다.
+- 팀원이 provider를 추가할 때 Gateway/Auth 핵심 코드를 매번 수정하면 구조가 무너진다.
+
+구현할 것:
+
+- provider 추가 체크리스트.
+- adapter interface.
+- target metadata 기준.
+- credential secret_ref 기준.
+- action permission 기준.
+- audit 기준.
+
+생각할 것:
+
+- 새 provider 추가가 DB migration 없이 가능한가? 가능하면 좋지만 action enum 추가는 필요할 수 있다.
+- provider별 metadata 검증은 어디에 둘 것인가? request schema 또는 provider adapter에 둔다.
+- audit log가 provider/target/action/actor/project를 모두 남기는가?
+
+완료 조건:
+
+- 새 provider 추가 시 Gateway/Auth 핵심 policy를 수정하지 않는다.
+- provider adapter와 action enum, request schema만 추가한다.
+- secret 노출 방지 테스트 패턴을 재사용한다.
+
+## 4. 용어
 
 ```text
 User
@@ -213,7 +533,7 @@ Policy
 
 사용자가 우리 서비스에 로그인했다고 해서 GitHub, Grafana, DB, Prometheus 권한이 자동으로 생기지 않는다.
 
-## 4. RBAC와 ABAC를 작게 구현하는 방법
+## 5. RBAC와 ABAC를 작게 구현하는 방법
 
 RBAC는 역할 기반 권한이다. 이 프로젝트는 role scope를 두 단계로 나눈다.
 
@@ -274,7 +594,7 @@ credential binding 생성
   -> project role 검사 + 필요하면 organization role 보조 검사
 ```
 
-## 5. 공통 action 모델
+## 6. 공통 action 모델
 
 외부 도구는 다르지만 내부 모델은 provider/target/action으로 통일한다.
 
@@ -318,7 +638,7 @@ OpenTelemetry
 
 provider별 차이는 adapter에서만 처리한다. Gateway/Auth의 권한 모델은 provider별로 분기하지 않는다.
 
-## 6. 새 패키지 구조
+## 7. 새 패키지 구조
 
 아래 파일을 추가한다.
 
@@ -375,7 +695,7 @@ security/ports.py
   TokenBroker, SecretVault Protocol.
 ```
 
-## 7. 코드 스켈레톤
+## 8. 코드 스켈레톤
 
 `packages/contracts/integrations/actions.py`
 
@@ -505,7 +825,7 @@ class SecretVault(Protocol):
     def read_secret(self, secret_ref: str) -> str: ...
 ```
 
-## 8. DB 모델 추가 계획
+## 9. DB 모델 추가 계획
 
 처음부터 모든 필드를 완벽히 만들지 말고, 아래 최소 테이블부터 만든다.
 
@@ -606,7 +926,7 @@ updated_at timestamptz not null
 - `credentials` 테이블에 raw token, password, kubeconfig, connection string을 넣지 않는다.
 - 현재 `token_vault`는 fake vault로 유지할 수 있지만, 새 설계에서는 `SecretVault` adapter 뒤로 숨긴다.
 
-## 9. API 설계
+## 10. API 설계
 
 처음 구현할 Gateway endpoint:
 
@@ -705,7 +1025,7 @@ Request:
 }
 ```
 
-## 10. 기존 OAuth endpoint 처리
+## 11. 기존 OAuth endpoint 처리
 
 기존 endpoint:
 
@@ -730,7 +1050,7 @@ OAuth callback -> provider account 연결 또는 credential 등록
 
 내부 로그인은 `/auth/login`이 담당하고, OAuth는 “외부 provider 연결”이 된다.
 
-## 11. Token Broker 설계
+## 12. Token Broker 설계
 
 Token Broker는 worker가 vault를 직접 읽지 못하게 하는 중앙 창구다.
 
@@ -794,7 +1114,7 @@ class DefaultTokenBroker:
         )
 ```
 
-## 12. 이벤트 payload 변경 방향
+## 13. 이벤트 payload 변경 방향
 
 앞으로 외부 도구를 쓰는 event payload에는 아래 필드를 넣는다.
 
@@ -819,7 +1139,7 @@ connection_string
 private_key
 ```
 
-## 13. Gateway/Auth 담당 작업 순서
+## 14. Gateway/Auth 담당 작업 순서
 
 아래 순서대로 PR을 나눈다.
 
@@ -1079,7 +1399,7 @@ GitHub 전용 모델이 아니었는지 Prometheus datasource로 검증한다.
 - GitHub와 Prometheus가 같은 `IntegrationTarget`, `CredentialBinding`, `AccessPolicy` 구조를 사용한다.
 - provider별 분기는 adapter 쪽에만 있다.
 
-## 14. 역할별 권한 초기값
+## 15. 역할별 권한 초기값
 
 초기 매핑:
 
@@ -1114,7 +1434,7 @@ viewer
 
 production 관련 write action은 별도 ABAC 조건을 추가하기 전까지 허용하지 않는다.
 
-## 15. Gateway route 작성 규칙
+## 16. Gateway route 작성 규칙
 
 모든 보호 route는 아래 순서를 지킨다.
 
@@ -1145,7 +1465,7 @@ command["project_id"] = payload.project_id
 await publish_and_record(..., command)
 ```
 
-## 16. 보안 체크리스트
+## 17. 보안 체크리스트
 
 PR마다 확인한다.
 
@@ -1160,7 +1480,7 @@ PR마다 확인한다.
 - worker가 vault를 직접 읽지 않음.
 - Gateway 밖에 외부 HTTP write endpoint를 만들지 않음.
 
-## 17. 테스트 목록
+## 18. 테스트 목록
 
 최소 테스트:
 
@@ -1195,7 +1515,7 @@ uv run ruff format --check services packages tests
 uv run python -m pytest
 ```
 
-## 18. 첫 구현자가 헷갈리면 보는 최소 요약
+## 19. 첫 구현자가 헷갈리면 보는 최소 요약
 
 ```text
 1. 로그인은 우리 서비스 계정으로 한다.
