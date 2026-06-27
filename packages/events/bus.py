@@ -12,13 +12,18 @@ from packages.config.settings import env
 from packages.contracts.event_bus.fields import CORRELATION_ID, EVENT_ID
 from packages.contracts.event_bus.interfaces import (
     Event,
+    EventBus,
     EventClient,
     EventPublisher,
     EventRecorder,
     EventSubscription,
     JsonObject,
 )
-from packages.contracts.event_bus.subjects import STREAM_NAME, STREAM_SUBJECTS, EventSubject
+from packages.contracts.event_bus.subjects import (
+    STREAM_NAME,
+    STREAM_SUBJECTS,
+    EventSubject,
+)
 from packages.contracts.interfaces import DeadLetterStore
 from packages.events.envelope import event
 
@@ -52,7 +57,7 @@ def event_causation(causation_id: str) -> Iterator[None]:
         CURRENT_CAUSATION_ID.reset(token)
 
 
-class EventBus:
+class NatsEventBus(EventBus):
     def __init__(self) -> None:
         self.url = env(NATS_URL_ENV, Nats.DEFAULT_URL)
         self.nc = None
@@ -64,14 +69,20 @@ class EventBus:
             try:
                 self.nc = await nats.connect(
                     self.url,
-                    name=env(Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME),
+                    name=env(
+                        Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME
+                    ),
                 )
                 self.js = self.nc.jetstream()
                 await self.ensure_stream()
                 return
             except Exception as exc:
+                message = (
+                    f"waiting for nats "
+                    f"({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
+                )
                 print(
-                    f"waiting for nats ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}",
+                    message,
                     flush=True,
                 )
                 await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
@@ -82,10 +93,16 @@ class EventBus:
         not_found = nats_not_found_error()
         try:
             info = await self.js.stream_info(STREAM_NAME)
-            subjects = sorted(set(info.config.subjects or []) | set(STREAM_SUBJECTS))
-            await self.js.update_stream(name=STREAM_NAME, subjects=subjects, storage="file")
+            subjects = sorted(
+                set(info.config.subjects or []) | set(STREAM_SUBJECTS)
+            )
+            await self.js.update_stream(
+                name=STREAM_NAME, subjects=subjects, storage="file"
+            )
         except not_found:
-            await self.js.add_stream(name=STREAM_NAME, subjects=STREAM_SUBJECTS, storage="file")
+            await self.js.add_stream(
+                name=STREAM_NAME, subjects=STREAM_SUBJECTS, storage="file"
+            )
 
     async def publish(
         self,
@@ -98,12 +115,16 @@ class EventBus:
         assert self.js is not None
         evt = event(subject, source, payload, correlation_id, causation_id)
         await self.js.publish(subject, json.dumps(evt).encode())
-        print(f"published {subject} correlation={evt[CORRELATION_ID]}", flush=True)
+        print(
+            f"published {subject} correlation={evt[CORRELATION_ID]}", flush=True
+        )
         return evt
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
         assert self.js is not None
-        return await self.js.pull_subscribe(subject, durable=durable, stream=STREAM_NAME)
+        return await self.js.pull_subscribe(
+            subject, durable=durable, stream=STREAM_NAME
+        )
 
     async def close(self) -> None:
         if self.nc:
@@ -111,7 +132,9 @@ class EventBus:
 
 
 class RecordedEventClient:
-    def __init__(self, publisher: EventPublisher, recorder: EventRecorder) -> None:
+    def __init__(
+        self, publisher: EventPublisher, recorder: EventRecorder
+    ) -> None:
         self.publisher = publisher
         self.recorder = recorder
 
@@ -152,7 +175,9 @@ class DeadLetterSink:
         error: Exception,
         attempts: int,
     ) -> Event:
-        dead_letter = self.store.record_dead_letter(evt, consumer, str(error), attempts)
+        dead_letter = self.store.record_dead_letter(
+            evt, consumer, str(error), attempts
+        )
         return await self.events.publish(
             EventSubject.DEAD_LETTER_CREATED,
             self.source,
