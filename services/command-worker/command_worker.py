@@ -1,66 +1,68 @@
 from __future__ import annotations
 
-import uuid
-from typing import Any
-
-from settings import (
-    AGENT_ROUTE_CHANNEL,
-    COMMAND_STATUS_QUEUED,
-    DEFAULT_COMMAND_ACTION,
-    POLICY_STEPS,
-    SANDBOX_WRITE_REJECT_REASON,
-    SERVICE_NAME,
+from command_config import CommandConfigPort
+from command_dispatcher import (
+    DefaultPlanner,
+    Dispatcher,
+    DispatchPort,
+    Planner,
 )
+from command_policy import Payload, Policy, PolicyPort
+from settings import Settings
 
-from packages.config.constants import DEFAULT_TARGET_CLUSTER_ID, SANDBOX_NAMESPACE
-from packages.contracts.event_bus.interfaces import EventClient
+from packages.contracts.event_bus.interfaces import (
+    EventClient,
+    EventEnvelope,
+)
+from packages.contracts.event_bus.payloads import CommandRejectedPayload
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.interfaces import AgentCommandQueue
 
 
 class CommandWorkflow:
-    def __init__(self, events: EventClient, commands: AgentCommandQueue) -> None:
-        self.events = events
-        self.commands = commands
+    def __init__(
+        self,
+        events: EventClient,
+        commands: AgentCommandQueue,
+        config: CommandConfigPort = Settings.CONFIG,
+        policy: PolicyPort | None = None,
+        planner: Planner | None = None,
+        dispatcher: DispatchPort | None = None,
+    ) -> None:
+        if policy is None:
+            policy = Policy.build(config.policy_rules)
+        if planner is None:
+            planner = DefaultPlanner(config)
+        if dispatcher is None:
+            dispatcher = Dispatcher(events, commands, config)
 
-    async def handle(self, evt: dict[str, Any]) -> None:
-        payload = evt["payload"]
-        namespace = payload.get("namespace", SANDBOX_NAMESPACE)
-        if namespace != SANDBOX_NAMESPACE:
-            await self.events.publish(
-                EventSubject.COMMAND_REJECTED,
-                SERVICE_NAME,
-                {"reason": SANDBOX_WRITE_REJECT_REASON, "requested": payload},
-                evt["correlation_id"],
+        self.events = events
+        self.config = config
+        self.policy = policy
+        self.planner = planner
+        self.dispatcher = dispatcher
+
+    async def handle(self, evt: EventEnvelope) -> None:
+        command = Payload(evt.payload)
+        policy = self.policy.evaluate(command)
+        if not policy.allowed:
+            await self.reject(
+                evt,
+                command,
+                policy.require_reason(),
             )
             return
 
-        plan = {
-            "command_id": str(uuid.uuid4()),
-            "cluster_id": payload.get("cluster_id", DEFAULT_TARGET_CLUSTER_ID),
-            "action": payload.get("action", DEFAULT_COMMAND_ACTION),
-            "namespace": namespace,
-            "steps": POLICY_STEPS,
-        }
+        await self.dispatcher.dispatch(evt, self.planner.build(command))
+
+    async def reject(
+        self, evt: EventEnvelope, command: Payload, reason: str
+    ) -> None:
         await self.events.publish(
-            EventSubject.COMMAND_DISPATCH_READY,
-            SERVICE_NAME,
-            {"plan": plan},
-            evt["correlation_id"],
-        )
-        await self.events.publish(
-            EventSubject.COMMAND_DISPATCHED,
-            SERVICE_NAME,
-            {
-                "plan": plan,
-                "route": {"channel": AGENT_ROUTE_CHANNEL, "cluster_id": plan["cluster_id"]},
-            },
-            evt["correlation_id"],
-        )
-        self.commands.queue_agent_command(evt["correlation_id"], plan, COMMAND_STATUS_QUEUED)
-        await self.events.publish(
-            EventSubject.COMMAND_QUEUED_FOR_AGENT,
-            SERVICE_NAME,
-            {"command_id": plan["command_id"], "cluster_id": plan["cluster_id"]},
-            evt["correlation_id"],
+            EventSubject.COMMAND_REJECTED,
+            self.config.service_name,
+            CommandRejectedPayload(
+                reason=reason, requested=command.raw
+            ).to_payload(),
+            evt.correlation_id,
         )
