@@ -7,6 +7,7 @@ import uuid
 
 import psycopg
 from psycopg.rows import dict_row
+from sqlalchemy import create_engine
 
 from packages.config.constants import Auth, GitHub, Postgres
 from packages.config.settings import env
@@ -18,6 +19,7 @@ from packages.contracts.interfaces import (
     EventProcessingRecord,
     InitializableStore,
 )
+from packages.storage.schema import SCHEMA_UPGRADES, metadata
 
 DATABASE_URL_ENV = "DATABASE_URL"
 DEFAULT_OAUTH_SCOPES = ["profile", "email"]
@@ -49,6 +51,10 @@ class Database:
     def __init__(self) -> None:
         self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
 
+    @property
+    def sqlalchemy_url(self) -> str:
+        return self.url.replace("postgresql://", "postgresql+psycopg://", 1)
+
     def connect(self):
         return psycopg.connect(self.url, row_factory=dict_row)
 
@@ -56,153 +62,14 @@ class Database:
         return await psycopg.AsyncConnection.connect(self.url, row_factory=dict_row)
 
     def init(self) -> None:
-        ddl = [
-            """
-            create table if not exists events (
-                event_id text primary key,
-                subject text not null,
-                source text not null,
-                correlation_id text not null,
-                payload jsonb not null,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists repo_changes (
-                id bigserial primary key,
-                correlation_id text not null,
-                commit_sha text not null,
-                manifest jsonb not null,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists evidence (
-                id bigserial primary key,
-                correlation_id text not null,
-                kind text not null,
-                payload jsonb not null,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists rca_reports (
-                id bigserial primary key,
-                correlation_id text not null,
-                root_cause text not null,
-                action text not null,
-                payload jsonb not null,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists pull_requests (
-                id bigserial primary key,
-                correlation_id text not null,
-                pr_url text not null,
-                title text not null,
-                body text not null,
-                status text not null,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists agent_commands (
-                command_id text primary key,
-                correlation_id text not null,
-                cluster_id text not null,
-                action text not null,
-                payload jsonb not null,
-                status text not null,
-                result jsonb not null default '{}'::jsonb,
-                created_at timestamptz not null default now(),
-                updated_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists dashboard_cards (
-                correlation_id text primary key,
-                status text not null,
-                summary text not null,
-                last_event text not null,
-                payload jsonb not null,
-                updated_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists audit_log (
-                id bigserial primary key,
-                event_id text not null,
-                subject text not null,
-                source text not null,
-                correlation_id text not null,
-                payload jsonb not null,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            create table if not exists event_processing (
-                event_id text not null,
-                consumer text not null,
-                subject text not null,
-                correlation_id text not null,
-                status text not null,
-                attempts integer not null default 0,
-                last_error text,
-                created_at timestamptz not null default now(),
-                updated_at timestamptz not null default now(),
-                primary key (event_id, consumer)
-            )
-            """,
-            """
-            create table if not exists event_dead_letters (
-                id bigserial primary key,
-                original_event_id text not null,
-                original_subject text not null,
-                consumer text not null,
-                correlation_id text not null,
-                attempts integer not null,
-                error text not null,
-                payload jsonb not null,
-                status text not null default 'open',
-                replayed_at timestamptz,
-                replay_event_id text,
-                created_at timestamptz not null default now()
-            )
-            """,
-            """
-            alter table event_dead_letters
-            add column if not exists status text not null default 'open'
-            """,
-            "alter table event_dead_letters add column if not exists replayed_at timestamptz",
-            "alter table event_dead_letters add column if not exists replay_event_id text",
-            """
-            create table if not exists oauth_accounts (
-                id bigserial primary key,
-                user_id text not null,
-                provider text not null,
-                provider_user text not null,
-                scopes text[] not null,
-                token_ref text not null,
-                status text not null,
-                created_at timestamptz not null default now(),
-                updated_at timestamptz not null default now(),
-                unique (user_id, provider)
-            )
-            """,
-            """
-            create table if not exists token_vault (
-                token_ref text primary key,
-                provider text not null,
-                encrypted_payload jsonb not null,
-                created_at timestamptz not null default now(),
-                updated_at timestamptz not null default now()
-            )
-            """,
-        ]
+        engine = create_engine(self.sqlalchemy_url)
+        try:
+            metadata.create_all(engine)
+        finally:
+            engine.dispose()
         with self.connect() as conn:
             with conn.cursor() as cur:
-                for statement in ddl:
+                for statement in SCHEMA_UPGRADES:
                     cur.execute(statement)
 
     def record_event(self, evt: Event) -> None:
