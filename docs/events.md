@@ -12,7 +12,8 @@
   "subject": "command.requested",
   "source": "api-gateway",
   "correlation_id": "uuid-or-business-flow-id",
-  "timestamp": "2026-06-26T00:00:00Z",
+  "causation_id": null,
+  "created_at": "2026-06-26T00:00:00Z",
   "payload": {}
 }
 ```
@@ -22,8 +23,31 @@
 - `subject`는 routing 계약이다.
 - `source`는 이벤트를 만든 서비스다.
 - `correlation_id`는 하나의 업무 흐름을 여러 서비스 사이에서 연결한다.
+- `causation_id`는 이 이벤트를 만든 직접 원인 이벤트의 `event_id`다. 사용자가 처음 요청한 root 이벤트는 `null`을 사용한다.
+- `created_at`은 envelope가 만들어진 UTC ISO 시각이다.
 - `payload`는 raw string이나 array가 아니라 JSON object여야 한다.
 - provider token, session token, kubeconfig, `.env` 값은 이벤트에 넣지 않는다.
+- 코드 안에서는 `dict` 인덱싱 대신 `EventEnvelope` 속성으로 접근한다. 예: `evt.subject`, `evt.payload`, `evt.correlation_id`.
+
+계약 위치:
+
+| 항목 | 파일 |
+| --- | --- |
+| envelope 객체 | `packages/contracts/event_bus/interfaces.py`의 `EventEnvelope` |
+| wire/storage dict | `packages/contracts/event_bus/interfaces.py`의 `Event` |
+| envelope 생성 | `packages/events/envelope.py`의 `event(...)` |
+
+## 이벤트 Payload
+
+발행 payload는 `packages/contracts/event_bus/payloads.py`에 dataclass 계약으로 둔다.
+
+규칙:
+
+- 새 이벤트 본문은 `<EventName>Payload` 클래스로 추가한다.
+- payload 안에 들어가는 값 객체는 `Manifest`, `Diff`, `Plan`, `Evidence`처럼 접미사 없는 명사로 둔다.
+- 서비스 workflow는 임의 dict를 직접 조립하기보다 payload 객체를 만들고 `to_payload()`로 발행한다.
+- Python 필드명은 `snake_case`를 사용한다. 외부 wire key가 `apiVersion`처럼 camelCase여야 하면 `field(metadata={"payload_name": "apiVersion"})` 별칭을 사용한다.
+- 입력 payload 검증은 gateway request schema 또는 worker 입력 Pydantic schema에서 처리하고, 출력 payload 구성은 `payloads.py`의 dataclass로 처리한다.
 
 ## Subject 이름 규칙
 
@@ -48,13 +72,30 @@
 
 ## 발행
 
-서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리한다.
+서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/payloads.py`의 payload 객체를 우선 사용한다.
 
 ```python
+from packages.contracts.event_bus.payloads import CommandRequestedPayload, Diff
+from packages.contracts.event_bus.subjects import EventSubject
+
+diff = Diff(
+    resource="deployment/demo",
+    namespace="sandbox",
+    desired_image="demo:v2",
+    actual_image="demo:v1",
+    risk="low",
+)
+
 await self.events.publish(
     EventSubject.COMMAND_REQUESTED,
     SERVICE_NAME,
-    {"cluster_id": "target-cluster-01", "namespace": "sandbox"},
+    CommandRequestedPayload(
+        cluster_id="target-cluster-01",
+        action="rollout_restart",
+        namespace="sandbox",
+        reason="desired diff detected",
+        diff=diff,
+    ).to_payload(),
     correlation_id,
 )
 ```
@@ -62,6 +103,18 @@ await self.events.publish(
 `RecordedEventClient`는 JetStream에 발행하고 PostgreSQL `events`에도 envelope를 저장한다.
 
 Gateway code는 호환성을 위해 `publish_and_record(...)`를 사용할 수 있다. 새 worker code는 `EventClient`를 우선 사용한다.
+
+Worker handler 안에서 발행하는 후속 이벤트는 `causation_id`를 직접 넘기지 않아도 된다. `WorkerRuntime`이 현재 처리 중인 원본 이벤트를 context로 잡고, `RecordedEventClient`가 자동으로 원본 `event_id`를 `causation_id`에 넣는다.
+
+Handler는 `EventEnvelope`를 받는다.
+
+```python
+async def handle(self, evt: EventEnvelope) -> None:
+    payload = evt.payload
+    correlation_id = evt.correlation_id
+```
+
+`ack`, `nak`, DLQ 이동은 workflow가 직접 처리하지 않는다. 이 책임은 `packages/runtime/worker.py`의 `EventProcessor`에 있다.
 
 ## 구독
 
@@ -96,6 +149,41 @@ WorkerService.from_subscription(
 | RCA Worker | `services/rca-worker/settings.py` | `cluster.evidence.received` |
 | Dashboard Projection Service | `services/dashboard-projection-service/settings.py` | `>` |
 | Audit Timeline Service | `services/audit-timeline-service/settings.py` | `>` |
+
+## 큐 처리 알고리즘
+
+현재 큐 정책은 MVP 기준으로 아래 조합을 사용한다.
+
+```text
+NATS JetStream durable pull consumer
+-> handler 단위 at-least-once delivery
+-> event_processing idempotency ledger
+-> bounded retry
+-> DLQ 저장
+-> 운영자 확인 후 replay
+```
+
+선택 기준:
+
+- exactly-once는 목표가 아니다. 중복 처리는 `event_processing`과 업무 테이블의 stable id로 막는다.
+- 서비스 간 직접 HTTP 호출 순서를 큐에 숨기지 않는다. 선후행은 `command.requested -> command.dispatch.ready -> command.dispatched`처럼 subject 전이로 표현한다.
+- MVP에서는 worker별 `fetch_batch_size=1`로 시작한다. 처리 순서와 디버깅을 쉽게 만들기 위해서다.
+- 처리량이 필요해지면 worker replica 수, durable consumer 분리, batch size 조정 순서로 확장한다.
+- 무한 재시도는 금지한다. 같은 이벤트가 계속 실패하면 운영자가 볼 수 있도록 DLQ로 이동한다.
+- 전역 순서 보장은 하지 않는다. 순서가 중요한 흐름은 `correlation_id`와 상태 전이 검증으로 보호한다.
+
+현재 구현 기준:
+
+| 항목 | 기준 |
+| --- | --- |
+| stream | `SERVICE_EVENTS` |
+| subject set | `packages/contracts/event_bus/subjects.py`의 `STREAM_SUBJECTS` |
+| durable name | 기본값은 `service_name` |
+| delivery | at-least-once |
+| retry | 최대 3회, 기본 delay 2초 |
+| batch | MVP 기본 1개 |
+| idempotency | `event_processing(event_id, consumer)` primary key |
+| DLQ subject | `dead_letter.created` |
 
 ## 처리 상태
 
@@ -153,7 +241,7 @@ GET  /dead-letters
 POST /dead-letters/{dead_letter_id}/replay
 ```
 
-두 endpoint 모두 유효한 session이 필요하다. Replay는 원본 payload를 원본 subject로 새 `event_id`와 함께 다시 발행한 뒤 dead letter row를 `replayed`로 표시한다.
+두 endpoint 모두 유효한 session이 필요하다. Replay는 원본 payload를 원본 subject로 새 `event_id`와 함께 다시 발행한다. 이때 `correlation_id`는 유지하고 `causation_id`는 원본 실패 이벤트의 `event_id`로 기록한 뒤 dead letter row를 `replayed`로 표시한다.
 
 ## Transaction과 순서 정책
 
