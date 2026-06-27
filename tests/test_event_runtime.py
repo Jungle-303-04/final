@@ -4,6 +4,7 @@ import asyncio
 import json
 from typing import Any
 
+from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.events.envelope import event
 from packages.runtime.worker import EventProcessor, EventRetryPolicy
@@ -28,40 +29,44 @@ class FakeProcessingStore:
     ) -> None:
         self.attempts = attempts
         self.status = status
-        self.recorded: list[dict[str, Any]] = []
+        self.recorded: list[EventEnvelope] = []
         self.finished: list[tuple[str, str]] = []
         self.failed: list[tuple[str, str, str]] = []
 
-    def record_event(self, evt: dict[str, Any]) -> None:
+    def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
 
     def begin_event_processing(
-        self, evt: dict[str, Any], consumer: str
+        self, evt: EventEnvelope, consumer: str
     ) -> dict[str, Any]:
         return {"status": self.status, "attempts": self.attempts}
 
     def finish_event_processing(
-        self, evt: dict[str, Any], consumer: str
+        self, evt: EventEnvelope, consumer: str
     ) -> None:
         self.finished.append((evt.event_id, consumer))
 
     def fail_event_processing(
-        self, evt: dict[str, Any], consumer: str, error: str, status: str
+        self,
+        evt: EventEnvelope,
+        consumer: str,
+        error: str,
+        status: str,
     ) -> None:
         self.failed.append((evt.event_id, consumer, status))
 
 
 class FakeDeadLetters:
     def __init__(self) -> None:
-        self.captured: list[tuple[dict[str, Any], str, str, int]] = []
+        self.captured: list[tuple[EventEnvelope, str, str, int]] = []
 
     async def capture(
         self,
-        evt: dict[str, Any],
+        evt: EventEnvelope,
         consumer: str,
         error: Exception,
         attempts: int,
-    ) -> dict[str, Any]:
+    ) -> EventEnvelope:
         self.captured.append((evt, consumer, str(error), attempts))
         return event(
             "dead_letter.created",
@@ -80,7 +85,7 @@ def test_event_processor_acks_successful_handler() -> None:
         dead_letters = FakeDeadLetters()
         handled: list[str] = []
 
-        async def handler(received: dict[str, Any]) -> None:
+        async def handler(received: EventEnvelope) -> None:
             handled.append(received.event_id)
 
         processor = EventProcessor(
@@ -109,7 +114,7 @@ def test_event_processor_naks_retryable_failure() -> None:
         store = FakeProcessingStore(attempts=1)
         dead_letters = FakeDeadLetters()
 
-        async def handler(_received: dict[str, Any]) -> None:
+        async def handler(_received: EventEnvelope) -> None:
             raise RuntimeError("temporary failure")
 
         processor = EventProcessor(
@@ -139,7 +144,7 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
         store = FakeProcessingStore(attempts=2)
         dead_letters = FakeDeadLetters()
 
-        async def handler(_received: dict[str, Any]) -> None:
+        async def handler(_received: EventEnvelope) -> None:
             raise RuntimeError("permanent failure")
 
         processor = EventProcessor(

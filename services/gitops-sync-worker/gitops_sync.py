@@ -41,7 +41,7 @@ class GitOpsSyncWorkflow:
             evt.correlation_id, commit_sha, manifest.to_payload()
         )
         rendered = RenderedManifest(
-            apiVersion=Settings.MANIFEST_API_VERSION,
+            api_version=Settings.MANIFEST_API_VERSION,
             kind=Settings.MANIFEST_KIND,
             metadata=RenderedMetadata(
                 name=manifest.app, namespace=manifest.namespace

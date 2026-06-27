@@ -88,5 +88,8 @@ def test_gitops_validates_webhook_and_emits_typed_payloads() -> None:
             "replicas",
             "namespace",
         }
+        rendered = events.published[1].payload["rendered_manifest"]
+        assert rendered["apiVersion"] == "apps/v1"
+        assert "api_version" not in rendered
 
     asyncio.run(run())
