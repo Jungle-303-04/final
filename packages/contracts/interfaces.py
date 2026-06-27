@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from packages.contracts.event_bus.interfaces import (
-    Event,
+    EventEnvelope,
     EventRecorder,
     JsonObject,
 )
@@ -18,19 +18,21 @@ class InitializableStore(Protocol):
 
 class EventProcessingStore(EventRecorder, Protocol):
     def begin_event_processing(
-        self, evt: Event, consumer: str
+        self, evt: EventEnvelope, consumer: str
     ) -> EventProcessingRecord: ...
 
-    def finish_event_processing(self, evt: Event, consumer: str) -> None: ...
+    def finish_event_processing(
+        self, evt: EventEnvelope, consumer: str
+    ) -> None: ...
 
     def fail_event_processing(
-        self, evt: Event, consumer: str, error: str, status: str
+        self, evt: EventEnvelope, consumer: str, error: str, status: str
     ) -> None: ...
 
 
 class DeadLetterStore(Protocol):
     def record_dead_letter(
-        self, evt: Event, consumer: str, error: str, attempts: int
+        self, evt: EventEnvelope, consumer: str, error: str, attempts: int
     ) -> JsonObject: ...
 
     def list_dead_letters(self, limit: int) -> list[JsonObject]: ...
@@ -111,14 +113,14 @@ class RcaStore(Protocol):
 
 class DashboardReadModel(Protocol):
     def upsert_dashboard(
-        self, evt: Event, status: str, summary: str
+        self, evt: EventEnvelope, status: str, summary: str
     ) -> None: ...
 
     def list_dashboard(self) -> list[JsonObject]: ...
 
 
 class AuditLogStore(Protocol):
-    def append_audit_log(self, evt: Event) -> None: ...
+    def append_audit_log(self, evt: EventEnvelope) -> None: ...
 
 
 class ManagementPlaneClient(Protocol):

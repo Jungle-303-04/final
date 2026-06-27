@@ -2,20 +2,23 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Final, Protocol
+from typing import Any, Protocol
 
 from command_config import PolicyRuleConfig
 
 from packages.contracts.gateway.fields import Gateway
 
 
-class Field:
-    REASON: Final[str] = "reason"
-    REQUESTED: Final[str] = "requested"
+class Lookup(Protocol):
+    """Reads a value by field name. Rules depend on this, not on dict."""
+
+    def value(self, field: str, default: Any = None) -> Any: ...
 
 
 @dataclass(frozen=True)
 class Payload:
+    """dict 기반 Lookup 구현 (command 이벤트 payload)."""
+
     raw: dict[str, Any]
 
     def value(self, field: str, default: Any = None) -> Any:
@@ -33,17 +36,21 @@ class Payload:
     def action(self) -> str | None:
         return self.value(Gateway.ACTION)
 
-    def rejected_event_payload(self, reason: str) -> dict[str, Any]:
-        return {
-            Field.REASON: reason,
-            Field.REQUESTED: self.raw,
-        }
+
+@dataclass(frozen=True)
+class ModelLookup:
+    """속성(model) 기반 Lookup 구현 (Pydantic/dataclass payload)."""
+
+    model: Any
+
+    def value(self, field: str, default: Any = None) -> Any:
+        return getattr(self.model, field, default)
 
 
 class Rule(Protocol):
     reason: str
 
-    def allows(self, command: Payload) -> bool: ...
+    def allows(self, target: Lookup) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -54,8 +61,8 @@ class EqualsRule:
     reason: str
     default: Any = None
 
-    def allows(self, command: Payload) -> bool:
-        return command.value(self.field, self.default) == self.expected
+    def allows(self, target: Lookup) -> bool:
+        return target.value(self.field, self.default) == self.expected
 
     @classmethod
     def build(cls, config: PolicyRuleConfig) -> EqualsRule:
@@ -88,7 +95,7 @@ class Result:
 
 
 class PolicyPort(Protocol):
-    def evaluate(self, command: Payload) -> Result: ...
+    def evaluate(self, target: Lookup) -> Result: ...
 
 
 class Policy:
@@ -100,8 +107,8 @@ class Policy:
         rules: list[Rule] = [EqualsRule.build(config) for config in configs]
         return cls(rules)
 
-    def evaluate(self, command: Payload) -> Result:
+    def evaluate(self, target: Lookup) -> Result:
         for rule in self.rules:
-            if not rule.allows(command):
+            if not rule.allows(target):
                 return Result.reject(rule.reason)
         return Result.allow()

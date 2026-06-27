@@ -43,12 +43,12 @@ class FakeProcessingStore:
     def finish_event_processing(
         self, evt: dict[str, Any], consumer: str
     ) -> None:
-        self.finished.append((evt["event_id"], consumer))
+        self.finished.append((evt.event_id, consumer))
 
     def fail_event_processing(
         self, evt: dict[str, Any], consumer: str, error: str, status: str
     ) -> None:
-        self.failed.append((evt["event_id"], consumer, status))
+        self.failed.append((evt.event_id, consumer, status))
 
 
 class FakeDeadLetters:
@@ -66,22 +66,22 @@ class FakeDeadLetters:
         return event(
             "dead_letter.created",
             consumer,
-            {"original_event_id": evt["event_id"], "attempts": attempts},
-            evt["correlation_id"],
-            evt["event_id"],
+            {"original_event_id": evt.event_id, "attempts": attempts},
+            evt.correlation_id,
+            evt.event_id,
         )
 
 
 def test_event_processor_acks_successful_handler() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": True}, "corr-1")
-        message = FakeMessage(evt)
+        message = FakeMessage(evt.to_dict())
         store = FakeProcessingStore()
         dead_letters = FakeDeadLetters()
         handled: list[str] = []
 
         async def handler(received: dict[str, Any]) -> None:
-            handled.append(received["event_id"])
+            handled.append(received.event_id)
 
         processor = EventProcessor(
             "command-worker",
@@ -95,8 +95,8 @@ def test_event_processor_acks_successful_handler() -> None:
 
         assert message.acked is True
         assert message.nak_delay is None
-        assert handled == [evt["event_id"]]
-        assert store.finished == [(evt["event_id"], "command-worker")]
+        assert handled == [evt.event_id]
+        assert store.finished == [(evt.event_id, "command-worker")]
         assert dead_letters.captured == []
 
     asyncio.run(run())
@@ -105,7 +105,7 @@ def test_event_processor_acks_successful_handler() -> None:
 def test_event_processor_naks_retryable_failure() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": False}, "corr-2")
-        message = FakeMessage(evt)
+        message = FakeMessage(evt.to_dict())
         store = FakeProcessingStore(attempts=1)
         dead_letters = FakeDeadLetters()
 
@@ -125,7 +125,7 @@ def test_event_processor_naks_retryable_failure() -> None:
         assert message.acked is False
         assert message.nak_delay == 7
         assert store.failed == [
-            (evt["event_id"], "command-worker", EventProcessingStatus.RETRYING)
+            (evt.event_id, "command-worker", EventProcessingStatus.RETRYING)
         ]
         assert dead_letters.captured == []
 
@@ -135,7 +135,7 @@ def test_event_processor_naks_retryable_failure() -> None:
 def test_event_processor_dead_letters_after_max_attempts() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": False}, "corr-3")
-        message = FakeMessage(evt)
+        message = FakeMessage(evt.to_dict())
         store = FakeProcessingStore(attempts=2)
         dead_letters = FakeDeadLetters()
 
@@ -156,7 +156,7 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
         assert message.nak_delay is None
         assert store.failed == [
             (
-                evt["event_id"],
+                evt.event_id,
                 "command-worker",
                 EventProcessingStatus.DEAD_LETTERED,
             )
