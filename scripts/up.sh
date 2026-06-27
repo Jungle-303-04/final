@@ -16,6 +16,7 @@ need() {
 need docker
 need kind
 need kubectl
+need helm
 need curl
 
 if ! docker info >/dev/null 2>&1; then
@@ -84,6 +85,8 @@ kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-loki --timeout=120s
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-otel --timeout=120s
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status daemonset/optional-node-collector --timeout=120s
+echo "==> installing target telemetry"
+bash "${ROOT_DIR}/scripts/install-telemetry.sh"
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout restart deploy/target-cluster-agent
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/target-cluster-agent --timeout=180s
 
