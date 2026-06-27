@@ -20,6 +20,13 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class LoginRequest(StrictModel):
+    # 우리 서비스 자체 계정으로 로그인할 때 받는 값이다.
+    # role 같은 권한 필드는 클라이언트가 보낼 수 없고, 서버가 DB/session 기준으로만 정한다.
+    email: str
+    password: str
+
+
 class OAuthCallbackRequest(StrictModel):
     user_id: str = LOCAL_USER_ID
     code: str | None = None
