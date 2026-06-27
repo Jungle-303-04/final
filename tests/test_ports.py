@@ -4,13 +4,21 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
-from packages.events.bus import publish_and_record
+from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.events.bus import (
+    RecordedEventClient,
+    event_causation,
+    publish_and_record,
+)
 from packages.events.envelope import event
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-COMMAND_WORKER_PATH = ROOT_DIR / "services" / "command-worker" / "command_worker.py"
+COMMAND_WORKER_PATH = (
+    ROOT_DIR / "services" / "command-worker" / "command_worker.py"
+)
 
 
 def load_module(path: Path, name: str):
@@ -18,6 +26,7 @@ def load_module(path: Path, name: str):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load module: {path}")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     previous_settings = sys.modules.pop("settings", None)
     sys.path.insert(0, str(path.parent))
     try:
@@ -32,7 +41,7 @@ def load_module(path: Path, name: str):
 
 class FakeEventPublisher:
     def __init__(self) -> None:
-        self.published: list[dict[str, Any]] = []
+        self.published: list[EventEnvelope] = []
 
     async def publish(
         self,
@@ -40,8 +49,9 @@ class FakeEventPublisher:
         source: str,
         payload: dict[str, Any],
         correlation_id: str | None = None,
-    ) -> dict[str, Any]:
-        created = event(subject, source, payload, correlation_id)
+        causation_id: str | None = None,
+    ) -> EventEnvelope:
+        created = event(subject, source, payload, correlation_id, causation_id)
         self.published.append(created)
         return created
 
@@ -52,9 +62,9 @@ class FakeEventClient(FakeEventPublisher):
 
 class FakeEventRecorder:
     def __init__(self) -> None:
-        self.recorded: list[dict[str, Any]] = []
+        self.recorded: list[EventEnvelope] = []
 
-    def record_event(self, evt: dict[str, Any]) -> None:
+    def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
 
 
@@ -62,7 +72,9 @@ class FakeAgentCommandQueue:
     def __init__(self) -> None:
         self.queued: list[tuple[str, dict[str, Any], str]] = []
 
-    def queue_agent_command(self, correlation_id: str, plan: dict[str, Any], status: str) -> None:
+    async def queue_agent_command(
+        self, correlation_id: str, plan: dict[str, Any], status: str
+    ) -> None:
         self.queued.append((correlation_id, plan, status))
 
 
@@ -80,7 +92,28 @@ def test_publish_and_record_uses_event_ports() -> None:
             "corr-1",
         )
 
-        assert created["correlation_id"] == "corr-1"
+        assert created.correlation_id == "corr-1"
+        assert publisher.published == [created]
+        assert recorder.recorded == [created]
+
+    asyncio.run(run())
+
+
+def test_recorded_event_client_inherits_current_causation_id() -> None:
+    async def run() -> None:
+        publisher = FakeEventPublisher()
+        recorder = FakeEventRecorder()
+        client = RecordedEventClient(publisher, recorder)
+
+        with event_causation("parent-event-1"):
+            created = await client.publish(
+                "command.dispatched",
+                "command-worker",
+                {"command_id": "cmd-1"},
+                "corr-1",
+            )
+
+        assert created.causation_id == "parent-event-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
 
@@ -95,14 +128,16 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
         workflow = module.CommandWorkflow(events, queue)
 
         await workflow.handle(
-            {
-                "payload": {
+            event(
+                "command.requested",
+                "test",
+                {
                     "cluster_id": "target-cluster-01",
                     "action": "rollout_restart",
                     "namespace": "sandbox",
                 },
-                "correlation_id": "corr-2",
-            }
+                "corr-2",
+            )
         )
 
         assert len(queue.queued) == 1
@@ -110,10 +145,33 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
         assert correlation_id == "corr-2"
         assert plan["cluster_id"] == "target-cluster-01"
         assert status == "queued"
-        assert [evt["subject"] for evt in events.published] == [
+        assert [evt.subject for evt in events.published] == [
             "command.dispatch.ready",
             "command.dispatched",
             "command.queued_for_agent",
         ]
 
     asyncio.run(run())
+
+
+def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
+    policy = load_module(
+        ROOT_DIR / "services" / "command-worker" / "command_policy.py",
+        "test_command_policy",
+    )
+    rule = policy.EqualsRule(
+        name="sandbox_namespace",
+        field="namespace",
+        expected="sandbox",
+        reason="only sandbox namespace writes are allowed",
+        default="sandbox",
+    )
+    engine = policy.Policy([rule])
+
+    dict_target = policy.Payload({"namespace": "sandbox"})
+    model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
+    rejected = policy.ModelLookup(SimpleNamespace(namespace="production"))
+
+    assert engine.evaluate(dict_target).allowed is True
+    assert engine.evaluate(model_target).allowed is True
+    assert engine.evaluate(rejected).allowed is False
