@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from packages.contracts.gateway.requests import CommandRequest, GitHubWebhookRequest
+from packages.contracts.gateway.requests import CommandRequest, GitHubWebhookRequest, LoginRequest
 from packages.events.envelope import event
 
 
@@ -13,6 +13,11 @@ def test_command_request_allows_only_sandbox_namespace() -> None:
 def test_command_request_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         CommandRequest(command_type="legacy")
+
+
+def test_login_request_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        LoginRequest(email="local@example.com", password="local-password", role="owner")
 
 
 def test_github_webhook_schema_rejects_invalid_replica_count() -> None:
