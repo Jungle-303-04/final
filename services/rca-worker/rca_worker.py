@@ -39,6 +39,9 @@ class RcaWorkflow:
         self.oauth_accounts = oauth_accounts
 
     async def handle(self, evt: dict[str, Any]) -> None:
+        evidence_ref = (
+            f"{Settings.OBJECT_EVIDENCE_PREFIX}/{evt[CORRELATION_ID]}.json"
+        )
         evidence = {
             Gateway.CLUSTER_ID: evt[PAYLOAD].get(
                 Gateway.CLUSTER_ID,
@@ -48,13 +51,18 @@ class RcaWorkflow:
             Field.METRICS: evt[PAYLOAD].get(Field.METRICS, {}),
             Field.LOGS: evt[PAYLOAD].get(Field.LOGS, []),
             Field.TRACES: evt[PAYLOAD].get(Field.TRACES, {}),
-            Field.OBJECT_REF: f"{Settings.OBJECT_EVIDENCE_PREFIX}/{evt[CORRELATION_ID]}.json",
+            Field.OBJECT_REF: evidence_ref,
         }
         pr_number = int(time.time()) % Settings.PR_NUMBER_MODULO
         pr_url = f"{Settings.PR_URL_PREFIX}/{pr_number}"
-        token_ref = self.oauth_accounts.latest_github_token_ref() or Settings.MISSING_GITHUB_TOKEN_REF
+        token_ref = (
+            self.oauth_accounts.latest_github_token_ref()
+            or Settings.MISSING_GITHUB_TOKEN_REF
+        )
 
-        self.rca_store.save_evidence(evt[CORRELATION_ID], Settings.EVIDENCE_KIND, evidence)
+        self.rca_store.save_evidence(
+            evt[CORRELATION_ID], Settings.EVIDENCE_KIND, evidence
+        )
         self.rca_store.save_rca_report(
             evt[CORRELATION_ID],
             Settings.ROOT_CAUSE,
@@ -65,7 +73,12 @@ class RcaWorkflow:
             evt[CORRELATION_ID],
             pr_url,
             Settings.PR_TITLE,
-            f"RCA: {Settings.ROOT_CAUSE}\n\nAction: {Settings.RECOMMENDED_ACTION}",
+            "\n\n".join(
+                (
+                    f"RCA: {Settings.ROOT_CAUSE}",
+                    f"Action: {Settings.RECOMMENDED_ACTION}",
+                )
+            ),
             Settings.PR_STATUS_CREATED,
         )
 

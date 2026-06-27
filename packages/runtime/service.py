@@ -102,7 +102,9 @@ def run_fastapi_service(
     default_port: str = Runtime.DEFAULT_HTTP_PORT,
     log_level: str = DEFAULT_LOG_LEVEL,
 ) -> None:
-    FastApiService(service_name, app_factory, host, port_env, default_port, log_level).run()
+    FastApiService(
+        service_name, app_factory, host, port_env, default_port, log_level
+    ).run()
 
 
 def run_worker_service(

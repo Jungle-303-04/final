@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, WorkerSubscription
+from packages.contracts.event_bus.subscriptions import (
+    ALL_EVENTS_SUBJECT,
+    WorkerSubscription,
+)
 
 
 class Settings:

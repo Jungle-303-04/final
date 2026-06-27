@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, WorkerSubscription
+from packages.contracts.event_bus.subscriptions import (
+    ALL_EVENTS_SUBJECT,
+    WorkerSubscription,
+)
 
 
 class Settings:
@@ -11,6 +14,9 @@ class Settings:
         subject=ALL_EVENTS_SUBJECT,
     )
 
-    TERMINAL_SUCCESS_SUBJECTS = {EventSubject.SAFE_PR_CREATED, EventSubject.COMMAND_COMPLETED}
+    TERMINAL_SUCCESS_SUBJECTS = {
+        EventSubject.SAFE_PR_CREATED,
+        EventSubject.COMMAND_COMPLETED,
+    }
     REJECTED_SUBJECT_SUFFIX = "rejected"
     FAILED_SUBJECT_SUFFIX = "failed"

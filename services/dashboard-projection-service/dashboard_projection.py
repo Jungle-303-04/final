@@ -11,7 +11,9 @@ from packages.contracts.interfaces import DashboardReadModel
 
 
 class DashboardProjectionWorkflow:
-    def __init__(self, events: EventClient, dashboard: DashboardReadModel) -> None:
+    def __init__(
+        self, events: EventClient, dashboard: DashboardReadModel
+    ) -> None:
         self.events = events
         self.dashboard = dashboard
 

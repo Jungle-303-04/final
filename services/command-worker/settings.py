@@ -25,7 +25,9 @@ class Settings:
     )
     DEFAULT_COMMAND_ACTION: Final[str] = "rollout_restart"
     SANDBOX_NAMESPACE_POLICY_NAME: Final[str] = "sandbox_namespace"
-    SANDBOX_WRITE_REJECT_REASON: Final[str] = "only sandbox namespace writes are allowed"
+    SANDBOX_WRITE_REJECT_REASON: Final[str] = (
+        "only sandbox namespace writes are allowed"
+    )
     COMMAND_STATUS_QUEUED: Final[str] = "queued"
     CONFIG = CommandConfig(
         service_name=SERVICE_NAME,
