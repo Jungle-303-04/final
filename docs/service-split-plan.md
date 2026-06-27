@@ -119,7 +119,7 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 - service runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
 - 서비스별 설정은 반드시 `services/<service-name>/settings.py`에 둔다.
 - worker 구독은 각 worker `settings.py`의 `SUBSCRIPTION = WorkerSubscription(...)`으로 선언한다.
-- event subject, stream, subscription 타입은 `packages/contracts/event_bus`에서 관리한다.
+- event subject, payload, stream, subscription 타입은 `packages/contracts/event_bus`에서 관리한다.
 - 여러 서비스가 공유하는 runtime/env 기본값만 `packages/config`로 승격한다.
 - 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둔다.
 - DB schema는 공유 PostgreSQL에서 시작하되 schema/table ownership을 문서화한다.
@@ -128,3 +128,5 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 - production write는 기본 금지하고 `sandbox` namespace부터 허용한다.
 - 새 서비스는 runner, Deployment/DaemonSet, health/restart 검증, 소유 WBS/이슈를 함께 추가한다.
 - PR에서 서비스 경계를 합치거나 role dispatcher로 회귀하면 merge하지 않는다.
+- 운영 배포 기준은 `docs/operations-deployment.md`와 `deploy/eks/README.md`를 따른다.
+- Fargate 전제 workload와 managed node group 전제 workload를 섞어서 설명하지 않는다.
