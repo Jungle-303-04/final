@@ -24,6 +24,58 @@
 
 ## Stage 0. 준비
 
+### Task 0-0. 로컬 실행 도구 확인
+
+목표:
+
+```text
+데모를 실행하기 전에 내 컴퓨터에서 필요한 도구가 켜져 있는지 확인한다.
+```
+
+실행:
+
+```bash
+python --version
+docker --version
+docker compose version
+docker info
+```
+
+직접 확인:
+
+- `python --version`이 출력된다.
+- `docker --version`이 출력된다.
+- `docker compose version`이 출력된다.
+- `docker info`가 Docker 정보를 출력한다.
+
+막히는 경우:
+
+```text
+Cannot connect to the Docker daemon
+```
+
+이 메시지가 나오면 Docker Desktop이 꺼져 있는 것이다.
+
+해결:
+
+```text
+Docker Desktop을 실행하고 다시 docker info를 실행한다.
+```
+
+산출물:
+
+- 없음. 도구 상태를 확인하면 된다.
+
+나중에 옮길 위치:
+
+- 해당 없음.
+
+성취 기준:
+
+```text
+Docker 데몬이 켜져 있어야 compose demo가 실행된다는 것을 안다.
+```
+
 ### Task 0-1. 현재 repo 상태 확인
 
 목표:
@@ -159,6 +211,20 @@ Docker Desktop을 먼저 실행한다.
 Docker가 꺼져 있으면 docker compose가 이미지를 받을 수 없다.
 ```
 
+먼저 설정 파일만 확인:
+
+```bash
+docker compose -f examples/telemetry-evidence-demo/docker-compose.yml config
+```
+
+직접 확인:
+
+- `demo-metrics` 서비스가 있다.
+- `prometheus` 서비스가 있다.
+- `loki` 서비스가 있다.
+- `otel-collector` 서비스가 있다.
+- `evidence-demo` 서비스가 있다.
+
 실행:
 
 ```bash
@@ -185,6 +251,49 @@ docker compose up --build
 
 ```text
 raw telemetry와 EvidenceDraft 차이를 실제 출력으로 봤다.
+```
+
+### Task 1-2-1. demo 포트와 역할 확인
+
+목표:
+
+```text
+어떤 포트가 어떤 도구를 의미하는지 외운다.
+```
+
+확인:
+
+| 포트 | 도구 | 확인할 것 |
+| --- | --- | --- |
+| `18001` | demo-metrics | `/metrics` 원문 |
+| `19090` | Prometheus | metric query API |
+| `13100` | Loki | log query API |
+
+실행:
+
+```bash
+curl http://localhost:18001/metrics
+curl "http://localhost:19090/api/v1/query?query=demo_http_5xx_rate"
+curl -G "http://localhost:13100/loki/api/v1/query" \
+  --data-urlencode 'query={service="checkout-api"} |= "readiness"'
+```
+
+산출물:
+
+- 각 command의 출력 중 핵심 JSON 또는 metric line을 작업 메모에 붙인다.
+
+나중에 옮길 위치:
+
+```text
+Prometheus adapter
+Loki adapter
+Evidence builder test fixture
+```
+
+성취 기준:
+
+```text
+metric endpoint, metric query, log query의 차이를 말할 수 있다.
 ```
 
 ### Task 1-3. Prometheus raw query 직접 실행
@@ -221,6 +330,14 @@ curl "http://localhost:19090/api/v1/query?query=demo_pod_restart_total"
 Prometheus raw response에서 숫자 값이 어디 있는지 찾을 수 있다.
 ```
 
+추가 학습 질문:
+
+```text
+왜 value[1]이 문자열일까?
+왜 EvidenceDraft에서는 float로 바꿔야 할까?
+labels는 전부 보관해야 할까, 필요한 것만 남겨야 할까?
+```
+
 ### Task 1-4. Loki raw query 직접 실행
 
 목표:
@@ -253,6 +370,14 @@ curl -G "http://localhost:13100/loki/api/v1/query" \
 
 ```text
 Loki raw response에서 log line이 어디 있는지 찾을 수 있다.
+```
+
+추가 학습 질문:
+
+```text
+log line 전체를 event payload에 넣어도 될까?
+민감정보가 있을 수 있으면 어떻게 줄여야 할까?
+snippet은 몇 글자까지만 남기는 것이 좋을까?
 ```
 
 ## Stage 2. Raw data 줄이기
