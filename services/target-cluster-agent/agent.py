@@ -106,7 +106,10 @@ class TargetClusterAgent:
     # Read runtime settings and optionally accept a test/mock Management Plane client.
     def __init__(self, client: ManagementPlaneClient | None = None) -> None:
         self.base_url = env(MANAGEMENT_BASE_URL_ENV, DEFAULT_MANAGEMENT_BASE_URL).rstrip("/")
-        self.prometheus_base_url = env(PROMETHEUS_BASE_URL_ENV, DEFAULT_PROMETHEUS_BASE_URL).rstrip("/")
+        self.prometheus_base_url = env(
+            PROMETHEUS_BASE_URL_ENV,
+            DEFAULT_PROMETHEUS_BASE_URL,
+        ).rstrip("/")
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
@@ -162,11 +165,11 @@ class TargetClusterAgent:
             async with httpx.AsyncClient(timeout=PROMETHEUS_TIMEOUT_SECONDS) as client:
                 query_results = {}
 
-                for metric_name, query in PROMETHEUS_INSTANT_QUERIES.items():
-                    payload = await self.query_prometheus(client, query)
+                for metric_query in PROMETHEUS_INSTANT_QUERIES:
+                    payload = await self.query_prometheus(client, metric_query.promql)
 
-                    query_results[metric_name] = {
-                        "query": query,
+                    query_results[metric_query.metric_name] = {
+                        "query": metric_query.promql,
                         # ** is the dictionary unpacking syntax.
                         **self.normalize_prometheus_payload(payload),
                     }
