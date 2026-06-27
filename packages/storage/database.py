@@ -179,6 +179,17 @@ class Database:
             "alter table event_dead_letters add column if not exists replayed_at timestamptz",
             "alter table event_dead_letters add column if not exists replay_event_id text",
             """
+            create table if not exists users (
+                id text primary key,
+                email text unique not null,
+                password_hash text not null,
+                display_name text not null,
+                status text not null,
+                created_at timestamptz not null default now(),
+                updated_at timestamptz not null default now()
+            )
+            """,
+            """
             create table if not exists oauth_accounts (
                 id bigserial primary key,
                 user_id text not null,
@@ -206,6 +217,47 @@ class Database:
             with conn.cursor() as cur:
                 for statement in ddl:
                     cur.execute(statement)
+
+    def get_user_by_email(self, email: str) -> JsonObject | None:
+        # 로그인 검증용 내부 조회다. API 응답으로 password_hash를 그대로 내보내면 안 된다.
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select id, email, password_hash, display_name, status
+                    from users
+                    where email = %s
+                    """,
+                    (email,),
+                )
+                row = cur.fetchone()
+                return dict(row) if row else None
+
+    def upsert_user(
+        self,
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        status: str,
+    ) -> None:
+        # 개발 환경에서 바로 로그인해 볼 수 있도록 기본 사용자를 넣거나 갱신한다.
+        # 저장되는 값은 password 원문이 아니라 hash뿐이다.
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into users (id, email, password_hash, display_name, status, updated_at)
+                    values (%s, %s, %s, %s, %s, now())
+                    on conflict (id) do update set
+                        email = excluded.email,
+                        password_hash = excluded.password_hash,
+                        display_name = excluded.display_name,
+                        status = excluded.status,
+                        updated_at = now()
+                    """,
+                    (user_id, email, password_hash, display_name, status),
+                )
 
     def record_event(self, evt: Event) -> None:
         with self.connect() as conn:
