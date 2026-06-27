@@ -3,40 +3,24 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from settings import (
-    APP_TITLE,
-    APP_VERSION,
-    COMMAND_NOT_FOUND_MESSAGE,
-    COMMAND_NOT_FOUND_STATUS_CODE,
-    COMMAND_POLL_SLEEP_SECONDS,
-    COMMAND_STATUS_LEASED,
-    COMMAND_STATUS_QUEUED,
-    CONFLICT_STATUS_CODE,
-    DASHBOARD_STREAM_INTERVAL_SECONDS,
-    DEAD_LETTER_NOT_FOUND_MESSAGE,
-    DEAD_LETTER_REPLAYED_MESSAGE,
-    DEFAULT_AGENT_COMMAND_POLL_SECONDS,
-    DEFAULT_DEAD_LETTER_LIMIT,
-    DEFAULT_SCOPES,
-    EVENT_STREAM_MEDIA_TYPE,
-    GATEWAY_ERROR_STATUS_CODE,
-    MAX_COMMAND_POLL_SECONDS,
-    MAX_DEAD_LETTER_LIMIT,
-    SERVICE_NAME,
-)
+from settings import Settings
 
-from packages.config.constants import (
-    DEFAULT_TARGET_CLUSTER_ID,
-    GITHUB_PROVIDER,
-    LOCAL_USER_ID,
-    REQUIRED_GITHUB_SCOPE,
+from packages.config.constants import Auth, GitHub, Target
+from packages.contracts.event_bus.fields import (
+    CORRELATION_ID,
+    EVENT_ID,
+    PAYLOAD,
 )
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
@@ -45,211 +29,264 @@ from packages.contracts.gateway.requests import (
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
-from packages.events.bus import EventBus, publish_and_record
+from packages.events.bus import NatsEventBus, publish_and_record
 from packages.storage.database import Database, wait_for_database
 
 
 class ApiGateway:
     def __init__(self) -> None:
         self.db = Database()
-        self.bus = EventBus()
+        self.bus = NatsEventBus()
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
-        self.app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+        self.app = FastAPI(
+            title=Settings.APP_TITLE,
+            version=Settings.APP_VERSION,
+            lifespan=self.lifespan,
+        )
         self.configure_routes()
+
+    @asynccontextmanager
+    async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
+        await wait_for_database(self.db)
+        await self.sessions.connect()
+        await self.bus.connect()
+        try:
+            yield
+        finally:
+            await self.bus.close()
+            await self.sessions.close()
+            await self.db.dispose_async()
+            self.db.dispose()
 
     def configure_routes(self) -> None:
         app = self.app
 
-        @app.on_event("startup")
-        async def startup() -> None:
-            await wait_for_database(self.db)
-            await self.sessions.connect()
-            await self.bus.connect()
-
-        @app.on_event("shutdown")
-        async def shutdown() -> None:
-            await self.bus.close()
-            await self.sessions.close()
-
-        @app.get("/healthz")
+        @app.get(gateway_routes.HEALTHZ_PATH)
         async def healthz() -> dict[str, str]:
-            return {"status": "ok", "service": SERVICE_NAME}
+            return {
+                Gateway.STATUS: Gateway.STATUS_OK,
+                Gateway.SERVICE: Settings.SERVICE_NAME,
+            }
 
-        @app.get("/readyz")
+        @app.get(gateway_routes.READYZ_PATH)
         async def readyz() -> dict[str, str]:
             self.db.init()
-            return {"status": "ready"}
+            return {Gateway.STATUS: Gateway.STATUS_READY}
 
-        @app.get("/auth/session")
+        @app.get(gateway_routes.AUTH_SESSION_PATH)
         async def session(request: Request) -> dict[str, Any]:
             current = await self.auth.require_session(request)
-            return {"authenticated": True, "user_id": current.user_id, "roles": current.roles}
+            return {
+                Gateway.AUTHENTICATED: True,
+                Gateway.USER_ID: current.user_id,
+                Gateway.ROLES: current.roles,
+            }
 
-        @app.get("/auth/oauth/{provider}/start")
+        @app.get(gateway_routes.OAUTH_START_PATH)
         async def oauth_start(
-            provider: str, user_id: str = LOCAL_USER_ID, scopes: str = DEFAULT_SCOPES
+            provider: str,
+            user_id: str = Auth.LOCAL_USER_ID,
+            scopes: str = Settings.DEFAULT_SCOPES,
         ) -> dict[str, Any]:
-            scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
-            if provider == GITHUB_PROVIDER and REQUIRED_GITHUB_SCOPE not in scope_list:
-                scope_list.append(REQUIRED_GITHUB_SCOPE)
+            scope_list = [
+                scope.strip() for scope in scopes.split(",") if scope.strip()
+            ]
+            if (
+                provider == GitHub.PROVIDER
+                and GitHub.REQUIRED_SCOPE not in scope_list
+            ):
+                scope_list.append(GitHub.REQUIRED_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
             await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.OAUTH_START_REQUESTED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 {
-                    "provider": provider,
-                    "user_id": user_id,
-                    "scopes": scope_list,
-                    "state": response["state"],
+                    Gateway.PROVIDER: provider,
+                    Gateway.USER_ID: user_id,
+                    Gateway.SCOPES: scope_list,
+                    Gateway.STATE: response[Gateway.STATE],
                 },
             )
             return response
 
-        @app.post("/auth/oauth/{provider}/callback")
-        async def oauth_callback(provider: str, payload: OAuthCallbackRequest) -> dict[str, Any]:
+        @app.post(gateway_routes.OAUTH_CALLBACK_PATH)
+        async def oauth_callback(
+            provider: str, payload: OAuthCallbackRequest
+        ) -> dict[str, Any]:
             result = await self.auth.callback(provider, payload.model_dump())
-            account = result["account"]
+            account = result[Gateway.ACCOUNT]
             evt = await publish_and_record(
-                self.bus, self.db, EventSubject.OAUTH_CONNECTED, SERVICE_NAME, account
+                self.bus,
+                self.db,
+                EventSubject.OAUTH_CONNECTED,
+                Settings.SERVICE_NAME,
+                account,
             )
             return {
-                "accepted": True,
-                "event_id": evt["event_id"],
-                "token_ref": account["token_ref"],
-                "session": result["session"],
+                Gateway.ACCEPTED: True,
+                EVENT_ID: evt.event_id,
+                Gateway.TOKEN_REF: account[Gateway.TOKEN_REF],
+                Gateway.SESSION: result[Gateway.SESSION],
             }
 
-        @app.post("/github/webhook")
-        async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
+        @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
+        async def github_webhook(
+            payload: GitHubWebhookRequest,
+        ) -> dict[str, Any]:
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.GIT_WEBHOOK_RECEIVED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {"accepted": True, "event": evt}
+            return {Gateway.ACCEPTED: True, Gateway.EVENT: evt}
 
-        @app.post("/agent/connect")
+        @app.post(gateway_routes.AGENT_CONNECT_PATH)
         async def agent_connect(payload: AgentConnectRequest) -> dict[str, Any]:
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.AGENT_CONNECTED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {"accepted": True, "event_id": evt["event_id"]}
+            return {Gateway.ACCEPTED: True, EVENT_ID: evt.event_id}
 
-        @app.post("/agent/evidence")
-        async def agent_evidence(payload: AgentEvidenceRequest) -> dict[str, Any]:
+        @app.post(gateway_routes.AGENT_EVIDENCE_PATH)
+        async def agent_evidence(
+            payload: AgentEvidenceRequest,
+        ) -> dict[str, Any]:
             evidence = payload.model_dump()
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.CLUSTER_EVIDENCE_RECEIVED,
-                SERVICE_NAME,
+                Settings.SERVICE_NAME,
                 evidence,
                 payload.correlation_id,
             )
             return {
-                "accepted": True,
-                "event_id": evt["event_id"],
-                "correlation_id": evt["correlation_id"],
+                Gateway.ACCEPTED: True,
+                EVENT_ID: evt.event_id,
+                CORRELATION_ID: evt.correlation_id,
             }
 
-        @app.post("/commands")
-        async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
+        @app.post(gateway_routes.COMMANDS_PATH)
+        async def commands(
+            request: Request, payload: CommandRequest
+        ) -> dict[str, Any]:
             current = await self.auth.require_session(request)
             command = payload.model_dump()
-            command["requested_by"] = current.user_id
+            command[Gateway.REQUESTED_BY] = current.user_id
             evt = await publish_and_record(
-                self.bus, self.db, EventSubject.COMMAND_REQUESTED, SERVICE_NAME, command
+                self.bus,
+                self.db,
+                EventSubject.COMMAND_REQUESTED,
+                Settings.SERVICE_NAME,
+                command,
             )
             return {
-                "accepted": True,
-                "event_id": evt["event_id"],
-                "correlation_id": evt["correlation_id"],
+                Gateway.ACCEPTED: True,
+                EVENT_ID: evt.event_id,
+                CORRELATION_ID: evt.correlation_id,
             }
 
-        @app.get("/dead-letters")
+        @app.get(gateway_routes.DEAD_LETTERS_PATH)
         async def dead_letters(
             request: Request,
-            limit: int = DEFAULT_DEAD_LETTER_LIMIT,
+            limit: int = Settings.DEFAULT_DEAD_LETTER_LIMIT,
         ) -> dict[str, Any]:
             await self.auth.require_session(request)
-            bounded_limit = max(1, min(limit, MAX_DEAD_LETTER_LIMIT))
-            return {"dead_letters": self.db.list_dead_letters(bounded_limit)}
+            bounded_limit = max(1, min(limit, Settings.MAX_DEAD_LETTER_LIMIT))
+            return {
+                Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)
+            }
 
-        @app.post("/dead-letters/{dead_letter_id}/replay")
-        async def replay_dead_letter(request: Request, dead_letter_id: int) -> dict[str, Any]:
+        @app.post(gateway_routes.DEAD_LETTER_REPLAY_PATH)
+        async def replay_dead_letter(
+            request: Request, dead_letter_id: int
+        ) -> dict[str, Any]:
             await self.auth.require_session(request)
             dead_letter = self.db.get_dead_letter(dead_letter_id)
             if dead_letter is None:
                 raise HTTPException(
-                    status_code=COMMAND_NOT_FOUND_STATUS_CODE,
-                    detail=DEAD_LETTER_NOT_FOUND_MESSAGE,
+                    status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=Settings.DEAD_LETTER_NOT_FOUND_MESSAGE,
                 )
-            if dead_letter["status"] == "replayed":
+            if dead_letter[Gateway.STATUS] == Gateway.STATUS_REPLAYED:
                 raise HTTPException(
-                    status_code=CONFLICT_STATUS_CODE,
-                    detail=DEAD_LETTER_REPLAYED_MESSAGE,
+                    status_code=Settings.CONFLICT_STATUS_CODE,
+                    detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
                 )
 
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 dead_letter["original_subject"],
-                SERVICE_NAME,
-                dead_letter["payload"],
-                dead_letter["correlation_id"],
+                Settings.SERVICE_NAME,
+                dead_letter[PAYLOAD],
+                dead_letter[CORRELATION_ID],
+                dead_letter["original_event_id"],
             )
-            self.db.mark_dead_letter_replayed(dead_letter_id, evt["event_id"])
-            return {"accepted": True, "dead_letter_id": dead_letter_id, "replay_event": evt}
+            self.db.mark_dead_letter_replayed(dead_letter_id, evt.event_id)
+            return {
+                Gateway.ACCEPTED: True,
+                Gateway.DEAD_LETTER_ID: dead_letter_id,
+                Gateway.REPLAY_EVENT: evt,
+            }
 
-        @app.get("/agent/commands/poll")
+        @app.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
         async def poll_command(
-            cluster_id: str = DEFAULT_TARGET_CLUSTER_ID,
-            timeout: int = DEFAULT_AGENT_COMMAND_POLL_SECONDS,
+            cluster_id: str = Target.DEFAULT_CLUSTER_ID,
+            timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
         ) -> dict[str, Any]:
-            deadline = time.time() + min(timeout, MAX_COMMAND_POLL_SECONDS)
+            deadline = time.time() + min(
+                timeout, Settings.MAX_COMMAND_POLL_SECONDS
+            )
             while time.time() < deadline:
-                row = self.db.lease_agent_command(
-                    cluster_id, COMMAND_STATUS_QUEUED, COMMAND_STATUS_LEASED
+                row = await self.db.lease_agent_command(
+                    cluster_id,
+                    Settings.COMMAND_STATUS_QUEUED,
+                    Settings.COMMAND_STATUS_LEASED,
                 )
                 if row:
-                    return {"command": row}
-                await asyncio.sleep(COMMAND_POLL_SLEEP_SECONDS)
-            return {"command": None}
+                    return {Gateway.COMMAND: row}
+                await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
+            return {Gateway.COMMAND: None}
 
-        @app.post("/agent/commands/{command_id}/result")
-        async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
+        @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
+        async def command_result(
+            command_id: str, payload: CommandResultRequest
+        ) -> dict[str, Any]:
             result = payload.model_dump()
-            correlation_id = self.db.complete_agent_command(command_id, result)
+            correlation_id = await self.db.complete_agent_command(
+                command_id, result
+            )
             if not correlation_id:
                 raise HTTPException(
-                    status_code=COMMAND_NOT_FOUND_STATUS_CODE,
-                    detail=COMMAND_NOT_FOUND_MESSAGE,
+                    status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=Settings.COMMAND_NOT_FOUND_MESSAGE,
                 )
             evt = await publish_and_record(
                 self.bus,
                 self.db,
                 EventSubject.COMMAND_COMPLETED,
-                SERVICE_NAME,
-                {"command_id": command_id, "result": result},
+                Settings.SERVICE_NAME,
+                {Gateway.COMMAND_ID: command_id, Gateway.RESULT: result},
                 correlation_id,
             )
-            return {"accepted": True, "event_id": evt["event_id"]}
+            return {Gateway.ACCEPTED: True, EVENT_ID: evt.event_id}
 
-        @app.get("/dashboard/query")
+        @app.get(gateway_routes.DASHBOARD_QUERY_PATH)
         async def dashboard_query(request: Request) -> dict[str, Any]:
             await self.auth.require_session(request)
-            return {"cards": self.db.list_dashboard()}
+            return {Gateway.CARDS: self.db.list_dashboard()}
 
-        @app.get("/dashboard/stream")
+        @app.get(gateway_routes.DASHBOARD_STREAM_PATH)
         async def dashboard_stream(request: Request) -> StreamingResponse:
             await self.auth.require_session(request)
 
@@ -259,15 +296,25 @@ class ApiGateway:
                     encoded = json.dumps(self.db.list_dashboard(), default=str)
                     if encoded != last:
                         last = encoded
-                        yield f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
-                    await asyncio.sleep(DASHBOARD_STREAM_INTERVAL_SECONDS)
+                        yield (
+                            f"event: {EventSubject.DASHBOARD_UPDATED}\n"
+                            f"data: {encoded}\n\n"
+                        )
+                    await asyncio.sleep(
+                        Settings.DASHBOARD_STREAM_INTERVAL_SECONDS
+                    )
 
-            return StreamingResponse(events(), media_type=EVENT_STREAM_MEDIA_TYPE)
+            return StreamingResponse(
+                events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE
+            )
 
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             print(f"gateway error: {exc}", flush=True)
-            return JSONResponse(status_code=GATEWAY_ERROR_STATUS_CODE, content={"error": str(exc)})
+            return JSONResponse(
+                status_code=Settings.GATEWAY_ERROR_STATUS_CODE,
+                content={Gateway.ERROR: str(exc)},
+            )
 
 
 def create_app() -> FastAPI:

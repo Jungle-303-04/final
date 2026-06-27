@@ -7,6 +7,7 @@
 - 제품/WBS 기준: `WIKI/projects/final`
 - 실행 코드 기준: 이 repository
 - 아키텍처 기준: `docs/architecture.md`, `docs/events.md`, `docs/service-split-plan.md`
+- 팀원 Codex 자동화 기준: `docs/team/codex-automation.md`
 - 코드와 문서가 다르면 같은 PR에서 문서도 함께 수정한다.
 
 ## 5인 담당 영역
@@ -82,11 +83,28 @@ ci: PR 필수 검증 workflow 추가
 
 ## Python 코드 스타일
 
+- Python 스타일 기준은 Google Python Style Guide 한글 번역본을 따른다.
+  - 기준 문서: https://github.com/Yosseulsin-JOB/Google-Python-Style-Guide-kor/blob/master/Google%20Python%20Style%20Guide%20kor.md
+  - 자동 검사: `uv run ruff check services packages tests`
+  - 포맷 검사: `uv run ruff format --check services packages tests`
+- 줄 길이는 80자를 기본으로 한다. 긴 URL, 명령어 예시, 외부 계약 문자열처럼
+  끊으면 의미가 흐려지는 값만 예외로 둔다.
+- import는 표준 라이브러리, 서드파티, 로컬 패키지 순서로 나누고 Ruff import
+  정렬을 통과해야 한다.
+- 패키지 내부 import는 가능한 한 전체 패키지 경로를 사용한다.
+  예: `from packages.contracts.event_bus.interfaces import Event`
+- wildcard import는 사용하지 않는다.
+- 함수와 메서드는 작게 유지하고 한 가지 책임만 갖게 한다.
+- public module, class, function은 동작이 이름만으로 충분히 드러나지 않으면
+  docstring을 작성한다. 단순 getter, dataclass, Protocol 선언처럼 자명한 코드는
+  생략할 수 있다.
+- 예외는 구체적으로 잡는다. process/runtime 경계에서만 넓은 `Exception`을 잡고,
+  이 경우 retry, DLQ, 로그처럼 후속 처리가 반드시 있어야 한다.
 - 짧은 이름보다 의미가 분명한 이름을 우선한다.
 - 한 파일에서만 쓰는 상수는 해당 파일 상단에 둔다.
 - 여러 파일이 공유하는 runtime/env 기본값은 `packages/config/constants.py`에 둔다.
 - Gateway 요청 계약은 `packages/contracts/gateway`에 둔다.
-- EventBus subject, stream, subscription 계약은 `packages/contracts/event_bus`에 둔다.
+- event bus subject, stream, subscription 계약은 `packages/contracts/event_bus`에 둔다.
 - 특정 서비스만 쓰는 설정은 `services/<service-name>/settings.py`에 둔다.
 - 교체 가능한 경계는 `packages/contracts/interfaces.py`의 `Protocol` port로 표현한다.
 - HTTP, worker, async loop 실행은 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
@@ -114,8 +132,11 @@ ci: PR 필수 검증 workflow 추가
 - 구독은 각 worker `settings.py`의 `SUBSCRIPTION = WorkerSubscription(...)`으로 선언한다.
 - runner는 `WorkerService.from_subscription(SUBSCRIPTION, ...)`만 호출한다.
 - 새 event subject는 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 함께 추가한다.
-- event payload는 JSON object여야 한다.
+- 새 event payload나 변경된 event payload는 `packages/contracts/event_bus/payloads.py`에 dataclass 계약으로 추가한다.
+- event payload는 JSON object여야 하며, workflow는 payload 객체의 `to_payload()` 결과를 발행한다.
+- Python 필드는 `snake_case`를 사용하고, wire key 별칭은 payload class metadata에서만 관리한다.
 - 하나의 업무 흐름은 `correlation_id`를 유지한다.
+- handler는 `EventEnvelope`를 받고 `evt.payload`, `evt.correlation_id`처럼 속성으로 접근한다.
 - handler write는 at-least-once delivery에 안전하도록 idempotent하게 작성한다.
 - handler는 local work를 끝낸 뒤 ack되어야 한다. `ack/nak/DLQ`는 `packages/runtime/worker.py`가 담당한다.
 
@@ -173,6 +194,13 @@ GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 - 어떻게 테스트했는지
 - 위험과 rollback 방법
 - 아키텍처, workflow, API, 일정이 바뀐 경우 WIKI/docs 수정 여부
+- event subject, payload, worker subscription, retry/DLQ 흐름이 바뀐 경우 `docs/events.md`와 PR 체크리스트 반영 여부
+
+팀원 Codex 자동화는 `docs/team/codex-automation.md`의 공통 프롬프트를 사용한다.
+각 팀원은 자기 GitHub ID만 지정하고, issue/PR/역할은 현재 문서와 GitHub 상태에서 매번 다시 계산한다.
+정기 자동화는 읽기, 점검, 제안만 수행한다.
+자동화가 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 직접 수행하면 안 된다.
+commit과 PR은 팀원이 필요를 판단하고 명시적으로 요청한 작업 세션에서만 수행한다.
 
 Merge 기준:
 
@@ -182,6 +210,7 @@ Merge 기준:
 - raw secret 없음
 - 동작 변경에는 테스트 추가 또는 수정
 - 담당 member guide checklist 충족
+- event contract 변경에는 subject/payload/handler 테스트 또는 smoke 증거 포함
 
 ## 리뷰 규칙
 
@@ -190,7 +219,10 @@ Reviewer는 아래 경우 PR을 막는다.
 - CI 실패
 - 동작 변경에 대한 테스트 누락
 - event subject 추가 후 문서 누락
+- event payload 추가/변경 후 `payloads.py` 또는 테스트 누락
+- handler가 `EventEnvelope` 대신 raw dict 전제를 사용
 - worker가 `EventClient` 대신 raw NATS 직접 사용
+- workflow가 직접 ack/nak/DLQ를 처리
 - Gateway 밖에 HTTP route 추가
 - target write가 `sandbox` 밖으로 확장
 - secret commit 또는 log 출력
