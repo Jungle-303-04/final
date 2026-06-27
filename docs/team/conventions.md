@@ -83,6 +83,23 @@ ci: PR 필수 검증 workflow 추가
 
 ## Python 코드 스타일
 
+- Python 스타일 기준은 Google Python Style Guide 한글 번역본을 따른다.
+  - 기준 문서: https://github.com/Yosseulsin-JOB/Google-Python-Style-Guide-kor/blob/master/Google%20Python%20Style%20Guide%20kor.md
+  - 자동 검사: `uv run ruff check services packages tests`
+  - 포맷 검사: `uv run ruff format --check services packages tests`
+- 줄 길이는 80자를 기본으로 한다. 긴 URL, 명령어 예시, 외부 계약 문자열처럼
+  끊으면 의미가 흐려지는 값만 예외로 둔다.
+- import는 표준 라이브러리, 서드파티, 로컬 패키지 순서로 나누고 Ruff import
+  정렬을 통과해야 한다.
+- 패키지 내부 import는 가능한 한 전체 패키지 경로를 사용한다.
+  예: `from packages.contracts.event_bus.interfaces import Event`
+- wildcard import는 사용하지 않는다.
+- 함수와 메서드는 작게 유지하고 한 가지 책임만 갖게 한다.
+- public module, class, function은 동작이 이름만으로 충분히 드러나지 않으면
+  docstring을 작성한다. 단순 getter, dataclass, Protocol 선언처럼 자명한 코드는
+  생략할 수 있다.
+- 예외는 구체적으로 잡는다. process/runtime 경계에서만 넓은 `Exception`을 잡고,
+  이 경우 retry, DLQ, 로그처럼 후속 처리가 반드시 있어야 한다.
 - 짧은 이름보다 의미가 분명한 이름을 우선한다.
 - 한 파일에서만 쓰는 상수는 해당 파일 상단에 둔다.
 - 여러 파일이 공유하는 runtime/env 기본값은 `packages/config/constants.py`에 둔다.

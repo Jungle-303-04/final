@@ -46,7 +46,9 @@ class GitOpsSyncWorkflow:
         manifest = {
             Field.APP: Settings.DEFAULT_APP_NAME,
             Field.IMAGE: payload.get(Field.IMAGE, Settings.DEFAULT_IMAGE),
-            Field.REPLICAS: payload.get(Field.REPLICAS, Settings.DEFAULT_REPLICAS),
+            Field.REPLICAS: payload.get(
+                Field.REPLICAS, Settings.DEFAULT_REPLICAS
+            ),
             Gateway.NAMESPACE: Sandbox.NAMESPACE,
         }
         self.repo.save_repo_change(evt[CORRELATION_ID], commit_sha, manifest)
@@ -92,7 +94,9 @@ class GitOpsSyncWorkflow:
             EventSubject.COMMAND_REQUESTED,
             Settings.SERVICE_NAME,
             {
-                Gateway.CLUSTER_ID: env(Settings.TARGET_CLUSTER_ENV, Target.DEFAULT_CLUSTER_ID),
+                Gateway.CLUSTER_ID: env(
+                    Settings.TARGET_CLUSTER_ENV, Target.DEFAULT_CLUSTER_ID
+                ),
                 Gateway.ACTION: Settings.SYNC_ACTION,
                 Gateway.NAMESPACE: Sandbox.NAMESPACE,
                 Field.REASON: Settings.SYNC_REASON,

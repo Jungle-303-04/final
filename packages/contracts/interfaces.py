@@ -17,11 +17,15 @@ class InitializableStore(Protocol):
 
 
 class EventProcessingStore(EventRecorder, Protocol):
-    def begin_event_processing(self, evt: Event, consumer: str) -> EventProcessingRecord: ...
+    def begin_event_processing(
+        self, evt: Event, consumer: str
+    ) -> EventProcessingRecord: ...
 
     def finish_event_processing(self, evt: Event, consumer: str) -> None: ...
 
-    def fail_event_processing(self, evt: Event, consumer: str, error: str, status: str) -> None: ...
+    def fail_event_processing(
+        self, evt: Event, consumer: str, error: str, status: str
+    ) -> None: ...
 
 
 class DeadLetterStore(Protocol):
@@ -33,7 +37,9 @@ class DeadLetterStore(Protocol):
 
     def get_dead_letter(self, dead_letter_id: int) -> JsonObject | None: ...
 
-    def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> None: ...
+    def mark_dead_letter_replayed(
+        self, dead_letter_id: int, replay_event_id: str
+    ) -> None: ...
 
 
 class OAuthAccountStore(Protocol):
@@ -43,13 +49,19 @@ class OAuthAccountStore(Protocol):
 
 
 class SessionStore(Protocol):
-    async def create_session(self, user_id: str, roles: list[str] | None = None) -> Any: ...
+    async def create_session(
+        self, user_id: str, roles: list[str] | None = None
+    ) -> Any: ...
 
     async def get_session(self, token: str | None) -> Any | None: ...
 
-    async def save_oauth_state(self, state: str, payload: JsonObject) -> None: ...
+    async def save_oauth_state(
+        self, state: str, payload: JsonObject
+    ) -> None: ...
 
-    async def consume_oauth_state(self, state: str | None) -> JsonObject | None: ...
+    async def consume_oauth_state(
+        self, state: str | None
+    ) -> JsonObject | None: ...
 
     async def check_rate_limit(self, key: str) -> None: ...
 
@@ -75,19 +87,32 @@ class AgentCommandQueue(Protocol):
 
 
 class RcaStore(Protocol):
-    def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None: ...
+    def save_evidence(
+        self, correlation_id: str, kind: str, payload: JsonObject
+    ) -> None: ...
 
     def save_rca_report(
-        self, correlation_id: str, root_cause: str, action: str, payload: JsonObject
+        self,
+        correlation_id: str,
+        root_cause: str,
+        action: str,
+        payload: JsonObject,
     ) -> None: ...
 
     def save_pull_request(
-        self, correlation_id: str, pr_url: str, title: str, body: str, status: str
+        self,
+        correlation_id: str,
+        pr_url: str,
+        title: str,
+        body: str,
+        status: str,
     ) -> None: ...
 
 
 class DashboardReadModel(Protocol):
-    def upsert_dashboard(self, evt: Event, status: str, summary: str) -> None: ...
+    def upsert_dashboard(
+        self, evt: Event, status: str, summary: str
+    ) -> None: ...
 
     def list_dashboard(self) -> list[JsonObject]: ...
 
@@ -103,6 +128,10 @@ class ManagementPlaneClient(Protocol):
 
     async def ship_evidence(self, evidence: JsonObject) -> int: ...
 
-    async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None: ...
+    async def poll_command(
+        self, cluster_id: str, timeout_seconds: int
+    ) -> CommandRecord | None: ...
 
-    async def complete_command(self, command_id: str, result: JsonObject) -> None: ...
+    async def complete_command(
+        self, command_id: str, result: JsonObject
+    ) -> None: ...
