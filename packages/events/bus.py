@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from packages.config.constants import Nats, Runtime
+from packages.config.logs import get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import (
     EventBus,
@@ -29,6 +30,7 @@ from packages.events.envelope import event
 NATS_URL_ENV = "NATS_URL"
 DEPENDENCY_RETRY_LIMIT = 60
 DEPENDENCY_RETRY_DELAY_SECONDS = 2
+logger = get_logger("event_bus")
 CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
     "current_event_causation_id",
     default=None,
@@ -43,6 +45,17 @@ def nats_client() -> Any:
 def nats_not_found_error() -> type[Exception]:
     from nats.js.errors import NotFoundError
     return NotFoundError
+
+
+def event_context(evt: EventEnvelope) -> dict[str, str | None]:
+    """로그에 실을 표준 이벤트 식별 필드(흐름 추적용)."""
+    return {
+        "subject": evt.subject,
+        "event_id": evt.event_id,
+        "correlation_id": evt.correlation_id,
+        "causation_id": evt.causation_id,
+        "source": evt.source,
+    }
 
 
 @contextmanager
@@ -101,7 +114,7 @@ class NatsEventBus(EventBus):
                 name=STREAM_NAME, subjects=STREAM_SUBJECTS, storage="file"
             )
 
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,
@@ -112,9 +125,7 @@ class NatsEventBus(EventBus):
         assert self.js is not None
         evt = event(subject, source, payload, correlation_id, causation_id)
         await self.js.publish(subject, json.dumps(evt.to_dict()).encode())
-        print(
-            f"published {subject} correlation={evt.correlation_id}", flush=True
-        )
+        logger.info("emitted", extra={"context": event_context(evt)})
         return evt
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
@@ -135,7 +146,7 @@ class RecordedEventClient:
         self.publisher = publisher
         self.recorder = recorder
 
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,
@@ -143,7 +154,7 @@ class RecordedEventClient:
         correlation_id: str | None = None,
         causation_id: str | None = None,
     ) -> EventEnvelope:
-        evt = await self.publisher.publish(
+        evt = await self.publisher.emit(
             subject,
             source,
             payload,
@@ -175,7 +186,7 @@ class DeadLetterSink:
         dead_letter = self.store.record_dead_letter(
             evt, consumer, str(error), attempts
         )
-        return await self.events.publish(
+        return await self.events.emit(
             EventSubject.DEAD_LETTER_CREATED,
             self.source,
             dead_letter,
@@ -184,7 +195,7 @@ class DeadLetterSink:
         )
 
 
-async def publish_and_record(
+async def emit_and_record(
     bus: EventPublisher,
     db: EventRecorder,
     subject: str,
@@ -193,7 +204,7 @@ async def publish_and_record(
     correlation_id: str | None = None,
     causation_id: str | None = None,
 ) -> EventEnvelope:
-    return await RecordedEventClient(bus, db).publish(
+    return await RecordedEventClient(bus, db).emit(
         subject,
         source,
         payload,

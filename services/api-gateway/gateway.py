@@ -29,7 +29,7 @@ from packages.contracts.gateway.requests import (
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
-from packages.events.bus import NatsEventBus, publish_and_record
+from packages.events.bus import NatsEventBus, emit_and_record
 from packages.storage.database import Database, wait_for_database
 
 
@@ -98,7 +98,7 @@ class ApiGateway:
             ):
                 scope_list.append(GitHub.REQUIRED_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
-            await publish_and_record(
+            await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.OAUTH_START_REQUESTED,
@@ -118,7 +118,7 @@ class ApiGateway:
         ) -> dict[str, Any]:
             result = await self.auth.callback(provider, payload.model_dump())
             account = result[Gateway.ACCOUNT]
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.OAUTH_CONNECTED,
@@ -136,7 +136,7 @@ class ApiGateway:
         async def github_webhook(
             payload: GitHubWebhookRequest,
         ) -> dict[str, Any]:
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.GIT_WEBHOOK_RECEIVED,
@@ -147,7 +147,7 @@ class ApiGateway:
 
         @app.post(gateway_routes.AGENT_CONNECT_PATH)
         async def agent_connect(payload: AgentConnectRequest) -> dict[str, Any]:
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.AGENT_CONNECTED,
@@ -161,7 +161,7 @@ class ApiGateway:
             payload: AgentEvidenceRequest,
         ) -> dict[str, Any]:
             evidence = payload.model_dump()
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.CLUSTER_EVIDENCE_RECEIVED,
@@ -182,7 +182,7 @@ class ApiGateway:
             current = await self.auth.require_session(request)
             command = payload.model_dump()
             command[Gateway.REQUESTED_BY] = current.user_id
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.COMMAND_REQUESTED,
@@ -223,7 +223,7 @@ class ApiGateway:
                     detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
                 )
 
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 dead_letter["original_subject"],
@@ -271,7 +271,7 @@ class ApiGateway:
                     status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
                     detail=Settings.COMMAND_NOT_FOUND_MESSAGE,
                 )
-            evt = await publish_and_record(
+            evt = await emit_and_record(
                 self.bus,
                 self.db,
                 EventSubject.COMMAND_COMPLETED,

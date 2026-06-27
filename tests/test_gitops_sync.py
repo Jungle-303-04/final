@@ -34,7 +34,7 @@ class FakeEvents:
     def __init__(self) -> None:
         self.published: list[Any] = []
 
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,

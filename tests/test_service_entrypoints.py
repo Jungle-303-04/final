@@ -6,34 +6,34 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
     "api-gateway": (
-        "services/api-gateway/runner.py",
+        "services/api-gateway/app.py",
         "FastApiService(",
     ),
     "gitops-sync-worker": (
-        "services/gitops-sync-worker/runner.py",
+        "services/gitops-sync-worker/app.py",
         "WorkerService.from_subscription(",
     ),
     "command-worker": (
-        "services/command-worker/runner.py",
-        "WorkerService.from_subscription(",
+        "services/command-worker/app.py",
+        "App(",
     ),
     "rca-worker": (
-        "services/rca-worker/runner.py",
-        "WorkerService.from_subscription(",
+        "services/rca-worker/app.py",
+        "App(",
     ),
     "dashboard-projection-service": (
-        "services/dashboard-projection-service/runner.py",
+        "services/dashboard-projection-service/app.py",
         "WorkerService.from_subscription(",
     ),
     "audit-timeline-service": (
-        "services/audit-timeline-service/runner.py",
+        "services/audit-timeline-service/app.py",
         "WorkerService.from_subscription(",
     ),
     "target-cluster-agent": (
-        "services/target-cluster-agent/runner.py",
+        "services/target-cluster-agent/app.py",
         "AsyncService(",
     ),
-    "node-collector": ("services/node-collector/runner.py", "AsyncService("),
+    "node-collector": ("services/node-collector/app.py", "AsyncService("),
     "fake-prometheus": (
         "services/target-cluster-agent/fake_prometheus.py",
         "AsyncService(",
@@ -48,12 +48,11 @@ SERVICE_ENTRYPOINTS = {
     ),
 }
 
+# App(한 파일) 마이그레이션된 서비스는 제외(아래 WorkerService 규약 검사).
 WORKER_ENTRYPOINTS = [
-    "services/gitops-sync-worker/runner.py",
-    "services/command-worker/runner.py",
-    "services/rca-worker/runner.py",
-    "services/dashboard-projection-service/runner.py",
-    "services/audit-timeline-service/runner.py",
+    "services/gitops-sync-worker/app.py",
+    "services/dashboard-projection-service/app.py",
+    "services/audit-timeline-service/app.py",
 ]
 
 
@@ -75,10 +74,15 @@ def test_services_have_direct_process_entrypoints() -> None:
         assert "SERVICE_NAME =" not in source
 
 
+# App(한 파일) 으로 마이그레이션한 서비스는 settings.py 가 없다(러너에 인라인).
+APP_BASED_SERVICES = {"rca-worker", "command-worker"}
+
+
 def test_services_keep_local_settings_files() -> None:
     service_dirs = {
         Path(relative_path).parent
-        for relative_path, _ in SERVICE_ENTRYPOINTS.values()
+        for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items()
+        if service not in APP_BASED_SERVICES
     }
 
     for service_dir in service_dirs:
@@ -158,4 +162,4 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     for legacy_arg in legacy_role_args:
         assert legacy_arg not in manifests
 
-    assert "services/management-api-gateway/runner.py" not in manifests
+    assert "services/management-api-gateway/app.py" not in manifests

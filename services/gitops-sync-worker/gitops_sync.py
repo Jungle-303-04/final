@@ -55,7 +55,7 @@ class GitOpsSyncWorkflow:
             actual_image=Settings.PREVIOUS_IMAGE,
             risk=Settings.SYNC_RISK,
         )
-        await self.events.publish(
+        await self.events.emit(
             EventSubject.GIT_CHANGED,
             Settings.SERVICE_NAME,
             GitChangedPayload(
@@ -63,19 +63,19 @@ class GitOpsSyncWorkflow:
             ).to_payload(),
             evt.correlation_id,
         )
-        await self.events.publish(
+        await self.events.emit(
             EventSubject.MANIFEST_RENDERED,
             Settings.SERVICE_NAME,
             ManifestRenderedPayload(rendered_manifest=rendered).to_payload(),
             evt.correlation_id,
         )
-        await self.events.publish(
+        await self.events.emit(
             EventSubject.DESIRED_DIFF_DETECTED,
             Settings.SERVICE_NAME,
             DesiredDiffPayload(diff=diff).to_payload(),
             evt.correlation_id,
         )
-        await self.events.publish(
+        await self.events.emit(
             EventSubject.COMMAND_REQUESTED,
             Settings.SERVICE_NAME,
             CommandRequestedPayload(

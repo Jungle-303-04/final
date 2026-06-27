@@ -35,7 +35,7 @@ class DashboardProjectionWorkflow:
             status = DashboardStatus.ATTENTION
         summary = f"{evt.subject} from {evt.source}"
         self.dashboard.upsert_dashboard(evt, status, summary)
-        await self.events.publish(
+        await self.events.emit(
             EventSubject.DASHBOARD_UPDATED,
             Settings.SERVICE_NAME,
             DashboardUpdatedPayload(
