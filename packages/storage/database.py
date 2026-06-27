@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 import uuid
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any
 
-import psycopg
-from psycopg.rows import dict_row
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from packages.config.constants import Auth, GitHub, Postgres
 from packages.config.settings import env
@@ -19,7 +21,21 @@ from packages.contracts.interfaces import (
     EventProcessingRecord,
     InitializableStore,
 )
-from packages.storage.schema import SCHEMA_UPGRADES, metadata
+from packages.storage.schema import (
+    AgentCommand,
+    AuditLog,
+    DashboardCard,
+    EventDeadLetter,
+    EventModel,
+    EventProcessing,
+    Evidence,
+    OAuthAccount,
+    PullRequest,
+    RcaReport,
+    RepoChange,
+    TokenVault,
+    metadata,
+)
 
 DATABASE_URL_ENV = "DATABASE_URL"
 DEFAULT_OAUTH_SCOPES = ["profile", "email"]
@@ -47,6 +63,10 @@ def serialize_dead_letter(row: JsonObject) -> JsonObject:
     return item
 
 
+def row_dict(row: Any) -> JsonObject:
+    return dict(row)
+
+
 class Database:
     def __init__(self) -> None:
         self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
@@ -55,11 +75,23 @@ class Database:
     def sqlalchemy_url(self) -> str:
         return self.url.replace("postgresql://", "postgresql+psycopg://", 1)
 
-    def connect(self):
-        return psycopg.connect(self.url, row_factory=dict_row)
+    @contextmanager
+    def connection(self):
+        engine = create_engine(self.sqlalchemy_url)
+        try:
+            with engine.begin() as conn:
+                yield conn
+        finally:
+            engine.dispose()
 
-    async def connect_async(self):
-        return await psycopg.AsyncConnection.connect(self.url, row_factory=dict_row)
+    @asynccontextmanager
+    async def async_connection(self):
+        engine = create_async_engine(self.sqlalchemy_url)
+        try:
+            async with engine.begin() as conn:
+                yield conn
+        finally:
+            await engine.dispose()
 
     def init(self) -> None:
         engine = create_engine(self.sqlalchemy_url)
@@ -67,227 +99,171 @@ class Database:
             metadata.create_all(engine)
         finally:
             engine.dispose()
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                for statement in SCHEMA_UPGRADES:
-                    cur.execute(statement)
 
     def record_event(self, evt: Event) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into events (event_id, subject, source, correlation_id, payload)
-                    values (%s, %s, %s, %s, %s)
-                    on conflict (event_id) do nothing
-                    """,
-                    (
-                        evt["event_id"],
-                        evt["subject"],
-                        evt["source"],
-                        evt["correlation_id"],
-                        json.dumps(evt["payload"]),
-                    ),
-                )
+        table = EventModel.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                event_id=evt["event_id"],
+                subject=evt["subject"],
+                source=evt["source"],
+                correlation_id=evt["correlation_id"],
+                payload=evt["payload"],
+            )
+            .on_conflict_do_nothing(index_elements=[table.c.event_id])
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def begin_event_processing(self, evt: Event, consumer: str) -> EventProcessingRecord:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into event_processing (
-                        event_id,
-                        consumer,
-                        subject,
-                        correlation_id,
-                        status,
-                        attempts,
-                        updated_at
-                    )
-                    values (%s, %s, %s, %s, %s, 0, now())
-                    on conflict (event_id, consumer) do nothing
-                    """,
+        table = EventProcessing.__table__
+        with self.connection() as conn:
+            self.insert_event_processing(conn, table, evt, consumer)
+            row = self.claim_event_processing(conn, table, evt, consumer)
+            if row:
+                return {"status": row["status"], "attempts": row["attempts"]}
+
+            existing = self.get_event_processing(conn, table, evt, consumer)
+            return row_dict(existing) if existing else {"status": "unknown", "attempts": 0}
+
+    def insert_event_processing(
+        self, conn: Connection, table: Any, evt: Event, consumer: str
+    ) -> None:
+        statement = (
+            pg_insert(table)
+            .values(
+                event_id=evt["event_id"],
+                consumer=consumer,
+                subject=evt["subject"],
+                correlation_id=evt["correlation_id"],
+                status=EventProcessingStatus.PROCESSING,
+                attempts=0,
+                updated_at=func.now(),
+            )
+            .on_conflict_do_nothing(index_elements=[table.c.event_id, table.c.consumer])
+        )
+        conn.execute(statement)
+
+    def claim_event_processing(
+        self, conn: Connection, table: Any, evt: Event, consumer: str
+    ) -> JsonObject | None:
+        statement = (
+            update(table)
+            .where(table.c.event_id == evt["event_id"])
+            .where(table.c.consumer == consumer)
+            .where(
+                table.c.status.not_in(
                     (
-                        evt["event_id"],
-                        consumer,
-                        evt["subject"],
-                        evt["correlation_id"],
-                        EventProcessingStatus.PROCESSING,
-                    ),
-                )
-                cur.execute(
-                    """
-                    update event_processing
-                    set attempts = attempts + 1,
-                        status = %s,
-                        last_error = null,
-                        updated_at = now()
-                    where event_id = %s
-                      and consumer = %s
-                      and status not in (%s, %s)
-                    returning status, attempts
-                    """,
-                    (
-                        EventProcessingStatus.PROCESSING,
-                        evt["event_id"],
-                        consumer,
                         EventProcessingStatus.PROCESSED,
                         EventProcessingStatus.DEAD_LETTERED,
-                    ),
+                    )
                 )
-                row = cur.fetchone()
-                if row:
-                    return {"status": row["status"], "attempts": row["attempts"]}
+            )
+            .values(
+                attempts=table.c.attempts + 1,
+                status=EventProcessingStatus.PROCESSING,
+                last_error=None,
+                updated_at=func.now(),
+            )
+            .returning(table.c.status, table.c.attempts)
+        )
+        row = conn.execute(statement).mappings().first()
+        return row_dict(row) if row else None
 
-                cur.execute(
-                    """
-                    select status, attempts
-                    from event_processing
-                    where event_id = %s and consumer = %s
-                    """,
-                    (evt["event_id"], consumer),
-                )
-                existing = cur.fetchone()
-                return dict(existing) if existing else {"status": "unknown", "attempts": 0}
+    def get_event_processing(
+        self, conn: Connection, table: Any, evt: Event, consumer: str
+    ) -> JsonObject | None:
+        statement = select(table.c.status, table.c.attempts).where(
+            table.c.event_id == evt["event_id"],
+            table.c.consumer == consumer,
+        )
+        row = conn.execute(statement).mappings().first()
+        return row_dict(row) if row else None
 
     def finish_event_processing(self, evt: Event, consumer: str) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    update event_processing
-                    set status = %s,
-                        last_error = null,
-                        updated_at = now()
-                    where event_id = %s and consumer = %s
-                    """,
-                    (EventProcessingStatus.PROCESSED, evt["event_id"], consumer),
-                )
+        table = EventProcessing.__table__
+        statement = (
+            update(table)
+            .where(table.c.event_id == evt["event_id"], table.c.consumer == consumer)
+            .values(
+                status=EventProcessingStatus.PROCESSED,
+                last_error=None,
+                updated_at=func.now(),
+            )
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def fail_event_processing(self, evt: Event, consumer: str, error: str, status: str) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    update event_processing
-                    set status = %s,
-                        last_error = %s,
-                        updated_at = now()
-                    where event_id = %s and consumer = %s
-                    """,
-                    (
-                        status,
-                        compact_error(error),
-                        evt["event_id"],
-                        consumer,
-                    ),
-                )
+        table = EventProcessing.__table__
+        statement = (
+            update(table)
+            .where(table.c.event_id == evt["event_id"], table.c.consumer == consumer)
+            .values(
+                status=status,
+                last_error=compact_error(error),
+                updated_at=func.now(),
+            )
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def record_dead_letter(
         self, evt: Event, consumer: str, error: str, attempts: int
     ) -> JsonObject:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into event_dead_letters (
-                        original_event_id,
-                        original_subject,
-                        consumer,
-                        correlation_id,
-                        attempts,
-                        error,
-                        payload
-                    )
-                    values (%s, %s, %s, %s, %s, %s, %s)
-                    returning id, created_at
-                    """,
-                    (
-                        evt["event_id"],
-                        evt["subject"],
-                        consumer,
-                        evt["correlation_id"],
-                        attempts,
-                        compact_error(error),
-                        json.dumps(evt["payload"]),
-                    ),
-                )
-                row = cur.fetchone()
-                return {
-                    "dead_letter_id": row["id"],
-                    "original_event_id": evt["event_id"],
-                    "original_subject": evt["subject"],
-                    "consumer": consumer,
-                    "correlation_id": evt["correlation_id"],
-                    "attempts": attempts,
-                    "error": compact_error(error),
-                    "created_at": row["created_at"].isoformat(),
-                    "status": "open",
-                }
+        table = EventDeadLetter.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                original_event_id=evt["event_id"],
+                original_subject=evt["subject"],
+                consumer=consumer,
+                correlation_id=evt["correlation_id"],
+                attempts=attempts,
+                error=compact_error(error),
+                payload=evt["payload"],
+                status="open",
+            )
+            .returning(table.c.id, table.c.created_at)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return {
+            "dead_letter_id": row["id"],
+            "original_event_id": evt["event_id"],
+            "original_subject": evt["subject"],
+            "consumer": consumer,
+            "correlation_id": evt["correlation_id"],
+            "attempts": attempts,
+            "error": compact_error(error),
+            "created_at": row["created_at"].isoformat(),
+            "status": "open",
+        }
 
     def list_dead_letters(self, limit: int) -> list[JsonObject]:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    select id,
-                           original_event_id,
-                           original_subject,
-                           consumer,
-                           correlation_id,
-                           attempts,
-                           error,
-                           payload,
-                           status,
-                           replayed_at,
-                           replay_event_id,
-                           created_at
-                    from event_dead_letters
-                    order by created_at desc
-                    limit %s
-                    """,
-                    (limit,),
-                )
-                return [serialize_dead_letter(row) for row in cur.fetchall()]
+        table = EventDeadLetter.__table__
+        statement = select(table).order_by(table.c.created_at.desc()).limit(limit)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_dead_letter(row) for row in rows]
 
     def get_dead_letter(self, dead_letter_id: int) -> JsonObject | None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    select id,
-                           original_event_id,
-                           original_subject,
-                           consumer,
-                           correlation_id,
-                           attempts,
-                           error,
-                           payload,
-                           status,
-                           replayed_at,
-                           replay_event_id,
-                           created_at
-                    from event_dead_letters
-                    where id = %s
-                    """,
-                    (dead_letter_id,),
-                )
-                row = cur.fetchone()
-                return serialize_dead_letter(row) if row else None
+        table = EventDeadLetter.__table__
+        statement = select(table).where(table.c.id == dead_letter_id)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_dead_letter(row) if row else None
 
     def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    update event_dead_letters
-                    set status = 'replayed',
-                        replayed_at = now(),
-                        replay_event_id = %s
-                    where id = %s
-                    """,
-                    (replay_event_id, dead_letter_id),
-                )
+        table = EventDeadLetter.__table__
+        statement = (
+            update(table)
+            .where(table.c.id == dead_letter_id)
+            .values(status="replayed", replayed_at=func.now(), replay_event_id=replay_event_id)
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
@@ -303,29 +279,35 @@ class Database:
             "refresh_token": f"fake-{provider}-refresh-token",
             "expires_at": int(time.time()) + TOKEN_EXPIRES_IN_SECONDS,
         }
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into token_vault (token_ref, provider, encrypted_payload)
-                    values (%s, %s, %s)
-                    """,
-                    (token_ref, provider, json.dumps(encrypted_payload)),
-                )
-                cur.execute(
-                    """
-                    insert into oauth_accounts
-                        (user_id, provider, provider_user, scopes, token_ref, status, updated_at)
-                    values (%s, %s, %s, %s, %s, 'connected', now())
-                    on conflict (user_id, provider) do update set
-                        provider_user = excluded.provider_user,
-                        scopes = excluded.scopes,
-                        token_ref = excluded.token_ref,
-                        status = 'connected',
-                        updated_at = now()
-                    """,
-                    (user_id, provider, provider_user, scopes, token_ref),
-                )
+        token_table = TokenVault.__table__
+        account_table = OAuthAccount.__table__
+        token_statement = pg_insert(token_table).values(
+            token_ref=token_ref,
+            provider=provider,
+            encrypted_payload=encrypted_payload,
+        )
+        account_insert = pg_insert(account_table).values(
+            user_id=user_id,
+            provider=provider,
+            provider_user=provider_user,
+            scopes=scopes,
+            token_ref=token_ref,
+            status="connected",
+            updated_at=func.now(),
+        )
+        account_statement = account_insert.on_conflict_do_update(
+            index_elements=[account_table.c.user_id, account_table.c.provider],
+            set_={
+                "provider_user": account_insert.excluded.provider_user,
+                "scopes": account_insert.excluded.scopes,
+                "token_ref": account_insert.excluded.token_ref,
+                "status": "connected",
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(token_statement)
+            conn.execute(account_statement)
         return {
             "user_id": user_id,
             "provider": provider,
@@ -335,138 +317,130 @@ class Database:
         }
 
     def latest_github_token_ref(self) -> str | None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    select token_ref
-                    from oauth_accounts
-                    where provider = %s and status = 'connected'
-                    order by updated_at desc
-                    limit 1
-                    """,
-                    (GitHub.PROVIDER,),
-                )
-                row = cur.fetchone()
-                return row["token_ref"] if row else None
+        table = OAuthAccount.__table__
+        statement = (
+            select(table.c.token_ref)
+            .where(table.c.provider == GitHub.PROVIDER, table.c.status == "connected")
+            .order_by(table.c.updated_at.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return row["token_ref"] if row else None
 
     def save_repo_change(self, correlation_id: str, commit_sha: str, manifest: JsonObject) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into repo_changes (correlation_id, commit_sha, manifest)
-                    values (%s, %s, %s)
-                    """,
-                    (correlation_id, commit_sha, json.dumps(manifest)),
-                )
+        table = RepoChange.__table__
+        statement = pg_insert(table).values(
+            correlation_id=correlation_id,
+            commit_sha=commit_sha,
+            manifest=manifest,
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     async def queue_agent_command(
         self, correlation_id: str, plan: JsonObject, status: str
     ) -> None:
-        async with await self.connect_async() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    insert into agent_commands (
-                        command_id,
-                        correlation_id,
-                        cluster_id,
-                        action,
-                        payload,
-                        status,
-                        updated_at
-                    )
-                    values (%s, %s, %s, %s, %s, %s, now())
-                    on conflict (command_id) do nothing
-                    """,
-                    (
-                        plan["command_id"],
-                        correlation_id,
-                        plan["cluster_id"],
-                        plan["action"],
-                        json.dumps(plan),
-                        status,
-                    ),
-                )
+        table = AgentCommand.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                command_id=plan["command_id"],
+                correlation_id=correlation_id,
+                cluster_id=plan["cluster_id"],
+                action=plan["action"],
+                payload=plan,
+                status=status,
+                result={},
+                updated_at=func.now(),
+            )
+            .on_conflict_do_nothing(index_elements=[table.c.command_id])
+        )
+        async with self.async_connection() as conn:
+            await conn.execute(statement)
 
     async def lease_agent_command(
         self, cluster_id: str, queued_status: str, leased_status: str
     ) -> CommandRecord | None:
-        async with await self.connect_async() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    select command_id, correlation_id, cluster_id, action, payload
-                    from agent_commands
-                    where cluster_id = %s and status = %s
-                    order by created_at
-                    limit 1
-                    """,
-                    (cluster_id, queued_status),
-                )
-                row = await cur.fetchone()
-                if row:
-                    await cur.execute(
-                        """
-                        update agent_commands
-                        set status = %s, updated_at = now()
-                        where command_id = %s
-                        """,
-                        (leased_status, row["command_id"]),
-                    )
-                return dict(row) if row else None
+        table = AgentCommand.__table__
+        find_statement = (
+            select(
+                table.c.command_id,
+                table.c.correlation_id,
+                table.c.cluster_id,
+                table.c.action,
+                table.c.payload,
+            )
+            .where(table.c.cluster_id == cluster_id, table.c.status == queued_status)
+            .order_by(table.c.created_at)
+            .limit(1)
+        )
+        async with self.async_connection() as conn:
+            row = (await conn.execute(find_statement)).mappings().first()
+            if row:
+                await self.mark_agent_command_leased(conn, table, row["command_id"], leased_status)
+            return row_dict(row) if row else None
+
+    async def mark_agent_command_leased(
+        self, conn: AsyncConnection, table: Any, command_id: str, leased_status: str
+    ) -> None:
+        statement = (
+            update(table)
+            .where(table.c.command_id == command_id)
+            .values(status=leased_status, updated_at=func.now())
+        )
+        await conn.execute(statement)
 
     async def complete_agent_command(
         self, command_id: str, result: JsonObject
     ) -> str | None:
-        async with await self.connect_async() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    update agent_commands
-                    set status = %s, result = %s, updated_at = now()
-                    where command_id = %s
-                    returning correlation_id
-                    """,
-                    (result["status"], json.dumps(result), command_id),
-                )
-                row = await cur.fetchone()
-                return row["correlation_id"] if row else None
+        table = AgentCommand.__table__
+        statement = (
+            update(table)
+            .where(table.c.command_id == command_id)
+            .values(status=result["status"], result=result, updated_at=func.now())
+            .returning(table.c.correlation_id)
+        )
+        async with self.async_connection() as conn:
+            row = (await conn.execute(statement)).mappings().first()
+        return row["correlation_id"] if row else None
 
     def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "insert into evidence (correlation_id, kind, payload) values (%s, %s, %s)",
-                    (correlation_id, kind, json.dumps(payload)),
-                )
+        table = Evidence.__table__
+        statement = pg_insert(table).values(
+            correlation_id=correlation_id,
+            kind=kind,
+            payload=payload,
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def save_rca_report(
         self, correlation_id: str, root_cause: str, action: str, payload: JsonObject
     ) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into rca_reports (correlation_id, root_cause, action, payload)
-                    values (%s, %s, %s, %s)
-                    """,
-                    (correlation_id, root_cause, action, json.dumps(payload)),
-                )
+        table = RcaReport.__table__
+        statement = pg_insert(table).values(
+            correlation_id=correlation_id,
+            root_cause=root_cause,
+            action=action,
+            payload=payload,
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def save_pull_request(
         self, correlation_id: str, pr_url: str, title: str, body: str, status: str
     ) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into pull_requests (correlation_id, pr_url, title, body, status)
-                    values (%s, %s, %s, %s, %s)
-                    """,
-                    (correlation_id, pr_url, title, body, status),
-                )
+        table = PullRequest.__table__
+        statement = pg_insert(table).values(
+            correlation_id=correlation_id,
+            pr_url=pr_url,
+            title=title,
+            body=body,
+            status=status,
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def upsert_dashboard(self, evt: Event, status: str, summary: str) -> None:
         payload = {
@@ -475,53 +449,46 @@ class Database:
             "last_payload": evt["payload"],
             "updated_at": now_iso(),
         }
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into dashboard_cards
-                        (correlation_id, status, summary, last_event, payload, updated_at)
-                    values (%s, %s, %s, %s, %s, now())
-                    on conflict (correlation_id) do update set
-                        status = excluded.status,
-                        summary = excluded.summary,
-                        last_event = excluded.last_event,
-                        payload = excluded.payload,
-                        updated_at = now()
-                    """,
-                    (evt["correlation_id"], status, summary, evt["subject"], json.dumps(payload)),
-                )
+        table = DashboardCard.__table__
+        insert_statement = pg_insert(table).values(
+            correlation_id=evt["correlation_id"],
+            status=status,
+            summary=summary,
+            last_event=evt["subject"],
+            payload=payload,
+            updated_at=func.now(),
+        )
+        statement = insert_statement.on_conflict_do_update(
+            index_elements=[table.c.correlation_id],
+            set_={
+                "status": insert_statement.excluded.status,
+                "summary": insert_statement.excluded.summary,
+                "last_event": insert_statement.excluded.last_event,
+                "payload": insert_statement.excluded.payload,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def list_dashboard(self) -> list[JsonObject]:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    select correlation_id, status, summary, last_event, payload, updated_at
-                    from dashboard_cards
-                    order by updated_at desc
-                    limit %s
-                    """,
-                    (DASHBOARD_LIMIT,),
-                )
-                return list(cur.fetchall())
+        table = DashboardCard.__table__
+        statement = select(table).order_by(table.c.updated_at.desc()).limit(DASHBOARD_LIMIT)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [row_dict(row) for row in rows]
 
     def append_audit_log(self, evt: Event) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    insert into audit_log (event_id, subject, source, correlation_id, payload)
-                    values (%s, %s, %s, %s, %s)
-                    """,
-                    (
-                        evt["event_id"],
-                        evt["subject"],
-                        evt["source"],
-                        evt["correlation_id"],
-                        json.dumps(evt["payload"]),
-                    ),
-                )
+        table = AuditLog.__table__
+        statement = pg_insert(table).values(
+            event_id=evt["event_id"],
+            subject=evt["subject"],
+            source=evt["source"],
+            correlation_id=evt["correlation_id"],
+            payload=evt["payload"],
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
 
 async def wait_for_database(db: InitializableStore) -> None:
