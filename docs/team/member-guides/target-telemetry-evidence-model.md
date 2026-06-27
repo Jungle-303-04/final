@@ -569,4 +569,4 @@ raw telemetry 전체를 넘기지 않는다.
 | 4 | [구현과 테스트 시작점](target-telemetry-evidence-04-implementation.md) | `evidence.py`와 테스트를 어떻게 시작할지 |
 | 5 | [Event payload 연결 방식](target-telemetry-evidence-05-event-mapping.md) | 나중에 Gateway/Event 계약과 어떻게 연결할지 |
 | 6 | [Evidence 학습 Task 보드](target-telemetry-evidence-06-learning-tasks.md) | 아주 작은 단위로 실행하고 성취를 확인 |
-| 7 | [Telemetry Evidence Micro Demo](../../examples/telemetry-evidence-demo/README.md) | Docker로 Prometheus/Loki/OTel 더미 데이터를 직접 확인 |
+| 7 | [Telemetry Evidence Micro Demo](../../../examples/telemetry-evidence-demo/README.md) | Docker로 Prometheus/Loki/OTel 더미 데이터를 직접 확인 |
