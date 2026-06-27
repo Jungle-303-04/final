@@ -1,7 +1,10 @@
 import pytest
 from pydantic import ValidationError
 
-from packages.contracts.gateway.requests import CommandRequest, GitHubWebhookRequest
+from packages.contracts.gateway.requests import (
+    CommandRequest,
+    GitHubWebhookRequest,
+)
 from packages.events.envelope import event
 
 

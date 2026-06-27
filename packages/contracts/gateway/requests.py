@@ -24,7 +24,9 @@ class OAuthCallbackRequest(StrictModel):
     user_id: str = Auth.LOCAL_USER_ID
     code: str | None = None
     state: str | None = None
-    scopes: list[str] = Field(default_factory=lambda: DEFAULT_OAUTH_SCOPES.copy())
+    scopes: list[str] = Field(
+        default_factory=lambda: DEFAULT_OAUTH_SCOPES.copy()
+    )
     provider_user: str | None = None
 
 
@@ -32,7 +34,9 @@ class GitHubWebhookRequest(StrictModel):
     commit_sha: str
     image: str = DEFAULT_WEBHOOK_IMAGE
     replicas: int = Field(
-        default=DEFAULT_WEBHOOK_REPLICAS, ge=MIN_WEBHOOK_REPLICAS, le=MAX_WEBHOOK_REPLICAS
+        default=DEFAULT_WEBHOOK_REPLICAS,
+        ge=MIN_WEBHOOK_REPLICAS,
+        le=MAX_WEBHOOK_REPLICAS,
     )
 
 

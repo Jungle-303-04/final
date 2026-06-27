@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Integer,
+    PrimaryKeyConstraint,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -20,11 +27,15 @@ def jsonb_column() -> Mapped[dict[str, Any]]:
 
 
 def created_at_column() -> Mapped[Any]:
-    return mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    return mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 def updated_at_column() -> Mapped[Any]:
-    return mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    return mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class EventModel(Base):
@@ -41,7 +52,9 @@ class EventModel(Base):
 class RepoChange(Base):
     __tablename__ = "repo_changes"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     correlation_id: Mapped[str] = text_column()
     commit_sha: Mapped[str] = text_column()
     manifest: Mapped[dict[str, Any]] = jsonb_column()
@@ -51,7 +64,9 @@ class RepoChange(Base):
 class Evidence(Base):
     __tablename__ = "evidence"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     correlation_id: Mapped[str] = text_column()
     kind: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
@@ -61,7 +76,9 @@ class Evidence(Base):
 class RcaReport(Base):
     __tablename__ = "rca_reports"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     correlation_id: Mapped[str] = text_column()
     root_cause: Mapped[str] = text_column()
     action: Mapped[str] = text_column()
@@ -72,7 +89,9 @@ class RcaReport(Base):
 class PullRequest(Base):
     __tablename__ = "pull_requests"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     correlation_id: Mapped[str] = text_column()
     pr_url: Mapped[str] = text_column()
     title: Mapped[str] = text_column()
@@ -109,7 +128,9 @@ class DashboardCard(Base):
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     event_id: Mapped[str] = text_column()
     subject: Mapped[str] = text_column()
     source: Mapped[str] = text_column()
@@ -136,7 +157,9 @@ class EventProcessing(Base):
 class EventDeadLetter(Base):
     __tablename__ = "event_dead_letters"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     original_event_id: Mapped[str] = text_column()
     original_subject: Mapped[str] = text_column()
     consumer: Mapped[str] = text_column()
@@ -154,7 +177,9 @@ class OAuthAccount(Base):
     __tablename__ = "oauth_accounts"
     __table_args__ = (UniqueConstraint("user_id", "provider"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
     user_id: Mapped[str] = text_column()
     provider: Mapped[str] = text_column()
     provider_user: Mapped[str] = text_column()

@@ -54,7 +54,9 @@ class CommandWorkflow:
 
         await self.dispatcher.dispatch(evt, self.planner.build(command))
 
-    async def reject(self, evt: dict[str, Any], command: Payload, reason: str) -> None:
+    async def reject(
+        self, evt: dict[str, Any], command: Payload, reason: str
+    ) -> None:
         await self.events.publish(
             EventSubject.COMMAND_REJECTED,
             self.config.service_name,

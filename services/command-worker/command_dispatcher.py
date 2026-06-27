@@ -57,7 +57,9 @@ class Plan:
     def ready_event_payload(self) -> dict[str, Any]:
         return {Field.PLAN: self.data}
 
-    def dispatched_event_payload(self, config: CommandConfigPort) -> dict[str, Any]:
+    def dispatched_event_payload(
+        self, config: CommandConfigPort
+    ) -> dict[str, Any]:
         return {
             Field.PLAN: self.data,
             Field.ROUTE: {
