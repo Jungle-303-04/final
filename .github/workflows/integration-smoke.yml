@@ -1,0 +1,50 @@
+name: Integration Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+
+jobs:
+  kind-smoke:
+    name: kind event flow smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      IMAGE_NAME: service:integration-smoke
+      MGMT_CLUSTER: management
+      TARGET_CLUSTER: target
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Set up kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - name: Verify local tooling
+        run: bash scripts/doctor.sh
+
+      - name: Start management and target clusters
+        run: make up
+
+      - name: Run event flow smoke
+        run: make smoke
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          kubectl --context "kind-${MGMT_CLUSTER}" -n management get pods -o wide || true
+          kubectl --context "kind-${MGMT_CLUSTER}" -n management logs deploy/api-gateway || true
+          kubectl --context "kind-${MGMT_CLUSTER}" -n management logs deploy/command-worker || true
+          kubectl --context "kind-${MGMT_CLUSTER}" -n management logs deploy/rca-worker || true
+          kubectl --context "kind-${TARGET_CLUSTER}" -n target get pods -o wide || true
+          kubectl --context "kind-${TARGET_CLUSTER}" -n target logs deploy/target-cluster-agent || true
+
+      - name: Delete kind clusters
+        if: always()
+        run: make down
