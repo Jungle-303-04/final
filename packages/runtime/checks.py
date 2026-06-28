@@ -24,8 +24,7 @@ def require_registered(payload_type: type) -> Any:
 def require_handler_signature(fn: Callable[..., Any]) -> bool:
     """핸들러가 (evt) 또는 (evt, ctx) 형태인지. 반환=ctx 를 받는지 여부."""
     params = [
-        p
-        for p in inspect.signature(fn).parameters.values()
+        p for p in inspect.signature(fn).parameters.values()
         if p.name != "self"
     ]
     if not 1 <= len(params) <= 2:
