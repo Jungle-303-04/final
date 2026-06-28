@@ -13,10 +13,7 @@ from typing import Any
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import (
-    DemoPingRequested,
-    DemoPongRequestedBody,
-)
+from packages.contracts.event_bus.bodies import DemoPingRequested, DemoPongRequestedBody
 from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
 
@@ -56,10 +53,7 @@ def test_golden_path_ping_to_outbound_callback() -> None:
 def test_outbound_failure_emits_failed() -> None:
     gateway = load_service("demo/ping-gateway")
     gateway.outbound = FakeOutbound(fail=True)
-    out = run_handler(
-        gateway.on_pong_requested,
-        DemoPongRequestedBody(message="pong: x", reply_to="/demo/callback"),
-    )
+    out = run_handler(gateway.on_pong_requested, DemoPongRequestedBody(message="pong: x", reply_to="/demo/callback"))
     assert subjects_of(out) == ["demo.pong.failed"]
     assert "unreachable" in out[0].error
 
@@ -70,14 +64,7 @@ def test_causation_auto_propagates_through_runtime() -> None:
     published: list[Any] = []
 
     class Pub:
-        async def emit(
-            self,
-            subject: str,
-            source: str,
-            payload: dict[str, Any],
-            correlation_id: str | None = None,
-            causation_id: str | None = None,
-        ) -> Any:
+        async def emit(self, subject: str, source: str, payload: dict[str, Any], correlation_id: str | None = None, causation_id: str | None = None) -> Any:
             evt = event(subject, source, payload, correlation_id, causation_id)
             published.append(evt)
             return evt
@@ -89,12 +76,7 @@ def test_causation_auto_propagates_through_runtime() -> None:
         client = RecordedEventClient(Pub(), Rec())
         parent = event("demo.ping.requested", "api-gateway", {}, "corr-1")
         with event_causation(parent.event_id):
-            child = await client.emit(
-                "demo.pong.requested",
-                "demo-ping-worker",
-                {},
-                parent.correlation_id,
-            )
+            child = await client.emit("demo.pong.requested", "demo-ping-worker", {}, parent.correlation_id)
         assert child.correlation_id == "corr-1"
         assert child.causation_id == parent.event_id
 

@@ -9,12 +9,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
-    SafePrCreatedBody,
-    SafePrFailedBody,
-    SafePrRequestedBody,
-)
+from packages.contracts.event_bus.bodies import EventBody, SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.runtime.app import App, EventContext
 
 app = App("repo-gateway-worker")
@@ -31,27 +26,12 @@ async def on_safe_pr_requested(evt: SafePrRequestedBody, ctx: EventContext) -> A
     try:
         pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
         token_ref = ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
-        ctx.db.save_pull_request(
-            ctx.correlation_id,
-            pr_url,
-            evt.title,
-            evt.body,
-            PR_STATUS_CREATED,
-        )
+        ctx.db.save_pull_request(ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED)
     except Exception as exc:
-        yield SafePrFailedBody(
-            provider=evt.provider,
-            title=evt.title,
-            reason=str(exc),
-        )
+        yield SafePrFailedBody(provider=evt.provider, title=evt.title, reason=str(exc))
         return
 
-    yield SafePrCreatedBody(
-        pr_url=pr_url,
-        provider=evt.provider,
-        token_ref=token_ref,
-        mode=PR_MODE,
-    )
+    yield SafePrCreatedBody(pr_url=pr_url, provider=evt.provider, token_ref=token_ref, mode=PR_MODE)
 
 
 if __name__ == "__main__":

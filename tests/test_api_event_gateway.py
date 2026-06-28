@@ -13,14 +13,7 @@ class MemoryPublisher:
     def __init__(self) -> None:
         self.events: list[EventEnvelope] = []
 
-    async def emit(
-        self,
-        subject: str,
-        source: str,
-        payload: dict[str, object],
-        correlation_id: str | None = None,
-        causation_id: str | None = None,
-    ) -> EventEnvelope:
+    async def emit(self, subject: str, source: str, payload: dict[str, object], correlation_id: str | None = None, causation_id: str | None = None) -> EventEnvelope:
         evt = event(subject, source, payload, correlation_id, causation_id)
         self.events.append(evt)
         return evt
@@ -39,17 +32,9 @@ def test_api_event_gateway_attaches_actor_and_records_event() -> None:
         publisher = MemoryPublisher()
         recorder = MemoryRecorder()
         gateway = ApiEventGateway(publisher, recorder, "api-gateway")
-        actor = Actor(
-            "user-1",
-            roles=("operator",),
-            permissions=(Permission.COMMAND_REQUEST,),
-        )
+        actor = Actor("user-1", roles=("operator",), permissions=(Permission.COMMAND_REQUEST,))
 
-        accepted = await gateway.accept(
-            EventSubject.COMMAND_REQUESTED,
-            {"action": "rollout_restart"},
-            actor=actor,
-        )
+        accepted = await gateway.accept(EventSubject.COMMAND_REQUESTED, {"action": "rollout_restart"}, actor=actor)
 
         assert accepted.response()["accepted"] is True
         assert publisher.events == [accepted.event]

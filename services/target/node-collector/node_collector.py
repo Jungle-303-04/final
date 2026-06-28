@@ -45,13 +45,7 @@ class NodeRuntimeSample:
 
 
 class NodeCollector:
-    def __init__(
-        self,
-        node_name: str,
-        pod_name: str,
-        namespace: str,
-        interval_seconds: int,
-    ) -> None:
+    def __init__(self, node_name: str, pod_name: str, namespace: str, interval_seconds: int) -> None:
         self.node_name = node_name
         self.pod_name = pod_name
         self.namespace = namespace
@@ -59,61 +53,19 @@ class NodeCollector:
 
     @classmethod
     def from_env(cls) -> NodeCollector:
-        return cls(
-            node_name=env(Settings.NODE_NAME_ENV, Settings.DEFAULT_NODE_NAME),
-            pod_name=env(Settings.POD_NAME_ENV, Settings.DEFAULT_POD_NAME),
-            namespace=env(Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE),
-            interval_seconds=int(
-                env(
-                    Settings.COLLECT_INTERVAL_ENV,
-                    Settings.DEFAULT_COLLECT_INTERVAL_SECONDS,
-                )
-            ),
-        )
+        return cls(node_name=env(Settings.NODE_NAME_ENV, Settings.DEFAULT_NODE_NAME), pod_name=env(Settings.POD_NAME_ENV, Settings.DEFAULT_POD_NAME), namespace=env(Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE), interval_seconds=int(env(Settings.COLLECT_INTERVAL_ENV, Settings.DEFAULT_COLLECT_INTERVAL_SECONDS)))
 
     def snapshot(self) -> NodeRuntimeSample:
-        return NodeRuntimeSample(
-            node_name=self.node_name,
-            pod_name=self.pod_name,
-            namespace=self.namespace,
-            timestamp=datetime.now(UTC).isoformat(),
-            cpu_usage_ratio=Settings.SAMPLE_CPU_USAGE_RATIO,
-            memory_working_set_bytes=Settings.SAMPLE_MEMORY_WORKING_SET_BYTES,
-            filesystem_usage_ratio=Settings.SAMPLE_FILESYSTEM_USAGE_RATIO,
-            runtime=Settings.RUNTIME_NAME,
-        )
+        return NodeRuntimeSample(node_name=self.node_name, pod_name=self.pod_name, namespace=self.namespace, timestamp=datetime.now(UTC).isoformat(), cpu_usage_ratio=Settings.SAMPLE_CPU_USAGE_RATIO, memory_working_set_bytes=Settings.SAMPLE_MEMORY_WORKING_SET_BYTES, filesystem_usage_ratio=Settings.SAMPLE_FILESYSTEM_USAGE_RATIO, runtime=Settings.RUNTIME_NAME)
 
     def prometheus_metrics(self) -> str:
         sample = self.snapshot()
         labels = f'node="{sample.node_name}",runtime="{sample.runtime}"'
-        return "\n".join(
-            [
-                "# HELP node_collector_cpu_usage_ratio Node CPU usage ratio.",
-                "# TYPE node_collector_cpu_usage_ratio gauge",
-                (f"node_collector_cpu_usage_ratio{{{labels}}} {sample.cpu_usage_ratio}"),
-                ("# HELP node_collector_memory_working_set_bytes Node memory working set."),
-                "# TYPE node_collector_memory_working_set_bytes gauge",
-                (f"node_collector_memory_working_set_bytes{{{labels}}} {sample.memory_working_set_bytes}"),
-                ("# HELP node_collector_filesystem_usage_ratio Node filesystem usage ratio."),
-                "# TYPE node_collector_filesystem_usage_ratio gauge",
-                f"node_collector_filesystem_usage_ratio{{{labels}}} {sample.filesystem_usage_ratio}",
-                "",
-            ]
-        )
+        return "\n".join(["# HELP node_collector_cpu_usage_ratio Node CPU usage ratio.", "# TYPE node_collector_cpu_usage_ratio gauge", (f"node_collector_cpu_usage_ratio{{{labels}}} {sample.cpu_usage_ratio}"), ("# HELP node_collector_memory_working_set_bytes Node memory working set."), "# TYPE node_collector_memory_working_set_bytes gauge", (f"node_collector_memory_working_set_bytes{{{labels}}} {sample.memory_working_set_bytes}"), ("# HELP node_collector_filesystem_usage_ratio Node filesystem usage ratio."), "# TYPE node_collector_filesystem_usage_ratio gauge", f"node_collector_filesystem_usage_ratio{{{labels}}} {sample.filesystem_usage_ratio}", ""])
 
     async def log_forever(self) -> None:
         while True:
-            print(
-                json.dumps(
-                    {
-                        Gateway.SERVICE: Settings.SERVICE_NAME,
-                        Field.KIND: NODE_RUNTIME_SAMPLE_KIND,
-                        Field.SAMPLE: self.snapshot().to_body(),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
+            print(json.dumps({Gateway.SERVICE: Settings.SERVICE_NAME, Field.KIND: NODE_RUNTIME_SAMPLE_KIND, Field.SAMPLE: self.snapshot().to_body()}, ensure_ascii=False), flush=True)
             await asyncio.sleep(self.interval_seconds)
 
 
@@ -134,11 +86,7 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
 
     @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
-        return {
-            Gateway.STATUS: Gateway.STATUS_OK,
-            Gateway.SERVICE: Settings.SERVICE_NAME,
-            Field.NODE: node_collector.node_name,
-        }
+        return {Gateway.STATUS: Gateway.STATUS_OK, Gateway.SERVICE: Settings.SERVICE_NAME, Field.NODE: node_collector.node_name}
 
     @app.get(SNAPSHOT_PATH)
     async def snapshot() -> dict[str, object]:
@@ -146,20 +94,10 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
 
     @app.get(METRICS_PATH, response_class=PlainTextResponse)
     async def metrics() -> PlainTextResponse:
-        return PlainTextResponse(
-            node_collector.prometheus_metrics(),
-            media_type=Settings.METRIC_CONTENT_TYPE,
-        )
+        return PlainTextResponse(node_collector.prometheus_metrics(), media_type=Settings.METRIC_CONTENT_TYPE)
 
     return app
 
 
 async def run() -> None:
-    await Server(
-        Config(
-            create_app(),
-            host=Settings.SERVICE_HOST,
-            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
-            log_level=Settings.LOG_LEVEL,
-        )
-    ).serve()
+    await Server(Config(create_app(), host=Settings.SERVICE_HOST, port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)), log_level=Settings.LOG_LEVEL)).serve()

@@ -32,3 +32,11 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]  # Line too long 비활성화
+
+[tool.ruff.format]
+# 한 줄로 합칠 수 있으면 합친다(트레일링 콤마로 인한 강제 줄바꿈 무시).
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint.isort]
+# 포매터(skip-magic-trailing-comma)와 일관: 트레일링 콤마로 import 재분할 안 함.
+split-on-trailing-comma = false

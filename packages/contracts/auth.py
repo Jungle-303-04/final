@@ -26,15 +26,7 @@ class Actor:
 
     @classmethod
     def fake_owner(cls, user_id: str = "local-user") -> Actor:
-        return cls(
-            user_id=user_id,
-            roles=("owner",),
-            permissions=tuple(item.value for item in Permission),
-        )
+        return cls(user_id=user_id, roles=("owner",), permissions=tuple(item.value for item in Permission))
 
     def to_body(self) -> dict[str, object]:
-        return {
-            "user_id": self.user_id,
-            "roles": list(self.roles),
-            "permissions": [str(item) for item in self.permissions],
-        }
+        return {"user_id": self.user_id, "roles": list(self.roles), "permissions": [str(item) for item in self.permissions]}

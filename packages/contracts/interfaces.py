@@ -3,11 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from packages.contracts.event_bus.interfaces import (
-    EventEnvelope,
-    EventRecorder,
-    JsonObject,
-)
+from packages.contracts.event_bus.interfaces import EventEnvelope, EventRecorder, JsonObject
 
 CommandRecord = dict[str, Any]
 

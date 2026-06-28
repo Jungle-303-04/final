@@ -10,10 +10,7 @@ API_GATEWAY_DIR = ROOT_DIR / "services" / "api-gateway"
 
 def load_gateway_auth_module():
     sys.path.insert(0, str(API_GATEWAY_DIR))
-    spec = importlib.util.spec_from_file_location(
-        "test_api_gateway_auth",
-        API_GATEWAY_DIR / "auth.py",
-    )
+    spec = importlib.util.spec_from_file_location("test_api_gateway_auth", API_GATEWAY_DIR / "auth.py")
     if spec is None or spec.loader is None:
         raise RuntimeError("cannot load api-gateway auth module")
     module = importlib.util.module_from_spec(spec)

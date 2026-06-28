@@ -8,11 +8,7 @@ from conftest import ROOT, load_file, load_service, run_handler, subjects_of
 
 from packages.contracts.event_bus.bodies import CommandRequestedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
-from packages.events.bus import (
-    RecordedEventClient,
-    emit_and_record,
-    event_causation,
-)
+from packages.events.bus import RecordedEventClient, emit_and_record, event_causation
 from packages.events.envelope import event
 
 
@@ -20,14 +16,7 @@ class FakeEventPublisher:
     def __init__(self) -> None:
         self.published: list[EventEnvelope] = []
 
-    async def emit(
-        self,
-        subject: str,
-        source: str,
-        payload: dict[str, Any],
-        correlation_id: str | None = None,
-        causation_id: str | None = None,
-    ) -> EventEnvelope:
+    async def emit(self, subject: str, source: str, payload: dict[str, Any], correlation_id: str | None = None, causation_id: str | None = None) -> EventEnvelope:
         created = event(subject, source, payload, correlation_id, causation_id)
         self.published.append(created)
         return created
@@ -53,14 +42,7 @@ def test_publish_and_record_uses_event_ports() -> None:
     async def run() -> None:
         publisher = FakeEventPublisher()
         recorder = FakeEventRecorder()
-        created = await emit_and_record(
-            publisher,
-            recorder,
-            "command.requested",
-            "test",
-            {"cluster_id": "target-cluster-01"},
-            "corr-1",
-        )
+        created = await emit_and_record(publisher, recorder, "command.requested", "test", {"cluster_id": "target-cluster-01"}, "corr-1")
         assert created.correlation_id == "corr-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
@@ -74,12 +56,7 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
         recorder = FakeEventRecorder()
         client = RecordedEventClient(publisher, recorder)
         with event_causation("parent-event-1"):
-            created = await client.emit(
-                "command.dispatched",
-                "command-worker",
-                {"command_id": "cmd-1"},
-                "corr-1",
-            )
+            created = await client.emit("command.dispatched", "command-worker", {"command_id": "cmd-1"}, "corr-1")
         assert created.causation_id == "parent-event-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
@@ -90,21 +67,9 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
 def test_command_subscriber_emits_dispatch_chain() -> None:
     command = load_service("command-worker")
     queue = FakeAgentCommandQueue()
-    payload = CommandRequestedBody.from_body(
-        {
-            "cluster_id": "target-cluster-01",
-            "action": "rollout_restart",
-            "namespace": "sandbox",
-            "reason": "rollout",
-            "diff": {},
-        }
-    )
+    payload = CommandRequestedBody.from_body({"cluster_id": "target-cluster-01", "action": "rollout_restart", "namespace": "sandbox", "reason": "rollout", "diff": {}})
     outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
-    assert subjects_of(outs) == [
-        "command.dispatch.ready",
-        "command.dispatched",
-        "command.queued_for_agent",
-    ]
+    assert subjects_of(outs) == ["command.dispatch.ready", "command.dispatched", "command.queued_for_agent"]
     assert len(queue.queued) == 1
     correlation_id, plan, status = queue.queued[0]
     assert correlation_id == "corr-2"
@@ -113,17 +78,8 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
 
 
 def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
-    policy = load_file(
-        ROOT / "services" / "command-worker" / "command_policy.py",
-        "test_command_policy",
-    )
-    rule = policy.EqualsRule(
-        name="sandbox_namespace",
-        field="namespace",
-        expected="sandbox",
-        reason="only sandbox namespace writes are allowed",
-        default="sandbox",
-    )
+    policy = load_file(ROOT / "services" / "command-worker" / "command_policy.py", "test_command_policy")
+    rule = policy.EqualsRule(name="sandbox_namespace", field="namespace", expected="sandbox", reason="only sandbox namespace writes are allowed", default="sandbox")
     engine = policy.Policy([rule])
     dict_target = policy.Body({"namespace": "sandbox"})
     model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
