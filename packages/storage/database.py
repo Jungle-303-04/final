@@ -528,9 +528,14 @@ class OutboxRepository(DatabaseConnection):
                 .on_conflict_do_nothing(index_elements=[table.c.event_id])
             )
 
-    async def unsent_events(self, limit: int) -> list[EventEnvelope]:
+    async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]:
         table = OutboxModel.__table__
-        stmt = select(table).where(table.c.sent_at.is_(None)).order_by(table.c.id).limit(limit)
+        stmt = (
+            select(table)
+            .where(table.c.sent_at.is_(None), table.c.source == source)
+            .order_by(table.c.id)
+            .limit(limit)
+        )
         async with self.async_connection() as conn:
             rows = (await conn.execute(stmt)).mappings().all()
         return [
