@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import sys
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -58,7 +59,13 @@ def run_handler(
     ctx = make_context(db=db, **fields)
 
     async def go() -> list[Any]:
-        return [out async for out in handler(payload, ctx)]
+        result = handler(payload, ctx)
+        if inspect.isasyncgen(result):
+            return [out async for out in result]
+        value = await result
+        if value is None:
+            return []
+        return value if isinstance(value, list) else [value]
 
     return asyncio.run(go())
 

@@ -39,11 +39,11 @@ SERVICE_ENTRYPOINTS = {
     ),
     "dashboard-projection-service": (
         "services/projection/dashboard-projection-service/app.py",
-        "WorkerService.from_subscription(",
+        "App(",
     ),
     "audit-timeline-service": (
         "services/projection/audit-timeline-service/app.py",
-        "WorkerService.from_subscription(",
+        "App(",
     ),
     "target-cluster-agent": (
         "services/target/target-cluster-agent/app.py",
@@ -66,12 +66,6 @@ SERVICE_ENTRYPOINTS = {
         "AsyncService(",
     ),
 }
-
-# App(한 파일) 마이그레이션된 서비스는 제외(아래 WorkerService 규약 검사).
-WORKER_ENTRYPOINTS = [
-    "services/projection/dashboard-projection-service/app.py",
-    "services/projection/audit-timeline-service/app.py",
-]
 
 
 def read_project_file(path: str) -> str:
@@ -101,6 +95,8 @@ APP_BASED_SERVICES = {
     "diff-worker",
     "diff-analyze-worker",
     "repo-gateway-worker",
+    "dashboard-projection-service",
+    "audit-timeline-service",
 }
 
 
@@ -116,25 +112,6 @@ def test_services_keep_local_settings_files() -> None:
         assert settings_file.exists(), (
             f"{service_dir} must own service settings"
         )
-
-
-def test_worker_entrypoints_use_shared_runtime_helper() -> None:
-    for relative_path in WORKER_ENTRYPOINTS:
-        source = read_project_file(relative_path)
-
-        assert "WorkerService.from_subscription(" in source
-        assert "EventHandlerSpec" not in source
-        assert "WorkerRuntime" not in source
-
-
-def test_worker_subscriptions_are_declared_in_service_settings() -> None:
-    for relative_path in WORKER_ENTRYPOINTS:
-        settings_path = str(Path(relative_path).parent / "settings.py")
-        source = read_project_file(settings_path)
-
-        assert "SUBSCRIPTION = WorkerSubscription(" in source
-        assert "subject=" in source
-        assert "SUBSCRIBE_SUBJECT" not in source
 
 
 def test_contracts_are_grouped_by_boundary() -> None:

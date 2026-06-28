@@ -1,17 +1,21 @@
+"""audit-timeline-service — 모든 이벤트를 감사 로그로 적재.
+
+@app.on_event 로 전체(>) 구독. 봉투 그대로 audit 로그에 append.
+체이닝 없음(말단 소비자).
+"""
+
 from __future__ import annotations
 
-from audit_timeline import AuditTimelineWorkflow
-from settings import Settings
+from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.runtime.app import App, EventContext
 
-from packages.runtime.service import WorkerService
+app = App("audit-timeline-service")
 
 
-def main() -> None:
-    WorkerService.from_subscription(
-        Settings.SUBSCRIPTION,
-        lambda events, db: AuditTimelineWorkflow(events, db).handle,
-    ).run()
+@app.on_event
+async def on_event(evt: EventEnvelope, ctx: EventContext) -> None:
+    ctx.db.append_audit_log(evt)
 
 
 if __name__ == "__main__":
-    main()
+    app.run()

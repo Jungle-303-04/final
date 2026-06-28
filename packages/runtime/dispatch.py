@@ -53,19 +53,39 @@ async def _iter_results(result: Any) -> AsyncIterator[Any]:
         yield value
 
 
+async def _emit_results(
+    client: Any, source: str, evt: EventEnvelope, result: Any
+) -> None:
+    """핸들러가 yield 한 body 들을 다음 이벤트로 발행(공통)."""
+    async for out in _iter_results(result):
+        # causation 은 EventProcessor 가 contextvar 로 자동 연결.
+        await client.emit(
+            out.__subject__, source, out.to_body(), evt.correlation_id
+        )
+
+
 def make_event_handler(
     sub: Subscription, client: Any, db: Any, source: str
 ) -> Callable[[EventEnvelope], Any]:
-    """봉투 핸들러로 감싼다: 디코드 → 콜백 → yield된 body 발행."""
+    """타입 구독: 봉투 → body 디코드 → 콜백 → yield된 body 발행."""
 
     async def handle(evt: EventEnvelope) -> None:
         body = sub.body_type.from_body(evt.payload)
         ctx = EventContext.of(evt, db)
         result = sub.fn(body, ctx) if sub.wants_ctx else sub.fn(body)
-        async for out in _iter_results(result):
-            # causation 은 EventProcessor 가 contextvar 로 자동 연결.
-            await client.emit(
-                out.__subject__, source, out.to_body(), evt.correlation_id
-            )
+        await _emit_results(client, source, evt, result)
+
+    return handle
+
+
+def make_raw_handler(
+    fn: Callable[..., Any], wants_ctx: bool, client: Any, db: Any, source: str
+) -> Callable[[EventEnvelope], Any]:
+    """전체(>) 구독: 디코드 없이 봉투 그대로 → 콜백 → yield된 body 발행."""
+
+    async def handle(evt: EventEnvelope) -> None:
+        ctx = EventContext.of(evt, db)
+        result = fn(evt, ctx) if wants_ctx else fn(evt)
+        await _emit_results(client, source, evt, result)
 
     return handle
