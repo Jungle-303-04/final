@@ -74,49 +74,6 @@ class SessionStore(Protocol):
     async def check_rate_limit(self, key: str) -> None: ...
 
 
-class RepoChangeStore(Protocol):
-    def save_repo_change(
-        self, correlation_id: str, commit_sha: str, manifest: JsonObject
-    ) -> None: ...
-
-
-class AgentCommandQueue(Protocol):
-    async def queue_agent_command(
-        self, correlation_id: str, plan: JsonObject, status: str
-    ) -> None: ...
-
-    async def lease_agent_command(
-        self, cluster_id: str, queued_status: str, leased_status: str
-    ) -> CommandRecord | None: ...
-
-    async def complete_agent_command(
-        self, command_id: str, result: JsonObject
-    ) -> str | None: ...
-
-
-class RcaStore(Protocol):
-    def save_evidence(
-        self, correlation_id: str, kind: str, payload: JsonObject
-    ) -> None: ...
-
-    def save_rca_report(
-        self,
-        correlation_id: str,
-        root_cause: str,
-        action: str,
-        payload: JsonObject,
-    ) -> None: ...
-
-    def save_pull_request(
-        self,
-        correlation_id: str,
-        pr_url: str,
-        title: str,
-        body: str,
-        status: str,
-    ) -> None: ...
-
-
 class DashboardReadModel(Protocol):
     def upsert_dashboard(
         self, evt: EventEnvelope, status: str, summary: str

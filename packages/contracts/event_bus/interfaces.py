@@ -50,10 +50,6 @@ class EventEnvelope:
 EventHandler = Callable[[EventEnvelope], Awaitable[None]]
 
 
-class HandlesEvent(Protocol):
-    async def handle(self, evt: EventEnvelope) -> None: ...
-
-
 class EventMessage(Protocol):
     """브로커 메시지. ack=성공 확인, nak=재시도 요청."""
 
