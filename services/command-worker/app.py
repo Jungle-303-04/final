@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 from command_config import CommandConfig, PolicyRuleConfig
 from command_policy import ModelLookup, Policy
 
-from packages.config.constants import Sandbox, Target
+from packages.config.constants import Command, Sandbox, Target
 from packages.contracts.event_bus.bodies import (
     CommandDispatchedBody,
     CommandDispatchReadyBody,
@@ -37,7 +37,7 @@ CONFIG = CommandConfig(
     policy_steps=("validate policy", "route target cluster", "queue for agent"),
     default_namespace=Sandbox.NAMESPACE,
     default_cluster_id=Target.DEFAULT_CLUSTER_ID,
-    default_command_action="rollout_restart",
+    default_command_action=Command.DEFAULT_ACTION,
     command_status_queued="queued",
     policy_rules=(
         PolicyRuleConfig(
