@@ -11,8 +11,10 @@ from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from settings import Settings
+from testapi import register_demo_routes
 
 from packages.config.constants import Auth, GitHub, Target
+from packages.contracts.auth import Actor
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
@@ -24,7 +26,8 @@ from packages.contracts.gateway.requests import (
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
-from packages.events.bus import NatsEventBus, emit_and_record
+from packages.events.bus import NatsEventBus
+from packages.runtime.gateway import ApiEventGateway
 from packages.storage.database import Database, wait_for_database
 
 
@@ -32,8 +35,12 @@ class ApiGateway:
     def __init__(self) -> None:
         self.db = Database()
         self.bus = NatsEventBus()
+        self.events = ApiEventGateway(
+            self.bus, self.db, Settings.SERVICE_NAME
+        )
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
+        self.demo_inbox: list[dict[str, Any]] = []  # 데모 콜백 착지점
         self.app = FastAPI(
             title=Settings.APP_TITLE,
             version=Settings.APP_VERSION,
@@ -56,6 +63,7 @@ class ApiGateway:
 
     def configure_routes(self) -> None:
         app = self.app
+        register_demo_routes(app, self.events, self.demo_inbox)
 
         @app.get(gateway_routes.HEALTHZ_PATH)
         async def healthz() -> dict[str, str]:
@@ -93,11 +101,8 @@ class ApiGateway:
             ):
                 scope_list.append(GitHub.REQUIRED_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
-            await emit_and_record(
-                self.bus,
-                self.db,
+            await self.events.accept(
                 EventSubject.OAUTH_START_REQUESTED,
-                Settings.SERVICE_NAME,
                 {
                     Gateway.PROVIDER: provider,
                     Gateway.USER_ID: user_id,
@@ -113,16 +118,13 @@ class ApiGateway:
         ) -> dict[str, Any]:
             result = await self.auth.callback(provider, payload.model_dump())
             account = result[Gateway.ACCOUNT]
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 EventSubject.OAUTH_CONNECTED,
-                Settings.SERVICE_NAME,
                 account,
             )
             return {
                 Gateway.ACCEPTED: True,
-                Gateway.EVENT_ID: evt.event_id,
+                Gateway.EVENT_ID: accepted.event.event_id,
                 Gateway.TOKEN_REF: account[Gateway.TOKEN_REF],
                 Gateway.SESSION: result[Gateway.SESSION],
             }
@@ -131,44 +133,31 @@ class ApiGateway:
         async def github_webhook(
             payload: GitHubWebhookRequest,
         ) -> dict[str, Any]:
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 EventSubject.GIT_WEBHOOK_RECEIVED,
-                Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {Gateway.ACCEPTED: True, Gateway.EVENT: evt}
+            return accepted.response(include_event=True)
 
         @app.post(gateway_routes.AGENT_CONNECT_PATH)
         async def agent_connect(payload: AgentConnectRequest) -> dict[str, Any]:
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 EventSubject.AGENT_CONNECTED,
-                Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: evt.event_id}
+            return accepted.response()
 
         @app.post(gateway_routes.AGENT_EVIDENCE_PATH)
         async def agent_evidence(
             payload: AgentEvidenceRequest,
         ) -> dict[str, Any]:
             evidence = payload.model_dump()
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 EventSubject.CLUSTER_EVIDENCE_RECEIVED,
-                Settings.SERVICE_NAME,
                 evidence,
                 payload.correlation_id,
             )
-            return {
-                Gateway.ACCEPTED: True,
-                Gateway.EVENT_ID: evt.event_id,
-                Gateway.CORRELATION_ID: evt.correlation_id,
-            }
+            return accepted.response()
 
         @app.post(gateway_routes.COMMANDS_PATH)
         async def commands(
@@ -177,18 +166,12 @@ class ApiGateway:
             current = await self.auth.require_session(request)
             command = payload.model_dump()
             command[Gateway.REQUESTED_BY] = current.user_id
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 EventSubject.COMMAND_REQUESTED,
-                Settings.SERVICE_NAME,
                 command,
+                actor=Actor(current.user_id, tuple(current.roles)),
             )
-            return {
-                Gateway.ACCEPTED: True,
-                Gateway.EVENT_ID: evt.event_id,
-                Gateway.CORRELATION_ID: evt.correlation_id,
-            }
+            return accepted.response()
 
         @app.get(gateway_routes.DEAD_LETTERS_PATH)
         async def dead_letters(
@@ -218,20 +201,19 @@ class ApiGateway:
                     detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
                 )
 
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 dead_letter["original_subject"],
-                Settings.SERVICE_NAME,
                 dead_letter[Gateway.PAYLOAD],
                 dead_letter[Gateway.CORRELATION_ID],
                 dead_letter["original_event_id"],
             )
-            self.db.mark_dead_letter_replayed(dead_letter_id, evt.event_id)
+            self.db.mark_dead_letter_replayed(
+                dead_letter_id, accepted.event.event_id
+            )
             return {
                 Gateway.ACCEPTED: True,
                 Gateway.DEAD_LETTER_ID: dead_letter_id,
-                Gateway.REPLAY_EVENT: evt,
+                Gateway.REPLAY_EVENT: accepted.event,
             }
 
         @app.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
@@ -266,15 +248,15 @@ class ApiGateway:
                     status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
                     detail=Settings.COMMAND_NOT_FOUND_MESSAGE,
                 )
-            evt = await emit_and_record(
-                self.bus,
-                self.db,
+            accepted = await self.events.accept(
                 EventSubject.COMMAND_COMPLETED,
-                Settings.SERVICE_NAME,
                 {Gateway.COMMAND_ID: command_id, Gateway.RESULT: result},
                 correlation_id,
             )
-            return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: evt.event_id}
+            return {
+                Gateway.ACCEPTED: True,
+                Gateway.EVENT_ID: accepted.event.event_id,
+            }
 
         @app.get(gateway_routes.DASHBOARD_QUERY_PATH)
         async def dashboard_query(request: Request) -> dict[str, Any]:
