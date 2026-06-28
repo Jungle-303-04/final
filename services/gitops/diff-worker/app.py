@@ -1,7 +1,7 @@
-"""diff-worker — manifest.rendered 를 받아 원하는 상태 vs 실제 차이를 낸다.
+"""diff-worker — manifest.rendered → desired.diff.detected (원하는 vs 실제).
 
-렌더된 이미지(원하는 것)와 현재 이미지(실제)를 비교해 desired.diff.detected
-를 흘린다. 중첩 payload(rendered_manifest)를 타입 객체로 받아 속성 접근한다.
+렌더 이미지(원하는 것) vs 현재 이미지(실제) 비교. 중첩 payload
+(rendered_manifest)는 타입 객체로 받아 속성 접근.
 """
 
 from __future__ import annotations

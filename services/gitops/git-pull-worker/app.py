@@ -1,7 +1,7 @@
-"""git-pull-worker — 깃 변경을 감지(풀링)해 다음 단계로 흘린다.
+"""git-pull-worker — 깃 변경 감지(풀링) → git.changed. 파이프라인 입구.
 
-지금은 webhook 입력을 받아 그대로 git.changed 로 넘기는 fake. 실제로는
-여기서 깃 풀링/소스 가져오기를 하고 그 결과로 git.changed 를 만든다.
+지금은 webhook 입력을 그대로 git.changed 로 넘기는 fake. 실제로는 깃
+풀링/소스 가져오기 후 git.changed 생성.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """repo-gateway(외부 GitHub 게이트웨이) 이벤트 payload.
 
 PR 생성은 repo-gateway 한 곳으로 모은다. 누구든(gitops·rca) PR 이 필요하면
-safe_pr.requested 를 흘리면 repo-gateway 가 만들어 safe_pr.created 를 낸다.
+safe_pr.requested → repo-gateway 가 PR 생성 → safe_pr.created.
 """
 
 from __future__ import annotations
