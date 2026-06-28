@@ -11,7 +11,7 @@ from packages.contracts.event_bus.payloads import (
 
 
 def test_diff_emits_desired_diff() -> None:
-    diff = load_service("diff-worker")
+    diff = load_service("gitops/diff-worker")
     payload = ManifestRenderedPayload(
         rendered_manifest=RenderedManifest(
             api_version="apps/v1",

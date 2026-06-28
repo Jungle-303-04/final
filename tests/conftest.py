@@ -33,7 +33,8 @@ def load_file(path: Path, name: str) -> Any:
 
 
 def load_service(name: str) -> Any:
-    return load_file(ROOT / "services" / name / "app.py", f"svc_{name}")
+    module = name.replace("/", "_")
+    return load_file(ROOT / "services" / name / "app.py", f"svc_{module}")
 
 
 def make_context(db: Any = None, **fields: Any) -> EventContext:
