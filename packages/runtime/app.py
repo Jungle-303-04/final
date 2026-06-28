@@ -21,6 +21,7 @@ from typing import Any
 
 from packages.contracts.event_bus.registry import Subscription, events
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.event_bus.subscriptions import WorkerSubscription
 from packages.runtime.checks import (
     require_handler_signature,
     require_registered,
@@ -54,9 +55,6 @@ class App:
 
     def run(self) -> None:
         """등록된 구독자를 NATS 에 붙여 실행. (런타임은 지연 import)"""
-        from packages.contracts.event_bus.subscriptions import (
-            WorkerSubscription,
-        )
         from packages.runtime.service import WorkerService
 
         require_single_handler(self.name, self._handlers)

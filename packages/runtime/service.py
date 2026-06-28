@@ -91,28 +91,3 @@ class WorkerService:
         )
         await WorkerRuntime(spec).run()
 
-
-def run_service(service_name: str, runner: AsyncRunner) -> None:
-    AsyncService(service_name, runner).run()
-
-
-def run_fastapi_service(
-    service_name: str,
-    app_factory: FastApiFactory,
-    host: str = DEFAULT_HTTP_HOST,
-    port_env: str = PORT_ENV,
-    default_port: str = Runtime.DEFAULT_HTTP_PORT,
-    log_level: str = DEFAULT_LOG_LEVEL,
-) -> None:
-    FastApiService(
-        service_name, app_factory, host, port_env, default_port, log_level
-    ).run()
-
-
-def run_worker_service(
-    service_name: str,
-    subject: str,
-    handler_factory: WorkerHandlerFactory,
-    durable_name: str | None = None,
-) -> None:
-    WorkerService(service_name, subject, handler_factory, durable_name).run()
