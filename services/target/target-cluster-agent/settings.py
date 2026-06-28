@@ -45,9 +45,7 @@ class Settings:
     PROMETHEUS_VECTOR_VALUE = "0.19"
 
     COMMAND_COMPLETED_STATUS = "completed"
-    COMMAND_RESULT_MESSAGE = (
-        "fake Kubernetes action applied in sandbox namespace"
-    )
+    COMMAND_RESULT_MESSAGE = "fake Kubernetes action applied in sandbox namespace"
     LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
     LOKI_WARNING_LINE = "WARN rollback candidate detected"
     OTEL_SLOW_SPAN = "GET /checkout"

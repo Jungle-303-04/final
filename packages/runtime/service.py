@@ -90,4 +90,3 @@ class WorkerService:
             durable_name=self.durable_name,
         )
         await WorkerRuntime(spec).run()
-

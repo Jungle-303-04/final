@@ -24,9 +24,7 @@ class OAuthCallbackRequest(StrictModel):
     user_id: str = Auth.LOCAL_USER_ID
     code: str | None = None
     state: str | None = None
-    scopes: list[str] = Field(
-        default_factory=lambda: DEFAULT_OAUTH_SCOPES.copy()
-    )
+    scopes: list[str] = Field(default_factory=lambda: DEFAULT_OAUTH_SCOPES.copy())
     provider_user: str | None = None
 
 

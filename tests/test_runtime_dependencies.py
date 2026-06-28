@@ -23,9 +23,7 @@ def load_gateway_auth_module():
 
 
 def test_service_image_requirements_include_storage_dependencies() -> None:
-    requirements = (ROOT_DIR / "services" / "requirements.txt").read_text(
-        encoding="utf-8"
-    )
+    requirements = (ROOT_DIR / "services" / "requirements.txt").read_text(encoding="utf-8")
 
     assert "sqlalchemy==" in requirements
 

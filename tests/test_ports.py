@@ -45,9 +45,7 @@ class FakeAgentCommandQueue:
     def __init__(self) -> None:
         self.queued: list[tuple[str, dict[str, Any], str]] = []
 
-    async def queue_agent_command(
-        self, correlation_id: str, plan: dict[str, Any], status: str
-    ) -> None:
+    async def queue_agent_command(self, correlation_id: str, plan: dict[str, Any], status: str) -> None:
         self.queued.append((correlation_id, plan, status))
 
 
@@ -101,9 +99,7 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
             "diff": {},
         }
     )
-    outs = run_handler(
-        command.on_command_requested, payload, db=queue, correlation_id="corr-2"
-    )
+    outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
     assert subjects_of(outs) == [
         "command.dispatch.ready",
         "command.dispatched",

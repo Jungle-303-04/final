@@ -62,9 +62,7 @@ class NodeCollector:
         return cls(
             node_name=env(Settings.NODE_NAME_ENV, Settings.DEFAULT_NODE_NAME),
             pod_name=env(Settings.POD_NAME_ENV, Settings.DEFAULT_POD_NAME),
-            namespace=env(
-                Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE
-            ),
+            namespace=env(Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE),
             interval_seconds=int(
                 env(
                     Settings.COLLECT_INTERVAL_ENV,
@@ -92,26 +90,13 @@ class NodeCollector:
             [
                 "# HELP node_collector_cpu_usage_ratio Node CPU usage ratio.",
                 "# TYPE node_collector_cpu_usage_ratio gauge",
-                (
-                    f"node_collector_cpu_usage_ratio{{{labels}}} "
-                    f"{sample.cpu_usage_ratio}"
-                ),
-                (
-                    "# HELP node_collector_memory_working_set_bytes "
-                    "Node memory working set."
-                ),
+                (f"node_collector_cpu_usage_ratio{{{labels}}} {sample.cpu_usage_ratio}"),
+                ("# HELP node_collector_memory_working_set_bytes Node memory working set."),
                 "# TYPE node_collector_memory_working_set_bytes gauge",
-                (
-                    f"node_collector_memory_working_set_bytes{{{labels}}} "
-                    f"{sample.memory_working_set_bytes}"
-                ),
-                (
-                    "# HELP node_collector_filesystem_usage_ratio "
-                    "Node filesystem usage ratio."
-                ),
+                (f"node_collector_memory_working_set_bytes{{{labels}}} {sample.memory_working_set_bytes}"),
+                ("# HELP node_collector_filesystem_usage_ratio Node filesystem usage ratio."),
                 "# TYPE node_collector_filesystem_usage_ratio gauge",
-                f"node_collector_filesystem_usage_ratio{{{labels}}} "
-                f"{sample.filesystem_usage_ratio}",
+                f"node_collector_filesystem_usage_ratio{{{labels}}} {sample.filesystem_usage_ratio}",
                 "",
             ]
         )
@@ -174,9 +159,7 @@ async def run() -> None:
         Config(
             create_app(),
             host=Settings.SERVICE_HOST,
-            port=int(
-                env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)
-            ),
+            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
             log_level=Settings.LOG_LEVEL,
         )
     ).serve()

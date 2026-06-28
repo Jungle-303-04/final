@@ -26,17 +26,12 @@ ATTENTION_SUFFIXES = ("rejected", "failed")
 def _status(subject: str) -> DashboardStatus:
     if subject in TERMINAL_SUCCESS:
         return DashboardStatus.DONE
-    attention = (
-        subject.endswith(ATTENTION_SUFFIXES)
-        or subject == EventSubject.DEAD_LETTER_CREATED
-    )
+    attention = subject.endswith(ATTENTION_SUFFIXES) or subject == EventSubject.DEAD_LETTER_CREATED
     return DashboardStatus.ATTENTION if attention else DashboardStatus.RUNNING
 
 
 @app.on_event
-async def on_event(
-    evt: EventEnvelope, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_event(evt: EventEnvelope, ctx: EventContext) -> AsyncIterator[EventBody]:
     if evt.subject == EventSubject.DASHBOARD_UPDATED:
         return  # 자기 이벤트는 무시(무한 루프 방지)
     status = _status(evt.subject)

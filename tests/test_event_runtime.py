@@ -25,9 +25,7 @@ class FakeMessage:
 
 
 class FakeProcessingStore:
-    def __init__(
-        self, attempts: int = 1, status: str = EventProcessingStatus.PROCESSING
-    ) -> None:
+    def __init__(self, attempts: int = 1, status: str = EventProcessingStatus.PROCESSING) -> None:
         self.attempts = attempts
         self.status = status
         self.recorded: list[EventEnvelope] = []
@@ -37,16 +35,10 @@ class FakeProcessingStore:
     def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
 
-    def begin_event_processing(
-        self, evt: EventEnvelope, consumer: str
-    ) -> dict[str, Any]:
-        return EventProcessingRecord(
-            status=self.status, attempts=self.attempts
-        )
+    def begin_event_processing(self, evt: EventEnvelope, consumer: str) -> dict[str, Any]:
+        return EventProcessingRecord(status=self.status, attempts=self.attempts)
 
-    def finish_event_processing(
-        self, evt: EventEnvelope, consumer: str
-    ) -> None:
+    def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None:
         self.finished.append((evt.event_id, consumer))
 
     def fail_event_processing(
@@ -132,9 +124,7 @@ def test_event_processor_naks_retryable_failure() -> None:
 
         assert message.acked is False
         assert message.nak_delay == 7
-        assert store.failed == [
-            (evt.event_id, "command-worker", EventProcessingStatus.RETRYING)
-        ]
+        assert store.failed == [(evt.event_id, "command-worker", EventProcessingStatus.RETRYING)]
         assert dead_letters.captured == []
 
     asyncio.run(run())

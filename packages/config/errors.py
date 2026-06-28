@@ -11,8 +11,6 @@ def fail(message: str, error: type[Exception] = RuntimeError) -> NoReturn:
     raise error(f"{SYSTEM_PREFIX} {message}")
 
 
-def require(
-    condition: object, message: str, error: type[Exception] = ValueError
-) -> None:
+def require(condition: object, message: str, error: type[Exception] = ValueError) -> None:
     if not condition:
         fail(message, error)

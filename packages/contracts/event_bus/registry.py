@@ -56,10 +56,7 @@ class EventRegistry:
         for subject, body_type in sorted(self._defs.items()):
             names = ", ".join(f.name for f in fields(body_type))
             service, handler = self._handlers.get(subject, ("-", "-"))
-            rows.append(
-                f"{subject:<28} {body_type.__name__:<26} "
-                f"by={service}/{handler}  fields=({names})"
-            )
+            rows.append(f"{subject:<28} {body_type.__name__:<26} by={service}/{handler}  fields=({names})")
         if self._raw_handlers:
             rows.append("")
             rows.append("ALL-EVENT 구독(프로젝터):")
