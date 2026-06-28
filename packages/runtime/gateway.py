@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from packages.config.errors import require
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.bodies import EventBody
-from packages.contracts.event_bus.interfaces import EventEnvelope, EventPublisher, EventRecorder, JsonObject
+from packages.contracts.event_bus.interfaces import (
+    EventEnvelope,
+    EventPublisher,
+    EventRecorder,
+    JsonObject,
+)
 from packages.contracts.gateway.fields import Gateway
 from packages.events.bus import RecordedEventClient
 
@@ -15,7 +20,11 @@ class AcceptedEvent:
     event: EventEnvelope
 
     def response(self, include_event: bool = False) -> JsonObject:
-        data: JsonObject = {Gateway.ACCEPTED: True, Gateway.EVENT_ID: self.event.event_id, Gateway.CORRELATION_ID: self.event.correlation_id}
+        data: JsonObject = {
+            Gateway.ACCEPTED: True,
+            Gateway.EVENT_ID: self.event.event_id,
+            Gateway.CORRELATION_ID: self.event.correlation_id,
+        }
         if include_event:
             data[Gateway.EVENT] = self.event
         return data
@@ -28,15 +37,30 @@ class ApiEventGateway:
         self.events = RecordedEventClient(publisher, recorder)
         self.source = source
 
-    async def accept(self, subject: str, payload: JsonObject, correlation_id: str | None = None, causation_id: str | None = None, actor: Actor | None = None) -> AcceptedEvent:
+    async def accept(
+        self,
+        subject: str,
+        payload: JsonObject,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+        actor: Actor | None = None,
+    ) -> AcceptedEvent:
         event_payload = dict(payload)
         if actor is not None:
             event_payload.setdefault(Gateway.REQUESTED_BY, actor.user_id)
             event_payload.setdefault(Gateway.ACTOR, actor.to_body())
-        evt = await self.events.emit(subject, self.source, event_payload, correlation_id, causation_id)
+        evt = await self.events.emit(
+            subject, self.source, event_payload, correlation_id, causation_id
+        )
         return AcceptedEvent(evt)
 
-    async def accept_body(self, body: EventBody, correlation_id: str | None = None, causation_id: str | None = None, actor: Actor | None = None) -> AcceptedEvent:
+    async def accept_body(
+        self,
+        body: EventBody,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+        actor: Actor | None = None,
+    ) -> AcceptedEvent:
         subject = getattr(body, "__subject__", None)
         require(subject is not None, f"{body.__class__.__name__} has no event subject", TypeError)
         return await self.accept(subject, body.to_body(), correlation_id, causation_id, actor)

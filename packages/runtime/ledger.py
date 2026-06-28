@@ -18,7 +18,11 @@ class Ledger:
         self.store.finish_event_processing(evt, self.consumer)
 
     def retry(self, evt: EventEnvelope, error: Exception) -> None:
-        self.store.fail_event_processing(evt, self.consumer, str(error), EventProcessingStatus.RETRYING)
+        self.store.fail_event_processing(
+            evt, self.consumer, str(error), EventProcessingStatus.RETRYING
+        )
 
     def dead_letter(self, evt: EventEnvelope, error: Exception) -> None:
-        self.store.fail_event_processing(evt, self.consumer, str(error), EventProcessingStatus.DEAD_LETTERED)
+        self.store.fail_event_processing(
+            evt, self.consumer, str(error), EventProcessingStatus.DEAD_LETTERED
+        )

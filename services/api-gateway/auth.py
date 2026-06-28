@@ -41,7 +41,11 @@ class RedisSessionStore:
         client = self._client()
         token = secrets.token_urlsafe(Settings.SESSION_TOKEN_BYTES)
         session = AuthSession(token=token, user_id=user_id, roles=roles or [Settings.OWNER_ROLE])
-        await client.setex(f"{Settings.SESSION_KEY_PREFIX}:{token}", self.ttl_seconds, json.dumps({"user_id": session.user_id, "roles": session.roles}))
+        await client.setex(
+            f"{Settings.SESSION_KEY_PREFIX}:{token}",
+            self.ttl_seconds,
+            json.dumps({"user_id": session.user_id, "roles": session.roles}),
+        )
         return session
 
     async def get_session(self, token: str | None) -> AuthSession | None:
@@ -51,10 +55,16 @@ class RedisSessionStore:
         if not raw:
             return None
         payload = json.loads(raw)
-        return AuthSession(token=token, user_id=payload["user_id"], roles=list(payload.get("roles", [])))
+        return AuthSession(
+            token=token, user_id=payload["user_id"], roles=list(payload.get("roles", []))
+        )
 
     async def save_oauth_state(self, state: str, payload: dict[str, Any]) -> None:
-        await self._client().setex(f"{Settings.OAUTH_STATE_KEY_PREFIX}:{state}", Settings.OAUTH_STATE_TTL_SECONDS, json.dumps(payload))
+        await self._client().setex(
+            f"{Settings.OAUTH_STATE_KEY_PREFIX}:{state}",
+            Settings.OAUTH_STATE_TTL_SECONDS,
+            json.dumps(payload),
+        )
 
     async def consume_oauth_state(self, state: str | None) -> dict[str, Any] | None:
         if not state:
@@ -66,7 +76,12 @@ class RedisSessionStore:
             return dict(json.loads(raw))
         return None
 
-    async def check_rate_limit(self, key: str, limit: int = Settings.DEFAULT_RATE_LIMIT, window_seconds: int = Settings.RATE_LIMIT_WINDOW_SECONDS) -> None:
+    async def check_rate_limit(
+        self,
+        key: str,
+        limit: int = Settings.DEFAULT_RATE_LIMIT,
+        window_seconds: int = Settings.RATE_LIMIT_WINDOW_SECONDS,
+    ) -> None:
         redis_key = f"{Settings.RATE_LIMIT_KEY_PREFIX}:{key}"
         count = await self._client().incr(redis_key)
         if count == 1:
@@ -87,15 +102,30 @@ class OAuthAuthService:
 
     async def start(self, provider: str, user_id: str, scopes: list[str]) -> dict[str, Any]:
         state = str(uuid.uuid4())
-        await self.sessions.save_oauth_state(state, {"provider": provider, "user_id": user_id, "scopes": scopes})
-        return {"provider": provider, "state": state, "authorization_url": (f"{Settings.OAUTH_AUTHORIZE_BASE_URL}/{provider}/authorize?state={state}")}
+        await self.sessions.save_oauth_state(
+            state, {"provider": provider, "user_id": user_id, "scopes": scopes}
+        )
+        return {
+            "provider": provider,
+            "state": state,
+            "authorization_url": (
+                f"{Settings.OAUTH_AUTHORIZE_BASE_URL}/{provider}/authorize?state={state}"
+            ),
+        }
 
     async def callback(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:
         state_payload = await self.sessions.consume_oauth_state(payload.get("state"))
         merged = {**(state_payload or {}), **payload, "provider": provider}
         account = self.db.save_oauth_account(merged)
         session = await self.sessions.create_session(account["user_id"], [Settings.OWNER_ROLE])
-        return {"account": account, "session": {"session_token": session.token, "user_id": session.user_id, "roles": session.roles}}
+        return {
+            "account": account,
+            "session": {
+                "session_token": session.token,
+                "user_id": session.user_id,
+                "roles": session.roles,
+            },
+        }
 
     async def require_session(self, request: Request) -> AuthSession:
         token = self._extract_token(request)

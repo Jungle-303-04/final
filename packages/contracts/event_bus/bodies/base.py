@@ -33,7 +33,11 @@ class EventBody:
             key = item.metadata.get("payload_name", item.name)
             value = raw.get(key)
             field_type = hints.get(item.name)
-            if isinstance(value, Mapping) and isinstance(field_type, type) and issubclass(field_type, EventBody):
+            if (
+                isinstance(value, Mapping)
+                and isinstance(field_type, type)
+                and issubclass(field_type, EventBody)
+            ):
                 value = field_type.from_body(value)
             values[item.name] = value
         return cls(**values)

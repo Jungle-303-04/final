@@ -49,7 +49,14 @@ class FastApiService:
         AsyncService(self.service_name, self.serve).run()
 
     async def serve(self) -> None:
-        await Server(Config(self.app_factory(), host=self.host, port=int(env(self.port_env, self.default_port)), log_level=self.log_level)).serve()
+        await Server(
+            Config(
+                self.app_factory(),
+                host=self.host,
+                port=int(env(self.port_env, self.default_port)),
+                log_level=self.log_level,
+            )
+        ).serve()
 
 
 @dataclass(frozen=True)
@@ -60,12 +67,24 @@ class WorkerService:
     durable_name: str | None = None
 
     @classmethod
-    def from_subscription(cls, subscription: WorkerSubscription, handler_factory: WorkerHandlerFactory) -> WorkerService:
-        return cls(subscription.service_name, subscription.subject, handler_factory, subscription.durable_name)
+    def from_subscription(
+        cls, subscription: WorkerSubscription, handler_factory: WorkerHandlerFactory
+    ) -> WorkerService:
+        return cls(
+            subscription.service_name,
+            subscription.subject,
+            handler_factory,
+            subscription.durable_name,
+        )
 
     def run(self) -> None:
         AsyncService(self.service_name, self.serve).run()
 
     async def serve(self) -> None:
-        spec = EventHandlerSpec(service_name=self.service_name, subject=self.subject, handler_factory=self.handler_factory, durable_name=self.durable_name)
+        spec = EventHandlerSpec(
+            service_name=self.service_name,
+            subject=self.subject,
+            handler_factory=self.handler_factory,
+            durable_name=self.durable_name,
+        )
         await WorkerRuntime(spec).run()
