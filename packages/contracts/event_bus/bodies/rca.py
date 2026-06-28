@@ -19,7 +19,6 @@ class ClusterEvidenceReceivedBody(EventBody):
     metrics: JsonObject
     logs: list[JsonObject]
     traces: JsonObject
-    correlation_id: str | None = None
 
 
 @dataclass(frozen=True)
