@@ -153,3 +153,29 @@ spec:
               value: postgresql://service:service@postgresql:5432/service
             - name: NATS_URL
               value: nats://nats:4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-pull-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: git-pull-worker
+  template:
+    metadata:
+      labels:
+        app: git-pull-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "services/git-pull-worker/app.py"]
+          env:
+            - name: DATABASE_URL
+              value: postgresql://service:service@postgresql:5432/service
+            - name: NATS_URL
+              value: nats://nats:4222
