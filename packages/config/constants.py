@@ -4,9 +4,7 @@ from typing import Final
 
 
 class Postgres:
-    DEFAULT_URL: Final[str] = (
-        "postgresql://service:service@postgresql:5432/service"
-    )
+    DEFAULT_URL: Final[str] = "postgresql://service:service@postgresql:5432/service"
 
 
 class Nats:

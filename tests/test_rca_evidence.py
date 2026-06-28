@@ -16,9 +16,7 @@ def test_rca_subscriber_yields_typed_event_chain() -> None:
         traces={"slow_span": "GET /x"},
         correlation_id="corr-9",
     )
-    outs = run_handler(
-        rca.on_cluster_evidence, payload, db=db, correlation_id="corr-9"
-    )
+    outs = run_handler(rca.on_cluster_evidence, payload, db=db, correlation_id="corr-9")
     assert subjects_of(outs) == [
         "evidence.built",
         "rca.completed",

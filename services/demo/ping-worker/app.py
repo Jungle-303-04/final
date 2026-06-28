@@ -22,9 +22,7 @@ CALLBACK_PATH = "/demo/callback"  # 외부(api-gateway)로 되돌아갈 경로
 
 
 @app.sub(DemoPingRequested)
-async def on_ping(
-    evt: DemoPingRequested, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_ping(evt: DemoPingRequested, ctx: EventContext) -> AsyncIterator[EventBody]:
     yield DemoPongRequestedBody(
         message=f"pong: {evt.message}",
         reply_to=CALLBACK_PATH,
