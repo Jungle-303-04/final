@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 
 from packages.config.time import now_iso
-from packages.contracts.event_bus.fields import CAUSATION_ID, CORRELATION_ID
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 
 
@@ -17,8 +16,8 @@ def event(
     # correlation_id 가 없으면 payload 가 실어온 값, 그것도 없으면 자기 자신을
     # 흐름 시작점으로 삼는다. causation 은 직전 이벤트(없으면 None=뿌리).
     event_id = str(uuid.uuid4())
-    correlation = correlation_id or payload.get(CORRELATION_ID) or event_id
-    causation = causation_id or payload.get(CAUSATION_ID)
+    correlation = correlation_id or payload.get("correlation_id") or event_id
+    causation = causation_id or payload.get("causation_id")
     return EventEnvelope(
         event_id=event_id,
         subject=subject,
