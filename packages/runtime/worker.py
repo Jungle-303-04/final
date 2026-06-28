@@ -5,6 +5,7 @@ import json
 import signal
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from packages.config.logs import get_logger
@@ -36,6 +37,7 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 2
 DEFAULT_FETCH_BATCH_SIZE = 1
 DEFAULT_FETCH_TIMEOUT_SECONDS = 1
+HEARTBEAT_PATH = "/tmp/heartbeat"  # liveness exec probe 가 mtime 신선도 검사
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,7 @@ class WorkerRuntime:
         logger.info("subscribed", extra={"context": lifecycle})
 
         while not stopping.is_set():
+            Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
             try:
                 messages = await sub.fetch(
                     self.spec.retry_policy.fetch_batch_size,
