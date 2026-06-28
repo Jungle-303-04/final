@@ -3,7 +3,7 @@
 서비스 파일(app.py) 한 곳에서:
     app = App("rca-worker")          # 서비스 이름 = 정체성(여기 한 번만)
 
-    @app.sub(ClusterEvidenceReceived)  # 구독: 이 이벤트 오면 이 함수
+    @app.sub(ClusterEvidenceReceivedBody)  # 구독: 이 이벤트 오면 이 함수
     async def on_evidence(evt, ctx):
         yield EvidenceBuiltBody(...)  # 체이닝 = yield
 

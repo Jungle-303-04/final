@@ -5,7 +5,7 @@ from typing import Any
 
 from conftest import SpyDb, load_service
 
-from packages.contracts.event_bus.bodies import GitWebhookReceived
+from packages.contracts.event_bus.bodies import GitWebhookReceivedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.events.envelope import event
@@ -49,7 +49,7 @@ def test_api_to_outbound_gateway_golden_path() -> None:
         db = SpyDb()
         gateway_events = ApiEventGateway(MemoryPublisher(), MemoryRecorder(), "api-gateway")
         accepted = await gateway_events.accept_body(
-            GitWebhookReceived(
+            GitWebhookReceivedBody(
                 commit_sha="abc1234", image="ghcr.io/project/checkout-api:new", replicas=2
             )
         )

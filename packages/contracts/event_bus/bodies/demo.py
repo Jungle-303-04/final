@@ -21,7 +21,7 @@ from packages.contracts.event_bus.subjects import EventSubject
 
 @events.reg(EventSubject.DEMO_PING_REQUESTED)
 @dataclass(frozen=True)
-class DemoPingRequested(EventBody):
+class DemoPingRequestedBody(EventBody):
     """API 가 받은 ping(입구 이벤트)."""
 
     message: str

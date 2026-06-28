@@ -13,7 +13,7 @@ from typing import Any
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import DemoPingRequested, DemoPongRequestedBody
+from packages.contracts.event_bus.bodies import DemoPingRequestedBody, DemoPongRequestedBody
 from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
 
@@ -39,7 +39,7 @@ def test_golden_path_ping_to_outbound_callback() -> None:
     gateway.outbound = outbound
 
     # 1) ping-worker: ping → pong.requested
-    pong_reqs = run_handler(worker.on_ping, DemoPingRequested(message="hello"))
+    pong_reqs = run_handler(worker.on_ping, DemoPingRequestedBody(message="hello"))
     assert subjects_of(pong_reqs) == ["demo.pong.requested"]
     assert pong_reqs[0].message == "pong: hello"
 
