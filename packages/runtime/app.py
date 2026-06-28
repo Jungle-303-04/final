@@ -78,7 +78,7 @@ class App:
             fn, wants_ctx = self._raw
 
             def raw_factory(client: Any, db: Any) -> Callable[..., Any]:
-                return make_raw_handler(fn, wants_ctx, client, db, self.name)
+                return make_raw_handler(fn, wants_ctx, db, self.name)
 
             return ALL_EVENTS_SUBJECT, raw_factory
 
@@ -86,7 +86,7 @@ class App:
         sub = self.subscriptions[0]
 
         def factory(client: Any, db: Any) -> Callable[..., Any]:
-            return make_event_handler(sub, client, db, self.name)
+            return make_event_handler(sub, db, self.name)
 
         return sub.subject, factory
 
