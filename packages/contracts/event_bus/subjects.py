@@ -65,7 +65,8 @@ class EventSubject(StrEnum):
     # --- 원인 분석/안전 PR(rca-worker) ---
     EVIDENCE_BUILT = "evidence.built"  # 증거 번들 구성
     RCA_COMPLETED = "rca.completed"  # 근본 원인 분석 완료
-    SAFE_PR_CREATED = "safe_pr.created"  # 안전한 롤백 PR 생성
+    SAFE_PR_REQUESTED = "safe_pr.requested"  # PR 생성 요청(공통)
+    SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
 
     # --- 읽기 모델(dashboard-projection-service) ---
     DASHBOARD_UPDATED = "dashboard.updated"  # 대시보드 카드 갱신

@@ -44,7 +44,10 @@ from packages.contracts.event_bus.payloads.rca import (
     Evidence,
     EvidenceBuiltPayload,
     RcaCompletedPayload,
+)
+from packages.contracts.event_bus.payloads.repo import (
     SafePrCreatedPayload,
+    SafePrRequestedPayload,
 )
 
 __all__ = [
@@ -73,4 +76,5 @@ __all__ = [
     "RenderedSpec",
     "Route",
     "SafePrCreatedPayload",
+    "SafePrRequestedPayload",
 ]
