@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.payloads import (
-    ManifestRenderedPayload,
+from packages.contracts.event_bus.bodies import (
+    ManifestRenderedBody,
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
@@ -12,7 +12,7 @@ from packages.contracts.event_bus.payloads import (
 
 def test_diff_emits_desired_diff() -> None:
     diff = load_service("gitops/diff-worker")
-    payload = ManifestRenderedPayload(
+    payload = ManifestRenderedBody(
         rendered_manifest=RenderedManifest(
             api_version="apps/v1",
             kind="Deployment",

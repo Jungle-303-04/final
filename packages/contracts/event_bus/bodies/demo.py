@@ -1,4 +1,4 @@
-"""demo(ping↔pong) 이벤트 payload — 프레임워크 한 바퀴 학습용.
+"""demo(ping↔pong) 이벤트 body — 프레임워크 한 바퀴 학습용.
 
 흐름:
     POST /demo/ping               (API 입구)
@@ -14,14 +14,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.contracts.event_bus.payloads.base import EventPayload
+from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.registry import events
 from packages.contracts.event_bus.subjects import EventSubject
 
 
 @events.reg(EventSubject.DEMO_PING_REQUESTED)
 @dataclass(frozen=True)
-class DemoPingRequested(EventPayload):
+class DemoPingRequested(EventBody):
     """API 가 받은 ping(입구 이벤트)."""
 
     message: str
@@ -29,7 +29,7 @@ class DemoPingRequested(EventPayload):
 
 @events.reg(EventSubject.DEMO_PONG_REQUESTED)
 @dataclass(frozen=True)
-class DemoPongRequestedPayload(EventPayload):
+class DemoPongRequestedBody(EventBody):
     """워커 → 게이트웨이: reply_to 로 외부 호출 요청."""
 
     message: str
@@ -38,7 +38,7 @@ class DemoPongRequestedPayload(EventPayload):
 
 @events.reg(EventSubject.DEMO_PONG_DELIVERED)
 @dataclass(frozen=True)
-class DemoPongDeliveredPayload(EventPayload):
+class DemoPongDeliveredBody(EventBody):
     """게이트웨이: 외부 호출 성공."""
 
     reply_to: str
@@ -47,7 +47,7 @@ class DemoPongDeliveredPayload(EventPayload):
 
 @events.reg(EventSubject.DEMO_PONG_FAILED)
 @dataclass(frozen=True)
-class DemoPongFailedPayload(EventPayload):
+class DemoPongFailedBody(EventBody):
     """게이트웨이: 외부 호출 실패."""
 
     reply_to: str

@@ -13,9 +13,9 @@ from typing import Any
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.payloads import (
+from packages.contracts.event_bus.bodies import (
     DemoPingRequested,
-    DemoPongRequestedPayload,
+    DemoPongRequestedBody,
 )
 from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
@@ -58,7 +58,7 @@ def test_outbound_failure_emits_failed() -> None:
     gateway.outbound = FakeOutbound(fail=True)
     out = run_handler(
         gateway.on_pong_requested,
-        DemoPongRequestedPayload(message="pong: x", reply_to="/demo/callback"),
+        DemoPongRequestedBody(message="pong: x", reply_to="/demo/callback"),
     )
     assert subjects_of(out) == ["demo.pong.failed"]
     assert "unreachable" in out[0].error

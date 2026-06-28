@@ -39,7 +39,7 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
         interval_seconds=15,
     )
 
-    payload = collector.snapshot().to_payload()
+    payload = collector.snapshot().to_body()
 
     assert payload["node_name"] == "target-control-plane"
     assert payload["pod_name"] == "optional-node-collector-abc"

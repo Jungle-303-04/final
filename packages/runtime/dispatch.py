@@ -1,7 +1,7 @@
 """이벤트 핸들러 실행 기계장치(런타임).
 
 registry(카탈로그, "어떤 이벤트가 있나")와 분리. 여기는 런타임 —
-"이벤트를 받아 payload 로 디코드 → 핸들러 실행 → yield 된 다음 이벤트 발행".
+"이벤트를 받아 body 로 디코드 → 핸들러 실행 → yield 된 다음 이벤트 발행".
 App.run 이 NATS 루프(WorkerRuntime)에 연결.
 """
 
@@ -38,7 +38,7 @@ class EventContext:
 
 
 async def _iter_results(result: Any) -> AsyncIterator[Any]:
-    """핸들러 결과를 payload 스트림으로 통일: yield형 / list / 단건 / None."""
+    """핸들러 결과를 body 스트림으로 통일: yield형 / list / 단건 / None."""
     if inspect.isasyncgen(result):
         async for item in result:
             yield item
@@ -56,16 +56,16 @@ async def _iter_results(result: Any) -> AsyncIterator[Any]:
 def make_event_handler(
     sub: Subscription, client: Any, db: Any, source: str
 ) -> Callable[[EventEnvelope], Any]:
-    """봉투 핸들러로 감싼다: 디코드 → 콜백 → yield된 payload 발행."""
+    """봉투 핸들러로 감싼다: 디코드 → 콜백 → yield된 body 발행."""
 
     async def handle(evt: EventEnvelope) -> None:
-        payload = sub.payload_type.from_payload(evt.payload)
+        body = sub.body_type.from_body(evt.payload)
         ctx = EventContext.of(evt, db)
-        result = sub.fn(payload, ctx) if sub.wants_ctx else sub.fn(payload)
+        result = sub.fn(body, ctx) if sub.wants_ctx else sub.fn(body)
         async for out in _iter_results(result):
             # causation 은 EventProcessor 가 contextvar 로 자동 연결.
             await client.emit(
-                out.__subject__, source, out.to_payload(), evt.correlation_id
+                out.__subject__, source, out.to_body(), evt.correlation_id
             )
 
     return handle
