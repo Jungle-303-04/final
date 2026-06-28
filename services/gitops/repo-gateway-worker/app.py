@@ -15,6 +15,7 @@ from packages.contracts.event_bus.bodies import (
     SafePrFailedBody,
     SafePrRequestedBody,
 )
+from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import App, EventContext
 
 app = App("repo-gateway-worker")
@@ -28,7 +29,7 @@ MISSING_GITHUB_TOKEN_REF = "missing-github-oauth-fallback"
 
 @app.sub(SafePrRequestedBody)
 async def on_safe_pr_requested(
-    evt: SafePrRequestedBody, ctx: EventContext
+    evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:
     try:
         pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"

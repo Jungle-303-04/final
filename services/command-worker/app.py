@@ -25,6 +25,7 @@ from packages.contracts.event_bus.bodies import (
     Route,
 )
 from packages.contracts.gateway.fields import Gateway
+from packages.contracts.stores import AgentCommandStore
 from packages.runtime.app import App, EventContext
 
 app = App("command-worker")
@@ -63,7 +64,7 @@ def build_plan(command: ModelLookup) -> Plan:
 
 @app.sub(CommandRequestedBody)
 async def on_command_requested(
-    evt: CommandRequestedBody, ctx: EventContext
+    evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:
     # 타입 body 를 룰 입력(Lookup)으로 — dict 가 아니라 모델 기반.
     command = ModelLookup(evt)

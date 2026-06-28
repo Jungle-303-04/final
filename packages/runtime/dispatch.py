@@ -18,17 +18,17 @@ from packages.runtime.async_db import AsyncDb
 
 
 @dataclass(frozen=True)
-class EventContext:
+class EventContext[DbT]:
     """핸들러가 받는 꾸러미: 흐름 정보 + 도구(db). 안 쓰면 생략 가능."""
 
     event_id: str
     subject: str
     correlation_id: str
     causation_id: str | None
-    db: Any
+    db: DbT
 
     @classmethod
-    def of(cls, evt: EventEnvelope, db: Any) -> EventContext:
+    def of(cls, evt: EventEnvelope, db: DbT) -> EventContext[DbT]:
         return cls(
             event_id=evt.event_id,
             subject=evt.subject,

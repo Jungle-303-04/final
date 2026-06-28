@@ -18,6 +18,7 @@ from packages.contracts.event_bus.bodies import (
     RenderedMetadata,
     RenderedSpec,
 )
+from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
 
 app = App("manifest-render-worker")
@@ -28,7 +29,9 @@ MANIFEST_KIND = "Deployment"
 
 
 @app.sub(GitChangedBody)
-async def on_git_changed(evt: GitChangedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
+async def on_git_changed(
+    evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
+) -> AsyncIterator[EventBody]:
     manifest = Manifest(
         app=DEFAULT_APP_NAME, image=evt.image, replicas=evt.replicas, namespace=Sandbox.NAMESPACE
     )
