@@ -28,8 +28,8 @@ class FakeOutboxStore:
         self.pending = list(events)
         self.sent: list[str] = []
 
-    async def unsent_events(self, limit: int) -> list[EventEnvelope]:
-        return self.pending[:limit]
+    async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]:
+        return [e for e in self.pending if e.source == source][:limit]
 
     async def mark_events_sent(self, event_ids: list[str]) -> None:
         self.sent.extend(event_ids)
@@ -48,7 +48,7 @@ class FakePublisher:
 def test_relay_publishes_then_marks_sent() -> None:
     store = FakeOutboxStore([_evt("a"), _evt("b")])
     publisher = FakePublisher()
-    relay = OutboxRelay(store, publisher)
+    relay = OutboxRelay(store, publisher, "api-gateway")
 
     sent = asyncio.run(relay.run_once())
 
@@ -57,9 +57,27 @@ def test_relay_publishes_then_marks_sent() -> None:
     assert store.sent == ["a", "b"]
 
 
+def test_relay_publishes_only_own_source() -> None:
+    other = EventEnvelope(
+        event_id="x",
+        subject="demo.ping.requested",
+        source="other-worker",
+        correlation_id="corr-1",
+        causation_id=None,
+        created_at="t",
+        payload={},
+    )
+    store = FakeOutboxStore([_evt("a"), other])
+    publisher = FakePublisher()
+    relay = OutboxRelay(store, publisher, "api-gateway")
+
+    assert asyncio.run(relay.run_once()) == 1
+    assert publisher.published == ["a"]  # 다른 워커(other-worker) 행은 건드리지 않음
+
+
 def test_relay_idempotent_when_drained() -> None:
     store = FakeOutboxStore([_evt("a")])
-    relay = OutboxRelay(store, FakePublisher())
+    relay = OutboxRelay(store, FakePublisher(), "api-gateway")
 
     assert asyncio.run(relay.run_once()) == 1
     assert asyncio.run(relay.run_once()) == 0  # 비면 아무 것도 안 함
