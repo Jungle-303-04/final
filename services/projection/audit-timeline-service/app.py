@@ -14,7 +14,7 @@ app = App("audit-timeline-service")
 
 @app.on_event
 async def on_event(evt: EventEnvelope, ctx: EventContext) -> None:
-    ctx.db.append_audit_log(evt)
+    await ctx.db.append_audit_log(evt)
 
 
 if __name__ == "__main__":

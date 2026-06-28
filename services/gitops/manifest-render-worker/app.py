@@ -32,7 +32,7 @@ async def on_git_changed(evt: GitChangedBody, ctx: EventContext) -> AsyncIterato
     manifest = Manifest(
         app=DEFAULT_APP_NAME, image=evt.image, replicas=evt.replicas, namespace=Sandbox.NAMESPACE
     )
-    ctx.db.save_repo_change(ctx.correlation_id, evt.commit_sha, manifest.to_body())
+    await ctx.db.save_repo_change(ctx.correlation_id, evt.commit_sha, manifest.to_body())
     rendered = RenderedManifest(
         api_version=MANIFEST_API_VERSION,
         kind=MANIFEST_KIND,
