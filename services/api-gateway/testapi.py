@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from packages.contracts.event_bus.bodies import DemoPingRequested
+from packages.contracts.event_bus.bodies import DemoPingRequestedBody
 from packages.runtime.gateway import ApiEventGateway
 
 
@@ -34,7 +34,7 @@ def register_demo_routes(
     @app.post("/demo/ping")
     async def demo_ping(payload: DemoPingRequest) -> dict[str, Any]:
         # API → event: 타입 body 하나로 발행(subject 자동 유도).
-        accepted = await events.accept_body(DemoPingRequested(message=payload.message))
+        accepted = await events.accept_body(DemoPingRequestedBody(message=payload.message))
         return accepted.response(include_event=True)
 
     @app.post("/demo/callback")

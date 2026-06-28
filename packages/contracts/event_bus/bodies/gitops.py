@@ -58,7 +58,7 @@ class Diff(EventBody):
 
 @events.reg(EventSubject.GIT_WEBHOOK_RECEIVED)
 @dataclass(frozen=True)
-class GitWebhookReceived(EventBody):
+class GitWebhookReceivedBody(EventBody):
     """git.webhook.received — 깃 webhook 입력(gitops 입력)."""
 
     commit_sha: str
