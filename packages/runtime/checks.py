@@ -20,11 +20,7 @@ def require_registered(body_type: type) -> Any:
 
 
 def require_handler_signature(fn: Callable[..., Any]) -> bool:
-    params = [
-        p
-        for p in inspect.signature(fn).parameters.values()
-        if p.name != "self"
-    ]
+    params = [p for p in inspect.signature(fn).parameters.values() if p.name != "self"]
     require(
         1 <= len(params) <= 2,
         f"{fn.__name__} 은 (evt) 또는 (evt, ctx) 형태여야 한다",

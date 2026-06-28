@@ -35,9 +35,7 @@ class ApiGateway:
     def __init__(self) -> None:
         self.db = Database()
         self.bus = NatsEventBus()
-        self.events = ApiEventGateway(
-            self.bus, self.db, Settings.SERVICE_NAME
-        )
+        self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
         self.demo_inbox: list[dict[str, Any]] = []  # 데모 콜백 착지점
@@ -92,13 +90,8 @@ class ApiGateway:
             user_id: str = Auth.LOCAL_USER_ID,
             scopes: str = Settings.DEFAULT_SCOPES,
         ) -> dict[str, Any]:
-            scope_list = [
-                scope.strip() for scope in scopes.split(",") if scope.strip()
-            ]
-            if (
-                provider == GitHub.PROVIDER
-                and GitHub.REQUIRED_SCOPE not in scope_list
-            ):
+            scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
+            if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scope_list:
                 scope_list.append(GitHub.REQUIRED_SCOPE)
             response = await self.auth.start(provider, user_id, scope_list)
             await self.events.accept(
@@ -113,9 +106,7 @@ class ApiGateway:
             return response
 
         @app.post(gateway_routes.OAUTH_CALLBACK_PATH)
-        async def oauth_callback(
-            provider: str, payload: OAuthCallbackRequest
-        ) -> dict[str, Any]:
+        async def oauth_callback(provider: str, payload: OAuthCallbackRequest) -> dict[str, Any]:
             result = await self.auth.callback(provider, payload.model_dump())
             account = result[Gateway.ACCOUNT]
             accepted = await self.events.accept(
@@ -160,9 +151,7 @@ class ApiGateway:
             return accepted.response()
 
         @app.post(gateway_routes.COMMANDS_PATH)
-        async def commands(
-            request: Request, payload: CommandRequest
-        ) -> dict[str, Any]:
+        async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
             current = await self.auth.require_session(request)
             command = payload.model_dump()
             command[Gateway.REQUESTED_BY] = current.user_id
@@ -180,14 +169,10 @@ class ApiGateway:
         ) -> dict[str, Any]:
             await self.auth.require_session(request)
             bounded_limit = max(1, min(limit, Settings.MAX_DEAD_LETTER_LIMIT))
-            return {
-                Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)
-            }
+            return {Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)}
 
         @app.post(gateway_routes.DEAD_LETTER_REPLAY_PATH)
-        async def replay_dead_letter(
-            request: Request, dead_letter_id: int
-        ) -> dict[str, Any]:
+        async def replay_dead_letter(request: Request, dead_letter_id: int) -> dict[str, Any]:
             await self.auth.require_session(request)
             dead_letter = self.db.get_dead_letter(dead_letter_id)
             if dead_letter is None:
@@ -207,9 +192,7 @@ class ApiGateway:
                 dead_letter[Gateway.CORRELATION_ID],
                 dead_letter["original_event_id"],
             )
-            self.db.mark_dead_letter_replayed(
-                dead_letter_id, accepted.event.event_id
-            )
+            self.db.mark_dead_letter_replayed(dead_letter_id, accepted.event.event_id)
             return {
                 Gateway.ACCEPTED: True,
                 Gateway.DEAD_LETTER_ID: dead_letter_id,
@@ -221,9 +204,7 @@ class ApiGateway:
             cluster_id: str = Target.DEFAULT_CLUSTER_ID,
             timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
         ) -> dict[str, Any]:
-            deadline = time.time() + min(
-                timeout, Settings.MAX_COMMAND_POLL_SECONDS
-            )
+            deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
             while time.time() < deadline:
                 row = await self.db.lease_agent_command(
                     cluster_id,
@@ -236,13 +217,9 @@ class ApiGateway:
             return {Gateway.COMMAND: None}
 
         @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
-        async def command_result(
-            command_id: str, payload: CommandResultRequest
-        ) -> dict[str, Any]:
+        async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
             result = payload.model_dump()
-            correlation_id = await self.db.complete_agent_command(
-                command_id, result
-            )
+            correlation_id = await self.db.complete_agent_command(command_id, result)
             if not correlation_id:
                 raise HTTPException(
                     status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
@@ -273,17 +250,10 @@ class ApiGateway:
                     encoded = json.dumps(self.db.list_dashboard(), default=str)
                     if encoded != last:
                         last = encoded
-                        yield (
-                            f"event: {EventSubject.DASHBOARD_UPDATED}\n"
-                            f"data: {encoded}\n\n"
-                        )
-                    await asyncio.sleep(
-                        Settings.DASHBOARD_STREAM_INTERVAL_SECONDS
-                    )
+                        yield (f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n")
+                    await asyncio.sleep(Settings.DASHBOARD_STREAM_INTERVAL_SECONDS)
 
-            return StreamingResponse(
-                events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE
-            )
+            return StreamingResponse(events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE)
 
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:

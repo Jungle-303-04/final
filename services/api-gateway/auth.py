@@ -26,9 +26,7 @@ class AuthSession:
 class RedisSessionStore:
     def __init__(self) -> None:
         self.url = env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL)
-        self.ttl_seconds = int(
-            env(Settings.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS)
-        )
+        self.ttl_seconds = int(env(Settings.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS))
         self.client: AsyncRedis | None = None
 
     async def connect(self) -> None:
@@ -39,14 +37,10 @@ class RedisSessionStore:
         if self.client is not None:
             await self.client.aclose()
 
-    async def create_session(
-        self, user_id: str, roles: list[str] | None = None
-    ) -> AuthSession:
+    async def create_session(self, user_id: str, roles: list[str] | None = None) -> AuthSession:
         client = self._client()
         token = secrets.token_urlsafe(Settings.SESSION_TOKEN_BYTES)
-        session = AuthSession(
-            token=token, user_id=user_id, roles=roles or [Settings.OWNER_ROLE]
-        )
+        session = AuthSession(token=token, user_id=user_id, roles=roles or [Settings.OWNER_ROLE])
         await client.setex(
             f"{Settings.SESSION_KEY_PREFIX}:{token}",
             self.ttl_seconds,
@@ -67,18 +61,14 @@ class RedisSessionStore:
             roles=list(payload.get("roles", [])),
         )
 
-    async def save_oauth_state(
-        self, state: str, payload: dict[str, Any]
-    ) -> None:
+    async def save_oauth_state(self, state: str, payload: dict[str, Any]) -> None:
         await self._client().setex(
             f"{Settings.OAUTH_STATE_KEY_PREFIX}:{state}",
             Settings.OAUTH_STATE_TTL_SECONDS,
             json.dumps(payload),
         )
 
-    async def consume_oauth_state(
-        self, state: str | None
-    ) -> dict[str, Any] | None:
+    async def consume_oauth_state(self, state: str | None) -> dict[str, Any] | None:
         if not state:
             return None
         key = f"{Settings.OAUTH_STATE_KEY_PREFIX}:{state}"
@@ -99,9 +89,7 @@ class RedisSessionStore:
         if count == 1:
             await self._client().expire(redis_key, window_seconds)
         if count > limit:
-            raise HTTPException(
-                status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE
-            )
+            raise HTTPException(status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE)
 
     def _client(self) -> AsyncRedis:
         if self.client is None:
@@ -114,32 +102,20 @@ class OAuthAuthService:
         self.db = db
         self.sessions = sessions
 
-    async def start(
-        self, provider: str, user_id: str, scopes: list[str]
-    ) -> dict[str, Any]:
+    async def start(self, provider: str, user_id: str, scopes: list[str]) -> dict[str, Any]:
         state = str(uuid.uuid4())
-        await self.sessions.save_oauth_state(
-            state, {"provider": provider, "user_id": user_id, "scopes": scopes}
-        )
+        await self.sessions.save_oauth_state(state, {"provider": provider, "user_id": user_id, "scopes": scopes})
         return {
             "provider": provider,
             "state": state,
-            "authorization_url": (
-                f"{Settings.OAUTH_AUTHORIZE_BASE_URL}/{provider}/authorize?state={state}"
-            ),
+            "authorization_url": (f"{Settings.OAUTH_AUTHORIZE_BASE_URL}/{provider}/authorize?state={state}"),
         }
 
-    async def callback(
-        self, provider: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        state_payload = await self.sessions.consume_oauth_state(
-            payload.get("state")
-        )
+    async def callback(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:
+        state_payload = await self.sessions.consume_oauth_state(payload.get("state"))
         merged = {**(state_payload or {}), **payload, "provider": provider}
         account = self.db.save_oauth_account(merged)
-        session = await self.sessions.create_session(
-            account["user_id"], [Settings.OWNER_ROLE]
-        )
+        session = await self.sessions.create_session(account["user_id"], [Settings.OWNER_ROLE])
         return {
             "account": account,
             "session": {
@@ -153,9 +129,7 @@ class OAuthAuthService:
         token = self._extract_token(request)
         session = await self.sessions.get_session(token)
         if session is None:
-            raise HTTPException(
-                status_code=401, detail=Settings.AUTHENTICATION_REQUIRED_MESSAGE
-            )
+            raise HTTPException(status_code=401, detail=Settings.AUTHENTICATION_REQUIRED_MESSAGE)
         await self.sessions.check_rate_limit(session.user_id)
         return session
 

@@ -39,9 +39,7 @@ class MemoryRecorder:
         self.events.append(evt)
 
 
-async def run_worker(
-    module: Any, incoming: EventEnvelope, db: Any
-) -> list[EventEnvelope]:
+async def run_worker(module: Any, incoming: EventEnvelope, db: Any) -> list[EventEnvelope]:
     publisher = MemoryPublisher()
     recorder = MemoryRecorder()
     client = RecordedEventClient(publisher, recorder)
@@ -58,9 +56,7 @@ async def run_worker(
 def test_api_to_outbound_gateway_golden_path() -> None:
     async def run() -> None:
         db = SpyDb()
-        gateway_events = ApiEventGateway(
-            MemoryPublisher(), MemoryRecorder(), "api-gateway"
-        )
+        gateway_events = ApiEventGateway(MemoryPublisher(), MemoryRecorder(), "api-gateway")
         accepted = await gateway_events.accept_body(
             GitWebhookReceived(
                 commit_sha="abc1234",
@@ -99,9 +95,7 @@ def test_api_to_outbound_gateway_golden_path() -> None:
             EventSubject.SAFE_PR_REQUESTED,
             EventSubject.SAFE_PR_CREATED,
         ]
-        assert {evt.correlation_id for evt in events} == {
-            accepted.event.correlation_id
-        }
+        assert {evt.correlation_id for evt in events} == {accepted.event.correlation_id}
         assert git_changed.causation_id == accepted.event.event_id
         assert rendered.causation_id == git_changed.event_id
         assert desired_diff.causation_id == rendered.event_id

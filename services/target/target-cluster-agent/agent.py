@@ -35,9 +35,7 @@ class HttpManagementPlaneClient:
     async def close(self) -> None:
         await self.client.aclose()
 
-    async def register_agent(
-        self, cluster_id: str, agent_id: str, capabilities: list[str]
-    ) -> None:
+    async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
         await self.client.post(
             f"{self.base_url}{gateway_routes.AGENT_CONNECT_PATH}",
             json={
@@ -54,9 +52,7 @@ class HttpManagementPlaneClient:
         )
         return response.status_code
 
-    async def poll_command(
-        self, cluster_id: str, timeout_seconds: int
-    ) -> CommandRecord | None:
+    async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_COMMAND_POLL_PATH}",
             params={Gateway.CLUSTER_ID: cluster_id, "timeout": timeout_seconds},
@@ -64,9 +60,7 @@ class HttpManagementPlaneClient:
         response.raise_for_status()
         return response.json().get(Gateway.COMMAND)
 
-    async def complete_command(
-        self, command_id: str, result: JsonObject
-    ) -> None:
+    async def complete_command(self, command_id: str, result: JsonObject) -> None:
         await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
             json=result,
@@ -79,9 +73,7 @@ class TargetClusterAgent:
             Settings.MANAGEMENT_BASE_URL_ENV,
             Settings.DEFAULT_MANAGEMENT_BASE_URL,
         ).rstrip("/")
-        self.cluster_id = env(
-            Settings.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID
-        )
+        self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
         self.interval = int(
             env(
                 Settings.EVIDENCE_INTERVAL_ENV,
@@ -99,9 +91,7 @@ class TargetClusterAgent:
 
     async def run_with_client(self, client: ManagementPlaneClient) -> None:
         await self.register(client)
-        await asyncio.gather(
-            self.ship_evidence(client), self.poll_commands(client)
-        )
+        await asyncio.gather(self.ship_evidence(client), self.poll_commands(client))
 
     async def register(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -113,9 +103,7 @@ class TargetClusterAgent:
                 )
                 return
             except Exception as exc:
-                print(
-                    f"agent waiting for management gateway: {exc}", flush=True
-                )
+                print(f"agent waiting for management gateway: {exc}", flush=True)
                 await asyncio.sleep(Settings.REGISTER_RETRY_DELAY_SECONDS)
 
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
@@ -141,9 +129,7 @@ class TargetClusterAgent:
                         f"agent executing command {command_id} action={action}",
                         flush=True,
                     )
-                    await asyncio.sleep(
-                        Settings.COMMAND_EXECUTION_DELAY_SECONDS
-                    )
+                    await asyncio.sleep(Settings.COMMAND_EXECUTION_DELAY_SECONDS)
                     await client.complete_command(
                         command_id,
                         {
@@ -251,9 +237,7 @@ async def run_fake_telemetry(kind: str) -> None:
         Config(
             create_fake_telemetry_app(kind),
             host=Settings.SERVICE_HOST,
-            port=int(
-                env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)
-            ),
+            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
             log_level=Settings.LOG_LEVEL,
         )
     ).serve()

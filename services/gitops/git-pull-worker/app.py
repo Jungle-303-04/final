@@ -20,13 +20,9 @@ app = App("git-pull-worker")
 
 
 @app.sub(GitWebhookReceived)
-async def on_git_webhook(
-    evt: GitWebhookReceived, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_git_webhook(evt: GitWebhookReceived, ctx: EventContext) -> AsyncIterator[EventBody]:
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
-    yield GitChangedBody(
-        commit_sha=commit_sha, image=evt.image, replicas=evt.replicas
-    )
+    yield GitChangedBody(commit_sha=commit_sha, image=evt.image, replicas=evt.replicas)
 
 
 if __name__ == "__main__":

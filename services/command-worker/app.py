@@ -62,32 +62,22 @@ def build_plan(command: ModelLookup) -> Plan:
 
 
 @app.sub(CommandRequestedBody)
-async def on_command_requested(
-    evt: CommandRequestedBody, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_command_requested(evt: CommandRequestedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     # 타입 body 를 룰 입력(Lookup)으로 — dict 가 아니라 모델 기반.
     command = ModelLookup(evt)
     result = POLICY.evaluate(command)
     if not result.allowed:
-        yield CommandRejectedBody(
-            reason=result.require_reason(), requested=evt.to_body()
-        )
+        yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
         return
 
     plan = build_plan(command)
     yield CommandDispatchReadyBody(plan=plan)
     yield CommandDispatchedBody(
         plan=plan,
-        route=Route(
-            channel=CONFIG.agent_route_channel, cluster_id=plan.cluster_id
-        ),
+        route=Route(channel=CONFIG.agent_route_channel, cluster_id=plan.cluster_id),
     )
-    await ctx.db.queue_agent_command(
-        ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued
-    )
-    yield CommandQueuedForAgentBody(
-        command_id=plan.command_id, cluster_id=plan.cluster_id
-    )
+    await ctx.db.queue_agent_command(ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued)
+    yield CommandQueuedForAgentBody(command_id=plan.command_id, cluster_id=plan.cluster_id)
 
 
 if __name__ == "__main__":

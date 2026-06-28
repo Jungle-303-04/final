@@ -28,17 +28,11 @@ DELIVERED_STATUS = "delivered"
 
 
 @app.sub(DemoPongRequestedBody)
-async def on_pong_requested(
-    evt: DemoPongRequestedBody, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_pong_requested(evt: DemoPongRequestedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     async for out in deliver(
         call=lambda: outbound.post(evt.reply_to, {"message": evt.message}),
-        ok=lambda _status: DemoPongDeliveredBody(
-            reply_to=evt.reply_to, status=DELIVERED_STATUS
-        ),
-        fail=lambda exc: DemoPongFailedBody(
-            reply_to=evt.reply_to, error=str(exc)
-        ),
+        ok=lambda _status: DemoPongDeliveredBody(reply_to=evt.reply_to, status=DELIVERED_STATUS),
+        fail=lambda exc: DemoPongFailedBody(reply_to=evt.reply_to, error=str(exc)),
     ):
         yield out
 

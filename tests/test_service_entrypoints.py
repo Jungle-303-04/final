@@ -101,29 +101,17 @@ APP_BASED_SERVICES = {
 
 
 def test_services_keep_local_settings_files() -> None:
-    service_dirs = {
-        Path(relative_path).parent
-        for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items()
-        if service not in APP_BASED_SERVICES
-    }
+    service_dirs = {Path(relative_path).parent for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items() if service not in APP_BASED_SERVICES}
 
     for service_dir in service_dirs:
         settings_file = ROOT_DIR / service_dir / "settings.py"
-        assert settings_file.exists(), (
-            f"{service_dir} must own service settings"
-        )
+        assert settings_file.exists(), f"{service_dir} must own service settings"
 
 
 def test_contracts_are_grouped_by_boundary() -> None:
-    assert (
-        ROOT_DIR / "packages" / "contracts" / "gateway" / "requests.py"
-    ).exists()
-    assert (
-        ROOT_DIR / "packages" / "contracts" / "event_bus" / "subjects.py"
-    ).exists()
-    assert (
-        ROOT_DIR / "packages" / "contracts" / "event_bus" / "subscriptions.py"
-    ).exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "gateway" / "requests.py").exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subjects.py").exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subscriptions.py").exists()
     assert not (ROOT_DIR / "packages" / "contracts" / "schemas.py").exists()
 
     constants = read_project_file("packages/config/constants.py")

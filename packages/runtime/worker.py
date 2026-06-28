@@ -94,9 +94,7 @@ class EventProcessor:
         self.dead_letters = dead_letters
         self.retry_policy = retry_policy
         self.codec = codec if codec is not None else JsonCodec()
-        self.ledger = (
-            ledger if ledger is not None else Ledger(store, service_name)
-        )
+        self.ledger = ledger if ledger is not None else Ledger(store, service_name)
 
     async def process(self, message: EventMessage) -> None:
         evt = self.codec.decode(message)
@@ -130,12 +128,8 @@ class EventProcessor:
         }
         if attempts >= self.retry_policy.max_attempts:
             self.ledger.dead_letter(evt, error)
-            await self.dead_letters.capture(
-                evt, self.service_name, error, attempts
-            )
-            logger.error(
-                "dead_letter", extra={"context": context}, exc_info=error
-            )
+            await self.dead_letters.capture(evt, self.service_name, error, attempts)
+            logger.error("dead_letter", extra={"context": context}, exc_info=error)
             await message.ack()
             return
 
@@ -164,9 +158,7 @@ class WorkerRuntime:
 
         await wait_for_database(self.db)
         await self.bus.connect()
-        sub = await self.bus.subscribe(
-            self.spec.subject, durable=self.spec.durable
-        )
+        sub = await self.bus.subscribe(self.spec.subject, durable=self.spec.durable)
         events = RecordedEventClient(self.bus, self.db)
         handler = self.spec.handler_factory(events, self.db)
         processor = EventProcessor(
@@ -194,9 +186,7 @@ class WorkerRuntime:
             except TimeoutError:
                 continue
             except Exception as exc:
-                logger.warning(
-                    "fetch_error", extra={"context": lifecycle}, exc_info=exc
-                )
+                logger.warning("fetch_error", extra={"context": lifecycle}, exc_info=exc)
                 await asyncio.sleep(1)
                 continue
 
@@ -209,9 +199,7 @@ class WorkerRuntime:
                         extra={"context": lifecycle},
                         exc_info=exc,
                     )
-                    await message.nak(
-                        delay=self.spec.retry_policy.retry_delay_seconds
-                    )
+                    await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
 
         await self.bus.close()
         dispose_async = getattr(self.db, "dispose_async", None)

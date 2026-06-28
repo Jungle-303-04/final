@@ -42,11 +42,13 @@ CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
 
 def nats_client() -> Any:
     import nats
+
     return nats
 
 
 def nats_not_found_error() -> type[Exception]:
     from nats.js.errors import NotFoundError
+
     return NotFoundError
 
 
@@ -82,18 +84,13 @@ class NatsEventBus(EventBus):
             try:
                 self.nc = await nats.connect(
                     self.url,
-                    name=env(
-                        Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME
-                    ),
+                    name=env(Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME),
                 )
                 self.js = self.nc.jetstream()
                 await self.ensure_stream()
                 return
             except Exception as exc:
-                message = (
-                    f"waiting for nats "
-                    f"({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
-                )
+                message = f"waiting for nats ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
                 print(
                     message,
                     flush=True,
@@ -106,9 +103,7 @@ class NatsEventBus(EventBus):
         not_found = nats_not_found_error()
         try:
             info = await self.js.stream_info(STREAM_NAME)
-            subjects = sorted(
-                set(info.config.subjects or []) | set(STREAM_SUBJECTS)
-            )
+            subjects = sorted(set(info.config.subjects or []) | set(STREAM_SUBJECTS))
             await self.js.update_stream(
                 name=STREAM_NAME,
                 subjects=subjects,
@@ -141,9 +136,7 @@ class NatsEventBus(EventBus):
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
         assert self.js is not None
-        return await self.js.pull_subscribe(
-            subject, durable=durable, stream=STREAM_NAME
-        )
+        return await self.js.pull_subscribe(subject, durable=durable, stream=STREAM_NAME)
 
     async def close(self) -> None:
         if self.nc:
@@ -151,9 +144,7 @@ class NatsEventBus(EventBus):
 
 
 class RecordedEventClient:
-    def __init__(
-        self, publisher: EventPublisher, recorder: EventRecorder
-    ) -> None:
+    def __init__(self, publisher: EventPublisher, recorder: EventRecorder) -> None:
         self.publisher = publisher
         self.recorder = recorder
 
@@ -194,9 +185,7 @@ class DeadLetterSink:
         error: Exception,
         attempts: int,
     ) -> EventEnvelope:
-        dead_letter = self.store.record_dead_letter(
-            evt, consumer, str(error), attempts
-        )
+        dead_letter = self.store.record_dead_letter(evt, consumer, str(error), attempts)
         return await self.events.emit(
             EventSubject.DEAD_LETTER_CREATED,
             self.source,
