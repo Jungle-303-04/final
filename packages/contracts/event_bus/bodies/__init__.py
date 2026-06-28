@@ -29,9 +29,9 @@ from packages.contracts.event_bus.bodies.demo import (
     DemoPongRequestedBody,
 )
 from packages.contracts.event_bus.bodies.gitops import (
-    DesiredDiffBody,
     Diff,
     DiffAnalyzedBody,
+    DiffDetectedBody,
     GitChangedBody,
     GitWebhookReceivedBody,
     Manifest,
@@ -64,7 +64,7 @@ __all__ = [
     "DemoPongDeliveredBody",
     "DemoPongFailedBody",
     "DemoPongRequestedBody",
-    "DesiredDiffBody",
+    "DiffDetectedBody",
     "Diff",
     "DiffAnalyzedBody",
     "EventBody",

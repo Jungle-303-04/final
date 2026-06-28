@@ -86,7 +86,7 @@ class ManifestRenderedBody(EventBody):
 
 @events.reg(EventSubject.DESIRED_DIFF_DETECTED)
 @dataclass(frozen=True)
-class DesiredDiffBody(EventBody):
+class DiffDetectedBody(EventBody):
     """desired.diff.detected — 적용해야 할 차이를 감지."""
 
     diff: Diff
