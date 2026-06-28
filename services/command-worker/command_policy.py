@@ -16,16 +16,6 @@ class Lookup(Protocol):
 
 
 @dataclass(frozen=True)
-class Body:
-    """dict 기반 Lookup 구현 (command 이벤트 body)."""
-
-    raw: dict[str, Any]
-
-    def value(self, field: str, default: Any = None) -> Any:
-        return self.raw.get(field, default)
-
-
-@dataclass(frozen=True)
 class ModelLookup:
     """속성(model) 기반 Lookup 구현 (Pydantic/dataclass body)."""
 
