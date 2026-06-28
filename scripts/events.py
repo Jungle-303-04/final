@@ -27,6 +27,8 @@ SERVICES = [
     "gitops/repo-gateway-worker",
     "demo/ping-worker",
     "demo/ping-gateway",
+    "projection/dashboard-projection-service",
+    "projection/audit-timeline-service",
 ]
 
 
