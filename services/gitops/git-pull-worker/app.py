@@ -9,11 +9,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
-    GitChangedBody,
-    GitWebhookReceived,
-)
+from packages.contracts.event_bus.bodies import EventBody, GitChangedBody, GitWebhookReceived
 from packages.runtime.app import App, EventContext
 
 app = App("git-pull-worker")

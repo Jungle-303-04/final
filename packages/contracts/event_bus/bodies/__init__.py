@@ -11,82 +11,12 @@
 
 from __future__ import annotations
 
-from packages.contracts.event_bus.bodies.base import (
-    EventBody,
-    JsonObject,
-)
-from packages.contracts.event_bus.bodies.command import (
-    CommandDispatchedBody,
-    CommandDispatchReadyBody,
-    CommandQueuedForAgentBody,
-    CommandRejectedBody,
-    CommandRequestedBody,
-    Plan,
-    Route,
-)
-from packages.contracts.event_bus.bodies.dashboard import (
-    DashboardUpdatedBody,
-)
-from packages.contracts.event_bus.bodies.demo import (
-    DemoPingRequested,
-    DemoPongDeliveredBody,
-    DemoPongFailedBody,
-    DemoPongRequestedBody,
-)
-from packages.contracts.event_bus.bodies.gitops import (
-    DesiredDiffBody,
-    Diff,
-    DiffAnalyzedBody,
-    GitChangedBody,
-    GitWebhookReceived,
-    Manifest,
-    ManifestRenderedBody,
-    RenderedManifest,
-    RenderedMetadata,
-    RenderedSpec,
-)
-from packages.contracts.event_bus.bodies.rca import (
-    ClusterEvidenceReceived,
-    Evidence,
-    EvidenceBuiltBody,
-    RcaCompletedBody,
-)
-from packages.contracts.event_bus.bodies.repo import (
-    SafePrCreatedBody,
-    SafePrFailedBody,
-    SafePrRequestedBody,
-)
+from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
+from packages.contracts.event_bus.bodies.command import CommandDispatchedBody, CommandDispatchReadyBody, CommandQueuedForAgentBody, CommandRejectedBody, CommandRequestedBody, Plan, Route
+from packages.contracts.event_bus.bodies.dashboard import DashboardUpdatedBody
+from packages.contracts.event_bus.bodies.demo import DemoPingRequested, DemoPongDeliveredBody, DemoPongFailedBody, DemoPongRequestedBody
+from packages.contracts.event_bus.bodies.gitops import DesiredDiffBody, Diff, DiffAnalyzedBody, GitChangedBody, GitWebhookReceived, Manifest, ManifestRenderedBody, RenderedManifest, RenderedMetadata, RenderedSpec
+from packages.contracts.event_bus.bodies.rca import ClusterEvidenceReceived, Evidence, EvidenceBuiltBody, RcaCompletedBody
+from packages.contracts.event_bus.bodies.repo import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 
-__all__ = [
-    "ClusterEvidenceReceived",
-    "CommandDispatchReadyBody",
-    "CommandDispatchedBody",
-    "CommandQueuedForAgentBody",
-    "CommandRejectedBody",
-    "CommandRequestedBody",
-    "DashboardUpdatedBody",
-    "DemoPingRequested",
-    "DemoPongDeliveredBody",
-    "DemoPongFailedBody",
-    "DemoPongRequestedBody",
-    "DesiredDiffBody",
-    "Diff",
-    "DiffAnalyzedBody",
-    "EventBody",
-    "Evidence",
-    "EvidenceBuiltBody",
-    "GitChangedBody",
-    "GitWebhookReceived",
-    "JsonObject",
-    "Manifest",
-    "ManifestRenderedBody",
-    "Plan",
-    "RcaCompletedBody",
-    "RenderedManifest",
-    "RenderedMetadata",
-    "RenderedSpec",
-    "Route",
-    "SafePrCreatedBody",
-    "SafePrFailedBody",
-    "SafePrRequestedBody",
-]
+__all__ = ["ClusterEvidenceReceived", "CommandDispatchReadyBody", "CommandDispatchedBody", "CommandQueuedForAgentBody", "CommandRejectedBody", "CommandRequestedBody", "DashboardUpdatedBody", "DemoPingRequested", "DemoPongDeliveredBody", "DemoPongFailedBody", "DemoPongRequestedBody", "DesiredDiffBody", "Diff", "DiffAnalyzedBody", "EventBody", "Evidence", "EvidenceBuiltBody", "GitChangedBody", "GitWebhookReceived", "JsonObject", "Manifest", "ManifestRenderedBody", "Plan", "RcaCompletedBody", "RenderedManifest", "RenderedMetadata", "RenderedSpec", "Route", "SafePrCreatedBody", "SafePrFailedBody", "SafePrRequestedBody"]

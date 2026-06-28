@@ -28,12 +28,7 @@ def load_node_collector_module():
 
 def test_node_collector_snapshot_uses_downward_api_identity() -> None:
     module = load_node_collector_module()
-    collector = module.NodeCollector(
-        node_name="target-control-plane",
-        pod_name="optional-node-collector-abc",
-        namespace="target",
-        interval_seconds=15,
-    )
+    collector = module.NodeCollector(node_name="target-control-plane", pod_name="optional-node-collector-abc", namespace="target", interval_seconds=15)
 
     payload = collector.snapshot().to_body()
 
@@ -45,12 +40,7 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
 
 def test_node_collector_exposes_prometheus_metrics() -> None:
     module = load_node_collector_module()
-    collector = module.NodeCollector(
-        node_name="target-control-plane",
-        pod_name="optional-node-collector-abc",
-        namespace="target",
-        interval_seconds=15,
-    )
+    collector = module.NodeCollector(node_name="target-control-plane", pod_name="optional-node-collector-abc", namespace="target", interval_seconds=15)
 
     metrics = collector.prometheus_metrics()
 

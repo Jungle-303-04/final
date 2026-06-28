@@ -28,13 +28,7 @@ class EventContext:
 
     @classmethod
     def of(cls, evt: EventEnvelope, db: Any) -> EventContext:
-        return cls(
-            event_id=evt.event_id,
-            subject=evt.subject,
-            correlation_id=evt.correlation_id,
-            causation_id=evt.causation_id,
-            db=db,
-        )
+        return cls(event_id=evt.event_id, subject=evt.subject, correlation_id=evt.correlation_id, causation_id=evt.causation_id, db=db)
 
 
 async def _iter_results(result: Any) -> AsyncIterator[Any]:
