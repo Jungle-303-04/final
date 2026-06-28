@@ -1,16 +1,16 @@
-"""gitops-sync-worker 이벤트 payload."""
+"""gitops 이벤트 body."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from packages.contracts.event_bus.payloads.base import EventPayload
+from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.registry import events
 from packages.contracts.event_bus.subjects import EventSubject
 
 
 @dataclass(frozen=True)
-class Manifest(EventPayload):
+class Manifest(EventBody):
     """sandbox에 동기화할 배포 사양(값 객체)."""
 
     app: str
@@ -20,7 +20,7 @@ class Manifest(EventPayload):
 
 
 @dataclass(frozen=True)
-class RenderedMetadata(EventPayload):
+class RenderedMetadata(EventBody):
     """렌더된 k8s manifest의 metadata 블록(값 객체)."""
 
     name: str
@@ -28,7 +28,7 @@ class RenderedMetadata(EventPayload):
 
 
 @dataclass(frozen=True)
-class RenderedSpec(EventPayload):
+class RenderedSpec(EventBody):
     """렌더된 k8s manifest의 spec 블록(값 객체)."""
 
     replicas: int
@@ -36,7 +36,7 @@ class RenderedSpec(EventPayload):
 
 
 @dataclass(frozen=True)
-class RenderedManifest(EventPayload):
+class RenderedManifest(EventBody):
     """k8s Deployment 형태로 렌더된 manifest(값 객체)."""
 
     api_version: str = field(metadata={"payload_name": "apiVersion"})
@@ -46,7 +46,7 @@ class RenderedManifest(EventPayload):
 
 
 @dataclass(frozen=True)
-class Diff(EventPayload):
+class Diff(EventBody):
     """원하는 상태와 실제 상태의 차이(값 객체)."""
 
     resource: str
@@ -58,7 +58,7 @@ class Diff(EventPayload):
 
 @events.reg(EventSubject.GIT_WEBHOOK_RECEIVED)
 @dataclass(frozen=True)
-class GitWebhookReceived(EventPayload):
+class GitWebhookReceived(EventBody):
     """git.webhook.received — 깃 webhook 입력(gitops 입력)."""
 
     commit_sha: str
@@ -68,7 +68,7 @@ class GitWebhookReceived(EventPayload):
 
 @events.reg(EventSubject.GIT_CHANGED)
 @dataclass(frozen=True)
-class GitChangedPayload(EventPayload):
+class GitChangedBody(EventBody):
     """git.changed — 깃 변경 확정(원시 변경 정보)."""
 
     commit_sha: str
@@ -78,7 +78,7 @@ class GitChangedPayload(EventPayload):
 
 @events.reg(EventSubject.MANIFEST_RENDERED)
 @dataclass(frozen=True)
-class ManifestRenderedPayload(EventPayload):
+class ManifestRenderedBody(EventBody):
     """manifest.rendered — k8s manifest 렌더 결과."""
 
     rendered_manifest: RenderedManifest
@@ -86,7 +86,7 @@ class ManifestRenderedPayload(EventPayload):
 
 @events.reg(EventSubject.DESIRED_DIFF_DETECTED)
 @dataclass(frozen=True)
-class DesiredDiffPayload(EventPayload):
+class DesiredDiffBody(EventBody):
     """desired.diff.detected — 적용해야 할 차이를 감지."""
 
     diff: Diff
@@ -94,7 +94,7 @@ class DesiredDiffPayload(EventPayload):
 
 @events.reg(EventSubject.DIFF_ANALYZED)
 @dataclass(frozen=True)
-class DiffAnalyzedPayload(EventPayload):
+class DiffAnalyzedBody(EventBody):
     """diff.analyzed — diff 위험도 분석 결과."""
 
     diff: Diff

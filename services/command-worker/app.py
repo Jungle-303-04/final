@@ -14,13 +14,13 @@ from command_config import CommandConfig, PolicyRuleConfig
 from command_policy import ModelLookup, Policy
 
 from packages.config.constants import Sandbox, Target
-from packages.contracts.event_bus.payloads import (
-    CommandDispatchedPayload,
-    CommandDispatchReadyPayload,
-    CommandQueuedForAgentPayload,
-    CommandRejectedPayload,
-    CommandRequestedPayload,
-    EventPayload,
+from packages.contracts.event_bus.bodies import (
+    CommandDispatchedBody,
+    CommandDispatchReadyBody,
+    CommandQueuedForAgentBody,
+    CommandRejectedBody,
+    CommandRequestedBody,
+    EventBody,
     Plan,
     Route,
 )
@@ -61,31 +61,31 @@ def build_plan(command: ModelLookup) -> Plan:
     )
 
 
-@app.sub(CommandRequestedPayload)
+@app.sub(CommandRequestedBody)
 async def on_command_requested(
-    evt: CommandRequestedPayload, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
-    # 타입 payload 를 룰 입력(Lookup)으로 — dict 가 아니라 모델 기반.
+    evt: CommandRequestedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
+    # 타입 body 를 룰 입력(Lookup)으로 — dict 가 아니라 모델 기반.
     command = ModelLookup(evt)
     result = POLICY.evaluate(command)
     if not result.allowed:
-        yield CommandRejectedPayload(
-            reason=result.require_reason(), requested=evt.to_payload()
+        yield CommandRejectedBody(
+            reason=result.require_reason(), requested=evt.to_body()
         )
         return
 
     plan = build_plan(command)
-    yield CommandDispatchReadyPayload(plan=plan)
-    yield CommandDispatchedPayload(
+    yield CommandDispatchReadyBody(plan=plan)
+    yield CommandDispatchedBody(
         plan=plan,
         route=Route(
             channel=CONFIG.agent_route_channel, cluster_id=plan.cluster_id
         ),
     )
     await ctx.db.queue_agent_command(
-        ctx.correlation_id, plan.to_payload(), CONFIG.command_status_queued
+        ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued
     )
-    yield CommandQueuedForAgentPayload(
+    yield CommandQueuedForAgentBody(
         command_id=plan.command_id, cluster_id=plan.cluster_id
     )
 

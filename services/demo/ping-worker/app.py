@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.payloads import (
+from packages.contracts.event_bus.bodies import (
     DemoPingRequested,
-    DemoPongRequestedPayload,
-    EventPayload,
+    DemoPongRequestedBody,
+    EventBody,
 )
 from packages.runtime.app import App, EventContext
 
@@ -24,8 +24,8 @@ CALLBACK_PATH = "/demo/callback"  # 외부(api-gateway)로 되돌아갈 경로
 @app.sub(DemoPingRequested)
 async def on_ping(
     evt: DemoPingRequested, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
-    yield DemoPongRequestedPayload(
+) -> AsyncIterator[EventBody]:
+    yield DemoPongRequestedBody(
         message=f"pong: {evt.message}",
         reply_to=CALLBACK_PATH,
     )

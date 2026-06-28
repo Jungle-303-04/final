@@ -16,8 +16,8 @@ class Lookup(Protocol):
 
 
 @dataclass(frozen=True)
-class Payload:
-    """dict 기반 Lookup 구현 (command 이벤트 payload)."""
+class Body:
+    """dict 기반 Lookup 구현 (command 이벤트 body)."""
 
     raw: dict[str, Any]
 
@@ -27,7 +27,7 @@ class Payload:
 
 @dataclass(frozen=True)
 class ModelLookup:
-    """속성(model) 기반 Lookup 구현 (Pydantic/dataclass payload)."""
+    """속성(model) 기반 Lookup 구현 (Pydantic/dataclass body)."""
 
     model: Any
 

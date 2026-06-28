@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.payloads import GitWebhookReceived
+from packages.contracts.event_bus.bodies import GitWebhookReceived
 
 
 def test_git_pull_emits_git_changed() -> None:

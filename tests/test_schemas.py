@@ -58,14 +58,14 @@ def test_event_uses_standard_envelope_fields() -> None:
 
 
 def test_payload_nested_decode_roundtrip() -> None:
-    from packages.contracts.event_bus.payloads import (
-        ManifestRenderedPayload,
+    from packages.contracts.event_bus.bodies import (
+        ManifestRenderedBody,
         RenderedManifest,
         RenderedMetadata,
         RenderedSpec,
     )
 
-    original = ManifestRenderedPayload(
+    original = ManifestRenderedBody(
         rendered_manifest=RenderedManifest(
             api_version="apps/v1",
             kind="Deployment",
@@ -74,7 +74,7 @@ def test_payload_nested_decode_roundtrip() -> None:
         )
     )
 
-    decoded = ManifestRenderedPayload.from_payload(original.to_payload())
+    decoded = ManifestRenderedBody.from_body(original.to_body())
 
     # 중첩이 dict 가 아니라 타입 객체로 복원된다(evt.x.y 접근 가능).
     assert isinstance(decoded.rendered_manifest, RenderedManifest)

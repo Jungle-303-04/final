@@ -40,7 +40,7 @@ class NodeRuntimeSample:
     filesystem_usage_ratio: float
     runtime: str
 
-    def to_payload(self) -> dict[str, object]:
+    def to_body(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -123,7 +123,7 @@ class NodeCollector:
                     {
                         Gateway.SERVICE: Settings.SERVICE_NAME,
                         Field.KIND: NODE_RUNTIME_SAMPLE_KIND,
-                        Field.SAMPLE: self.snapshot().to_payload(),
+                        Field.SAMPLE: self.snapshot().to_body(),
                     },
                     ensure_ascii=False,
                 ),
@@ -157,7 +157,7 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
 
     @app.get(SNAPSHOT_PATH)
     async def snapshot() -> dict[str, object]:
-        return node_collector.snapshot().to_payload()
+        return node_collector.snapshot().to_body()
 
     @app.get(METRICS_PATH, response_class=PlainTextResponse)
     async def metrics() -> PlainTextResponse:

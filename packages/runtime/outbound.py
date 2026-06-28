@@ -23,7 +23,7 @@ async def deliver(
     ok: Callable[[Any], Any],
     fail: Callable[[Exception], Any],
 ) -> AsyncIterator[Any]:
-    """외부 호출 1회 → 성공이면 ok(결과), 실패면 fail(예외) payload 발행."""
+    """외부 호출 1회 → 성공이면 ok(결과), 실패면 fail(예외) body 발행."""
     try:
         result = await call()
     except Exception as exc:  # noqa: BLE001 - 외부 호출은 무엇이든 실패 가능

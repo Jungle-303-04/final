@@ -1,6 +1,6 @@
 """diff-worker — manifest.rendered → desired.diff.detected (원하는 vs 실제).
 
-렌더 이미지(원하는 것) vs 현재 이미지(실제) 비교. 중첩 payload
+렌더 이미지(원하는 것) vs 현재 이미지(실제) 비교. 중첩 body
 (rendered_manifest)는 타입 객체로 받아 속성 접근.
 """
 
@@ -9,11 +9,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from packages.config.constants import Sandbox
-from packages.contracts.event_bus.payloads import (
-    DesiredDiffPayload,
+from packages.contracts.event_bus.bodies import (
+    DesiredDiffBody,
     Diff,
-    EventPayload,
-    ManifestRenderedPayload,
+    EventBody,
+    ManifestRenderedBody,
 )
 from packages.runtime.app import App, EventContext
 
@@ -24,10 +24,10 @@ RESOURCE_REF = "deployment/checkout-api"
 SYNC_RISK = "sandbox-only"
 
 
-@app.sub(ManifestRenderedPayload)
+@app.sub(ManifestRenderedBody)
 async def on_manifest_rendered(
-    evt: ManifestRenderedPayload, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
+    evt: ManifestRenderedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
     rendered = evt.rendered_manifest  # 중첩 디코드로 타입 객체
     diff = Diff(
         resource=RESOURCE_REF,
@@ -36,7 +36,7 @@ async def on_manifest_rendered(
         actual_image=PREVIOUS_IMAGE,
         risk=SYNC_RISK,
     )
-    yield DesiredDiffPayload(diff=diff)
+    yield DesiredDiffBody(diff=diff)
 
 
 if __name__ == "__main__":
