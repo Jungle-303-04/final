@@ -499,4 +499,4 @@ async def wait_for_database(db: InitializableStore) -> None:
             message = f"waiting for postgres ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
             print(message, flush=True)
             await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-    fail("PostgreSQL 에 연결할 수 없다")
+    fail("PostgreSQL 연결 실패")

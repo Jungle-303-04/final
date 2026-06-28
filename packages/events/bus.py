@@ -91,7 +91,7 @@ class NatsEventBus(EventBus):
                 message = f"waiting for nats ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
                 print(message, flush=True)
                 await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-        fail("NATS 에 연결할 수 없다")
+        fail("NATS 연결 실패")
 
     async def ensure_stream(self) -> None:
         assert self.js is not None

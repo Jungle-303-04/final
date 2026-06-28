@@ -9,7 +9,7 @@ class SecretRef:
     """외부 secret 위치를 가리키는 내부 계약.
 
     provider는 env, kubernetes, vault, aws-secrets-manager처럼 구현체가
-    해석한다. 오픈소스 사용자는 이 계약에 맞는 provider만 끼우면 된다.
+    해석. 오픈소스 사용자는 이 계약에 맞는 provider 만 끼움.
     """
 
     name: str
