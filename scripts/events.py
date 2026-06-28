@@ -22,6 +22,7 @@ SERVICES = [
     "command-worker",
     "git-pull-worker",
     "manifest-render-worker",
+    "diff-worker",
 ]
 
 
