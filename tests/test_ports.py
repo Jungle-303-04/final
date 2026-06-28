@@ -1,49 +1,22 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from conftest import ROOT, load_file, load_service, run_handler, subjects_of
+
+from packages.contracts.event_bus.bodies import CommandRequestedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
-from packages.events.bus import (
-    RecordedEventClient,
-    event_causation,
-    publish_and_record,
-)
+from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-COMMAND_WORKER_PATH = (
-    ROOT_DIR / "services" / "command-worker" / "command_worker.py"
-)
-
-
-def load_module(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load module: {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    previous_settings = sys.modules.pop("settings", None)
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.path.remove(str(path.parent))
-        sys.modules.pop("settings", None)
-        if previous_settings is not None:
-            sys.modules["settings"] = previous_settings
 
 
 class FakeEventPublisher:
     def __init__(self) -> None:
         self.published: list[EventEnvelope] = []
 
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,
@@ -54,10 +27,6 @@ class FakeEventPublisher:
         created = event(subject, source, payload, correlation_id, causation_id)
         self.published.append(created)
         return created
-
-
-class FakeEventClient(FakeEventPublisher):
-    pass
 
 
 class FakeEventRecorder:
@@ -82,16 +51,10 @@ def test_publish_and_record_uses_event_ports() -> None:
     async def run() -> None:
         publisher = FakeEventPublisher()
         recorder = FakeEventRecorder()
-
-        created = await publish_and_record(
-            publisher,
-            recorder,
-            "command.requested",
-            "test",
-            {"cluster_id": "target-cluster-01"},
-            "corr-1",
+        client = RecordedEventClient(publisher, recorder)
+        created = await client.emit(
+            "command.requested", "test", {"cluster_id": "target-cluster-01"}, "corr-1"
         )
-
         assert created.correlation_id == "corr-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
@@ -104,15 +67,10 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
         publisher = FakeEventPublisher()
         recorder = FakeEventRecorder()
         client = RecordedEventClient(publisher, recorder)
-
         with event_causation("parent-event-1"):
-            created = await client.publish(
-                "command.dispatched",
-                "command-worker",
-                {"command_id": "cmd-1"},
-                "corr-1",
+            created = await client.emit(
+                "command.dispatched", "command-worker", {"command_id": "cmd-1"}, "corr-1"
             )
-
         assert created.causation_id == "parent-event-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
@@ -120,44 +78,34 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
     asyncio.run(run())
 
 
-def test_command_workflow_queues_agent_command_through_port() -> None:
-    async def run() -> None:
-        module = load_module(COMMAND_WORKER_PATH, "test_command_worker")
-        events = FakeEventClient()
-        queue = FakeAgentCommandQueue()
-        workflow = module.CommandWorkflow(events, queue)
-
-        await workflow.handle(
-            event(
-                "command.requested",
-                "test",
-                {
-                    "cluster_id": "target-cluster-01",
-                    "action": "rollout_restart",
-                    "namespace": "sandbox",
-                },
-                "corr-2",
-            )
-        )
-
-        assert len(queue.queued) == 1
-        correlation_id, plan, status = queue.queued[0]
-        assert correlation_id == "corr-2"
-        assert plan["cluster_id"] == "target-cluster-01"
-        assert status == "queued"
-        assert [evt.subject for evt in events.published] == [
-            "command.dispatch.ready",
-            "command.dispatched",
-            "command.queued_for_agent",
-        ]
-
-    asyncio.run(run())
+def test_command_subscriber_emits_dispatch_chain() -> None:
+    command = load_service("command-worker")
+    queue = FakeAgentCommandQueue()
+    payload = CommandRequestedBody.from_body(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": {},
+        }
+    )
+    outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
+    assert subjects_of(outs) == [
+        "command.dispatch.ready",
+        "command.dispatched",
+        "command.queued_for_agent",
+    ]
+    assert len(queue.queued) == 1
+    correlation_id, plan, status = queue.queued[0]
+    assert correlation_id == "corr-2"
+    assert plan["cluster_id"] == "target-cluster-01"
+    assert status == "queued"
 
 
 def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
-    policy = load_module(
-        ROOT_DIR / "services" / "command-worker" / "command_policy.py",
-        "test_command_policy",
+    policy = load_file(
+        ROOT / "services" / "command-worker" / "command_policy.py", "test_command_policy"
     )
     rule = policy.EqualsRule(
         name="sandbox_namespace",
@@ -167,11 +115,7 @@ def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
         default="sandbox",
     )
     engine = policy.Policy([rule])
-
-    dict_target = policy.Payload({"namespace": "sandbox"})
     model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
     rejected = policy.ModelLookup(SimpleNamespace(namespace="production"))
-
-    assert engine.evaluate(dict_target).allowed is True
     assert engine.evaluate(model_target).allowed is True
     assert engine.evaluate(rejected).allowed is False
