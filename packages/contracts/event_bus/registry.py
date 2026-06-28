@@ -33,6 +33,7 @@ class EventRegistry:
     def __init__(self) -> None:
         self._defs: dict[EventSubject, type] = {}
         self._handlers: dict[EventSubject, tuple[str, str]] = {}
+        self._raw_handlers: list[tuple[str, str]] = []
 
     def reg(self, subject: EventSubject) -> Callable[[type], type]:
         def decorator(body_type: type) -> type:
@@ -46,6 +47,10 @@ class EventRegistry:
         """App 이 자기 핸들러를 카탈로그에 알린다(make events 표시용)."""
         self._handlers[sub.subject] = (service, sub.fn.__name__)
 
+    def note_raw_handler(self, service: str, handler: str) -> None:
+        """전체(>) 구독 프로젝터를 카탈로그에 알린다."""
+        self._raw_handlers.append((service, handler))
+
     def describe(self) -> str:
         rows = ["EVENTS (한눈에 보기)", ""]
         for subject, body_type in sorted(self._defs.items()):
@@ -55,6 +60,11 @@ class EventRegistry:
                 f"{subject:<28} {body_type.__name__:<26} "
                 f"by={service}/{handler}  fields=({names})"
             )
+        if self._raw_handlers:
+            rows.append("")
+            rows.append("ALL-EVENT 구독(프로젝터):")
+            for service, handler in sorted(self._raw_handlers):
+                rows.append(f"  {service}/{handler}  ← 모든 이벤트(>)")
         return "\n".join(rows)
 
 
