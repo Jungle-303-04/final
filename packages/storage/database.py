@@ -131,14 +131,16 @@ class EventRepository(DatabaseConnection):
             self.insert_event_processing(conn, table, evt, consumer)
             row = self.claim_event_processing(conn, table, evt, consumer)
             if row:
-                return {"status": row["status"], "attempts": row["attempts"]}
+                return EventProcessingRecord(
+                    status=row["status"], attempts=row["attempts"]
+                )
 
             existing = self.get_event_processing(conn, table, evt, consumer)
-            return (
-                row_dict(existing)
-                if existing
-                else {"status": "unknown", "attempts": 0}
-            )
+            if existing:
+                return EventProcessingRecord(
+                    status=existing["status"], attempts=existing["attempts"]
+                )
+            return EventProcessingRecord(status="unknown", attempts=0)
 
     def insert_event_processing(
         self, conn: Connection, table: Any, evt: EventEnvelope, consumer: str

@@ -101,11 +101,11 @@ class EventProcessor:
     async def process(self, message: EventMessage) -> None:
         evt = self.codec.decode(message)
         processing = self.ledger.begin(evt)
-        if processing["status"] != EventProcessingStatus.PROCESSING:
+        if processing.status != EventProcessingStatus.PROCESSING:
             await message.ack()
             return
 
-        attempts = int(processing["attempts"])
+        attempts = processing.attempts
         context = {**event_context(evt), "consumer": self.service_name}
         logger.info("handling", extra={"context": context})
         try:
