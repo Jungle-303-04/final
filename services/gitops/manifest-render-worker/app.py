@@ -1,7 +1,7 @@
-"""manifest-render-worker — git.changed 를 받아 k8s manifest 를 렌더한다.
+"""manifest-render-worker — git.changed → manifest 렌더 → manifest.rendered.
 
-원시 변경(commit/image/replicas)을 배포 사양 + 렌더된 Deployment 로 만들고
-repo_change 로 저장한 뒤 manifest.rendered 를 흘린다.
+원시 변경(commit/image/replicas) → 배포 사양 + 렌더된 Deployment, repo_change
+저장.
 """
 
 from __future__ import annotations

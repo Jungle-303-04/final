@@ -7,7 +7,7 @@ class Gateway(StrEnum):
     """Gateway 요청/응답·payload의 필드 이름.
 
     StrEnum 이라 dict 인덱싱(d[Gateway.STATUS])과 json 직렬화에서
-    자동으로 문자열 값으로 동작한다.
+    문자열 값으로 자동 동작.
     """
 
     ACCEPTED = "accepted"

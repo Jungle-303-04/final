@@ -10,8 +10,8 @@
     if __name__ == "__main__":
         app.run()                       # NATS 붙여 실행
 
-settings.py / 별도 핸들러 모듈 / import 배선이 사라진다. 내부(NATS/ledger/
-runtime)는 App 이 숨긴다.
+settings.py / 별도 핸들러 모듈 / import 배선 없음. 내부(NATS/ledger/
+runtime)는 App 이 은닉.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from packages.runtime.checks import (
 )
 from packages.runtime.dispatch import EventContext, make_event_handler
 
-# 서비스는 App 과 EventContext 를 함께 쓰므로 여기서 재노출한다.
+# App 과 EventContext 함께 쓰므로 여기서 재노출.
 __all__ = ["App", "EventContext"]
 
 

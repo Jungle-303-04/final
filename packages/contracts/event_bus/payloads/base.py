@@ -26,7 +26,7 @@ class EventPayload:
     @classmethod
     def from_payload(cls, raw: Mapping[str, Any]) -> EventPayload:
         # 중첩 payload(예: rendered_manifest: RenderedManifest)는 dict 가
-        # 아니라 그 타입 객체로 복원해 워커가 evt.x.y 로 쓰게 한다.
+        # 아니라 그 타입 객체로 복원 → 워커가 evt.x.y 로 접근.
         hints = get_type_hints(cls)
         values: JsonObject = {}
         for item in fields(cls):

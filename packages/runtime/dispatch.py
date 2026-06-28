@@ -1,8 +1,8 @@
 """이벤트 핸들러 실행 기계장치(런타임).
 
-registry(카탈로그, "어떤 이벤트가 있나")와 분리한다. 여기는 런타임 —
+registry(카탈로그, "어떤 이벤트가 있나")와 분리. 여기는 런타임 —
 "이벤트를 받아 payload 로 디코드 → 핸들러 실행 → yield 된 다음 이벤트 발행".
-App.run 이 이걸 NATS 루프(WorkerRuntime)에 끼워 넣는다.
+App.run 이 NATS 루프(WorkerRuntime)에 연결.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def make_event_handler(
         ctx = EventContext.of(evt, db)
         result = sub.fn(payload, ctx) if sub.wants_ctx else sub.fn(payload)
         async for out in _iter_results(result):
-            # causation 은 EventProcessor 가 contextvar 로 자동 연결한다.
+            # causation 은 EventProcessor 가 contextvar 로 자동 연결.
             await client.emit(
                 out.__subject__, source, out.to_payload(), evt.correlation_id
             )
