@@ -151,6 +151,7 @@ class WorkerRuntime:
     async def run(self) -> None:
         from packages.storage.database import wait_for_database
 
+        Path(HEARTBEAT_PATH).touch()  # 시작 즉시 생존 표시(DB 대기 중 liveness 오살 방지)
         await wait_for_database(self.db)
         await self.bus.connect()
         sub = await self.bus.subscribe(self.spec.subject, durable=self.spec.durable)
