@@ -38,11 +38,11 @@ SERVICE_ENTRYPOINTS = {
         "App(",
     ),
     "dashboard-projection-service": (
-        "services/dashboard-projection-service/app.py",
+        "services/projection/dashboard-projection-service/app.py",
         "WorkerService.from_subscription(",
     ),
     "audit-timeline-service": (
-        "services/audit-timeline-service/app.py",
+        "services/projection/audit-timeline-service/app.py",
         "WorkerService.from_subscription(",
     ),
     "target-cluster-agent": (
@@ -66,8 +66,8 @@ SERVICE_ENTRYPOINTS = {
 
 # App(한 파일) 마이그레이션된 서비스는 제외(아래 WorkerService 규약 검사).
 WORKER_ENTRYPOINTS = [
-    "services/dashboard-projection-service/app.py",
-    "services/audit-timeline-service/app.py",
+    "services/projection/dashboard-projection-service/app.py",
+    "services/projection/audit-timeline-service/app.py",
 ]
 
 
