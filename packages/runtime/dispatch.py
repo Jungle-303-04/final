@@ -1,8 +1,8 @@
 """이벤트 핸들러 실행 기계장치(런타임).
 
 registry(카탈로그, "어떤 이벤트가 있나")와 분리. 여기는 런타임 —
-"이벤트를 받아 body 로 디코드 → 핸들러 실행 → yield 된 다음 이벤트 발행".
-App.run 이 NATS 루프(WorkerRuntime)에 연결.
+"이벤트를 받아 body 로 디코드 → 핸들러 실행 → yield 된 다음 이벤트 수집".
+수집한 이벤트는 EventProcessor 가 한 트랜잭션으로 outbox 에 적재(직접 발행 안 함).
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.registry import Subscription
+from packages.events.envelope import event
 from packages.runtime.async_db import AsyncDb
 
 
@@ -54,35 +55,36 @@ async def _iter_results(result: Any) -> AsyncIterator[Any]:
         yield value
 
 
-async def _emit_results(client: Any, source: str, evt: EventEnvelope, result: Any) -> None:
-    """핸들러가 yield 한 body 들을 다음 이벤트로 발행(공통)."""
-    async for out in _iter_results(result):
-        # causation 은 EventProcessor 가 contextvar 로 자동 연결.
-        await client.emit(out.__subject__, source, out.to_body(), evt.correlation_id)
+async def _collect(source: str, evt: EventEnvelope, result: Any) -> list[EventEnvelope]:
+    """yield 된 body 를 발행할 EventEnvelope 로 수집(causation=부모 event_id)."""
+    out: list[EventEnvelope] = []
+    async for body in _iter_results(result):
+        out.append(
+            event(body.__subject__, source, body.to_body(), evt.correlation_id, evt.event_id)
+        )
+    return out
 
 
-def make_event_handler(
-    sub: Subscription, client: Any, db: Any, source: str
-) -> Callable[[EventEnvelope], Any]:
-    """타입 구독: 봉투 → body 디코드 → 콜백 → yield된 body 발행."""
+def make_event_handler(sub: Subscription, db: Any, source: str) -> Callable[[EventEnvelope], Any]:
+    """타입 구독: 봉투 → body 디코드 → 콜백 → yield된 body 수집."""
 
-    async def handle(evt: EventEnvelope) -> None:
+    async def handle(evt: EventEnvelope) -> list[EventEnvelope]:
         body = sub.body_type.from_body(evt.payload)
         ctx = EventContext.of(evt, AsyncDb(db))
         result = sub.fn(body, ctx) if sub.wants_ctx else sub.fn(body)
-        await _emit_results(client, source, evt, result)
+        return await _collect(source, evt, result)
 
     return handle
 
 
 def make_raw_handler(
-    fn: Callable[..., Any], wants_ctx: bool, client: Any, db: Any, source: str
+    fn: Callable[..., Any], wants_ctx: bool, db: Any, source: str
 ) -> Callable[[EventEnvelope], Any]:
-    """전체(>) 구독: 디코드 없이 봉투 그대로 → 콜백 → yield된 body 발행."""
+    """전체(>) 구독: 디코드 없이 봉투 그대로 → 콜백 → yield된 body 수집."""
 
-    async def handle(evt: EventEnvelope) -> None:
+    async def handle(evt: EventEnvelope) -> list[EventEnvelope]:
         ctx = EventContext.of(evt, AsyncDb(db))
         result = fn(evt, ctx) if wants_ctx else fn(evt)
-        await _emit_results(client, source, evt, result)
+        return await _collect(source, evt, result)
 
     return handle

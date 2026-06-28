@@ -8,7 +8,6 @@ from conftest import SpyDb, load_service
 from packages.contracts.event_bus.bodies import GitWebhookReceived
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
 from packages.runtime.dispatch import make_event_handler
 from packages.runtime.gateway import ApiEventGateway
@@ -40,17 +39,9 @@ class MemoryRecorder:
 
 
 async def run_worker(module: Any, incoming: EventEnvelope, db: Any) -> list[EventEnvelope]:
-    publisher = MemoryPublisher()
-    recorder = MemoryRecorder()
-    client = RecordedEventClient(publisher, recorder)
-    subscription = module.app.subscriptions[0]
-    handler = make_event_handler(subscription, client, db, module.app.name)
-
-    with event_causation(incoming.event_id):
-        await handler(incoming)
-
-    assert recorder.events == publisher.events
-    return publisher.events
+    # make_event_handler 는 이제 발행 대신 수집해서 반환(EventProcessor 가 outbox 적재).
+    handler = make_event_handler(module.app.subscriptions[0], db, module.app.name)
+    return await handler(incoming)
 
 
 def test_api_to_outbound_gateway_golden_path() -> None:
