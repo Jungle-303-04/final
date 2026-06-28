@@ -11,12 +11,12 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync doctor lint format test events check build-image up down status smoke scale kill-pod clean
+.PHONY: help setup env sync hooks doctor lint format test events check build-image up down status smoke scale kill-pod clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-setup: env sync ## 최초 개발 환경 준비
+setup: env sync hooks ## 최초 개발 환경 준비
 
 env: ## .env 파일 생성
 	@if [[ -f .env ]]; then \
@@ -33,10 +33,13 @@ doctor: ## 로컬 필수 도구 점검
 	bash scripts/doctor.sh
 
 lint: ## Ruff 린트 검사
-	uv run ruff check services packages tests
+	uv run ruff check services packages scripts tests
 
 format: ## Ruff 포맷 적용
-	uv run ruff format services packages tests
+	uv run ruff format services packages scripts tests
+
+hooks: ## git 커밋 훅 설치(pre-commit, 팀 공통 포맷 강제)
+	uv run pre-commit install
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
