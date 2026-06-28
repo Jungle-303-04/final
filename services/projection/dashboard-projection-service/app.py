@@ -1,7 +1,7 @@
 """dashboard-projection-service — 모든 이벤트를 대시보드 카드로 투영.
 
 @app.on_event 로 전체(>) 구독. 이벤트마다 상태(진행/완료/주의)를 판정해
-읽기 모델에 upsert 하고 dashboard.updated 를 흘린다.
+읽기 모델에 upsert 하고 dashboard.updated 흘림.
 """
 
 from __future__ import annotations

@@ -14,7 +14,7 @@ def event(
     causation_id: str | None = None,
 ) -> EventEnvelope:
     # correlation_id 가 없으면 payload 가 실어온 값, 그것도 없으면 자기 자신을
-    # 흐름 시작점으로 삼는다. causation 은 직전 이벤트(없으면 None=뿌리).
+    # 흐름 시작점. causation 은 직전 이벤트(없으면 None=뿌리).
     event_id = str(uuid.uuid4())
     correlation = correlation_id or payload.get("correlation_id") or event_id
     causation = causation_id or payload.get("causation_id")

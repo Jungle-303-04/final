@@ -62,7 +62,7 @@ def test_outbound_failure_emits_failed() -> None:
 
 
 def test_causation_auto_propagates_through_runtime() -> None:
-    # 런타임은 핸들러를 event_causation(부모 event_id) 안에서 실행한다.
+    # 런타임은 핸들러를 event_causation(부모 event_id) 안에서 실행.
     # 그 안에서 emit 한 자식은 correlation 유지 + causation=부모 event_id.
     published: list[Any] = []
 

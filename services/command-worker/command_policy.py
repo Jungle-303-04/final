@@ -10,7 +10,7 @@ from packages.config.errors import require
 
 
 class Lookup(Protocol):
-    """이름으로 값을 읽는다. 룰은 dict 가 아니라 이 인터페이스에 의존한다."""
+    """이름으로 값 읽기. 룰은 dict 가 아니라 이 인터페이스에 의존."""
 
     def value(self, field: str, default: Any = None) -> Any: ...
 
@@ -77,7 +77,7 @@ class Result:
         return cls(False, reason)
 
     def require_reason(self) -> str:
-        require(self.reason is not None, "정책 거부에는 reason 이 필요하다")
+        require(self.reason is not None, "정책 거부에 reason 필요")
         return self.reason
 
 
