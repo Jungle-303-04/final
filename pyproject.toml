@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pytest>=8.4.0",
     "ruff>=0.12.0",
 ]
@@ -25,8 +26,10 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.ruff]
-line-length = 80
+# 가독성 폭(클린코드 기준): 80은 좁아 의미 없는 줄바꿈을 부르고, 1000은 과함 → 100.
+line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # 폭은 포매터가 관리, 린트로 길이 트집 안 잡음

@@ -39,7 +39,7 @@
 
 - 새 endpoint의 auth 동작이 문서화됨
 - 새 request schema가 알 수 없거나 위험한 field를 거부함
-- Gateway가 발행하는 event subject/payload 변경이 `subjects.py`, `payloads.py`, `docs/events.md`에 반영됨
+- Gateway가 발행하는 event subject/body 변경이 `subjects.py`, `packages/contracts/event_bus/bodies/`, `docs/events.md`에 반영됨
 - session/cookie/header 인증 테스트가 있음
 - project/organization 권한 변경에는 권한 테스트가 있음
 - credential 관련 변경에는 secret 미노출 테스트가 있음
@@ -2030,8 +2030,8 @@ git_changes
 | 2 | Scheduler | 주기 poll tick 생성 | `git.poll.tick` |
 | 3 | Git Poller Worker | repo 최신 상태 조회 | `git.repo.observed` |
 | 4 | Git Poller Worker | 이전 상태와 비교 | 새 commit이면 `git.changed` |
-| 5 | GitOps Sync Worker | manifest render/diff | `manifest.rendered`, `desired.diff.detected` |
-| 6 | GitOps Sync Worker | command 요청 | `command.requested` |
+| 5 | GitOps split workers | manifest render/diff | `manifest.rendered`, `desired.diff.detected` |
+| 6 | GitOps split workers | command 요청 | `command.requested` |
 
 #### 현재 수준에서 필요한 최소 API
 
@@ -2122,7 +2122,7 @@ source_ref.target_id: integration target id
 Target/Telemetry 담당이 먼저 구현할 것:
 
 ```text
-services/target-cluster-agent/evidence.py
+services/target/target-cluster-agent/evidence.py
   raw -> EvidenceDraft 변환
 
 tests/test_target_metric_evidence.py

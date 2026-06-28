@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from uvicorn import Config, Server
 
 from packages.config.constants import Runtime
+from packages.config.logs import configure_logging
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventClient, EventHandler
 from packages.contracts.event_bus.subscriptions import WorkerSubscription
@@ -31,6 +32,7 @@ class AsyncService:
 
     def run(self) -> None:
         os.environ.setdefault(Runtime.SERVICE_NAME_ENV, self.service_name)
+        configure_logging(self.service_name)
         asyncio.run(self.runner())
 
 
@@ -66,9 +68,7 @@ class WorkerService:
 
     @classmethod
     def from_subscription(
-        cls,
-        subscription: WorkerSubscription,
-        handler_factory: WorkerHandlerFactory,
+        cls, subscription: WorkerSubscription, handler_factory: WorkerHandlerFactory
     ) -> WorkerService:
         return cls(
             subscription.service_name,
@@ -88,29 +88,3 @@ class WorkerService:
             durable_name=self.durable_name,
         )
         await WorkerRuntime(spec).run()
-
-
-def run_service(service_name: str, runner: AsyncRunner) -> None:
-    AsyncService(service_name, runner).run()
-
-
-def run_fastapi_service(
-    service_name: str,
-    app_factory: FastApiFactory,
-    host: str = DEFAULT_HTTP_HOST,
-    port_env: str = PORT_ENV,
-    default_port: str = Runtime.DEFAULT_HTTP_PORT,
-    log_level: str = DEFAULT_LOG_LEVEL,
-) -> None:
-    FastApiService(
-        service_name, app_factory, host, port_env, default_port, log_level
-    ).run()
-
-
-def run_worker_service(
-    service_name: str,
-    subject: str,
-    handler_factory: WorkerHandlerFactory,
-    durable_name: str | None = None,
-) -> None:
-    WorkerService(service_name, subject, handler_factory, durable_name).run()
