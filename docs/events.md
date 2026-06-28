@@ -37,17 +37,17 @@
 | wire/storage dict | `packages/contracts/event_bus/interfaces.py`의 `Event` |
 | envelope 생성 | `packages/events/envelope.py`의 `event(...)` |
 
-## 이벤트 Payload
+## 이벤트 Body
 
-발행 payload는 `packages/contracts/event_bus/payloads.py`에 dataclass 계약으로 둔다.
+발행 body는 `packages/contracts/event_bus/bodies/`에 dataclass 계약으로 둔다. 여기서 "body"는 타입이 있는 이벤트 본문 객체를 가리킨다. envelope 안의 wire/transport 필드는 여전히 소문자 `payload`로 부른다(직렬화된 형태).
 
 규칙:
 
-- 새 이벤트 본문은 `<EventName>Payload` 클래스로 추가한다.
-- payload 안에 들어가는 값 객체는 `Manifest`, `Diff`, `Plan`, `Evidence`처럼 접미사 없는 명사로 둔다.
-- 서비스 workflow는 임의 dict를 직접 조립하기보다 payload 객체를 만들고 `to_payload()`로 발행한다.
+- 새 이벤트 본문은 `<EventName>Body` 클래스로 추가한다(base class는 `EventBody`).
+- body 안에 들어가는 값 객체는 `Manifest`, `Diff`, `Plan`, `Evidence`처럼 접미사 없는 명사로 둔다.
+- 서비스 workflow는 임의 dict를 직접 조립하기보다 body 객체를 만들고 `to_body()`로 발행한다. 역직렬화는 `from_body()`를 사용한다.
 - Python 필드명은 `snake_case`를 사용한다. 외부 wire key가 `apiVersion`처럼 camelCase여야 하면 `field(metadata={"payload_name": "apiVersion"})` 별칭을 사용한다.
-- 입력 payload 검증은 gateway request schema 또는 worker 입력 Pydantic schema에서 처리하고, 출력 payload 구성은 `payloads.py`의 dataclass로 처리한다.
+- 입력 body 검증은 gateway request schema 또는 worker 입력 Pydantic schema에서 처리하고, 출력 body 구성은 `bodies/`의 dataclass로 처리한다.
 
 ## Subject 이름 규칙
 
@@ -56,26 +56,44 @@
 | 영역 | 현재 subject |
 | --- | --- |
 | OAuth | `oauth.start.requested`, `oauth.connected` |
-| GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `desired.diff.detected` |
+| GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed` |
 | Agent | `agent.connected`, `cluster.evidence.received` |
 | Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
-| RCA | `evidence.built`, `rca.completed`, `safe_pr.created` |
+| RCA/Safe PR | `evidence.built`, `rca.completed`, `safe_pr.requested`, `safe_pr.created`, `safe_pr.failed` |
 | Dashboard | `dashboard.updated` |
 | DLQ | `dead_letter.created` |
+| Demo (골든패스) | `demo.ping.requested`, `demo.pong.requested`, `demo.pong.delivered`, `demo.pong.failed` |
 
 새 subject는 아래 내용을 결정한 뒤 추가한다.
 
 - 누가 발행하는가
 - 누가 구독하는가
 - command 요청인지, 상태 사실인지, projection 알림인지
-- 숨은 local state 없이 retry/replay할 수 있을 만큼 payload가 충분한지
+- 숨은 local state 없이 retry/replay할 수 있을 만큼 body가 충분한지
 
 ## 발행
 
-서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/payloads.py`의 payload 객체를 우선 사용한다.
+서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/bodies/`의 body 객체를 우선 사용한다.
+
+API Gateway 같은 HTTP 입구는 `packages/runtime/gateway.py`의
+`ApiEventGateway`를 사용한다.
 
 ```python
-from packages.contracts.event_bus.payloads import CommandRequestedPayload, Diff
+accepted = await self.events.accept_body(
+    CommandRequestedBody(...),
+    actor=Actor(current.user_id, tuple(current.roles)),
+)
+return accepted.response()
+```
+
+`accept_body`는 타입이 있는 body 하나를 받아 subject를 자동으로 유도하고 envelope로 발행한다.
+
+`ApiEventGateway`는 API 요청을 event envelope로 만들고, event bus 발행과
+event table 기록을 함께 처리한다. 로그인/권한 구현이 아직 fake여도 내부
+표현은 `packages/contracts/auth.py`의 `Actor`로 맞춘다.
+
+```python
+from packages.contracts.event_bus.bodies import CommandRequestedBody, Diff
 from packages.contracts.event_bus.subjects import EventSubject
 
 diff = Diff(
@@ -89,20 +107,20 @@ diff = Diff(
 await self.events.publish(
     EventSubject.COMMAND_REQUESTED,
     SERVICE_NAME,
-    CommandRequestedPayload(
+    CommandRequestedBody(
         cluster_id="target-cluster-01",
         action="rollout_restart",
         namespace="sandbox",
         reason="desired diff detected",
         diff=diff,
-    ).to_payload(),
+    ).to_body(),
     correlation_id,
 )
 ```
 
 `RecordedEventClient`는 JetStream에 발행하고 PostgreSQL `events`에도 envelope를 저장한다.
 
-Gateway code는 호환성을 위해 `publish_and_record(...)`를 사용할 수 있다. 새 worker code는 `EventClient`를 우선 사용한다.
+새 API code는 `ApiEventGateway`, 새 worker code는 `EventClient`를 우선 사용한다.
 
 Worker handler 안에서 발행하는 후속 이벤트는 `causation_id`를 직접 넘기지 않아도 된다. `WorkerRuntime`이 현재 처리 중인 원본 이벤트를 context로 잡고, `RecordedEventClient`가 자동으로 원본 `event_id`를 `causation_id`에 넣는다.
 
@@ -118,37 +136,70 @@ async def handle(self, evt: EventEnvelope) -> None:
 
 ## 구독
 
-각 worker의 구독 위치는 자기 서비스 폴더의 `settings.py`다. Runner는 구독 subject를 직접 쓰지 않고 `SUBSCRIPTION`만 넘긴다.
+한 서비스는 한 파일 `app.py`다. 구독은 `App` 객체에 `@app.sub(BodyType)`으로 선언한다. 별도의 `settings.py`나 `WorkerSubscription` 모델, `WorkerService.from_subscription(...)` 호출은 더 이상 서비스 파일에 두지 않는다.
 
 ```python
-from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.event_bus.subscriptions import WorkerSubscription
-
-SERVICE_NAME = "command-worker"
-SUBSCRIPTION = WorkerSubscription(
-    service_name=SERVICE_NAME,
-    subject=EventSubject.COMMAND_REQUESTED,
+from packages.contracts.event_bus.bodies import (
+    CommandRequestedBody,
+    CommandDispatchReadyBody,
 )
+from packages.runtime.app import App
+
+app = App("command-worker")
+
+@app.sub(CommandRequestedBody)              # 한 body 타입 구독
+async def on_command_requested(evt, ctx):
+    yield CommandDispatchReadyBody(...)     # 체이닝: 다음 이벤트는 yield
+
+if __name__ == "__main__":
+    app.run()
 ```
+
+`@app.sub(BodyType)`이 구독할 subject를 body 타입에서 자동으로 유도한다. 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). 테스트나 카탈로그가 필요하면 `app.subscriptions`로 등록된 구독 계약을 확인한다.
+
+dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
 
 ```python
-WorkerService.from_subscription(
-    SUBSCRIPTION,
-    lambda events, db: CommandWorkflow(events, db).handle,
-).run()
+@app.on_event
+async def on_event(evt: EventEnvelope, ctx):
+    ctx.db.append_audit_log(evt)
 ```
 
-`WorkerService`는 내부에서 `EventHandlerSpec`과 `WorkerRuntime`을 만든다. durable consumer 이름은 기본적으로 `service_name`을 사용한다. 한 서비스가 여러 독립 consumer를 가져야 하면 `WorkerSubscription(..., durable_name="...")`을 명시한다.
+`App.run()`은 내부적으로 `WorkerService`/`WorkerRuntime`을 조립한다. durable consumer 이름은 기본적으로 `service_name`을 사용한다. 즉 `WorkerService`는 런타임 내부 구현이며, 서비스 작성자는 직접 다루지 않는다.
 
 현재 worker 구독 위치:
 
 | 서비스 | 설정 파일 | 구독 subject |
 | --- | --- | --- |
-| GitOps Sync Worker | `services/gitops-sync-worker/settings.py` | `git.webhook.received` |
-| Command Worker | `services/command-worker/settings.py` | `command.requested` |
-| RCA Worker | `services/rca-worker/settings.py` | `cluster.evidence.received` |
-| Dashboard Projection Service | `services/dashboard-projection-service/settings.py` | `>` |
-| Audit Timeline Service | `services/audit-timeline-service/settings.py` | `>` |
+| Git Pull Worker (App) | `services/gitops/git-pull-worker/app.py` | `git.webhook.received` |
+| Manifest Render Worker (App) | `services/gitops/manifest-render-worker/app.py` | `git.changed` |
+| Diff Worker (App) | `services/gitops/diff-worker/app.py` | `manifest.rendered` |
+| Diff Analyze Worker (App) | `services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
+| Repo Gateway Worker (App) | `services/gitops/repo-gateway-worker/app.py` | `safe_pr.requested` |
+| Command Worker (App) | `services/command-worker/app.py` | `command.requested` |
+| RCA Worker (App) | `services/rca-worker/app.py` | `cluster.evidence.received` |
+| Dashboard Projection Service (`@app.on_event`) | `services/projection/dashboard-projection-service/app.py` | `>` |
+| Audit Timeline Service (`@app.on_event`) | `services/projection/audit-timeline-service/app.py` | `>` |
+
+## Outbound Gateway 패턴
+
+외부 시스템으로 나가는 작업은 요청/결과 이벤트를 분리한다.
+
+```text
+*.requested
+-> outbound gateway가 외부 provider 호출
+-> *.created/*.delivered 또는 *.failed
+```
+
+이 표준 모양은 `packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
+
+예: `safe_pr.requested -> repo-gateway-worker -> safe_pr.created`. PR 생성은 `repo-gateway-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `repo-gateway-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
+
+외부 provider 호출 실패는 가능한 한 worker 예외로 터뜨려 DLQ로 보내기보다
+`safe_pr.failed` 같은 도메인 실패 이벤트로 발행한다. 이렇게 하면 dashboard,
+audit, replay 정책이 같은 이벤트 흐름 안에서 실패를 볼 수 있다. JSON decode,
+계약 위반, DB 장애처럼 런타임 자체가 처리할 수 없는 오류는 기존 retry/DLQ
+경로를 사용한다.
 
 ## 큐 처리 알고리즘
 

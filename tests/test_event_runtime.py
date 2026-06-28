@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager
 from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.processing import EventProcessingStatus
+from packages.contracts.interfaces import EventProcessingRecord
 from packages.events.envelope import event
 from packages.runtime.worker import EventProcessor, EventRetryPolicy
 
@@ -24,34 +26,32 @@ class FakeMessage:
 
 
 class FakeProcessingStore:
-    def __init__(
-        self, attempts: int = 1, status: str = EventProcessingStatus.PROCESSING
-    ) -> None:
+    def __init__(self, attempts: int = 1, status: str = EventProcessingStatus.PROCESSING) -> None:
         self.attempts = attempts
         self.status = status
         self.recorded: list[EventEnvelope] = []
         self.finished: list[tuple[str, str]] = []
         self.failed: list[tuple[str, str, str]] = []
+        self.staged: list[EventEnvelope] = []
+
+    @contextmanager
+    def unit_of_work(self):
+        yield None
+
+    def stage_events(self, conn: Any, events: list[EventEnvelope]) -> None:
+        self.staged.extend(events)
 
     def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
 
-    def begin_event_processing(
-        self, evt: EventEnvelope, consumer: str
-    ) -> dict[str, Any]:
-        return {"status": self.status, "attempts": self.attempts}
+    def begin_event_processing(self, evt: EventEnvelope, consumer: str) -> dict[str, Any]:
+        return EventProcessingRecord(status=self.status, attempts=self.attempts)
 
-    def finish_event_processing(
-        self, evt: EventEnvelope, consumer: str
-    ) -> None:
+    def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None:
         self.finished.append((evt.event_id, consumer))
 
     def fail_event_processing(
-        self,
-        evt: EventEnvelope,
-        consumer: str,
-        error: str,
-        status: str,
+        self, evt: EventEnvelope, consumer: str, error: str, status: str
     ) -> None:
         self.failed.append((evt.event_id, consumer, status))
 
@@ -61,11 +61,7 @@ class FakeDeadLetters:
         self.captured: list[tuple[EventEnvelope, str, str, int]] = []
 
     async def capture(
-        self,
-        evt: EventEnvelope,
-        consumer: str,
-        error: Exception,
-        attempts: int,
+        self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int
     ) -> EventEnvelope:
         self.captured.append((evt, consumer, str(error), attempts))
         return event(
@@ -85,8 +81,9 @@ def test_event_processor_acks_successful_handler() -> None:
         dead_letters = FakeDeadLetters()
         handled: list[str] = []
 
-        async def handler(received: EventEnvelope) -> None:
+        async def handler(received: EventEnvelope) -> list[EventEnvelope]:
             handled.append(received.event_id)
+            return []
 
         processor = EventProcessor(
             "command-worker",
@@ -114,7 +111,7 @@ def test_event_processor_naks_retryable_failure() -> None:
         store = FakeProcessingStore(attempts=1)
         dead_letters = FakeDeadLetters()
 
-        async def handler(_received: EventEnvelope) -> None:
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise RuntimeError("temporary failure")
 
         processor = EventProcessor(
@@ -129,9 +126,7 @@ def test_event_processor_naks_retryable_failure() -> None:
 
         assert message.acked is False
         assert message.nak_delay == 7
-        assert store.failed == [
-            (evt.event_id, "command-worker", EventProcessingStatus.RETRYING)
-        ]
+        assert store.failed == [(evt.event_id, "command-worker", EventProcessingStatus.RETRYING)]
         assert dead_letters.captured == []
 
     asyncio.run(run())
@@ -144,7 +139,7 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
         store = FakeProcessingStore(attempts=2)
         dead_letters = FakeDeadLetters()
 
-        async def handler(_received: EventEnvelope) -> None:
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise RuntimeError("permanent failure")
 
         processor = EventProcessor(
@@ -160,16 +155,8 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
         assert message.acked is True
         assert message.nak_delay is None
         assert store.failed == [
-            (
-                evt.event_id,
-                "command-worker",
-                EventProcessingStatus.DEAD_LETTERED,
-            )
+            (evt.event_id, "command-worker", EventProcessingStatus.DEAD_LETTERED)
         ]
-        assert dead_letters.captured[0][1:] == (
-            "command-worker",
-            "permanent failure",
-            2,
-        )
+        assert dead_letters.captured[0][1:] == ("command-worker", "permanent failure", 2)
 
     asyncio.run(run())

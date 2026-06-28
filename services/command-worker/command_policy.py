@@ -6,40 +6,18 @@ from typing import Any, Protocol
 
 from command_config import PolicyRuleConfig
 
-from packages.contracts.gateway.fields import Gateway
+from packages.config.errors import require
 
 
 class Lookup(Protocol):
-    """Reads a value by field name. Rules depend on this, not on dict."""
+    """이름으로 값 읽기. 룰은 dict 가 아니라 이 인터페이스에 의존."""
 
     def value(self, field: str, default: Any = None) -> Any: ...
 
 
 @dataclass(frozen=True)
-class Payload:
-    """dict 기반 Lookup 구현 (command 이벤트 payload)."""
-
-    raw: dict[str, Any]
-
-    def value(self, field: str, default: Any = None) -> Any:
-        return self.raw.get(field, default)
-
-    @property
-    def namespace(self) -> str | None:
-        return self.value(Gateway.NAMESPACE)
-
-    @property
-    def cluster_id(self) -> str | None:
-        return self.value(Gateway.CLUSTER_ID)
-
-    @property
-    def action(self) -> str | None:
-        return self.value(Gateway.ACTION)
-
-
-@dataclass(frozen=True)
 class ModelLookup:
-    """속성(model) 기반 Lookup 구현 (Pydantic/dataclass payload)."""
+    """속성(model) 기반 Lookup 구현 (Pydantic/dataclass body)."""
 
     model: Any
 
@@ -89,13 +67,8 @@ class Result:
         return cls(False, reason)
 
     def require_reason(self) -> str:
-        if self.reason is None:
-            raise ValueError("policy rejection requires reason")
+        require(self.reason is not None, "정책 거부에 reason 필요")
         return self.reason
-
-
-class PolicyPort(Protocol):
-    def evaluate(self, target: Lookup) -> Result: ...
 
 
 class Policy:

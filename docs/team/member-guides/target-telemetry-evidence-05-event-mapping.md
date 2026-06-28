@@ -25,7 +25,7 @@ Audit timeline payload
 ```text
 EvidenceDraft
   -> GatewayEvidenceRequest
-  -> EventPayload
+  -> EventBody
   -> RcaEvidenceInput
 ```
 

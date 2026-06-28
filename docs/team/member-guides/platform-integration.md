@@ -9,13 +9,15 @@ Platform/Integration 담당자는 “모든 코드를 직접 구현하는 사람
 ```text
 Common Contracts
   subjects.py
-  payloads.py
+  packages/contracts/event_bus/bodies/
   EventEnvelope
   service ports
 
 Runtime
-  WorkerService
+  App (서비스 진입점)
+  WorkerService (App.run 내부)
   EventProcessor
+  outbound.py deliver(call, ok, fail)
   retry/DLQ/idempotency
 
 Infrastructure
@@ -42,7 +44,7 @@ Infrastructure
 
 ## 현재 책임
 
-- `packages/contracts/event_bus`, `EventEnvelope`, payload DTO, `EventClient`, `WorkerService`, retry, DLQ, replay 계약을 유지한다.
+- `packages/contracts/event_bus`, `EventEnvelope`, body DTO, `EventClient`, `App`/`WorkerService`, retry, DLQ, replay 계약을 유지한다.
 - CI가 실패한 PR이 merge되지 않도록 GitHub Actions와 branch protection 기준을 관리한다.
 - 배포 스크립트와 수요일 demo 검증 흐름을 유지한다.
 - DB/event 원자성이 필요해지는 시점에 outbox relay 도입 여부를 결정한다.
@@ -54,7 +56,7 @@ Infrastructure
 팀원에게는 내부 구현보다 아래 네 가지를 반복해서 알려준다.
 
 1. 어떤 event subject를 구독하는가.
-2. handler는 어떤 payload DTO를 읽는가.
+2. handler는 어떤 body DTO를 읽는가(`@app.sub(BodyType)`).
 3. 처리 후 어떤 event subject를 발행하는가.
 4. retry/DLQ/ack/nak는 runtime이 처리한다.
 
@@ -68,16 +70,16 @@ Infrastructure
 서비스 담당자가 반드시 지켜야 하는 것:
 
 - raw NATS client를 서비스 workflow에 import하지 않는다.
-- event payload는 DTO 또는 계약 클래스로 만든다.
+- event body는 DTO 또는 계약 클래스로 만든다(`EventBody` 하위).
 - secret은 event, response, log, audit에 넣지 않는다.
-- subject/payload 변경은 문서와 테스트를 같이 바꾼다.
+- subject/body 변경은 문서와 테스트를 같이 바꾼다.
 
 ## 코드 규칙
 
 - 교체 가능한 infrastructure는 `Protocol` interface로 표현한다.
 - runtime error handling은 runtime/process edge code에 모은다.
 - service workflow가 raw NATS client를 import하지 않게 한다.
-- service workflow가 raw event dict에 의존하지 않고 `EventEnvelope`와 payload DTO를 사용하게 한다.
+- service workflow가 raw event dict에 의존하지 않고 `EventEnvelope`와 body DTO를 사용하게 한다.
 - 상수는 의미 있는 이름으로 명시한다.
 - 클래스는 바뀌는 이유가 하나가 되도록 작게 유지한다.
 - 공통 계약 변경은 최소 하나 이상의 서비스 테스트 또는 contract test를 동반한다.
@@ -87,9 +89,9 @@ Infrastructure
 
 | Phase | PR 목표 | 왜 이 단위인가 |
 | --- | --- | --- |
-| 1 | 이벤트 계약 문서/예제 정비 | 팀원이 subject/payload를 보고 구현할 수 있게 한다. |
+| 1 | 이벤트 계약 문서/예제 정비 | 팀원이 subject/body를 보고 구현할 수 있게 한다. |
 | 2 | Worker template/fake runtime test helper | 새 worker 테스트를 쉽게 만든다. |
-| 3 | Contract test 추가 | subject/payload 변경 회귀를 잡는다. |
+| 3 | Contract test 추가 | subject/body 변경 회귀를 잡는다. |
 | 4 | CI dependency/runtime gap 제거 | 로컬/CI/Docker 차이로 부팅 실패를 막는다. |
 | 5 | Smoke test 강화 | import만이 아니라 최소 event path를 검증한다. |
 | 6 | DLQ/replay 운영 가이드 | 실패 복구 방법을 팀에 제공한다. |
@@ -101,7 +103,7 @@ Infrastructure
 목표:
 
 ```text
-새 담당자가 subject와 payload만 보고 worker 입출력을 이해하게 만든다.
+새 담당자가 subject와 body만 보고 worker 입출력을 이해하게 만든다.
 ```
 
 왜 해야 하는가:
@@ -112,15 +114,16 @@ Infrastructure
 
 구현할 것:
 
-- `docs/events.md`에 subject별 producer/consumer/payload 표.
+- `docs/events.md`에 subject별 producer/consumer/body 표.
 - `subjects.py` 그룹 주석 유지.
-- `payloads.py` DTO 예제.
+- `packages/contracts/event_bus/bodies/` DTO 예제.
+- `make events`(`python scripts/events.py`) 카탈로그 유지: 각 이벤트를 `subject  Body  by=service/handler  fields=(...)`로 출력하고, `@app.on_event` 서비스는 "ALL-EVENT 구독(프로젝터)" 섹션에 모은다.
 - 각 멤버 가이드에 “이벤트를 몰라도 되는 연결 규칙” 섹션.
 
 생각할 것:
 
 - 새 subject가 사실인지 명령인지 이름으로 구분되는가?
-- payload에 secret이 들어갈 가능성이 있는가?
+- body에 secret이 들어갈 가능성이 있는가?
 - producer와 consumer가 실제로 존재하는가?
 
 하지 말 것:
@@ -131,7 +134,7 @@ Infrastructure
 테스트:
 
 - subject 상수 중복 없음.
-- payload DTO `to_payload()` smoke.
+- body DTO `to_body()`/`from_body()` round-trip smoke.
 - docs 링크 깨짐 없음.
 
 ## Phase 2. Worker template/fake runtime test helper
@@ -145,14 +148,15 @@ Infrastructure
 왜 해야 하는가:
 
 - 초보자가 JetStream을 띄우지 못해도 로직 테스트를 작성할 수 있어야 한다.
-- fake EventClient가 있으면 발행된 subject/payload를 바로 검증할 수 있다.
+- 테스트 helper가 있으면 핸들러가 yield한 subject/body를 바로 검증할 수 있다.
 - runtime은 별도 테스트하고 service workflow는 작게 테스트한다.
 
-구현할 것:
+구현할 것(`tests/conftest.py`):
 
-- `FakeEventClient`.
-- `FakeCommandQueue` 또는 store fake.
-- `make_envelope(...)` test helper.
+- `load_service` — `app.py`를 로드해 `App`을 꺼낸다.
+- `run_handler` — 핸들러를 envelope로 호출하고 yield된 body를 모은다.
+- `subjects_of` — yield된 body들의 subject 목록을 뽑는다.
+- `SpyDb` — DB 호출을 기록하는 fake.
 - worker test 예제 하나.
 
 생각할 것:
@@ -168,8 +172,8 @@ Infrastructure
 
 테스트:
 
-- sample handler가 fake event client로 subject 발행 검증.
-- EventEnvelope fixture가 payload DTO와 잘 맞는다.
+- sample handler가 `run_handler`/`subjects_of`로 발행 subject 검증.
+- EventEnvelope fixture가 body DTO와 잘 맞는다.
 
 ## Phase 3. Contract test 추가
 
@@ -182,14 +186,14 @@ Infrastructure
 왜 해야 하는가:
 
 - subject 이름 하나가 바뀌면 모든 worker가 조용히 끊길 수 있다.
-- payload field 하나가 바뀌면 dashboard/audit/command가 깨질 수 있다.
+- body field 하나가 바뀌면 dashboard/audit/command가 깨질 수 있다.
 - contract test는 팀원이 리팩토링할 때 안전망이 된다.
 
 구현할 것:
 
 - subject naming test.
-- payload required field test.
-- worker subscription subject 존재 test.
+- body required field test.
+- worker `@app.sub` subscription subject 존재 test.
 - docs/events subject mention test는 가능하면 추가.
 
 생각할 것:
@@ -255,7 +259,7 @@ Gateway -> event -> worker -> DB/read model 중 최소 한 줄이 실제로 흐�
 
 왜 해야 하는가:
 
-- compile/lint는 subject/payload mismatch를 못 잡을 수 있다.
+- compile/lint는 subject/body mismatch를 못 잡을 수 있다.
 - demo 전 가장 중요한 것은 한 cycle이 흐르는지다.
 - 팀원 PR이 서로를 깨뜨렸는지 빨리 알아야 한다.
 
@@ -388,7 +392,7 @@ DB 저장과 event publish가 동시에 필요한 흐름에서 불일치 위험�
 - `make check` 통과
 - CI workflow가 required check로 유지됨
 - 새 공통 contract에 최소 1개 테스트 존재
-- 새 event payload 계약이 `payloads.py`와 테스트에 반영됨
+- 새 event body 계약이 `packages/contracts/event_bus/bodies/`와 테스트에 반영됨
 - architecture/runtime 변경이 문서에 설명됨
 - 다른 service owner 동작을 바꾼 경우 사전 조율 기록 존재
 - Docker runtime dependency와 CI dependency가 어긋나지 않음
