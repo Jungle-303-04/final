@@ -55,3 +55,28 @@ def test_event_uses_standard_envelope_fields() -> None:
     assert created.correlation_id == "corr-2"
     assert created.causation_id == "parent-event-1"
     assert created.created_at
+
+
+def test_payload_nested_decode_roundtrip() -> None:
+    from packages.contracts.event_bus.payloads import (
+        ManifestRenderedPayload,
+        RenderedManifest,
+        RenderedMetadata,
+        RenderedSpec,
+    )
+
+    original = ManifestRenderedPayload(
+        rendered_manifest=RenderedManifest(
+            api_version="apps/v1",
+            kind="Deployment",
+            metadata=RenderedMetadata(name="checkout-api", namespace="sandbox"),
+            spec=RenderedSpec(replicas=2, image="img:new"),
+        )
+    )
+
+    decoded = ManifestRenderedPayload.from_payload(original.to_payload())
+
+    # 중첩이 dict 가 아니라 타입 객체로 복원된다(evt.x.y 접근 가능).
+    assert isinstance(decoded.rendered_manifest, RenderedManifest)
+    assert decoded.rendered_manifest.spec.image == "img:new"
+    assert decoded == original
