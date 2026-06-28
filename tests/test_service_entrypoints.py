@@ -46,20 +46,23 @@ SERVICE_ENTRYPOINTS = {
         "WorkerService.from_subscription(",
     ),
     "target-cluster-agent": (
-        "services/target-cluster-agent/app.py",
+        "services/target/target-cluster-agent/app.py",
         "AsyncService(",
     ),
-    "node-collector": ("services/node-collector/app.py", "AsyncService("),
+    "node-collector": (
+        "services/target/node-collector/app.py",
+        "AsyncService(",
+    ),
     "fake-prometheus": (
-        "services/target-cluster-agent/fake_prometheus.py",
+        "services/target/target-cluster-agent/fake_prometheus.py",
         "AsyncService(",
     ),
     "fake-loki": (
-        "services/target-cluster-agent/fake_loki.py",
+        "services/target/target-cluster-agent/fake_loki.py",
         "AsyncService(",
     ),
     "fake-otel": (
-        "services/target-cluster-agent/fake_otel.py",
+        "services/target/target-cluster-agent/fake_otel.py",
         "AsyncService(",
     ),
 }
