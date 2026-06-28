@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.contracts.stores import AuditStore
 from packages.runtime.app import App, EventContext
 
 app = App("audit-timeline-service")
 
 
 @app.on_event
-async def on_event(evt: EventEnvelope, ctx: EventContext) -> None:
+async def on_event(evt: EventEnvelope, ctx: EventContext[AuditStore]) -> None:
     await ctx.db.append_audit_log(evt)
 
 

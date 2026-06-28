@@ -146,6 +146,7 @@ ci: PR 필수 검증 workflow 추가
 - handler는 `EventEnvelope`를 받고 `evt.payload`, `evt.correlation_id`처럼 속성으로 접근한다.
 - handler write는 at-least-once delivery에 안전하도록 idempotent하게 작성한다.
 - handler는 local work를 끝낸 뒤 ack되어야 한다. `ack/nak/DLQ`는 `packages/runtime/worker.py`가 담당한다.
+- 워커는 `ctx: EventContext[XStore]`로 받는다(`packages/contracts/stores.py`의 능력별 async Protocol). 자기 store 메서드만 노출되어 다른 서비스의 DB 능력은 안 보인다. `ctx.db` 호출은 비차단(`AsyncDb`)이라 항상 `await`.
 
 ## API 규칙
 
