@@ -31,7 +31,9 @@ class OAuthCallbackRequest(StrictModel):
 class GitHubWebhookRequest(StrictModel):
     commit_sha: str
     image: str = DEFAULT_WEBHOOK_IMAGE
-    replicas: int = Field(default=DEFAULT_WEBHOOK_REPLICAS, ge=MIN_WEBHOOK_REPLICAS, le=MAX_WEBHOOK_REPLICAS)
+    replicas: int = Field(
+        default=DEFAULT_WEBHOOK_REPLICAS, ge=MIN_WEBHOOK_REPLICAS, le=MAX_WEBHOOK_REPLICAS
+    )
 
 
 class AgentConnectRequest(StrictModel):

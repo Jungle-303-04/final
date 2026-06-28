@@ -12,7 +12,23 @@ STREAM_MAX_BYTES = 1024 * 1024 * 1024  # 1 GiB
 
 # 스트림이 받는 subject 와일드카드. 도메인별로 "<도메인>.>" 한 줄씩.
 # 새 도메인 이벤트 추가 시 여기 와일드카드도 함께.
-STREAM_SUBJECTS = ["oauth.>", "git.>", "manifest.>", "desired.>", "diff.>", "cluster.>", "evidence.>", "command.>", "rca.>", "safe_pr.>", "dashboard.>", "audit.>", "agent.>", "dead_letter.>", "demo.>"]
+STREAM_SUBJECTS = [
+    "oauth.>",
+    "git.>",
+    "manifest.>",
+    "desired.>",
+    "diff.>",
+    "cluster.>",
+    "evidence.>",
+    "command.>",
+    "rca.>",
+    "safe_pr.>",
+    "dashboard.>",
+    "audit.>",
+    "agent.>",
+    "dead_letter.>",
+    "demo.>",
+]
 
 
 class EventSubject(StrEnum):

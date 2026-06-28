@@ -8,7 +8,15 @@ from packages.contracts.event_bus.interfaces import EventEnvelope
 
 
 def _evt(subject: str, source: str = "rca-worker") -> EventEnvelope:
-    return EventEnvelope(event_id="e1", subject=subject, source=source, correlation_id="c1", causation_id=None, created_at="t", payload={})
+    return EventEnvelope(
+        event_id="e1",
+        subject=subject,
+        source=source,
+        correlation_id="c1",
+        causation_id=None,
+        created_at="t",
+        payload={},
+    )
 
 
 def test_dashboard_projects_and_emits_update() -> None:

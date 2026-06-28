@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pytest>=8.4.0",
     "ruff>=0.12.0",
 ]
@@ -25,18 +26,10 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.ruff]
-# 줄 길이 제한 비활성화: 포매터가 강제로 줄을 쪼개지 않도록 매우 크게.
-line-length = 1000
+# 가독성 폭(클린코드 기준): 80은 좁아 의미 없는 줄바꿈을 부르고, 1000은 과함 → 100.
+line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]  # Line too long 비활성화
-
-[tool.ruff.format]
-# 한 줄로 합칠 수 있으면 합친다(트레일링 콤마로 인한 강제 줄바꿈 무시).
-skip-magic-trailing-comma = true
-
-[tool.ruff.lint.isort]
-# 포매터(skip-magic-trailing-comma)와 일관: 트레일링 콤마로 import 재분할 안 함.
-split-on-trailing-comma = false
+ignore = ["E501"]  # 폭은 포매터가 관리, 린트로 길이 트집 안 잡음
