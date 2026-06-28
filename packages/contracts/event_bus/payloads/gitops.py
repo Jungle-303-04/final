@@ -56,13 +56,24 @@ class Diff(EventPayload):
     risk: str
 
 
+@events.reg(EventSubject.GIT_WEBHOOK_RECEIVED)
+@dataclass(frozen=True)
+class GitWebhookReceived(EventPayload):
+    """git.webhook.received — 깃 webhook 입력(gitops 입력)."""
+
+    commit_sha: str
+    image: str
+    replicas: int
+
+
 @events.reg(EventSubject.GIT_CHANGED)
 @dataclass(frozen=True)
 class GitChangedPayload(EventPayload):
-    """git.changed — 변경이 확정됐고 manifest를 만들었다."""
+    """git.changed — 깃 변경 확정(원시 변경 정보)."""
 
     commit_sha: str
-    manifest: Manifest
+    image: str
+    replicas: int
 
 
 @events.reg(EventSubject.MANIFEST_RENDERED)
@@ -79,3 +90,14 @@ class DesiredDiffPayload(EventPayload):
     """desired.diff.detected — 적용해야 할 차이를 감지."""
 
     diff: Diff
+
+
+@events.reg(EventSubject.DIFF_ANALYZED)
+@dataclass(frozen=True)
+class DiffAnalyzedPayload(EventPayload):
+    """diff.analyzed — diff 위험도 분석 결과."""
+
+    diff: Diff
+    safe: bool
+    risk: str
+    reason: str

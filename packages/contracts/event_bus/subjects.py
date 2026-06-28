@@ -17,6 +17,7 @@ STREAM_SUBJECTS = [
     "git.>",
     "manifest.>",
     "desired.>",
+    "diff.>",
     "cluster.>",
     "evidence.>",
     "command.>",
@@ -47,6 +48,7 @@ class EventSubject(StrEnum):
     GIT_CHANGED = "git.changed"  # 변경 확정
     MANIFEST_RENDERED = "manifest.rendered"  # k8s manifest 렌더
     DESIRED_DIFF_DETECTED = "desired.diff.detected"  # 원하는 상태와 차이 감지
+    DIFF_ANALYZED = "diff.analyzed"  # diff 위험도 분석 결과
 
     # --- 대상 클러스터/에이전트(target-cluster-agent) ---
     AGENT_CONNECTED = "agent.connected"  # 에이전트 등록
