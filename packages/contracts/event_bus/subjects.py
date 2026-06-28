@@ -27,6 +27,7 @@ STREAM_SUBJECTS = [
     "audit.>",
     "agent.>",
     "dead_letter.>",
+    "demo.>",
 ]
 
 
@@ -67,9 +68,16 @@ class EventSubject(StrEnum):
     RCA_COMPLETED = "rca.completed"  # 근본 원인 분석 완료
     SAFE_PR_REQUESTED = "safe_pr.requested"  # PR 생성 요청(공통)
     SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
+    SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패
 
     # --- 읽기 모델(dashboard-projection-service) ---
     DASHBOARD_UPDATED = "dashboard.updated"  # 대시보드 카드 갱신
 
     # --- 신뢰성(공통): 재시도 소진 시 DLQ ---
     DEAD_LETTER_CREATED = "dead_letter.created"  # 죽은 편지(DLQ) 적재
+
+    # --- demo(ping↔pong): 프레임워크 한 바퀴 학습용 ---
+    DEMO_PING_REQUESTED = "demo.ping.requested"  # API 입구
+    DEMO_PONG_REQUESTED = "demo.pong.requested"  # 워커 → outbound 게이트웨이
+    DEMO_PONG_DELIVERED = "demo.pong.delivered"  # 외부 호출 성공
+    DEMO_PONG_FAILED = "demo.pong.failed"  # 외부 호출 실패
