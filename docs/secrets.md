@@ -1,30 +1,29 @@
 # 시크릿 관리
 
-시크릿 도구는 강제하지 않는다. 프로젝트 내부 코드는
-`packages/contracts/secrets.py`의 `SecretProvider` 인터페이스만 본다.
-
-기본 구현은 `packages/config/secrets.py`의 `EnvSecretProvider`다. 로컬
-`.env`, Docker env, Kubernetes Secret env 주입은 모두 이 구현으로 처리한다.
+시크릿 도구는 강제하지 않는다. 현재 코드베이스에는 별도 `SecretProvider`
+추상화가 없다. 서비스 설정은 `packages/config/settings.py`의 `env(name,
+default)`로 환경변수에서 읽고, provider token은 평문 값이 아니라
+`token_ref`/`credential_ref` 같은 참조로만 이벤트와 저장소 경계를 지난다.
 
 외부 사용자는 SOPS/age, AWS Secrets Manager, Vault, 1Password, External
-Secrets 중 무엇을 쓰든 최종적으로 env를 주입하거나 `SecretProvider` 구현을
-갈아끼우면 된다.
+Secrets 중 무엇을 쓰든 최종적으로 Kubernetes Secret 또는 실행 환경변수로
+주입하면 된다. 서비스 코드가 특정 secret manager SDK를 직접 import하지 않는
+경계를 유지한다.
 
 ## 인터페이스 기준
 
-시크릿은 코드에서 값이 아니라 참조로 다룬다.
+시크릿은 서비스 간 계약과 이벤트에서 값이 아니라 참조로 다룬다.
 
 ```python
-from packages.config.secrets import default_secret_provider
-from packages.contracts.secrets import SecretRef
+from packages.config.settings import env
 
-token = default_secret_provider().require(SecretRef.env("GITHUB_TOKEN"))
+database_url = env("DATABASE_URL", "postgresql://service:service@postgresql:5432/service")
 ```
 
 규칙:
 
 - 서비스 코드는 SOPS, AWS, Vault 같은 특정 도구를 직접 import하지 않는다.
-- 서비스 코드는 `SecretRef`와 `SecretProvider` 계약에만 의존한다.
+- 서비스 코드는 실행 설정은 환경변수로 읽고, provider credential은 `token_ref` 또는 `credential_ref`만 전달한다.
 - 우리 내부 기본값은 env/Kubernetes Secret 주입이다.
 - 특정 운영 환경용 provider는 adapter로 추가한다.
 
