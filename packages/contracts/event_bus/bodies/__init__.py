@@ -23,7 +23,7 @@ from packages.contracts.event_bus.bodies.command import (
 )
 from packages.contracts.event_bus.bodies.dashboard import DashboardUpdatedBody
 from packages.contracts.event_bus.bodies.demo import (
-    DemoPingRequested,
+    DemoPingRequestedBody,
     DemoPongDeliveredBody,
     DemoPongFailedBody,
     DemoPongRequestedBody,
@@ -33,7 +33,7 @@ from packages.contracts.event_bus.bodies.gitops import (
     Diff,
     DiffAnalyzedBody,
     GitChangedBody,
-    GitWebhookReceived,
+    GitWebhookReceivedBody,
     Manifest,
     ManifestRenderedBody,
     RenderedManifest,
@@ -41,7 +41,7 @@ from packages.contracts.event_bus.bodies.gitops import (
     RenderedSpec,
 )
 from packages.contracts.event_bus.bodies.rca import (
-    ClusterEvidenceReceived,
+    ClusterEvidenceReceivedBody,
     Evidence,
     EvidenceBuiltBody,
     RcaCompletedBody,
@@ -53,14 +53,14 @@ from packages.contracts.event_bus.bodies.repo import (
 )
 
 __all__ = [
-    "ClusterEvidenceReceived",
+    "ClusterEvidenceReceivedBody",
     "CommandDispatchReadyBody",
     "CommandDispatchedBody",
     "CommandQueuedForAgentBody",
     "CommandRejectedBody",
     "CommandRequestedBody",
     "DashboardUpdatedBody",
-    "DemoPingRequested",
+    "DemoPingRequestedBody",
     "DemoPongDeliveredBody",
     "DemoPongFailedBody",
     "DemoPongRequestedBody",
@@ -71,7 +71,7 @@ __all__ = [
     "Evidence",
     "EvidenceBuiltBody",
     "GitChangedBody",
-    "GitWebhookReceived",
+    "GitWebhookReceivedBody",
     "JsonObject",
     "Manifest",
     "ManifestRenderedBody",

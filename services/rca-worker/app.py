@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 
 from packages.config.constants import GitHub
 from packages.contracts.event_bus.bodies import (
-    ClusterEvidenceReceived,
+    ClusterEvidenceReceivedBody,
     EventBody,
     Evidence,
     EvidenceBuiltBody,
@@ -30,9 +30,9 @@ OBJECT_EVIDENCE_PREFIX = "object://evidence"
 EVIDENCE_KIND = "rca_bundle"
 
 
-@app.sub(ClusterEvidenceReceived)
+@app.sub(ClusterEvidenceReceivedBody)
 async def on_cluster_evidence(
-    evt: ClusterEvidenceReceived, ctx: EventContext[RcaStore]
+    evt: ClusterEvidenceReceivedBody, ctx: EventContext[RcaStore]
 ) -> AsyncIterator[EventBody]:
     evidence_ref = f"{OBJECT_EVIDENCE_PREFIX}/{ctx.correlation_id}.json"
     evidence = Evidence(

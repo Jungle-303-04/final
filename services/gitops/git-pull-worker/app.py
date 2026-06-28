@@ -9,14 +9,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import EventBody, GitChangedBody, GitWebhookReceived
+from packages.contracts.event_bus.bodies import EventBody, GitChangedBody, GitWebhookReceivedBody
 from packages.runtime.app import App, EventContext
 
 app = App("git-pull-worker")
 
 
-@app.sub(GitWebhookReceived)
-async def on_git_webhook(evt: GitWebhookReceived, ctx: EventContext) -> AsyncIterator[EventBody]:
+@app.sub(GitWebhookReceivedBody)
+async def on_git_webhook(evt: GitWebhookReceivedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
     yield GitChangedBody(commit_sha=commit_sha, image=evt.image, replicas=evt.replicas)
 

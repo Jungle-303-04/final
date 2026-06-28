@@ -11,7 +11,7 @@ from packages.contracts.event_bus.subjects import EventSubject
 
 @events.reg(EventSubject.CLUSTER_EVIDENCE_RECEIVED)
 @dataclass(frozen=True)
-class ClusterEvidenceReceived(EventBody):
+class ClusterEvidenceReceivedBody(EventBody):
     """cluster.evidence.received — 에이전트가 보낸 증거(rca 입력)."""
 
     cluster_id: str
