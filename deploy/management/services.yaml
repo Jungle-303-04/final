@@ -121,7 +121,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/dashboard-projection-service/app.py"]
+          command: ["python", "services/projection/dashboard-projection-service/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -147,7 +147,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/audit-timeline-service/app.py"]
+          command: ["python", "services/projection/audit-timeline-service/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
