@@ -9,7 +9,12 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import EventBody, SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
+from packages.contracts.event_bus.bodies import (
+    EventBody,
+    SafePrCreatedBody,
+    SafePrFailedBody,
+    SafePrRequestedBody,
+)
 from packages.runtime.app import App, EventContext
 
 app = App("repo-gateway-worker")
@@ -22,7 +27,9 @@ MISSING_GITHUB_TOKEN_REF = "missing-github-oauth-fallback"
 
 
 @app.sub(SafePrRequestedBody)
-async def on_safe_pr_requested(evt: SafePrRequestedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
+async def on_safe_pr_requested(
+    evt: SafePrRequestedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
     try:
         pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
         token_ref = ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF

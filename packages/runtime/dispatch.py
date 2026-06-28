@@ -28,7 +28,13 @@ class EventContext:
 
     @classmethod
     def of(cls, evt: EventEnvelope, db: Any) -> EventContext:
-        return cls(event_id=evt.event_id, subject=evt.subject, correlation_id=evt.correlation_id, causation_id=evt.causation_id, db=db)
+        return cls(
+            event_id=evt.event_id,
+            subject=evt.subject,
+            correlation_id=evt.correlation_id,
+            causation_id=evt.causation_id,
+            db=db,
+        )
 
 
 async def _iter_results(result: Any) -> AsyncIterator[Any]:
@@ -54,7 +60,9 @@ async def _emit_results(client: Any, source: str, evt: EventEnvelope, result: An
         await client.emit(out.__subject__, source, out.to_body(), evt.correlation_id)
 
 
-def make_event_handler(sub: Subscription, client: Any, db: Any, source: str) -> Callable[[EventEnvelope], Any]:
+def make_event_handler(
+    sub: Subscription, client: Any, db: Any, source: str
+) -> Callable[[EventEnvelope], Any]:
     """타입 구독: 봉투 → body 디코드 → 콜백 → yield된 body 발행."""
 
     async def handle(evt: EventEnvelope) -> None:
@@ -66,7 +74,9 @@ def make_event_handler(sub: Subscription, client: Any, db: Any, source: str) -> 
     return handle
 
 
-def make_raw_handler(fn: Callable[..., Any], wants_ctx: bool, client: Any, db: Any, source: str) -> Callable[[EventEnvelope], Any]:
+def make_raw_handler(
+    fn: Callable[..., Any], wants_ctx: bool, client: Any, db: Any, source: str
+) -> Callable[[EventEnvelope], Any]:
     """전체(>) 구독: 디코드 없이 봉투 그대로 → 콜백 → yield된 body 발행."""
 
     async def handle(evt: EventEnvelope) -> None:

@@ -23,7 +23,12 @@ from packages.config.errors import require
 from packages.contracts.event_bus.registry import Subscription, events
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, WorkerSubscription
-from packages.runtime.checks import require_handler_signature, require_registered, require_single_handler, require_unique_handler
+from packages.runtime.checks import (
+    require_handler_signature,
+    require_registered,
+    require_single_handler,
+    require_unique_handler,
+)
 from packages.runtime.dispatch import EventContext, make_event_handler, make_raw_handler
 
 # App 과 EventContext 함께 쓰므로 여기서 재노출.
@@ -38,7 +43,9 @@ class App:
 
     def sub(self, body_type: type) -> Callable[..., Any]:
         """타입 구독: 이 body 가 실린 이벤트 1종을 받는다."""
-        require(self._raw is None, f"{self.name}: @app.sub 와 @app.on_event 는 함께 못 쓴다", TypeError)
+        require(
+            self._raw is None, f"{self.name}: @app.sub 와 @app.on_event 는 함께 못 쓴다", TypeError
+        )
         subject = require_registered(body_type)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -55,7 +62,11 @@ class App:
 
         대시보드/감사처럼 도메인을 가로지르는 프로젝터용.
         """
-        require(not self._handlers and self._raw is None, f"{self.name}: 구독은 @app.sub 또는 @app.on_event 하나만", TypeError)
+        require(
+            not self._handlers and self._raw is None,
+            f"{self.name}: 구독은 @app.sub 또는 @app.on_event 하나만",
+            TypeError,
+        )
         self._raw = (fn, require_handler_signature(fn))
         events.note_raw_handler(self.name, fn.__name__)
         return fn

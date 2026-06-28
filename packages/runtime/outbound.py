@@ -18,7 +18,9 @@ from typing import Any, Protocol
 from packages.config.settings import env
 
 
-async def deliver(call: Callable[[], Awaitable[Any]], ok: Callable[[Any], Any], fail: Callable[[Exception], Any]) -> AsyncIterator[Any]:
+async def deliver(
+    call: Callable[[], Awaitable[Any]], ok: Callable[[Any], Any], fail: Callable[[Exception], Any]
+) -> AsyncIterator[Any]:
     """외부 호출 1회 → 성공이면 ok(결과), 실패면 fail(예외) body 발행."""
     try:
         result = await call()
@@ -49,7 +51,12 @@ class HttpOutbound:
         url = f"{self.base_url}{path}"
 
         def _post() -> int:
-            request = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
+            request = urllib.request.Request(
+                url,
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
             with urllib.request.urlopen(  # noqa: S310 - 내부 콜백 URL
                 request, timeout=self.TIMEOUT_SECONDS
             ) as response:

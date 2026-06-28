@@ -67,7 +67,14 @@ class EventSubscription(Protocol):
 
 
 class EventPublisher(Protocol):
-    async def emit(self, subject: str, source: str, payload: JsonObject, correlation_id: str | None = None, causation_id: str | None = None) -> EventEnvelope: ...
+    async def emit(
+        self,
+        subject: str,
+        source: str,
+        payload: JsonObject,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+    ) -> EventEnvelope: ...
 
 
 class EventRecorder(Protocol):
@@ -77,7 +84,14 @@ class EventRecorder(Protocol):
 
 class EventClient(Protocol):
     # emit = 브로커 발행 + 저장 + causation 자동 연결(RecordedEventClient).
-    async def emit(self, subject: str, source: str, payload: JsonObject, correlation_id: str | None = None, causation_id: str | None = None) -> EventEnvelope: ...
+    async def emit(
+        self,
+        subject: str,
+        source: str,
+        payload: JsonObject,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+    ) -> EventEnvelope: ...
 
 
 class EventConsumerBus(EventPublisher, Protocol):
