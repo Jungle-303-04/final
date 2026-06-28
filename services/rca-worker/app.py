@@ -17,6 +17,7 @@ from packages.contracts.event_bus.bodies import (
     RcaCompletedBody,
     SafePrRequestedBody,
 )
+from packages.contracts.stores import RcaStore
 from packages.runtime.app import App, EventContext
 
 app = App("rca-worker")
@@ -31,7 +32,7 @@ EVIDENCE_KIND = "rca_bundle"
 
 @app.sub(ClusterEvidenceReceived)
 async def on_cluster_evidence(
-    evt: ClusterEvidenceReceived, ctx: EventContext
+    evt: ClusterEvidenceReceived, ctx: EventContext[RcaStore]
 ) -> AsyncIterator[EventBody]:
     evidence_ref = f"{OBJECT_EVIDENCE_PREFIX}/{ctx.correlation_id}.json"
     evidence = Evidence(

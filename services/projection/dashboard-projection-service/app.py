@@ -12,6 +12,7 @@ from packages.contracts.dashboard.status import DashboardStatus
 from packages.contracts.event_bus.bodies import DashboardUpdatedBody, EventBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.stores import DashboardStore
 from packages.runtime.app import App, EventContext
 
 app = App("dashboard-projection-service")
@@ -28,7 +29,9 @@ def _status(subject: str) -> DashboardStatus:
 
 
 @app.on_event
-async def on_event(evt: EventEnvelope, ctx: EventContext) -> AsyncIterator[EventBody]:
+async def on_event(
+    evt: EventEnvelope, ctx: EventContext[DashboardStore]
+) -> AsyncIterator[EventBody]:
     if evt.subject == EventSubject.DASHBOARD_UPDATED:
         return  # 자기 이벤트는 무시(무한 루프 방지)
     status = _status(evt.subject)
