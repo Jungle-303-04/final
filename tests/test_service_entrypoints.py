@@ -5,6 +5,10 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
+    "diff-worker": (
+        "services/diff-worker/app.py",
+        "App(",
+    ),
     "manifest-render-worker": (
         "services/manifest-render-worker/app.py",
         "App(",
@@ -83,6 +87,7 @@ APP_BASED_SERVICES = {
     "command-worker",
     "git-pull-worker",
     "manifest-render-worker",
+    "diff-worker",
 }
 
 
