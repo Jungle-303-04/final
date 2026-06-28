@@ -50,14 +50,3 @@ class RcaCompletedPayload(EventPayload):
     root_cause: str
     action: str
     evidence_ref: str
-
-
-@events.reg(EventSubject.SAFE_PR_CREATED)
-@dataclass(frozen=True)
-class SafePrCreatedPayload(EventPayload):
-    """safe_pr.created — 안전한 롤백 PR을 만들었다."""
-
-    pr_url: str
-    provider: str
-    token_ref: str
-    mode: str
