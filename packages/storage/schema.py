@@ -175,4 +175,18 @@ class TokenVault(Base):
     updated_at: Mapped[Any] = updated_at_column()
 
 
+class OutboxModel(Base):
+    __tablename__ = "outbox"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    subject: Mapped[str] = text_column()
+    source: Mapped[str] = text_column()
+    correlation_id: Mapped[str] = text_column()
+    causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    occurred_at: Mapped[str] = text_column()
+    payload: Mapped[dict[str, Any]] = jsonb_column()
+    sent_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
 metadata = Base.metadata

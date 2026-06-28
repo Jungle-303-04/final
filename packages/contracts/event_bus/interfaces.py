@@ -77,6 +77,10 @@ class EventPublisher(Protocol):
     ) -> EventEnvelope: ...
 
 
+class EnvelopePublisher(Protocol):
+    async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope: ...
+
+
 class EventRecorder(Protocol):
     # 발행한 이벤트를 영속 저장(감사/재생용).
     def record_event(self, evt: EventEnvelope) -> None: ...
