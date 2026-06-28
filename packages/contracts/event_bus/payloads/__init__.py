@@ -27,6 +27,12 @@ from packages.contracts.event_bus.payloads.command import (
 from packages.contracts.event_bus.payloads.dashboard import (
     DashboardUpdatedPayload,
 )
+from packages.contracts.event_bus.payloads.demo import (
+    DemoPingRequested,
+    DemoPongDeliveredPayload,
+    DemoPongFailedPayload,
+    DemoPongRequestedPayload,
+)
 from packages.contracts.event_bus.payloads.gitops import (
     DesiredDiffPayload,
     Diff,
@@ -47,6 +53,7 @@ from packages.contracts.event_bus.payloads.rca import (
 )
 from packages.contracts.event_bus.payloads.repo import (
     SafePrCreatedPayload,
+    SafePrFailedPayload,
     SafePrRequestedPayload,
 )
 
@@ -58,6 +65,10 @@ __all__ = [
     "CommandRejectedPayload",
     "CommandRequestedPayload",
     "DashboardUpdatedPayload",
+    "DemoPingRequested",
+    "DemoPongDeliveredPayload",
+    "DemoPongFailedPayload",
+    "DemoPongRequestedPayload",
     "DesiredDiffPayload",
     "Diff",
     "DiffAnalyzedPayload",
@@ -76,5 +87,6 @@ __all__ = [
     "RenderedSpec",
     "Route",
     "SafePrCreatedPayload",
+    "SafePrFailedPayload",
     "SafePrRequestedPayload",
 ]
