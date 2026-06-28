@@ -11,7 +11,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync hooks doctor lint format test events check build-image up down status smoke scale kill-pod clean
+.PHONY: help setup env sync hooks doctor lint format test events crash-test check build-image up down status smoke scale kill-pod clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -63,6 +63,9 @@ status: ## management/target 리소스 상태 확인
 
 smoke: ## 전체 이벤트 사이클 smoke 테스트
 	bash scripts/smoke.sh
+
+crash-test: ## Outbox exactly-once 크래시 테스트(make up 후)
+	bash scripts/crash_test.sh
 
 scale: ## management worker scale. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
 	@test -n "$(DEPLOYMENT)" && test -n "$(REPLICAS)"
