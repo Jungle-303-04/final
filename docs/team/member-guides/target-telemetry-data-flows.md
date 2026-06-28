@@ -10,13 +10,13 @@
 
 현재 있는 것:
 
-- `services/target-cluster-agent/fake_prometheus.py`
+- `services/target/target-cluster-agent/fake_prometheus.py`
   - 실제 Prometheus가 아니다.
   - `agent.py`의 `create_fake_telemetry_app("prometheus")`를 실행한다.
   - Prometheus처럼 생긴 JSON을 고정으로 반환하는 fake server다.
   - scrape 저장소도 없고 PromQL query engine도 없다.
 
-- `services/node-collector/node_collector.py`
+- `services/target/node-collector/node_collector.py`
   - 이미 `GET /metrics` endpoint가 있다.
   - Prometheus text format 형태로 sample metric을 반환한다.
   - 첫 real Prometheus scrape target으로 쓰기 좋다.
@@ -92,7 +92,7 @@ Kubernetes API
    - pod phase, deployment replica, node condition 같은 표준 metric을 얻기 쉽다.
    - 우리가 직접 object 상태 exporter를 만들 필요가 줄어든다.
 
-2. `services/node-collector`가 `/metrics` 제공
+2. `services/target/node-collector`가 `/metrics` 제공
    - 우리 demo에 필요한 node/runtime metric만 직접 노출한다.
    - Prometheus가 이 endpoint를 scrape한다.
    - 예: `node_collector_runtime_ready`, `node_collector_pod_restart_total`.
@@ -226,7 +226,7 @@ Prometheus, Loki, OpenTelemetry Collector 같은 관측 스택도 Kubernetes에 
 ```text
 User workload manifests
   사용자가 배포하려는 애플리케이션 리소스
-  GitOps Sync Worker가 render/diff/command 대상으로 본다.
+  GitOps split workers가 render/diff/command 대상으로 본다.
 
 Platform observability manifests
   우리 시스템이 관측을 위해 설치하는 내부 인프라 리소스
@@ -258,7 +258,7 @@ services/*/deploy 또는 manifests/
   target workload diff 대상 아님
 ```
 
-GitOps Sync Worker 규칙:
+GitOps split worker 규칙:
 
 - `deploy/target/observability/**`는 기본 workload diff 후보에서 제외한다.
 - `monitoring`, `observability`, `prometheus`, `loki`, `otel` 같은 platform 경로는 allowlist 없이는 command.requested로 변환하지 않는다.

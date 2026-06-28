@@ -17,10 +17,10 @@ spec:
         - name: gateway
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/api-gateway/runner.py"]
+          command: ["python", "services/api-gateway/app.py"]
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
             - name: REDIS_URL
@@ -53,32 +53,6 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gitops-sync-worker
-  namespace: management
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: gitops-sync-worker
-  template:
-    metadata:
-      labels:
-        app: gitops-sync-worker
-    spec:
-      containers:
-        - name: worker
-          image: service:local
-          imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops-sync-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: command-worker
   namespace: management
 spec:
@@ -95,10 +69,19 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/command-worker/runner.py"]
+          command: ["python", "services/command-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -121,10 +104,19 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/rca-worker/runner.py"]
+          command: ["python", "services/rca-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -147,10 +139,19 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/dashboard-projection-service/runner.py"]
+          command: ["python", "services/projection/dashboard-projection-service/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -173,9 +174,193 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/audit-timeline-service/runner.py"]
+          command: ["python", "services/projection/audit-timeline-service/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
+            - name: NATS_URL
+              value: nats://nats:4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-pull-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: git-pull-worker
+  template:
+    metadata:
+      labels:
+        app: git-pull-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "services/gitops/git-pull-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          env:
+            - name: DATABASE_URL
+              value: postgresql://service:service@pgbouncer:6432/service
+            - name: NATS_URL
+              value: nats://nats:4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manifest-render-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manifest-render-worker
+  template:
+    metadata:
+      labels:
+        app: manifest-render-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "services/gitops/manifest-render-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          env:
+            - name: DATABASE_URL
+              value: postgresql://service:service@pgbouncer:6432/service
+            - name: NATS_URL
+              value: nats://nats:4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diff-worker
+  template:
+    metadata:
+      labels:
+        app: diff-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "services/gitops/diff-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          env:
+            - name: DATABASE_URL
+              value: postgresql://service:service@pgbouncer:6432/service
+            - name: NATS_URL
+              value: nats://nats:4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-analyze-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diff-analyze-worker
+  template:
+    metadata:
+      labels:
+        app: diff-analyze-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "services/gitops/diff-analyze-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          env:
+            - name: DATABASE_URL
+              value: postgresql://service:service@pgbouncer:6432/service
+            - name: NATS_URL
+              value: nats://nats:4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: repo-gateway-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: repo-gateway-worker
+  template:
+    metadata:
+      labels:
+        app: repo-gateway-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "services/gitops/repo-gateway-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          env:
+            - name: DATABASE_URL
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222

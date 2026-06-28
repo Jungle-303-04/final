@@ -4,9 +4,7 @@ from typing import Final
 
 
 class Postgres:
-    DEFAULT_URL: Final[str] = (
-        "postgresql://service:service@postgresql:5432/service"
-    )
+    DEFAULT_URL: Final[str] = "postgresql://service:service@postgresql:5432/service"
 
 
 class Nats:
@@ -39,5 +37,16 @@ class GitHub:
     REQUIRED_SCOPE: Final[str] = "repo"
 
 
+class OAuth:
+    DEFAULT_SCOPES: Final[tuple[str, ...]] = ("profile", "email")
+
+
+class Command:
+    DEFAULT_ACTION: Final[str] = "rollout_restart"
+
+
 class Sandbox:
     NAMESPACE: Final[str] = "sandbox"
+    RISK_TAG: Final[str] = (
+        "sandbox-only"  # diff 가 sandbox 한정 → 안전 판정 표식(생산자·소비자 공유)
+    )
