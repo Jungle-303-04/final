@@ -5,8 +5,8 @@
 - 접미사 없는 명사 = 본문 안에 끼워지는 값 객체(예: Manifest, Diff, Plan).
 규칙: 입력은 Pydantic으로 검증, 출력(이 패키지)은 dataclass로 구성.
 
-도메인별로 base/gitops/command/rca/dashboard 모듈에 나뉘어 있고, 여기서
-전부 재노출하므로 `from ...payloads import X` 는 그대로 동작한다.
+도메인별 base/gitops/command/rca/dashboard 모듈로 분리, 여기서 전부
+재노출 → `from ...payloads import X` 그대로 동작.
 """
 
 from __future__ import annotations

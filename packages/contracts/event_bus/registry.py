@@ -1,10 +1,10 @@
 """이벤트 타입 레지스트리(전역 계약, 카탈로그).
 
-"어떤 이벤트가 있나"만 담당한다(정적, 전역 공유 계약).
-- @events.reg(SUBJECT): 이 payload가 이 이벤트다.
+"어떤 이벤트가 있나"만 담당(정적, 전역 공유 계약).
+- @events.reg(SUBJECT): payload ↔ 이벤트 매핑.
 - describe(): make events 로 한눈에 보는 표.
 
-실제 구독/실행(런타임)은 packages/runtime/ 의 App + dispatch 가 한다.
+실제 구독/실행(런타임)은 packages/runtime/ 의 App + dispatch 담당.
 이벤트 "정의"는 공유 계약이라 전역, "핸들러"는 서비스별이라 App 소유.
 """
 

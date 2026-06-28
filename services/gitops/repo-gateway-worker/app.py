@@ -1,8 +1,7 @@
-"""repo-gateway-worker — safe_pr.requested 를 받아 GitHub PR 을 만든다.
+"""repo-gateway-worker — safe_pr.requested → GitHub PR → safe_pr.created.
 
-외부(GitHub)로 나가는 단일 outbound 게이트웨이. target-cluster-agent 가
-클러스터 게이트웨이인 것과 대칭. 안전 판단은 요청자(gitops·rca)가 끝내서
-보내고, 여기서는 실제 PR 생성만 맡아 safe_pr.created 를 흘린다.
+외부(GitHub) 단일 outbound 게이트웨이. target-cluster-agent(클러스터
+게이트웨이)와 대칭. 안전 판단은 요청자(gitops·rca), PR 생성만 여기서.
 """
 
 from __future__ import annotations

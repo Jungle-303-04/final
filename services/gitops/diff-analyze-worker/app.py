@@ -1,7 +1,7 @@
-"""diff-analyze-worker — desired.diff.detected 를 받아 위험도를 분석한다.
+"""diff-analyze-worker — desired.diff.detected → 위험도 분석 → diff.analyzed.
 
-diff 가 sandbox 한정이면 안전(safe)으로 보고 diff.analyzed 를 흘린다.
-안전하면 PR 생성을 repo-gateway 에 위임(safe_pr.requested)한다.
+sandbox 한정이면 안전(safe). 안전 시 PR 생성을 repo-gateway 에
+위임(safe_pr.requested).
 """
 
 from __future__ import annotations
