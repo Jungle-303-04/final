@@ -80,10 +80,6 @@ class Result:
         return self.reason
 
 
-class PolicyPort(Protocol):
-    def evaluate(self, target: Lookup) -> Result: ...
-
-
 class Policy:
     def __init__(self, rules: Sequence[Rule]) -> None:
         self.rules: tuple[Rule, ...] = tuple(rules)
