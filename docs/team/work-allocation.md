@@ -23,7 +23,9 @@
 - 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
 - PR 기준: `dev` base draft PR
 - 변경 가능 범위: 아래 작업 경계 표와 각 member guide
-- 자동화 권한: 읽기, 점검, 제안만 허용한다. commit, push, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경은 팀원이 명시적으로 요청한 작업 세션에서만 수행한다.
+- 팀원별 자동화 권한: 담당 범위 Issue 본문/체크리스트, Project WBS item/status, source/WIKI 문서 정합성은 직접 보정한다. 완료된 issue는 닫지 않고 Project status만 `완료`로 갱신한다.
+- 총괄 WBS 자동화 권한: 전체 WBS/Issue/Project/docs/WIKI 정합성을 보정하고, 각 상위 작업이 최소 10개 이상의 하위 task 또는 체크리스트를 유지하도록 부족분을 정의한다.
+- 자동화 금지 작업: 제품 코드 구현, commit, push, branch 생성/삭제, PR close/Ready/merge, main/dev 직접 변경.
 
 ## 작업 경계
 
