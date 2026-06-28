@@ -53,32 +53,6 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gitops-sync-worker
-  namespace: management
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: gitops-sync-worker
-  template:
-    metadata:
-      labels:
-        app: gitops-sync-worker
-    spec:
-      containers:
-        - name: worker
-          image: service:local
-          imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops-sync-worker/app.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: command-worker
   namespace: management
 spec:
