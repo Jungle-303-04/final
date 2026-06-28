@@ -20,7 +20,7 @@ spec:
           command: ["python", "services/api-gateway/app.py"]
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
             - name: REDIS_URL
@@ -81,7 +81,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -116,7 +116,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -151,7 +151,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -186,7 +186,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -221,7 +221,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -256,7 +256,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -291,7 +291,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -326,7 +326,7 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
 ---
@@ -361,6 +361,6 @@ spec:
             failureThreshold: 3
           env:
             - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
+              value: postgresql://service:service@pgbouncer:6432/service
             - name: NATS_URL
               value: nats://nats:4222
