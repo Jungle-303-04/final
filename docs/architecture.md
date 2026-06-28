@@ -83,7 +83,7 @@ fake-loki                     -> python services/target/target-cluster-agent/fak
 fake-otel                     -> python services/target/target-cluster-agent/fake_otel.py
 ```
 
-서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 runner, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
+서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 `app.py` entrypoint, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
 
 ## 복구와 장애 격리
 
@@ -91,7 +91,7 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 
 | 기준 | 설명 |
 | --- | --- |
-| health | HTTP 서비스는 `/healthz`, worker/agent는 runner 생존과 log/event 처리 상태로 확인한다. |
+| health | HTTP 서비스는 `/healthz`, worker/agent는 `app.py` entrypoint 생존과 log/event 처리 상태로 확인한다. |
 | restart | `scripts/kill-pod.sh <deployment>` 뒤 Deployment가 새 pod를 만든다. |
 | retry | worker handler 실패는 `event_processing` retry 상태를 거쳐 DLQ로 이동한다. |
 | isolation | 한 서비스 장애가 다른 서비스 process를 같이 죽이면 안 된다. |
@@ -118,7 +118,7 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 ```python
 app = App("rca-worker")
 
-@app.sub(ClusterEvidenceReceived)      # 한 body 타입 구독
+@app.sub(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
 async def on_evidence(evt, ctx):
     yield EvidenceBuiltBody(...)        # 체이닝 = 다음 body를 yield
 
