@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import DemoPingRequestedBody, DemoPongRequestedBody, EventBody
+from packages.contracts.event_bus.bodies import (
+    DemoPingRequestedBody,
+    DemoPongRequestedBody,
+    EventBody,
+)
 from packages.runtime.app import App, EventContext
 
 app = App("demo-ping-worker")

@@ -284,7 +284,11 @@ class DeadLetterRepository(DatabaseConnection):
         statement = (
             update(table)
             .where(table.c.id == dead_letter_id)
-            .values(status=DEAD_LETTER_STATUS_REPLAYED, replayed_at=func.now(), replay_event_id=replay_event_id)
+            .values(
+                status=DEAD_LETTER_STATUS_REPLAYED,
+                replayed_at=func.now(),
+                replay_event_id=replay_event_id,
+            )
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -305,7 +309,9 @@ class OAuthRepository(DatabaseConnection):
                     encrypted_payload=self._fake_token_payload(provider),
                 )
             )
-            conn.execute(self._oauth_account_upsert(user_id, provider, provider_user, scopes, token_ref))
+            conn.execute(
+                self._oauth_account_upsert(user_id, provider, provider_user, scopes, token_ref)
+            )
         return {
             "user_id": user_id,
             "provider": provider,
