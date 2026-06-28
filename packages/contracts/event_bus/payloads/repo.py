@@ -1,0 +1,34 @@
+"""repo-gateway(외부 GitHub 게이트웨이) 이벤트 payload.
+
+PR 생성은 repo-gateway 한 곳으로 모은다. 누구든(gitops·rca) PR 이 필요하면
+safe_pr.requested 를 흘리면 repo-gateway 가 만들어 safe_pr.created 를 낸다.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from packages.contracts.event_bus.payloads.base import EventPayload
+from packages.contracts.event_bus.registry import events
+from packages.contracts.event_bus.subjects import EventSubject
+
+
+@events.reg(EventSubject.SAFE_PR_REQUESTED)
+@dataclass(frozen=True)
+class SafePrRequestedPayload(EventPayload):
+    """safe_pr.requested — PR 을 만들어 달라(제목/본문/공급자)."""
+
+    title: str
+    body: str
+    provider: str
+
+
+@events.reg(EventSubject.SAFE_PR_CREATED)
+@dataclass(frozen=True)
+class SafePrCreatedPayload(EventPayload):
+    """safe_pr.created — repo-gateway 가 PR 을 만들었다."""
+
+    pr_url: str
+    provider: str
+    token_ref: str
+    mode: str
