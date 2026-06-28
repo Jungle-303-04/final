@@ -21,7 +21,6 @@ app = App("diff-worker")
 
 PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
 RESOURCE_REF = "deployment/checkout-api"
-SYNC_RISK = "sandbox-only"
 
 
 @app.sub(ManifestRenderedBody)
@@ -34,7 +33,7 @@ async def on_manifest_rendered(
         namespace=Sandbox.NAMESPACE,
         desired_image=rendered.spec.image,
         actual_image=PREVIOUS_IMAGE,
-        risk=SYNC_RISK,
+        risk=Sandbox.RISK_TAG,
     )
     yield DesiredDiffBody(diff=diff)
 
