@@ -60,16 +60,6 @@ class SessionStore(Protocol):
     async def check_rate_limit(self, key: str) -> None: ...
 
 
-class DashboardReadModel(Protocol):
-    def upsert_dashboard(self, evt: EventEnvelope, status: str, summary: str) -> None: ...
-
-    def list_dashboard(self) -> list[JsonObject]: ...
-
-
-class AuditLogStore(Protocol):
-    def append_audit_log(self, evt: EventEnvelope) -> None: ...
-
-
 class ManagementPlaneClient(Protocol):
     async def register_agent(
         self, cluster_id: str, agent_id: str, capabilities: list[str]
