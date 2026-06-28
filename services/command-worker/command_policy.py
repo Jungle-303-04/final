@@ -54,13 +54,7 @@ class EqualsRule:
 
     @classmethod
     def build(cls, config: PolicyRuleConfig) -> EqualsRule:
-        return cls(
-            name=config.name,
-            field=config.field,
-            expected=config.expected,
-            reason=config.reason,
-            default=config.default,
-        )
+        return cls(name=config.name, field=config.field, expected=config.expected, reason=config.reason, default=config.default)
 
 
 @dataclass(frozen=True)

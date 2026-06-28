@@ -39,23 +39,12 @@ def load_service(name: str) -> Any:
 
 
 def make_context(db: Any = None, **fields: Any) -> EventContext:
-    base: dict[str, Any] = {
-        "event_id": "evt-1",
-        "subject": "test",
-        "correlation_id": "corr-1",
-        "causation_id": None,
-        "db": db,
-    }
+    base: dict[str, Any] = {"event_id": "evt-1", "subject": "test", "correlation_id": "corr-1", "causation_id": None, "db": db}
     base.update(fields)
     return EventContext(**base)
 
 
-def run_handler(
-    handler: Callable[..., AsyncIterator[Any]],
-    payload: Any,
-    db: Any = None,
-    **fields: Any,
-) -> list[Any]:
+def run_handler(handler: Callable[..., AsyncIterator[Any]], payload: Any, db: Any = None, **fields: Any) -> list[Any]:
     ctx = make_context(db=db, **fields)
 
     async def go() -> list[Any]:

@@ -2,14 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import (
-    BigInteger,
-    Integer,
-    PrimaryKeyConstraint,
-    Text,
-    UniqueConstraint,
-    func,
-)
+from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 

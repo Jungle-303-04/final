@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import os
 
-from packages.contracts.secrets import (
-    MissingSecretError,
-    SecretRef,
-)
+from packages.contracts.secrets import MissingSecretError, SecretRef
 
 
 class EnvSecretProvider:

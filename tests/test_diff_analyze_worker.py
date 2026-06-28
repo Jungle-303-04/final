@@ -6,13 +6,7 @@ from packages.contracts.event_bus.bodies import DesiredDiffBody, Diff
 
 
 def _diff(risk: str) -> Diff:
-    return Diff(
-        resource="deployment/checkout-api",
-        namespace="sandbox",
-        desired_image="img:new",
-        actual_image="img:old",
-        risk=risk,
-    )
+    return Diff(resource="deployment/checkout-api", namespace="sandbox", desired_image="img:new", actual_image="img:old", risk=risk)
 
 
 def test_safe_diff_requests_pr() -> None:
