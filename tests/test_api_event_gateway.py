@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from packages.contracts.auth import Actor, Permission
+from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.events.envelope import event
@@ -39,7 +39,7 @@ def test_api_event_gateway_attaches_actor_and_records_event() -> None:
         publisher = MemoryPublisher()
         recorder = MemoryRecorder()
         gateway = ApiEventGateway(publisher, recorder, "api-gateway")
-        actor = Actor("user-1", roles=("operator",), permissions=(Permission.COMMAND_REQUEST,))
+        actor = Actor("user-1", roles=("operator",))
 
         accepted = await gateway.accept(
             EventSubject.COMMAND_REQUESTED, {"action": "rollout_restart"}, actor=actor

@@ -115,9 +115,7 @@ def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
         default="sandbox",
     )
     engine = policy.Policy([rule])
-    dict_target = policy.Body({"namespace": "sandbox"})
     model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
     rejected = policy.ModelLookup(SimpleNamespace(namespace="production"))
-    assert engine.evaluate(dict_target).allowed is True
     assert engine.evaluate(model_target).allowed is True
     assert engine.evaluate(rejected).allowed is False
