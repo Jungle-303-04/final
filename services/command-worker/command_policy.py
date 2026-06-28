@@ -6,6 +6,8 @@ from typing import Any, Protocol
 
 from command_config import PolicyRuleConfig
 
+from packages.config.errors import require
+
 
 class Lookup(Protocol):
     """이름으로 값을 읽는다. 룰은 dict 가 아니라 이 인터페이스에 의존한다."""
@@ -75,8 +77,7 @@ class Result:
         return cls(False, reason)
 
     def require_reason(self) -> str:
-        if self.reason is None:
-            raise ValueError("정책 거부에는 reason 이 필요하다")
+        require(self.reason is not None, "정책 거부에는 reason 이 필요하다")
         return self.reason
 
 

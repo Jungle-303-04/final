@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from packages.config.constants import Nats, Runtime
+from packages.config.errors import fail
 from packages.config.logs import get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import (
@@ -98,7 +99,7 @@ class NatsEventBus(EventBus):
                     flush=True,
                 )
                 await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-        raise RuntimeError("NATS 에 연결할 수 없다")
+        fail("NATS 에 연결할 수 없다")
 
     async def ensure_stream(self) -> None:
         assert self.js is not None
