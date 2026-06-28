@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager
 from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
@@ -31,6 +32,14 @@ class FakeProcessingStore:
         self.recorded: list[EventEnvelope] = []
         self.finished: list[tuple[str, str]] = []
         self.failed: list[tuple[str, str, str]] = []
+        self.staged: list[EventEnvelope] = []
+
+    @contextmanager
+    def unit_of_work(self):
+        yield None
+
+    def stage_events(self, conn: Any, events: list[EventEnvelope]) -> None:
+        self.staged.extend(events)
 
     def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
@@ -72,8 +81,9 @@ def test_event_processor_acks_successful_handler() -> None:
         dead_letters = FakeDeadLetters()
         handled: list[str] = []
 
-        async def handler(received: EventEnvelope) -> None:
+        async def handler(received: EventEnvelope) -> list[EventEnvelope]:
             handled.append(received.event_id)
+            return []
 
         processor = EventProcessor(
             "command-worker",
@@ -101,7 +111,7 @@ def test_event_processor_naks_retryable_failure() -> None:
         store = FakeProcessingStore(attempts=1)
         dead_letters = FakeDeadLetters()
 
-        async def handler(_received: EventEnvelope) -> None:
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise RuntimeError("temporary failure")
 
         processor = EventProcessor(
@@ -129,7 +139,7 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
         store = FakeProcessingStore(attempts=2)
         dead_letters = FakeDeadLetters()
 
-        async def handler(_received: EventEnvelope) -> None:
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
             raise RuntimeError("permanent failure")
 
         processor = EventProcessor(
