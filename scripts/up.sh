@@ -61,14 +61,16 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/red
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
 for deploy in \
   api-gateway \
-  gitops-sync-worker command-worker rca-worker \
+  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker repo-gateway-worker \
+  command-worker rca-worker \
   dashboard-projection-service audit-timeline-service; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout restart "deploy/${deploy}"
 done
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api-gateway --timeout=180s
 
 for deploy in \
-  gitops-sync-worker command-worker rca-worker \
+  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker repo-gateway-worker \
+  command-worker rca-worker \
   dashboard-projection-service audit-timeline-service; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status "deploy/${deploy}" --timeout=180s
 done
