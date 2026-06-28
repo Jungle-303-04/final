@@ -8,7 +8,7 @@ from conftest import ROOT, load_file, load_service, run_handler, subjects_of
 
 from packages.contracts.event_bus.bodies import CommandRequestedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
-from packages.events.bus import RecordedEventClient, emit_and_record, event_causation
+from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
 
 
@@ -51,13 +51,9 @@ def test_publish_and_record_uses_event_ports() -> None:
     async def run() -> None:
         publisher = FakeEventPublisher()
         recorder = FakeEventRecorder()
-        created = await emit_and_record(
-            publisher,
-            recorder,
-            "command.requested",
-            "test",
-            {"cluster_id": "target-cluster-01"},
-            "corr-1",
+        client = RecordedEventClient(publisher, recorder)
+        created = await client.emit(
+            "command.requested", "test", {"cluster_id": "target-cluster-01"}, "corr-1"
         )
         assert created.correlation_id == "corr-1"
         assert publisher.published == [created]
