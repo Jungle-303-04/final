@@ -45,7 +45,7 @@ Audit Timeline Service
 
 ## 이벤트 시스템을 몰라도 되는 작업 규칙
 
-- RCA Worker는 `@app.sub(ClusterEvidenceReceived)`로 `cluster.evidence.received`를 구독한다.
+- RCA Worker는 `@app.sub(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
 - handler 입력은 타입이 있는 body 객체이며, 원본 envelope의 transport 필드는 `EventEnvelope.payload`다.
 - 새로운 사실을 만들면 body DTO로 감싸서 `yield`로 발행한다.
 - GitHub PR을 실제로 만들 때도 event에는 PR URL, branch, commit SHA, credential_ref 같은 reference만 남긴다.
