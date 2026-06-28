@@ -31,7 +31,7 @@ EvidenceDraft
   사람이 읽을 수 있고 RCA가 판단하기 쉬운 형태
   아직 최종 event payload는 아님
 
-Final Event Payload
+Final Event Body
   Gateway/RCA/Event 계약이 확정된 뒤
   EvidenceDraft를 변환해서 보낼 최종 payload
 ```
@@ -130,7 +130,7 @@ EvidenceDraft는 이렇게 바꾼다.
 현재 EvidenceDraft는 아래 파일에 바로 넣을 최종 계약이 아니다.
 
 ```text
-packages/contracts/event_bus/payloads.py
+packages/contracts/event_bus/bodies/
 ```
 
 아직은 Target Agent 내부에서만 쓰는 중간 모델로 시작한다.
@@ -138,7 +138,7 @@ packages/contracts/event_bus/payloads.py
 처음 구현 위치 후보:
 
 ```text
-services/target-cluster-agent/evidence.py
+services/target/target-cluster-agent/evidence.py
 ```
 
 나중에 Gateway/RCA/Event 계약이 확정되면 그때 변환한다.
@@ -444,7 +444,7 @@ DB query span 시간이 기준보다 길다.
 처음 구현 후보 파일:
 
 ```text
-services/target-cluster-agent/evidence.py
+services/target/target-cluster-agent/evidence.py
 ```
 
 처음 만들 class 후보:

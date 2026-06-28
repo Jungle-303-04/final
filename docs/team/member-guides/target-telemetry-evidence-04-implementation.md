@@ -2,7 +2,7 @@
 
 ## 목표
 
-이 문서는 `services/target-cluster-agent/evidence.py`를 어떻게 시작할지 설명한다.
+이 문서는 `services/target/target-cluster-agent/evidence.py`를 어떻게 시작할지 설명한다.
 
 중요한 원칙:
 
@@ -16,7 +16,7 @@
 새 파일 후보:
 
 ```text
-services/target-cluster-agent/evidence.py
+services/target/target-cluster-agent/evidence.py
 ```
 
 테스트 파일 후보:
@@ -36,7 +36,7 @@ tests/test_target_log_evidence.py
 ```text
 1. examples/telemetry-evidence-demo/app/evidence_demo.py를 읽는다.
 2. latest_value(...) 함수만 이해한다.
-3. 같은 동작을 services/target-cluster-agent/evidence.py에 옮긴다.
+3. 같은 동작을 services/target/target-cluster-agent/evidence.py에 옮긴다.
 4. tests/test_target_metric_evidence.py에 raw JSON fixture를 하나 넣는다.
 5. pytest로 latest 값 하나가 나오는지 확인한다.
 6. 그 다음에 EvidenceDraft dataclass를 만든다.
@@ -174,7 +174,7 @@ def test_latest_from_prometheus_vector() -> None:
     assert module.latest_from_prometheus_vector(raw) == 0.19
 ```
 
-`services/target-cluster-agent`처럼 디렉터리 이름에 hyphen이 있으면 일반 import가 어렵다. 그래서 위 예시처럼 `importlib.util.spec_from_file_location`으로 파일 경로에서 직접 module을 읽는다.
+`services/target/target-cluster-agent`처럼 디렉터리 이름에 hyphen이 있으면 일반 import가 어렵다. 그래서 위 예시처럼 `importlib.util.spec_from_file_location`으로 파일 경로에서 직접 module을 읽는다.
 
 참고할 파일:
 
@@ -186,7 +186,7 @@ tests/test_node_collector.py
 
 ## 첫 구현 코드 후보
 
-`services/target-cluster-agent/evidence.py`에 처음 넣을 수 있는 최소 코드다.
+`services/target/target-cluster-agent/evidence.py`에 처음 넣을 수 있는 최소 코드다.
 
 ```python
 from __future__ import annotations
