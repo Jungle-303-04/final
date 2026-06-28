@@ -5,7 +5,7 @@
 
     @app.sub(ClusterEvidenceReceived)  # 구독: 이 이벤트 오면 이 함수
     async def on_evidence(evt, ctx):
-        yield EvidenceBuiltPayload(...)  # 체이닝 = yield
+        yield EvidenceBuiltBody(...)  # 체이닝 = yield
 
     if __name__ == "__main__":
         app.run()                       # NATS 붙여 실행
@@ -39,13 +39,13 @@ class App:
         self.name = name
         self._handlers: dict[EventSubject, Subscription] = {}
 
-    def sub(self, payload_type: type) -> Callable[..., Any]:
-        subject = require_registered(payload_type)
+    def sub(self, body_type: type) -> Callable[..., Any]:
+        subject = require_registered(body_type)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             require_unique_handler(self._handlers, subject)
             sub = Subscription(
-                subject, payload_type, fn, require_handler_signature(fn)
+                subject, body_type, fn, require_handler_signature(fn)
             )
             self._handlers[subject] = sub
             events.note_handler(self.name, sub)  # 카탈로그 표시용
@@ -53,12 +53,16 @@ class App:
 
         return decorator
 
+    @property
+    def subscriptions(self) -> tuple[Subscription, ...]:
+        return tuple(self._handlers.values())
+
     def run(self) -> None:
         """등록된 구독자를 NATS 에 붙여 실행. (런타임은 지연 import)"""
         from packages.runtime.service import WorkerService
 
         require_single_handler(self.name, self._handlers)
-        sub = next(iter(self._handlers.values()))
+        sub = self.subscriptions[0]
         worker_sub = WorkerSubscription(
             service_name=self.name, subject=sub.subject
         )

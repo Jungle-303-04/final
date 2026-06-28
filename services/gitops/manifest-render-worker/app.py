@@ -9,11 +9,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from packages.config.constants import Sandbox
-from packages.contracts.event_bus.payloads import (
-    EventPayload,
-    GitChangedPayload,
+from packages.contracts.event_bus.bodies import (
+    EventBody,
+    GitChangedBody,
     Manifest,
-    ManifestRenderedPayload,
+    ManifestRenderedBody,
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
@@ -27,10 +27,10 @@ MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
 
 
-@app.sub(GitChangedPayload)
+@app.sub(GitChangedBody)
 async def on_git_changed(
-    evt: GitChangedPayload, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
+    evt: GitChangedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
     manifest = Manifest(
         app=DEFAULT_APP_NAME,
         image=evt.image,
@@ -38,7 +38,7 @@ async def on_git_changed(
         namespace=Sandbox.NAMESPACE,
     )
     ctx.db.save_repo_change(
-        ctx.correlation_id, evt.commit_sha, manifest.to_payload()
+        ctx.correlation_id, evt.commit_sha, manifest.to_body()
     )
     rendered = RenderedManifest(
         api_version=MANIFEST_API_VERSION,
@@ -48,7 +48,7 @@ async def on_git_changed(
         ),
         spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
     )
-    yield ManifestRenderedPayload(rendered_manifest=rendered)
+    yield ManifestRenderedBody(rendered_manifest=rendered)
 
 
 if __name__ == "__main__":

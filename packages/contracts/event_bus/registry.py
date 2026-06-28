@@ -1,7 +1,7 @@
 """이벤트 타입 레지스트리(전역 계약, 카탈로그).
 
 "어떤 이벤트가 있나"만 담당(정적, 전역 공유 계약).
-- @events.reg(SUBJECT): payload ↔ 이벤트 매핑.
+- @events.reg(SUBJECT): body ↔ 이벤트 매핑.
 - describe(): make events 로 한눈에 보는 표.
 
 실제 구독/실행(런타임)은 packages/runtime/ 의 App + dispatch 담당.
@@ -19,10 +19,10 @@ from packages.contracts.event_bus.subjects import EventSubject
 
 @dataclass(frozen=True)
 class Subscription:
-    """App.sub 가 만드는 핸들러 바인딩(subject ↔ payload ↔ 함수)."""
+    """App.sub 가 만드는 핸들러 바인딩(subject ↔ body ↔ 함수)."""
 
     subject: EventSubject
-    payload_type: type
+    body_type: type
     fn: Callable[..., Any]
     wants_ctx: bool
 
@@ -35,10 +35,10 @@ class EventRegistry:
         self._handlers: dict[EventSubject, tuple[str, str]] = {}
 
     def reg(self, subject: EventSubject) -> Callable[[type], type]:
-        def decorator(payload_type: type) -> type:
-            payload_type.__subject__ = subject
-            self._defs[subject] = payload_type
-            return payload_type
+        def decorator(body_type: type) -> type:
+            body_type.__subject__ = subject
+            self._defs[subject] = body_type
+            return body_type
 
         return decorator
 
@@ -48,12 +48,12 @@ class EventRegistry:
 
     def describe(self) -> str:
         rows = ["EVENTS (한눈에 보기)", ""]
-        for subject, payload_type in sorted(self._defs.items()):
-            names = ", ".join(f.name for f in fields(payload_type))
+        for subject, body_type in sorted(self._defs.items()):
+            names = ", ".join(f.name for f in fields(body_type))
             service, handler = self._handlers.get(subject, ("-", "-"))
             rows.append(
-                f"{subject:<28} {payload_type.__name__:<26} "
-                f"by={service}/{handler}  payload=({names})"
+                f"{subject:<28} {body_type.__name__:<26} "
+                f"by={service}/{handler}  fields=({names})"
             )
         return "\n".join(rows)
 
