@@ -5,6 +5,10 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
+    "manifest-render-worker": (
+        "services/manifest-render-worker/app.py",
+        "App(",
+    ),
     "git-pull-worker": (
         "services/git-pull-worker/app.py",
         "App(",
@@ -74,7 +78,12 @@ def test_services_have_direct_process_entrypoints() -> None:
 
 
 # App(한 파일) 으로 마이그레이션한 서비스는 settings.py 가 없다(러너에 인라인).
-APP_BASED_SERVICES = {"rca-worker", "command-worker", "git-pull-worker"}
+APP_BASED_SERVICES = {
+    "rca-worker",
+    "command-worker",
+    "git-pull-worker",
+    "manifest-render-worker",
+}
 
 
 def test_services_keep_local_settings_files() -> None:
