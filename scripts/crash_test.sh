@@ -32,7 +32,10 @@ kill_workers() {
 
 wait_ready() {
   for app in "${KILL_APPS[@]}"; do
-    kubectl --context "$CTX" -n "$NS" rollout status "deploy/${app}" --timeout=180s >/dev/null
+    log "waiting for ${app} to roll out"
+    if ! kubectl --context "$CTX" -n "$NS" rollout status "deploy/${app}" --timeout=180s; then
+      log "warning: ${app} rollout not confirmed within timeout, continuing to poll"
+    fi
   done
 }
 
