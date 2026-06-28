@@ -6,7 +6,7 @@ from packages.contracts.event_bus.payloads import SafePrRequestedPayload
 
 
 def test_repo_gateway_creates_pr_from_request() -> None:
-    repo = load_service("repo-gateway-worker")
+    repo = load_service("gitops/repo-gateway-worker")
     db = SpyDb()
     outs = run_handler(
         repo.on_safe_pr_requested,

@@ -20,11 +20,11 @@ if str(ROOT_DIR) not in sys.path:
 SERVICES = [
     "rca-worker",
     "command-worker",
-    "git-pull-worker",
-    "manifest-render-worker",
-    "diff-worker",
-    "diff-analyze-worker",
-    "repo-gateway-worker",
+    "gitops/git-pull-worker",
+    "gitops/manifest-render-worker",
+    "gitops/diff-worker",
+    "gitops/diff-analyze-worker",
+    "gitops/repo-gateway-worker",
 ]
 
 
@@ -46,7 +46,8 @@ def main() -> None:
 
     # 서비스 핸들러(@app.sub) 등록.
     for service in SERVICES:
-        _load(ROOT_DIR / "services" / service / "app.py", f"app_{service}")
+        module = service.replace("/", "_")
+        _load(ROOT_DIR / "services" / service / "app.py", f"app_{module}")
 
     from packages.contracts.event_bus.registry import events
 

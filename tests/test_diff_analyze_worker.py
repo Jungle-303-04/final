@@ -16,7 +16,7 @@ def _diff(risk: str) -> Diff:
 
 
 def test_safe_diff_requests_pr() -> None:
-    analyze = load_service("diff-analyze-worker")
+    analyze = load_service("gitops/diff-analyze-worker")
     safe = run_handler(
         analyze.on_desired_diff, DesiredDiffPayload(diff=_diff("sandbox-only"))
     )
@@ -25,7 +25,7 @@ def test_safe_diff_requests_pr() -> None:
 
 
 def test_unsafe_diff_skips_pr() -> None:
-    analyze = load_service("diff-analyze-worker")
+    analyze = load_service("gitops/diff-analyze-worker")
     unsafe = run_handler(
         analyze.on_desired_diff, DesiredDiffPayload(diff=_diff("production"))
     )

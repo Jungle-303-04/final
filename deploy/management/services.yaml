@@ -173,7 +173,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/git-pull-worker/app.py"]
+          command: ["python", "services/gitops/git-pull-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -199,7 +199,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/manifest-render-worker/app.py"]
+          command: ["python", "services/gitops/manifest-render-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -225,7 +225,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/diff-worker/app.py"]
+          command: ["python", "services/gitops/diff-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -251,7 +251,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/diff-analyze-worker/app.py"]
+          command: ["python", "services/gitops/diff-analyze-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -277,7 +277,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/repo-gateway-worker/app.py"]
+          command: ["python", "services/gitops/repo-gateway-worker/app.py"]
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
