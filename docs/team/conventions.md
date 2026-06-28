@@ -8,6 +8,7 @@
 - 실행 코드 기준: 이 repository
 - 아키텍처 기준: `docs/architecture.md`, `docs/events.md`, `docs/service-split-plan.md`
 - 팀원 Codex 자동화 기준: `docs/team/codex-automation.md`
+- 계약/데모 구현 경계 기준: `docs/team/contract-vs-demo-boundary.md`
 - 코드와 문서가 다르면 같은 PR에서 문서도 함께 수정한다.
 
 ## 5인 담당 영역
