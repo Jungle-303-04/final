@@ -5,56 +5,25 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
-    "api-gateway": (
-        "services/api-gateway/runner.py",
-        "FastApiService(",
-    ),
-    "gitops-sync-worker": (
-        "services/gitops-sync-worker/runner.py",
-        "WorkerService.from_subscription(",
-    ),
-    "command-worker": (
-        "services/command-worker/runner.py",
-        "WorkerService.from_subscription(",
-    ),
-    "rca-worker": (
-        "services/rca-worker/runner.py",
-        "WorkerService.from_subscription(",
-    ),
+    "repo-gateway-worker": ("services/gitops/repo-gateway-worker/app.py", "App("),
+    "diff-analyze-worker": ("services/gitops/diff-analyze-worker/app.py", "App("),
+    "diff-worker": ("services/gitops/diff-worker/app.py", "App("),
+    "manifest-render-worker": ("services/gitops/manifest-render-worker/app.py", "App("),
+    "git-pull-worker": ("services/gitops/git-pull-worker/app.py", "App("),
+    "api-gateway": ("services/api-gateway/app.py", "FastApiService("),
+    "command-worker": ("services/command-worker/app.py", "App("),
+    "rca-worker": ("services/rca-worker/app.py", "App("),
     "dashboard-projection-service": (
-        "services/dashboard-projection-service/runner.py",
-        "WorkerService.from_subscription(",
+        "services/projection/dashboard-projection-service/app.py",
+        "App(",
     ),
-    "audit-timeline-service": (
-        "services/audit-timeline-service/runner.py",
-        "WorkerService.from_subscription(",
-    ),
-    "target-cluster-agent": (
-        "services/target-cluster-agent/runner.py",
-        "AsyncService(",
-    ),
-    "node-collector": ("services/node-collector/runner.py", "AsyncService("),
-    "fake-prometheus": (
-        "services/target-cluster-agent/fake_prometheus.py",
-        "AsyncService(",
-    ),
-    "fake-loki": (
-        "services/target-cluster-agent/fake_loki.py",
-        "AsyncService(",
-    ),
-    "fake-otel": (
-        "services/target-cluster-agent/fake_otel.py",
-        "AsyncService(",
-    ),
+    "audit-timeline-service": ("services/projection/audit-timeline-service/app.py", "App("),
+    "target-cluster-agent": ("services/target/target-cluster-agent/app.py", "AsyncService("),
+    "node-collector": ("services/target/node-collector/app.py", "AsyncService("),
+    "fake-prometheus": ("services/target/target-cluster-agent/fake_prometheus.py", "AsyncService("),
+    "fake-loki": ("services/target/target-cluster-agent/fake_loki.py", "AsyncService("),
+    "fake-otel": ("services/target/target-cluster-agent/fake_otel.py", "AsyncService("),
 }
-
-WORKER_ENTRYPOINTS = [
-    "services/gitops-sync-worker/runner.py",
-    "services/command-worker/runner.py",
-    "services/rca-worker/runner.py",
-    "services/dashboard-projection-service/runner.py",
-    "services/audit-timeline-service/runner.py",
-]
 
 
 def read_project_file(path: str) -> str:
@@ -62,10 +31,7 @@ def read_project_file(path: str) -> str:
 
 
 def test_services_have_direct_process_entrypoints() -> None:
-    for service_name, (
-        relative_path,
-        expected_helper,
-    ) in SERVICE_ENTRYPOINTS.items():
+    for service_name, (relative_path, expected_helper) in SERVICE_ENTRYPOINTS.items():
         entrypoint = ROOT_DIR / relative_path
 
         assert entrypoint.exists(), f"{service_name} entrypoint does not exist"
@@ -75,48 +41,36 @@ def test_services_have_direct_process_entrypoints() -> None:
         assert "SERVICE_NAME =" not in source
 
 
+# App(한 파일) 으로 마이그레이션한 서비스는 settings.py 가 없다(러너에 인라인).
+APP_BASED_SERVICES = {
+    "rca-worker",
+    "command-worker",
+    "git-pull-worker",
+    "manifest-render-worker",
+    "diff-worker",
+    "diff-analyze-worker",
+    "repo-gateway-worker",
+    "dashboard-projection-service",
+    "audit-timeline-service",
+}
+
+
 def test_services_keep_local_settings_files() -> None:
     service_dirs = {
         Path(relative_path).parent
-        for relative_path, _ in SERVICE_ENTRYPOINTS.values()
+        for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items()
+        if service not in APP_BASED_SERVICES
     }
 
     for service_dir in service_dirs:
         settings_file = ROOT_DIR / service_dir / "settings.py"
-        assert settings_file.exists(), (
-            f"{service_dir} must own service settings"
-        )
-
-
-def test_worker_entrypoints_use_shared_runtime_helper() -> None:
-    for relative_path in WORKER_ENTRYPOINTS:
-        source = read_project_file(relative_path)
-
-        assert "WorkerService.from_subscription(" in source
-        assert "EventHandlerSpec" not in source
-        assert "WorkerRuntime" not in source
-
-
-def test_worker_subscriptions_are_declared_in_service_settings() -> None:
-    for relative_path in WORKER_ENTRYPOINTS:
-        settings_path = str(Path(relative_path).parent / "settings.py")
-        source = read_project_file(settings_path)
-
-        assert "SUBSCRIPTION = WorkerSubscription(" in source
-        assert "subject=" in source
-        assert "SUBSCRIBE_SUBJECT" not in source
+        assert settings_file.exists(), f"{service_dir} must own service settings"
 
 
 def test_contracts_are_grouped_by_boundary() -> None:
-    assert (
-        ROOT_DIR / "packages" / "contracts" / "gateway" / "requests.py"
-    ).exists()
-    assert (
-        ROOT_DIR / "packages" / "contracts" / "event_bus" / "subjects.py"
-    ).exists()
-    assert (
-        ROOT_DIR / "packages" / "contracts" / "event_bus" / "subscriptions.py"
-    ).exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "gateway" / "requests.py").exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subjects.py").exists()
+    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subscriptions.py").exists()
     assert not (ROOT_DIR / "packages" / "contracts" / "schemas.py").exists()
 
     constants = read_project_file("packages/config/constants.py")
@@ -158,4 +112,4 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     for legacy_arg in legacy_role_args:
         assert legacy_arg not in manifests
 
-    assert "services/management-api-gateway/runner.py" not in manifests
+    assert "services/management-api-gateway/app.py" not in manifests

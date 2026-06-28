@@ -7,7 +7,6 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 LOKI_URL = os.environ.get("LOKI_URL", "http://localhost:3100")
 

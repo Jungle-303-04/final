@@ -1,0 +1,28 @@
+"""git-pull-worker — 깃 변경 감지(풀링) → git.changed. 파이프라인 입구.
+
+우현 원본 GitOpsSyncWorkflow.handle()의 commit_sha 결정과 GIT_CHANGED
+발행 블록에 대응. 변경 감지 책임만 떼어 이후 렌더/비교/명령 단계가
+독립적으로 재시도·테스트될 수 있게 분리.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import AsyncIterator
+
+from packages.contracts.event_bus.bodies import EventBody, GitChangedBody, GitWebhookReceivedBody
+from packages.runtime.app import App, EventContext
+
+app = App("git-pull-worker")
+
+
+@app.sub(GitWebhookReceivedBody)
+async def on_git_webhook(
+    evt: GitWebhookReceivedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
+    commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
+    yield GitChangedBody(commit_sha=commit_sha, image=evt.image, replicas=evt.replicas)
+
+
+if __name__ == "__main__":
+    app.run()
