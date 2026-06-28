@@ -1,7 +1,7 @@
 """command-worker — 한 파일 서비스.
 
 command.requested 를 받아 정책을 검사하고, 통과하면 실행 계획을 세워
-에이전트 큐에 적재한다. 결과는 yield 로 흘린다(dispatch.ready →
+에이전트 큐에 적재. 결과는 yield 로 흘림(dispatch.ready →
 dispatched → queued_for_agent). 정책 위반이면 rejected.
 """
 

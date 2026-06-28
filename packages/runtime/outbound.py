@@ -4,7 +4,7 @@
     *.requested  →  외부 호출  →  *.delivered(성공) / *.failed(실패)
 
 deliver() 가 try/except 를 한 곳에 모아, 게이트웨이 핸들러는 "무엇을 호출하고
-성공/실패를 어떤 이벤트로 낼지"만 선언하면 된다.
+성공/실패를 어떤 이벤트로 낼지"만 선언.
 """
 
 from __future__ import annotations
