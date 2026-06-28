@@ -30,13 +30,10 @@ kill_workers() {
   done
 }
 
-wait_ready() {
-  for app in "${KILL_APPS[@]}"; do
-    log "waiting for ${app} to roll out"
-    if ! kubectl --context "$CTX" -n "$NS" rollout status "deploy/${app}" --timeout=180s; then
-      log "warning: ${app} rollout not confirmed within timeout, continuing to poll"
-    fi
-  done
+ready_count() {
+  kubectl --context "$CTX" -n "$NS" get pods -l "app=$1" \
+    -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null \
+    | grep -c true || true
 }
 
 log "starting crash test: ${N} webhooks, kill targets ${KILL_APPS[*]}"
@@ -55,10 +52,7 @@ for i in $(seq 1 "$N"); do
   fi
 done
 
-log "waiting for crashed workers to become ready again"
-wait_ready
-log "workers ready, waiting for redelivery and reprocessing"
-
+log "polling: workers recover, NATS redelivers unacked messages, ledger dedups duplicates"
 list="$(printf "'%s'," "${corr_ids[@]}")"
 list="${list%,}"
 count_sql="select count(*) from pull_requests where correlation_id in (${list})"
@@ -68,9 +62,13 @@ deadline=$(( $(date +%s) + POLL_TIMEOUT ))
 total=0
 maxper=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
+  ready=""
+  for app in "${KILL_APPS[@]}"; do
+    ready+="${app}=$(ready_count "$app")/1 "
+  done
   total="$(psql_q "$count_sql")"; total="${total:-0}"
   maxper="$(psql_q "$maxper_sql")"; maxper="${maxper:-0}"
-  log "observed pull_requests=${total}/${N} max_per_correlation=${maxper}"
+  log "workers ${ready}| pull_requests=${total}/${N} max_per_correlation=${maxper}"
   [ "$maxper" -gt 1 ] && break
   [ "$total" -ge "$N" ] && break
   sleep 6
@@ -84,6 +82,6 @@ fi
 if [ "$maxper" -gt 1 ]; then
   log "failure: duplicate pull requests for a correlation_id, ledger dedup not effective"
 else
-  log "failure: observed ${total} pull requests, expected ${N} (possible loss or still recovering)"
+  log "failure: observed ${total} pull requests, expected ${N} (possible loss or workers not recovering)"
 fi
 exit 1
