@@ -20,6 +20,7 @@ if str(ROOT_DIR) not in sys.path:
 SERVICES = [
     "rca-worker",
     "command-worker",
+    "git-pull-worker",
 ]
 
 
