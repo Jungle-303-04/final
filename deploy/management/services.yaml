@@ -70,6 +70,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/command-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -96,6 +105,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/rca-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -122,6 +140,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/projection/dashboard-projection-service/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -148,6 +175,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/projection/audit-timeline-service/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -174,6 +210,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/gitops/git-pull-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -200,6 +245,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/gitops/manifest-render-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -226,6 +280,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/gitops/diff-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -252,6 +315,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/gitops/diff-analyze-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
@@ -278,6 +350,15 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "services/gitops/repo-gateway-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
           env:
             - name: DATABASE_URL
               value: postgresql://service:service@postgresql:5432/service
