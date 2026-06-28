@@ -6,7 +6,7 @@ from packages.contracts.event_bus.payloads import GitWebhookReceived
 
 
 def test_git_pull_emits_git_changed() -> None:
-    git_pull = load_service("git-pull-worker")
+    git_pull = load_service("gitops/git-pull-worker")
     outs = run_handler(
         git_pull.on_git_webhook,
         GitWebhookReceived(commit_sha="abc123", image="img:new", replicas=2),

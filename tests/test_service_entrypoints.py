@@ -6,23 +6,23 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
     "repo-gateway-worker": (
-        "services/repo-gateway-worker/app.py",
+        "services/gitops/repo-gateway-worker/app.py",
         "App(",
     ),
     "diff-analyze-worker": (
-        "services/diff-analyze-worker/app.py",
+        "services/gitops/diff-analyze-worker/app.py",
         "App(",
     ),
     "diff-worker": (
-        "services/diff-worker/app.py",
+        "services/gitops/diff-worker/app.py",
         "App(",
     ),
     "manifest-render-worker": (
-        "services/manifest-render-worker/app.py",
+        "services/gitops/manifest-render-worker/app.py",
         "App(",
     ),
     "git-pull-worker": (
-        "services/git-pull-worker/app.py",
+        "services/gitops/git-pull-worker/app.py",
         "App(",
     ),
     "api-gateway": (

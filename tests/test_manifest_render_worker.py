@@ -6,7 +6,7 @@ from packages.contracts.event_bus.payloads import GitChangedPayload
 
 
 def test_render_emits_manifest_rendered() -> None:
-    render = load_service("manifest-render-worker")
+    render = load_service("gitops/manifest-render-worker")
     db = SpyDb()
     outs = run_handler(
         render.on_git_changed,
