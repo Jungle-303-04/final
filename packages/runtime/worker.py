@@ -163,7 +163,7 @@ class WorkerRuntime:
             DeadLetterSink(events, self.db, self.spec.service_name),
             self.spec.retry_policy,
         )
-        relay = OutboxRelay(self.db, self.bus)
+        relay = OutboxRelay(self.db, self.bus, self.spec.service_name)
         stopping = asyncio.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())

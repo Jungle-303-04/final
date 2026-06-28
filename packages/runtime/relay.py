@@ -14,15 +14,20 @@ DEFAULT_BATCH = 100
 
 class OutboxRelay:
     def __init__(
-        self, store: OutboxReader, publisher: EnvelopePublisher, batch: int = DEFAULT_BATCH
+        self,
+        store: OutboxReader,
+        publisher: EnvelopePublisher,
+        source: str,
+        batch: int = DEFAULT_BATCH,
     ) -> None:
         self.store = store
         self.publisher = publisher
+        self.source = source  # 자기 서비스가 적재한 행만 relay
         self.batch = batch
 
     async def run_once(self) -> int:
         """미발행 outbox 를 한 배치 발행하고 sent 표시. 발행 건수 반환."""
-        rows = await self.store.unsent_events(self.batch)
+        rows = await self.store.unsent_events(self.batch, self.source)
         for evt in rows:
             await self.publisher.publish_envelope(evt)
         if rows:
