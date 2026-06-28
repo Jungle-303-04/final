@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import ClusterEvidenceReceived
+from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody
 
 
 def test_rca_subscriber_yields_typed_event_chain() -> None:
     rca = load_service("rca-worker")
     db = SpyDb()
-    payload = ClusterEvidenceReceived(
+    payload = ClusterEvidenceReceivedBody(
         cluster_id="target-cluster-01",
         kubernetes={"pods": []},
         metrics={"cpu": 0.8},
