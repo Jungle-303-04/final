@@ -58,9 +58,18 @@ class ApiGateway:
             self.db.dispose()
 
     def configure_routes(self) -> None:
+        # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
         app = self.app
         register_demo_routes(app, self.events, self.demo_inbox)
+        self._register_health_routes(app)
+        self._register_auth_routes(app)
+        self._register_ingest_routes(app)
+        self._register_command_routes(app)
+        self._register_dead_letter_routes(app)
+        self._register_dashboard_routes(app)
+        self._register_error_handler(app)
 
+    def _register_health_routes(self, app: FastAPI) -> None:
         @app.get(gateway_routes.HEALTHZ_PATH)
         async def healthz() -> dict[str, str]:
             return {Gateway.STATUS: Gateway.STATUS_OK, Gateway.SERVICE: Settings.SERVICE_NAME}
@@ -70,6 +79,7 @@ class ApiGateway:
             self.db.init()
             return {Gateway.STATUS: Gateway.STATUS_READY}
 
+    def _register_auth_routes(self, app: FastAPI) -> None:
         @app.get(gateway_routes.AUTH_SESSION_PATH)
         async def session(request: Request) -> dict[str, Any]:
             current = await self.auth.require_session(request)
@@ -110,6 +120,7 @@ class ApiGateway:
                 Gateway.SESSION: result[Gateway.SESSION],
             }
 
+    def _register_ingest_routes(self, app: FastAPI) -> None:
         @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
         async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
             accepted = await self.events.accept(
@@ -130,6 +141,7 @@ class ApiGateway:
             )
             return accepted.response()
 
+    def _register_command_routes(self, app: FastAPI) -> None:
         @app.post(gateway_routes.COMMANDS_PATH)
         async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
             current = await self.auth.require_session(request)
@@ -142,6 +154,38 @@ class ApiGateway:
             )
             return accepted.response()
 
+        @app.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
+        async def poll_command(
+            cluster_id: str = Target.DEFAULT_CLUSTER_ID,
+            timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
+        ) -> dict[str, Any]:
+            deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
+            while time.time() < deadline:
+                row = await self.db.lease_agent_command(
+                    cluster_id, Settings.COMMAND_STATUS_QUEUED, Settings.COMMAND_STATUS_LEASED
+                )
+                if row:
+                    return {Gateway.COMMAND: row}
+                await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
+            return {Gateway.COMMAND: None}
+
+        @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
+        async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
+            result = payload.model_dump()
+            correlation_id = await self.db.complete_agent_command(command_id, result)
+            if not correlation_id:
+                raise HTTPException(
+                    status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
+                    detail=Settings.COMMAND_NOT_FOUND_MESSAGE,
+                )
+            accepted = await self.events.accept(
+                EventSubject.COMMAND_COMPLETED,
+                {Gateway.COMMAND_ID: command_id, Gateway.RESULT: result},
+                correlation_id,
+            )
+            return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: accepted.event.event_id}
+
+    def _register_dead_letter_routes(self, app: FastAPI) -> None:
         @app.get(gateway_routes.DEAD_LETTERS_PATH)
         async def dead_letters(
             request: Request, limit: int = Settings.DEFAULT_DEAD_LETTER_LIMIT
@@ -178,37 +222,7 @@ class ApiGateway:
                 Gateway.REPLAY_EVENT: accepted.event,
             }
 
-        @app.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
-        async def poll_command(
-            cluster_id: str = Target.DEFAULT_CLUSTER_ID,
-            timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
-        ) -> dict[str, Any]:
-            deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
-            while time.time() < deadline:
-                row = await self.db.lease_agent_command(
-                    cluster_id, Settings.COMMAND_STATUS_QUEUED, Settings.COMMAND_STATUS_LEASED
-                )
-                if row:
-                    return {Gateway.COMMAND: row}
-                await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
-            return {Gateway.COMMAND: None}
-
-        @app.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
-        async def command_result(command_id: str, payload: CommandResultRequest) -> dict[str, Any]:
-            result = payload.model_dump()
-            correlation_id = await self.db.complete_agent_command(command_id, result)
-            if not correlation_id:
-                raise HTTPException(
-                    status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
-                    detail=Settings.COMMAND_NOT_FOUND_MESSAGE,
-                )
-            accepted = await self.events.accept(
-                EventSubject.COMMAND_COMPLETED,
-                {Gateway.COMMAND_ID: command_id, Gateway.RESULT: result},
-                correlation_id,
-            )
-            return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: accepted.event.event_id}
-
+    def _register_dashboard_routes(self, app: FastAPI) -> None:
         @app.get(gateway_routes.DASHBOARD_QUERY_PATH)
         async def dashboard_query(request: Request) -> dict[str, Any]:
             await self.auth.require_session(request)
@@ -229,6 +243,7 @@ class ApiGateway:
 
             return StreamingResponse(events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE)
 
+    def _register_error_handler(self, app: FastAPI) -> None:
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             print(f"gateway error: {exc}", flush=True)
