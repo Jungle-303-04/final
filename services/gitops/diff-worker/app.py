@@ -11,8 +11,8 @@ from collections.abc import AsyncIterator
 
 from packages.config.constants import Sandbox
 from packages.contracts.event_bus.bodies import (
-    DesiredDiffBody,
     Diff,
+    DiffDetectedBody,
     EventBody,
     ManifestRenderedBody,
 )
@@ -36,7 +36,7 @@ async def on_manifest_rendered(
         actual_image=PREVIOUS_IMAGE,
         risk=Sandbox.RISK_TAG,
     )
-    yield DesiredDiffBody(diff=diff)
+    yield DiffDetectedBody(diff=diff)
 
 
 if __name__ == "__main__":
