@@ -46,14 +46,17 @@ DEPENDENCY_RETRY_LIMIT = 60
 DEPENDENCY_RETRY_DELAY_SECONDS = 2
 ERROR_MESSAGE_LIMIT = 2000
 
-# 풀 제어: pod 다수 × (sync+async) 엔진이 postgres max_connections 를 넘기지 않게 상한.
-# pre_ping 으로 죽은 연결은 쓰기 전에 폐기, timeout 으로 하트비트 창(30s) 안에 빨리 실패.
+# 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
+# timeout 으로 하트비트 창(30s) 안에 빨리 실패.
+# prepare_threshold=None: PgBouncer transaction pooling 에서 prepared statement 가
+# 트랜잭션을 가로질러 깨지지 않도록 psycopg server-side prepared statement 비활성화.
 POOL_OPTIONS = {
     "pool_size": 2,
     "max_overflow": 2,
     "pool_timeout": 10,
     "pool_pre_ping": True,
     "pool_recycle": 300,
+    "connect_args": {"prepare_threshold": None},
 }
 
 
