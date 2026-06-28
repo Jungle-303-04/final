@@ -16,7 +16,7 @@ services/api-gateway
 
 services/gitops/git-pull-worker
   Git target polling / Git changed event
-  app.py: repo polling 기본값, @app.sub(GitWebhookReceived)
+  app.py: repo polling 기본값, @app.sub(GitWebhookReceivedBody)
 
 services/gitops/manifest-render-worker
   Manifest render
@@ -40,7 +40,7 @@ services/command-worker
 
 services/rca-worker
   RCA / Evidence (PR 생성은 repo-gateway 에 위임: safe_pr.requested)
-  app.py: RCA 기본 메시지, @app.sub(ClusterEvidenceReceived)
+  app.py: RCA 기본 메시지, @app.sub(ClusterEvidenceReceivedBody)
 
 services/projection/dashboard-projection-service
   Read Model / Dashboard Projection
@@ -147,7 +147,7 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 - 외부 write 권한은 gateway/auth/policy를 지나게 한다.
 - target cluster는 outbound 연결을 기본값으로 둔다.
 - production write는 기본 금지하고 `sandbox` namespace부터 허용한다.
-- 새 서비스는 runner, Deployment/DaemonSet, health/restart 검증, 소유 WBS/이슈를 함께 추가한다.
+- 새 서비스는 `app.py` entrypoint, Deployment/DaemonSet, health/restart 검증, 소유 WBS/이슈를 함께 추가한다.
 - PR에서 서비스 경계를 합치거나 role dispatcher로 회귀하면 merge하지 않는다.
 - 운영 배포 기준은 `docs/operations-deployment.md`와 `deploy/eks/README.md`를 따른다.
 - Fargate 전제 workload와 managed node group 전제 workload를 섞어서 설명하지 않는다.
