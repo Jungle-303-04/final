@@ -1,7 +1,8 @@
 """manifest-render-worker — git.changed → manifest 렌더 → manifest.rendered.
 
-원시 변경(commit/image/replicas) → 배포 사양 + 렌더된 Deployment, repo_change
-저장.
+우현 원본 GitOpsSyncWorkflow.handle()의 manifest dict 생성, repo_change 저장,
+rendered Deployment 생성, MANIFEST_RENDERED 발행 블록에 대응. Git 변경을
+Kubernetes 배포 사양으로 바꾸는 책임만 분리.
 """
 
 from __future__ import annotations

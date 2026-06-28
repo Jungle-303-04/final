@@ -1,7 +1,8 @@
 """diff-analyze-worker — desired.diff.detected → 위험도 분석 → diff.analyzed.
 
-sandbox 한정이면 안전(safe). 안전 시 PR 생성을 repo-gateway 에
-위임(safe_pr.requested).
+우현 원본 GitOpsSyncWorkflow.handle()의 COMMAND_REQUESTED 직접 발행 블록을
+대체. 지금 구조는 diff를 바로 실행 명령으로 보내지 않고 안전 판정 후
+safe_pr.requested로 넘겨 repo-gateway가 PR 생성을 맡게 분리.
 """
 
 from __future__ import annotations
