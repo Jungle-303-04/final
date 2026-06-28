@@ -117,6 +117,7 @@ ci: PR 필수 검증 workflow 추가
 - 서비스 폴더에서 NATS client, PostgreSQL connection, `WorkerRuntime`을 직접 조립하지 않는다.
 - 서비스 workflow는 concrete NATS/PostgreSQL client가 아니라 port에 의존한다.
 - 서비스 설정값은 `app.py` 상단 상수로 두고, 한 줄 가드는 `packages/config/errors.py`의 `require(cond, msg, error)` / `fail(msg, error)`를 쓴다(에러 메시지는 `[event-system]` 접두사).
+- 한 파일에서만 쓰는 검증/사전조건 헬퍼는 별도 모듈로 빼지 않고 그 파일 하단에 `ensure_*` 함수로 co-locate한다(예: `packages/runtime/app.py`의 `ensure_registered`). 여러 파일이 공유하는 검증 원시 함수(`require`/`fail`)만 `packages/config/errors.py`에 둔다.
 - 작은 불변 값 객체에는 dataclass를 사용한다.
 - process 경계 밖에서 넓은 `except Exception`을 남발하지 않는다. Runtime/process edge에서는 예외를 잡아 DLQ로 전환할 수 있다.
 - secret은 event, log, fixture, docs, screenshot, test에 넣지 않는다.
@@ -204,10 +205,10 @@ GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 
 팀원 Codex 자동화는 `docs/team/codex-automation.md`의 공통 프롬프트를 사용한다.
 각 팀원은 자기 GitHub ID만 지정하고, issue/PR/역할은 현재 문서와 GitHub 상태에서 매번 다시 계산한다.
-팀원별 정기 자동화는 읽기, 점검, 제안만 수행한다.
-팀원별 자동화가 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 직접 수행하면 안 된다.
-총괄 `final-wbs-issue-sync` 자동화는 WBS/Issue/Project/docs 정합성 유지에 필요한 제한된 쓰기 작업을 수행할 수 있다.
-완료된 issue는 닫지 않고 Project status만 갱신한다.
+팀원별 정기 자동화는 담당 범위 안에서 Issue/Project/docs/WIKI 정합성을 직접 관리한다.
+자동화가 `git add`, `git commit`, `git push`, branch 생성/삭제, PR close/Ready/merge를 직접 수행하면 안 된다.
+자동화는 구현/커밋/PR 증거가 있는 작업의 issue 본문과 Project status를 최신화하고, 구현되지 않은 계획 항목은 issue/checklist로 정의해 Project `할일`에 둔다.
+완료된 issue는 닫지 않고 Project status만 `완료`로 갱신한다.
 commit과 PR은 팀원이 필요를 판단하고 명시적으로 요청한 작업 세션에서만 수행한다.
 
 Merge 기준:

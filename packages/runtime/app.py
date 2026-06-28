@@ -16,19 +16,14 @@ runtime)는 App 이 은닉.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any
 
-from packages.config.errors import require
+from packages.config.errors import fail, require
 from packages.contracts.event_bus.registry import Subscription, events
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, WorkerSubscription
-from packages.runtime.checks import (
-    require_handler_signature,
-    require_registered,
-    require_single_handler,
-    require_unique_handler,
-)
 from packages.runtime.dispatch import EventContext, make_event_handler, make_raw_handler
 
 # App 과 EventContext 함께 쓰므로 여기서 재노출.
@@ -42,15 +37,13 @@ class App:
         self._raw: tuple[Callable[..., Any], bool] | None = None
 
     def sub(self, body_type: type) -> Callable[..., Any]:
-        """타입 구독: 이 body 가 실린 이벤트 1종을 받는다."""
-        require(
-            self._raw is None, f"{self.name}: @app.sub 와 @app.on_event 는 함께 못 쓴다", TypeError
-        )
-        subject = require_registered(body_type)
+        """타입 구독: 이 body 가 실린 이벤트 1종을 받음."""
+        require(self._raw is None, f"{self.name}: @app.sub·@app.on_event 혼용 불가", TypeError)
+        subject = ensure_registered(body_type)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-            require_unique_handler(self._handlers, subject)
-            sub = Subscription(subject, body_type, fn, require_handler_signature(fn))
+            ensure_unique_handler(self._handlers, subject)
+            sub = Subscription(subject, body_type, fn, ensure_handler_signature(fn))
             self._handlers[subject] = sub
             events.note_handler(self.name, sub)  # 카탈로그 표시용
             return fn
@@ -58,16 +51,12 @@ class App:
         return decorator
 
     def on_event(self, fn: Callable[..., Any]) -> Callable[..., Any]:
-        """전체(>) 구독: 모든 이벤트를 봉투(EventEnvelope) 그대로 받는다.
+        """전체(>) 구독: 모든 이벤트를 봉투(EventEnvelope) 그대로 받음.
 
         대시보드/감사처럼 도메인을 가로지르는 프로젝터용.
         """
-        require(
-            not self._handlers and self._raw is None,
-            f"{self.name}: 구독은 @app.sub 또는 @app.on_event 하나만",
-            TypeError,
-        )
-        self._raw = (fn, require_handler_signature(fn))
+        require(not self._handlers and self._raw is None, f"{self.name}: 구독은 하나만", TypeError)
+        self._raw = (fn, ensure_handler_signature(fn))
         events.note_raw_handler(self.name, fn.__name__)
         return fn
 
@@ -93,10 +82,34 @@ class App:
 
             return ALL_EVENTS_SUBJECT, raw_factory
 
-        require_single_handler(self.name, self._handlers)
+        ensure_single_handler(self.name, self._handlers)
         sub = self.subscriptions[0]
 
         def factory(client: Any, db: Any) -> Callable[..., Any]:
             return make_event_handler(sub, client, db, self.name)
 
         return sub.subject, factory
+
+
+# ensure
+
+
+def ensure_registered(body_type: type) -> Any:
+    subject = getattr(body_type, "__subject__", None)
+    require(subject is not None, f"{body_type.__name__} 미등록 — @events.reg 필요", TypeError)
+    return subject
+
+
+def ensure_handler_signature(fn: Callable[..., Any]) -> bool:
+    params = [p for p in inspect.signature(fn).parameters.values() if p.name != "self"]
+    require(1 <= len(params) <= 2, f"{fn.__name__} 시그니처는 (evt) 또는 (evt, ctx)", TypeError)
+    return len(params) == 2
+
+
+def ensure_unique_handler(handlers: dict[Any, Any], subject: Any) -> None:
+    if subject in handlers:
+        fail(f"{subject} 구독자 중복: {handlers[subject].fn.__name__}", TypeError)
+
+
+def ensure_single_handler(service: str, handlers: dict[Any, Any]) -> None:
+    require(len(handlers) == 1, f"{service}: 핸들러 1개만(현재 {len(handlers)})", RuntimeError)
