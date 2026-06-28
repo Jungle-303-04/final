@@ -24,6 +24,7 @@ SERVICES = [
     "manifest-render-worker",
     "diff-worker",
     "diff-analyze-worker",
+    "repo-gateway-worker",
 ]
 
 
