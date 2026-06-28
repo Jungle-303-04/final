@@ -13,7 +13,10 @@ SERVICE_ENTRYPOINTS = {
     "api-gateway": ("services/api-gateway/app.py", "FastApiService("),
     "command-worker": ("services/command-worker/app.py", "App("),
     "rca-worker": ("services/rca-worker/app.py", "App("),
-    "dashboard-projection-service": ("services/projection/dashboard-projection-service/app.py", "App("),
+    "dashboard-projection-service": (
+        "services/projection/dashboard-projection-service/app.py",
+        "App(",
+    ),
     "audit-timeline-service": ("services/projection/audit-timeline-service/app.py", "App("),
     "target-cluster-agent": ("services/target/target-cluster-agent/app.py", "AsyncService("),
     "node-collector": ("services/target/node-collector/app.py", "AsyncService("),
@@ -39,11 +42,25 @@ def test_services_have_direct_process_entrypoints() -> None:
 
 
 # App(한 파일) 으로 마이그레이션한 서비스는 settings.py 가 없다(러너에 인라인).
-APP_BASED_SERVICES = {"rca-worker", "command-worker", "git-pull-worker", "manifest-render-worker", "diff-worker", "diff-analyze-worker", "repo-gateway-worker", "dashboard-projection-service", "audit-timeline-service"}
+APP_BASED_SERVICES = {
+    "rca-worker",
+    "command-worker",
+    "git-pull-worker",
+    "manifest-render-worker",
+    "diff-worker",
+    "diff-analyze-worker",
+    "repo-gateway-worker",
+    "dashboard-projection-service",
+    "audit-timeline-service",
+}
 
 
 def test_services_keep_local_settings_files() -> None:
-    service_dirs = {Path(relative_path).parent for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items() if service not in APP_BASED_SERVICES}
+    service_dirs = {
+        Path(relative_path).parent
+        for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items()
+        if service not in APP_BASED_SERVICES
+    }
 
     for service_dir in service_dirs:
         settings_file = ROOT_DIR / service_dir / "settings.py"
@@ -69,12 +86,29 @@ def test_central_role_dispatcher_is_removed() -> None:
 
 
 def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
-    manifests = "\n".join([read_project_file("deploy/management/services.yaml"), read_project_file("deploy/target/target.yaml")])
+    manifests = "\n".join(
+        [
+            read_project_file("deploy/management/services.yaml"),
+            read_project_file("deploy/target/target.yaml"),
+        ]
+    )
 
     for relative_path, _expected_helper in SERVICE_ENTRYPOINTS.values():
         assert f'command: ["python", "{relative_path}"]' in manifests
 
-    legacy_role_args = ['args: ["gateway"]', 'args: ["gitops-sync-worker"]', 'args: ["command-worker"]', 'args: ["rca-worker"]', 'args: ["dashboard-projection-service"]', 'args: ["audit-timeline-service"]', 'args: ["target-agent"]', 'args: ["node-collector"]', 'args: ["fake-prometheus"]', 'args: ["fake-loki"]', 'args: ["fake-otel"]']
+    legacy_role_args = [
+        'args: ["gateway"]',
+        'args: ["gitops-sync-worker"]',
+        'args: ["command-worker"]',
+        'args: ["rca-worker"]',
+        'args: ["dashboard-projection-service"]',
+        'args: ["audit-timeline-service"]',
+        'args: ["target-agent"]',
+        'args: ["node-collector"]',
+        'args: ["fake-prometheus"]',
+        'args: ["fake-loki"]',
+        'args: ["fake-otel"]',
+    ]
     for legacy_arg in legacy_role_args:
         assert legacy_arg not in manifests
 

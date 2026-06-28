@@ -18,7 +18,14 @@ class MemoryPublisher:
     def __init__(self) -> None:
         self.events: list[EventEnvelope] = []
 
-    async def emit(self, subject: str, source: str, payload: dict[str, Any], correlation_id: str | None = None, causation_id: str | None = None) -> EventEnvelope:
+    async def emit(
+        self,
+        subject: str,
+        source: str,
+        payload: dict[str, Any],
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+    ) -> EventEnvelope:
         evt = event(subject, source, payload, correlation_id, causation_id)
         self.events.append(evt)
         return evt
@@ -50,7 +57,11 @@ def test_api_to_outbound_gateway_golden_path() -> None:
     async def run() -> None:
         db = SpyDb()
         gateway_events = ApiEventGateway(MemoryPublisher(), MemoryRecorder(), "api-gateway")
-        accepted = await gateway_events.accept_body(GitWebhookReceived(commit_sha="abc1234", image="ghcr.io/project/checkout-api:new", replicas=2))
+        accepted = await gateway_events.accept_body(
+            GitWebhookReceived(
+                commit_sha="abc1234", image="ghcr.io/project/checkout-api:new", replicas=2
+            )
+        )
 
         git_pull = load_service("gitops/git-pull-worker")
         manifest = load_service("gitops/manifest-render-worker")
@@ -65,8 +76,23 @@ def test_api_to_outbound_gateway_golden_path() -> None:
         safe_pr_requested = analyzed_events[1]
         safe_pr_created = (await run_worker(repo, safe_pr_requested, db))[0]
 
-        events = [accepted.event, git_changed, rendered, desired_diff, *analyzed_events, safe_pr_created]
-        assert [evt.subject for evt in events] == [EventSubject.GIT_WEBHOOK_RECEIVED, EventSubject.GIT_CHANGED, EventSubject.MANIFEST_RENDERED, EventSubject.DESIRED_DIFF_DETECTED, EventSubject.DIFF_ANALYZED, EventSubject.SAFE_PR_REQUESTED, EventSubject.SAFE_PR_CREATED]
+        events = [
+            accepted.event,
+            git_changed,
+            rendered,
+            desired_diff,
+            *analyzed_events,
+            safe_pr_created,
+        ]
+        assert [evt.subject for evt in events] == [
+            EventSubject.GIT_WEBHOOK_RECEIVED,
+            EventSubject.GIT_CHANGED,
+            EventSubject.MANIFEST_RENDERED,
+            EventSubject.DESIRED_DIFF_DETECTED,
+            EventSubject.DIFF_ANALYZED,
+            EventSubject.SAFE_PR_REQUESTED,
+            EventSubject.SAFE_PR_CREATED,
+        ]
         assert {evt.correlation_id for evt in events} == {accepted.event.correlation_id}
         assert git_changed.causation_id == accepted.event.event_id
         assert rendered.causation_id == git_changed.event_id

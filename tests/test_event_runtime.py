@@ -41,7 +41,9 @@ class FakeProcessingStore:
     def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None:
         self.finished.append((evt.event_id, consumer))
 
-    def fail_event_processing(self, evt: EventEnvelope, consumer: str, error: str, status: str) -> None:
+    def fail_event_processing(
+        self, evt: EventEnvelope, consumer: str, error: str, status: str
+    ) -> None:
         self.failed.append((evt.event_id, consumer, status))
 
 
@@ -49,9 +51,17 @@ class FakeDeadLetters:
     def __init__(self) -> None:
         self.captured: list[tuple[EventEnvelope, str, str, int]] = []
 
-    async def capture(self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int) -> EventEnvelope:
+    async def capture(
+        self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int
+    ) -> EventEnvelope:
         self.captured.append((evt, consumer, str(error), attempts))
-        return event("dead_letter.created", consumer, {"original_event_id": evt.event_id, "attempts": attempts}, evt.correlation_id, evt.event_id)
+        return event(
+            "dead_letter.created",
+            consumer,
+            {"original_event_id": evt.event_id, "attempts": attempts},
+            evt.correlation_id,
+            evt.event_id,
+        )
 
 
 def test_event_processor_acks_successful_handler() -> None:
@@ -134,7 +144,9 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
 
         assert message.acked is True
         assert message.nak_delay is None
-        assert store.failed == [(evt.event_id, "command-worker", EventProcessingStatus.DEAD_LETTERED)]
+        assert store.failed == [
+            (evt.event_id, "command-worker", EventProcessingStatus.DEAD_LETTERED)
+        ]
         assert dead_letters.captured[0][1:] == ("command-worker", "permanent failure", 2)
 
     asyncio.run(run())

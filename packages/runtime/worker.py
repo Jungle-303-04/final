@@ -8,11 +8,23 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from packages.config.logs import get_logger
-from packages.contracts.event_bus.interfaces import EventClient, EventConsumerBus, EventEnvelope, EventHandler, EventMessage
+from packages.contracts.event_bus.interfaces import (
+    EventClient,
+    EventConsumerBus,
+    EventEnvelope,
+    EventHandler,
+    EventMessage,
+)
 from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.contracts.event_bus.subscriptions import durable_name
 from packages.contracts.interfaces import EventProcessingStore
-from packages.events.bus import DeadLetterSink, NatsEventBus, RecordedEventClient, event_causation, event_context
+from packages.events.bus import (
+    DeadLetterSink,
+    NatsEventBus,
+    RecordedEventClient,
+    event_causation,
+    event_context,
+)
 from packages.runtime.ledger import Ledger
 
 if TYPE_CHECKING:
@@ -57,11 +69,22 @@ class JsonCodec:
 
 
 class DeadLetterPort(Protocol):
-    async def capture(self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int) -> EventEnvelope: ...
+    async def capture(
+        self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int
+    ) -> EventEnvelope: ...
 
 
 class EventProcessor:
-    def __init__(self, service_name: str, handler: EventHandler, store: EventProcessingStore, dead_letters: DeadLetterPort, retry_policy: EventRetryPolicy, codec: Codec | None = None, ledger: Ledger | None = None) -> None:
+    def __init__(
+        self,
+        service_name: str,
+        handler: EventHandler,
+        store: EventProcessingStore,
+        dead_letters: DeadLetterPort,
+        retry_policy: EventRetryPolicy,
+        codec: Codec | None = None,
+        ledger: Ledger | None = None,
+    ) -> None:
         self.service_name = service_name
         self.handler = handler
         self.dead_letters = dead_letters
@@ -87,7 +110,9 @@ class EventProcessor:
         except Exception as exc:
             await self.fail(message, evt, exc, attempts)
 
-    async def fail(self, message: EventMessage, evt: EventEnvelope, error: Exception, attempts: int) -> None:
+    async def fail(
+        self, message: EventMessage, evt: EventEnvelope, error: Exception, attempts: int
+    ) -> None:
         context = {**event_context(evt), "consumer": self.service_name, "attempts": attempts}
         if attempts >= self.retry_policy.max_attempts:
             self.ledger.dead_letter(evt, error)
@@ -102,7 +127,12 @@ class EventProcessor:
 
 
 class WorkerRuntime:
-    def __init__(self, spec: EventHandlerSpec, bus: EventConsumerBus | None = None, db: Database | None = None) -> None:
+    def __init__(
+        self,
+        spec: EventHandlerSpec,
+        bus: EventConsumerBus | None = None,
+        db: Database | None = None,
+    ) -> None:
         self.spec = spec
         if db is None:
             from packages.storage.database import Database
@@ -119,7 +149,13 @@ class WorkerRuntime:
         sub = await self.bus.subscribe(self.spec.subject, durable=self.spec.durable)
         events = RecordedEventClient(self.bus, self.db)
         handler = self.spec.handler_factory(events, self.db)
-        processor = EventProcessor(self.spec.service_name, handler, self.db, DeadLetterSink(events, self.db, self.spec.service_name), self.spec.retry_policy)
+        processor = EventProcessor(
+            self.spec.service_name,
+            handler,
+            self.db,
+            DeadLetterSink(events, self.db, self.spec.service_name),
+            self.spec.retry_policy,
+        )
         stopping = asyncio.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
@@ -128,7 +164,10 @@ class WorkerRuntime:
 
         while not stopping.is_set():
             try:
-                messages = await sub.fetch(self.spec.retry_policy.fetch_batch_size, timeout=self.spec.retry_policy.fetch_timeout_seconds)
+                messages = await sub.fetch(
+                    self.spec.retry_policy.fetch_batch_size,
+                    timeout=self.spec.retry_policy.fetch_timeout_seconds,
+                )
             except TimeoutError:
                 continue
             except Exception as exc:
