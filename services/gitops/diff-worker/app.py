@@ -25,9 +25,7 @@ SYNC_RISK = "sandbox-only"
 
 
 @app.sub(ManifestRenderedBody)
-async def on_manifest_rendered(
-    evt: ManifestRenderedBody, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_manifest_rendered(evt: ManifestRenderedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     rendered = evt.rendered_manifest  # 중첩 디코드로 타입 객체
     diff = Diff(
         resource=RESOURCE_REF,

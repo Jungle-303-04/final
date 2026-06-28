@@ -26,15 +26,11 @@ PR_TITLE = "Apply sandbox manifest"
 
 
 @app.sub(DesiredDiffBody)
-async def on_desired_diff(
-    evt: DesiredDiffBody, ctx: EventContext
-) -> AsyncIterator[EventBody]:
+async def on_desired_diff(evt: DesiredDiffBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     diff = evt.diff
     safe = diff.risk == SAFE_RISK
     reason = SAFE_REASON if safe else UNSAFE_REASON
-    yield DiffAnalyzedBody(
-        diff=diff, safe=safe, risk=diff.risk, reason=reason
-    )
+    yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
         yield SafePrRequestedBody(
             title=PR_TITLE,

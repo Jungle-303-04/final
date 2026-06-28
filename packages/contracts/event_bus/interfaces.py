@@ -63,9 +63,7 @@ class EventMessage(Protocol):
 class EventSubscription(Protocol):
     """pull 구독. fetch로 메시지를 배치로 당겨온다."""
 
-    async def fetch(
-        self, batch: int, timeout: float | None = None
-    ) -> Sequence[EventMessage]: ...
+    async def fetch(self, batch: int, timeout: float | None = None) -> Sequence[EventMessage]: ...
 
 
 class EventPublisher(Protocol):
@@ -101,9 +99,7 @@ class EventConsumerBus(EventPublisher, Protocol):
 
     async def connect(self) -> None: ...
 
-    async def subscribe(
-        self, subject: str, durable: str
-    ) -> EventSubscription: ...
+    async def subscribe(self, subject: str, durable: str) -> EventSubscription: ...
 
     async def close(self) -> None: ...
 

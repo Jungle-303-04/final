@@ -59,9 +59,7 @@ class App:
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             require_unique_handler(self._handlers, subject)
-            sub = Subscription(
-                subject, body_type, fn, require_handler_signature(fn)
-            )
+            sub = Subscription(subject, body_type, fn, require_handler_signature(fn))
             self._handlers[subject] = sub
             events.note_handler(self.name, sub)  # 카탈로그 표시용
             return fn
@@ -91,9 +89,7 @@ class App:
         from packages.runtime.service import WorkerService
 
         subject, factory = self._resolve()
-        worker_sub = WorkerSubscription(
-            service_name=self.name, subject=subject
-        )
+        worker_sub = WorkerSubscription(service_name=self.name, subject=subject)
         WorkerService.from_subscription(worker_sub, factory).run()
 
     def _resolve(self) -> tuple[str, Callable[..., Any]]:

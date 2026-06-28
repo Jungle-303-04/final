@@ -28,15 +28,11 @@ class DemoCallbackRequest(BaseModel):
     message: str
 
 
-def register_demo_routes(
-    app: FastAPI, events: ApiEventGateway, inbox: list[dict[str, Any]]
-) -> None:
+def register_demo_routes(app: FastAPI, events: ApiEventGateway, inbox: list[dict[str, Any]]) -> None:
     @app.post("/demo/ping")
     async def demo_ping(payload: DemoPingRequest) -> dict[str, Any]:
         # API → event: 타입 body 하나로 발행(subject 자동 유도).
-        accepted = await events.accept_body(
-            DemoPingRequested(message=payload.message)
-        )
+        accepted = await events.accept_body(DemoPingRequested(message=payload.message))
         return accepted.response(include_event=True)
 
     @app.post("/demo/callback")

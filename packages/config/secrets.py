@@ -22,4 +22,3 @@ class EnvSecretProvider:
             name = f"{ref.provider}:{ref.name}"
             raise MissingSecretError(f"missing secret: {name}")
         return value
-
