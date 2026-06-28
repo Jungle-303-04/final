@@ -44,7 +44,7 @@ class EventSubject(StrEnum):
     OAUTH_START_REQUESTED = "oauth.start.requested"  # OAuth 시작 요청
     OAUTH_CONNECTED = "oauth.connected"  # 계정 연결 완료
 
-    # --- GitOps 동기화(gitops-sync-worker): webhook→manifest→diff ---
+    # --- GitOps split workers: webhook→manifest→diff ---
     GIT_WEBHOOK_RECEIVED = "git.webhook.received"  # 깃 webhook 수신(입구)
     GIT_CHANGED = "git.changed"  # 변경 확정
     MANIFEST_RENDERED = "manifest.rendered"  # k8s manifest 렌더
