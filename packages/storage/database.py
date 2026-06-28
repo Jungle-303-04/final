@@ -42,6 +42,11 @@ TOKEN_EXPIRES_IN_SECONDS = 3600
 DASHBOARD_LIMIT = 25
 ERROR_MESSAGE_LIMIT = 2000
 
+# 상태 어휘(흩어진 리터럴 단일화)
+ACCOUNT_STATUS_CONNECTED = "connected"
+DEAD_LETTER_STATUS_OPEN = "open"
+DEAD_LETTER_STATUS_REPLAYED = "replayed"
+
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
 # prepare_threshold=None: PgBouncer transaction pooling 에서 prepared statement 가
@@ -242,7 +247,7 @@ class DeadLetterRepository(DatabaseConnection):
                 attempts=attempts,
                 error=compact_error(error),
                 payload=evt.payload,
-                status="open",
+                status=DEAD_LETTER_STATUS_OPEN,
             )
             .returning(table.c.id, table.c.created_at)
         )
@@ -257,7 +262,7 @@ class DeadLetterRepository(DatabaseConnection):
             "attempts": attempts,
             "error": compact_error(error),
             "created_at": row["created_at"].isoformat(),
-            "status": "open",
+            "status": DEAD_LETTER_STATUS_OPEN,
         }
 
     def list_dead_letters(self, limit: int) -> list[JsonObject]:
@@ -279,7 +284,7 @@ class DeadLetterRepository(DatabaseConnection):
         statement = (
             update(table)
             .where(table.c.id == dead_letter_id)
-            .values(status="replayed", replayed_at=func.now(), replay_event_id=replay_event_id)
+            .values(status=DEAD_LETTER_STATUS_REPLAYED, replayed_at=func.now(), replay_event_id=replay_event_id)
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -289,44 +294,18 @@ class OAuthRepository(DatabaseConnection):
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
         user_id = payload.get("user_id", Auth.LOCAL_USER_ID)
-        scopes = payload.get("scopes") or list(OAuth.DEFAULT_SCOPES)
-        if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scopes:
-            scopes.append(GitHub.REQUIRED_SCOPE)
-        token_ref = f"{TOKEN_REF_PREFIX}/{provider}/{user_id}/{uuid.uuid4()}"
+        scopes = self._oauth_scopes(provider, payload)
         provider_user = payload.get("provider_user") or f"{provider}-{user_id}"
-        encrypted_payload = {
-            "note": FAKE_ENCRYPTED_TOKEN_NOTE,
-            "access_token": f"fake-{provider}-access-token",
-            "refresh_token": f"fake-{provider}-refresh-token",
-            "expires_at": int(time.time()) + TOKEN_EXPIRES_IN_SECONDS,
-        }
-        token_table = TokenVault.__table__
-        account_table = OAuthAccount.__table__
-        token_statement = pg_insert(token_table).values(
-            token_ref=token_ref, provider=provider, encrypted_payload=encrypted_payload
-        )
-        account_insert = pg_insert(account_table).values(
-            user_id=user_id,
-            provider=provider,
-            provider_user=provider_user,
-            scopes=scopes,
-            token_ref=token_ref,
-            status="connected",
-            updated_at=func.now(),
-        )
-        account_statement = account_insert.on_conflict_do_update(
-            index_elements=[account_table.c.user_id, account_table.c.provider],
-            set_={
-                "provider_user": account_insert.excluded.provider_user,
-                "scopes": account_insert.excluded.scopes,
-                "token_ref": account_insert.excluded.token_ref,
-                "status": "connected",
-                "updated_at": func.now(),
-            },
-        )
+        token_ref = f"{TOKEN_REF_PREFIX}/{provider}/{user_id}/{uuid.uuid4()}"
         with self.connection() as conn:
-            conn.execute(token_statement)
-            conn.execute(account_statement)
+            conn.execute(
+                pg_insert(TokenVault.__table__).values(
+                    token_ref=token_ref,
+                    provider=provider,
+                    encrypted_payload=self._fake_token_payload(provider),
+                )
+            )
+            conn.execute(self._oauth_account_upsert(user_id, provider, provider_user, scopes, token_ref))
         return {
             "user_id": user_id,
             "provider": provider,
@@ -335,11 +314,52 @@ class OAuthRepository(DatabaseConnection):
             "token_ref": token_ref,
         }
 
+    @staticmethod
+    def _oauth_scopes(provider: str, payload: JsonObject) -> list[str]:
+        scopes = payload.get("scopes") or list(OAuth.DEFAULT_SCOPES)
+        if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scopes:
+            scopes.append(GitHub.REQUIRED_SCOPE)
+        return scopes
+
+    @staticmethod
+    def _fake_token_payload(provider: str) -> JsonObject:
+        return {
+            "note": FAKE_ENCRYPTED_TOKEN_NOTE,
+            "access_token": f"fake-{provider}-access-token",
+            "refresh_token": f"fake-{provider}-refresh-token",
+            "expires_at": int(time.time()) + TOKEN_EXPIRES_IN_SECONDS,
+        }
+
+    @staticmethod
+    def _oauth_account_upsert(
+        user_id: str, provider: str, provider_user: str, scopes: list[str], token_ref: str
+    ) -> Any:
+        table = OAuthAccount.__table__
+        insert = pg_insert(table).values(
+            user_id=user_id,
+            provider=provider,
+            provider_user=provider_user,
+            scopes=scopes,
+            token_ref=token_ref,
+            status=ACCOUNT_STATUS_CONNECTED,
+            updated_at=func.now(),
+        )
+        return insert.on_conflict_do_update(
+            index_elements=[table.c.user_id, table.c.provider],
+            set_={
+                "provider_user": insert.excluded.provider_user,
+                "scopes": insert.excluded.scopes,
+                "token_ref": insert.excluded.token_ref,
+                "status": ACCOUNT_STATUS_CONNECTED,
+                "updated_at": func.now(),
+            },
+        )
+
     def latest_github_token_ref(self) -> str | None:
         table = OAuthAccount.__table__
         statement = (
             select(table.c.token_ref)
-            .where(table.c.provider == GitHub.PROVIDER, table.c.status == "connected")
+            .where(table.c.provider == GitHub.PROVIDER, table.c.status == ACCOUNT_STATUS_CONNECTED)
             .order_by(table.c.updated_at.desc())
             .limit(1)
         )
