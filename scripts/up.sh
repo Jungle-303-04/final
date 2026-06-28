@@ -56,6 +56,7 @@ for old_deploy in \
   kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
 done
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=180s
+kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/pgbouncer --timeout=120s
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/nats --timeout=180s
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
