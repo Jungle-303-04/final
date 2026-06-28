@@ -10,8 +10,8 @@
 | --- | --- | --- | --- |
 | 1번 | Platform/Integration | event runtime, contract, CI, deploy, merge 안정화 | CI gate, DLQ scenario, smoke 자동화 |
 | 2번 | Gateway/Auth | 외부 HTTP, session, OAuth, command API, DLQ API 담당 | GitHub OAuth 실제 adapter 연결 경로 |
-| 3번 | GitOps/Command | Git webhook부터 manifest/diff/command 생성까지 담당 | manifest render와 command.requested 흐름 |
-| 4번 | RCA/Safe PR | evidence 기반 RCA, audit, Safe PR 흐름 담당 | Safe PR client와 RCA event test |
+| 3번 | GitOps/Command | Git polling부터 split worker manifest/diff/command 생성까지 담당 | manifest render와 command.requested 흐름 |
+| 4번 | RCA/Safe PR | evidence 기반 RCA, audit, Safe PR request/repo-gateway 흐름 담당 | Safe PR request와 RCA event test |
 | 5번 | Target/Telemetry | 대상 cluster agent, Kubernetes/RBAC, telemetry adapter 담당 | 실제 Prometheus/Loki evidence 수집 경로 |
 
 ## Codex 자동화
@@ -31,9 +31,20 @@
 | --- | --- | --- |
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
 | Gateway/Auth | `services/api-gateway`, `packages/contracts/gateway`, `packages/contracts/identity`, `packages/contracts/integrations`, `packages/contracts/security` | event subject, shared DB schema, target agent protocol |
-| GitOps/Command | `services/gitops-sync-worker`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
-| RCA/Safe PR | `services/rca-worker`, `services/audit-timeline-service`, Safe PR logic | GitHub token scope, command payload, dashboard read model |
-| Target/Telemetry | `services/target-cluster-agent`, `services/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
+| GitOps/Command | `services/gitops/*`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
+| RCA/Safe PR | `services/rca-worker`, `services/gitops/repo-gateway-worker`, `services/projection/audit-timeline-service`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
+| Target/Telemetry | `services/target/target-cluster-agent`, `services/target/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
+
+## 현재 코드 경로 기준
+
+2026-06-28 기준 작업 브랜치에서는 서비스 경로가 아래처럼 그룹화되어 있다.
+이 경로 변경이 `main`에 merge되기 전까지 관련 WBS/Project status는 `진행`으로 유지한다.
+
+| 영역 | 현재 경로 |
+| --- | --- |
+| GitOps pipeline | `services/gitops/git-pull-worker`, `services/gitops/manifest-render-worker`, `services/gitops/diff-worker`, `services/gitops/diff-analyze-worker`, `services/gitops/repo-gateway-worker` |
+| Projection | `services/projection/dashboard-projection-service`, `services/projection/audit-timeline-service` |
+| Target | `services/target/target-cluster-agent`, `services/target/node-collector` |
 
 ## 2026-06-26 기준 미흡한 부분
 
@@ -58,7 +69,7 @@
 ## 팀 간 계약 규칙
 
 - 새 API route: Gateway/Auth가 PR을 열고 schema/docs를 수정한다.
-- 새 event subject/payload: 담당자가 `packages/contracts/event_bus/subjects.py`, `packages/contracts/event_bus/payloads.py`, `docs/events.md`, test를 함께 수정한다.
+- 새 event subject/body: 담당자가 `packages/contracts/event_bus/subjects.py`, `packages/contracts/event_bus/bodies/`, `docs/events.md`, test를 함께 수정한다.
 - 새 DB table: 담당자가 `Database.init`, docs, test coverage를 함께 수정한다.
 - 새 Kubernetes permission: Target/Telemetry가 PR에서 RBAC 범위를 설명한다.
 - dashboard 의존성이 생기는 API 변경: 현재는 Gateway/Auth와 Platform/Integration이 문서에 먼저 남긴다.

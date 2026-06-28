@@ -4,7 +4,7 @@
 
 Target Agent가 보낸 evidence를 사람이 이해할 수 있는 원인 분석으로 정리하고, 안전한 GitHub PR 제안까지 연결한다. Audit Timeline은 command, RCA, PR 흐름을 나중에 추적할 수 있게 기록한다.
 
-이 담당자는 이벤트 버스의 내부 ack/nak/DLQ를 몰라도 된다. worker는 event를 받아 payload를 읽고, 검증된 결과 event를 발행한다.
+이 담당자는 이벤트 버스의 내부 ack/nak/DLQ를 몰라도 된다. worker는 event를 받아 본문(body)을 읽고, 검증된 결과 body를 `yield`로 발행한다(체이닝).
 
 ```text
 Gateway
@@ -13,6 +13,9 @@ Gateway
 RCA Worker
   -> evidence.built
   -> rca.completed
+  -> safe_pr.requested
+
+Repo Gateway Worker
   -> safe_pr.created
 
 Audit Timeline Service
@@ -23,16 +26,18 @@ Audit Timeline Service
 ## 담당 영역
 
 - `services/rca-worker`
-- `services/audit-timeline-service`
+- `services/gitops/repo-gateway-worker`
+- `services/projection/audit-timeline-service`
 - Evidence Builder logic
 - AI RCA Service logic
-- Safe PR logic
+- Safe PR request/proposal logic
 - RCA/audit 관련 worker test
-- GitHub PR adapter 또는 fake adapter
+- GitHub PR adapter 또는 fake adapter. 실제 PR 발급은 repo-gateway 중심으로 둔다.
 
 ## 현재 책임
 
-- fake Safe PR event를 실제 GitHub branch/commit/PR client로 교체할 준비를 한다.
+- RCA Worker는 직접 PR을 생성하지 않고 `safe_pr.requested`를 만든다.
+- repo-gateway가 `safe_pr.requested`를 받아 GitHub branch/commit/PR client 또는 fake adapter로 처리한다.
 - RCA 결과는 evidence 기반으로만 생성한다.
 - Safe PR side effect는 token/ref 확인과 feature flag로 보호한다.
 - audit timeline이 command, RCA, PR 상태를 추적하게 한다.
@@ -40,9 +45,9 @@ Audit Timeline Service
 
 ## 이벤트 시스템을 몰라도 되는 작업 규칙
 
-- RCA Worker는 `cluster.evidence.received`를 구독한다.
-- handler 입력은 `EventEnvelope.payload`다.
-- 새로운 사실을 만들면 payload DTO로 감싸서 event를 발행한다.
+- RCA Worker는 `@app.sub(ClusterEvidenceReceived)`로 `cluster.evidence.received`를 구독한다.
+- handler 입력은 타입이 있는 body 객체이며, 원본 envelope의 transport 필드는 `EventEnvelope.payload`다.
+- 새로운 사실을 만들면 body DTO로 감싸서 `yield`로 발행한다.
 - GitHub PR을 실제로 만들 때도 event에는 PR URL, branch, commit SHA, credential_ref 같은 reference만 남긴다.
 - 실패가 일시적이면 exception을 던져 runtime retry를 사용한다.
 - 정책/검증 실패처럼 정상적으로 거절할 일은 실패 event나 명확한 result로 끝낸다.
@@ -51,15 +56,15 @@ Audit Timeline Service
 
 - “증거에서 확인된 내용”과 “AI가 추론한 내용”을 분리한다.
 - “외부에 쓰는 작업”은 feature flag, policy, token ref가 모두 있어야 실행한다.
-- “감사에 남겨야 하는 상태 변화”는 audit timeline이 읽을 수 있게 event payload에 식별자를 남긴다.
+- “감사에 남겨야 하는 상태 변화”는 audit timeline이 읽을 수 있게 event body에 식별자를 남긴다.
 
 ## 코드 규칙
 
-- Worker 구독은 각 서비스 `settings.py`의 `SUBSCRIPTION`에 선언한다.
-- Worker runner는 `WorkerService.from_subscription(...)`으로 실행한다.
-- Worker는 `EventClient`로 발행한다.
-- Handler는 `EventEnvelope`를 받고 `evt.payload`로 입력을 읽는다.
-- 발행 payload는 `packages/contracts/event_bus/payloads.py`의 dataclass를 사용한다.
+- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.sub(BodyType)`으로 선언한다.
+- `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
+- Worker는 다음 이벤트 body를 `yield`로 발행한다(체이닝).
+- Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
+- 발행 body는 `packages/contracts/event_bus/bodies/`의 dataclass를 사용한다(base class `EventBody`).
 - `correlation_id`를 유지한다.
 - RCA output은 근거 없는 추론보다 확인된 evidence를 우선한다.
 - GitHub PR 생성에는 provider token을 event에 넣지 말고 Token Broker/credential reference를 사용한다.
@@ -207,7 +212,7 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 
 구현할 것:
 
-- `RcaCompletedPayload`.
+- `RcaCompletedBody`.
 - `rca.completed` 발행.
 - correlation_id 유지.
 - failure/insufficient evidence 상태 표현.
@@ -249,7 +254,7 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 - branch name.
 - file changes.
 - rationale.
-- `safe_pr.created` 또는 proposal event 발행 정책 정리.
+- `safe_pr.requested`와 `safe_pr.created` 분리 정책 정리.
 
 생각할 것:
 
@@ -365,15 +370,16 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 - `cluster.evidence.received`.
 - `evidence.built`.
 - `rca.completed`.
-- `safe_pr.created` 또는 proposal event.
+- `safe_pr.requested`.
+- repo-gateway fake adapter의 `safe_pr.created`.
 - audit log append.
 
 ## PR 체크리스트
 
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
-- 새/변경 event payload가 `packages/contracts/event_bus/payloads.py`에 있음
+- 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
 - RCA/Safe PR 동작 테스트 존재
-- handler가 `EventEnvelope`와 payload DTO 흐름을 유지함
+- handler가 `@app.sub` body DTO 흐름을 유지함
 - raw NATS 사용 없음
 - 실제 GitHub write는 feature flag 또는 policy guard로 보호
 - audit/dashboard 영향이 문서화됨
@@ -382,13 +388,14 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 ## 처음 읽을 파일
 
 1. `services/rca-worker`
-2. `services/audit-timeline-service`
-3. `packages/contracts/event_bus/subjects.py`
-4. `packages/contracts/event_bus/payloads.py`
-5. `packages/runtime/worker.py`
-6. `docs/events.md`
-7. Gateway/Auth Token Broker 설계: `docs/team/member-guides/gateway-auth.md`
+2. `services/gitops/repo-gateway-worker`
+3. `services/projection/audit-timeline-service`
+4. `packages/contracts/event_bus/subjects.py`
+5. `packages/contracts/event_bus/bodies/`
+6. `packages/runtime/worker.py`
+7. `docs/events.md`
+8. Gateway/Auth Token Broker 설계: `docs/team/member-guides/gateway-auth.md`
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/rca-worker`, `services/audit-timeline-service`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
+이 영역을 작업할 때는 `services/rca-worker`, `services/gitops/repo-gateway-worker`, `services/projection/audit-timeline-service`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.

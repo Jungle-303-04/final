@@ -6,7 +6,6 @@ import time
 import urllib.error
 import urllib.request
 
-
 LOKI_URL = os.environ.get("LOKI_URL", "http://localhost:3100")
 LOG_FILE = os.environ.get("LOG_FILE", "/tmp/demo-app.log")
 

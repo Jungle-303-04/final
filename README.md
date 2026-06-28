@@ -11,18 +11,22 @@ Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 
 ```text
 services
   api-gateway
-  gitops-sync-worker
+  gitops/git-pull-worker
+  gitops/manifest-render-worker
+  gitops/diff-worker
+  gitops/diff-analyze-worker
+  gitops/repo-gateway-worker
   command-worker
   rca-worker
-  dashboard-projection-service
-  audit-timeline-service
-  target-cluster-agent
-  node-collector
+  projection/dashboard-projection-service
+  projection/audit-timeline-service
+  target/target-cluster-agent
+  target/node-collector
 packages
   config                 env, runtime 기본값, 시간 helper
   contracts              gateway/event_bus/dashboard 계약과 Protocol port
     gateway              API Gateway 요청 schema
-    event_bus            stream, subject, subscription, envelope, payload 계약
+    event_bus            stream, subject, subscription, envelope, body 계약
     dashboard            dashboard status 계약
   events                 event envelope, NATS JetStream, DLQ event sink
   storage                PostgreSQL 저장소와 schema 초기화
@@ -56,16 +60,20 @@ make down
 
 ## 서비스 역할
 
-각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python services/<service-name>/runner.py`처럼 서비스별 entrypoint로 분리한다.
+각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python services/<service-name>/app.py`처럼 서비스별 entrypoint로 분리한다.
 
-새 서비스 runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService` 중 하나를 사용합니다. 서비스 폴더에서 `WorkerRuntime`, NATS client, PostgreSQL connection을 직접 조립하지 않습니다.
-각 서비스가 직접 제어하는 설정은 `services/<service-name>/settings.py`에 둡니다. Worker 구독은 자기 서비스 `settings.py`의 `SUBSCRIPTION`에서 확인합니다. 여러 서비스가 공유하는 이벤트 subject, envelope, payload, stream 계약은 `packages/contracts/event_bus`에 둡니다.
+한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `packages/runtime/app.py`의 `App`을 사용합니다. `@app.sub(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). cross-cutting projector(dashboard, audit)는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
+서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둡니다. 여러 서비스가 공유하는 이벤트 subject, envelope, body, stream 계약은 `packages/contracts/event_bus`에 둡니다.
 
 ```text
 api-gateway                  관리 API Gateway
-gitops-sync-worker           Git webhook -> manifest/diff/command
+git-pull-worker              Git webhook/polling -> git.changed
+manifest-render-worker       git.changed -> manifest.rendered
+diff-worker                  manifest.rendered -> desired.diff.detected
+diff-analyze-worker          desired.diff.detected -> diff.analyzed (안전 시 safe_pr.requested)
+repo-gateway-worker          safe_pr.requested -> safe_pr.created/safe_pr.failed (유일한 PR 생성자)
 command-worker               command policy/dispatch/agent queue
-rca-worker                   evidence -> RCA -> safe PR
+rca-worker                   evidence -> RCA -> safe_pr.requested
 dashboard-projection-service dashboard read model
 audit-timeline-service       audit log
 target-cluster-agent         대상 클러스터 outbound agent

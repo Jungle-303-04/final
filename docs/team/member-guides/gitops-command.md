@@ -7,18 +7,18 @@ Git provider를 주기적으로 polling해서 새 commit/merge를 감지하고, 
 이 담당자는 이벤트 시스템 내부 구현을 모두 알 필요는 없다. 다만 worker는 이벤트를 받아서 처리하고, 다음 이벤트를 발행한다는 규칙을 지켜야 한다.
 
 ```text
-Git Poller
-  -> git.poll.tick
-  -> git.repo.observed
+Git Poller (git-pull-worker)
+  -> git.webhook.received
   -> git.changed
 
-GitOps Sync Worker
-  -> git.changed
-  -> manifest.rendered
-  -> desired.diff.detected
-  -> command.requested
+GitOps split workers (5단계 파이프라인)
+  git-pull-worker        -> git.changed
+  manifest-render-worker -> manifest.rendered
+  diff-worker            -> desired.diff.detected
+  diff-analyze-worker    -> diff.analyzed (안전 시 safe_pr.requested)
+  repo-gateway-worker    -> safe_pr.created / safe_pr.failed
 
-Command Worker
+Command Worker (command.requested 는 API Gateway 가 발행)
   -> command.dispatch.ready
   -> command.dispatched
   -> agent command queue 저장
@@ -30,8 +30,11 @@ Target Agent
 
 ## 담당 영역
 
-- `services/gitops-sync-worker`
-- `services/git-poller-worker` 또는 `services/gitops-sync-worker/git_poller.py`
+- `services/gitops/git-pull-worker`
+- `services/gitops/manifest-render-worker`
+- `services/gitops/diff-worker`
+- `services/gitops/diff-analyze-worker`
+- `services/gitops/repo-gateway-worker`
 - `services/command-worker`
 - git watch target polling
 - manifest render
@@ -43,9 +46,9 @@ Target Agent
 
 ## 현재 책임
 
-- Git polling 결과를 `git.changed`, `manifest.rendered`, `desired.diff.detected` 흐름으로 정리한다.
-- webhook은 기본 GitOps 사이클에서 사용하지 않는다.
-- diff 결과가 안전한 command payload로 변환되게 만든다.
+- Git 변경을 `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed` 5단계 파이프라인으로 정리한다.
+- 안전한 diff면 `diff-analyze-worker`가 `safe_pr.requested`를 발행하고, `repo-gateway-worker`가 실제 PR(`safe_pr.created`)을 만든다.
+- diff 결과가 안전한 command/PR 요청 body로 변환되게 만든다.
 - command는 production write가 아니라 `sandbox` 또는 demo namespace 기준으로 제한한다.
 - command 생성과 dispatch 준비 event에 대한 테스트를 추가한다.
 - command worker는 agent를 직접 호출하지 않고 agent command queue에 저장한다.
@@ -54,12 +57,11 @@ Target Agent
 
 Worker 담당자가 꼭 알아야 할 것:
 
-- handler는 `EventEnvelope`를 받는다.
-- 입력 본문은 `evt.payload`에서 읽는다.
-- 새 이벤트를 발행할 때는 `EventClient`를 쓴다.
+- handler는 `@app.sub(BodyType)`로 구독하고 타입 body를 입력으로 받는다. 원본 envelope의 transport 필드는 `evt.payload`다.
+- 새 이벤트는 다음 body를 `yield`로 발행한다(체이닝).
 - `correlation_id`는 runtime/client가 이어가므로 직접 새로 만들지 않는다.
 - ack/nak/retry/DLQ는 `packages/runtime/worker.py` 책임이다. workflow 코드에서 직접 처리하지 않는다.
-- subject를 새로 만들면 `packages/contracts/event_bus/subjects.py`, payload DTO를 새로 만들면 `packages/contracts/event_bus/payloads.py`, 설명은 `docs/events.md`에 같이 반영한다.
+- subject를 새로 만들면 `packages/contracts/event_bus/subjects.py`, body DTO를 새로 만들면 `packages/contracts/event_bus/bodies/`, 설명은 `docs/events.md`에 같이 반영한다.
 
 모르는 상태에서 작업할 때의 기준:
 
@@ -69,16 +71,16 @@ Worker 담당자가 꼭 알아야 할 것:
 
 ## 코드 규칙
 
-- Worker 구독은 각 서비스 `settings.py`의 `SUBSCRIPTION`에 선언한다.
-- Worker runner는 `WorkerService.from_subscription(...)`으로 실행한다.
-- Worker는 `EventClient`로 발행한다.
-- Handler는 `EventEnvelope`를 받고 `evt.payload`로 입력을 읽는다.
-- 발행 payload는 `packages/contracts/event_bus/payloads.py`의 dataclass를 사용한다.
+- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.sub(BodyType)`으로 선언한다.
+- `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
+- Worker는 다음 이벤트 body를 `yield`로 발행한다.
+- Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
+- 발행 body는 `packages/contracts/event_bus/bodies/`의 dataclass를 사용한다(base class `EventBody`).
 - `correlation_id`를 유지한다.
 - handler write는 idempotent하거나 conflict-safe해야 한다.
 - workflow code에서 직접 ack/nak하지 않는다.
 - command policy, planner, dispatcher는 분리한다.
-- secret/token은 command payload에 넣지 않는다. 필요하면 `credential_ref`만 넣는다.
+- secret/token은 command body에 넣지 않는다. 필요하면 `credential_ref`만 넣는다.
 
 ## Phase별 작은 PR 계획
 
@@ -88,30 +90,30 @@ Worker 담당자가 꼭 알아야 할 것:
 | 2 | Git polling observation -> GitChanged 변환 | polling 결과를 내부 표준 event로 바꾼다. |
 | 3 | Manifest render DTO와 fake renderer | 실제 Git/Kustomize 없이 다음 담당자가 작업 가능하다. |
 | 4 | Desired diff DTO와 diff detector | command 생성 전에 변경 내용을 구조화한다. |
-| 5 | CommandRequested payload 생성 | Gateway/Command Worker 연결점을 만든다. |
+| 5 | CommandRequested body 생성 | Gateway/Command Worker 연결점을 만든다. |
 | 6 | Command policy rule 구조 | namespace/action 제한을 범용 rule로 검사한다. |
 | 7 | Planner/Dispatcher/Queue 연결 | command를 Agent가 poll할 수 있는 상태로 만든다. |
-| 8 | E2E worker chain test | subject/payload 연결이 끊기지 않았는지 검증한다. |
+| 8 | E2E worker chain test | subject/body 연결이 끊기지 않았는지 검증한다. |
 
 ## Phase 1. GitOps worker 입력/출력 계약 정리
 
 목표:
 
 ```text
-GitOps Sync Worker가 어떤 event를 받고 어떤 event를 발행하는지 계약을 고정한다.
+GitOps split workers가 어떤 event를 받고 어떤 event를 발행하는지 계약을 고정한다.
 ```
 
 왜 해야 하는가:
 
-- 이벤트 시스템을 모르는 팀원도 subject 이름과 payload DTO만 보고 작업할 수 있다.
-- subject/payload가 흔들리면 Gateway, Dashboard, Audit, Command Worker가 모두 깨진다.
+- 이벤트 시스템을 모르는 팀원도 subject 이름과 body DTO만 보고 작업할 수 있다.
+- subject/body가 흔들리면 Gateway, Dashboard, Audit, Command Worker가 모두 깨진다.
 - 구현 전에 계약을 먼저 고정하면 테스트를 작게 쓸 수 있다.
 
 구현할 것:
 
 - `git.poll.tick`, `git.repo.observed`, `git.changed` 계약 후보 확인.
-- `GitChangedPayload`, `RenderedManifestPayload`, `DesiredDiffDetectedPayload`, `CommandRequestedPayload` 확인 또는 보강.
-- 각 payload의 필수 필드 정리.
+- `GitChangedBody`, `ManifestRenderedBody`, `DesiredDiffBody`, `CommandRequestedBody` 확인 또는 보강.
+- 각 body의 필수 필드 정리.
 - `docs/events.md`에 입력/출력 흐름 표 추가.
 
 생각할 것:
@@ -123,12 +125,12 @@ GitOps Sync Worker가 어떤 event를 받고 어떤 event를 발행하는지 계
 하지 말 것:
 
 - subject 문자열을 서비스 코드에 직접 하드코딩하지 않는다.
-- payload dict를 아무 곳에서나 자유롭게 만들지 않는다.
+- body dict를 아무 곳에서나 자유롭게 만들지 않는다.
 
 테스트:
 
-- payload DTO `to_payload()` 결과가 기대 field를 가진다.
-- worker settings의 subscription subject가 문서와 일치한다.
+- body DTO `to_body()` 결과가 기대 field를 가진다.
+- worker `@app.sub(...)` 구독 subject가 문서와 일치한다.
 
 ## Phase 2. Git polling observation -> GitChanged 변환
 
@@ -141,7 +143,7 @@ Git Poller가 관찰한 repo 상태를 내부 GitChanged event로 변환한다.
 왜 해야 하는가:
 
 - GitHub/GitLab provider별 응답 형식을 내부 서비스 전체에 퍼뜨리면 확장이 어렵다.
-- 내부 worker들은 `GitChangedPayload`만 알면 된다.
+- 내부 worker들은 `GitChangedBody`만 알면 된다.
 - polling은 같은 commit을 반복해서 볼 수 있으므로 중복 방지가 핵심이다.
 
 구현할 것:
@@ -244,7 +246,7 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 - diff 없음 -> command 요청 없음.
 - namespace/action 필드 포함.
 
-## Phase 5. CommandRequested payload 생성
+## Phase 5. CommandRequested body 생성
 
 목표:
 
@@ -254,13 +256,13 @@ diff를 Command Worker가 이해할 수 있는 command.requested event로 변환
 
 왜 해야 하는가:
 
-- GitOps Sync Worker는 command를 직접 queue에 넣지 않는다.
+- GitOps split workers는 command를 직접 queue에 넣지 않는다.
 - command policy/dispatch 책임은 Command Worker가 가진다.
 - 두 worker 사이 계약이 명확해야 테스트와 디버깅이 쉽다.
 
 구현할 것:
 
-- command requested payload DTO.
+- command requested body DTO (`CommandRequestedBody`).
 - command action 결정.
 - target cluster id 결정.
 - namespace 포함.
@@ -299,16 +301,16 @@ Command Worker가 command.requested를 받아 범용 policy rule로 허용/거�
 
 구현할 것:
 
-- `Payload` wrapper.
+- `Lookup` wrapper.
 - `Rule` Protocol.
 - `EqualsRule` 같은 기본 rule.
-- `Policy.evaluate(payload)`.
+- `Policy.evaluate(lookup)`.
 - 실패 시 `command.rejected` 발행.
 
 생각할 것:
 
 - 첫 실패만 반환할지, 모든 실패를 모을지. 현재는 첫 실패가 단순하다.
-- default 값을 rule config에 둘지, payload wrapper에 둘지.
+- default 값을 rule config에 둘지, lookup wrapper에 둘지.
 - policy 실패는 retry 대상이 아니다. 정상 거절 event로 끝난다.
 
 하지 말 것:
@@ -397,9 +399,9 @@ polling으로 감지한 git.changed에서 command queued까지 fake bus/fake db�
 ## PR 체크리스트
 
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
-- 새/변경 event payload가 `packages/contracts/event_bus/payloads.py`에 있음
+- 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
 - manifest/diff/command 흐름 테스트 존재
-- handler가 `EventEnvelope`와 payload DTO 흐름을 유지함
+- handler가 `@app.sub` body DTO 흐름을 유지함
 - raw NATS 사용 없음
 - command payload 변경 시 Gateway/Auth와 Target/Telemetry에 공유
 - audit/dashboard 영향이 있으면 문서화
@@ -438,7 +440,7 @@ Scheduler 또는 수동 poll 요청
 4. 마지막으로 본 commit_sha와 비교
 5. 달라졌으면 git.changed 발행
 6. 현재 observed state 저장
-7. GitOps Sync Worker가 manifest.rendered -> desired.diff.detected -> command.requested 진행
+7. GitOps split workers가 manifest.rendered -> desired.diff.detected -> command.requested 진행
 ```
 
 PR merge까지 보고 싶을 때:
@@ -505,7 +507,7 @@ MVP에서는 `git_watch_targets`만 있어도 된다.
 
 ## polling event 계약 후보
 
-나중에 `packages/contracts/event_bus/subjects.py`, `payloads.py`, `docs/events.md`에 반영한다.
+나중에 `packages/contracts/event_bus/subjects.py`, `packages/contracts/event_bus/bodies/`, `docs/events.md`에 반영한다.
 
 ```text
 git.poll.tick
@@ -561,22 +563,23 @@ Polling으로 만든 `git.changed`가 downstream의 유일한 표준 입력이�
 
 ## polling 담당 코드 후보
 
-처음에는 GitOps Sync Worker에 모두 넣지 말고, 역할을 나눠 생각한다.
+현재 작업 브랜치에서는 기존 단일 GitOps 폴더 대신 split worker 구조를 사용한다.
 
 ```text
-services/git-poller-worker
-  주기적으로 repo target을 확인하고 git.changed를 발행
+services/gitops/git-pull-worker
+  repo target을 확인하고 git.changed를 발행
 
-services/gitops-sync-worker
-  git.changed를 받아 render/diff/command 흐름 진행
-```
+services/gitops/manifest-render-worker
+  git.changed를 받아 manifest.rendered 발행
 
-아직 서비스가 많아지는 것이 부담이면 `services/gitops-sync-worker` 내부에 poller 모듈을 둘 수 있다.
+services/gitops/diff-worker
+  manifest.rendered를 받아 desired.diff.detected 발행
 
-```text
-services/gitops-sync-worker/git_poller.py
-services/gitops-sync-worker/git_provider.py
-services/gitops-sync-worker/git_state.py
+services/gitops/diff-analyze-worker
+  desired.diff.detected를 받아 diff.analyzed 발행
+
+services/gitops/repo-gateway-worker
+  safe_pr.requested를 받아 guarded repo write 또는 fake PR event 발행
 ```
 
 하지만 handler 책임은 분리한다.
@@ -586,7 +589,7 @@ Poller
   repo 상태 관찰
 
 GitOps Sync
-  관찰 결과를 manifest/diff/command로 처리
+  관찰 결과를 manifest/diff/command/PR request로 처리
 ```
 
 ## polling 테스트 목록
@@ -613,12 +616,12 @@ tests/test_git_polling.py
 
 1. `docs/events.md`
 2. `packages/contracts/event_bus/subjects.py`
-3. `packages/contracts/event_bus/payloads.py`
-4. `packages/runtime/worker.py`
-5. `packages/runtime/service.py`
-6. `services/gitops-sync-worker`
+3. `packages/contracts/event_bus/bodies/`
+4. `packages/runtime/app.py`
+5. `packages/runtime/worker.py`
+6. `services/gitops`
 7. `services/command-worker`
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `docs/events.md`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `services/gitops-sync-worker`, `services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.
+이 영역을 작업할 때는 `docs/events.md`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `services/gitops`, `services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.
