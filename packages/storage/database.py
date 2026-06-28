@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager, contextmanager
@@ -13,7 +12,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from packages.config.constants import Auth, GitHub, OAuth, Postgres
-from packages.config.errors import fail
+from packages.config.retry import retry_dependency
 from packages.config.settings import env
 from packages.config.time import now_iso
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
@@ -41,8 +40,6 @@ TOKEN_REF_PREFIX = "vault://oauth"
 FAKE_ENCRYPTED_TOKEN_NOTE = "fake encrypted provider token payload"
 TOKEN_EXPIRES_IN_SECONDS = 3600
 DASHBOARD_LIMIT = 25
-DEPENDENCY_RETRY_LIMIT = 60
-DEPENDENCY_RETRY_DELAY_SECONDS = 2
 ERROR_MESSAGE_LIMIT = 2000
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
@@ -427,20 +424,18 @@ class AgentCommandRepository(DatabaseConnection):
 
 
 class RcaRepository(DatabaseConnection):
-    def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None:
+    def save_evidence(self, correlation_id: str, kind: str, body: JsonObject) -> None:
         table = Evidence.__table__
-        statement = pg_insert(table).values(
-            correlation_id=correlation_id, kind=kind, payload=payload
-        )
+        statement = pg_insert(table).values(correlation_id=correlation_id, kind=kind, payload=body)
         with self.connection() as conn:
             conn.execute(statement)
 
     def save_rca_report(
-        self, correlation_id: str, root_cause: str, action: str, payload: JsonObject
+        self, correlation_id: str, root_cause: str, action: str, body: JsonObject
     ) -> None:
         table = RcaReport.__table__
         statement = pg_insert(table).values(
-            correlation_id=correlation_id, root_cause=root_cause, action=action, payload=payload
+            correlation_id=correlation_id, root_cause=root_cause, action=action, payload=body
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -574,12 +569,7 @@ class Database(
 
 
 async def wait_for_database(db: InitializableStore) -> None:
-    for attempt in range(DEPENDENCY_RETRY_LIMIT):
-        try:
-            db.init()
-            return
-        except Exception as exc:
-            message = f"waiting for postgres ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
-            print(message, flush=True)
-            await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-    fail("PostgreSQL 연결 실패")
+    async def attempt() -> None:
+        db.init()
+
+    await retry_dependency(attempt, label="postgres")
