@@ -1,9 +1,8 @@
 """구조적(JSON) 로깅.
 
-print 대신 한 줄 = JSON 1개로 찍는다. 그래야 로그 수집기
-(Loki/Elasticsearch/CloudWatch 등)에서 correlation_id 같은 필드로
-질의·필터·정렬할 수 있다. 모든 서비스가 같은 형식을 써서 흐름을
-pod 경계 넘어 한 번에 따라갈 수 있게 한다.
+print 대신 한 줄=JSON 1개. 로그 수집기(Loki/ES/CloudWatch)에서
+correlation_id 같은 필드로 질의·필터·정렬 가능. 전 서비스 동일 형식 →
+pod 경계 넘는 흐름 추적.
 """
 
 from __future__ import annotations

@@ -35,7 +35,7 @@ class EventEnvelope:
     created_at: str
     payload: JsonObject
 
-    # 필드 이름의 단일 출처는 이 dataclass. 직렬화는 거기서 파생한다.
+    # 필드 이름 단일 출처 = 이 dataclass. 직렬화도 여기서 파생.
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> EventEnvelope:
         known = {f.name for f in fields(cls)}
@@ -113,5 +113,5 @@ class EventConsumerBus(EventPublisher, Protocol):
 
 
 class EventBus(EventConsumerBus, Protocol):
-    # 구체 구현은 NatsEventBus. 서비스는 이 Protocol에만 의존한다.
+    # 구체 구현 = NatsEventBus. 서비스는 이 Protocol 에만 의존.
     pass

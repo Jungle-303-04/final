@@ -1,8 +1,7 @@
 """rca-worker — 한 파일 서비스.
 
-증거(cluster.evidence.received)를 받아 RCA 보고서를 만들고, 안전 롤백 PR 은
-repo-gateway 에 위임한다. 결과 이벤트(evidence.built, rca.completed,
-safe_pr.requested)를 흘린다.
+증거(cluster.evidence.received) → RCA 보고서 생성. 안전 롤백 PR 은
+repo-gateway 에 위임. 결과: evidence.built · rca.completed · safe_pr.requested.
 """
 
 from __future__ import annotations
@@ -55,7 +54,7 @@ async def on_cluster_evidence(
         ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_payload()
     )
 
-    # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 가 맡는다.
+    # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 담당.
     yield EvidenceBuiltPayload(evidence=evidence)
     yield report
     yield SafePrRequestedPayload(
