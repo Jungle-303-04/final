@@ -85,10 +85,16 @@ ci: PR 필수 검증 workflow 추가
 
 - Python 스타일 기준은 Google Python Style Guide 한글 번역본을 따른다.
   - 기준 문서: https://github.com/Yosseulsin-JOB/Google-Python-Style-Guide-kor/blob/master/Google%20Python%20Style%20Guide%20kor.md
-  - 자동 검사: `uv run ruff check services packages tests`
-  - 포맷 검사: `uv run ruff format --check services packages tests`
-- 줄 길이는 80자를 기본으로 한다. 긴 URL, 명령어 예시, 외부 계약 문자열처럼
-  끊으면 의미가 흐려지는 값만 예외로 둔다.
+  - 린트: `make lint` (`uv run ruff check services packages scripts tests`)
+  - 포맷: `make format` (`uv run ruff format ...`)
+- 줄 길이는 100자를 기본으로 한다. 80자는 의미 없는 줄바꿈을 부르고, 무제한은
+  가로 스크롤을 부른다. 폭은 포매터가 관리하므로 `E501`(line-too-long) 린트는 끈다.
+- 한 줄로 표현 가능한 짧은 코드는 한 줄로 둔다. 긴 호출·import·생성자는 한
+  항목씩 세로로 나눈다. magic trailing comma(끝 콤마)를 유지하므로, 블록 끝에
+  콤마를 붙이면 포매터가 그 블록을 세로로 유지한다(의도적 세로 정렬 + 깔끔한 diff).
+- 포맷은 팀 전체가 동일하게 적용된다. ruff 버전은 `uv.lock`에 고정되고,
+  `make hooks`(또는 `make setup`)로 설치하는 pre-commit 훅(`.pre-commit-config.yaml`)이
+  커밋 시 자동으로 포맷·린트한다.
 - import는 표준 라이브러리, 서드파티, 로컬 패키지 순서로 나누고 Ruff import
   정렬을 통과해야 한다.
 - 패키지 내부 import는 가능한 한 전체 패키지 경로를 사용한다.
@@ -198,8 +204,10 @@ GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 
 팀원 Codex 자동화는 `docs/team/codex-automation.md`의 공통 프롬프트를 사용한다.
 각 팀원은 자기 GitHub ID만 지정하고, issue/PR/역할은 현재 문서와 GitHub 상태에서 매번 다시 계산한다.
-정기 자동화는 읽기, 점검, 제안만 수행한다.
-자동화가 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 직접 수행하면 안 된다.
+팀원별 정기 자동화는 읽기, 점검, 제안만 수행한다.
+팀원별 자동화가 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 직접 수행하면 안 된다.
+총괄 `final-wbs-issue-sync` 자동화는 WBS/Issue/Project/docs 정합성 유지에 필요한 제한된 쓰기 작업을 수행할 수 있다.
+완료된 issue는 닫지 않고 Project status만 갱신한다.
 commit과 PR은 팀원이 필요를 판단하고 명시적으로 요청한 작업 세션에서만 수행한다.
 
 Merge 기준:
