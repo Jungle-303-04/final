@@ -47,4 +47,6 @@ class Command:
 
 class Sandbox:
     NAMESPACE: Final[str] = "sandbox"
-    RISK_TAG: Final[str] = "sandbox-only"  # diff 가 sandbox 한정 → 안전 판정 표식(생산자·소비자 공유)
+    RISK_TAG: Final[str] = (
+        "sandbox-only"  # diff 가 sandbox 한정 → 안전 판정 표식(생산자·소비자 공유)
+    )
