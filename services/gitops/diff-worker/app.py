@@ -1,7 +1,8 @@
 """diff-worker — manifest.rendered → desired.diff.detected (원하는 vs 실제).
 
-렌더 이미지(원하는 것) vs 현재 이미지(실제) 비교. 중첩 body
-(rendered_manifest)는 타입 객체로 받아 속성 접근.
+우현 원본 GitOpsSyncWorkflow.handle()의 diff dict 생성과
+DESIRED_DIFF_DETECTED 발행 블록에 대응. 렌더 결과와 현재 상태 비교만
+분리해 실제 cluster 조회 로직으로 교체하기 쉽게 유지.
 """
 
 from __future__ import annotations

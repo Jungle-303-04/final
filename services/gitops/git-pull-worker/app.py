@@ -1,7 +1,8 @@
 """git-pull-worker — 깃 변경 감지(풀링) → git.changed. 파이프라인 입구.
 
-지금은 webhook 입력을 그대로 git.changed 로 넘기는 fake. 실제로는 깃
-풀링/소스 가져오기 후 git.changed 생성.
+우현 원본 GitOpsSyncWorkflow.handle()의 commit_sha 결정과 GIT_CHANGED
+발행 블록에 대응. 변경 감지 책임만 떼어 이후 렌더/비교/명령 단계가
+독립적으로 재시도·테스트될 수 있게 분리.
 """
 
 from __future__ import annotations
