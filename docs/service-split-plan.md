@@ -12,39 +12,55 @@ services/api-gateway
   API Gateway
   OAuth/session
   command/dashboard/agent HTTP 경계
-  settings.py: route limit, session, polling, error policy
+  app.py: route limit, session, polling, error policy
 
-services/gitops-sync-worker
-  GitOps / Desired State
-  settings.py: manifest render 기본값, diff 정책, 구독 subject
+services/gitops/git-pull-worker
+  Git target polling / Git changed event
+  app.py: repo polling 기본값, @app.sub(GitWebhookReceived)
+
+services/gitops/manifest-render-worker
+  Manifest render
+  app.py: manifest render 기본값, @app.sub(GitChangedBody)
+
+services/gitops/diff-worker
+  Desired state diff
+  app.py: diff 정책, @app.sub(ManifestRenderedBody)
+
+services/gitops/diff-analyze-worker
+  Diff analysis / Safe PR request decision
+  app.py: analysis 기본값, @app.sub(DesiredDiffBody)
+
+services/gitops/repo-gateway-worker
+  유일한 outbound GitHub PR 생성자 (safe_pr.requested -> safe_pr.created/failed)
+  app.py: repo write feature flag, @app.sub(SafePrRequestedBody)
 
 services/command-worker
   Command / Control
-  settings.py: command policy, queue status, 구독 subject
+  app.py: command policy, queue status, @app.sub(CommandRequestedBody)
 
 services/rca-worker
-  RCA / Evidence
-  settings.py: RCA 기본 메시지, Safe PR mode, 구독 subject
+  RCA / Evidence (PR 생성은 repo-gateway 에 위임: safe_pr.requested)
+  app.py: RCA 기본 메시지, @app.sub(ClusterEvidenceReceived)
 
-services/dashboard-projection-service
+services/projection/dashboard-projection-service
   Read Model / Dashboard Projection
-  settings.py: projection 상태 규칙, 구독 subject
+  app.py: projection 상태 규칙, @app.on_event (모든 이벤트 >)
 
-services/audit-timeline-service
+services/projection/audit-timeline-service
   Audit Timeline
-  settings.py: 구독 subject
+  app.py: @app.on_event (모든 이벤트 >)
 
-services/target-cluster-agent
+services/target/target-cluster-agent
   Target Cluster Agent
   telemetry adapter
   command receiver
-  settings.py: agent 연결, fake telemetry, polling 간격
+  app.py: agent 연결, fake telemetry, polling 간격
 
-services/node-collector
+services/target/node-collector
   선택형 DaemonSet collector
   node/runtime metrics endpoint
   Loki 스타일 collector를 위한 stdout log sample
-  settings.py: node sample, scrape port, collect interval
+  app.py: node sample, scrape port, collect interval
 
 packages/config
   env, 상수, 시간 helper
@@ -75,7 +91,8 @@ packages/storage
   event_processing / dead letter / 업무 저장소
 
 packages/runtime
-  FastApiService / WorkerService / AsyncService 실행 객체
+  App (worker 서비스 진입점) / FastApiService / WorkerService(내부) / AsyncService 실행 객체
+  outbound.py: deliver(call, ok, fail) outbound gateway helper
   worker retry / event_processing / DLQ 정책
 
 deploy
@@ -91,16 +108,20 @@ secrets
 
 ```text
 api-gateway        -> python services/api-gateway/app.py
-gitops-sync-worker            -> python services/gitops-sync-worker/app.py
+git-pull-worker               -> python services/gitops/git-pull-worker/app.py
+manifest-render-worker        -> python services/gitops/manifest-render-worker/app.py
+diff-worker                   -> python services/gitops/diff-worker/app.py
+diff-analyze-worker           -> python services/gitops/diff-analyze-worker/app.py
+repo-gateway-worker           -> python services/gitops/repo-gateway-worker/app.py
 command-worker                -> python services/command-worker/app.py
 rca-worker                    -> python services/rca-worker/app.py
-dashboard-projection-service  -> python services/dashboard-projection-service/app.py
-audit-timeline-service        -> python services/audit-timeline-service/app.py
-target-cluster-agent          -> python services/target-cluster-agent/app.py
-optional-node-collector       -> python services/node-collector/app.py
-fake-prometheus               -> python services/target-cluster-agent/fake_prometheus.py
-fake-loki                     -> python services/target-cluster-agent/fake_loki.py
-fake-otel                     -> python services/target-cluster-agent/fake_otel.py
+dashboard-projection-service  -> python services/projection/dashboard-projection-service/app.py
+audit-timeline-service        -> python services/projection/audit-timeline-service/app.py
+target-cluster-agent          -> python services/target/target-cluster-agent/app.py
+optional-node-collector       -> python services/target/node-collector/app.py
+fake-prometheus               -> python services/target/target-cluster-agent/fake_prometheus.py
+fake-loki                     -> python services/target/target-cluster-agent/fake_loki.py
+fake-otel                     -> python services/target/target-cluster-agent/fake_otel.py
 ```
 
 ## 추가 분리 순서
@@ -108,18 +129,18 @@ fake-otel                     -> python services/target-cluster-agent/fake_otel.
 1. `services/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
 2. 각 service의 DB query를 repository 객체로 분리한다.
 3. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
-4. 실제 GitHub PR 생성이 들어가면 `Safe PR`을 `services/safe-pr-service`로 분리한다.
-5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target-cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `services/node-collector`에서 확장한다.
+4. 실제 GitHub PR 생성은 먼저 `services/gitops/repo-gateway-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
+5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target/target-cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `services/target/node-collector`에서 확장한다.
 6. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 공통 base layer 위에서 서비스별 image로 나눈다.
 
 ## 규칙
 
 - 먼저 service/process 경계를 유지하고, 파일은 책임별로 나눈다.
 - 서비스 workflow는 `packages/contracts` 포트에 의존하고 concrete adapter는 runtime/composition 경계에서 주입한다.
-- service runner는 `packages/runtime/service.py`의 `FastApiService`, `WorkerService`, `AsyncService`를 사용한다.
-- 서비스별 설정은 반드시 `services/<service-name>/settings.py`에 둔다.
-- worker 구독은 각 worker `settings.py`의 `SUBSCRIPTION = WorkerSubscription(...)`으로 선언한다.
-- event subject, payload, stream, subscription 타입은 `packages/contracts/event_bus`에서 관리한다.
+- worker 서비스는 한 파일 `app.py`에서 `packages/runtime/app.py`의 `App`을 사용한다. `App.run()`이 내부적으로 `FastApiService`/`WorkerService`/`AsyncService`를 조립한다.
+- 서비스별 설정(상수)은 별도 `settings.py`가 아니라 `services/<service-name>/app.py` 안에 둔다.
+- worker 구독은 각 worker `app.py`의 `@app.sub(BodyType)`(cross-cutting projector는 `@app.on_event`)으로 선언한다.
+- event subject, body, stream, subscription 타입은 `packages/contracts/event_bus`에서 관리한다.
 - 여러 서비스가 공유하는 runtime/env 기본값만 `packages/config`로 승격한다.
 - 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둔다.
 - DB schema는 공유 PostgreSQL에서 시작하되 schema/table ownership을 문서화한다.
