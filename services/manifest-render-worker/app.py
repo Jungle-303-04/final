@@ -1,0 +1,55 @@
+"""manifest-render-worker — git.changed 를 받아 k8s manifest 를 렌더한다.
+
+원시 변경(commit/image/replicas)을 배포 사양 + 렌더된 Deployment 로 만들고
+repo_change 로 저장한 뒤 manifest.rendered 를 흘린다.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+from packages.config.constants import Sandbox
+from packages.contracts.event_bus.payloads import (
+    EventPayload,
+    GitChangedPayload,
+    Manifest,
+    ManifestRenderedPayload,
+    RenderedManifest,
+    RenderedMetadata,
+    RenderedSpec,
+)
+from packages.runtime.app import App, EventContext
+
+app = App("manifest-render-worker")
+
+DEFAULT_APP_NAME = "checkout-api"
+MANIFEST_API_VERSION = "apps/v1"
+MANIFEST_KIND = "Deployment"
+
+
+@app.sub(GitChangedPayload)
+async def on_git_changed(
+    evt: GitChangedPayload, ctx: EventContext
+) -> AsyncIterator[EventPayload]:
+    manifest = Manifest(
+        app=DEFAULT_APP_NAME,
+        image=evt.image,
+        replicas=evt.replicas,
+        namespace=Sandbox.NAMESPACE,
+    )
+    ctx.db.save_repo_change(
+        ctx.correlation_id, evt.commit_sha, manifest.to_payload()
+    )
+    rendered = RenderedManifest(
+        api_version=MANIFEST_API_VERSION,
+        kind=MANIFEST_KIND,
+        metadata=RenderedMetadata(
+            name=manifest.app, namespace=manifest.namespace
+        ),
+        spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
+    )
+    yield ManifestRenderedPayload(rendered_manifest=rendered)
+
+
+if __name__ == "__main__":
+    app.run()
