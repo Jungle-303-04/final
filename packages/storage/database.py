@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
-from packages.config.constants import Auth, GitHub, Postgres
+from packages.config.constants import Auth, GitHub, OAuth, Postgres
 from packages.config.errors import fail
 from packages.config.settings import env
 from packages.config.time import now_iso
@@ -37,7 +37,6 @@ from packages.storage.schema import (
 )
 
 DATABASE_URL_ENV = "DATABASE_URL"
-DEFAULT_OAUTH_SCOPES = ["profile", "email"]
 TOKEN_REF_PREFIX = "vault://oauth"
 FAKE_ENCRYPTED_TOKEN_NOTE = "fake encrypted provider token payload"
 TOKEN_EXPIRES_IN_SECONDS = 3600
@@ -293,7 +292,7 @@ class OAuthRepository(DatabaseConnection):
     def save_oauth_account(self, payload: JsonObject) -> JsonObject:
         provider = payload["provider"]
         user_id = payload.get("user_id", Auth.LOCAL_USER_ID)
-        scopes = payload.get("scopes") or DEFAULT_OAUTH_SCOPES.copy()
+        scopes = payload.get("scopes") or list(OAuth.DEFAULT_SCOPES)
         if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scopes:
             scopes.append(GitHub.REQUIRED_SCOPE)
         token_ref = f"{TOKEN_REF_PREFIX}/{provider}/{user_id}/{uuid.uuid4()}"
