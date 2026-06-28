@@ -32,8 +32,10 @@ async def on_safe_pr_requested(
 ) -> AsyncIterator[EventBody]:
     try:
         pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
-        token_ref = ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
-        ctx.db.save_pull_request(ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED)
+        token_ref = await ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
+        await ctx.db.save_pull_request(
+            ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
+        )
     except Exception as exc:
         yield SafePrFailedBody(provider=evt.provider, title=evt.title, reason=str(exc))
         return

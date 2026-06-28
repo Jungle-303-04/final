@@ -14,6 +14,7 @@ from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.registry import Subscription
+from packages.runtime.async_db import AsyncDb
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,7 @@ def make_event_handler(
 
     async def handle(evt: EventEnvelope) -> None:
         body = sub.body_type.from_body(evt.payload)
-        ctx = EventContext.of(evt, db)
+        ctx = EventContext.of(evt, AsyncDb(db))
         result = sub.fn(body, ctx) if sub.wants_ctx else sub.fn(body)
         await _emit_results(client, source, evt, result)
 
@@ -80,7 +81,7 @@ def make_raw_handler(
     """전체(>) 구독: 디코드 없이 봉투 그대로 → 콜백 → yield된 body 발행."""
 
     async def handle(evt: EventEnvelope) -> None:
-        ctx = EventContext.of(evt, db)
+        ctx = EventContext.of(evt, AsyncDb(db))
         result = fn(evt, ctx) if wants_ctx else fn(evt)
         await _emit_results(client, source, evt, result)
 
