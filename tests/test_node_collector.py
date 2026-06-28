@@ -5,15 +5,11 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-NODE_COLLECTOR_PATH = (
-    ROOT_DIR / "services" / "node-collector" / "node_collector.py"
-)
+NODE_COLLECTOR_PATH = ROOT_DIR / "services" / "target" / "node-collector" / "node_collector.py"
 
 
 def load_node_collector_module():
-    spec = importlib.util.spec_from_file_location(
-        "test_node_collector_module", NODE_COLLECTOR_PATH
-    )
+    spec = importlib.util.spec_from_file_location("test_node_collector_module", NODE_COLLECTOR_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load module: {NODE_COLLECTOR_PATH}")
     module = importlib.util.module_from_spec(spec)
@@ -39,7 +35,7 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
         interval_seconds=15,
     )
 
-    payload = collector.snapshot().to_payload()
+    payload = collector.snapshot().to_body()
 
     assert payload["node_name"] == "target-control-plane"
     assert payload["pod_name"] == "optional-node-collector-abc"
