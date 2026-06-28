@@ -129,6 +129,12 @@ class NatsEventBus(EventBus):
         logger.info("emitted", extra={"context": event_context(evt)})
         return evt
 
+    async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope:
+        assert self.js is not None
+        await self.js.publish(evt.subject, json.dumps(evt.to_dict()).encode())
+        logger.info("relayed", extra={"context": event_context(evt)})
+        return evt
+
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
         assert self.js is not None
         return await self.js.pull_subscribe(subject, durable=durable, stream=STREAM_NAME)
