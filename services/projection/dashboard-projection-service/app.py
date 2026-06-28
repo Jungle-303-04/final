@@ -33,7 +33,7 @@ async def on_event(evt: EventEnvelope, ctx: EventContext) -> AsyncIterator[Event
         return  # 자기 이벤트는 무시(무한 루프 방지)
     status = _status(evt.subject)
     summary = f"{evt.subject} from {evt.source}"
-    ctx.db.upsert_dashboard(evt, status, summary)
+    await ctx.db.upsert_dashboard(evt, status, summary)
     yield DashboardUpdatedBody(summary=summary, status=status)
 
 

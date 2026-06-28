@@ -45,8 +45,10 @@ async def on_cluster_evidence(
     report = RcaCompletedBody(
         root_cause=ROOT_CAUSE, action=RECOMMENDED_ACTION, evidence_ref=evidence.object_ref
     )
-    ctx.db.save_evidence(ctx.correlation_id, EVIDENCE_KIND, evidence.to_body())
-    ctx.db.save_rca_report(ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_body())
+    await ctx.db.save_evidence(ctx.correlation_id, EVIDENCE_KIND, evidence.to_body())
+    await ctx.db.save_rca_report(
+        ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_body()
+    )
 
     # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 담당.
     yield EvidenceBuiltBody(evidence=evidence)

@@ -79,7 +79,7 @@ class SpyDb:
         self._returns = returns
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
-        def method(*args: Any) -> Any:
+        async def method(*args: Any) -> Any:
             self.calls.append((name, args))
             return self._returns.get(name)
 

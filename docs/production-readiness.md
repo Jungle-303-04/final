@@ -4,6 +4,14 @@
 shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규모"에서 보강이 필요한
 운영 항목과 결정 사항이다. 우선순위는 P0(차단)→P2(편의).
 
+## 구현 상태
+
+- [x] P0 워커 liveness 하트비트 + exec probe(9개 워커).
+- [x] P0 async DB(워커 핸들러 경로): `AsyncDb` 프록시로 sync 메서드를 스레드풀에
+  보내고, 핸들러는 `await ctx.db.x(...)`로 통일. 남은 sync 경로(ledger·api-gateway
+  라우트)는 실DB smoke 테스트(`make up`) 후 단계적으로.
+- [ ] P1 KEDA · P2 타입 db · 나중(마이그레이션·스키마버전·메트릭).
+
 ## P0 — 워커 liveness probe (exec 하트비트)
 
 문제: 워커는 HTTP 없는 NATS pull consumer라 k8s가 상태를 물어볼 곳이 없다.
