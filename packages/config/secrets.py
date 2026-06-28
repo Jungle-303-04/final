@@ -6,7 +6,7 @@ from packages.contracts.secrets import MissingSecretError, SecretRef
 
 
 class EnvSecretProvider:
-    """우리 내부 기본값: env/Kubernetes Secret 주입을 그대로 읽는다."""
+    """우리 내부 기본값: env/Kubernetes Secret 주입을 그대로 읽음."""
 
     def get(self, ref: SecretRef) -> str | None:
         if ref.provider != "env":

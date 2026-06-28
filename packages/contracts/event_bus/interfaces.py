@@ -19,7 +19,7 @@ class Event(TypedDict):
 
 @dataclass(frozen=True)
 class EventEnvelope:
-    """코드에서 다루는 이벤트 봉투. 속성으로 접근한다(evt.subject).
+    """코드에서 다루는 이벤트 봉투. 속성으로 접근(evt.subject).
 
     봉투 = 모든 이벤트가 공통으로 갖는 메타데이터 + payload(본문).
     - correlation_id: 한 흐름(요청)에 속한 이벤트를 묶는 ID.
