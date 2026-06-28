@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -8,8 +7,8 @@ from contextvars import ContextVar
 from typing import Any
 
 from packages.config.constants import Nats, Runtime
-from packages.config.errors import fail
 from packages.config.logs import get_logger
+from packages.config.retry import retry_dependency
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import (
     EventBus,
@@ -31,8 +30,6 @@ from packages.contracts.interfaces import DeadLetterStore
 from packages.events.envelope import event
 
 NATS_URL_ENV = "NATS_URL"
-DEPENDENCY_RETRY_LIMIT = 60
-DEPENDENCY_RETRY_DELAY_SECONDS = 2
 logger = get_logger("event_bus")
 CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
     "current_event_causation_id", default=None
@@ -79,19 +76,15 @@ class NatsEventBus(EventBus):
 
     async def connect(self) -> None:
         nats = nats_client()
-        for attempt in range(DEPENDENCY_RETRY_LIMIT):
-            try:
-                self.nc = await nats.connect(
-                    self.url, name=env(Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME)
-                )
-                self.js = self.nc.jetstream()
-                await self.ensure_stream()
-                return
-            except Exception as exc:
-                message = f"waiting for nats ({attempt + 1}/{DEPENDENCY_RETRY_LIMIT}): {exc}"
-                print(message, flush=True)
-                await asyncio.sleep(DEPENDENCY_RETRY_DELAY_SECONDS)
-        fail("NATS 연결 실패")
+
+        async def attempt() -> None:
+            self.nc = await nats.connect(
+                self.url, name=env(Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME)
+            )
+            self.js = self.nc.jetstream()
+            await self.ensure_stream()
+
+        await retry_dependency(attempt, label="nats")
 
     async def ensure_stream(self) -> None:
         assert self.js is not None
