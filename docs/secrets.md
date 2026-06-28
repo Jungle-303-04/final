@@ -1,6 +1,32 @@
 # 시크릿 관리
 
-처음에는 GitHub가 기본 제공하는 도구만 씁니다.
+시크릿 도구는 강제하지 않는다. 프로젝트 내부 코드는
+`packages/contracts/secrets.py`의 `SecretProvider` 인터페이스만 본다.
+
+기본 구현은 `packages/config/secrets.py`의 `EnvSecretProvider`다. 로컬
+`.env`, Docker env, Kubernetes Secret env 주입은 모두 이 구현으로 처리한다.
+
+외부 사용자는 SOPS/age, AWS Secrets Manager, Vault, 1Password, External
+Secrets 중 무엇을 쓰든 최종적으로 env를 주입하거나 `SecretProvider` 구현을
+갈아끼우면 된다.
+
+## 인터페이스 기준
+
+시크릿은 코드에서 값이 아니라 참조로 다룬다.
+
+```python
+from packages.config.secrets import default_secret_provider
+from packages.contracts.secrets import SecretRef
+
+token = default_secret_provider().require(SecretRef.env("GITHUB_TOKEN"))
+```
+
+규칙:
+
+- 서비스 코드는 SOPS, AWS, Vault 같은 특정 도구를 직접 import하지 않는다.
+- 서비스 코드는 `SecretRef`와 `SecretProvider` 계약에만 의존한다.
+- 우리 내부 기본값은 env/Kubernetes Secret 주입이다.
+- 특정 운영 환경용 provider는 adapter로 추가한다.
 
 ## 로컬
 
@@ -23,11 +49,16 @@ CI/CD에서 필요한 값은 GitHub Actions Secrets를 씁니다.
 
 ## 운영/클라우드
 
-운영 배포에서는 클라우드 Secret Manager를 씁니다.
+운영 배포에서는 사용자가 원하는 Secret Manager를 선택할 수 있게 한다.
 
 - AWS: Secrets Manager 또는 SSM Parameter Store
 - GCP: Secret Manager
 - Azure: Key Vault
+- Kubernetes: External Secrets로 외부 secret을 Kubernetes Secret으로 동기화
+
+AWS를 쓰는 사용자는 AWS provider를 붙이면 되고, Vault를 쓰는 사용자는 Vault
+provider를 붙이면 된다. 오픈소스 기본 배포는 특정 클라우드를 필수로 하지
+않는다.
 
 ## 팀 공유가 필요할 때
 

@@ -55,7 +55,7 @@ flowchart LR
     UI["UI Dashboard"] --> Gateway
     Gateway --> Bus["NATS JetStream<br/>git.* / cluster.* / command.* / rca.* / safe_pr.* / dashboard.* / audit.*"]
 
-    Bus --> GitOps["GitOps Sync Worker<br/>manifest render / desired diff"]
+    Bus --> GitOps["GitOps split workers<br/>manifest render / desired diff"]
     Bus --> Command["Command Worker<br/>policy / command orchestration"]
     Bus --> RCA["RCA Worker<br/>evidence build / RCA / Safe PR"]
     Bus --> Projection["Dashboard Projection<br/>read model update"]
@@ -94,7 +94,7 @@ flowchart LR
 | 서비스 | 역할 |
 | --- | --- |
 | API Gateway | 모든 외부 요청의 입구이며 OAuth/session, webhook, command, dashboard query/stream, DLQ API를 담당 |
-| GitOps Sync Worker | Git 변경을 manifest render, desired diff, command.requested event로 변환 |
+| GitOps split workers | Git 변경을 manifest render, desired diff, command.requested event로 변환 |
 | Command Worker | command policy를 검사하고 sandbox command만 target agent queue로 보냄 |
 | RCA Worker | cluster evidence를 묶어 RCA를 만들고 Safe PR 또는 복구 제안 event를 생성 |
 | Dashboard Projection Service | 모든 주요 event를 화면용 read model로 갱신 |
@@ -110,7 +110,7 @@ flowchart LR
 | Command Dispatcher | 실행 가능한 command를 target agent로 보낼 수 있는 형태로 변환 | 전송 방식이 polling, WebSocket, gRPC로 바뀌어도 command 판단 로직을 보호하기 위해 |
 | Agent Connection Gateway | target agent와 management 사이의 연결 채널 | target cluster가 외부에서 직접 뚫리지 않고 outbound 연결만 유지하게 하기 위해 |
 
-현재 코드에서는 `Command Orchestrator`와 `Command Dispatcher`가 `services/command-worker` 안에서 최소 구현으로 묶여 있고, `Agent Connection Gateway`는 `services/api-gateway`의 agent endpoint와 `services/target-cluster-agent`의 polling client로 구현되어 있습니다. 트래픽이나 책임이 커지면 별도 서비스로 분리합니다.
+현재 코드에서는 `Command Orchestrator`와 `Command Dispatcher`가 `services/command-worker` 안에서 최소 구현으로 묶여 있고, `Agent Connection Gateway`는 `services/api-gateway`의 agent endpoint와 `services/target/target-cluster-agent`의 polling client로 구현되어 있습니다. 트래픽이나 책임이 커지면 별도 서비스로 분리합니다.
 
 ## 코치님께 확인받고 싶은 것
 
