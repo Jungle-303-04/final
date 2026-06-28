@@ -46,6 +46,16 @@ DEPENDENCY_RETRY_LIMIT = 60
 DEPENDENCY_RETRY_DELAY_SECONDS = 2
 ERROR_MESSAGE_LIMIT = 2000
 
+# 풀 제어: pod 다수 × (sync+async) 엔진이 postgres max_connections 를 넘기지 않게 상한.
+# pre_ping 으로 죽은 연결은 쓰기 전에 폐기, timeout 으로 하트비트 창(30s) 안에 빨리 실패.
+POOL_OPTIONS = {
+    "pool_size": 2,
+    "max_overflow": 2,
+    "pool_timeout": 10,
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
+
 
 def compact_error(error: str) -> str:
     return error[:ERROR_MESSAGE_LIMIT]
@@ -72,8 +82,8 @@ _ACTIVE_CONN: ContextVar[Connection | None] = ContextVar("active_conn", default=
 class DatabaseConnection:
     def __init__(self) -> None:
         self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
-        self.engine: Engine = create_engine(self.sqlalchemy_url)
-        self.async_engine: AsyncEngine = create_async_engine(self.sqlalchemy_url)
+        self.engine: Engine = create_engine(self.sqlalchemy_url, **POOL_OPTIONS)
+        self.async_engine: AsyncEngine = create_async_engine(self.sqlalchemy_url, **POOL_OPTIONS)
 
     @property
     def sqlalchemy_url(self) -> str:
