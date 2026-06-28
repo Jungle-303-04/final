@@ -27,6 +27,7 @@ from packages.events.bus import (
     event_context,
 )
 from packages.runtime.ledger import Ledger
+from packages.runtime.relay import OutboxRelay
 
 if TYPE_CHECKING:
     from packages.storage.database import Database
@@ -89,6 +90,7 @@ class EventProcessor:
     ) -> None:
         self.service_name = service_name
         self.handler = handler
+        self.store = store
         self.dead_letters = dead_letters
         self.retry_policy = retry_policy
         self.codec = codec if codec is not None else JsonCodec()
@@ -96,18 +98,21 @@ class EventProcessor:
 
     async def process(self, message: EventMessage) -> None:
         evt = self.codec.decode(message)
-        processing = self.ledger.begin(evt)
-        if processing.status != EventProcessingStatus.PROCESSING:
-            await message.ack()
-            return
-
-        attempts = processing.attempts
-        context = {**event_context(evt), "consumer": self.service_name}
-        logger.info("handling", extra={"context": context})
+        attempts = 0
         try:
-            with event_causation(evt.event_id):
-                await self.handler(evt)
-            self.ledger.finish(evt)
+            # 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
+            with self.store.unit_of_work() as conn:
+                processing = self.ledger.begin(evt)
+                if processing.status != EventProcessingStatus.PROCESSING:
+                    await message.ack()  # 이미 처리됨(중복) → skip
+                    return
+                attempts = processing.attempts
+                context = {**event_context(evt), "consumer": self.service_name}
+                logger.info("handling", extra={"context": context})
+                with event_causation(evt.event_id):
+                    outbox_events = await self.handler(evt)
+                self.store.stage_events(conn, outbox_events)
+                self.ledger.finish(evt)
             await message.ack()
         except Exception as exc:
             await self.fail(message, evt, exc, attempts)
@@ -158,6 +163,7 @@ class WorkerRuntime:
             DeadLetterSink(events, self.db, self.spec.service_name),
             self.spec.retry_policy,
         )
+        relay = OutboxRelay(self.db, self.bus)
         stopping = asyncio.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
@@ -166,6 +172,10 @@ class WorkerRuntime:
 
         while not stopping.is_set():
             Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
+            try:
+                await relay.run_once()  # outbox → NATS 발행
+            except Exception as exc:
+                logger.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
             try:
                 messages = await sub.fetch(
                     self.spec.retry_policy.fetch_batch_size,

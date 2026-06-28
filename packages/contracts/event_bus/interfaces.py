@@ -47,7 +47,7 @@ class EventEnvelope:
 
 
 # 워커가 구독한 이벤트 1건을 처리하는 함수 시그니처.
-EventHandler = Callable[[EventEnvelope], Awaitable[None]]
+EventHandler = Callable[[EventEnvelope], Awaitable[list[EventEnvelope]]]
 
 
 class EventMessage(Protocol):

@@ -4,6 +4,7 @@ import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from sqlalchemy import create_engine, func, select, update
@@ -65,6 +66,9 @@ def row_dict(row: Any) -> JsonObject:
     return dict(row)
 
 
+_ACTIVE_CONN: ContextVar[Connection | None] = ContextVar("active_conn", default=None)
+
+
 class DatabaseConnection:
     def __init__(self) -> None:
         self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
@@ -77,8 +81,22 @@ class DatabaseConnection:
 
     @contextmanager
     def connection(self):
+        active = _ACTIVE_CONN.get()
+        if active is not None:
+            yield active  # UoW 트랜잭션에 합류(commit 은 UoW 소유)
+            return
         with self.engine.begin() as conn:
             yield conn
+
+    @contextmanager
+    def unit_of_work(self):
+        """한 트랜잭션 — 안에서 connection() 호출은 모두 이 커넥션을 쓴다."""
+        with self.engine.begin() as conn:
+            token = _ACTIVE_CONN.set(conn)
+            try:
+                yield conn
+            finally:
+                _ACTIVE_CONN.reset(token)
 
     @asynccontextmanager
     async def async_connection(self):

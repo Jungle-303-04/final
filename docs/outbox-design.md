@@ -1,5 +1,10 @@
 # Transactional Outbox (완전판) 설계
 
+> 상태: 1~3단계 **구현 완료(단위테스트 green)**. ⚠️ stage 2~3(트랜잭션 flip)은
+> 실DB/NATS 없이는 검증 불가 — `make up && make smoke` 로 반드시 확인 후 머지.
+> 알려진 caveat: 핸들러를 트랜잭션으로 감싸므로 outbound 게이트웨이의 외부 HTTP가
+> tx 안에서 돌아 tx 가 길게 잡힌다(정확성 OK, 성능 이슈). 4단계에서 분리 예정.
+
 목표: **업무 쓰기 + 이벤트 발행 + ledger 완료**를 한 DB 트랜잭션으로 묶어
 "정확히 한 번 처리(exactly-once processing)"를 보장한다. 워커 작성자의 코드
 (`yield`, `await ctx.db.x`)는 한 글자도 안 바뀐다 — 모든 변경은 프레임워크 내부.
