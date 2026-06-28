@@ -175,17 +175,3 @@ class DeadLetterSink:
             evt.correlation_id,
             evt.event_id,
         )
-
-
-async def emit_and_record(
-    bus: EventPublisher,
-    db: EventRecorder,
-    subject: str,
-    source: str,
-    payload: JsonObject,
-    correlation_id: str | None = None,
-    causation_id: str | None = None,
-) -> EventEnvelope:
-    return await RecordedEventClient(bus, db).emit(
-        subject, source, payload, correlation_id, causation_id
-    )
