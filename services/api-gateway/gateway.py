@@ -13,11 +13,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from settings import Settings
 
 from packages.config.constants import Auth, GitHub, Target
-from packages.contracts.event_bus.fields import (
-    CORRELATION_ID,
-    EVENT_ID,
-    PAYLOAD,
-)
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
@@ -127,7 +122,7 @@ class ApiGateway:
             )
             return {
                 Gateway.ACCEPTED: True,
-                EVENT_ID: evt.event_id,
+                Gateway.EVENT_ID: evt.event_id,
                 Gateway.TOKEN_REF: account[Gateway.TOKEN_REF],
                 Gateway.SESSION: result[Gateway.SESSION],
             }
@@ -154,7 +149,7 @@ class ApiGateway:
                 Settings.SERVICE_NAME,
                 payload.model_dump(),
             )
-            return {Gateway.ACCEPTED: True, EVENT_ID: evt.event_id}
+            return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: evt.event_id}
 
         @app.post(gateway_routes.AGENT_EVIDENCE_PATH)
         async def agent_evidence(
@@ -171,8 +166,8 @@ class ApiGateway:
             )
             return {
                 Gateway.ACCEPTED: True,
-                EVENT_ID: evt.event_id,
-                CORRELATION_ID: evt.correlation_id,
+                Gateway.EVENT_ID: evt.event_id,
+                Gateway.CORRELATION_ID: evt.correlation_id,
             }
 
         @app.post(gateway_routes.COMMANDS_PATH)
@@ -191,8 +186,8 @@ class ApiGateway:
             )
             return {
                 Gateway.ACCEPTED: True,
-                EVENT_ID: evt.event_id,
-                CORRELATION_ID: evt.correlation_id,
+                Gateway.EVENT_ID: evt.event_id,
+                Gateway.CORRELATION_ID: evt.correlation_id,
             }
 
         @app.get(gateway_routes.DEAD_LETTERS_PATH)
@@ -228,8 +223,8 @@ class ApiGateway:
                 self.db,
                 dead_letter["original_subject"],
                 Settings.SERVICE_NAME,
-                dead_letter[PAYLOAD],
-                dead_letter[CORRELATION_ID],
+                dead_letter[Gateway.PAYLOAD],
+                dead_letter[Gateway.CORRELATION_ID],
                 dead_letter["original_event_id"],
             )
             self.db.mark_dead_letter_replayed(dead_letter_id, evt.event_id)
@@ -279,7 +274,7 @@ class ApiGateway:
                 {Gateway.COMMAND_ID: command_id, Gateway.RESULT: result},
                 correlation_id,
             )
-            return {Gateway.ACCEPTED: True, EVENT_ID: evt.event_id}
+            return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: evt.event_id}
 
         @app.get(gateway_routes.DASHBOARD_QUERY_PATH)
         async def dashboard_query(request: Request) -> dict[str, Any]:

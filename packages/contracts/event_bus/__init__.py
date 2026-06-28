@@ -1,12 +1,3 @@
-from packages.contracts.event_bus.fields import (
-    CAUSATION_ID,
-    CORRELATION_ID,
-    CREATED_AT,
-    EVENT_ID,
-    PAYLOAD,
-    SOURCE,
-    SUBJECT,
-)
 from packages.contracts.event_bus.interfaces import (
     Event,
     EventBus,
@@ -32,9 +23,6 @@ from packages.contracts.event_bus.subscriptions import (
 
 __all__ = [
     "ALL_EVENTS_SUBJECT",
-    "CAUSATION_ID",
-    "CORRELATION_ID",
-    "CREATED_AT",
     "Event",
     "EventBus",
     "EventClient",
@@ -46,12 +34,8 @@ __all__ = [
     "EventRecorder",
     "EventSubject",
     "EventSubscription",
-    "EVENT_ID",
     "JsonObject",
-    "PAYLOAD",
-    "SOURCE",
     "STREAM_NAME",
     "STREAM_SUBJECTS",
-    "SUBJECT",
     "WorkerSubscription",
 ]
