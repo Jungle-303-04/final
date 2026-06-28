@@ -15,21 +15,45 @@
 
 ## 등록된 정기 자동화
 
-관리자 환경에는 5명 모두의 담당 범위를 감시하는 Codex cron 자동화가 등록되어 있다.
-각 자동화는 2시간마다 한 번씩 실행되며, 실행 시점마다 이 문서와 WIKI 프롬프트, GitHub Issue/PR 상태를 다시 읽어 담당 기준을 갱신한다.
+관리자 환경에는 5명 모두의 담당 범위를 관리하는 Codex cron 자동화와
+WBS/Issue/Project를 전체 관점에서 정리하는 총괄 동기화 자동화가 등록되어 있다.
+각 자동화는 2시간마다 한 번씩 실행되며, 실행 시점마다 이 문서와 WIKI 프롬프트, GitHub Issue/PR 상태를 다시 읽어 담당 기준을 갱신하고 필요한 범위의 정합성 보정을 직접 수행한다.
 
 | 자동화 ID | GitHub ID | 성격 |
 | --- | --- | --- |
-| `final-woonyong-kr` | `woonyong-kr` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
-| `final-jcbbbbbb` | `JCBBBBBB` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
-| `final-jeonwoohyun-hydromel` | `JEONWOOHYUN-hydromel` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
-| `final-ummfieg` | `ummfieg` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
-| `final-minmings111` | `minmings111` | 담당 범위 이탈, PR 상태, 문서 갱신 필요 여부 점검 |
+| `final-wbs-issue-sync` | 전체 | WBS, Issue, Project, source/WIKI 문서 불일치 동기화 |
+| `final-woonyong-kr` | `woonyong-kr` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
+| `final-jcbbbbbb` | `JCBBBBBB` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
+| `final-jeonwoohyun-hydromel` | `JEONWOOHYUN-hydromel` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
+| `final-ummfieg` | `ummfieg` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
+| `final-minmings111` | `minmings111` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
 
-정기 자동화는 브랜치를 전환하거나 코드를 직접 구현하지 않는다.
-구현은 각 담당자의 작업 Codex가 수행하고, 정기 자동화는 현재 문서 기준 준수 여부와 다음 행동을 정리한다.
-정기 자동화는 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 하지 않는다.
-필요한 변경은 보고에 제안만 남기고, 팀원이 명시적으로 요청한 작업 세션에서만 반영한다.
+팀원별 자동화는 브랜치를 전환하거나 제품 코드를 직접 구현하지 않는다.
+구현은 각 담당자의 작업 Codex가 수행한다. 대신 팀원별 자동화는 자기 담당 범위의 작업 원장과 문서를 직접 관리한다.
+
+팀원별 자동화는 아래 변경을 직접 수행할 수 있다.
+
+- 담당 issue 본문, 체크리스트, 라벨, assignee 보정
+- 담당 issue의 Project `WBS` item 추가와 status 갱신
+- 담당 범위 source docs와 WIKI 문서의 경로, 상태, 완료 기준, 테스트 기준 불일치 수정
+- 현재 구현/커밋/브랜치/PR 증거를 근거로 완료 후보는 Project status `완료`로, 진행 증거가 있으면 `진행`으로, 구현 증거가 없으면 `할일`로 갱신
+- 구현되지 않았지만 계획상 필요한 항목은 새 issue 또는 상위 issue 체크리스트로 정의하고 Project `할일`에 등록
+
+`final-wbs-issue-sync` 총괄 자동화는 아래 변경을 직접 수행할 수 있다.
+
+- final repo Issue 본문/체크리스트/라벨/assignee 보정
+- final repo Project `WBS` item 추가와 status 갱신
+- source docs와 WIKI 핵심 문서의 WBS/경로/상태 불일치 수정
+- 각 상위 작업이 최소 10개 이상의 하위 task 또는 체크리스트를 갖는지 점검하고 부족분을 issue/task로 보강
+
+모든 final 자동화는 아래 작업은 금지한다.
+
+- 완료된 issue close
+- PR close, Ready 전환, merge, push
+- git add, git commit, git push, branch 생성/삭제
+- `main`/`dev` 직접 변경
+- user 작업 중인 코드 되돌리기
+- secret, kubeconfig, provider token, `.env` 원문 출력 또는 저장
 
 ## 자동화 프롬프트
 
@@ -76,9 +100,12 @@ GitHub에서 매번 확인한다:
 - main/dev에 직접 push하지 않는다.
 - PR base는 dev로 유지한다.
 - 구현 전 draft PR은 Ready로 바꾸지 않는다.
-- 다른 팀원의 branch, issue, PR은 수정하지 않고 영향만 보고한다.
-- 자동화 실행 중에는 `git add`, `git commit`, `git push`, branch 생성/삭제, PR 생성/수정/댓글/닫기, Ready 전환, issue 상태 변경을 하지 않는다.
-- 필요한 변경은 실행 보고에 제안만 남기고, 팀원이 명시적으로 요청한 작업 세션에서만 반영한다.
+- 다른 팀원의 branch, issue, PR은 수정하지 않고 영향만 보고한다. 단, 공유 문서에 영향을 주는 경로/상태 불일치는 자기 담당 범위에 한해 수정한다.
+- 자동화 실행 중에는 `git add`, `git commit`, `git push`, branch 생성/삭제, PR close/Ready/merge를 하지 않는다.
+- 완료된 issue는 close하지 않고 Project status만 갱신한다.
+- 담당 범위의 issue body/checklist/Project status/source docs/WIKI 문서는 직접 최신화한다.
+- 아직 구현되지 않았지만 구현해야 하는 항목은 issue 또는 체크리스트로 만들고 Project `할일`에 둔다.
+- 이미 구현/커밋/PR 증거가 있는 항목은 실제 파일과 설명을 issue 본문에 추가하고 Project status를 `진행` 또는 `완료`로 갱신한다.
 
 아키텍처 제약:
 - 처음부터 완전 분리 마이크로서비스 구조를 지킨다.
@@ -95,9 +122,9 @@ GitHub에서 매번 확인한다:
 5. PR 업데이트 필요 사항: 변경 파일, 테스트 결과, 문서 갱신 필요 여부, merge 금지 사유를 실행 보고에 정리한다. PR 본문이나 댓글은 직접 수정하지 않는다.
 
 문서 동기화:
-- event subject/payload, API route, schema, DB table, Kubernetes 권한, WBS 일정, 역할 기준이 바뀌면 source docs와 WIKI 갱신 필요 여부를 보고한다.
-- 회의에서 결정된 변경은 프로젝트 회의록과 핵심 문서 반영 필요 여부를 보고한다.
-- WIKI 갱신이 필요하면 수정해야 할 파일과 내용을 실행 보고에 남긴다. 자동화가 WIKI 파일을 직접 수정하거나 PR 댓글을 작성하지 않는다.
+- event subject/payload, API route, schema, DB table, Kubernetes 권한, WBS 일정, 역할 기준이 바뀌면 source docs와 WIKI를 직접 갱신한다.
+- 회의에서 결정된 변경은 프로젝트 회의록과 핵심 문서에 반영한다.
+- 죽은 문서, 오래된 경로, 폐기된 계획은 남겨두지 않는다. 필요한 경우 현재 기준 문서로 병합하거나 최신 상태로 줄인다.
 
 보안:
 - secret, kubeconfig, provider token, .env 원문은 절대 출력하거나 commit하지 않는다.
@@ -107,7 +134,8 @@ GitHub에서 매번 확인한다:
 - 이번 실행에서 확인한 issue/PR
 - 수행한 변경
 - 실행한 테스트와 결과
-- 문서/WIKI 갱신 필요 여부
+- 문서/WIKI 갱신 내역
+- 생성/갱신한 issue와 Project status
 - Ready 전환 가능 여부
 - merge 금지 사유가 있으면 그 사유
 를 간단히 남긴다.
@@ -119,4 +147,6 @@ GitHub에서 매번 확인한다:
 - 개인별 차이는 `TEAM_MEMBER_GITHUB_ID` 하나로만 둔다.
 - 역할, 브랜치, issue, PR 매핑은 문서와 GitHub 상태를 매번 다시 읽어 계산한다.
 - 관리자는 WIKI와 source docs만 수정해도 팀원 자동화 기준을 갱신할 수 있다.
-- 자동화는 읽기, 점검, 제안만 수행한다. commit, push, PR, issue 변경은 팀원이 명시적으로 요청한 작업 세션에서만 수행한다.
+- 모든 final 자동화는 담당 범위 안에서 WBS/Issue/Project/docs/WIKI 정합성 유지에 필요한 제한된 쓰기 작업을 수행한다.
+- 제품 코드 구현, commit, push, PR close/Ready/merge는 팀원이 명시적으로 요청한 작업 세션에서만 수행한다.
+- 완료된 issue는 닫지 않고 Project status만 갱신한다.
