@@ -11,8 +11,7 @@ API_GATEWAY_DIR = ROOT_DIR / "services" / "api-gateway"
 def load_gateway_auth_module():
     sys.path.insert(0, str(API_GATEWAY_DIR))
     spec = importlib.util.spec_from_file_location(
-        "test_api_gateway_auth",
-        API_GATEWAY_DIR / "auth.py",
+        "test_api_gateway_auth", API_GATEWAY_DIR / "auth.py"
     )
     if spec is None or spec.loader is None:
         raise RuntimeError("cannot load api-gateway auth module")
@@ -23,9 +22,7 @@ def load_gateway_auth_module():
 
 
 def test_service_image_requirements_include_storage_dependencies() -> None:
-    requirements = (ROOT_DIR / "services" / "requirements.txt").read_text(
-        encoding="utf-8"
-    )
+    requirements = (ROOT_DIR / "services" / "requirements.txt").read_text(encoding="utf-8")
 
     assert "sqlalchemy==" in requirements
 

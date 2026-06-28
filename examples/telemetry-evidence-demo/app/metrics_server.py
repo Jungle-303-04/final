@@ -3,7 +3,6 @@ from __future__ import annotations
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-
 START_TIME = time.time()
 
 
@@ -18,26 +17,16 @@ def metric_text() -> str:
         [
             "# HELP demo_pod_restart_total Demo pod restart count.",
             "# TYPE demo_pod_restart_total counter",
-            (
-                'demo_pod_restart_total{namespace="sandbox",'
-                'pod="checkout-api"} '
-                f"{restart_total}"
-            ),
+            (f'demo_pod_restart_total{{namespace="sandbox",pod="checkout-api"}} {restart_total}'),
             "# HELP demo_http_5xx_rate Demo HTTP 5xx rate.",
             "# TYPE demo_http_5xx_rate gauge",
-            (
-                'demo_http_5xx_rate{namespace="sandbox",'
-                'pod="checkout-api"} '
-                f"{http_5xx_rate}"
-            ),
+            (f'demo_http_5xx_rate{{namespace="sandbox",pod="checkout-api"}} {http_5xx_rate}'),
             "# HELP demo_node_cpu_usage_ratio Demo node CPU usage ratio.",
             "# TYPE demo_node_cpu_usage_ratio gauge",
-            'demo_node_cpu_usage_ratio{node="worker-1"} '
-            f"{cpu_ratio}",
+            f'demo_node_cpu_usage_ratio{{node="worker-1"}} {cpu_ratio}',
             "# HELP demo_node_memory_pressure Demo node memory pressure.",
             "# TYPE demo_node_memory_pressure gauge",
-            'demo_node_memory_pressure{node="worker-1"} '
-            f"{memory_pressure}",
+            f'demo_node_memory_pressure{{node="worker-1"}} {memory_pressure}',
             "",
         ]
     )

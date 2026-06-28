@@ -4,14 +4,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.config.constants import Auth, Sandbox, Target
+from packages.config.constants import Auth, Command, OAuth, Sandbox, Target
 
-DEFAULT_OAUTH_SCOPES = ["profile", "email"]
 DEFAULT_WEBHOOK_IMAGE = "ghcr.io/project/checkout-api:bad"
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
 MAX_WEBHOOK_REPLICAS = 10
-DEFAULT_COMMAND_ACTION = "rollout_restart"
 DEFAULT_COMMAND_STATUS = "completed"
 EMPTY_COMMAND_MESSAGE = ""
 
@@ -24,9 +22,7 @@ class OAuthCallbackRequest(StrictModel):
     user_id: str = Auth.LOCAL_USER_ID
     code: str | None = None
     state: str | None = None
-    scopes: list[str] = Field(
-        default_factory=lambda: DEFAULT_OAUTH_SCOPES.copy()
-    )
+    scopes: list[str] = Field(default_factory=lambda: list(OAuth.DEFAULT_SCOPES))
     provider_user: str | None = None
 
 
@@ -34,9 +30,7 @@ class GitHubWebhookRequest(StrictModel):
     commit_sha: str
     image: str = DEFAULT_WEBHOOK_IMAGE
     replicas: int = Field(
-        default=DEFAULT_WEBHOOK_REPLICAS,
-        ge=MIN_WEBHOOK_REPLICAS,
-        le=MAX_WEBHOOK_REPLICAS,
+        default=DEFAULT_WEBHOOK_REPLICAS, ge=MIN_WEBHOOK_REPLICAS, le=MAX_WEBHOOK_REPLICAS
     )
 
 
@@ -57,7 +51,7 @@ class AgentEvidenceRequest(StrictModel):
 
 class CommandRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
-    action: str = DEFAULT_COMMAND_ACTION
+    action: str = Command.DEFAULT_ACTION
     namespace: Literal["sandbox"] = Sandbox.NAMESPACE
     reason: str | None = None
     diff: dict[str, Any] | None = None
