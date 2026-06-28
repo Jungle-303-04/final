@@ -1,7 +1,7 @@
 # Transactional Outbox (완전판) 설계
 
-> 상태: 1~3단계 **구현 완료(단위테스트 green)**. ⚠️ stage 2~3(트랜잭션 flip)은
-> 실DB/NATS 없이는 검증 불가 — `make up && make smoke` 로 반드시 확인 후 머지.
+> 상태: 1~3단계 **구현 완료 + `make smoke` 통과**(실 Postgres+NATS, gitops/rca/command
+> 전 경로 정상 흐름 확인). 남은 검증: 크래시 주입 시 exactly-once(정상 경로만 확인됨).
 > 알려진 caveat: 핸들러를 트랜잭션으로 감싸므로 outbound 게이트웨이의 외부 HTTP가
 > tx 안에서 돌아 tx 가 길게 잡힌다(정확성 OK, 성능 이슈). 4단계에서 분리 예정.
 
