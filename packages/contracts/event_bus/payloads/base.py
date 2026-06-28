@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
-from typing import Any
+from typing import Any, get_type_hints
 
 JsonObject = dict[str, Any]
 
@@ -25,10 +25,21 @@ class EventPayload:
 
     @classmethod
     def from_payload(cls, raw: Mapping[str, Any]) -> EventPayload:
+        # 중첩 payload(예: rendered_manifest: RenderedManifest)는 dict 가
+        # 아니라 그 타입 객체로 복원해 워커가 evt.x.y 로 쓰게 한다.
+        hints = get_type_hints(cls)
         values: JsonObject = {}
         for item in fields(cls):
             key = item.metadata.get("payload_name", item.name)
-            values[item.name] = raw.get(key)
+            value = raw.get(key)
+            field_type = hints.get(item.name)
+            if (
+                isinstance(value, Mapping)
+                and isinstance(field_type, type)
+                and issubclass(field_type, EventPayload)
+            ):
+                value = field_type.from_payload(value)
+            values[item.name] = value
         return cls(**values)
 
 
