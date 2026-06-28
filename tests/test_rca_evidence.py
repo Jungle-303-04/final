@@ -22,8 +22,8 @@ def test_rca_subscriber_yields_typed_event_chain() -> None:
     assert subjects_of(outs) == [
         "evidence.built",
         "rca.completed",
-        "safe_pr.created",
+        "safe_pr.requested",
     ]
     assert db.called("save_evidence")
     assert db.called("save_rca_report")
-    assert db.called("save_pull_request")
+    assert not db.called("save_pull_request")
