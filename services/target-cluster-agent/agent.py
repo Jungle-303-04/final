@@ -18,6 +18,7 @@ from settings import (
     CRASHING_POD_RESTARTS,
     CRASHING_POD_STATUS,
     DEFAULT_AGENT_ID,
+    DEFAULT_LOKI_BASE_URL,
     DEFAULT_MANAGEMENT_BASE_URL,
     DEFAULT_PROMETHEUS_BASE_URL,
     DEFAULT_SERVICE_PORT,
@@ -33,7 +34,10 @@ from settings import (
     K8S_BACKOFF_EVENT,
     K8S_READINESS_FAILED_EVENT,
     LOG_LEVEL,
+    LOKI_BASE_URL_ENV,
     LOKI_ERROR_LINE,
+    LOKI_QUERY_LIMIT,
+    LOKI_TIMEOUT_SECONDS,
     LOKI_WARNING_LINE,
     MANAGEMENT_BASE_URL_ENV,
     OTEL_SLOW_SPAN,
@@ -45,7 +49,7 @@ from settings import (
     SERVICE_PORT_ENV,
     TARGET_CLUSTER_ID_ENV,
 )
-from telemetry_queries import PROMETHEUS_INSTANT_QUERIES
+from telemetry_queries import LOKI_LOG_QUERIES, PROMETHEUS_INSTANT_QUERIES
 from uvicorn import Config, Server
 
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
@@ -110,6 +114,10 @@ class TargetClusterAgent:
             PROMETHEUS_BASE_URL_ENV,
             DEFAULT_PROMETHEUS_BASE_URL,
         ).rstrip("/")
+        self.loki_base_url = env(
+            LOKI_BASE_URL_ENV,
+            DEFAULT_LOKI_BASE_URL,
+        ).rstrip("/")
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
@@ -156,6 +164,7 @@ class TargetClusterAgent:
     async def collect_evidence(self) -> JsonObject:
         evidence = self.fake_evidence()
         evidence["metrics"] = await self.collect_prometheus_metrics()
+        evidence["logs"] = await self.collect_loki_logs()
         return evidence
 
     # Run every configured Prometheus query and package the normalized results.
@@ -219,6 +228,71 @@ class TargetClusterAgent:
         return { # other result type(not vector)
             "result_type": result_type,
             "result": result,
+            "raw": payload,
+        }
+
+    # Run every configured Loki query and package the normalized results.
+    async def collect_loki_logs(self) -> list[JsonObject]:
+        """Collect configured Loki query results."""
+        try:
+            async with httpx.AsyncClient(timeout=LOKI_TIMEOUT_SECONDS) as client:
+                log_results = []
+
+                for log_query in LOKI_LOG_QUERIES:
+                    payload = await self.query_loki(client, log_query.logql)
+
+                    log_results.append(
+                        {
+                            "source": "loki",
+                            "query_name": log_query.query_name,
+                            "query": log_query.logql,
+                            **self.normalize_loki_payload(payload),
+                        }
+                    )
+
+            return log_results
+
+        except Exception as exc:
+            print(f"loki log collection failed: {exc}", flush=True)
+            return self.fake_evidence()["logs"]
+
+    # Actually request a single range query from Loki and return the parsed response body.
+    async def query_loki(self, client: httpx.AsyncClient, query: str) -> JsonObject:
+        response = await client.get(
+            f"{self.loki_base_url}/loki/api/v1/query_range",
+            params={"query": query, "limit": LOKI_QUERY_LIMIT},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # Convert Loki stream responses into a stable evidence-friendly structure.
+    def normalize_loki_payload(self, payload: JsonObject) -> JsonObject:
+        data = payload.get("data", {})
+        result_type = data.get("resultType")
+        result = data.get("result", [])
+        streams = []
+
+        for item in result:
+            values = []
+            for raw_entry in item.get("values", []):
+                values.append(
+                    {
+                        "timestamp": raw_entry[0] if len(raw_entry) >= 1 else None,
+                        "line": raw_entry[1] if len(raw_entry) >= 2 else None,
+                    }
+                )
+
+            streams.append(
+                {
+                    "stream": item.get("stream", {}),
+                    "values": values,
+                }
+            )
+
+        return {
+            "result_type": result_type,
+            "streams": streams,
+            "line_count": sum(len(stream["values"]) for stream in streams),
             "raw": payload,
         }
 

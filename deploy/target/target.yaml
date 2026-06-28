@@ -88,8 +88,7 @@ spec:
         - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          command:
-            ["python", "services/target-cluster-agent/fake_prometheus.py"]
+          command: ["python", "services/target-cluster-agent/fake_prometheus.py"]
           ports:
             - containerPort: 8000
 ---
@@ -249,5 +248,7 @@ spec:
               value: "__MANAGEMENT_BASE_URL__"
             - name: PROMETHEUS_BASE_URL
               value: "http://prometheus.target.svc:9090"
+            - name: LOKI_BASE_URL
+              value: "http://loki-gateway.target.svc"
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"
