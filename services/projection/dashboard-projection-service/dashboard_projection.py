@@ -3,11 +3,11 @@ from __future__ import annotations
 from settings import Settings
 
 from packages.contracts.dashboard.status import DashboardStatus
+from packages.contracts.event_bus.bodies import DashboardUpdatedBody
 from packages.contracts.event_bus.interfaces import (
     EventClient,
     EventEnvelope,
 )
-from packages.contracts.event_bus.payloads import DashboardUpdatedPayload
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.interfaces import DashboardReadModel
 
@@ -38,8 +38,8 @@ class DashboardProjectionWorkflow:
         await self.events.emit(
             EventSubject.DASHBOARD_UPDATED,
             Settings.SERVICE_NAME,
-            DashboardUpdatedPayload(
+            DashboardUpdatedBody(
                 summary=summary, status=status
-            ).to_payload(),
+            ).to_body(),
             evt.correlation_id,
         )

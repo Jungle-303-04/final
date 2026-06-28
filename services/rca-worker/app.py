@@ -9,13 +9,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from packages.config.constants import GitHub
-from packages.contracts.event_bus.payloads import (
+from packages.contracts.event_bus.bodies import (
     ClusterEvidenceReceived,
-    EventPayload,
+    EventBody,
     Evidence,
-    EvidenceBuiltPayload,
-    RcaCompletedPayload,
-    SafePrRequestedPayload,
+    EvidenceBuiltBody,
+    RcaCompletedBody,
+    SafePrRequestedBody,
 )
 from packages.runtime.app import App, EventContext
 
@@ -32,7 +32,7 @@ EVIDENCE_KIND = "rca_bundle"
 @app.sub(ClusterEvidenceReceived)
 async def on_cluster_evidence(
     evt: ClusterEvidenceReceived, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
+) -> AsyncIterator[EventBody]:
     evidence_ref = f"{OBJECT_EVIDENCE_PREFIX}/{ctx.correlation_id}.json"
     evidence = Evidence(
         cluster_id=evt.cluster_id,
@@ -42,22 +42,22 @@ async def on_cluster_evidence(
         traces=evt.traces,
         object_ref=evidence_ref,
     )
-    report = RcaCompletedPayload(
+    report = RcaCompletedBody(
         root_cause=ROOT_CAUSE,
         action=RECOMMENDED_ACTION,
         evidence_ref=evidence.object_ref,
     )
     ctx.db.save_evidence(
-        ctx.correlation_id, EVIDENCE_KIND, evidence.to_payload()
+        ctx.correlation_id, EVIDENCE_KIND, evidence.to_body()
     )
     ctx.db.save_rca_report(
-        ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_payload()
+        ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_body()
     )
 
     # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 담당.
-    yield EvidenceBuiltPayload(evidence=evidence)
+    yield EvidenceBuiltBody(evidence=evidence)
     yield report
-    yield SafePrRequestedPayload(
+    yield SafePrRequestedBody(
         title=PR_TITLE,
         body=f"RCA: {ROOT_CAUSE}\n\nAction: {RECOMMENDED_ACTION}",
         provider=GitHub.PROVIDER,

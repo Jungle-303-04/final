@@ -9,11 +9,11 @@ from typing import Any
 from packages.config.errors import fail, require
 
 
-def require_registered(payload_type: type) -> Any:
-    subject = getattr(payload_type, "__subject__", None)
+def require_registered(body_type: type) -> Any:
+    subject = getattr(body_type, "__subject__", None)
     require(
         subject is not None,
-        f"{payload_type.__name__} 은 @events.reg 로 먼저 등록해야 한다",
+        f"{body_type.__name__} 은 @events.reg 로 먼저 등록해야 한다",
         TypeError,
     )
     return subject

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.payloads import ClusterEvidenceReceived
+from packages.contracts.event_bus.bodies import ClusterEvidenceReceived
 
 
 def test_rca_subscriber_yields_typed_event_chain() -> None:

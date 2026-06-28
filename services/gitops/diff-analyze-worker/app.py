@@ -9,11 +9,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from packages.config.constants import GitHub
-from packages.contracts.event_bus.payloads import (
-    DesiredDiffPayload,
-    DiffAnalyzedPayload,
-    EventPayload,
-    SafePrRequestedPayload,
+from packages.contracts.event_bus.bodies import (
+    DesiredDiffBody,
+    DiffAnalyzedBody,
+    EventBody,
+    SafePrRequestedBody,
 )
 from packages.runtime.app import App, EventContext
 
@@ -25,18 +25,18 @@ UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
 PR_TITLE = "Apply sandbox manifest"
 
 
-@app.sub(DesiredDiffPayload)
+@app.sub(DesiredDiffBody)
 async def on_desired_diff(
-    evt: DesiredDiffPayload, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
+    evt: DesiredDiffBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
     diff = evt.diff
     safe = diff.risk == SAFE_RISK
     reason = SAFE_REASON if safe else UNSAFE_REASON
-    yield DiffAnalyzedPayload(
+    yield DiffAnalyzedBody(
         diff=diff, safe=safe, risk=diff.risk, reason=reason
     )
     if safe:
-        yield SafePrRequestedPayload(
+        yield SafePrRequestedBody(
             title=PR_TITLE,
             body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
             provider=GitHub.PROVIDER,

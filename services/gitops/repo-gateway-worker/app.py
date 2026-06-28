@@ -9,10 +9,11 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.payloads import (
-    EventPayload,
-    SafePrCreatedPayload,
-    SafePrRequestedPayload,
+from packages.contracts.event_bus.bodies import (
+    EventBody,
+    SafePrCreatedBody,
+    SafePrFailedBody,
+    SafePrRequestedBody,
 )
 from packages.runtime.app import App, EventContext
 
@@ -25,16 +26,29 @@ PR_NUMBER_MODULO = 100000
 MISSING_GITHUB_TOKEN_REF = "missing-github-oauth-fallback"
 
 
-@app.sub(SafePrRequestedPayload)
+@app.sub(SafePrRequestedBody)
 async def on_safe_pr_requested(
-    evt: SafePrRequestedPayload, ctx: EventContext
-) -> AsyncIterator[EventPayload]:
-    pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
-    token_ref = ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
-    ctx.db.save_pull_request(
-        ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
-    )
-    yield SafePrCreatedPayload(
+    evt: SafePrRequestedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
+    try:
+        pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
+        token_ref = ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
+        ctx.db.save_pull_request(
+            ctx.correlation_id,
+            pr_url,
+            evt.title,
+            evt.body,
+            PR_STATUS_CREATED,
+        )
+    except Exception as exc:
+        yield SafePrFailedBody(
+            provider=evt.provider,
+            title=evt.title,
+            reason=str(exc),
+        )
+        return
+
+    yield SafePrCreatedBody(
         pr_url=pr_url,
         provider=evt.provider,
         token_ref=token_ref,

@@ -6,8 +6,8 @@ from typing import Any
 
 from conftest import ROOT, load_file, load_service, run_handler, subjects_of
 
+from packages.contracts.event_bus.bodies import CommandRequestedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
-from packages.contracts.event_bus.payloads import CommandRequestedPayload
 from packages.events.bus import (
     RecordedEventClient,
     emit_and_record,
@@ -92,7 +92,7 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
 def test_command_subscriber_emits_dispatch_chain() -> None:
     command = load_service("command-worker")
     queue = FakeAgentCommandQueue()
-    payload = CommandRequestedPayload.from_payload(
+    payload = CommandRequestedBody.from_body(
         {
             "cluster_id": "target-cluster-01",
             "action": "rollout_restart",
@@ -129,7 +129,7 @@ def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
         default="sandbox",
     )
     engine = policy.Policy([rule])
-    dict_target = policy.Payload({"namespace": "sandbox"})
+    dict_target = policy.Body({"namespace": "sandbox"})
     model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
     rejected = policy.ModelLookup(SimpleNamespace(namespace="production"))
     assert engine.evaluate(dict_target).allowed is True

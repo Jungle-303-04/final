@@ -1,7 +1,7 @@
 """등록된 이벤트와 구독자를 한눈에 출력한다.
 
 사용: python scripts/events.py   (또는 make events)
-payload 정의(@events.reg)와 서비스 핸들러(@app.sub)를 import 해 레지스트리를
+body 정의(@events.reg)와 서비스 핸들러(@app.sub)를 import 해 레지스트리를
 채운 뒤 표로 보여준다. App 으로 마이그레이션한 서비스를 SERVICES 에 추가.
 """
 
@@ -44,7 +44,7 @@ def _load(path: Path, name: str) -> None:
 
 def main() -> None:
     # 이벤트 타입 정의(@events.reg) 등록.
-    importlib.import_module("packages.contracts.event_bus.payloads")
+    importlib.import_module("packages.contracts.event_bus.bodies")
 
     # 서비스 핸들러(@app.sub) 등록.
     for service in SERVICES:
