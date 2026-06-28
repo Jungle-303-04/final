@@ -9,10 +9,6 @@ SERVICE_ENTRYPOINTS = {
         "services/api-gateway/app.py",
         "FastApiService(",
     ),
-    "gitops-sync-worker": (
-        "services/gitops-sync-worker/app.py",
-        "WorkerService.from_subscription(",
-    ),
     "command-worker": (
         "services/command-worker/app.py",
         "App(",
@@ -50,7 +46,6 @@ SERVICE_ENTRYPOINTS = {
 
 # App(한 파일) 마이그레이션된 서비스는 제외(아래 WorkerService 규약 검사).
 WORKER_ENTRYPOINTS = [
-    "services/gitops-sync-worker/app.py",
     "services/dashboard-projection-service/app.py",
     "services/audit-timeline-service/app.py",
 ]
