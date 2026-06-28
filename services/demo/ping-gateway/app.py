@@ -11,12 +11,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    DemoPongDeliveredBody,
-    DemoPongFailedBody,
-    DemoPongRequestedBody,
-    EventBody,
-)
+from packages.contracts.event_bus.bodies import DemoPongDeliveredBody, DemoPongFailedBody, DemoPongRequestedBody, EventBody
 from packages.runtime.app import App, EventContext
 from packages.runtime.outbound import HttpOutbound, deliver
 
@@ -29,11 +24,7 @@ DELIVERED_STATUS = "delivered"
 
 @app.sub(DemoPongRequestedBody)
 async def on_pong_requested(evt: DemoPongRequestedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
-    async for out in deliver(
-        call=lambda: outbound.post(evt.reply_to, {"message": evt.message}),
-        ok=lambda _status: DemoPongDeliveredBody(reply_to=evt.reply_to, status=DELIVERED_STATUS),
-        fail=lambda exc: DemoPongFailedBody(reply_to=evt.reply_to, error=str(exc)),
-    ):
+    async for out in deliver(call=lambda: outbound.post(evt.reply_to, {"message": evt.message}), ok=lambda _status: DemoPongDeliveredBody(reply_to=evt.reply_to, status=DELIVERED_STATUS), fail=lambda exc: DemoPongFailedBody(reply_to=evt.reply_to, error=str(exc))):
         yield out
 
 

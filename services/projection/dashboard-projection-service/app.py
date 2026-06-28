@@ -16,10 +16,7 @@ from packages.runtime.app import App, EventContext
 
 app = App("dashboard-projection-service")
 
-TERMINAL_SUCCESS = {
-    EventSubject.SAFE_PR_CREATED,
-    EventSubject.COMMAND_COMPLETED,
-}
+TERMINAL_SUCCESS = {EventSubject.SAFE_PR_CREATED, EventSubject.COMMAND_COMPLETED}
 ATTENTION_SUFFIXES = ("rejected", "failed")
 
 

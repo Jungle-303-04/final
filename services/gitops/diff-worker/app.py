@@ -9,12 +9,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from packages.config.constants import Sandbox
-from packages.contracts.event_bus.bodies import (
-    DesiredDiffBody,
-    Diff,
-    EventBody,
-    ManifestRenderedBody,
-)
+from packages.contracts.event_bus.bodies import DesiredDiffBody, Diff, EventBody, ManifestRenderedBody
 from packages.runtime.app import App, EventContext
 
 app = App("diff-worker")
@@ -27,13 +22,7 @@ SYNC_RISK = "sandbox-only"
 @app.sub(ManifestRenderedBody)
 async def on_manifest_rendered(evt: ManifestRenderedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     rendered = evt.rendered_manifest  # 중첩 디코드로 타입 객체
-    diff = Diff(
-        resource=RESOURCE_REF,
-        namespace=Sandbox.NAMESPACE,
-        desired_image=rendered.spec.image,
-        actual_image=PREVIOUS_IMAGE,
-        risk=SYNC_RISK,
-    )
+    diff = Diff(resource=RESOURCE_REF, namespace=Sandbox.NAMESPACE, desired_image=rendered.spec.image, actual_image=PREVIOUS_IMAGE, risk=SYNC_RISK)
     yield DesiredDiffBody(diff=diff)
 
 

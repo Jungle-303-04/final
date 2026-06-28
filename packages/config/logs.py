@@ -21,12 +21,7 @@ class JsonFormatter(logging.Formatter):
         self.service = service
 
     def format(self, record: logging.LogRecord) -> str:
-        data: dict[str, Any] = {
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
-            "level": record.levelname.lower(),
-            "service": self.service,
-            "action": record.getMessage(),
-        }
+        data: dict[str, Any] = {"ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"), "level": record.levelname.lower(), "service": self.service, "action": record.getMessage()}
         context = getattr(record, CONTEXT_KEY, None)
         if isinstance(context, dict):
             data.update(context)

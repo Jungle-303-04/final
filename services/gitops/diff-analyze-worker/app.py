@@ -9,12 +9,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from packages.config.constants import GitHub
-from packages.contracts.event_bus.bodies import (
-    DesiredDiffBody,
-    DiffAnalyzedBody,
-    EventBody,
-    SafePrRequestedBody,
-)
+from packages.contracts.event_bus.bodies import DesiredDiffBody, DiffAnalyzedBody, EventBody, SafePrRequestedBody
 from packages.runtime.app import App, EventContext
 
 app = App("diff-analyze-worker")
@@ -32,11 +27,7 @@ async def on_desired_diff(evt: DesiredDiffBody, ctx: EventContext) -> AsyncItera
     reason = SAFE_REASON if safe else UNSAFE_REASON
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
-        yield SafePrRequestedBody(
-            title=PR_TITLE,
-            body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
-            provider=GitHub.PROVIDER,
-        )
+        yield SafePrRequestedBody(title=PR_TITLE, body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}", provider=GitHub.PROVIDER)
 
 
 if __name__ == "__main__":
