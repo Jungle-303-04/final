@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from packages.contracts.event_bus.interfaces import (
@@ -9,7 +10,12 @@ from packages.contracts.event_bus.interfaces import (
 )
 
 CommandRecord = dict[str, Any]
-EventProcessingRecord = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class EventProcessingRecord:
+    status: str
+    attempts: int
 
 
 class InitializableStore(Protocol):

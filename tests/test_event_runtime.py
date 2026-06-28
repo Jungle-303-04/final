@@ -6,6 +6,7 @@ from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.processing import EventProcessingStatus
+from packages.contracts.interfaces import EventProcessingRecord
 from packages.events.envelope import event
 from packages.runtime.worker import EventProcessor, EventRetryPolicy
 
@@ -39,7 +40,9 @@ class FakeProcessingStore:
     def begin_event_processing(
         self, evt: EventEnvelope, consumer: str
     ) -> dict[str, Any]:
-        return {"status": self.status, "attempts": self.attempts}
+        return EventProcessingRecord(
+            status=self.status, attempts=self.attempts
+        )
 
     def finish_event_processing(
         self, evt: EventEnvelope, consumer: str
