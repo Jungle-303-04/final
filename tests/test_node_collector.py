@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 NODE_COLLECTOR_PATH = (
-    ROOT_DIR / "services" / "node-collector" / "node_collector.py"
+    ROOT_DIR / "services" / "target" / "node-collector" / "node_collector.py"
 )
 
 
