@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 import httpx
+from evidence import EvidenceCollector
 from fastapi import FastAPI
 from settings import Settings
 from uvicorn import Config, Server
@@ -70,7 +71,18 @@ class TargetClusterAgent:
         self.interval = int(
             env(Settings.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
         )
+        self.prometheus_base_url = env(
+            Settings.PROMETHEUS_BASE_URL_ENV, Settings.DEFAULT_PROMETHEUS_BASE_URL
+        ).rstrip("/")
+        self.loki_base_url = env(Settings.LOKI_BASE_URL_ENV, Settings.DEFAULT_LOKI_BASE_URL).rstrip(
+            "/"
+        )
         self.client = client
+        self.evidence_collector = EvidenceCollector(
+            self.prometheus_base_url,
+            self.loki_base_url,
+            self.fake_evidence,
+        )
 
     async def run(self) -> None:
         if self.client is not None:
@@ -99,11 +111,14 @@ class TargetClusterAgent:
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                status_code = await client.ship_evidence(self.fake_evidence())
+                status_code = await client.ship_evidence(await self.collect_evidence())
                 print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
             await asyncio.sleep(self.interval)
+
+    async def collect_evidence(self) -> JsonObject:
+        return await self.evidence_collector.collect_evidence()
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
