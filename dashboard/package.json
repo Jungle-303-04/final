@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "dev:local": "VITE_GATEWAY_TARGET=http://localhost:18081 vite --config vite.config.ts --host 0.0.0.0",
+    "dev:local": "VITE_GATEWAY_TARGET=http://localhost:18080 vite --config vite.config.ts --host 0.0.0.0",
     "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && vite build --config vite.config.ts",
     "preview": "vite preview --config vite.config.ts --host 0.0.0.0",
     "sync:sources": "node scripts/sync-backend.mjs",
@@ -13,11 +13,11 @@
     "verify": "npm run sync:check && npm run build"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^4.7.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "vite": "^6.0.7"
+    "vite": "^6.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
