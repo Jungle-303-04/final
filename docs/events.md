@@ -229,7 +229,7 @@ async def on_command_requested(evt: CommandRequestedBody, ctx: EventContext):
 dashboard, audit 같은 전체 이벤트 projector는 `EventEnvelope`를 받는다.
 
 ```python
-@app.on_event
+@app.on_any
 async def on_event(evt: EventEnvelope, ctx: EventContext):
     subject = evt.subject
 ```
@@ -259,10 +259,10 @@ if __name__ == "__main__":
 
 `@app.on(BodyType)`이 구독할 subject를 body 타입에서 자동으로 유도한다. 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). 테스트나 카탈로그가 필요하면 `app.subscriptions`로 등록된 구독 계약을 확인한다.
 
-dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
 
 ```python
-@app.on_event
+@app.on_any
 async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
@@ -280,8 +280,8 @@ async def on_event(evt: EventEnvelope, ctx):
 | Repo Gateway Worker (App) | `services/gitops/repo-gateway-worker/app.py` | `safe_pr.requested` |
 | Command Worker (App) | `services/command-worker/app.py` | `command.requested` |
 | RCA Worker (App) | `services/rca-worker/app.py` | `cluster.evidence.received` |
-| Dashboard Projection Service (`@app.on_event`) | `services/projection/dashboard-projection-service/app.py` | `>` |
-| Audit Timeline Service (`@app.on_event`) | `services/projection/audit-timeline-service/app.py` | `>` |
+| Dashboard Projection Service (`@app.on_any`) | `services/projection/dashboard-projection-service/app.py` | `>` |
+| Audit Timeline Service (`@app.on_any`) | `services/projection/audit-timeline-service/app.py` | `>` |
 
 ## Outbound Gateway 패턴
 

@@ -137,14 +137,14 @@ ci: PR 필수 검증 workflow 추가
 ## 이벤트 규칙
 
 - API 입구 발행은 `ApiEventGateway.accept_body(...)`, worker 후속 발행은 `yield Body(...)`를 사용한다. raw NATS 직접 발행은 금지한다.
-- 구독은 각 worker `app.py`의 `@app.on(BodyType)`으로 선언한다. dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받는다.
+- 구독은 각 worker `app.py`의 `@app.on(BodyType)`으로 선언한다. dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받는다.
 - 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). `WorkerService`는 `App.run()` 내부 구현이며 서비스가 직접 호출하지 않는다.
 - 새 event subject는 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 함께 추가한다.
 - 새 event body나 변경된 event body는 `packages/contracts/event_bus/bodies/`에 dataclass 계약으로 추가한다(base class `EventBody`, 클래스명 `<EventName>Body`).
 - event body는 직렬화하면 JSON object여야 하며, workflow는 body 객체의 `to_body()` 결과를 발행한다(역직렬화는 `from_body()`). envelope의 transport 필드는 소문자 `payload`다.
 - Python 필드는 `snake_case`를 사용하고, wire key 별칭은 body class metadata에서만 관리한다.
 - 하나의 업무 흐름은 `correlation_id`를 유지한다.
-- typed handler는 body 객체를 받고, `@app.on_event` projector만 `EventEnvelope`를 받는다.
+- typed handler는 body 객체를 받고, `@app.on_any` projector만 `EventEnvelope`를 받는다.
 - handler write는 at-least-once delivery에 안전하도록 idempotent하게 작성한다.
 - handler는 local work를 끝낸 뒤 ack되어야 한다. `ack/nak/DLQ`는 `packages/runtime/worker.py`가 담당한다.
 - 워커는 `ctx: EventContext[XStore]`로 받는다(`packages/contracts/stores.py`의 능력별 async Protocol). 자기 store 메서드만 노출되어 다른 서비스의 DB 능력은 안 보인다. `ctx.db` 호출은 비차단(`AsyncDb`)이라 항상 `await`.
