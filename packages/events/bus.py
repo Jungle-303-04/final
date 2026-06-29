@@ -174,3 +174,13 @@ class DeadLetterSink:
             evt.correlation_id,
             evt.event_id,
         )
+
+    async def capture_raw(self, raw: bytes, consumer: str, error: Exception) -> EventEnvelope:
+        dead_letter = self.store.record_raw_dead_letter(raw, consumer, str(error))
+        return await self.events.emit(
+            EventSubject.DEAD_LETTER_CREATED,
+            self.source,
+            dead_letter,
+            dead_letter["correlation_id"],
+            dead_letter["original_event_id"],
+        )

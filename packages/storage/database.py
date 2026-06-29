@@ -4,14 +4,15 @@ import time
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import create_engine, func, select, update
+from sqlalchemy import create_engine, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from packages.config.constants import Auth, GitHub, OAuth, Postgres
+from packages.config.constants import Auth, CommandStatus, GitHub, OAuth, Postgres
 from packages.config.retry import retry_dependency
 from packages.config.settings import env
 from packages.config.time import now_iso
@@ -46,6 +47,9 @@ ERROR_MESSAGE_LIMIT = 2000
 ACCOUNT_STATUS_CONNECTED = "connected"
 DEAD_LETTER_STATUS_OPEN = "open"
 DEAD_LETTER_STATUS_REPLAYED = "replayed"
+RAW_DEAD_LETTER_SUBJECT = "__decode_failed__"
+UNKNOWN_AGENT_ID = "unknown-agent"
+DEFAULT_COMMAND_LEASE_SECONDS = 60
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
@@ -73,6 +77,12 @@ def serialize_dead_letter(row: JsonObject) -> JsonObject:
     item = dict(row)
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["replayed_at"] = iso_or_none(item.get("replayed_at"))
+    return item
+
+
+def serialize_command(row: JsonObject) -> JsonObject:
+    item = dict(row)
+    item["leased_until"] = iso_or_none(item.get("leased_until"))
     return item
 
 
@@ -119,6 +129,20 @@ class DatabaseConnection:
 
     def init(self) -> None:
         metadata.create_all(self.engine)
+        self.ensure_compatible_schema()
+
+    def ensure_compatible_schema(self) -> None:
+        """Keep local demo DBs usable until a real migration tool is introduced."""
+        statements = (
+            "alter table agent_commands add column if not exists lease_id text",
+            "alter table agent_commands add column if not exists agent_id text",
+            "alter table agent_commands add column if not exists leased_until timestamptz",
+            "alter table agent_commands add column if not exists started_at timestamptz",
+            "alter table agent_commands add column if not exists completed_at timestamptz",
+        )
+        with self.engine.begin() as conn:
+            for statement in statements:
+                conn.execute(text(statement))
 
     def dispose(self) -> None:
         self.engine.dispose()
@@ -231,6 +255,13 @@ class EventRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    def event_processing_status_counts(self) -> dict[str, int]:
+        table = EventProcessing.__table__
+        statement = select(table.c.status, func.count().label("count")).group_by(table.c.status)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {row["status"]: int(row["count"]) for row in rows}
+
 
 class DeadLetterRepository(DatabaseConnection):
     def record_dead_letter(
@@ -265,6 +296,39 @@ class DeadLetterRepository(DatabaseConnection):
             "status": DEAD_LETTER_STATUS_OPEN,
         }
 
+    def record_raw_dead_letter(self, raw: bytes, consumer: str, error: str) -> JsonObject:
+        original_event_id = f"decode-failure:{uuid.uuid4()}"
+        payload = {"raw": raw.decode(errors="replace")}
+        table = EventDeadLetter.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                original_event_id=original_event_id,
+                original_subject=RAW_DEAD_LETTER_SUBJECT,
+                consumer=consumer,
+                correlation_id=original_event_id,
+                attempts=1,
+                error=compact_error(error),
+                payload=payload,
+                status=DEAD_LETTER_STATUS_OPEN,
+            )
+            .returning(table.c.id, table.c.created_at)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return {
+            "dead_letter_id": row["id"],
+            "original_event_id": original_event_id,
+            "original_subject": RAW_DEAD_LETTER_SUBJECT,
+            "consumer": consumer,
+            "correlation_id": original_event_id,
+            "attempts": 1,
+            "error": compact_error(error),
+            "created_at": row["created_at"].isoformat(),
+            "status": DEAD_LETTER_STATUS_OPEN,
+            "payload": payload,
+        }
+
     def list_dead_letters(self, limit: int) -> list[JsonObject]:
         table = EventDeadLetter.__table__
         statement = select(table).order_by(table.c.created_at.desc()).limit(limit)
@@ -292,6 +356,12 @@ class DeadLetterRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def open_dead_letter_count(self) -> int:
+        table = EventDeadLetter.__table__
+        statement = select(func.count()).where(table.c.status == DEAD_LETTER_STATUS_OPEN)
+        with self.connection() as conn:
+            return int(conn.execute(statement).scalar() or 0)
 
 
 class OAuthRepository(DatabaseConnection):
@@ -385,7 +455,7 @@ class RepoChangeRepository(DatabaseConnection):
 
 
 class AgentCommandRepository(DatabaseConnection):
-    async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
+    def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
         table = AgentCommand.__table__
         statement = (
             pg_insert(table)
@@ -396,57 +466,135 @@ class AgentCommandRepository(DatabaseConnection):
                 action=plan["action"],
                 payload=plan,
                 status=status,
+                lease_id=None,
+                agent_id=None,
+                leased_until=None,
+                started_at=None,
+                completed_at=None,
                 result={},
                 updated_at=func.now(),
             )
             .on_conflict_do_nothing(index_elements=[table.c.command_id])
         )
-        async with self.async_connection() as conn:
-            await conn.execute(statement)
+        with self.connection() as conn:
+            conn.execute(statement)
 
     async def lease_agent_command(
-        self, cluster_id: str, queued_status: str, leased_status: str
+        self,
+        cluster_id: str,
+        queued_status: str = CommandStatus.QUEUED,
+        leased_status: str = CommandStatus.LEASED,
+        agent_id: str = UNKNOWN_AGENT_ID,
+        lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
     ) -> CommandRecord | None:
         table = AgentCommand.__table__
+        now = datetime.now(UTC)
+        leased_until = now + timedelta(seconds=lease_seconds)
+        lease_id = str(uuid.uuid4())
+        columns = (
+            table.c.command_id,
+            table.c.correlation_id,
+            table.c.cluster_id,
+            table.c.action,
+            table.c.payload,
+            table.c.status,
+            table.c.lease_id,
+            table.c.agent_id,
+            table.c.leased_until,
+        )
+        available = or_(
+            table.c.status == queued_status,
+            (table.c.status == leased_status) & (table.c.leased_until < func.now()),
+        )
         find_statement = (
-            select(
-                table.c.command_id,
-                table.c.correlation_id,
-                table.c.cluster_id,
-                table.c.action,
-                table.c.payload,
-            )
-            .where(table.c.cluster_id == cluster_id, table.c.status == queued_status)
+            select(table.c.command_id)
+            .where(table.c.cluster_id == cluster_id, available)
             .order_by(table.c.created_at)
             .limit(1)
+            .with_for_update(skip_locked=True)
         )
         async with self.async_connection() as conn:
             row = (await conn.execute(find_statement)).mappings().first()
-            if row:
-                await self.mark_agent_command_leased(conn, table, row["command_id"], leased_status)
-            return row_dict(row) if row else None
+            if not row:
+                return None
+            statement = (
+                update(table)
+                .where(table.c.command_id == row["command_id"])
+                .values(
+                    status=leased_status,
+                    lease_id=lease_id,
+                    agent_id=agent_id,
+                    leased_until=leased_until,
+                    updated_at=func.now(),
+                )
+                .returning(*columns)
+            )
+            leased = (await conn.execute(statement)).mappings().first()
+            return serialize_command(row_dict(leased)) if leased else None
 
-    async def mark_agent_command_leased(
-        self, conn: AsyncConnection, table: Any, command_id: str, leased_status: str
-    ) -> None:
-        statement = (
-            update(table)
-            .where(table.c.command_id == command_id)
-            .values(status=leased_status, updated_at=func.now())
-        )
-        await conn.execute(statement)
-
-    async def complete_agent_command(self, command_id: str, result: JsonObject) -> str | None:
+    async def start_agent_command(
+        self,
+        command_id: str,
+        lease_id: str,
+        agent_id: str,
+        running_status: str = CommandStatus.RUNNING,
+    ) -> str | None:
         table = AgentCommand.__table__
         statement = (
             update(table)
-            .where(table.c.command_id == command_id)
-            .values(status=result["status"], result=result, updated_at=func.now())
+            .where(
+                table.c.command_id == command_id,
+                table.c.lease_id == lease_id,
+                table.c.agent_id == agent_id,
+                table.c.status == CommandStatus.LEASED,
+                table.c.leased_until >= func.now(),
+            )
+            .values(status=running_status, started_at=func.now(), updated_at=func.now())
             .returning(table.c.correlation_id)
         )
         async with self.async_connection() as conn:
             row = (await conn.execute(statement)).mappings().first()
         return row["correlation_id"] if row else None
+
+    async def complete_agent_command(
+        self, command_id: str, result: JsonObject, lease_id: str, agent_id: str
+    ) -> str | None:
+        table = AgentCommand.__table__
+        statement = (
+            update(table)
+            .where(
+                table.c.command_id == command_id,
+                table.c.lease_id == lease_id,
+                table.c.agent_id == agent_id,
+                table.c.status == CommandStatus.RUNNING,
+            )
+            .values(
+                status=result["status"],
+                result=result,
+                completed_at=func.now(),
+                updated_at=func.now(),
+            )
+            .returning(table.c.correlation_id)
+        )
+        async with self.async_connection() as conn:
+            row = (await conn.execute(statement)).mappings().first()
+        return row["correlation_id"] if row else None
+
+    def command_status_counts(self) -> dict[str, int]:
+        table = AgentCommand.__table__
+        statement = select(table.c.status, func.count().label("count")).group_by(table.c.status)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {row["status"]: int(row["count"]) for row in rows}
+
+    def oldest_command_age_seconds(self, status: str) -> float:
+        table = AgentCommand.__table__
+        statement = select(func.extract("epoch", func.now() - func.min(table.c.created_at))).where(
+            table.c.status == status
+        )
+        with self.connection() as conn:
+            age = conn.execute(statement).scalar()
+        return float(age or 0)
 
 
 class RcaRepository(DatabaseConnection):
@@ -578,6 +726,12 @@ class OutboxRepository(DatabaseConnection):
         stmt = update(table).where(table.c.event_id.in_(event_ids)).values(sent_at=func.now())
         async with self.async_connection() as conn:
             await conn.execute(stmt)
+
+    def outbox_pending_count(self) -> int:
+        table = OutboxModel.__table__
+        statement = select(func.count()).where(table.c.sent_at.is_(None))
+        with self.connection() as conn:
+            return int(conn.execute(statement).scalar() or 0)
 
 
 class Database(

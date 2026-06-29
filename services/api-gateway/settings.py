@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from packages.config.constants import CommandStatus
+
 
 class Settings:
     SERVICE_NAME = "api-gateway"
@@ -19,9 +21,12 @@ class Settings:
     COMMAND_NOT_FOUND_MESSAGE = "command not found"
     DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
     DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
+    AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
 
-    COMMAND_STATUS_QUEUED = "queued"
-    COMMAND_STATUS_LEASED = "leased"
+    COMMAND_STATUS_QUEUED = CommandStatus.QUEUED
+    COMMAND_STATUS_LEASED = CommandStatus.LEASED
+    COMMAND_STATUS_RUNNING = CommandStatus.RUNNING
+    COMMAND_LEASE_SECONDS = 60
     EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
     DEFAULT_DEAD_LETTER_LIMIT = 50
     MAX_DEAD_LETTER_LIMIT = 100
@@ -39,6 +44,9 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
+    AGENT_TOKEN_HEADER = "x-agent-token"
+    AGENT_TOKEN_ENV = "AGENT_TOKEN"
+    DEFAULT_AGENT_TOKEN = "local-agent-token"
     OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"

@@ -48,7 +48,8 @@ class ApiEventGateway:
         event_payload = dict(payload)
         if actor is not None:
             event_payload.setdefault(Gateway.REQUESTED_BY, actor.user_id)
-            event_payload.setdefault(Gateway.ACTOR, actor.to_body())
+            if not event_payload.get(Gateway.ACTOR):
+                event_payload[Gateway.ACTOR] = actor.to_body()
         evt = await self.events.emit(
             subject, self.source, event_payload, correlation_id, causation_id
         )
