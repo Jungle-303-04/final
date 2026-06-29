@@ -7,6 +7,10 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.identity.models import (
+    OAuthAccount,
+    TokenVault,
+)
 from packages.config.constants import Auth, GitHub, OAuth
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import (
@@ -15,10 +19,6 @@ from packages.storage.engine import (
     TOKEN_EXPIRES_IN_SECONDS,
     TOKEN_REF_PREFIX,
     DatabaseConnection,
-)
-from packages.storage.schema import (
-    OAuthAccount,
-    TokenVault,
 )
 
 
