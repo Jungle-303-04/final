@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from packages.config.time import now_iso
-from packages.contracts.event_bus.interfaces import Event, JsonObject
+from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 
 
 def event(
@@ -11,12 +11,19 @@ def event(
     source: str,
     payload: JsonObject,
     correlation_id: str | None = None,
-) -> Event:
-    return {
-        "event_id": str(uuid.uuid4()),
-        "subject": subject,
-        "source": source,
-        "correlation_id": correlation_id or payload.get("correlation_id") or str(uuid.uuid4()),
-        "timestamp": now_iso(),
-        "payload": payload,
-    }
+    causation_id: str | None = None,
+) -> EventEnvelope:
+    # correlation_id 가 없으면 payload 가 실어온 값, 그것도 없으면 자기 자신을
+    # 흐름 시작점. causation 은 직전 이벤트(없으면 None=뿌리).
+    event_id = str(uuid.uuid4())
+    correlation = correlation_id or payload.get("correlation_id") or event_id
+    causation = causation_id or payload.get("causation_id")
+    return EventEnvelope(
+        event_id=event_id,
+        subject=subject,
+        source=source,
+        correlation_id=correlation,
+        causation_id=causation,
+        created_at=now_iso(),
+        payload=payload,
+    )
