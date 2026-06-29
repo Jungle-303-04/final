@@ -32,10 +32,13 @@ def _domain_modules(suffix: str) -> list[ModuleType]:
     for info in pkgutil.iter_modules(domains.__path__, f"{domains.__name__}."):
         if not info.ispkg:
             continue
+        module_name = f"{info.name}.{suffix}"
         try:
-            mods.append(importlib.import_module(f"{info.name}.{suffix}"))
-        except ModuleNotFoundError:
-            pass  # 그 도메인에 tables/repo 가 없을 수 있음
+            mods.append(importlib.import_module(module_name))
+        except ModuleNotFoundError as exc:
+            if exc.name != module_name:
+                raise
+            # 그 도메인에 models/repository 가 없을 수 있음.
     return mods
 
 
