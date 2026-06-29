@@ -22,9 +22,6 @@ from settings import (
     POD_NAME_ENV,
     POD_NAMESPACE_ENV,
     RUNTIME_NAME,
-    SAMPLE_CPU_USAGE_RATIO,
-    SAMPLE_FILESYSTEM_USAGE_RATIO,
-    SAMPLE_MEMORY_WORKING_SET_BYTES,
     SERVICE_HOST,
     SERVICE_NAME,
     SERVICE_PORT_ENV,
@@ -42,11 +39,6 @@ class NodeRuntimeSample:
     namespace: str
     timestamp: str
     runtime: str
-
-    # These are still demo runtime samples.
-    cpu_usage_ratio: float
-    memory_working_set_bytes: int
-    filesystem_usage_ratio: float
 
     # These are calculated from the Kubernetes API response.
     node_pod_count: int
@@ -90,9 +82,6 @@ class NodeCollector:
             pod_name=self.pod_name,
             namespace=self.namespace,
             timestamp=datetime.now(UTC).isoformat(),
-            cpu_usage_ratio=SAMPLE_CPU_USAGE_RATIO,
-            memory_working_set_bytes=SAMPLE_MEMORY_WORKING_SET_BYTES,
-            filesystem_usage_ratio=SAMPLE_FILESYSTEM_USAGE_RATIO,
             runtime=RUNTIME_NAME,
             node_pod_count=len(node_pods),
             node_not_ready_pod_count=count_not_ready_pods(node_pods),
@@ -108,24 +97,6 @@ class NodeCollector:
         }
 
         return [
-            MetricSample(
-                name="node_collector_cpu_usage_ratio",
-                help="Node CPU usage ratio.",
-                value=sample.cpu_usage_ratio,
-                labels=labels,
-            ),
-            MetricSample(
-                name="node_collector_memory_working_set_bytes",
-                help="Node memory working set.",
-                value=sample.memory_working_set_bytes,
-                labels=labels,
-            ),
-            MetricSample(
-                name="node_collector_filesystem_usage_ratio",
-                help="Node filesystem usage ratio.",
-                value=sample.filesystem_usage_ratio,
-                labels=labels,
-            ),
             MetricSample(
                 name="node_collector_node_pod_count",
                 help="Pods scheduled on this Kubernetes node.",
