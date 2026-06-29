@@ -1,16 +1,12 @@
+"""rca 도메인 repository — 증거·RCA 리포트 영속."""
+
 from __future__ import annotations
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.rca.models import Evidence, RcaReport
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.storage.engine import (
-    DatabaseConnection,
-)
-from packages.storage.schema import (
-    Evidence,
-    PullRequest,
-    RcaReport,
-)
+from packages.storage.engine import DatabaseConnection
 
 
 class RcaRepository(DatabaseConnection):
@@ -26,16 +22,6 @@ class RcaRepository(DatabaseConnection):
         table = RcaReport.__table__
         statement = pg_insert(table).values(
             correlation_id=correlation_id, root_cause=root_cause, action=action, payload=body
-        )
-        with self.connection() as conn:
-            conn.execute(statement)
-
-    def save_pull_request(
-        self, correlation_id: str, pr_url: str, title: str, body: str, status: str
-    ) -> None:
-        table = PullRequest.__table__
-        statement = pg_insert(table).values(
-            correlation_id=correlation_id, pr_url=pr_url, title=title, body=body, status=status
         )
         with self.connection() as conn:
             conn.execute(statement)

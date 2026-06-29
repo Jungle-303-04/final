@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 import domains
 from domains.command.repository import AgentCommandRepository
 from domains.identity.repository import OAuthRepository
+from domains.rca.repository import RcaRepository
+from domains.scm.repository import PullRequestRepository
 from packages.storage.engine import DatabaseConnection
 from packages.storage.repositories.events import (
     DeadLetterRepository,
@@ -22,7 +24,6 @@ from packages.storage.repositories.events import (
     OutboxRepository,
 )
 from packages.storage.repositories.projection import AuditLogRepository, DashboardRepository
-from packages.storage.repositories.rca import RcaRepository
 
 
 def _domain_modules(suffix: str) -> list[ModuleType]:
@@ -59,7 +60,6 @@ def _discovered_repositories() -> tuple[type, ...]:
 _CORE = (EventRepository, DeadLetterRepository, OutboxRepository)
 # identity 는 domains/ 로 이전 완료 → 자동 발견. 나머지는 이전 대기.
 _PENDING = (
-    RcaRepository,
     DashboardRepository,
     AuditLogRepository,
 )
@@ -74,6 +74,7 @@ if TYPE_CHECKING:
         OAuthRepository,
         AgentCommandRepository,
         RcaRepository,
+        PullRequestRepository,
         DashboardRepository,
         AuditLogRepository,
     ): ...
