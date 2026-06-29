@@ -1,0 +1,46 @@
+# GitHub 폴링 스케줄 — CronJob 에 위임(타이머를 우리가 안 들고 k8s 가 듦).
+#
+# 왜 CronJob:
+#   - 스케줄·겹침·복구를 검증된 k8s 스케줄러가 보장(직접 락/리더선출 안 짬).
+#   - concurrencyPolicy: Forbid → 이전 폴이 안 끝났으면 다음 실행 건너뜀(겹침 차단).
+#   - 파드가 죽어도 다음 주기에 새로 띄움(누락 복구). 1회 실행 후 종료라 replica·리더선출 불필요.
+#
+# 추상화(유지보수): 같은 바이너리가 POLL_ONCE 로 모드만 바뀐다.
+#   - POLL_ONCE=1(여기)  → 1회 당기고 종료(CronJob 위임).
+#   - POLL_ONCE 미설정    → 내부 interval 루프(상주 Deployment). 나중에 내부 로직으로
+#     전환하려면 이 매니페스트를 Deployment 로 바꾸고 POLL_ONCE 만 빼면 됨(코드 그대로).
+#
+# 중복: CronJob 은 매 실행이 새 프로세스라 메모리 커서가 없어 같은 커밋을 또 POST 할 수 있으나,
+#   기존 ledger dedup(exactly-once)이 흡수한다. 증분화(커서/ETag)는 핸드오프 최적화 항목.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-poller
+  namespace: management
+spec:
+  schedule: "*/1 * * * *" # 1분마다(CronJob 최소 granularity).
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: poller
+              image: service:local
+              imagePullPolicy: IfNotPresent
+              command: ["python", "services/gitops/github-poller/app.py"]
+              env:
+                - name: MANAGEMENT_BASE_URL
+                  value: http://api-gateway:8000
+                - name: GITHUB_REPO
+                  value: octocat/Hello-World
+                - name: POLL_ONCE
+                  value: "1" # 한 번 당기고 종료 — 주기는 CronJob 이 보장.
+                # 무인증은 시간당 60회 제한 → 잦은 폴링 땐 토큰 권장(5000회).
+                # - name: GITHUB_TOKEN
+                #   valueFrom:
+                #     secretKeyRef: { name: github-poller, key: token }

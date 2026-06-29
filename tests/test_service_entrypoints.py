@@ -10,6 +10,7 @@ SERVICE_ENTRYPOINTS = {
     "diff-worker": ("services/gitops/diff-worker/app.py", "App("),
     "manifest-render-worker": ("services/gitops/manifest-render-worker/app.py", "App("),
     "git-pull-worker": ("services/gitops/git-pull-worker/app.py", "App("),
+    "github-poller": ("services/gitops/github-poller/app.py", "AsyncService("),
     "api-gateway": ("services/api-gateway/app.py", "FastApiService("),
     "command-worker": ("services/command-worker/app.py", "App("),
     "rca-worker": ("services/rca-worker/app.py", "App("),
@@ -89,6 +90,7 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     manifests = "\n".join(
         [
             read_project_file("deploy/management/services.yaml"),
+            read_project_file("deploy/management/github-poller.yaml"),
             read_project_file("deploy/target/target.yaml"),
         ]
     )
