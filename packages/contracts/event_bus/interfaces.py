@@ -19,21 +19,15 @@ class Event(TypedDict):
 
 @dataclass(frozen=True)
 class EventEnvelope:
-    """코드에서 다루는 이벤트 봉투. 속성으로 접근(evt.subject).
+    """이벤트 봉투 — 공통 메타데이터 + payload. 속성으로 접근(evt.subject)."""
 
-    봉투 = 모든 이벤트가 공통으로 갖는 메타데이터 + payload(본문).
-    - correlation_id: 한 흐름(요청)에 속한 이벤트를 묶는 ID.
-    - causation_id: 직전(나를 유발한) 이벤트의 ID. 인과 사슬 추적용.
-    Event(TypedDict)는 와이어/저장용 dict, 변환은 from_mapping/to_dict.
-    """
-
-    event_id: str
-    subject: str
-    source: str
-    correlation_id: str
-    causation_id: str | None
-    created_at: str
-    payload: JsonObject
+    event_id: str  # 이 이벤트의 고유 ID
+    subject: str  # 주제(주소) — 예: git.changed
+    source: str  # 발행한 서비스 이름
+    correlation_id: str  # 같은 흐름(요청)의 이벤트를 묶는 ID
+    causation_id: str | None  # 나를 유발한 직전 이벤트 ID(없으면 흐름 시작점)
+    created_at: str  # 생성 시각(ISO 문자열)
+    payload: JsonObject  # 본문 데이터(dict)
 
     # 필드 이름 단일 출처 = 이 dataclass. 직렬화도 여기서 파생.
     @classmethod
