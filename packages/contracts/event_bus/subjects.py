@@ -27,7 +27,6 @@ STREAM_SUBJECTS = [
     "audit.>",
     "agent.>",
     "dead_letter.>",
-    "demo.>",
 ]
 
 
@@ -75,9 +74,3 @@ class EventSubject(StrEnum):
 
     # --- 신뢰성(공통): 재시도 소진 시 DLQ ---
     DEAD_LETTER_CREATED = "dead_letter.created"  # 죽은 편지(DLQ) 적재
-
-    # --- demo(ping↔pong): 프레임워크 한 바퀴 학습용 ---
-    DEMO_PING_REQUESTED = "demo.ping.requested"  # API 입구
-    DEMO_PONG_REQUESTED = "demo.pong.requested"  # 워커 → outbound 게이트웨이
-    DEMO_PONG_DELIVERED = "demo.pong.delivered"  # 외부 호출 성공
-    DEMO_PONG_FAILED = "demo.pong.failed"  # 외부 호출 실패

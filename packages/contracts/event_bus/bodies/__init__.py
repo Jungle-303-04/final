@@ -23,12 +23,6 @@ from packages.contracts.event_bus.bodies.command import (
     Route,
 )
 from packages.contracts.event_bus.bodies.dashboard import DashboardUpdatedBody
-from packages.contracts.event_bus.bodies.demo import (
-    DemoPingRequestedBody,
-    DemoPongDeliveredBody,
-    DemoPongFailedBody,
-    DemoPongRequestedBody,
-)
 from packages.contracts.event_bus.bodies.rca import (
     ClusterEvidenceReceivedBody,
     Evidence,
@@ -62,10 +56,6 @@ __all__ = [
     "CommandRejectedBody",
     "CommandRequestedBody",
     "DashboardUpdatedBody",
-    "DemoPingRequestedBody",
-    "DemoPongDeliveredBody",
-    "DemoPongFailedBody",
-    "DemoPongRequestedBody",
     "DiffDetectedBody",
     "Diff",
     "DiffAnalyzedBody",
