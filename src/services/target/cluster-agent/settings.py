@@ -4,7 +4,7 @@ from packages.config.constants import CommandStatus
 
 
 class Settings:
-    TARGET_AGENT_SERVICE_NAME = "target-cluster-agent"
+    TARGET_AGENT_SERVICE_NAME = "cluster-agent"
     FAKE_PROMETHEUS_SERVICE_NAME = "fake-prometheus"
     FAKE_LOKI_SERVICE_NAME = "fake-loki"
     FAKE_OTEL_SERVICE_NAME = "fake-otel"

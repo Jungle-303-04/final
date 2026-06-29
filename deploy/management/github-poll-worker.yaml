@@ -15,7 +15,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: github-poller
+  name: github-poll-worker
   namespace: management
 spec:
   schedule: "*/1 * * * *" # 1분마다(CronJob 최소 granularity).
@@ -32,7 +32,7 @@ spec:
             - name: poller
               image: service:local
               imagePullPolicy: IfNotPresent
-              command: ["python", "src/services/gitops/github-poller/app.py"]
+              command: ["python", "src/services/gitops/github-poll-worker/app.py"]
               env:
                 - name: MANAGEMENT_BASE_URL
                   value: http://api-gateway:8000
@@ -43,4 +43,4 @@ spec:
                 # 무인증은 시간당 60회 제한 → 잦은 폴링 땐 토큰 권장(5000회).
                 # - name: GITHUB_TOKEN
                 #   valueFrom:
-                #     secretKeyRef: { name: github-poller, key: token }
+                #     secretKeyRef: { name: github-poll-worker, key: token }

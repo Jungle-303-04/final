@@ -277,11 +277,11 @@ async def on_event(evt: EventEnvelope, ctx):
 | Manifest Render Worker (App) | `services/gitops/manifest-render-worker/app.py` | `git.changed` |
 | Diff Worker (App) | `services/gitops/diff-worker/app.py` | `manifest.rendered` |
 | Diff Analyze Worker (App) | `services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
-| Repo Gateway Worker (App) | `services/gitops/repo-gateway-worker/app.py` | `safe_pr.requested` |
+| Repo Gateway Worker (App) | `services/gitops/scm-worker/app.py` | `safe_pr.requested` |
 | Command Worker (App) | `services/command-worker/app.py` | `command.requested` |
 | RCA Worker (App) | `services/rca-worker/app.py` | `cluster.evidence.received` |
-| Dashboard Projection Service (`@app.on_any`) | `services/projection/dashboard-projection-service/app.py` | `>` |
-| Audit Timeline Service (`@app.on_any`) | `services/projection/audit-timeline-service/app.py` | `>` |
+| Dashboard Projection Service (`@app.on_any`) | `services/projection/dashboard-worker/app.py` | `>` |
+| Audit Timeline Service (`@app.on_any`) | `services/projection/audit-worker/app.py` | `>` |
 
 ## Outbound Gateway 패턴
 
@@ -295,7 +295,7 @@ async def on_event(evt: EventEnvelope, ctx):
 
 이 표준 모양은 `packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
 
-예: `safe_pr.requested -> repo-gateway-worker -> safe_pr.created`. PR 생성은 `repo-gateway-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `repo-gateway-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
+예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
 
 외부 provider 호출 실패는 가능한 한 worker 예외로 터뜨려 DLQ로 보내기보다
 `safe_pr.failed` 같은 도메인 실패 이벤트로 발행한다. 이렇게 하면 dashboard,
