@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import domains
 from packages.storage.engine import DatabaseConnection
@@ -64,4 +65,18 @@ _PENDING = (
     AuditLogRepository,
 )
 
-Database = type("Database", _CORE + _PENDING + _discovered_repositories(), {})
+if TYPE_CHECKING:
+    # 타입 검사용 스텁 — 코어+pending repo 계약을 선언(런타임엔 아래 type() 이
+    # 도메인 repo 까지 동적 합성). 타입체커가 Database 의 store 메서드를 인식하게 한다.
+    class Database(  # noqa: D101
+        EventRepository,
+        DeadLetterRepository,
+        OutboxRepository,
+        OAuthRepository,
+        AgentCommandRepository,
+        RcaRepository,
+        DashboardRepository,
+        AuditLogRepository,
+    ): ...
+else:
+    Database = type("Database", _CORE + _PENDING + _discovered_repositories(), {})
