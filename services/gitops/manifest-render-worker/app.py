@@ -33,6 +33,31 @@ MANIFEST_KIND = "Deployment"
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
 ) -> AsyncIterator[EventBody]:
+    # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 manifest + repo 저장 + render):
+    #
+    # manifest = {
+    #     "app": DEFAULT_APP_NAME,
+    #     "image": payload.get("image", DEFAULT_IMAGE),
+    #     "replicas": payload.get("replicas", DEFAULT_REPLICAS),
+    #     "namespace": SANDBOX_NAMESPACE,
+    # }
+    # self.repo.save_repo_change(evt["correlation_id"], commit_sha, manifest)
+    #
+    # rendered = {
+    #     "apiVersion": MANIFEST_API_VERSION,
+    #     "kind": MANIFEST_KIND,
+    #     "metadata": {"name": manifest["app"], "namespace": manifest["namespace"]},
+    #     "spec": {"replicas": manifest["replicas"], "image": manifest["image"]},
+    # }
+    # await self.events.publish(
+    #     EventSubject.MANIFEST_RENDERED,
+    #     SERVICE_NAME,
+    #     {"rendered_manifest": rendered},
+    #     evt["correlation_id"],
+    # )
+    #
+    # 현재 split 구조에서는 dict 대신 Manifest/RenderedManifest 값 객체를 만들고,
+    # 저장소는 EventContext[RepoChangeStore]를 통해 await로 호출한다.
     manifest = Manifest(
         app=DEFAULT_APP_NAME, image=evt.image, replicas=evt.replicas, namespace=Sandbox.NAMESPACE
     )
