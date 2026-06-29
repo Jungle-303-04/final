@@ -25,7 +25,7 @@
 | Fargate | stateless API/worker 일부만 후보 |
 | node-collector | DaemonSet이므로 Fargate-only 배치 금지 |
 | stateful store | 운영 후보는 RDS, ElastiCache, S3 같은 managed service |
-| target 연결 | target-cluster-agent outbound 연결 유지 |
+| target 연결 | cluster-agent outbound 연결 유지 |
 | 권한 | OAuth/session, AWS IAM/IRSA, Kubernetes ServiceAccount/RBAC를 분리 |
 | 관측성 | CloudWatch, Prometheus, Loki, OTel을 provider adapter로 수용 |
 
@@ -37,9 +37,9 @@ services
   + gitops            Git 변경 -> manifest/diff/analyze/repo write split workers
   + command-worker               command policy -> target agent queue
   + rca-worker                   evidence -> RCA -> safe PR event
-  + projection/dashboard-projection-service dashboard read model projection
-  + projection/audit-timeline-service       변경 불가능한 audit timeline
-  + target/target-cluster-agent             Target Cluster Agent와 telemetry adapter
+  + projection/dashboard-worker dashboard read model projection
+  + projection/audit-worker       변경 불가능한 audit timeline
+  + target/cluster-agent             Target Cluster Agent와 telemetry adapter
   + target/node-collector                   선택형 DaemonSet node/runtime metrics source
 
 packages
@@ -71,16 +71,16 @@ git-pull-worker               -> python services/gitops/git-pull-worker/app.py
 manifest-render-worker        -> python services/gitops/manifest-render-worker/app.py
 diff-worker                   -> python services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python services/gitops/diff-analyze-worker/app.py
-repo-gateway-worker           -> python services/gitops/repo-gateway-worker/app.py
+scm-worker           -> python services/gitops/scm-worker/app.py
 command-worker                -> python services/command-worker/app.py
 rca-worker                    -> python services/rca-worker/app.py
-dashboard-projection-service  -> python services/projection/dashboard-projection-service/app.py
-audit-timeline-service        -> python services/projection/audit-timeline-service/app.py
-target-cluster-agent          -> python services/target/target-cluster-agent/app.py
+dashboard-worker  -> python services/projection/dashboard-worker/app.py
+audit-worker        -> python services/projection/audit-worker/app.py
+cluster-agent          -> python services/target/cluster-agent/app.py
 optional-node-collector       -> python services/target/node-collector/app.py
-fake-prometheus               -> python services/target/target-cluster-agent/fake_prometheus.py
-fake-loki                     -> python services/target/target-cluster-agent/fake_loki.py
-fake-otel                     -> python services/target/target-cluster-agent/fake_otel.py
+fake-prometheus               -> python services/target/cluster-agent/fake_prometheus.py
+fake-loki                     -> python services/target/cluster-agent/fake_loki.py
+fake-otel                     -> python services/target/cluster-agent/fake_otel.py
 ```
 
 서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 `app.py` entrypoint, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
@@ -111,14 +111,14 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
 
-현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `NatsEventBus`, `services/target/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
+현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `NatsEventBus`, `services/target/cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
 
 한 서비스는 한 파일 `app.py`다. worker 서비스는 `packages/runtime/app.py`의 `App`을 사용한다.
 
 ```python
 app = App("rca-worker")
 
-@app.sub(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
+@app.on(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
 async def on_evidence(evt, ctx):
     yield EvidenceBuiltBody(...)        # 체이닝 = 다음 body를 yield
 
@@ -132,15 +132,15 @@ if __name__ == "__main__":
 - `WorkerService`: JetStream subject 구독 worker process(내부용)
 - `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
 
-dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
 
 ```python
-@app.on_event
+@app.on_any
 async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
 
-서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.sub(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `packages/contracts/event_bus`에 둔다.
+서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.on(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `packages/contracts/event_bus`에 둔다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 
@@ -153,11 +153,11 @@ async def on_event(evt: EventEnvelope, ctx):
 - `manifest-render-worker`
 - `diff-worker`
 - `diff-analyze-worker`
-- `repo-gateway-worker`
+- `scm-worker`
 - `command-worker`
 - `rca-worker`
-- `dashboard-projection-service`
-- `audit-timeline-service`
+- `dashboard-worker`
+- `audit-worker`
 - `nats`
 - `postgresql`
 - `redis`
@@ -165,7 +165,7 @@ async def on_event(evt: EventEnvelope, ctx):
 
 대상 클러스터:
 
-- `target-cluster-agent`
+- `cluster-agent`
 - `node-collector`: `optional-node-collector` DaemonSet으로 실행
 - `fake-prometheus`
 - `fake-loki`

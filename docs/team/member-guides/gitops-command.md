@@ -16,7 +16,7 @@ GitOps split workers (5단계 파이프라인)
   manifest-render-worker -> manifest.rendered
   diff-worker            -> desired.diff.detected
   diff-analyze-worker    -> diff.analyzed (안전 시 safe_pr.requested)
-  repo-gateway-worker    -> safe_pr.created / safe_pr.failed
+  scm-worker    -> safe_pr.created / safe_pr.failed
 
 Command Worker (command.requested 는 API Gateway 가 발행)
   -> command.dispatch.ready
@@ -34,7 +34,7 @@ Target Agent
 - `services/gitops/manifest-render-worker`
 - `services/gitops/diff-worker`
 - `services/gitops/diff-analyze-worker`
-- `services/gitops/repo-gateway-worker`
+- `services/gitops/scm-worker`
 - `services/command-worker`
 - git watch target polling
 - manifest render
@@ -47,7 +47,7 @@ Target Agent
 ## 현재 책임
 
 - Git 변경을 `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed` 5단계 파이프라인으로 정리한다.
-- 안전한 diff면 `diff-analyze-worker`가 `safe_pr.requested`를 발행하고, `repo-gateway-worker`가 실제 PR(`safe_pr.created`)을 만든다.
+- 안전한 diff면 `diff-analyze-worker`가 `safe_pr.requested`를 발행하고, `scm-worker`가 실제 PR(`safe_pr.created`)을 만든다.
 - diff 결과가 안전한 command/PR 요청 body로 변환되게 만든다.
 - command는 production write가 아니라 `sandbox` 또는 demo namespace 기준으로 제한한다.
 - command 생성과 dispatch 준비 event에 대한 테스트를 추가한다.
@@ -57,7 +57,7 @@ Target Agent
 
 Worker 담당자가 꼭 알아야 할 것:
 
-- handler는 `@app.sub(BodyType)`로 구독하고 타입 body를 입력으로 받는다. 원본 envelope의 transport 필드는 `evt.payload`다.
+- handler는 `@app.on(BodyType)`로 구독하고 타입 body를 입력으로 받는다. 원본 envelope의 transport 필드는 `evt.payload`다.
 - 새 이벤트는 다음 body를 `yield`로 발행한다(체이닝).
 - `correlation_id`는 runtime/client가 이어가므로 직접 새로 만들지 않는다.
 - ack/nak/retry/DLQ는 `packages/runtime/worker.py` 책임이다. workflow 코드에서 직접 처리하지 않는다.
@@ -71,7 +71,7 @@ Worker 담당자가 꼭 알아야 할 것:
 
 ## 코드 규칙
 
-- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.sub(BodyType)`으로 선언한다.
+- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.on(BodyType)`으로 선언한다.
 - `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
 - Worker는 다음 이벤트 body를 `yield`로 발행한다.
 - Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
@@ -130,7 +130,7 @@ GitOps split workers가 어떤 event를 받고 어떤 event를 발행하는지 �
 테스트:
 
 - body DTO `to_body()` 결과가 기대 field를 가진다.
-- worker `@app.sub(...)` 구독 subject가 문서와 일치한다.
+- worker `@app.on(...)` 구독 subject가 문서와 일치한다.
 
 ## Phase 2. Git polling observation -> GitChanged 변환
 
@@ -251,7 +251,7 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 목표:
 
 ```text
-안전한 diff를 repo-gateway-worker가 이해할 수 있는 safe_pr.requested event로 변환한다.
+안전한 diff를 scm-worker가 이해할 수 있는 safe_pr.requested event로 변환한다.
 ```
 
 왜 해야 하는가:
@@ -401,7 +401,7 @@ polling으로 감지한 git.changed에서 command queued까지 fake bus/fake db�
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
 - 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
 - manifest/diff/command 흐름 테스트 존재
-- handler가 `@app.sub` body DTO 흐름을 유지함
+- handler가 `@app.on` body DTO 흐름을 유지함
 - raw NATS 사용 없음
 - command payload 변경 시 Gateway/Auth와 Target/Telemetry에 공유
 - audit/dashboard 영향이 있으면 문서화
@@ -579,7 +579,7 @@ services/gitops/diff-analyze-worker
   desired.diff.detected를 받아 diff.analyzed 발행
   안전하면 safe_pr.requested 발행
 
-services/gitops/repo-gateway-worker
+services/gitops/scm-worker
   safe_pr.requested를 받아 guarded repo write 또는 fake PR event 발행
 ```
 

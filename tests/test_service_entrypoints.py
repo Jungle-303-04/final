@@ -5,24 +5,28 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
-    "repo-gateway-worker": ("services/gitops/repo-gateway-worker/app.py", "App("),
-    "diff-analyze-worker": ("services/gitops/diff-analyze-worker/app.py", "App("),
-    "diff-worker": ("services/gitops/diff-worker/app.py", "App("),
-    "manifest-render-worker": ("services/gitops/manifest-render-worker/app.py", "App("),
-    "git-pull-worker": ("services/gitops/git-pull-worker/app.py", "App("),
-    "api-gateway": ("services/api-gateway/app.py", "FastApiService("),
-    "command-worker": ("services/command-worker/app.py", "App("),
-    "rca-worker": ("services/rca-worker/app.py", "App("),
-    "dashboard-projection-service": (
-        "services/projection/dashboard-projection-service/app.py",
+    "scm-worker": ("src/services/gitops/scm-worker/app.py", "App("),
+    "diff-analyze-worker": ("src/services/gitops/diff-analyze-worker/app.py", "App("),
+    "diff-worker": ("src/services/gitops/diff-worker/app.py", "App("),
+    "manifest-render-worker": ("src/services/gitops/manifest-render-worker/app.py", "App("),
+    "git-pull-worker": ("src/services/gitops/git-pull-worker/app.py", "App("),
+    "github-poll-worker": ("src/services/gitops/github-poll-worker/app.py", "AsyncService("),
+    "api-gateway": ("src/services/api-gateway/app.py", "FastApiService("),
+    "command-worker": ("src/services/command-worker/app.py", "App("),
+    "rca-worker": ("src/services/rca-worker/app.py", "App("),
+    "dashboard-worker": (
+        "src/services/projection/dashboard-worker/app.py",
         "App(",
     ),
-    "audit-timeline-service": ("services/projection/audit-timeline-service/app.py", "App("),
-    "target-cluster-agent": ("services/target/target-cluster-agent/app.py", "AsyncService("),
-    "node-collector": ("services/target/node-collector/app.py", "AsyncService("),
-    "fake-prometheus": ("services/target/target-cluster-agent/fake_prometheus.py", "AsyncService("),
-    "fake-loki": ("services/target/target-cluster-agent/fake_loki.py", "AsyncService("),
-    "fake-otel": ("services/target/target-cluster-agent/fake_otel.py", "AsyncService("),
+    "audit-worker": ("src/services/projection/audit-worker/app.py", "App("),
+    "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
+    "node-collector": ("src/services/target/node-collector/app.py", "AsyncService("),
+    "fake-prometheus": (
+        "src/services/target/cluster-agent/fake_prometheus.py",
+        "AsyncService(",
+    ),
+    "fake-loki": ("src/services/target/cluster-agent/fake_loki.py", "AsyncService("),
+    "fake-otel": ("src/services/target/cluster-agent/fake_otel.py", "AsyncService("),
 }
 
 
@@ -49,9 +53,9 @@ APP_BASED_SERVICES = {
     "manifest-render-worker",
     "diff-worker",
     "diff-analyze-worker",
-    "repo-gateway-worker",
-    "dashboard-projection-service",
-    "audit-timeline-service",
+    "scm-worker",
+    "dashboard-worker",
+    "audit-worker",
 }
 
 
@@ -68,27 +72,28 @@ def test_services_keep_local_settings_files() -> None:
 
 
 def test_contracts_are_grouped_by_boundary() -> None:
-    assert (ROOT_DIR / "packages" / "contracts" / "gateway" / "requests.py").exists()
-    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subjects.py").exists()
-    assert (ROOT_DIR / "packages" / "contracts" / "event_bus" / "subscriptions.py").exists()
-    assert not (ROOT_DIR / "packages" / "contracts" / "schemas.py").exists()
+    assert (ROOT_DIR / "src" / "packages" / "contracts" / "gateway" / "requests.py").exists()
+    assert (ROOT_DIR / "src" / "packages" / "contracts" / "event_bus" / "subjects.py").exists()
+    assert (ROOT_DIR / "src" / "packages" / "contracts" / "event_bus" / "subscriptions.py").exists()
+    assert not (ROOT_DIR / "src" / "packages" / "contracts" / "schemas.py").exists()
 
-    constants = read_project_file("packages/config/constants.py")
+    constants = read_project_file("src/packages/config/constants.py")
     assert "class EventSubject" not in constants
     assert "class EventProcessingStatus" not in constants
 
 
 def test_central_role_dispatcher_is_removed() -> None:
-    assert not (ROOT_DIR / "services" / "main.py").exists()
-    assert not (ROOT_DIR / "services" / "registry.py").exists()
-    assert not (ROOT_DIR / "packages" / "shared").exists()
-    assert not (ROOT_DIR / "packages" / "worker_runtime").exists()
+    assert not (ROOT_DIR / "src" / "services" / "main.py").exists()
+    assert not (ROOT_DIR / "src" / "services" / "registry.py").exists()
+    assert not (ROOT_DIR / "src" / "packages" / "shared").exists()
+    assert not (ROOT_DIR / "src" / "packages" / "worker_runtime").exists()
 
 
 def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     manifests = "\n".join(
         [
             read_project_file("deploy/management/services.yaml"),
+            read_project_file("deploy/management/github-poll-worker.yaml"),
             read_project_file("deploy/target/target.yaml"),
         ]
     )
@@ -101,8 +106,8 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         'args: ["gitops-sync-worker"]',
         'args: ["command-worker"]',
         'args: ["rca-worker"]',
-        'args: ["dashboard-projection-service"]',
-        'args: ["audit-timeline-service"]',
+        'args: ["dashboard-worker"]',
+        'args: ["audit-worker"]',
         'args: ["target-agent"]',
         'args: ["node-collector"]',
         'args: ["fake-prometheus"]',
@@ -112,4 +117,4 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     for legacy_arg in legacy_role_args:
         assert legacy_arg not in manifests
 
-    assert "services/management-api-gateway/app.py" not in manifests
+    assert "src/services/management-api-gateway/app.py" not in manifests
