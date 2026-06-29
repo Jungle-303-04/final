@@ -1,5 +1,6 @@
 from packages.contracts.event_bus.interfaces import (
     Event,
+    EventBus,
     EventClient,
     EventConsumerBus,
     EventHandler,
@@ -16,6 +17,7 @@ from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, Worke
 __all__ = [
     "ALL_EVENTS_SUBJECT",
     "Event",
+    "EventBus",
     "EventClient",
     "EventConsumerBus",
     "EventHandler",
