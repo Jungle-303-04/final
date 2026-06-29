@@ -28,6 +28,24 @@ RESOURCE_REF = "deployment/checkout-api"
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
+    # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 diff + desired.diff.detected):
+    #
+    # diff = {
+    #     "resource": RESOURCE_REF,
+    #     "namespace": SANDBOX_NAMESPACE,
+    #     "desired_image": rendered["spec"]["image"],
+    #     "actual_image": PREVIOUS_IMAGE,
+    #     "risk": SYNC_RISK,
+    # }
+    # await self.events.publish(
+    #     EventSubject.DESIRED_DIFF_DETECTED,
+    #     SERVICE_NAME,
+    #     {"diff": diff},
+    #     evt["correlation_id"],
+    # )
+    #
+    # 현재 split 구조에서는 rendered manifest body를 받아 Diff 값 객체로 변환하고,
+    # subject 발행은 yield DiffDetectedBody(...)로 런타임이 처리한다.
     rendered = evt.rendered_manifest  # 중첩 디코드로 타입 객체
     diff = Diff(
         resource=RESOURCE_REF,
