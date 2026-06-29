@@ -6,7 +6,7 @@ from packages.contracts.event_bus.bodies import SafePrRequestedBody
 
 
 def test_repo_gateway_creates_pr_from_request() -> None:
-    repo = load_service("gitops/repo-gateway-worker")
+    repo = load_service("gitops/scm-worker")
     db = SpyDb()
     outs = run_handler(
         repo.on_safe_pr_requested,
@@ -25,7 +25,7 @@ class FailingDb(SpyDb):
 
 
 def test_repo_gateway_emits_failed_event_on_provider_error() -> None:
-    repo = load_service("gitops/repo-gateway-worker")
+    repo = load_service("gitops/scm-worker")
     outs = run_handler(
         repo.on_safe_pr_requested,
         SafePrRequestedBody(title="t", body="b", provider="github"),

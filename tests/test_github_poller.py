@@ -1,4 +1,4 @@
-"""github-poller 단위 검증 — 실제 GitHub/네트워크 없이 httpx MockTransport 로.
+"""github-poll-worker 단위 검증 — 실제 GitHub/네트워크 없이 httpx MockTransport 로.
 
 once 모드(CronJob): 최신 커밋을 webhook 입구로 1회 POST.
 dedup 가드: 같은 커밋이면 두 번째 폴은 POST 안 함(최종 dedup 은 ledger 가 보장).
@@ -16,7 +16,7 @@ from conftest import ROOT, load_file
 
 def _load_poller() -> Any:
     return load_file(
-        ROOT / "src" / "services" / "gitops" / "github-poller" / "poller.py", "svc_poller"
+        ROOT / "src" / "services" / "gitops" / "github-poll-worker" / "poller.py", "svc_poller"
     )
 
 

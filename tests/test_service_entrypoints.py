@@ -5,28 +5,28 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 SERVICE_ENTRYPOINTS = {
-    "repo-gateway-worker": ("src/services/gitops/repo-gateway-worker/app.py", "App("),
+    "scm-worker": ("src/services/gitops/scm-worker/app.py", "App("),
     "diff-analyze-worker": ("src/services/gitops/diff-analyze-worker/app.py", "App("),
     "diff-worker": ("src/services/gitops/diff-worker/app.py", "App("),
     "manifest-render-worker": ("src/services/gitops/manifest-render-worker/app.py", "App("),
     "git-pull-worker": ("src/services/gitops/git-pull-worker/app.py", "App("),
-    "github-poller": ("src/services/gitops/github-poller/app.py", "AsyncService("),
+    "github-poll-worker": ("src/services/gitops/github-poll-worker/app.py", "AsyncService("),
     "api-gateway": ("src/services/api-gateway/app.py", "FastApiService("),
     "command-worker": ("src/services/command-worker/app.py", "App("),
     "rca-worker": ("src/services/rca-worker/app.py", "App("),
-    "dashboard-projection-service": (
-        "src/services/projection/dashboard-projection-service/app.py",
+    "dashboard-worker": (
+        "src/services/projection/dashboard-worker/app.py",
         "App(",
     ),
-    "audit-timeline-service": ("src/services/projection/audit-timeline-service/app.py", "App("),
-    "target-cluster-agent": ("src/services/target/target-cluster-agent/app.py", "AsyncService("),
+    "audit-worker": ("src/services/projection/audit-worker/app.py", "App("),
+    "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
     "node-collector": ("src/services/target/node-collector/app.py", "AsyncService("),
     "fake-prometheus": (
-        "src/services/target/target-cluster-agent/fake_prometheus.py",
+        "src/services/target/cluster-agent/fake_prometheus.py",
         "AsyncService(",
     ),
-    "fake-loki": ("src/services/target/target-cluster-agent/fake_loki.py", "AsyncService("),
-    "fake-otel": ("src/services/target/target-cluster-agent/fake_otel.py", "AsyncService("),
+    "fake-loki": ("src/services/target/cluster-agent/fake_loki.py", "AsyncService("),
+    "fake-otel": ("src/services/target/cluster-agent/fake_otel.py", "AsyncService("),
 }
 
 
@@ -53,9 +53,9 @@ APP_BASED_SERVICES = {
     "manifest-render-worker",
     "diff-worker",
     "diff-analyze-worker",
-    "repo-gateway-worker",
-    "dashboard-projection-service",
-    "audit-timeline-service",
+    "scm-worker",
+    "dashboard-worker",
+    "audit-worker",
 }
 
 
@@ -93,7 +93,7 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     manifests = "\n".join(
         [
             read_project_file("deploy/management/services.yaml"),
-            read_project_file("deploy/management/github-poller.yaml"),
+            read_project_file("deploy/management/github-poll-worker.yaml"),
             read_project_file("deploy/target/target.yaml"),
         ]
     )
@@ -106,8 +106,8 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         'args: ["gitops-sync-worker"]',
         'args: ["command-worker"]',
         'args: ["rca-worker"]',
-        'args: ["dashboard-projection-service"]',
-        'args: ["audit-timeline-service"]',
+        'args: ["dashboard-worker"]',
+        'args: ["audit-worker"]',
         'args: ["target-agent"]',
         'args: ["node-collector"]',
         'args: ["fake-prometheus"]',

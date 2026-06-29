@@ -35,9 +35,9 @@ work-allocation 의 5인 분배를 바운디드 컨텍스트로 분해한다.
 | services/gitops/* (pull→render→diff→analyze) | **gitops** | GitOps/Command | Git 변경 감지→manifest→diff→분석 |
 | services/command-worker | **command** | GitOps/Command | 명령 정책→target agent 큐(control-plane) |
 | services/rca-worker | **rca** | RCA/Safe PR | 증거→근본원인분석 |
-| services/gitops/repo-gateway-worker | **scm** | RCA/Safe PR | GitHub PR 생성(유일 outbound writer) |
-| services/projection/dashboard-projection-service | **projection** | (대시보드 owner) | 대시보드 read model |
-| services/projection/audit-timeline-service | **audit** | RCA/Safe PR | 불변 감사 타임라인 |
+| services/gitops/scm-worker | **scm** | RCA/Safe PR | GitHub PR 생성(유일 outbound writer) |
+| services/projection/dashboard-worker | **projection** | (대시보드 owner) | 대시보드 read model |
+| services/projection/audit-worker | **audit** | RCA/Safe PR | 불변 감사 타임라인 |
 | services/target/* | **telemetry** | Target/Telemetry | target agent·관측성 어댑터·증거 수집·명령 실행 |
 | dashboard/(UI) | **frontend** | (미정) | React/Vite UI, node 생태계 |
 
@@ -106,7 +106,7 @@ RCA 결과는 **evidence 기반으로만** 생성. `users/ummfieg/rca-scenarios/
 | `models.py` | `PullRequest` (현재 rca 에 섞임 → scm 으로 이동) |
 | `repository.py` | PR 영속 |
 | `client.py` | GitHub PR 생성 outbound client(feature flag 보호) |
-| (실행) | `services/gitops/repo-gateway-worker/app.py` |
+| (실행) | `services/gitops/scm-worker/app.py` |
 
 ### projection (read model) / audit
 | 도메인 | 모듈 |
@@ -156,7 +156,7 @@ domains/telemetry/
     loki.py                 # logs 수집
     otel.py                 # traces 수집
   collector.py              # node-collector(DaemonSet) — node/runtime 메트릭
-services/target/target-cluster-agent/app.py   # 에이전트 프로세스(연결·폴링·증거 ship)
+services/target/cluster-agent/app.py   # 에이전트 프로세스(연결·폴링·증거 ship)
 services/target/node-collector/app.py         # 선택형 DaemonSet
 ```
 

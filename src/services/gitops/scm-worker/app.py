@@ -1,4 +1,4 @@
-"""repo-gateway-worker — safe_pr.requested → GitHub PR → safe_pr.created.
+"""scm-worker — safe_pr.requested → GitHub PR → safe_pr.created.
 
 우현 원본에는 없던 새 outbound 경계. 원본은 diff 후 command를 직접
 요청했지만, 현 구조는 안전한 GitOps 복구를 위해 PR 생성 책임을 이
@@ -20,7 +20,7 @@ from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import App, EventContext
 from packages.runtime.outbound import deliver
 
-app = App("repo-gateway-worker")
+app = App("scm-worker")
 
 PR_URL_PREFIX = "https://github.example.local/project/repo/pull"
 PR_MODE = "fake_github_api_call"

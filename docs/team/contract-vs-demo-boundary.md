@@ -71,14 +71,14 @@
 | `services/demo/**` | ping-pong 골든패스 학습용 | 제품 기능이 아니라 런타임 예시로 유지하거나 examples로 이동 |
 | `services/api-gateway/testapi.py` | `/demo/ping`, `/demo/callback` 데모 API | 운영 API와 분리 유지 |
 | `packages/contracts/event_bus/bodies/demo.py` | demo subject body | 학습용 계약. 제품 플로우 계약으로 쓰지 않음 |
-| `services/target/target-cluster-agent/fake_prometheus.py` | 실제 Prometheus가 아니라 fake HTTP app | real Prometheus adapter |
-| `services/target/target-cluster-agent/fake_loki.py` | 실제 Loki가 아니라 fake HTTP app | real Loki adapter |
-| `services/target/target-cluster-agent/fake_otel.py` | 실제 OTel collector가 아니라 fake HTTP app | real OTel collector/exporter |
-| `services/target/target-cluster-agent/agent.py`의 `fake_evidence` | 장애 데이터가 실제 수집값이 아님 | Kubernetes/Prometheus/Loki/OTel adapter가 만든 Evidence |
+| `services/target/cluster-agent/fake_prometheus.py` | 실제 Prometheus가 아니라 fake HTTP app | real Prometheus adapter |
+| `services/target/cluster-agent/fake_loki.py` | 실제 Loki가 아니라 fake HTTP app | real Loki adapter |
+| `services/target/cluster-agent/fake_otel.py` | 실제 OTel collector가 아니라 fake HTTP app | real OTel collector/exporter |
+| `services/target/cluster-agent/agent.py`의 `fake_evidence` | 장애 데이터가 실제 수집값이 아님 | Kubernetes/Prometheus/Loki/OTel adapter가 만든 Evidence |
 | `services/gitops/manifest-render-worker/app.py`의 `checkout-api` 기본값 | 실제 repo render가 아니라 sample manifest 생성 | Git repo checkout + Kustomize/Helm renderer |
 | `services/gitops/diff-worker/app.py`의 `PREVIOUS_IMAGE`, `RESOURCE_REF` | 실제 cluster diff가 아니라 fixed diff | desired/actual manifest 비교기 |
 | `services/rca-worker/app.py`의 고정 RCA 결과 | AI 분석이 아니라 deterministic sample | `RcaAnalyzerPort` 뒤의 LLM/rule analyzer |
-| `services/gitops/repo-gateway-worker/app.py`의 fake PR URL | 실제 GitHub PR 생성이 아님 | GitHub App/PAT adapter |
+| `services/gitops/scm-worker/app.py`의 fake PR URL | 실제 GitHub PR 생성이 아님 | GitHub App/PAT adapter |
 | `packages/storage/database.py`의 fake OAuth token payload | 실제 provider token exchange가 아님 | SecretVault/TokenBroker adapter |
 | `tests/**`의 fixture 값 | 테스트 입력일 뿐 운영 계약 아님 | 계약 변경 시 fixture도 같이 변경 |
 

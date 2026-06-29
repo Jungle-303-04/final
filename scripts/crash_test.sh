@@ -14,7 +14,7 @@ CTX="${MGMT_CONTEXT:-kind-management}"
 NS="${MGMT_NS:-management}"
 N="${N:-6}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-300}"
-KILL_APPS=(manifest-render-worker repo-gateway-worker)
+KILL_APPS=(manifest-render-worker scm-worker)
 
 log() { printf '%s [crash-test] %s\n' "$(date +%T)" "$*"; }
 

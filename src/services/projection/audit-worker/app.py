@@ -1,4 +1,4 @@
-"""audit-timeline-service — 모든 이벤트를 감사 로그로 적재.
+"""audit-worker — 모든 이벤트를 감사 로그로 적재.
 
 @app.on_any 로 전체(>) 구독. 봉투 그대로 audit 로그에 append.
 체이닝 없음(말단 소비자).
@@ -10,7 +10,7 @@ from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.stores import AuditStore
 from packages.runtime.app import App, EventContext
 
-app = App("audit-timeline-service")
+app = App("audit-worker")
 
 
 @app.on_any

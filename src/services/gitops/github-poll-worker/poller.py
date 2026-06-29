@@ -1,9 +1,9 @@
-"""github-poller — GitHub 를 주기적으로 당겨(폴링) 새 커밋을 webhook 입구로 흘린다.
+"""github-poll-worker — GitHub 를 주기적으로 당겨(폴링) 새 커밋을 webhook 입구로 흘린다.
 
 ArgoCD 와 같은 방향: "폴링 기본 + webhook 가속(옵션)". webhook 이 불가능한 환경
 (외부에 엔드포인트 못 여는 경우)이나 webhook 누락 보정용으로 폴링을 둔다.
 
-target-cluster-agent 와 같은 타이머 producer 모양: 주기마다 외부를 호출하고
+cluster-agent 와 같은 타이머 producer 모양: 주기마다 외부를 호출하고
 결과를 api-gateway 의 /github/webhook 으로 POST 한다. 그 뒤는 webhook 과 100%
 동일 경로(outbox → NATS → git-pull-worker → 파이프라인)를 탄다.
 

@@ -50,7 +50,7 @@ class EventSubject(StrEnum):
     DESIRED_DIFF_DETECTED = "desired.diff.detected"  # 원하는 상태와 차이 감지
     DIFF_ANALYZED = "diff.analyzed"  # diff 위험도 분석 결과
 
-    # --- 대상 클러스터/에이전트(target-cluster-agent) ---
+    # --- 대상 클러스터/에이전트(cluster-agent) ---
     AGENT_CONNECTED = "agent.connected"  # 에이전트 등록
     CLUSTER_EVIDENCE_RECEIVED = "cluster.evidence.received"  # 증거 수신(입구)
 
@@ -69,7 +69,7 @@ class EventSubject(StrEnum):
     SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
     SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패
 
-    # --- 읽기 모델(dashboard-projection-service) ---
+    # --- 읽기 모델(dashboard-worker) ---
     DASHBOARD_UPDATED = "dashboard.updated"  # 대시보드 카드 갱신
 
     # --- 신뢰성(공통): 재시도 소진 시 DLQ ---

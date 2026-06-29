@@ -34,8 +34,8 @@
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
 | Gateway/Auth | `services/api-gateway`, `packages/contracts/gateway`, `packages/contracts/identity`, `packages/contracts/integrations`, `packages/contracts/security` | event subject, shared DB schema, target agent protocol |
 | GitOps/Command | `services/gitops/*`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
-| RCA/Safe PR | `services/rca-worker`, `services/gitops/repo-gateway-worker`, `services/projection/audit-timeline-service`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
-| Target/Telemetry | `services/target/target-cluster-agent`, `services/target/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
+| RCA/Safe PR | `services/rca-worker`, `services/gitops/scm-worker`, `services/projection/audit-worker`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
+| Target/Telemetry | `services/target/cluster-agent`, `services/target/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
 
 ## 현재 코드 경로 기준
 
@@ -44,9 +44,9 @@
 
 | 영역 | 현재 경로 |
 | --- | --- |
-| GitOps pipeline | `services/gitops/git-pull-worker`, `services/gitops/manifest-render-worker`, `services/gitops/diff-worker`, `services/gitops/diff-analyze-worker`, `services/gitops/repo-gateway-worker` |
-| Projection | `services/projection/dashboard-projection-service`, `services/projection/audit-timeline-service` |
-| Target | `services/target/target-cluster-agent`, `services/target/node-collector` |
+| GitOps pipeline | `services/gitops/git-pull-worker`, `services/gitops/manifest-render-worker`, `services/gitops/diff-worker`, `services/gitops/diff-analyze-worker`, `services/gitops/scm-worker` |
+| Projection | `services/projection/dashboard-worker`, `services/projection/audit-worker` |
+| Target | `services/target/cluster-agent`, `services/target/node-collector` |
 
 ## 2026-06-26 기준 미흡한 부분
 

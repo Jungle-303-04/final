@@ -26,8 +26,8 @@ Audit Timeline Service
 ## 담당 영역
 
 - `services/rca-worker`
-- `services/gitops/repo-gateway-worker`
-- `services/projection/audit-timeline-service`
+- `services/gitops/scm-worker`
+- `services/projection/audit-worker`
 - Evidence Builder logic
 - AI RCA Service logic
 - Safe PR request/proposal logic
@@ -329,7 +329,7 @@ event 흐름을 audit_log로 기록해서 나중에 추적 가능하게 한다.
 
 구현할 것:
 
-- `audit-timeline-service` 구독 확인.
+- `audit-worker` 구독 확인.
 - event subject, source, correlation_id, causation_id, created_at 저장.
 - payload는 안전한 subset 또는 redaction.
 - command/RCA/PR subject별 사람이 읽는 message.
@@ -388,8 +388,8 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 ## 처음 읽을 파일
 
 1. `services/rca-worker`
-2. `services/gitops/repo-gateway-worker`
-3. `services/projection/audit-timeline-service`
+2. `services/gitops/scm-worker`
+3. `services/projection/audit-worker`
 4. `packages/contracts/event_bus/subjects.py`
 5. `packages/contracts/event_bus/bodies/`
 6. `packages/runtime/worker.py`
@@ -398,4 +398,4 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/rca-worker`, `services/gitops/repo-gateway-worker`, `services/projection/audit-timeline-service`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
+이 영역을 작업할 때는 `services/rca-worker`, `services/gitops/scm-worker`, `services/projection/audit-worker`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.

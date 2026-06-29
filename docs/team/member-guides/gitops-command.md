@@ -16,7 +16,7 @@ GitOps split workers (5단계 파이프라인)
   manifest-render-worker -> manifest.rendered
   diff-worker            -> desired.diff.detected
   diff-analyze-worker    -> diff.analyzed (안전 시 safe_pr.requested)
-  repo-gateway-worker    -> safe_pr.created / safe_pr.failed
+  scm-worker    -> safe_pr.created / safe_pr.failed
 
 Command Worker (command.requested 는 API Gateway 가 발행)
   -> command.dispatch.ready
@@ -34,7 +34,7 @@ Target Agent
 - `services/gitops/manifest-render-worker`
 - `services/gitops/diff-worker`
 - `services/gitops/diff-analyze-worker`
-- `services/gitops/repo-gateway-worker`
+- `services/gitops/scm-worker`
 - `services/command-worker`
 - git watch target polling
 - manifest render
@@ -47,7 +47,7 @@ Target Agent
 ## 현재 책임
 
 - Git 변경을 `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed` 5단계 파이프라인으로 정리한다.
-- 안전한 diff면 `diff-analyze-worker`가 `safe_pr.requested`를 발행하고, `repo-gateway-worker`가 실제 PR(`safe_pr.created`)을 만든다.
+- 안전한 diff면 `diff-analyze-worker`가 `safe_pr.requested`를 발행하고, `scm-worker`가 실제 PR(`safe_pr.created`)을 만든다.
 - diff 결과가 안전한 command/PR 요청 body로 변환되게 만든다.
 - command는 production write가 아니라 `sandbox` 또는 demo namespace 기준으로 제한한다.
 - command 생성과 dispatch 준비 event에 대한 테스트를 추가한다.
@@ -251,7 +251,7 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 목표:
 
 ```text
-안전한 diff를 repo-gateway-worker가 이해할 수 있는 safe_pr.requested event로 변환한다.
+안전한 diff를 scm-worker가 이해할 수 있는 safe_pr.requested event로 변환한다.
 ```
 
 왜 해야 하는가:
@@ -579,7 +579,7 @@ services/gitops/diff-analyze-worker
   desired.diff.detected를 받아 diff.analyzed 발행
   안전하면 safe_pr.requested 발행
 
-services/gitops/repo-gateway-worker
+services/gitops/scm-worker
   safe_pr.requested를 받아 guarded repo write 또는 fake PR event 발행
 ```
 
