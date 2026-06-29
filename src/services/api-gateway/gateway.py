@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-import asyncio
-import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
 
 from domains.command.router import router as command_router
 from domains.identity.router import router as identity_router
+from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
 from packages.config.constants import CommandStatus
 from packages.config.settings import env
@@ -70,7 +69,7 @@ class ApiGateway:
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         self._register_dead_letter_routes(app)
-        self._register_dashboard_routes(app)
+        app.include_router(projection_router)  # projection 도메인 라우터(대시보드)
         self._register_metrics_routes(app)
         self._register_error_handler(app)
 
@@ -140,27 +139,6 @@ class ApiGateway:
                 Gateway.DEAD_LETTER_ID: dead_letter_id,
                 Gateway.REPLAY_EVENT: accepted.event,
             }
-
-    def _register_dashboard_routes(self, app: FastAPI) -> None:
-        @app.get(gateway_routes.DASHBOARD_QUERY_PATH)
-        async def dashboard_query(request: Request) -> dict[str, Any]:
-            await self.auth.require_session(request)
-            return {Gateway.CARDS: self.db.list_dashboard()}
-
-        @app.get(gateway_routes.DASHBOARD_STREAM_PATH)
-        async def dashboard_stream(request: Request) -> StreamingResponse:
-            await self.auth.require_session(request)
-
-            async def events():
-                last = ""
-                while True:
-                    encoded = json.dumps(self.db.list_dashboard(), default=str)
-                    if encoded != last:
-                        last = encoded
-                        yield (f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n")
-                    await asyncio.sleep(Settings.DASHBOARD_STREAM_INTERVAL_SECONDS)
-
-            return StreamingResponse(events(), media_type=Settings.EVENT_STREAM_MEDIA_TYPE)
 
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")

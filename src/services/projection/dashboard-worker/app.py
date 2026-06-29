@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from domains.projection.events import DashboardStatus
 from packages.contracts.event_bus.bodies import DashboardUpdatedBody, EventBody
-from packages.contracts.event_bus.bodies.dashboard import DashboardStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.stores import DashboardStore
