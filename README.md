@@ -62,7 +62,7 @@ make down
 
 각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python services/<service-name>/app.py`처럼 서비스별 entrypoint로 분리한다.
 
-한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `packages/runtime/app.py`의 `App`을 사용합니다. `@app.sub(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). cross-cutting projector(dashboard, audit)는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
+한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `packages/runtime/app.py`의 `App`을 사용합니다. `@app.on(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). cross-cutting projector(dashboard, audit)는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
 서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둡니다. 여러 서비스가 공유하는 이벤트 subject, envelope, body, stream 계약은 `packages/contracts/event_bus`에 둡니다.
 
 ```text
@@ -107,7 +107,5 @@ make kill-pod DEPLOYMENT=rca-worker
 - [docs/operations-deployment.md](docs/operations-deployment.md)
 - [docs/service-split-plan.md](docs/service-split-plan.md)
 - [docs/secrets.md](docs/secrets.md)
-- [docs/team-workflow.md](docs/team-workflow.md)
 - [docs/team/conventions.md](docs/team/conventions.md)
 - [docs/team/work-allocation.md](docs/team/work-allocation.md)
-- [outputs/final-wbs-20260626/나만무_상세_WBS.xlsx](outputs/final-wbs-20260626/나만무_상세_WBS.xlsx)

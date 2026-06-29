@@ -38,6 +38,7 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 2
 DEFAULT_FETCH_BATCH_SIZE = 1
 DEFAULT_FETCH_TIMEOUT_SECONDS = 1
+DEFAULT_HANDLER_TIMEOUT_SECONDS = 30  # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
 HEARTBEAT_PATH = "/tmp/heartbeat"  # liveness exec probe 가 mtime 신선도 검사
 
 
@@ -47,6 +48,7 @@ class EventRetryPolicy:
     retry_delay_seconds: int = DEFAULT_RETRY_DELAY_SECONDS
     fetch_batch_size: int = DEFAULT_FETCH_BATCH_SIZE
     fetch_timeout_seconds: int = DEFAULT_FETCH_TIMEOUT_SECONDS
+    handler_timeout_seconds: int = DEFAULT_HANDLER_TIMEOUT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -129,7 +131,11 @@ class EventProcessor:
                 context = {**event_context(evt), "consumer": self.service_name}
                 logger.info("handling", extra={"context": context})
                 with event_causation(evt.event_id):
-                    outbox_events = await self.handler(evt)
+                    # 핸들러 hang 상한: 초과 시 TimeoutError → 아래 except → fail()(재시도/DLQ).
+                    # 트랜잭션 안이라 취소돼도 롤백 → 부분 쓰기 없음.
+                    outbox_events = await asyncio.wait_for(
+                        self.handler(evt), timeout=self.retry_policy.handler_timeout_seconds
+                    )
                 self.store.stage_events(conn, outbox_events)
                 self.ledger.finish(evt)
             await message.ack()
