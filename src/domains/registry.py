@@ -13,8 +13,10 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 import domains
+from domains.audit.repository import AuditLogRepository
 from domains.command.repository import AgentCommandRepository
 from domains.identity.repository import OAuthRepository
+from domains.projection.repository import DashboardRepository
 from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
 from packages.storage.engine import DatabaseConnection
@@ -23,7 +25,6 @@ from packages.storage.repositories.events import (
     EventRepository,
     OutboxRepository,
 )
-from packages.storage.repositories.projection import AuditLogRepository, DashboardRepository
 
 
 def _domain_modules(suffix: str) -> list[ModuleType]:
@@ -58,11 +59,8 @@ def _discovered_repositories() -> tuple[type, ...]:
 
 
 _CORE = (EventRepository, DeadLetterRepository, OutboxRepository)
-# identity 는 domains/ 로 이전 완료 → 자동 발견. 나머지는 이전 대기.
-_PENDING = (
-    DashboardRepository,
-    AuditLogRepository,
-)
+# 모든 도메인 repo 가 domains/ 로 이전 완료 → 전부 자동 발견(이전 대기 없음).
+_PENDING: tuple[type, ...] = ()
 
 if TYPE_CHECKING:
     # 타입 검사용 스텁 — 코어+pending repo 계약을 선언(런타임엔 아래 type() 이
