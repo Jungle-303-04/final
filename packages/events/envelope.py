@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from packages.config.time import now_iso
+from packages.config.settings import now_iso
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 
 
