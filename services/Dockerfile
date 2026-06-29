@@ -14,4 +14,4 @@ COPY services ./services
 
 EXPOSE 8000 9100
 
-CMD ["python", "services/api-gateway/runner.py"]
+CMD ["python", "services/api-gateway/app.py"]
