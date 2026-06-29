@@ -24,7 +24,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 echo "==> building ${IMAGE_NAME}"
-docker build -f "${ROOT_DIR}/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
+docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
 
 if ! kind get clusters | grep -qx "${MGMT_CLUSTER}"; then
   echo "==> creating management cluster: ${MGMT_CLUSTER}"

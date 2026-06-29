@@ -115,7 +115,10 @@ class OAuthAuthService:
 
     async def callback(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:
         state_payload = await self.sessions.consume_oauth_state(payload.get("state"))
-        merged = {**(state_payload or {}), **payload, "provider": provider}
+        if state_payload is None:
+            # state 미존재/불일치 → CSRF·인증 우회 차단(세션 발급 금지). [P0]
+            raise HTTPException(status_code=400, detail=Settings.OAUTH_STATE_INVALID_MESSAGE)
+        merged = {**state_payload, **payload, "provider": provider}
         account = self.db.save_oauth_account(merged)
         session = await self.sessions.create_session(account["user_id"], [Settings.OWNER_ROLE])
         return {
