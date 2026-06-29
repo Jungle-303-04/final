@@ -46,6 +46,16 @@ PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = (
         description="Demo node runtime CPU ratio exposed by optional-node-collector.",
         promql="node_collector_cpu_usage_ratio",
     ),
+    PrometheusInstantQuery(
+        metric_name="node_collector_node_pod_count",
+        description="Pods scheduled on each Kubernetes node reported by optional-node-collector.",
+        promql="node_collector_node_pod_count",
+    ),
+    PrometheusInstantQuery(
+        metric_name="node_collector_node_not_ready_pod_count",
+        description="Not Ready Pods on each Kubernetes node reported by optional-node-collector.",
+        promql="node_collector_node_not_ready_pod_count",
+    ),
 )
 
 
