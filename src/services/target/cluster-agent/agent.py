@@ -35,7 +35,7 @@ class HttpManagementPlaneClient:
         await self.client.aclose()
 
     async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
-        await self.client.post(
+        response = await self.client.post(
             f"{self.base_url}{gateway_routes.AGENT_CONNECT_PATH}",
             json={
                 Gateway.CLUSTER_ID: cluster_id,
@@ -44,6 +44,7 @@ class HttpManagementPlaneClient:
             },
             headers=self.headers,
         )
+        response.raise_for_status()
 
     async def ship_evidence(self, evidence: JsonObject) -> int:
         response = await self.client.post(
@@ -51,6 +52,7 @@ class HttpManagementPlaneClient:
             json=evidence,
             headers=self.headers,
         )
+        response.raise_for_status()
         return response.status_code
 
     async def poll_command(
@@ -71,7 +73,7 @@ class HttpManagementPlaneClient:
     async def start_command(
         self, command_id: str, cluster_id: str, lease_id: str, agent_id: str
     ) -> None:
-        await self.client.post(
+        response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_start_path(command_id)}",
             json={
                 Gateway.CLUSTER_ID: cluster_id,
@@ -80,15 +82,17 @@ class HttpManagementPlaneClient:
             },
             headers=self.headers,
         )
+        response.raise_for_status()
 
     async def complete_command(
         self, command_id: str, lease_id: str, agent_id: str, result: JsonObject
     ) -> None:
-        await self.client.post(
+        response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
             json={**result, Gateway.AGENT_ID: agent_id, Gateway.LEASE_ID: lease_id},
             headers=self.headers,
         )
+        response.raise_for_status()
 
 
 class TargetClusterAgent:
