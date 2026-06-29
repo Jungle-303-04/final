@@ -37,7 +37,7 @@ class EventRegistry:
 
     def define(self, subject: EventSubject) -> Callable[[type], type]:
         def decorator(body_type: type) -> type:
-            body_type.__subject__ = subject
+            body_type.__subject__ = subject  # type: ignore[attr-defined]  # 의도된 동적 부착
             self._defs[subject] = body_type
             return body_type
 

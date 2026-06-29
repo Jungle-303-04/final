@@ -46,11 +46,12 @@ class Command:
 
 
 class CommandStatus:
-    QUEUED: Final[str] = "queued"
-    LEASED: Final[str] = "leased"
-    RUNNING: Final[str] = "running"
-    COMPLETED: Final[str] = "completed"
-    FAILED: Final[str] = "failed"
+    # Final(타입 미지정) → mypy 가 Literal 로 추론 → Literal 필드(status)에 그대로 대입 가능.
+    QUEUED: Final = "queued"
+    LEASED: Final = "leased"
+    RUNNING: Final = "running"
+    COMPLETED: Final = "completed"
+    FAILED: Final = "failed"
 
 
 class Sandbox:
