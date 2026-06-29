@@ -20,10 +20,10 @@
 | Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `deploy`, `scripts`, `.github` | `docs/events.md`, `docs/team/conventions.md` |
 | Gateway/Auth | `services/api-gateway`, `packages/contracts/gateway`, `packages/contracts/event_bus` | `docs/team/member-guides/gateway-auth.md` |
 | GitOps/Command | `services/gitops/*`, `services/command-worker` | `docs/team/member-guides/gitops-command.md` |
-| RCA/Safe PR | `services/rca-worker`, `services/gitops/repo-gateway-worker`, `services/projection/audit-timeline-service` | `docs/team/member-guides/rca-safe-pr.md` |
-| Target/Telemetry | `services/target/target-cluster-agent`, `services/target/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
+| RCA/Safe PR | `services/rca-worker`, `services/gitops/scm-worker`, `services/projection/audit-worker` | `docs/team/member-guides/rca-safe-pr.md` |
+| Target/Telemetry | `services/target/cluster-agent`, `services/target/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
 
-`services/projection/dashboard-projection-service`와 dashboard 관련 문서는 현재 공통 read model 영역으로 둔다. UI가 실제로 추가되면 별도 담당을 다시 만든다.
+`services/projection/dashboard-worker`와 dashboard 관련 문서는 현재 공통 read model 영역으로 둔다. UI가 실제로 추가되면 별도 담당을 다시 만든다.
 
 ## 브랜치 규칙
 

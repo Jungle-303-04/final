@@ -30,7 +30,7 @@ services/gitops/diff-analyze-worker
   Diff analysis / Safe PR request decision
   app.py: analysis 기본값, @app.on(DiffDetectedBody)
 
-services/gitops/repo-gateway-worker
+services/gitops/scm-worker
   유일한 outbound GitHub PR 생성자 (safe_pr.requested -> safe_pr.created/failed)
   app.py: repo write feature flag, @app.on(SafePrRequestedBody)
 
@@ -42,15 +42,15 @@ services/rca-worker
   RCA / Evidence (PR 생성은 repo-gateway 에 위임: safe_pr.requested)
   app.py: RCA 기본 메시지, @app.on(ClusterEvidenceReceivedBody)
 
-services/projection/dashboard-projection-service
+services/projection/dashboard-worker
   Read Model / Dashboard Projection
   app.py: projection 상태 규칙, @app.on_any (모든 이벤트 >)
 
-services/projection/audit-timeline-service
+services/projection/audit-worker
   Audit Timeline
   app.py: @app.on_any (모든 이벤트 >)
 
-services/target/target-cluster-agent
+services/target/cluster-agent
   Target Cluster Agent
   telemetry adapter
   command receiver
@@ -112,16 +112,16 @@ git-pull-worker               -> python services/gitops/git-pull-worker/app.py
 manifest-render-worker        -> python services/gitops/manifest-render-worker/app.py
 diff-worker                   -> python services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python services/gitops/diff-analyze-worker/app.py
-repo-gateway-worker           -> python services/gitops/repo-gateway-worker/app.py
+scm-worker           -> python services/gitops/scm-worker/app.py
 command-worker                -> python services/command-worker/app.py
 rca-worker                    -> python services/rca-worker/app.py
-dashboard-projection-service  -> python services/projection/dashboard-projection-service/app.py
-audit-timeline-service        -> python services/projection/audit-timeline-service/app.py
-target-cluster-agent          -> python services/target/target-cluster-agent/app.py
+dashboard-worker  -> python services/projection/dashboard-worker/app.py
+audit-worker        -> python services/projection/audit-worker/app.py
+cluster-agent          -> python services/target/cluster-agent/app.py
 optional-node-collector       -> python services/target/node-collector/app.py
-fake-prometheus               -> python services/target/target-cluster-agent/fake_prometheus.py
-fake-loki                     -> python services/target/target-cluster-agent/fake_loki.py
-fake-otel                     -> python services/target/target-cluster-agent/fake_otel.py
+fake-prometheus               -> python services/target/cluster-agent/fake_prometheus.py
+fake-loki                     -> python services/target/cluster-agent/fake_loki.py
+fake-otel                     -> python services/target/cluster-agent/fake_otel.py
 ```
 
 ## 추가 분리 순서
@@ -129,8 +129,8 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 1. `services/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
 2. 각 service의 DB query를 repository 객체로 분리한다.
 3. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
-4. 실제 GitHub PR 생성은 먼저 `services/gitops/repo-gateway-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
-5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target/target-cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `services/target/node-collector`에서 확장한다.
+4. 실제 GitHub PR 생성은 먼저 `services/gitops/scm-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
+5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `services/target/cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `services/target/node-collector`에서 확장한다.
 6. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 공통 base layer 위에서 서비스별 image로 나눈다.
 
 ## 규칙

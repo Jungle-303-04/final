@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class Settings:
-    SERVICE_NAME = "github-poller"
+    SERVICE_NAME = "github-poll-worker"
 
     # api-gateway 의 webhook 입구로 POST(폴링이 당겨온 변경을 webhook 과 동일 경로로 흘림).
     DEFAULT_MANAGEMENT_BASE_URL = "http://api-gateway:8000"

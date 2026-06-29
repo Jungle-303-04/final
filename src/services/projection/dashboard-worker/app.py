@@ -1,4 +1,4 @@
-"""dashboard-projection-service — 모든 이벤트를 대시보드 카드로 투영.
+"""dashboard-worker — 모든 이벤트를 대시보드 카드로 투영.
 
 @app.on_any 로 전체(>) 구독. 이벤트마다 상태(진행/완료/주의)를 판정해
 읽기 모델에 upsert 하고 dashboard.updated 흘림.
@@ -15,7 +15,7 @@ from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.stores import DashboardStore
 from packages.runtime.app import App, EventContext
 
-app = App("dashboard-projection-service")
+app = App("dashboard-worker")
 
 TERMINAL_SUCCESS = {EventSubject.SAFE_PR_CREATED, EventSubject.COMMAND_COMPLETED}
 ATTENTION_SUFFIXES = ("rejected", "failed")

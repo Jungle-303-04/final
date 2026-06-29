@@ -24,9 +24,9 @@ SERVICES = [
     "gitops/manifest-render-worker",
     "gitops/diff-worker",
     "gitops/diff-analyze-worker",
-    "gitops/repo-gateway-worker",
-    "projection/dashboard-projection-service",
-    "projection/audit-timeline-service",
+    "gitops/scm-worker",
+    "projection/dashboard-worker",
+    "projection/audit-worker",
 ]
 
 

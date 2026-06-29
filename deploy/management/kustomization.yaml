@@ -6,5 +6,5 @@ resources:
   - pgbouncer.yaml
   - nats.yaml
   - services.yaml
-  - github-poller.yaml
+  - github-poll-worker.yaml
 
