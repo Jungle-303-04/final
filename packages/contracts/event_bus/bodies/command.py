@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
-from packages.contracts.event_bus.bodies.gitops import Diff
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.domains.gitops.events import Diff
 
 
 @event(EventSubject.COMMAND_REQUESTED)
