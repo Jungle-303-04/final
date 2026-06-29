@@ -2122,7 +2122,7 @@ source_ref.target_id: integration target id
 Target/Telemetry 담당이 먼저 구현할 것:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
   raw -> EvidenceDraft 변환
 
 tests/test_target_metric_evidence.py

@@ -129,7 +129,7 @@ packages/contracts/event_bus/bodies/
 처음 위치 후보:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 ```
 
 나중 흐름:

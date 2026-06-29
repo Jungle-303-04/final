@@ -138,7 +138,7 @@ packages/contracts/event_bus/bodies/
 처음 구현 위치 후보:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 ```
 
 나중에 Gateway/RCA/Event 계약이 확정되면 그때 변환한다.
@@ -444,7 +444,7 @@ DB query span 시간이 기준보다 길다.
 처음 구현 후보 파일:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 ```
 
 처음 만들 class 후보:
