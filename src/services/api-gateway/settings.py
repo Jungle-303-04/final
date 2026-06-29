@@ -50,4 +50,5 @@ class Settings:
     OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
+    OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
