@@ -6,7 +6,7 @@
 규칙: 입력은 Pydantic으로 검증, 출력(이 패키지)은 dataclass로 구성.
 
 도메인별 base/gitops/command/rca/dashboard 모듈로 분리, 여기서 전부
-재노출 → `from ...payloads import X` 그대로 동작.
+재노출 → `from packages.contracts.event_bus.bodies import X`로 사용.
 """
 
 from __future__ import annotations
