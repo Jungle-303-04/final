@@ -1,19 +1,14 @@
+"""projection 도메인 repository — 대시보드 read model."""
+
 from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.projection.models import DashboardCard
 from packages.config.settings import now_iso
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
-from packages.storage.engine import (
-    DASHBOARD_LIMIT,
-    DatabaseConnection,
-    row_dict,
-)
-from packages.storage.schema import (
-    AuditLog,
-    DashboardCard,
-)
+from packages.storage.engine import DASHBOARD_LIMIT, DatabaseConnection, row_dict
 
 
 class DashboardRepository(DatabaseConnection):
@@ -52,17 +47,3 @@ class DashboardRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [row_dict(row) for row in rows]
-
-
-class AuditLogRepository(DatabaseConnection):
-    def append_audit_log(self, evt: EventEnvelope) -> None:
-        table = AuditLog.__table__
-        statement = pg_insert(table).values(
-            event_id=evt.event_id,
-            subject=evt.subject,
-            source=evt.source,
-            correlation_id=evt.correlation_id,
-            payload=evt.payload,
-        )
-        with self.connection() as conn:
-            conn.execute(statement)
