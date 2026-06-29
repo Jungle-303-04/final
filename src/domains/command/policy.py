@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
-from command_config import PolicyRuleConfig
-
+from domains.command.policy_config import PolicyRuleConfig
 from packages.config.errors import require
 
 
@@ -68,6 +67,7 @@ class Result:
 
     def require_reason(self) -> str:
         require(self.reason is not None, "정책 거부에 reason 필요")
+        assert self.reason is not None  # require 가 보장(타입체커 내로잉)
         return self.reason
 
 
@@ -77,7 +77,7 @@ class Policy:
 
     @classmethod
     def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
-        rules: list[Rule] = [EqualsRule.build(config) for config in configs]
+        rules: list[Rule] = [cast(Rule, EqualsRule.build(config)) for config in configs]
         return cls(rules)
 
     def evaluate(self, target: Lookup) -> Result:
