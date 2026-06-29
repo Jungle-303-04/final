@@ -1,7 +1,7 @@
 """이벤트 타입 레지스트리(전역 계약, 카탈로그).
 
 "어떤 이벤트가 있나"만 담당(정적, 전역 공유 계약).
-- @events.reg(SUBJECT): body ↔ 이벤트 매핑.
+- @event(SUBJECT): body ↔ 이벤트 매핑.
 - describe(): make events 로 한눈에 보는 표.
 
 실제 구독/실행(런타임)은 packages/runtime/ 의 App + dispatch 담당.
@@ -19,7 +19,7 @@ from packages.contracts.event_bus.subjects import EventSubject
 
 @dataclass(frozen=True)
 class Subscription:
-    """App.sub 가 만드는 핸들러 바인딩(subject ↔ body ↔ 함수)."""
+    """App.on 가 만드는 핸들러 바인딩(subject ↔ body ↔ 함수)."""
 
     subject: EventSubject
     body_type: type
@@ -28,14 +28,14 @@ class Subscription:
 
 
 class EventRegistry:
-    """전역 이벤트 카탈로그(주소록). @events.reg 로 이벤트 타입이 적힌다."""
+    """전역 이벤트 카탈로그(주소록). @event 로 이벤트 타입이 적힌다."""
 
     def __init__(self) -> None:
         self._defs: dict[EventSubject, type] = {}
         self._handlers: dict[EventSubject, tuple[str, str]] = {}
         self._raw_handlers: list[tuple[str, str]] = []
 
-    def reg(self, subject: EventSubject) -> Callable[[type], type]:
+    def define(self, subject: EventSubject) -> Callable[[type], type]:
         def decorator(body_type: type) -> type:
             body_type.__subject__ = subject
             self._defs[subject] = body_type
@@ -68,3 +68,4 @@ class EventRegistry:
 
 
 events = EventRegistry()
+event = events.define  # @event(SUBJECT): body ↔ 이벤트 선언 데코레이터

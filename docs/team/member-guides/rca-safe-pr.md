@@ -45,7 +45,7 @@ Audit Timeline Service
 
 ## 이벤트 시스템을 몰라도 되는 작업 규칙
 
-- RCA Worker는 `@app.sub(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
+- RCA Worker는 `@app.on(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
 - handler 입력은 타입이 있는 body 객체이며, 원본 envelope의 transport 필드는 `EventEnvelope.payload`다.
 - 새로운 사실을 만들면 body DTO로 감싸서 `yield`로 발행한다.
 - GitHub PR을 실제로 만들 때도 event에는 PR URL, branch, commit SHA, credential_ref 같은 reference만 남긴다.
@@ -60,7 +60,7 @@ Audit Timeline Service
 
 ## 코드 규칙
 
-- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.sub(BodyType)`으로 선언한다.
+- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.on(BodyType)`으로 선언한다.
 - `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
 - Worker는 다음 이벤트 body를 `yield`로 발행한다(체이닝).
 - Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
@@ -379,7 +379,7 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
 - 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
 - RCA/Safe PR 동작 테스트 존재
-- handler가 `@app.sub` body DTO 흐름을 유지함
+- handler가 `@app.on` body DTO 흐름을 유지함
 - raw NATS 사용 없음
 - 실제 GitHub write는 feature flag 또는 policy guard로 보호
 - audit/dashboard 영향이 문서화됨

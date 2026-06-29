@@ -121,7 +121,7 @@ class OutboxRelay:
 ## 워커 작성자 관점 (변화 0)
 
 ```python
-@app.sub(GitChangedBody)
+@app.on(GitChangedBody)
 async def on_git_changed(evt, ctx: EventContext[RepoChangeStore]):
     await ctx.db.save_repo_change(...)   # ← 그대로 (내부적으로 UoW 트랜잭션)
     yield ManifestRenderedBody(...)      # ← 그대로 (내부적으로 outbox 적재)

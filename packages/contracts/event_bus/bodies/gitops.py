@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from packages.contracts.event_bus.bodies.base import EventBody
-from packages.contracts.event_bus.registry import events
+from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
 
 
@@ -56,7 +56,7 @@ class Diff(EventBody):
     risk: str
 
 
-@events.reg(EventSubject.GIT_WEBHOOK_RECEIVED)
+@event(EventSubject.GIT_WEBHOOK_RECEIVED)
 @dataclass(frozen=True)
 class GitWebhookReceivedBody(EventBody):
     """git.webhook.received — 깃 webhook 입력(gitops 입력)."""
@@ -66,7 +66,7 @@ class GitWebhookReceivedBody(EventBody):
     replicas: int
 
 
-@events.reg(EventSubject.GIT_CHANGED)
+@event(EventSubject.GIT_CHANGED)
 @dataclass(frozen=True)
 class GitChangedBody(EventBody):
     """git.changed — 깃 변경 확정(원시 변경 정보)."""
@@ -76,7 +76,7 @@ class GitChangedBody(EventBody):
     replicas: int
 
 
-@events.reg(EventSubject.MANIFEST_RENDERED)
+@event(EventSubject.MANIFEST_RENDERED)
 @dataclass(frozen=True)
 class ManifestRenderedBody(EventBody):
     """manifest.rendered — k8s manifest 렌더 결과."""
@@ -84,7 +84,7 @@ class ManifestRenderedBody(EventBody):
     rendered_manifest: RenderedManifest
 
 
-@events.reg(EventSubject.DESIRED_DIFF_DETECTED)
+@event(EventSubject.DESIRED_DIFF_DETECTED)
 @dataclass(frozen=True)
 class DiffDetectedBody(EventBody):
     """desired.diff.detected — 적용해야 할 차이를 감지."""
@@ -92,7 +92,7 @@ class DiffDetectedBody(EventBody):
     diff: Diff
 
 
-@events.reg(EventSubject.DIFF_ANALYZED)
+@event(EventSubject.DIFF_ANALYZED)
 @dataclass(frozen=True)
 class DiffAnalyzedBody(EventBody):
     """diff.analyzed — diff 위험도 분석 결과."""

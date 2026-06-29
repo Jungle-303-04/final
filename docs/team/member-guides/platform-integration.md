@@ -56,7 +56,7 @@ Infrastructure
 팀원에게는 내부 구현보다 아래 네 가지를 반복해서 알려준다.
 
 1. 어떤 event subject를 구독하는가.
-2. handler는 어떤 body DTO를 읽는가(`@app.sub(BodyType)`).
+2. handler는 어떤 body DTO를 읽는가(`@app.on(BodyType)`).
 3. 처리 후 어떤 event subject를 발행하는가.
 4. retry/DLQ/ack/nak는 runtime이 처리한다.
 
@@ -193,7 +193,7 @@ Infrastructure
 
 - subject naming test.
 - body required field test.
-- worker `@app.sub` subscription subject 존재 test.
+- worker `@app.on` subscription subject 존재 test.
 - docs/events subject mention test는 가능하면 추가.
 
 생각할 것:

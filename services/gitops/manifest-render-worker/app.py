@@ -29,7 +29,7 @@ MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
 
 
-@app.sub(GitChangedBody)
+@app.on(GitChangedBody)
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
 ) -> AsyncIterator[EventBody]:
