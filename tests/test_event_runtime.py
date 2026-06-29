@@ -18,6 +18,12 @@ class FakeMessage:
         self.acked = False
         self.nak_delay: int | None = None
 
+    @classmethod
+    def raw(cls, data: bytes) -> FakeMessage:
+        message = cls({})
+        message.data = data
+        return message
+
     async def ack(self) -> None:
         self.acked = True
 
@@ -59,6 +65,7 @@ class FakeProcessingStore:
 class FakeDeadLetters:
     def __init__(self) -> None:
         self.captured: list[tuple[EventEnvelope, str, str, int]] = []
+        self.raw: list[tuple[bytes, str, str]] = []
 
     async def capture(
         self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int
@@ -70,6 +77,16 @@ class FakeDeadLetters:
             {"original_event_id": evt.event_id, "attempts": attempts},
             evt.correlation_id,
             evt.event_id,
+        )
+
+    async def capture_raw(self, raw: bytes, consumer: str, error: Exception) -> EventEnvelope:
+        self.raw.append((raw, consumer, str(error)))
+        return event(
+            "dead_letter.created",
+            consumer,
+            {"original_subject": "__decode_failed__", "raw": raw.decode(errors="replace")},
+            "decode-failure",
+            None,
         )
 
 
@@ -158,5 +175,32 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
             (evt.event_id, "command-worker", EventProcessingStatus.DEAD_LETTERED)
         ]
         assert dead_letters.captured[0][1:] == ("command-worker", "permanent failure", 2)
+
+    asyncio.run(run())
+
+
+def test_event_processor_acks_and_raw_dead_letters_decode_failure() -> None:
+    async def run() -> None:
+        message = FakeMessage.raw(b"{not-json")
+        store = FakeProcessingStore()
+        dead_letters = FakeDeadLetters()
+
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
+            raise AssertionError("handler must not run for malformed payload")
+
+        processor = EventProcessor(
+            "command-worker",
+            handler,
+            store,  # type: ignore[arg-type]
+            dead_letters,  # type: ignore[arg-type]
+            EventRetryPolicy(max_attempts=2),
+        )
+
+        await processor.process(message)
+
+        assert message.acked is True
+        assert message.nak_delay is None
+        assert dead_letters.raw[0][0] == b"{not-json"
+        assert store.recorded == []
 
     asyncio.run(run())

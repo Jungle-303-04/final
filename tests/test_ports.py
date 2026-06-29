@@ -47,6 +47,16 @@ class FakeAgentCommandQueue:
         self.queued.append((correlation_id, plan, status))
 
 
+def command_diff() -> dict[str, str]:
+    return {
+        "resource": "deployment/checkout-api",
+        "namespace": "sandbox",
+        "desired_image": "ghcr.io/project/checkout-api:new",
+        "actual_image": "ghcr.io/project/checkout-api:old",
+        "risk": "sandbox-only",
+    }
+
+
 def test_publish_and_record_uses_event_ports() -> None:
     async def run() -> None:
         publisher = FakeEventPublisher()
@@ -87,7 +97,7 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
             "action": "rollout_restart",
             "namespace": "sandbox",
             "reason": "rollout",
-            "diff": {},
+            "diff": command_diff(),
         }
     )
     outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
@@ -100,7 +110,27 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
     correlation_id, plan, status = queue.queued[0]
     assert correlation_id == "corr-2"
     assert plan["cluster_id"] == "target-cluster-01"
+    assert plan["command_id"] == outs[0].plan.command_id
+    assert plan["idempotency_key"]
     assert status == "queued"
+
+
+def test_command_id_is_deterministic_for_same_input() -> None:
+    command = load_service("command-worker")
+    payload = CommandRequestedBody.from_body(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": command_diff(),
+        }
+    )
+
+    first = command.build_plan(payload, "corr-2")
+    second = command.build_plan(payload, "corr-2")
+
+    assert first.command_id == second.command_id
 
 
 def test_policy_evaluates_dict_and_model_lookups_alike() -> None:

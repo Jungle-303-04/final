@@ -21,6 +21,9 @@ class HttpManagementPlaneClient:
     def __init__(self, base_url: str, timeout_seconds: int = Settings.HTTP_TIMEOUT_SECONDS) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=timeout_seconds)
+        self.headers = {
+            Settings.AGENT_TOKEN_HEADER: env(Settings.AGENT_TOKEN_ENV, Settings.DEFAULT_AGENT_TOKEN)
+        }
 
     async def __aenter__(self) -> HttpManagementPlaneClient:
         return self
@@ -39,25 +42,52 @@ class HttpManagementPlaneClient:
                 Gateway.AGENT_ID: agent_id,
                 Gateway.CAPABILITIES: capabilities,
             },
+            headers=self.headers,
         )
 
     async def ship_evidence(self, evidence: JsonObject) -> int:
         response = await self.client.post(
-            f"{self.base_url}{gateway_routes.AGENT_EVIDENCE_PATH}", json=evidence
+            f"{self.base_url}{gateway_routes.AGENT_EVIDENCE_PATH}",
+            json=evidence,
+            headers=self.headers,
         )
         return response.status_code
 
-    async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
+    async def poll_command(
+        self, cluster_id: str, agent_id: str, timeout_seconds: int
+    ) -> CommandRecord | None:
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_COMMAND_POLL_PATH}",
-            params={Gateway.CLUSTER_ID: cluster_id, "timeout": timeout_seconds},
+            params={
+                Gateway.CLUSTER_ID: cluster_id,
+                Gateway.AGENT_ID: agent_id,
+                "timeout": timeout_seconds,
+            },
+            headers=self.headers,
         )
         response.raise_for_status()
         return response.json().get(Gateway.COMMAND)
 
-    async def complete_command(self, command_id: str, result: JsonObject) -> None:
+    async def start_command(
+        self, command_id: str, cluster_id: str, lease_id: str, agent_id: str
+    ) -> None:
         await self.client.post(
-            f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}", json=result
+            f"{self.base_url}{gateway_routes.agent_command_start_path(command_id)}",
+            json={
+                Gateway.CLUSTER_ID: cluster_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.LEASE_ID: lease_id,
+            },
+            headers=self.headers,
+        )
+
+    async def complete_command(
+        self, command_id: str, lease_id: str, agent_id: str, result: JsonObject
+    ) -> None:
+        await self.client.post(
+            f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
+            json={**result, Gateway.AGENT_ID: agent_id, Gateway.LEASE_ID: lease_id},
+            headers=self.headers,
         )
 
 
@@ -67,6 +97,7 @@ class TargetClusterAgent:
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
         self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
+        self.agent_id = env(Settings.HOSTNAME_ENV, Settings.DEFAULT_AGENT_ID)
         self.interval = int(
             env(Settings.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
         )
@@ -88,7 +119,7 @@ class TargetClusterAgent:
             try:
                 await client.register_agent(
                     self.cluster_id,
-                    env(Settings.HOSTNAME_ENV, Settings.DEFAULT_AGENT_ID),
+                    self.agent_id,
                     Settings.AGENT_CAPABILITIES,
                 )
                 return
@@ -109,15 +140,19 @@ class TargetClusterAgent:
         while True:
             try:
                 command = await client.poll_command(
-                    self.cluster_id, Settings.COMMAND_POLL_TIMEOUT_SECONDS
+                    self.cluster_id, self.agent_id, Settings.COMMAND_POLL_TIMEOUT_SECONDS
                 )
                 if command:
                     command_id = command[Gateway.COMMAND_ID]
+                    lease_id = command[Gateway.LEASE_ID]
                     action = command[Gateway.ACTION]
                     print(f"agent executing command {command_id} action={action}", flush=True)
+                    await client.start_command(command_id, self.cluster_id, lease_id, self.agent_id)
                     await asyncio.sleep(Settings.COMMAND_EXECUTION_DELAY_SECONDS)
                     await client.complete_command(
                         command_id,
+                        lease_id,
+                        self.agent_id,
                         {
                             Gateway.STATUS: Settings.COMMAND_COMPLETED_STATUS,
                             Gateway.CLUSTER_ID: self.cluster_id,
