@@ -132,10 +132,10 @@ if __name__ == "__main__":
 - `WorkerService`: JetStream subject 구독 worker process(내부용)
 - `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
 
-dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
 
 ```python
-@app.on_event
+@app.on_any
 async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
