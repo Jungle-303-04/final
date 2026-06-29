@@ -4,16 +4,25 @@ import asyncio
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from settings import (
     COLLECT_INTERVAL_ENV,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
+    DEFAULT_KUBERNETES_SERVICE_HOST,
+    DEFAULT_KUBERNETES_SERVICE_PORT,
     DEFAULT_NODE_NAME,
     DEFAULT_POD_NAME,
     DEFAULT_POD_NAMESPACE,
     DEFAULT_SERVICE_PORT,
+    KUBERNETES_API_TIMEOUT_SECONDS,
+    KUBERNETES_SERVICE_HOST_ENV,
+    KUBERNETES_SERVICE_PORT_ENV,
+    KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
+    KUBERNETES_SERVICEACCOUNT_TOKEN_PATH,
     LOG_LEVEL,
     METRIC_CONTENT_TYPE,
     NODE_NAME_ENV,
@@ -69,7 +78,35 @@ class NodeCollector:
             interval_seconds=int(env(COLLECT_INTERVAL_ENV, DEFAULT_COLLECT_INTERVAL_SECONDS)),
         )
 
-    def snapshot(self) -> NodeRuntimeSample:
+    # Build the in-cluster Kubernetes API server URL from env vars injected by Kubernetes.
+    def kubernetes_api_base_url(self) -> str:
+        host = env(KUBERNETES_SERVICE_HOST_ENV, DEFAULT_KUBERNETES_SERVICE_HOST)
+        port = env(KUBERNETES_SERVICE_PORT_ENV, DEFAULT_KUBERNETES_SERVICE_PORT)
+        return f"https://{host}:{port}" 
+
+    # Read the mounted ServiceAccount token and use it as a Kubernetes API Bearer token.
+    def kubernetes_auth_headers(self) -> dict[str, str]:
+        token = Path(KUBERNETES_SERVICEACCOUNT_TOKEN_PATH).read_text(encoding="utf-8").strip()
+        return {"Authorization": f"Bearer {token}"}
+
+    # List Pods through the Kubernetes API using this Pod's ServiceAccount identity.
+    async def list_pods(self) -> dict[str, object]:
+        async with httpx.AsyncClient(
+            timeout=KUBERNETES_API_TIMEOUT_SECONDS,
+            verify=KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
+        ) as client:
+            response = await client.get(
+                f"{self.kubernetes_api_base_url()}/api/v1/pods",
+                headers=self.kubernetes_auth_headers(),
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def snapshot(self) -> NodeRuntimeSample:
+        # For now, this only proves the collector can reach the Kubernetes API.
+        # The next step will turn the Pod list into node-level metrics.
+        await self.list_pods()
+
         return NodeRuntimeSample(
             node_name=self.node_name,
             pod_name=self.pod_name,
@@ -81,8 +118,8 @@ class NodeCollector:
             runtime=RUNTIME_NAME,
         )
 
-    def prometheus_metrics(self) -> str:
-        sample = self.snapshot()
+    async def prometheus_metrics(self) -> str:
+        sample = await self.snapshot()
         labels = f'node="{sample.node_name}",runtime="{sample.runtime}"'
         return "\n".join(
             [
@@ -103,14 +140,14 @@ class NodeCollector:
             ]
         )
 
-    async def log_forever(self) -> None:
-        while True:
+    async def log_forever(self) -> None: 
+        while True: # background loop
             print(
                 json.dumps(
                     {
                         "service": SERVICE_NAME,
                         "kind": "node_runtime_sample",
-                        "sample": self.snapshot().to_payload(),
+                        "sample": (await self.snapshot()).to_payload(),
                     },
                     ensure_ascii=False,
                 ),
@@ -139,12 +176,12 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
 
     @app.get("/snapshot")
     async def snapshot() -> dict[str, object]:
-        return node_collector.snapshot().to_payload()
+        return (await node_collector.snapshot()).to_payload()
 
     @app.get("/metrics", response_class=PlainTextResponse)
     async def metrics() -> PlainTextResponse:
         return PlainTextResponse(
-            node_collector.prometheus_metrics(),
+            await node_collector.prometheus_metrics(),
             media_type=METRIC_CONTENT_TYPE,
         )
 
