@@ -6,6 +6,9 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.command.models import (
+    AgentCommand,
+)
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.interfaces import CommandRecord
@@ -15,9 +18,6 @@ from packages.storage.engine import (
     DatabaseConnection,
     row_dict,
     serialize_command,
-)
-from packages.storage.schema import (
-    AgentCommand,
 )
 
 
