@@ -130,7 +130,7 @@ EvidenceDraft는 이렇게 바꾼다.
 현재 EvidenceDraft는 아래 파일에 바로 넣을 최종 계약이 아니다.
 
 ```text
-packages/contracts/event_bus/bodies/
+src/packages/contracts/event_bus/bodies/
 ```
 
 아직은 Target Agent 내부에서만 쓰는 중간 모델로 시작한다.
@@ -138,7 +138,7 @@ packages/contracts/event_bus/bodies/
 처음 구현 위치 후보:
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 나중에 Gateway/RCA/Event 계약이 확정되면 그때 변환한다.
@@ -444,7 +444,7 @@ DB query span 시간이 기준보다 길다.
 처음 구현 후보 파일:
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 처음 만들 class 후보:

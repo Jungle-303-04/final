@@ -1,7 +1,7 @@
 # 시크릿 관리
 
 시크릿 도구는 강제하지 않는다. 현재 코드베이스에는 별도 `SecretProvider`
-추상화가 없다. 서비스 설정은 `packages/config/settings.py`의 `env(name,
+추상화가 없다. 서비스 설정은 `src/packages/config/settings.py`의 `env(name,
 default)`로 환경변수에서 읽고, provider token은 평문 값이 아니라
 `token_ref`/`credential_ref` 같은 참조로만 이벤트와 저장소 경계를 지난다.
 
