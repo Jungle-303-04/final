@@ -12,7 +12,6 @@ from packages.config.constants import Runtime
 from packages.config.logs import configure_logging
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EventClient, EventHandler
-from packages.contracts.event_bus.subscriptions import WorkerSubscription
 from packages.runtime.worker import EventHandlerSpec, WorkerRuntime
 from packages.storage.database import Database
 
@@ -62,20 +61,9 @@ class FastApiService:
 @dataclass(frozen=True)
 class WorkerService:
     service_name: str
-    subject: str
+    subjects: tuple[str, ...]
     handler_factory: WorkerHandlerFactory
     durable_name: str | None = None
-
-    @classmethod
-    def from_subscription(
-        cls, subscription: WorkerSubscription, handler_factory: WorkerHandlerFactory
-    ) -> WorkerService:
-        return cls(
-            subscription.service_name,
-            subscription.subject,
-            handler_factory,
-            subscription.durable_name,
-        )
 
     def run(self) -> None:
         AsyncService(self.service_name, self.serve).run()
@@ -83,7 +71,7 @@ class WorkerService:
     async def serve(self) -> None:
         spec = EventHandlerSpec(
             service_name=self.service_name,
-            subject=self.subject,
+            subjects=self.subjects,
             handler_factory=self.handler_factory,
             durable_name=self.durable_name,
         )
