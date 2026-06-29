@@ -8,7 +8,7 @@
 
 ```
 src/
-  packages/                 # 프레임워크(Platform 소유) — 도메인 아님
+  src/packages/                 # 프레임워크(Platform 소유) — 도메인 아님
     config / contracts / events / runtime / storage
   domains/<도메인>/          # 바운디드 컨텍스트(팀원 소유) — 끝까지 한 폴더
     events.py               # 도메인 이벤트(subject + body)
@@ -18,7 +18,7 @@ src/
     schemas.py              # HTTP 요청/응답 DTO(Pydantic) — 필요한 도메인만
     dependencies.py         # 인가 가드/필터(Depends) — 필요한 도메인만
     policy.py / client.py / adapters/  # 도메인 특화 모듈 — 필요한 도메인만
-  services/<서비스>/app.py   # 실행 프로세스(워커 + 얇은 api-gateway 조립기)
+  src/services/<서비스>/app.py   # 실행 프로세스(워커 + 얇은 api-gateway 조립기)
 frontend/                   # 대시보드 UI(별도 owner, node 생태계)
 ```
 
@@ -31,17 +31,17 @@ work-allocation 의 5인 분배를 바운디드 컨텍스트로 분해한다.
 
 | 현재 | 프로덕션 도메인명 | 담당(5인) | 책임 |
 | --- | --- | --- | --- |
-| services/api-gateway + auth | **identity** | Gateway/Auth | 인증·세션·OAuth·토큰볼트·권한(authz) |
-| services/gitops/* (pull→render→diff→analyze) | **gitops** | GitOps/Command | Git 변경 감지→manifest→diff→분석 |
-| services/command-worker | **command** | GitOps/Command | 명령 정책→target agent 큐(control-plane) |
-| services/rca-worker | **rca** | RCA/Safe PR | 증거→근본원인분석 |
-| services/gitops/scm-worker | **scm** | RCA/Safe PR | GitHub PR 생성(유일 outbound writer) |
-| services/projection/dashboard-worker | **projection** | (대시보드 owner) | 대시보드 read model |
-| services/projection/audit-worker | **audit** | RCA/Safe PR | 불변 감사 타임라인 |
-| services/target/* | **telemetry** | Target/Telemetry | target agent·관측성 어댑터·증거 수집·명령 실행 |
+| src/services/api-gateway + auth | **identity** | Gateway/Auth | 인증·세션·OAuth·토큰볼트·권한(authz) |
+| src/services/gitops/* (pull→render→diff→analyze) | **gitops** | GitOps/Command | Git 변경 감지→manifest→diff→분석 |
+| src/services/command-worker | **command** | GitOps/Command | 명령 정책→target agent 큐(control-plane) |
+| src/services/rca-worker | **rca** | RCA/Safe PR | 증거→근본원인분석 |
+| src/services/gitops/scm-worker | **scm** | RCA/Safe PR | GitHub PR 생성(유일 outbound writer) |
+| src/services/projection/dashboard-worker | **projection** | (대시보드 owner) | 대시보드 read model |
+| src/services/projection/audit-worker | **audit** | RCA/Safe PR | 불변 감사 타임라인 |
+| src/services/target/* | **telemetry** | Target/Telemetry | target agent·관측성 어댑터·증거 수집·명령 실행 |
 | dashboard/(UI) | **frontend** | (미정) | React/Vite UI, node 생태계 |
 
-> `packages/`(config·contracts·events·runtime·storage)는 Platform 소유의 **프레임워크**이며 도메인이 아니다.
+> `src/packages/`(config·contracts·events·runtime·storage)는 Platform 소유의 **프레임워크**이며 도메인이 아니다.
 
 ## 3. 도메인별 필요한 모듈 (문서 기반 추론)
 
@@ -70,7 +70,7 @@ route 순서 = **input validation → auth/policy → event publish**.
 | `models.py` | `RepoChange` |
 | `repository.py` | `RepoChangeRepository` |
 | `router.py` | `/github/webhook` |
-| (실행) | `services/gitops/{git-pull,manifest-render,diff,diff-analyze}-worker/app.py` |
+| (실행) | `src/services/gitops/{git-pull,manifest-render,diff,diff-analyze}-worker/app.py` |
 
 ### command (제어)
 | 모듈 | 내용 |
@@ -80,7 +80,7 @@ route 순서 = **input validation → auth/policy → event publish**.
 | `repository.py` | `AgentCommandRepository`(queue/lease/start/complete) |
 | `router.py` | `/commands`, `/agent/command/poll`(롱폴)·`/start`·`/result` |
 | `policy.py` | 명령 정책(sandbox namespace 룰 등) — 도메인 특화 |
-| (실행) | `services/command-worker/app.py` |
+| (실행) | `src/services/command-worker/app.py` |
 
 ### rca (진단)
 **WIKI rca-safe-pr 가이드**: RCA Worker 는 직접 PR 생성 안 함 → `safe_pr.requested` 만 발행.
@@ -97,7 +97,7 @@ RCA 결과는 **evidence 기반으로만** 생성. `users/ummfieg/rca-scenarios/
 | `evidence_builder.py` | raw evidence → 사람이 읽는 요약(`EvidenceBuilt`) |
 | `analyzer.py` | AI RCA Service — 증거+시나리오 지식 → `rca.completed`(근본원인·조치) |
 | `scenarios/` | 40개 장애 시나리오 인디케이터(판정 규칙 소스) |
-| (실행) | `services/rca-worker/app.py` |
+| (실행) | `src/services/rca-worker/app.py` |
 
 ### scm (소스컨트롤/PR)
 | 모듈 | 내용 |
@@ -106,7 +106,7 @@ RCA 결과는 **evidence 기반으로만** 생성. `users/ummfieg/rca-scenarios/
 | `models.py` | `PullRequest` (현재 rca 에 섞임 → scm 으로 이동) |
 | `repository.py` | PR 영속 |
 | `client.py` | GitHub PR 생성 outbound client(feature flag 보호) |
-| (실행) | `services/gitops/scm-worker/app.py` |
+| (실행) | `src/services/gitops/scm-worker/app.py` |
 
 ### projection (read model) / audit
 | 도메인 | 모듈 |
@@ -156,15 +156,15 @@ domains/telemetry/
     loki.py                 # logs 수집
     otel.py                 # traces 수집
   collector.py              # node-collector(DaemonSet) — node/runtime 메트릭
-services/target/cluster-agent/app.py   # 에이전트 프로세스(연결·폴링·증거 ship)
-services/target/node-collector/app.py         # 선택형 DaemonSet
+src/services/target/cluster-agent/app.py   # 에이전트 프로세스(연결·폴링·증거 ship)
+src/services/target/node-collector/app.py         # 선택형 DaemonSet
 ```
 
 특수 고려:
 - **RBAC**: agent 는 자기 클러스터 ServiceAccount 로 sandbox namespace 쓰기만(최소권한). `deploy/target` 의 Role/RoleBinding 로 범위 명시.
 - **adapter 교체**: 실제 Prometheus/Loki/OTel 과 fake adapter 를 같은 인터페이스로 두고 env 로 선택(fake = fallback).
 - **node-collector**: DaemonSet 이라 Fargate 배치 금지(노드별 1개).
-- **증거 스키마 계약**: evidence 모델은 rca 도메인과 공유 계약 → `packages/contracts/event_bus/bodies/` 의 `ClusterEvidenceReceivedBody` 와 정합 유지.
+- **증거 스키마 계약**: evidence 모델은 rca 도메인과 공유 계약 → `src/packages/contracts/event_bus/bodies/` 의 `ClusterEvidenceReceivedBody` 와 정합 유지.
 
 ## 6. 프론트엔드(대시보드) — node 생태계 관리
 

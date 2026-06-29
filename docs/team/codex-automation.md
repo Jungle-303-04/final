@@ -110,7 +110,7 @@ GitHub에서 매번 확인한다:
 아키텍처 제약:
 - 처음부터 완전 분리 마이크로서비스 구조를 지킨다.
 - 단일 FastAPI 앱, 모듈식 모놀리식, role dispatcher, 서비스 간 직접 함수 호출로 회귀하지 않는다.
-- 서비스는 services/<service-name>/app.py entrypoint와 Kubernetes Deployment/DaemonSet 경계를 유지한다.
+- 서비스는 src/services/<service-name>/app.py entrypoint와 Kubernetes Deployment/DaemonSet 경계를 유지한다.
 - 서비스 간 통신은 Gateway HTTP API, NATS JetStream event, 명시된 storage/queue 계약만 사용한다.
 - production namespace write는 금지하고 sandbox namespace만 사용한다.
 

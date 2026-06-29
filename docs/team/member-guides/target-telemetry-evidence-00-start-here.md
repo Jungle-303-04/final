@@ -11,7 +11,7 @@
 2. Prometheus/Loki/OTel이 각각 무엇을 하는지 눈으로 본다.
 3. raw data가 어떻게 생겼는지 본다.
 4. raw data를 작은 EvidenceDraft로 줄이는 이유를 이해한다.
-5. 나중에 services/target/cluster-agent/evidence.py로 옮길 코드를 찾는다.
+5. 나중에 src/services/target/cluster-agent/evidence.py로 옮길 코드를 찾는다.
 ```
 
 지금 당장 Gateway API, NATS event, RCA Worker까지 연결하지 않는다. 그 계약은 아직 움직일 수 있기 때문이다.
@@ -300,7 +300,7 @@ latest_value(raw) 함수가 이 값을 뽑는다.
 후보 위치:
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 ## 6단계. Loki raw query 보기
@@ -404,7 +404,7 @@ metric_evidence(...)
 처음 만들 파일 후보:
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 처음 만들 테스트 후보:
@@ -479,7 +479,7 @@ Prometheus raw JSON에서 0.19를 뽑아서 EvidenceDraft로 만든다.
 지금 바로 아래 파일에 계약을 추가하지 않는다.
 
 ```text
-packages/contracts/event_bus/bodies/
+src/packages/contracts/event_bus/bodies/
 ```
 
 이유:
