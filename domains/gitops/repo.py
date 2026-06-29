@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.gitops.tables import RepoChange
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.domains.gitops.tables import RepoChange
 from packages.storage.engine import DatabaseConnection
 
 
