@@ -24,6 +24,24 @@ PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
 RESOURCE_REF = "deployment/checkout-api"
 
 
+def load_actual_resource_image(rendered: ManifestRenderedBody) -> str:
+    # TODO(gitops): query the target cluster desired/actual state through a read-only adapter.
+    # TODO(gitops): compare by resource identity, namespace, kind, and field path, not only image.
+    return PREVIOUS_IMAGE
+
+
+def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
+    rendered = evt.rendered_manifest
+    # TODO(gitops): include create/update/delete operation type and machine-readable risk reasons.
+    return Diff(
+        resource=RESOURCE_REF,
+        namespace=Sandbox.NAMESPACE,
+        desired_image=rendered.spec.image,
+        actual_image=actual_image,
+        risk=Sandbox.RISK_TAG,
+    )
+
+
 @app.on(ManifestRenderedBody)
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext
@@ -46,14 +64,8 @@ async def on_manifest_rendered(
     #
     # 현재 split 구조에서는 rendered manifest body를 받아 Diff 값 객체로 변환하고,
     # subject 발행은 yield DiffDetectedBody(...)로 런타임이 처리한다.
-    rendered = evt.rendered_manifest  # 중첩 디코드로 타입 객체
-    diff = Diff(
-        resource=RESOURCE_REF,
-        namespace=Sandbox.NAMESPACE,
-        desired_image=rendered.spec.image,
-        actual_image=PREVIOUS_IMAGE,
-        risk=Sandbox.RISK_TAG,
-    )
+    actual_image = load_actual_resource_image(evt)
+    diff = build_desired_diff(evt, actual_image)
     yield DiffDetectedBody(diff=diff)
 
 

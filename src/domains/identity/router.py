@@ -20,6 +20,14 @@ router = APIRouter()
 DEFAULT_SCOPES = "profile,email"
 
 
+def resolve_oauth_scopes(provider: str, scopes: str) -> list[str]:
+    # TODO(gateway): load provider-specific scope policy from integration target configuration.
+    scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
+    if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scope_list:
+        scope_list.append(GitHub.REQUIRED_SCOPE)
+    return scope_list
+
+
 def _set_session_cookie(response: Response, session: dict[str, Any]) -> None:
     # 토큰을 JSON 으로 돌려주지 않고 httpOnly 쿠키로 심는다 → JS 가 못 읽어 XSS 탈취 차단.
     secure = env(Auth.COOKIE_SECURE_ENV, "1") != "0"
@@ -31,6 +39,26 @@ def _set_session_cookie(response: Response, session: dict[str, Any]) -> None:
         samesite=Auth.COOKIE_SAMESITE,
         max_age=int(env(Auth.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS)),
     )
+
+
+async def record_oauth_start(
+    events: Any, provider: str, user_id: str, scopes: list[str], state: str
+) -> None:
+    # TODO(gateway): attach organization/project context once integration targets are modeled.
+    await events.accept(
+        EventSubject.OAUTH_START_REQUESTED,
+        {
+            Gateway.PROVIDER: provider,
+            Gateway.USER_ID: user_id,
+            Gateway.SCOPES: scopes,
+            Gateway.STATE: state,
+        },
+    )
+
+
+async def record_oauth_connected(events: Any, account: dict[str, Any]) -> Any:
+    # TODO(gateway): store only token_ref in event payload and keep provider tokens inside Token Broker.
+    return await events.accept(EventSubject.OAUTH_CONNECTED, account)
 
 
 @router.get(gateway_routes.AUTH_SESSION_PATH)
@@ -51,19 +79,9 @@ async def oauth_start(
     auth: Any = Depends(get_auth),
     events: Any = Depends(get_events),
 ) -> dict[str, Any]:
-    scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
-    if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scope_list:
-        scope_list.append(GitHub.REQUIRED_SCOPE)
+    scope_list = resolve_oauth_scopes(provider, scopes)
     response = await auth.start(provider, user_id, scope_list)
-    await events.accept(
-        EventSubject.OAUTH_START_REQUESTED,
-        {
-            Gateway.PROVIDER: provider,
-            Gateway.USER_ID: user_id,
-            Gateway.SCOPES: scope_list,
-            Gateway.STATE: response[Gateway.STATE],
-        },
-    )
+    await record_oauth_start(events, provider, user_id, scope_list, response[Gateway.STATE])
     return response
 
 
@@ -77,7 +95,7 @@ async def oauth_callback(
 ) -> dict[str, Any]:
     result = await auth.callback(provider, payload.model_dump())
     account = result[Gateway.ACCOUNT]
-    accepted = await events.accept(EventSubject.OAUTH_CONNECTED, account)
+    accepted = await record_oauth_connected(events, account)
     session = result[Gateway.SESSION]
     _set_session_cookie(response, session)  # 토큰은 httpOnly 쿠키로만 전달(바디로 노출 안 함)
     return {

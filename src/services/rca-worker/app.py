@@ -30,12 +30,11 @@ OBJECT_EVIDENCE_PREFIX = "object://evidence"
 EVIDENCE_KIND = "rca_bundle"
 
 
-@app.on(ClusterEvidenceReceivedBody)
-async def on_cluster_evidence(
-    evt: ClusterEvidenceReceivedBody, ctx: EventContext[RcaStore]
-) -> AsyncIterator[EventBody]:
-    evidence_ref = f"{OBJECT_EVIDENCE_PREFIX}/{ctx.correlation_id}.json"
-    evidence = Evidence(
+def build_evidence_bundle(evt: ClusterEvidenceReceivedBody, correlation_id: str) -> Evidence:
+    # TODO(rca): normalize raw Kubernetes/metrics/logs/traces into a bounded evidence bundle.
+    # TODO(rca): store large raw artifacts externally and keep only object refs in event payloads.
+    evidence_ref = f"{OBJECT_EVIDENCE_PREFIX}/{correlation_id}.json"
+    return Evidence(
         cluster_id=evt.cluster_id,
         kubernetes=evt.kubernetes,
         metrics=evt.metrics,
@@ -43,9 +42,34 @@ async def on_cluster_evidence(
         traces=evt.traces,
         object_ref=evidence_ref,
     )
-    report = RcaCompletedBody(
-        root_cause=ROOT_CAUSE, action=RECOMMENDED_ACTION, evidence_ref=evidence.object_ref
+
+
+def evaluate_rca_scenarios(evidence: Evidence) -> RcaCompletedBody:
+    # TODO(rca): evaluate evidence-backed scenarios and return insufficient_evidence when confidence is low.
+    # TODO(rca): keep AI/rule analysis behind a port so prompts, rules, and fallbacks are testable.
+    return RcaCompletedBody(
+        root_cause=ROOT_CAUSE,
+        action=RECOMMENDED_ACTION,
+        evidence_ref=evidence.object_ref,
     )
+
+
+def build_safe_pr_request(report: RcaCompletedBody) -> SafePrRequestedBody:
+    # TODO(rca): route to draft_pr, auto, approval_required, or forbidden based on RCA policy.
+    # TODO(rca): include evidence refs and rollback safety checklist instead of constant prose.
+    return SafePrRequestedBody(
+        title=PR_TITLE,
+        body=f"RCA: {report.root_cause}\n\nAction: {report.action}",
+        provider=GitHub.PROVIDER,
+    )
+
+
+@app.on(ClusterEvidenceReceivedBody)
+async def on_cluster_evidence(
+    evt: ClusterEvidenceReceivedBody, ctx: EventContext[RcaStore]
+) -> AsyncIterator[EventBody]:
+    evidence = build_evidence_bundle(evt, ctx.correlation_id)
+    report = evaluate_rca_scenarios(evidence)
     await ctx.db.save_evidence(ctx.correlation_id, EVIDENCE_KIND, evidence.to_body())
     await ctx.db.save_rca_report(
         ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_body()
@@ -54,11 +78,7 @@ async def on_cluster_evidence(
     # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 담당.
     yield EvidenceBuiltBody(evidence=evidence)
     yield report
-    yield SafePrRequestedBody(
-        title=PR_TITLE,
-        body=f"RCA: {ROOT_CAUSE}\n\nAction: {RECOMMENDED_ACTION}",
-        provider=GitHub.PROVIDER,
-    )
+    yield build_safe_pr_request(report)
 
 
 if __name__ == "__main__":
