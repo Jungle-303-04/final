@@ -20,6 +20,7 @@
 팀원별 차이는 `TEAM_MEMBER_GITHUB_ID` 값 하나뿐이며, 자동화는 GitHub issue, PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 계산한다.
 
 - 공통 프롬프트: `docs/team/codex-automation.md`
+- 역할별 구현 TODO 원장: `docs/team/implementation-todo.md`
 - 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
 - PR 기준: `dev` base draft PR
 - 변경 가능 범위: 아래 작업 경계 표와 각 member guide
@@ -31,11 +32,11 @@
 
 | 역할 | 자유롭게 변경 가능 | 변경 전 조율 필요 |
 | --- | --- | --- |
-| Platform/Integration | `packages/config`, `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
-| Gateway/Auth | `services/api-gateway`, `packages/contracts/gateway`, `packages/contracts/identity`, `packages/contracts/integrations`, `packages/contracts/security` | event subject, shared DB schema, target agent protocol |
-| GitOps/Command | `services/gitops/*`, `services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
-| RCA/Safe PR | `services/rca-worker`, `services/gitops/scm-worker`, `services/projection/audit-worker`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
-| Target/Telemetry | `services/target/cluster-agent`, `services/target/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
+| Platform/Integration | `src/packages/config`, `src/packages/contracts`, `src/packages/events`, `src/packages/storage`, `src/packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
+| Gateway/Auth | `src/services/api-gateway`, `src/packages/contracts/gateway`, identity/integration/security 계약 | event subject, shared DB schema, target agent protocol |
+| GitOps/Command | `src/services/gitops/*`, `src/services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
+| RCA/Safe PR | `src/services/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
+| Target/Telemetry | `src/services/target/cluster-agent`, `src/services/target/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
 
 ## 현재 코드 경로 기준
 
@@ -44,19 +45,21 @@
 
 | 영역 | 현재 경로 |
 | --- | --- |
-| GitOps pipeline | `services/gitops/git-pull-worker`, `services/gitops/manifest-render-worker`, `services/gitops/diff-worker`, `services/gitops/diff-analyze-worker`, `services/gitops/scm-worker` |
-| Projection | `services/projection/dashboard-worker`, `services/projection/audit-worker` |
-| Target | `services/target/cluster-agent`, `services/target/node-collector` |
+| GitOps pipeline | `src/services/gitops/git-pull-worker`, `src/services/gitops/github-poll-worker`, `src/services/gitops/manifest-render-worker`, `src/services/gitops/diff-worker`, `src/services/gitops/diff-analyze-worker`, `src/services/gitops/scm-worker` |
+| Projection | `src/services/projection/dashboard-worker`, `src/services/projection/audit-worker` |
+| Target | `src/services/target/cluster-agent`, `src/services/target/node-collector` |
 
-## 2026-06-26 기준 미흡한 부분
+## 2026-06-30 기준 미흡한 부분
 
 | 미흡한 부분 | 담당 | 메모 |
 | --- | --- | --- |
 | Gateway/Auth 최종 권한 모델 | Gateway/Auth | 일반 로그인, Redis session, org/project role, integration target/credential, Token Broker를 단계별로 구현 |
 | manifest render와 desired diff 정교화 | GitOps/Command | GitOps event와 command 생성 테스트 필요 |
+| AI 기본 모듈 | RCA/Safe PR | 별도 AI service 분리 전까지 evidence/RCA 질의, command 승인, PR 설명/재생성 입력 경계를 정리 |
 | 실제 GitHub PR 생성 | RCA/Safe PR | Safe PR client는 feature flag로 보호 |
+| agent 관리 로직 | Target/Telemetry | agent registry/status와 command lease 상태 관리 |
 | Prometheus/Loki 실제 adapter | Target/Telemetry | fake adapter는 fallback으로 유지 |
-| outbox 도입 여부 | Platform/Integration | 실제 PR side effect 전 결정 |
+| Outbox relay 운영 하드닝 | Platform/Integration | 실제 provider side effect 전 crash injection, relay source filter, 운영 runbook을 유지 |
 | 수요일 demo script | Platform/Integration + 각 담당자 | 매주 수요일은 실행 가능한 demo 필요 |
 
 ## 주간 협업 흐름
@@ -71,7 +74,7 @@
 ## 팀 간 계약 규칙
 
 - 새 API route: Gateway/Auth가 PR을 열고 schema/docs를 수정한다.
-- 새 event subject/body: 담당자가 `packages/contracts/event_bus/subjects.py`, `packages/contracts/event_bus/bodies/`, `docs/events.md`, test를 함께 수정한다.
+- 새 event subject/body: 담당자가 `src/packages/contracts/event_bus/subjects.py`, `src/packages/contracts/event_bus/bodies/`, `docs/events.md`, test를 함께 수정한다.
 - 새 DB table: 담당자가 `Database.init`, docs, test coverage를 함께 수정한다.
 - 새 Kubernetes permission: Target/Telemetry가 PR에서 RBAC 범위를 설명한다.
 - dashboard 의존성이 생기는 API 변경: 현재는 Gateway/Auth와 Platform/Integration이 문서에 먼저 남긴다.
