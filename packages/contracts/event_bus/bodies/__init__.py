@@ -11,6 +11,18 @@
 
 from __future__ import annotations
 
+from domains.gitops.events import (
+    Diff,
+    DiffAnalyzedBody,
+    DiffDetectedBody,
+    GitChangedBody,
+    GitWebhookReceivedBody,
+    Manifest,
+    ManifestRenderedBody,
+    RenderedManifest,
+    RenderedMetadata,
+    RenderedSpec,
+)
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.bodies.command import (
     CommandCompletedBody,
@@ -33,18 +45,6 @@ from packages.contracts.event_bus.bodies.repo import (
     SafePrCreatedBody,
     SafePrFailedBody,
     SafePrRequestedBody,
-)
-from packages.domains.gitops.events import (
-    Diff,
-    DiffAnalyzedBody,
-    DiffDetectedBody,
-    GitChangedBody,
-    GitWebhookReceivedBody,
-    Manifest,
-    ManifestRenderedBody,
-    RenderedManifest,
-    RenderedMetadata,
-    RenderedSpec,
 )
 
 __all__ = [
