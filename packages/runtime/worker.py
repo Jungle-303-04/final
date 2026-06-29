@@ -223,9 +223,7 @@ class WorkerRuntime:
                     try:
                         await processor.process(message)
                     except Exception as exc:
-                        logger.error(
-                            "processor_error", extra={"context": lifecycle}, exc_info=exc
-                        )
+                        logger.error("processor_error", extra={"context": lifecycle}, exc_info=exc)
                         await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
 
         await self.bus.close()
