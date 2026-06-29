@@ -12,7 +12,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from settings import Settings
 
-from packages.config.constants import Auth, CommandStatus, GitHub, Sandbox, Target
+from domains.identity.router import router as identity_router
+from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.bodies import (
@@ -32,7 +33,6 @@ from packages.contracts.gateway.requests import (
     CommandResultRequest,
     CommandStartRequest,
     GitHubWebhookRequest,
-    OAuthCallbackRequest,
 )
 from packages.events.bus import NatsEventBus
 from packages.runtime.gateway import ApiEventGateway
@@ -50,6 +50,10 @@ class ApiGateway:
         self.app = FastAPI(
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )
+        # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
+        self.app.state.db = self.db
+        self.app.state.events = self.events
+        self.app.state.auth = self.auth
         self.configure_routes()
 
     @asynccontextmanager
@@ -69,7 +73,7 @@ class ApiGateway:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
         app = self.app
         self._register_health_routes(app)
-        self._register_auth_routes(app)
+        app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         self._register_ingest_routes(app)
         self._register_command_routes(app)
         self._register_dead_letter_routes(app)
@@ -124,47 +128,6 @@ class ApiGateway:
                 return row
             await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
         return None
-
-    def _register_auth_routes(self, app: FastAPI) -> None:
-        @app.get(gateway_routes.AUTH_SESSION_PATH)
-        async def session(request: Request) -> dict[str, Any]:
-            current = await self.auth.require_session(request)
-            return {
-                Gateway.AUTHENTICATED: True,
-                Gateway.USER_ID: current.user_id,
-                Gateway.ROLES: current.roles,
-            }
-
-        @app.get(gateway_routes.OAUTH_START_PATH)
-        async def oauth_start(
-            provider: str, user_id: str = Auth.LOCAL_USER_ID, scopes: str = Settings.DEFAULT_SCOPES
-        ) -> dict[str, Any]:
-            scope_list = [scope.strip() for scope in scopes.split(",") if scope.strip()]
-            if provider == GitHub.PROVIDER and GitHub.REQUIRED_SCOPE not in scope_list:
-                scope_list.append(GitHub.REQUIRED_SCOPE)
-            response = await self.auth.start(provider, user_id, scope_list)
-            await self.events.accept(
-                EventSubject.OAUTH_START_REQUESTED,
-                {
-                    Gateway.PROVIDER: provider,
-                    Gateway.USER_ID: user_id,
-                    Gateway.SCOPES: scope_list,
-                    Gateway.STATE: response[Gateway.STATE],
-                },
-            )
-            return response
-
-        @app.post(gateway_routes.OAUTH_CALLBACK_PATH)
-        async def oauth_callback(provider: str, payload: OAuthCallbackRequest) -> dict[str, Any]:
-            result = await self.auth.callback(provider, payload.model_dump())
-            account = result[Gateway.ACCOUNT]
-            accepted = await self.events.accept(EventSubject.OAUTH_CONNECTED, account)
-            return {
-                Gateway.ACCEPTED: True,
-                Gateway.EVENT_ID: accepted.event.event_id,
-                Gateway.TOKEN_REF: account[Gateway.TOKEN_REF],
-                Gateway.SESSION: result[Gateway.SESSION],
-            }
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
         @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
