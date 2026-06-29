@@ -104,6 +104,27 @@ class ApiGateway:
         }
         return Diff.from_body(raw)
 
+    async def _lease_next_command(
+        self, cluster_id: str, agent_id: str, timeout: int
+    ) -> dict[str, Any] | None:
+        """롱폴 — 이 클러스터(cluster_id)의 다음 명령을 timeout 까지 대기하며 리스.
+
+        agent 가 아웃바운드로 거는 단일 채널. 명령이 생기면 즉시 응답, 없으면 None.
+        """
+        deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
+        while time.time() < deadline:
+            row = await self.db.lease_agent_command(
+                cluster_id,
+                Settings.COMMAND_STATUS_QUEUED,
+                Settings.COMMAND_STATUS_LEASED,
+                agent_id,
+                Settings.COMMAND_LEASE_SECONDS,
+            )
+            if row:
+                return row
+            await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
+        return None
+
     def _register_auth_routes(self, app: FastAPI) -> None:
         @app.get(gateway_routes.AUTH_SESSION_PATH)
         async def session(request: Request) -> dict[str, Any]:
@@ -190,20 +211,10 @@ class ApiGateway:
             agent_id: str = "target-agent",
             timeout: int = Settings.DEFAULT_AGENT_COMMAND_POLL_SECONDS,
         ) -> dict[str, Any]:
+            # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
             self._require_agent(request)
-            deadline = time.time() + min(timeout, Settings.MAX_COMMAND_POLL_SECONDS)
-            while time.time() < deadline:
-                row = await self.db.lease_agent_command(
-                    cluster_id,
-                    Settings.COMMAND_STATUS_QUEUED,
-                    Settings.COMMAND_STATUS_LEASED,
-                    agent_id,
-                    Settings.COMMAND_LEASE_SECONDS,
-                )
-                if row:
-                    return {Gateway.COMMAND: row}
-                await asyncio.sleep(Settings.COMMAND_POLL_SLEEP_SECONDS)
-            return {Gateway.COMMAND: None}
+            row = await self._lease_next_command(cluster_id, agent_id, timeout)
+            return {Gateway.COMMAND: row}
 
         @app.post(gateway_routes.AGENT_COMMAND_START_PATH)
         async def command_start(
