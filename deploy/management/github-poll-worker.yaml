@@ -40,6 +40,8 @@ spec:
                   value: octocat/Hello-World
                 - name: POLL_ONCE
                   value: "1" # 한 번 당기고 종료 — 주기는 CronJob 이 보장.
+                - name: GITHUB_WEBHOOK_SECRET
+                  value: local-webhook-secret # 운영은 Secret 주입. gateway 와 동일 키로 서명.
                 # 무인증은 시간당 60회 제한 → 잦은 폴링 땐 토큰 권장(5000회).
                 # - name: GITHUB_TOKEN
                 #   valueFrom:
