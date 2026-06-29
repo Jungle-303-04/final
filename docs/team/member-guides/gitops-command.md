@@ -89,8 +89,8 @@ Worker 담당자가 꼭 알아야 할 것:
 | 1 | GitOps worker 입력/출력 계약 정리 | event 흐름의 첫 단추를 고정한다. |
 | 2 | Git polling observation -> GitChanged 변환 | polling 결과를 내부 표준 event로 바꾼다. |
 | 3 | Manifest render DTO와 fake renderer | 실제 Git/Kustomize 없이 다음 담당자가 작업 가능하다. |
-| 4 | Desired diff DTO와 diff detector | command 생성 전에 변경 내용을 구조화한다. |
-| 5 | CommandRequested body 생성 | Gateway/Command Worker 연결점을 만든다. |
+| 4 | Desired diff DTO와 diff detector | PR 제안 또는 command 판단 전에 변경 내용을 구조화한다. |
+| 5 | Safe PR request 생성 | 안전한 diff를 바로 실행하지 않고 PR 제안으로 넘긴다. |
 | 6 | Command policy rule 구조 | namespace/action 제한을 범용 rule로 검사한다. |
 | 7 | Planner/Dispatcher/Queue 연결 | command를 Agent가 poll할 수 있는 상태로 만든다. |
 | 8 | E2E worker chain test | subject/body 연결이 끊기지 않았는지 검증한다. |
@@ -112,7 +112,7 @@ GitOps split workers가 어떤 event를 받고 어떤 event를 발행하는지 �
 구현할 것:
 
 - `git.poll.tick`, `git.repo.observed`, `git.changed` 계약 후보 확인.
-- `GitChangedBody`, `ManifestRenderedBody`, `DesiredDiffBody`, `CommandRequestedBody` 확인 또는 보강.
+- `GitChangedBody`, `ManifestRenderedBody`, `DiffDetectedBody`, `SafePrRequestedBody` 확인 또는 보강.
 - 각 body의 필수 필드 정리.
 - `docs/events.md`에 입력/출력 흐름 표 추가.
 
@@ -218,8 +218,8 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 
 왜 해야 하는가:
 
-- command는 diff를 근거로 만들어져야 한다.
-- diff가 구조화되어야 policy가 어떤 namespace/action인지 검사할 수 있다.
+- Safe PR 제안과 command 판단은 diff를 근거로 만들어져야 한다.
+- diff가 구조화되어야 policy가 어떤 namespace/resource인지 검사할 수 있다.
 - RCA/Safe PR도 diff를 근거로 설명할 수 있다.
 
 구현할 것:
@@ -231,59 +231,59 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 
 생각할 것:
 
-- create/update/delete 중 어떤 action을 command로 허용할 것인가.
+- create/update/delete 중 어떤 변경을 Safe PR 또는 command 후보로 볼 것인가.
 - namespace가 없는 cluster-scoped resource는 어떻게 제한할 것인가.
 - diff가 없으면 command를 만들지 말아야 하는가? 맞다.
 
 하지 말 것:
 
-- diff가 비어도 command를 발행하지 않는다.
+- diff가 비어도 후속 요청을 발행하지 않는다.
 - production namespace 변경을 통과시키지 않는다.
 
 테스트:
 
 - diff 있음 -> `desired.diff.detected`.
-- diff 없음 -> command 요청 없음.
+- diff 없음 -> `safe_pr.requested` 또는 command 요청 없음.
 - namespace/action 필드 포함.
 
-## Phase 5. CommandRequested body 생성
+## Phase 5. Safe PR request 생성
 
 목표:
 
 ```text
-diff를 Command Worker가 이해할 수 있는 command.requested event로 변환한다.
+안전한 diff를 repo-gateway-worker가 이해할 수 있는 safe_pr.requested event로 변환한다.
 ```
 
 왜 해야 하는가:
 
-- GitOps split workers는 command를 직접 queue에 넣지 않는다.
-- command policy/dispatch 책임은 Command Worker가 가진다.
-- 두 worker 사이 계약이 명확해야 테스트와 디버깅이 쉽다.
+- GitOps split workers는 target command를 직접 queue에 넣지 않는다.
+- diff가 안전하더라도 바로 실행하지 않고, 사람이 확인 가능한 PR 제안으로 남긴다.
+- command 실행은 Gateway 승인 또는 별도 command 요청을 통해 Command Worker가 담당한다.
 
 구현할 것:
 
-- command requested body DTO (`CommandRequestedBody`).
-- command action 결정.
-- target cluster id 결정.
-- namespace 포함.
-- `command.requested` 발행.
+- safe PR requested body DTO (`SafePrRequestedBody`).
+- PR 제목과 본문 결정.
+- provider 결정.
+- `safe_pr.requested` 발행.
 
 생각할 것:
 
-- action 기본값을 설정에서 받을지, diff에서 결정할지.
-- target cluster id가 없으면 기본값을 둘지 거부할지.
-- command payload에 사람이 읽을 수 있는 reason/summary가 있는지.
+- 어떤 diff를 안전하다고 볼 것인가.
+- PR 본문에 사람이 이해할 수 있는 before/after가 들어가는가.
+- PR 생성에 필요한 credential은 body가 아니라 token_ref/provider 경계로 처리되는가.
 
 하지 말 것:
 
 - Agent command queue에 직접 저장하지 않는다.
 - Target Agent를 직접 호출하지 않는다.
+- `safe_pr.requested` body에 secret을 넣지 않는다.
 
 테스트:
 
-- diff -> command.requested 발행.
-- non-sandbox namespace는 command policy에서 거부될 수 있도록 namespace를 보존.
-- command payload에 secret 없음.
+- 안전한 diff -> `safe_pr.requested` 발행.
+- 위험한 diff -> `diff.analyzed`만 발행.
+- PR payload에 secret 없음.
 
 ## Phase 6. Command policy rule 구조
 
@@ -577,6 +577,7 @@ services/gitops/diff-worker
 
 services/gitops/diff-analyze-worker
   desired.diff.detected를 받아 diff.analyzed 발행
+  안전하면 safe_pr.requested 발행
 
 services/gitops/repo-gateway-worker
   safe_pr.requested를 받아 guarded repo write 또는 fake PR event 발행
