@@ -17,6 +17,9 @@ TODO(handoff): 여기는 "실제로 가져오는" 최소 흐름이다(매번 최
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
 
 import httpx
 from settings import Settings
@@ -33,6 +36,7 @@ class GitHubPoller:
         self.repo = env(Settings.GITHUB_REPO_ENV, Settings.DEFAULT_GITHUB_REPO)
         self.interval = int(env(Settings.POLL_INTERVAL_ENV, Settings.DEFAULT_POLL_INTERVAL_SECONDS))
         self.token = env(Settings.GITHUB_TOKEN_ENV, "")
+        self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
         self.once = bool(env(Settings.POLL_ONCE_ENV, ""))  # CronJob 모드면 1회 후 종료.
         self._client = client
         self._last_sha: str | None = None  # 같은 커밋 중복 POST 만 줄이는 메모리 가드(최소)
@@ -81,15 +85,27 @@ class GitHubPoller:
         return commits[0]["sha"] if commits else None
 
     async def emit_webhook(self, client: httpx.AsyncClient, commit_sha: str) -> None:
-        response = await client.post(
-            f"{self.base_url}{gateway_routes.GITHUB_WEBHOOK_PATH}",
-            json={
+        # 서명은 전송 바이트와 정확히 일치해야 함 → json= 대신 직접 직렬화한 content 를 보낸다.
+        body = json.dumps(
+            {
                 "commit_sha": commit_sha,
                 "image": Settings.DEFAULT_IMAGE,
                 "replicas": Settings.DEFAULT_REPLICAS,
-            },
+            }
+        ).encode()
+        response = await client.post(
+            f"{self.base_url}{gateway_routes.GITHUB_WEBHOOK_PATH}",
+            content=body,
+            headers=self._webhook_headers(body),
         )
         response.raise_for_status()
+
+    def _webhook_headers(self, body: bytes) -> dict[str, str]:
+        headers = {"content-type": "application/json"}
+        if self.webhook_secret:  # 시크릿 있으면 HMAC 서명 첨부(없으면 입구가 거부 → fail-closed).
+            digest = hmac.new(self.webhook_secret.encode(), body, hashlib.sha256).hexdigest()
+            headers[Settings.SIGNATURE_HEADER] = f"{Settings.SIGNATURE_PREFIX}{digest}"
+        return headers
 
     def _github_headers(self) -> dict[str, str]:
         if self.token:
