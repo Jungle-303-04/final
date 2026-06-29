@@ -7,9 +7,9 @@
 
 from __future__ import annotations
 
+from domains.gitops.repo import RepoChangeRepository
 from packages.config.retry import retry_dependency
 from packages.contracts.interfaces import InitializableStore
-from packages.domains.gitops.repo import RepoChangeRepository
 from packages.storage.engine import (
     ERROR_MESSAGE_LIMIT,
     compact_error,
