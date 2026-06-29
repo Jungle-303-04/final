@@ -32,6 +32,7 @@ from packages.storage.schema import (
     RcaReport,
     RepoChange,
     TokenVault,
+    User,
     metadata,
 )
 
@@ -374,6 +375,55 @@ class OAuthRepository(DatabaseConnection):
         return row["token_ref"] if row else None
 
 
+class UserRepository(DatabaseConnection):
+    def get_user_by_email(self, email: str) -> JsonObject | None:
+        table = User.__table__
+        statement = (
+            select(
+                table.c.id,
+                table.c.email,
+                table.c.password_hash,
+                table.c.display_name,
+                table.c.status,
+            )
+            .where(table.c.email == email)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return row_dict(row) if row else None
+
+    def upsert_user(
+        self,
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        status: str,
+    ) -> None:
+        table = User.__table__
+        insert = pg_insert(table).values(
+            id=user_id,
+            email=email,
+            password_hash=password_hash,
+            display_name=display_name,
+            status=status,
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.id],
+            set_={
+                "email": insert.excluded.email,
+                "password_hash": insert.excluded.password_hash,
+                "display_name": insert.excluded.display_name,
+                "status": insert.excluded.status,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
+
 class RepoChangeRepository(DatabaseConnection):
     def save_repo_change(self, correlation_id: str, commit_sha: str, manifest: JsonObject) -> None:
         table = RepoChange.__table__
@@ -584,6 +634,7 @@ class Database(
     EventRepository,
     DeadLetterRepository,
     OAuthRepository,
+    UserRepository,
     RepoChangeRepository,
     AgentCommandRepository,
     RcaRepository,

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
+import hmac
 import json
 import secrets
 import uuid
@@ -13,7 +17,66 @@ from settings import Settings
 from packages.config.constants import Auth
 from packages.config.constants import Redis as RedisConfig
 from packages.config.settings import env
-from packages.contracts.interfaces import OAuthAccountStore, SessionStore
+from packages.contracts.interfaces import OAuthAccountStore, SessionStore, UserStore
+
+PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
+PASSWORD_HASH_NAME = "sha256"
+PASSWORD_HASH_ITERATIONS = 260000
+PASSWORD_SALT_BYTES = 16
+
+
+def _encode_token(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_token(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(PASSWORD_SALT_BYTES)
+    digest = hashlib.pbkdf2_hmac(
+        PASSWORD_HASH_NAME,
+        password.encode("utf-8"),
+        salt,
+        PASSWORD_HASH_ITERATIONS,
+    )
+    return (
+        f"{PASSWORD_HASH_ALGORITHM}"
+        f"${PASSWORD_HASH_ITERATIONS}"
+        f"${_encode_token(salt)}"
+        f"${_encode_token(digest)}"
+    )
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        algorithm, iterations, salt_value, digest_value = password_hash.split("$", 3)
+        if algorithm != PASSWORD_HASH_ALGORITHM:
+            return False
+        salt = _decode_token(salt_value)
+        expected = _decode_token(digest_value)
+        actual = hashlib.pbkdf2_hmac(
+            PASSWORD_HASH_NAME,
+            password.encode("utf-8"),
+            salt,
+            int(iterations),
+        )
+    except (binascii.Error, TypeError, ValueError):
+        return False
+    return hmac.compare_digest(actual, expected)
+
+
+def extract_session_token(request: Request) -> str | None:
+    authorization = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
+    if authorization.lower().startswith(Settings.BEARER_PREFIX):
+        return authorization.split(" ", 1)[1].strip()
+    if request.headers.get(Settings.SESSION_TOKEN_HEADER):
+        return request.headers[Settings.SESSION_TOKEN_HEADER]
+    if request.cookies.get(Auth.SESSION_COOKIE_NAME):
+        return request.cookies[Auth.SESSION_COOKIE_NAME]
+    return None
 
 
 @dataclass(frozen=True)
@@ -58,6 +121,9 @@ class RedisSessionStore:
         return AuthSession(
             token=token, user_id=payload["user_id"], roles=list(payload.get("roles", []))
         )
+
+    async def delete_session(self, token: str) -> None:
+        await self._client().delete(f"{Settings.SESSION_KEY_PREFIX}:{token}")
 
     async def save_oauth_state(self, state: str, payload: dict[str, Any]) -> None:
         await self._client().setex(
@@ -128,20 +194,27 @@ class OAuthAuthService:
         }
 
     async def require_session(self, request: Request) -> AuthSession:
-        token = self._extract_token(request)
+        token = extract_session_token(request)
         session = await self.sessions.get_session(token)
         if session is None:
             raise HTTPException(status_code=401, detail=Settings.AUTHENTICATION_REQUIRED_MESSAGE)
         await self.sessions.check_rate_limit(session.user_id)
         return session
 
-    @staticmethod
-    def _extract_token(request: Request) -> str | None:
-        authorization = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
-        if authorization.lower().startswith(Settings.BEARER_PREFIX):
-            return authorization.split(" ", 1)[1].strip()
-        if request.headers.get(Settings.SESSION_TOKEN_HEADER):
-            return request.headers[Settings.SESSION_TOKEN_HEADER]
-        if request.cookies.get(Auth.SESSION_COOKIE_NAME):
-            return request.cookies[Auth.SESSION_COOKIE_NAME]
-        return None
+
+class PasswordAuthService:
+    def __init__(self, db: UserStore, sessions: SessionStore) -> None:
+        self.db = db
+        self.sessions = sessions
+
+    async def login(self, email: str, password: str) -> AuthSession:
+        user = self.db.get_user_by_email(email)
+        if user is None or user["status"] != Settings.USER_STATUS_ACTIVE:
+            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+        if not verify_password(password, str(user["password_hash"])):
+            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+        return await self.sessions.create_session(str(user["id"]), [Settings.OWNER_ROLE])
+
+    async def logout(self, token: str | None) -> None:
+        if token:
+            await self.sessions.delete_session(token)
