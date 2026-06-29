@@ -25,6 +25,8 @@ spec:
               value: nats://nats:4222
             - name: REDIS_URL
               value: redis://redis:6379/0
+            - name: AGENT_TOKEN
+              value: local-agent-token  # 운영은 Secret 주입(fail-closed)
           ports:
             - name: http
               containerPort: 8000

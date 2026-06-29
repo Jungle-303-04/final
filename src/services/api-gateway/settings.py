@@ -51,4 +51,5 @@ class Settings:
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"
+    AGENT_AUTH_NOT_CONFIGURED_MESSAGE = "agent auth not configured"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"

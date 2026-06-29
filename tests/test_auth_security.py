@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from conftest import ROOT, load_file
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 
 class _FakeSessions:
@@ -36,3 +36,12 @@ def test_oauth_callback_rejects_invalid_state() -> None:
         assert exc.value.status_code == 400
 
     asyncio.run(run())
+
+
+def test_require_agent_fail_closed_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
+    monkeypatch.delenv("AGENT_TOKEN", raising=False)  # 토큰 미설정
+    request = Request({"type": "http", "headers": []})
+    with pytest.raises(HTTPException) as exc:
+        deps.require_agent(request)
+    assert exc.value.status_code == 503  # 약한 기본값으로 열리지 않고 거부

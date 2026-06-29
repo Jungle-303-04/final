@@ -13,9 +13,9 @@ from fastapi import HTTPException, Request
 from packages.config.settings import env
 
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
-DEFAULT_AGENT_TOKEN = "local-agent-token"
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
+AGENT_AUTH_NOT_CONFIGURED_MESSAGE = "agent auth not configured"
 
 
 def get_auth(request: Request) -> Any:
@@ -28,7 +28,9 @@ async def require_session(request: Request) -> Any:
 
 
 def require_agent(request: Request) -> None:
-    """agent 토큰 가드 — target agent outbound 요청 인증."""
-    expected = env(AGENT_TOKEN_ENV, DEFAULT_AGENT_TOKEN)
+    """agent 토큰 가드 — fail-closed. AGENT_TOKEN 미설정이면 약한 기본값으로 열지 않고 거부."""
+    expected = env(AGENT_TOKEN_ENV, "")
+    if not expected:
+        raise HTTPException(status_code=503, detail=AGENT_AUTH_NOT_CONFIGURED_MESSAGE)
     if request.headers.get(AGENT_TOKEN_HEADER) != expected:
         raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
