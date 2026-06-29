@@ -10,13 +10,13 @@
 
 현재 있는 것:
 
-- `services/target/cluster-agent/fake_prometheus.py`
+- `src/services/target/cluster-agent/fake_prometheus.py`
   - 실제 Prometheus가 아니다.
   - `agent.py`의 `create_fake_telemetry_app("prometheus")`를 실행한다.
   - Prometheus처럼 생긴 JSON을 고정으로 반환하는 fake server다.
   - scrape 저장소도 없고 PromQL query engine도 없다.
 
-- `services/target/node-collector/node_collector.py`
+- `src/services/target/node-collector/node_collector.py`
   - 이미 `GET /metrics` endpoint가 있다.
   - Prometheus text format 형태로 sample metric을 반환한다.
   - 첫 real Prometheus scrape target으로 쓰기 좋다.
@@ -92,7 +92,7 @@ Kubernetes API
    - pod phase, deployment replica, node condition 같은 표준 metric을 얻기 쉽다.
    - 우리가 직접 object 상태 exporter를 만들 필요가 줄어든다.
 
-2. `services/target/node-collector`가 `/metrics` 제공
+2. `src/services/target/node-collector`가 `/metrics` 제공
    - 우리 demo에 필요한 node/runtime metric만 직접 노출한다.
    - Prometheus가 이 endpoint를 scrape한다.
    - 예: `node_collector_runtime_ready`, `node_collector_pod_restart_total`.
@@ -253,7 +253,7 @@ examples/workloads/
   demo 사용자 앱 manifest
   GitOps workload diff 대상 가능
 
-services/*/deploy 또는 manifests/
+src/services/*/deploy 또는 manifests/
   management plane 서비스 배포 manifest
   target workload diff 대상 아님
 ```
