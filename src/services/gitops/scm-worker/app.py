@@ -27,6 +27,13 @@ PR_MODE = "fake_github_api_call"
 PR_STATUS_CREATED = "created"
 PR_NUMBER_MODULO = 100000
 MISSING_GITHUB_TOKEN_MESSAGE = "github credential not available"
+SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
+
+
+def safe_pr_failure_reason(exc: Exception) -> str:
+    if isinstance(exc, PermissionError):
+        return MISSING_GITHUB_TOKEN_MESSAGE
+    return SAFE_PR_CREATION_FAILED_MESSAGE
 
 
 @app.on(SafePrRequestedBody)
@@ -63,7 +70,9 @@ async def on_safe_pr_requested(
     async for out in deliver(
         call=create_pr,
         ok=created,
-        fail=lambda exc: SafePrFailedBody(provider=evt.provider, title=evt.title, reason=str(exc)),
+        fail=lambda exc: SafePrFailedBody(
+            provider=evt.provider, title=evt.title, reason=safe_pr_failure_reason(exc)
+        ),
     ):
         yield out
 
