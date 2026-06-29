@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -28,6 +29,10 @@ class EventProcessingStore(EventRecorder, Protocol):
     def fail_event_processing(
         self, evt: EventEnvelope, consumer: str, error: str, status: str
     ) -> None: ...
+
+    def unit_of_work(self) -> AbstractContextManager[Any]: ...  # 트랜잭션 컨텍스트
+
+    def stage_events(self, conn: Any, events: list[EventEnvelope]) -> None: ...  # outbox 적재
 
 
 class DeadLetterStore(Protocol):
