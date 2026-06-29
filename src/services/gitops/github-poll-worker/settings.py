@@ -21,6 +21,11 @@ class Settings:
     GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
     GITHUB_API_BASE = "https://api.github.com"
 
+    # webhook 입구가 HMAC 서명을 검증 → 폴러도 같은 시크릿으로 서명해 통과(gateway 와 동일 키).
+    WEBHOOK_SECRET_ENV = "GITHUB_WEBHOOK_SECRET"
+    SIGNATURE_HEADER = "x-hub-signature-256"
+    SIGNATURE_PREFIX = "sha256="
+
     HTTP_TIMEOUT_SECONDS = 20
     POLL_RETRY_DELAY_SECONDS = 5
 

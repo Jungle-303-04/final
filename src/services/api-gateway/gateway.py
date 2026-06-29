@@ -10,21 +10,16 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
 
 from domains.command.router import router as command_router
+from domains.gitops.router import router as gitops_router
 from domains.identity.router import router as identity_router
 from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
 from packages.config.constants import CommandStatus
 from packages.config.settings import env
-from packages.contracts.event_bus.bodies import (
-    GitWebhookReceivedBody,
-)
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
-from packages.contracts.gateway.requests import (
-    AgentConnectRequest,
-    GitHubWebhookRequest,
-)
+from packages.contracts.gateway.requests import AgentConnectRequest
 from packages.events.bus import NatsEventBus
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
@@ -65,6 +60,7 @@ class ApiGateway:
         app = self.app
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         self._register_ingest_routes(app)
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
@@ -92,11 +88,6 @@ class ApiGateway:
             raise HTTPException(status_code=401, detail=Settings.AGENT_AUTH_REQUIRED_MESSAGE)
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
-        @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
-        async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
-            accepted = await self.events.accept_body(GitWebhookReceivedBody(**payload.model_dump()))
-            return accepted.response(include_event=True)
-
         @app.post(gateway_routes.AGENT_CONNECT_PATH)
         async def agent_connect(request: Request, payload: AgentConnectRequest) -> dict[str, Any]:
             self._require_agent(request)
