@@ -13,3 +13,9 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# build/deps artifacts (never commit)
+node_modules/
+.vite/
+*.tsbuildinfo
+dashboard/test-results/
