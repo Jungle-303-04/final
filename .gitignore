@@ -19,3 +19,5 @@ node_modules/
 .vite/
 *.tsbuildinfo
 dashboard/test-results/
+.coverage
+htmlcov/
