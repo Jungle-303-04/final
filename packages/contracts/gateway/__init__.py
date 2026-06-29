@@ -5,6 +5,7 @@ from packages.contracts.gateway.requests import (
     AgentEvidenceRequest,
     CommandRequest,
     CommandResultRequest,
+    CommandStartRequest,
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "AgentEvidenceRequest",
     "CommandRequest",
     "CommandResultRequest",
+    "CommandStartRequest",
     "Gateway",
     "GitHubWebhookRequest",
     "OAuthCallbackRequest",

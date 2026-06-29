@@ -21,6 +21,7 @@ class CommandRequestedBody(EventBody):
     reason: str
     diff: Diff
     requested_by: str | None = None
+    actor: JsonObject | None = None
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class Plan(EventBody):
     """에이전트가 실행할 명령 계획(값 객체)."""
 
     command_id: str
+    idempotency_key: str
     cluster_id: str
     action: str
     namespace: str
@@ -75,3 +77,12 @@ class CommandRejectedBody(EventBody):
 
     reason: str
     requested: JsonObject
+
+
+@events.reg(EventSubject.COMMAND_COMPLETED)
+@dataclass(frozen=True)
+class CommandCompletedBody(EventBody):
+    """command.completed — 에이전트가 명령 실행 결과를 보고."""
+
+    command_id: str
+    result: JsonObject

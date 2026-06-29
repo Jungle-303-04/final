@@ -28,6 +28,7 @@ class Gateway(StrEnum):
     ERROR = "error"
     EVENT = "event"
     EVENT_ID = "event_id"
+    LEASE_ID = "lease_id"
     MESSAGE = "message"
     NAMESPACE = "namespace"
     PAYLOAD = "payload"

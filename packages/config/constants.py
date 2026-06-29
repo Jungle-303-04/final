@@ -45,6 +45,14 @@ class Command:
     DEFAULT_ACTION: Final[str] = "rollout_restart"
 
 
+class CommandStatus:
+    QUEUED: Final[str] = "queued"
+    LEASED: Final[str] = "leased"
+    RUNNING: Final[str] = "running"
+    COMPLETED: Final[str] = "completed"
+    FAILED: Final[str] = "failed"
+
+
 class Sandbox:
     NAMESPACE: Final[str] = "sandbox"
     RISK_TAG: Final[str] = (
