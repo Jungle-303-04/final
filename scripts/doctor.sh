@@ -12,7 +12,7 @@ check() {
 }
 
 status=0
-for cmd in git python3 uv docker kubectl kind; do
+for cmd in git python3 uv docker kubectl kind helm; do
   check "${cmd}" || status=1
 done
 
@@ -29,5 +29,6 @@ uv --version || true
 docker --version || true
 kubectl version --client=true || true
 kind version || true
+helm version || true
 
 exit "${status}"
