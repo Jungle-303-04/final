@@ -46,7 +46,7 @@ async def run_worker(module: Any, incoming: EventEnvelope, db: Any) -> list[Even
 
 def test_api_to_outbound_gateway_golden_path() -> None:
     async def run() -> None:
-        db = SpyDb()
+        db = SpyDb(latest_github_token_ref="token-ref-1")  # scm-worker fail-closed 통과용 자격증명
         gateway_events = ApiEventGateway(MemoryPublisher(), MemoryRecorder(), "api-gateway")
         accepted = await gateway_events.accept_body(
             GitWebhookReceivedBody(
