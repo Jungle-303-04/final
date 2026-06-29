@@ -236,12 +236,11 @@ spec:
           image: service:local
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/target/cluster-agent/app.py"]
+          envFrom:
+            - configMapRef:
+                name: target-runtime-config
+            - secretRef:
+                name: target-runtime-secret
           env:
-            - name: TARGET_CLUSTER_ID
-              value: target-cluster-01
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
-            - name: AGENT_TOKEN
-              value: local-agent-token
-            - name: EVIDENCE_INTERVAL_SECONDS
-              value: "8"
