@@ -28,6 +28,7 @@ def test_repo_gateway_fails_closed_without_credential() -> None:
         db=db,
     )
     assert subjects_of(outs) == ["safe_pr.failed"]  # PR 생성 거부
+    assert outs[0].reason == "github credential not available"
     assert not db.called("save_pull_request")  # 저장도 안 함
 
 
@@ -45,4 +46,4 @@ def test_repo_gateway_emits_failed_event_on_provider_error() -> None:
         db=FailingDb(latest_github_token_ref="token-ref-1"),  # 자격증명은 있고 provider 가 실패
     )
     assert subjects_of(outs) == ["safe_pr.failed"]
-    assert outs[0].reason == "github unavailable"
+    assert outs[0].reason == "safe pr creation failed"
