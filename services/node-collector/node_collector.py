@@ -4,25 +4,18 @@ import asyncio
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 
-import httpx
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+from kubernetes_api import KubernetesApiClient, count_not_ready_pods, pods_on_node
+from prometheus_metrics import MetricSample, render_prometheus_metrics
 from settings import (
     COLLECT_INTERVAL_ENV,
     DEFAULT_COLLECT_INTERVAL_SECONDS,
-    DEFAULT_KUBERNETES_SERVICE_HOST,
-    DEFAULT_KUBERNETES_SERVICE_PORT,
     DEFAULT_NODE_NAME,
     DEFAULT_POD_NAME,
     DEFAULT_POD_NAMESPACE,
     DEFAULT_SERVICE_PORT,
-    KUBERNETES_API_TIMEOUT_SECONDS,
-    KUBERNETES_SERVICE_HOST_ENV,
-    KUBERNETES_SERVICE_PORT_ENV,
-    KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
-    KUBERNETES_SERVICEACCOUNT_TOKEN_PATH,
     LOG_LEVEL,
     METRIC_CONTENT_TYPE,
     NODE_NAME_ENV,
@@ -43,14 +36,21 @@ from packages.config.settings import env
 
 @dataclass(frozen=True)
 class NodeRuntimeSample:
+    # One internal snapshot used by /snapshot, structured logs, and /metrics.
     node_name: str
     pod_name: str
     namespace: str
     timestamp: str
+    runtime: str
+
+    # These are still demo runtime samples.
     cpu_usage_ratio: float
     memory_working_set_bytes: int
     filesystem_usage_ratio: float
-    runtime: str
+
+    # These are calculated from the Kubernetes API response.
+    node_pod_count: int
+    node_not_ready_pod_count: int
 
     def to_payload(self) -> dict[str, object]:
         return asdict(self)
@@ -63,11 +63,13 @@ class NodeCollector:
         pod_name: str,
         namespace: str,
         interval_seconds: int,
+        kubernetes: KubernetesApiClient | None = None,
     ) -> None:
         self.node_name = node_name
         self.pod_name = pod_name
         self.namespace = namespace
         self.interval_seconds = interval_seconds
+        self.kubernetes = kubernetes or KubernetesApiClient()
 
     @classmethod
     def from_env(cls) -> NodeCollector:
@@ -78,34 +80,10 @@ class NodeCollector:
             interval_seconds=int(env(COLLECT_INTERVAL_ENV, DEFAULT_COLLECT_INTERVAL_SECONDS)),
         )
 
-    # Build the in-cluster Kubernetes API server URL from env vars injected by Kubernetes.
-    def kubernetes_api_base_url(self) -> str:
-        host = env(KUBERNETES_SERVICE_HOST_ENV, DEFAULT_KUBERNETES_SERVICE_HOST)
-        port = env(KUBERNETES_SERVICE_PORT_ENV, DEFAULT_KUBERNETES_SERVICE_PORT)
-        return f"https://{host}:{port}" 
-
-    # Read the mounted ServiceAccount token and use it as a Kubernetes API Bearer token.
-    def kubernetes_auth_headers(self) -> dict[str, str]:
-        token = Path(KUBERNETES_SERVICEACCOUNT_TOKEN_PATH).read_text(encoding="utf-8").strip()
-        return {"Authorization": f"Bearer {token}"}
-
-    # List Pods through the Kubernetes API using this Pod's ServiceAccount identity.
-    async def list_pods(self) -> dict[str, object]:
-        async with httpx.AsyncClient(
-            timeout=KUBERNETES_API_TIMEOUT_SECONDS,
-            verify=KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
-        ) as client:
-            response = await client.get(
-                f"{self.kubernetes_api_base_url()}/api/v1/pods",
-                headers=self.kubernetes_auth_headers(),
-            )
-            response.raise_for_status()
-            return response.json()
-
     async def snapshot(self) -> NodeRuntimeSample:
-        # For now, this only proves the collector can reach the Kubernetes API.
-        # The next step will turn the Pod list into node-level metrics.
-        await self.list_pods()
+        # Fetch all Pods, then reduce them to metrics for this collector's node.
+        pods_payload = await self.kubernetes.list_pods()
+        node_pods = pods_on_node(pods_payload, self.node_name)
 
         return NodeRuntimeSample(
             node_name=self.node_name,
@@ -116,32 +94,58 @@ class NodeCollector:
             memory_working_set_bytes=SAMPLE_MEMORY_WORKING_SET_BYTES,
             filesystem_usage_ratio=SAMPLE_FILESYSTEM_USAGE_RATIO,
             runtime=RUNTIME_NAME,
+            node_pod_count=len(node_pods),
+            node_not_ready_pod_count=count_not_ready_pods(node_pods),
         )
+
+    def metric_samples(self, sample: NodeRuntimeSample) -> list[MetricSample]:
+        # These labels identify which node produced the sample.
+        # In a multi-node cluster, each DaemonSet Pod will produce the same metric names
+        # with a different node label, and Prometheus can group by node.
+        labels = {
+            "node": sample.node_name,
+            "runtime": sample.runtime,
+        }
+
+        return [
+            MetricSample(
+                name="node_collector_cpu_usage_ratio",
+                help="Node CPU usage ratio.",
+                value=sample.cpu_usage_ratio,
+                labels=labels,
+            ),
+            MetricSample(
+                name="node_collector_memory_working_set_bytes",
+                help="Node memory working set.",
+                value=sample.memory_working_set_bytes,
+                labels=labels,
+            ),
+            MetricSample(
+                name="node_collector_filesystem_usage_ratio",
+                help="Node filesystem usage ratio.",
+                value=sample.filesystem_usage_ratio,
+                labels=labels,
+            ),
+            MetricSample(
+                name="node_collector_node_pod_count",
+                help="Pods scheduled on this Kubernetes node.",
+                value=sample.node_pod_count,
+                labels=labels,
+            ),
+            MetricSample(
+                name="node_collector_node_not_ready_pod_count",
+                help="Pods scheduled on this Kubernetes node that are not Ready.",
+                value=sample.node_not_ready_pod_count,
+                labels=labels,
+            ),
+        ]
 
     async def prometheus_metrics(self) -> str:
         sample = await self.snapshot()
-        labels = f'node="{sample.node_name}",runtime="{sample.runtime}"'
-        return "\n".join(
-            [
-                "# HELP node_collector_cpu_usage_ratio Node CPU usage ratio.",
-                "# TYPE node_collector_cpu_usage_ratio gauge",
-                f"node_collector_cpu_usage_ratio{{{labels}}} {sample.cpu_usage_ratio}",
-                "# HELP node_collector_memory_working_set_bytes Node memory working set.",
-                "# TYPE node_collector_memory_working_set_bytes gauge",
-                (
-                    f"node_collector_memory_working_set_bytes{{{labels}}} "
-                    f"{sample.memory_working_set_bytes}"
-                ),
-                "# HELP node_collector_filesystem_usage_ratio Node filesystem usage ratio.",
-                "# TYPE node_collector_filesystem_usage_ratio gauge",
-                f"node_collector_filesystem_usage_ratio{{{labels}}} "
-                f"{sample.filesystem_usage_ratio}",
-                "",
-            ]
-        )
+        return render_prometheus_metrics(self.metric_samples(sample))
 
-    async def log_forever(self) -> None: 
-        while True: # background loop
+    async def log_forever(self) -> None:
+        while True:
             print(
                 json.dumps(
                     {
