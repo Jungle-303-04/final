@@ -119,15 +119,17 @@ class EventProcessor:
             )
             await message.ack()
             return
-        attempts = 0
+        # 1) claim 을 별도 트랜잭션으로 먼저 커밋. attempt 증가가 핸들러 실패에 롤백되면
+        #    재시도 횟수가 누적되지 않아 영영 DLQ 에 못 간다 → claim 과 업무를 분리한다.
+        with self.store.unit_of_work():
+            processing = self.ledger.begin(evt)  # 처리대장에 "처리 시작" 기록 + attempt 증가
+        if processing.status != EventProcessingStatus.PROCESSING:
+            await message.ack()  # 이미 처리됨/소진됨(중복) → skip(exactly-once 핵심)
+            return
+        attempts = processing.attempts  # 지금까지 시도 횟수(커밋되어 누적)
+        # 2) 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
         try:
-            # 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
             with self.store.unit_of_work() as conn:
-                processing = self.ledger.begin(evt)  # 처리대장에 "처리 시작" 기록/조회
-                if processing.status != EventProcessingStatus.PROCESSING:
-                    await message.ack()  # 이미 처리된 중복 → skip(exactly-once 핵심)
-                    return
-                attempts = processing.attempts  # 지금까지 시도 횟수
                 context = {**event_context(evt), "consumer": self.service_name}
                 logger.info("handling", extra={"context": context})
                 with event_causation(evt.event_id):  # 자식 이벤트들의 부모 = 이 이벤트
@@ -138,10 +140,11 @@ class EventProcessor:
                     )  # 핸들러 실행 → 다음 이벤트 봉투들 수집
                 self.store.stage_events(conn, outbox_events)  # 다음 이벤트들을 outbox 에 적재
                 self.ledger.finish(evt)  # 처리대장에 "완료" 기록
-            # with 끝 = 트랜잭션 커밋(처리대장 + outbox 함께 저장)
+            # with 끝 = 트랜잭션 커밋(업무 + outbox 함께 저장)
             await message.ack()  # NATS 에 "처리 완료" 통보 → 재배달 안 함
         except Exception as exc:
-            await self.fail(message, evt, exc, attempts)  # 실패 → 재시도 or DLQ 판단
+            # claim 이 이미 커밋되어 attempt 가 누적된 상태 → fail 이 그 row 를 갱신(재시도/DLQ).
+            await self.fail(message, evt, exc, attempts)
 
     async def fail(
         self, message: EventMessage, evt: EventEnvelope, error: Exception, attempts: int
