@@ -42,7 +42,9 @@ class App:
         self._raw: tuple[Callable[..., Any], bool] | None = None
 
     def on(self, body_type: type) -> Callable[..., Any]:
-        """타입 구독: 이 body 가 실린 이벤트 1종을 받음."""
+        """
+        타입 구독: 이 body 가 실린 이벤트 1종을 받음.
+        """
         require(self._raw is None, f"{self.name}: @app.on·@app.on_any 혼용 불가", TypeError)
         subject = ensure_registered(body_type)
 
@@ -56,9 +58,8 @@ class App:
         return decorator
 
     def on_any(self, fn: Callable[..., Any]) -> Callable[..., Any]:
-        """전체(>) 구독: 모든 이벤트를 봉투(EventEnvelope) 그대로 받음.
-
-        대시보드/감사처럼 도메인을 가로지르는 프로젝터용.
+        """
+        전체(>) 구독: 모든 이벤트를 봉투(EventEnvelope) 그대로 받음.
         """
         require(not self._handlers and self._raw is None, f"{self.name}: 구독은 하나만", TypeError)
         self._raw = (fn, ensure_handler_signature(fn))
@@ -70,17 +71,16 @@ class App:
         return tuple(self._handlers.values())
 
     def run(self) -> None:
-        """등록된 구독자를 NATS 에 붙여 실행. (런타임은 지연 import)"""
+        """
+        등록된 구독자를 NATS 에 붙여 실행. (런타임은 지연 import)
+        """
         from packages.runtime.service import WorkerService
 
         subjects, factory = self._resolve()
         WorkerService(self.name, tuple(subjects), factory).run()
 
     def _resolve(self) -> tuple[list[str], Callable[..., Any]]:
-        """구독 종류(typed/raw)에 맞는 (subject 목록, 핸들러 팩토리).
-
-        typed 는 subject 여러 개 가능 — 팩토리가 subject→핸들러 라우터를 반환.
-        """
+        """구독 방식별 (subject 목록, 핸들러 factory) 구성 — 전체구독은 '>' 하나, 타입구독은 subject별 라우터."""
         if self._raw is not None:
             fn, wants_ctx = self._raw
 
