@@ -22,9 +22,20 @@ EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
 router = APIRouter(dependencies=[Depends(require_session)])
 
 
+def read_dashboard_cards(db: Any) -> list[dict[str, Any]]:
+    # TODO(projection): scope dashboard cards by organization/project and add pagination.
+    return db.list_dashboard()
+
+
+def encode_dashboard_event(cards: list[dict[str, Any]]) -> str:
+    # TODO(projection): include event ids/correlation ids so clients can resume SSE streams.
+    encoded = json.dumps(cards, default=str)
+    return f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
+
+
 @router.get(gateway_routes.DASHBOARD_QUERY_PATH)
 async def dashboard_query(db: Any = Depends(get_db)) -> dict[str, Any]:
-    return {Gateway.CARDS: db.list_dashboard()}
+    return {Gateway.CARDS: read_dashboard_cards(db)}
 
 
 @router.get(gateway_routes.DASHBOARD_STREAM_PATH)
@@ -32,10 +43,11 @@ async def dashboard_stream(db: Any = Depends(get_db)) -> StreamingResponse:
     async def stream() -> AsyncIterator[str]:
         last = ""
         while True:
-            encoded = json.dumps(db.list_dashboard(), default=str)
+            cards = read_dashboard_cards(db)
+            encoded = json.dumps(cards, default=str)
             if encoded != last:
                 last = encoded
-                yield f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
+                yield encode_dashboard_event(cards)
             await asyncio.sleep(STREAM_INTERVAL_SECONDS)
 
     return StreamingResponse(stream(), media_type=EVENT_STREAM_MEDIA_TYPE)

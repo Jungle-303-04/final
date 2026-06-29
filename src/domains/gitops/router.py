@@ -15,9 +15,14 @@ from packages.runtime.dependencies import get_events
 router = APIRouter(dependencies=[Depends(verify_github_signature)])
 
 
+def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody:
+    # TODO(gitops): normalize branch, repository, installation, and delivery id fields.
+    return GitWebhookReceivedBody(**payload.model_dump())
+
+
 @router.post(gateway_routes.GITHUB_WEBHOOK_PATH)
 async def github_webhook(
     payload: GitHubWebhookRequest, events: Any = Depends(get_events)
 ) -> dict[str, Any]:
-    accepted = await events.accept_body(GitWebhookReceivedBody(**payload.model_dump()))
+    accepted = await events.accept_body(build_git_webhook_body(payload))
     return accepted.response(include_event=True)

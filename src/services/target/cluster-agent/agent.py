@@ -134,7 +134,7 @@ class TargetClusterAgent:
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                status_code = await client.ship_evidence(self.fake_evidence())
+                status_code = await client.ship_evidence(self.build_evidence_payload())
                 print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
@@ -152,47 +152,73 @@ class TargetClusterAgent:
                     action = command[Gateway.ACTION]
                     print(f"agent executing command {command_id} action={action}", flush=True)
                     await client.start_command(command_id, self.cluster_id, lease_id, self.agent_id)
-                    await asyncio.sleep(Settings.COMMAND_EXECUTION_DELAY_SECONDS)
+                    result = await self.execute_command(command)
                     await client.complete_command(
                         command_id,
                         lease_id,
                         self.agent_id,
-                        {
-                            Gateway.STATUS: Settings.COMMAND_COMPLETED_STATUS,
-                            Gateway.CLUSTER_ID: self.cluster_id,
-                            Gateway.APPLIED: True,
-                            Gateway.MESSAGE: Settings.COMMAND_RESULT_MESSAGE,
-                        },
+                        result,
                     )
             except Exception as exc:
                 print(f"command polling failed: {exc}", flush=True)
                 await asyncio.sleep(Settings.COMMAND_RETRY_DELAY_SECONDS)
 
-    def fake_evidence(self) -> JsonObject:
+    async def execute_command(self, command: CommandRecord) -> JsonObject:
+        # TODO(target): map command action to an allowlisted Kubernetes operation in sandbox only.
+        # TODO(target): capture stdout/stderr/status and report partial failure without raw secrets.
+        await asyncio.sleep(Settings.COMMAND_EXECUTION_DELAY_SECONDS)
+        return {
+            Gateway.STATUS: Settings.COMMAND_COMPLETED_STATUS,
+            Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.APPLIED: True,
+            Gateway.MESSAGE: Settings.COMMAND_RESULT_MESSAGE,
+        }
+
+    def build_evidence_payload(self) -> JsonObject:
+        # TODO(telemetry): replace fake collectors with Kubernetes, Prometheus, Loki, and OTel ports.
         return {
             Gateway.CLUSTER_ID: self.cluster_id,
-            "kubernetes": {
-                "pods": [
-                    {
-                        "name": Settings.CRASHING_POD_NAME,
-                        "status": Settings.CRASHING_POD_STATUS,
-                        "restarts": Settings.CRASHING_POD_RESTARTS,
-                    }
-                ],
-                "events": [Settings.K8S_READINESS_FAILED_EVENT, Settings.K8S_BACKOFF_EVENT],
-            },
-            "metrics": {
-                "source": Settings.FAKE_PROMETHEUS_SOURCE,
-                "cpu": Settings.FAKE_NODE_CPU,
-                "memory_mb": Settings.FAKE_NODE_MEMORY_MB,
-                "http_5xx_rate": Settings.FAKE_HTTP_5XX_RATE,
-            },
-            "logs": [
-                {"source": Settings.FAKE_LOKI_SOURCE, "line": Settings.LOKI_ERROR_LINE},
-                {"source": Settings.FAKE_LOKI_SOURCE, "line": Settings.LOKI_WARNING_LINE},
-            ],
-            "traces": {"source": Settings.FAKE_OTEL_SOURCE, "slow_span": Settings.OTEL_SLOW_SPAN},
+            "kubernetes": self.collect_kubernetes_evidence(),
+            "metrics": self.collect_metric_evidence(),
+            "logs": self.collect_log_evidence(),
+            "traces": self.collect_trace_evidence(),
         }
+
+    def collect_kubernetes_evidence(self) -> JsonObject:
+        # TODO(target): read pods/events/nodes with least-privilege RBAC and redact object metadata.
+        return {
+            "pods": [
+                {
+                    "name": Settings.CRASHING_POD_NAME,
+                    "status": Settings.CRASHING_POD_STATUS,
+                    "restarts": Settings.CRASHING_POD_RESTARTS,
+                }
+            ],
+            "events": [Settings.K8S_READINESS_FAILED_EVENT, Settings.K8S_BACKOFF_EVENT],
+        }
+
+    def collect_metric_evidence(self) -> JsonObject:
+        # TODO(telemetry): query Prometheus and return bounded metric summaries, not raw samples.
+        return {
+            "source": Settings.FAKE_PROMETHEUS_SOURCE,
+            "cpu": Settings.FAKE_NODE_CPU,
+            "memory_mb": Settings.FAKE_NODE_MEMORY_MB,
+            "http_5xx_rate": Settings.FAKE_HTTP_5XX_RATE,
+        }
+
+    def collect_log_evidence(self) -> list[JsonObject]:
+        # TODO(telemetry): query Loki and redact sensitive log fields before shipping evidence.
+        return [
+            {"source": Settings.FAKE_LOKI_SOURCE, "line": Settings.LOKI_ERROR_LINE},
+            {"source": Settings.FAKE_LOKI_SOURCE, "line": Settings.LOKI_WARNING_LINE},
+        ]
+
+    def collect_trace_evidence(self) -> JsonObject:
+        # TODO(telemetry): query OpenTelemetry backend and summarize spans by service/operation.
+        return {"source": Settings.FAKE_OTEL_SOURCE, "slow_span": Settings.OTEL_SLOW_SPAN}
+
+    def fake_evidence(self) -> JsonObject:
+        return self.build_evidence_payload()
 
 
 def create_fake_telemetry_app(kind: str) -> FastAPI:
