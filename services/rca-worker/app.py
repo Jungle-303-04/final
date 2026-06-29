@@ -30,7 +30,7 @@ OBJECT_EVIDENCE_PREFIX = "object://evidence"
 EVIDENCE_KIND = "rca_bundle"
 
 
-@app.sub(ClusterEvidenceReceivedBody)
+@app.on(ClusterEvidenceReceivedBody)
 async def on_cluster_evidence(
     evt: ClusterEvidenceReceivedBody, ctx: EventContext[RcaStore]
 ) -> AsyncIterator[EventBody]:

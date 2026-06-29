@@ -25,7 +25,7 @@ UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
 PR_TITLE = "Apply sandbox manifest"
 
 
-@app.sub(DiffDetectedBody)
+@app.on(DiffDetectedBody)
 async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     diff = evt.diff
     safe = diff.risk == Sandbox.RISK_TAG

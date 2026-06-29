@@ -24,7 +24,7 @@ PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
 RESOURCE_REF = "deployment/checkout-api"
 
 
-@app.sub(ManifestRenderedBody)
+@app.on(ManifestRenderedBody)
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:

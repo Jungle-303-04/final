@@ -77,7 +77,7 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
     )
 
 
-@app.sub(CommandRequestedBody)
+@app.on(CommandRequestedBody)
 async def on_command_requested(
     evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:

@@ -27,7 +27,7 @@ outbound = HttpOutbound()  # 외부 호출 어댑터(테스트에서 교체)
 DELIVERED_STATUS = "delivered"
 
 
-@app.sub(DemoPongRequestedBody)
+@app.on(DemoPongRequestedBody)
 async def on_pong_requested(
     evt: DemoPongRequestedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
