@@ -40,6 +40,7 @@ class Gateway(StrEnum):
     SCOPES = "scopes"
     SERVICE = "service"
     SESSION = "session"
+    SESSION_TOKEN = "session_token"
     STATE = "state"
     STATUS = "status"
     STATUS_OK = "ok"
