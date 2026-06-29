@@ -26,7 +26,7 @@ PR_URL_PREFIX = "https://github.example.local/project/repo/pull"
 PR_MODE = "fake_github_api_call"
 PR_STATUS_CREATED = "created"
 PR_NUMBER_MODULO = 100000
-MISSING_GITHUB_TOKEN_REF = "missing-github-oauth-fallback"
+MISSING_GITHUB_TOKEN_MESSAGE = "github credential not available"
 
 
 @app.on(SafePrRequestedBody)
@@ -44,8 +44,11 @@ async def on_safe_pr_requested(
     # outbound 게이트웨이 정형: 외부 호출(PR 생성)의 try/except 는 deliver 가 흡수하고,
     # 핸들러는 "무엇을 호출하고 성공/실패를 어떤 이벤트로 낼지"만 선언(타 게이트웨이와 동일 모양).
     async def create_pr() -> tuple[str, str]:
+        # fail-closed: 자격증명 없으면 약한 fallback 으로 PR 만들지 않고 실패 처리(deliver.fail).
+        token_ref = await ctx.db.latest_github_token_ref()
+        if not token_ref:
+            raise PermissionError(MISSING_GITHUB_TOKEN_MESSAGE)
         pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
-        token_ref = await ctx.db.latest_github_token_ref() or MISSING_GITHUB_TOKEN_REF
         await ctx.db.save_pull_request(
             ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
         )
