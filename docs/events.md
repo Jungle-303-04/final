@@ -1,6 +1,108 @@
-# 이벤트 계약과 DLQ 운영 가이드
+# 이벤트/큐 시스템 사용 가이드
 
 이 문서는 이벤트를 작성, 발행, 구독, 재시도, 재처리할 때 따르는 작업 규칙이다.
+
+팀원이 처음 읽을 때는 내부 NATS, JetStream, ack/nak 세부 구현을 먼저 볼 필요가 없다.
+서비스 담당자는 아래 네 가지만 기억하면 된다.
+
+```text
+1. 내가 받을 이벤트 body를 고른다.
+2. app.py에 @app.sub(BodyType) 핸들러를 만든다.
+3. 처리 결과로 다음 이벤트 body를 yield 한다.
+4. retry, ack, DLQ는 runtime이 처리한다.
+```
+
+## 0. 처음 쓰는 방법
+
+새 worker를 만들거나 기존 worker에 이벤트 흐름을 추가할 때는 이 순서대로 한다.
+
+### 0.1 받을 이벤트 확인
+
+먼저 `packages/contracts/event_bus/bodies/`에서 내가 받을 body를 찾는다.
+
+예를 들어 `command.requested`를 처리하려면 `CommandRequestedBody`를 사용한다.
+
+```python
+from packages.contracts.event_bus.bodies import CommandRequestedBody
+```
+
+body와 subject 연결은 `@events.reg(...)`로 이미 등록되어 있다. 팀원은 subject 문자열을 직접 외울 필요가 없다.
+
+### 0.2 worker handler 작성
+
+worker 파일은 `services/<domain>/<service-name>/app.py` 또는
+`services/<service-name>/app.py` 한 곳에 둔다.
+
+```python
+from collections.abc import AsyncIterator
+
+from packages.contracts.event_bus.bodies import (
+    CommandRequestedBody,
+    CommandRejectedBody,
+    EventBody,
+)
+from packages.runtime.app import App, EventContext
+
+app = App("example-worker")
+
+
+@app.sub(CommandRequestedBody)
+async def on_command_requested(
+    evt: CommandRequestedBody,
+    ctx: EventContext,
+) -> AsyncIterator[EventBody]:
+    if evt.namespace != "sandbox":
+        yield CommandRejectedBody(reason="sandbox only", requested=evt.to_body())
+        return
+
+    # 처리 결과가 있다면 다음 이벤트 body를 yield 한다.
+    # NATS publish, ack, retry, DLQ는 여기서 직접 하지 않는다.
+```
+
+### 0.3 DB가 필요하면 ctx.db를 쓴다
+
+worker가 DB를 써야 하면 `packages/contracts/stores.py`의 필요한 store protocol을
+타입으로 붙인다.
+
+```python
+from packages.contracts.stores import AgentCommandStore
+
+
+@app.sub(CommandRequestedBody)
+async def on_command_requested(
+    evt: CommandRequestedBody,
+    ctx: EventContext[AgentCommandStore],
+) -> AsyncIterator[EventBody]:
+    await ctx.db.queue_agent_command(ctx.correlation_id, evt.to_body(), "queued")
+```
+
+핵심 규칙:
+
+- `ctx.db`는 자기 handler에 필요한 능력만 보이게 한다.
+- DB 호출은 `await` 한다.
+- handler 안에서 직접 PostgreSQL connection을 만들지 않는다.
+
+### 0.4 새 이벤트가 필요하면 계약부터 추가
+
+새 이벤트를 만들 때는 아래 순서로 추가한다.
+
+1. `packages/contracts/event_bus/subjects.py`에 subject 추가
+2. `packages/contracts/event_bus/bodies/<domain>.py`에 `<EventName>Body` 추가
+3. body class에 `@events.reg(EventSubject.X)` 등록
+4. 생산 worker에서 `yield NewBody(...)`
+5. 소비 worker에서 `@app.sub(NewBody)` 사용
+6. `docs/events.md`의 흐름 표 갱신
+7. 테스트 추가
+
+### 0.5 절대 하지 말 것
+
+서비스 담당자는 아래를 직접 하지 않는다.
+
+- raw NATS client import
+- `ack()`, `nak()` 직접 호출
+- `WorkerService.from_subscription(...)` 직접 호출
+- event payload를 raw dict로 마음대로 조립
+- secret/token/kubeconfig를 event body에 넣기
 
 ## 이벤트 Envelope
 
@@ -73,7 +175,14 @@
 
 ## 발행
 
-서비스는 raw NATS가 아니라 `EventClient`를 사용해야 한다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/bodies/`의 body 객체를 우선 사용한다.
+서비스는 raw NATS를 직접 사용하지 않는다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/bodies/`의 body 객체를 사용한다.
+
+현재 서비스 코드에서 발행 방식은 두 가지다.
+
+| 위치 | 발행 방식 | 예 |
+| --- | --- | --- |
+| API Gateway HTTP 입구 | `ApiEventGateway.accept_body(...)` | HTTP request -> root event |
+| Worker handler | `yield SomeBody(...)` | event -> 다음 event |
 
 API Gateway 같은 HTTP 입구는 `packages/runtime/gateway.py`의
 `ApiEventGateway`를 사용한다.
@@ -92,44 +201,37 @@ return accepted.response()
 event table 기록을 함께 처리한다. 로그인/권한 구현이 아직 fake여도 내부
 표현은 `packages/contracts/auth.py`의 `Actor`로 맞춘다.
 
+Worker handler 안에서는 직접 `publish(...)`를 호출하지 않고 다음 body를 `yield`한다.
+
 ```python
-from packages.contracts.event_bus.bodies import CommandRequestedBody, Diff
-from packages.contracts.event_bus.subjects import EventSubject
-
-diff = Diff(
-    resource="deployment/demo",
-    namespace="sandbox",
-    desired_image="demo:v2",
-    actual_image="demo:v1",
-    risk="low",
-)
-
-await self.events.publish(
-    EventSubject.COMMAND_REQUESTED,
-    SERVICE_NAME,
-    CommandRequestedBody(
-        cluster_id="target-cluster-01",
-        action="rollout_restart",
-        namespace="sandbox",
-        reason="desired diff detected",
-        diff=diff,
-    ).to_body(),
-    correlation_id,
-)
+@app.sub(DiffDetectedBody)
+async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext):
+    yield DiffAnalyzedBody(
+        diff=evt.diff,
+        safe=True,
+        risk=evt.diff.risk,
+        reason="sandbox 한정 변경이라 안전",
+    )
 ```
 
-`RecordedEventClient`는 JetStream에 발행하고 PostgreSQL `events`에도 envelope를 저장한다.
+런타임은 yield된 body를 envelope로 바꿔 outbox에 적재하고, relay가 NATS로 발행한다.
+따라서 worker 담당자는 `event_id`, `causation_id`, `ack`, `nak`를 직접 만들지 않는다.
 
-새 API code는 `ApiEventGateway`, 새 worker code는 `EventClient`를 우선 사용한다.
+`RecordedEventClient`는 runtime/API 경계에서 JetStream 발행과 PostgreSQL `events` 저장을 담당한다.
 
-Worker handler 안에서 발행하는 후속 이벤트는 `causation_id`를 직접 넘기지 않아도 된다. `WorkerRuntime`이 현재 처리 중인 원본 이벤트를 context로 잡고, `RecordedEventClient`가 자동으로 원본 `event_id`를 `causation_id`에 넣는다.
-
-Handler는 `EventEnvelope`를 받는다.
+Typed worker handler는 body 객체를 받는다.
 
 ```python
-async def handle(self, evt: EventEnvelope) -> None:
-    payload = evt.payload
-    correlation_id = evt.correlation_id
+async def on_command_requested(evt: CommandRequestedBody, ctx: EventContext):
+    namespace = evt.namespace
+```
+
+dashboard, audit 같은 전체 이벤트 projector는 `EventEnvelope`를 받는다.
+
+```python
+@app.on_event
+async def on_event(evt: EventEnvelope, ctx: EventContext):
+    subject = evt.subject
 ```
 
 `ack`, `nak`, DLQ 이동은 workflow가 직접 처리하지 않는다. 이 책임은 `packages/runtime/worker.py`의 `EventProcessor`에 있다.
@@ -169,7 +271,7 @@ async def on_event(evt: EventEnvelope, ctx):
 
 현재 worker 구독 위치:
 
-| 서비스 | 설정 파일 | 구독 subject |
+| 서비스 | 서비스 파일 | 구독 subject |
 | --- | --- | --- |
 | Git Pull Worker (App) | `services/gitops/git-pull-worker/app.py` | `git.webhook.received` |
 | Manifest Render Worker (App) | `services/gitops/manifest-render-worker/app.py` | `git.changed` |
@@ -317,4 +419,5 @@ single DB transaction
 -> outbox row를 published로 표시
 ```
 
-현재 MVP는 processing ledger와 DLQ를 먼저 구현한다. business write와 emitted event가 반드시 함께 commit되어야 하는 시점에는 outbox relay를 다음 hardening 단계로 추가한다.
+현재 구현은 handler가 yield한 후속 이벤트를 outbox에 적재하고, `OutboxRelay`가 발행한다.
+business write와 emitted event를 더 강하게 묶어야 하는 시점에는 repository 단위 transaction과 relay locking을 다음 hardening 단계로 보강한다.
