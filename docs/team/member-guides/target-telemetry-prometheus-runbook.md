@@ -21,9 +21,9 @@ node-collector /metrics
 
 | 파일 | 현재 상태 | 작업자가 알아야 할 점 |
 | --- | --- | --- |
-| `services/target/cluster-agent/fake_prometheus.py` | fake server 실행 파일 | 실제 Prometheus가 아니다. scrape도 저장도 PromQL도 없다. |
-| `services/target/cluster-agent/agent.py` | Gateway client와 fake evidence loop가 있음 | Gateway 계약은 나중에 바뀔 수 있으므로 지금은 debug query API를 별도로 만든다. |
-| `services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`가 이미 있음 | real Prometheus의 첫 scrape target으로 사용한다. |
+| `src/services/target/cluster-agent/fake_prometheus.py` | fake server 실행 파일 | 실제 Prometheus가 아니다. scrape도 저장도 PromQL도 없다. |
+| `src/services/target/cluster-agent/agent.py` | Gateway client와 fake evidence loop가 있음 | Gateway 계약은 나중에 바뀔 수 있으므로 지금은 debug query API를 별도로 만든다. |
+| `src/services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`가 이미 있음 | real Prometheus의 첫 scrape target으로 사용한다. |
 | `deploy/target/target.yaml` | fake telemetry, node collector, target agent 배포가 있음 | real Prometheus Helm 설치 경로는 아직 없다. |
 | `tests/test_node_collector.py` | node collector 단위 테스트가 있음 | 새 metric 변경은 여기 테스트를 확장한다. |
 | `Makefile` | `make check`, `make up`, `make smoke`가 있음 | 단위 테스트 후 전체 점검에 사용한다. |
@@ -171,7 +171,7 @@ Prometheus가 읽을 첫 target인 `node-collector /metrics`를 안정화한다.
 
 ### 현재 코드
 
-`services/target/node-collector/node_collector.py`에는 이미 있다.
+`src/services/target/node-collector/node_collector.py`에는 이미 있다.
 
 ```text
 GET /metrics
@@ -183,7 +183,7 @@ node_collector_filesystem_usage_ratio
 ### 수정 파일
 
 ```text
-services/target/node-collector/node_collector.py
+src/services/target/node-collector/node_collector.py
 tests/test_node_collector.py
 ```
 
@@ -306,7 +306,7 @@ curl로 확인한 Prometheus query를 Python 코드로 옮긴다.
 새 파일 후보:
 
 ```text
-services/target/cluster-agent/prometheus_client.py
+src/services/target/cluster-agent/prometheus_client.py
 tests/test_target_prometheus_client.py
 ```
 
@@ -331,7 +331,7 @@ class PrometheusClient:
 
 ### 설정
 
-`services/target/cluster-agent/app.py`의 설정 상수에 추가 후보:
+`src/services/target/cluster-agent/app.py`의 설정 상수에 추가 후보:
 
 ```python
 PROMETHEUS_URL_ENV = "PROMETHEUS_URL"
@@ -365,8 +365,8 @@ Gateway 계약이 없어도 Agent가 query를 받아 Prometheus에 실행하는 
 ### 수정 파일
 
 ```text
-services/target/cluster-agent/agent.py
-services/target/cluster-agent/app.py
+src/services/target/cluster-agent/agent.py
+src/services/target/cluster-agent/app.py
 tests/test_target_agent_debug_query.py
 ```
 
@@ -426,7 +426,7 @@ Prometheus raw response를 그대로 반환하지 않고 작은 evidence 형태�
 ### 수정 파일
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 tests/test_target_metric_evidence.py
 ```
 
@@ -466,7 +466,7 @@ class MetricEvidence:
 ### 수정 파일
 
 ```text
-services/target/cluster-agent/kubernetes_reader.py
+src/services/target/cluster-agent/kubernetes_reader.py
 tests/test_target_kubernetes_reader.py
 ```
 

@@ -25,9 +25,9 @@ Audit Timeline Service
 
 ## 담당 영역
 
-- `services/rca-worker`
-- `services/gitops/scm-worker`
-- `services/projection/audit-worker`
+- `src/services/rca-worker`
+- `src/services/gitops/scm-worker`
+- `src/services/projection/audit-worker`
 - Evidence Builder logic
 - AI RCA Service logic
 - Safe PR request/proposal logic
@@ -64,7 +64,7 @@ Audit Timeline Service
 - `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
 - Worker는 다음 이벤트 body를 `yield`로 발행한다(체이닝).
 - Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
-- 발행 body는 `packages/contracts/event_bus/bodies/`의 dataclass를 사용한다(base class `EventBody`).
+- 발행 body는 `src/packages/contracts/event_bus/bodies/`의 dataclass를 사용한다(base class `EventBody`).
 - `correlation_id`를 유지한다.
 - RCA output은 근거 없는 추론보다 확인된 evidence를 우선한다.
 - GitHub PR 생성에는 provider token을 event에 넣지 말고 Token Broker/credential reference를 사용한다.
@@ -376,8 +376,8 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 
 ## PR 체크리스트
 
-- 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
-- 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
+- 새 event subject가 `src/packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
+- 새/변경 event body가 `src/packages/contracts/event_bus/bodies/`에 있음
 - RCA/Safe PR 동작 테스트 존재
 - handler가 `@app.on` body DTO 흐름을 유지함
 - raw NATS 사용 없음
@@ -387,15 +387,15 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 
 ## 처음 읽을 파일
 
-1. `services/rca-worker`
-2. `services/gitops/scm-worker`
-3. `services/projection/audit-worker`
-4. `packages/contracts/event_bus/subjects.py`
-5. `packages/contracts/event_bus/bodies/`
-6. `packages/runtime/worker.py`
+1. `src/services/rca-worker`
+2. `src/services/gitops/scm-worker`
+3. `src/services/projection/audit-worker`
+4. `src/packages/contracts/event_bus/subjects.py`
+5. `src/packages/contracts/event_bus/bodies/`
+6. `src/packages/runtime/worker.py`
 7. `docs/events.md`
 8. Gateway/Auth Token Broker 설계: `docs/team/member-guides/gateway-auth.md`
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/rca-worker`, `services/gitops/scm-worker`, `services/projection/audit-worker`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
+이 영역을 작업할 때는 `src/services/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker`, `src/packages/runtime/worker.py`, `src/packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.

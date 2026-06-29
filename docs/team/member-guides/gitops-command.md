@@ -30,12 +30,12 @@ Target Agent
 
 ## 담당 영역
 
-- `services/gitops/git-pull-worker`
-- `services/gitops/manifest-render-worker`
-- `services/gitops/diff-worker`
-- `services/gitops/diff-analyze-worker`
-- `services/gitops/scm-worker`
-- `services/command-worker`
+- `src/services/gitops/git-pull-worker`
+- `src/services/gitops/manifest-render-worker`
+- `src/services/gitops/diff-worker`
+- `src/services/gitops/diff-analyze-worker`
+- `src/services/gitops/scm-worker`
+- `src/services/command-worker`
 - git watch target polling
 - manifest render
 - desired state diff
@@ -60,8 +60,8 @@ Worker 담당자가 꼭 알아야 할 것:
 - handler는 `@app.on(BodyType)`로 구독하고 타입 body를 입력으로 받는다. 원본 envelope의 transport 필드는 `evt.payload`다.
 - 새 이벤트는 다음 body를 `yield`로 발행한다(체이닝).
 - `correlation_id`는 runtime/client가 이어가므로 직접 새로 만들지 않는다.
-- ack/nak/retry/DLQ는 `packages/runtime/worker.py` 책임이다. workflow 코드에서 직접 처리하지 않는다.
-- subject를 새로 만들면 `packages/contracts/event_bus/subjects.py`, body DTO를 새로 만들면 `packages/contracts/event_bus/bodies/`, 설명은 `docs/events.md`에 같이 반영한다.
+- ack/nak/retry/DLQ는 `src/packages/runtime/worker.py` 책임이다. workflow 코드에서 직접 처리하지 않는다.
+- subject를 새로 만들면 `src/packages/contracts/event_bus/subjects.py`, body DTO를 새로 만들면 `src/packages/contracts/event_bus/bodies/`, 설명은 `docs/events.md`에 같이 반영한다.
 
 모르는 상태에서 작업할 때의 기준:
 
@@ -75,7 +75,7 @@ Worker 담당자가 꼭 알아야 할 것:
 - `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
 - Worker는 다음 이벤트 body를 `yield`로 발행한다.
 - Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
-- 발행 body는 `packages/contracts/event_bus/bodies/`의 dataclass를 사용한다(base class `EventBody`).
+- 발행 body는 `src/packages/contracts/event_bus/bodies/`의 dataclass를 사용한다(base class `EventBody`).
 - `correlation_id`를 유지한다.
 - handler write는 idempotent하거나 conflict-safe해야 한다.
 - workflow code에서 직접 ack/nak하지 않는다.
@@ -398,8 +398,8 @@ polling으로 감지한 git.changed에서 command queued까지 fake bus/fake db�
 
 ## PR 체크리스트
 
-- 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
-- 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
+- 새 event subject가 `src/packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
+- 새/변경 event body가 `src/packages/contracts/event_bus/bodies/`에 있음
 - manifest/diff/command 흐름 테스트 존재
 - handler가 `@app.on` body DTO 흐름을 유지함
 - raw NATS 사용 없음
@@ -507,7 +507,7 @@ MVP에서는 `git_watch_targets`만 있어도 된다.
 
 ## polling event 계약 후보
 
-나중에 `packages/contracts/event_bus/subjects.py`, `packages/contracts/event_bus/bodies/`, `docs/events.md`에 반영한다.
+나중에 `src/packages/contracts/event_bus/subjects.py`, `src/packages/contracts/event_bus/bodies/`, `docs/events.md`에 반영한다.
 
 ```text
 git.poll.tick
@@ -566,20 +566,20 @@ Polling으로 만든 `git.changed`가 downstream의 유일한 표준 입력이�
 현재 작업 브랜치에서는 기존 단일 GitOps 폴더 대신 split worker 구조를 사용한다.
 
 ```text
-services/gitops/git-pull-worker
+src/services/gitops/git-pull-worker
   repo target을 확인하고 git.changed를 발행
 
-services/gitops/manifest-render-worker
+src/services/gitops/manifest-render-worker
   git.changed를 받아 manifest.rendered 발행
 
-services/gitops/diff-worker
+src/services/gitops/diff-worker
   manifest.rendered를 받아 desired.diff.detected 발행
 
-services/gitops/diff-analyze-worker
+src/services/gitops/diff-analyze-worker
   desired.diff.detected를 받아 diff.analyzed 발행
   안전하면 safe_pr.requested 발행
 
-services/gitops/scm-worker
+src/services/gitops/scm-worker
   safe_pr.requested를 받아 guarded repo write 또는 fake PR event 발행
 ```
 
@@ -616,13 +616,13 @@ tests/test_git_polling.py
 ## 처음 읽을 파일
 
 1. `docs/events.md`
-2. `packages/contracts/event_bus/subjects.py`
-3. `packages/contracts/event_bus/bodies/`
-4. `packages/runtime/app.py`
-5. `packages/runtime/worker.py`
-6. `services/gitops`
-7. `services/command-worker`
+2. `src/packages/contracts/event_bus/subjects.py`
+3. `src/packages/contracts/event_bus/bodies/`
+4. `src/packages/runtime/app.py`
+5. `src/packages/runtime/worker.py`
+6. `src/services/gitops`
+7. `src/services/command-worker`
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `docs/events.md`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `services/gitops`, `services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.
+이 영역을 작업할 때는 `docs/events.md`, `src/packages/runtime/worker.py`, `src/packages/runtime/service.py`, `src/services/gitops`, `src/services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.

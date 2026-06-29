@@ -6,12 +6,12 @@
 
 ## 담당 영역
 
-- `services/api-gateway`
-- `packages/contracts/gateway`
-- `packages/contracts/event_bus`
-- `packages/contracts/identity`
-- `packages/contracts/integrations`
-- `packages/contracts/security`
+- `src/services/api-gateway`
+- `src/packages/contracts/gateway`
+- `src/packages/contracts/event_bus`
+- `src/packages/contracts/identity`
+- `src/packages/contracts/integrations`
+- `src/packages/contracts/security`
 - OAuth/session/token vault 흐름
 - command/dashboard/dead-letter HTTP route
 
@@ -39,7 +39,7 @@
 
 - 새 endpoint의 auth 동작이 문서화됨
 - 새 request schema가 알 수 없거나 위험한 field를 거부함
-- Gateway가 발행하는 event subject/body 변경이 `subjects.py`, `packages/contracts/event_bus/bodies/`, `docs/events.md`에 반영됨
+- Gateway가 발행하는 event subject/body 변경이 `subjects.py`, `src/packages/contracts/event_bus/bodies/`, `docs/events.md`에 반영됨
 - session/cookie/header 인증 테스트가 있음
 - project/organization 권한 변경에는 권한 테스트가 있음
 - credential 관련 변경에는 secret 미노출 테스트가 있음
@@ -49,7 +49,7 @@
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/api-gateway/gateway.py`, `services/api-gateway/auth.py`, `packages/contracts/gateway`, `packages/contracts/event_bus`, `docs/team/conventions.md`, 이 문서를 먼저 읽어라.
+이 영역을 작업할 때는 `src/services/api-gateway/gateway.py`, `src/services/api-gateway/auth.py`, `src/packages/contracts/gateway`, `src/packages/contracts/event_bus`, `docs/team/conventions.md`, 이 문서를 먼저 읽어라.
 
 ## Gateway/Auth 최종 설계와 구현 작업서
 
@@ -643,21 +643,21 @@ provider별 차이는 adapter에서만 처리한다. Gateway/Auth의 권한 모�
 아래 파일을 추가한다.
 
 ```text
-packages/contracts/identity/
+src/packages/contracts/identity/
   __init__.py
   fields.py
   models.py
   roles.py
   ports.py
 
-packages/contracts/integrations/
+src/packages/contracts/integrations/
   __init__.py
   fields.py
   models.py
   actions.py
   ports.py
 
-packages/contracts/security/
+src/packages/contracts/security/
   __init__.py
   models.py
   ports.py
@@ -697,7 +697,7 @@ security/ports.py
 
 ## 8. 코드 스켈레톤
 
-`packages/contracts/integrations/actions.py`
+`src/packages/contracts/integrations/actions.py`
 
 ```python
 from __future__ import annotations
@@ -761,7 +761,7 @@ class IntegrationAction(StrEnum):
     CONFIGURE_PIPELINE = "configure_pipeline"
 ```
 
-`packages/contracts/security/models.py`
+`src/packages/contracts/security/models.py`
 
 ```python
 from __future__ import annotations
@@ -804,7 +804,7 @@ class IssuedCredential:
     expires_at: str | None = None
 ```
 
-`packages/contracts/security/ports.py`
+`src/packages/contracts/security/ports.py`
 
 ```python
 from __future__ import annotations
@@ -2122,7 +2122,7 @@ source_ref.target_id: integration target id
 Target/Telemetry 담당이 먼저 구현할 것:
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
   raw -> EvidenceDraft 변환
 
 tests/test_target_metric_evidence.py
@@ -2132,10 +2132,10 @@ tests/test_target_metric_evidence.py
 Gateway/Auth 담당이 먼저 구현할 것:
 
 ```text
-packages/contracts/gateway/requests.py
+src/packages/contracts/gateway/requests.py
   AgentEvidenceRequest 강화
 
-services/api-gateway/gateway.py
+src/services/api-gateway/gateway.py
   /agent/evidence validation 강화
 
 tests/test_agent_evidence_api.py
@@ -2351,11 +2351,11 @@ OAuth와 별개로 우리 서비스 자체 로그인을 받을 준비를 한다.
 
 작업:
 
-1. `packages/contracts/gateway/routes.py`에 `AUTH_LOGIN_PATH = "/auth/login"` 추가.
-2. `packages/contracts/gateway/routes.py`에 `AUTH_LOGOUT_PATH = "/auth/logout"` 추가.
-3. `packages/contracts/gateway/requests.py`에 `LoginRequest` 추가.
-4. `packages/contracts/gateway/fields.py`에 필요한 response field가 없으면 추가.
-5. `services/api-gateway/gateway.py`에 route skeleton 추가.
+1. `src/packages/contracts/gateway/routes.py`에 `AUTH_LOGIN_PATH = "/auth/login"` 추가.
+2. `src/packages/contracts/gateway/routes.py`에 `AUTH_LOGOUT_PATH = "/auth/logout"` 추가.
+3. `src/packages/contracts/gateway/requests.py`에 `LoginRequest` 추가.
+4. `src/packages/contracts/gateway/fields.py`에 필요한 response field가 없으면 추가.
+5. `src/services/api-gateway/gateway.py`에 route skeleton 추가.
 6. route skeleton은 아직 `501 not implemented` 또는 fake success가 아니라, 다음 PR에서 구현한다고 명확히 테스트한다.
 
 LoginRequest:
@@ -2382,11 +2382,11 @@ email/password로 우리 서비스 user를 검증할 수 있게 한다.
 
 작업:
 
-1. `packages/storage/schema.py`에 `User` 모델 추가.
-2. `packages/storage/database.py`에 `IdentityRepository` 추가.
-3. `packages/contracts/identity` 패키지 생성.
-4. `packages/contracts/identity/ports.py`에 `UserStore` Protocol 추가.
-5. `services/api-gateway/auth.py`에 password hashing helper 추가.
+1. `src/packages/storage/schema.py`에 `User` 모델 추가.
+2. `src/packages/storage/database.py`에 `IdentityRepository` 추가.
+3. `src/packages/contracts/identity` 패키지 생성.
+4. `src/packages/contracts/identity/ports.py`에 `UserStore` Protocol 추가.
+5. `src/services/api-gateway/auth.py`에 password hashing helper 추가.
 6. dev bootstrap user를 만든다.
 
 초기 dev user:
@@ -2460,9 +2460,9 @@ organization role과 project role을 분리한다.
 
 작업:
 
-1. `packages/storage/schema.py`에 `Organization`, `OrganizationMember`, `Project`, `ProjectMember` 추가.
-2. `packages/contracts/identity/models.py` 추가.
-3. `packages/contracts/identity/roles.py` 추가.
+1. `src/packages/storage/schema.py`에 `Organization`, `OrganizationMember`, `Project`, `ProjectMember` 추가.
+2. `src/packages/contracts/identity/models.py` 추가.
+3. `src/packages/contracts/identity/roles.py` 추가.
 4. `OrganizationMembershipStore` Protocol 추가.
 5. `ProjectMembershipStore` Protocol 추가.
 6. `require_organization_role(session, organization_id, action)` helper 추가.
@@ -2506,7 +2506,7 @@ project role:
 
 작업:
 
-1. `packages/contracts/integrations` 패키지 생성.
+1. `src/packages/contracts/integrations` 패키지 생성.
 2. `Provider.GITHUB`, `TargetType.REPO`, `AuthMethod.GITHUB_APP/PAT`만 먼저 추가.
 3. `IntegrationTargetRequest` 추가.
 4. `CredentialCreateRequest` 추가.
@@ -2562,8 +2562,8 @@ worker나 service가 vault/secret 저장소를 직접 읽지 못하게 한다.
 
 작업:
 
-1. `packages/contracts/security/ports.py`에 `TokenBroker`, `SecretVault` 추가.
-2. `packages/contracts/security/models.py`에 `IssuedCredential` 추가.
+1. `src/packages/contracts/security/ports.py`에 `TokenBroker`, `SecretVault` 추가.
+2. `src/packages/contracts/security/models.py`에 `IssuedCredential` 추가.
 3. `DefaultTokenBroker` 구현.
 4. `DefaultTokenBroker.issue(AccessRequest)`에서 `AccessPolicy`를 먼저 호출한다.
 5. 통과하면 binding의 `secret_ref`로 vault에서 secret을 읽는다.

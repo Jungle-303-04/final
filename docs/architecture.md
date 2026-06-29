@@ -66,21 +66,21 @@ secrets                         SOPS/age 기반 secret 공유 템플릿
 각 Kubernetes workload는 중앙 dispatcher에 role 문자열을 넘기지 않는다. Deployment/DaemonSet이 각 서비스 entrypoint를 직접 실행한다.
 
 ```text
-api-gateway        -> python services/api-gateway/app.py
-git-pull-worker               -> python services/gitops/git-pull-worker/app.py
-manifest-render-worker        -> python services/gitops/manifest-render-worker/app.py
-diff-worker                   -> python services/gitops/diff-worker/app.py
-diff-analyze-worker           -> python services/gitops/diff-analyze-worker/app.py
-scm-worker           -> python services/gitops/scm-worker/app.py
-command-worker                -> python services/command-worker/app.py
-rca-worker                    -> python services/rca-worker/app.py
-dashboard-worker  -> python services/projection/dashboard-worker/app.py
-audit-worker        -> python services/projection/audit-worker/app.py
-cluster-agent          -> python services/target/cluster-agent/app.py
-optional-node-collector       -> python services/target/node-collector/app.py
-fake-prometheus               -> python services/target/cluster-agent/fake_prometheus.py
-fake-loki                     -> python services/target/cluster-agent/fake_loki.py
-fake-otel                     -> python services/target/cluster-agent/fake_otel.py
+api-gateway        -> python src/services/api-gateway/app.py
+git-pull-worker               -> python src/services/gitops/git-pull-worker/app.py
+manifest-render-worker        -> python src/services/gitops/manifest-render-worker/app.py
+diff-worker                   -> python src/services/gitops/diff-worker/app.py
+diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
+scm-worker           -> python src/services/gitops/scm-worker/app.py
+command-worker                -> python src/services/command-worker/app.py
+rca-worker                    -> python src/services/rca-worker/app.py
+dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
+audit-worker        -> python src/services/projection/audit-worker/app.py
+cluster-agent          -> python src/services/target/cluster-agent/app.py
+optional-node-collector       -> python src/services/target/node-collector/app.py
+fake-prometheus               -> python src/services/target/cluster-agent/fake_prometheus.py
+fake-loki                     -> python src/services/target/cluster-agent/fake_loki.py
+fake-otel                     -> python src/services/target/cluster-agent/fake_otel.py
 ```
 
 서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 `app.py` entrypoint, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
@@ -99,21 +99,21 @@ fake-otel                     -> python services/target/cluster-agent/fake_otel.
 
 ## 포트와 어댑터
 
-공통 인터페이스는 `packages/contracts` 하위 계약 폴더에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
+공통 인터페이스는 `src/packages/contracts` 하위 계약 폴더에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
 
-- `packages/contracts/event_bus`: stream, subject, worker subscription, envelope, body, event publish/consume 경계
+- `src/packages/contracts/event_bus`: stream, subject, worker subscription, envelope, body, event publish/consume 경계
 - `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream을 교체할 수 있는 경계
 - `EventClient`: 서비스 코드가 사용하는 publish 경계
 - `EventEnvelope`: workflow handler가 받는 이벤트 객체. transport/wire 필드는 소문자 `payload`이며, 서비스 코드는 `evt["payload"]` 대신 `evt.payload`처럼 속성 접근을 사용한다.
-- `packages/contracts/event_bus/bodies/`: 서비스가 발행하는 event body dataclass 계약(base class `EventBody`). wire key 별칭이 필요하면 body class에서만 관리한다.
-- `packages/contracts/gateway`: API Gateway HTTP 요청 schema
+- `src/packages/contracts/event_bus/bodies/`: 서비스가 발행하는 event body dataclass 계약(base class `EventBody`). wire key 별칭이 필요하면 body class에서만 관리한다.
+- `src/packages/contracts/gateway`: API Gateway HTTP 요청 schema
 - `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
 
-현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `NatsEventBus`, `services/target/cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
+현재 concrete adapter는 `src/packages/storage/database.py`의 `Database`, `src/packages/events/bus.py`의 `NatsEventBus`, `src/services/target/cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
 
-한 서비스는 한 파일 `app.py`다. worker 서비스는 `packages/runtime/app.py`의 `App`을 사용한다.
+한 서비스는 한 파일 `app.py`다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용한다.
 
 ```python
 app = App("rca-worker")
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     app.run()
 ```
 
-`App.run()`은 내부적으로 `packages/runtime/service.py`의 실행 객체와 `WorkerRuntime`을 조립한다. 즉 `WorkerService`/`WorkerRuntime`은 런타임 내부 구현이며 서비스 작성자는 직접 다루지 않는다. 실행 객체 종류:
+`App.run()`은 내부적으로 `src/packages/runtime/service.py`의 실행 객체와 `WorkerRuntime`을 조립한다. 즉 `WorkerService`/`WorkerRuntime`은 런타임 내부 구현이며 서비스 작성자는 직접 다루지 않는다. 실행 객체 종류:
 
 - `FastApiService`: HTTP API process
 - `WorkerService`: JetStream subject 구독 worker process(내부용)
@@ -140,7 +140,7 @@ async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
 
-서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.on(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `packages/contracts/event_bus`에 둔다.
+서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.on(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `src/packages/contracts/event_bus`에 둔다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 
@@ -202,7 +202,7 @@ Target Cluster Agent
 실패한 event 처리:
 
 ```text
-packages/runtime/worker.py
+src/packages/runtime/worker.py
 -> event_processing retrying
 -> NATS nak
 -> max attempts 초과
