@@ -1,13 +1,12 @@
-"""Database — 도메인별 repository 를 합친 단일 진입점(공개 API).
+"""Database 공개 진입점(하위호환) — 합성은 domains/registry 가 담당.
 
-실제 SQL 은 repositories/ 의 도메인별 파일에 있다(events·commands·auth·gitops·projection).
-엔진·트랜잭션·헬퍼는 engine.py. 여기서는 그것들을 하나의 Database 로 합치고,
-테스트·하위호환을 위해 모듈 헬퍼를 재노출한다.
+엔진·트랜잭션·헬퍼는 engine.py, 도메인 repo 합성은 domains/registry.py(도메인 zone).
+여기서는 그 Database 와 테스트·하위호환용 모듈 헬퍼를 재노출한다.
 """
 
 from __future__ import annotations
 
-from domains.gitops.repo import RepoChangeRepository
+from domains.registry import Database as Database
 from packages.config.retry import retry_dependency
 from packages.contracts.interfaces import InitializableStore
 from packages.storage.engine import (
@@ -18,15 +17,6 @@ from packages.storage.engine import (
     serialize_command,
     serialize_dead_letter,
 )
-from packages.storage.repositories.auth import OAuthRepository
-from packages.storage.repositories.commands import AgentCommandRepository
-from packages.storage.repositories.events import (
-    DeadLetterRepository,
-    EventRepository,
-    OutboxRepository,
-)
-from packages.storage.repositories.projection import AuditLogRepository, DashboardRepository
-from packages.storage.repositories.rca import RcaRepository
 
 __all__ = [
     "ERROR_MESSAGE_LIMIT",
@@ -38,20 +28,6 @@ __all__ = [
     "serialize_dead_letter",
     "wait_for_database",
 ]
-
-
-class Database(
-    EventRepository,
-    DeadLetterRepository,
-    OAuthRepository,
-    RepoChangeRepository,
-    AgentCommandRepository,
-    RcaRepository,
-    DashboardRepository,
-    AuditLogRepository,
-    OutboxRepository,
-):
-    pass
 
 
 async def wait_for_database(db: InitializableStore) -> None:
