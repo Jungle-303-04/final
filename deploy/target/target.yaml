@@ -241,5 +241,7 @@ spec:
               value: target-cluster-01
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
+            - name: AGENT_TOKEN
+              value: local-agent-token
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"
