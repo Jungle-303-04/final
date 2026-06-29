@@ -32,7 +32,7 @@ spec:
             - name: poller
               image: service:local
               imagePullPolicy: IfNotPresent
-              command: ["python", "services/gitops/github-poller/app.py"]
+              command: ["python", "src/services/gitops/github-poller/app.py"]
               env:
                 - name: MANAGEMENT_BASE_URL
                   value: http://api-gateway:8000
