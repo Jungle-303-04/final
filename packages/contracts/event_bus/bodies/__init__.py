@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.bodies.command import (
+    CommandCompletedBody,
     CommandDispatchedBody,
     CommandDispatchReadyBody,
     CommandQueuedForAgentBody,
@@ -54,6 +55,7 @@ from packages.contracts.event_bus.bodies.repo import (
 
 __all__ = [
     "ClusterEvidenceReceivedBody",
+    "CommandCompletedBody",
     "CommandDispatchReadyBody",
     "CommandDispatchedBody",
     "CommandQueuedForAgentBody",

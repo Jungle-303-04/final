@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from packages.config.constants import CommandStatus
+
 
 class Settings:
     TARGET_AGENT_SERVICE_NAME = "target-cluster-agent"
@@ -15,6 +17,9 @@ class Settings:
     MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
     TARGET_CLUSTER_ID_ENV = "TARGET_CLUSTER_ID"
     EVIDENCE_INTERVAL_ENV = "EVIDENCE_INTERVAL_SECONDS"
+    AGENT_TOKEN_ENV = "AGENT_TOKEN"
+    DEFAULT_AGENT_TOKEN = "local-agent-token"
+    AGENT_TOKEN_HEADER = "x-agent-token"
     HTTP_TIMEOUT_SECONDS = 20
     COMMAND_POLL_TIMEOUT_SECONDS = 15
     COMMAND_EXECUTION_DELAY_SECONDS = 2
@@ -44,7 +49,7 @@ class Settings:
     FAKE_HTTP_5XX_RATE = 0.19
     PROMETHEUS_VECTOR_VALUE = "0.19"
 
-    COMMAND_COMPLETED_STATUS = "completed"
+    COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
     COMMAND_RESULT_MESSAGE = "fake Kubernetes action applied in sandbox namespace"
     LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
     LOKI_WARNING_LINE = "WARN rollback candidate detected"

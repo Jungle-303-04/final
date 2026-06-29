@@ -4,13 +4,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.config.constants import Auth, Command, OAuth, Sandbox, Target
+from packages.config.constants import Auth, Command, CommandStatus, OAuth, Sandbox, Target
 
 DEFAULT_WEBHOOK_IMAGE = "ghcr.io/project/checkout-api:bad"
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
 MAX_WEBHOOK_REPLICAS = 10
-DEFAULT_COMMAND_STATUS = "completed"
+DEFAULT_COMMAND_STATUS = CommandStatus.COMPLETED
 EMPTY_COMMAND_MESSAGE = ""
 
 
@@ -52,13 +52,21 @@ class AgentEvidenceRequest(StrictModel):
 class CommandRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     action: str = Command.DEFAULT_ACTION
-    namespace: Literal["sandbox"] = Sandbox.NAMESPACE
+    namespace: str = Sandbox.NAMESPACE
     reason: str | None = None
     diff: dict[str, Any] | None = None
+
+
+class CommandStartRequest(StrictModel):
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    agent_id: str
+    lease_id: str
 
 
 class CommandResultRequest(StrictModel):
     status: Literal["completed", "failed"] = DEFAULT_COMMAND_STATUS
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    agent_id: str
+    lease_id: str
     applied: bool = False
     message: str = EMPTY_COMMAND_MESSAGE

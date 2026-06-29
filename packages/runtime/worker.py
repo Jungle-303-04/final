@@ -76,6 +76,8 @@ class DeadLetterPort(Protocol):
         self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int
     ) -> EventEnvelope: ...
 
+    async def capture_raw(self, raw: bytes, consumer: str, error: Exception) -> EventEnvelope: ...
+
 
 class EventProcessor:
     def __init__(
@@ -97,7 +99,17 @@ class EventProcessor:
         self.ledger = ledger if ledger is not None else Ledger(store, service_name)
 
     async def process(self, message: EventMessage) -> None:
-        evt = self.codec.decode(message)
+        try:
+            evt = self.codec.decode(message)
+        except Exception as exc:
+            await self.dead_letters.capture_raw(message.data, self.service_name, exc)
+            logger.error(
+                "decode_dead_letter",
+                extra={"context": {"consumer": self.service_name}},
+                exc_info=exc,
+            )
+            await message.ack()
+            return
         attempts = 0
         try:
             # 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
