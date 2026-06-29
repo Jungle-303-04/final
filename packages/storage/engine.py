@@ -107,6 +107,9 @@ class DatabaseConnection:
             yield conn
 
     def init(self) -> None:
+        from domains.registry import load_domain_tables
+
+        load_domain_tables()  # domains/*/tables.py 자동 등록(create_all 전)
         metadata.create_all(self.engine)
         self.ensure_compatible_schema()
 

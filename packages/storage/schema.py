@@ -6,7 +6,6 @@ from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text, UniqueCo
 from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
-from domains.gitops.tables import RepoChange as RepoChange  # 도메인 테이블 등록 + 재노출
 from packages.storage.base import (
     Base,
     created_at_column,
