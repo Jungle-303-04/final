@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/gateway": {
-        target: process.env.VITE_GATEWAY_TARGET ?? "http://localhost:18081",
+        target: process.env.VITE_GATEWAY_TARGET ?? "http://localhost:18080",
         changeOrigin: true,
         rewrite: (requestPath) => requestPath.replace(/^\/gateway/, ""),
       },
