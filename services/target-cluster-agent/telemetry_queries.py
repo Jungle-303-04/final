@@ -42,9 +42,22 @@ PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = (
         promql='kube_deployment_status_replicas{namespace="target"}',
     ),
     PrometheusInstantQuery(
-        metric_name="node_collector_cpu_usage_ratio",
-        description="Demo node runtime CPU ratio exposed by optional-node-collector.",
-        promql="node_collector_cpu_usage_ratio",
+        metric_name="node_cpu_usage_ratio",
+        description="Node CPU usage ratio from Prometheus node-exporter metrics.",
+        promql='1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))',
+    ),
+    PrometheusInstantQuery(
+        metric_name="node_memory_usage_ratio",
+        description="Node memory usage ratio from Prometheus node-exporter metrics.",
+        promql="1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+    ),
+    PrometheusInstantQuery(
+        metric_name="node_filesystem_usage_ratio",
+        description="Node filesystem usage ratio from Prometheus node-exporter metrics.",
+        promql=(
+            '1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"} '
+            '/ node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"})'
+        ),
     ),
     PrometheusInstantQuery(
         metric_name="node_collector_node_pod_count",
