@@ -16,7 +16,7 @@ from packages.runtime.app import App, EventContext
 app = App("git-pull-worker")
 
 
-@app.sub(GitWebhookReceivedBody)
+@app.on(GitWebhookReceivedBody)
 async def on_git_webhook(
     evt: GitWebhookReceivedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:

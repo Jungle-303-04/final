@@ -29,7 +29,7 @@
 | `packages/contracts/event_bus/subjects.py` | 이벤트 subject 이름 | 어떤 이벤트를 발행/구독할지 정하는 전체 지도다. |
 | `packages/contracts/event_bus/interfaces.py` | `EventEnvelope`, `EventClient`, bus port | 이벤트 봉투와 발행/소비 port의 공통 약속이다. |
 | `packages/contracts/event_bus/bodies/*.py` | 이벤트 payload body dataclass | 이벤트 안에 어떤 데이터가 들어가는지 정한다. |
-| `packages/contracts/event_bus/registry.py` | body와 subject 연결 | `@app.sub(BodyType)`가 어떤 subject를 구독하는지 결정한다. |
+| `packages/contracts/event_bus/registry.py` | body와 subject 연결 | `@app.on(BodyType)`가 어떤 subject를 구독하는지 결정한다. |
 | `packages/contracts/event_bus/processing.py` | 처리 상태값 | retry, processed, dead-lettered 상태의 공통 언어다. |
 | `packages/contracts/gateway/requests.py` | Gateway HTTP request schema | 외부 API 요청 body가 어떤 형태인지 정한다. |
 | `packages/contracts/gateway/routes.py` | Gateway route path | UI, CLI, agent가 호출할 HTTP 경로의 기준이다. |
@@ -50,7 +50,7 @@
 
 | 파일 | 역할 |
 | --- | --- |
-| `packages/runtime/app.py` | 서비스 작성자가 쓰는 `App`, `@app.sub`, `@app.on_event` 규칙 |
+| `packages/runtime/app.py` | 서비스 작성자가 쓰는 `App`, `@app.on`, `@app.on_event` 규칙 |
 | `packages/runtime/worker.py` | JetStream 메시지 처리, retry, DLQ, ack/nak |
 | `packages/runtime/ledger.py` | 이벤트 처리 멱등성 ledger port 호출 |
 | `packages/runtime/dispatch.py` | body handler 실행과 다음 이벤트 dispatch |

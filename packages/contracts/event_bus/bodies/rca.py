@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
-from packages.contracts.event_bus.registry import events
+from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
 
 
-@events.reg(EventSubject.CLUSTER_EVIDENCE_RECEIVED)
+@event(EventSubject.CLUSTER_EVIDENCE_RECEIVED)
 @dataclass(frozen=True)
 class ClusterEvidenceReceivedBody(EventBody):
     """cluster.evidence.received — 에이전트가 보낸 증거(rca 입력)."""
@@ -33,7 +33,7 @@ class Evidence(EventBody):
     object_ref: str
 
 
-@events.reg(EventSubject.EVIDENCE_BUILT)
+@event(EventSubject.EVIDENCE_BUILT)
 @dataclass(frozen=True)
 class EvidenceBuiltBody(EventBody):
     """evidence.built — 증거 번들을 구성했다."""
@@ -41,7 +41,7 @@ class EvidenceBuiltBody(EventBody):
     evidence: Evidence
 
 
-@events.reg(EventSubject.RCA_COMPLETED)
+@event(EventSubject.RCA_COMPLETED)
 @dataclass(frozen=True)
 class RcaCompletedBody(EventBody):
     """rca.completed — 근본 원인과 권고 조치."""

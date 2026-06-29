@@ -9,11 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from packages.contracts.event_bus.bodies.base import EventBody
-from packages.contracts.event_bus.registry import events
+from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
 
 
-@events.reg(EventSubject.SAFE_PR_REQUESTED)
+@event(EventSubject.SAFE_PR_REQUESTED)
 @dataclass(frozen=True)
 class SafePrRequestedBody(EventBody):
     """safe_pr.requested — PR 을 만들어 달라(제목/본문/공급자)."""
@@ -23,7 +23,7 @@ class SafePrRequestedBody(EventBody):
     provider: str
 
 
-@events.reg(EventSubject.SAFE_PR_CREATED)
+@event(EventSubject.SAFE_PR_CREATED)
 @dataclass(frozen=True)
 class SafePrCreatedBody(EventBody):
     """safe_pr.created — repo-gateway 가 PR 을 만들었다."""
@@ -34,7 +34,7 @@ class SafePrCreatedBody(EventBody):
     mode: str
 
 
-@events.reg(EventSubject.SAFE_PR_FAILED)
+@event(EventSubject.SAFE_PR_FAILED)
 @dataclass(frozen=True)
 class SafePrFailedBody(EventBody):
     """safe_pr.failed — repo-gateway 가 PR 생성을 완료하지 못했다."""

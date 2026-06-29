@@ -118,7 +118,7 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 ```python
 app = App("rca-worker")
 
-@app.sub(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
+@app.on(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
 async def on_evidence(evt, ctx):
     yield EvidenceBuiltBody(...)        # 체이닝 = 다음 body를 yield
 
@@ -140,7 +140,7 @@ async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
 
-서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.sub(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `packages/contracts/event_bus`에 둔다.
+서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.on(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `packages/contracts/event_bus`에 둔다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 

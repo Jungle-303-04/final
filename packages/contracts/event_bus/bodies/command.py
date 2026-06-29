@@ -6,11 +6,11 @@ from dataclasses import dataclass
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.bodies.gitops import Diff
-from packages.contracts.event_bus.registry import events
+from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
 
 
-@events.reg(EventSubject.COMMAND_REQUESTED)
+@event(EventSubject.COMMAND_REQUESTED)
 @dataclass(frozen=True)
 class CommandRequestedBody(EventBody):
     """command.requested — 이 diff를 sandbox에 적용해 달라."""
@@ -44,7 +44,7 @@ class Route(EventBody):
     cluster_id: str
 
 
-@events.reg(EventSubject.COMMAND_DISPATCH_READY)
+@event(EventSubject.COMMAND_DISPATCH_READY)
 @dataclass(frozen=True)
 class CommandDispatchReadyBody(EventBody):
     """command.dispatch.ready — 정책 통과, 실행 계획 수립."""
@@ -52,7 +52,7 @@ class CommandDispatchReadyBody(EventBody):
     plan: Plan
 
 
-@events.reg(EventSubject.COMMAND_DISPATCHED)
+@event(EventSubject.COMMAND_DISPATCHED)
 @dataclass(frozen=True)
 class CommandDispatchedBody(EventBody):
     """command.dispatched — 대상 클러스터로 라우팅했다."""
@@ -61,7 +61,7 @@ class CommandDispatchedBody(EventBody):
     route: Route
 
 
-@events.reg(EventSubject.COMMAND_QUEUED_FOR_AGENT)
+@event(EventSubject.COMMAND_QUEUED_FOR_AGENT)
 @dataclass(frozen=True)
 class CommandQueuedForAgentBody(EventBody):
     """command.queued_for_agent — 에이전트 폴링 큐에 적재."""
@@ -70,7 +70,7 @@ class CommandQueuedForAgentBody(EventBody):
     cluster_id: str
 
 
-@events.reg(EventSubject.COMMAND_REJECTED)
+@event(EventSubject.COMMAND_REJECTED)
 @dataclass(frozen=True)
 class CommandRejectedBody(EventBody):
     """command.rejected — 정책 위반으로 거부(원요청 첨부)."""
@@ -79,7 +79,7 @@ class CommandRejectedBody(EventBody):
     requested: JsonObject
 
 
-@events.reg(EventSubject.COMMAND_COMPLETED)
+@event(EventSubject.COMMAND_COMPLETED)
 @dataclass(frozen=True)
 class CommandCompletedBody(EventBody):
     """command.completed — 에이전트가 명령 실행 결과를 보고."""

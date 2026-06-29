@@ -3,7 +3,7 @@
 서비스 파일(app.py) 한 곳에서:
     app = App("rca-worker")          # 서비스 이름 = 정체성(여기 한 번만)
 
-    @app.sub(ClusterEvidenceReceivedBody)  # 구독: 이 이벤트 오면 이 함수
+    @app.on(ClusterEvidenceReceivedBody)  # 구독: 이 이벤트 오면 이 함수
     async def on_evidence(evt, ctx):
         yield EvidenceBuiltBody(...)  # 체이닝 = yield
 
@@ -41,9 +41,9 @@ class App:
         self._handlers: dict[EventSubject, Subscription] = {}
         self._raw: tuple[Callable[..., Any], bool] | None = None
 
-    def sub(self, body_type: type) -> Callable[..., Any]:
+    def on(self, body_type: type) -> Callable[..., Any]:
         """타입 구독: 이 body 가 실린 이벤트 1종을 받음."""
-        require(self._raw is None, f"{self.name}: @app.sub·@app.projector 혼용 불가", TypeError)
+        require(self._raw is None, f"{self.name}: @app.on·@app.on_any 혼용 불가", TypeError)
         subject = ensure_registered(body_type)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -55,7 +55,7 @@ class App:
 
         return decorator
 
-    def projector(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+    def on_any(self, fn: Callable[..., Any]) -> Callable[..., Any]:
         """전체(>) 구독: 모든 이벤트를 봉투(EventEnvelope) 그대로 받음.
 
         대시보드/감사처럼 도메인을 가로지르는 프로젝터용.
@@ -103,7 +103,7 @@ class App:
 
 def ensure_registered(body_type: type) -> Any:
     subject = getattr(body_type, "__subject__", None)
-    require(subject is not None, f"{body_type.__name__} 미등록 — @events.reg 필요", TypeError)
+    require(subject is not None, f"{body_type.__name__} 미등록 — @event 필요", TypeError)
     return subject
 
 
@@ -119,4 +119,4 @@ def ensure_unique_handler(handlers: dict[Any, Any], subject: Any) -> None:
 
 
 def ensure_has_handler(service: str, handlers: dict[Any, Any]) -> None:
-    require(len(handlers) >= 1, f"{service}: 구독 핸들러가 없음(@app.sub 필요)", RuntimeError)
+    require(len(handlers) >= 1, f"{service}: 구독 핸들러가 없음(@app.on 필요)", RuntimeError)
