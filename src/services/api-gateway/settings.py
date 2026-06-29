@@ -22,7 +22,6 @@ class Settings:
     DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
     DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
     GATEWAY_ERROR_MESSAGE = "internal server error"
-    AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
 
     COMMAND_STATUS_QUEUED = CommandStatus.QUEUED
     COMMAND_STATUS_LEASED = CommandStatus.LEASED
@@ -45,12 +44,8 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
-    AGENT_TOKEN_HEADER = "x-agent-token"
-    AGENT_TOKEN_ENV = "AGENT_TOKEN"
-    DEFAULT_AGENT_TOKEN = "local-agent-token"
     OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"
-    AGENT_AUTH_NOT_CONFIGURED_MESSAGE = "agent auth not configured"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
