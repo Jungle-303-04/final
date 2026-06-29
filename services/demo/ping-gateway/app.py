@@ -18,11 +18,11 @@ from packages.contracts.event_bus.bodies import (
     EventBody,
 )
 from packages.runtime.app import App, EventContext
-from packages.runtime.outbound import HttpOutbound, deliver
+from packages.runtime.outbound import HttpOutbound, Outbound, deliver
 
 app = App("demo-ping-gateway")
 
-outbound = HttpOutbound()  # 외부 호출 어댑터(테스트에서 교체)
+outbound: Outbound = HttpOutbound()  # 외부 호출 어댑터(Outbound 계약 — 테스트에서 가짜로 교체)
 
 DELIVERED_STATUS = "delivered"
 
