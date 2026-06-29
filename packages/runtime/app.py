@@ -38,7 +38,7 @@ class App:
 
     def sub(self, body_type: type) -> Callable[..., Any]:
         """타입 구독: 이 body 가 실린 이벤트 1종을 받음."""
-        require(self._raw is None, f"{self.name}: @app.sub·@app.on_event 혼용 불가", TypeError)
+        require(self._raw is None, f"{self.name}: @app.sub·@app.projector 혼용 불가", TypeError)
         subject = ensure_registered(body_type)
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -50,7 +50,7 @@ class App:
 
         return decorator
 
-    def on_event(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+    def projector(self, fn: Callable[..., Any]) -> Callable[..., Any]:
         """전체(>) 구독: 모든 이벤트를 봉투(EventEnvelope) 그대로 받음.
 
         대시보드/감사처럼 도메인을 가로지르는 프로젝터용.
