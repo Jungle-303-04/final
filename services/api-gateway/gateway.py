@@ -151,11 +151,7 @@ class ApiGateway:
     def _register_ingest_routes(self, app: FastAPI) -> None:
         @app.post(gateway_routes.GITHUB_WEBHOOK_PATH)
         async def github_webhook(payload: GitHubWebhookRequest) -> dict[str, Any]:
-            accepted = await self.events.accept_body(
-                GitWebhookReceivedBody(
-                    commit_sha=payload.commit_sha, image=payload.image, replicas=payload.replicas
-                )
-            )
+            accepted = await self.events.accept_body(GitWebhookReceivedBody(**payload.model_dump()))
             return accepted.response(include_event=True)
 
         @app.post(gateway_routes.AGENT_CONNECT_PATH)
@@ -168,13 +164,7 @@ class ApiGateway:
         async def agent_evidence(request: Request, payload: AgentEvidenceRequest) -> dict[str, Any]:
             self._require_agent(request)
             accepted = await self.events.accept_body(
-                ClusterEvidenceReceivedBody(
-                    cluster_id=payload.cluster_id,
-                    kubernetes=payload.kubernetes,
-                    metrics=payload.metrics,
-                    logs=payload.logs,
-                    traces=payload.traces,
-                ),
+                ClusterEvidenceReceivedBody(**payload.model_dump(exclude={"correlation_id"})),
                 payload.correlation_id,
             )
             return accepted.response()
