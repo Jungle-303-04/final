@@ -21,7 +21,10 @@ SERVICE_ENTRYPOINTS = {
     "audit-timeline-service": ("src/services/projection/audit-timeline-service/app.py", "App("),
     "target-cluster-agent": ("src/services/target/target-cluster-agent/app.py", "AsyncService("),
     "node-collector": ("src/services/target/node-collector/app.py", "AsyncService("),
-    "fake-prometheus": ("src/services/target/target-cluster-agent/fake_prometheus.py", "AsyncService("),
+    "fake-prometheus": (
+        "src/services/target/target-cluster-agent/fake_prometheus.py",
+        "AsyncService(",
+    ),
     "fake-loki": ("src/services/target/target-cluster-agent/fake_loki.py", "AsyncService("),
     "fake-otel": ("src/services/target/target-cluster-agent/fake_otel.py", "AsyncService("),
 }
