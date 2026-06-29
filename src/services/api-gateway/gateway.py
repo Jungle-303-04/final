@@ -85,9 +85,11 @@ class ApiGateway:
             return {Gateway.STATUS: Gateway.STATUS_READY}
 
     def _require_agent(self, request: Request) -> None:
-        expected = env(Settings.AGENT_TOKEN_ENV, Settings.DEFAULT_AGENT_TOKEN)
-        supplied = request.headers.get(Settings.AGENT_TOKEN_HEADER)
-        if supplied != expected:
+        # fail-closed: AGENT_TOKEN 미설정이면 약한 기본값으로 열지 않고 거부.
+        expected = env(Settings.AGENT_TOKEN_ENV, "")
+        if not expected:
+            raise HTTPException(status_code=503, detail=Settings.AGENT_AUTH_NOT_CONFIGURED_MESSAGE)
+        if request.headers.get(Settings.AGENT_TOKEN_HEADER) != expected:
             raise HTTPException(status_code=401, detail=Settings.AGENT_AUTH_REQUIRED_MESSAGE)
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
