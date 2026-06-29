@@ -77,5 +77,5 @@ kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYM
 
 clean: ## Python 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
-	find src tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find src tests scripts -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -name .DS_Store -delete
