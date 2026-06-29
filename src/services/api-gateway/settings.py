@@ -44,7 +44,7 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
-    OAUTH_AUTHORIZE_BASE_URL = "https://oauth.example.local"
+    OAUTH_AUTHORIZE_BASE_URL_ENV = "OAUTH_AUTHORIZE_BASE_URL"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"

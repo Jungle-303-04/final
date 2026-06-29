@@ -105,12 +105,14 @@ class OAuthAuthService:
         await self.sessions.save_oauth_state(
             state, {"provider": provider, "user_id": user_id, "scopes": scopes}
         )
+        authorize_base_url = env(Settings.OAUTH_AUTHORIZE_BASE_URL_ENV, "").rstrip("/")
+        authorization_url = (
+            f"{authorize_base_url}/{provider}/authorize?state={state}" if authorize_base_url else ""
+        )
         return {
             "provider": provider,
             "state": state,
-            "authorization_url": (
-                f"{Settings.OAUTH_AUTHORIZE_BASE_URL}/{provider}/authorize?state={state}"
-            ),
+            "authorization_url": authorization_url,
         }
 
     async def callback(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:

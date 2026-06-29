@@ -13,7 +13,8 @@ def load_gateway_module() -> Any:
     )
 
 
-def test_gateway_unhandled_error_response_does_not_leak_exception_detail() -> None:
+def test_gateway_unhandled_error_response_does_not_leak_exception_detail(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()
     app = gateway.create_app()
 
