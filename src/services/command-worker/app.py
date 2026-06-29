@@ -52,6 +52,12 @@ CONFIG = CommandConfig(
 POLICY = Policy.build(CONFIG.policy_rules)
 
 
+def evaluate_command_policy(command: CommandRequestedBody):
+    # TODO(command): load org/project/cluster policy and evaluate action, namespace, and requester role.
+    # TODO(command): keep production writes fail-closed until approval and RBAC proof are available.
+    return POLICY.evaluate(ModelLookup(command))
+
+
 def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
     payload = {
         "correlation_id": correlation_id,
@@ -76,11 +82,19 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
     )
 
 
+async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
+    # TODO(command): persist lease metadata, retry policy, and target agent routing constraints.
+    # TODO(command): make queue writes share the same outbox/UoW boundary as the command events.
+    await ctx.db.queue_agent_command(
+        ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued
+    )
+
+
 @app.on(CommandRequestedBody)
 async def on_command_requested(
     evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:
-    result = POLICY.evaluate(ModelLookup(evt))
+    result = evaluate_command_policy(evt)
     if not result.allowed:
         yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
         return
@@ -90,9 +104,7 @@ async def on_command_requested(
     yield CommandDispatchedBody(
         plan=plan, route=Route(channel=CONFIG.agent_route_channel, cluster_id=plan.cluster_id)
     )
-    await ctx.db.queue_agent_command(
-        ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued
-    )
+    await queue_plan_for_agent(ctx, plan)
     yield CommandQueuedForAgentBody(command_id=plan.command_id, cluster_id=plan.cluster_id)
 
 

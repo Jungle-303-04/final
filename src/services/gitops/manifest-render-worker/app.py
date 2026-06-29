@@ -29,6 +29,28 @@ MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
 
 
+def build_manifest_from_git_change(evt: GitChangedBody) -> Manifest:
+    # TODO(gitops): checkout target repo/ref and read the real workload source.
+    # TODO(gitops): preserve commit metadata so render failures can be traced to a repo revision.
+    return Manifest(
+        app=DEFAULT_APP_NAME,
+        image=evt.image,
+        replicas=evt.replicas,
+        namespace=Sandbox.NAMESPACE,
+    )
+
+
+def render_deployment_manifest(manifest: Manifest) -> RenderedManifest:
+    # TODO(gitops): replace this deployment-only shape with Kustomize/Helm renderer output.
+    # TODO(gitops): return structured render errors instead of raw exceptions.
+    return RenderedManifest(
+        api_version=MANIFEST_API_VERSION,
+        kind=MANIFEST_KIND,
+        metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
+        spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
+    )
+
+
 @app.on(GitChangedBody)
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
@@ -58,16 +80,9 @@ async def on_git_changed(
     #
     # 현재 split 구조에서는 dict 대신 Manifest/RenderedManifest 값 객체를 만들고,
     # 저장소는 EventContext[RepoChangeStore]를 통해 await로 호출한다.
-    manifest = Manifest(
-        app=DEFAULT_APP_NAME, image=evt.image, replicas=evt.replicas, namespace=Sandbox.NAMESPACE
-    )
+    manifest = build_manifest_from_git_change(evt)
     await ctx.db.save_repo_change(ctx.correlation_id, evt.commit_sha, manifest.to_body())
-    rendered = RenderedManifest(
-        api_version=MANIFEST_API_VERSION,
-        kind=MANIFEST_KIND,
-        metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
-        spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
-    )
+    rendered = render_deployment_manifest(manifest)
     yield ManifestRenderedBody(rendered_manifest=rendered)
 
 
