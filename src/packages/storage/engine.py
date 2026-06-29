@@ -8,8 +8,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from packages.config.constants import Postgres
-from packages.config.settings import env
+from packages.config.settings import required_env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.schema import (
     metadata,
@@ -17,8 +16,9 @@ from packages.storage.schema import (
 
 DATABASE_URL_ENV = "DATABASE_URL"
 TOKEN_REF_PREFIX = "vault://oauth"
-FAKE_ENCRYPTED_TOKEN_NOTE = "fake encrypted provider token payload"
-TOKEN_EXPIRES_IN_SECONDS = 3600
+PLACEHOLDER_CREDENTIAL_NOTE = "provider credential pending Token Broker implementation"
+CREDENTIAL_STATUS_PENDING = "pending"
+CREDENTIAL_STATUS_READY = "ready"
 DASHBOARD_LIMIT = 25
 ERROR_MESSAGE_LIMIT = 2000
 
@@ -74,7 +74,7 @@ _ACTIVE_CONN: ContextVar[Connection | None] = ContextVar("active_conn", default=
 
 class DatabaseConnection:
     def __init__(self) -> None:
-        self.url = env(DATABASE_URL_ENV, Postgres.DEFAULT_URL)
+        self.url = required_env(DATABASE_URL_ENV)
         self.engine: Engine = create_engine(self.sqlalchemy_url, **POOL_OPTIONS)
         self.async_engine: AsyncEngine = create_async_engine(self.sqlalchemy_url, **POOL_OPTIONS)
 

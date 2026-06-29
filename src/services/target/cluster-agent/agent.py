@@ -21,9 +21,7 @@ class HttpManagementPlaneClient:
     def __init__(self, base_url: str, timeout_seconds: int = Settings.HTTP_TIMEOUT_SECONDS) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=timeout_seconds)
-        self.headers = {
-            Settings.AGENT_TOKEN_HEADER: env(Settings.AGENT_TOKEN_ENV, Settings.DEFAULT_AGENT_TOKEN)
-        }
+        self.headers = {Settings.AGENT_TOKEN_HEADER: env(Settings.AGENT_TOKEN_ENV, "")}
 
     async def __aenter__(self) -> HttpManagementPlaneClient:
         return self
@@ -216,9 +214,6 @@ class TargetClusterAgent:
     def collect_trace_evidence(self) -> JsonObject:
         # TODO(telemetry): query OpenTelemetry backend and summarize spans by service/operation.
         return {"source": Settings.FAKE_OTEL_SOURCE, "slow_span": Settings.OTEL_SLOW_SPAN}
-
-    def fake_evidence(self) -> JsonObject:
-        return self.build_evidence_payload()
 
 
 def create_fake_telemetry_app(kind: str) -> FastAPI:
