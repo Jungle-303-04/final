@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   python-checks:
@@ -26,13 +27,13 @@ jobs:
         run: uv sync --locked
 
       - name: Ruff lint
-        run: uv run ruff check src tests
+        run: uv run ruff check src scripts tests
 
       - name: Ruff format check
-        run: uv run ruff format --check src tests
+        run: uv run ruff format --check src scripts tests
 
       - name: Python compile
-        run: python -m compileall -q src
+        run: python -m compileall -q src scripts
 
       - name: Unit tests
         run: uv run pytest -q
@@ -69,7 +70,9 @@ jobs:
 
       - name: Container import smoke
         run: |
-          docker run --rm service:ci python - <<'PY'
+          docker run --rm \
+            -e DATABASE_URL=postgresql://user:pass@postgresql:5432/service \
+            service:ci python - <<'PY'
           import sys
 
           import sqlalchemy
