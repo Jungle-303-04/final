@@ -175,6 +175,18 @@ class TokenVault(Base):
     updated_at: Mapped[Any] = updated_at_column()
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    password_hash: Mapped[str] = text_column()
+    display_name: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
 class OutboxModel(Base):
     __tablename__ = "outbox"
 
