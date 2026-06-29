@@ -26,29 +26,6 @@ class EventModel(Base):
     created_at: Mapped[Any] = created_at_column()
 
 
-class DashboardCard(Base):
-    __tablename__ = "dashboard_cards"
-
-    correlation_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    status: Mapped[str] = text_column()
-    summary: Mapped[str] = text_column()
-    last_event: Mapped[str] = text_column()
-    payload: Mapped[dict[str, Any]] = jsonb_column()
-    updated_at: Mapped[Any] = updated_at_column()
-
-
-class AuditLog(Base):
-    __tablename__ = "audit_log"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    event_id: Mapped[str] = text_column()
-    subject: Mapped[str] = text_column()
-    source: Mapped[str] = text_column()
-    correlation_id: Mapped[str] = text_column()
-    payload: Mapped[dict[str, Any]] = jsonb_column()
-    created_at: Mapped[Any] = created_at_column()
-
-
 class EventProcessing(Base):
     __tablename__ = "event_processing"
     __table_args__ = (PrimaryKeyConstraint("event_id", "consumer"),)
