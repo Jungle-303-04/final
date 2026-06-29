@@ -34,7 +34,7 @@ production candidate
 
 | 구성 | Kubernetes 형태 | 운영 배치 기준 |
 | --- | --- | --- |
-| target-cluster-agent | Deployment | target cluster 안에서 outbound로 management 연결 |
+| cluster-agent | Deployment | target cluster 안에서 outbound로 management 연결 |
 | node-collector | DaemonSet | managed node group 또는 EC2 node 필요 |
 | ServiceAccount/RBAC | Kubernetes RBAC | read cluster objects, write only sandbox namespace |
 | Prometheus/Loki/OTel | optional adapter 대상 | 이미 있으면 query/remote-write 연동, 없으면 fallback source |
@@ -49,8 +49,8 @@ Fargate는 stateless workload에만 선택 적용한다.
 - gitops-sync-worker
 - command-worker
 - rca-worker
-- dashboard-projection-service
-- audit-timeline-service
+- dashboard-worker
+- audit-worker
 
 사용하지 않는 대상:
 
@@ -85,7 +85,7 @@ IRSA_ROLE_ARN_LIST
 ## 운영 전 체크리스트
 
 - management API는 ALB/Ingress 뒤에 둔다.
-- target-cluster-agent는 outbound 연결만 사용한다.
+- cluster-agent는 outbound 연결만 사용한다.
 - node-collector는 Fargate profile 대상에 넣지 않는다.
 - stateful store는 managed service 전환 계획을 둔다.
 - ServiceAccount/RBAC는 sandbox write만 허용한다.

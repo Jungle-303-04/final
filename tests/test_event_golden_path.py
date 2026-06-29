@@ -58,7 +58,7 @@ def test_api_to_outbound_gateway_golden_path() -> None:
         manifest = load_service("gitops/manifest-render-worker")
         diff = load_service("gitops/diff-worker")
         analyze = load_service("gitops/diff-analyze-worker")
-        repo = load_service("gitops/repo-gateway-worker")
+        repo = load_service("gitops/scm-worker")
 
         git_changed = (await run_worker(git_pull, accepted.event, db))[0]
         rendered = (await run_worker(manifest, git_changed, db))[0]

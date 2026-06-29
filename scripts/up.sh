@@ -62,17 +62,17 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/red
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
 for deploy in \
   api-gateway \
-  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker repo-gateway-worker \
+  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
   command-worker rca-worker \
-  dashboard-projection-service audit-timeline-service; do
+  dashboard-worker audit-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout restart "deploy/${deploy}"
 done
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api-gateway --timeout=180s
 
 for deploy in \
-  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker repo-gateway-worker \
+  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
   command-worker rca-worker \
-  dashboard-projection-service audit-timeline-service; do
+  dashboard-worker audit-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status "deploy/${deploy}" --timeout=180s
 done
 
@@ -87,8 +87,8 @@ kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-loki --timeout=120s
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-otel --timeout=120s
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status daemonset/optional-node-collector --timeout=120s
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout restart deploy/target-cluster-agent
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/target-cluster-agent --timeout=180s
+kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout restart deploy/cluster-agent
+kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/cluster-agent --timeout=180s
 
 echo
 echo "service is ready."

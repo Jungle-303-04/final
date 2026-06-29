@@ -89,13 +89,13 @@ Docker 데몬이 켜져 있어야 compose demo가 실행된다는 것을 안다.
 ```bash
 pwd
 git status --short
-find services/target/target-cluster-agent services/target/node-collector -maxdepth 2 -type f | sort
+find services/target/cluster-agent services/target/node-collector -maxdepth 2 -type f | sort
 ```
 
 직접 확인:
 
-- `services/target/target-cluster-agent/agent.py`가 보인다.
-- `services/target/target-cluster-agent/fake_prometheus.py`가 보인다.
+- `services/target/cluster-agent/agent.py`가 보인다.
+- `services/target/cluster-agent/fake_prometheus.py`가 보인다.
 - `services/target/node-collector/node_collector.py`가 보인다.
 
 산출물:
@@ -123,8 +123,8 @@ fake_prometheus.py는 실제 Prometheus가 아니라는 점을 이해한다.
 확인할 파일:
 
 ```bash
-sed -n '1,220p' services/target/target-cluster-agent/fake_prometheus.py
-sed -n '1,260p' services/target/target-cluster-agent/agent.py
+sed -n '1,220p' services/target/cluster-agent/fake_prometheus.py
+sed -n '1,260p' services/target/cluster-agent/agent.py
 ```
 
 직접 확인:
@@ -245,7 +245,7 @@ docker compose up --build
 
 나중에 옮길 위치:
 
-- `examples/telemetry-evidence-demo/app/evidence_demo.py`의 변환 아이디어를 `services/target/target-cluster-agent/evidence.py`로 옮긴다.
+- `examples/telemetry-evidence-demo/app/evidence_demo.py`의 변환 아이디어를 `services/target/cluster-agent/evidence.py`로 옮긴다.
 
 성취 기준:
 
@@ -413,7 +413,7 @@ latest_value(...)
 나중에 옮길 위치:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 tests/test_target_metric_evidence.py
 ```
 
@@ -466,7 +466,7 @@ metric_evidence(...)
 나중에 옮길 위치:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 ```
 
 성취 기준:
@@ -508,7 +508,7 @@ log_evidence(...)
 나중에 옮길 위치:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 tests/test_target_log_evidence.py
 ```
 
@@ -531,7 +531,7 @@ tests/test_target_log_evidence.py
 새 파일:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+services/target/cluster-agent/evidence.py
 ```
 
 처음 넣을 것:
@@ -545,7 +545,7 @@ MetricEvidenceDraft
 직접 확인:
 
 ```bash
-python -m py_compile services/target/target-cluster-agent/evidence.py
+python -m py_compile services/target/cluster-agent/evidence.py
 ```
 
 산출물:
@@ -658,4 +658,4 @@ EvidenceDraft -> dict 변환 함수 후보만 작성
 - raw data와 EvidenceDraft 차이를 설명할 수 있다.
 - `kind`, `summary`, `signals`, `source_ref` 의미를 설명할 수 있다.
 - Docker demo를 실행해서 EvidenceDraft 출력을 볼 수 있다.
-- `services/target/target-cluster-agent/evidence.py`로 옮길 함수 후보를 말할 수 있다.
+- `services/target/cluster-agent/evidence.py`로 옮길 함수 후보를 말할 수 있다.
