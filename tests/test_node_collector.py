@@ -5,7 +5,9 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-NODE_COLLECTOR_PATH = ROOT_DIR / "services" / "target" / "node-collector" / "node_collector.py"
+NODE_COLLECTOR_PATH = (
+    ROOT_DIR / "src" / "services" / "target" / "node-collector" / "node_collector.py"
+)
 
 
 def load_node_collector_module():
