@@ -7,13 +7,20 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from auth import OAuthAuthService, RedisSessionStore
-from fastapi import FastAPI, HTTPException, Request
+from auth import (
+    OAuthAuthService,
+    PasswordAuthService,
+    RedisSessionStore,
+    extract_session_token,
+    hash_password,
+)
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from settings import Settings
 from testapi import register_demo_routes
 
 from packages.config.constants import Auth, GitHub, Target
+from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
@@ -24,6 +31,7 @@ from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     GitHubWebhookRequest,
+    LoginRequest,
     OAuthCallbackRequest,
 )
 from packages.events.bus import NatsEventBus
@@ -38,15 +46,35 @@ class ApiGateway:
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
+        self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.demo_inbox: list[dict[str, Any]] = []  # 데모 콜백 착지점
         self.app = FastAPI(
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )
         self.configure_routes()
 
+    @staticmethod
+    def _cookie_secure() -> bool:
+        return (
+            env(Settings.AUTH_COOKIE_SECURE_ENV, Settings.DEFAULT_AUTH_COOKIE_SECURE).lower()
+            == "true"
+        )
+
+    def _bootstrap_local_user(self) -> None:
+        self.db.upsert_user(
+            Auth.LOCAL_USER_ID,
+            env(Settings.LOCAL_LOGIN_EMAIL_ENV, Settings.DEFAULT_LOCAL_LOGIN_EMAIL),
+            hash_password(
+                env(Settings.LOCAL_LOGIN_PASSWORD_ENV, Settings.DEFAULT_LOCAL_LOGIN_PASSWORD)
+            ),
+            Settings.DEFAULT_LOCAL_LOGIN_DISPLAY_NAME,
+            Settings.USER_STATUS_ACTIVE,
+        )
+
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
         await wait_for_database(self.db)
+        self._bootstrap_local_user()
         await self.sessions.connect()
         await self.bus.connect()
         try:
@@ -88,6 +116,31 @@ class ApiGateway:
                 Gateway.USER_ID: current.user_id,
                 Gateway.ROLES: current.roles,
             }
+
+        @app.post(gateway_routes.AUTH_LOGIN_PATH)
+        async def login(payload: LoginRequest, response: Response) -> dict[str, Any]:
+            session = await self.password_auth.login(payload.email, payload.password)
+            response.set_cookie(
+                key=Auth.SESSION_COOKIE_NAME,
+                value=session.token,
+                max_age=self.sessions.ttl_seconds,
+                httponly=True,
+                secure=self._cookie_secure(),
+                samesite="lax",
+                path="/",
+            )
+            return {
+                Gateway.AUTHENTICATED: True,
+                Gateway.USER_ID: session.user_id,
+                Gateway.SESSION: {"session_token": session.token},
+            }
+
+        @app.post(gateway_routes.AUTH_LOGOUT_PATH)
+        async def logout(request: Request, response: Response) -> dict[str, bool]:
+            token = extract_session_token(request)
+            await self.password_auth.logout(token)
+            response.delete_cookie(Auth.SESSION_COOKIE_NAME, path="/")
+            return {Gateway.AUTHENTICATED: False}
 
         @app.get(gateway_routes.OAUTH_START_PATH)
         async def oauth_start(
