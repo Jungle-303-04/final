@@ -21,6 +21,7 @@ class Settings:
     COMMAND_NOT_FOUND_MESSAGE = "command not found"
     DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
     DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
+    GATEWAY_ERROR_MESSAGE = "internal server error"
     AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
 
     COMMAND_STATUS_QUEUED = CommandStatus.QUEUED
