@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 
 from packages.config.constants import GitHub, Sandbox
 from packages.contracts.event_bus.bodies import (
+    Diff,
     DiffAnalyzedBody,
     DiffDetectedBody,
     EventBody,
@@ -25,11 +26,26 @@ UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
 PR_TITLE = "Apply sandbox manifest"
 
 
+def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
+    # TODO(gitops): replace the risk-string check with policy rules over operation, namespace, and RBAC.
+    # TODO(gitops): return approval_required/forbidden routes when production impact is possible.
+    safe = diff.risk == Sandbox.RISK_TAG
+    return safe, SAFE_REASON if safe else UNSAFE_REASON
+
+
+def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
+    # TODO(gitops): include rendered manifest patch, rollback plan, and reviewer checklist.
+    return SafePrRequestedBody(
+        title=PR_TITLE,
+        body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
+        provider=GitHub.PROVIDER,
+    )
+
+
 @app.on(DiffDetectedBody)
 async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
     diff = evt.diff
-    safe = diff.risk == Sandbox.RISK_TAG
-    reason = SAFE_REASON if safe else UNSAFE_REASON
+    safe, reason = evaluate_safe_pr_policy(diff)
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
         # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 command.requested 직접 발행):
@@ -49,11 +65,7 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
         #
         # 현재 split 구조에서는 diff를 바로 실행 command로 보내지 않고,
         # 안전 판정 후 safe_pr.requested를 발행한다.
-        yield SafePrRequestedBody(
-            title=PR_TITLE,
-            body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
-            provider=GitHub.PROVIDER,
-        )
+        yield build_safe_pr_request(diff)
 
 
 if __name__ == "__main__":

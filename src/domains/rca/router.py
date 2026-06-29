@@ -15,12 +15,17 @@ from packages.runtime.dependencies import get_events
 router = APIRouter(dependencies=[Depends(require_agent)])
 
 
+def build_cluster_evidence_body(payload: AgentEvidenceRequest) -> ClusterEvidenceReceivedBody:
+    # TODO(gateway): validate source agent, evidence size, redaction status, and correlation scope.
+    return ClusterEvidenceReceivedBody(**payload.model_dump(exclude={"correlation_id"}))
+
+
 @router.post(gateway_routes.AGENT_EVIDENCE_PATH)
 async def agent_evidence(
     payload: AgentEvidenceRequest, events: Any = Depends(get_events)
 ) -> dict[str, Any]:
     accepted = await events.accept_body(
-        ClusterEvidenceReceivedBody(**payload.model_dump(exclude={"correlation_id"})),
+        build_cluster_evidence_body(payload),
         payload.correlation_id,
     )
     return accepted.response()

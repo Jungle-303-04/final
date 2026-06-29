@@ -30,6 +30,27 @@ MISSING_GITHUB_TOKEN_MESSAGE = "github credential not available"
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
 
 
+async def resolve_github_credential(ctx: EventContext[PullRequestStore]) -> str:
+    # TODO(scm): request a short-lived credential from Token Broker instead of reading latest ref.
+    token_ref = await ctx.db.latest_github_token_ref()
+    if not token_ref:
+        raise PermissionError(MISSING_GITHUB_TOKEN_MESSAGE)
+    return token_ref
+
+
+async def create_safe_pr(
+    evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
+) -> tuple[str, str]:
+    # TODO(scm): create branch, commit patch, open PR, and persist provider response atomically.
+    # TODO(scm): enforce repo allowlist, branch naming, token scope, and rollback metadata before write.
+    token_ref = await resolve_github_credential(ctx)
+    pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
+    await ctx.db.save_pull_request(
+        ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
+    )
+    return pr_url, token_ref
+
+
 def safe_pr_failure_reason(exc: Exception) -> str:
     if isinstance(exc, PermissionError):
         return MISSING_GITHUB_TOKEN_MESSAGE
@@ -51,15 +72,7 @@ async def on_safe_pr_requested(
     # outbound 게이트웨이 정형: 외부 호출(PR 생성)의 try/except 는 deliver 가 흡수하고,
     # 핸들러는 "무엇을 호출하고 성공/실패를 어떤 이벤트로 낼지"만 선언(타 게이트웨이와 동일 모양).
     async def create_pr() -> tuple[str, str]:
-        # fail-closed: 자격증명 없으면 약한 fallback 으로 PR 만들지 않고 실패 처리(deliver.fail).
-        token_ref = await ctx.db.latest_github_token_ref()
-        if not token_ref:
-            raise PermissionError(MISSING_GITHUB_TOKEN_MESSAGE)
-        pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
-        await ctx.db.save_pull_request(
-            ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
-        )
-        return pr_url, token_ref
+        return await create_safe_pr(evt, ctx)
 
     def created(result: tuple[str, str]) -> SafePrCreatedBody:
         pr_url, token_ref = result
