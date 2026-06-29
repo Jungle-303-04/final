@@ -12,8 +12,10 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from packages.config.errors import fail
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.registry import Subscription
+from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT
 from packages.events.envelope import event
 from packages.runtime.async_db import AsyncDb
 
@@ -75,6 +77,20 @@ def make_event_handler(sub: Subscription, db: Any, source: str) -> Callable[[Eve
         return await _collect(source, evt, result)
 
     return handle
+
+
+def make_router(
+    handlers: dict[str, Callable[[EventEnvelope], Any]],
+) -> Callable[[EventEnvelope], Any]:
+    """한 워커가 여러 subject 구독 시: evt.subject 로 핸들러 선택(없으면 '>' 전체구독)."""
+
+    async def route(evt: EventEnvelope) -> list[EventEnvelope]:
+        handler = handlers.get(evt.subject) or handlers.get(ALL_EVENTS_SUBJECT)
+        if handler is None:
+            fail(f"{evt.subject} 구독 핸들러 없음", RuntimeError)
+        return await handler(evt)
+
+    return route
 
 
 def make_raw_handler(

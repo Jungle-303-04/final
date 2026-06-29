@@ -52,7 +52,7 @@ class EventRetryPolicy:
 @dataclass(frozen=True)
 class EventHandlerSpec:
     service_name: str
-    subject: str
+    subjects: tuple[str, ...]
     handler_factory: Callable[[EventClient, Database], EventHandler]
     durable_name: str | None = None
     retry_policy: EventRetryPolicy = EventRetryPolicy()
@@ -60,6 +60,13 @@ class EventHandlerSpec:
     @property
     def durable(self) -> str:
         return durable_name(self.service_name, self.durable_name)
+
+    def durable_for(self, subject: str) -> str:
+        """subject 여러 개면 컨슈머 이름 충돌 방지 위해 subject 로 namespace."""
+        if len(self.subjects) <= 1:
+            return self.durable
+        slug = subject.replace(".", "-").replace(">", "all").replace("*", "any")
+        return f"{self.durable}-{slug}"
 
 
 class Codec(Protocol):
@@ -166,7 +173,11 @@ class WorkerRuntime:
         Path(HEARTBEAT_PATH).touch()  # 시작 즉시 생존 표시(DB 대기 중 liveness 오살 방지)
         await wait_for_database(self.db)
         await self.bus.connect()
-        sub = await self.bus.subscribe(self.spec.subject, durable=self.spec.durable)
+        # subject 마다 별도 컨슈머(줄) — 한 줄이 막혀도 다른 subject 는 계속 흐름.
+        subs = [
+            (subject, await self.bus.subscribe(subject, durable=self.spec.durable_for(subject)))
+            for subject in self.spec.subjects
+        ]
         events = RecordedEventClient(self.bus, self.db)
         handler = self.spec.handler_factory(events, self.db)
         processor = EventProcessor(
@@ -180,7 +191,7 @@ class WorkerRuntime:
         stopping = asyncio.Event()
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
-        lifecycle = {"consumer": self.spec.service_name, "subject": self.spec.subject}
+        lifecycle = {"consumer": self.spec.service_name, "subjects": list(self.spec.subjects)}
         logger.info("subscribed", extra={"context": lifecycle})
 
         while not stopping.is_set():
@@ -189,24 +200,27 @@ class WorkerRuntime:
                 await relay.run_once()  # outbox → NATS 발행
             except Exception as exc:
                 logger.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
-            try:
-                messages = await sub.fetch(
-                    self.spec.retry_policy.fetch_batch_size,
-                    timeout=self.spec.retry_policy.fetch_timeout_seconds,
-                )
-            except TimeoutError:
-                continue
-            except Exception as exc:
-                logger.warning("fetch_error", extra={"context": lifecycle}, exc_info=exc)
-                await asyncio.sleep(1)
-                continue
-
-            for message in messages:
+            for _subject, sub in subs:
                 try:
-                    await processor.process(message)
+                    messages = await sub.fetch(
+                        self.spec.retry_policy.fetch_batch_size,
+                        timeout=self.spec.retry_policy.fetch_timeout_seconds,
+                    )
+                except TimeoutError:
+                    continue
                 except Exception as exc:
-                    logger.error("processor_error", extra={"context": lifecycle}, exc_info=exc)
-                    await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
+                    logger.warning("fetch_error", extra={"context": lifecycle}, exc_info=exc)
+                    await asyncio.sleep(1)
+                    continue
+
+                for message in messages:
+                    try:
+                        await processor.process(message)
+                    except Exception as exc:
+                        logger.error(
+                            "processor_error", extra={"context": lifecycle}, exc_info=exc
+                        )
+                        await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
 
         await self.bus.close()
         dispose_async = getattr(self.db, "dispose_async", None)
