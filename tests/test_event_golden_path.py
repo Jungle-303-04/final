@@ -44,7 +44,9 @@ async def run_worker(module: Any, incoming: EventEnvelope, db: Any) -> list[Even
     return await handler(incoming)
 
 
-def test_api_to_outbound_gateway_golden_path() -> None:
+def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
+    monkeypatch.setenv("SCM_PR_URL_PREFIX", "https://github.test.local/project/repo/pull")
+
     async def run() -> None:
         db = SpyDb(latest_github_token_ref="token-ref-1")  # scm-worker fail-closed 통과용 자격증명
         gateway_events = ApiEventGateway(MemoryPublisher(), MemoryRecorder(), "api-gateway")

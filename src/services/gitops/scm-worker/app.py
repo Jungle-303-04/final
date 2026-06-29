@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
+from packages.config.settings import env
 from packages.contracts.event_bus.bodies import (
     EventBody,
     SafePrCreatedBody,
@@ -22,11 +23,12 @@ from packages.runtime.outbound import deliver
 
 app = App("scm-worker")
 
-PR_URL_PREFIX = "https://github.example.local/project/repo/pull"
-PR_MODE = "fake_github_api_call"
+SCM_PR_URL_PREFIX_ENV = "SCM_PR_URL_PREFIX"
+PR_MODE = "stub_pr_adapter"
 PR_STATUS_CREATED = "created"
 PR_NUMBER_MODULO = 100000
 MISSING_GITHUB_TOKEN_MESSAGE = "github credential not available"
+MISSING_PR_ADAPTER_MESSAGE = "github pr adapter not configured"
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
 
 
@@ -38,13 +40,21 @@ async def resolve_github_credential(ctx: EventContext[PullRequestStore]) -> str:
     return token_ref
 
 
+def resolve_pr_url_prefix() -> str:
+    # TODO(scm): replace the stub URL prefix with the real GitHub App adapter response URL.
+    prefix = env(SCM_PR_URL_PREFIX_ENV, "").rstrip("/")
+    if not prefix:
+        raise RuntimeError(MISSING_PR_ADAPTER_MESSAGE)
+    return prefix
+
+
 async def create_safe_pr(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> tuple[str, str]:
     # TODO(scm): create branch, commit patch, open PR, and persist provider response atomically.
     # TODO(scm): enforce repo allowlist, branch naming, token scope, and rollback metadata before write.
     token_ref = await resolve_github_credential(ctx)
-    pr_url = f"{PR_URL_PREFIX}/{int(time.time()) % PR_NUMBER_MODULO}"
+    pr_url = f"{resolve_pr_url_prefix()}/{int(time.time()) % PR_NUMBER_MODULO}"
     await ctx.db.save_pull_request(
         ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
     )

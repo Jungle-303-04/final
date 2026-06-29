@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 import uuid
 from typing import Any
 
@@ -15,8 +14,9 @@ from packages.config.constants import Auth, GitHub, OAuth
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import (
     ACCOUNT_STATUS_CONNECTED,
-    FAKE_ENCRYPTED_TOKEN_NOTE,
-    TOKEN_EXPIRES_IN_SECONDS,
+    CREDENTIAL_STATUS_PENDING,
+    CREDENTIAL_STATUS_READY,
+    PLACEHOLDER_CREDENTIAL_NOTE,
     TOKEN_REF_PREFIX,
     DatabaseConnection,
 )
@@ -34,7 +34,7 @@ class OAuthRepository(DatabaseConnection):
                 pg_insert(TokenVault.__table__).values(
                     token_ref=token_ref,
                     provider=provider,
-                    encrypted_payload=self._fake_token_payload(provider),
+                    encrypted_payload=self._credential_placeholder_payload(),
                 )
             )
             conn.execute(
@@ -56,13 +56,15 @@ class OAuthRepository(DatabaseConnection):
         return scopes
 
     @staticmethod
-    def _fake_token_payload(provider: str) -> JsonObject:
+    def _credential_placeholder_payload() -> JsonObject:
         return {
-            "note": FAKE_ENCRYPTED_TOKEN_NOTE,
-            "access_token": f"fake-{provider}-access-token",
-            "refresh_token": f"fake-{provider}-refresh-token",
-            "expires_at": int(time.time()) + TOKEN_EXPIRES_IN_SECONDS,
+            "note": PLACEHOLDER_CREDENTIAL_NOTE,
+            "status": CREDENTIAL_STATUS_PENDING,
         }
+
+    @staticmethod
+    def _is_ready_provider_credential(payload: object) -> bool:
+        return isinstance(payload, dict) and payload.get("status") == CREDENTIAL_STATUS_READY
 
     @staticmethod
     def _oauth_account_upsert(
@@ -90,13 +92,20 @@ class OAuthRepository(DatabaseConnection):
         )
 
     def latest_github_token_ref(self) -> str | None:
-        table = OAuthAccount.__table__
+        account = OAuthAccount.__table__
+        vault = TokenVault.__table__
         statement = (
-            select(table.c.token_ref)
-            .where(table.c.provider == GitHub.PROVIDER, table.c.status == ACCOUNT_STATUS_CONNECTED)
-            .order_by(table.c.updated_at.desc())
+            select(account.c.token_ref, vault.c.encrypted_payload)
+            .join(vault, account.c.token_ref == vault.c.token_ref)
+            .where(
+                account.c.provider == GitHub.PROVIDER,
+                account.c.status == ACCOUNT_STATUS_CONNECTED,
+            )
+            .order_by(account.c.updated_at.desc())
             .limit(1)
         )
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
-        return row["token_ref"] if row else None
+        if not row or not self._is_ready_provider_credential(row["encrypted_payload"]):
+            return None
+        return row["token_ref"]

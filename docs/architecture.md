@@ -224,7 +224,7 @@ UI
 -> Gateway가 oauth.connected 발행
 ```
 
-현재 구현은 fake token exchange를 사용한다. 실제 Google/GitHub OAuth를 붙일 때는 provider adapter만 교체하고 내부 저장 구조와 event flow는 유지한다. UI 호출은 반환된 session token을 `Authorization: Bearer <token>`으로 전달해야 한다.
+현재 구현은 provider token 대신 credential placeholder만 저장한다. 실제 Google/GitHub OAuth를 붙일 때는 provider adapter와 Token Broker를 추가하고 내부 저장 구조와 event flow는 유지한다. UI 호출은 httpOnly session cookie 또는 `Authorization: Bearer <token>`으로 인증해야 한다.
 
 ## 실행
 

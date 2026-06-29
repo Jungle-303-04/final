@@ -15,9 +15,9 @@ Secrets 중 무엇을 쓰든 최종적으로 Kubernetes Secret 또는 실행 환
 시크릿은 서비스 간 계약과 이벤트에서 값이 아니라 참조로 다룬다.
 
 ```python
-from packages.config.settings import env
+from packages.config.settings import required_env
 
-database_url = env("DATABASE_URL", "postgresql://service:service@postgresql:5432/service")
+database_url = required_env("DATABASE_URL")
 ```
 
 규칙:
