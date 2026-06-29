@@ -39,13 +39,13 @@ def _domain_modules(suffix: str) -> list[ModuleType]:
 
 def load_domain_tables() -> None:
     """domains/*/tables.py 임포트 → Base.metadata 에 자동 등록."""
-    _domain_modules("tables")
+    _domain_modules("models")
 
 
 def _discovered_repositories() -> tuple[type, ...]:
     """domains/*/repo.py 에서 정의된 DatabaseConnection 하위 repo 수집."""
     found: list[type] = []
-    for mod in _domain_modules("repo"):
+    for mod in _domain_modules("repository"):
         for obj in vars(mod).values():
             if (
                 isinstance(obj, type)

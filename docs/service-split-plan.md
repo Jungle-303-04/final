@@ -44,11 +44,11 @@ services/rca-worker
 
 services/projection/dashboard-projection-service
   Read Model / Dashboard Projection
-  app.py: projection 상태 규칙, @app.on_event (모든 이벤트 >)
+  app.py: projection 상태 규칙, @app.on_any (모든 이벤트 >)
 
 services/projection/audit-timeline-service
   Audit Timeline
-  app.py: @app.on_event (모든 이벤트 >)
+  app.py: @app.on_any (모든 이벤트 >)
 
 services/target/target-cluster-agent
   Target Cluster Agent
@@ -139,7 +139,7 @@ fake-otel                     -> python services/target/target-cluster-agent/fak
 - 서비스 workflow는 `packages/contracts` 포트에 의존하고 concrete adapter는 runtime/composition 경계에서 주입한다.
 - worker 서비스는 한 파일 `app.py`에서 `packages/runtime/app.py`의 `App`을 사용한다. `App.run()`이 내부적으로 `FastApiService`/`WorkerService`/`AsyncService`를 조립한다.
 - 서비스별 설정(상수)은 별도 `settings.py`가 아니라 `services/<service-name>/app.py` 안에 둔다.
-- worker 구독은 각 worker `app.py`의 `@app.on(BodyType)`(cross-cutting projector는 `@app.on_event`)으로 선언한다.
+- worker 구독은 각 worker `app.py`의 `@app.on(BodyType)`(cross-cutting projector는 `@app.on_any`)으로 선언한다.
 - event subject, body, stream, subscription 타입은 `packages/contracts/event_bus`에서 관리한다.
 - 여러 서비스가 공유하는 runtime/env 기본값만 `packages/config`로 승격한다.
 - 이벤트 작성과 DLQ 운영 기준은 `docs/events.md`를 source of truth로 둔다.
