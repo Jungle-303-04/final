@@ -1,0 +1,97 @@
+# Values for the OpenTelemetry Collector Helm chart.
+# This file controls how the collector is installed in the target Kubernetes cluster.
+
+mode: deployment
+replicaCount: 1
+fullnameOverride: opentelemetry-collector
+
+image:
+  # The Kubernetes distribution includes receivers/processors commonly used in clusters.
+  repository: otel/opentelemetry-collector-k8s
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+
+    # Disable default non-OTLP receivers for the first local integration pass.
+    jaeger: null
+    prometheus: null
+    zipkin: null
+
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    batch: {}
+
+  exporters:
+    # Debug exporter keeps the first collector install self-contained.
+    debug: {}
+
+  extensions:
+    health_check: {}
+
+  service:
+    extensions:
+      - health_check
+    pipelines:
+      traces:
+        receivers:
+          - otlp
+        processors:
+          - memory_limiter
+          - batch
+        exporters:
+          - debug
+      metrics:
+        receivers:
+          - otlp
+        processors:
+          - memory_limiter
+          - batch
+        exporters:
+          - debug
+      logs:
+        receivers:
+          - otlp
+        processors:
+          - memory_limiter
+          - batch
+        exporters:
+          - debug
+
+ports:
+  otlp:
+    enabled: true
+    containerPort: 4317
+    servicePort: 4317
+    protocol: TCP
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    protocol: TCP
+
+  # Match the disabled receivers above.
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
