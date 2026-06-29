@@ -3,6 +3,8 @@ from __future__ import annotations
 HEALTHZ_PATH = "/healthz"
 READYZ_PATH = "/readyz"
 AUTH_SESSION_PATH = "/auth/session"
+AUTH_LOGIN_PATH = "/auth/login"
+AUTH_LOGOUT_PATH = "/auth/logout"
 OAUTH_START_PATH = "/auth/oauth/{provider}/start"
 OAUTH_CALLBACK_PATH = "/auth/oauth/{provider}/callback"
 GITHUB_WEBHOOK_PATH = "/github/webhook"
