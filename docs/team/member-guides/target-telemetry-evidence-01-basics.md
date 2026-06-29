@@ -121,7 +121,7 @@ EvidenceDraft는 최종 이벤트 payload가 아니다.
 지금은 아래 파일을 확정하지 않는다.
 
 ```text
-packages/contracts/event_bus/bodies/
+src/packages/contracts/event_bus/bodies/
 ```
 
 지금은 Target Agent 내부에서 raw data를 줄이는 연습을 먼저 한다.
@@ -129,7 +129,7 @@ packages/contracts/event_bus/bodies/
 처음 위치 후보:
 
 ```text
-services/target/cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 나중 흐름:

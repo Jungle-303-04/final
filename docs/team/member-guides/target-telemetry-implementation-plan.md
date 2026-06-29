@@ -12,11 +12,11 @@
 
 | 현재 파일 | 이미 있는 것 | 주의할 점 |
 | --- | --- | --- |
-| `services/target/cluster-agent/agent.py` | Management Gateway로 register/evidence/command poll/result를 보내는 client 흐름 | Gateway 계약이 아직 바뀔 수 있으므로 이 흐름을 확장하기 전에 Prometheus 폐쇄 루프를 먼저 만든다. |
-| `services/target/cluster-agent/fake_prometheus.py` | `run_fake_telemetry("prometheus")` 실행 파일 | 실제 Prometheus가 아니다. query 저장소도 scrape도 없다. fixed JSON을 반환하는 fake server다. |
-| `services/target/cluster-agent/fake_loki.py` | fake Loki 실행 파일 | 실제 Loki ingest/query가 아니다. |
-| `services/target/cluster-agent/fake_otel.py` | fake OTel 실행 파일 | 실제 OTLP collector나 trace backend가 아니다. |
-| `services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`, structured stdout log | 이미 Prometheus text format 비슷한 metric을 제공하므로 real Prometheus scrape 첫 대상으로 쓰기 좋다. |
+| `src/services/target/cluster-agent/agent.py` | Management Gateway로 register/evidence/command poll/result를 보내는 client 흐름 | Gateway 계약이 아직 바뀔 수 있으므로 이 흐름을 확장하기 전에 Prometheus 폐쇄 루프를 먼저 만든다. |
+| `src/services/target/cluster-agent/fake_prometheus.py` | `run_fake_telemetry("prometheus")` 실행 파일 | 실제 Prometheus가 아니다. query 저장소도 scrape도 없다. fixed JSON을 반환하는 fake server다. |
+| `src/services/target/cluster-agent/fake_loki.py` | fake Loki 실행 파일 | 실제 Loki ingest/query가 아니다. |
+| `src/services/target/cluster-agent/fake_otel.py` | fake OTel 실행 파일 | 실제 OTLP collector나 trace backend가 아니다. |
+| `src/services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`, structured stdout log | 이미 Prometheus text format 비슷한 metric을 제공하므로 real Prometheus scrape 첫 대상으로 쓰기 좋다. |
 | `deploy/target/target.yaml` | fake-prometheus/fake-loki/fake-otel, optional-node-collector, cluster-agent 배포 | fake-prometheus는 real Prometheus가 아니다. Prometheus Helm 설치 YAML/values는 아직 없다. |
 
 현재 상태에서 제일 중요한 판단:
@@ -175,7 +175,7 @@ Prometheus를 우리 플랫폼 관측용으로 설치할 수 있게 Helm values 
 
 현재 코드 기준:
 
-- `services/target/node-collector/node_collector.py`는 이미 `GET /metrics`를 제공한다.
+- `src/services/target/node-collector/node_collector.py`는 이미 `GET /metrics`를 제공한다.
 - metric 예시:
   - `node_collector_cpu_usage_ratio`
   - `node_collector_memory_working_set_bytes`

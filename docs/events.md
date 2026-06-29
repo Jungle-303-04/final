@@ -18,7 +18,7 @@
 
 ### 0.1 받을 이벤트 확인
 
-먼저 `packages/contracts/event_bus/bodies/`에서 내가 받을 body를 찾는다.
+먼저 `src/packages/contracts/event_bus/bodies/`에서 내가 받을 body를 찾는다.
 
 예를 들어 `command.requested`를 처리하려면 `CommandRequestedBody`를 사용한다.
 
@@ -30,8 +30,8 @@ body와 subject 연결은 `@event(...)`로 이미 등록되어 있다. 팀원은
 
 ### 0.2 worker handler 작성
 
-worker 파일은 `services/<domain>/<service-name>/app.py` 또는
-`services/<service-name>/app.py` 한 곳에 둔다.
+worker 파일은 `src/services/<domain>/<service-name>/app.py` 또는
+`src/services/<service-name>/app.py` 한 곳에 둔다.
 
 ```python
 from collections.abc import AsyncIterator
@@ -61,7 +61,7 @@ async def on_command_requested(
 
 ### 0.3 DB가 필요하면 ctx.db를 쓴다
 
-worker가 DB를 써야 하면 `packages/contracts/stores.py`의 필요한 store protocol을
+worker가 DB를 써야 하면 `src/packages/contracts/stores.py`의 필요한 store protocol을
 타입으로 붙인다.
 
 ```python
@@ -86,8 +86,8 @@ async def on_command_requested(
 
 새 이벤트를 만들 때는 아래 순서로 추가한다.
 
-1. `packages/contracts/event_bus/subjects.py`에 subject 추가
-2. `packages/contracts/event_bus/bodies/<domain>.py`에 `<EventName>Body` 추가
+1. `src/packages/contracts/event_bus/subjects.py`에 subject 추가
+2. `src/packages/contracts/event_bus/bodies/<domain>.py`에 `<EventName>Body` 추가
 3. body class에 `@event(EventSubject.X)` 등록
 4. 생산 worker에서 `yield NewBody(...)`
 5. 소비 worker에서 `@app.on(NewBody)` 사용
@@ -135,13 +135,13 @@ async def on_command_requested(
 
 | 항목 | 파일 |
 | --- | --- |
-| envelope 객체 | `packages/contracts/event_bus/interfaces.py`의 `EventEnvelope` |
-| wire/storage dict | `packages/contracts/event_bus/interfaces.py`의 `Event` |
-| envelope 생성 | `packages/events/envelope.py`의 `event(...)` |
+| envelope 객체 | `src/packages/contracts/event_bus/interfaces.py`의 `EventEnvelope` |
+| wire/storage dict | `src/packages/contracts/event_bus/interfaces.py`의 `Event` |
+| envelope 생성 | `src/packages/events/envelope.py`의 `event(...)` |
 
 ## 이벤트 Body
 
-발행 body는 `packages/contracts/event_bus/bodies/`에 dataclass 계약으로 둔다. 여기서 "body"는 타입이 있는 이벤트 본문 객체를 가리킨다. envelope 안의 wire/transport 필드는 여전히 소문자 `payload`로 부른다(직렬화된 형태).
+발행 body는 `src/packages/contracts/event_bus/bodies/`에 dataclass 계약으로 둔다. 여기서 "body"는 타입이 있는 이벤트 본문 객체를 가리킨다. envelope 안의 wire/transport 필드는 여전히 소문자 `payload`로 부른다(직렬화된 형태).
 
 규칙:
 
@@ -175,7 +175,7 @@ async def on_command_requested(
 
 ## 발행
 
-서비스는 raw NATS를 직접 사용하지 않는다. Subject enum은 `packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `packages/contracts/event_bus/bodies/`의 body 객체를 사용한다.
+서비스는 raw NATS를 직접 사용하지 않는다. Subject enum은 `src/packages/contracts/event_bus/subjects.py`에서 관리하고, 발행 본문은 `src/packages/contracts/event_bus/bodies/`의 body 객체를 사용한다.
 
 현재 서비스 코드에서 발행 방식은 두 가지다.
 
@@ -184,7 +184,7 @@ async def on_command_requested(
 | API Gateway HTTP 입구 | `ApiEventGateway.accept_body(...)` | HTTP request -> root event |
 | Worker handler | `yield SomeBody(...)` | event -> 다음 event |
 
-API Gateway 같은 HTTP 입구는 `packages/runtime/gateway.py`의
+API Gateway 같은 HTTP 입구는 `src/packages/runtime/gateway.py`의
 `ApiEventGateway`를 사용한다.
 
 ```python
@@ -199,7 +199,7 @@ return accepted.response()
 
 `ApiEventGateway`는 API 요청을 event envelope로 만들고, event bus 발행과
 event table 기록을 함께 처리한다. 로그인/권한 구현이 아직 fake여도 내부
-표현은 `packages/contracts/auth.py`의 `Actor`로 맞춘다.
+표현은 `src/packages/contracts/auth.py`의 `Actor`로 맞춘다.
 
 Worker handler 안에서는 직접 `publish(...)`를 호출하지 않고 다음 body를 `yield`한다.
 
@@ -234,7 +234,7 @@ async def on_event(evt: EventEnvelope, ctx: EventContext):
     subject = evt.subject
 ```
 
-`ack`, `nak`, DLQ 이동은 workflow가 직접 처리하지 않는다. 이 책임은 `packages/runtime/worker.py`의 `EventProcessor`에 있다.
+`ack`, `nak`, DLQ 이동은 workflow가 직접 처리하지 않는다. 이 책임은 `src/packages/runtime/worker.py`의 `EventProcessor`에 있다.
 
 ## 구독
 
@@ -273,15 +273,15 @@ async def on_event(evt: EventEnvelope, ctx):
 
 | 서비스 | 서비스 파일 | 구독 subject |
 | --- | --- | --- |
-| Git Pull Worker (App) | `services/gitops/git-pull-worker/app.py` | `git.webhook.received` |
-| Manifest Render Worker (App) | `services/gitops/manifest-render-worker/app.py` | `git.changed` |
-| Diff Worker (App) | `services/gitops/diff-worker/app.py` | `manifest.rendered` |
-| Diff Analyze Worker (App) | `services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
-| Repo Gateway Worker (App) | `services/gitops/scm-worker/app.py` | `safe_pr.requested` |
-| Command Worker (App) | `services/command-worker/app.py` | `command.requested` |
-| RCA Worker (App) | `services/rca-worker/app.py` | `cluster.evidence.received` |
-| Dashboard Projection Service (`@app.on_any`) | `services/projection/dashboard-worker/app.py` | `>` |
-| Audit Timeline Service (`@app.on_any`) | `services/projection/audit-worker/app.py` | `>` |
+| Git Pull Worker (App) | `src/services/gitops/git-pull-worker/app.py` | `git.webhook.received` |
+| Manifest Render Worker (App) | `src/services/gitops/manifest-render-worker/app.py` | `git.changed` |
+| Diff Worker (App) | `src/services/gitops/diff-worker/app.py` | `manifest.rendered` |
+| Diff Analyze Worker (App) | `src/services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
+| Repo Gateway Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.requested` |
+| Command Worker (App) | `src/services/command-worker/app.py` | `command.requested` |
+| RCA Worker (App) | `src/services/rca-worker/app.py` | `cluster.evidence.received` |
+| Dashboard Projection Service (`@app.on_any`) | `src/services/projection/dashboard-worker/app.py` | `>` |
+| Audit Timeline Service (`@app.on_any`) | `src/services/projection/audit-worker/app.py` | `>` |
 
 ## Outbound Gateway 패턴
 
@@ -293,7 +293,7 @@ async def on_event(evt: EventEnvelope, ctx):
 -> *.created/*.delivered 또는 *.failed
 ```
 
-이 표준 모양은 `packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
+이 표준 모양은 `src/packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
 
 예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
 
@@ -330,7 +330,7 @@ NATS JetStream durable pull consumer
 | 항목 | 기준 |
 | --- | --- |
 | stream | `SERVICE_EVENTS` |
-| subject set | `packages/contracts/event_bus/subjects.py`의 `STREAM_SUBJECTS` |
+| subject set | `src/packages/contracts/event_bus/subjects.py`의 `STREAM_SUBJECTS` |
 | durable name | 기본값은 `service_name` |
 | delivery | at-least-once |
 | retry | 최대 3회, 기본 delay 2초 |
