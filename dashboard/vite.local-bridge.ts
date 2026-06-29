@@ -12,7 +12,7 @@ const finalRoot = path.resolve(dashboardRoot, "..");
 const wikiRoot = path.resolve(finalRoot, "../WIKI");
 const stateDir = path.join(dashboardRoot, "live-state");
 const manifestPath = path.join(dashboardRoot, "config/kubernetes/desired-manifest.yaml");
-const gatewayTarget = process.env.VITE_GATEWAY_TARGET ?? "http://localhost:18081";
+const gatewayTarget = process.env.VITE_GATEWAY_TARGET ?? "http://localhost:18080";
 const gatewayPort = Number.parseInt(new URL(gatewayTarget).port || "80", 10);
 const portForwardSession = "releasegraph-gateway-portforward";
 const mgmt = ["--context", "kind-management", "-n", "management"];
@@ -51,12 +51,25 @@ async function count(root: string, current = root, acc = { files: 0, source: 0, 
   return acc;
 }
 async function service(id: string, name: string, port: number) { const line = (await opt("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], finalRoot, "", 3000)).split("\n").filter(Boolean)[1] ?? ""; return { id, name, port, status: line ? "정상" as Status : "오류" as Status, detail: line || `:${port} 리슨 없음` }; }
-async function gatewayHealth() { try { const r = await cmd("curl", ["-sS", "-m", "5", `${gatewayTarget}/healthz`], finalRoot, 7000); return { status: r.stdout.includes("ok") ? "정상" as Status : "주의" as Status, detail: `${gatewayTarget} ${r.stdout}` }; } catch (e) { return { status: "오류" as Status, detail: e instanceof Error ? e.message : String(e) }; } }
+async function gatewayHealth() {
+  let last = "";
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await cmd("curl", ["-sS", "-m", "5", `${gatewayTarget}/healthz`], finalRoot, 7000);
+      return { status: r.stdout.includes("ok") ? "정상" as Status : "주의" as Status, detail: `${gatewayTarget} ${r.stdout}` };
+    } catch (e) {
+      last = e instanceof Error ? e.message : String(e);
+      await sleep(400);
+    }
+  }
+  return { status: "오류" as Status, detail: last };
+}
 async function context(context: string) { const nodes = await opt("kubectl", ["--context", context, "get", "nodes", "--no-headers", "--request-timeout=5s"], finalRoot, "", 7000); const pods = await opt("kubectl", ["--context", context, "get", "pods", "-A", "--no-headers", "--request-timeout=5s"], finalRoot, "", 7000); return { context, status: nodes ? "정상" as Status : "오류" as Status, nodes: nodes.split("\n").filter(Boolean).length, pods: pods.split("\n").filter(Boolean).length, detail: nodes ? "kubectl API 수집 성공" : "kubectl 접근 실패" }; }
 async function workloads(context: string, namespace: string) { const out = await opt("kubectl", ["--context", context, "-n", namespace, "get", "deploy", "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.readyReplicas}|{.status.replicas}{\"\\n\"}{end}", "--request-timeout=5s"], finalRoot, "", 7000); return out.split("\n").filter(Boolean).map((line) => { const [name, ready = "0", replicas = "0"] = line.split("|"); return { id: `${context}-${namespace}-${name}`, context, namespace, name, ready: Number(ready) || 0, replicas: Number(replicas) || 0, status: ready === replicas && Number(replicas) > 0 ? "정상" as Status : "주의" as Status, detail: `${ready || 0}/${replicas || 0} ready` }; }); }
 async function gitopsConfig() { const yaml = await readFile(manifestPath, "utf8"); return { path: manifestPath, relativePath: rel(manifestPath), yaml, version: yaml.match(/^# releasegraph-version:\s*(.+)$/m)?.[1] ?? "", image: parseImage(yaml), replicas: parseReplicas(yaml), resource: { name: parseMeta(yaml, "name", "checkout-api"), namespace: parseMeta(yaml, "namespace", "sandbox") }, lastCommit: await opt("git", ["log", "-1", "--pretty=format:%h%x09%cI%x09%s", "--", rel(manifestPath)], finalRoot), diff: await opt("git", ["diff", "--", rel(manifestPath)], finalRoot), ghStatus: await opt("gh", ["auth", "status"], finalRoot, "gh auth 확인 필요") }; }
 async function overview() {
-  const [fr, wr, gh, vite, pf, pg, redis, nats, km, kt, mw, tw] = await Promise.all([repo("final", finalRoot), repo("WIKI", wikiRoot), gatewayHealth(), service("vite", "Vite 대시보드", 5173), service("gateway-portforward", "Gateway port-forward", gatewayPort), service("postgres", "PostgreSQL", 15432), service("redis", "Redis", 16379), service("nats", "NATS JetStream", 14222), context("kind-management"), context("kind-target"), workloads("kind-management", "management"), workloads("kind-target", "sandbox")]);
+  const gatewayListenerName = gatewayPort === 18080 ? "Gateway NodePort 리스너" : "Gateway port-forward";
+  const [fr, wr, gh, vite, pf, pg, redis, nats, km, kt, mw, tw] = await Promise.all([repo("final", finalRoot), repo("WIKI", wikiRoot), gatewayHealth(), service("vite", "Vite 대시보드", 5173), service("gateway-portforward", gatewayListenerName, gatewayPort), service("postgres", "PostgreSQL", 15432), service("redis", "Redis", 16379), service("nats", "NATS JetStream", 14222), context("kind-management"), context("kind-target"), workloads("kind-management", "management"), workloads("kind-target", "sandbox")]);
   return { generatedAt: new Date().toISOString(), busy: pipelineBusy, repositories: [fr, wr], sourceSummary: [{ label: "final", root: finalRoot, branch: fr.branch, head: fr.head, counts: await count(finalRoot) }, { label: "WIKI", root: wikiRoot, branch: wr.branch, head: wr.head, counts: await count(wikiRoot) }, { label: "dashboard", root: dashboardRoot, branch: fr.branch, head: fr.head, counts: await count(dashboardRoot) }], services: [vite, { id: "gateway", name: "API Gateway", port: gatewayPort, ...gh }, pf, pg, redis, nats], clusters: [km, kt], workloads: [...mw, ...tw] };
 }
 async function fetchRepos() { emit("repo.fetch.start", "주의", "git fetch 시작"); const final = await cmd("git", ["fetch", "--all", "--prune"], finalRoot); const wiki = await cmd("git", ["fetch", "--all", "--prune"], wikiRoot); emit("repo.fetch.done", "정상", "git fetch 완료"); return { final, wiki, overview: await overview() }; }
@@ -64,7 +77,7 @@ async function pullBuild() { if (pipelineBusy) throw new Error("파이프라인 
 async function dryRun(yaml: string) { await mkdir(stateDir, { recursive: true }); const file = path.join(stateDir, "dry-run.yaml"); await writeFile(file, yaml); const r = await cmd("kubectl", ["apply", "--dry-run=client", "-f", file], finalRoot); emit("yaml.dry_run", "정상", "YAML dry-run 성공", r.stdout); return { path: file, image: parseImage(yaml), replicas: parseReplicas(yaml), ...r }; }
 async function diff(yaml: string) { await mkdir(stateDir, { recursive: true }); const file = path.join(stateDir, "proposed.yaml"); await writeFile(file, yaml); const out = await opt("git", ["diff", "--no-index", "--", manifestPath, file], finalRoot, "", 10000); emit("gitops.diff", out ? "주의" : "정상", "diff 계산", out ? "변경 있음" : "변경 없음"); return { diff: out, image: parseImage(yaml), replicas: parseReplicas(yaml) }; }
 async function saveVersion(yaml: string) { const v = releaseVersion(); await mkdir(path.dirname(manifestPath), { recursive: true }); await writeFile(manifestPath, versioned(yaml, v)); await cmd("kubectl", ["apply", "--dry-run=client", "-f", manifestPath], finalRoot); await cmd("git", ["add", "--", rel(manifestPath)], finalRoot); const commit = await cmd("git", ["commit", "-m", "feat: Kubernetes 설정 / 버전 커밋 / 배포 manifest", "-m", `- 이유: 브라우저에서 수정한 manifest를 ${v} 버전으로 남김`, "-m", "- 영향: dashboard/config/kubernetes/desired-manifest.yaml", "-m", "- 검증: kubectl apply --dry-run=client", "--", rel(manifestPath)], finalRoot); emit("gitops.versioned", "정상", "버전 커밋 완료", commit.stdout); return { version: v, commit, state: await gitopsConfig() }; }
-async function createPr(base: string, title: string, body: string) { const branch = await opt("git", ["branch", "--show-current"], finalRoot, "codex/프론트엔드-데모"); emit("gitops.pr.start", "주의", "PR 생성", `${branch} -> ${base}`); await cmd("git", ["push", "-u", "origin", branch], finalRoot); const pr = await cmd("gh", ["pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body], finalRoot); emit("gitops.pr.done", "정상", "PR 생성 완료", pr.stdout); return { branch, base, prUrl: pr.stdout }; }
+async function createPr(base: string, title: string, body: string) { const branch = await opt("git", ["branch", "--show-current"], finalRoot, "codex/dashboard"); emit("gitops.pr.start", "주의", "PR 생성", `${branch} -> ${base}`); await cmd("git", ["push", "-u", "origin", branch], finalRoot); const pr = await cmd("gh", ["pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body], finalRoot); emit("gitops.pr.done", "정상", "PR 생성 완료", pr.stdout); return { branch, base, prUrl: pr.stdout }; }
 async function deploy() { const cfg = await gitopsConfig(); emit("deploy.start", "주의", "target 배포", cfg.relativePath); const apply = await cmd("kubectl", ["--context", "kind-target", "apply", "-f", manifestPath], finalRoot); const rollout = await cmd("kubectl", ["--context", "kind-target", "-n", cfg.resource.namespace, "rollout", "status", `deploy/${cfg.resource.name}`, "--timeout=180s"], finalRoot); emit("deploy.done", "정상", "target 배포 완료", `${cfg.resource.namespace}/${cfg.resource.name}`); return { apply, rollout, overview: await overview() }; }
 async function scale(namespace: string, name: string, replicas: number) { const safe = Math.max(0, Math.min(10, replicas)); emit("cluster.scale.start", "주의", "scale 시작", `${namespace}/${name} -> ${safe}`); const scaled = await cmd("kubectl", ["--context", "kind-target", "-n", namespace, "scale", `deploy/${name}`, `--replicas=${safe}`], finalRoot); if (safe > 0) await cmd("kubectl", ["--context", "kind-target", "-n", namespace, "rollout", "status", `deploy/${name}`, "--timeout=180s"], finalRoot); emit("cluster.scale.done", "정상", "scale 완료", `${namespace}/${name} -> ${safe}`); return { scaled, overview: await overview() }; }
 async function fault() { emit("fault.inject", "주의", "Gateway scale 0"); await cmd("kubectl", [...mgmt, "scale", "deploy/api-gateway", "--replicas=0"], finalRoot); await sleep(2500); const health = await gatewayHealth(); emit("fault.done", health.status === "오류" ? "주의" : "오류", "Gateway 장애 주입 결과", health.detail); return { health, overview: await overview() }; }
@@ -81,6 +94,16 @@ async function recover() {
   return { health, overview: await overview() };
 }
 async function recoverPortForward() {
+  if (gatewayPort === 18080) {
+    const health = await gatewayHealth();
+    emit(
+      health.status === "정상" ? "gateway.nodeport.ready" : "gateway.nodeport.failed",
+      health.status,
+      "Gateway NodePort 확인",
+      health.detail,
+    );
+    return { health, overview: await overview() };
+  }
   emit("portforward.recover.start", "주의", "Gateway port-forward 재기동", `${gatewayTarget} (${portForwardSession})`);
   await opt("screen", ["-S", portForwardSession, "-X", "quit"], finalRoot, "", 3000);
   await sleep(800);
