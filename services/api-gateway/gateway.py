@@ -11,7 +11,6 @@ from auth import OAuthAuthService, RedisSessionStore
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from settings import Settings
-from testapi import register_demo_routes
 
 from packages.config.constants import Auth, CommandStatus, GitHub, Sandbox, Target
 from packages.config.settings import env
@@ -48,7 +47,6 @@ class ApiGateway:
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = RedisSessionStore()
         self.auth = OAuthAuthService(self.db, self.sessions)
-        self.demo_inbox: list[dict[str, Any]] = []  # 데모 콜백 착지점
         self.app = FastAPI(
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )
@@ -70,7 +68,6 @@ class ApiGateway:
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
         app = self.app
-        register_demo_routes(app, self.events, self.demo_inbox)
         self._register_health_routes(app)
         self._register_auth_routes(app)
         self._register_ingest_routes(app)

@@ -14,7 +14,7 @@ from packages.runtime.relay import OutboxRelay
 def _evt(event_id: str) -> EventEnvelope:
     return EventEnvelope(
         event_id=event_id,
-        subject="demo.ping.requested",
+        subject="git.changed",
         source="api-gateway",
         correlation_id="corr-1",
         causation_id=None,
@@ -60,7 +60,7 @@ def test_relay_publishes_then_marks_sent() -> None:
 def test_relay_publishes_only_own_source() -> None:
     other = EventEnvelope(
         event_id="x",
-        subject="demo.ping.requested",
+        subject="git.changed",
         source="other-worker",
         correlation_id="corr-1",
         causation_id=None,
