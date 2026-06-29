@@ -63,3 +63,21 @@ jobs:
 
       - name: Build service image
         run: docker build -f services/Dockerfile -t service:ci .
+
+      - name: Container import smoke
+        run: |
+          docker run --rm service:ci python - <<'PY'
+          import sys
+
+          import sqlalchemy
+          from packages.storage.database import Database
+
+          sys.path.insert(0, "/app/services/api-gateway")
+          from auth import RedisSessionStore
+          from gateway import ApiGateway
+
+          assert sqlalchemy.__version__
+          assert Database().sqlalchemy_url.startswith("postgresql+psycopg://")
+          assert RedisSessionStore().url.startswith("redis://")
+          assert ApiGateway().app.title
+          PY
