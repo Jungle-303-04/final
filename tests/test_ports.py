@@ -134,9 +134,7 @@ def test_command_id_is_deterministic_for_same_input() -> None:
 
 
 def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
-    policy = load_file(
-        ROOT / "src" / "services" / "command-worker" / "command_policy.py", "test_command_policy"
-    )
+    policy = load_file(ROOT / "src" / "domains" / "command" / "policy.py", "test_command_policy")
     rule = policy.EqualsRule(
         name="sandbox_namespace",
         field="namespace",

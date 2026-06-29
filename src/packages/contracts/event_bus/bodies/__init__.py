@@ -11,6 +11,16 @@
 
 from __future__ import annotations
 
+from domains.command.events import (
+    CommandCompletedBody,
+    CommandDispatchedBody,
+    CommandDispatchReadyBody,
+    CommandQueuedForAgentBody,
+    CommandRejectedBody,
+    CommandRequestedBody,
+    Plan,
+    Route,
+)
 from domains.gitops.events import (
     Diff,
     DiffAnalyzedBody,
@@ -24,16 +34,6 @@ from domains.gitops.events import (
     RenderedSpec,
 )
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
-from packages.contracts.event_bus.bodies.command import (
-    CommandCompletedBody,
-    CommandDispatchedBody,
-    CommandDispatchReadyBody,
-    CommandQueuedForAgentBody,
-    CommandRejectedBody,
-    CommandRequestedBody,
-    Plan,
-    Route,
-)
 from packages.contracts.event_bus.bodies.dashboard import DashboardUpdatedBody
 from packages.contracts.event_bus.bodies.rca import (
     ClusterEvidenceReceivedBody,
