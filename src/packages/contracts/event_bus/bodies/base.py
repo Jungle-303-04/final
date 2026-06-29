@@ -93,7 +93,8 @@ def _decode_value(owner: str, key: str, value: Any, field_type: Any) -> Any:
     if origin in (list, Sequence):
         if not isinstance(value, Sequence) or isinstance(value, str | bytes):
             raise EventBodyDecodeError(f"{owner}: field {key} must be a list")
-        return list(value)
+        item_type = args[0] if args else Any
+        return [_decode_value(owner, f"{key}[]", item, item_type) for item in value]
 
     if origin in (dict, Mapping):
         if not isinstance(value, Mapping):

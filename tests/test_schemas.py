@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from packages.contracts.event_bus.bodies import CommandRequestedBody
+from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody, CommandRequestedBody
 from packages.contracts.event_bus.bodies.base import EventBodyDecodeError
 from packages.contracts.gateway.requests import CommandRequest, GitHubWebhookRequest
 from packages.events.envelope import event
@@ -108,5 +108,18 @@ def test_event_body_rejects_unexpected_field() -> None:
                     "risk": "sandbox-only",
                 },
                 "debug": True,
+            }
+        )
+
+
+def test_event_body_rejects_invalid_list_item_type() -> None:
+    with pytest.raises(EventBodyDecodeError):
+        ClusterEvidenceReceivedBody.from_body(
+            {
+                "cluster_id": "target-cluster-01",
+                "kubernetes": {},
+                "metrics": {},
+                "logs": ["raw log line must be an object"],
+                "traces": {},
             }
         )
