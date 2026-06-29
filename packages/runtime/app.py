@@ -23,8 +23,13 @@ from typing import Any
 from packages.config.errors import fail, require
 from packages.contracts.event_bus.registry import Subscription, events
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, WorkerSubscription
-from packages.runtime.dispatch import EventContext, make_event_handler, make_raw_handler
+from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT
+from packages.runtime.dispatch import (
+    EventContext,
+    make_event_handler,
+    make_raw_handler,
+    make_router,
+)
 
 # App 과 EventContext 함께 쓰므로 여기서 재노출.
 __all__ = ["App", "EventContext"]
@@ -68,27 +73,29 @@ class App:
         """등록된 구독자를 NATS 에 붙여 실행. (런타임은 지연 import)"""
         from packages.runtime.service import WorkerService
 
-        subject, factory = self._resolve()
-        worker_sub = WorkerSubscription(service_name=self.name, subject=subject)
-        WorkerService.from_subscription(worker_sub, factory).run()
+        subjects, factory = self._resolve()
+        WorkerService(self.name, tuple(subjects), factory).run()
 
-    def _resolve(self) -> tuple[str, Callable[..., Any]]:
-        """구독 종류(typed/raw)에 맞는 (subject, 핸들러 팩토리)."""
+    def _resolve(self) -> tuple[list[str], Callable[..., Any]]:
+        """구독 종류(typed/raw)에 맞는 (subject 목록, 핸들러 팩토리).
+
+        typed 는 subject 여러 개 가능 — 팩토리가 subject→핸들러 라우터를 반환.
+        """
         if self._raw is not None:
             fn, wants_ctx = self._raw
 
             def raw_factory(client: Any, db: Any) -> Callable[..., Any]:
                 return make_raw_handler(fn, wants_ctx, db, self.name)
 
-            return ALL_EVENTS_SUBJECT, raw_factory
+            return [ALL_EVENTS_SUBJECT], raw_factory
 
-        ensure_single_handler(self.name, self._handlers)
-        sub = self.subscriptions[0]
+        ensure_has_handler(self.name, self._handlers)
+        subs = self.subscriptions
 
         def factory(client: Any, db: Any) -> Callable[..., Any]:
-            return make_event_handler(sub, db, self.name)
+            return make_router({s.subject: make_event_handler(s, db, self.name) for s in subs})
 
-        return sub.subject, factory
+        return [s.subject for s in subs], factory
 
 
 # ensure
@@ -111,5 +118,5 @@ def ensure_unique_handler(handlers: dict[Any, Any], subject: Any) -> None:
         fail(f"{subject} 구독자 중복: {handlers[subject].fn.__name__}", TypeError)
 
 
-def ensure_single_handler(service: str, handlers: dict[Any, Any]) -> None:
-    require(len(handlers) == 1, f"{service}: 핸들러 1개만(현재 {len(handlers)})", RuntimeError)
+def ensure_has_handler(service: str, handlers: dict[Any, Any]) -> None:
+    require(len(handlers) >= 1, f"{service}: 구독 핸들러가 없음(@app.sub 필요)", RuntimeError)
