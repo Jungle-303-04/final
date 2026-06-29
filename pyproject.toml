@@ -23,7 +23,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 [tool.ruff]
 # 가독성 폭(클린코드 기준): 80은 좁아 의미 없는 줄바꿈을 부르고, 1000은 과함 → 100.

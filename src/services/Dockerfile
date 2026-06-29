@@ -2,16 +2,15 @@ FROM python:3.13.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app/src
 
 WORKDIR /app
 
-COPY services/requirements.txt ./requirements.txt
+COPY src/services/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY packages ./packages
-COPY services ./services
+COPY src ./src
 
 EXPOSE 8000 9100
 
-CMD ["python", "services/api-gateway/app.py"]
+CMD ["python", "src/services/api-gateway/app.py"]

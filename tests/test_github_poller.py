@@ -15,7 +15,7 @@ from conftest import ROOT, load_file
 
 
 def _load_poller() -> Any:
-    return load_file(ROOT / "services" / "gitops" / "github-poller" / "poller.py", "svc_poller")
+    return load_file(ROOT / "src" / "services" / "gitops" / "github-poller" / "poller.py", "svc_poller")
 
 
 def _transport(posted: list[dict[str, Any]], sha: str = "abc123def456") -> httpx.MockTransport:
