@@ -137,7 +137,7 @@ ci: PR 필수 검증 workflow 추가
 ## 이벤트 규칙
 
 - API 입구 발행은 `ApiEventGateway.accept_body(...)`, worker 후속 발행은 `yield Body(...)`를 사용한다. raw NATS 직접 발행은 금지한다.
-- 구독은 각 worker `app.py`의 `@app.sub(BodyType)`으로 선언한다. dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받는다.
+- 구독은 각 worker `app.py`의 `@app.on(BodyType)`으로 선언한다. dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받는다.
 - 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). `WorkerService`는 `App.run()` 내부 구현이며 서비스가 직접 호출하지 않는다.
 - 새 event subject는 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 함께 추가한다.
 - 새 event body나 변경된 event body는 `packages/contracts/event_bus/bodies/`에 dataclass 계약으로 추가한다(base class `EventBody`, 클래스명 `<EventName>Body`).

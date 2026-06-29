@@ -1,0 +1,70 @@
+{
+  "status": "partial",
+  "branchName": "codex/프론트엔드-데모",
+  "generatedAt": "2026-06-29T08:24:25.447Z",
+  "merges": [
+    {
+      "remote": "origin/dev",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/jeonwoohyun-hydromel/command-worker",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/jeonwoohyun-hydromel/gitops-sync-worker",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/minmings111/node-collector",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/minmings111/target-cluster-agent",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/ummfieg/audit-timeline-service",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/ummfieg/dashboard-projection-service",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/ummfieg/rca-worker",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/feat/woonyong-kr/event-system",
+      "status": "merged"
+    },
+    {
+      "remote": "origin/main",
+      "status": "merged"
+    }
+  ],
+  "mergeConflicts": [
+    {
+      "remote": "origin/feat/jcbbbbbb/api-gateway",
+      "status": "conflict",
+      "conflicts": [
+        "packages/config/constants.py",
+        "packages/storage/database.py",
+        "services/api-gateway/gateway.py"
+      ],
+      "mergeAborted": true
+    }
+  ],
+  "dashboardChangesBeforeSync": [
+    "dashboard/"
+  ],
+  "dashboardChangesAfterSync": [
+    "dashboard/"
+  ],
+  "outsideDashboardChanges": [
+    "outputs/weekly-report/2026-06-29-project-progress-detail-slides.pptx",
+    "outputs/weekly-report/2026-06-29-project-progress-detail-slides.pptx.inspect.ndjson"
+  ],
+  "note": "Some remote branches could not be merged automatically. Conflicts were aborted and reported; dashboard sync and build still completed."
+}

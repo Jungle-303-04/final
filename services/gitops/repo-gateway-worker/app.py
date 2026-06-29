@@ -29,7 +29,7 @@ PR_NUMBER_MODULO = 100000
 MISSING_GITHUB_TOKEN_REF = "missing-github-oauth-fallback"
 
 
-@app.sub(SafePrRequestedBody)
+@app.on(SafePrRequestedBody)
 async def on_safe_pr_requested(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:

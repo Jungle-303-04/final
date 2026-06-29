@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-06-29T11:17:18.498Z",
+  "repositories": [
+    {
+      "label": "final",
+      "root": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final",
+      "branch": "codex/프론트엔드-데모",
+      "head": "782334138841",
+      "upstream": "",
+      "dirty": 1,
+      "counts": {
+        "files": 403,
+        "source": 179,
+        "docs": 39,
+        "bytes": 37904034
+      }
+    },
+    {
+      "label": "WIKI",
+      "root": "/Users/woonyong/workspace/Krafton-Jungle/WIKI",
+      "branch": "main",
+      "head": "8f4ff7005d32",
+      "upstream": "origin/main",
+      "dirty": 2,
+      "counts": {
+        "files": 316,
+        "source": 225,
+        "docs": 192,
+        "bytes": 38645167
+      }
+    },
+    {
+      "label": "dashboard",
+      "root": "/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final/dashboard",
+      "branch": "codex/프론트엔드-데모",
+      "head": "782334138841",
+      "upstream": "",
+      "dirty": 1,
+      "counts": {
+        "files": 18,
+        "source": 13,
+        "docs": 0,
+        "bytes": 119409
+      }
+    }
+  ],
+  "runtime": {
+    "gateway": "{\"status\":\"ok\",\"service\":\"api-gateway\"}",
+    "localBridge": "{\n  \"generatedAt\": \"2026-06-29T11:17:20.149Z\",\n  \"busy\": false,\n  \"repositories\": [\n    {\n      \"label\": \"final\",\n      \"root\": \"/Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final\",\n      \"exists\": true,\n      \"status\": \"주의\",\n      \"branch\": \"codex/프론트엔드-데모\",\n      \"head\": \"782334138841\",\n      \"upstream\": \"\",\n      \"remote\": \"https://github.com/Jungle-303-04/final.git\",\n      \"ahead\": 0,\n      \"behind\": 0,\n      \"dirty\": 0,\n      \"untracked\": 1,\n      \"subject\": \"Merge remote-tracking branch 'origin/feat/ummfieg/rca-worker' into codex/프론트엔드-데모\",\n      \"committedAt\": \"2026-06-29T12:53:44+09:00\",\n      \"statusLines\": [\n        \"?? dashboard/\"\n      ],\n      \"recentCommits\": [\n        {\n          \"hash\": \"7823341\",\n          \"date\": \"2026-06-29T12:53:44+09:00\",\n          \"subject\": \"Merge remote-tracking branch 'origin/feat/ummfieg/rca-worker' into codex/프론트엔드-데모\"\n        },\n        {\n          \"hash\": \"11ea9cd\",\n          \"date\": \"2026-06-29T12:53:44+09:00\",\n          \"subject\": \"Merge remote-tracking branch 'origin/feat/ummfieg/dashboard-projection-service' into codex/프론트엔드-데모\"\n        },\n        {\n          \"hash\": \"3c46d0c\",\n          \"date\": \"2026-06-29T12:53:43+09:00\",\n          \"subject\": \"Merge remote-tracking branch 'origin/feat/ummfieg/audit-timeline-service' into codex/프론트엔드-데모\"\n        },\n        {\n          \"hash\": \"f28f6f8\",\n          \"date\": \"2026-06-29T12:53:26+09:00\",\n          \"subject\": \"Merge remote-tracking branch 'origin/feat/minmings111/target-cluster-agent' into codex/프론트엔드-데모\"\n        },\n        {\n          \"hash\": \"88f9b73\",\n          \"date\": \"2026-06-29T12:49:27+09:00\",\n          \"subject\": \"Merge remote-tracking branch 'origin/feat/minmings111/node-collector' into codex/프론트엔드-데모\"\n        }\n      ]\n    },\n    {\n      \"label\": \"WIKI\",\n      \"root\": \"/Users/woonyong/workspace/Krafton-Jungle/WIKI\",\n      \"exists\": true,\n      \"status\": \"주의\",\n      \"branch\": \"main\",\n      \"head\": \"8f4ff7005d32\",\n      \"upstream\": \"origin/main\",\n      \"r"
+  }
+}
