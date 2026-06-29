@@ -1,13 +1,16 @@
 import pytest
 from pydantic import ValidationError
 
+from packages.contracts.event_bus.bodies import CommandRequestedBody
+from packages.contracts.event_bus.bodies.base import EventBodyDecodeError
 from packages.contracts.gateway.requests import CommandRequest, GitHubWebhookRequest
 from packages.events.envelope import event
 
 
-def test_command_request_allows_only_sandbox_namespace() -> None:
-    with pytest.raises(ValidationError):
-        CommandRequest(namespace="production")
+def test_command_request_leaves_namespace_policy_to_command_worker() -> None:
+    request = CommandRequest(namespace="production")
+
+    assert request.namespace == "production"
 
 
 def test_command_request_rejects_unknown_fields() -> None:
@@ -75,3 +78,35 @@ def test_payload_nested_decode_roundtrip() -> None:
     assert isinstance(decoded.rendered_manifest, RenderedManifest)
     assert decoded.rendered_manifest.spec.image == "img:new"
     assert decoded == original
+
+
+def test_event_body_rejects_missing_required_field() -> None:
+    with pytest.raises(EventBodyDecodeError):
+        CommandRequestedBody.from_body(
+            {
+                "cluster_id": "target-cluster-01",
+                "action": "rollout_restart",
+                "namespace": "sandbox",
+                "reason": "rollout",
+            }
+        )
+
+
+def test_event_body_rejects_unexpected_field() -> None:
+    with pytest.raises(EventBodyDecodeError):
+        CommandRequestedBody.from_body(
+            {
+                "cluster_id": "target-cluster-01",
+                "action": "rollout_restart",
+                "namespace": "sandbox",
+                "reason": "rollout",
+                "diff": {
+                    "resource": "deployment/checkout-api",
+                    "namespace": "sandbox",
+                    "desired_image": "new",
+                    "actual_image": "old",
+                    "risk": "sandbox-only",
+                },
+                "debug": True,
+            }
+        )

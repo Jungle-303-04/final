@@ -26,8 +26,8 @@ Audit Timeline Service
 ## 담당 영역
 
 - `services/rca-worker`
-- `services/gitops/repo-gateway-worker`
-- `services/projection/audit-timeline-service`
+- `services/gitops/scm-worker`
+- `services/projection/audit-worker`
 - Evidence Builder logic
 - AI RCA Service logic
 - Safe PR request/proposal logic
@@ -45,7 +45,7 @@ Audit Timeline Service
 
 ## 이벤트 시스템을 몰라도 되는 작업 규칙
 
-- RCA Worker는 `@app.sub(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
+- RCA Worker는 `@app.on(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
 - handler 입력은 타입이 있는 body 객체이며, 원본 envelope의 transport 필드는 `EventEnvelope.payload`다.
 - 새로운 사실을 만들면 body DTO로 감싸서 `yield`로 발행한다.
 - GitHub PR을 실제로 만들 때도 event에는 PR URL, branch, commit SHA, credential_ref 같은 reference만 남긴다.
@@ -60,7 +60,7 @@ Audit Timeline Service
 
 ## 코드 규칙
 
-- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.sub(BodyType)`으로 선언한다.
+- 한 서비스는 한 파일 `app.py`다. worker 구독은 `@app.on(BodyType)`으로 선언한다.
 - `App.run()`이 내부적으로 worker 런타임을 조립한다. 서비스가 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다.
 - Worker는 다음 이벤트 body를 `yield`로 발행한다(체이닝).
 - Handler는 타입 body를 받고, 필요하면 원본 envelope의 `evt.payload`(transport)도 읽는다.
@@ -329,7 +329,7 @@ event 흐름을 audit_log로 기록해서 나중에 추적 가능하게 한다.
 
 구현할 것:
 
-- `audit-timeline-service` 구독 확인.
+- `audit-worker` 구독 확인.
 - event subject, source, correlation_id, causation_id, created_at 저장.
 - payload는 안전한 subset 또는 redaction.
 - command/RCA/PR subject별 사람이 읽는 message.
@@ -379,7 +379,7 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 - 새 event subject가 `packages/contracts/event_bus/subjects.py`와 `docs/events.md`에 있음
 - 새/변경 event body가 `packages/contracts/event_bus/bodies/`에 있음
 - RCA/Safe PR 동작 테스트 존재
-- handler가 `@app.sub` body DTO 흐름을 유지함
+- handler가 `@app.on` body DTO 흐름을 유지함
 - raw NATS 사용 없음
 - 실제 GitHub write는 feature flag 또는 policy guard로 보호
 - audit/dashboard 영향이 문서화됨
@@ -388,8 +388,8 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 ## 처음 읽을 파일
 
 1. `services/rca-worker`
-2. `services/gitops/repo-gateway-worker`
-3. `services/projection/audit-timeline-service`
+2. `services/gitops/scm-worker`
+3. `services/projection/audit-worker`
 4. `packages/contracts/event_bus/subjects.py`
 5. `packages/contracts/event_bus/bodies/`
 6. `packages/runtime/worker.py`
@@ -398,4 +398,4 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `services/rca-worker`, `services/gitops/repo-gateway-worker`, `services/projection/audit-timeline-service`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
+이 영역을 작업할 때는 `services/rca-worker`, `services/gitops/scm-worker`, `services/projection/audit-worker`, `packages/runtime/worker.py`, `packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
