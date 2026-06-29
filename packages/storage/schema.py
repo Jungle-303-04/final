@@ -2,29 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-class Base(DeclarativeBase):
-    pass
-
-
-def text_column() -> Mapped[str]:
-    return mapped_column(Text, nullable=False)
-
-
-def jsonb_column() -> Mapped[dict[str, Any]]:
-    return mapped_column(JSONB, nullable=False)
-
-
-def created_at_column() -> Mapped[Any]:
-    return mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
-
-
-def updated_at_column() -> Mapped[Any]:
-    return mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+from packages.domains.gitops.tables import RepoChange as RepoChange  # 도메인 테이블 등록 + 재노출
+from packages.storage.base import (
+    Base,
+    created_at_column,
+    jsonb_column,
+    text_column,
+    updated_at_column,
+)
 
 
 class EventModel(Base):
@@ -35,16 +24,6 @@ class EventModel(Base):
     source: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
-    created_at: Mapped[Any] = created_at_column()
-
-
-class RepoChange(Base):
-    __tablename__ = "repo_changes"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    correlation_id: Mapped[str] = text_column()
-    commit_sha: Mapped[str] = text_column()
-    manifest: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
 
 

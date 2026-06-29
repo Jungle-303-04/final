@@ -29,18 +29,6 @@ from packages.contracts.event_bus.bodies.demo import (
     DemoPongFailedBody,
     DemoPongRequestedBody,
 )
-from packages.contracts.event_bus.bodies.gitops import (
-    Diff,
-    DiffAnalyzedBody,
-    DiffDetectedBody,
-    GitChangedBody,
-    GitWebhookReceivedBody,
-    Manifest,
-    ManifestRenderedBody,
-    RenderedManifest,
-    RenderedMetadata,
-    RenderedSpec,
-)
 from packages.contracts.event_bus.bodies.rca import (
     ClusterEvidenceReceivedBody,
     Evidence,
@@ -51,6 +39,18 @@ from packages.contracts.event_bus.bodies.repo import (
     SafePrCreatedBody,
     SafePrFailedBody,
     SafePrRequestedBody,
+)
+from packages.domains.gitops.events import (
+    Diff,
+    DiffAnalyzedBody,
+    DiffDetectedBody,
+    GitChangedBody,
+    GitWebhookReceivedBody,
+    Manifest,
+    ManifestRenderedBody,
+    RenderedManifest,
+    RenderedMetadata,
+    RenderedSpec,
 )
 
 __all__ = [

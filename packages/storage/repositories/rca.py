@@ -10,18 +10,7 @@ from packages.storage.schema import (
     Evidence,
     PullRequest,
     RcaReport,
-    RepoChange,
 )
-
-
-class RepoChangeRepository(DatabaseConnection):
-    def save_repo_change(self, correlation_id: str, commit_sha: str, manifest: JsonObject) -> None:
-        table = RepoChange.__table__
-        statement = pg_insert(table).values(
-            correlation_id=correlation_id, commit_sha=commit_sha, manifest=manifest
-        )
-        with self.connection() as conn:
-            conn.execute(statement)
 
 
 class RcaRepository(DatabaseConnection):
