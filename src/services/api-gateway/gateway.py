@@ -11,11 +11,11 @@ from settings import Settings
 
 from domains.command.router import router as command_router
 from domains.gitops.router import router as gitops_router
+from domains.identity.dependencies import require_agent
 from domains.identity.router import router as identity_router
 from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
 from packages.config.constants import CommandStatus
-from packages.config.settings import env
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
@@ -79,18 +79,10 @@ class ApiGateway:
             self.db.init()
             return {Gateway.STATUS: Gateway.STATUS_READY}
 
-    def _require_agent(self, request: Request) -> None:
-        # fail-closed: AGENT_TOKEN 미설정이면 약한 기본값으로 열지 않고 거부.
-        expected = env(Settings.AGENT_TOKEN_ENV, "")
-        if not expected:
-            raise HTTPException(status_code=503, detail=Settings.AGENT_AUTH_NOT_CONFIGURED_MESSAGE)
-        if request.headers.get(Settings.AGENT_TOKEN_HEADER) != expected:
-            raise HTTPException(status_code=401, detail=Settings.AGENT_AUTH_REQUIRED_MESSAGE)
-
     def _register_ingest_routes(self, app: FastAPI) -> None:
         @app.post(gateway_routes.AGENT_CONNECT_PATH)
         async def agent_connect(request: Request, payload: AgentConnectRequest) -> dict[str, Any]:
-            self._require_agent(request)
+            require_agent(request)
             accepted = await self.events.accept(EventSubject.AGENT_CONNECTED, payload.model_dump())
             return accepted.response()
 
