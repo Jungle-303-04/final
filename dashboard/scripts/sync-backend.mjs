@@ -21,7 +21,12 @@ function count(root, current = root, acc = { files: 0, source: 0, docs: 0, bytes
   return acc;
 }
 function repo(label, root) { const branch = run("git", ["branch", "--show-current"], root) || "unknown"; return { label, root, branch, head: run("git", ["rev-parse", "--short=12", "HEAD"], root) || "unknown", dirty: run("git", ["status", "--porcelain"], root).split("\n").filter(Boolean).length, counts: count(root) }; }
-const report = { generatedAt: new Date().toISOString(), repositories: [repo("final", finalRoot), repo("WIKI", wikiRoot), repo("dashboard", dashboardRoot)], runtime: { gateway: run("curl", ["-sS", "-m", "2", "http://localhost:18081/healthz"], finalRoot) } };
+const report = { generatedAt: new Date().toISOString(), repositories: [repo("final", finalRoot), repo("WIKI", wikiRoot), repo("dashboard", dashboardRoot)], runtime: { gateway: run("curl", ["-sS", "-m", "2", "http://localhost:18080/healthz"], finalRoot) } };
 mkdirSync(path.dirname(reportPath), { recursive: true });
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-if (process.argv.includes("--check")) { if (report.repositories[0].branch !== "codex/프론트엔드-데모" || report.repositories[2].counts.source < 5) process.exit(1); console.log("source sync report is current."); } else console.log(`wrote ${path.relative(dashboardRoot, reportPath)}`);
+if (process.argv.includes("--check")) {
+  if (report.repositories[0].branch !== "codex/dashboard" || report.repositories[2].counts.source < 5) process.exit(1);
+  console.log("source sync report is current.");
+} else {
+  console.log(`wrote ${path.relative(dashboardRoot, reportPath)}`);
+}
