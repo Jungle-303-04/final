@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from packages.config.retry import retry_dependency
 from packages.contracts.interfaces import InitializableStore
+from packages.domains.gitops.repo import RepoChangeRepository
 from packages.storage.engine import (
     ERROR_MESSAGE_LIMIT,
     compact_error,
@@ -24,8 +25,8 @@ from packages.storage.repositories.events import (
     EventRepository,
     OutboxRepository,
 )
-from packages.storage.repositories.gitops import RcaRepository, RepoChangeRepository
 from packages.storage.repositories.projection import AuditLogRepository, DashboardRepository
+from packages.storage.repositories.rca import RcaRepository
 
 __all__ = [
     "ERROR_MESSAGE_LIMIT",
