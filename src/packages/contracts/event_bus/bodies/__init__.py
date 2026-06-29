@@ -33,19 +33,19 @@ from domains.gitops.events import (
     RenderedMetadata,
     RenderedSpec,
 )
-from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
-from packages.contracts.event_bus.bodies.dashboard import DashboardUpdatedBody
-from packages.contracts.event_bus.bodies.rca import (
+from domains.rca.events import (
     ClusterEvidenceReceivedBody,
     Evidence,
     EvidenceBuiltBody,
     RcaCompletedBody,
 )
-from packages.contracts.event_bus.bodies.repo import (
+from domains.scm.events import (
     SafePrCreatedBody,
     SafePrFailedBody,
     SafePrRequestedBody,
 )
+from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
+from packages.contracts.event_bus.bodies.dashboard import DashboardUpdatedBody
 
 __all__ = [
     "ClusterEvidenceReceivedBody",

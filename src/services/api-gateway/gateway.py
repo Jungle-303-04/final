@@ -13,10 +13,10 @@ from settings import Settings
 
 from domains.command.router import router as command_router
 from domains.identity.router import router as identity_router
+from domains.rca.router import router as rca_router
 from packages.config.constants import CommandStatus
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import (
-    ClusterEvidenceReceivedBody,
     GitWebhookReceivedBody,
 )
 from packages.contracts.event_bus.subjects import EventSubject
@@ -24,7 +24,6 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
-    AgentEvidenceRequest,
     GitHubWebhookRequest,
 )
 from packages.events.bus import NatsEventBus
@@ -68,6 +67,7 @@ class ApiGateway:
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         self._register_ingest_routes(app)
+        app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         self._register_dead_letter_routes(app)
         self._register_dashboard_routes(app)
@@ -102,15 +102,6 @@ class ApiGateway:
         async def agent_connect(request: Request, payload: AgentConnectRequest) -> dict[str, Any]:
             self._require_agent(request)
             accepted = await self.events.accept(EventSubject.AGENT_CONNECTED, payload.model_dump())
-            return accepted.response()
-
-        @app.post(gateway_routes.AGENT_EVIDENCE_PATH)
-        async def agent_evidence(request: Request, payload: AgentEvidenceRequest) -> dict[str, Any]:
-            self._require_agent(request)
-            accepted = await self.events.accept_body(
-                ClusterEvidenceReceivedBody(**payload.model_dump(exclude={"correlation_id"})),
-                payload.correlation_id,
-            )
             return accepted.response()
 
     def _register_dead_letter_routes(self, app: FastAPI) -> None:

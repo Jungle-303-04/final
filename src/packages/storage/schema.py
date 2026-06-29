@@ -26,39 +26,6 @@ class EventModel(Base):
     created_at: Mapped[Any] = created_at_column()
 
 
-class Evidence(Base):
-    __tablename__ = "evidence"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    correlation_id: Mapped[str] = text_column()
-    kind: Mapped[str] = text_column()
-    payload: Mapped[dict[str, Any]] = jsonb_column()
-    created_at: Mapped[Any] = created_at_column()
-
-
-class RcaReport(Base):
-    __tablename__ = "rca_reports"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    correlation_id: Mapped[str] = text_column()
-    root_cause: Mapped[str] = text_column()
-    action: Mapped[str] = text_column()
-    payload: Mapped[dict[str, Any]] = jsonb_column()
-    created_at: Mapped[Any] = created_at_column()
-
-
-class PullRequest(Base):
-    __tablename__ = "pull_requests"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    correlation_id: Mapped[str] = text_column()
-    pr_url: Mapped[str] = text_column()
-    title: Mapped[str] = text_column()
-    body: Mapped[str] = text_column()
-    status: Mapped[str] = text_column()
-    created_at: Mapped[Any] = created_at_column()
-
-
 class DashboardCard(Base):
     __tablename__ = "dashboard_cards"
 
