@@ -32,6 +32,23 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
     reason = SAFE_REASON if safe else UNSAFE_REASON
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
+        # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 command.requested 직접 발행):
+        #
+        # await self.events.publish(
+        #     EventSubject.COMMAND_REQUESTED,
+        #     SERVICE_NAME,
+        #     {
+        #         "cluster_id": env(TARGET_CLUSTER_ENV, DEFAULT_TARGET_CLUSTER_ID),
+        #         "action": SYNC_ACTION,
+        #         "namespace": SANDBOX_NAMESPACE,
+        #         "reason": SYNC_REASON,
+        #         "diff": diff,
+        #     },
+        #     evt["correlation_id"],
+        # )
+        #
+        # 현재 split 구조에서는 diff를 바로 실행 command로 보내지 않고,
+        # 안전 판정 후 safe_pr.requested를 발행한다.
         yield SafePrRequestedBody(
             title=PR_TITLE,
             body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
