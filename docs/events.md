@@ -7,7 +7,7 @@
 
 ```text
 1. 내가 받을 이벤트 body를 고른다.
-2. app.py에 @app.sub(BodyType) 핸들러를 만든다.
+2. app.py에 @app.on(BodyType) 핸들러를 만든다.
 3. 처리 결과로 다음 이벤트 body를 yield 한다.
 4. retry, ack, DLQ는 runtime이 처리한다.
 ```
@@ -26,7 +26,7 @@
 from packages.contracts.event_bus.bodies import CommandRequestedBody
 ```
 
-body와 subject 연결은 `@events.reg(...)`로 이미 등록되어 있다. 팀원은 subject 문자열을 직접 외울 필요가 없다.
+body와 subject 연결은 `@event(...)`로 이미 등록되어 있다. 팀원은 subject 문자열을 직접 외울 필요가 없다.
 
 ### 0.2 worker handler 작성
 
@@ -46,7 +46,7 @@ from packages.runtime.app import App, EventContext
 app = App("example-worker")
 
 
-@app.sub(CommandRequestedBody)
+@app.on(CommandRequestedBody)
 async def on_command_requested(
     evt: CommandRequestedBody,
     ctx: EventContext,
@@ -68,7 +68,7 @@ worker가 DB를 써야 하면 `packages/contracts/stores.py`의 필요한 store 
 from packages.contracts.stores import AgentCommandStore
 
 
-@app.sub(CommandRequestedBody)
+@app.on(CommandRequestedBody)
 async def on_command_requested(
     evt: CommandRequestedBody,
     ctx: EventContext[AgentCommandStore],
@@ -88,9 +88,9 @@ async def on_command_requested(
 
 1. `packages/contracts/event_bus/subjects.py`에 subject 추가
 2. `packages/contracts/event_bus/bodies/<domain>.py`에 `<EventName>Body` 추가
-3. body class에 `@events.reg(EventSubject.X)` 등록
+3. body class에 `@event(EventSubject.X)` 등록
 4. 생산 worker에서 `yield NewBody(...)`
-5. 소비 worker에서 `@app.sub(NewBody)` 사용
+5. 소비 worker에서 `@app.on(NewBody)` 사용
 6. `docs/events.md`의 흐름 표 갱신
 7. 테스트 추가
 
@@ -204,7 +204,7 @@ event table 기록을 함께 처리한다. 로그인/권한 구현이 아직 fak
 Worker handler 안에서는 직접 `publish(...)`를 호출하지 않고 다음 body를 `yield`한다.
 
 ```python
-@app.sub(DiffDetectedBody)
+@app.on(DiffDetectedBody)
 async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext):
     yield DiffAnalyzedBody(
         diff=evt.diff,
@@ -229,7 +229,7 @@ async def on_command_requested(evt: CommandRequestedBody, ctx: EventContext):
 dashboard, audit 같은 전체 이벤트 projector는 `EventEnvelope`를 받는다.
 
 ```python
-@app.on_event
+@app.on_any
 async def on_event(evt: EventEnvelope, ctx: EventContext):
     subject = evt.subject
 ```
@@ -238,7 +238,7 @@ async def on_event(evt: EventEnvelope, ctx: EventContext):
 
 ## 구독
 
-한 서비스는 한 파일 `app.py`다. 구독은 `App` 객체에 `@app.sub(BodyType)`으로 선언한다. 별도의 `settings.py`나 `WorkerSubscription` 모델, `WorkerService.from_subscription(...)` 호출은 더 이상 서비스 파일에 두지 않는다.
+한 서비스는 한 파일 `app.py`다. 구독은 `App` 객체에 `@app.on(BodyType)`으로 선언한다. 별도의 `settings.py`나 `WorkerSubscription` 모델, `WorkerService.from_subscription(...)` 호출은 더 이상 서비스 파일에 두지 않는다.
 
 ```python
 from packages.contracts.event_bus.bodies import (
@@ -249,7 +249,7 @@ from packages.runtime.app import App
 
 app = App("command-worker")
 
-@app.sub(CommandRequestedBody)              # 한 body 타입 구독
+@app.on(CommandRequestedBody)              # 한 body 타입 구독
 async def on_command_requested(evt, ctx):
     yield CommandDispatchReadyBody(...)     # 체이닝: 다음 이벤트는 yield
 
@@ -257,12 +257,12 @@ if __name__ == "__main__":
     app.run()
 ```
 
-`@app.sub(BodyType)`이 구독할 subject를 body 타입에서 자동으로 유도한다. 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). 테스트나 카탈로그가 필요하면 `app.subscriptions`로 등록된 구독 계약을 확인한다.
+`@app.on(BodyType)`이 구독할 subject를 body 타입에서 자동으로 유도한다. 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). 테스트나 카탈로그가 필요하면 `app.subscriptions`로 등록된 구독 계약을 확인한다.
 
-dashboard, audit 같은 cross-cutting projector는 `@app.on_event`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
 
 ```python
-@app.on_event
+@app.on_any
 async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
@@ -277,11 +277,11 @@ async def on_event(evt: EventEnvelope, ctx):
 | Manifest Render Worker (App) | `services/gitops/manifest-render-worker/app.py` | `git.changed` |
 | Diff Worker (App) | `services/gitops/diff-worker/app.py` | `manifest.rendered` |
 | Diff Analyze Worker (App) | `services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
-| Repo Gateway Worker (App) | `services/gitops/repo-gateway-worker/app.py` | `safe_pr.requested` |
+| Repo Gateway Worker (App) | `services/gitops/scm-worker/app.py` | `safe_pr.requested` |
 | Command Worker (App) | `services/command-worker/app.py` | `command.requested` |
 | RCA Worker (App) | `services/rca-worker/app.py` | `cluster.evidence.received` |
-| Dashboard Projection Service (`@app.on_event`) | `services/projection/dashboard-projection-service/app.py` | `>` |
-| Audit Timeline Service (`@app.on_event`) | `services/projection/audit-timeline-service/app.py` | `>` |
+| Dashboard Projection Service (`@app.on_any`) | `services/projection/dashboard-worker/app.py` | `>` |
+| Audit Timeline Service (`@app.on_any`) | `services/projection/audit-worker/app.py` | `>` |
 
 ## Outbound Gateway 패턴
 
@@ -295,7 +295,7 @@ async def on_event(evt: EventEnvelope, ctx):
 
 이 표준 모양은 `packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
 
-예: `safe_pr.requested -> repo-gateway-worker -> safe_pr.created`. PR 생성은 `repo-gateway-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `repo-gateway-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
+예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
 
 외부 provider 호출 실패는 가능한 한 worker 예외로 터뜨려 DLQ로 보내기보다
 `safe_pr.failed` 같은 도메인 실패 이벤트로 발행한다. 이렇게 하면 dashboard,

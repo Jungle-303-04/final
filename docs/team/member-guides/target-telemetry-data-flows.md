@@ -10,7 +10,7 @@
 
 현재 있는 것:
 
-- `services/target/target-cluster-agent/fake_prometheus.py`
+- `services/target/cluster-agent/fake_prometheus.py`
   - 실제 Prometheus가 아니다.
   - `agent.py`의 `create_fake_telemetry_app("prometheus")`를 실행한다.
   - Prometheus처럼 생긴 JSON을 고정으로 반환하는 fake server다.
