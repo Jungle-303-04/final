@@ -3,10 +3,6 @@ from __future__ import annotations
 from typing import Final
 
 
-class Postgres:
-    DEFAULT_URL: Final[str] = "postgresql://service:service@postgresql:5432/service"
-
-
 class Nats:
     DEFAULT_URL: Final[str] = "nats://nats:4222"
 

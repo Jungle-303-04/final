@@ -46,7 +46,8 @@ def test_row_dict_copies_mapping() -> None:
     assert db.row_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2}
 
 
-def test_sqlalchemy_url_uses_psycopg_driver() -> None:
+def test_sqlalchemy_url_uses_psycopg_driver(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     conn = db.Database()  # 엔진은 지연 생성(연결 안 함)
     assert conn.sqlalchemy_url.startswith("postgresql+psycopg://")
 
@@ -63,11 +64,19 @@ def test_oauth_scopes_non_github_untouched() -> None:
     assert scopes == ["profile"]  # GitHub 아니면 repo 안 붙음
 
 
-def test_fake_token_payload_shape() -> None:
-    payload = db.Database._fake_token_payload("github")
-    assert payload["access_token"] == "fake-github-access-token"
-    assert payload["refresh_token"] == "fake-github-refresh-token"
-    assert "expires_at" in payload and "note" in payload
+def test_credential_placeholder_payload_has_no_provider_secret() -> None:
+    payload = db.Database._credential_placeholder_payload()
+    assert payload["status"] == "pending"
+    assert "note" in payload
+    assert "access_token" not in payload
+    assert "refresh_token" not in payload
+
+
+def test_pending_credential_is_not_ready_for_outbound_provider_call() -> None:
+    assert not db.Database._is_ready_provider_credential(
+        db.Database._credential_placeholder_payload()
+    )
+    assert db.Database._is_ready_provider_credential({"status": "ready"})
 
 
 def test_schema_defines_expected_tables() -> None:

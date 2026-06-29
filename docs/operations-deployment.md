@@ -147,7 +147,7 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | 항목 | 계획 | 이유 |
 | --- | --- | --- |
 | CI integration smoke | `.github/workflows/integration-smoke.yml`에서 nightly/manual `make up && make smoke`를 실행한다. PR 필수 check에는 Docker import smoke를 두고, 실제 kind E2E는 비용과 실행 시간을 분리해 운영한다. | uv 기반 unit CI와 Docker/runtime 환경 차이를 잡고, NATS/PostgreSQL/Redis/Kubernetes 조합 부팅 실패를 조기에 발견한다. |
-| Secret provider 경계 | fake OAuth token 저장을 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 fake 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
+| Secret provider 경계 | credential placeholder를 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 임시 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
 
 ## 참고 문서
 
