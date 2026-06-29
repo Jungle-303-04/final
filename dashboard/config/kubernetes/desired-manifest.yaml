@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: sandbox
+  labels:
+    app: checkout-api
+    managed-by: releasegraph-dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: checkout-api
+  template:
+    metadata:
+      labels:
+        app: checkout-api
+    spec:
+      containers:
+        - name: checkout-api
+          image: service:local
+          command: ["python", "-m", "http.server", "8080"]
+          ports:
+            - containerPort: 8080
