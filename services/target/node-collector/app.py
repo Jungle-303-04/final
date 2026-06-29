@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from node_collector import run
+from settings import Settings
+
+from packages.runtime.service import AsyncService
+
+__all__ = ["run"]
+
+
+def main() -> None:
+    AsyncService(Settings.SERVICE_NAME, run).run()
+
+
+if __name__ == "__main__":
+    main()
