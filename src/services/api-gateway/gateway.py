@@ -158,9 +158,10 @@ class ApiGateway:
     def _register_error_handler(self, app: FastAPI) -> None:
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
-            print(f"gateway error: {exc}", flush=True)
+            print(f"gateway error: {type(exc).__name__}", flush=True)
             return JSONResponse(
-                status_code=Settings.GATEWAY_ERROR_STATUS_CODE, content={Gateway.ERROR: str(exc)}
+                status_code=Settings.GATEWAY_ERROR_STATUS_CODE,
+                content={Gateway.ERROR: Settings.GATEWAY_ERROR_MESSAGE},
             )
 
 
