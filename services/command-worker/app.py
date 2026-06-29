@@ -66,6 +66,51 @@ def build_plan(command: ModelLookup) -> Plan:
 async def on_command_requested(
     evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:
+    # 우현 원본 보존(CommandWorkflow.handle 전체 흐름):
+    #
+    # payload = evt["payload"]
+    # namespace = payload.get("namespace", SANDBOX_NAMESPACE)
+    # if namespace != SANDBOX_NAMESPACE:
+    #     await self.events.publish(
+    #         EventSubject.COMMAND_REJECTED,
+    #         SERVICE_NAME,
+    #         {"reason": SANDBOX_WRITE_REJECT_REASON, "requested": payload},
+    #         evt["correlation_id"],
+    #     )
+    #     return
+    #
+    # plan = {
+    #     "command_id": str(uuid.uuid4()),
+    #     "cluster_id": payload.get("cluster_id", DEFAULT_TARGET_CLUSTER_ID),
+    #     "action": payload.get("action", DEFAULT_COMMAND_ACTION),
+    #     "namespace": namespace,
+    #     "steps": POLICY_STEPS,
+    # }
+    # await self.events.publish(
+    #     EventSubject.COMMAND_DISPATCH_READY,
+    #     SERVICE_NAME,
+    #     {"plan": plan},
+    #     evt["correlation_id"],
+    # )
+    # await self.events.publish(
+    #     EventSubject.COMMAND_DISPATCHED,
+    #     SERVICE_NAME,
+    #     {
+    #         "plan": plan,
+    #         "route": {"channel": AGENT_ROUTE_CHANNEL, "cluster_id": plan["cluster_id"]},
+    #     },
+    #     evt["correlation_id"],
+    # )
+    # self.commands.queue_agent_command(evt["correlation_id"], plan, COMMAND_STATUS_QUEUED)
+    # await self.events.publish(
+    #     EventSubject.COMMAND_QUEUED_FOR_AGENT,
+    #     SERVICE_NAME,
+    #     {"command_id": plan["command_id"], "cluster_id": plan["cluster_id"]},
+    #     evt["correlation_id"],
+    # )
+    #
+    # 현재 구조에서는 raw dict payload 대신 CommandRequestedBody를 받고,
+    # publish 직접 호출 대신 yield Body로 런타임 dispatch에 맡긴다.
     # 타입 body 를 룰 입력(Lookup)으로 — dict 가 아니라 모델 기반.
     command = ModelLookup(evt)
     result = POLICY.evaluate(command)

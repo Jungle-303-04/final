@@ -20,6 +20,19 @@ app = App("git-pull-worker")
 async def on_git_webhook(
     evt: GitWebhookReceivedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
+    # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 commit_sha + git.changed):
+    #
+    # payload = evt["payload"]
+    # commit_sha = payload.get("commit_sha") or str(uuid.uuid4())[:8]
+    # await self.events.publish(
+    #     EventSubject.GIT_CHANGED,
+    #     SERVICE_NAME,
+    #     {"commit_sha": commit_sha, "manifest": manifest},
+    #     evt["correlation_id"],
+    # )
+    #
+    # 현재 split 구조에서는 raw dict payload 대신 GitWebhookReceivedBody를 받고,
+    # manifest 생성은 다음 단계인 manifest-render-worker가 맡는다.
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
     yield GitChangedBody(commit_sha=commit_sha, image=evt.image, replicas=evt.replicas)
 
