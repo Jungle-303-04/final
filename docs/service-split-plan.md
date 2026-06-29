@@ -28,7 +28,7 @@ services/gitops/diff-worker
 
 services/gitops/diff-analyze-worker
   Diff analysis / Safe PR request decision
-  app.py: analysis 기본값, @app.sub(DesiredDiffBody)
+  app.py: analysis 기본값, @app.sub(DiffDetectedBody)
 
 services/gitops/repo-gateway-worker
   유일한 outbound GitHub PR 생성자 (safe_pr.requested -> safe_pr.created/failed)
