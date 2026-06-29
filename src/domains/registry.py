@@ -13,8 +13,8 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 import domains
+from domains.identity.repository import OAuthRepository
 from packages.storage.engine import DatabaseConnection
-from packages.storage.repositories.auth import OAuthRepository
 from packages.storage.repositories.commands import AgentCommandRepository
 from packages.storage.repositories.events import (
     DeadLetterRepository,
@@ -57,8 +57,8 @@ def _discovered_repositories() -> tuple[type, ...]:
 
 
 _CORE = (EventRepository, DeadLetterRepository, OutboxRepository)
+# identity 는 domains/ 로 이전 완료 → 자동 발견. 나머지는 이전 대기.
 _PENDING = (
-    OAuthRepository,
     AgentCommandRepository,
     RcaRepository,
     DashboardRepository,
