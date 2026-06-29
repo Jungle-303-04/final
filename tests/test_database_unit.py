@@ -7,7 +7,11 @@ repository 의 실제 SQL 실행은 Postgres 전용(jsonb·on_conflict)이라 �
 from __future__ import annotations
 
 from datetime import datetime
+from types import SimpleNamespace
 
+import pytest
+
+from domains import registry
 from packages.storage import database as db
 from packages.storage.schema import metadata
 
@@ -83,3 +87,34 @@ def test_schema_defines_expected_tables() -> None:
         "token_vault",
     }
     assert expected <= set(metadata.tables)  # 13개 테이블 정의 존재
+
+
+def test_domain_module_discovery_ignores_missing_optional_suffix(monkeypatch) -> None:
+    monkeypatch.setattr(
+        registry.pkgutil,
+        "iter_modules",
+        lambda *_: [SimpleNamespace(ispkg=True, name="domains.empty_domain")],
+    )
+
+    def fail_missing_optional(name: str):
+        raise ModuleNotFoundError(f"No module named {name}", name=name)
+
+    monkeypatch.setattr(registry.importlib, "import_module", fail_missing_optional)
+
+    assert registry._domain_modules("models") == []
+
+
+def test_domain_module_discovery_raises_nested_import_failure(monkeypatch) -> None:
+    monkeypatch.setattr(
+        registry.pkgutil,
+        "iter_modules",
+        lambda *_: [SimpleNamespace(ispkg=True, name="domains.broken_domain")],
+    )
+
+    def fail_nested_import(name: str):
+        raise ModuleNotFoundError("No module named nested_dependency", name="nested_dependency")
+
+    monkeypatch.setattr(registry.importlib, "import_module", fail_nested_import)
+
+    with pytest.raises(ModuleNotFoundError, match="nested_dependency"):
+        registry._domain_modules("models")
