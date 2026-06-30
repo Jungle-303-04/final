@@ -38,20 +38,13 @@ from packages.config.settings import env
 
 @dataclass(frozen=True)
 class NodeRuntimeSample:
-    # One internal snapshot used by /snapshot, structured logs, and /metrics.
+    # One internal snapshot used by /snapshot and structured logs.
+    # Prometheus /metrics is built separately by metric group collectors.
     node_name: str
     pod_name: str
     namespace: str
     timestamp: str
     runtime: str
-
-    # These are calculated from the Kubernetes API response.
-    node_pod_count: int | None
-    node_not_ready_pod_count: int | None
-
-    # Keep /metrics available even when the Kubernetes API read fails.
-    scrape_error: bool
-    scrape_error_message: str | None
 
     def to_payload(self) -> dict[str, object]:
         return asdict(self)
@@ -71,7 +64,10 @@ class NodeCollector:
         self.namespace = namespace
         self.interval_seconds = interval_seconds
         self.kubernetes = kubernetes or KubernetesApiClient()
+        # from metric_collectors.py
+        # Inject fields needed to run PodMetricCollector.
         self.pod_metric_collector = PodMetricCollector(self.kubernetes, self.node_name)
+        # Register actually running collectors.
         self.metric_collectors: list[MetricCollector] = [self.pod_metric_collector]
 
     @classmethod
@@ -84,31 +80,14 @@ class NodeCollector:
         )
 
     async def snapshot(self) -> NodeRuntimeSample:
-        # Build a human/log-friendly snapshot. Prometheus metrics are collected separately
-        # by metric group collectors so this method does not control every metric shape.
-        try:
-            pod_summary = await self.pod_metric_collector.collect_pod_summary()
-            node_pod_count = pod_summary.pod_count
-            node_not_ready_pod_count = pod_summary.not_ready_pod_count
-            scrape_error = False
-            scrape_error_message = None
-
-        except Exception as exc:
-            node_pod_count = None
-            node_not_ready_pod_count = None
-            scrape_error = True
-            scrape_error_message = str(exc)
-
+        # Build a human/log-friendly snapshot for the collector process itself.
+        # Kubernetes metric values and scrape errors belong to /metrics collectors.
         return NodeRuntimeSample(
             node_name=self.node_name,
             pod_name=self.pod_name,
             namespace=self.namespace,
             timestamp=datetime.now(UTC).isoformat(),
             runtime=RUNTIME_NAME,
-            node_pod_count=node_pod_count,
-            node_not_ready_pod_count=node_not_ready_pod_count,
-            scrape_error=scrape_error,
-            scrape_error_message=scrape_error_message,
         )
 
     def metric_labels(self) -> dict[str, str]:

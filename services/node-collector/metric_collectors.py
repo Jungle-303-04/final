@@ -8,7 +8,9 @@ from prometheus_metrics import MetricSample
 
 
 class MetricCollector(Protocol):
-    # A metric group collector reads one Kubernetes domain and returns Prometheus samples.
+    # This is not a real collector object. It is a type contract.
+    # A concrete class like PodMetricCollector matches this contract
+    # when it defines this same async collect(labels) method.
     async def collect(self, labels: dict[str, str]) -> list[MetricSample]: ...
 
 
