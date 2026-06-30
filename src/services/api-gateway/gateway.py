@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from auth import PasswordAuthService, SessionAuthService
 from fastapi import FastAPI, HTTPException, Request
@@ -24,6 +23,12 @@ from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import AgentConnectRequest
+from packages.contracts.gateway.responses import (
+    AcceptedResponse,
+    DeadLetterReplayResponse,
+    DeadLettersResponse,
+    HealthResponse,
+)
 from packages.events.bus import NatsEventBus
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
@@ -96,33 +101,46 @@ class ApiGateway:
         self._register_error_handler(app)
 
     def _register_health_routes(self, app: FastAPI) -> None:
-        @app.get(gateway_routes.HEALTHZ_PATH)
-        async def healthz() -> dict[str, str]:
-            return {Gateway.STATUS: Gateway.STATUS_OK, Gateway.SERVICE: Settings.SERVICE_NAME}
+        @app.get(gateway_routes.HEALTHZ_PATH, response_model=HealthResponse)
+        async def healthz() -> HealthResponse:
+            return HealthResponse(status=Gateway.STATUS_OK, service=Settings.SERVICE_NAME)
 
-        @app.get(gateway_routes.READYZ_PATH)
-        async def readyz() -> dict[str, str]:
+        @app.get(
+            gateway_routes.READYZ_PATH,
+            response_model=HealthResponse,
+            response_model_exclude_none=True,
+        )
+        async def readyz() -> HealthResponse:
             self.db.init()
-            return {Gateway.STATUS: Gateway.STATUS_READY}
+            return HealthResponse(status=Gateway.STATUS_READY)
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
-        @app.post(gateway_routes.AGENT_CONNECT_PATH)
-        async def agent_connect(request: Request, payload: AgentConnectRequest) -> dict[str, Any]:
+        @app.post(gateway_routes.AGENT_CONNECT_PATH, response_model=AcceptedResponse)
+        async def agent_connect(request: Request, payload: AgentConnectRequest) -> AcceptedResponse:
             require_agent(request)
             accepted = await self.events.accept(EventSubject.AGENT_CONNECTED, payload.model_dump())
-            return accepted.response()
+            return AcceptedResponse(
+                accepted=True,
+                event_id=accepted.event.event_id,
+                correlation_id=accepted.event.correlation_id,
+            )
 
     def _register_dead_letter_routes(self, app: FastAPI) -> None:
-        @app.get(gateway_routes.DEAD_LETTERS_PATH)
+        @app.get(gateway_routes.DEAD_LETTERS_PATH, response_model=DeadLettersResponse)
         async def dead_letters(
             request: Request, limit: int = Settings.DEFAULT_DEAD_LETTER_LIMIT
-        ) -> dict[str, Any]:
+        ) -> DeadLettersResponse:
             await self.auth.require_session(request)
             bounded_limit = max(1, min(limit, Settings.MAX_DEAD_LETTER_LIMIT))
-            return {Gateway.DEAD_LETTERS: self.db.list_dead_letters(bounded_limit)}
+            return DeadLettersResponse(dead_letters=self.db.list_dead_letters(bounded_limit))
 
-        @app.post(gateway_routes.DEAD_LETTER_REPLAY_PATH)
-        async def replay_dead_letter(request: Request, dead_letter_id: int) -> dict[str, Any]:
+        @app.post(
+            gateway_routes.DEAD_LETTER_REPLAY_PATH,
+            response_model=DeadLetterReplayResponse,
+        )
+        async def replay_dead_letter(
+            request: Request, dead_letter_id: int
+        ) -> DeadLetterReplayResponse:
             await self.auth.require_session(request)
             dead_letter = self.db.get_dead_letter(dead_letter_id)
             if dead_letter is None:
@@ -143,11 +161,11 @@ class ApiGateway:
                 dead_letter["original_event_id"],
             )
             self.db.mark_dead_letter_replayed(dead_letter_id, accepted.event.event_id)
-            return {
-                Gateway.ACCEPTED: True,
-                Gateway.DEAD_LETTER_ID: dead_letter_id,
-                Gateway.REPLAY_EVENT: accepted.event,
-            }
+            return DeadLetterReplayResponse(
+                accepted=True,
+                dead_letter_id=dead_letter_id,
+                replay_event=accepted.event.to_dict(),
+            )
 
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")
