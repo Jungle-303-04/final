@@ -325,7 +325,9 @@ def render() -> None:
     draw_text(draw, 1116, 533, "binding 정보는 Broker/Policy가 참조", TINY, "#667485")
 
     draw_arrow(draw, [(1065, 890), (1145, 940), (1315, 950), (1358, 885)], color=COLORS["red"])
-    draw_text(draw, 1120, 950, "secret은 event/worker payload로 직접 이동하지 않음", CALLOUT, "#744705")
+    draw_text(
+        draw, 1120, 950, "secret은 event/worker payload로 직접 이동하지 않음", CALLOUT, "#744705"
+    )
 
     draw_rounded(draw, (80, 970, 1720, 1080), "#ffffff", COLORS["lane_stroke"])
     draw_text(draw, 115, 994, "구현 순서 요약", CALLOUT_TITLE, "#175b47")
