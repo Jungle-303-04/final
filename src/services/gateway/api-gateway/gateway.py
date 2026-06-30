@@ -10,7 +10,7 @@ from settings import Settings
 
 from domains.command.router import router as command_router
 from domains.gitops.router import router as gitops_router
-from domains.identity.dependencies import require_agent
+from domains.identity.dependencies import require_admin_session, require_agent
 from domains.identity.router import router as identity_router
 from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
@@ -77,6 +77,7 @@ class ApiGateway:
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
         await wait_for_database(self.db)
+        self.db.init()  # 스키마 보장은 시작 시 1회만(readyz 프로브에서 DDL 돌리지 않도록).
         await self.sessions.connect()
         await self.bus.connect()
         try:
@@ -113,7 +114,8 @@ class ApiGateway:
             response_model_exclude_none=True,
         )
         async def readyz() -> HealthResponse:
-            self.db.init()
+            # 가벼운 연결 확인만(스키마 보장은 시작 시 lifespan 에서 1회). DDL 안 돌린다.
+            self.db.check_ready()
             return HealthResponse(status=Gateway.STATUS_READY)
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
@@ -132,7 +134,8 @@ class ApiGateway:
         async def dead_letters(
             request: Request, limit: int = Settings.DEFAULT_DEAD_LETTER_LIMIT
         ) -> DeadLettersResponse:
-            await self.auth.require_session(request)
+            # 전 테넌트 실패 이벤트 노출 → admin 만(일반 세션 금지).
+            await require_admin_session(request)
             bounded_limit = max(1, min(limit, Settings.MAX_DEAD_LETTER_LIMIT))
             return DeadLettersResponse(dead_letters=self.db.list_dead_letters(bounded_limit))
 
@@ -143,7 +146,8 @@ class ApiGateway:
         async def replay_dead_letter(
             request: Request, dead_letter_id: int
         ) -> DeadLetterReplayResponse:
-            await self.auth.require_session(request)
+            # 임의 이벤트 재발행 → admin 만.
+            await require_admin_session(request)
             dead_letter = self.db.get_dead_letter(dead_letter_id)
             if dead_letter is None:
                 raise HTTPException(

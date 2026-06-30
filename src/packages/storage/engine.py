@@ -164,6 +164,11 @@ class DatabaseConnection:
         async with self.async_engine.begin() as conn:
             yield conn
 
+    def check_ready(self) -> None:
+        """가벼운 연결 확인(SELECT 1) — readiness 프로브용. DDL/마이그레이션 안 함."""
+        with self.connection() as conn:
+            conn.execute(text("SELECT 1"))
+
     def init(self) -> None:
         from domains.registry import load_domain_tables
 
