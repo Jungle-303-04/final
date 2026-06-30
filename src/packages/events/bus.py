@@ -71,17 +71,18 @@ def event_causation(causation_id: str) -> Iterator[None]:
 class NatsEventBus(EventBus):
     def __init__(self) -> None:
         self.url = env(NATS_URL_ENV, Nats.DEFAULT_URL)
-        self.nc = None
-        self.js = None
+        self.nc: Any | None = None
+        self.js: Any | None = None
 
     async def connect(self) -> None:
         nats = nats_client()
 
         async def attempt() -> None:
-            self.nc = await nats.connect(
+            connection = await nats.connect(
                 self.url, name=env(Runtime.SERVICE_NAME_ENV, Runtime.DEFAULT_SERVICE_NAME)
             )
-            self.js = self.nc.jetstream()
+            self.nc = connection
+            self.js = connection.jetstream()
             await self.ensure_stream()
 
         await retry_dependency(attempt, label="nats")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
@@ -28,6 +29,23 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class KubernetesManifestResource:
+    kind: str
+    api_version: str
+    namespace: str
+    name: str
+    plural: str
+    api_prefix: str
+    manifest: JsonObject
+
+    def collection_url(self, base_url: str) -> str:
+        return f"{base_url}{self.api_prefix}/namespaces/{self.namespace}/{self.plural}"
+
+    def resource_url(self, base_url: str) -> str:
+        return f"{self.collection_url(base_url)}/{self.name}"
 
 
 class AgentConfig:
@@ -98,6 +116,8 @@ class AgentConfig:
     APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
     ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
     COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
+    MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
+    MANIFEST_PATCHED_MESSAGE = "Kubernetes manifest patched in sandbox namespace"
     LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
     LOKI_WARNING_LINE = "WARN rollback candidate detected"
     OTEL_SLOW_SPAN = "GET /checkout"
@@ -249,6 +269,7 @@ class TargetClusterAgent:
         )
         self.client = client
         self.telemetry_transport = telemetry_transport
+        self.kubernetes_transport = kubernetes_transport
         self.node_collector = NodeCollectorManager.from_env(kubernetes_transport)
 
     async def run(self) -> None:
@@ -515,6 +536,14 @@ class TargetClusterAgent:
         plan = command.get("payload", {})
         diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
         namespace = str(diff.get("namespace") or "sandbox")
+        desired_manifest = diff.get("desired_manifest")
+        if isinstance(desired_manifest, dict) and desired_manifest:
+            applied, message = await self.apply_kubernetes_manifest(
+                desired_manifest,
+                namespace,
+            )
+            return self.command_result(applied, message)
+
         deployment = deployment_name_from_resource(str(diff.get("resource", "")))
         image = str(diff.get("desired_image", ""))
         if not deployment or not image:
@@ -536,6 +565,41 @@ class TargetClusterAgent:
         applied, message = await self.patch_deployment(namespace, deployment, patch)
         return self.command_result(applied, message)
 
+    async def apply_kubernetes_manifest(
+        self, manifest: JsonObject, fallback_namespace: str
+    ) -> tuple[bool, str]:
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            return False, "kubernetes api not configured; dry-run only"
+
+        try:
+            resource = kubernetes_manifest_resource(manifest, fallback_namespace)
+        except ValueError as exc:
+            return False, str(exc)
+
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            current = await client.get(
+                resource.resource_url(base_url), headers=kubernetes_headers(token)
+            )
+            if current.status_code == 404:
+                created = await client.post(
+                    resource.collection_url(base_url),
+                    json=resource.manifest,
+                    headers=kubernetes_headers(token, "application/json"),
+                )
+                created.raise_for_status()
+                return True, AgentConfig.MANIFEST_CREATED_MESSAGE
+
+            current.raise_for_status()
+            patched = await client.patch(
+                resource.resource_url(base_url),
+                json=resource.manifest,
+                headers=kubernetes_headers(token, "application/merge-patch+json"),
+            )
+            patched.raise_for_status()
+        return True, AgentConfig.MANIFEST_PATCHED_MESSAGE
+
     def command_result(self, applied: bool, message: str) -> JsonObject:
         return {
             Gateway.STATUS: AgentConfig.COMMAND_COMPLETED_STATUS,
@@ -553,7 +617,7 @@ class TargetClusterAgent:
             return False, "kubernetes api not configured; dry-run only"
         url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment}"
         headers = kubernetes_headers(token, "application/strategic-merge-patch+json")
-        async with kubernetes_client() as client:
+        async with kubernetes_client(self.kubernetes_transport) as client:
             response = await client.patch(url, json=patch, headers=headers)
             response.raise_for_status()
         return True, AgentConfig.COMMAND_RESULT_MESSAGE
@@ -752,6 +816,49 @@ def build_rollout_restart_patch() -> JsonObject:
             }
         }
     }
+
+
+def kubernetes_manifest_resource(
+    manifest: JsonObject,
+    fallback_namespace: str,
+) -> KubernetesManifestResource:
+    kind = str(manifest.get("kind", ""))
+    api_version = str(manifest.get("apiVersion", ""))
+    metadata = manifest.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("manifest metadata must be an object")
+    name = str(metadata.get("name", ""))
+    namespace = str(metadata.get("namespace") or fallback_namespace)
+    if not kind or not api_version or not name:
+        raise ValueError("manifest requires apiVersion, kind, and metadata.name")
+
+    api_prefix, plural = kubernetes_resource_api(kind, api_version)
+    normalized = {
+        **manifest,
+        "metadata": {
+            **metadata,
+            "namespace": namespace,
+        },
+    }
+    return KubernetesManifestResource(
+        kind=kind,
+        api_version=api_version,
+        namespace=namespace,
+        name=name,
+        plural=plural,
+        api_prefix=api_prefix,
+        manifest=normalized,
+    )
+
+
+def kubernetes_resource_api(kind: str, api_version: str) -> tuple[str, str]:
+    if kind == "Deployment" and api_version == "apps/v1":
+        return "/apis/apps/v1", "deployments"
+    if kind == "Service" and api_version == "v1":
+        return "/api/v1", "services"
+    if kind == "ConfigMap" and api_version == "v1":
+        return "/api/v1", "configmaps"
+    raise ValueError(f"unsupported manifest kind: {api_version}/{kind}")
 
 
 async def prometheus_metric_names(client: httpx.AsyncClient, base_url: str) -> list[str]:

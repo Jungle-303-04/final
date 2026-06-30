@@ -21,7 +21,7 @@ from packages.runtime.app import App, EventContext
 app = App("diff-worker")
 
 PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
-DEPLOYMENT_RESOURCE_PREFIX = "deployment"
+RESOURCE_NOT_INSPECTED = "resource-not-inspected"
 
 
 def load_actual_resource_image(rendered: ManifestRenderedBody) -> str:
@@ -30,11 +30,15 @@ def load_actual_resource_image(rendered: ManifestRenderedBody) -> str:
     return PREVIOUS_IMAGE
 
 
+def resource_ref(kind: str, name: str) -> str:
+    return f"{kind.lower()}/{name}"
+
+
 def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
     rendered = evt.rendered_manifest
     # TODO(gitops): create/update/delete 작업 유형과 기계 판독용 위험 사유 포함
     return Diff(
-        resource=f"{DEPLOYMENT_RESOURCE_PREFIX}/{rendered.metadata.name}",
+        resource=resource_ref(rendered.kind, rendered.metadata.name),
         namespace=rendered.metadata.namespace or Sandbox.NAMESPACE,
         desired_image=rendered.spec.image,
         actual_image=actual_image,
@@ -49,6 +53,7 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
         cluster_id=evt.cluster_id,
         manifest_path=evt.manifest_path,
         resource_class=rendered.resource_class,
+        desired_manifest=rendered.manifest,
     )
 
 
@@ -74,7 +79,11 @@ async def on_manifest_rendered(
     #
     # 현재 split 구조: rendered manifest body → Diff 값 객체 변환
     # subject 발행은 yield DiffDetectedBody(...)로 런타임 처리
-    actual_image = load_actual_resource_image(evt)
+    actual_image = (
+        load_actual_resource_image(evt)
+        if evt.rendered_manifest.spec.image
+        else RESOURCE_NOT_INSPECTED
+    )
     diff = build_desired_diff(evt, actual_image)
     yield DiffDetectedBody(diff=diff)
 
