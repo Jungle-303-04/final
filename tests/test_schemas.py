@@ -6,6 +6,7 @@ from packages.contracts.event_bus.bodies.base import EventBodyDecodeError
 from packages.contracts.gateway.requests import (
     CommandRequest,
     GitHubWebhookRequest,
+    LoginRequest,
     TargetRegisterRequest,
 )
 from packages.events.envelope import event
@@ -20,6 +21,11 @@ def test_command_request_leaves_namespace_policy_to_command_worker() -> None:
 def test_command_request_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         CommandRequest(command_type="legacy")
+
+
+def test_login_request_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        LoginRequest(email="local@example.com", password="local-password", role="owner")
 
 
 def test_github_webhook_schema_rejects_invalid_replica_count() -> None:
