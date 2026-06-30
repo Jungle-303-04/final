@@ -36,7 +36,7 @@ async 커넥션 + async DB 메서드**로 간다 — 단일 이벤트 루프에�
 
 ## 구성 요소
 
-### 1. outbox 테이블 (`packages/storage/schema.py`)
+### 1. outbox 테이블 (`src/packages/storage/schema.py`)
 
 ```
 outbox(id PK autoincr, event_id UNIQUE, subject, source,
@@ -47,7 +47,7 @@ outbox(id PK autoincr, event_id UNIQUE, subject, source,
 - `event_id`: 안정 식별자(한 번 생성, relay 재시도 시 동일) → downstream dedup 키.
 - `sent_at NULL` = 아직 발행 안 됨.
 
-### 2. UnitOfWork (`packages/storage/unit_of_work.py`)
+### 2. UnitOfWork (`src/packages/storage/unit_of_work.py`)
 
 async 트랜잭션을 열고, 활성 커넥션을 contextvar 에 심는다. `ctx.db` 의 async
 메서드는 contextvar 의 커넥션을 쓴다(없으면 자기 트랜잭션 — 레거시 호환).
@@ -69,7 +69,7 @@ class UnitOfWork:
 `async_connection()` 은 `_ACTIVE` 가 있으면 그걸 yield(commit 안 함 — UoW 소유),
 없으면 새 트랜잭션.
 
-### 3. 핸들러는 발행 대신 수집 (`packages/runtime/dispatch.py`)
+### 3. 핸들러는 발행 대신 수집 (`src/packages/runtime/dispatch.py`)
 
 `make_event_handler` 가 yield 를 NATS 로 보내지 않고 **EventEnvelope 리스트로
 수집해 반환**한다. (client 의존 제거)
@@ -83,7 +83,7 @@ async def handle(evt) -> list[EventEnvelope]:
             async for o in _iter_results(result)]
 ```
 
-### 4. EventProcessor 가 한 트랜잭션으로 커밋 (`packages/runtime/worker.py`)
+### 4. EventProcessor 가 한 트랜잭션으로 커밋 (`src/packages/runtime/worker.py`)
 
 ```python
 async def process(message):
@@ -99,7 +99,7 @@ async def process(message):
 
 실패 시 트랜잭션 rollback → 아무 효과 없음 → 재시도. max 초과 → DLQ.
 
-### 5. OutboxRelay (`packages/runtime/relay.py`)
+### 5. OutboxRelay (`src/packages/runtime/relay.py`)
 
 ```python
 class OutboxRelay:
@@ -113,7 +113,7 @@ class OutboxRelay:
 워커 런타임이 소비 루프와 함께 relay 루프를 `asyncio.gather` 로 돌린다. 각 워커는
 자기 outbox 만 relay.
 
-### 6. bus.publish_envelope (`packages/events/bus.py`)
+### 6. bus.publish_envelope (`src/packages/events/bus.py`)
 
 저장된 EventEnvelope 를 *그대로*(같은 event_id) NATS 에 발행. relay 재시도 시
 동일 id → downstream dedup.
@@ -121,7 +121,7 @@ class OutboxRelay:
 ## 워커 작성자 관점 (변화 0)
 
 ```python
-@app.sub(GitChangedBody)
+@app.on(GitChangedBody)
 async def on_git_changed(evt, ctx: EventContext[RepoChangeStore]):
     await ctx.db.save_repo_change(...)   # ← 그대로 (내부적으로 UoW 트랜잭션)
     yield ManifestRenderedBody(...)      # ← 그대로 (내부적으로 outbox 적재)

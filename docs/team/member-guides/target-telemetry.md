@@ -39,10 +39,10 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 
 ## 담당 영역
 
-- `services/target/target-cluster-agent`
-- `services/target/node-collector`
+- `src/services/target/cluster-agent`
+- `src/services/target/node-collector`
 - `deploy/target`
-- `packages/contracts/agent` 또는 agent 관련 request/response 계약
+- `src/packages/contracts/agent` 또는 agent 관련 request/response 계약
 - fake/real Prometheus, Loki, OpenTelemetry adapter
 - ServiceAccount/RBAC manifest
 
@@ -143,13 +143,13 @@ Management Gateway API 계약은 아직 구현 중이므로 처음부터 Agent-G
 
 ## 처음 읽을 파일
 
-1. `services/target/target-cluster-agent/agent.py`
-2. `services/target/node-collector/node_collector.py`
+1. `src/services/target/cluster-agent/agent.py`
+2. `src/services/target/node-collector/node_collector.py`
 3. `deploy/target/target.yaml`
-4. `services/api-gateway/gateway.py`의 agent route
-5. `packages/contracts/event_bus/bodies/`의 evidence/command body
+4. `src/services/api-gateway/gateway.py`의 agent route
+5. `src/packages/contracts/event_bus/bodies/`의 evidence/command body
 6. `docs/events.md`
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `deploy/target/target.yaml`, `services/target/target-cluster-agent/agent.py`, `services/target/node-collector/node_collector.py`, `services/api-gateway/gateway.py`, `docs/events.md`, 그리고 이 문서의 하위 문서들을 먼저 읽어라. Target Agent는 이벤트 버스 구현을 몰라도 되며, Gateway HTTP API만 호출하게 유지하라.
+이 영역을 작업할 때는 `deploy/target/target.yaml`, `src/services/target/cluster-agent/agent.py`, `src/services/target/node-collector/node_collector.py`, `src/services/api-gateway/gateway.py`, `docs/events.md`, 그리고 이 문서의 하위 문서들을 먼저 읽어라. Target Agent는 이벤트 버스 구현을 몰라도 되며, Gateway HTTP API만 호출하게 유지하라.

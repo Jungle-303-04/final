@@ -43,7 +43,7 @@ jobs:
           kubectl --context "kind-${MGMT_CLUSTER}" -n management logs deploy/command-worker || true
           kubectl --context "kind-${MGMT_CLUSTER}" -n management logs deploy/rca-worker || true
           kubectl --context "kind-${TARGET_CLUSTER}" -n target get pods -o wide || true
-          kubectl --context "kind-${TARGET_CLUSTER}" -n target logs deploy/target-cluster-agent || true
+          kubectl --context "kind-${TARGET_CLUSTER}" -n target logs deploy/cluster-agent || true
 
       - name: Delete kind clusters
         if: always()
