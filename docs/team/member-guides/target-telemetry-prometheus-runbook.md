@@ -24,7 +24,7 @@ node-collector /metrics
 | `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=prometheus`) | fake server 실행 entrypoint | 실제 Prometheus가 아니다. scrape도 저장도 PromQL도 없다. |
 | `src/services/target/cluster-agent/agent.py` | Gateway client와 fake evidence loop가 있음 | Gateway 계약은 나중에 바뀔 수 있으므로 지금은 debug query API를 별도로 만든다. |
 | `src/services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`가 이미 있음 | real Prometheus의 첫 scrape target으로 사용한다. |
-| `deploy/target/target.yaml` | fake telemetry, node collector, target agent 배포가 있음 | real Prometheus Helm 설치 경로는 아직 없다. |
+| `deploy/target/target.yaml` | fake telemetry, cluster-agent, node collector 관리 권한 배포가 있음 | 정적 node collector DaemonSet은 없고 cluster-agent가 생성/패치한다. |
 | `tests/test_node_collector.py` | node collector 단위 테스트가 있음 | 새 metric 변경은 여기 테스트를 확장한다. |
 | `Makefile` | `make check`, `make up`, `make smoke`가 있음 | 단위 테스트 후 전체 점검에 사용한다. |
 
@@ -240,7 +240,7 @@ deploy/target/target.yaml
 
 ### 현재 manifest 확인
 
-`deploy/target/target.yaml`의 `optional-node-collector`에는 이미 annotation이 있다.
+cluster-agent가 생성하는 `optional-node-collector` DaemonSet에는 이미 annotation이 있다.
 
 ```yaml
 prometheus.io/path: /metrics
@@ -278,7 +278,8 @@ cluster가 떠 있는 상태에서:
 ```bash
 make up
 kubectl --context target -n target get pods
-kubectl --context target -n target port-forward deploy/optional-node-collector 9100:9100
+kubectl --context target -n target get pods -l app=optional-node-collector
+kubectl --context target -n target port-forward pod/<optional-node-collector-pod> 9100:9100
 curl http://localhost:9100/metrics
 ```
 

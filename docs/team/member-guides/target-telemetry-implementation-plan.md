@@ -17,7 +17,7 @@
 | `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=loki`) | fake Loki 실행 entrypoint | 실제 Loki ingest/query가 아니다. |
 | `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=otel`) | fake OTel 실행 entrypoint | 실제 OTLP collector나 trace backend가 아니다. |
 | `src/services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`, structured stdout log | 이미 Prometheus text format 비슷한 metric을 제공하므로 real Prometheus scrape 첫 대상으로 쓰기 좋다. |
-| `deploy/target/target.yaml` | fake-prometheus/fake-loki/fake-otel, optional-node-collector, cluster-agent 배포 | fake-prometheus는 real Prometheus가 아니다. Prometheus Helm 설치 YAML/values는 아직 없다. |
+| `deploy/target/target.yaml` | fake-prometheus/fake-loki/fake-otel, cluster-agent, node collector 관리 권한 배포 | 정적 node collector DaemonSet을 직접 담지 않는다. cluster-agent가 DaemonSet을 생성/패치한다. |
 
 현재 상태에서 제일 중요한 판단:
 
@@ -180,7 +180,7 @@ Prometheus를 우리 플랫폼 관측용으로 설치할 수 있게 Helm values 
   - `node_collector_cpu_usage_ratio`
   - `node_collector_memory_working_set_bytes`
   - `node_collector_filesystem_usage_ratio`
-- `deploy/target/target.yaml`의 `optional-node-collector`에는 prometheus scrape annotation이 이미 있다.
+- cluster-agent가 생성하는 `optional-node-collector` DaemonSet spec에는 prometheus scrape annotation이 있다.
 
 구현할 것:
 

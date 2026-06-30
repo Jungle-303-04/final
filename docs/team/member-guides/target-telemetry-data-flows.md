@@ -23,8 +23,8 @@
 
 - `deploy/target/target.yaml`
   - `fake-prometheus`, `fake-loki`, `fake-otel` Deployment가 있다.
-  - `optional-node-collector` DaemonSet이 있다.
-  - `optional-node-collector` pod template에 `prometheus.io/scrape`, `prometheus.io/path`, `prometheus.io/port` annotation이 있다.
+  - `cluster-agent`가 뜨고, 그 agent가 `optional-node-collector` DaemonSet을 생성/패치한다.
+  - 정적 target manifest에 node collector DaemonSet을 직접 넣지 않는다.
 
 아직 없는 것:
 
