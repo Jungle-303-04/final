@@ -156,10 +156,9 @@ class RedisSessionStore:
         if not token:
             return None
         key = f"{self.config.email_verification_key_prefix}:{token}"
-        raw = await self._client().get(key)
+        raw = await self._client().getdel(key)
         if not raw:
             return None
-        await self._client().delete(key)
         payload = json.loads(raw)
         return {"user_id": str(payload["user_id"]), "email": str(payload["email"])}
 
