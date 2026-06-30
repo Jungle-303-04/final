@@ -45,3 +45,4 @@ class Gateway(StrEnum):
     STATUS_REPLAYED = "replayed"
     USER_ID = "user_id"
     VERIFICATION_REQUIRED = "verification_required"
+    WORKSPACE_ID = "workspace_id"

@@ -40,7 +40,12 @@ class FakePasswordAuth:
 
     async def login(self, email: str, password: str) -> Any:
         self.calls.append(("login", (email, password)))
-        return SimpleNamespace(token="login-token", user_id="user-1", roles=["owner"])
+        return SimpleNamespace(
+            token="login-token",
+            user_id="user-1",
+            roles=["admin"],
+            workspace_id="default",
+        )
 
     async def resend_email_verification(self, email: str, password: str, client_key: str) -> Any:
         self.calls.append(("resend_email_verification", (email, password, client_key)))
@@ -56,7 +61,27 @@ class FakePasswordAuth:
 
     async def verify_email(self, token: str) -> Any:
         self.calls.append(("verify_email", (token,)))
-        return SimpleNamespace(token="verified-session-token", user_id="user-1", roles=["owner"])
+        return SimpleNamespace(
+            user_id="user-1",
+            status="active",
+            roles=["admin"],
+            workspace_id="default",
+            session=SimpleNamespace(
+                token="verified-session-token",
+                user_id="user-1",
+                roles=["admin"],
+                workspace_id="default",
+            ),
+        )
+
+    async def approve_user(self, user_id: str, workspace_id: str) -> Any:
+        self.calls.append(("approve_user", (user_id, workspace_id)))
+        return {
+            "user_id": user_id,
+            "status": "active",
+            "role": "member",
+            "workspace_id": workspace_id,
+        }
 
 
 def test_signup_requests_email_verification_without_session_cookie(monkeypatch) -> None:
@@ -131,6 +156,7 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     cookie = response.headers["set-cookie"].lower()
 
     assert body.authenticated is True
+    assert body.workspace_id == "default"
     assert "service_session=login-token" in cookie
     assert "httponly" in cookie
 
@@ -172,6 +198,58 @@ def test_verify_email_rejects_external_redirect(monkeypatch) -> None:
     assert response.headers["location"] == "/login?verified=1"
 
 
+def test_verify_email_pending_approval_redirects_without_cookie(monkeypatch) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "0")
+    password_auth = FakePasswordAuth()
+
+    async def pending_verify(_token: str) -> Any:
+        return SimpleNamespace(
+            user_id="user-2",
+            status="pending_approval",
+            roles=["member"],
+            workspace_id="default",
+            session=None,
+        )
+
+    password_auth.verify_email = pending_verify  # type: ignore[method-assign]
+
+    async def run() -> Any:
+        return await identity_router.verify_email(
+            token="email-token",
+            redirect="/dashboard",
+            password_auth=password_auth,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?verified=1&approval=pending"
+    assert "set-cookie" not in response.headers
+
+
+def test_admin_can_approve_pending_user() -> None:
+    password_auth = FakePasswordAuth()
+
+    async def run() -> Any:
+        return await identity_router.approve_user(
+            user_id="user-2",
+            current=SimpleNamespace(
+                token="login-token",
+                user_id="admin-user",
+                roles=["admin"],
+                workspace_id="default",
+            ),
+            password_auth=password_auth,
+        )
+
+    body = asyncio.run(run())
+
+    assert body.accepted is True
+    assert body.user_id == "user-2"
+    assert body.status == "active"
+    assert body.workspace_id == "default"
+
+
 def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
     response = Response()
@@ -180,7 +258,12 @@ def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
     async def run() -> Any:
         return await identity_router.logout(
             response=response,
-            current=SimpleNamespace(token="login-token", user_id="user-1", roles=["owner"]),
+            current=SimpleNamespace(
+                token="login-token",
+                user_id="user-1",
+                roles=["admin"],
+                workspace_id="default",
+            ),
             password_auth=password_auth,
         )
 

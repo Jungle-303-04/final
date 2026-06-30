@@ -1,4 +1,4 @@
-# Values for the Grafana Loki Helm chart.
+# Grafana Loki Helm chart 값
 
 deploymentMode: SingleBinary
 
@@ -24,9 +24,9 @@ singleBinary:
     enabled: true
     size: 5Gi
 
-# kind/local target clusters are intentionally small. The Loki chart enables
-# memcached result/chunk caches by default, and the chunk cache requests ~9.8Gi.
-# Production installs should size or re-enable these caches explicitly.
+# kind/local 대상 클러스터는 작게 구성. Loki chart는 기본으로
+# memcached result/chunk cache 활성화, chunk cache request는 약 9.8Gi
+# production 설치에서는 cache size 조정 또는 재활성화
 chunksCache:
   enabled: false
 

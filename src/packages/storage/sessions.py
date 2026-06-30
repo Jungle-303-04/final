@@ -12,6 +12,7 @@ class AuthSession:
     token: str
     user_id: str
     roles: list[str]
+    workspace_id: str
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class RedisSessionStoreConfig:
     key_prefix: str
     token_bytes: int
     default_roles: tuple[str, ...]
+    default_workspace_id: str
     rate_limit_key_prefix: str
     rate_limit: int
     rate_limit_window_seconds: int
@@ -52,17 +54,29 @@ class RedisSessionStore:
         if self.client is not None:
             await self.client.aclose()
 
-    async def create_session(self, user_id: str, roles: list[str] | None = None) -> AuthSession:
+    async def create_session(
+        self,
+        user_id: str,
+        roles: list[str] | None = None,
+        workspace_id: str | None = None,
+    ) -> AuthSession:
         token = secrets.token_urlsafe(self.config.token_bytes)
         session = AuthSession(
             token=token,
             user_id=user_id,
             roles=roles or list(self.config.default_roles),
+            workspace_id=workspace_id or self.config.default_workspace_id,
         )
         await self._client().setex(
             f"{self.config.key_prefix}:{token}",
             self.config.ttl_seconds,
-            json.dumps({"user_id": session.user_id, "roles": session.roles}),
+            json.dumps(
+                {
+                    "user_id": session.user_id,
+                    "roles": session.roles,
+                    "workspace_id": session.workspace_id,
+                }
+            ),
         )
         return session
 
@@ -77,6 +91,7 @@ class RedisSessionStore:
             token=token,
             user_id=payload["user_id"],
             roles=list(payload.get("roles", [])),
+            workspace_id=payload.get("workspace_id", self.config.default_workspace_id),
         )
 
     async def delete_session(self, token: str) -> None:

@@ -12,6 +12,10 @@ def _diff(risk: str) -> Diff:
         desired_image="img:new",
         actual_image="img:old",
         risk=risk,
+        workspace_id="workspace-1",
+        repository_id="repo-1",
+        binding_id="binding-1",
+        cluster_id="cluster-1",
     )
 
 
@@ -20,8 +24,15 @@ def test_safe_diff_requests_pr() -> None:
     safe = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=_diff("sandbox-only")))
     assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested", "alert.requested"]
     assert safe[0].safe is True
+    assert safe[1].workspace_id == "workspace-1"
+    assert safe[1].repository_id == "repo-1"
+    assert safe[1].binding_id == "binding-1"
+    assert safe[2].workspace_id == "workspace-1"
+    assert safe[2].cluster_id == "cluster-1"
     assert safe[2].next_command is not None
     assert safe[2].next_command.action == "apply_manifest"
+    assert safe[2].next_command.cluster_id == "cluster-1"
+    assert safe[2].next_command.workspace_id == "workspace-1"
 
 
 def test_unsafe_diff_skips_pr() -> None:

@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from packages.config.constants import Target
 from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import (
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_REPO_BRANCH,
+    DEFAULT_REPO_REF,
+    DEFAULT_REPOSITORY_ID,
+    DEFAULT_WATCH_TARGET_ID,
+    ResourceClass,
+)
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
 @dataclass(frozen=True)
@@ -17,6 +28,7 @@ class Manifest(EventBody):
     image: str
     replicas: int
     namespace: str
+    manifest_path: str = DEFAULT_MANIFEST_PATH
 
 
 @dataclass(frozen=True)
@@ -43,6 +55,7 @@ class RenderedManifest(EventBody):
     kind: str
     metadata: RenderedMetadata
     spec: RenderedSpec
+    resource_class: str = ResourceClass.APPLICATION.value
 
 
 @dataclass(frozen=True)
@@ -54,6 +67,13 @@ class Diff(EventBody):
     desired_image: str
     actual_image: str
     risk: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    watch_target_id: str = DEFAULT_WATCH_TARGET_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    resource_class: str = ResourceClass.APPLICATION.value
 
 
 @event(EventSubject.GIT_WEBHOOK_RECEIVED)
@@ -64,6 +84,14 @@ class GitWebhookReceivedBody(EventBody):
     commit_sha: str
     image: str
     replicas: int
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    repo_ref: str = DEFAULT_REPO_REF
+    branch: str = DEFAULT_REPO_BRANCH
+    watch_target_id: str = DEFAULT_WATCH_TARGET_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    manifest_path: str = DEFAULT_MANIFEST_PATH
 
 
 @event(EventSubject.GIT_CHANGED)
@@ -74,6 +102,14 @@ class GitChangedBody(EventBody):
     commit_sha: str
     image: str
     replicas: int
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    repo_ref: str = DEFAULT_REPO_REF
+    branch: str = DEFAULT_REPO_BRANCH
+    watch_target_id: str = DEFAULT_WATCH_TARGET_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    manifest_path: str = DEFAULT_MANIFEST_PATH
 
 
 @event(EventSubject.MANIFEST_RENDERED)
@@ -82,6 +118,27 @@ class ManifestRenderedBody(EventBody):
     """manifest.rendered — k8s manifest 렌더 결과."""
 
     rendered_manifest: RenderedManifest
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    watch_target_id: str = DEFAULT_WATCH_TARGET_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    commit_sha: str = ""
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+
+
+@event(EventSubject.MANIFEST_INVALID)
+@dataclass(frozen=True)
+class ManifestInvalidBody(EventBody):
+    """manifest.invalid — repo는 관찰됐지만 배포 가능한 manifest가 아님."""
+
+    workspace_id: str
+    repository_id: str
+    watch_target_id: str
+    binding_id: str
+    commit_sha: str
+    manifest_path: str
+    reason: str
 
 
 @event(EventSubject.DESIRED_DIFF_DETECTED)

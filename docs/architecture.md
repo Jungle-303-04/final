@@ -10,8 +10,8 @@
 - 관리 영역의 서비스들은 NATS JetStream을 통해 비동기로 통신한다.
 - 저장소는 Kubernetes workload로 분리해 실행한다.
 - 대상 클러스터 Agent는 관리 영역으로 outbound 연결만 맺는다.
-- OAuth provider token은 Dashboard 상태가 아니라 Token Vault record로 관리한다.
-- Dashboard와 command API는 Gateway OAuth flow가 발급한 session을 요구한다.
+- 외부 provider credential은 Dashboard 상태가 아니라 credential_ref/Token Broker 경계로 관리한다.
+- Dashboard와 command API는 Gateway 내부 로그인(email/password)이 발급한 Redis session을 요구한다.
 
 ## 운영 배포 기준
 
@@ -26,14 +26,14 @@
 | node-collector | DaemonSet이므로 Fargate-only 배치 금지 |
 | stateful store | 운영 후보는 RDS, ElastiCache, S3 같은 managed service |
 | target 연결 | cluster-agent outbound 연결 유지 |
-| 권한 | OAuth/session, AWS IAM/IRSA, Kubernetes ServiceAccount/RBAC를 분리 |
+| 권한 | 내부 session, 외부 credential, AWS IAM/IRSA, Kubernetes ServiceAccount/RBAC를 분리 |
 | 관측성 | CloudWatch, Prometheus, Loki, OTel을 provider adapter로 수용 |
 
 ## 서비스 배치
 
 ```text
 services
-  + api-gateway       HTTP 경계, OAuth/session, dashboard API
+  + api-gateway       HTTP 경계, 내부 로그인/session, dashboard API
   + gitops            Git 변경 -> manifest/diff/analyze/repo write split workers
   + command-worker               command policy -> target agent queue
   + rca-worker                   evidence -> RCA -> safe PR event
@@ -211,20 +211,19 @@ src/packages/runtime/worker.py
 -> Gateway /dead-letters replay
 ```
 
-## OAuth 흐름
+## 내부 로그인 흐름
 
 ```text
 UI
--> /auth/oauth/{provider}/start
--> OAuth provider redirect
--> /auth/oauth/{provider}/callback
--> Gateway가 provider token을 Token Vault에 저장
--> Gateway가 user/provider metadata를 PostgreSQL에 저장
+-> /auth/signup
+-> mail.email_verification.requested
+-> /auth/verify-email
+-> /auth/login
 -> Gateway가 session을 Redis에 저장
--> Gateway가 oauth.connected 발행
+-> Gateway가 httpOnly session cookie 발급
 ```
 
-현재 구현은 provider token 대신 credential placeholder만 저장한다. 실제 Google/GitHub OAuth를 붙일 때는 provider adapter와 Token Broker를 추가하고 내부 저장 구조와 event flow는 유지한다. UI 호출은 httpOnly session cookie 또는 `Authorization: Bearer <token>`으로 인증해야 한다.
+현재 구현은 OAuth를 로그인으로 사용하지 않는다. 실제 Google/GitHub 같은 외부 연결은 integration target/credential_ref/Token Broker 흐름으로 별도 추가한다. UI 호출은 httpOnly session cookie로 인증한다.
 
 ## 실행
 

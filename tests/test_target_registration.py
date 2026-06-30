@@ -57,7 +57,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest(monkey
     async def run():
         return await register_target(
             target_request(),
-            current=SimpleNamespace(user_id="local-user"),
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
             db=db,
         )
 
@@ -70,6 +70,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest(monkey
     assert response.install_manifest
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
+    assert db.registered[0]["workspace_id"] == "default"
 
 
 def test_target_registration_fails_closed_without_agent_token(monkeypatch) -> None:
@@ -78,7 +79,7 @@ def test_target_registration_fails_closed_without_agent_token(monkeypatch) -> No
     async def run() -> None:
         await register_target(
             target_request(),
-            current=SimpleNamespace(user_id="local-user"),
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
             db=FakeDb(),
         )
 

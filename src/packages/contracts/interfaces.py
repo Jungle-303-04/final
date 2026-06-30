@@ -59,13 +59,34 @@ class UserStore(Protocol):
         password_hash: str,
         display_name: str,
         status: str,
+        role: str,
     ) -> JsonObject | None: ...
 
-    def activate_user(self, user_id: str) -> JsonObject | None: ...
+    def complete_email_verification(self, user_id: str) -> JsonObject | None: ...
+
+    def approve_user(self, user_id: str, workspace_id: str) -> JsonObject | None: ...
+
+    def get_default_workspace_id_for_user(self, user_id: str) -> str | None: ...
+
+    def grant_resource_access(self, payload: JsonObject) -> JsonObject: ...
+
+    def user_has_resource_access(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+        action: str,
+    ) -> bool: ...
 
 
 class SessionStore(Protocol):
-    async def create_session(self, user_id: str, roles: list[str] | None = None) -> Any: ...
+    async def create_session(
+        self,
+        user_id: str,
+        roles: list[str] | None = None,
+        workspace_id: str | None = None,
+    ) -> Any: ...
 
     async def get_session(self, token: str | None) -> Any | None: ...
 
@@ -100,15 +121,20 @@ class ManagementPlaneClient(Protocol):
     async def ship_evidence(self, evidence: JsonObject) -> int: ...
 
     async def poll_command(
-        self, cluster_id: str, agent_id: str, timeout_seconds: int
+        self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None: ...
 
     async def start_command(
-        self, command_id: str, cluster_id: str, lease_id: str, agent_id: str
+        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
     ) -> None: ...
 
     async def complete_command(
-        self, command_id: str, lease_id: str, agent_id: str, result: JsonObject
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        result: JsonObject,
     ) -> None: ...
 
 

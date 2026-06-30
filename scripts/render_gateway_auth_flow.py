@@ -213,7 +213,7 @@ def render() -> None:
     draw_text(draw, 1266, 188, "PHASE 5+", PHASE, "#ffffff")
     draw_text(draw, 1360, 181, "Event / Worker / Token Broker", LANE_TITLE)
 
-    # Phase 1-2
+    # 1-2단계
     draw_card(draw, 130, 255, 390, 95)
     draw_number(draw, 160, 285, 1, COLORS["blue"])
     draw_text(draw, 190, 276, "Browser / CLI", BOX_TITLE)
@@ -244,7 +244,7 @@ def render() -> None:
     draw_arrow(draw, [(325, 515), (325, 560)])
     draw_arrow(draw, [(325, 680), (325, 725)])
 
-    # Phase 3-4
+    # 3-4단계
     draw_card(draw, 700, 255, 390, 120)
     draw_number(draw, 730, 285, 5, COLORS["orange"])
     draw_text(draw, 775, 276, "보호 API 진입", BOX_TITLE)
@@ -276,7 +276,7 @@ def render() -> None:
     draw_arrow(draw, [(895, 565), (895, 610)])
     draw_arrow(draw, [(895, 755), (895, 800)], color=COLORS["soft"], dashed=True)
 
-    # Phase 5+
+    # 5단계+
     draw_card(draw, 1270, 255, 390, 120, kind="event")
     draw_number(draw, 1300, 285, 8, COLORS["green"])
     draw_text(draw, 1330, 276, "secret 없는 event 발행", BOX_TITLE)
