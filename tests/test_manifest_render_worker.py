@@ -71,6 +71,75 @@ def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
     assert manifest.spec.image == "ghcr.io/project/pulled-api:1"
 
 
+def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
+    render = load_service("gitops/manifest-render-worker")
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
+    monkeypatch.setenv("GITHUB_API_BASE", "https://api.github.test")
+    monkeypatch.setenv("GITHUB_TOKEN", "token-1")
+    calls: list[tuple[str, str | None, float]] = []
+
+    class Response:
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"\n".join(
+                [
+                    b"apiVersion: apps/v1",
+                    b"kind: Deployment",
+                    b"metadata:",
+                    b"  name: checkout-api",
+                    b"  namespace: sandbox",
+                    b"spec:",
+                    b"  replicas: 4",
+                    b"  template:",
+                    b"    spec:",
+                    b"      containers:",
+                    b"        - name: checkout-api",
+                    b"          image: ghcr.io/project/checkout-api:demo",
+                ]
+            )
+
+    def fake_urlopen(req: object, timeout: float) -> Response:
+        calls.append(
+            (
+                req.full_url,  # type: ignore[attr-defined]
+                req.get_header("Authorization"),  # type: ignore[attr-defined]
+                timeout,
+            )
+        )
+        return Response()
+
+    monkeypatch.setattr(render.request, "urlopen", fake_urlopen)
+
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="ignored",
+            replicas=1,
+            repo_ref="owner/demo",
+            manifest_path="k8s/deploy.yaml",
+        ),
+        db=SpyDb(),
+    )
+
+    manifest = outs[0].rendered_manifest
+    assert calls == [
+        (
+            "https://api.github.test/repos/owner/demo/contents/k8s/deploy.yaml?ref=abc123",
+            "Bearer token-1",
+            5.0,
+        )
+    ]
+    assert manifest.metadata.name == "checkout-api"
+    assert manifest.spec.replicas == 4
+    assert manifest.spec.image == "ghcr.io/project/checkout-api:demo"
+
+
 def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) -> None:
     broken = tmp_path / "broken.yaml"
     broken.write_text("not: a deployment\n", encoding="utf-8")

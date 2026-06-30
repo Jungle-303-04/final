@@ -30,6 +30,16 @@ def _transport(posted: list[dict[str, Any]], sha: str = "abc123def456") -> httpx
     return httpx.MockTransport(handler)
 
 
+def _recording_transport(calls: list[str], sha: str = "abc123def456") -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if request.url.path.endswith("/commits"):
+            return httpx.Response(200, json=[{"sha": sha}])
+        return httpx.Response(200, json={"accepted": True})
+
+    return httpx.MockTransport(handler)
+
+
 def _rate_limited_transport(posted: list[dict[str, Any]]) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.github.com":
@@ -80,6 +90,22 @@ def test_dedup_guard_skips_unchanged_sha() -> None:
 
     asyncio.run(go())
     assert len(posted) == 1
+
+
+def test_github_api_base_env_controls_poll_endpoint(monkeypatch) -> None:
+    module = _load_poller()
+    calls: list[str] = []
+    monkeypatch.setenv("GITHUB_API_BASE", "https://github.enterprise.local/api/v3")
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=_recording_transport(calls)) as client:
+            poller = module.GitHubPoller(client=client)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+    assert calls[0].startswith(
+        "https://github.enterprise.local/api/v3/repos/octocat/Hello-World/commits"
+    )
 
 
 def test_rate_limited_poll_exits_without_webhook_or_failure() -> None:
