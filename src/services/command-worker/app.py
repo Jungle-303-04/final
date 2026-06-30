@@ -82,6 +82,7 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         cluster_id=command.cluster_id or CONFIG.default_cluster_id,
         action=command.action or CONFIG.default_command_action,
         namespace=command.namespace or CONFIG.default_namespace,
+        diff=command.diff.to_body(),
         steps=list(CONFIG.policy_steps),
     )
 
