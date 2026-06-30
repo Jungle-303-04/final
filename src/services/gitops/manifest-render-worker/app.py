@@ -18,11 +18,13 @@ from packages.contracts.event_bus.bodies import (
     EventBody,
     GitChangedBody,
     Manifest,
+    ManifestInvalidBody,
     ManifestRenderedBody,
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
 )
+from packages.contracts.gitops import ManifestArtifactStatus
 from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
 
@@ -36,7 +38,7 @@ GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
 
 
 def read_manifest_source(evt: GitChangedBody) -> str | None:
-    manifest_path = env(GIT_MANIFEST_PATH_ENV, "")
+    manifest_path = env(GIT_MANIFEST_PATH_ENV, evt.manifest_path)
     if not manifest_path:
         return None
 
@@ -115,6 +117,7 @@ def build_manifest_from_git_change(evt: GitChangedBody) -> Manifest:
         image=evt.image,
         replicas=evt.replicas,
         namespace=Sandbox.NAMESPACE,
+        manifest_path=evt.manifest_path,
     )
 
 
@@ -127,6 +130,30 @@ def render_deployment_manifest(manifest: Manifest) -> RenderedManifest:
         metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
         spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
     )
+
+
+def artifact_payload(
+    evt: GitChangedBody,
+    status: str,
+    rendered: RenderedManifest | None = None,
+    reason: str | None = None,
+) -> dict[str, object]:
+    return {
+        "workspace_id": evt.workspace_id,
+        "repository_id": evt.repository_id,
+        "watch_target_id": evt.watch_target_id,
+        "binding_id": evt.binding_id,
+        "commit_sha": evt.commit_sha,
+        "manifest_path": evt.manifest_path,
+        "status": status,
+        "status_reason": reason,
+        "rendered_manifest": rendered.to_body() if rendered is not None else None,
+        "source_summary": {
+            "repo_ref": evt.repo_ref,
+            "branch": evt.branch,
+            "cluster_id": evt.cluster_id,
+        },
+    }
 
 
 @app.on(GitChangedBody)
@@ -158,10 +185,48 @@ async def on_git_changed(
     #
     # 현재 split 구조: dict 대신 Manifest/RenderedManifest 값 객체 생성
     # 저장소 호출: EventContext[RepoChangeStore] + await
-    manifest = build_manifest_from_git_change(evt)
-    await ctx.db.save_repo_change(ctx.correlation_id, evt.commit_sha, manifest.to_body())
+    try:
+        manifest = build_manifest_from_git_change(evt)
+    except (subprocess.CalledProcessError, ValueError) as exc:
+        reason = str(exc)
+        await ctx.db.record_manifest_artifact(
+            artifact_payload(evt, ManifestArtifactStatus.INVALID_CONFIG.value, reason=reason)
+        )
+        yield ManifestInvalidBody(
+            workspace_id=evt.workspace_id,
+            repository_id=evt.repository_id,
+            watch_target_id=evt.watch_target_id,
+            binding_id=evt.binding_id,
+            commit_sha=evt.commit_sha,
+            manifest_path=evt.manifest_path,
+            reason=reason,
+        )
+        return
+
+    await ctx.db.save_repo_change(
+        ctx.correlation_id,
+        evt.commit_sha,
+        manifest.to_body(),
+        evt.workspace_id,
+        evt.repository_id,
+        evt.watch_target_id,
+        evt.binding_id,
+        evt.manifest_path,
+    )
     rendered = render_deployment_manifest(manifest)
-    yield ManifestRenderedBody(rendered_manifest=rendered)
+    await ctx.db.record_manifest_artifact(
+        artifact_payload(evt, ManifestArtifactStatus.RENDERED.value, rendered=rendered)
+    )
+    yield ManifestRenderedBody(
+        rendered_manifest=rendered,
+        workspace_id=evt.workspace_id,
+        repository_id=evt.repository_id,
+        watch_target_id=evt.watch_target_id,
+        binding_id=evt.binding_id,
+        cluster_id=evt.cluster_id,
+        commit_sha=evt.commit_sha,
+        manifest_path=evt.manifest_path,
+    )
 
 
 if __name__ == "__main__":

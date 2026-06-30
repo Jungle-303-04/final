@@ -56,6 +56,31 @@ class WorkspaceMember(Base):
     updated_at: Mapped[Any] = updated_at_column()
 
 
+class ResourceAccessGrant(Base):
+    __tablename__ = "resource_access_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "subject_type",
+            "subject_id",
+            "resource_type",
+            "resource_id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
+    subject_type: Mapped[str] = text_column()
+    subject_id: Mapped[str] = text_column()
+    resource_type: Mapped[str] = text_column()
+    resource_id: Mapped[str] = text_column()
+    role: Mapped[str] = text_column()
+    permissions: Mapped[dict[str, Any]] = jsonb_column()
+    status: Mapped[str] = text_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
 class ClusterRegistration(Base):
     __tablename__ = "cluster_registrations"
     __table_args__ = (UniqueConstraint("workspace_id", "cluster_id"),)
