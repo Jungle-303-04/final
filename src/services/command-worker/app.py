@@ -12,6 +12,7 @@ import json
 from collections.abc import AsyncIterator
 
 from domains.command.policy import ModelLookup, Policy
+from domains.command.policy import Result as PolicyResult
 from domains.command.policy_config import CommandConfig, PolicyRuleConfig
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.event_bus.bodies import (
@@ -50,11 +51,14 @@ CONFIG = CommandConfig(
     ),
 )
 POLICY = Policy.build(CONFIG.policy_rules)
+NO_DIFF_REASON = "desired and actual images already match"
 
 
 def evaluate_command_policy(command: CommandRequestedBody):
     # TODO(command): load org/project/cluster policy and evaluate action, namespace, and requester role.
     # TODO(command): keep production writes fail-closed until approval and RBAC proof are available.
+    if command.diff.desired_image == command.diff.actual_image:
+        return PolicyResult.reject(NO_DIFF_REASON)
     return POLICY.evaluate(ModelLookup(command))
 
 
