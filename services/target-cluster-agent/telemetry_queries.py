@@ -69,6 +69,11 @@ PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = (
         description="Not Ready Pods on each Kubernetes node reported by optional-node-collector.",
         promql="node_collector_node_not_ready_pod_count",
     ),
+    PrometheusInstantQuery(
+        metric_name="node_collector_scrape_error",
+        description="Whether optional-node-collector failed to read Kubernetes API data.",
+        promql="node_collector_scrape_error",
+    ),
 )
 
 
