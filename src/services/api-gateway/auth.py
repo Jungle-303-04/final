@@ -6,9 +6,7 @@ import hashlib
 import hmac
 import json
 import secrets
-import uuid
 from dataclasses import dataclass
-from typing import Any
 
 from fastapi import HTTPException, Request
 from redis.asyncio import Redis as AsyncRedis
@@ -17,7 +15,7 @@ from settings import Settings
 from packages.config.constants import Auth
 from packages.config.constants import Redis as RedisConfig
 from packages.config.settings import env
-from packages.contracts.interfaces import OAuthAccountStore, SessionStore, UserStore
+from packages.contracts.interfaces import SessionStore, UserStore
 
 PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_HASH_NAME = "sha256"
@@ -125,23 +123,6 @@ class RedisSessionStore:
     async def delete_session(self, token: str) -> None:
         await self._client().delete(f"{Settings.SESSION_KEY_PREFIX}:{token}")
 
-    async def save_oauth_state(self, state: str, payload: dict[str, Any]) -> None:
-        await self._client().setex(
-            f"{Settings.OAUTH_STATE_KEY_PREFIX}:{state}",
-            Settings.OAUTH_STATE_TTL_SECONDS,
-            json.dumps(payload),
-        )
-
-    async def consume_oauth_state(self, state: str | None) -> dict[str, Any] | None:
-        if not state:
-            return None
-        key = f"{Settings.OAUTH_STATE_KEY_PREFIX}:{state}"
-        raw = await self._client().get(key)
-        if raw:
-            await self._client().delete(key)
-            return dict(json.loads(raw))
-        return None
-
     async def check_rate_limit(
         self,
         key: str,
@@ -161,42 +142,9 @@ class RedisSessionStore:
         return self.client
 
 
-class OAuthAuthService:
-    def __init__(self, db: OAuthAccountStore, sessions: SessionStore) -> None:
-        self.db = db
+class SessionAuthService:
+    def __init__(self, sessions: SessionStore) -> None:
         self.sessions = sessions
-
-    async def start(self, provider: str, user_id: str, scopes: list[str]) -> dict[str, Any]:
-        state = str(uuid.uuid4())
-        await self.sessions.save_oauth_state(
-            state, {"provider": provider, "user_id": user_id, "scopes": scopes}
-        )
-        authorize_base_url = env(Settings.OAUTH_AUTHORIZE_BASE_URL_ENV, "").rstrip("/")
-        authorization_url = (
-            f"{authorize_base_url}/{provider}/authorize?state={state}" if authorize_base_url else ""
-        )
-        return {
-            "provider": provider,
-            "state": state,
-            "authorization_url": authorization_url,
-        }
-
-    async def callback(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:
-        state_payload = await self.sessions.consume_oauth_state(payload.get("state"))
-        if state_payload is None:
-            # state 미존재/불일치 → CSRF·인증 우회 차단(세션 발급 금지). [P0]
-            raise HTTPException(status_code=400, detail=Settings.OAUTH_STATE_INVALID_MESSAGE)
-        merged = {**state_payload, **payload, "provider": provider}
-        account = self.db.save_oauth_account(merged)
-        session = await self.sessions.create_session(account["user_id"], [Settings.OWNER_ROLE])
-        return {
-            "account": account,
-            "session": {
-                "session_token": session.token,
-                "user_id": session.user_id,
-                "roles": session.roles,
-            },
-        }
 
     async def require_session(self, request: Request) -> AuthSession:
         token = extract_session_token(request)

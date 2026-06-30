@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from auth import OAuthAuthService, RedisSessionStore
+from auth import RedisSessionStore, SessionAuthService
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
@@ -36,7 +36,7 @@ class ApiGateway:
         self.bus = NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = RedisSessionStore()
-        self.auth = OAuthAuthService(self.db, self.sessions)
+        self.auth = SessionAuthService(self.sessions)
         self.app = FastAPI(
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )

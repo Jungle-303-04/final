@@ -35,11 +35,6 @@ class Auth:
 
 class GitHub:
     PROVIDER: Final[str] = "github"
-    REQUIRED_SCOPE: Final[str] = "repo"
-
-
-class OAuth:
-    DEFAULT_SCOPES: Final[tuple[str, ...]] = ("profile", "email")
 
 
 class Command:

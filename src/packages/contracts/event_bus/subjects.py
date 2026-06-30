@@ -13,7 +13,6 @@ STREAM_MAX_BYTES = 1024 * 1024 * 1024  # 1 GiB
 # 스트림이 받는 subject 와일드카드. 도메인별로 "<도메인>.>" 한 줄씩.
 # 새 도메인 이벤트 추가 시 여기 와일드카드도 함께.
 STREAM_SUBJECTS = [
-    "oauth.>",
     "git.>",
     "manifest.>",
     "desired.>",
@@ -40,10 +39,6 @@ class EventSubject(StrEnum):
     - 요청형(command.requested) = 처리 요청 신호.
     StrEnum 이라 멤버 자체가 와이어 문자열.
     """
-
-    # --- 인증(api-gateway): OAuth 연결 ---
-    OAUTH_START_REQUESTED = "oauth.start.requested"  # OAuth 시작 요청
-    OAUTH_CONNECTED = "oauth.connected"  # 계정 연결 완료
 
     # --- GitOps split workers: webhook→manifest→diff ---
     GIT_WEBHOOK_RECEIVED = "git.webhook.received"  # 깃 webhook 수신(입구)
