@@ -36,6 +36,7 @@ services
   + api-gateway       HTTP 경계, 내부 로그인/session, dashboard API
   + gitops            Git 변경 -> manifest/diff/analyze/repo write split workers
   + command-worker               command policy -> target agent queue
+  + target/reconcile-worker      target desired state -> reconcile result
   + rca-worker                   evidence -> RCA -> safe PR event
   + projection/dashboard-worker dashboard read model projection
   + projection/audit-worker       변경 불가능한 audit timeline
@@ -73,6 +74,7 @@ diff-worker                   -> python src/services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
 scm-worker           -> python src/services/gitops/scm-worker/app.py
 command-worker                -> python src/services/command/command-worker/app.py
+target-reconcile-worker       -> python src/services/target/reconcile-worker/app.py
 rca-worker                    -> python src/services/ai/rca-worker/app.py
 dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
@@ -110,6 +112,8 @@ fake-otel                     -> python src/services/target/cluster-agent/fake_t
 - `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
+- `TargetReconcileStore`: target desired-state와 reconcile 결과 저장 경계
+- `ActualStateReader`: 운영 구현에서 Kubernetes watch/cache 또는 agent 보고를 연결할 actual-state 조회 경계
 
 현재 concrete adapter는 `src/packages/storage/database.py`의 `Database`, `src/packages/events/bus.py`의 `NatsEventBus`, `src/services/target/cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
 
@@ -155,6 +159,7 @@ async def on_event(evt: EventEnvelope, ctx):
 - `diff-analyze-worker`
 - `scm-worker`
 - `command-worker`
+- `target-reconcile-worker`
 - `rca-worker`
 - `dashboard-worker`
 - `audit-worker`
@@ -192,6 +197,14 @@ Target Cluster Agent
 -> evidence.built -> rca.completed -> safe_pr.requested
 -> Repo Gateway Worker
 -> safe_pr.created
+
+Target 등록 / desired-state
+-> API Gateway /targets
+-> target_desired_states 저장
+-> NATS cluster.desired_state.changed
+-> Target Reconcile Worker
+-> cluster.reconcile.requested
+-> cluster.reconcile.completed
 
 모든 event
 -> Dashboard Projection Service
