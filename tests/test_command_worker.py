@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 from domains.command.handler import (
     COMMAND_CONFIG,
+    MANIFEST_NAMESPACE_MISMATCH_REASON,
+    NAMESPACE_MISMATCH_REASON,
     build_plan,
     handle_command_requested,
     route_for_plan,
@@ -191,4 +193,73 @@ def test_command_handler_rejects_unsupported_action_before_queue() -> None:
     assert len(events) == 1
     assert isinstance(events[0], CommandRejectedBody)
     assert events[0].reason == "unsupported command action"
+    assert store.calls == []
+
+
+def test_command_handler_rejects_diff_namespace_mismatch_before_queue() -> None:
+    request = command_request()
+    mismatched = CommandRequestedBody(
+        cluster_id=request.cluster_id,
+        action=request.action,
+        namespace=Sandbox.NAMESPACE,
+        reason=request.reason,
+        diff=Diff(
+            resource=request.diff.resource,
+            namespace="kube-system",
+            desired_image=request.diff.desired_image,
+            actual_image=request.diff.actual_image,
+            risk=request.diff.risk,
+        ),
+        workspace_id=request.workspace_id,
+        requested_by=request.requested_by,
+    )
+
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(mismatched, ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == NAMESPACE_MISMATCH_REASON
+    assert store.calls == []
+
+
+def test_command_handler_rejects_manifest_namespace_mismatch_before_queue() -> None:
+    request = configmap_command_request()
+    mismatched_manifest = {
+        **request.diff.desired_manifest,
+        "metadata": {"name": "checkout-api-config", "namespace": "kube-system"},
+    }
+    mismatched = CommandRequestedBody(
+        cluster_id=request.cluster_id,
+        action=request.action,
+        namespace=request.namespace,
+        reason=request.reason,
+        diff=Diff(
+            resource=request.diff.resource,
+            namespace=request.diff.namespace,
+            desired_image=request.diff.desired_image,
+            actual_image=request.diff.actual_image,
+            risk=request.diff.risk,
+            desired_manifest=mismatched_manifest,
+        ),
+        workspace_id=request.workspace_id,
+        requested_by=request.requested_by,
+    )
+
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(mismatched, ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == MANIFEST_NAMESPACE_MISMATCH_REASON
     assert store.calls == []
