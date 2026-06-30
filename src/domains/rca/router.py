@@ -31,21 +31,14 @@ def scoped_evidence_key(identity: ClusterAgentIdentity, evidence_key: str | None
     return f"{identity.workspace_id}:{identity.cluster_id}:{evidence_key}"
 
 
-def trusted_evidence_payload(
+def build_cluster_evidence_body(
     payload: AgentEvidenceRequest, identity: ClusterAgentIdentity
-) -> dict[str, Any]:
+) -> ClusterEvidenceReceivedBody:
     # body 의 workspace_id/cluster_id 는 무시하고 토큰 identity 로 덮어쓴다(테넌트 위조 차단).
     data = payload.model_dump(exclude={"correlation_id"})
     data["workspace_id"] = identity.workspace_id
     data["cluster_id"] = identity.cluster_id
     data["evidence_key"] = scoped_evidence_key(identity, payload.evidence_key)
-    return data
-
-
-def build_cluster_evidence_body(
-    payload: AgentEvidenceRequest, identity: ClusterAgentIdentity
-) -> ClusterEvidenceReceivedBody:
-    data = trusted_evidence_payload(payload, identity)
     return ClusterEvidenceReceivedBody(**data)
 
 
