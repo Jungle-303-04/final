@@ -28,7 +28,7 @@ async def agent_evidence(
     events: Any = Depends(get_events),
     db: Any = Depends(get_db),
 ) -> AcceptedResponse:
-    if payload.evidence_key and hasattr(db, "get_evidence_window"):
+    if payload.evidence_key:
         existing = db.get_evidence_window(payload.evidence_key)
         if existing:
             return AcceptedResponse(
@@ -41,7 +41,7 @@ async def agent_evidence(
         build_cluster_evidence_body(payload),
         payload.correlation_id,
     )
-    if payload.evidence_key and hasattr(db, "record_evidence_window"):
+    if payload.evidence_key:
         recorded = db.record_evidence_window(
             payload.evidence_key,
             payload.workspace_id,

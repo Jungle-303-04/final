@@ -47,16 +47,19 @@ NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"
 ACCESS_DENIED_CODE = 403
 RESOURCE_ACCESS_DENIED = "resource access denied"
+# diff 미지정(수동 명령) 시 폴백 — 데모 placeholder. 운영에선 클라이언트가 diff 를 채운다.
+MANUAL_DIFF_RESOURCE = "deployment/checkout-api"
+MANUAL_DIFF_ACTUAL_IMAGE = "unknown"
 
 router = APIRouter()
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
     raw = payload.diff or {
-        "resource": "deployment/checkout-api",
+        "resource": MANUAL_DIFF_RESOURCE,
         "namespace": payload.namespace,
         "desired_image": payload.action,
-        "actual_image": "unknown",
+        "actual_image": MANUAL_DIFF_ACTUAL_IMAGE,
         "risk": Sandbox.RISK_TAG,
     }
     raw = {**raw, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
