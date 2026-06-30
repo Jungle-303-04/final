@@ -89,7 +89,7 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
 
 
 def test_command_subscriber_emits_dispatch_chain() -> None:
-    command = load_service("command-worker")
+    command = load_service("command/worker")
     queue = FakeAgentCommandQueue()
     payload = CommandRequestedBody.from_body(
         {
@@ -117,7 +117,7 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
 
 
 def test_command_subscriber_rejects_noop_diff() -> None:
-    command = load_service("command-worker")
+    command = load_service("command/worker")
     queue = FakeAgentCommandQueue()
     diff = command_diff()
     diff["actual_image"] = diff["desired_image"]
