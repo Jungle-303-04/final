@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.gateway.base import StrictModel
@@ -32,6 +33,11 @@ MAX_EVIDENCE_INTERVAL_SECONDS = 3600
 DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS = 30
 MIN_EVIDENCE_SOURCE_LEASE_SECONDS = 5
 MAX_EVIDENCE_SOURCE_LEASE_SECONDS = 300
+
+# agent evidence 페이로드 상한 — 무한 크기 수집물이 DB/NATS/LLM 컨텍스트를 압박하지 않도록.
+MAX_EVIDENCE_LOG_ENTRIES = 2000
+MAX_EVIDENCE_PAYLOAD_BYTES = 1_048_576  # 직렬화 1MiB 상한(초과 시 422)
+EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE = "evidence payload exceeds size limit"
 
 
 class LoginRequest(StrictModel):
@@ -85,8 +91,27 @@ class AgentEvidenceRequest(StrictModel):
     evidence_key: str | None = None
     kubernetes: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, Any] = Field(default_factory=dict)
-    logs: list[dict[str, Any]] = Field(default_factory=list)
+    logs: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_EVIDENCE_LOG_ENTRIES)
     traces: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _bound_payload_size(self) -> AgentEvidenceRequest:
+        # logs 길이는 Field(max_length)로, 전체 수집물 크기는 직렬화 바이트로 상한.
+        # (kubernetes/metrics/traces 는 중첩 dict 라 항목 수만으로는 못 막음)
+        size = len(
+            json.dumps(
+                {
+                    "kubernetes": self.kubernetes,
+                    "metrics": self.metrics,
+                    "logs": self.logs,
+                    "traces": self.traces,
+                },
+                default=str,
+            ).encode()
+        )
+        if size > MAX_EVIDENCE_PAYLOAD_BYTES:
+            raise ValueError(EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE)
+        return self
 
 
 class TargetRegisterRequest(StrictModel):
