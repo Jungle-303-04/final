@@ -16,10 +16,10 @@ jobs:
       TARGET_CLUSTER: target
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5.1.0
 
       - name: Set up kind
         uses: helm/kind-action@v1
