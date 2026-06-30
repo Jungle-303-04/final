@@ -59,10 +59,26 @@ from domains.scm.events import (
     SafePrFailedBody,
     SafePrRequestedBody,
 )
+from domains.target.events import (
+    ClusterDesiredStateChangedBody,
+    ClusterDriftDetectedBody,
+    ClusterReconcileCompletedBody,
+    ClusterReconcileFailedBody,
+    ClusterReconcileRequestedBody,
+    ClusterReconcileStartedBody,
+    TargetDesiredComponent,
+    TargetDrift,
+)
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 
 __all__ = [
     "ClusterEvidenceReceivedBody",
+    "ClusterDesiredStateChangedBody",
+    "ClusterDriftDetectedBody",
+    "ClusterReconcileCompletedBody",
+    "ClusterReconcileFailedBody",
+    "ClusterReconcileRequestedBody",
+    "ClusterReconcileStartedBody",
     "AlertDispatchedBody",
     "AlertRejectedBody",
     "AlertRequestedBody",
@@ -103,4 +119,6 @@ __all__ = [
     "SafePrCreatedBody",
     "SafePrFailedBody",
     "SafePrRequestedBody",
+    "TargetDesiredComponent",
+    "TargetDrift",
 ]
