@@ -29,6 +29,13 @@ DEAD_LETTER_STATUS_REPLAYED = "replayed"
 RAW_DEAD_LETTER_SUBJECT = "__decode_failed__"
 UNKNOWN_AGENT_ID = "unknown-agent"
 DEFAULT_COMMAND_LEASE_SECONDS = 60
+AGENT_COMMAND_COMPAT_COLUMNS = {
+    "lease_id": "alter table agent_commands add column if not exists lease_id text",
+    "agent_id": "alter table agent_commands add column if not exists agent_id text",
+    "leased_until": "alter table agent_commands add column if not exists leased_until timestamptz",
+    "started_at": "alter table agent_commands add column if not exists started_at timestamptz",
+    "completed_at": "alter table agent_commands add column if not exists completed_at timestamptz",
+}
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
@@ -115,15 +122,23 @@ class DatabaseConnection:
 
     def ensure_compatible_schema(self) -> None:
         """Keep local demo DBs usable until a real migration tool is introduced."""
-        statements = (
-            "alter table agent_commands add column if not exists lease_id text",
-            "alter table agent_commands add column if not exists agent_id text",
-            "alter table agent_commands add column if not exists leased_until timestamptz",
-            "alter table agent_commands add column if not exists started_at timestamptz",
-            "alter table agent_commands add column if not exists completed_at timestamptz",
-        )
         with self.engine.begin() as conn:
-            for statement in statements:
+            existing_columns = set(
+                conn.execute(
+                    text(
+                        """
+                        select column_name
+                        from information_schema.columns
+                        where table_schema = current_schema()
+                          and table_name = 'agent_commands'
+                        """
+                    )
+                ).scalars()
+            )
+            for column, statement in AGENT_COMMAND_COMPAT_COLUMNS.items():
+                if column in existing_columns:
+                    continue
+                conn.execute(text("set local lock_timeout = '5s'"))
                 conn.execute(text(statement))
 
     def dispose(self) -> None:
