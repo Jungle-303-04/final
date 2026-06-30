@@ -23,6 +23,7 @@ STREAM_SUBJECTS = [
     "command.>",
     "rca.>",
     "alert.>",
+    "mail.>",
     "safe_pr.>",
     "dashboard.>",
     "audit.>",
@@ -69,6 +70,8 @@ class EventSubject(StrEnum):
     ALERT_REQUESTED = "alert.requested"  # 알람 전송/사전 배포 게이트 요청
     ALERT_DISPATCHED = "alert.dispatched"  # 알람 전송 완료(또는 stub 통과)
     ALERT_REJECTED = "alert.rejected"  # 알람/정책 게이트 차단
+    EMAIL_VERIFICATION_REQUESTED = "mail.email_verification.requested"  # 이메일 인증 요청
+    EMAIL_VERIFICATION_SENT = "mail.email_verification.sent"  # 이메일 인증 발송 완료
     SAFE_PR_REQUESTED = "safe_pr.requested"  # PR 생성 요청(공통)
     SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
     SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패

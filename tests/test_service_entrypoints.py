@@ -13,6 +13,7 @@ SERVICE_ENTRYPOINTS = {
     "github-poll-worker": ("src/services/gitops/github-poll-worker/app.py", "AsyncService("),
     "api-gateway": ("src/services/api-gateway/app.py", "FastApiService("),
     "alert-worker": ("src/services/alert-worker/app.py", "App("),
+    "mail-worker": ("src/services/mail-worker/app.py", "App("),
     "command-worker": ("src/services/command-worker/app.py", "App("),
     "rca-worker": ("src/services/rca-worker/app.py", "App("),
     "dashboard-worker": (
@@ -51,6 +52,7 @@ APP_BASED_SERVICES = {
     "rca-worker",
     "command-worker",
     "alert-worker",
+    "mail-worker",
     "git-pull-worker",
     "manifest-render-worker",
     "diff-worker",

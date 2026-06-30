@@ -38,6 +38,7 @@ from domains.gitops.events import (
     RenderedMetadata,
     RenderedSpec,
 )
+from domains.mail.events import EmailVerificationRequestedBody, EmailVerificationSentBody
 from domains.projection.events import DashboardUpdatedBody
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
@@ -72,6 +73,8 @@ __all__ = [
     "Diff",
     "DiffAnalyzedBody",
     "EventBody",
+    "EmailVerificationRequestedBody",
+    "EmailVerificationSentBody",
     "Evidence",
     "EvidenceBuiltBody",
     "GitChangedBody",
