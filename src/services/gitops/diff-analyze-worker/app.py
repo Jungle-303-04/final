@@ -40,9 +40,14 @@ def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
 
 def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
     # TODO(gitops): rendered manifest patch, rollback plan, reviewer checklist 포함
+    summary = (
+        f"{diff.resource}: {diff.actual_image} → {diff.desired_image}"
+        if diff.desired_image
+        else f"{diff.resource}: apply rendered manifest"
+    )
     return SafePrRequestedBody(
         title=PR_TITLE,
-        body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
+        body=summary,
         provider=GitHub.PROVIDER,
         workspace_id=diff.workspace_id,
         repository_id=diff.repository_id,

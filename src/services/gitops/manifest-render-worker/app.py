@@ -11,7 +11,10 @@ import json
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 from urllib import error, parse, request
+
+import yaml
 
 from packages.config.constants import Sandbox
 from packages.config.settings import env
@@ -39,6 +42,11 @@ app = App("manifest-render-worker")
 DEFAULT_APP_NAME = "checkout-api"
 MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
+METADATA_FIELD = "metadata"
+SPEC_FIELD = "spec"
+TEMPLATE_FIELD = "template"
+CONTAINERS_FIELD = "containers"
+NAMESPACED_KINDS = {"Deployment", "Service", "ConfigMap"}
 GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
 GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
 GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
@@ -114,57 +122,87 @@ def read_manifest_source(evt: GitChangedBody) -> str | None:
     return None
 
 
-def parse_manifest_source(source: str) -> Manifest:
+def parse_rendered_manifest_source(source: str) -> list[RenderedManifest]:
+    payloads = load_manifest_documents(source)
+    rendered = [
+        render_manifest_payload(payload)
+        for payload in payloads
+        if isinstance(payload, dict) and payload
+    ]
+    if not rendered:
+        raise ValueError("manifest source did not contain a Kubernetes object")
+    return rendered
+
+
+def load_manifest_documents(source: str) -> list[Any]:
     try:
         payload = json.loads(source)
-        metadata = payload.get("metadata", {})
-        spec = payload.get("spec", {})
-        template = spec.get("template", {})
-        containers = template.get("spec", {}).get("containers", [])
-        image = containers[0]["image"]
-        return Manifest(
-            app=metadata["name"],
-            image=image,
-            replicas=int(spec.get("replicas", 1)),
-            namespace=metadata.get("namespace", Sandbox.NAMESPACE),
-        )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return parse_simple_yaml_manifest(source)
+        return payload if isinstance(payload, list) else [payload]
+    except json.JSONDecodeError:
+        try:
+            return list(yaml.safe_load_all(source))
+        except yaml.YAMLError as exc:
+            raise ValueError(f"invalid YAML manifest: {exc}") from exc
 
 
-def parse_simple_yaml_manifest(source: str) -> Manifest:
-    # TODO(gitops): 최소 Deployment 파서를 Kustomize/Helm/YAML 어댑터로 교체
-    name: str | None = None
-    namespace = Sandbox.NAMESPACE
-    replicas = 1
-    image: str | None = None
-    section: str | None = None
+def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
+    kind = str(payload.get("kind", ""))
+    api_version = str(payload.get("apiVersion", ""))
+    metadata = payload.get(METADATA_FIELD, {})
+    if not isinstance(metadata, dict):
+        raise ValueError("manifest metadata must be an object")
+    name = str(metadata.get("name", ""))
+    if not kind or not api_version or not name:
+        raise ValueError("manifest must include apiVersion, kind, and metadata.name")
 
-    for raw_line in source.splitlines():
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if not raw_line.startswith((" ", "-")):
-            section = stripped.removesuffix(":")
-        if section == "metadata":
-            if stripped.startswith("name:") and name is None:
-                name = stripped.split(":", 1)[1].strip().strip('"')
-            if stripped.startswith("namespace:"):
-                namespace = stripped.split(":", 1)[1].strip().strip('"')
-        if stripped.startswith("replicas:"):
-            replicas = int(stripped.split(":", 1)[1].strip())
-        if "image:" in stripped and image is None:
-            image = stripped.split("image:", 1)[1].strip().strip('"')
+    namespace = str(metadata.get("namespace") or Sandbox.NAMESPACE)
+    if kind in NAMESPACED_KINDS:
+        payload = {
+            **payload,
+            METADATA_FIELD: {
+                **metadata,
+                "namespace": namespace,
+            },
+        }
 
-    if not name or not image:
-        raise ValueError("manifest must include metadata.name and a container image")
-    return Manifest(app=name, image=image, replicas=replicas, namespace=namespace)
+    return RenderedManifest(
+        api_version=api_version,
+        kind=kind,
+        metadata=RenderedMetadata(name=name, namespace=namespace),
+        spec=rendered_spec_from_payload(kind, payload),
+        manifest=payload,
+    )
+
+
+def rendered_spec_from_payload(kind: str, payload: dict[str, Any]) -> RenderedSpec:
+    spec = payload.get(SPEC_FIELD, {})
+    if not isinstance(spec, dict):
+        return RenderedSpec()
+    if kind != MANIFEST_KIND:
+        return RenderedSpec()
+    return RenderedSpec(
+        replicas=int(spec.get("replicas", 0) or 0),
+        image=deployment_image(spec),
+    )
+
+
+def deployment_image(spec: dict[str, Any]) -> str:
+    template = spec.get(TEMPLATE_FIELD, {})
+    if not isinstance(template, dict):
+        return ""
+    pod_spec = template.get(SPEC_FIELD, {})
+    if not isinstance(pod_spec, dict):
+        return ""
+    containers = pod_spec.get(CONTAINERS_FIELD, [])
+    if not isinstance(containers, list) or not containers:
+        return ""
+    first = containers[0]
+    if not isinstance(first, dict):
+        return ""
+    return str(first.get("image", ""))
 
 
 def build_manifest_from_git_change(evt: GitChangedBody) -> Manifest:
-    source = read_manifest_source(evt)
-    if source is not None:
-        return parse_manifest_source(source)
     # TODO(gitops): commit metadata 보존으로 render 실패와 repo revision 추적
     return Manifest(
         app=DEFAULT_APP_NAME,
@@ -175,15 +213,51 @@ def build_manifest_from_git_change(evt: GitChangedBody) -> Manifest:
     )
 
 
+def build_rendered_manifests_from_git_change(evt: GitChangedBody) -> list[RenderedManifest]:
+    source = read_manifest_source(evt)
+    if source is not None:
+        return parse_rendered_manifest_source(source)
+    return [render_deployment_manifest(build_manifest_from_git_change(evt))]
+
+
 def render_deployment_manifest(manifest: Manifest) -> RenderedManifest:
     # TODO(gitops): Deployment 전용 shape를 Kustomize/Helm renderer 출력으로 교체
     # TODO(gitops): raw exception 대신 구조화된 render 오류 반환
+    raw = {
+        "apiVersion": MANIFEST_API_VERSION,
+        "kind": MANIFEST_KIND,
+        "metadata": {"name": manifest.app, "namespace": manifest.namespace},
+        "spec": {
+            "replicas": manifest.replicas,
+            "template": {
+                "spec": {
+                    "containers": [
+                        {
+                            "name": manifest.app,
+                            "image": manifest.image,
+                        }
+                    ]
+                }
+            },
+        },
+    }
     return RenderedManifest(
         api_version=MANIFEST_API_VERSION,
         kind=MANIFEST_KIND,
         metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
         spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
+        manifest=raw,
     )
+
+
+def rendered_resource_suffix(rendered: RenderedManifest) -> str:
+    return f"{rendered.kind.lower()}/{rendered.metadata.name}"
+
+
+def artifact_manifest_path(evt: GitChangedBody, rendered: RenderedManifest | None) -> str:
+    if rendered is None:
+        return evt.manifest_path
+    return f"{evt.manifest_path}#{rendered_resource_suffix(rendered)}"
 
 
 def artifact_payload(
@@ -198,13 +272,15 @@ def artifact_payload(
         "watch_target_id": evt.watch_target_id,
         "binding_id": evt.binding_id,
         "commit_sha": evt.commit_sha,
-        "manifest_path": evt.manifest_path,
+        "manifest_path": artifact_manifest_path(evt, rendered),
         "status": status,
         "status_reason": reason,
         "rendered_manifest": rendered.to_body() if rendered is not None else None,
         "source_summary": {
             "repo_ref": evt.repo_ref,
             "branch": evt.branch,
+            "manifest_path": evt.manifest_path,
+            "resource": rendered_resource_suffix(rendered) if rendered is not None else None,
             "cluster_id": evt.cluster_id,
             "application_id": evt.application_id,
             "workflow_run_id": evt.workflow_run_id,
@@ -243,7 +319,7 @@ async def on_git_changed(
     # 현재 split 구조: dict 대신 Manifest/RenderedManifest 값 객체 생성
     # 저장소 호출: EventContext[RepoChangeStore] + await
     try:
-        manifest = build_manifest_from_git_change(evt)
+        rendered_manifests = build_rendered_manifests_from_git_change(evt)
     except (subprocess.CalledProcessError, ManifestSourceError, ValueError) as exc:
         reason = str(exc)
         await ctx.db.record_manifest_artifact(
@@ -264,33 +340,33 @@ async def on_git_changed(
         )
         return
 
-    await ctx.db.save_repo_change(
-        ctx.correlation_id,
-        evt.commit_sha,
-        manifest.to_body(),
-        evt.workspace_id,
-        evt.repository_id,
-        evt.watch_target_id,
-        evt.binding_id,
-        evt.manifest_path,
-    )
-    rendered = render_deployment_manifest(manifest)
-    await ctx.db.record_manifest_artifact(
-        artifact_payload(evt, ManifestArtifactStatus.RENDERED.value, rendered=rendered)
-    )
-    yield ManifestRenderedBody(
-        rendered_manifest=rendered,
-        workspace_id=evt.workspace_id,
-        repository_id=evt.repository_id,
-        watch_target_id=evt.watch_target_id,
-        binding_id=evt.binding_id,
-        application_id=evt.application_id,
-        workflow_run_id=evt.workflow_run_id,
-        environment=evt.environment,
-        cluster_id=evt.cluster_id,
-        commit_sha=evt.commit_sha,
-        manifest_path=evt.manifest_path,
-    )
+    for rendered in rendered_manifests:
+        await ctx.db.save_repo_change(
+            ctx.correlation_id,
+            evt.commit_sha,
+            rendered.manifest or rendered.to_body(),
+            evt.workspace_id,
+            evt.repository_id,
+            evt.watch_target_id,
+            evt.binding_id,
+            evt.manifest_path,
+        )
+        await ctx.db.record_manifest_artifact(
+            artifact_payload(evt, ManifestArtifactStatus.RENDERED.value, rendered=rendered)
+        )
+        yield ManifestRenderedBody(
+            rendered_manifest=rendered,
+            workspace_id=evt.workspace_id,
+            repository_id=evt.repository_id,
+            watch_target_id=evt.watch_target_id,
+            binding_id=evt.binding_id,
+            application_id=evt.application_id,
+            workflow_run_id=evt.workflow_run_id,
+            environment=evt.environment,
+            cluster_id=evt.cluster_id,
+            commit_sha=evt.commit_sha,
+            manifest_path=evt.manifest_path,
+        )
 
 
 if __name__ == "__main__":
