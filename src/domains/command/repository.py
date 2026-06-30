@@ -113,6 +113,7 @@ class AgentCommandRepository(DatabaseConnection):
         self,
         command_id: str,
         workspace_id: str,
+        cluster_id: str,
         lease_id: str,
         agent_id: str,
         running_status: str = CommandStatus.RUNNING,
@@ -125,6 +126,7 @@ class AgentCommandRepository(DatabaseConnection):
             .where(
                 table.c.command_id == command_id,
                 table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
                 table.c.status == CommandStatus.LEASED,
@@ -146,6 +148,7 @@ class AgentCommandRepository(DatabaseConnection):
         self,
         command_id: str,
         workspace_id: str,
+        cluster_id: str,
         lease_id: str,
         agent_id: str,
         lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
@@ -157,6 +160,7 @@ class AgentCommandRepository(DatabaseConnection):
             .where(
                 table.c.command_id == command_id,
                 table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
                 table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
@@ -173,6 +177,7 @@ class AgentCommandRepository(DatabaseConnection):
         self,
         command_id: str,
         workspace_id: str,
+        cluster_id: str,
         result: JsonObject,
         lease_id: str,
         agent_id: str,
@@ -183,6 +188,7 @@ class AgentCommandRepository(DatabaseConnection):
             .where(
                 table.c.command_id == command_id,
                 table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
                 table.c.status == CommandStatus.RUNNING,

@@ -9,6 +9,7 @@ from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     command_heartbeat,
     command_result,
+    command_start,
     commands,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
@@ -16,6 +17,7 @@ from packages.contracts.gateway.requests import (
     CommandHeartbeatRequest,
     CommandRequest,
     CommandResultRequest,
+    CommandStartRequest,
 )
 
 AGENT_IDENTITY = ClusterAgentIdentity(
@@ -60,34 +62,49 @@ def current_session() -> SimpleNamespace:
 class SpyCommandLeaseDb:
     def __init__(self, correlation_id: str | None) -> None:
         self.correlation_id = correlation_id
-        self.calls: list[tuple[str, str, str, str, int]] = []
+        self.calls: list[tuple[str, str, str, str, str, int]] = []
+
+    async def start_agent_command(
+        self,
+        command_id: str,
+        workspace_id: str,
+        cluster_id: str,
+        lease_id: str,
+        agent_id: str,
+        running_status: str,
+        lease_seconds: int,
+    ) -> str | None:
+        self.calls.append((command_id, workspace_id, cluster_id, lease_id, agent_id, lease_seconds))
+        return self.correlation_id
 
     async def heartbeat_agent_command(
         self,
         command_id: str,
         workspace_id: str,
+        cluster_id: str,
         lease_id: str,
         agent_id: str,
         lease_seconds: int,
     ) -> str | None:
-        self.calls.append((command_id, workspace_id, lease_id, agent_id, lease_seconds))
+        self.calls.append((command_id, workspace_id, cluster_id, lease_id, agent_id, lease_seconds))
         return self.correlation_id
 
 
 class SpyCommandResultDb:
     def __init__(self, correlation_id: str | None) -> None:
         self.correlation_id = correlation_id
-        self.calls: list[tuple[str, str, dict[str, object], str, str]] = []
+        self.calls: list[tuple[str, str, str, dict[str, object], str, str]] = []
 
     async def complete_agent_command(
         self,
         command_id: str,
         workspace_id: str,
+        cluster_id: str,
         result: dict[str, object],
         lease_id: str,
         agent_id: str,
     ) -> str | None:
-        self.calls.append((command_id, workspace_id, result, lease_id, agent_id))
+        self.calls.append((command_id, workspace_id, cluster_id, result, lease_id, agent_id))
         return self.correlation_id
 
 
@@ -170,6 +187,7 @@ def test_command_result_uses_trusted_agent_identity_in_result_blob() -> None:
             (
                 "cmd-1",
                 "trusted-workspace",
+                "trusted-cluster",
                 {
                     "status": "completed",
                     "cluster_id": "trusted-cluster",
@@ -190,6 +208,30 @@ def test_command_result_uses_trusted_agent_identity_in_result_blob() -> None:
     asyncio.run(run())
 
 
+def test_command_start_uses_trusted_agent_cluster_boundary() -> None:
+    async def run() -> None:
+        db = SpyCommandLeaseDb(correlation_id="corr-1")
+        response = await command_start(
+            "cmd-1",
+            CommandStartRequest(
+                workspace_id="spoofed-workspace",
+                cluster_id="spoofed-cluster",
+                agent_id="agent-1",
+                lease_id="lease-1",
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert response.accepted is True
+        assert response.correlation_id == "corr-1"
+        assert db.calls == [
+            ("cmd-1", "trusted-workspace", "trusted-cluster", "lease-1", "agent-1", 60)
+        ]
+
+    asyncio.run(run())
+
+
 def test_command_heartbeat_extends_current_lease() -> None:
     async def run() -> None:
         db = SpyCommandLeaseDb(correlation_id="corr-1")
@@ -206,7 +248,9 @@ def test_command_heartbeat_extends_current_lease() -> None:
 
         assert response.accepted is True
         assert response.correlation_id == "corr-1"
-        assert db.calls == [("cmd-1", "trusted-workspace", "lease-1", "agent-1", 60)]
+        assert db.calls == [
+            ("cmd-1", "trusted-workspace", "trusted-cluster", "lease-1", "agent-1", 60)
+        ]
 
     asyncio.run(run())
 
