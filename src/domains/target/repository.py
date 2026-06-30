@@ -8,12 +8,124 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from domains.target.models import EvidenceSourceLease, EvidenceWindow
+from domains.target.models import (
+    EvidenceSourceLease,
+    EvidenceWindow,
+    TargetDesiredState,
+    TargetReconcileRecord,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.target import TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 
 class TargetAgentRepository(DatabaseConnection):
+    def upsert_target_desired_states(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        components: list[JsonObject],
+        updated_by: str | None,
+    ) -> list[JsonObject]:
+        table = TargetDesiredState.__table__
+        records: list[JsonObject] = []
+        with self.connection() as conn:
+            for component in components:
+                statement = (
+                    pg_insert(table)
+                    .values(
+                        workspace_id=workspace_id,
+                        cluster_id=cluster_id,
+                        component=component["component"],
+                        namespace=component["namespace"],
+                        version=component["version"],
+                        status=TargetDesiredStateStatus.ACTIVE.value,
+                        updated_by=updated_by,
+                        spec=component["spec"],
+                        updated_at=func.now(),
+                    )
+                    .on_conflict_do_update(
+                        index_elements=[
+                            table.c.workspace_id,
+                            table.c.cluster_id,
+                            table.c.component,
+                        ],
+                        set_={
+                            "namespace": component["namespace"],
+                            "version": component["version"],
+                            "status": TargetDesiredStateStatus.ACTIVE.value,
+                            "updated_by": updated_by,
+                            "spec": component["spec"],
+                            "updated_at": func.now(),
+                        },
+                    )
+                    .returning(
+                        table.c.workspace_id,
+                        table.c.cluster_id,
+                        table.c.component,
+                        table.c.namespace,
+                        table.c.version,
+                        table.c.status,
+                        table.c.updated_by,
+                        table.c.spec,
+                    )
+                )
+                row = conn.execute(statement).mappings().one()
+                records.append(dict(row))
+        return records
+
+    def list_target_desired_states(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
+        table = TargetDesiredState.__table__
+        statement = (
+            select(
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.component,
+                table.c.namespace,
+                table.c.version,
+                table.c.status,
+                table.c.updated_by,
+                table.c.spec,
+            )
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .order_by(table.c.component)
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings()]
+
+    def record_target_reconcile_result(self, payload: JsonObject) -> JsonObject:
+        table = TargetReconcileRecord.__table__
+        reconcile_id = str(payload.get("reconcile_id") or uuid.uuid4())
+        statement = (
+            pg_insert(table)
+            .values(
+                reconcile_id=reconcile_id,
+                workspace_id=payload["workspace_id"],
+                cluster_id=payload["cluster_id"],
+                desired_state_version=payload["desired_state_version"],
+                status=payload["status"],
+                drifted=payload["drifted"],
+                applied=payload["applied"],
+                message=payload["message"],
+                details=payload.get("details", {}),
+                updated_at=func.now(),
+            )
+            .returning(
+                table.c.reconcile_id,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.desired_state_version,
+                table.c.status,
+                table.c.drifted,
+                table.c.applied,
+                table.c.message,
+                table.c.details,
+            )
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return dict(row)
+
     def lease_evidence_source(
         self,
         cluster_id: str,
