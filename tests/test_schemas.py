@@ -3,7 +3,11 @@ from pydantic import ValidationError
 
 from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody, CommandRequestedBody
 from packages.contracts.event_bus.bodies.base import EventBodyDecodeError
-from packages.contracts.gateway.requests import CommandRequest, GitHubWebhookRequest
+from packages.contracts.gateway.requests import (
+    CommandRequest,
+    GitHubWebhookRequest,
+    TargetRegisterRequest,
+)
 from packages.events.envelope import event
 
 
@@ -21,6 +25,11 @@ def test_command_request_rejects_unknown_fields() -> None:
 def test_github_webhook_schema_rejects_invalid_replica_count() -> None:
     with pytest.raises(ValidationError):
         GitHubWebhookRequest(commit_sha="abc123", replicas=0)
+
+
+def test_target_register_schema_rejects_empty_management_url() -> None:
+    with pytest.raises(ValidationError):
+        TargetRegisterRequest(management_base_url="")
 
 
 def test_event_uses_payload_correlation_id() -> None:
