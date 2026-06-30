@@ -28,6 +28,7 @@ class Settings:
 
     HTTP_TIMEOUT_SECONDS = 20
     POLL_RETRY_DELAY_SECONDS = 5
+    SOFT_SKIP_STATUS_CODES = {403, 429}
 
     # webhook 바디 기본값(폴러는 commit_sha 만 실제로 채우고 image/replicas 는 데모 기본).
     DEFAULT_IMAGE = "service:local"
