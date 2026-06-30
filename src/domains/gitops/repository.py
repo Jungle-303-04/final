@@ -7,6 +7,7 @@ import hashlib
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.command.models import AgentCommand
 from domains.gitops.models import (
     Application,
     Approval,
@@ -18,6 +19,7 @@ from domains.gitops.models import (
     WorkflowRun,
     WorkflowRunStep,
 )
+from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
     DEFAULT_APPLICATION_ID,
@@ -386,7 +388,30 @@ class RepoChangeRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
-        return dict(row) if row else None
+        if row:
+            return dict(row)
+        return self._workflow_identity_from_queued_command(command_id)
+
+    def _workflow_identity_from_queued_command(self, command_id: str) -> JsonObject | None:
+        table = AgentCommand.__table__
+        statement = select(table.c.payload).where(table.c.command_id == command_id).limit(1)
+        with self.connection() as conn:
+            payload = conn.execute(statement).scalar_one_or_none()
+        if not isinstance(payload, dict):
+            return None
+        workflow_run_id = payload.get("workflow_run_id")
+        application_id = payload.get("application_id")
+        if not workflow_run_id or not application_id:
+            return None
+        return {
+            "workflow_run_id": str(workflow_run_id),
+            "workspace_id": str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            "application_id": str(application_id),
+            "binding_id": str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            "environment": str(payload.get("environment", DEFAULT_ENVIRONMENT)),
+            "cluster_id": str(payload.get("cluster_id", Target.DEFAULT_CLUSTER_ID)),
+            "commit_sha": str(payload.get("commit_sha", "")),
+        }
 
     def save_repo_change(
         self,
