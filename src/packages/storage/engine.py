@@ -31,6 +31,14 @@ AGENT_COMMAND_COMPAT_COLUMNS = {
     "started_at": "alter table agent_commands add column if not exists started_at timestamptz",
     "completed_at": "alter table agent_commands add column if not exists completed_at timestamptz",
 }
+USER_ACCOUNT_COMPAT_COLUMNS = {
+    "email": "alter table user_accounts add column if not exists email text",
+    "password_hash": "alter table user_accounts add column if not exists password_hash text",
+}
+USER_ACCOUNT_EMAIL_INDEX = (
+    "create unique index if not exists ux_user_accounts_email "
+    "on user_accounts (email) where email is not null"
+)
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
@@ -118,23 +126,36 @@ class DatabaseConnection:
     def ensure_compatible_schema(self) -> None:
         """Keep local demo DBs usable until a real migration tool is introduced."""
         with self.engine.begin() as conn:
-            existing_columns = set(
-                conn.execute(
-                    text(
-                        """
-                        select column_name
-                        from information_schema.columns
-                        where table_schema = current_schema()
-                          and table_name = 'agent_commands'
-                        """
-                    )
-                ).scalars()
-            )
+            existing_columns = self._existing_columns(conn, "agent_commands")
             for column, statement in AGENT_COMMAND_COMPAT_COLUMNS.items():
                 if column in existing_columns:
                     continue
                 conn.execute(text("set local lock_timeout = '5s'"))
                 conn.execute(text(statement))
+
+            existing_user_columns = self._existing_columns(conn, "user_accounts")
+            for column, statement in USER_ACCOUNT_COMPAT_COLUMNS.items():
+                if column in existing_user_columns:
+                    continue
+                conn.execute(text("set local lock_timeout = '5s'"))
+                conn.execute(text(statement))
+            conn.execute(text(USER_ACCOUNT_EMAIL_INDEX))
+
+    @staticmethod
+    def _existing_columns(conn: Connection, table_name: str) -> set[str]:
+        return set(
+            conn.execute(
+                text(
+                    """
+                    select column_name
+                    from information_schema.columns
+                    where table_schema = current_schema()
+                      and table_name = :table_name
+                    """
+                ),
+                {"table_name": table_name},
+            ).scalars()
+        )
 
     def dispose(self) -> None:
         self.engine.dispose()
