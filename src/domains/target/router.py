@@ -14,13 +14,13 @@ from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import TargetRegisterRequest
 from packages.contracts.gateway.responses import TargetInstallResponse
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
 from packages.runtime.dependencies import get_db
 
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_NOT_CONFIGURED = "agent token is not configured"
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
-INSTALL_STATUS_REGISTERED = "registered"
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -162,6 +162,7 @@ metadata:
   namespace: target
 data:
   TARGET_CLUSTER_ID: {yaml_string(payload.cluster_id)}
+  WORKSPACE_ID: {yaml_string(payload.workspace_id)}
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
@@ -319,7 +320,7 @@ def install_response(
     return TargetInstallResponse(
         registered=True,
         cluster_id=payload.cluster_id,
-        status=INSTALL_STATUS_REGISTERED,
+        status=ClusterRegistrationStatus.REGISTERED.value,
         applied=apply_output is not None,
         apply_output=apply_output,
         install_manifest=manifest,
@@ -336,22 +337,27 @@ async def register_target(
     if not agent_token:
         raise HTTPException(status_code=503, detail=AGENT_TOKEN_NOT_CONFIGURED)
 
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    scoped_payload = payload.model_copy(update={"workspace_id": workspace_id})
+
     if hasattr(db, "register_target_cluster"):
         db.register_target_cluster(
             {
-                "workspace_id": payload.workspace_id,
+                "workspace_id": workspace_id,
                 "user_id": current.user_id,
-                "cluster_id": payload.cluster_id,
-                "name": payload.name,
-                "environment": payload.environment,
-                "settings": payload.model_dump(
+                "cluster_id": scoped_payload.cluster_id,
+                "name": scoped_payload.name,
+                "environment": scoped_payload.environment,
+                "settings": scoped_payload.model_dump(
                     exclude={"apply", "kube_context"},
                 ),
             }
         )
 
-    manifest = target_install_manifest(payload, agent_token)
+    manifest = target_install_manifest(scoped_payload, agent_token)
     apply_output = (
-        apply_manifest_with_kubectl(manifest, payload.kube_context) if payload.apply else None
+        apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
+        if scoped_payload.apply
+        else None
     )
-    return install_response(payload, manifest, apply_output)
+    return install_response(scoped_payload, manifest, apply_output)

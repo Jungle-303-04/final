@@ -51,7 +51,21 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
             await poller.run()
 
     asyncio.run(go())
-    assert posted == [{"commit_sha": "abc123def456", "image": "service:local", "replicas": 2}]
+    assert posted == [
+        {
+            "commit_sha": "abc123def456",
+            "image": "service:local",
+            "replicas": 2,
+            "workspace_id": "default",
+            "repository_id": "repo-default",
+            "repo_ref": "octocat/Hello-World",
+            "branch": "main",
+            "watch_target_id": "watch-default",
+            "binding_id": "binding-default",
+            "cluster_id": "target-cluster-01",
+            "manifest_path": "deploy.yaml",
+        }
+    ]
 
 
 def test_dedup_guard_skips_unchanged_sha() -> None:

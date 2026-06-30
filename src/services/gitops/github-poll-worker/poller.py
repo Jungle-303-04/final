@@ -1,17 +1,17 @@
-"""github-poll-worker — GitHub 를 주기적으로 당겨(폴링) 새 커밋을 webhook 입구로 흘린다.
+"""github-poll-worker — GitHub 주기 polling, 새 commit을 webhook 입구로 전달
 
-ArgoCD 와 같은 방향: "폴링 기본 + webhook 가속(옵션)". webhook 이 불가능한 환경
-(외부에 엔드포인트 못 여는 경우)이나 webhook 누락 보정용으로 폴링을 둔다.
+ArgoCD와 같은 방향: "polling 기본 + webhook 가속(옵션)".
+외부 endpoint를 못 여는 환경이나 webhook 누락 보정용 polling.
 
-cluster-agent 와 같은 타이머 producer 모양: 주기마다 외부를 호출하고
-결과를 api-gateway 의 /github/webhook 으로 POST 한다. 그 뒤는 webhook 과 100%
-동일 경로(outbox → NATS → git-pull-worker → 파이프라인)를 탄다.
+cluster-agent와 같은 timer producer 형태: 주기마다 외부 호출 후
+api-gateway의 /github/webhook으로 POST. 이후 경로는 webhook과 동일
+(outbox → NATS → git-pull-worker → pipeline).
 
-TODO(handoff): 여기는 "실제로 가져오는" 최소 흐름이다(매번 최신 커밋 1건 조회).
-  프로덕션 최적화는 별도 담당:
-    - 커서/ETag(If-None-Match)로 증분만 조회 → 변경 없으면 304, rate limit 절약.
-    - X-RateLimit-Remaining 기반 throttle + 실패 시 지수 백오프.
-  같은 커밋을 또 봐도 기존 ledger dedup(exactly-once)이 흡수하므로 최소 흐름도 안전.
+TODO(handoff): 실제 조회 최소 흐름(매번 최신 commit 1건)
+  production optimization:
+    - cursor/ETag(If-None-Match)로 incremental 조회 → 변경 없으면 304, rate limit 절약
+    - X-RateLimit-Remaining 기반 throttle + 실패 시 exponential backoff
+  같은 commit 반복 조회도 기존 ledger dedup(정확히 한 번)으로 흡수
 """
 
 from __future__ import annotations
@@ -37,6 +37,16 @@ class GitHubPoller:
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
         self.repo = env(Settings.GITHUB_REPO_ENV, Settings.DEFAULT_GITHUB_REPO)
+        self.branch = env(Settings.GITHUB_BRANCH_ENV, Settings.DEFAULT_GITHUB_BRANCH)
+        self.workspace_id = env(Settings.WORKSPACE_ID_ENV, Settings.DEFAULT_WORKSPACE_ID)
+        self.repository_id = env(Settings.REPOSITORY_ID_ENV, Settings.DEFAULT_REPOSITORY_ID)
+        self.watch_target_id = env(Settings.WATCH_TARGET_ID_ENV, Settings.DEFAULT_WATCH_TARGET_ID)
+        self.binding_id = env(
+            Settings.DEPLOYMENT_BINDING_ID_ENV,
+            Settings.DEFAULT_DEPLOYMENT_BINDING_ID,
+        )
+        self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Settings.DEFAULT_TARGET_CLUSTER_ID)
+        self.manifest_path = env(Settings.MANIFEST_PATH_ENV, Settings.DEFAULT_MANIFEST_PATH)
         self.interval = int(env(Settings.POLL_INTERVAL_ENV, Settings.DEFAULT_POLL_INTERVAL_SECONDS))
         self.token = env(Settings.GITHUB_TOKEN_ENV, "")
         self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
@@ -86,7 +96,7 @@ class GitHubPoller:
     async def latest_commit_sha(self, client: httpx.AsyncClient) -> str | None:
         response = await client.get(
             f"{Settings.GITHUB_API_BASE}/repos/{self.repo}/commits",
-            params={"per_page": 1},
+            params={"per_page": 1, "sha": self.branch},
             headers=self._github_headers(),
         )
         if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
@@ -105,12 +115,20 @@ class GitHubPoller:
         return commits[0]["sha"] if commits else None
 
     async def emit_webhook(self, client: httpx.AsyncClient, commit_sha: str) -> None:
-        # 서명은 전송 바이트와 정확히 일치해야 함 → json= 대신 직접 직렬화한 content 를 보낸다.
+        # 서명은 전송 바이트와 정확히 일치 필요 → json= 대신 직접 직렬화한 content 전송
         body = json.dumps(
             {
                 "commit_sha": commit_sha,
                 "image": Settings.DEFAULT_IMAGE,
                 "replicas": Settings.DEFAULT_REPLICAS,
+                "workspace_id": self.workspace_id,
+                "repository_id": self.repository_id,
+                "repo_ref": self.repo,
+                "branch": self.branch,
+                "watch_target_id": self.watch_target_id,
+                "binding_id": self.binding_id,
+                "cluster_id": self.cluster_id,
+                "manifest_path": self.manifest_path,
             }
         ).encode()
         response = await client.post(

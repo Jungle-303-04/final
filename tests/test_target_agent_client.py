@@ -42,9 +42,10 @@ async def close_client(client: Any) -> None:
     [
         lambda client: client.register_agent("cluster-1", "agent-1", ["evidence"]),
         lambda client: client.ship_evidence({"cluster_id": "cluster-1"}),
-        lambda client: client.start_command("cmd-1", "cluster-1", "lease-1", "agent-1"),
+        lambda client: client.start_command("cmd-1", "cluster-1", "default", "lease-1", "agent-1"),
         lambda client: client.complete_command(
             "cmd-1",
+            "default",
             "lease-1",
             "agent-1",
             {"status": "completed", "cluster_id": "cluster-1"},

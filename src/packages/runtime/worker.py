@@ -120,11 +120,11 @@ class EventProcessor:
             await message.ack()
             return
         # 1) claim 을 별도 트랜잭션으로 먼저 커밋. attempt 증가가 핸들러 실패에 롤백되면
-        #    재시도 횟수가 누적되지 않아 영영 DLQ 에 못 간다 → claim 과 업무를 분리한다.
+        #    재시도 횟수 미누적으로 영구 DLQ 미도달 위험 → claim 과 업무 분리
         with self.store.unit_of_work():
             processing = self.ledger.begin(evt)  # 처리대장에 "처리 시작" 기록 + attempt 증가
         if processing.status != EventProcessingStatus.PROCESSING:
-            await message.ack()  # 이미 처리됨/소진됨(중복) → skip(exactly-once 핵심)
+            await message.ack()  # 이미 처리됨/소진됨(중복) → 건너뛰기(정확히 한 번 핵심)
             return
         attempts = processing.attempts  # 지금까지 시도 횟수(커밋되어 누적)
         # 2) 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).

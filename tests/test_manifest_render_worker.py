@@ -18,7 +18,10 @@ def test_render_emits_manifest_rendered() -> None:
     assert subjects_of(outs) == ["manifest.rendered"]
     assert outs[0].rendered_manifest.spec.image == "img:new"
     assert outs[0].rendered_manifest.api_version == "apps/v1"
+    assert outs[0].workspace_id == "default"
+    assert outs[0].binding_id == "binding-default"
     assert db.called("save_repo_change")
+    assert db.called("record_manifest_artifact")
 
 
 def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
@@ -66,3 +69,31 @@ def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
     assert manifest.metadata.namespace == "sandbox"
     assert manifest.spec.replicas == 3
     assert manifest.spec.image == "ghcr.io/project/pulled-api:1"
+
+
+def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) -> None:
+    broken = tmp_path / "broken.yaml"
+    broken.write_text("not: a deployment\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(broken))
+
+    render = load_service("gitops/manifest-render-worker")
+    db = SpyDb()
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="bad123",
+            image="ignored",
+            replicas=1,
+            repository_id="repo-1",
+            binding_id="binding-1",
+            manifest_path="deploy/broken.yaml",
+        ),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert outs[0].repository_id == "repo-1"
+    assert outs[0].binding_id == "binding-1"
+    assert "manifest must include" in outs[0].reason
+    assert db.called("record_manifest_artifact")
+    assert not db.called("save_repo_change")

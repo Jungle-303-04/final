@@ -2222,30 +2222,34 @@ Request:
 }
 ```
 
-## 11. 기존 OAuth endpoint 처리
+## 11. 외부 provider 연결 재도입 정책
 
-기존 endpoint:
-
-```text
-GET  /auth/oauth/{provider}/start
-POST /auth/oauth/{provider}/callback
-```
-
-이 endpoint는 삭제하지 않는다. 역할만 바꾼다.
-
-현재:
+현재 코드에는 OAuth endpoint를 두지 않는다.
 
 ```text
-OAuth callback -> session 생성
+/auth/signup
+/auth/login
+/auth/logout
+/auth/session
 ```
 
-최종:
+내부 로그인은 email/password와 Redis session이 담당한다.
+외부 provider 연결이 필요해지면 로그인 route가 아니라 integration route로 추가한다.
+
+나중에 추가할 endpoint 예:
 
 ```text
-OAuth callback -> provider account 연결 또는 credential 등록
+POST /integrations
+POST /integration-targets
+POST /credentials
+POST /credential-bindings
 ```
 
-내부 로그인은 `/auth/login`이 담당하고, OAuth는 “외부 provider 연결”이 된다.
+정책:
+
+- provider 계정 연결은 session 생성과 분리한다.
+- provider token은 event payload, response, log에 싣지 않는다.
+- worker는 credential_id가 아니라 target_id/action으로 Token Broker에 요청한다.
 
 ## 12. Token Broker 설계
 

@@ -31,10 +31,22 @@ async def on_git_webhook(
     #     evt["correlation_id"],
     # )
     #
-    # 현재 split 구조에서는 raw dict payload 대신 GitWebhookReceivedBody를 받고,
-    # manifest 생성은 다음 단계인 manifest-render-worker가 맡는다.
+    # 현재 split 구조: raw dict payload 대신 GitWebhookReceivedBody 수신
+    # manifest 생성 담당: 다음 단계 manifest-render-worker
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
-    yield GitChangedBody(commit_sha=commit_sha, image=evt.image, replicas=evt.replicas)
+    yield GitChangedBody(
+        commit_sha=commit_sha,
+        image=evt.image,
+        replicas=evt.replicas,
+        workspace_id=evt.workspace_id,
+        repository_id=evt.repository_id,
+        repo_ref=evt.repo_ref,
+        branch=evt.branch,
+        watch_target_id=evt.watch_target_id,
+        binding_id=evt.binding_id,
+        cluster_id=evt.cluster_id,
+        manifest_path=evt.manifest_path,
+    )
 
 
 if __name__ == "__main__":

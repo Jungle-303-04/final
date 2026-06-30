@@ -53,13 +53,13 @@ route 순서 = **input validation → auth/policy → event publish**.
 
 | 모듈 | 내용 |
 | --- | --- |
-| `events.py` | `oauth.start.requested`, `oauth.connected` |
-| `models.py` | `User`(email/password), `OAuthAccount`, `TokenVault` |
-| `repository.py` | 사용자·OAuth 계정·토큰 영속(`OAuthAccountStore` 계약) |
-| `router.py` | `/auth/login`(email/pw), `/auth/session`, `/auth/oauth/{provider}/start·callback` |
-| `schemas.py` | `LoginRequest`, `OAuthCallbackRequest` 등 HTTP DTO(위험 field 거부) |
+| `events.py` | 이메일 인증 요청/발송, 향후 integration 연결 이벤트 |
+| `models.py` | `User`(email/password), `Workspace`, `WorkspaceMember`, `ResourceAccessGrant` |
+| `repository.py` | 사용자·워크스페이스·리소스 권한 영속 |
+| `router.py` | `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/session`, `/auth/verify-email` |
+| `schemas.py` | `LoginRequest`, `SignupRequest` 등 HTTP DTO(위험 field 거부) |
 | `dependencies.py` | **인가 가드(필터)** — `require_session`, `require_agent`, `require_roles([...])` |
-| `service.py` | 로그인·OAuth flow(`OAuthAuthService`), Redis 세션(`SessionStore`) |
+| `service.py` | 내부 로그인·이메일 인증·Redis 세션(`SessionStore`) |
 | `integrations.py` | 외부 도구 integration target·credential binding·Token Broker(planned `contracts/integrations`) |
 | `security.py` | **organization role · project role 분리**·권한 정책(planned `contracts/security`) |
 
@@ -226,4 +226,3 @@ WIKI `projects/final/architecture.md` 의 포트 계약(Protocol)을 도메인 r
 - 분배/계약 규칙: `WIKI:projects/final/team-work-allocation.md`, `repo:docs/team/work-allocation.md`
 - RCA 지식: `WIKI:users/ummfieg/rca-scenarios/`(40 시나리오), `feedback/rca-*.md`
 - frontend/security: `WIKI:wiki/frontend/README.md`, `wiki/security/README.md` (현재 stub → 착수 시 정의 필요)
-
