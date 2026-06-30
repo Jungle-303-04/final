@@ -34,15 +34,22 @@ def resource_ref(kind: str, name: str) -> str:
     return f"{kind.lower()}/{name}"
 
 
+def risk_for_namespace(namespace: str) -> str:
+    if namespace == Sandbox.NAMESPACE:
+        return Sandbox.RISK_TAG
+    return Sandbox.UNSAFE_NAMESPACE_RISK_TAG
+
+
 def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
     rendered = evt.rendered_manifest
+    namespace = rendered.metadata.namespace or Sandbox.NAMESPACE
     # TODO(gitops): create/update/delete 작업 유형과 기계 판독용 위험 사유 포함
     return Diff(
         resource=resource_ref(rendered.kind, rendered.metadata.name),
-        namespace=rendered.metadata.namespace or Sandbox.NAMESPACE,
+        namespace=namespace,
         desired_image=rendered.spec.image,
         actual_image=actual_image,
-        risk=Sandbox.RISK_TAG,
+        risk=risk_for_namespace(namespace),
         workspace_id=evt.workspace_id,
         repository_id=evt.repository_id,
         watch_target_id=evt.watch_target_id,
