@@ -19,6 +19,7 @@ from domains.identity.repository import WorkspaceAccessRepository
 from domains.projection.repository import DashboardRepository
 from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
+from domains.target.repository import TargetAgentRepository
 from packages.storage.engine import DatabaseConnection
 from packages.storage.repositories.events import (
     DeadLetterRepository,
@@ -78,6 +79,7 @@ if TYPE_CHECKING:
         PullRequestRepository,
         DashboardRepository,
         AuditLogRepository,
+        TargetAgentRepository,
     ): ...
 else:
     Database = type("Database", _CORE + _PENDING + _discovered_repositories(), {})

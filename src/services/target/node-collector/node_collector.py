@@ -9,7 +9,6 @@ from enum import StrEnum
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
-from settings import Settings
 from uvicorn import Config, Server
 
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -29,6 +28,30 @@ class Field(StrEnum):
 NODE_RUNTIME_SAMPLE_KIND = "node_runtime_sample"
 SNAPSHOT_PATH = "/snapshot"
 METRICS_PATH = "/metrics"
+
+
+class NodeCollectorConfig:
+    SERVICE_NAME = "node-collector"
+    SERVICE_HOST = "0.0.0.0"
+    SERVICE_PORT_ENV = "PORT"
+    DEFAULT_SERVICE_PORT = "9100"
+    LOG_LEVEL = "info"
+
+    NODE_NAME_ENV = "NODE_NAME"
+    POD_NAME_ENV = "POD_NAME"
+    POD_NAMESPACE_ENV = "POD_NAMESPACE"
+    COLLECT_INTERVAL_ENV = "COLLECT_INTERVAL_SECONDS"
+
+    DEFAULT_NODE_NAME = "unknown-node"
+    DEFAULT_POD_NAME = "node-collector"
+    DEFAULT_POD_NAMESPACE = "target"
+    DEFAULT_COLLECT_INTERVAL_SECONDS = "15"
+
+    SAMPLE_CPU_USAGE_RATIO = 0.37
+    SAMPLE_MEMORY_WORKING_SET_BYTES = 268_435_456
+    SAMPLE_FILESYSTEM_USAGE_RATIO = 0.42
+    RUNTIME_NAME = "containerd"
+    METRIC_CONTENT_TYPE = "text/plain; version=0.0.4"
 
 
 @dataclass(frozen=True)
@@ -58,11 +81,16 @@ class NodeCollector:
     @classmethod
     def from_env(cls) -> NodeCollector:
         return cls(
-            node_name=env(Settings.NODE_NAME_ENV, Settings.DEFAULT_NODE_NAME),
-            pod_name=env(Settings.POD_NAME_ENV, Settings.DEFAULT_POD_NAME),
-            namespace=env(Settings.POD_NAMESPACE_ENV, Settings.DEFAULT_POD_NAMESPACE),
+            node_name=env(NodeCollectorConfig.NODE_NAME_ENV, NodeCollectorConfig.DEFAULT_NODE_NAME),
+            pod_name=env(NodeCollectorConfig.POD_NAME_ENV, NodeCollectorConfig.DEFAULT_POD_NAME),
+            namespace=env(
+                NodeCollectorConfig.POD_NAMESPACE_ENV, NodeCollectorConfig.DEFAULT_POD_NAMESPACE
+            ),
             interval_seconds=int(
-                env(Settings.COLLECT_INTERVAL_ENV, Settings.DEFAULT_COLLECT_INTERVAL_SECONDS)
+                env(
+                    NodeCollectorConfig.COLLECT_INTERVAL_ENV,
+                    NodeCollectorConfig.DEFAULT_COLLECT_INTERVAL_SECONDS,
+                )
             ),
         )
 
@@ -72,10 +100,10 @@ class NodeCollector:
             pod_name=self.pod_name,
             namespace=self.namespace,
             timestamp=datetime.now(UTC).isoformat(),
-            cpu_usage_ratio=Settings.SAMPLE_CPU_USAGE_RATIO,
-            memory_working_set_bytes=Settings.SAMPLE_MEMORY_WORKING_SET_BYTES,
-            filesystem_usage_ratio=Settings.SAMPLE_FILESYSTEM_USAGE_RATIO,
-            runtime=Settings.RUNTIME_NAME,
+            cpu_usage_ratio=NodeCollectorConfig.SAMPLE_CPU_USAGE_RATIO,
+            memory_working_set_bytes=NodeCollectorConfig.SAMPLE_MEMORY_WORKING_SET_BYTES,
+            filesystem_usage_ratio=NodeCollectorConfig.SAMPLE_FILESYSTEM_USAGE_RATIO,
+            runtime=NodeCollectorConfig.RUNTIME_NAME,
         )
 
     def prometheus_metrics(self) -> str:
@@ -104,7 +132,7 @@ class NodeCollector:
                 "node_runtime_sample_collected",
                 extra={
                     CONTEXT_KEY: {
-                        Gateway.SERVICE: Settings.SERVICE_NAME,
+                        Gateway.SERVICE: NodeCollectorConfig.SERVICE_NAME,
                         Field.KIND: NODE_RUNTIME_SAMPLE_KIND,
                         Field.SAMPLE: self.snapshot().to_body(),
                     }
@@ -126,13 +154,13 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
             if task:
                 task.cancel()
 
-    app = FastAPI(title=Settings.SERVICE_NAME, lifespan=lifespan)
+    app = FastAPI(title=NodeCollectorConfig.SERVICE_NAME, lifespan=lifespan)
 
     @app.get(gateway_routes.HEALTHZ_PATH)
     async def healthz() -> dict[str, str]:
         return {
             Gateway.STATUS: Gateway.STATUS_OK,
-            Gateway.SERVICE: Settings.SERVICE_NAME,
+            Gateway.SERVICE: NodeCollectorConfig.SERVICE_NAME,
             Field.NODE: node_collector.node_name,
         }
 
@@ -143,7 +171,7 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
     @app.get(METRICS_PATH, response_class=PlainTextResponse)
     async def metrics() -> PlainTextResponse:
         return PlainTextResponse(
-            node_collector.prometheus_metrics(), media_type=Settings.METRIC_CONTENT_TYPE
+            node_collector.prometheus_metrics(), media_type=NodeCollectorConfig.METRIC_CONTENT_TYPE
         )
 
     return app
@@ -153,8 +181,10 @@ async def run() -> None:
     await Server(
         Config(
             create_app(),
-            host=Settings.SERVICE_HOST,
-            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
-            log_level=Settings.LOG_LEVEL,
+            host=NodeCollectorConfig.SERVICE_HOST,
+            port=int(
+                env(NodeCollectorConfig.SERVICE_PORT_ENV, NodeCollectorConfig.DEFAULT_SERVICE_PORT)
+            ),
+            log_level=NodeCollectorConfig.LOG_LEVEL,
         )
     ).serve()

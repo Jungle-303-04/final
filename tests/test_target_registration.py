@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from domains.target.router import register_target, target_install_manifest
-from packages.contracts.gateway.requests import TargetRegisterRequest
+from domains.target.router import lease_evidence_source, register_target, target_install_manifest
+from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
 
 
 class FakeDb:
@@ -17,6 +17,23 @@ class FakeDb:
     def register_target_cluster(self, payload: dict[str, object]) -> dict[str, object]:
         self.registered.append(payload)
         return payload
+
+
+class FakeLeaseDb:
+    def lease_evidence_source(
+        self,
+        cluster_id: str,
+        workspace_id: str,
+        source_id: str,
+        agent_id: str,
+        window_start: str,
+        lease_seconds: int,
+    ) -> dict[str, object]:
+        return {
+            "leased": True,
+            "lease_id": f"{cluster_id}:{workspace_id}:{source_id}:{agent_id}:{window_start}:{lease_seconds}",
+            "leased_until": "2026-06-30T00:00:30+00:00",
+        }
 
 
 def target_request() -> TargetRegisterRequest:
@@ -88,3 +105,25 @@ def test_target_registration_fails_closed_without_agent_token(monkeypatch) -> No
     with pytest.raises(HTTPException) as exc:
         asyncio.run(run())
     assert exc.value.status_code == 503
+
+
+def test_evidence_source_lease_route_delegates_to_management_store() -> None:
+    async def run():
+        return await lease_evidence_source(
+            "prometheus.default",
+            EvidenceSourceLeaseRequest(
+                cluster_id="cluster-1",
+                workspace_id="workspace-1",
+                agent_id="agent-1",
+                window_start="2026-06-30T00:00:00+00:00",
+                lease_seconds=30,
+            ),
+            FakeLeaseDb(),
+        )
+
+    import asyncio
+
+    response = asyncio.run(run())
+
+    assert response.leased is True
+    assert "prometheus.default" in str(response.lease_id)

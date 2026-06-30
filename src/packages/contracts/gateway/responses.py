@@ -61,6 +61,17 @@ class CommandStartedResponse(StrictModel):
     correlation_id: str
 
 
+class CommandHeartbeatResponse(StrictModel):
+    accepted: bool
+    correlation_id: str
+
+
+class EvidenceSourceLeaseResponse(StrictModel):
+    leased: bool
+    lease_id: str | None = None
+    leased_until: str | None = None
+
+
 class DashboardResponse(StrictModel):
     cards: list[JsonMap]
 
