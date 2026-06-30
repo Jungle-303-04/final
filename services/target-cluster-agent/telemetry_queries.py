@@ -21,7 +21,7 @@ class LokiLogQuery:
 class OpenTelemetrySpanQuery:
     query_name: str
     description: str
-    selector: str
+    traceql: str
 
 
 # Connection-check queries that are expected to exist in the local target cluster.
@@ -97,21 +97,21 @@ LOKI_LOG_QUERIES: tuple[LokiLogQuery, ...] = (
 )
 
 
-# OpenTelemetry Collector receives telemetry; querying usually happens in a trace backend.
+# Tempo stores traces from OpenTelemetry Collector and supports TraceQL search.
 OPEN_TELEMETRY_SPAN_QUERIES: tuple[OpenTelemetrySpanQuery, ...] = (
     OpenTelemetrySpanQuery(
         query_name="checkout_slow_spans",
         description="Slow checkout spans for demo RCA evidence.",
-        selector='service.name="checkout-api" span.name="GET /checkout"',
+        traceql='{ resource.service.name = "checkout-api" }',
     ),
     OpenTelemetrySpanQuery(
         query_name="target_agent_error_spans",
         description="Error spans emitted by the target-cluster-agent.",
-        selector='service.name="target-cluster-agent" status.code="ERROR"',
+        traceql='{ resource.service.name = "target-cluster-agent" && status = error }',
     ),
     OpenTelemetrySpanQuery(
         query_name="management_gateway_spans",
         description="Management Gateway request spans related to agent traffic.",
-        selector='service.name="api-gateway" http.route=~"/agent/.*"',
+        traceql='{ resource.service.name = "api-gateway" }',
     ),
 )
