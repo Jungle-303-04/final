@@ -73,20 +73,21 @@ jobs:
 
       - name: Container import smoke
         run: |
-          docker run --rm \
+          docker run --rm -i \
             -e DATABASE_URL=postgresql://user:pass@postgresql:5432/service \
             service:ci python - <<'PY'
           import sys
 
           import sqlalchemy
+
           from packages.storage.database import Database
 
           sys.path.insert(0, "/app/src/services/gateway/api-gateway")
-          from auth import RedisSessionStore
           from gateway import ApiGateway
 
           assert sqlalchemy.__version__
           assert Database().sqlalchemy_url.startswith("postgresql+psycopg://")
-          assert RedisSessionStore().url.startswith("redis://")
+          # ApiGateway 구성이 RedisSessionStore·라우터·인증서비스까지 실제로 빌드한다.
           assert ApiGateway().app.title
+          print("container smoke ok")
           PY

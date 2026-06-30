@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from domains.identity.dependencies import require_agent, require_session
+from domains.identity.dependencies import require_admin_session, require_agent, require_session
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
@@ -332,7 +332,7 @@ def install_response(
 @session_router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(
     payload: TargetRegisterRequest,
-    current: Any = Depends(require_session),
+    current: Any = Depends(require_admin_session),  # kubectl apply 실행 → admin 만
     db: Any = Depends(get_db),
 ) -> TargetInstallResponse:
     agent_token = env(AGENT_TOKEN_ENV, "")
