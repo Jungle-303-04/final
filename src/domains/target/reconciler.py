@@ -29,7 +29,9 @@ class ActualStateSnapshot:
 
 
 class ActualStateReader(Protocol):
-    async def read_actual_state(self, workspace_id: str, cluster_id: str) -> ActualStateSnapshot: ...
+    async def read_actual_state(
+        self, workspace_id: str, cluster_id: str
+    ) -> ActualStateSnapshot: ...
 
 
 @dataclass(frozen=True)
