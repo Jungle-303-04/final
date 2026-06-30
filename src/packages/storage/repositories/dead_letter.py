@@ -118,5 +118,3 @@ class DeadLetterRepository(DatabaseConnection):
         statement = select(func.count()).where(table.c.status == DEAD_LETTER_STATUS_OPEN)
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
-
-

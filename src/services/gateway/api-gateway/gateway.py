@@ -175,7 +175,14 @@ class ApiGateway:
 
     def _register_metrics_routes(self, app: FastAPI) -> None:
         @app.get("/metrics")
-        async def metrics() -> PlainTextResponse:
+        async def metrics(request: Request) -> PlainTextResponse:
+            # METRICS_TOKEN 설정 시에만 Bearer 강제(설정 안 하면 클러스터 내부 스크레이핑 허용 —
+            # 외부 노출은 NetworkPolicy/별도 포트로 막아야 함). 토큰 불일치는 거부.
+            metrics_token = env(Settings.METRICS_TOKEN_ENV, "")
+            if metrics_token:
+                header = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
+                if header != f"Bearer {metrics_token}":
+                    raise HTTPException(status_code=401, detail="metrics token required")
             scalar_metrics = {
                 "event_dead_letters_open_total": self.db.open_dead_letter_count(),
                 "outbox_pending_total": self.db.outbox_pending_count(),

@@ -130,5 +130,3 @@ class EventRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return {row["status"]: int(row["count"]) for row in rows}
-
-
