@@ -41,8 +41,12 @@ class NodeRuntimeSample:
     runtime: str
 
     # These are calculated from the Kubernetes API response.
-    node_pod_count: int
-    node_not_ready_pod_count: int
+    node_pod_count: int | None
+    node_not_ready_pod_count: int | None
+
+    # Keep /metrics available even when the Kubernetes API read fails.
+    scrape_error: bool
+    scrape_error_message: str | None
 
     def to_payload(self) -> dict[str, object]:
         return asdict(self)
@@ -74,8 +78,20 @@ class NodeCollector:
 
     async def snapshot(self) -> NodeRuntimeSample:
         # Fetch all Pods, then reduce them to metrics for this collector's node.
-        pods_payload = await self.kubernetes.list_pods()
-        node_pods = pods_on_node(pods_payload, self.node_name)
+        try:
+            pods_payload = await self.kubernetes.list_pods()
+            node_pods = pods_on_node(pods_payload, self.node_name)
+
+            node_pod_count = len(node_pods)
+            node_not_ready_pod_count = count_not_ready_pods(node_pods)
+            scrape_error = False
+            scrape_error_message = None
+
+        except Exception as exc:
+            node_pod_count = None
+            node_not_ready_pod_count = None
+            scrape_error = True
+            scrape_error_message = str(exc)
 
         return NodeRuntimeSample(
             node_name=self.node_name,
@@ -83,8 +99,10 @@ class NodeCollector:
             namespace=self.namespace,
             timestamp=datetime.now(UTC).isoformat(),
             runtime=RUNTIME_NAME,
-            node_pod_count=len(node_pods),
-            node_not_ready_pod_count=count_not_ready_pods(node_pods),
+            node_pod_count=node_pod_count,
+            node_not_ready_pod_count=node_not_ready_pod_count,
+            scrape_error=scrape_error,
+            scrape_error_message=scrape_error_message,
         )
 
     def metric_samples(self, sample: NodeRuntimeSample) -> list[MetricSample]:
@@ -96,20 +114,36 @@ class NodeCollector:
             "runtime": sample.runtime,
         }
 
-        return [
+        samples = [
             MetricSample(
-                name="node_collector_node_pod_count",
-                help="Pods scheduled on this Kubernetes node.",
-                value=sample.node_pod_count,
-                labels=labels,
-            ),
-            MetricSample(
-                name="node_collector_node_not_ready_pod_count",
-                help="Pods scheduled on this Kubernetes node that are not Ready.",
-                value=sample.node_not_ready_pod_count,
+                name="node_collector_scrape_error",
+                help="Whether node collector failed to read Kubernetes API data.",
+                value=1 if sample.scrape_error else 0,
                 labels=labels,
             ),
         ]
+
+        if sample.node_pod_count is not None:
+            samples.append(
+                MetricSample(
+                    name="node_collector_node_pod_count",
+                    help="Pods scheduled on this Kubernetes node.",
+                    value=sample.node_pod_count,
+                    labels=labels,
+                )
+            )
+
+        if sample.node_not_ready_pod_count is not None:
+            samples.append(
+                MetricSample(
+                    name="node_collector_node_not_ready_pod_count",
+                    help="Pods scheduled on this Kubernetes node that are not Ready.",
+                    value=sample.node_not_ready_pod_count,
+                    labels=labels,
+                )
+            )
+
+        return samples
 
     async def prometheus_metrics(self) -> str:
         sample = await self.snapshot()
