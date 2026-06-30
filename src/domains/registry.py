@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import domains
 from domains.audit.repository import AuditLogRepository
 from domains.command.repository import AgentCommandRepository
-from domains.identity.repository import OAuthRepository
+from domains.identity.repository import OAuthRepository, WorkspaceAccessRepository
 from domains.projection.repository import DashboardRepository
 from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
@@ -73,6 +73,7 @@ if TYPE_CHECKING:
         DeadLetterRepository,
         OutboxRepository,
         OAuthRepository,
+        WorkspaceAccessRepository,
         AgentCommandRepository,
         RcaRepository,
         PullRequestRepository,

@@ -94,8 +94,26 @@ def test_schema_defines_expected_tables() -> None:
         "audit_log",
         "oauth_accounts",
         "token_vault",
+        "user_accounts",
+        "workspaces",
+        "workspace_members",
+        "repository_integrations",
+        "cluster_registrations",
+        "repo_cluster_bindings",
     }
-    assert expected <= set(metadata.tables)  # 13개 테이블 정의 존재
+    assert expected <= set(metadata.tables)
+
+
+def test_workspace_access_repository_declares_management_tables() -> None:
+    expected = {
+        "user_accounts",
+        "workspaces",
+        "workspace_members",
+        "repository_integrations",
+        "cluster_registrations",
+        "repo_cluster_bindings",
+    }
+    assert expected == db.Database.required_tables()
 
 
 def test_domain_module_discovery_ignores_missing_optional_suffix(monkeypatch) -> None:
