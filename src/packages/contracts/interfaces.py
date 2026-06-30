@@ -55,10 +55,25 @@ class OAuthAccountStore(Protocol):
     def latest_github_token_ref(self) -> str | None: ...
 
 
+class UserStore(Protocol):
+    def get_user_by_email(self, email: str) -> JsonObject | None: ...
+
+    def upsert_user(
+        self,
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        status: str,
+    ) -> None: ...
+
+
 class SessionStore(Protocol):
     async def create_session(self, user_id: str, roles: list[str] | None = None) -> Any: ...
 
     async def get_session(self, token: str | None) -> Any | None: ...
+
+    async def delete_session(self, token: str) -> None: ...
 
     async def save_oauth_state(self, state: str, payload: JsonObject) -> None: ...
 

@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Gateway / Auth 구현 흐름</title>
+  <desc id="desc">내부 로그인, Redis 세션, 프로젝트 권한, 외부 도구 연결, AccessPolicy, Token Broker, Worker 흐름을 보여주는 다이어그램</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f8fb; }
+      .title { font: 800 42px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 500 20px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #526071; }
+      .lane-title { font: 800 22px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #172033; }
+      .phase { font: 800 15px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #ffffff; }
+      .box-title { font: 800 21px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #172033; }
+      .box-text { font: 500 17px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #3d4b5c; }
+      .small { font: 500 15px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #596778; }
+      .tiny { font: 700 13px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #667485; }
+      .warn-title { font: 800 18px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #6f3d00; }
+      .warn-text { font: 600 15px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #744705; }
+      .good-title { font: 800 18px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #175b47; }
+      .good-text { font: 600 15px "Noto Sans KR", "Segoe UI", Arial, sans-serif; fill: #25624f; }
+      .lane { fill: #ffffff; stroke: #d8dee8; stroke-width: 2; rx: 8; }
+      .card { fill: #ffffff; stroke: #cfd7e5; stroke-width: 2; rx: 8; }
+      .db { fill: #eef6ff; stroke: #8ab8f5; stroke-width: 2; rx: 8; }
+      .redis { fill: #fff1f0; stroke: #f29b94; stroke-width: 2; rx: 8; }
+      .vault { fill: #f4efff; stroke: #b9a7f4; stroke-width: 2; rx: 8; }
+      .event { fill: #eefaf4; stroke: #83cfa5; stroke-width: 2; rx: 8; }
+      .policy { fill: #fff8df; stroke: #e7c861; stroke-width: 2; rx: 8; }
+      .shadow { filter: drop-shadow(0 8px 18px rgba(22, 32, 51, 0.10)); }
+      .arrow { stroke: #56657a; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .arrow-soft { stroke: #8a96a8; stroke-width: 2.5; fill: none; marker-end: url(#arrowSoft); stroke-dasharray: 8 8; }
+      .no { stroke: #d6625d; stroke-width: 3; fill: none; marker-end: url(#arrowRed); }
+      .pill { rx: 8; }
+      .num { font: 800 18px "Segoe UI", Arial, sans-serif; fill: #ffffff; }
+    </style>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L12,7 L2,12 Z" fill="#56657a"/>
+    </marker>
+    <marker id="arrowSoft" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L12,7 L2,12 Z" fill="#8a96a8"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L12,7 L2,12 Z" fill="#d6625d"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1800" height="1120"/>
+
+  <text x="80" y="78" class="title">Gateway / Auth 구현 흐름</text>
+  <text x="80" y="115" class="subtitle">우리 서비스 로그인과 외부 도구 credential을 분리하고, secret 없는 event로 worker까지 전달한다.</text>
+
+  <rect x="80" y="152" width="500" height="780" class="lane shadow"/>
+  <rect x="650" y="152" width="500" height="780" class="lane shadow"/>
+  <rect x="1220" y="152" width="500" height="780" class="lane shadow"/>
+
+  <rect x="110" y="182" width="95" height="31" fill="#4169e1" class="pill"/>
+  <text x="126" y="204" class="phase">PHASE 1-2</text>
+  <text x="220" y="205" class="lane-title">내부 로그인 / 세션 / 프로젝트 권한</text>
+
+  <rect x="680" y="182" width="95" height="31" fill="#b15a00" class="pill"/>
+  <text x="696" y="204" class="phase">PHASE 3-4</text>
+  <text x="790" y="205" class="lane-title">Integration 등록 / Action 정책</text>
+
+  <rect x="1250" y="182" width="95" height="31" fill="#21865f" class="pill"/>
+  <text x="1266" y="204" class="phase">PHASE 5+</text>
+  <text x="1360" y="205" class="lane-title">Event / Worker / Token Broker</text>
+
+  <rect x="130" y="255" width="390" height="95" class="card"/>
+  <circle cx="160" cy="285" r="18" fill="#4169e1"/>
+  <text x="154" y="292" class="num">1</text>
+  <text x="190" y="288" class="box-title">Browser / CLI</text>
+  <text x="190" y="320" class="box-text">POST /auth/login</text>
+  <text x="190" y="344" class="small">email + password 입력</text>
+
+  <rect x="130" y="405" width="390" height="110" class="db"/>
+  <circle cx="160" cy="435" r="18" fill="#4169e1"/>
+  <text x="154" y="442" class="num">2</text>
+  <text x="190" y="438" class="box-title">users 테이블</text>
+  <text x="190" y="471" class="box-text">password_hash만 저장</text>
+  <text x="190" y="496" class="small">평문 password 저장 금지</text>
+
+  <rect x="130" y="570" width="390" height="110" class="redis"/>
+  <circle cx="160" cy="600" r="18" fill="#4169e1"/>
+  <text x="154" y="607" class="num">3</text>
+  <text x="190" y="603" class="box-title">Redis server-side session</text>
+  <text x="190" y="636" class="box-text">opaque session token + TTL</text>
+  <text x="190" y="661" class="small">Cookie 또는 Bearer token으로 전달</text>
+
+  <rect x="130" y="735" width="390" height="125" class="db"/>
+  <circle cx="160" cy="765" r="18" fill="#4169e1"/>
+  <text x="154" y="772" class="num">4</text>
+  <text x="190" y="768" class="box-title">project 권한 확인</text>
+  <text x="190" y="800" class="box-text">organizations / projects</text>
+  <text x="190" y="825" class="box-text">organization_members / project_members</text>
+  <text x="190" y="850" class="small">로그인은 “누구”, 권한은 “어느 project에서 무엇”</text>
+
+  <path d="M325 350 L325 395" class="arrow"/>
+  <path d="M325 515 L325 560" class="arrow"/>
+  <path d="M325 680 L325 725" class="arrow"/>
+
+  <rect x="700" y="255" width="390" height="120" class="card"/>
+  <circle cx="730" cy="285" r="18" fill="#b15a00"/>
+  <text x="724" y="292" class="num">5</text>
+  <text x="760" y="288" class="box-title">보호 API 진입</text>
+  <text x="760" y="320" class="box-text">/commands, /dashboard/query</text>
+  <text x="760" y="345" class="small">1. request schema 검증</text>
+  <text x="760" y="368" class="small">2. require_session → project role 검사</text>
+
+  <rect x="700" y="430" width="390" height="135" class="db"/>
+  <circle cx="730" cy="460" r="18" fill="#b15a00"/>
+  <text x="724" y="467" class="num">6</text>
+  <text x="760" y="463" class="box-title">Integration 등록</text>
+  <text x="760" y="495" class="box-text">integration_targets</text>
+  <text x="760" y="520" class="box-text">credentials(secret_ref만)</text>
+  <text x="760" y="545" class="box-text">credential_bindings(allowed_actions)</text>
+
+  <rect x="700" y="620" width="390" height="135" class="policy"/>
+  <circle cx="730" cy="650" r="18" fill="#b15a00"/>
+  <text x="724" y="657" class="num">7</text>
+  <text x="760" y="653" class="box-title">AccessPolicy.evaluate</text>
+  <text x="760" y="685" class="box-text">role 권한 + target 소속 + binding action</text>
+  <text x="760" y="710" class="small">viewer는 create_pr 거부</text>
+  <text x="760" y="735" class="small">maintainer는 binding 있으면 허용</text>
+
+  <rect x="700" y="810" width="390" height="70" fill="#fff4e8" stroke="#e6b47b" stroke-width="2" rx="8"/>
+  <text x="730" y="839" class="warn-title">주의</text>
+  <text x="790" y="839" class="warn-text">GitHub token, PAT, private key는 response/event/log에 절대 넣지 않음</text>
+  <text x="790" y="862" class="warn-text">DB에는 raw secret 대신 secret_ref만 저장</text>
+
+  <path d="M895 375 L895 420" class="arrow"/>
+  <path d="M895 565 L895 610" class="arrow"/>
+  <path d="M895 755 L895 800" class="arrow-soft"/>
+
+  <rect x="1270" y="255" width="390" height="120" class="event"/>
+  <circle cx="1300" cy="285" r="18" fill="#21865f"/>
+  <text x="1294" y="292" class="num">8</text>
+  <text x="1330" y="288" class="box-title">secret 없는 event 발행</text>
+  <text x="1330" y="320" class="box-text">project_id / target_id</text>
+  <text x="1330" y="345" class="box-text">requested_by / action</text>
+  <text x="1330" y="368" class="small">worker는 secret을 event에서 받지 않음</text>
+
+  <rect x="1270" y="430" width="390" height="110" class="card"/>
+  <circle cx="1300" cy="460" r="18" fill="#21865f"/>
+  <text x="1294" y="467" class="num">9</text>
+  <text x="1330" y="463" class="box-title">Worker / Service</text>
+  <text x="1330" y="495" class="box-text">target_id + action만 알고 처리</text>
+  <text x="1330" y="520" class="small">credential_id 또는 raw vault read 금지</text>
+
+  <rect x="1270" y="595" width="390" height="125" class="policy"/>
+  <circle cx="1300" cy="625" r="18" fill="#21865f"/>
+  <text x="1294" y="632" class="num">10</text>
+  <text x="1330" y="628" class="box-title">TokenBroker.issue</text>
+  <text x="1330" y="660" class="box-text">AccessPolicy를 먼저 다시 검사</text>
+  <text x="1330" y="685" class="small">실패하면 vault read 호출 안 함</text>
+  <text x="1330" y="710" class="small">성공하면 binding의 secret_ref 사용</text>
+
+  <rect x="1270" y="775" width="180" height="100" class="vault"/>
+  <text x="1300" y="815" class="box-title">SecretVault</text>
+  <text x="1300" y="847" class="small">secret_ref로 조회</text>
+
+  <rect x="1480" y="775" width="180" height="100" class="card"/>
+  <text x="1508" y="815" class="box-title">Adapter</text>
+  <text x="1508" y="847" class="small">GitHub / Prometheus</text>
+
+  <path d="M1465 375 L1465 420" class="arrow"/>
+  <path d="M1465 540 L1465 585" class="arrow"/>
+  <path d="M1465 720 L1370 765" class="arrow"/>
+  <path d="M1450 825 L1470 825" class="arrow"/>
+
+  <path d="M520 315 C585 315 620 315 690 315" class="arrow"/>
+  <text x="555" y="292" class="tiny">session token으로 보호 API 호출</text>
+
+  <path d="M1090 690 C1165 690 1195 315 1260 315" class="arrow"/>
+  <text x="1120" y="640" class="tiny">허용된 action만 event 발행</text>
+
+  <path d="M1090 495 C1170 495 1195 660 1260 660" class="arrow-soft"/>
+  <text x="1116" y="535" class="tiny">binding 정보는 Broker/Policy가 참조</text>
+
+  <path d="M1065 850 C1145 940 1315 950 1358 885" class="no"/>
+  <text x="1120" y="950" class="warn-text">secret은 event/worker payload로 직접 이동하지 않음</text>
+
+  <rect x="80" y="970" width="1640" height="90" fill="#ffffff" stroke="#d8dee8" stroke-width="2" rx="8"/>
+  <text x="115" y="1008" class="good-title">구현 순서 요약</text>
+  <text x="115" y="1040" class="good-text">1 users + login → 2 Redis session → 3 project membership → 4 GitHub target/credential/binding → 5 AccessPolicy → 6 TokenBroker → 7 Prometheus로 추상화 검증</text>
+
+  <rect x="1205" y="985" width="470" height="50" fill="#f7fbff" stroke="#c6d8ef" stroke-width="2" rx="8"/>
+  <text x="1230" y="1018" class="small">완료 기준: 로그인 성공, logout 후 401, viewer create_pr 거부, secret 미노출</text>
+</svg>

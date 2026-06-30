@@ -49,3 +49,13 @@ class Settings:
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
+    INVALID_CREDENTIALS_MESSAGE = "invalid email or password"
+    USER_STATUS_ACTIVE = "active"
+
+    LOCAL_LOGIN_EMAIL_ENV = "LOCAL_LOGIN_EMAIL"
+    LOCAL_LOGIN_PASSWORD_ENV = "LOCAL_LOGIN_PASSWORD"
+    AUTH_COOKIE_SECURE_ENV = "AUTH_COOKIE_SECURE"
+    DEFAULT_LOCAL_LOGIN_EMAIL = "local@example.com"
+    DEFAULT_LOCAL_LOGIN_PASSWORD = "local-password"
+    DEFAULT_LOCAL_LOGIN_DISPLAY_NAME = "Local User"
+    DEFAULT_AUTH_COOKIE_SECURE = "false"
