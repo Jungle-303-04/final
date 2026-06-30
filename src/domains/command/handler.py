@@ -64,11 +64,28 @@ COMMAND_CONFIG = CommandConfig(
     ),
 )
 POLICY = Policy.build(COMMAND_CONFIG.policy_rules)
+NAMESPACE_MISMATCH_REASON = "command namespace must match diff namespace"
+MANIFEST_NAMESPACE_MISMATCH_REASON = "manifest namespace must match command namespace"
+
+
+def desired_manifest_namespace(command: CommandRequestedBody) -> str | None:
+    metadata = command.diff.desired_manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    namespace = metadata.get(Gateway.NAMESPACE)
+    if namespace in (None, ""):
+        return None
+    return str(namespace)
 
 
 def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     if command.diff.is_image_only_noop():
         return PolicyResult.reject(Sandbox.NO_DIFF_REASON)
+    if command.namespace != command.diff.namespace:
+        return PolicyResult.reject(NAMESPACE_MISMATCH_REASON)
+    manifest_namespace = desired_manifest_namespace(command)
+    if manifest_namespace is not None and manifest_namespace != command.namespace:
+        return PolicyResult.reject(MANIFEST_NAMESPACE_MISMATCH_REASON)
     return POLICY.evaluate(ModelLookup(command))
 
 
