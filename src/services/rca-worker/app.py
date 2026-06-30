@@ -51,6 +51,7 @@ def build_evidence_bundle(evt: ClusterEvidenceReceivedBody, correlation_id: str)
         logs=evt.logs,
         traces=evt.traces,
         object_ref=evidence_ref,
+        workspace_id=evt.workspace_id,
     )
 
 
@@ -61,6 +62,7 @@ def detect_incident(evidence: Evidence) -> IncidentDetectedBody:
         cluster_id=evidence.cluster_id,
         detected=detected,
         reason=INCIDENT_DETECTED_REASON if detected else INCIDENT_NOT_DETECTED_REASON,
+        workspace_id=evidence.workspace_id,
     )
 
 
@@ -75,11 +77,13 @@ def evaluate_rca_scenarios(
             selected=SELECTED_SCENARIO,
             confidence=RCA_CONFIDENCE,
             evidence_ref=evidence.object_ref,
+            workspace_id=evidence.workspace_id,
         ),
         RcaCompletedBody(
             root_cause=ROOT_CAUSE,
             action=RECOMMENDED_ACTION,
             evidence_ref=evidence.object_ref,
+            workspace_id=evidence.workspace_id,
         ),
     )
 
@@ -90,6 +94,7 @@ def decide_safe_pr_policy(report: RcaCompletedBody) -> SafePrPolicyDecidedBody:
         route=SAFE_PR_ROUTE,
         reason="sample policy allows draft rollback PR",
         evidence_ref=report.evidence_ref,
+        workspace_id=report.workspace_id,
     )
 
 
@@ -100,6 +105,7 @@ def build_safe_pr_request(report: RcaCompletedBody) -> SafePrRequestedBody:
         title=PR_TITLE,
         body=f"RCA: {report.root_cause}\n\nAction: {report.action}",
         provider=GitHub.PROVIDER,
+        workspace_id=report.workspace_id,
     )
 
 
@@ -109,7 +115,12 @@ async def on_cluster_evidence(
 ) -> AsyncIterator[EventBody]:
     evidence = build_evidence_bundle(evt, ctx.correlation_id)
     incident = detect_incident(evidence)
-    await ctx.db.save_evidence(ctx.correlation_id, EVIDENCE_KIND, evidence.to_body())
+    await ctx.db.save_evidence(
+        ctx.correlation_id,
+        evidence.workspace_id,
+        EVIDENCE_KIND,
+        evidence.to_body(),
+    )
 
     yield incident
     yield EvidenceBuiltBody(evidence=evidence)
@@ -118,13 +129,18 @@ async def on_cluster_evidence(
         yield RcaActionRequiredBody(
             reason=NO_INCIDENT_ACTION_REQUIRED,
             evidence_ref=evidence.object_ref,
+            workspace_id=evidence.workspace_id,
         )
         return
 
     scenarios, report = evaluate_rca_scenarios(evidence)
     policy = decide_safe_pr_policy(report)
     await ctx.db.save_rca_report(
-        ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_body()
+        ctx.correlation_id,
+        evidence.workspace_id,
+        ROOT_CAUSE,
+        RECOMMENDED_ACTION,
+        report.to_body(),
     )
 
     # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 담당.
@@ -134,7 +150,11 @@ async def on_cluster_evidence(
     if policy.route == SAFE_PR_ROUTE:
         yield build_safe_pr_request(report)
     else:
-        yield RcaActionRequiredBody(reason=policy.reason, evidence_ref=policy.evidence_ref)
+        yield RcaActionRequiredBody(
+            reason=policy.reason,
+            evidence_ref=policy.evidence_ref,
+            workspace_id=policy.workspace_id,
+        )
 
 
 if __name__ == "__main__":
