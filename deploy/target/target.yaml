@@ -1,3 +1,14 @@
+# =============================================================================
+# 샘플/CI 스키마 검증용 매니페스트 — 단독 배포 대상 아님.
+#
+# 실제 cluster-agent 설치 매니페스트는 런타임에 api-gateway 의
+# target 도메인(src/domains/target/router.py: target_install_manifest)이
+# 클러스터 등록 요청마다 생성/적용한다. 이 파일은 그 출력의 정적 참조본으로,
+# 생성기가 주입하는 target-runtime-config(ConfigMap)/target-runtime-secret(Secret)
+# 은 의도적으로 빠져 있다. `kubectl apply -f` 로 직접 띄우면 cluster-agent 가
+# 그 두 리소스를 envFrom 으로 찾지 못해 기동하지 않는다.
+# 용도: kubeconform 등 CI 스키마 검증 + 리뷰용 형상 참고.
+# =============================================================================
 apiVersion: v1
 kind: Namespace
 metadata:
