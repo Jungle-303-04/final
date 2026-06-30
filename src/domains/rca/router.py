@@ -31,13 +31,21 @@ def scoped_evidence_key(identity: ClusterAgentIdentity, evidence_key: str | None
     return f"{identity.workspace_id}:{identity.cluster_id}:{evidence_key}"
 
 
-def build_cluster_evidence_body(
+def trusted_evidence_payload(
     payload: AgentEvidenceRequest, identity: ClusterAgentIdentity
-) -> ClusterEvidenceReceivedBody:
+) -> dict[str, Any]:
     # body 의 workspace_id/cluster_id 는 무시하고 토큰 identity 로 덮어쓴다(테넌트 위조 차단).
     data = payload.model_dump(exclude={"correlation_id"})
     data["workspace_id"] = identity.workspace_id
     data["cluster_id"] = identity.cluster_id
+    data["evidence_key"] = scoped_evidence_key(identity, payload.evidence_key)
+    return data
+
+
+def build_cluster_evidence_body(
+    payload: AgentEvidenceRequest, identity: ClusterAgentIdentity
+) -> ClusterEvidenceReceivedBody:
+    data = trusted_evidence_payload(payload, identity)
     return ClusterEvidenceReceivedBody(**data)
 
 
@@ -58,21 +66,19 @@ async def agent_evidence(
                 correlation_id=existing["correlation_id"],
             )
 
-    accepted = await events.accept_body(
-        build_cluster_evidence_body(payload, identity),
-        payload.correlation_id,
-    )
+    evidence_body = build_cluster_evidence_body(payload, identity)
+    accepted = await events.accept_body(evidence_body, payload.correlation_id)
     if evidence_key:
         recorded = db.record_evidence_window(
             evidence_key,
             identity.workspace_id,
             identity.cluster_id,
-            payload.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
-            payload.window_start or payload.evidence_key,
-            payload.agent_id,
+            evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
+            evidence_body.window_start or evidence_body.evidence_key,
+            evidence_body.agent_id,
             accepted.event.event_id,
             accepted.event.correlation_id,
-            payload.model_dump(),
+            evidence_body.to_body(),
         )
         if recorded["duplicate"]:
             return AcceptedResponse(
