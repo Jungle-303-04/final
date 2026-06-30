@@ -6,13 +6,18 @@ repository 의 실제 SQL 실행은 Postgres 전용(jsonb·on_conflict)이라 �
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from domains import registry
+from packages.events.envelope import event
 from packages.storage import database as db
+from packages.storage.repositories.event import EventRepository
 from packages.storage.schema import metadata
 
 
@@ -84,6 +89,39 @@ def test_schema_defines_expected_tables() -> None:
         "target_reconcile_records",
     }
     assert expected <= set(metadata.tables)
+
+
+def test_event_schema_preserves_causation_id() -> None:
+    assert "causation_id" in set(metadata.tables["events"].c.keys())
+
+
+def test_record_event_persists_causation_id() -> None:
+    recorded: list[Any] = []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    repository.record_event(
+        event(
+            "git.changed",
+            "git-pull-worker",
+            {"commit_sha": "abc123"},
+            correlation_id="corr-1",
+            causation_id="parent-event-1",
+        )
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    assert "causation_id" in str(compiled)
+    assert compiled.params["causation_id"] == "parent-event-1"
 
 
 def test_user_account_schema_supports_password_login() -> None:
