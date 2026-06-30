@@ -52,7 +52,7 @@ class RenderedSpec(EventBody):
 
 @dataclass(frozen=True)
 class RenderedManifest(EventBody):
-    """k8s Deployment 형태로 렌더된 manifest(값 객체)."""
+    """렌더된 Kubernetes manifest(값 객체)."""
 
     api_version: str = field(metadata={"payload_name": "apiVersion"})
     kind: str
