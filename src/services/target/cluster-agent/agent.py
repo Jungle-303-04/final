@@ -22,6 +22,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.responses import FakeTelemetryResponse, HealthResponse
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
@@ -64,12 +65,13 @@ class HttpManagementPlaneClient:
         return response.status_code
 
     async def poll_command(
-        self, cluster_id: str, agent_id: str, timeout_seconds: int
+        self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None:
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_COMMAND_POLL_PATH}",
             params={
                 Gateway.CLUSTER_ID: cluster_id,
+                Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 "timeout": timeout_seconds,
             },
@@ -79,12 +81,13 @@ class HttpManagementPlaneClient:
         return response.json().get(Gateway.COMMAND)
 
     async def start_command(
-        self, command_id: str, cluster_id: str, lease_id: str, agent_id: str
+        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
     ) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_start_path(command_id)}",
             json={
                 Gateway.CLUSTER_ID: cluster_id,
+                Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 Gateway.LEASE_ID: lease_id,
             },
@@ -93,11 +96,21 @@ class HttpManagementPlaneClient:
         response.raise_for_status()
 
     async def complete_command(
-        self, command_id: str, lease_id: str, agent_id: str, result: JsonObject
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        result: JsonObject,
     ) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
-            json={**result, Gateway.AGENT_ID: agent_id, Gateway.LEASE_ID: lease_id},
+            json={
+                **result,
+                Gateway.WORKSPACE_ID: workspace_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.LEASE_ID: lease_id,
+            },
             headers=self.headers,
         )
         response.raise_for_status()
@@ -114,6 +127,7 @@ class TargetClusterAgent:
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
         self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
+        self.workspace_id = env(Settings.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
         self.agent_id = env(Settings.HOSTNAME_ENV, Settings.DEFAULT_AGENT_ID)
         self.interval = int(
             env(Settings.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
@@ -191,10 +205,14 @@ class TargetClusterAgent:
         while True:
             try:
                 command = await client.poll_command(
-                    self.cluster_id, self.agent_id, Settings.COMMAND_POLL_TIMEOUT_SECONDS
+                    self.cluster_id,
+                    self.workspace_id,
+                    self.agent_id,
+                    Settings.COMMAND_POLL_TIMEOUT_SECONDS,
                 )
                 if command:
                     command_id = command[Gateway.COMMAND_ID]
+                    workspace_id = command.get(Gateway.WORKSPACE_ID, self.workspace_id)
                     lease_id = command[Gateway.LEASE_ID]
                     action = command[Gateway.ACTION]
                     LOGGER.info(
@@ -208,10 +226,17 @@ class TargetClusterAgent:
                             }
                         },
                     )
-                    await client.start_command(command_id, self.cluster_id, lease_id, self.agent_id)
+                    await client.start_command(
+                        command_id,
+                        self.cluster_id,
+                        str(workspace_id),
+                        lease_id,
+                        self.agent_id,
+                    )
                     result = await self.execute_command(command)
                     await client.complete_command(
                         command_id,
+                        str(workspace_id),
                         lease_id,
                         self.agent_id,
                         result,
@@ -333,6 +358,7 @@ class TargetClusterAgent:
             )
         return {
             Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.WORKSPACE_ID: self.workspace_id,
             "kubernetes": self.collect_kubernetes_evidence(),
             "metrics": metrics,
             "logs": logs,

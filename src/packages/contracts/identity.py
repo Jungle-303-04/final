@@ -11,10 +11,12 @@ class AccountRole(StrEnum):
 class UserStatus(StrEnum):
     ACTIVE = "active"
     PENDING_EMAIL_VERIFICATION = "pending_email_verification"
+    PENDING_APPROVAL = "pending_approval"
 
 
 class WorkspaceRole(StrEnum):
     OWNER = "owner"
+    MEMBER = "member"
 
 
 class WorkspaceStatus(StrEnum):
@@ -23,3 +25,7 @@ class WorkspaceStatus(StrEnum):
 
 class ClusterRegistrationStatus(StrEnum):
     REGISTERED = "registered"
+
+
+DEFAULT_WORKSPACE_ID = "default"
+DEFAULT_WORKSPACE_NAME = "Default Workspace"

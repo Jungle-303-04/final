@@ -29,7 +29,7 @@ from packages.contracts.gateway.responses import (
     DeadLettersResponse,
     HealthResponse,
 )
-from packages.contracts.identity import AccountRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
 from packages.events.bus import NatsEventBus
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
@@ -65,6 +65,7 @@ class ApiGateway:
             key_prefix=Settings.SESSION_KEY_PREFIX,
             token_bytes=Settings.SESSION_TOKEN_BYTES,
             default_roles=(AccountRole.MEMBER.value,),
+            default_workspace_id=DEFAULT_WORKSPACE_ID,
             rate_limit_key_prefix=Settings.RATE_LIMIT_KEY_PREFIX,
             rate_limit=Settings.DEFAULT_RATE_LIMIT,
             rate_limit_window_seconds=Settings.RATE_LIMIT_WINDOW_SECONDS,

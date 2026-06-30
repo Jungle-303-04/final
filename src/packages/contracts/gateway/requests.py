@@ -6,6 +6,7 @@ from pydantic import Field
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 DEFAULT_WEBHOOK_IMAGE = "service:local"
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -15,7 +16,6 @@ DEFAULT_COMMAND_STATUS: Literal["completed", "failed"] = CommandStatus.COMPLETED
 EMPTY_COMMAND_MESSAGE = ""
 DEFAULT_TARGET_NAME = "target-cluster"
 DEFAULT_TARGET_ENVIRONMENT = "sandbox"
-DEFAULT_WORKSPACE_ID = "default"
 DEFAULT_TARGET_IMAGE = "service:local"
 DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus:8000"
 DEFAULT_LOKI_BASE_URL = "http://fake-loki:8000"
@@ -58,6 +58,7 @@ class AgentConnectRequest(StrictModel):
 
 class AgentEvidenceRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    workspace_id: str = DEFAULT_WORKSPACE_ID
     correlation_id: str | None = None
     kubernetes: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, Any] = Field(default_factory=dict)
@@ -95,6 +96,7 @@ class CommandRequest(StrictModel):
 
 class CommandStartRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    workspace_id: str = DEFAULT_WORKSPACE_ID
     agent_id: str
     lease_id: str
 
@@ -102,6 +104,7 @@ class CommandStartRequest(StrictModel):
 class CommandResultRequest(StrictModel):
     status: Literal["completed", "failed"] = DEFAULT_COMMAND_STATUS
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    workspace_id: str = DEFAULT_WORKSPACE_ID
     agent_id: str
     lease_id: str
     applied: bool = False
