@@ -27,8 +27,8 @@ class Auth:
     DEFAULT_SESSION_TTL_SECONDS: Final[str] = "86400"
     SESSION_TTL_ENV: Final[str] = "SESSION_TTL_SECONDS"
     SESSION_COOKIE_NAME: Final[str] = "service_session"
-    # 세션 쿠키를 httpOnly 로 심어 JS 가 토큰을 못 읽게(XSS 탈취 차단). Secure 는 운영 기본 on,
-    # 로컬 http 개발에선 COOKIE_SECURE=0 로 끈다. SameSite=lax 로 CSRF 완화.
+    # 세션 쿠키 httpOnly 설정으로 JS 토큰 접근 차단(XSS 탈취 차단). Secure 는 운영 기본 on,
+    # 로컬 http 개발은 COOKIE_SECURE=0. SameSite=lax 로 CSRF 완화.
     COOKIE_SECURE_ENV: Final[str] = "COOKIE_SECURE"
     COOKIE_SAMESITE: Final[str] = "lax"
 
