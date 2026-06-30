@@ -23,7 +23,7 @@ rules:
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "replicasets", "daemonsets"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -34,6 +34,30 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-target-manage
+  namespace: target
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-target-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-target-manage
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
@@ -179,51 +203,6 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
----
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: optional-node-collector
-  namespace: target
-spec:
-  selector:
-    matchLabels:
-      app: optional-node-collector
-  template:
-    metadata:
-      annotations:
-        prometheus.io/path: /metrics
-        prometheus.io/port: "9100"
-        prometheus.io/scrape: "true"
-      labels:
-        app: optional-node-collector
-    spec:
-      containers:
-        - name: node-collector
-          image: service:local
-          imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/target/node-collector/app.py"]
-          env:
-            - name: PORT
-              value: "9100"
-            - name: COLLECT_INTERVAL_SECONDS
-              value: "15"
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-          ports:
-            - name: metrics
-              containerPort: 9100
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -253,3 +232,9 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
+            - name: NODE_COLLECTOR_ENABLED
+              value: "true"
+            - name: NODE_COLLECTOR_IMAGE
+              value: service:local
+            - name: NODE_COLLECTOR_NAMESPACE
+              value: target

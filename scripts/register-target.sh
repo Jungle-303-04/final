@@ -12,6 +12,7 @@ PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://fake-prometheus:8000}"
 LOKI_BASE_URL="${LOKI_BASE_URL:-http://fake-loki:8000}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 IMAGE_NAME="${IMAGE_NAME:-service:local}"
+INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
 
@@ -25,6 +26,14 @@ need() {
 need curl
 need kubectl
 need python3
+
+is_true() {
+  normalized="$(printf "%s" "$1" | tr "[:upper:]" "[:lower:]")"
+  case "${normalized}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 if [ -z "${MANAGEMENT_BASE_URL}" ]; then
   echo "MANAGEMENT_BASE_URL is required" >&2
@@ -49,9 +58,17 @@ registration_body="$(
   LOKI_BASE_URL="${LOKI_BASE_URL}" \
   EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
   IMAGE_NAME="${IMAGE_NAME}" \
+  INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR}" \
   python3 - <<'PY'
 import json
 import os
+
+install_node_collector = os.environ["INSTALL_NODE_COLLECTOR"].lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 print(json.dumps({
     "cluster_id": os.environ["TARGET_CLUSTER_ID"],
@@ -64,7 +81,7 @@ print(json.dumps({
     "evidence_interval_seconds": int(os.environ["EVIDENCE_INTERVAL_SECONDS"]),
     "image": os.environ["IMAGE_NAME"],
     "install_fake_telemetry": True,
-    "install_node_collector": True,
+    "install_node_collector": install_node_collector,
     "apply": False,
 }))
 PY
@@ -87,9 +104,11 @@ printf "%s" "${registration_response}" \
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/fake-prometheus --timeout=120s
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/fake-loki --timeout=120s
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/fake-otel --timeout=120s
-kubectl --context "${TARGET_CONTEXT}" -n target rollout status daemonset/optional-node-collector --timeout=120s
 kubectl --context "${TARGET_CONTEXT}" -n sandbox rollout status deploy/checkout-api --timeout=120s
 kubectl --context "${TARGET_CONTEXT}" -n target rollout restart deploy/cluster-agent
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/cluster-agent --timeout=180s
+if is_true "${INSTALL_NODE_COLLECTOR}"; then
+  kubectl --context "${TARGET_CONTEXT}" -n target rollout status daemonset/optional-node-collector --timeout=180s
+fi
 
 echo "Target registered and installed."
