@@ -20,6 +20,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import random
 
 import httpx
 from settings import Settings
@@ -70,16 +71,32 @@ class GitHubPoller:
         await self.loop(client)
 
     async def loop(self, client: httpx.AsyncClient) -> None:
+        failures = 0
         while True:
             try:
                 await self.poll_once(client)
             except Exception as exc:
+                failures += 1
+                # 지수 백오프(+지터, 상한) — 연속 실패 시 GitHub/게이트웨이를 두드리지 않게.
+                backoff = min(
+                    Settings.POLL_RETRY_DELAY_SECONDS * (2 ** (failures - 1)),
+                    Settings.POLL_MAX_BACKOFF_SECONDS,
+                )
+                backoff += random.uniform(0, Settings.POLL_BACKOFF_JITTER_SECONDS)
                 LOGGER.warning(
                     "github_poll_failed",
-                    extra={CONTEXT_KEY: {"repo": self.repo, "exception_type": type(exc).__name__}},
+                    extra={
+                        CONTEXT_KEY: {
+                            "repo": self.repo,
+                            "exception_type": type(exc).__name__,
+                            "failures": failures,
+                            "backoff_seconds": round(backoff, 1),
+                        }
+                    },
                 )
-                await asyncio.sleep(Settings.POLL_RETRY_DELAY_SECONDS)
+                await asyncio.sleep(backoff)
                 continue
+            failures = 0  # 성공 → 백오프 리셋
             await asyncio.sleep(self.interval)
 
     async def poll_once(self, client: httpx.AsyncClient) -> None:
