@@ -30,6 +30,7 @@ class EventRepository(DatabaseConnection):
                 subject=evt.subject,
                 source=evt.source,
                 correlation_id=evt.correlation_id,
+                causation_id=evt.causation_id,
                 payload=evt.payload,
             )
             .on_conflict_do_nothing(index_elements=[table.c.event_id])

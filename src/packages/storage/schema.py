@@ -22,6 +22,7 @@ class EventModel(Base):
     subject: Mapped[str] = text_column()
     source: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
+    causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
 
