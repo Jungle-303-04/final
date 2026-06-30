@@ -56,3 +56,31 @@ def test_noop_diff_skips_pr_even_when_sandbox() -> None:
     assert subjects_of(outs) == ["diff.analyzed"]
     assert outs[0].safe is False
     assert outs[0].reason == "desired and actual images already match"
+
+
+def test_manifest_diff_with_same_image_is_not_treated_as_noop() -> None:
+    analyze = load_service("gitops/diff-analyze-worker")
+    diff = _diff("sandbox-only")
+    manifest_diff = Diff(
+        resource=diff.resource,
+        namespace=diff.namespace,
+        desired_image=diff.actual_image,
+        actual_image=diff.actual_image,
+        risk=diff.risk,
+        workspace_id=diff.workspace_id,
+        repository_id=diff.repository_id,
+        binding_id=diff.binding_id,
+        cluster_id=diff.cluster_id,
+        desired_manifest={
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+            "spec": {"replicas": 3},
+        },
+    )
+
+    outs = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=manifest_diff))
+
+    assert subjects_of(outs) == ["diff.analyzed", "safe_pr.requested", "alert.requested"]
+    assert outs[0].safe is True
+    assert outs[1].body == "deployment/checkout-api: apply rendered manifest"

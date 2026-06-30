@@ -32,7 +32,7 @@ PRE_DEPLOY_ALERT_SEVERITY = "info"
 def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
     # TODO(gitops): risk string check를 operation, namespace, RBAC policy rule로 교체
     # TODO(gitops): production 영향 시 approval_required/forbidden route 반환
-    if diff.desired_image == diff.actual_image:
+    if diff.is_image_only_noop():
         return False, Sandbox.NO_DIFF_REASON
     safe = diff.risk == Sandbox.RISK_TAG
     return safe, SAFE_REASON if safe else UNSAFE_REASON
@@ -42,7 +42,7 @@ def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
     # TODO(gitops): rendered manifest patch, rollback plan, reviewer checklist 포함
     summary = (
         f"{diff.resource}: {diff.actual_image} → {diff.desired_image}"
-        if diff.desired_image
+        if diff.desired_image and diff.desired_image != diff.actual_image
         else f"{diff.resource}: apply rendered manifest"
     )
     return SafePrRequestedBody(
