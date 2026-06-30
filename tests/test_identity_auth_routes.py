@@ -40,7 +40,7 @@ class FakePasswordAuth:
 
     async def login(self, email: str, password: str) -> Any:
         self.calls.append(("login", (email, password)))
-        return SimpleNamespace(token="login-token", user_id="user-1", roles=["owner"])
+        return SimpleNamespace(token="login-token", user_id="user-1", roles=["admin"])
 
     async def resend_email_verification(self, email: str, password: str, client_key: str) -> Any:
         self.calls.append(("resend_email_verification", (email, password, client_key)))
@@ -56,7 +56,7 @@ class FakePasswordAuth:
 
     async def verify_email(self, token: str) -> Any:
         self.calls.append(("verify_email", (token,)))
-        return SimpleNamespace(token="verified-session-token", user_id="user-1", roles=["owner"])
+        return SimpleNamespace(token="verified-session-token", user_id="user-1", roles=["admin"])
 
 
 def test_signup_requests_email_verification_without_session_cookie(monkeypatch) -> None:
@@ -180,7 +180,7 @@ def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
     async def run() -> Any:
         return await identity_router.logout(
             response=response,
-            current=SimpleNamespace(token="login-token", user_id="user-1", roles=["owner"]),
+            current=SimpleNamespace(token="login-token", user_id="user-1", roles=["admin"]),
             password_auth=password_auth,
         )
 

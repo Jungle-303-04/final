@@ -50,6 +50,8 @@ class DeadLetterStore(Protocol):
 
 
 class UserStore(Protocol):
+    def has_user_accounts(self) -> bool: ...
+
     def get_user_by_email(self, email: str) -> JsonObject | None: ...
 
     def create_user(
@@ -59,6 +61,7 @@ class UserStore(Protocol):
         password_hash: str,
         display_name: str,
         status: str,
+        role: str,
     ) -> JsonObject | None: ...
 
     def activate_user(self, user_id: str) -> JsonObject | None: ...

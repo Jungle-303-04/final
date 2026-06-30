@@ -13,6 +13,7 @@ from rate_limits import (
 from settings import Settings
 
 from packages.config.constants import Auth
+from packages.contracts.identity import AccountRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
 from packages.storage.sessions import AuthSession, RateLimitExceeded
 
@@ -71,12 +72,14 @@ class PasswordAuthService:
         normalized_email = normalize_email(email)
         if self.db.get_user_by_email(normalized_email) is not None:
             raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
+        role = self._new_user_role()
         user = self.db.create_user(
             user_id=f"user-{uuid.uuid4()}",
             email=normalized_email,
             password_hash=hash_password(password),
             display_name=default_display_name(normalized_email),
-            status=Settings.USER_STATUS_PENDING_EMAIL_VERIFICATION,
+            status=UserStatus.PENDING_EMAIL_VERIFICATION.value,
+            role=role.value,
         )
         if user is None:
             raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
@@ -93,15 +96,18 @@ class PasswordAuthService:
         user = self.db.get_user_by_email(normalize_email(email))
         if user is None:
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
-        if user["status"] == Settings.USER_STATUS_PENDING_EMAIL_VERIFICATION:
+        status = str(user["status"])
+        if status == UserStatus.PENDING_EMAIL_VERIFICATION.value:
             raise HTTPException(
                 status_code=403, detail=Settings.EMAIL_VERIFICATION_REQUIRED_MESSAGE
             )
-        if user["status"] != Settings.USER_STATUS_ACTIVE:
+        if status != UserStatus.ACTIVE.value:
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
         if not verify_password(password, str(user["password_hash"])):
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
-        return await self.sessions.create_session(user_id_from_record(user), [Settings.OWNER_ROLE])
+        return await self.sessions.create_session(
+            user_id_from_record(user), roles_from_record(user)
+        )
 
     async def resend_email_verification(
         self, email: str, password: str, client_key: str
@@ -111,9 +117,10 @@ class PasswordAuthService:
         user = self.db.get_user_by_email(normalized_email)
         if user is None or not verify_password(password, str(user.get("password_hash"))):
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
-        if user["status"] == Settings.USER_STATUS_ACTIVE:
+        status = str(user["status"])
+        if status == UserStatus.ACTIVE.value:
             return None
-        if user["status"] != Settings.USER_STATUS_PENDING_EMAIL_VERIFICATION:
+        if status != UserStatus.PENDING_EMAIL_VERIFICATION.value:
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
 
         user_id = user_id_from_record(user)
@@ -132,12 +139,26 @@ class PasswordAuthService:
         user = self.db.activate_user(str(payload["user_id"]))
         if user is None:
             raise HTTPException(status_code=400, detail=Settings.EMAIL_VERIFICATION_INVALID_MESSAGE)
-        return await self.sessions.create_session(user_id_from_record(user), [Settings.OWNER_ROLE])
+        return await self.sessions.create_session(
+            user_id_from_record(user), roles_from_record(user)
+        )
 
     async def logout(self, token: str | None) -> None:
         if token:
             await self.sessions.delete_session(token)
 
+    def _new_user_role(self) -> AccountRole:
+        if self.db.has_user_accounts():
+            return AccountRole.MEMBER
+        return AccountRole.ADMIN
+
 
 def user_id_from_record(user: dict[str, object]) -> str:
     return str(user.get("user_id") or user["id"])
+
+
+def roles_from_record(user: dict[str, object]) -> list[str]:
+    role = user.get("role") or AccountRole.MEMBER.value
+    if isinstance(role, AccountRole):
+        return [role.value]
+    return [str(role)]
