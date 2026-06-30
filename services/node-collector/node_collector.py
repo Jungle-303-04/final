@@ -118,17 +118,23 @@ class NodeCollector:
     async def metric_samples(self) -> list[MetricSample]:
         # Run each metric group collector and keep /metrics alive if one group fails.
         labels = self.metric_labels()
-        samples = []
-        has_error = False
+        samples: list[MetricSample] = []
+        status_samples: list[MetricSample] = []
         for collector in self.metric_collectors:
+            has_error = False
             try:
                 samples.extend(await collector.collect(labels))
             except Exception as exc:
                 has_error = True
-                print(f"node metric collection failed: {exc}", flush=True)
+                print(
+                    f"node metric collection failed collector={collector.collector_name}: {exc}",
+                    flush=True,
+                )
+            status_samples.append(
+                collector_status_metric_sample(labels, collector.collector_name, has_error)
+            )
 
-        samples.insert(0, collector_status_metric_sample(labels, has_error))
-        return samples
+        return status_samples + samples
 
     async def prometheus_metrics(self) -> str:
         # Prometheus pulls text from /metrics; this method bridges collection to text output.
