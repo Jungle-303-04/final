@@ -111,6 +111,7 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
     assert correlation_id == "corr-2"
     assert plan["cluster_id"] == "target-cluster-01"
     assert plan["command_id"] == outs[0].plan.command_id
+    assert plan["diff"]["resource"] == "deployment/checkout-api"
     assert plan["idempotency_key"]
     assert status == "queued"
 

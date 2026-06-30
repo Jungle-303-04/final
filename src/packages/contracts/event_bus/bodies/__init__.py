@@ -11,6 +11,11 @@
 
 from __future__ import annotations
 
+from domains.alert.events import (
+    AlertDispatchedBody,
+    AlertRejectedBody,
+    AlertRequestedBody,
+)
 from domains.command.events import (
     CommandCompletedBody,
     CommandDispatchedBody,
@@ -49,6 +54,9 @@ from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 
 __all__ = [
     "ClusterEvidenceReceivedBody",
+    "AlertDispatchedBody",
+    "AlertRejectedBody",
+    "AlertRequestedBody",
     "CommandCompletedBody",
     "CommandDispatchReadyBody",
     "CommandDispatchedBody",
