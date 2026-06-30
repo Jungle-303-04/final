@@ -56,6 +56,13 @@ class DashboardResponse(StrictModel):
     cards: list[JsonMap]
 
 
+class FakeTelemetryResponse(StrictModel):
+    status: str
+    data: Any | None = None
+    telemetry: str | None = None
+    path: str | None = None
+
+
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str
