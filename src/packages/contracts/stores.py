@@ -13,9 +13,17 @@ from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 
 
 class RcaStore(Protocol):
-    async def save_evidence(self, correlation_id: str, kind: str, body: JsonObject) -> None: ...
+    async def save_evidence(
+        self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject
+    ) -> None: ...
+
     async def save_rca_report(
-        self, correlation_id: str, root_cause: str, action: str, body: JsonObject
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        root_cause: str,
+        action: str,
+        body: JsonObject,
     ) -> None: ...
 
 

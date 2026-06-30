@@ -13,7 +13,7 @@ from rate_limits import (
 from settings import Settings
 
 from packages.config.constants import Auth
-from packages.contracts.identity import AccountRole, UserStatus
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
 from packages.storage.sessions import AuthSession, RateLimitExceeded
 
@@ -24,6 +24,15 @@ class EmailVerificationChallenge:
     email: str
     token: str
     expires_in_seconds: int
+
+
+@dataclass(frozen=True)
+class EmailVerificationResult:
+    user_id: str
+    status: str
+    roles: list[str]
+    workspace_id: str | None
+    session: AuthSession | None
 
 
 def extract_session_token(request: Request) -> str | None:
@@ -72,14 +81,13 @@ class PasswordAuthService:
         normalized_email = normalize_email(email)
         if self.db.get_user_by_email(normalized_email) is not None:
             raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
-        role = self._new_user_role()
         user = self.db.create_user(
             user_id=f"user-{uuid.uuid4()}",
             email=normalized_email,
             password_hash=hash_password(password),
             display_name=default_display_name(normalized_email),
             status=UserStatus.PENDING_EMAIL_VERIFICATION.value,
-            role=role.value,
+            role=AccountRole.MEMBER.value,
         )
         if user is None:
             raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
@@ -101,12 +109,17 @@ class PasswordAuthService:
             raise HTTPException(
                 status_code=403, detail=Settings.EMAIL_VERIFICATION_REQUIRED_MESSAGE
             )
+        if status == UserStatus.PENDING_APPROVAL.value:
+            raise HTTPException(status_code=403, detail=Settings.ACCOUNT_APPROVAL_REQUIRED_MESSAGE)
         if status != UserStatus.ACTIVE.value:
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
         if not verify_password(password, str(user["password_hash"])):
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+        user_id = user_id_from_record(user)
         return await self.sessions.create_session(
-            user_id_from_record(user), roles_from_record(user)
+            user_id,
+            roles_from_record(user),
+            workspace_id_from_record(user) or self.db.get_default_workspace_id_for_user(user_id),
         )
 
     async def resend_email_verification(
@@ -132,25 +145,41 @@ class PasswordAuthService:
             expires_in_seconds=Settings.EMAIL_VERIFICATION_TTL_SECONDS,
         )
 
-    async def verify_email(self, token: str) -> AuthSession:
+    async def verify_email(self, token: str) -> EmailVerificationResult:
         payload = await self.sessions.consume_email_verification_token(token)
         if payload is None:
             raise HTTPException(status_code=400, detail=Settings.EMAIL_VERIFICATION_INVALID_MESSAGE)
-        user = self.db.activate_user(str(payload["user_id"]))
+        user = self.db.complete_email_verification(str(payload["user_id"]))
         if user is None:
             raise HTTPException(status_code=400, detail=Settings.EMAIL_VERIFICATION_INVALID_MESSAGE)
-        return await self.sessions.create_session(
-            user_id_from_record(user), roles_from_record(user)
+        user_id = user_id_from_record(user)
+        roles = roles_from_record(user)
+        status = str(user["status"])
+        workspace_id = (
+            workspace_id_from_record(user)
+            or self.db.get_default_workspace_id_for_user(user_id)
+            or DEFAULT_WORKSPACE_ID
         )
+        session = None
+        if status == UserStatus.ACTIVE.value:
+            session = await self.sessions.create_session(user_id, roles, workspace_id)
+        return EmailVerificationResult(
+            user_id=user_id,
+            status=status,
+            roles=roles,
+            workspace_id=workspace_id,
+            session=session,
+        )
+
+    async def approve_user(self, user_id: str, workspace_id: str) -> dict[str, object]:
+        user = self.db.approve_user(user_id, workspace_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail=Settings.USER_NOT_FOUND_MESSAGE)
+        return user
 
     async def logout(self, token: str | None) -> None:
         if token:
             await self.sessions.delete_session(token)
-
-    def _new_user_role(self) -> AccountRole:
-        if self.db.has_user_accounts():
-            return AccountRole.MEMBER
-        return AccountRole.ADMIN
 
 
 def user_id_from_record(user: dict[str, object]) -> str:
@@ -162,3 +191,8 @@ def roles_from_record(user: dict[str, object]) -> list[str]:
     if isinstance(role, AccountRole):
         return [role.value]
     return [str(role)]
+
+
+def workspace_id_from_record(user: dict[str, object]) -> str | None:
+    workspace_id = user.get("workspace_id")
+    return str(workspace_id) if workspace_id else None

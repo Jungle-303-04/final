@@ -14,6 +14,7 @@ class Evidence(Base):
     __tablename__ = "evidence"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     kind: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
@@ -24,6 +25,7 @@ class RcaReport(Base):
     __tablename__ = "rca_reports"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     root_cause: Mapped[str] = text_column()
     action: Mapped[str] = text_column()
