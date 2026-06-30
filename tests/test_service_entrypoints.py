@@ -100,7 +100,10 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         ]
     )
 
+    generated_workloads = {"src/services/target/node-collector/app.py"}
     for relative_path, _expected_helper in SERVICE_ENTRYPOINTS.values():
+        if relative_path in generated_workloads:
+            continue
         assert f'command: ["python", "{relative_path}"]' in manifests
 
     legacy_role_args = [
@@ -130,3 +133,12 @@ def test_target_install_is_driven_by_registration_script() -> None:
     assert "/targets" in register_script
     assert "delete deploy/target-cluster-agent" in register_script
     assert "kubectl --context" in register_script
+
+
+def test_node_collector_is_agent_managed_not_static_manifest() -> None:
+    target_manifest = read_project_file("deploy/target/target.yaml")
+    agent_source = read_project_file("src/services/target/cluster-agent/agent.py")
+
+    assert "kind: DaemonSet" not in target_manifest
+    assert "cluster-agent-target-manage" in target_manifest
+    assert "src/services/target/node-collector/app.py" in agent_source

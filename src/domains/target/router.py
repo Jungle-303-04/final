@@ -33,9 +33,6 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
     fake_telemetry = (
         fake_telemetry_manifest(payload.image) if payload.install_fake_telemetry else ""
     )
-    node_collector = (
-        node_collector_manifest(payload.image) if payload.install_node_collector else ""
-    )
     return "\n---\n".join(
         block.strip()
         for block in [
@@ -47,7 +44,6 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token),
             fake_telemetry,
-            node_collector,
             checkout_api_manifest(payload.image),
             cluster_agent_manifest(payload),
         ]
@@ -85,7 +81,7 @@ rules:
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "replicasets", "daemonsets"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -96,6 +92,30 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-target-manage
+  namespace: target
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-target-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-target-manage
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
@@ -143,6 +163,9 @@ data:
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
+  NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}
+  NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
+  NODE_COLLECTOR_NAMESPACE: "target"
 """
 
 
@@ -211,54 +234,6 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
-"""
-
-
-def node_collector_manifest(image: str) -> str:
-    return f"""
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: optional-node-collector
-  namespace: target
-spec:
-  selector:
-    matchLabels:
-      app: optional-node-collector
-  template:
-    metadata:
-      annotations:
-        prometheus.io/path: /metrics
-        prometheus.io/port: "9100"
-        prometheus.io/scrape: "true"
-      labels:
-        app: optional-node-collector
-    spec:
-      containers:
-        - name: node-collector
-          image: {yaml_string(image)}
-          imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/target/node-collector/app.py"]
-          env:
-            - name: PORT
-              value: "9100"
-            - name: COLLECT_INTERVAL_SECONDS
-              value: "15"
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-          ports:
-            - name: metrics
-              containerPort: 9100
 """
 
 
