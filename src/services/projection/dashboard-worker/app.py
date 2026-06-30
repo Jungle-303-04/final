@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from domains.projection.events import DashboardStatus
 from packages.contracts.event_bus.bodies import DashboardUpdatedBody, EventBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
@@ -19,13 +18,16 @@ app = App("dashboard-worker")
 
 TERMINAL_SUCCESS = {EventSubject.SAFE_PR_CREATED, EventSubject.COMMAND_COMPLETED}
 ATTENTION_SUFFIXES = ("rejected", "failed")
+DASHBOARD_STATUS_RUNNING = "running"
+DASHBOARD_STATUS_DONE = "done"
+DASHBOARD_STATUS_ATTENTION = "attention"
 
 
-def _status(subject: str) -> DashboardStatus:
+def _status(subject: str) -> str:
     if subject in TERMINAL_SUCCESS:
-        return DashboardStatus.DONE
+        return DASHBOARD_STATUS_DONE
     attention = subject.endswith(ATTENTION_SUFFIXES) or subject == EventSubject.DEAD_LETTER_CREATED
-    return DashboardStatus.ATTENTION if attention else DashboardStatus.RUNNING
+    return DASHBOARD_STATUS_ATTENTION if attention else DASHBOARD_STATUS_RUNNING
 
 
 @app.on_any
