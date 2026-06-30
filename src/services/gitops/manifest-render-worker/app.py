@@ -33,6 +33,7 @@ from packages.contracts.gitops import (
     GITHUB_API_BASE_ENV,
     GITHUB_TOKEN_ENV,
     ManifestArtifactStatus,
+    supported_kubernetes_resource,
 )
 from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
@@ -46,7 +47,6 @@ METADATA_FIELD = "metadata"
 SPEC_FIELD = "spec"
 TEMPLATE_FIELD = "template"
 CONTAINERS_FIELD = "containers"
-NAMESPACED_KINDS = {"Deployment", "Service", "ConfigMap"}
 GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
 GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
 GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
@@ -155,8 +155,9 @@ def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
     if not kind or not api_version or not name:
         raise ValueError("manifest must include apiVersion, kind, and metadata.name")
 
+    contract = supported_kubernetes_resource(api_version, kind)
     namespace = str(metadata.get("namespace") or Sandbox.NAMESPACE)
-    if kind in NAMESPACED_KINDS:
+    if contract.namespaced:
         payload = {
             **payload,
             METADATA_FIELD: {
