@@ -81,7 +81,7 @@ jobs:
           import sqlalchemy
           from packages.storage.database import Database
 
-          sys.path.insert(0, "/app/src/services/api-gateway")
+          sys.path.insert(0, "/app/src/services/gateway/api-gateway")
           from auth import RedisSessionStore
           from gateway import ApiGateway
 
