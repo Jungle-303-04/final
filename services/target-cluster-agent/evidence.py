@@ -15,8 +15,11 @@ from telemetry_queries import (
     OPEN_TELEMETRY_SPAN_QUERIES,
     PROMETHEUS_INSTANT_QUERIES,
 )
+from telemetry_tracing import get_tracer, mark_span_error
 
 from packages.contracts.event_bus.interfaces import JsonObject
+
+TRACER = get_tracer("target-cluster-agent.evidence")
 
 
 class EvidenceCollector:
@@ -34,45 +37,56 @@ class EvidenceCollector:
 
     # Build the full evidence payload; telemetry sections are replaced with real query data.
     async def collect_evidence(self) -> JsonObject:
-        evidence = self.fake_evidence()
-        evidence["metrics"] = await self.collect_prometheus_metrics()
-        evidence["logs"] = await self.collect_loki_logs()
-        evidence["traces"] = await self.collect_tempo_traces()
-        return evidence
+        with TRACER.start_as_current_span("evidence.collect") as span:
+            evidence = self.fake_evidence()
+            evidence["metrics"] = await self.collect_prometheus_metrics()
+            evidence["logs"] = await self.collect_loki_logs()
+            evidence["traces"] = await self.collect_tempo_traces()
+            span.set_attribute("evidence.has_metrics", "metrics" in evidence)
+            span.set_attribute("evidence.has_logs", "logs" in evidence)
+            span.set_attribute("evidence.has_traces", "traces" in evidence)
+            return evidence
 
     # Run every configured Prometheus query and package the normalized results.
     async def collect_prometheus_metrics(self) -> JsonObject:
         """Collect configured Prometheus query results."""
-        try:
-            async with httpx.AsyncClient(timeout=PROMETHEUS_TIMEOUT_SECONDS) as client:
-                query_results = {}
+        with TRACER.start_as_current_span("prometheus.collect") as span:
+            span.set_attribute("prometheus.query_count", len(PROMETHEUS_INSTANT_QUERIES))
+            try:
+                async with httpx.AsyncClient(timeout=PROMETHEUS_TIMEOUT_SECONDS) as client:
+                    query_results = {}
 
-                for metric_query in PROMETHEUS_INSTANT_QUERIES:
-                    payload = await self.query_prometheus(client, metric_query.promql)
+                    for metric_query in PROMETHEUS_INSTANT_QUERIES:
+                        payload = await self.query_prometheus(client, metric_query.promql)
 
-                    query_results[metric_query.metric_name] = {
-                        "query": metric_query.promql,
-                        # ** is the dictionary unpacking syntax.
-                        **self.normalize_prometheus_payload(payload),
-                    }
+                        query_results[metric_query.metric_name] = {
+                            "query": metric_query.promql,
+                            # ** is the dictionary unpacking syntax.
+                            **self.normalize_prometheus_payload(payload),
+                        }
 
-            return {
-                "source": "prometheus",
-                "results": query_results,
-            }
+                span.set_attribute("prometheus.result_count", len(query_results))
+                return {
+                    "source": "prometheus",
+                    "results": query_results,
+                }
 
-        except Exception as exc:
-            print(f"prometheus metrics collection failed: {exc}", flush=True)
-            return self.fake_evidence()["metrics"]
+            except Exception as exc:
+                mark_span_error(span, exc)
+                print(f"prometheus metrics collection failed: {exc}", flush=True)
+                return self.fake_evidence()["metrics"]
 
     # Actually request a single query to Prometheus and return the parsed response body.
     async def query_prometheus(self, client: httpx.AsyncClient, query: str) -> JsonObject:
-        response = await client.get(
-            f"{self.prometheus_base_url}/api/v1/query",
-            params={"query": query},
-        )
-        response.raise_for_status()
-        return response.json()
+        with TRACER.start_as_current_span("prometheus.query") as span:
+            span.set_attribute("prometheus.query", query)
+            response = await client.get(
+                f"{self.prometheus_base_url}/api/v1/query",
+                params={"query": query},
+            )
+            span.set_attribute("http.status_code", response.status_code)
+            response.raise_for_status()
+            return response.json()
 
     # Convert Prometheus response shapes into a stable evidence-friendly structure.
     def normalize_prometheus_payload(self, payload: JsonObject) -> JsonObject:
@@ -107,36 +121,43 @@ class EvidenceCollector:
     # Run every configured Loki query and package the normalized results.
     async def collect_loki_logs(self) -> list[JsonObject]:
         """Collect configured Loki query results."""
-        try:
-            async with httpx.AsyncClient(timeout=LOKI_TIMEOUT_SECONDS) as client:
-                log_results = []
+        with TRACER.start_as_current_span("loki.collect") as span:
+            span.set_attribute("loki.query_count", len(LOKI_LOG_QUERIES))
+            try:
+                async with httpx.AsyncClient(timeout=LOKI_TIMEOUT_SECONDS) as client:
+                    log_results = []
 
-                for log_query in LOKI_LOG_QUERIES:
-                    payload = await self.query_loki(client, log_query.logql)
+                    for log_query in LOKI_LOG_QUERIES:
+                        payload = await self.query_loki(client, log_query.logql)
 
-                    log_results.append(
-                        {
-                            "source": "loki",
-                            "query_name": log_query.query_name,
-                            "query": log_query.logql,
-                            **self.normalize_loki_payload(payload),
-                        }
-                    )
+                        log_results.append(
+                            {
+                                "source": "loki",
+                                "query_name": log_query.query_name,
+                                "query": log_query.logql,
+                                **self.normalize_loki_payload(payload),
+                            }
+                        )
 
-            return log_results
+                span.set_attribute("loki.result_count", len(log_results))
+                return log_results
 
-        except Exception as exc:
-            print(f"loki log collection failed: {exc}", flush=True)
-            return self.fake_evidence()["logs"]
+            except Exception as exc:
+                mark_span_error(span, exc)
+                print(f"loki log collection failed: {exc}", flush=True)
+                return self.fake_evidence()["logs"]
 
     # Actually request a single range query from Loki and return the parsed response body.
     async def query_loki(self, client: httpx.AsyncClient, query: str) -> JsonObject:
-        response = await client.get(
-            f"{self.loki_base_url}/loki/api/v1/query_range",
-            params={"query": query, "limit": LOKI_QUERY_LIMIT},
-        )
-        response.raise_for_status()
-        return response.json()
+        with TRACER.start_as_current_span("loki.query_range") as span:
+            span.set_attribute("loki.query", query)
+            response = await client.get(
+                f"{self.loki_base_url}/loki/api/v1/query_range",
+                params={"query": query, "limit": LOKI_QUERY_LIMIT},
+            )
+            span.set_attribute("http.status_code", response.status_code)
+            response.raise_for_status()
+            return response.json()
 
     # Convert Loki stream responses into a stable evidence-friendly structure.
     def normalize_loki_payload(self, payload: JsonObject) -> JsonObject:
@@ -172,35 +193,42 @@ class EvidenceCollector:
     # Run every configured Tempo TraceQL search and package normalized trace summaries.
     async def collect_tempo_traces(self) -> JsonObject:
         """Collect configured Tempo trace search results."""
-        try:
-            async with httpx.AsyncClient(timeout=TEMPO_TIMEOUT_SECONDS) as client:
-                trace_results = {}
+        with TRACER.start_as_current_span("tempo.collect") as span:
+            span.set_attribute("tempo.query_count", len(OPEN_TELEMETRY_SPAN_QUERIES))
+            try:
+                async with httpx.AsyncClient(timeout=TEMPO_TIMEOUT_SECONDS) as client:
+                    trace_results = {}
 
-                for span_query in OPEN_TELEMETRY_SPAN_QUERIES:
-                    payload = await self.query_tempo(client, span_query.traceql)
+                    for span_query in OPEN_TELEMETRY_SPAN_QUERIES:
+                        payload = await self.query_tempo(client, span_query.traceql)
 
-                    trace_results[span_query.query_name] = {
-                        "query": span_query.traceql,
-                        **self.normalize_tempo_payload(payload),
-                    }
+                        trace_results[span_query.query_name] = {
+                            "query": span_query.traceql,
+                            **self.normalize_tempo_payload(payload),
+                        }
 
-            return {
-                "source": "tempo",
-                "results": trace_results,
-            }
+                span.set_attribute("tempo.result_count", len(trace_results))
+                return {
+                    "source": "tempo",
+                    "results": trace_results,
+                }
 
-        except Exception as exc:
-            print(f"tempo trace collection failed: {exc}", flush=True)
-            return self.fake_evidence()["traces"]
+            except Exception as exc:
+                mark_span_error(span, exc)
+                print(f"tempo trace collection failed: {exc}", flush=True)
+                return self.fake_evidence()["traces"]
 
     # Actually request one TraceQL search from Tempo and return the parsed response body.
     async def query_tempo(self, client: httpx.AsyncClient, traceql: str) -> JsonObject:
-        response = await client.get(
-            f"{self.tempo_base_url}/api/search",
-            params={"q": traceql, "limit": TEMPO_QUERY_LIMIT},
-        )
-        response.raise_for_status()
-        return response.json()
+        with TRACER.start_as_current_span("tempo.search") as span:
+            span.set_attribute("tempo.traceql", traceql)
+            response = await client.get(
+                f"{self.tempo_base_url}/api/search",
+                params={"q": traceql, "limit": TEMPO_QUERY_LIMIT},
+            )
+            span.set_attribute("http.status_code", response.status_code)
+            response.raise_for_status()
+            return response.json()
 
     # Convert Tempo search responses into a stable evidence-friendly structure.
     def normalize_tempo_payload(self, payload: JsonObject) -> JsonObject:

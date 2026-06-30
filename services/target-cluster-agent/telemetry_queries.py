@@ -110,6 +110,11 @@ OPEN_TELEMETRY_SPAN_QUERIES: tuple[OpenTelemetrySpanQuery, ...] = (
         traceql='{ resource.service.name = "target-cluster-agent" && status = error }',
     ),
     OpenTelemetrySpanQuery(
+        query_name="target_agent_recent_spans",
+        description="Recent spans emitted by the target-cluster-agent evidence loop.",
+        traceql='{ resource.service.name = "target-cluster-agent" }',
+    ),
+    OpenTelemetrySpanQuery(
         query_name="management_gateway_spans",
         description="Management Gateway request spans related to agent traffic.",
         traceql='{ resource.service.name = "api-gateway" }',
