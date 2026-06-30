@@ -35,6 +35,17 @@ is_true() {
   esac
 }
 
+wait_for_node_collector() {
+  for _ in $(seq 1 60); do
+    if kubectl --context "${TARGET_CONTEXT}" -n target get daemonset/optional-node-collector >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "daemonset/optional-node-collector was not created by cluster-agent" >&2
+  return 1
+}
+
 if [ -z "${MANAGEMENT_BASE_URL}" ]; then
   echo "MANAGEMENT_BASE_URL is required" >&2
   exit 1
@@ -108,6 +119,7 @@ kubectl --context "${TARGET_CONTEXT}" -n sandbox rollout status deploy/checkout-
 kubectl --context "${TARGET_CONTEXT}" -n target rollout restart deploy/cluster-agent
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/cluster-agent --timeout=180s
 if is_true "${INSTALL_NODE_COLLECTOR}"; then
+  wait_for_node_collector
   kubectl --context "${TARGET_CONTEXT}" -n target rollout status daemonset/optional-node-collector --timeout=180s
 fi
 

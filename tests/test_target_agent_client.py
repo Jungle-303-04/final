@@ -16,6 +16,13 @@ def load_agent_module() -> Any:
     )
 
 
+def load_node_collector_manager_module() -> Any:
+    return load_file(
+        ROOT / "src" / "services" / "target" / "cluster-agent" / "node_collector_manager.py",
+        "test_node_collector_manager_module",
+    )
+
+
 def make_client(agent_module: Any, status_code: int) -> Any:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status_code, request=request)
@@ -84,22 +91,6 @@ def test_target_agent_builds_apply_manifest_patch() -> None:
     ]
 
 
-def test_target_agent_builds_node_collector_daemonset() -> None:
-    agent_module = load_agent_module()
-
-    body = agent_module.build_node_collector_daemonset("target", "service:local")
-
-    assert body["kind"] == "DaemonSet"
-    assert body["metadata"]["name"] == "optional-node-collector"
-    assert body["metadata"]["namespace"] == "target"
-    assert body["spec"]["template"]["spec"]["tolerations"] == [{"operator": "Exists"}]
-    assert body["spec"]["template"]["spec"]["containers"][0]["image"] == "service:local"
-    assert body["spec"]["template"]["spec"]["containers"][0]["command"] == [
-        "python",
-        "src/services/target/node-collector/app.py",
-    ]
-
-
 def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch) -> None:
     agent_module = load_agent_module()
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
@@ -125,53 +116,43 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
     assert "dry-run" in result["message"]
 
 
-def test_target_agent_creates_node_collector_when_missing(monkeypatch) -> None:
-    agent_module = load_agent_module()
-    calls: list[tuple[str, str, dict[str, Any] | None]] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        payload = json_body(request)
-        calls.append((request.method, request.url.path, payload))
-        if request.method == "GET":
-            return httpx.Response(404, request=request)
-        return httpx.Response(201, json={"ok": True}, request=request)
-
+def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
+    manager_module = load_node_collector_manager_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
     monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
-    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=httpx.MockTransport(handler)
-    )
+    monkeypatch.setattr(manager_module, "service_account_token", lambda: "token")
 
-    applied, message = asyncio.run(agent.ensure_node_collector())
+    async def run_with_get_status(status_code: int) -> list[str]:
+        methods: list[str] = []
 
-    assert applied is True
-    assert "created" in message
-    assert calls[0][0] == "GET"
-    assert calls[1][0] == "POST"
-    assert calls[1][2]["kind"] == "DaemonSet"
+        def handler(request: httpx.Request) -> httpx.Response:
+            methods.append(request.method)
+            if request.method == "GET":
+                return httpx.Response(status_code, request=request)
+            return httpx.Response(200, json={"ok": True}, request=request)
 
+        manager = manager_module.NodeCollectorManager(
+            enabled=True,
+            image="service:local",
+            namespace="target",
+            transport=httpx.MockTransport(handler),
+        )
+        applied, _message = await manager.reconcile()
+        assert applied is True
+        return methods
 
-def test_target_agent_patches_node_collector_when_present(monkeypatch) -> None:
-    agent_module = load_agent_module()
-    methods: list[str] = []
+    body = manager_module.NodeCollectorManager(
+        enabled=True, image="service:local", namespace="target"
+    ).daemonset()
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        methods.append(request.method)
-        return httpx.Response(200, json={"ok": True}, request=request)
-
-    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
-    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
-    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
-    agent = agent_module.TargetClusterAgent(
-        kubernetes_transport=httpx.MockTransport(handler)
-    )
-
-    applied, message = asyncio.run(agent.ensure_node_collector())
-
-    assert applied is True
-    assert "reconciled" in message
-    assert methods == ["GET", "PATCH"]
+    assert body["kind"] == "DaemonSet"
+    assert body["spec"]["template"]["spec"]["tolerations"] == [{"operator": "Exists"}]
+    assert body["spec"]["template"]["spec"]["containers"][0]["command"] == [
+        "python",
+        "src/services/target/node-collector/app.py",
+    ]
+    assert asyncio.run(run_with_get_status(404)) == ["GET", "POST"]
+    assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH"]
 
 
 def test_target_agent_queries_prometheus_and_loki_directly(monkeypatch) -> None:
@@ -233,11 +214,3 @@ def test_target_agent_queries_prometheus_and_loki_directly(monkeypatch) -> None:
     assert calls.count("/api/v1/query") == 2
     assert "/loki/api/v1/labels" in calls
     assert "/loki/api/v1/query_range" in calls
-
-
-def json_body(request: httpx.Request) -> dict[str, Any] | None:
-    if not request.content:
-        return None
-    import json
-
-    return json.loads(request.content.decode())

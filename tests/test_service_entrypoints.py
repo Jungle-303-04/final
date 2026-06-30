@@ -137,8 +137,10 @@ def test_target_install_is_driven_by_registration_script() -> None:
 
 def test_node_collector_is_agent_managed_not_static_manifest() -> None:
     target_manifest = read_project_file("deploy/target/target.yaml")
-    agent_source = read_project_file("src/services/target/cluster-agent/agent.py")
+    manager_source = read_project_file(
+        "src/services/target/cluster-agent/node_collector_manager.py"
+    )
 
     assert "kind: DaemonSet" not in target_manifest
     assert "cluster-agent-target-manage" in target_manifest
-    assert "src/services/target/node-collector/app.py" in agent_source
+    assert "src/services/target/node-collector/app.py" in manager_source
