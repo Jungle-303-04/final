@@ -21,7 +21,7 @@ node-collector /metrics
 
 | 파일 | 현재 상태 | 작업자가 알아야 할 점 |
 | --- | --- | --- |
-| `src/services/target/cluster-agent/fake_prometheus.py` | fake server 실행 파일 | 실제 Prometheus가 아니다. scrape도 저장도 PromQL도 없다. |
+| `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=prometheus`) | fake server 실행 entrypoint | 실제 Prometheus가 아니다. scrape도 저장도 PromQL도 없다. |
 | `src/services/target/cluster-agent/agent.py` | Gateway client와 fake evidence loop가 있음 | Gateway 계약은 나중에 바뀔 수 있으므로 지금은 debug query API를 별도로 만든다. |
 | `src/services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`가 이미 있음 | real Prometheus의 첫 scrape target으로 사용한다. |
 | `deploy/target/target.yaml` | fake telemetry, node collector, target agent 배포가 있음 | real Prometheus Helm 설치 경로는 아직 없다. |
@@ -547,10 +547,9 @@ Gateway API가 준비되면 debug 흐름을 실제 `/agent/evidence`로 연결�
 
 ## 이 작업에서 자주 하는 실수
 
-- `fake_prometheus.py`를 실제 Prometheus라고 생각하는 것.
+- `fake_telemetry.py`의 Prometheus 모드를 실제 Prometheus라고 생각하는 것.
 - Prometheus에 POST로 metric을 넣으려는 것.
 - Gateway 계약이 없는데 `/agent/evidence` DTO를 먼저 고정하는 것.
 - Helm values에 secret을 넣는 것.
 - Prometheus 설치 YAML을 GitOps workload diff에 섞는 것.
 - raw Prometheus response 전체를 evidence로 보내는 것.
-

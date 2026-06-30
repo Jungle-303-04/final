@@ -10,7 +10,7 @@
 
 현재 있는 것:
 
-- `src/services/target/cluster-agent/fake_prometheus.py`
+- `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=prometheus`)
   - 실제 Prometheus가 아니다.
   - `agent.py`의 `create_fake_telemetry_app("prometheus")`를 실행한다.
   - Prometheus처럼 생긴 JSON을 고정으로 반환하는 fake server다.
@@ -38,7 +38,7 @@
 따라서 첫 구현 목표는 이것이다.
 
 ```text
-fake-prometheus를 키우지 않는다.
+fake telemetry Prometheus 모드를 키우지 않는다.
 real Prometheus를 설치한다.
 이미 있는 node-collector /metrics를 Prometheus가 scrape하게 한다.
 Prometheus query API로 node_collector_* metric을 다시 꺼낸다.
