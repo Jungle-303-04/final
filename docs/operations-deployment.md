@@ -89,7 +89,7 @@ Fargate는 다음 조건을 모두 만족할 때만 쓴다.
 | 내부 통신 | service DNS와 NATS JetStream |
 | target 연결 | cluster-agent가 management로 outbound 연결 |
 | subnet | 운영 후보는 private subnet 중심 |
-| egress | OAuth, GitHub, AI provider, object store, log destination만 명시 허용 |
+| egress | GitHub, AI provider, object store, log destination, 승인된 integration provider만 명시 허용 |
 | VPC endpoint | ECR, S3, CloudWatch, Secrets Manager 사용 시 우선 검토 |
 
 Target Cluster에 command를 보내기 위해 target cluster API server를 외부에 공개하지 않는다. Agent가 command queue를 polling하거나 stream으로 받아 실행한다.
@@ -98,7 +98,7 @@ Target Cluster에 command를 보내기 위해 target cluster API server를 외�
 
 | 권한 | 위치 | 용도 |
 | --- | --- | --- |
-| OAuth provider token | Management token vault | GitHub/Google provider API 호출 |
+| external credential | Management token vault | GitHub/Google 등 integration provider API 호출 |
 | session | Redis | UI/API 사용자 인증 |
 | AWS IAM / IRSA | EKS service account annotation | AWS API 접근 권한 |
 | Kubernetes ServiceAccount/RBAC | Target Cluster | Agent가 Kubernetes API를 읽고 sandbox만 제한 write |
