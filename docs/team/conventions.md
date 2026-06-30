@@ -19,9 +19,9 @@
 | 역할 | 주 담당 폴더 | 주 담당 문서 |
 | --- | --- | --- |
 | Platform/Integration | `src/packages/config`, `src/packages/contracts`, `src/packages/events`, `src/packages/storage`, `src/packages/runtime`, `deploy`, `scripts`, `.github` | `docs/events.md`, `docs/team/conventions.md` |
-| Gateway/Auth | `src/services/api-gateway`, `src/packages/contracts/gateway`, `src/packages/contracts/event_bus` | `docs/team/member-guides/gateway-auth.md` |
-| GitOps/Command | `src/services/gitops/*`, `src/services/command-worker` | `docs/team/member-guides/gitops-command.md` |
-| RCA/Safe PR | `src/services/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker` | `docs/team/member-guides/rca-safe-pr.md` |
+| Gateway/Auth | `src/services/gateway/api-gateway`, `src/packages/contracts/gateway`, `src/packages/contracts/event_bus` | `docs/team/member-guides/gateway-auth.md` |
+| GitOps/Command | `src/services/gitops/*`, `src/services/command/command-worker` | `docs/team/member-guides/gitops-command.md` |
+| RCA/Safe PR | `src/services/ai/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker` | `docs/team/member-guides/rca-safe-pr.md` |
 | Target/Telemetry | `src/services/target/cluster-agent`, `src/services/target/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
 
 `src/services/projection/dashboard-worker`와 dashboard 관련 문서는 현재 공통 read model 영역으로 둔다. UI가 실제로 추가되면 별도 담당을 다시 만든다.

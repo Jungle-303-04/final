@@ -35,7 +35,7 @@ Target Agent
 - `src/services/gitops/diff-worker`
 - `src/services/gitops/diff-analyze-worker`
 - `src/services/gitops/scm-worker`
-- `src/services/command-worker`
+- `src/services/command/command-worker`
 - git watch target polling
 - manifest render
 - desired state diff
@@ -621,8 +621,8 @@ tests/test_git_polling.py
 4. `src/packages/runtime/app.py`
 5. `src/packages/runtime/worker.py`
 6. `src/services/gitops`
-7. `src/services/command-worker`
+7. `src/services/command/command-worker`
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `docs/events.md`, `src/packages/runtime/worker.py`, `src/packages/runtime/service.py`, `src/services/gitops`, `src/services/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.
+이 영역을 작업할 때는 `docs/events.md`, `src/packages/runtime/worker.py`, `src/packages/runtime/service.py`, `src/services/gitops`, `src/services/command/command-worker`를 먼저 읽어라. handler는 작게 유지하고 event contract를 깨지 마라.

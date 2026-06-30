@@ -37,9 +37,9 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 | 역할 | 자유롭게 변경 가능 | 변경 전 조율 필요 |
 | --- | --- | --- |
 | Platform/Integration | `src/packages/config`, `src/packages/contracts`, `src/packages/events`, `src/packages/storage`, `src/packages/runtime`, `.github`, `deploy`, `scripts` | service workflow 동작, Gateway route |
-| Gateway/Auth | `src/services/api-gateway`, `src/packages/contracts/gateway`, identity/integration/security 계약 | event subject, shared DB schema, target agent protocol |
-| GitOps/Command | `src/services/gitops/*`, `src/services/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
-| RCA/Safe PR | `src/services/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
+| Gateway/Auth | `src/services/gateway/api-gateway`, `src/packages/contracts/gateway`, identity/integration/security 계약 | event subject, shared DB schema, target agent protocol |
+| GitOps/Command | `src/services/gitops/*`, `src/services/command/command-worker`, manifest/diff/command 생성 | target RBAC, RCA evidence schema, Gateway route |
+| RCA/Safe PR | `src/services/ai/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker`, Safe PR request/repo write logic | GitHub token scope, command payload, dashboard read model |
 | Target/Telemetry | `src/services/target/cluster-agent`, `src/services/target/node-collector`, `deploy/target` | command payload schema, evidence schema, metrics storage |
 
 ## 현재 코드 경로 기준

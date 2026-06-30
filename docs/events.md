@@ -278,8 +278,8 @@ async def on_event(evt: EventEnvelope, ctx):
 | Diff Worker (App) | `src/services/gitops/diff-worker/app.py` | `manifest.rendered` |
 | Diff Analyze Worker (App) | `src/services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
 | Repo Gateway Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.requested` |
-| Command Worker (App) | `src/services/command-worker/app.py` | `command.requested` |
-| RCA Worker (App) | `src/services/rca-worker/app.py` | `cluster.evidence.received` |
+| Command Worker (App) | `src/services/command/command-worker/app.py` | `command.requested` |
+| RCA Worker (App) | `src/services/ai/rca-worker/app.py` | `cluster.evidence.received` |
 | Dashboard Projection Service (`@app.on_any`) | `src/services/projection/dashboard-worker/app.py` | `>` |
 | Audit Timeline Service (`@app.on_any`) | `src/services/projection/audit-worker/app.py` | `>` |
 

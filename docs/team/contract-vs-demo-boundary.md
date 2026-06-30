@@ -74,7 +74,7 @@
 | `src/services/target/cluster-agent/agent.py`의 fake evidence collectors | 장애 데이터가 실제 수집값이 아님 | Kubernetes/Prometheus/Loki/OTel adapter가 만든 Evidence |
 | `src/services/gitops/manifest-render-worker/app.py`의 `checkout-api` 기본값 | 실제 repo render가 아니라 sample manifest 생성 | Git repo checkout + Kustomize/Helm renderer |
 | `src/services/gitops/diff-worker/app.py`의 `PREVIOUS_IMAGE`, `RESOURCE_REF` | 실제 cluster diff가 아니라 fixed diff | desired/actual manifest 비교기 |
-| `src/services/rca-worker/app.py`의 고정 RCA 결과 | AI 분석이 아니라 deterministic sample | `RcaAnalyzerPort` 뒤의 LLM/rule analyzer |
+| `src/services/ai/rca-worker/app.py`의 고정 RCA 결과 | AI 분석이 아니라 deterministic sample | `RcaAnalyzerPort` 뒤의 LLM/rule analyzer |
 | `src/services/gitops/scm-worker/app.py`의 fake PR URL | 실제 GitHub PR 생성이 아님 | GitHub App/PAT adapter |
 | `src/domains/identity/repository.py`의 credential placeholder | 실제 provider token exchange가 아님 | SecretVault/TokenBroker adapter |
 | `tests/**`의 fixture 값 | 테스트 입력일 뿐 운영 계약 아님 | 계약 변경 시 fixture도 같이 변경 |
