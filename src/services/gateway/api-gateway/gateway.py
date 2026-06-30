@@ -4,13 +4,17 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from auth import PasswordAuthService, SessionAuthService
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
 
 from domains.command.router import router as command_router
 from domains.gitops.router import router as gitops_router
-from domains.identity.dependencies import require_admin_session, require_agent
+from domains.identity.dependencies import (
+    ClusterAgentIdentity,
+    require_admin_session,
+    require_cluster_agent,
+)
 from domains.identity.router import router as identity_router
 from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
@@ -120,9 +124,17 @@ class ApiGateway:
 
     def _register_ingest_routes(self, app: FastAPI) -> None:
         @app.post(gateway_routes.AGENT_CONNECT_PATH, response_model=AcceptedResponse)
-        async def agent_connect(request: Request, payload: AgentConnectRequest) -> AcceptedResponse:
-            require_agent(request)
-            accepted = await self.events.accept(EventSubject.AGENT_CONNECTED, payload.model_dump())
+        async def agent_connect(
+            payload: AgentConnectRequest,
+            identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+        ) -> AcceptedResponse:
+            # cluster_id/workspace_id 는 토큰 identity 에서 — body 의 cluster_id 는 신뢰 안 함.
+            body = {
+                **payload.model_dump(),
+                "cluster_id": identity.cluster_id,
+                "workspace_id": identity.workspace_id,
+            }
+            accepted = await self.events.accept(EventSubject.AGENT_CONNECTED, body)
             return AcceptedResponse(
                 accepted=True,
                 event_id=accepted.event.event_id,

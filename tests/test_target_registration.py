@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 from pydantic import ValidationError
 
+from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
 from domains.target.router import lease_evidence_source, register_target, target_install_manifest
 from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
 
@@ -67,8 +68,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
 
 
-def test_target_registration_records_cluster_and_returns_install_manifest(monkeypatch) -> None:
-    monkeypatch.setenv("AGENT_TOKEN", "agent-secret")
+def test_target_registration_records_cluster_and_returns_install_manifest() -> None:
     db = FakeDb()
 
     async def run():
@@ -88,23 +88,10 @@ def test_target_registration_records_cluster_and_returns_install_manifest(monkey
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
     assert db.registered[0]["workspace_id"] == "default"
-
-
-def test_target_registration_fails_closed_without_agent_token(monkeypatch) -> None:
-    monkeypatch.delenv("AGENT_TOKEN", raising=False)
-
-    async def run() -> None:
-        await register_target(
-            target_request(),
-            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
-            db=FakeDb(),
-        )
-
-    import asyncio
-
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(run())
-    assert exc.value.status_code == 503
+    match = re.search(r'AGENT_TOKEN: "([^"]+)"', response.install_manifest)
+    assert match is not None
+    assert db.registered[0]["agent_token_hash"] == hash_agent_token(match.group(1))
+    assert "agent_token" not in db.registered[0]
 
 
 def test_evidence_source_lease_route_delegates_to_management_store() -> None:
@@ -118,7 +105,11 @@ def test_evidence_source_lease_route_delegates_to_management_store() -> None:
                 window_start="2026-06-30T00:00:00+00:00",
                 lease_seconds=30,
             ),
-            FakeLeaseDb(),
+            identity=ClusterAgentIdentity(
+                workspace_id="trusted-workspace",
+                cluster_id="trusted-cluster",
+            ),
+            db=FakeLeaseDb(),
         )
 
     import asyncio
@@ -126,4 +117,5 @@ def test_evidence_source_lease_route_delegates_to_management_store() -> None:
     response = asyncio.run(run())
 
     assert response.leased is True
+    assert str(response.lease_id).startswith("trusted-cluster:trusted-workspace:")
     assert "prometheus.default" in str(response.lease_id)

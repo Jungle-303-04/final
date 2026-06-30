@@ -6,18 +6,30 @@ APIRouter(dependencies=[Depends(require_*)]) 또는 라우트 인자로 선언�
 
 from __future__ import annotations
 
+import hashlib
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request
 
-from packages.config.settings import env
 from packages.contracts.identity import AccountRole
 
-AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
-AGENT_AUTH_NOT_CONFIGURED_MESSAGE = "agent auth not configured"
 ADMIN_AUTH_REQUIRED_MESSAGE = "admin role required"
+
+
+def hash_agent_token(token: str) -> str:
+    """agent 토큰 → SHA-256 hex. 원문은 저장하지 않고 이 해시만 저장/비교한다."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class ClusterAgentIdentity:
+    """토큰으로 인증된 agent 의 권위 신원 — 요청 body 가 아닌 등록 레지스트리 기준."""
+
+    workspace_id: str
+    cluster_id: str
 
 
 def get_password_auth(request: Request) -> Any:
@@ -37,10 +49,21 @@ async def require_admin_session(request: Request) -> Any:
     return current
 
 
-def require_agent(request: Request) -> None:
-    """agent 토큰 가드 — fail-closed. AGENT_TOKEN 미설정이면 약한 기본값으로 열지 않고 거부."""
-    expected = env(AGENT_TOKEN_ENV, "")
-    if not expected:
-        raise HTTPException(status_code=503, detail=AGENT_AUTH_NOT_CONFIGURED_MESSAGE)
-    if request.headers.get(AGENT_TOKEN_HEADER) != expected:
+def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
+    """per-cluster agent 토큰 가드 — fail-closed.
+
+    x-agent-token 을 해시해 등록 레지스트리에서 클러스터를 찾고, 그 클러스터의
+    권위 (workspace_id, cluster_id) 를 돌려준다. agent 라우트는 이 값을 쓰고
+    요청 body 의 workspace_id/cluster_id 는 신뢰하지 않는다(크로스 테넌트 차단).
+    토큰 없음/미등록/미인증(해시 불일치)은 모두 401.
+    """
+    token = request.headers.get(AGENT_TOKEN_HEADER, "")
+    if not token:
         raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
+    identity = request.app.state.db.authenticate_cluster_agent(hash_agent_token(token))
+    if identity is None:
+        raise HTTPException(status_code=401, detail=AGENT_AUTH_REQUIRED_MESSAGE)
+    return ClusterAgentIdentity(
+        workspace_id=identity["workspace_id"],
+        cluster_id=identity["cluster_id"],
+    )

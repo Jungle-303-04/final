@@ -58,7 +58,7 @@ route 순서 = **input validation → auth/policy → event publish**.
 | `repository.py` | 사용자·워크스페이스·리소스 권한 영속 |
 | `router.py` | `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/session`, `/auth/verify-email` |
 | `schemas.py` | `LoginRequest`, `SignupRequest` 등 HTTP DTO(위험 field 거부) |
-| `dependencies.py` | **인가 가드(필터)** — `require_session`, `require_agent`, `require_roles([...])` |
+| `dependencies.py` | **인가 가드(필터)** — `require_session`, `require_cluster_agent`, `require_roles([...])` |
 | `service.py` | 내부 로그인·이메일 인증·Redis 세션(`SessionStore`) |
 | `integrations.py` | 외부 도구 integration target·credential binding·Token Broker(planned `contracts/integrations`) |
 | `security.py` | **organization role · project role 분리**·권한 정책(planned `contracts/security`) |
@@ -136,7 +136,7 @@ target agent ─(outbound)─▶ rca.router(/agent/evidence) ─▶ cluster.evid
 ### 인가 흐름(필터)
 ```
 identity.dependencies.require_session  → 사용자 라우트(dashboard/command 발행)
-identity.dependencies.require_agent    → agent 라우트(/agent/command/*, /agent/evidence)
+identity.dependencies.require_cluster_agent → agent 라우트(/agent/command/*, /agent/evidence)
 → APIRouter(dependencies=[Depends(require_*)]) 로 라우터 단위 선언(핸들러 반복 X)
 ```
 
