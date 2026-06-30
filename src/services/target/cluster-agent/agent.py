@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -162,15 +163,75 @@ class TargetClusterAgent:
                 await asyncio.sleep(Settings.COMMAND_RETRY_DELAY_SECONDS)
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
-        # TODO(target): map command action to an allowlisted Kubernetes operation in sandbox only.
+        # TODO(target): expand action allowlist with workspace/repo/cluster policy and approval proof.
         # TODO(target): capture stdout/stderr/status and report partial failure without raw secrets.
-        await asyncio.sleep(Settings.COMMAND_EXECUTION_DELAY_SECONDS)
+        if command.get(Gateway.ACTION) == Settings.APPLY_MANIFEST_ACTION:
+            return await self.apply_manifest_command(command)
+        if command.get(Gateway.ACTION) == Settings.ROLLOUT_RESTART_ACTION:
+            return await self.rollout_restart_command(command)
+        return {
+            Gateway.STATUS: "failed",
+            Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.APPLIED: False,
+            Gateway.MESSAGE: f"unsupported action: {command.get(Gateway.ACTION)}",
+        }
+
+    async def apply_manifest_command(self, command: CommandRecord) -> JsonObject:
+        plan = command.get("payload", {})
+        diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
+        namespace = str(diff.get("namespace") or "sandbox")
+        deployment = deployment_name_from_resource(str(diff.get("resource", "")))
+        image = str(diff.get("desired_image", ""))
+        if not deployment or not image:
+            return self.command_result(
+                False, "apply_manifest requires deployment resource and image"
+            )
+        patch = build_apply_manifest_patch(deployment, image)
+        applied, message = await self.patch_deployment(namespace, deployment, patch)
+        return self.command_result(applied, message)
+
+    async def rollout_restart_command(self, command: CommandRecord) -> JsonObject:
+        plan = command.get("payload", {})
+        diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
+        namespace = str(diff.get("namespace") or "sandbox")
+        deployment = deployment_name_from_resource(str(diff.get("resource", "")))
+        if not deployment:
+            return self.command_result(False, "rollout_restart requires deployment resource")
+        patch = build_rollout_restart_patch()
+        applied, message = await self.patch_deployment(namespace, deployment, patch)
+        return self.command_result(applied, message)
+
+    def command_result(self, applied: bool, message: str) -> JsonObject:
         return {
             Gateway.STATUS: Settings.COMMAND_COMPLETED_STATUS,
             Gateway.CLUSTER_ID: self.cluster_id,
-            Gateway.APPLIED: True,
-            Gateway.MESSAGE: Settings.COMMAND_RESULT_MESSAGE,
+            Gateway.APPLIED: applied,
+            Gateway.MESSAGE: message,
         }
+
+    async def patch_deployment(
+        self, namespace: str, deployment: str, patch: JsonObject
+    ) -> tuple[bool, str]:
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            return False, "kubernetes api not configured; dry-run only"
+        url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment}"
+        headers = {
+            "authorization": f"Bearer {token}",
+            "content-type": "application/strategic-merge-patch+json",
+        }
+        verify: str | bool = (
+            Settings.SERVICE_ACCOUNT_CA_PATH
+            if os.path.exists(Settings.SERVICE_ACCOUNT_CA_PATH)
+            else True
+        )
+        async with httpx.AsyncClient(
+            verify=verify, timeout=Settings.HTTP_TIMEOUT_SECONDS
+        ) as client:
+            response = await client.patch(url, json=patch, headers=headers)
+            response.raise_for_status()
+        return True, Settings.COMMAND_RESULT_MESSAGE
 
     def build_evidence_payload(self) -> JsonObject:
         # TODO(telemetry): replace fake collectors with Kubernetes, Prometheus, Loki, and OTel ports.
@@ -266,3 +327,43 @@ async def run_fake_telemetry(kind: str) -> None:
             log_level=Settings.LOG_LEVEL,
         )
     ).serve()
+
+
+def deployment_name_from_resource(resource: str) -> str:
+    if resource.startswith("deployment/"):
+        return resource.split("/", 1)[1]
+    return resource
+
+
+def build_apply_manifest_patch(deployment: str, image: str) -> JsonObject:
+    return {
+        "spec": {
+            "template": {
+                "metadata": {"annotations": {"ops.service/apply-at": str(int(time.time()))}},
+                "spec": {"containers": [{"name": deployment, "image": image}]},
+            }
+        }
+    }
+
+
+def build_rollout_restart_patch() -> JsonObject:
+    return {
+        "spec": {
+            "template": {
+                "metadata": {"annotations": {"ops.service/restarted-at": str(int(time.time()))}}
+            }
+        }
+    }
+
+
+def kubernetes_api_base_url() -> str | None:
+    host = env(Settings.KUBERNETES_SERVICE_HOST_ENV, "")
+    port = env(Settings.KUBERNETES_SERVICE_PORT_ENV, "443")
+    return f"https://{host}:{port}" if host else None
+
+
+def service_account_token() -> str | None:
+    if not os.path.exists(Settings.SERVICE_ACCOUNT_TOKEN_PATH):
+        return None
+    with open(Settings.SERVICE_ACCOUNT_TOKEN_PATH, encoding="utf-8") as token_file:
+        return token_file.read().strip()

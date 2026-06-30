@@ -60,6 +60,8 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
         manifest = load_service("gitops/manifest-render-worker")
         diff = load_service("gitops/diff-worker")
         analyze = load_service("gitops/diff-analyze-worker")
+        alert = load_service("alert-worker")
+        command = load_service("command-worker")
         repo = load_service("gitops/scm-worker")
 
         git_changed = (await run_worker(git_pull, accepted.event, db))[0]
@@ -67,7 +69,11 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
         desired_diff = (await run_worker(diff, rendered, db))[0]
         analyzed_events = await run_worker(analyze, desired_diff, db)
         safe_pr_requested = analyzed_events[1]
+        alert_requested = analyzed_events[2]
         safe_pr_created = (await run_worker(repo, safe_pr_requested, db))[0]
+        alert_events = await run_worker(alert, alert_requested, db)
+        command_requested = alert_events[1]
+        command_events = await run_worker(command, command_requested, db)
 
         events = [
             accepted.event,
@@ -76,6 +82,8 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
             desired_diff,
             *analyzed_events,
             safe_pr_created,
+            *alert_events,
+            *command_events,
         ]
         assert [evt.subject for evt in events] == [
             EventSubject.GIT_WEBHOOK_RECEIVED,
@@ -84,7 +92,13 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
             EventSubject.DESIRED_DIFF_DETECTED,
             EventSubject.DIFF_ANALYZED,
             EventSubject.SAFE_PR_REQUESTED,
+            EventSubject.ALERT_REQUESTED,
             EventSubject.SAFE_PR_CREATED,
+            EventSubject.ALERT_DISPATCHED,
+            EventSubject.COMMAND_REQUESTED,
+            EventSubject.COMMAND_DISPATCH_READY,
+            EventSubject.COMMAND_DISPATCHED,
+            EventSubject.COMMAND_QUEUED_FOR_AGENT,
         ]
         assert {evt.correlation_id for evt in events} == {accepted.event.correlation_id}
         assert git_changed.causation_id == accepted.event.event_id
@@ -92,8 +106,13 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
         assert desired_diff.causation_id == rendered.event_id
         assert analyzed_events[0].causation_id == desired_diff.event_id
         assert safe_pr_requested.causation_id == desired_diff.event_id
+        assert alert_requested.causation_id == desired_diff.event_id
         assert safe_pr_created.causation_id == safe_pr_requested.event_id
+        assert alert_events[0].causation_id == alert_requested.event_id
+        assert command_requested.causation_id == alert_requested.event_id
+        assert command_events[0].causation_id == command_requested.event_id
         assert db.called("save_repo_change")
         assert db.called("save_pull_request")
+        assert db.called("queue_agent_command")
 
     asyncio.run(run())

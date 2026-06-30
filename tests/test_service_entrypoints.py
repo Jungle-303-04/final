@@ -12,6 +12,7 @@ SERVICE_ENTRYPOINTS = {
     "git-pull-worker": ("src/services/gitops/git-pull-worker/app.py", "App("),
     "github-poll-worker": ("src/services/gitops/github-poll-worker/app.py", "AsyncService("),
     "api-gateway": ("src/services/api-gateway/app.py", "FastApiService("),
+    "alert-worker": ("src/services/alert-worker/app.py", "App("),
     "command-worker": ("src/services/command-worker/app.py", "App("),
     "rca-worker": ("src/services/rca-worker/app.py", "App("),
     "dashboard-worker": (
@@ -49,6 +50,7 @@ def test_services_have_direct_process_entrypoints() -> None:
 APP_BASED_SERVICES = {
     "rca-worker",
     "command-worker",
+    "alert-worker",
     "git-pull-worker",
     "manifest-render-worker",
     "diff-worker",

@@ -22,6 +22,7 @@ STREAM_SUBJECTS = [
     "evidence.>",
     "command.>",
     "rca.>",
+    "alert.>",
     "safe_pr.>",
     "dashboard.>",
     "audit.>",
@@ -65,6 +66,9 @@ class EventSubject(StrEnum):
     # --- 원인 분석/안전 PR(rca-worker) ---
     EVIDENCE_BUILT = "evidence.built"  # 증거 번들 구성
     RCA_COMPLETED = "rca.completed"  # 근본 원인 분석 완료
+    ALERT_REQUESTED = "alert.requested"  # 알람 전송/사전 배포 게이트 요청
+    ALERT_DISPATCHED = "alert.dispatched"  # 알람 전송 완료(또는 stub 통과)
+    ALERT_REJECTED = "alert.rejected"  # 알람/정책 게이트 차단
     SAFE_PR_REQUESTED = "safe_pr.requested"  # PR 생성 요청(공통)
     SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
     SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패
