@@ -1,17 +1,17 @@
-"""github-poll-worker — GitHub 를 주기적으로 당겨(폴링) 새 커밋을 webhook 입구로 흘린다.
+"""github-poll-worker — GitHub 주기 polling, 새 commit을 webhook 입구로 전달
 
-ArgoCD 와 같은 방향: "폴링 기본 + webhook 가속(옵션)". webhook 이 불가능한 환경
-(외부에 엔드포인트 못 여는 경우)이나 webhook 누락 보정용으로 폴링을 둔다.
+ArgoCD와 같은 방향: "polling 기본 + webhook 가속(옵션)".
+외부 endpoint를 못 여는 환경이나 webhook 누락 보정용 polling.
 
-cluster-agent 와 같은 타이머 producer 모양: 주기마다 외부를 호출하고
-결과를 api-gateway 의 /github/webhook 으로 POST 한다. 그 뒤는 webhook 과 100%
-동일 경로(outbox → NATS → git-pull-worker → 파이프라인)를 탄다.
+cluster-agent와 같은 timer producer 형태: 주기마다 외부 호출 후
+api-gateway의 /github/webhook으로 POST. 이후 경로는 webhook과 동일
+(outbox → NATS → git-pull-worker → pipeline).
 
-TODO(handoff): 여기는 "실제로 가져오는" 최소 흐름이다(매번 최신 커밋 1건 조회).
-  프로덕션 최적화는 별도 담당:
-    - 커서/ETag(If-None-Match)로 증분만 조회 → 변경 없으면 304, rate limit 절약.
-    - X-RateLimit-Remaining 기반 throttle + 실패 시 지수 백오프.
-  같은 커밋을 또 봐도 기존 ledger dedup(exactly-once)이 흡수하므로 최소 흐름도 안전.
+TODO(handoff): 실제 조회 최소 흐름(매번 최신 commit 1건)
+  production optimization:
+    - cursor/ETag(If-None-Match)로 incremental 조회 → 변경 없으면 304, rate limit 절약
+    - X-RateLimit-Remaining 기반 throttle + 실패 시 exponential backoff
+  같은 commit 반복 조회도 기존 ledger dedup(정확히 한 번)으로 흡수
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ class GitHubPoller:
         return commits[0]["sha"] if commits else None
 
     async def emit_webhook(self, client: httpx.AsyncClient, commit_sha: str) -> None:
-        # 서명은 전송 바이트와 정확히 일치해야 함 → json= 대신 직접 직렬화한 content 를 보낸다.
+        # 서명은 전송 바이트와 정확히 일치 필요 → json= 대신 직접 직렬화한 content 전송
         body = json.dumps(
             {
                 "commit_sha": commit_sha,

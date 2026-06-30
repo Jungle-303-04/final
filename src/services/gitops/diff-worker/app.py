@@ -25,14 +25,14 @@ RESOURCE_REF = "deployment/checkout-api"
 
 
 def load_actual_resource_image(rendered: ManifestRenderedBody) -> str:
-    # TODO(gitops): query the target cluster desired/actual state through a read-only adapter.
-    # TODO(gitops): compare by resource identity, namespace, kind, and field path, not only image.
+    # TODO(gitops): target cluster desired/actual 상태 읽기 전용 어댑터 조회
+    # TODO(gitops): image뿐 아니라 리소스 식별자, namespace, kind, 필드 경로 비교
     return PREVIOUS_IMAGE
 
 
 def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
     rendered = evt.rendered_manifest
-    # TODO(gitops): include create/update/delete operation type and machine-readable risk reasons.
+    # TODO(gitops): create/update/delete 작업 유형과 기계 판독용 위험 사유 포함
     return Diff(
         resource=RESOURCE_REF,
         namespace=Sandbox.NAMESPACE,
@@ -62,8 +62,8 @@ async def on_manifest_rendered(
     #     evt["correlation_id"],
     # )
     #
-    # 현재 split 구조에서는 rendered manifest body를 받아 Diff 값 객체로 변환하고,
-    # subject 발행은 yield DiffDetectedBody(...)로 런타임이 처리한다.
+    # 현재 split 구조: rendered manifest body → Diff 값 객체 변환
+    # subject 발행은 yield DiffDetectedBody(...)로 런타임 처리
     actual_image = load_actual_resource_image(evt)
     diff = build_desired_diff(evt, actual_image)
     yield DiffDetectedBody(diff=diff)
