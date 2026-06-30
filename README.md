@@ -9,25 +9,28 @@ Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 
 ## 구조
 
 ```text
-services
+src/services
   api-gateway
+  alert-worker
   gitops/git-pull-worker
+  gitops/github-poll-worker
   gitops/manifest-render-worker
   gitops/diff-worker
   gitops/diff-analyze-worker
-  gitops/repo-gateway-worker
+  gitops/scm-worker
   command-worker
   rca-worker
-  projection/dashboard-projection-service
-  projection/audit-timeline-service
-  target/target-cluster-agent
+  projection/dashboard-worker
+  projection/audit-worker
+  target/cluster-agent
   target/node-collector
-packages
+src/domains
+  identity, gitops, command, rca, scm, projection, audit, alert, target
+src/packages
   config                 env, runtime 기본값, 시간 helper
-  contracts              gateway/event_bus/dashboard 계약과 Protocol port
+  contracts              gateway/event_bus/auth/store 계약과 Protocol port
     gateway              API Gateway 요청 schema
     event_bus            stream, subject, subscription, envelope, body 계약
-    dashboard            dashboard status 계약
   events                 event envelope, NATS JetStream, DLQ event sink
   storage                PostgreSQL 저장소와 schema 초기화
   runtime                FastAPI/worker/async service 실행 객체
@@ -71,12 +74,13 @@ git-pull-worker              Git webhook/polling -> git.changed
 manifest-render-worker       git.changed -> manifest.rendered
 diff-worker                  manifest.rendered -> desired.diff.detected
 diff-analyze-worker          desired.diff.detected -> diff.analyzed (안전 시 safe_pr.requested)
-repo-gateway-worker          safe_pr.requested -> safe_pr.created/safe_pr.failed (유일한 PR 생성자)
+scm-worker                   safe_pr.requested -> safe_pr.created/safe_pr.failed (유일한 PR 생성자)
 command-worker               command policy/dispatch/agent queue
 rca-worker                   evidence -> RCA -> safe_pr.requested
-dashboard-projection-service dashboard read model
-audit-timeline-service       audit log
-target-cluster-agent         대상 클러스터 outbound agent
+dashboard-worker             dashboard read model
+audit-worker                 audit log
+alert-worker                 alarm/notification event boundary
+cluster-agent                대상 클러스터 outbound agent
 fake-prometheus              fake metrics source
 fake-loki                    fake logs source
 fake-otel                    fake trace source
@@ -102,6 +106,7 @@ make kill-pod DEPLOYMENT=rca-worker
 
 ## 문서
 
+- [docs/README.md](docs/README.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/events.md](docs/events.md)
 - [docs/operations-deployment.md](docs/operations-deployment.md)
