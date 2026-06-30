@@ -180,6 +180,10 @@ def approval_payload(payload: JsonObject, reason: str, status: str) -> JsonObjec
     }
 
 
+def command_result_succeeded(result: JsonObject) -> bool:
+    return result.get("status") == CommandStatus.COMPLETED and result.get("applied") is not False
+
+
 @app.on(GitWebhookReceivedBody)
 async def on_git_webhook(
     evt: GitWebhookReceivedBody, ctx: EventContext[WorkflowStore]
@@ -566,7 +570,7 @@ async def on_command_completed(
     if identity is None:
         return
     run = normalize_payload(identity)
-    succeeded = evt.result.get("status") == CommandStatus.COMPLETED
+    succeeded = command_result_succeeded(evt.result)
     run_status = WorkflowRunStatus.SUCCEEDED.value if succeeded else WorkflowRunStatus.FAILED.value
     step_status = (
         WorkflowStepStatus.SUCCEEDED.value if succeeded else WorkflowStepStatus.FAILED.value
