@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from packages.config.settings import required_env
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.identity import AccountRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
 from packages.storage.schema import (
     metadata,
 )
@@ -56,6 +56,26 @@ USER_ACCOUNT_ROLE_DEFAULT = (
     f"alter table user_accounts alter column role set default '{AccountRole.MEMBER.value}'"
 )
 USER_ACCOUNT_ROLE_NOT_NULL = "alter table user_accounts alter column role set not null"
+WORKSPACE_COMPAT_COLUMNS = {
+    "agent_commands": {
+        "workspace_id": "alter table agent_commands add column if not exists workspace_id text",
+    },
+    "dashboard_cards": {
+        "workspace_id": "alter table dashboard_cards add column if not exists workspace_id text",
+    },
+    "evidence": {
+        "workspace_id": "alter table evidence add column if not exists workspace_id text",
+    },
+    "rca_reports": {
+        "workspace_id": "alter table rca_reports add column if not exists workspace_id text",
+    },
+}
+WORKSPACE_BACKFILL_COLUMNS = (
+    "agent_commands",
+    "dashboard_cards",
+    "evidence",
+    "rca_reports",
+)
 USER_ACCOUNT_EMAIL_INDEX = (
     "create unique index if not exists ux_user_accounts_email "
     "on user_accounts (email) where email is not null"
@@ -143,6 +163,9 @@ class DatabaseConnection:
         load_domain_tables()  # domains/*/tables.py 자동 등록(create_all 전)
         metadata.create_all(self.engine)
         self.ensure_compatible_schema()
+        ensure_default_workspace = getattr(self, "ensure_default_workspace", None)
+        if callable(ensure_default_workspace):
+            ensure_default_workspace()
 
     def ensure_compatible_schema(self) -> None:
         """Keep local demo DBs usable until a real migration tool is introduced."""
@@ -164,6 +187,42 @@ class DatabaseConnection:
             conn.execute(text(USER_ACCOUNT_ROLE_DEFAULT))
             conn.execute(text(USER_ACCOUNT_ROLE_NOT_NULL))
             conn.execute(text(USER_ACCOUNT_EMAIL_INDEX))
+
+            for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
+                existing_table_columns = self._existing_columns(conn, table_name)
+                for column, statement in columns.items():
+                    if column in existing_table_columns:
+                        continue
+                    conn.execute(text("set local lock_timeout = '5s'"))
+                    conn.execute(text(statement))
+
+            for table_name in WORKSPACE_BACKFILL_COLUMNS:
+                conn.execute(
+                    text(
+                        f"""
+                        update {table_name}
+                        set workspace_id = :workspace_id
+                        where workspace_id is null
+                        """
+                    ),
+                    {"workspace_id": DEFAULT_WORKSPACE_ID},
+                )
+                conn.execute(
+                    text(
+                        f"""
+                        alter table {table_name}
+                        alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        f"""
+                        alter table {table_name}
+                        alter column workspace_id set not null
+                        """
+                    )
+                )
 
     @staticmethod
     def _existing_columns(conn: Connection, table_name: str) -> set[str]:

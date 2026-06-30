@@ -11,11 +11,13 @@ from typing import Any
 from fastapi import HTTPException, Request
 
 from packages.config.settings import env
+from packages.contracts.identity import AccountRole
 
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
 AGENT_AUTH_NOT_CONFIGURED_MESSAGE = "agent auth not configured"
+ADMIN_AUTH_REQUIRED_MESSAGE = "admin role required"
 
 
 def get_password_auth(request: Request) -> Any:
@@ -25,6 +27,14 @@ def get_password_auth(request: Request) -> Any:
 async def require_session(request: Request) -> Any:
     """사용자 세션 가드 — 유효 세션 필요(없으면 401)."""
     return await request.app.state.auth.require_session(request)
+
+
+async def require_admin_session(request: Request) -> Any:
+    """관리자 세션 가드 — account role admin 필요."""
+    current = await require_session(request)
+    if AccountRole.ADMIN.value not in current.roles:
+        raise HTTPException(status_code=403, detail=ADMIN_AUTH_REQUIRED_MESSAGE)
+    return current
 
 
 def require_agent(request: Request) -> None:

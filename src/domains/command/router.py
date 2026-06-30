@@ -29,6 +29,7 @@ from packages.contracts.gateway.responses import (
     CommandStartedResponse,
     EventIdAcceptedResponse,
 )
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db, get_events
 
 DEFAULT_POLL_SECONDS = 10
@@ -53,13 +54,18 @@ def command_diff(payload: CommandRequest) -> Diff:
 
 
 async def lease_next_command(
-    db: Any, cluster_id: str, agent_id: str, timeout: int
+    db: Any, cluster_id: str, workspace_id: str, agent_id: str, timeout: int
 ) -> JsonObject | None:
     """롱폴 — 이 클러스터의 다음 명령을 timeout 까지 대기하며 리스(아웃바운드 단일 채널)."""
     deadline = time.time() + min(timeout, MAX_POLL_SECONDS)
     while time.time() < deadline:
         row = await db.lease_agent_command(
-            cluster_id, CommandStatus.QUEUED, CommandStatus.LEASED, agent_id, LEASE_SECONDS
+            cluster_id,
+            workspace_id,
+            CommandStatus.QUEUED,
+            CommandStatus.LEASED,
+            agent_id,
+            LEASE_SECONDS,
         )
         if row:
             return row
@@ -80,6 +86,7 @@ async def commands(
             namespace=payload.namespace,
             reason=payload.reason or "manual command request",
             diff=command_diff(payload),
+            workspace_id=getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID),
             requested_by=current.user_id,
         ),
         actor=Actor(current.user_id, tuple(current.roles)),
@@ -98,12 +105,13 @@ agent_router = APIRouter(dependencies=[Depends(require_agent)])
 @agent_router.get(gateway_routes.AGENT_COMMAND_POLL_PATH, response_model=AgentCommandPollResponse)
 async def poll_command(
     cluster_id: str = Target.DEFAULT_CLUSTER_ID,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
     agent_id: str = "target-agent",
     timeout: int = DEFAULT_POLL_SECONDS,
     db: Any = Depends(get_db),
 ) -> AgentCommandPollResponse:
     # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
-    row = await lease_next_command(db, cluster_id, agent_id, timeout)
+    row = await lease_next_command(db, cluster_id, workspace_id, agent_id, timeout)
     return AgentCommandPollResponse(command=row)
 
 
@@ -112,7 +120,11 @@ async def command_start(
     command_id: str, payload: CommandStartRequest, db: Any = Depends(get_db)
 ) -> CommandStartedResponse:
     correlation_id = await db.start_agent_command(
-        command_id, payload.lease_id, payload.agent_id, CommandStatus.RUNNING
+        command_id,
+        payload.workspace_id,
+        payload.lease_id,
+        payload.agent_id,
+        CommandStatus.RUNNING,
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
@@ -128,7 +140,11 @@ async def command_result(
 ) -> EventIdAcceptedResponse:
     result = payload.model_dump()
     correlation_id = await db.complete_agent_command(
-        command_id, result, payload.lease_id, payload.agent_id
+        command_id,
+        payload.workspace_id,
+        result,
+        payload.lease_id,
+        payload.agent_id,
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)

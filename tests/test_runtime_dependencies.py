@@ -38,6 +38,7 @@ def test_gateway_redis_client_import_is_not_shadowed_by_config() -> None:
         key_prefix="session",
         token_bytes=32,
         default_roles=("member",),
+        default_workspace_id="default",
         rate_limit_key_prefix="rate",
         rate_limit=120,
         rate_limit_window_seconds=60,

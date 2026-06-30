@@ -21,6 +21,7 @@ class AgentCommand(Base):
     __tablename__ = "agent_commands"
 
     command_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     cluster_id: Mapped[str] = text_column()
     action: Mapped[str] = text_column()

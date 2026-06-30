@@ -13,6 +13,8 @@ from domains.identity.models import (
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    DEFAULT_WORKSPACE_NAME,
     AccountRole,
     ClusterRegistrationStatus,
     UserStatus,
@@ -48,16 +50,31 @@ class WorkspaceAccessRepository(DatabaseConnection):
         workspace_id = payload["workspace_id"]
         with self.connection() as conn:
             conn.execute(self._user_upsert(user_id))
-            conn.execute(self._workspace_upsert(workspace_id))
-            conn.execute(self._member_upsert(workspace_id, user_id))
+            conn.execute(self._workspace_upsert(workspace_id, workspace_id))
+            conn.execute(self._member_upsert(workspace_id, user_id, WorkspaceRole.MEMBER.value))
             conn.execute(self._cluster_upsert(payload))
         return payload
 
-    def has_user_accounts(self) -> bool:
-        table = UserAccount.__table__
-        statement = select(func.count()).select_from(table)
+    def ensure_default_workspace(self) -> JsonObject:
+        workspace_table = Workspace.__table__
+        statement = self._workspace_upsert(DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME).returning(
+            workspace_table.c.workspace_id,
+            workspace_table.c.name,
+            workspace_table.c.slug,
+            workspace_table.c.status,
+        )
         with self.connection() as conn:
-            return int(conn.execute(statement).scalar_one()) > 0
+            row = conn.execute(statement).mappings().first()
+        return (
+            dict(row)
+            if row is not None
+            else {
+                "workspace_id": DEFAULT_WORKSPACE_ID,
+                "name": DEFAULT_WORKSPACE_NAME,
+                "slug": DEFAULT_WORKSPACE_ID,
+                "status": WorkspaceStatus.ACTIVE.value,
+            }
+        )
 
     def get_user_by_email(self, email: str) -> JsonObject | None:
         table = UserAccount.__table__
@@ -112,12 +129,55 @@ class WorkspaceAccessRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
 
-    def activate_user(self, user_id: str) -> JsonObject | None:
+    def complete_email_verification(self, user_id: str) -> JsonObject | None:
+        table = UserAccount.__table__
+        with self.connection() as conn:
+            conn.execute(self._workspace_upsert(DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME))
+            is_first_owner = not self._has_workspace_owner(conn, DEFAULT_WORKSPACE_ID)
+            status = (
+                UserStatus.ACTIVE.value if is_first_owner else UserStatus.PENDING_APPROVAL.value
+            )
+            role = AccountRole.ADMIN.value if is_first_owner else AccountRole.MEMBER.value
+            statement = (
+                table.update()
+                .where(
+                    table.c.user_id == user_id,
+                    table.c.status == UserStatus.PENDING_EMAIL_VERIFICATION.value,
+                )
+                .values(status=status, role=role, updated_at=func.now())
+                .returning(
+                    table.c.user_id,
+                    table.c.email,
+                    table.c.password_hash,
+                    table.c.display_name,
+                    table.c.status,
+                    table.c.role,
+                )
+            )
+            row = conn.execute(statement).mappings().first()
+            if row is not None and is_first_owner:
+                conn.execute(
+                    self._member_upsert(
+                        DEFAULT_WORKSPACE_ID,
+                        user_id,
+                        WorkspaceRole.OWNER.value,
+                    )
+                )
+        return dict(row) if row is not None else None
+
+    def approve_user(self, user_id: str, workspace_id: str) -> JsonObject | None:
         table = UserAccount.__table__
         statement = (
             table.update()
-            .where(table.c.user_id == user_id)
-            .values(status=UserStatus.ACTIVE.value, updated_at=func.now())
+            .where(
+                table.c.user_id == user_id,
+                table.c.status == UserStatus.PENDING_APPROVAL.value,
+            )
+            .values(
+                status=UserStatus.ACTIVE.value,
+                role=AccountRole.MEMBER.value,
+                updated_at=func.now(),
+            )
             .returning(
                 table.c.user_id,
                 table.c.email,
@@ -128,8 +188,40 @@ class WorkspaceAccessRepository(DatabaseConnection):
             )
         )
         with self.connection() as conn:
+            conn.execute(self._workspace_upsert(workspace_id, workspace_id))
             row = conn.execute(statement).mappings().first()
-        return dict(row) if row is not None else None
+            if row is not None:
+                conn.execute(self._member_upsert(workspace_id, user_id, WorkspaceRole.MEMBER.value))
+        if row is None:
+            return None
+        data = dict(row)
+        data["workspace_id"] = workspace_id
+        return data
+
+    def get_default_workspace_id_for_user(self, user_id: str) -> str | None:
+        table = WorkspaceMember.__table__
+        statement = (
+            select(table.c.workspace_id)
+            .where(
+                table.c.user_id == user_id,
+                table.c.status == WorkspaceStatus.ACTIVE.value,
+            )
+            .order_by(table.c.created_at)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            value = conn.execute(statement).scalar_one_or_none()
+        return str(value) if value is not None else None
+
+    @staticmethod
+    def _has_workspace_owner(conn: Any, workspace_id: str) -> bool:
+        table = WorkspaceMember.__table__
+        statement = select(func.count()).where(
+            table.c.workspace_id == workspace_id,
+            table.c.role == WorkspaceRole.OWNER.value,
+            table.c.status == WorkspaceStatus.ACTIVE.value,
+        )
+        return int(conn.execute(statement).scalar_one()) > 0
 
     @staticmethod
     def _user_upsert(user_id: str) -> Any:
@@ -138,7 +230,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
             user_id=user_id,
             display_name=user_id,
             status=UserStatus.ACTIVE.value,
-            role=AccountRole.ADMIN.value,
+            role=AccountRole.MEMBER.value,
             updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
@@ -147,11 +239,11 @@ class WorkspaceAccessRepository(DatabaseConnection):
         )
 
     @staticmethod
-    def _workspace_upsert(workspace_id: str) -> Any:
+    def _workspace_upsert(workspace_id: str, name: str) -> Any:
         table = Workspace.__table__
         insert = pg_insert(table).values(
             workspace_id=workspace_id,
-            name=workspace_id,
+            name=name,
             slug=workspace_id,
             status=WorkspaceStatus.ACTIVE.value,
             updated_at=func.now(),
@@ -162,12 +254,12 @@ class WorkspaceAccessRepository(DatabaseConnection):
         )
 
     @staticmethod
-    def _member_upsert(workspace_id: str, user_id: str) -> Any:
+    def _member_upsert(workspace_id: str, user_id: str, role: str) -> Any:
         table = WorkspaceMember.__table__
         insert = pg_insert(table).values(
             workspace_id=workspace_id,
             user_id=user_id,
-            role=WorkspaceRole.OWNER.value,
+            role=role,
             permissions={"target": ["register", "install"]},
             status=WorkspaceStatus.ACTIVE.value,
             updated_at=func.now(),

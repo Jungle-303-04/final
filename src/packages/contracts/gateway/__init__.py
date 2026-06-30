@@ -26,6 +26,7 @@ from packages.contracts.gateway.responses import (
     HealthResponse,
     LogoutResponse,
     TargetInstallResponse,
+    UserApprovalResponse,
 )
 
 __all__ = [
@@ -53,5 +54,6 @@ __all__ = [
     "ResendEmailVerificationRequest",
     "SignupRequest",
     "TargetInstallResponse",
+    "UserApprovalResponse",
     "routes",
 ]

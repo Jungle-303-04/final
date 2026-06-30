@@ -58,5 +58,7 @@ class Settings:
     INVALID_CREDENTIALS_MESSAGE = "invalid email or password"
     EMAIL_VERIFICATION_REQUIRED_MESSAGE = "email verification required"
     EMAIL_VERIFICATION_INVALID_MESSAGE = "invalid or expired email verification token"
+    ACCOUNT_APPROVAL_REQUIRED_MESSAGE = "account approval required"
     PASSWORD_CONFIRMATION_MISMATCH_MESSAGE = "password confirmation does not match"
     USER_ALREADY_EXISTS_MESSAGE = "user already exists"
+    USER_NOT_FOUND_MESSAGE = "user not found"
