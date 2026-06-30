@@ -25,7 +25,6 @@ app = App("diff-analyze-worker")
 
 SAFE_REASON = "sandbox 한정 변경이라 안전"
 UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
-NO_DIFF_REASON = "desired and actual images already match"
 PR_TITLE = "Apply sandbox manifest"
 PRE_DEPLOY_ALERT_SEVERITY = "info"
 
@@ -34,7 +33,7 @@ def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
     # TODO(gitops): risk string check를 operation, namespace, RBAC policy rule로 교체
     # TODO(gitops): production 영향 시 approval_required/forbidden route 반환
     if diff.desired_image == diff.actual_image:
-        return False, NO_DIFF_REASON
+        return False, Sandbox.NO_DIFF_REASON
     safe = diff.risk == Sandbox.RISK_TAG
     return safe, SAFE_REASON if safe else UNSAFE_REASON
 

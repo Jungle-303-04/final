@@ -64,12 +64,11 @@ COMMAND_CONFIG = CommandConfig(
     ),
 )
 POLICY = Policy.build(COMMAND_CONFIG.policy_rules)
-NO_DIFF_REASON = "desired and actual images already match"
 
 
 def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     if command.diff.desired_image == command.diff.actual_image:
-        return PolicyResult.reject(NO_DIFF_REASON)
+        return PolicyResult.reject(Sandbox.NO_DIFF_REASON)
     return POLICY.evaluate(ModelLookup(command))
 
 
