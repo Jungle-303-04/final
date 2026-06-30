@@ -21,11 +21,9 @@ from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
 from domains.target.repository import TargetAgentRepository
 from packages.storage.engine import DatabaseConnection
-from packages.storage.repositories.events import (
-    DeadLetterRepository,
-    EventRepository,
-    OutboxRepository,
-)
+from packages.storage.repositories.dead_letter import DeadLetterRepository
+from packages.storage.repositories.event import EventRepository
+from packages.storage.repositories.outbox import OutboxRepository
 
 
 def _domain_modules(suffix: str) -> list[ModuleType]:
