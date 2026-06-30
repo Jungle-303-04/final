@@ -208,5 +208,31 @@ def test_workflow_controller_links_command_lifecycle_to_run() -> None:
         "workflow.step.recorded",
         "workflow.run.completed",
     ]
+    assert completed_db.called("attach_workflow_command")
     assert completed_db.called("update_workflow_run_for_command")
     assert completed[-1].workflow_run_id == "workflow-1"
+
+
+def test_workflow_controller_does_not_trust_agent_result_identity_without_mapping() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(get_workflow_identity_for_command=None)
+    outs = run_handler(
+        workflow.on_command_completed,
+        CommandCompletedBody(
+            command_id="cmd-orphan",
+            result={
+                "status": CommandStatus.COMPLETED,
+                "message": "applied",
+                "workspace_id": "spoofed-workspace",
+                "application_id": "spoofed-app",
+                "workflow_run_id": "spoofed-workflow",
+                "binding_id": "spoofed-binding",
+                "environment": "prod",
+            },
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert not db.called("attach_workflow_command")
+    assert not db.called("update_workflow_run_for_command")
