@@ -9,7 +9,7 @@ Platform/Integration 담당자는 “모든 코드를 직접 구현하는 사람
 ```text
 Common Contracts
   subjects.py
-  packages/contracts/event_bus/bodies/
+  src/packages/contracts/event_bus/bodies/
   EventEnvelope
   service ports
 
@@ -30,11 +30,11 @@ Infrastructure
 
 ## 담당 영역
 
-- `packages/config`
-- `packages/contracts`
-- `packages/events`
-- `packages/storage`
-- `packages/runtime`
+- `src/packages/config`
+- `src/packages/contracts`
+- `src/packages/events`
+- `src/packages/storage`
+- `src/packages/runtime`
 - `.github`
 - `deploy`
 - `scripts`
@@ -44,7 +44,7 @@ Infrastructure
 
 ## 현재 책임
 
-- `packages/contracts/event_bus`, `EventEnvelope`, body DTO, `EventClient`, `App`/`WorkerService`, retry, DLQ, replay 계약을 유지한다.
+- `src/packages/contracts/event_bus`, `EventEnvelope`, body DTO, `EventClient`, `App`/`WorkerService`, retry, DLQ, replay 계약을 유지한다.
 - CI가 실패한 PR이 merge되지 않도록 GitHub Actions와 branch protection 기준을 관리한다.
 - 배포 스크립트와 수요일 demo 검증 흐름을 유지한다.
 - DB/event 원자성이 필요해지는 시점에 outbox relay 도입 여부를 결정한다.
@@ -56,7 +56,7 @@ Infrastructure
 팀원에게는 내부 구현보다 아래 네 가지를 반복해서 알려준다.
 
 1. 어떤 event subject를 구독하는가.
-2. handler는 어떤 body DTO를 읽는가(`@app.sub(BodyType)`).
+2. handler는 어떤 body DTO를 읽는가(`@app.on(BodyType)`).
 3. 처리 후 어떤 event subject를 발행하는가.
 4. retry/DLQ/ack/nak는 runtime이 처리한다.
 
@@ -116,7 +116,7 @@ Infrastructure
 
 - `docs/events.md`에 subject별 producer/consumer/body 표.
 - `subjects.py` 그룹 주석 유지.
-- `packages/contracts/event_bus/bodies/` DTO 예제.
+- `src/packages/contracts/event_bus/bodies/` DTO 예제.
 - `make events`(`python scripts/events.py`) 카탈로그 유지: 각 이벤트를 `subject  Body  by=service/handler  fields=(...)`로 출력하고, `@app.on_event` 서비스는 "ALL-EVENT 구독(프로젝터)" 섹션에 모은다.
 - 각 멤버 가이드에 “이벤트를 몰라도 되는 연결 규칙” 섹션.
 
@@ -193,7 +193,7 @@ Infrastructure
 
 - subject naming test.
 - body required field test.
-- worker `@app.sub` subscription subject 존재 test.
+- worker `@app.on` subscription subject 존재 test.
 - docs/events subject mention test는 가능하면 추가.
 
 생각할 것:
@@ -221,13 +221,13 @@ CI에서는 통과하지만 Docker 컨테이너가 부팅 실패하는 차이를
 
 왜 해야 하는가:
 
-- pyproject에는 있는데 `services/requirements.txt`에 없는 의존성은 컨테이너에서 죽는다.
+- pyproject에는 있는데 `src/services/requirements.txt`에 없는 의존성은 컨테이너에서 죽는다.
 - import 이름 충돌 같은 문제는 실제 startup에서 드러난다.
 - 초보 팀원은 CI 초록불을 신뢰하므로 CI가 실제 실행에 가까워야 한다.
 
 구현할 것:
 
-- `services/requirements.txt`와 pyproject dependency 정합성 확인.
+- `src/services/requirements.txt`와 pyproject dependency 정합성 확인.
 - Gateway/worker container import smoke.
 - `make smoke`가 실제 app startup을 확인하도록 개선.
 - Redis/Postgres/NATS dependency health wait 확인.
@@ -392,7 +392,7 @@ DB 저장과 event publish가 동시에 필요한 흐름에서 불일치 위험�
 - `make check` 통과
 - CI workflow가 required check로 유지됨
 - 새 공통 contract에 최소 1개 테스트 존재
-- 새 event body 계약이 `packages/contracts/event_bus/bodies/`와 테스트에 반영됨
+- 새 event body 계약이 `src/packages/contracts/event_bus/bodies/`와 테스트에 반영됨
 - architecture/runtime 변경이 문서에 설명됨
 - 다른 service owner 동작을 바꾼 경우 사전 조율 기록 존재
 - Docker runtime dependency와 CI dependency가 어긋나지 않음
@@ -400,10 +400,10 @@ DB 저장과 event publish가 동시에 필요한 흐름에서 불일치 위험�
 
 ## 처음 읽을 파일
 
-1. `packages/contracts/event_bus`
-2. `packages/events`
-3. `packages/runtime`
-4. `packages/storage`
+1. `src/packages/contracts/event_bus`
+2. `src/packages/events`
+3. `src/packages/runtime`
+4. `src/packages/storage`
 5. `docs/events.md`
 6. `docs/team/conventions.md`
 7. `.github`
@@ -411,4 +411,4 @@ DB 저장과 event publish가 동시에 필요한 흐름에서 불일치 위험�
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `packages/contracts`, `packages/events`, `packages/storage`, `packages/runtime`, `docs/events.md`, `.github`를 먼저 읽어라. 변경 범위를 좁게 유지하고 각 service의 공개 계약을 깨지 마라.
+이 영역을 작업할 때는 `src/packages/contracts`, `src/packages/events`, `src/packages/storage`, `src/packages/runtime`, `docs/events.md`, `.github`를 먼저 읽어라. 변경 범위를 좁게 유지하고 각 service의 공개 계약을 깨지 마라.

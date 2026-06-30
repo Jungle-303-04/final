@@ -20,7 +20,7 @@ def _evt(subject: str, source: str = "rca-worker") -> EventEnvelope:
 
 
 def test_dashboard_projects_and_emits_update() -> None:
-    dash = load_service("projection/dashboard-projection-service")
+    dash = load_service("projection/dashboard-worker")
     db = SpyDb()
     outs = run_handler(dash.on_event, _evt("safe_pr.created"), db=db)
     assert subjects_of(outs) == ["dashboard.updated"]
@@ -28,7 +28,7 @@ def test_dashboard_projects_and_emits_update() -> None:
 
 
 def test_dashboard_ignores_its_own_event() -> None:
-    dash = load_service("projection/dashboard-projection-service")
+    dash = load_service("projection/dashboard-worker")
     db = SpyDb()
     outs = run_handler(dash.on_event, _evt("dashboard.updated"), db=db)
     assert outs == []
@@ -36,7 +36,7 @@ def test_dashboard_ignores_its_own_event() -> None:
 
 
 def test_audit_appends_log_without_chaining() -> None:
-    audit = load_service("projection/audit-timeline-service")
+    audit = load_service("projection/audit-worker")
     db = SpyDb()
     outs = run_handler(audit.on_event, _evt("command.requested"), db=db)
     assert outs == []

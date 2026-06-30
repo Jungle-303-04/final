@@ -33,10 +33,10 @@ doctor: ## 로컬 필수 도구 점검
 	bash scripts/doctor.sh
 
 lint: ## Ruff 린트 검사
-	uv run ruff check services packages scripts tests
+	uv run ruff check src scripts tests
 
 format: ## Ruff 포맷 적용
-	uv run ruff format services packages scripts tests
+	uv run ruff format src scripts tests
 
 hooks: ## git 커밋 훅 설치(pre-commit, 팀 공통 포맷 강제)
 	uv run pre-commit install
@@ -80,5 +80,5 @@ kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYM
 
 clean: ## Python 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
-	find services packages tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find src tests scripts -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -name .DS_Store -delete
