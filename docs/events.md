@@ -162,6 +162,7 @@ async def on_command_requested(
 | Agent/Target | `agent.connected`, `cluster.evidence.received`, `cluster.desired_state.changed`, `cluster.reconcile.requested`, `cluster.reconcile.started`, `cluster.drift.detected`, `cluster.reconcile.completed`, `cluster.reconcile.failed` |
 | Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
 | RCA/Safe PR | `evidence.built`, `rca.completed`, `safe_pr.requested`, `safe_pr.created`, `safe_pr.failed` |
+| Workflow/Approval | `workflow.created`, `workflow.run.started`, `workflow.step.recorded`, `workflow.run.completed`, `workflow.run.failed`, `approval.requested`, `approval.granted`, `approval.rejected` |
 | Dashboard | `dashboard.updated` |
 | DLQ | `dead_letter.created` |
 | Demo (골든패스) | `demo.ping.requested`, `demo.pong.requested`, `demo.pong.delivered`, `demo.pong.failed` |
@@ -277,6 +278,7 @@ async def on_event(evt: EventEnvelope, ctx):
 | Manifest Render Worker (App) | `src/services/gitops/manifest-render-worker/app.py` | `git.changed` |
 | Diff Worker (App) | `src/services/gitops/diff-worker/app.py` | `manifest.rendered` |
 | Diff Analyze Worker (App) | `src/services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
+| Workflow Controller (App) | `src/services/gitops/workflow-controller/app.py` | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed`, `safe_pr.created`, `safe_pr.failed`, `approval.granted`, `approval.rejected`, `command.queued_for_agent`, `command.completed` |
 | Repo Gateway Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.requested` |
 | Command Worker (App) | `src/services/command/command-worker/app.py` | `command.requested` |
 | Target Reconcile Worker (App) | `src/services/target/reconcile-worker/app.py` | `cluster.desired_state.changed`, `cluster.reconcile.requested` |
@@ -308,6 +310,8 @@ Git repo와 target cluster는 직접 1:1로 묶지 않는다. `deployment_bindin
 git_repositories
   -> git_watch_targets(branch/path polling cursor)
   -> deployment_bindings(repo path -> cluster/namespace/app)
+  -> applications(사용자가 보는 서비스 단위)
+  -> workflow_runs / workflow_run_steps / approvals(제품 실행 상태)
   -> manifest_artifacts(commit별 render/invalid 상태)
   -> command queue / target agent
 ```

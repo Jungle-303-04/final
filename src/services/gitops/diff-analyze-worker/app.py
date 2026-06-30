@@ -47,6 +47,9 @@ def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
         workspace_id=diff.workspace_id,
         repository_id=diff.repository_id,
         binding_id=diff.binding_id,
+        application_id=diff.application_id,
+        workflow_run_id=diff.workflow_run_id,
+        environment=diff.environment,
         manifest_path=diff.manifest_path,
     )
 
@@ -60,6 +63,10 @@ def build_auto_command_request(diff: Diff) -> CommandRequestedBody:
         reason="safe sandbox gitops apply",
         diff=diff,
         workspace_id=diff.workspace_id,
+        application_id=diff.application_id,
+        workflow_run_id=diff.workflow_run_id,
+        binding_id=diff.binding_id,
+        environment=diff.environment,
     )
 
 
@@ -73,6 +80,10 @@ def build_pre_deploy_alert_request(diff: Diff) -> AlertRequestedBody:
         reason="safe sandbox deploy will continue after alert gate",
         next_command=build_auto_command_request(diff),
         workspace_id=diff.workspace_id,
+        application_id=diff.application_id,
+        workflow_run_id=diff.workflow_run_id,
+        binding_id=diff.binding_id,
+        environment=diff.environment,
     )
 
 

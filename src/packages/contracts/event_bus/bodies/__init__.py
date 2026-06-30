@@ -30,6 +30,9 @@ from domains.command.events import (
     RoutingConstraint,
 )
 from domains.gitops.events import (
+    ApprovalGrantedBody,
+    ApprovalRejectedBody,
+    ApprovalRequestedBody,
     Diff,
     DiffAnalyzedBody,
     DiffDetectedBody,
@@ -41,6 +44,11 @@ from domains.gitops.events import (
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
+    WorkflowCreatedBody,
+    WorkflowRunCompletedBody,
+    WorkflowRunFailedBody,
+    WorkflowRunStartedBody,
+    WorkflowStepRecordedBody,
 )
 from domains.mail.events import EmailVerificationRequestedBody, EmailVerificationSentBody
 from domains.projection.events import DashboardUpdatedBody
@@ -79,6 +87,9 @@ __all__ = [
     "ClusterReconcileFailedBody",
     "ClusterReconcileRequestedBody",
     "ClusterReconcileStartedBody",
+    "ApprovalGrantedBody",
+    "ApprovalRejectedBody",
+    "ApprovalRequestedBody",
     "AlertDispatchedBody",
     "AlertRejectedBody",
     "AlertRequestedBody",
@@ -121,4 +132,9 @@ __all__ = [
     "SafePrRequestedBody",
     "TargetDesiredComponent",
     "TargetDrift",
+    "WorkflowCreatedBody",
+    "WorkflowRunCompletedBody",
+    "WorkflowRunFailedBody",
+    "WorkflowRunStartedBody",
+    "WorkflowStepRecordedBody",
 ]

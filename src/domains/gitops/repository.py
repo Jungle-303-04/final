@@ -4,30 +4,42 @@ from __future__ import annotations
 
 import hashlib
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import (
+    Application,
+    Approval,
     DeploymentBinding,
     GitRepository,
     GitWatchTarget,
     ManifestArtifact,
     RepoChange,
+    WorkflowRun,
+    WorkflowRunStep,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID,
     DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_ENVIRONMENT,
     DEFAULT_MANIFEST_PATH,
     DEFAULT_REPO_BRANCH,
     DEFAULT_REPO_REF,
     DEFAULT_REPOSITORY_ID,
     DEFAULT_WATCH_TARGET_ID,
+    DEFAULT_WORKFLOW_RUN_ID,
+    ApplicationStatus,
+    ApprovalStatus,
     DeploymentBindingStatus,
     GitProvider,
     ManifestArtifactStatus,
     RepositoryStatus,
     ResourceClass,
     WatchTargetStatus,
+    WorkflowRunStatus,
+    WorkflowStepName,
+    WorkflowStepStatus,
 )
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -151,6 +163,228 @@ class RepoChangeRepository(DatabaseConnection):
         )
         return {**payload, "workspace_id": workspace_id, "binding_id": binding_id}
 
+    def upsert_application(self, payload: JsonObject) -> JsonObject:
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        repository_id = str(payload.get("repository_id", DEFAULT_REPOSITORY_ID))
+        application_id = derive_application_id(payload)
+        table = Application.__table__
+        insert = pg_insert(table).values(
+            application_id=application_id,
+            workspace_id=workspace_id,
+            repository_id=repository_id,
+            name=str(payload.get("name") or payload.get("app_name") or DEFAULT_APPLICATION_ID),
+            manifest_path=str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
+            status=str(payload.get("status", ApplicationStatus.ACTIVE.value)),
+            metadata=dict(payload.get("metadata", {})),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.application_id],
+            set_={
+                "repository_id": insert.excluded.repository_id,
+                "name": insert.excluded.name,
+                "manifest_path": insert.excluded.manifest_path,
+                "status": insert.excluded.status,
+                "metadata": insert.excluded.metadata,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return {**payload, "workspace_id": workspace_id, "application_id": application_id}
+
+    def start_workflow_run(self, payload: JsonObject) -> JsonObject:
+        workflow_run_id = derive_workflow_run_id(payload)
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        application_id = derive_application_id(payload)
+        binding_id = str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID))
+        table = WorkflowRun.__table__
+        insert = pg_insert(table).values(
+            workflow_run_id=workflow_run_id,
+            workspace_id=workspace_id,
+            application_id=application_id,
+            binding_id=binding_id,
+            environment=str(payload.get("environment", DEFAULT_ENVIRONMENT)),
+            cluster_id=str(payload.get("cluster_id", "")),
+            commit_sha=str(payload.get("commit_sha", "")),
+            status=str(payload.get("status", WorkflowRunStatus.STARTED.value)),
+            current_step=str(payload.get("current_step", WorkflowStepName.GIT.value)),
+            summary=payload.get("summary"),
+            command_id=payload.get("command_id"),
+            metadata=dict(payload.get("metadata", {})),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.workflow_run_id],
+            set_={
+                "status": insert.excluded.status,
+                "current_step": insert.excluded.current_step,
+                "summary": insert.excluded.summary,
+                "command_id": insert.excluded.command_id,
+                "metadata": insert.excluded.metadata,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return {
+            **payload,
+            "workspace_id": workspace_id,
+            "application_id": application_id,
+            "binding_id": binding_id,
+            "workflow_run_id": workflow_run_id,
+        }
+
+    def update_workflow_run(self, payload: JsonObject) -> JsonObject:
+        workflow_run_id = derive_workflow_run_id(payload)
+        values: JsonObject = {"updated_at": func.now()}
+        for key in ("status", "current_step", "summary", "command_id"):
+            if key in payload:
+                values[key] = payload[key]
+        if "metadata" in payload:
+            values["metadata"] = dict(payload["metadata"])
+        table = WorkflowRun.__table__
+        statement = (
+            table.update()
+            .where(table.c.workflow_run_id == workflow_run_id)
+            .values(**values)
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return {**payload, "workflow_run_id": workflow_run_id}
+
+    def record_workflow_step(self, payload: JsonObject) -> JsonObject:
+        workflow_run_id = derive_workflow_run_id(payload)
+        step_name = str(payload.get("name") or payload.get("step") or WorkflowStepName.GIT.value)
+        step_id = str(payload.get("step_id") or derive_workflow_step_id(workflow_run_id, step_name))
+        table = WorkflowRunStep.__table__
+        insert = pg_insert(table).values(
+            step_id=step_id,
+            workflow_run_id=workflow_run_id,
+            workspace_id=str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            application_id=derive_application_id(payload),
+            binding_id=str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            environment=str(payload.get("environment", DEFAULT_ENVIRONMENT)),
+            name=step_name,
+            status=str(payload.get("status", WorkflowStepStatus.SUCCEEDED.value)),
+            message=payload.get("message"),
+            details=dict(payload.get("details", {})),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.workflow_run_id, table.c.name],
+            set_={
+                "status": insert.excluded.status,
+                "message": insert.excluded.message,
+                "details": insert.excluded.details,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return {**payload, "workflow_run_id": workflow_run_id, "step_id": step_id, "name": step_name}
+
+    def request_workflow_approval(self, payload: JsonObject) -> JsonObject:
+        workflow_run_id = derive_workflow_run_id(payload)
+        approval_id = str(payload.get("approval_id") or derive_approval_id(workflow_run_id))
+        table = Approval.__table__
+        insert = pg_insert(table).values(
+            approval_id=approval_id,
+            workflow_run_id=workflow_run_id,
+            workspace_id=str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            application_id=derive_application_id(payload),
+            binding_id=str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            environment=str(payload.get("environment", DEFAULT_ENVIRONMENT)),
+            status=str(payload.get("status", ApprovalStatus.REQUESTED.value)),
+            reason=str(payload.get("reason", "")),
+            requested_role=str(payload.get("requested_role", AccessRole.DEPLOYER.value)),
+            requested_by=payload.get("requested_by"),
+            decided_by=payload.get("decided_by"),
+            decision=payload.get("decision"),
+            details=dict(payload.get("details", {})),
+            expires_at=payload.get("expires_at"),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.approval_id],
+            set_={
+                "status": insert.excluded.status,
+                "reason": insert.excluded.reason,
+                "requested_role": insert.excluded.requested_role,
+                "requested_by": insert.excluded.requested_by,
+                "decided_by": insert.excluded.decided_by,
+                "decision": insert.excluded.decision,
+                "details": insert.excluded.details,
+                "expires_at": insert.excluded.expires_at,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return {**payload, "workflow_run_id": workflow_run_id, "approval_id": approval_id}
+
+    def resolve_workflow_approval(self, payload: JsonObject) -> JsonObject:
+        workflow_run_id = derive_workflow_run_id(payload)
+        approval_id = str(payload.get("approval_id") or derive_approval_id(workflow_run_id))
+        table = Approval.__table__
+        statement = (
+            table.update()
+            .where(table.c.approval_id == approval_id)
+            .values(
+                status=str(payload.get("status", ApprovalStatus.GRANTED.value)),
+                decided_by=payload.get("decided_by"),
+                decision=payload.get("decision"),
+                details=dict(payload.get("details", {})),
+                updated_at=func.now(),
+            )
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return {**payload, "workflow_run_id": workflow_run_id, "approval_id": approval_id}
+
+    def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None:
+        table = WorkflowRun.__table__
+        statement = (
+            table.update()
+            .where(table.c.workflow_run_id == workflow_run_id)
+            .values(command_id=command_id, updated_at=func.now())
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
+    def update_workflow_run_for_command(self, payload: JsonObject) -> JsonObject:
+        command_id = str(payload["command_id"])
+        values: JsonObject = {"updated_at": func.now()}
+        for key in ("status", "current_step", "summary"):
+            if key in payload:
+                values[key] = payload[key]
+        if "metadata" in payload:
+            values["metadata"] = dict(payload["metadata"])
+        table = WorkflowRun.__table__
+        statement = table.update().where(table.c.command_id == command_id).values(**values)
+        with self.connection() as conn:
+            conn.execute(statement)
+        return payload
+
+    def get_workflow_identity_for_command(self, command_id: str) -> JsonObject | None:
+        table = WorkflowRun.__table__
+        statement = (
+            select(
+                table.c.workflow_run_id,
+                table.c.workspace_id,
+                table.c.application_id,
+                table.c.binding_id,
+                table.c.environment,
+                table.c.cluster_id,
+                table.c.commit_sha,
+            )
+            .where(table.c.command_id == command_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
+
     def save_repo_change(
         self,
         correlation_id: str,
@@ -253,3 +487,44 @@ def manifest_artifact_id(payload: JsonObject) -> str:
         ]
     )
     return f"manifest-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_application_id(payload: JsonObject) -> str:
+    explicit = payload.get("application_id")
+    if explicit and explicit != DEFAULT_APPLICATION_ID:
+        return str(explicit)
+    raw = "|".join(
+        [
+            str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            str(payload.get("repository_id", DEFAULT_REPOSITORY_ID)),
+            str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
+            str(payload.get("name") or payload.get("app_name") or DEFAULT_APPLICATION_ID),
+        ]
+    )
+    return f"app-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_workflow_run_id(payload: JsonObject) -> str:
+    explicit = payload.get("workflow_run_id")
+    if explicit and explicit != DEFAULT_WORKFLOW_RUN_ID:
+        return str(explicit)
+    raw = "|".join(
+        [
+            str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            derive_application_id(payload),
+            str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            str(payload.get("environment", DEFAULT_ENVIRONMENT)),
+            str(payload.get("commit_sha", "")),
+        ]
+    )
+    return f"workflow-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_workflow_step_id(workflow_run_id: str, step_name: str) -> str:
+    raw = f"{workflow_run_id}|{step_name}"
+    return f"step-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_approval_id(workflow_run_id: str) -> str:
+    raw = f"{workflow_run_id}|deploy-approval"
+    return f"approval-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"

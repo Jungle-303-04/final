@@ -34,7 +34,7 @@
 ```text
 services
   + api-gateway       HTTP 경계, 내부 로그인/session, dashboard API
-  + gitops            Git 변경 -> manifest/diff/analyze/repo write split workers
+  + gitops            Git 변경 -> workflow state -> manifest/diff/analyze/repo write split workers
   + command-worker               command policy -> target agent queue
   + target/reconcile-worker      target desired state -> reconcile result
   + rca-worker                   evidence -> RCA -> safe PR event
@@ -69,6 +69,7 @@ secrets                         SOPS/age 기반 secret 공유 템플릿
 ```text
 api-gateway        -> python src/services/gateway/api-gateway/app.py
 git-pull-worker               -> python src/services/gitops/git-pull-worker/app.py
+workflow-controller           -> python src/services/gitops/workflow-controller/app.py
 manifest-render-worker        -> python src/services/gitops/manifest-render-worker/app.py
 diff-worker                   -> python src/services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
@@ -109,7 +110,7 @@ fake-otel                     -> python src/services/target/cluster-agent/fake_t
 - `EventEnvelope`: workflow handler가 받는 이벤트 객체. transport/wire 필드는 소문자 `payload`이며, 서비스 코드는 `evt["payload"]` 대신 `evt.payload`처럼 속성 접근을 사용한다.
 - `src/packages/contracts/event_bus/bodies/`: 서비스가 발행하는 event body dataclass 계약(base class `EventBody`). wire key 별칭이 필요하면 body class에서만 관리한다.
 - `src/packages/contracts/gateway`: API Gateway HTTP 요청 schema
-- `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
+- `WorkflowStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
 - `TargetReconcileStore`: target desired-state와 reconcile 결과 저장 경계
@@ -154,6 +155,7 @@ async def on_event(evt: EventEnvelope, ctx):
 
 - `api-gateway`
 - `git-pull-worker`
+- `workflow-controller`
 - `manifest-render-worker`
 - `diff-worker`
 - `diff-analyze-worker`
@@ -183,12 +185,16 @@ async def on_event(evt: EventEnvelope, ctx):
 GitHub webhook
 -> API Gateway
 -> NATS git.webhook.received
+-> Workflow Controller가 Application/WorkflowRun 시작
 -> GitOps split workers
+-> NATS workflow.step.recorded / approval.requested 또는 approval.granted
 -> NATS command.requested
 -> Command Worker
 -> Target Agent용 command queue 저장
+-> Workflow Controller가 apply 단계와 command_id 연결
 -> Target Cluster Agent가 polling 후 command 완료
 -> NATS command.completed
+-> NATS workflow.run.completed 또는 workflow.run.failed
 
 Target Cluster Agent
 -> API Gateway /agent/evidence
