@@ -5,13 +5,13 @@ from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody, Com
 from packages.contracts.event_bus.bodies.base import EventBodyDecodeError
 from packages.contracts.gateway.requests import (
     CommandRequest,
-    EmailVerificationRequest,
     GitHubWebhookRequest,
     LoginRequest,
     ResendEmailVerificationRequest,
     SignupRequest,
     TargetRegisterRequest,
 )
+from packages.contracts.gateway.responses import EmailVerificationResponse
 from packages.events.envelope import event
 
 
@@ -45,9 +45,14 @@ def test_resend_verification_request_rejects_invalid_email() -> None:
         ResendEmailVerificationRequest(email="not-email", password="local-password")
 
 
-def test_email_verification_request_rejects_empty_token() -> None:
+def test_email_verification_response_rejects_token_field() -> None:
     with pytest.raises(ValidationError):
-        EmailVerificationRequest(token="")
+        EmailVerificationResponse(
+            accepted=True,
+            verification_required=True,
+            email="local@example.com",
+            token="secret",
+        )
 
 
 def test_github_webhook_schema_rejects_invalid_replica_count() -> None:

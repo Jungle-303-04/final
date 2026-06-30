@@ -18,10 +18,6 @@ AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
 AGENT_AUTH_NOT_CONFIGURED_MESSAGE = "agent auth not configured"
 
 
-def get_auth(request: Request) -> Any:
-    return request.app.state.auth
-
-
 def get_password_auth(request: Request) -> Any:
     return request.app.state.password_auth
 
