@@ -29,8 +29,24 @@ class StrictModel(BaseModel):
 class LoginRequest(StrictModel):
     # 우리 서비스 자체 계정으로 로그인할 때 받는 값이다.
     # role 같은 권한 필드는 클라이언트가 보낼 수 없고, 서버가 DB/session 기준으로만 정한다.
-    email: str
-    password: str
+    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=8)
+
+
+class SignupRequest(StrictModel):
+    # 가입도 권한 필드는 받지 않는다. 최초 role/session 정책은 서버가 정한다.
+    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=8)
+    password_confirm: str = Field(min_length=8)
+
+
+class EmailVerificationRequest(StrictModel):
+    token: str = Field(min_length=1)
+
+
+class ResendEmailVerificationRequest(StrictModel):
+    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=8)
 
 
 class GitHubWebhookRequest(StrictModel):

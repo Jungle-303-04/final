@@ -6,7 +6,11 @@ from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
+    EmailVerificationRequest,
     GitHubWebhookRequest,
+    LoginRequest,
+    ResendEmailVerificationRequest,
+    SignupRequest,
 )
 
 __all__ = [
@@ -15,7 +19,11 @@ __all__ = [
     "CommandRequest",
     "CommandResultRequest",
     "CommandStartRequest",
+    "EmailVerificationRequest",
     "Gateway",
     "GitHubWebhookRequest",
+    "LoginRequest",
+    "ResendEmailVerificationRequest",
+    "SignupRequest",
     "routes",
 ]
