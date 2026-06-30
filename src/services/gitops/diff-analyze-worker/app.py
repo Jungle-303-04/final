@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.config.constants import GitHub, Sandbox
+from packages.config.constants import Command, GitHub, Sandbox, Target
 from packages.contracts.event_bus.bodies import (
+    AlertRequestedBody,
+    CommandRequestedBody,
     Diff,
     DiffAnalyzedBody,
     DiffDetectedBody,
@@ -25,6 +27,7 @@ SAFE_REASON = "sandbox 한정 변경이라 안전"
 UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
 NO_DIFF_REASON = "desired and actual images already match"
 PR_TITLE = "Apply sandbox manifest"
+PRE_DEPLOY_ALERT_SEVERITY = "info"
 
 
 def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
@@ -42,6 +45,29 @@ def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
         title=PR_TITLE,
         body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
         provider=GitHub.PROVIDER,
+    )
+
+
+def build_auto_command_request(diff: Diff) -> CommandRequestedBody:
+    # TODO(gitops): make auto deploy route policy-driven per workspace/repo/cluster environment.
+    return CommandRequestedBody(
+        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        action=Command.APPLY_MANIFEST_ACTION,
+        namespace=diff.namespace,
+        reason="safe sandbox gitops apply",
+        diff=diff,
+    )
+
+
+def build_pre_deploy_alert_request(diff: Diff) -> AlertRequestedBody:
+    # TODO(alert): include deployment window, blast radius, approver list, and rollback metadata.
+    return AlertRequestedBody(
+        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        namespace=diff.namespace,
+        severity=PRE_DEPLOY_ALERT_SEVERITY,
+        message=f"pre-deploy check passed for {diff.resource}",
+        reason="safe sandbox deploy will continue after alert gate",
+        next_command=build_auto_command_request(diff),
     )
 
 
@@ -67,8 +93,10 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
         # )
         #
         # 현재 split 구조에서는 diff를 바로 실행 command로 보내지 않고,
-        # 안전 판정 후 safe_pr.requested를 발행한다.
+        # 안전 판정 후 safe_pr.requested와 pre-deploy alert gate를 발행한다.
+        # alert-worker가 게이트 함수를 통과시키면 command.requested로 이어진다.
         yield build_safe_pr_request(diff)
+        yield build_pre_deploy_alert_request(diff)
 
 
 if __name__ == "__main__":

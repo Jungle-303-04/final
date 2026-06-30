@@ -44,6 +44,7 @@ class OAuth:
 
 class Command:
     DEFAULT_ACTION: Final[str] = "rollout_restart"
+    APPLY_MANIFEST_ACTION: Final[str] = "apply_manifest"
 
 
 class CommandStatus:

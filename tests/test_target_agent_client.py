@@ -71,3 +71,39 @@ def test_management_client_ship_evidence_returns_success_status() -> None:
             await close_client(client)
 
     assert asyncio.run(run()) == 202
+
+
+def test_target_agent_builds_apply_manifest_patch() -> None:
+    agent_module = load_agent_module()
+
+    patch = agent_module.build_apply_manifest_patch("checkout-api", "img:new")
+
+    assert agent_module.deployment_name_from_resource("deployment/checkout-api") == "checkout-api"
+    assert patch["spec"]["template"]["spec"]["containers"] == [
+        {"name": "checkout-api", "image": "img:new"}
+    ]
+
+
+def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    agent = agent_module.TargetClusterAgent()
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "deployment/checkout-api",
+                        "namespace": "sandbox",
+                        "desired_image": "img:new",
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is False
+    assert "dry-run" in result["message"]
