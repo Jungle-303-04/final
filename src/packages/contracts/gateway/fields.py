@@ -27,6 +27,7 @@ class Gateway(StrEnum):
     ERROR = "error"
     EVENT = "event"
     EVENT_ID = "event_id"
+    EMAIL = "email"
     LEASE_ID = "lease_id"
     MESSAGE = "message"
     NAMESPACE = "namespace"
@@ -43,3 +44,5 @@ class Gateway(StrEnum):
     STATUS_READY = "ready"
     STATUS_REPLAYED = "replayed"
     USER_ID = "user_id"
+    VERIFICATION_REQUIRED = "verification_required"
+    VERIFICATION_URL = "verification_url"

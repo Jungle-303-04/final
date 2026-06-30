@@ -39,11 +39,41 @@ class FakeUserStore:
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         return self.users.get(email)
 
+    def create_user(
+        self,
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        status: str,
+    ) -> dict[str, Any] | None:
+        if email in self.users:
+            return None
+        user = {
+            "user_id": user_id,
+            "email": email,
+            "password_hash": password_hash,
+            "display_name": display_name,
+            "status": status,
+        }
+        self.users[email] = user
+        return user
+
+    def activate_user(self, user_id: str) -> dict[str, Any] | None:
+        for user in self.users.values():
+            if user.get("user_id") == user_id or user.get("id") == user_id:
+                user["status"] = "active"
+                return user
+        return None
+
 
 class FakeSessionStore:
     def __init__(self, auth_module) -> None:
         self.auth_module = auth_module
         self.sessions: dict[str, Any] = {}
+        self.email_tokens: dict[str, dict[str, str]] = {}
+        self.rate_checks: list[tuple[Any, ...]] = []
+        self.block_rate_limit = False
 
     async def create_session(self, user_id: str, roles: list[str] | None = None) -> Any:
         # Redis 대신 dict에 저장해서 PasswordAuthService 흐름만 검증한다.
@@ -57,6 +87,38 @@ class FakeSessionStore:
 
     async def delete_session(self, token: str) -> None:
         self.sessions.pop(token, None)
+
+    async def check_rate_limit(
+        self,
+        key: str,
+        limit: int | None = None,
+        window_seconds: int | None = None,
+    ) -> None:
+        self.rate_checks.append(("plain", key, limit, window_seconds))
+        if self.block_rate_limit:
+            raise self.auth_module.RateLimitExceeded
+
+    async def check_escalating_rate_limit(
+        self,
+        key: str,
+        limit: int,
+        window_seconds: int,
+        lock_steps_seconds: tuple[int, ...],
+        strike_ttl_seconds: int,
+    ) -> None:
+        self.rate_checks.append(
+            ("escalating", key, limit, window_seconds, lock_steps_seconds, strike_ttl_seconds)
+        )
+        if self.block_rate_limit:
+            raise self.auth_module.RateLimitExceeded(lock_steps_seconds[0])
+
+    async def create_email_verification_token(self, user_id: str, email: str) -> str:
+        token = f"email-token-{len(self.email_tokens) + 1}"
+        self.email_tokens[token] = {"user_id": user_id, "email": email}
+        return token
+
+    async def consume_email_verification_token(self, token: str | None) -> dict[str, str] | None:
+        return self.email_tokens.pop(token or "", None)
 
 
 def test_hash_password_does_not_store_plain_password() -> None:
@@ -93,6 +155,173 @@ def test_password_login_creates_session() -> None:
         assert session.user_id == "local-user"
         assert session.roles == ["owner"]
         assert await sessions.get_session(session.token) == session
+
+    asyncio.run(run())
+
+
+def test_password_signup_creates_pending_user_and_verification_token() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore({})
+        sessions = FakeSessionStore(auth)
+        service = auth.PasswordAuthService(users, sessions)
+
+        challenge = await service.signup(
+            "LOCAL@example.com", "local-password", "local-password", "127.0.0.1"
+        )
+
+        user = users.get_user_by_email("local@example.com")
+        assert user is not None
+        assert user["display_name"] == "local"
+        assert user["status"] == "pending_email_verification"
+        assert user["password_hash"] != "local-password"
+        assert auth.verify_password("local-password", user["password_hash"])
+        assert challenge.user_id == user["user_id"]
+        assert challenge.token == "email-token-1"
+        assert sessions.sessions == {}
+        assert len(sessions.rate_checks) == 2
+
+    asyncio.run(run())
+
+
+def test_password_signup_rejects_password_confirmation_mismatch() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        service = auth.PasswordAuthService(FakeUserStore({}), FakeSessionStore(auth))
+
+        with pytest.raises(HTTPException) as exc:
+            await service.signup(
+                "local@example.com", "local-password", "different-password", "127.0.0.1"
+            )
+        assert exc.value.status_code == 400
+        assert exc.value.detail == "password confirmation does not match"
+
+    asyncio.run(run())
+
+
+def test_password_signup_rejects_duplicate_email() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore(
+            {
+                "local@example.com": {
+                    "user_id": "local-user",
+                    "email": "local@example.com",
+                    "password_hash": auth.hash_password("local-password"),
+                    "display_name": "Local User",
+                    "status": "active",
+                }
+            }
+        )
+        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+
+        with pytest.raises(HTTPException) as exc:
+            await service.signup(
+                "LOCAL@example.com", "local-password", "local-password", "127.0.0.1"
+            )
+        assert exc.value.status_code == 409
+        assert exc.value.detail == "user already exists"
+
+    asyncio.run(run())
+
+
+def test_password_signup_rate_limit_blocks_before_user_lookup() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore({})
+        sessions = FakeSessionStore(auth)
+        sessions.block_rate_limit = True
+        service = auth.PasswordAuthService(users, sessions)
+
+        with pytest.raises(HTTPException) as exc:
+            await service.signup(
+                "local@example.com", "local-password", "local-password", "127.0.0.1"
+            )
+        assert exc.value.status_code == 429
+        assert users.users == {}
+
+    asyncio.run(run())
+
+
+def test_resend_verification_requires_pending_password_and_issues_new_token() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore(
+            {
+                "local@example.com": {
+                    "user_id": "local-user",
+                    "email": "local@example.com",
+                    "password_hash": auth.hash_password("local-password"),
+                    "display_name": "Local User",
+                    "status": "pending_email_verification",
+                }
+            }
+        )
+        sessions = FakeSessionStore(auth)
+        service = auth.PasswordAuthService(users, sessions)
+
+        challenge = await service.resend_email_verification(
+            "local@example.com", "local-password", "127.0.0.1"
+        )
+
+        assert challenge is not None
+        assert challenge.token == "email-token-1"
+        assert challenge.user_id == "local-user"
+
+    asyncio.run(run())
+
+
+def test_password_login_rejects_pending_email_verification() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore(
+            {
+                "local@example.com": {
+                    "user_id": "local-user",
+                    "email": "local@example.com",
+                    "password_hash": auth.hash_password("local-password"),
+                    "display_name": "Local User",
+                    "status": "pending_email_verification",
+                }
+            }
+        )
+        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+
+        with pytest.raises(HTTPException) as exc:
+            await service.login("local@example.com", "local-password")
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "email verification required"
+
+    asyncio.run(run())
+
+
+def test_verify_email_activates_user_and_creates_session() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore(
+            {
+                "local@example.com": {
+                    "user_id": "local-user",
+                    "email": "local@example.com",
+                    "password_hash": auth.hash_password("local-password"),
+                    "display_name": "Local User",
+                    "status": "pending_email_verification",
+                }
+            }
+        )
+        sessions = FakeSessionStore(auth)
+        sessions.email_tokens["email-token-1"] = {
+            "user_id": "local-user",
+            "email": "local@example.com",
+        }
+        service = auth.PasswordAuthService(users, sessions)
+
+        session = await service.verify_email("email-token-1")
+
+        assert users.get_user_by_email("local@example.com")["status"] == "active"
+        assert session.user_id == "local-user"
+        assert await sessions.get_session(session.token) == session
+        assert "email-token-1" not in sessions.email_tokens
 
     asyncio.run(run())
 
