@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.identity.models import (
@@ -355,8 +355,19 @@ class WorkspaceAccessRepository(DatabaseConnection):
         return insert.on_conflict_do_update(
             index_elements=[table.c.workspace_id, table.c.user_id],
             set_={
-                "role": insert.excluded.role,
-                "permissions": insert.excluded.permissions,
+                "role": case(
+                    (insert.excluded.role == WorkspaceRole.OWNER.value, insert.excluded.role),
+                    (table.c.role == WorkspaceRole.OWNER.value, table.c.role),
+                    else_=insert.excluded.role,
+                ),
+                "permissions": case(
+                    (
+                        insert.excluded.role == WorkspaceRole.OWNER.value,
+                        insert.excluded.permissions,
+                    ),
+                    (table.c.role == WorkspaceRole.OWNER.value, table.c.permissions),
+                    else_=insert.excluded.permissions,
+                ),
                 "status": WorkspaceStatus.ACTIVE.value,
                 "updated_at": func.now(),
             },
