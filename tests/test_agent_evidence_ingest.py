@@ -79,3 +79,17 @@ def test_agent_evidence_records_new_window_after_emit() -> None:
     assert events.body.cluster_id == "trusted-cluster"
     assert db.recorded
     assert db.recorded[0][1:3] == ("trusted-workspace", "trusted-cluster")
+
+
+def test_agent_evidence_key_is_namespaced_by_trusted_identity() -> None:
+    # body 의 evidence_key 접두사("workspace-1:cluster-1:...")가 아니라 토큰 identity 로
+    # 네임스페이스돼야 한다 — 다른 워크스페이스 키 선점/충돌(증거 억제) 차단.
+    events = SpyEvents()
+    db = DedupeDb()
+
+    asyncio.run(agent_evidence(evidence_request(), AGENT_IDENTITY, events, db))
+
+    recorded_key = db.recorded[0][0]
+    assert recorded_key.startswith("trusted-workspace:trusted-cluster:")
+    # agent 가 위조한 workspace-1 접두사가 키 선두를 차지하지 못한다.
+    assert not recorded_key.startswith("workspace-1:")
