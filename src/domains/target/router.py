@@ -329,7 +329,9 @@ def install_response(
     )
 
 
-@session_router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
+# require_admin_session 이 세션을 이미 검증 → session_router(라우터 단위 require_session) 대신
+# base router 에 둬 이중 require_session(레이트리밋 2배)을 피한다.
+@router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(
     payload: TargetRegisterRequest,
     current: Any = Depends(require_admin_session),  # kubectl apply 실행 → admin 만
