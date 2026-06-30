@@ -78,7 +78,14 @@ def test_agent_evidence_records_new_window_after_emit() -> None:
     assert events.body.workspace_id == "trusted-workspace"
     assert events.body.cluster_id == "trusted-cluster"
     assert db.recorded
+    recorded_key = db.recorded[0][0]
+    assert events.body.evidence_key == recorded_key
+    assert recorded_key.startswith("trusted-workspace:trusted-cluster:")
     assert db.recorded[0][1:3] == ("trusted-workspace", "trusted-cluster")
+    stored_payload = db.recorded[0][-1]
+    assert stored_payload["workspace_id"] == "trusted-workspace"
+    assert stored_payload["cluster_id"] == "trusted-cluster"
+    assert stored_payload["evidence_key"] == recorded_key
 
 
 def test_agent_evidence_key_is_namespaced_by_trusted_identity() -> None:
