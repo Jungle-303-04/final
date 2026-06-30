@@ -79,6 +79,7 @@ class NodeCollector:
             interval_seconds=int(env(COLLECT_INTERVAL_ENV, DEFAULT_COLLECT_INTERVAL_SECONDS)),
         )
 
+    ## for Loki-log
     async def snapshot(self) -> NodeRuntimeSample:
         # Build a human/log-friendly snapshot for the collector process itself.
         # Kubernetes metric values and scrape errors belong to /metrics collectors.
@@ -90,10 +91,25 @@ class NodeCollector:
             runtime=RUNTIME_NAME,
         )
 
+    async def log_forever(self) -> None:
+        # The same snapshot is also written as structured stdout for Loki/Alloy.
+        while True:
+            print(
+                json.dumps(
+                    {
+                        "service": SERVICE_NAME,
+                        "kind": "node_runtime_sample",
+                        "sample": (await self.snapshot()).to_payload(),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            await asyncio.sleep(self.interval_seconds)
+
+    ## for Prometheus-metrics
     def metric_labels(self) -> dict[str, str]:
-        # These labels identify which node produced each metric sample.
-        # In a multi-node cluster, each DaemonSet Pod will produce the same metric names
-        # with a different node label, and Prometheus can group by node.
+        # Build common labels attached to every metric.
         return {
             "node": self.node_name,
             "runtime": RUNTIME_NAME,
@@ -118,21 +134,6 @@ class NodeCollector:
         # Prometheus pulls text from /metrics; this method bridges collection to text output.
         return render_prometheus_metrics(await self.metric_samples())
 
-    async def log_forever(self) -> None:
-        # The same snapshot is also written as structured stdout for Loki/Alloy.
-        while True:
-            print(
-                json.dumps(
-                    {
-                        "service": SERVICE_NAME,
-                        "kind": "node_runtime_sample",
-                        "sample": (await self.snapshot()).to_payload(),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-            await asyncio.sleep(self.interval_seconds)
 
 
 def create_app(collector: NodeCollector | None = None) -> FastAPI:
