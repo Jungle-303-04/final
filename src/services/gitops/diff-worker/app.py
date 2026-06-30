@@ -68,24 +68,7 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
-    # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 diff + desired.diff.detected):
-    #
-    # diff = {
-    #     "resource": RESOURCE_REF,
-    #     "namespace": SANDBOX_NAMESPACE,
-    #     "desired_image": rendered["spec"]["image"],
-    #     "actual_image": PREVIOUS_IMAGE,
-    #     "risk": SYNC_RISK,
-    # }
-    # await self.events.publish(
-    #     EventSubject.DESIRED_DIFF_DETECTED,
-    #     SERVICE_NAME,
-    #     {"diff": diff},
-    #     evt["correlation_id"],
-    # )
-    #
-    # 현재 split 구조: rendered manifest body → Diff 값 객체 변환
-    # subject 발행은 yield DiffDetectedBody(...)로 런타임 처리
+    # 렌더 결과를 Diff 값 객체로 변환하고 subject 발행은 런타임 yield가 처리한다.
     actual_image = (
         load_actual_resource_image(evt)
         if evt.rendered_manifest.spec.image
