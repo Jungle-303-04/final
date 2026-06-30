@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from domains.identity.dependencies import require_admin_session, require_agent, require_session
+from domains.identity.dependencies import require_admin_session, require_agent
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
@@ -21,9 +21,12 @@ AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_NOT_CONFIGURED = "agent token is not configured"
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
+# 콤마구분 허용 컨텍스트 목록. 설정 시 목록 밖 --context 거부(임의 클러스터 적용 차단).
+# 미설정 시 컨텍스트 미지정(현재 kubeconfig)만 허용 — 페이로드로 임의 컨텍스트 지정 불가.
+KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
+KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
 
 router = APIRouter()
-session_router = APIRouter(dependencies=[Depends(require_session)])
 agent_router = APIRouter(dependencies=[Depends(require_agent)])
 
 
@@ -303,7 +306,16 @@ spec:
 """
 
 
+def allowed_kube_contexts() -> set[str]:
+    raw = env(KUBE_CONTEXT_ALLOWLIST_ENV, "")
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
 def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
+    # 입력(컨텍스트) 검증을 먼저 — 허용목록이 비어있으면(미설정) 어떤 명시 컨텍스트도
+    # 거부(fail-closed), 설정돼 있으면 목록에 든 컨텍스트만 허용. 임의 클러스터 적용 차단.
+    if kube_context and kube_context not in allowed_kube_contexts():
+        raise HTTPException(status_code=403, detail=KUBE_CONTEXT_NOT_ALLOWED)
     if not shutil.which("kubectl"):
         raise HTTPException(status_code=503, detail=KUBECTL_NOT_AVAILABLE)
     command = ["kubectl"]
@@ -329,8 +341,8 @@ def install_response(
     )
 
 
-# require_admin_session 이 세션을 이미 검증 → session_router(라우터 단위 require_session) 대신
-# base router 에 둬 이중 require_session(레이트리밋 2배)을 피한다.
+# require_admin_session 이 세션을 검증 → base router 에 둔다.
+# (라우터 단위 require_session + require_admin_session = 이중 검증/레이트리밋 2배 회피)
 @router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(
     payload: TargetRegisterRequest,
@@ -386,5 +398,4 @@ async def lease_evidence_source(
     return EvidenceSourceLeaseResponse(**lease)
 
 
-router.include_router(session_router)
 router.include_router(agent_router)
