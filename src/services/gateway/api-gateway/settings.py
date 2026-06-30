@@ -52,6 +52,9 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
+    METRICS_TOKEN_ENV = (
+        "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제(미설정=내부 스크레이핑 허용)
+    )
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
