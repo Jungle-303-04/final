@@ -20,7 +20,6 @@ AGENT_TOKEN_NOT_CONFIGURED = "agent token is not configured"
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
 INSTALL_STATUS_REGISTERED = "registered"
-AGENT_TOKEN_REF_PREFIX = "credential/agent"
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -336,7 +335,6 @@ async def register_target(
     if not agent_token:
         raise HTTPException(status_code=503, detail=AGENT_TOKEN_NOT_CONFIGURED)
 
-    token_ref = f"{AGENT_TOKEN_REF_PREFIX}/{payload.cluster_id}"
     if hasattr(db, "register_target_cluster"):
         db.register_target_cluster(
             {
@@ -345,7 +343,6 @@ async def register_target(
                 "cluster_id": payload.cluster_id,
                 "name": payload.name,
                 "environment": payload.environment,
-                "agent_token_ref": token_ref,
                 "settings": payload.model_dump(
                     exclude={"apply", "kube_context"},
                 ),

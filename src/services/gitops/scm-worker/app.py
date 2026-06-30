@@ -27,17 +27,8 @@ SCM_PR_URL_PREFIX_ENV = "SCM_PR_URL_PREFIX"
 PR_MODE = "stub_pr_adapter"
 PR_STATUS_CREATED = "created"
 PR_NUMBER_MODULO = 100000
-MISSING_GITHUB_TOKEN_MESSAGE = "github credential not available"
 MISSING_PR_ADAPTER_MESSAGE = "github pr adapter not configured"
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
-
-
-async def resolve_github_credential(ctx: EventContext[PullRequestStore]) -> str:
-    # TODO(scm): request a short-lived credential from Token Broker instead of reading latest ref.
-    token_ref = await ctx.db.latest_github_token_ref()
-    if not token_ref:
-        raise PermissionError(MISSING_GITHUB_TOKEN_MESSAGE)
-    return token_ref
 
 
 def resolve_pr_url_prefix() -> str:
@@ -48,22 +39,17 @@ def resolve_pr_url_prefix() -> str:
     return prefix
 
 
-async def create_safe_pr(
-    evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
-) -> tuple[str, str]:
+async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
     # TODO(scm): create branch, commit patch, open PR, and persist provider response atomically.
-    # TODO(scm): enforce repo allowlist, branch naming, token scope, and rollback metadata before write.
-    token_ref = await resolve_github_credential(ctx)
+    # TODO(scm): enforce repo allowlist, branch naming, and rollback metadata before write.
     pr_url = f"{resolve_pr_url_prefix()}/{int(time.time()) % PR_NUMBER_MODULO}"
     await ctx.db.save_pull_request(
         ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
     )
-    return pr_url, token_ref
+    return pr_url
 
 
 def safe_pr_failure_reason(exc: Exception) -> str:
-    if isinstance(exc, PermissionError):
-        return MISSING_GITHUB_TOKEN_MESSAGE
     return SAFE_PR_CREATION_FAILED_MESSAGE
 
 
@@ -81,14 +67,11 @@ async def on_safe_pr_requested(
     #
     # outbound 게이트웨이 정형: 외부 호출(PR 생성)의 try/except 는 deliver 가 흡수하고,
     # 핸들러는 "무엇을 호출하고 성공/실패를 어떤 이벤트로 낼지"만 선언(타 게이트웨이와 동일 모양).
-    async def create_pr() -> tuple[str, str]:
+    async def create_pr() -> str:
         return await create_safe_pr(evt, ctx)
 
-    def created(result: tuple[str, str]) -> SafePrCreatedBody:
-        pr_url, token_ref = result
-        return SafePrCreatedBody(
-            pr_url=pr_url, provider=evt.provider, token_ref=token_ref, mode=PR_MODE
-        )
+    def created(pr_url: str) -> SafePrCreatedBody:
+        return SafePrCreatedBody(pr_url=pr_url, provider=evt.provider, mode=PR_MODE)
 
     async for out in deliver(
         call=create_pr,

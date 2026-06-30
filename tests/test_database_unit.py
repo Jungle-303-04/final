@@ -52,33 +52,6 @@ def test_sqlalchemy_url_uses_psycopg_driver(monkeypatch) -> None:
     assert conn.sqlalchemy_url.startswith("postgresql+psycopg://")
 
 
-def test_oauth_scopes_appends_github_repo_scope() -> None:
-    scopes = db.Database._oauth_scopes("github", {"scopes": ["profile"]})
-    assert "repo" in scopes  # GitHub 은 repo 스코프 강제
-    default = db.Database._oauth_scopes("github", {})
-    assert "repo" in default and "profile" in default
-
-
-def test_oauth_scopes_non_github_untouched() -> None:
-    scopes = db.Database._oauth_scopes("gitlab", {"scopes": ["profile"]})
-    assert scopes == ["profile"]  # GitHub 아니면 repo 안 붙음
-
-
-def test_credential_placeholder_payload_has_no_provider_secret() -> None:
-    payload = db.Database._credential_placeholder_payload()
-    assert payload["status"] == "pending"
-    assert "note" in payload
-    assert "access_token" not in payload
-    assert "refresh_token" not in payload
-
-
-def test_pending_credential_is_not_ready_for_outbound_provider_call() -> None:
-    assert not db.Database._is_ready_provider_credential(
-        db.Database._credential_placeholder_payload()
-    )
-    assert db.Database._is_ready_provider_credential({"status": "ready"})
-
-
 def test_schema_defines_expected_tables() -> None:
     expected = {
         "events",
@@ -92,14 +65,10 @@ def test_schema_defines_expected_tables() -> None:
         "agent_commands",
         "dashboard_cards",
         "audit_log",
-        "oauth_accounts",
-        "token_vault",
         "user_accounts",
         "workspaces",
         "workspace_members",
-        "repository_integrations",
         "cluster_registrations",
-        "repo_cluster_bindings",
     }
     assert expected <= set(metadata.tables)
 
@@ -109,9 +78,7 @@ def test_workspace_access_repository_declares_management_tables() -> None:
         "user_accounts",
         "workspaces",
         "workspace_members",
-        "repository_integrations",
         "cluster_registrations",
-        "repo_cluster_bindings",
     }
     assert expected == db.Database.required_tables()
 

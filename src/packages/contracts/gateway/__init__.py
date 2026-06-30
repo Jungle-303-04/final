@@ -7,7 +7,6 @@ from packages.contracts.gateway.requests import (
     CommandResultRequest,
     CommandStartRequest,
     GitHubWebhookRequest,
-    OAuthCallbackRequest,
 )
 
 __all__ = [
@@ -18,6 +17,5 @@ __all__ = [
     "CommandStartRequest",
     "Gateway",
     "GitHubWebhookRequest",
-    "OAuthCallbackRequest",
     "routes",
 ]

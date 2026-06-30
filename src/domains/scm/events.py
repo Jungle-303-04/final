@@ -30,7 +30,6 @@ class SafePrCreatedBody(EventBody):
 
     pr_url: str
     provider: str
-    token_ref: str
     mode: str
 
 
