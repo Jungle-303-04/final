@@ -88,7 +88,7 @@ ci: PR 필수 검증 workflow 추가
 
 - Python 스타일 기준은 Google Python Style Guide 한글 번역본을 따른다.
   - 기준 문서: https://github.com/Yosseulsin-JOB/Google-Python-Style-Guide-kor/blob/master/Google%20Python%20Style%20Guide%20kor.md
-  - 린트: `make lint` (`uv run ruff check services packages scripts tests`)
+  - 린트: `make lint` (`uv run ruff check src scripts tests`)
   - 포맷: `make format` (`uv run ruff format ...`)
 - 줄 길이는 100자를 기본으로 한다. 80자는 의미 없는 줄바꿈을 부르고, 무제한은
   가로 스크롤을 부른다. 폭은 포매터가 관리하므로 `E501`(line-too-long) 린트는 끈다.
@@ -170,7 +170,7 @@ PR을 열기 전:
 
 ```bash
 make check
-python3 -m py_compile $(find services packages -name '*.py' -print)
+bash scripts/test.sh
 ```
 
 수요일 데모 전:
