@@ -3,18 +3,42 @@ from __future__ import annotations
 import os
 
 import httpx
-from settings import Settings
 
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 
 
-class NodeCollectorManager:
-    """Keeps the node collector DaemonSet on every target-cluster node.
+class NodeCollectorManagerConfig:
+    NODE_COLLECTOR_ENABLED_ENV = "NODE_COLLECTOR_ENABLED"
+    NODE_COLLECTOR_IMAGE_ENV = "NODE_COLLECTOR_IMAGE"
+    NODE_COLLECTOR_NAMESPACE_ENV = "NODE_COLLECTOR_NAMESPACE"
+    NODE_COLLECTOR_NAME = "optional-node-collector"
+    NODE_COLLECTOR_APP_LABEL = "optional-node-collector"
+    NODE_COLLECTOR_CONTAINER_NAME = "node-collector"
+    NODE_COLLECTOR_DEFAULT_IMAGE = "service:local"
+    NODE_COLLECTOR_DEFAULT_NAMESPACE = "target"
+    NODE_COLLECTOR_PORT = 9100
+    NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS = 15
+    NODE_COLLECTOR_CREATED_MESSAGE = "node collector daemonset created"
+    NODE_COLLECTOR_PATCHED_MESSAGE = "node collector daemonset reconciled"
+    NODE_COLLECTOR_DRY_RUN_MESSAGE = "kubernetes api not configured; node collector dry-run only"
+    NODE_COLLECTOR_DISABLED_MESSAGE = "node collector reconcile disabled"
+    NODE_COLLECTOR_MANAGED_BY_LABEL = "ops.service/managed-by"
+    NODE_COLLECTOR_MANAGED_BY_VALUE = "cluster-agent"
 
-    Team handoff: target registration installs only the cluster-agent. From that point,
-    this target-agent boundary owns collector rollout and drift correction.
-    TODO(target): replace this inline DaemonSet with a Helm/Kustomize-rendered collector spec.
+    KUBERNETES_SERVICE_HOST_ENV = "KUBERNETES_SERVICE_HOST"
+    KUBERNETES_SERVICE_PORT_ENV = "KUBERNETES_SERVICE_PORT_HTTPS"
+    SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    HTTP_TIMEOUT_SECONDS = 20
+
+
+class NodeCollectorManager:
+    """target cluster 노드마다 node collector DaemonSet 유지.
+
+    인계 기준: target registration은 cluster-agent 설치까지만 담당.
+    이후 collector rollout과 drift correction은 target-agent 경계에서 처리.
+    TODO(target): inline DaemonSet을 Helm/Kustomize 렌더링 collector spec으로 교체
     """
 
     def __init__(
@@ -33,26 +57,29 @@ class NodeCollectorManager:
     @classmethod
     def from_env(cls, transport: httpx.AsyncBaseTransport | None = None) -> NodeCollectorManager:
         return cls(
-            enabled=truthy(env(Settings.NODE_COLLECTOR_ENABLED_ENV, "true")),
-            image=env(Settings.NODE_COLLECTOR_IMAGE_ENV, Settings.NODE_COLLECTOR_DEFAULT_IMAGE),
+            enabled=truthy(env(NodeCollectorManagerConfig.NODE_COLLECTOR_ENABLED_ENV, "true")),
+            image=env(
+                NodeCollectorManagerConfig.NODE_COLLECTOR_IMAGE_ENV,
+                NodeCollectorManagerConfig.NODE_COLLECTOR_DEFAULT_IMAGE,
+            ),
             namespace=env(
-                Settings.NODE_COLLECTOR_NAMESPACE_ENV,
-                Settings.NODE_COLLECTOR_DEFAULT_NAMESPACE,
+                NodeCollectorManagerConfig.NODE_COLLECTOR_NAMESPACE_ENV,
+                NodeCollectorManagerConfig.NODE_COLLECTOR_DEFAULT_NAMESPACE,
             ),
             transport=transport,
         )
 
     async def reconcile(self) -> tuple[bool, str]:
         if not self.enabled:
-            return False, Settings.NODE_COLLECTOR_DISABLED_MESSAGE
+            return False, NodeCollectorManagerConfig.NODE_COLLECTOR_DISABLED_MESSAGE
         base_url = kubernetes_api_base_url()
         token = service_account_token()
         if not base_url or not token:
-            return False, Settings.NODE_COLLECTOR_DRY_RUN_MESSAGE
+            return False, NodeCollectorManagerConfig.NODE_COLLECTOR_DRY_RUN_MESSAGE
 
         daemonset = self.daemonset()
         collection_url = f"{base_url}/apis/apps/v1/namespaces/{self.namespace}/daemonsets"
-        resource_url = f"{collection_url}/{Settings.NODE_COLLECTOR_NAME}"
+        resource_url = f"{collection_url}/{NodeCollectorManagerConfig.NODE_COLLECTOR_NAME}"
         async with kubernetes_client(self.transport) as client:
             current = await client.get(resource_url, headers=kubernetes_headers(token))
             if current.status_code == 404:
@@ -62,7 +89,7 @@ class NodeCollectorManager:
                     headers=kubernetes_headers(token, "application/json"),
                 )
                 created.raise_for_status()
-                return True, Settings.NODE_COLLECTOR_CREATED_MESSAGE
+                return True, NodeCollectorManagerConfig.NODE_COLLECTOR_CREATED_MESSAGE
 
             current.raise_for_status()
             patched = await client.patch(
@@ -71,29 +98,33 @@ class NodeCollectorManager:
                 headers=kubernetes_headers(token, "application/strategic-merge-patch+json"),
             )
             patched.raise_for_status()
-        return True, Settings.NODE_COLLECTOR_PATCHED_MESSAGE
+        return True, NodeCollectorManagerConfig.NODE_COLLECTOR_PATCHED_MESSAGE
 
     def daemonset(self) -> JsonObject:
         labels = {
-            "app": Settings.NODE_COLLECTOR_APP_LABEL,
-            Settings.NODE_COLLECTOR_MANAGED_BY_LABEL: Settings.NODE_COLLECTOR_MANAGED_BY_VALUE,
+            "app": NodeCollectorManagerConfig.NODE_COLLECTOR_APP_LABEL,
+            NodeCollectorManagerConfig.NODE_COLLECTOR_MANAGED_BY_LABEL: NodeCollectorManagerConfig.NODE_COLLECTOR_MANAGED_BY_VALUE,
         }
         return {
             "apiVersion": "apps/v1",
             "kind": "DaemonSet",
             "metadata": {
-                "name": Settings.NODE_COLLECTOR_NAME,
+                "name": NodeCollectorManagerConfig.NODE_COLLECTOR_NAME,
                 "namespace": self.namespace,
                 "labels": labels,
             },
             "spec": {
-                "selector": {"matchLabels": {"app": Settings.NODE_COLLECTOR_APP_LABEL}},
+                "selector": {
+                    "matchLabels": {"app": NodeCollectorManagerConfig.NODE_COLLECTOR_APP_LABEL}
+                },
                 "updateStrategy": {"type": "RollingUpdate"},
                 "template": {
                     "metadata": {
                         "annotations": {
                             "prometheus.io/path": "/metrics",
-                            "prometheus.io/port": str(Settings.NODE_COLLECTOR_PORT),
+                            "prometheus.io/port": str(
+                                NodeCollectorManagerConfig.NODE_COLLECTOR_PORT
+                            ),
                             "prometheus.io/scrape": "true",
                         },
                         "labels": labels,
@@ -109,15 +140,15 @@ class NodeCollectorManager:
 
 def node_collector_container(image: str) -> JsonObject:
     return {
-        "name": Settings.NODE_COLLECTOR_CONTAINER_NAME,
+        "name": NodeCollectorManagerConfig.NODE_COLLECTOR_CONTAINER_NAME,
         "image": image,
         "imagePullPolicy": "IfNotPresent",
         "command": ["python", "src/services/target/node-collector/app.py"],
         "env": [
-            {"name": "PORT", "value": str(Settings.NODE_COLLECTOR_PORT)},
+            {"name": "PORT", "value": str(NodeCollectorManagerConfig.NODE_COLLECTOR_PORT)},
             {
                 "name": "COLLECT_INTERVAL_SECONDS",
-                "value": str(Settings.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS),
+                "value": str(NodeCollectorManagerConfig.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS),
             },
             {"name": "NODE_NAME", "valueFrom": {"fieldRef": {"fieldPath": "spec.nodeName"}}},
             {"name": "POD_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}},
@@ -126,20 +157,22 @@ def node_collector_container(image: str) -> JsonObject:
                 "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}},
             },
         ],
-        "ports": [{"name": "metrics", "containerPort": Settings.NODE_COLLECTOR_PORT}],
+        "ports": [
+            {"name": "metrics", "containerPort": NodeCollectorManagerConfig.NODE_COLLECTOR_PORT}
+        ],
     }
 
 
 def kubernetes_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
     verify: str | bool = (
-        Settings.SERVICE_ACCOUNT_CA_PATH
-        if os.path.exists(Settings.SERVICE_ACCOUNT_CA_PATH)
+        NodeCollectorManagerConfig.SERVICE_ACCOUNT_CA_PATH
+        if os.path.exists(NodeCollectorManagerConfig.SERVICE_ACCOUNT_CA_PATH)
         else True
     )
     return httpx.AsyncClient(
         verify=verify,
         transport=transport,
-        timeout=Settings.HTTP_TIMEOUT_SECONDS,
+        timeout=NodeCollectorManagerConfig.HTTP_TIMEOUT_SECONDS,
     )
 
 
@@ -151,15 +184,17 @@ def kubernetes_headers(token: str, content_type: str | None = None) -> dict[str,
 
 
 def kubernetes_api_base_url() -> str | None:
-    host = env(Settings.KUBERNETES_SERVICE_HOST_ENV, "")
-    port = env(Settings.KUBERNETES_SERVICE_PORT_ENV, "443")
+    host = env(NodeCollectorManagerConfig.KUBERNETES_SERVICE_HOST_ENV, "")
+    port = env(NodeCollectorManagerConfig.KUBERNETES_SERVICE_PORT_ENV, "443")
     return f"https://{host}:{port}" if host else None
 
 
 def service_account_token() -> str | None:
-    if not os.path.exists(Settings.SERVICE_ACCOUNT_TOKEN_PATH):
+    if not os.path.exists(NodeCollectorManagerConfig.SERVICE_ACCOUNT_TOKEN_PATH):
         return None
-    with open(Settings.SERVICE_ACCOUNT_TOKEN_PATH, encoding="utf-8") as token_file:
+    with open(
+        NodeCollectorManagerConfig.SERVICE_ACCOUNT_TOKEN_PATH, encoding="utf-8"
+    ) as token_file:
         return token_file.read().strip()
 
 

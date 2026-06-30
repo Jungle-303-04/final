@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
-from domains.command.router import RESOURCE_ACCESS_DENIED, commands
-from packages.contracts.gateway.requests import CommandRequest
+from domains.command.router import RESOURCE_ACCESS_DENIED, command_heartbeat, commands
+from packages.contracts.gateway.requests import CommandHeartbeatRequest, CommandRequest
 
 
 class SpyAccessDb:
@@ -40,6 +40,23 @@ class SpyEvents:
 
 def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("member",), workspace_id="workspace-1")
+
+
+class SpyCommandLeaseDb:
+    def __init__(self, correlation_id: str | None) -> None:
+        self.correlation_id = correlation_id
+        self.calls: list[tuple[str, str, str, str, int]] = []
+
+    async def heartbeat_agent_command(
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        lease_seconds: int,
+    ) -> str | None:
+        self.calls.append((command_id, workspace_id, lease_id, agent_id, lease_seconds))
+        return self.correlation_id
 
 
 def test_command_request_requires_cluster_deploy_access() -> None:
@@ -80,5 +97,45 @@ def test_command_request_denies_without_cluster_access() -> None:
             raise AssertionError("expected HTTPException")
 
         assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_command_heartbeat_extends_current_lease() -> None:
+    async def run() -> None:
+        db = SpyCommandLeaseDb(correlation_id="corr-1")
+        response = await command_heartbeat(
+            "cmd-1",
+            CommandHeartbeatRequest(
+                workspace_id="workspace-1",
+                agent_id="agent-1",
+                lease_id="lease-1",
+            ),
+            db,
+        )
+
+        assert response.accepted is True
+        assert response.correlation_id == "corr-1"
+        assert db.calls == [("cmd-1", "workspace-1", "lease-1", "agent-1", 60)]
+
+    asyncio.run(run())
+
+
+def test_command_heartbeat_rejects_stale_lease() -> None:
+    async def run() -> None:
+        try:
+            await command_heartbeat(
+                "cmd-1",
+                CommandHeartbeatRequest(
+                    workspace_id="workspace-1",
+                    agent_id="agent-1",
+                    lease_id="old-lease",
+                ),
+                SpyCommandLeaseDb(correlation_id=None),
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 404
+        else:
+            raise AssertionError("expected HTTPException")
 
     asyncio.run(run())

@@ -29,6 +29,9 @@ DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus:8000"
 DEFAULT_LOKI_BASE_URL = "http://fake-loki:8000"
 MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
+DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS = 30
+MIN_EVIDENCE_SOURCE_LEASE_SECONDS = 5
+MAX_EVIDENCE_SOURCE_LEASE_SECONDS = 300
 
 
 class LoginRequest(StrictModel):
@@ -76,6 +79,10 @@ class AgentEvidenceRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     correlation_id: str | None = None
+    agent_id: str | None = None
+    source_id: str | None = None
+    window_start: str | None = None
+    evidence_key: str | None = None
     kubernetes: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, Any] = Field(default_factory=dict)
     logs: list[dict[str, Any]] = Field(default_factory=list)
@@ -117,6 +124,10 @@ class CommandStartRequest(StrictModel):
     lease_id: str
 
 
+class CommandHeartbeatRequest(CommandStartRequest):
+    pass
+
+
 class CommandResultRequest(StrictModel):
     status: Literal["completed", "failed"] = DEFAULT_COMMAND_STATUS
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
@@ -125,3 +136,15 @@ class CommandResultRequest(StrictModel):
     lease_id: str
     applied: bool = False
     message: str = EMPTY_COMMAND_MESSAGE
+
+
+class EvidenceSourceLeaseRequest(StrictModel):
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    agent_id: str
+    window_start: str
+    lease_seconds: int = Field(
+        default=DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS,
+        ge=MIN_EVIDENCE_SOURCE_LEASE_SECONDS,
+        le=MAX_EVIDENCE_SOURCE_LEASE_SECONDS,
+    )
