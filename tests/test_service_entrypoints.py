@@ -120,3 +120,12 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         assert legacy_arg not in manifests
 
     assert "src/services/management-api-gateway/app.py" not in manifests
+
+
+def test_target_install_is_driven_by_registration_script() -> None:
+    up_script = read_project_file("scripts/up.sh")
+    register_script = read_project_file("scripts/register-target.sh")
+
+    assert "scripts/register-target.sh" in up_script
+    assert "/targets" in register_script
+    assert "kubectl --context" in register_script

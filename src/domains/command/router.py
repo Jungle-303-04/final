@@ -37,7 +37,7 @@ router = APIRouter()
 
 def command_diff(payload: CommandRequest) -> Diff:
     raw = payload.diff or {
-        "resource": "manual/command",
+        "resource": "deployment/checkout-api",
         "namespace": payload.namespace,
         "desired_image": payload.action,
         "actual_image": "unknown",
