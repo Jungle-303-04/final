@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from packages.config.constants import CommandStatus, Sandbox, Target
@@ -123,6 +125,41 @@ def test_workflow_controller_auto_approves_safe_diff() -> None:
         "approval.granted",
     ]
     assert db.called("request_workflow_approval")
+    assert db.called("resolve_workflow_approval")
+    assert outs[-1].decision == "auto-approved"
+
+
+def test_workflow_controller_does_not_complete_manifest_diff_only_by_same_image() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+    diff = workflow_diff()
+    manifest_diff = replace(
+        diff,
+        desired_image=diff.actual_image,
+        desired_manifest={
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": "checkout-api", "namespace": Sandbox.NAMESPACE},
+            "spec": {"replicas": 3},
+        },
+    )
+
+    outs = run_handler(
+        workflow.on_diff_analyzed,
+        DiffAnalyzedBody(
+            diff=manifest_diff,
+            safe=True,
+            risk=Sandbox.RISK_TAG,
+            reason="sandbox safe",
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == [
+        "workflow.step.recorded",
+        "workflow.step.recorded",
+        "approval.granted",
+    ]
     assert db.called("resolve_workflow_approval")
     assert outs[-1].decision == "auto-approved"
 

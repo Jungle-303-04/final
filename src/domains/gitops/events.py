@@ -83,6 +83,15 @@ class Diff(EventBody):
     resource_class: str = ResourceClass.APPLICATION.value
     desired_manifest: JsonObject = field(default_factory=dict)
 
+    def is_image_only_noop(self) -> bool:
+        """이미지 비교만으로 no-op 판정이 가능한 legacy diff인지 확인."""
+
+        return (
+            bool(self.desired_image)
+            and self.desired_image == self.actual_image
+            and not self.desired_manifest
+        )
+
 
 @event(EventSubject.GIT_WEBHOOK_RECEIVED)
 @dataclass(frozen=True)

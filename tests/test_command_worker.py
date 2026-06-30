@@ -74,6 +74,30 @@ def configmap_command_request() -> CommandRequestedBody:
     )
 
 
+def manifest_command_request_with_same_image() -> CommandRequestedBody:
+    return CommandRequestedBody(
+        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        action=Command.APPLY_MANIFEST_ACTION,
+        namespace=Sandbox.NAMESPACE,
+        reason="test",
+        diff=Diff(
+            resource="deployment/checkout-api",
+            namespace=Sandbox.NAMESPACE,
+            desired_image="checkout:same",
+            actual_image="checkout:same",
+            risk=Sandbox.RISK_TAG,
+            desired_manifest={
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {"name": "checkout-api", "namespace": Sandbox.NAMESPACE},
+                "spec": {"replicas": 3},
+            },
+        ),
+        workspace_id="workspace-1",
+        requested_by="user-1",
+    )
+
+
 async def collect_events(source: AsyncIterator[EventBody]) -> list[EventBody]:
     return [body async for body in source]
 
@@ -134,6 +158,25 @@ def test_command_handler_allows_non_image_manifest_diff() -> None:
         CommandQueuedForAgentBody,
     ]
     assert store.calls[0][1]["diff"]["desired_manifest"]["kind"] == "ConfigMap"
+
+
+def test_command_handler_queues_manifest_diff_even_when_image_matches() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(
+            handle_command_requested(manifest_command_request_with_same_image(), ctx)
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [
+        CommandDispatchReadyBody,
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert store.calls[0][1]["diff"]["desired_manifest"]["spec"]["replicas"] == 3
 
 
 def test_command_handler_rejects_unsupported_action_before_queue() -> None:
