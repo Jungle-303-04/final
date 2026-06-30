@@ -45,6 +45,7 @@ class EventSubject(StrEnum):
     GIT_WEBHOOK_RECEIVED = "git.webhook.received"  # 깃 webhook 수신(입구)
     GIT_CHANGED = "git.changed"  # 변경 확정
     MANIFEST_RENDERED = "manifest.rendered"  # k8s manifest 렌더
+    MANIFEST_INVALID = "manifest.invalid"  # 배포 가능한 manifest 부재/파싱 실패
     DESIRED_DIFF_DETECTED = "desired.diff.detected"  # 원하는 상태와 차이 감지
     DIFF_ANALYZED = "diff.analyzed"  # diff 위험도 분석 결과
 
