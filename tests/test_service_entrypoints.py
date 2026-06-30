@@ -22,11 +22,11 @@ SERVICE_ENTRYPOINTS = {
     "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
     "node-collector": ("src/services/target/node-collector/app.py", "AsyncService("),
     "fake-prometheus": (
-        "src/services/target/cluster-agent/fake_prometheus.py",
+        "src/services/target/cluster-agent/fake_telemetry.py",
         "AsyncService(",
     ),
-    "fake-loki": ("src/services/target/cluster-agent/fake_loki.py", "AsyncService("),
-    "fake-otel": ("src/services/target/cluster-agent/fake_otel.py", "AsyncService("),
+    "fake-loki": ("src/services/target/cluster-agent/fake_telemetry.py", "AsyncService("),
+    "fake-otel": ("src/services/target/cluster-agent/fake_telemetry.py", "AsyncService("),
 }
 
 

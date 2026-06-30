@@ -119,9 +119,9 @@ dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
 optional-node-collector       -> python src/services/target/node-collector/app.py
-fake-prometheus               -> python src/services/target/cluster-agent/fake_prometheus.py
-fake-loki                     -> python src/services/target/cluster-agent/fake_loki.py
-fake-otel                     -> python src/services/target/cluster-agent/fake_otel.py
+fake-prometheus               -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=prometheus)
+fake-loki                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=loki)
+fake-otel                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=otel)
 ```
 
 ## 추가 분리 순서
