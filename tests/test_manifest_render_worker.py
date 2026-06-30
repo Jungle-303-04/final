@@ -140,6 +140,93 @@ def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
     assert manifest.spec.image == "ghcr.io/project/checkout-api:demo"
 
 
+def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
+    monkeypatch, tmp_path
+) -> None:
+    source = tmp_path / "bundle.yaml"
+    source.write_text(
+        "\n---\n".join(
+            [
+                "\n".join(
+                    [
+                        "apiVersion: apps/v1",
+                        "kind: Deployment",
+                        "metadata:",
+                        "  name: checkout-api",
+                        "spec:",
+                        "  replicas: 5",
+                        "  template:",
+                        "    spec:",
+                        "      containers:",
+                        "        - name: checkout-api",
+                        "          image: ghcr.io/project/checkout-api:v2",
+                    ]
+                ),
+                "\n".join(
+                    [
+                        "apiVersion: v1",
+                        "kind: Service",
+                        "metadata:",
+                        "  name: checkout-api",
+                        "spec:",
+                        "  selector:",
+                        "    app: checkout-api",
+                        "  ports:",
+                        "    - port: 80",
+                        "      targetPort: 8000",
+                    ]
+                ),
+                "\n".join(
+                    [
+                        "apiVersion: v1",
+                        "kind: ConfigMap",
+                        "metadata:",
+                        "  name: checkout-api-config",
+                        "data:",
+                        "  LOG_LEVEL: info",
+                    ]
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(source))
+
+    render = load_service("gitops/manifest-render-worker")
+    db = SpyDb()
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="ignored",
+            replicas=1,
+            manifest_path=str(source),
+        ),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["manifest.rendered", "manifest.rendered", "manifest.rendered"]
+    assert [out.rendered_manifest.kind for out in outs] == [
+        "Deployment",
+        "Service",
+        "ConfigMap",
+    ]
+    assert outs[0].rendered_manifest.metadata.namespace == "sandbox"
+    assert outs[0].rendered_manifest.spec.replicas == 5
+    assert outs[0].rendered_manifest.spec.image == "ghcr.io/project/checkout-api:v2"
+    assert outs[1].rendered_manifest.manifest["spec"]["ports"][0]["port"] == 80
+    assert outs[2].rendered_manifest.manifest["data"]["LOG_LEVEL"] == "info"
+    assert sum(1 for call in db.calls if call[0] == "save_repo_change") == 3
+    artifact_paths = [
+        call[1][0]["manifest_path"] for call in db.calls if call[0] == "record_manifest_artifact"
+    ]
+    assert artifact_paths == [
+        f"{source}#deployment/checkout-api",
+        f"{source}#service/checkout-api",
+        f"{source}#configmap/checkout-api-config",
+    ]
+
+
 def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) -> None:
     broken = tmp_path / "broken.yaml"
     broken.write_text("not: a deployment\n", encoding="utf-8")

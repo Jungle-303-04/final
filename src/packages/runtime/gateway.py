@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from packages.config.errors import require
 from packages.contracts.auth import Actor
@@ -63,5 +64,7 @@ class ApiEventGateway:
         actor: Actor | None = None,
     ) -> AcceptedEvent:
         subject = getattr(body, "__subject__", None)
-        require(subject is not None, f"{body.__class__.__name__} 에 subject 없음", TypeError)
-        return await self.accept(subject, body.to_body(), correlation_id, causation_id, actor)
+        require(isinstance(subject, str), f"{body.__class__.__name__} 에 subject 없음", TypeError)
+        return await self.accept(
+            cast(str, subject), body.to_body(), correlation_id, causation_id, actor
+        )

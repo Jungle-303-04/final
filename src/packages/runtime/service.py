@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import FastAPI
 from uvicorn import Config, Server
@@ -15,7 +16,7 @@ from packages.contracts.event_bus.interfaces import EventClient, EventHandler
 from packages.runtime.worker import EventHandlerSpec, WorkerRuntime
 from packages.storage.database import Database
 
-AsyncRunner = Callable[[], Awaitable[None]]
+AsyncRunner = Callable[[], Coroutine[Any, Any, None]]
 FastApiFactory = Callable[[], FastAPI]
 WorkerHandlerFactory = Callable[[EventClient, Database], EventHandler]
 

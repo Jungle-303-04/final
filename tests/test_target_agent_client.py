@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -121,6 +122,103 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
     assert result["status"] == "completed"
     assert result["applied"] is False
     assert "dry-run" in result["message"]
+
+
+def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        calls.append((request.method, request.url.path, body))
+        if request.method == "GET":
+            return httpx.Response(404, request=request)
+        return httpx.Response(201, json={"ok": True}, request=request)
+
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "configmap/checkout-api-config",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "v1",
+                            "kind": "ConfigMap",
+                            "metadata": {"name": "checkout-api-config"},
+                            "data": {"LOG_LEVEL": "info"},
+                        },
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["applied"] is True
+    assert [call[0] for call in calls] == ["GET", "POST"]
+    assert calls[0][1] == "/api/v1/namespaces/sandbox/configmaps/checkout-api-config"
+    assert calls[1][1] == "/api/v1/namespaces/sandbox/configmaps"
+    assert calls[1][2]["metadata"]["namespace"] == "sandbox"
+    assert calls[1][2]["data"]["LOG_LEVEL"] == "info"
+
+
+def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        calls.append((request.method, request.url.path, body))
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "deployment/checkout-api",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "apps/v1",
+                            "kind": "Deployment",
+                            "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+                            "spec": {
+                                "replicas": 5,
+                                "template": {
+                                    "spec": {
+                                        "containers": [
+                                            {
+                                                "name": "checkout-api",
+                                                "image": "ghcr.io/project/checkout-api:v2",
+                                            }
+                                        ]
+                                    }
+                                },
+                            },
+                        },
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["applied"] is True
+    assert [call[0] for call in calls] == ["GET", "PATCH"]
+    assert calls[1][1] == "/apis/apps/v1/namespaces/sandbox/deployments/checkout-api"
+    assert calls[1][2]["spec"]["replicas"] == 5
+    assert calls[1][2]["spec"]["template"]["spec"]["containers"][0]["image"].endswith(":v2")
 
 
 def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
