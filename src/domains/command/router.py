@@ -170,6 +170,7 @@ async def command_start(
     correlation_id = await db.start_agent_command(
         command_id,
         identity.workspace_id,  # body 가 아닌 토큰 identity 의 workspace
+        identity.cluster_id,  # body 가 아닌 토큰 identity 의 cluster
         payload.lease_id,
         payload.agent_id,
         CommandStatus.RUNNING,
@@ -192,6 +193,7 @@ async def command_heartbeat(
     correlation_id = await db.heartbeat_agent_command(
         command_id,
         identity.workspace_id,
+        identity.cluster_id,
         payload.lease_id,
         payload.agent_id,
         LEASE_SECONDS,
@@ -213,6 +215,7 @@ async def command_result(
     correlation_id = await db.complete_agent_command(
         command_id,
         identity.workspace_id,
+        identity.cluster_id,
         result,
         payload.lease_id,
         payload.agent_id,
