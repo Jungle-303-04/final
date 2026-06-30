@@ -15,15 +15,10 @@ from packages.storage.schema import (
 )
 
 DATABASE_URL_ENV = "DATABASE_URL"
-TOKEN_REF_PREFIX = "vault://oauth"
-PLACEHOLDER_CREDENTIAL_NOTE = "provider credential pending Token Broker implementation"
-CREDENTIAL_STATUS_PENDING = "pending"
-CREDENTIAL_STATUS_READY = "ready"
 DASHBOARD_LIMIT = 25
 ERROR_MESSAGE_LIMIT = 2000
 
 # 상태 어휘(흩어진 리터럴 단일화)
-ACCOUNT_STATUS_CONNECTED = "connected"
 DEAD_LETTER_STATUS_OPEN = "open"
 DEAD_LETTER_STATUS_REPLAYED = "replayed"
 RAW_DEAD_LETTER_SUBJECT = "__decode_failed__"

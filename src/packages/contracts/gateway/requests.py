@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.config.constants import Auth, Command, CommandStatus, OAuth, Sandbox, Target
+from packages.config.constants import Command, CommandStatus, Sandbox, Target
 
 DEFAULT_WEBHOOK_IMAGE = "service:local"
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -31,14 +31,6 @@ class LoginRequest(StrictModel):
     # role 같은 권한 필드는 클라이언트가 보낼 수 없고, 서버가 DB/session 기준으로만 정한다.
     email: str
     password: str
-
-
-class OAuthCallbackRequest(StrictModel):
-    user_id: str = Auth.LOCAL_USER_ID
-    code: str | None = None
-    state: str | None = None
-    scopes: list[str] = Field(default_factory=lambda: list(OAuth.DEFAULT_SCOPES))
-    provider_user: str | None = None
 
 
 class GitHubWebhookRequest(StrictModel):

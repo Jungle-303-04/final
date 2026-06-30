@@ -26,7 +26,6 @@ class RepoChangeStore(Protocol):
 
 
 class PullRequestStore(Protocol):
-    async def latest_github_token_ref(self) -> str | None: ...
     async def save_pull_request(
         self, correlation_id: str, pr_url: str, title: str, body: str, status: str
     ) -> None: ...
