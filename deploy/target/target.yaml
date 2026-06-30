@@ -85,7 +85,10 @@ spec:
         - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/target/cluster-agent/fake_prometheus.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: prometheus
           ports:
             - containerPort: 8000
 ---
@@ -120,7 +123,10 @@ spec:
         - name: fake-loki
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/target/cluster-agent/fake_loki.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: loki
           ports:
             - containerPort: 8000
 ---
@@ -155,7 +161,10 @@ spec:
         - name: fake-otel
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/target/cluster-agent/fake_otel.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: otel
           ports:
             - containerPort: 8000
 ---
