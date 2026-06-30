@@ -9,6 +9,7 @@
 - 아키텍처 기준: `docs/architecture.md`, `docs/events.md`, `docs/service-split-plan.md`
 - 팀원 Codex 자동화 기준: `docs/team/codex-automation.md`
 - 계약/데모 구현 경계 기준: `docs/team/contract-vs-demo-boundary.md`
+- 팀원별 파일 소유권 기준: `docs/team/file-ownership-convention.md`
 - 코드와 문서가 다르면 같은 PR에서 문서도 함께 수정한다.
 
 ## 5인 담당 영역
@@ -24,6 +25,7 @@
 | Target/Telemetry | `src/services/target/cluster-agent`, `src/services/target/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
 
 `src/services/projection/dashboard-worker`와 dashboard 관련 문서는 현재 공통 read model 영역으로 둔다. UI가 실제로 추가되면 별도 담당을 다시 만든다.
+파일 단위 관리/인지 범위는 `docs/team/file-ownership-convention.md`를 따른다.
 
 ## 브랜치 규칙
 
