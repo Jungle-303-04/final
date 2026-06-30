@@ -151,8 +151,11 @@ class EventProcessor:
     ) -> None:
         context = {**event_context(evt), "consumer": self.service_name, "attempts": attempts}
         if attempts >= self.retry_policy.max_attempts:
-            self.ledger.dead_letter(evt, error)
+            # DLQ 기록을 먼저, ledger DEAD_LETTERED 표시를 나중에 한다. 둘이 한 트랜잭션이 아니라
+            # 사이에 크래시할 수 있는데, 이 순서면 '유실'이 아니라 '재처리(최악 중복 DLQ)'가 된다
+            # — DLQ 행은 남고 상태는 아직 안 닫혀 재배달 시 다시 처리/DLQ(복구 가능).
             await self.dead_letters.capture(evt, self.service_name, error, attempts)
+            self.ledger.dead_letter(evt, error)
             logger.error("dead_letter", extra={"context": context}, exc_info=error)
             await message.ack()
             return
