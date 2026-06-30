@@ -152,6 +152,8 @@ subjects:
 
 
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:
+    # Target team: Gateway bootstraps the cluster-agent; the agent reconciles node collectors.
+    # TODO(target): replace inline YAML strings with Helm/Kustomize render output.
     return f"""
 apiVersion: v1
 kind: ConfigMap
