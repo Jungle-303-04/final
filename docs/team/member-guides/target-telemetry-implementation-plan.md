@@ -12,12 +12,12 @@
 
 | 현재 파일 | 이미 있는 것 | 주의할 점 |
 | --- | --- | --- |
-| `services/target/target-cluster-agent/agent.py` | Management Gateway로 register/evidence/command poll/result를 보내는 client 흐름 | Gateway 계약이 아직 바뀔 수 있으므로 이 흐름을 확장하기 전에 Prometheus 폐쇄 루프를 먼저 만든다. |
-| `services/target/target-cluster-agent/fake_prometheus.py` | `run_fake_telemetry("prometheus")` 실행 파일 | 실제 Prometheus가 아니다. query 저장소도 scrape도 없다. fixed JSON을 반환하는 fake server다. |
-| `services/target/target-cluster-agent/fake_loki.py` | fake Loki 실행 파일 | 실제 Loki ingest/query가 아니다. |
-| `services/target/target-cluster-agent/fake_otel.py` | fake OTel 실행 파일 | 실제 OTLP collector나 trace backend가 아니다. |
-| `services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`, structured stdout log | 이미 Prometheus text format 비슷한 metric을 제공하므로 real Prometheus scrape 첫 대상으로 쓰기 좋다. |
-| `deploy/target/target.yaml` | fake-prometheus/fake-loki/fake-otel, optional-node-collector, target-cluster-agent 배포 | fake-prometheus는 real Prometheus가 아니다. Prometheus Helm 설치 YAML/values는 아직 없다. |
+| `src/services/target/cluster-agent/agent.py` | Management Gateway로 register/evidence/command poll/result를 보내는 client 흐름 | Gateway 계약이 아직 바뀔 수 있으므로 이 흐름을 확장하기 전에 Prometheus 폐쇄 루프를 먼저 만든다. |
+| `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=prometheus`) | fake Prometheus 실행 entrypoint | 실제 Prometheus가 아니다. query 저장소도 scrape도 없다. fixed JSON을 반환하는 fake server다. |
+| `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=loki`) | fake Loki 실행 entrypoint | 실제 Loki ingest/query가 아니다. |
+| `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=otel`) | fake OTel 실행 entrypoint | 실제 OTLP collector나 trace backend가 아니다. |
+| `src/services/target/node-collector/node_collector.py` | `/snapshot`, `/metrics`, structured stdout log | 이미 Prometheus text format 비슷한 metric을 제공하므로 real Prometheus scrape 첫 대상으로 쓰기 좋다. |
+| `deploy/target/target.yaml` | fake-prometheus/fake-loki/fake-otel, cluster-agent, node collector 관리 권한 배포 | 정적 node collector DaemonSet을 직접 담지 않는다. cluster-agent가 DaemonSet을 생성/패치한다. |
 
 현재 상태에서 제일 중요한 판단:
 
@@ -33,7 +33,7 @@ real Prometheus
   query API로 데이터를 다시 꺼낼 수 있음
 ```
 
-따라서 작업자는 `fake_prometheus.py`를 실제 Prometheus로 착각하면 안 된다. 다음 단계는 fake server를 더 키우는 것이 아니라, real Prometheus를 Helm으로 설치하고 이미 있는 `node-collector /metrics`를 scrape하게 만드는 것이다.
+따라서 작업자는 `fake_telemetry.py`의 `FAKE_TELEMETRY_KIND=prometheus` 모드를 실제 Prometheus로 착각하면 안 된다. 다음 단계는 fake server를 더 키우는 것이 아니라, real Prometheus를 Helm으로 설치하고 이미 있는 `node-collector /metrics`를 scrape하게 만드는 것이다.
 
 ## 첫 작업자가 따라 할 순서
 
@@ -81,7 +81,7 @@ node-collector /metrics
 구현할 것:
 
 - `docs/team/member-guides/target-telemetry-data-flows.md`에 현재 파일별 역할을 적는다.
-- `fake_prometheus.py`는 real Prometheus가 아니라는 점을 명시한다.
+- `fake_telemetry.py`의 Prometheus 모드는 real Prometheus가 아니라는 점을 명시한다.
 - `node_collector.py`의 `/metrics`가 첫 scrape target이라는 점을 명시한다.
 - `deploy/target/target.yaml`의 fake-prometheus Deployment가 real Prometheus 설치가 아니라는 점을 명시한다.
 
@@ -175,12 +175,12 @@ Prometheus를 우리 플랫폼 관측용으로 설치할 수 있게 Helm values 
 
 현재 코드 기준:
 
-- `services/target/node-collector/node_collector.py`는 이미 `GET /metrics`를 제공한다.
+- `src/services/target/node-collector/node_collector.py`는 이미 `GET /metrics`를 제공한다.
 - metric 예시:
   - `node_collector_cpu_usage_ratio`
   - `node_collector_memory_working_set_bytes`
   - `node_collector_filesystem_usage_ratio`
-- `deploy/target/target.yaml`의 `optional-node-collector`에는 prometheus scrape annotation이 이미 있다.
+- cluster-agent가 생성하는 `optional-node-collector` DaemonSet spec에는 prometheus scrape annotation이 있다.
 
 구현할 것:
 

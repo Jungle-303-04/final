@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-AUTH_PATH = ROOT_DIR / "services" / "api-gateway" / "auth.py"
+AUTH_PATH = ROOT_DIR / "src" / "services" / "api-gateway" / "auth.py"
 
 
 def load_auth_module():

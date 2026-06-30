@@ -18,8 +18,10 @@ def _diff(risk: str) -> Diff:
 def test_safe_diff_requests_pr() -> None:
     analyze = load_service("gitops/diff-analyze-worker")
     safe = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=_diff("sandbox-only")))
-    assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested"]
+    assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested", "alert.requested"]
     assert safe[0].safe is True
+    assert safe[2].next_command is not None
+    assert safe[2].next_command.action == "apply_manifest"
 
 
 def test_unsafe_diff_skips_pr() -> None:
@@ -27,3 +29,19 @@ def test_unsafe_diff_skips_pr() -> None:
     unsafe = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=_diff("production")))
     assert subjects_of(unsafe) == ["diff.analyzed"]
     assert unsafe[0].safe is False
+
+
+def test_noop_diff_skips_pr_even_when_sandbox() -> None:
+    analyze = load_service("gitops/diff-analyze-worker")
+    diff = _diff("sandbox-only")
+    noop = Diff(
+        resource=diff.resource,
+        namespace=diff.namespace,
+        desired_image=diff.desired_image,
+        actual_image=diff.desired_image,
+        risk=diff.risk,
+    )
+    outs = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=noop))
+    assert subjects_of(outs) == ["diff.analyzed"]
+    assert outs[0].safe is False
+    assert outs[0].reason == "desired and actual images already match"

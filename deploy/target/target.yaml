@@ -1,6 +1,3 @@
-# Namespaces used by the target cluster demo.
-# target: telemetry and target-cluster-agent workloads.
-# sandbox: write target for safe command demos.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -11,43 +8,65 @@ kind: Namespace
 metadata:
   name: sandbox
 ---
-# Permissions used by target-cluster-agent.
-# The agent can read target-cluster resources and write limited demo resources in sandbox.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: target-cluster-agent
+  name: cluster-agent
   namespace: target
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "replicasets", "daemonsets"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-target-manage
+  namespace: target
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-target-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-target-manage
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-sandbox-write
   namespace: sandbox
 rules:
   - apiGroups: [""]
@@ -60,203 +79,163 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-sandbox-write
   namespace: sandbox
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-sandbox-write
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
-# Legacy fake telemetry services.
-# target-cluster-agent now points to Helm-installed Prometheus/Loki through env below.
-# These fake services are kept as reference only and are not applied from this manifest.
-#
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: fake-prometheus
-#   namespace: target
-# spec:
-#   replicas: 1
-#   selector:
-#     matchLabels:
-#       app: fake-prometheus
-#   template:
-#     metadata:
-#       labels:
-#         app: fake-prometheus
-#     spec:
-#       containers:
-#         - name: fake-prometheus
-#           image: service:local
-#           imagePullPolicy: IfNotPresent
-#           command: ["python", "services/target/target-cluster-agent/fake_prometheus.py"]
-#           ports:
-#             - containerPort: 8000
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: fake-prometheus
-#   namespace: target
-# spec:
-#   selector:
-#     app: fake-prometheus
-#   ports:
-#     - port: 8000
-#       targetPort: 8000
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: fake-loki
-#   namespace: target
-# spec:
-#   replicas: 1
-#   selector:
-#     matchLabels:
-#       app: fake-loki
-#   template:
-#     metadata:
-#       labels:
-#         app: fake-loki
-#     spec:
-#       containers:
-#         - name: fake-loki
-#           image: service:local
-#           imagePullPolicy: IfNotPresent
-#           command: ["python", "services/target/target-cluster-agent/fake_loki.py"]
-#           ports:
-#             - containerPort: 8000
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: fake-loki
-#   namespace: target
-# spec:
-#   selector:
-#     app: fake-loki
-#   ports:
-#     - port: 8000
-#       targetPort: 8000
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: fake-otel
-#   namespace: target
-# spec:
-#   replicas: 1
-#   selector:
-#     matchLabels:
-#       app: fake-otel
-#   template:
-#     metadata:
-#       labels:
-#         app: fake-otel
-#     spec:
-#       containers:
-#         - name: fake-otel
-#           image: service:local
-#           imagePullPolicy: IfNotPresent
-#           command: ["python", "services/target/target-cluster-agent/fake_otel.py"]
-#           ports:
-#             - containerPort: 8000
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: fake-otel
-#   namespace: target
-# spec:
-#   selector:
-#     app: fake-otel
-#   ports:
-#     - port: 8000
-#       targetPort: 8000
 ---
-# optional-node-collector exposes demo node metrics on /metrics.
-# Prometheus discovers it through the scrape annotations below.
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: optional-node-collector
-  namespace: target
-spec:
-  selector:
-    matchLabels:
-      app: optional-node-collector
-  template:
-    metadata:
-      annotations:
-        prometheus.io/path: /metrics
-        prometheus.io/port: "9100"
-        prometheus.io/scrape: "true"
-      labels:
-        app: optional-node-collector
-    spec:
-      containers:
-        - name: node-collector
-          image: service:local
-          imagePullPolicy: IfNotPresent
-          command: ["python", "services/target/node-collector/app.py"]
-          env:
-            - name: PORT
-              value: "9100"
-            - name: COLLECT_INTERVAL_SECONDS
-              value: "15"
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-          ports:
-            - name: metrics
-              containerPort: 9100
----
-# target-cluster-agent sends collected evidence to the management plane.
-# Prometheus and Loki URLs point to the real Helm-installed services in this namespace.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: target-cluster-agent
+  name: fake-prometheus
   namespace: target
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: target-cluster-agent
+      app: fake-prometheus
   template:
     metadata:
       labels:
-        app: target-cluster-agent
+        app: fake-prometheus
     spec:
-      serviceAccountName: target-cluster-agent
       containers:
-        - name: target-cluster-agent
+        - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target/target-cluster-agent/app.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
           env:
-            - name: TARGET_CLUSTER_ID
-              value: target-cluster-01
+            - name: FAKE_TELEMETRY_KIND
+              value: prometheus
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-prometheus
+  namespace: target
+spec:
+  selector:
+    app: fake-prometheus
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-loki
+  namespace: target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fake-loki
+  template:
+    metadata:
+      labels:
+        app: fake-loki
+    spec:
+      containers:
+        - name: fake-loki
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: loki
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-loki
+  namespace: target
+spec:
+  selector:
+    app: fake-loki
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-otel
+  namespace: target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fake-otel
+  template:
+    metadata:
+      labels:
+        app: fake-otel
+    spec:
+      containers:
+        - name: fake-otel
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: otel
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-otel
+  namespace: target
+spec:
+  selector:
+    app: fake-otel
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-agent
+  namespace: target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-agent
+  template:
+    metadata:
+      labels:
+        app: cluster-agent
+    spec:
+      serviceAccountName: cluster-agent
+      containers:
+        - name: cluster-agent
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/target/cluster-agent/app.py"]
+          envFrom:
+            - configMapRef:
+                name: target-runtime-config
+            - secretRef:
+                name: target-runtime-secret
+          env:
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
-            - name: PROMETHEUS_BASE_URL
-              value: "http://prometheus.target.svc:9090"
-            - name: LOKI_BASE_URL
-              value: "http://loki-gateway.target.svc"
-            - name: EVIDENCE_INTERVAL_SECONDS
-              value: "8"
+            - name: NODE_COLLECTOR_ENABLED
+              value: "true"
+            - name: NODE_COLLECTOR_IMAGE
+              value: service:local
+            - name: NODE_COLLECTOR_NAMESPACE
+              value: target

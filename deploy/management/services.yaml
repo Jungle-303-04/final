@@ -17,14 +17,12 @@ spec:
         - name: gateway
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/api-gateway/app.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
-            - name: REDIS_URL
-              value: redis://redis:6379/0
+          command: ["python", "src/services/api-gateway/app.py"]
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
           ports:
             - name: http
               containerPort: 8000
@@ -34,6 +32,8 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service
@@ -49,6 +49,41 @@ spec:
       port: 8000
       targetPort: http
       nodePort: 30080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alert-worker
+  template:
+    metadata:
+      labels:
+        app: alert-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/alert-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -69,7 +104,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/command-worker/app.py"]
+          command: ["python", "src/services/command-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -79,11 +114,11 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -104,7 +139,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/rca-worker/app.py"]
+          command: ["python", "src/services/rca-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -114,32 +149,32 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dashboard-projection-service
+  name: dashboard-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: dashboard-projection-service
+      app: dashboard-worker
   template:
     metadata:
       labels:
-        app: dashboard-projection-service
+        app: dashboard-worker
     spec:
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/projection/dashboard-projection-service/app.py"]
+          command: ["python", "src/services/projection/dashboard-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -149,32 +184,32 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: audit-timeline-service
+  name: audit-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: audit-timeline-service
+      app: audit-worker
   template:
     metadata:
       labels:
-        app: audit-timeline-service
+        app: audit-worker
     spec:
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/projection/audit-timeline-service/app.py"]
+          command: ["python", "src/services/projection/audit-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -184,11 +219,11 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -209,7 +244,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops/git-pull-worker/app.py"]
+          command: ["python", "src/services/gitops/git-pull-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -219,11 +254,11 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -244,7 +279,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops/manifest-render-worker/app.py"]
+          command: ["python", "src/services/gitops/manifest-render-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -254,11 +289,11 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -279,7 +314,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops/diff-worker/app.py"]
+          command: ["python", "src/services/gitops/diff-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -289,11 +324,11 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -314,7 +349,7 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops/diff-analyze-worker/app.py"]
+          command: ["python", "src/services/gitops/diff-analyze-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -324,32 +359,32 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: repo-gateway-worker
+  name: scm-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: repo-gateway-worker
+      app: scm-worker
   template:
     metadata:
       labels:
-        app: repo-gateway-worker
+        app: scm-worker
     spec:
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops/repo-gateway-worker/app.py"]
+          command: ["python", "src/services/gitops/scm-worker/app.py"]
           livenessProbe:
             exec:
               command:
@@ -359,8 +394,8 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@pgbouncer:6432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
