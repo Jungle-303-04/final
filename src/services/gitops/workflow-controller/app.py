@@ -85,6 +85,17 @@ def diff_payload(evt: DiffDetectedBody | DiffAnalyzedBody) -> JsonObject:
     return normalize_payload(payload)
 
 
+def rendered_application_name(evt: ManifestRenderedBody) -> str | None:
+    """Application 이름 후보는 workload manifest에서만 가져온다.
+
+    한 파일에 Service/ConfigMap이 같이 렌더될 때 부속 리소스 이름이 Application.name을
+    덮으면 콘솔에서 앱이 checkout-api-config 같은 이름으로 보인다.
+    """
+    if evt.rendered_manifest.kind == "Deployment":
+        return evt.rendered_manifest.metadata.name
+    return None
+
+
 async def ensure_run(
     ctx: EventContext[WorkflowStore],
     payload: JsonObject,
@@ -247,9 +258,12 @@ async def on_git_changed(
 async def on_manifest_rendered(
     evt: ManifestRenderedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
-    run = await ensure_run(
+    application_name = rendered_application_name(evt)
+    payload = gitops_payload(evt, application_name)
+    transition = ensure_run if application_name else transition_run
+    run = await transition(
         ctx,
-        gitops_payload(evt, evt.rendered_manifest.metadata.name),
+        payload,
         WorkflowRunStatus.DIFFING.value,
         WorkflowStepName.DIFF.value,
         "manifest rendered; calculating desired diff",
@@ -301,7 +315,7 @@ async def on_manifest_invalid(
 async def on_diff_detected(
     evt: DiffDetectedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
-    run = await ensure_run(
+    run = await transition_run(
         ctx,
         diff_payload(evt),
         WorkflowRunStatus.POLICY_CHECKING.value,
