@@ -13,25 +13,25 @@
 | `ummfieg` | `ummfieg` | RCA/Safe PR, Audit, Dashboard Projection |
 | `minmings111` | `minmings111` | Target/Telemetry |
 
-## 등록된 정기 자동화
+## 현재 운영 자동화
 
-관리자 환경에는 5명 모두의 담당 범위를 관리하는 Codex cron 자동화와
-WBS/Issue/Project를 전체 관점에서 정리하는 총괄 동기화 자동화가 등록되어 있다.
-각 자동화는 2시간마다 한 번씩 실행되며, 실행 시점마다 이 문서와 WIKI 프롬프트, GitHub Issue/PR 상태를 다시 읽어 담당 기준을 갱신하고 필요한 범위의 정합성 보정을 직접 수행한다.
+관리자 환경의 final/WIKI 관련 정기 자동화는 2026-06-30 기준 두 개만 유지한다.
+개인별 정기 자동화(`final-woonyong-kr`, `final-jcbbbbbb`,
+`final-jeonwoohyun-hydromel`, `final-ummfieg`, `final-minmings111`)는 삭제했다.
+팀원은 정기 자동화가 아니라 필요할 때 여는 작업 Codex 세션에서 아래 공통
+프롬프트를 사용한다.
 
-| 자동화 ID | GitHub ID | 성격 |
+| 자동화 ID | 범위 | 성격 |
 | --- | --- | --- |
-| `final-wbs-issue-sync` | 전체 | WBS, Issue, Project, source/WIKI 문서 불일치 동기화 |
-| `final-woonyong-kr` | `woonyong-kr` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
-| `final-jcbbbbbb` | `JCBBBBBB` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
-| `final-jeonwoohyun-hydromel` | `JEONWOOHYUN-hydromel` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
-| `final-ummfieg` | `ummfieg` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
-| `final-minmings111` | `minmings111` | 담당 범위 Issue/Project/docs/WIKI 정합성 관리 |
+| `final-wbs-issue-sync` | final source repo, WIKI `projects/final`, GitHub Issues/Project | 코드, 이슈, WBS, 핵심 문서 정합성 감사와 안전한 보정 |
+| `wiki` | WIKI repo 전체 | frontmatter, 링크, 문서 엔트로피, 오래된 문서 위생 관리 |
 
-팀원별 자동화는 브랜치를 전환하거나 제품 코드를 직접 구현하지 않는다.
-구현은 각 담당자의 작업 Codex가 수행한다. 대신 팀원별 자동화는 자기 담당 범위의 작업 원장과 문서를 직접 관리한다.
+팀원 작업 세션은 브랜치를 전환하거나 제품 코드를 구현할 수 있지만, 그 경우
+담당자가 명시적으로 요청한 작업 세션이어야 한다. 정기 자동화는 제품 코드를
+직접 구현하지 않는다.
 
-팀원별 자동화는 아래 변경을 직접 수행할 수 있다.
+팀원 작업 세션 또는 총괄 자동화가 안전한 범위에서 수행할 수 있는 관리 작업은
+아래와 같다.
 
 - 담당 issue 본문, 체크리스트, 라벨, assignee 보정
 - 담당 issue의 Project `WBS` item 추가와 status 갱신
@@ -46,7 +46,7 @@ WBS/Issue/Project를 전체 관점에서 정리하는 총괄 동기화 자동화
 - source docs와 WIKI 핵심 문서의 WBS/경로/상태 불일치 수정
 - 각 상위 작업이 최소 10개 이상의 하위 task 또는 체크리스트를 갖는지 점검하고 부족분을 issue/task로 보강
 
-모든 final 자동화는 아래 작업은 금지한다.
+모든 final/WIKI 정기 자동화는 아래 작업은 금지한다.
 
 - 완료된 issue close
 - PR close, Ready 전환, merge, push
@@ -55,14 +55,15 @@ WBS/Issue/Project를 전체 관점에서 정리하는 총괄 동기화 자동화
 - user 작업 중인 코드 되돌리기
 - secret, kubeconfig, provider token, `.env` 원문 출력 또는 저장
 
-## 자동화 프롬프트
+## 팀원 작업 세션 프롬프트
 
-아래 프롬프트를 팀원 각자의 Codex 자동화에 그대로 넣고, 첫 줄의 GitHub ID만 바꾼다.
+아래 프롬프트는 팀원 각자의 수동 작업 Codex 세션에서 사용한다.
+첫 줄의 GitHub ID만 바꾼다. 이 프롬프트만으로 정기 자동화를 새로 만들지 않는다.
 
 ```text
 TEAM_MEMBER_GITHUB_ID="<본인 GitHub ID>"
 
-너는 final 프로젝트에서 TEAM_MEMBER_GITHUB_ID가 담당한 작업만 보조하는 Codex 자동화다.
+너는 final 프로젝트에서 TEAM_MEMBER_GITHUB_ID가 담당한 작업만 보조하는 Codex 작업 세션이다.
 
 매 실행마다 오래된 기억이나 이전 프롬프트보다 현재 문서를 우선한다. 먼저 아래 문서를 읽고 이번 실행 기준을 다시 계산한다.
 
@@ -143,10 +144,10 @@ GitHub에서 매번 확인한다:
 
 ## 운영 방식
 
-- 팀원이 문서를 수정하면 다음 자동화 실행부터 이 문서를 다시 읽고 기준을 갱신한다.
+- 팀원이 문서를 수정하면 다음 작업 세션과 총괄 자동화 실행부터 이 문서를 다시 읽고 기준을 갱신한다.
 - 개인별 차이는 `TEAM_MEMBER_GITHUB_ID` 하나로만 둔다.
 - 역할, 브랜치, issue, PR 매핑은 문서와 GitHub 상태를 매번 다시 읽어 계산한다.
-- 관리자는 WIKI와 source docs만 수정해도 팀원 자동화 기준을 갱신할 수 있다.
-- 모든 final 자동화는 담당 범위 안에서 WBS/Issue/Project/docs/WIKI 정합성 유지에 필요한 제한된 쓰기 작업을 수행한다.
+- 관리자는 WIKI와 source docs만 수정해도 팀원 작업 세션 기준을 갱신할 수 있다.
+- final/WIKI 정기 자동화는 WBS/Issue/Project/docs/WIKI 정합성 유지에 필요한 제한된 쓰기 작업만 수행한다.
 - 제품 코드 구현, commit, push, PR close/Ready/merge는 팀원이 명시적으로 요청한 작업 세션에서만 수행한다.
 - 완료된 issue는 닫지 않고 Project status만 갱신한다.
