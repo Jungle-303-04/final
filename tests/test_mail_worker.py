@@ -7,7 +7,7 @@ from packages.contracts.event_bus.bodies import EmailVerificationRequestedBody
 
 def test_mail_worker_logs_email_verification_without_smtp(monkeypatch) -> None:
     monkeypatch.delenv("SMTP_HOST", raising=False)
-    mail = load_service("mail-worker")
+    mail = load_service("mail/worker")
 
     outs = run_handler(
         mail.on_email_verification_requested,

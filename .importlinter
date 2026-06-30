@@ -1,0 +1,31 @@
+# 아키텍처 의존 경계 강제 — import-linter (CI에서 lint-imports 실행).
+# 규칙: services → domains → packages (안쪽 커널로만 의존). 역방향 금지.
+# 예외 2곳(의도적): 이벤트 계약 facade 집계 + storage 합성 루트. 후속 정리 후보.
+
+[importlinter]
+root_packages =
+    packages
+    domains
+include_external_packages = True
+
+[importlinter:contract:layered]
+name = Layered: domains(위) → packages(아래), 역방향 금지
+type = layers
+layers =
+    domains
+    packages
+ignore_imports =
+    # 이벤트 계약 facade: 도메인이 소유한 이벤트 바디를 packages.contracts 가 집계(재export)
+    packages.contracts.event_bus.bodies -> domains.*.events
+    # 합성 루트: 동적 Database/테이블 로딩(도메인 자동 발견)
+    packages.storage.database -> domains.registry
+    packages.storage.engine -> domains.registry
+
+[importlinter:contract:no-services-in-lib]
+name = packages/domains 는 services 를 import 하지 않음
+type = forbidden
+source_modules =
+    packages
+    domains
+forbidden_modules =
+    services

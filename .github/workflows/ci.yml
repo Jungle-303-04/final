@@ -32,6 +32,9 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check src scripts tests
 
+      - name: Import boundaries (services → domains → packages)
+        run: PYTHONPATH=src uv run lint-imports --config .importlinter
+
       - name: Python compile
         run: python -m compileall -q src scripts
 
