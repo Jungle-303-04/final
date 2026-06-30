@@ -191,9 +191,11 @@ def deployment_replicas(spec: dict[str, Any]) -> int:
     raw = spec.get("replicas", 1)
     if raw is None:
         return 1
-    if isinstance(raw, bool):
+    if isinstance(raw, bool) or not isinstance(raw, int):
         raise ValueError("deployment spec.replicas must be an integer")
-    return int(raw)
+    if raw < 0:
+        raise ValueError("deployment spec.replicas must be a non-negative integer")
+    return raw
 
 
 def deployment_image(spec: dict[str, Any]) -> str:
