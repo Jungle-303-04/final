@@ -11,7 +11,7 @@
 
 현재 `dev`의 기준 구조:
 
-- 외부 HTTP는 `src/services/api-gateway`가 받고, 실제 도메인 route는 `src/domains/*/router.py`로 나뉜다.
+- 외부 HTTP는 `src/services/gateway/api-gateway`가 받고, 실제 도메인 route는 `src/domains/*/router.py`로 나뉜다.
 - 공유 계약은 `src/packages/contracts/*`, 런타임/저장소 공통은 `src/packages/runtime`, `src/packages/storage`에 둔다.
 - worker는 `src/services/<service>/app.py`에서 `App(...)`와 `@app.on(...)`을 사용한다.
 - Target Agent는 management plane으로 outbound HTTP만 한다. NATS/DB에 직접 붙지 않는다.
@@ -43,7 +43,7 @@ PR 하나의 크기는 “한 도메인 안에서 한 가지 기능”으로 제
 | 작업자 | 브랜치 | dev 대비 판단 | 권장 액션 |
 | --- | --- | --- | --- |
 | 우현 | `origin/feat/jeonwoohyun-hydromel/gitops-sync-worker` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`에서 새 브랜치를 만들고 GitOps worker TODO만 구현한다. |
-| 우현 | `origin/feat/jeonwoohyun-hydromel/command-worker` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`의 `src/services/command-worker`를 기준으로 작은 PR 작성. |
+| 우현 | `origin/feat/jeonwoohyun-hydromel/command-worker` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`의 `src/services/command/command-worker`를 기준으로 작은 PR 작성. |
 | 찬빈 | `origin/feat/jcbbbbbb/api-gateway` | `services/`, `packages/` 루트에 Gateway/Auth 구현 1600줄이 있다. 현재 경로와 충돌 가능성이 높다. | 코드 전체 merge 금지. password auth, access policy, schema, 테스트 아이디어만 현재 `src/` 구조로 이식. |
 | 가인 | `origin/feat/ummfieg/rca-worker` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`의 RCA event flow에서 새 PR을 시작한다. |
 | 가인 | `origin/feat/ummfieg/dashboard-projection-service` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `src/services/projection/dashboard-worker` 기준으로 projection 확장. |
@@ -63,7 +63,7 @@ PR 하나의 크기는 “한 도메인 안에서 한 가지 기능”으로 제
 
 그대로 가져오면 안 되는 구현:
 
-- `services/api-gateway/gateway.py`에 route를 전부 넣는 방식. 현재 dev는 도메인 router로 분리되어 있다.
+- `services/gateway/api-gateway/gateway.py`에 route를 전부 넣는 방식. 현재 dev는 도메인 router로 분리되어 있다.
 - `packages/storage/database.py`에 긴 DDL과 SQL 메서드를 직접 추가하는 방식. 현재 dev는 `src/domains/identity/models.py`, `repository.py`가 권한/연결 모델을 맡는다.
 - root `packages/*` 경로. 현재는 `src/packages/*`다.
 - session token을 응답 body에 자세히 싣는 흐름. 브라우저는 HttpOnly cookie를 우선한다.
@@ -72,8 +72,8 @@ PR 하나의 크기는 “한 도메인 안에서 한 가지 기능”으로 제
 
 | 브랜치 구현 | dev 이식 위치 |
 | --- | --- |
-| `services/api-gateway/auth.py` password 함수 | `src/services/api-gateway/auth.py` 또는 `src/domains/identity/security.py` |
-| `PasswordAuthService` | `src/services/api-gateway/auth.py`에 작게 두고 route는 identity router에서 호출 |
+| `services/gateway/api-gateway/auth.py` password 함수 | `src/services/gateway/api-gateway/auth.py` 또는 `src/domains/identity/security.py` |
+| `PasswordAuthService` | `src/services/gateway/api-gateway/auth.py`에 작게 두고 route는 identity router에서 호출 |
 | `LoginRequest` | `src/packages/contracts/gateway/requests.py` |
 | login/logout route | `src/domains/identity/router.py` |
 | organization/cluster policy | `src/domains/identity/policy.py` 또는 `src/packages/contracts/interfaces.py` Protocol + `src/domains/identity/repository.py` |
@@ -187,7 +187,7 @@ class AccessPolicy:
 - `src/services/gitops/manifest-render-worker`
 - `src/services/gitops/diff-worker`
 - `src/services/gitops/diff-analyze-worker`
-- `src/services/command-worker`
+- `src/services/command/command-worker`
 - `src/domains/gitops`
 - `src/domains/command`
 
@@ -246,7 +246,7 @@ async def handle_git_changed(body: GitChangedBody, ctx: EventContext[GitOpsStore
 
 담당 파일:
 
-- `src/services/rca-worker/app.py`
+- `src/services/ai/rca-worker/app.py`
 - `src/domains/rca`
 - `src/domains/scm`
 - `src/services/gitops/scm-worker/app.py`
@@ -425,8 +425,8 @@ class TelemetryCollector:
 | `packages/contracts/gateway/requests.py` | `src/packages/contracts/gateway/requests.py`에 schema만 추가. route 로직 금지. |
 | `packages/contracts/interfaces.py` | `src/packages/contracts/interfaces.py`에 Protocol만 추가. concrete DB/Redis import 금지. |
 | `packages/storage/database.py` | 직접 이식 금지. 도메인 model/repository 또는 storage schema로 분리. |
-| `services/api-gateway/gateway.py` | 직접 이식 금지. route는 `src/domains/*/router.py`, 조립은 현재 `ApiGateway.configure_routes()` 유지. |
-| `services/api-gateway/auth.py` | password/session helper만 현재 `src/services/api-gateway/auth.py` 또는 identity security 모듈로 이식. |
+| `services/gateway/api-gateway/gateway.py` | 직접 이식 금지. route는 `src/domains/*/router.py`, 조립은 현재 `ApiGateway.configure_routes()` 유지. |
+| `services/gateway/api-gateway/auth.py` | password/session helper만 현재 `src/services/gateway/api-gateway/auth.py` 또는 identity security 모듈로 이식. |
 | `services/target-cluster-agent/agent.py` | 직접 이식 금지. 현재 `TargetClusterAgent`의 outbound 계약 유지. |
 | `services/target-cluster-agent/evidence.py` | `src/services/target/cluster-agent` 하위 작은 collector 모듈로 이식 가능. |
 | `services/node-collector/*` | `src/services/target/node-collector/*`로 module 단위 이식. 기존 API path 유지. |

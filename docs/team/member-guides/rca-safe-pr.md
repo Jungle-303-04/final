@@ -25,7 +25,7 @@ Audit Timeline Service
 
 ## 담당 영역
 
-- `src/services/rca-worker`
+- `src/services/ai/rca-worker`
 - `src/services/gitops/scm-worker`
 - `src/services/projection/audit-worker`
 - Evidence Builder logic
@@ -387,7 +387,7 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 
 ## 처음 읽을 파일
 
-1. `src/services/rca-worker`
+1. `src/services/ai/rca-worker`
 2. `src/services/gitops/scm-worker`
 3. `src/services/projection/audit-worker`
 4. `src/packages/contracts/event_bus/subjects.py`
@@ -398,4 +398,4 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `src/services/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker`, `src/packages/runtime/worker.py`, `src/packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
+이 영역을 작업할 때는 `src/services/ai/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker`, `src/packages/runtime/worker.py`, `src/packages/runtime/service.py`, `docs/events.md`를 먼저 읽어라. 외부 write는 항상 안전장치를 먼저 확인하라.
