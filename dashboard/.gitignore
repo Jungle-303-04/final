@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+test-results/
+live-state/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vite.local-bridge.js
+vite.local-bridge.d.ts
+.env
+.env.local
+*.log
