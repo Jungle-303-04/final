@@ -14,13 +14,13 @@ from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import TargetRegisterRequest
 from packages.contracts.gateway.responses import TargetInstallResponse
+from packages.contracts.identity import ClusterRegistrationStatus
 from packages.runtime.dependencies import get_db
 
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
 AGENT_TOKEN_NOT_CONFIGURED = "agent token is not configured"
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
-INSTALL_STATUS_REGISTERED = "registered"
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -319,7 +319,7 @@ def install_response(
     return TargetInstallResponse(
         registered=True,
         cluster_id=payload.cluster_id,
-        status=INSTALL_STATUS_REGISTERED,
+        status=ClusterRegistrationStatus.REGISTERED.value,
         applied=apply_output is not None,
         apply_output=apply_output,
         install_manifest=manifest,

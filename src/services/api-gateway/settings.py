@@ -49,7 +49,6 @@ class Settings:
     SESSION_TOKEN_BYTES = 32
     DEFAULT_RATE_LIMIT = 120
     RATE_LIMIT_WINDOW_SECONDS = 60
-    OWNER_ROLE = "owner"
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
@@ -61,5 +60,3 @@ class Settings:
     EMAIL_VERIFICATION_INVALID_MESSAGE = "invalid or expired email verification token"
     PASSWORD_CONFIRMATION_MISMATCH_MESSAGE = "password confirmation does not match"
     USER_ALREADY_EXISTS_MESSAGE = "user already exists"
-    USER_STATUS_ACTIVE = "active"
-    USER_STATUS_PENDING_EMAIL_VERIFICATION = "pending_email_verification"
