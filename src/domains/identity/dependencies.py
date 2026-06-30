@@ -22,6 +22,10 @@ def get_auth(request: Request) -> Any:
     return request.app.state.auth
 
 
+def get_password_auth(request: Request) -> Any:
+    return request.app.state.password_auth
+
+
 async def require_session(request: Request) -> Any:
     """사용자 세션 가드 — 유효 세션 필요(없으면 401)."""
     return await request.app.state.auth.require_session(request)

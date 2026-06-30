@@ -73,6 +73,11 @@ def test_schema_defines_expected_tables() -> None:
     assert expected <= set(metadata.tables)
 
 
+def test_user_account_schema_supports_password_login() -> None:
+    columns = set(metadata.tables["user_accounts"].c.keys())
+    assert {"email", "password_hash"} <= columns
+
+
 def test_workspace_access_repository_declares_management_tables() -> None:
     expected = {
         "user_accounts",

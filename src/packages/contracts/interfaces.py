@@ -52,14 +52,16 @@ class DeadLetterStore(Protocol):
 class UserStore(Protocol):
     def get_user_by_email(self, email: str) -> JsonObject | None: ...
 
-    def upsert_user(
+    def create_user(
         self,
         user_id: str,
         email: str,
         password_hash: str,
         display_name: str,
         status: str,
-    ) -> None: ...
+    ) -> JsonObject | None: ...
+
+    def activate_user(self, user_id: str) -> JsonObject | None: ...
 
 
 class SessionStore(Protocol):
@@ -69,7 +71,25 @@ class SessionStore(Protocol):
 
     async def delete_session(self, token: str) -> None: ...
 
-    async def check_rate_limit(self, key: str) -> None: ...
+    async def check_rate_limit(
+        self,
+        key: str,
+        limit: int | None = None,
+        window_seconds: int | None = None,
+    ) -> None: ...
+
+    async def check_escalating_rate_limit(
+        self,
+        key: str,
+        limit: int,
+        window_seconds: int,
+        lock_steps_seconds: tuple[int, ...],
+        strike_ttl_seconds: int,
+    ) -> None: ...
+
+    async def create_email_verification_token(self, user_id: str, email: str) -> str: ...
+
+    async def consume_email_verification_token(self, token: str | None) -> JsonObject | None: ...
 
 
 class ManagementPlaneClient(Protocol):
