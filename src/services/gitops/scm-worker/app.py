@@ -57,15 +57,8 @@ def safe_pr_failure_reason(exc: Exception) -> str:
 async def on_safe_pr_requested(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:
-    # 우현 원본 보존:
-    #
-    # 원본 GitOpsSyncWorkflow.handle에는 repo-gateway 단계 없음
-    # 원본은 desired.diff.detected 뒤 command.requested 직접 발행
-    # 이 파일은 직접 실행 흐름을 보존 가능한 PR 제안 경계로 전환
-    # 원본 command.requested 블록은 diff-analyze-worker safe 분기 주석에 보존
-    #
-    # outbound 게이트웨이 정형: 외부 호출(PR 생성)의 try/except 는 deliver 가 흡수하고,
-    # 핸들러는 "무엇을 호출하고 성공/실패를 어떤 이벤트로 낼지"만 선언(타 게이트웨이와 동일 모양).
+    # repo-gateway는 외부 PR 생성 경계다. 핸들러는 호출과 결과 이벤트만 선언하고
+    # provider 예외 처리는 deliver가 공통으로 맡는다.
     async def create_pr() -> str:
         return await create_safe_pr(evt, ctx)
 
