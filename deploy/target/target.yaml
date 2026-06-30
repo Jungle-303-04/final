@@ -321,6 +321,11 @@ spec:
             # Helm release "tempo" stores traces forwarded by OpenTelemetry Collector.
             - name: TEMPO_BASE_URL
               value: "http://tempo.target.svc:3200"
+            # OpenTelemetry SDK sends spans to the in-cluster Collector, then Tempo stores them.
+            - name: OTEL_SERVICE_NAME
+              value: "target-cluster-agent"
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: "http://opentelemetry-collector.target.svc:4318/v1/traces"
             # Evidence collection loop interval in seconds.
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"
