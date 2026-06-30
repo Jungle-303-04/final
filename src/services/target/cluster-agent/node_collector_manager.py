@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-import os
-
 import httpx
+from kubernetes_api import (
+    kubernetes_api_base_url,
+    kubernetes_client,
+    kubernetes_headers,
+    service_account_token,
+)
 
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -25,12 +29,6 @@ class NodeCollectorManagerConfig:
     NODE_COLLECTOR_DISABLED_MESSAGE = "node collector reconcile disabled"
     NODE_COLLECTOR_MANAGED_BY_LABEL = "ops.service/managed-by"
     NODE_COLLECTOR_MANAGED_BY_VALUE = "cluster-agent"
-
-    KUBERNETES_SERVICE_HOST_ENV = "KUBERNETES_SERVICE_HOST"
-    KUBERNETES_SERVICE_PORT_ENV = "KUBERNETES_SERVICE_PORT_HTTPS"
-    SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-    SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    HTTP_TIMEOUT_SECONDS = 20
 
 
 class NodeCollectorManager:
@@ -161,41 +159,6 @@ def node_collector_container(image: str) -> JsonObject:
             {"name": "metrics", "containerPort": NodeCollectorManagerConfig.NODE_COLLECTOR_PORT}
         ],
     }
-
-
-def kubernetes_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
-    verify: str | bool = (
-        NodeCollectorManagerConfig.SERVICE_ACCOUNT_CA_PATH
-        if os.path.exists(NodeCollectorManagerConfig.SERVICE_ACCOUNT_CA_PATH)
-        else True
-    )
-    return httpx.AsyncClient(
-        verify=verify,
-        transport=transport,
-        timeout=NodeCollectorManagerConfig.HTTP_TIMEOUT_SECONDS,
-    )
-
-
-def kubernetes_headers(token: str, content_type: str | None = None) -> dict[str, str]:
-    headers = {"authorization": f"Bearer {token}"}
-    if content_type is not None:
-        headers["content-type"] = content_type
-    return headers
-
-
-def kubernetes_api_base_url() -> str | None:
-    host = env(NodeCollectorManagerConfig.KUBERNETES_SERVICE_HOST_ENV, "")
-    port = env(NodeCollectorManagerConfig.KUBERNETES_SERVICE_PORT_ENV, "443")
-    return f"https://{host}:{port}" if host else None
-
-
-def service_account_token() -> str | None:
-    if not os.path.exists(NodeCollectorManagerConfig.SERVICE_ACCOUNT_TOKEN_PATH):
-        return None
-    with open(
-        NodeCollectorManagerConfig.SERVICE_ACCOUNT_TOKEN_PATH, encoding="utf-8"
-    ) as token_file:
-        return token_file.read().strip()
 
 
 def truthy(value: str) -> bool:
