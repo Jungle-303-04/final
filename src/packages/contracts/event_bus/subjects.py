@@ -19,6 +19,7 @@ STREAM_SUBJECTS = [
     "desired.>",
     "diff.>",
     "cluster.>",
+    "incident.>",
     "evidence.>",
     "command.>",
     "rca.>",
@@ -64,8 +65,12 @@ class EventSubject(StrEnum):
     COMMAND_COMPLETED = "command.completed"  # 에이전트 실행 완료
 
     # --- 원인 분석/안전 PR(rca-worker) ---
+    INCIDENT_DETECTED = "incident.detected"  # 장애 플래그 판단 결과
     EVIDENCE_BUILT = "evidence.built"  # 증거 번들 구성
+    RCA_SCENARIOS_EVALUATED = "rca.scenarios.evaluated"  # RCA 후보 시나리오 평가
     RCA_COMPLETED = "rca.completed"  # 근본 원인 분석 완료
+    SAFE_PR_POLICY_DECIDED = "safe_pr.policy_decided"  # PR/자동/승인필요 라우트 결정
+    RCA_ACTION_REQUIRED = "rca.action_required"  # 자동 진행 불가, 사람 조치 필요
     ALERT_REQUESTED = "alert.requested"  # 알람 전송/사전 배포 게이트 요청
     ALERT_DISPATCHED = "alert.dispatched"  # 알람 전송 완료(또는 stub 통과)
     ALERT_REJECTED = "alert.rejected"  # 알람/정책 게이트 차단
