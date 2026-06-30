@@ -41,8 +41,8 @@ NO_INCIDENT_ACTION_REQUIRED = "incident flag was not set"
 
 
 def build_evidence_bundle(evt: ClusterEvidenceReceivedBody, correlation_id: str) -> Evidence:
-    # TODO(rca): normalize raw Kubernetes/metrics/logs/traces into a bounded evidence bundle.
-    # TODO(rca): store large raw artifacts externally and keep only object refs in event payloads.
+    # TODO(rca): raw Kubernetes/metrics/logs/traces를 제한된 evidence bundle로 정규화
+    # TODO(rca): 큰 raw artifact는 외부 저장, event payload에는 object ref만 유지
     evidence_ref = f"{OBJECT_EVIDENCE_PREFIX}/{correlation_id}.json"
     return Evidence(
         cluster_id=evt.cluster_id,
@@ -55,7 +55,7 @@ def build_evidence_bundle(evt: ClusterEvidenceReceivedBody, correlation_id: str)
 
 
 def detect_incident(evidence: Evidence) -> IncidentDetectedBody:
-    # TODO(rca): replace deterministic sample checks with policy-backed incident flag rules.
+    # TODO(rca): deterministic sample check를 policy 기반 incident flag rule로 교체
     detected = bool(evidence.logs or evidence.kubernetes.get("pods") or evidence.metrics)
     return IncidentDetectedBody(
         cluster_id=evidence.cluster_id,
@@ -67,8 +67,8 @@ def detect_incident(evidence: Evidence) -> IncidentDetectedBody:
 def evaluate_rca_scenarios(
     evidence: Evidence,
 ) -> tuple[RcaScenariosEvaluatedBody, RcaCompletedBody]:
-    # TODO(rca): evaluate evidence-backed scenarios and return insufficient_evidence when confidence is low.
-    # TODO(rca): keep AI/rule analysis behind a port so prompts, rules, and fallbacks are testable.
+    # TODO(rca): evidence 기반 scenario 평가와 낮은 confidence 시 insufficient_evidence 반환
+    # TODO(rca): AI/rule 분석을 port 뒤에 두어 prompt/rule/fallback 테스트 가능성 확보
     return (
         RcaScenariosEvaluatedBody(
             scenario_count=1,
@@ -85,7 +85,7 @@ def evaluate_rca_scenarios(
 
 
 def decide_safe_pr_policy(report: RcaCompletedBody) -> SafePrPolicyDecidedBody:
-    # TODO(rca): implement draft_pr/auto/approval_required/forbidden policy with audit proofs.
+    # TODO(rca): draft_pr/auto/approval_required/forbidden policy와 audit proof 구현
     return SafePrPolicyDecidedBody(
         route=SAFE_PR_ROUTE,
         reason="sample policy allows draft rollback PR",
@@ -94,8 +94,8 @@ def decide_safe_pr_policy(report: RcaCompletedBody) -> SafePrPolicyDecidedBody:
 
 
 def build_safe_pr_request(report: RcaCompletedBody) -> SafePrRequestedBody:
-    # TODO(rca): route to draft_pr, auto, approval_required, or forbidden based on RCA policy.
-    # TODO(rca): include evidence refs and rollback safety checklist instead of constant prose.
+    # TODO(rca): RCA policy 기반 draft_pr/auto/approval_required/forbidden route 선택
+    # TODO(rca): 고정 문구 대신 evidence ref와 rollback safety checklist 포함
     return SafePrRequestedBody(
         title=PR_TITLE,
         body=f"RCA: {report.root_cause}\n\nAction: {report.action}",
