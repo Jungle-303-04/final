@@ -185,6 +185,8 @@ kubectl --context "kind-${TARGET_CLUSTER}" create namespace target \
 kubectl --context "kind-${TARGET_CLUSTER}" -n target create configmap target-runtime-config \
   --from-literal=TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
   --from-literal=EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
+  --from-literal=PROMETHEUS_BASE_URL="http://fake-prometheus:8000" \
+  --from-literal=LOKI_BASE_URL="http://fake-loki:8000" \
   --dry-run=client -o yaml | kubectl --context "kind-${TARGET_CLUSTER}" apply -f -
 kubectl --context "kind-${TARGET_CLUSTER}" -n target create secret generic target-runtime-secret \
   --from-literal=AGENT_TOKEN="${AGENT_TOKEN}" \
