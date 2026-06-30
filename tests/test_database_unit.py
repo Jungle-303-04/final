@@ -62,6 +62,10 @@ def test_schema_defines_expected_tables() -> None:
         "git_repositories",
         "git_watch_targets",
         "deployment_bindings",
+        "applications",
+        "workflow_runs",
+        "workflow_run_steps",
+        "approvals",
         "manifest_artifacts",
         "evidence",
         "rca_reports",
@@ -113,6 +117,31 @@ def test_gitops_schema_tracks_repo_binding_and_manifest_state() -> None:
         "status",
         "status_reason",
     } <= set(metadata.tables["manifest_artifacts"].c.keys())
+    assert {
+        "application_id",
+        "workspace_id",
+        "repository_id",
+        "name",
+        "manifest_path",
+        "status",
+    } <= set(metadata.tables["applications"].c.keys())
+    assert {
+        "workflow_run_id",
+        "application_id",
+        "binding_id",
+        "environment",
+        "commit_sha",
+        "status",
+        "current_step",
+        "command_id",
+    } <= set(metadata.tables["workflow_runs"].c.keys())
+    assert {
+        "approval_id",
+        "workflow_run_id",
+        "status",
+        "requested_role",
+        "decision",
+    } <= set(metadata.tables["approvals"].c.keys())
 
 
 def test_workspace_access_repository_declares_management_tables() -> None:

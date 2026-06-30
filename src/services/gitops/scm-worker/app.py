@@ -77,6 +77,9 @@ async def on_safe_pr_requested(
             workspace_id=evt.workspace_id,
             repository_id=evt.repository_id,
             binding_id=evt.binding_id,
+            application_id=evt.application_id,
+            workflow_run_id=evt.workflow_run_id,
+            environment=evt.environment,
         )
 
     async for out in deliver(
@@ -89,6 +92,9 @@ async def on_safe_pr_requested(
             workspace_id=evt.workspace_id,
             repository_id=evt.repository_id,
             binding_id=evt.binding_id,
+            application_id=evt.application_id,
+            workflow_run_id=evt.workflow_run_id,
+            environment=evt.environment,
         ),
     ):
         yield out

@@ -18,6 +18,10 @@ src/services/gitops/git-pull-worker
   Git target polling / Git changed event
   app.py: repo polling 기본값, @app.on(GitWebhookReceivedBody)
 
+src/services/gitops/workflow-controller
+  Application / WorkflowRun / Approval 상태 관리
+  app.py: GitOps, approval, command lifecycle 이벤트를 관찰해 workflow.* / approval.* projection 발행
+
 src/services/gitops/manifest-render-worker
   Manifest render
   app.py: manifest render 기본값, @app.on(GitChangedBody)
@@ -109,6 +113,7 @@ secrets
 ```text
 api-gateway        -> python src/services/gateway/api-gateway/app.py
 git-pull-worker               -> python src/services/gitops/git-pull-worker/app.py
+workflow-controller           -> python src/services/gitops/workflow-controller/app.py
 manifest-render-worker        -> python src/services/gitops/manifest-render-worker/app.py
 diff-worker                   -> python src/services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
@@ -127,11 +132,12 @@ fake-otel                     -> python src/services/target/cluster-agent/fake_t
 ## 추가 분리 순서
 
 1. `src/services/gateway/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
-2. 각 service의 DB query를 repository 객체로 분리한다.
-3. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
-4. 실제 GitHub PR 생성은 먼저 `src/services/gitops/scm-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
-5. 실제 Prometheus/Loki/OTel 연동이 들어가면 `src/services/target/cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `src/services/target/node-collector`에서 확장한다.
-6. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 공통 base layer 위에서 서비스별 image로 나눈다.
+2. `workflow-controller`가 만든 `applications`, `workflow_runs`, `workflow_run_steps`, `approvals`를 Gateway query API와 콘솔 UI의 1급 객체로 노출한다.
+3. 각 service의 DB query를 repository 객체로 분리한다.
+4. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
+5. 실제 GitHub PR 생성은 먼저 `src/services/gitops/scm-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
+6. 실제 Prometheus/Loki/OTel 연동이 들어가면 `src/services/target/cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `src/services/target/node-collector`에서 확장한다.
+7. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 공통 base layer 위에서 서비스별 image로 나눈다.
 
 ## 규칙
 

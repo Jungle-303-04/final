@@ -122,9 +122,9 @@
 | --- | --- |
 | GitOps domain | `src/domains/gitops/*.py` |
 | command domain | `src/domains/command/*.py` |
-| GitOps workers | `src/services/gitops/github-poll-worker/*.py`, `src/services/gitops/git-pull-worker/app.py`, `src/services/gitops/manifest-render-worker/app.py`, `src/services/gitops/diff-worker/app.py`, `src/services/gitops/diff-analyze-worker/app.py` |
+| GitOps workers | `src/services/gitops/github-poll-worker/*.py`, `src/services/gitops/git-pull-worker/app.py`, `src/services/gitops/workflow-controller/app.py`, `src/services/gitops/manifest-render-worker/app.py`, `src/services/gitops/diff-worker/app.py`, `src/services/gitops/diff-analyze-worker/app.py` |
 | command worker | `src/services/command/command-worker/app.py` |
-| GitOps/command tests | `tests/test_github_poller.py`, `tests/test_git_pull_worker.py`, `tests/test_manifest_render_worker.py`, `tests/test_diff_worker.py`, `tests/test_diff_analyze_worker.py`, `tests/test_repo_gateway_worker.py`, `tests/test_event_golden_path.py` |
+| GitOps/command tests | `tests/test_github_poller.py`, `tests/test_git_pull_worker.py`, `tests/test_workflow_controller.py`, `tests/test_manifest_render_worker.py`, `tests/test_diff_worker.py`, `tests/test_diff_analyze_worker.py`, `tests/test_repo_gateway_worker.py`, `tests/test_event_golden_path.py` |
 | 문서 | `docs/team/member-guides/gitops-command.md` |
 
 반드시 알아야 하는 파일:

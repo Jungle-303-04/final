@@ -38,6 +38,10 @@ def build_dispatched(evt: AlertRequestedBody) -> AlertDispatchedBody:
         channel=DEFAULT_ALERT_CHANNEL,
         mode=STUB_ALERT_MODE,
         workspace_id=evt.workspace_id,
+        application_id=evt.application_id,
+        workflow_run_id=evt.workflow_run_id,
+        binding_id=evt.binding_id,
+        environment=evt.environment,
     )
 
 
