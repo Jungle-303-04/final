@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -35,7 +36,7 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
         interval_seconds=15,
     )
 
-    payload = collector.snapshot().to_payload()
+    payload = asyncio.run(collector.snapshot()).to_payload()
 
     assert payload["node_name"] == "target-control-plane"
     assert payload["pod_name"] == "optional-node-collector-abc"
@@ -45,15 +46,46 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
 
 def test_node_collector_exposes_prometheus_metrics() -> None:
     module = load_node_collector_module()
+
+    class FakeKubernetesApi:
+        async def list_pods(self) -> dict[str, object]:
+            return {
+                "items": [
+                    {
+                        "spec": {"nodeName": "target-control-plane"},
+                        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+                    },
+                    {
+                        "spec": {"nodeName": "target-control-plane"},
+                        "status": {"conditions": [{"type": "Ready", "status": "False"}]},
+                    },
+                    {
+                        "spec": {"nodeName": "other-node"},
+                        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+                    },
+                ]
+            }
+
     collector = module.NodeCollector(
         node_name="target-control-plane",
         pod_name="optional-node-collector-abc",
         namespace="target",
         interval_seconds=15,
+        kubernetes=FakeKubernetesApi(),
     )
 
-    metrics = collector.prometheus_metrics()
+    metrics = asyncio.run(collector.prometheus_metrics())
 
-    assert "node_collector_cpu_usage_ratio" in metrics
+    assert (
+        'node_collector_scrape_error{node="target-control-plane",'
+        'runtime="containerd",collector="pod"} 0'
+    ) in metrics
+    assert (
+        'node_collector_node_pod_count{node="target-control-plane",runtime="containerd"} 2'
+    ) in metrics
+    assert (
+        'node_collector_node_not_ready_pod_count{node="target-control-plane",'
+        'runtime="containerd"} 1'
+    ) in metrics
     assert 'node="target-control-plane"' in metrics
     assert 'runtime="containerd"' in metrics

@@ -10,7 +10,9 @@ from prometheus_metrics import MetricSample
 class MetricCollector(Protocol):
     # This is not a real collector object. It is a type contract.
     # A concrete class like PodMetricCollector matches this contract
-    # when it defines this same async collect(labels) method.
+    # when it defines collector_name and this same async collect(labels) method.
+    collector_name: str
+
     async def collect(self, labels: dict[str, str]) -> list[MetricSample]: ...
 
 
@@ -21,18 +23,24 @@ class PodSummary:
     not_ready_pod_count: int
 
 
-def collector_status_metric_sample(labels: dict[str, str], has_error: bool) -> MetricSample:
+def collector_status_metric_sample(
+    labels: dict[str, str],
+    collector_name: str,
+    has_error: bool,
+) -> MetricSample:
     # Always emit collector health so Prometheus can see partial collection failures.
     return MetricSample(
         name="node_collector_scrape_error",
         help="Whether node collector failed to read Kubernetes API data.",
         value=1 if has_error else 0,
-        labels=labels,
+        labels={**labels, "collector": collector_name},
     )
 
 
 class PodMetricCollector:
     # Owns Pod-related Kubernetes API reads and converts them directly to MetricSample values.
+    collector_name = "pod"
+
     def __init__(self, kubernetes: KubernetesApiClient, node_name: str) -> None:
         self.kubernetes = kubernetes
         self.node_name = node_name
