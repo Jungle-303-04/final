@@ -25,6 +25,7 @@ class UserAccount(Base):
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     display_name: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
+    role: Mapped[str] = text_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
 
