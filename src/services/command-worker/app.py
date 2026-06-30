@@ -55,8 +55,8 @@ NO_DIFF_REASON = "desired and actual images already match"
 
 
 def evaluate_command_policy(command: CommandRequestedBody):
-    # TODO(command): load org/project/cluster policy and evaluate action, namespace, and requester role.
-    # TODO(command): keep production writes fail-closed until approval and RBAC proof are available.
+    # TODO(command): org/project/cluster 정책 로드와 action, namespace, requester role 평가
+    # TODO(command): 승인과 RBAC proof 전까지 production write fail-closed 유지
     if command.diff.desired_image == command.diff.actual_image:
         return PolicyResult.reject(NO_DIFF_REASON)
     return POLICY.evaluate(ModelLookup(command))
@@ -88,8 +88,8 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
 
 
 async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
-    # TODO(command): persist lease metadata, retry policy, and target agent routing constraints.
-    # TODO(command): make queue writes share the same outbox/UoW boundary as the command events.
+    # TODO(command): lease metadata, retry policy, target agent routing constraint 저장
+    # TODO(command): queue write와 command event의 outbox/UoW 경계 공유
     await ctx.db.queue_agent_command(
         ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued
     )

@@ -67,7 +67,7 @@ _PENDING: tuple[type, ...] = ()
 
 if TYPE_CHECKING:
     # 타입 검사용 스텁 — 코어+pending repo 계약을 선언(런타임엔 아래 type() 이
-    # 도메인 repo 까지 동적 합성). 타입체커가 Database 의 store 메서드를 인식하게 한다.
+    # 도메인 repo 까지 동적 합성). Database store 메서드 타입체커 인식용.
     class Database(  # noqa: D101
         EventRepository,
         DeadLetterRepository,

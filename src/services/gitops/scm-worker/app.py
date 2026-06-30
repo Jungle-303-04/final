@@ -32,7 +32,7 @@ SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
 
 
 def resolve_pr_url_prefix() -> str:
-    # TODO(scm): replace the stub URL prefix with the real GitHub App adapter response URL.
+    # TODO(scm): stub URL prefix를 실제 GitHub App adapter response URL로 교체
     prefix = env(SCM_PR_URL_PREFIX_ENV, "").rstrip("/")
     if not prefix:
         raise RuntimeError(MISSING_PR_ADAPTER_MESSAGE)
@@ -40,8 +40,8 @@ def resolve_pr_url_prefix() -> str:
 
 
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
-    # TODO(scm): create branch, commit patch, open PR, and persist provider response atomically.
-    # TODO(scm): enforce repo allowlist, branch naming, and rollback metadata before write.
+    # TODO(scm): branch 생성, patch commit, PR 생성, provider response 원자 저장
+    # TODO(scm): write 전 repo allowlist, branch naming, rollback metadata 검증
     pr_url = f"{resolve_pr_url_prefix()}/{int(time.time()) % PR_NUMBER_MODULO}"
     await ctx.db.save_pull_request(
         ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
@@ -59,11 +59,10 @@ async def on_safe_pr_requested(
 ) -> AsyncIterator[EventBody]:
     # 우현 원본 보존:
     #
-    # 원본 GitOpsSyncWorkflow.handle에는 repo-gateway 단계가 없었다.
-    # 원본은 desired.diff.detected 뒤에 command.requested를 직접 발행했다.
-    # 이 파일은 그 직접 실행 흐름을 보존 가능한 PR 제안 경계로 바꾸기 위해
-    # 새로 생긴 split worker다. 원본 command.requested 블록은
-    # diff-analyze-worker의 safe 분기 주석으로 남겨 두었다.
+    # 원본 GitOpsSyncWorkflow.handle에는 repo-gateway 단계 없음
+    # 원본은 desired.diff.detected 뒤 command.requested 직접 발행
+    # 이 파일은 직접 실행 흐름을 보존 가능한 PR 제안 경계로 전환
+    # 원본 command.requested 블록은 diff-analyze-worker safe 분기 주석에 보존
     #
     # outbound 게이트웨이 정형: 외부 호출(PR 생성)의 try/except 는 deliver 가 흡수하고,
     # 핸들러는 "무엇을 호출하고 성공/실패를 어떤 이벤트로 낼지"만 선언(타 게이트웨이와 동일 모양).
