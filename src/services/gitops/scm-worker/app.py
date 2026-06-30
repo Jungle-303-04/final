@@ -70,13 +70,21 @@ async def on_safe_pr_requested(
         return await create_safe_pr(evt, ctx)
 
     def created(pr_url: str) -> SafePrCreatedBody:
-        return SafePrCreatedBody(pr_url=pr_url, provider=evt.provider, mode=PR_MODE)
+        return SafePrCreatedBody(
+            pr_url=pr_url,
+            provider=evt.provider,
+            mode=PR_MODE,
+            workspace_id=evt.workspace_id,
+        )
 
     async for out in deliver(
         call=create_pr,
         ok=created,
         fail=lambda exc: SafePrFailedBody(
-            provider=evt.provider, title=evt.title, reason=safe_pr_failure_reason(exc)
+            provider=evt.provider,
+            title=evt.title,
+            reason=safe_pr_failure_reason(exc),
+            workspace_id=evt.workspace_id,
         ),
     ):
         yield out

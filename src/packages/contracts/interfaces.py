@@ -50,8 +50,6 @@ class DeadLetterStore(Protocol):
 
 
 class UserStore(Protocol):
-    def has_user_accounts(self) -> bool: ...
-
     def get_user_by_email(self, email: str) -> JsonObject | None: ...
 
     def create_user(
@@ -64,11 +62,20 @@ class UserStore(Protocol):
         role: str,
     ) -> JsonObject | None: ...
 
-    def activate_user(self, user_id: str) -> JsonObject | None: ...
+    def complete_email_verification(self, user_id: str) -> JsonObject | None: ...
+
+    def approve_user(self, user_id: str, workspace_id: str) -> JsonObject | None: ...
+
+    def get_default_workspace_id_for_user(self, user_id: str) -> str | None: ...
 
 
 class SessionStore(Protocol):
-    async def create_session(self, user_id: str, roles: list[str] | None = None) -> Any: ...
+    async def create_session(
+        self,
+        user_id: str,
+        roles: list[str] | None = None,
+        workspace_id: str | None = None,
+    ) -> Any: ...
 
     async def get_session(self, token: str | None) -> Any | None: ...
 
@@ -103,15 +110,20 @@ class ManagementPlaneClient(Protocol):
     async def ship_evidence(self, evidence: JsonObject) -> int: ...
 
     async def poll_command(
-        self, cluster_id: str, agent_id: str, timeout_seconds: int
+        self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None: ...
 
     async def start_command(
-        self, command_id: str, cluster_id: str, lease_id: str, agent_id: str
+        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
     ) -> None: ...
 
     async def complete_command(
-        self, command_id: str, lease_id: str, agent_id: str, result: JsonObject
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        result: JsonObject,
     ) -> None: ...
 
 

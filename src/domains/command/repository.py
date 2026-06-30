@@ -11,6 +11,7 @@ from domains.command.models import (
 )
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
 from packages.storage.engine import (
     DEFAULT_COMMAND_LEASE_SECONDS,
@@ -28,6 +29,7 @@ class AgentCommandRepository(DatabaseConnection):
             pg_insert(table)
             .values(
                 command_id=plan["command_id"],
+                workspace_id=plan.get("workspace_id", DEFAULT_WORKSPACE_ID),
                 correlation_id=correlation_id,
                 cluster_id=plan["cluster_id"],
                 action=plan["action"],
@@ -49,6 +51,7 @@ class AgentCommandRepository(DatabaseConnection):
     async def lease_agent_command(
         self,
         cluster_id: str,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
         queued_status: str = CommandStatus.QUEUED,
         leased_status: str = CommandStatus.LEASED,
         agent_id: str = UNKNOWN_AGENT_ID,
@@ -60,6 +63,7 @@ class AgentCommandRepository(DatabaseConnection):
         lease_id = str(uuid.uuid4())
         columns = (
             table.c.command_id,
+            table.c.workspace_id,
             table.c.correlation_id,
             table.c.cluster_id,
             table.c.action,
@@ -75,7 +79,9 @@ class AgentCommandRepository(DatabaseConnection):
         )
         candidate = (
             select(table.c.command_id)
-            .where(table.c.cluster_id == cluster_id, available)
+            .where(
+                table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id, available
+            )
             .order_by(table.c.created_at)
             .limit(1)
             .with_for_update(skip_locked=True)
@@ -100,6 +106,7 @@ class AgentCommandRepository(DatabaseConnection):
     async def start_agent_command(
         self,
         command_id: str,
+        workspace_id: str,
         lease_id: str,
         agent_id: str,
         running_status: str = CommandStatus.RUNNING,
@@ -109,6 +116,7 @@ class AgentCommandRepository(DatabaseConnection):
             update(table)
             .where(
                 table.c.command_id == command_id,
+                table.c.workspace_id == workspace_id,
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
                 table.c.status == CommandStatus.LEASED,
@@ -122,13 +130,19 @@ class AgentCommandRepository(DatabaseConnection):
         return row["correlation_id"] if row else None
 
     async def complete_agent_command(
-        self, command_id: str, result: JsonObject, lease_id: str, agent_id: str
+        self,
+        command_id: str,
+        workspace_id: str,
+        result: JsonObject,
+        lease_id: str,
+        agent_id: str,
     ) -> str | None:
         table = AgentCommand.__table__
         statement = (
             update(table)
             .where(
                 table.c.command_id == command_id,
+                table.c.workspace_id == workspace_id,
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
                 table.c.status == CommandStatus.RUNNING,

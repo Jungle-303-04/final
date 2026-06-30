@@ -65,6 +65,7 @@ def evaluate_command_policy(command: CommandRequestedBody):
 def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
     payload = {
         "correlation_id": correlation_id,
+        "workspace_id": command.workspace_id,
         "cluster_id": command.cluster_id,
         "action": command.action,
         "namespace": command.namespace,
@@ -84,6 +85,7 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         namespace=command.namespace or CONFIG.default_namespace,
         diff=command.diff.to_body(),
         steps=list(CONFIG.policy_steps),
+        workspace_id=command.workspace_id,
     )
 
 
@@ -110,7 +112,11 @@ async def on_command_requested(
         plan=plan, route=Route(channel=CONFIG.agent_route_channel, cluster_id=plan.cluster_id)
     )
     await queue_plan_for_agent(ctx, plan)
-    yield CommandQueuedForAgentBody(command_id=plan.command_id, cluster_id=plan.cluster_id)
+    yield CommandQueuedForAgentBody(
+        command_id=plan.command_id,
+        cluster_id=plan.cluster_id,
+        workspace_id=plan.workspace_id,
+    )
 
 
 if __name__ == "__main__":
