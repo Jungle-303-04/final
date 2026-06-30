@@ -73,20 +73,18 @@ class AgentCommandRepository(DatabaseConnection):
             table.c.status == queued_status,
             (table.c.status == leased_status) & (table.c.leased_until < func.now()),
         )
-        find_statement = (
+        candidate = (
             select(table.c.command_id)
             .where(table.c.cluster_id == cluster_id, available)
             .order_by(table.c.created_at)
             .limit(1)
             .with_for_update(skip_locked=True)
+            .scalar_subquery()
         )
         async with self.async_connection() as conn:
-            row = (await conn.execute(find_statement)).mappings().first()
-            if not row:
-                return None
             statement = (
                 update(table)
-                .where(table.c.command_id == row["command_id"])
+                .where(table.c.command_id == candidate)
                 .values(
                     status=leased_status,
                     lease_id=lease_id,
