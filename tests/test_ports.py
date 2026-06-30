@@ -137,7 +137,7 @@ def test_command_subscriber_rejects_noop_diff() -> None:
 
 
 def test_command_id_is_deterministic_for_same_input() -> None:
-    command = load_service("command-worker")
+    command = load_file(ROOT / "src" / "domains" / "command" / "handler.py", "test_command_handler")
     payload = CommandRequestedBody.from_body(
         {
             "cluster_id": "target-cluster-01",
