@@ -11,7 +11,6 @@ POSTGRES_DB="${POSTGRES_DB:-service}"
 DATABASE_URL="${DATABASE_URL:-}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
-AGENT_TOKEN="${AGENT_TOKEN:-}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_REPO="${GITHUB_REPO:-octocat/Hello-World}"
 SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX:-}"
@@ -73,13 +72,6 @@ fi
 
 if [ -z "${DATABASE_URL}" ]; then
   DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:6432/${POSTGRES_DB}"
-fi
-
-if [ -z "${AGENT_TOKEN}" ]; then
-  AGENT_TOKEN="$(existing_secret_value management-runtime-secret AGENT_TOKEN)"
-fi
-if [ -z "${AGENT_TOKEN}" ]; then
-  AGENT_TOKEN="$(openssl rand -hex 32)"
 fi
 
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
@@ -163,7 +155,6 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic management-runtime-secret \
   --from-literal=DATABASE_URL="${DATABASE_URL}" \
-  --from-literal=AGENT_TOKEN="${AGENT_TOKEN}" \
   --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 kubectl --context "kind-${MGMT_CLUSTER}" -n management delete \
