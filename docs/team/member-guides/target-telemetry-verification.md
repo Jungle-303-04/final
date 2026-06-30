@@ -2,10 +2,11 @@
 
 This runbook checks the current Target/Telemetry MVP from the terminal.
 
-It verifies four things:
+It verifies five things:
 
 - Prometheus is installed and can answer metric queries.
 - Loki is installed and can answer log queries.
+- Tempo is installed and can answer trace search queries.
 - optional-node-collector exposes node-scoped metrics.
 - target-cluster-agent sends evidence to the management plane.
 
@@ -22,6 +23,7 @@ Expected:
 - `prometheus-*` Pods are `Running`.
 - `loki-*` Pods are `Running`.
 - `alloy-*` is `Running`.
+- `tempo-*` is `Running`.
 - `opentelemetry-collector-*` is `Running`.
 - `optional-node-collector-*` is `Running`.
 - `target-cluster-agent-*` is `Running`.
@@ -118,7 +120,36 @@ Expected:
 - stream labels include `namespace`, `app`, `pod`, and `container`
 - each `line` is the original stdout log line stored in Loki
 
-## 6. Check Evidence Shipping
+## 6. Check Tempo Query
+
+Tempo stores traces forwarded by OpenTelemetry Collector.
+
+This query can succeed with zero traces when no service has emitted spans yet.
+
+```powershell
+@'
+import httpx
+
+query = '{ resource.service.name = "target-cluster-agent" }'
+r = httpx.get(
+    "http://tempo.target.svc:3200/api/search",
+    params={"q": query, "limit": 5},
+    timeout=10,
+)
+p = r.json()
+
+print("http:", r.status_code)
+print("trace count:", len(p.get("traces", [])))
+print(p)
+'@ | kubectl --context kind-target -n target exec -i deploy/target-cluster-agent -- python -
+```
+
+Expected:
+
+- `http: 200`
+- `trace count` may be `0` until a workload emits spans through OpenTelemetry.
+
+## 7. Check Evidence Shipping
 
 ```powershell
 kubectl --context kind-target -n target logs deploy/target-cluster-agent --tail=20
@@ -143,16 +174,16 @@ POST /agent/evidence HTTP/1.1" 200 OK
 published cluster.evidence.received
 ```
 
-## 7. Check Latest Evidence in Management DB
+## 8. Check Latest Evidence in Management DB
 
 ```powershell
-kubectl --context kind-management -n management exec postgresql-0 -- psql -U service -d service -At -c "select payload->>'cluster_id', payload ? 'metrics', payload ? 'logs', payload->'metrics'->>'source', (payload->'metrics'->'results') ? 'node_collector_node_pod_count', (payload->'metrics'->'results') ? 'node_collector_scrape_error', jsonb_array_length(payload->'logs') from evidence order by created_at desc limit 1;"
+kubectl --context kind-management -n management exec postgresql-0 -- psql -U service -d service -At -c "select payload->>'cluster_id', payload ? 'metrics', payload ? 'logs', payload ? 'traces', payload->'metrics'->>'source', payload->'traces'->>'source', (payload->'metrics'->'results') ? 'node_collector_node_pod_count', (payload->'metrics'->'results') ? 'node_collector_scrape_error', jsonb_array_length(payload->'logs') from evidence order by created_at desc limit 1;"
 ```
 
 Expected columns:
 
 ```text
-target-cluster-01|t|t|prometheus|t|t|...
+target-cluster-01|t|t|t|prometheus|tempo|t|t|...
 ```
 
 Meaning:
@@ -160,26 +191,29 @@ Meaning:
 - evidence belongs to `target-cluster-01`
 - `metrics` exists
 - `logs` exists
+- `traces` exists
 - metrics source is `prometheus`
+- traces source is `tempo`
 - node collector pod count query exists
 - node collector scrape error query exists
 - logs array has at least one query result
 
-## 8. Run Unit Tests
+## 9. Run Unit Tests
 
 ```powershell
-uv run pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_pod_evidence.py tests/test_node_collector.py
+uv run pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_trace_evidence.py tests/test_target_pod_evidence.py tests/test_node_collector.py
 ```
 
-These tests do not call the real cluster. They use fake Prometheus, Loki, and Kubernetes API responses to verify evidence shaping logic.
+These tests do not call the real cluster. They use fake Prometheus, Loki, Tempo, and Kubernetes API responses to verify evidence shaping logic.
 
-## Current OpenTelemetry Gap
+## OpenTelemetry And Tempo State
 
-OpenTelemetry Collector is installed and exposes OTLP ports `4317` and `4318`.
+OpenTelemetry Collector exposes OTLP ports `4317` and `4318`.
 
 Current state:
 
 - OTel Collector receives OTLP data.
-- OTel Collector exports to `debug`.
-- `target-cluster-agent` does not yet replace `evidence["traces"]` with real trace data.
-- A real trace evidence path still needs a trace backend such as Tempo, or a deliberate MVP shortcut through Loki/debug logs.
+- OTel Collector forwards traces to Tempo.
+- Tempo stores traces and exposes `/api/search`.
+- `target-cluster-agent` queries Tempo and replaces `evidence["traces"]`.
+- Trace results can be empty until a workload emits spans through OpenTelemetry.

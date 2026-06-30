@@ -39,7 +39,12 @@ config:
     batch: {}
 
   exporters:
-    # Debug exporter keeps the first collector install self-contained.
+    # Send traces to the in-cluster Tempo service through OTLP/gRPC.
+    otlp_grpc/tempo:
+      endpoint: tempo.target.svc:4317
+      tls:
+        insecure: true
+    # Keep logs/metrics self-contained until they are routed to dedicated backends.
     debug: {}
 
   extensions:
@@ -56,7 +61,7 @@ config:
           - memory_limiter
           - batch
         exporters:
-          - debug
+          - otlp_grpc/tempo
       metrics:
         receivers:
           - otlp
