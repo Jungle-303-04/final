@@ -66,14 +66,14 @@ secrets                         SOPS/age 기반 secret 공유 템플릿
 각 Kubernetes workload는 중앙 dispatcher에 role 문자열을 넘기지 않는다. Deployment/DaemonSet이 각 서비스 entrypoint를 직접 실행한다.
 
 ```text
-api-gateway        -> python src/services/api-gateway/app.py
+api-gateway        -> python src/services/gateway/api-gateway/app.py
 git-pull-worker               -> python src/services/gitops/git-pull-worker/app.py
 manifest-render-worker        -> python src/services/gitops/manifest-render-worker/app.py
 diff-worker                   -> python src/services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
 scm-worker           -> python src/services/gitops/scm-worker/app.py
-command-worker                -> python src/services/command-worker/app.py
-rca-worker                    -> python src/services/rca-worker/app.py
+command-worker                -> python src/services/command/command-worker/app.py
+rca-worker                    -> python src/services/ai/rca-worker/app.py
 dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py

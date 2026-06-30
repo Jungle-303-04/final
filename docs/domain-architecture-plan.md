@@ -31,10 +31,10 @@ work-allocation 의 5인 분배를 바운디드 컨텍스트로 분해한다.
 
 | 현재 | 프로덕션 도메인명 | 담당(5인) | 책임 |
 | --- | --- | --- | --- |
-| src/services/api-gateway + auth | **identity** | Gateway/Auth | 인증·세션·OAuth·토큰볼트·권한(authz) |
+| src/services/gateway/api-gateway + auth | **identity** | Gateway/Auth | 인증·세션·OAuth·토큰볼트·권한(authz) |
 | src/services/gitops/* (pull→render→diff→analyze) | **gitops** | GitOps/Command | Git 변경 감지→manifest→diff→분석 |
-| src/services/command-worker | **command** | GitOps/Command | 명령 정책→target agent 큐(control-plane) |
-| src/services/rca-worker | **rca** | RCA/Safe PR | 증거→근본원인분석 |
+| src/services/command/command-worker | **command** | GitOps/Command | 명령 정책→target agent 큐(control-plane) |
+| src/services/ai/rca-worker | **rca** | RCA/Safe PR | 증거→근본원인분석 |
 | src/services/gitops/scm-worker | **scm** | RCA/Safe PR | GitHub PR 생성(유일 outbound writer) |
 | src/services/projection/dashboard-worker | **projection** | (대시보드 owner) | 대시보드 read model |
 | src/services/projection/audit-worker | **audit** | RCA/Safe PR | 불변 감사 타임라인 |
@@ -80,7 +80,7 @@ route 순서 = **input validation → auth/policy → event publish**.
 | `repository.py` | `AgentCommandRepository`(queue/lease/start/complete) |
 | `router.py` | `/commands`, `/agent/command/poll`(롱폴)·`/start`·`/result` |
 | `policy.py` | 명령 정책(sandbox namespace 룰 등) — 도메인 특화 |
-| (실행) | `src/services/command-worker/app.py` |
+| (실행) | `src/services/command/command-worker/app.py` |
 
 ### rca (진단)
 **WIKI rca-safe-pr 가이드**: RCA Worker 는 직접 PR 생성 안 함 → `safe_pr.requested` 만 발행.
@@ -97,7 +97,7 @@ RCA 결과는 **evidence 기반으로만** 생성. `users/ummfieg/rca-scenarios/
 | `evidence_builder.py` | raw evidence → 사람이 읽는 요약(`EvidenceBuilt`) |
 | `analyzer.py` | AI RCA Service — 증거+시나리오 지식 → `rca.completed`(근본원인·조치) |
 | `scenarios/` | 40개 장애 시나리오 인디케이터(판정 규칙 소스) |
-| (실행) | `src/services/rca-worker/app.py` |
+| (실행) | `src/services/ai/rca-worker/app.py` |
 
 ### scm (소스컨트롤/PR)
 | 모듈 | 내용 |

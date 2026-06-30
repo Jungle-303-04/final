@@ -41,17 +41,19 @@ command   ◀── alert
 
 ## 4. 서비스 폴더·네이밍 규칙
 
-- **단일 워커 도메인**: `services/<도메인>/worker/` (예: `command/worker`, `alert/worker`, `mail/worker`).
+모든 서비스는 `services/<그룹>/<배포명>/` 로 그룹화한다(평면 폴더 금지). **리프 = k8s Deployment 이름**과 일치.
+
+- **워커**: `services/<도메인>/<도메인>-worker/` (예: `command/command-worker`, `alert/alert-worker`, `mail/mail-worker`).
 - **다중 워커 도메인**: `services/<도메인>/<구체명>/` (예: `gitops/git-pull-worker`, `projection/audit-worker`, `target/cluster-agent`).
-- **AI 에이전트**: `services/ai/<agent>/` (예: `ai/rca`). 많이 생기므로 전용 그룹.
-- **게이트웨이**: `services/api-gateway/`(단일 HTTP 진입, 워커 아님).
-- k8s Deployment 이름은 기존 유지(예: `command-worker`) — 폴더 경로와 다를 수 있고, 매니페스트 `command:` 가 경로를 가리킨다.
+- **AI 에이전트**: `services/ai/<agent>-worker/` (예: `ai/rca-worker`). 많이 생기므로 전용 그룹.
+- **게이트웨이**: `services/gateway/api-gateway/`(단일 HTTP 진입).
+- 매니페스트 `command:` 가 이 경로를 가리킨다.
 
 ## 5. AI 에이전트(많이 생길 예정)
 
 3계층에 그대로 매핑한다:
-- `services/ai/<agent>/` — 에이전트 프로세스 entrypoint.
-- `packages/ai/` — 공유 LLM 인프라(클라이언트·프롬프트·비용/토큰 가드·구조화 출력). 모든 에이전트가 재사용.
+- `services/ai/<agent>-worker/` — 에이전트 프로세스 entrypoint(예: `ai/rca-worker`).
+- `packages/ai/` — 공유 LLM 인프라(`LlmClient` 포트 + `FakeLlmClient` 어댑터 + `AiAgent` 베이스). 모든 에이전트가 재사용.
 - `domains/<capability>/` — 각 능력의 로직(events·정책). 예: `domains/rca`.
 
 ## 6. 검사 실행
