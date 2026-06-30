@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator
+from types import SimpleNamespace
+
+from domains.command.handler import (
+    COMMAND_CONFIG,
+    build_plan,
+    handle_command_requested,
+    route_for_plan,
+)
+from domains.gitops.events import Diff
+from packages.config.constants import Command, Sandbox, Target
+from packages.contracts.event_bus.bodies import (
+    CommandDispatchedBody,
+    CommandDispatchReadyBody,
+    CommandQueuedForAgentBody,
+    CommandRejectedBody,
+    CommandRequestedBody,
+    EventBody,
+    Plan,
+)
+from packages.contracts.event_bus.interfaces import JsonObject
+
+
+class SpyAgentCommandStore:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, JsonObject, str]] = []
+
+    async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
+        self.calls.append((correlation_id, plan, status))
+
+
+def command_request(action: str = Command.DEFAULT_ACTION) -> CommandRequestedBody:
+    return CommandRequestedBody(
+        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        action=action,
+        namespace=Sandbox.NAMESPACE,
+        reason="test",
+        diff=Diff(
+            resource="deployment/checkout-api",
+            namespace=Sandbox.NAMESPACE,
+            desired_image="checkout:new",
+            actual_image="checkout:old",
+            risk=Sandbox.RISK_TAG,
+        ),
+        workspace_id="workspace-1",
+        requested_by="user-1",
+    )
+
+
+async def collect_events(source: AsyncIterator[EventBody]) -> list[EventBody]:
+    return [body async for body in source]
+
+
+def test_build_plan_includes_agent_execution_metadata() -> None:
+    plan = build_plan(command_request(), "corr-1")
+    route = route_for_plan(plan)
+    body = plan.to_body()
+    roundtrip = Plan.from_body(body)
+
+    assert plan.lease.lease_seconds == COMMAND_CONFIG.lease_seconds
+    assert plan.lease.heartbeat_interval_seconds == COMMAND_CONFIG.heartbeat_interval_seconds
+    assert plan.retry_policy.max_attempts == COMMAND_CONFIG.retry_max_attempts
+    assert plan.retry_policy.retry_delay_seconds == COMMAND_CONFIG.retry_delay_seconds
+    assert plan.routing_constraint.channel == COMMAND_CONFIG.agent_route_channel
+    assert plan.routing_constraint.required_capability == COMMAND_CONFIG.required_agent_capability
+    assert route.channel == COMMAND_CONFIG.agent_route_channel
+    assert roundtrip.lease.lease_seconds == COMMAND_CONFIG.lease_seconds
+    assert body["routing_constraint"]["workspace_id"] == "workspace-1"
+
+
+def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(command_request(), ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [
+        CommandDispatchReadyBody,
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert len(store.calls) == 1
+    correlation_id, plan_payload, status = store.calls[0]
+    assert correlation_id == "corr-1"
+    assert status == COMMAND_CONFIG.command_status_queued
+    assert plan_payload == events[0].plan.to_body()
+    assert plan_payload["lease"]["lease_seconds"] == COMMAND_CONFIG.lease_seconds
+    assert plan_payload["retry_policy"]["max_attempts"] == COMMAND_CONFIG.retry_max_attempts
+    assert plan_payload["routing_constraint"]["cluster_id"] == Target.DEFAULT_CLUSTER_ID
+
+
+def test_command_handler_rejects_unsupported_action_before_queue() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(command_request("delete"), ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == "unsupported command action"
+    assert store.calls == []

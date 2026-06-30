@@ -27,6 +27,32 @@ class CommandRequestedBody(EventBody):
 
 
 @dataclass(frozen=True)
+class LeaseMetadata(EventBody):
+    """명령 lease 유지 기준."""
+
+    lease_seconds: int
+    heartbeat_interval_seconds: int
+
+
+@dataclass(frozen=True)
+class RetryPolicy(EventBody):
+    """agent 실행 실패 후 재처리 기준."""
+
+    max_attempts: int
+    retry_delay_seconds: int
+
+
+@dataclass(frozen=True)
+class RoutingConstraint(EventBody):
+    """명령을 맡을 수 있는 target agent 조건."""
+
+    channel: str
+    cluster_id: str
+    workspace_id: str
+    required_capability: str
+
+
+@dataclass(frozen=True)
 class Plan(EventBody):
     """에이전트가 실행할 명령 계획(값 객체)."""
 
@@ -37,6 +63,9 @@ class Plan(EventBody):
     namespace: str
     diff: JsonObject
     steps: list[str]
+    lease: LeaseMetadata
+    retry_policy: RetryPolicy
+    routing_constraint: RoutingConstraint
     workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
@@ -59,7 +88,7 @@ class CommandDispatchReadyBody(EventBody):
 @event(EventSubject.COMMAND_DISPATCHED)
 @dataclass(frozen=True)
 class CommandDispatchedBody(EventBody):
-    """command.dispatched — 대상 클러스터로 라우팅했다."""
+    """command.dispatched — 대상 클러스터 라우팅."""
 
     plan: Plan
     route: Route

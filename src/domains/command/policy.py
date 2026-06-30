@@ -4,8 +4,39 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
-from domains.command.policy_config import PolicyRuleConfig
 from packages.config.errors import require
+
+DEFAULT_COMMAND_LEASE_SECONDS = 60
+DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS = 20
+DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS = 3
+DEFAULT_COMMAND_RETRY_DELAY_SECONDS = 5
+
+
+@dataclass(frozen=True)
+class PolicyRuleConfig:
+    name: str
+    field: str
+    reason: str
+    expected: Any | None = None
+    allowed_values: tuple[Any, ...] = ()
+    default: Any = None
+
+
+@dataclass(frozen=True)
+class CommandConfig:
+    service_name: str
+    agent_route_channel: str
+    policy_steps: tuple[str, ...]
+    default_namespace: str
+    default_cluster_id: str
+    default_command_action: str
+    command_status_queued: str
+    lease_seconds: int
+    heartbeat_interval_seconds: int
+    retry_max_attempts: int
+    retry_delay_seconds: int
+    required_agent_capability: str
+    policy_rules: tuple[PolicyRuleConfig, ...]
 
 
 class Lookup(Protocol):
@@ -53,6 +84,28 @@ class EqualsRule:
 
 
 @dataclass(frozen=True)
+class AllowedValuesRule:
+    name: str
+    field: str
+    allowed_values: tuple[Any, ...]
+    reason: str
+    default: Any = None
+
+    def allows(self, target: Lookup) -> bool:
+        return target.value(self.field, self.default) in self.allowed_values
+
+    @classmethod
+    def build(cls, config: PolicyRuleConfig) -> AllowedValuesRule:
+        return cls(
+            name=config.name,
+            field=config.field,
+            allowed_values=config.allowed_values,
+            reason=config.reason,
+            default=config.default,
+        )
+
+
+@dataclass(frozen=True)
 class Result:
     allowed: bool
     reason: str | None = None
@@ -77,7 +130,12 @@ class Policy:
 
     @classmethod
     def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
-        rules: list[Rule] = [cast(Rule, EqualsRule.build(config)) for config in configs]
+        rules: list[Rule] = []
+        for config in configs:
+            if config.allowed_values:
+                rules.append(cast(Rule, AllowedValuesRule.build(config)))
+                continue
+            rules.append(cast(Rule, EqualsRule.build(config)))
         return cls(rules)
 
     def evaluate(self, target: Lookup) -> Result:
