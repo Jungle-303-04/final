@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -78,6 +79,44 @@ class ResourceClass(StrEnum):
     APPLICATION = "application"
     PLATFORM = "platform"
     SYSTEM = "system"
+
+
+@dataclass(frozen=True)
+class KubernetesResourceContract:
+    api_version: str
+    kind: str
+    api_prefix: str
+    plural: str
+    namespaced: bool = True
+
+
+SUPPORTED_KUBERNETES_RESOURCES: dict[tuple[str, str], KubernetesResourceContract] = {
+    ("apps/v1", "Deployment"): KubernetesResourceContract(
+        api_version="apps/v1",
+        kind="Deployment",
+        api_prefix="/apis/apps/v1",
+        plural="deployments",
+    ),
+    ("v1", "Service"): KubernetesResourceContract(
+        api_version="v1",
+        kind="Service",
+        api_prefix="/api/v1",
+        plural="services",
+    ),
+    ("v1", "ConfigMap"): KubernetesResourceContract(
+        api_version="v1",
+        kind="ConfigMap",
+        api_prefix="/api/v1",
+        plural="configmaps",
+    ),
+}
+
+
+def supported_kubernetes_resource(api_version: str, kind: str) -> KubernetesResourceContract:
+    try:
+        return SUPPORTED_KUBERNETES_RESOURCES[(api_version, kind)]
+    except KeyError:
+        raise ValueError(f"unsupported manifest kind: {api_version}/{kind}") from None
 
 
 DEFAULT_REPOSITORY_ID = "repo-default"

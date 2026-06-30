@@ -7,6 +7,7 @@ import httpx
 
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gitops import supported_kubernetes_resource
 
 
 @dataclass(frozen=True)
@@ -101,10 +102,5 @@ def kubernetes_manifest_resource(
 
 
 def kubernetes_resource_api(kind: str, api_version: str) -> tuple[str, str]:
-    if kind == "Deployment" and api_version == "apps/v1":
-        return "/apis/apps/v1", "deployments"
-    if kind == "Service" and api_version == "v1":
-        return "/api/v1", "services"
-    if kind == "ConfigMap" and api_version == "v1":
-        return "/api/v1", "configmaps"
-    raise ValueError(f"unsupported manifest kind: {api_version}/{kind}")
+    contract = supported_kubernetes_resource(api_version, kind)
+    return contract.api_prefix, contract.plural
