@@ -12,9 +12,12 @@ from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID,
     DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_ENVIRONMENT,
     DEFAULT_MANIFEST_PATH,
     DEFAULT_REPOSITORY_ID,
+    DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
@@ -30,6 +33,9 @@ class SafePrRequestedBody(EventBody):
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    environment: str = DEFAULT_ENVIRONMENT
     manifest_path: str = DEFAULT_MANIFEST_PATH
 
 
@@ -44,6 +50,9 @@ class SafePrCreatedBody(EventBody):
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    environment: str = DEFAULT_ENVIRONMENT
 
 
 @event(EventSubject.SAFE_PR_FAILED)
@@ -57,3 +66,6 @@ class SafePrFailedBody(EventBody):
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    environment: str = DEFAULT_ENVIRONMENT

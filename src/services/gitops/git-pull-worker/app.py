@@ -44,6 +44,9 @@ async def on_git_webhook(
         branch=evt.branch,
         watch_target_id=evt.watch_target_id,
         binding_id=evt.binding_id,
+        application_id=evt.application_id,
+        workflow_run_id=evt.workflow_run_id,
+        environment=evt.environment,
         cluster_id=evt.cluster_id,
         manifest_path=evt.manifest_path,
     )
