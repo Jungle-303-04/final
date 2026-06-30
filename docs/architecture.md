@@ -78,9 +78,9 @@ dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
 optional-node-collector       -> python src/services/target/node-collector/app.py
-fake-prometheus               -> python src/services/target/cluster-agent/fake_prometheus.py
-fake-loki                     -> python src/services/target/cluster-agent/fake_loki.py
-fake-otel                     -> python src/services/target/cluster-agent/fake_otel.py
+fake-prometheus               -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=prometheus)
+fake-loki                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=loki)
+fake-otel                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=otel)
 ```
 
 서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 `app.py` entrypoint, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
