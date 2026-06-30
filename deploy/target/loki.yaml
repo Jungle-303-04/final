@@ -24,6 +24,15 @@ singleBinary:
     enabled: true
     size: 5Gi
 
+# kind/local target clusters are intentionally small. The Loki chart enables
+# memcached result/chunk caches by default, and the chunk cache requests ~9.8Gi.
+# Production installs should size or re-enable these caches explicitly.
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
 read:
   replicas: 0
 write:
