@@ -45,29 +45,35 @@ def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
         title=PR_TITLE,
         body=f"{diff.resource}: {diff.actual_image} → {diff.desired_image}",
         provider=GitHub.PROVIDER,
+        workspace_id=diff.workspace_id,
+        repository_id=diff.repository_id,
+        binding_id=diff.binding_id,
+        manifest_path=diff.manifest_path,
     )
 
 
 def build_auto_command_request(diff: Diff) -> CommandRequestedBody:
     # TODO(gitops): workspace/repo/cluster environment별 auto deploy route policy화
     return CommandRequestedBody(
-        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
         action=Command.APPLY_MANIFEST_ACTION,
         namespace=diff.namespace,
         reason="safe sandbox gitops apply",
         diff=diff,
+        workspace_id=diff.workspace_id,
     )
 
 
 def build_pre_deploy_alert_request(diff: Diff) -> AlertRequestedBody:
     # TODO(alert): deployment window, blast radius, approver list, rollback metadata 포함
     return AlertRequestedBody(
-        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
         namespace=diff.namespace,
         severity=PRE_DEPLOY_ALERT_SEVERITY,
         message=f"pre-deploy check passed for {diff.resource}",
         reason="safe sandbox deploy will continue after alert gate",
         next_command=build_auto_command_request(diff),
+        workspace_id=diff.workspace_id,
     )
 
 

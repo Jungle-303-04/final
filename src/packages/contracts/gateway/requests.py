@@ -6,6 +6,14 @@ from pydantic import Field
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.gitops import (
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_REPO_BRANCH,
+    DEFAULT_REPO_REF,
+    DEFAULT_REPOSITORY_ID,
+    DEFAULT_WATCH_TARGET_ID,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 DEFAULT_WEBHOOK_IMAGE = "service:local"
@@ -48,6 +56,14 @@ class GitHubWebhookRequest(StrictModel):
     replicas: int = Field(
         default=DEFAULT_WEBHOOK_REPLICAS, ge=MIN_WEBHOOK_REPLICAS, le=MAX_WEBHOOK_REPLICAS
     )
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    repo_ref: str = DEFAULT_REPO_REF
+    branch: str = DEFAULT_REPO_BRANCH
+    watch_target_id: str = DEFAULT_WATCH_TARGET_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    manifest_path: str = DEFAULT_MANIFEST_PATH
 
 
 class AgentConnectRequest(StrictModel):

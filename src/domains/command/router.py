@@ -29,7 +29,11 @@ from packages.contracts.gateway.responses import (
     CommandStartedResponse,
     EventIdAcceptedResponse,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    DEPLOY_ACCESS,
+    AccessResourceType,
+)
 from packages.runtime.dependencies import get_db, get_events
 
 DEFAULT_POLL_SECONDS = 10
@@ -38,11 +42,13 @@ POLL_SLEEP_SECONDS = 1
 LEASE_SECONDS = 60
 NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"
+ACCESS_DENIED_CODE = 403
+RESOURCE_ACCESS_DENIED = "resource access denied"
 
 router = APIRouter()
 
 
-def command_diff(payload: CommandRequest) -> Diff:
+def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
     raw = payload.diff or {
         "resource": "deployment/checkout-api",
         "namespace": payload.namespace,
@@ -50,7 +56,21 @@ def command_diff(payload: CommandRequest) -> Diff:
         "actual_image": "unknown",
         "risk": Sandbox.RISK_TAG,
     }
+    raw = {**raw, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
     return cast(Diff, Diff.from_body(raw))
+
+
+def require_cluster_deploy_access(
+    db: Any, current: Any, workspace_id: str, cluster_id: str
+) -> None:
+    if not db.user_has_resource_access(
+        current.user_id,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        cluster_id,
+        DEPLOY_ACCESS,
+    ):
+        raise HTTPException(status_code=ACCESS_DENIED_CODE, detail=RESOURCE_ACCESS_DENIED)
 
 
 async def lease_next_command(
@@ -77,16 +97,19 @@ async def lease_next_command(
 async def commands(
     payload: CommandRequest,
     current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> AcceptedResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
     accepted = await events.accept_body(
         CommandRequestedBody(
             cluster_id=payload.cluster_id,
             action=payload.action,
             namespace=payload.namespace,
             reason=payload.reason or "manual command request",
-            diff=command_diff(payload),
-            workspace_id=getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID),
+            diff=command_diff(payload, workspace_id),
+            workspace_id=workspace_id,
             requested_by=current.user_id,
         ),
         actor=Actor(current.user_id, tuple(current.roles)),
