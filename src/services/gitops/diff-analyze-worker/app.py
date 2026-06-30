@@ -98,24 +98,8 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
     safe, reason = evaluate_safe_pr_policy(diff)
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
-        # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 command.requested 직접 발행):
-        #
-        # await self.events.publish(
-        #     EventSubject.COMMAND_REQUESTED,
-        #     SERVICE_NAME,
-        #     {
-        #         "cluster_id": env(TARGET_CLUSTER_ENV, DEFAULT_TARGET_CLUSTER_ID),
-        #         "action": SYNC_ACTION,
-        #         "namespace": SANDBOX_NAMESPACE,
-        #         "reason": SYNC_REASON,
-        #         "diff": diff,
-        #     },
-        #     evt["correlation_id"],
-        # )
-        #
-        # 현재 split 구조: diff를 바로 실행 command로 보내지 않는 흐름
-        # 안전 판정 후 safe_pr.requested와 pre-deploy alert gate 발행
-        # alert-worker gate 통과 후 command.requested 연결
+        # 안전 판정 후 바로 실행하지 않고 PR 제안과 alert gate를 먼저 발행한다.
+        # alert-worker가 gate를 통과시키면 command.requested가 연결된다.
         yield build_safe_pr_request(diff)
         yield build_pre_deploy_alert_request(diff)
 
