@@ -372,3 +372,46 @@ def test_render_rejects_boolean_deployment_replicas(monkeypatch, tmp_path) -> No
 
     assert subjects_of(outs) == ["manifest.invalid"]
     assert outs[0].reason == "deployment spec.replicas must be an integer"
+
+
+@pytest.mark.parametrize(
+    ("replicas", "reason"),
+    [
+        ("1.5", "deployment spec.replicas must be an integer"),
+        ("'3'", "deployment spec.replicas must be an integer"),
+        ("-1", "deployment spec.replicas must be a non-negative integer"),
+    ],
+)
+def test_render_rejects_invalid_deployment_replicas_values(
+    monkeypatch, tmp_path, replicas: str, reason: str
+) -> None:
+    broken = tmp_path / "broken-replicas.yaml"
+    broken.write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: checkout-api",
+                "spec:",
+                f"  replicas: {replicas}",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: checkout-api",
+                "          image: ghcr.io/project/checkout-api:v2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(broken))
+
+    render = load_service("gitops/manifest-render-worker")
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="bad123", image="ignored", replicas=1),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert outs[0].reason == reason
