@@ -18,6 +18,12 @@ def test_diff_emits_desired_diff() -> None:
             kind="Deployment",
             metadata=RenderedMetadata(name="checkout-api", namespace="sandbox"),
             spec=RenderedSpec(replicas=2, image="img:new"),
+            manifest={
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+                "spec": {"replicas": 2},
+            },
         ),
         repository_id="repo-1",
         binding_id="binding-1",
@@ -27,6 +33,7 @@ def test_diff_emits_desired_diff() -> None:
     assert subjects_of(outs) == ["desired.diff.detected"]
     assert outs[0].diff.desired_image == "img:new"
     assert outs[0].diff.resource == "deployment/checkout-api"
+    assert outs[0].diff.desired_manifest["kind"] == "Deployment"
     assert outs[0].diff.repository_id == "repo-1"
     assert outs[0].diff.binding_id == "binding-1"
     assert outs[0].diff.cluster_id == "cluster-1"

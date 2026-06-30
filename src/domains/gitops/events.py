@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from packages.config.constants import Target
-from packages.contracts.event_bus.bodies.base import EventBody
+from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gitops import (
@@ -46,8 +46,8 @@ class RenderedMetadata(EventBody):
 class RenderedSpec(EventBody):
     """렌더된 k8s manifest의 spec 블록(값 객체)."""
 
-    replicas: int
-    image: str
+    replicas: int = 0
+    image: str = ""
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,7 @@ class RenderedManifest(EventBody):
     metadata: RenderedMetadata
     spec: RenderedSpec
     resource_class: str = ResourceClass.APPLICATION.value
+    manifest: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,7 @@ class Diff(EventBody):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     manifest_path: str = DEFAULT_MANIFEST_PATH
     resource_class: str = ResourceClass.APPLICATION.value
+    desired_manifest: JsonObject = field(default_factory=dict)
 
 
 @event(EventSubject.GIT_WEBHOOK_RECEIVED)
