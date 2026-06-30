@@ -7,9 +7,13 @@ Kubernetes 배포 사양으로 바꾸는 책임만 분리.
 
 from __future__ import annotations
 
+import json
+import subprocess
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from packages.config.constants import Sandbox
+from packages.config.settings import env
 from packages.contracts.event_bus.bodies import (
     EventBody,
     GitChangedBody,
@@ -27,10 +31,84 @@ app = App("manifest-render-worker")
 DEFAULT_APP_NAME = "checkout-api"
 MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
+GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
+GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
+
+
+def read_manifest_source(evt: GitChangedBody) -> str | None:
+    manifest_path = env(GIT_MANIFEST_PATH_ENV, "")
+    if not manifest_path:
+        return None
+
+    repo_path = env(GIT_REPO_PATH_ENV, "")
+    if repo_path:
+        # TODO(gitops): replace local clone access with repo integration target checkout/cache.
+        result = subprocess.run(
+            ["git", "-C", repo_path, "show", f"{evt.commit_sha}:{manifest_path}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout
+
+    path = Path(manifest_path)
+    if path.exists():
+        # TODO(gitops): use this local-file path only for dev/test; production should use repo refs.
+        return path.read_text(encoding="utf-8")
+    return None
+
+
+def parse_manifest_source(source: str) -> Manifest:
+    try:
+        payload = json.loads(source)
+        metadata = payload.get("metadata", {})
+        spec = payload.get("spec", {})
+        template = spec.get("template", {})
+        containers = template.get("spec", {}).get("containers", [])
+        image = containers[0]["image"]
+        return Manifest(
+            app=metadata["name"],
+            image=image,
+            replicas=int(spec.get("replicas", 1)),
+            namespace=metadata.get("namespace", Sandbox.NAMESPACE),
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return parse_simple_yaml_manifest(source)
+
+
+def parse_simple_yaml_manifest(source: str) -> Manifest:
+    # TODO(gitops): replace this minimal Deployment parser with Kustomize/Helm/YAML adapter.
+    name: str | None = None
+    namespace = Sandbox.NAMESPACE
+    replicas = 1
+    image: str | None = None
+    section: str | None = None
+
+    for raw_line in source.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw_line.startswith((" ", "-")):
+            section = stripped.removesuffix(":")
+        if section == "metadata":
+            if stripped.startswith("name:") and name is None:
+                name = stripped.split(":", 1)[1].strip().strip('"')
+            if stripped.startswith("namespace:"):
+                namespace = stripped.split(":", 1)[1].strip().strip('"')
+        if stripped.startswith("replicas:"):
+            replicas = int(stripped.split(":", 1)[1].strip())
+        if "image:" in stripped and image is None:
+            image = stripped.split("image:", 1)[1].strip().strip('"')
+
+    if not name or not image:
+        raise ValueError("manifest must include metadata.name and a container image")
+    return Manifest(app=name, image=image, replicas=replicas, namespace=namespace)
 
 
 def build_manifest_from_git_change(evt: GitChangedBody) -> Manifest:
-    # TODO(gitops): checkout target repo/ref and read the real workload source.
+    source = read_manifest_source(evt)
+    if source is not None:
+        return parse_manifest_source(source)
     # TODO(gitops): preserve commit metadata so render failures can be traced to a repo revision.
     return Manifest(
         app=DEFAULT_APP_NAME,

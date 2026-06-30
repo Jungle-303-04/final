@@ -33,6 +33,7 @@ class Plan(EventBody):
     cluster_id: str
     action: str
     namespace: str
+    diff: JsonObject
     steps: list[str]
 
 

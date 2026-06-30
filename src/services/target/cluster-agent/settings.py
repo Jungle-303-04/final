@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from packages.config.constants import CommandStatus
+from packages.config.constants import Command, CommandStatus
 
 
 class Settings:
@@ -49,7 +49,13 @@ class Settings:
     PROMETHEUS_VECTOR_VALUE = "0.19"
 
     COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
-    COMMAND_RESULT_MESSAGE = "fake Kubernetes action applied in sandbox namespace"
+    APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
+    ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
+    COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
+    KUBERNETES_SERVICE_HOST_ENV = "KUBERNETES_SERVICE_HOST"
+    KUBERNETES_SERVICE_PORT_ENV = "KUBERNETES_SERVICE_PORT_HTTPS"
+    SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
     LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
     LOKI_WARNING_LINE = "WARN rollback candidate detected"
     OTEL_SLOW_SPAN = "GET /checkout"

@@ -18,8 +18,10 @@ def _diff(risk: str) -> Diff:
 def test_safe_diff_requests_pr() -> None:
     analyze = load_service("gitops/diff-analyze-worker")
     safe = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=_diff("sandbox-only")))
-    assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested"]
+    assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested", "alert.requested"]
     assert safe[0].safe is True
+    assert safe[2].next_command is not None
+    assert safe[2].next_command.action == "apply_manifest"
 
 
 def test_unsafe_diff_skips_pr() -> None:
