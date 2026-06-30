@@ -1,7 +1,7 @@
 """command 도메인 HTTP 라우터 — 명령 발행 + agent 명령 풀(롱폴)·시작·결과.
 
 agent 라우트는 APIRouter(dependencies=[Depends(require_agent)]) 로 라우터 단위 가드(필터)
-를 적용 — 핸들러마다 인증 반복 없이 선언적으로 보호한다.
+적용 — 핸들러별 인증 반복 제거.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
 from domains.identity.dependencies import require_agent, require_session
 from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.auth import Actor
@@ -41,7 +42,7 @@ from packages.runtime.dependencies import get_db, get_events
 DEFAULT_POLL_SECONDS = 10
 MAX_POLL_SECONDS = 30
 POLL_SLEEP_SECONDS = 1
-LEASE_SECONDS = 60
+LEASE_SECONDS = DEFAULT_COMMAND_LEASE_SECONDS
 NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"
 ACCESS_DENIED_CODE = 403
