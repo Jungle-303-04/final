@@ -21,6 +21,10 @@ class ClusterEvidenceReceivedBody(EventBody):
     logs: list[JsonObject]
     traces: JsonObject
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    agent_id: str | None = None
+    source_id: str | None = None
+    window_start: str | None = None
+    evidence_key: str | None = None
 
 
 @event(EventSubject.INCIDENT_DETECTED)

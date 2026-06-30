@@ -47,7 +47,7 @@ def test_services_have_direct_process_entrypoints() -> None:
         assert "SERVICE_NAME =" not in source
 
 
-# App(한 파일) 으로 마이그레이션한 서비스는 settings.py 가 없다(러너에 인라인).
+# App(한 파일) 서비스는 runner 파일 안에서 이름과 기본값 관리
 APP_BASED_SERVICES = {
     "rca-worker",
     "command-worker",
@@ -62,17 +62,30 @@ APP_BASED_SERVICES = {
     "audit-worker",
 }
 
+LOCAL_SETTINGS_SERVICES = {"api-gateway", "github-poll-worker"}
 
-def test_services_keep_local_settings_files() -> None:
-    service_dirs = {
-        Path(relative_path).parent
-        for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items()
-        if service not in APP_BASED_SERVICES
-    }
+INLINE_CONFIG_SERVICES = {
+    "cluster-agent": "AgentConfig",
+    "node-collector": "NodeCollectorConfig",
+    "fake-prometheus": "AgentConfig",
+    "fake-loki": "AgentConfig",
+    "fake-otel": "AgentConfig",
+}
 
-    for service_dir in service_dirs:
+
+def test_services_use_expected_config_location() -> None:
+    for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items():
+        service_dir = Path(relative_path).parent
         settings_file = ROOT_DIR / service_dir / "settings.py"
-        assert settings_file.exists(), f"{service_dir} must own service settings"
+        source = read_project_file(relative_path)
+
+        if service in LOCAL_SETTINGS_SERVICES:
+            assert settings_file.exists(), f"{service_dir} must own service settings"
+            continue
+
+        assert not settings_file.exists(), f"{service_dir} should not keep settings.py"
+        if service in INLINE_CONFIG_SERVICES:
+            assert INLINE_CONFIG_SERVICES[service] in source
 
 
 def test_contracts_are_grouped_by_boundary() -> None:
