@@ -30,5 +30,5 @@ class Settings:
     POLL_RETRY_DELAY_SECONDS = 5
 
     # webhook 바디 기본값(폴러는 commit_sha 만 실제로 채우고 image/replicas 는 데모 기본).
-    DEFAULT_IMAGE = "ghcr.io/project/checkout-api:bad"
+    DEFAULT_IMAGE = "service:local"
     DEFAULT_REPLICAS = 2
