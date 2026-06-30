@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.contracts.gateway.base import StrictModel
 
 DEFAULT_WEBHOOK_IMAGE = "service:local"
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -22,26 +23,18 @@ MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
 
 
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
 class LoginRequest(StrictModel):
-    # 우리 서비스 자체 계정으로 로그인할 때 받는 값이다.
-    # role 같은 권한 필드는 클라이언트가 보낼 수 없고, 서버가 DB/session 기준으로만 정한다.
+    # 우리 서비스 자체 계정 로그인 입력값
+    # role 같은 권한 필드는 클라이언트 입력 금지, 서버가 DB/session 기준 결정
     email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(min_length=8)
 
 
 class SignupRequest(StrictModel):
-    # 가입도 권한 필드는 받지 않는다. 최초 role/session 정책은 서버가 정한다.
+    # 가입도 권한 필드 입력 금지. 최초 role/session 정책은 서버 결정
     email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(min_length=8)
     password_confirm: str = Field(min_length=8)
-
-
-class EmailVerificationRequest(StrictModel):
-    token: str = Field(min_length=1)
 
 
 class ResendEmailVerificationRequest(StrictModel):

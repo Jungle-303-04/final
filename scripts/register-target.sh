@@ -14,7 +14,10 @@ EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 IMAGE_NAME="${IMAGE_NAME:-service:local}"
 INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
 COOKIE_JAR="$(mktemp)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
+
+source "${SCRIPT_DIR}/lib/auth.sh"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -51,13 +54,8 @@ if [ -z "${MANAGEMENT_BASE_URL}" ]; then
   exit 1
 fi
 
-echo "==> creating operator session for target registration"
-start_response="$(curl -fsS "${BASE_URL}/auth/oauth/github/start?user_id=local-user&scopes=profile,email,repo")"
-state="$(printf "%s" "${start_response}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["state"])')"
-curl -fsS -X POST "${BASE_URL}/auth/oauth/github/callback" \
-  -H "content-type: application/json" \
-  -c "${COOKIE_JAR}" \
-  -d "{\"state\":\"${state}\",\"code\":\"local-dev-code\",\"scopes\":[\"profile\",\"email\",\"repo\"]}" >/dev/null
+echo "==> logging in operator for target registration"
+login_with_password "${BASE_URL}" "${COOKIE_JAR}"
 
 registration_body="$(
   TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}" \

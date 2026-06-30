@@ -13,6 +13,7 @@ from domains.identity.dependencies import require_session
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import TargetRegisterRequest
+from packages.contracts.gateway.responses import TargetInstallResponse
 from packages.runtime.dependencies import get_db
 
 AGENT_TOKEN_ENV = "AGENT_TOKEN"
@@ -151,8 +152,8 @@ subjects:
 
 
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:
-    # Target team: Gateway bootstraps the cluster-agent; the agent reconciles node collectors.
-    # TODO(target): replace inline YAML strings with Helm/Kustomize render output.
+    # Target팀: gateway의 cluster-agent bootstrap, agent의 node collector reconciliation
+    # TODO(target): inline YAML string을 Helm/Kustomize render output으로 교체
     return f"""
 apiVersion: v1
 kind: ConfigMap
@@ -314,23 +315,23 @@ def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
 
 def install_response(
     payload: TargetRegisterRequest, manifest: str, apply_output: str | None
-) -> dict[str, Any]:
-    return {
-        "registered": True,
-        "cluster_id": payload.cluster_id,
-        "status": INSTALL_STATUS_REGISTERED,
-        "applied": apply_output is not None,
-        "apply_output": apply_output,
-        "install_manifest": manifest,
-    }
+) -> TargetInstallResponse:
+    return TargetInstallResponse(
+        registered=True,
+        cluster_id=payload.cluster_id,
+        status=INSTALL_STATUS_REGISTERED,
+        applied=apply_output is not None,
+        apply_output=apply_output,
+        install_manifest=manifest,
+    )
 
 
-@router.post(gateway_routes.TARGETS_PATH)
+@router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(
     payload: TargetRegisterRequest,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> dict[str, Any]:
+) -> TargetInstallResponse:
     agent_token = env(AGENT_TOKEN_ENV, "")
     if not agent_token:
         raise HTTPException(status_code=503, detail=AGENT_TOKEN_NOT_CONFIGURED)

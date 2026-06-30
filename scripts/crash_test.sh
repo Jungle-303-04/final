@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Outbox exactly-once crash test.
+# 아웃박스 정확히 한 번 크래시 테스트
 #
-# Fires N webhooks and force-kills gitops workers mid-flight to trigger NATS
-# redelivery. With the transactional outbox + ledger dedup, each webhook
-# (correlation_id) must yield exactly one pull request despite the crashes.
+# N개 webhook 발사 후 gitops worker 강제 종료로 NATS redelivery 유도
+# transactional outbox + ledger dedup 기준, crash 중에도 각 webhook
+# (correlation_id)마다 pull request 정확히 1개
 #
-# Requires: make up (cluster + gateway on 18080) running.
-# Usage: bash scripts/crash_test.sh   (N defaults to 6, override via env)
+# 필요: make up 실행 상태(cluster + gateway on 18080)
+# 사용: bash scripts/crash_test.sh   (N 기본값 6, env로 override)
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:18080}"
@@ -73,21 +73,6 @@ ready_count() {
 
 if [ -z "$POSTGRES_PASSWORD" ]; then
   POSTGRES_PASSWORD="$(load_secret_key postgresql-secret POSTGRES_PASSWORD)"
-fi
-
-ready_credential_sql="
-select count(*)
-from oauth_accounts oa
-join token_vault tv on tv.token_ref = oa.token_ref
-where oa.provider = 'github'
-  and oa.status = 'connected'
-  and tv.encrypted_payload ->> 'status' = 'ready'"
-ready_credential_count="$(psql_q "$ready_credential_sql")"
-ready_credential_count="${ready_credential_count:-0}"
-if [ "$ready_credential_count" -lt 1 ]; then
-  log "skipping crash test: no ready GitHub credential in token_vault"
-  log "OAuth placeholders are fail-closed; provision a Token Broker-backed credential first."
-  exit 0
 fi
 
 if [ -z "$GITHUB_WEBHOOK_SECRET" ]; then

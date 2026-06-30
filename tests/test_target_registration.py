@@ -54,7 +54,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest(monkey
     monkeypatch.setenv("AGENT_TOKEN", "agent-secret")
     db = FakeDb()
 
-    async def run() -> dict[str, object]:
+    async def run():
         return await register_target(
             target_request(),
             current=SimpleNamespace(user_id="local-user"),
@@ -65,9 +65,9 @@ def test_target_registration_records_cluster_and_returns_install_manifest(monkey
 
     response = asyncio.run(run())
 
-    assert response["registered"] is True
-    assert response["applied"] is False
-    assert "install_manifest" in response
+    assert response.registered is True
+    assert response.applied is False
+    assert response.install_manifest
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
 
