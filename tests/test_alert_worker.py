@@ -6,7 +6,7 @@ from packages.contracts.event_bus.bodies import AlertRequestedBody, CommandReque
 
 
 def test_alert_worker_dispatches_then_auto_deploys_after_gate() -> None:
-    alert = load_service("alert-worker")
+    alert = load_service("alert/worker")
     diff = Diff(
         resource="deployment/checkout-api",
         namespace="sandbox",
