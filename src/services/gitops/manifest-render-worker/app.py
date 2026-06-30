@@ -1,8 +1,8 @@
 """manifest-render-worker — git.changed → manifest 렌더 → manifest.rendered.
 
 우현 원본 GitOpsSyncWorkflow.handle()의 manifest dict 생성, repo_change 저장,
-rendered Deployment 생성, MANIFEST_RENDERED 발행 블록에 대응. Git 변경을
-Kubernetes 배포 사양으로 바꾸는 책임만 분리.
+rendered Kubernetes object 생성, MANIFEST_RENDERED 발행 블록에 대응. Git 변경을
+Kubernetes manifest로 바꾸는 책임만 분리.
 """
 
 from __future__ import annotations
@@ -181,9 +181,18 @@ def rendered_spec_from_payload(kind: str, payload: dict[str, Any]) -> RenderedSp
     if kind != MANIFEST_KIND:
         return RenderedSpec()
     return RenderedSpec(
-        replicas=int(spec.get("replicas", 0) or 0),
+        replicas=deployment_replicas(spec),
         image=deployment_image(spec),
     )
+
+
+def deployment_replicas(spec: dict[str, Any]) -> int:
+    raw = spec.get("replicas", 1)
+    if raw is None:
+        return 1
+    if isinstance(raw, bool):
+        raise ValueError("deployment spec.replicas must be an integer")
+    return int(raw)
 
 
 def deployment_image(spec: dict[str, Any]) -> str:
