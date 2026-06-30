@@ -329,7 +329,7 @@ async def on_diff_analyzed(
         {"safe": evt.safe, "risk": evt.risk},
     )
 
-    if evt.diff.desired_image == evt.diff.actual_image:
+    if evt.diff.is_image_only_noop():
         await transition_run(
             ctx,
             run,
