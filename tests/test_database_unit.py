@@ -76,6 +76,8 @@ def test_schema_defines_expected_tables() -> None:
         "cluster_registrations",
         "evidence_source_leases",
         "evidence_windows",
+        "target_desired_states",
+        "target_reconcile_records",
     }
     assert expected <= set(metadata.tables)
 

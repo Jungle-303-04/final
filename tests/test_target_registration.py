@@ -4,6 +4,7 @@ import re
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
@@ -14,10 +15,38 @@ from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, Targ
 class FakeDb:
     def __init__(self) -> None:
         self.registered: list[dict[str, object]] = []
+        self.desired_states: list[dict[str, object]] = []
 
     def register_target_cluster(self, payload: dict[str, object]) -> dict[str, object]:
         self.registered.append(payload)
         return payload
+
+    def upsert_target_desired_states(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        components: list[dict[str, object]],
+        updated_by: str | None,
+    ) -> list[dict[str, object]]:
+        self.desired_states.extend(
+            {
+                **component,
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "updated_by": updated_by,
+            }
+            for component in components
+        )
+        return self.desired_states
+
+
+class FakeEvents:
+    def __init__(self) -> None:
+        self.accepted: list[object] = []
+
+    async def accept_body(self, body: object, *_args: object) -> object:
+        self.accepted.append(body)
+        return object()
 
 
 class FakeLeaseDb:
@@ -70,12 +99,14 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
 
 def test_target_registration_records_cluster_and_returns_install_manifest() -> None:
     db = FakeDb()
+    events = FakeEvents()
 
     async def run():
         return await register_target(
             target_request(),
             current=SimpleNamespace(user_id="local-user", workspace_id="default"),
             db=db,
+            events=events,
         )
 
     import asyncio
@@ -88,10 +119,46 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
     assert db.registered[0]["workspace_id"] == "default"
+    assert {item["component"] for item in db.desired_states} == {
+        "cluster-agent",
+        "fake-telemetry",
+        "node-collector",
+    }
+    assert len(events.accepted) == 1
+    assert events.accepted[0].cluster_id == "target-cluster-01"
+    assert events.accepted[0].requested_by == "local-user"
     match = re.search(r'AGENT_TOKEN: "([^"]+)"', response.install_manifest)
     assert match is not None
     assert db.registered[0]["agent_token_hash"] == hash_agent_token(match.group(1))
     assert "agent_token" not in db.registered[0]
+
+
+def test_target_registration_apply_failure_does_not_record_state(monkeypatch) -> None:
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(update={"apply": True})
+
+    def fail_apply(_manifest: str, _kube_context: str | None) -> str:
+        raise HTTPException(status_code=502, detail="apply failed")
+
+    monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", fail_apply)
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    import asyncio
+
+    with pytest.raises(HTTPException):
+        asyncio.run(run())
+
+    assert db.registered == []
+    assert db.desired_states == []
+    assert events.accepted == []
 
 
 def test_evidence_source_lease_route_delegates_to_management_store() -> None:

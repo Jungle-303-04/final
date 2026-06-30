@@ -159,7 +159,7 @@ async def on_command_requested(
 | --- | --- |
 | Identity | `mail.email_verification.requested`, `mail.email_verification.sent` |
 | GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed` |
-| Agent | `agent.connected`, `cluster.evidence.received` |
+| Agent/Target | `agent.connected`, `cluster.evidence.received`, `cluster.desired_state.changed`, `cluster.reconcile.requested`, `cluster.reconcile.started`, `cluster.drift.detected`, `cluster.reconcile.completed`, `cluster.reconcile.failed` |
 | Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
 | RCA/Safe PR | `evidence.built`, `rca.completed`, `safe_pr.requested`, `safe_pr.created`, `safe_pr.failed` |
 | Dashboard | `dashboard.updated` |
@@ -279,6 +279,7 @@ async def on_event(evt: EventEnvelope, ctx):
 | Diff Analyze Worker (App) | `src/services/gitops/diff-analyze-worker/app.py` | `desired.diff.detected` |
 | Repo Gateway Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.requested` |
 | Command Worker (App) | `src/services/command/command-worker/app.py` | `command.requested` |
+| Target Reconcile Worker (App) | `src/services/target/reconcile-worker/app.py` | `cluster.desired_state.changed`, `cluster.reconcile.requested` |
 | RCA Worker (App) | `src/services/ai/rca-worker/app.py` | `cluster.evidence.received` |
 | Dashboard Projection Service (`@app.on_any`) | `src/services/projection/dashboard-worker/app.py` | `>` |
 | Audit Timeline Service (`@app.on_any`) | `src/services/projection/audit-worker/app.py` | `>` |

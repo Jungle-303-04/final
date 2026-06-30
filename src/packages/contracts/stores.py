@@ -55,6 +55,14 @@ class AgentCommandStore(Protocol):
     ) -> None: ...
 
 
+class TargetReconcileStore(Protocol):
+    async def list_target_desired_states(
+        self, workspace_id: str, cluster_id: str
+    ) -> list[JsonObject]: ...
+
+    async def record_target_reconcile_result(self, payload: JsonObject) -> JsonObject: ...
+
+
 class DashboardStore(Protocol):
     async def upsert_dashboard(self, evt: EventEnvelope, status: Any, summary: str) -> None: ...
 
