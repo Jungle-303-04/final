@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+import secrets
 import shutil
 import subprocess
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from domains.identity.dependencies import require_admin_session, require_agent
+from domains.identity.dependencies import (
+    ClusterAgentIdentity,
+    hash_agent_token,
+    require_admin_session,
+    require_cluster_agent,
+)
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
@@ -17,8 +23,7 @@ from packages.contracts.gateway.responses import EvidenceSourceLeaseResponse, Ta
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
 from packages.runtime.dependencies import get_db
 
-AGENT_TOKEN_ENV = "AGENT_TOKEN"
-AGENT_TOKEN_NOT_CONFIGURED = "agent token is not configured"
+AGENT_TOKEN_BYTES = 32  # per-cluster agent 토큰 엔트로피(secrets.token_urlsafe)
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
 # 콤마구분 허용 컨텍스트 목록. 설정 시 목록 밖 --context 거부(임의 클러스터 적용 차단).
@@ -27,7 +32,8 @@ KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
 KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
 
 router = APIRouter()
-agent_router = APIRouter(dependencies=[Depends(require_agent)])
+# per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취한다.
+agent_router = APIRouter(dependencies=[Depends(require_cluster_agent)])
 
 
 def yaml_string(value: str) -> str:
@@ -349,12 +355,12 @@ async def register_target(
     current: Any = Depends(require_admin_session),  # kubectl apply 실행 → admin 만
     db: Any = Depends(get_db),
 ) -> TargetInstallResponse:
-    agent_token = env(AGENT_TOKEN_ENV, "")
-    if not agent_token:
-        raise HTTPException(status_code=503, detail=AGENT_TOKEN_NOT_CONFIGURED)
-
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     scoped_payload = payload.model_copy(update={"workspace_id": workspace_id})
+
+    # 클러스터별 agent 토큰 생성 — 원문은 이 클러스터 secret 에만 주입, 해시만 레지스트리에 저장.
+    # 전역 AGENT_TOKEN 신뢰를 제거(토큰 1개로 전 워크스페이스 접근하던 구멍 차단). 재등록 시 회전.
+    agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
 
     db.register_target_cluster(
         {
@@ -363,6 +369,7 @@ async def register_target(
             "cluster_id": scoped_payload.cluster_id,
             "name": scoped_payload.name,
             "environment": scoped_payload.environment,
+            "agent_token_hash": hash_agent_token(agent_token),
             "settings": scoped_payload.model_dump(
                 exclude={"apply", "kube_context"},
             ),
@@ -385,11 +392,12 @@ async def register_target(
 async def lease_evidence_source(
     source_id: str,
     payload: EvidenceSourceLeaseRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> EvidenceSourceLeaseResponse:
     lease = db.lease_evidence_source(
-        payload.cluster_id,
-        payload.workspace_id,
+        identity.cluster_id,  # body 가 아닌 토큰 identity 기준
+        identity.workspace_id,
         source_id,
         payload.agent_id,
         payload.window_start,

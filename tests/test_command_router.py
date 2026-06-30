@@ -6,7 +6,13 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 
 from domains.command.router import RESOURCE_ACCESS_DENIED, command_heartbeat, commands
+from domains.identity.dependencies import ClusterAgentIdentity
 from packages.contracts.gateway.requests import CommandHeartbeatRequest, CommandRequest
+
+AGENT_IDENTITY = ClusterAgentIdentity(
+    workspace_id="trusted-workspace",
+    cluster_id="trusted-cluster",
+)
 
 
 class SpyAccessDb:
@@ -111,12 +117,13 @@ def test_command_heartbeat_extends_current_lease() -> None:
                 agent_id="agent-1",
                 lease_id="lease-1",
             ),
-            db,
+            identity=AGENT_IDENTITY,
+            db=db,
         )
 
         assert response.accepted is True
         assert response.correlation_id == "corr-1"
-        assert db.calls == [("cmd-1", "workspace-1", "lease-1", "agent-1", 60)]
+        assert db.calls == [("cmd-1", "trusted-workspace", "lease-1", "agent-1", 60)]
 
     asyncio.run(run())
 
@@ -131,7 +138,8 @@ def test_command_heartbeat_rejects_stale_lease() -> None:
                     agent_id="agent-1",
                     lease_id="old-lease",
                 ),
-                SpyCommandLeaseDb(correlation_id=None),
+                identity=AGENT_IDENTITY,
+                db=SpyCommandLeaseDb(correlation_id=None),
             )
         except HTTPException as exc:
             assert exc.status_code == 404

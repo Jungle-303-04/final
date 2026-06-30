@@ -1,7 +1,7 @@
 """command 도메인 HTTP 라우터 — 명령 발행 + agent 명령 풀(롱폴)·시작·결과.
 
-agent 라우트는 APIRouter(dependencies=[Depends(require_agent)]) 로 라우터 단위 가드(필터)
-적용 — 핸들러별 인증 반복 제거.
+agent 라우트는 APIRouter(dependencies=[Depends(require_cluster_agent)]) 로 라우터 단위
+per-cluster 토큰 인증 — workspace_id/cluster_id 는 body 가 아닌 토큰 identity 에서만 취한다.
 """
 
 from __future__ import annotations
@@ -13,8 +13,12 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException
 
 from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
-from domains.identity.dependencies import require_agent, require_session
-from packages.config.constants import CommandStatus, Sandbox, Target
+from domains.identity.dependencies import (
+    ClusterAgentIdentity,
+    require_cluster_agent,
+    require_session,
+)
+from packages.config.constants import CommandStatus, Sandbox
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.bodies import CommandCompletedBody, CommandRequestedBody, Diff
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -127,30 +131,36 @@ async def commands(
     )
 
 
-# agent 라우트 — 라우터 단위 가드(필터)로 일괄 인증.
-agent_router = APIRouter(dependencies=[Depends(require_agent)])
+# agent 라우트 — 라우터 단위 가드(필터)로 per-cluster 토큰 인증.
+# workspace_id/cluster_id 는 토큰으로 인증된 identity 에서만 취하고 body/query 는 신뢰 안 함.
+agent_router = APIRouter(dependencies=[Depends(require_cluster_agent)])
 
 
 @agent_router.get(gateway_routes.AGENT_COMMAND_POLL_PATH, response_model=AgentCommandPollResponse)
 async def poll_command(
-    cluster_id: str = Target.DEFAULT_CLUSTER_ID,
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
     agent_id: str = "target-agent",
     timeout: int = DEFAULT_POLL_SECONDS,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> AgentCommandPollResponse:
     # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
-    row = await lease_next_command(db, cluster_id, workspace_id, agent_id, timeout)
+    # cluster_id/workspace_id 는 토큰 identity 에서 — 임의 클러스터/워크스페이스 폴링 차단.
+    row = await lease_next_command(
+        db, identity.cluster_id, identity.workspace_id, agent_id, timeout
+    )
     return AgentCommandPollResponse(command=row)
 
 
 @agent_router.post(gateway_routes.AGENT_COMMAND_START_PATH, response_model=CommandStartedResponse)
 async def command_start(
-    command_id: str, payload: CommandStartRequest, db: Any = Depends(get_db)
+    command_id: str,
+    payload: CommandStartRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
 ) -> CommandStartedResponse:
     correlation_id = await db.start_agent_command(
         command_id,
-        payload.workspace_id,
+        identity.workspace_id,  # body 가 아닌 토큰 identity 의 workspace
         payload.lease_id,
         payload.agent_id,
         CommandStatus.RUNNING,
@@ -165,11 +175,14 @@ async def command_start(
     gateway_routes.AGENT_COMMAND_HEARTBEAT_PATH, response_model=CommandHeartbeatResponse
 )
 async def command_heartbeat(
-    command_id: str, payload: CommandHeartbeatRequest, db: Any = Depends(get_db)
+    command_id: str,
+    payload: CommandHeartbeatRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
 ) -> CommandHeartbeatResponse:
     correlation_id = await db.heartbeat_agent_command(
         command_id,
-        payload.workspace_id,
+        identity.workspace_id,
         payload.lease_id,
         payload.agent_id,
         LEASE_SECONDS,
@@ -183,13 +196,14 @@ async def command_heartbeat(
 async def command_result(
     command_id: str,
     payload: CommandResultRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> EventIdAcceptedResponse:
     result = payload.model_dump()
     correlation_id = await db.complete_agent_command(
         command_id,
-        payload.workspace_id,
+        identity.workspace_id,
         result,
         payload.lease_id,
         payload.agent_id,

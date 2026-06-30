@@ -408,6 +408,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
             name=payload["name"],
             environment=payload["environment"],
             status=ClusterRegistrationStatus.REGISTERED.value,
+            agent_token_hash=payload["agent_token_hash"],
             settings=payload["settings"],
             updated_at=func.now(),
         )
@@ -417,10 +418,29 @@ class WorkspaceAccessRepository(DatabaseConnection):
                 "name": insert.excluded.name,
                 "environment": insert.excluded.environment,
                 "status": ClusterRegistrationStatus.REGISTERED.value,
+                # 재등록 시 토큰 회전 — 새 해시로 갱신(이전 토큰 무효화).
+                "agent_token_hash": insert.excluded.agent_token_hash,
                 "settings": insert.excluded.settings,
                 "updated_at": func.now(),
             },
         )
+
+    def authenticate_cluster_agent(self, token_hash: str) -> JsonObject | None:
+        """agent 토큰 해시 → 등록된 클러스터의 권위 (workspace_id, cluster_id).
+
+        매칭 없으면 None(호출측 401). 빈/NULL 해시는 절대 매칭하지 않는다
+        (token_hash 가 빈 문자열이면 호출 전 차단; NULL 컬럼은 동등비교에서 제외).
+        """
+        if not token_hash:
+            return None
+        table = ClusterRegistration.__table__
+        statement = select(
+            table.c.workspace_id,
+            table.c.cluster_id,
+        ).where(table.c.agent_token_hash == token_hash)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
 
 
 def role_actions(role: str) -> set[str]:
