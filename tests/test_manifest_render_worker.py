@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from packages.contracts.event_bus.bodies import GitChangedBody
@@ -285,6 +286,57 @@ def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) ->
     assert outs[0].repository_id == "repo-1"
     assert outs[0].binding_id == "binding-1"
     assert "manifest must include" in outs[0].reason
+    assert db.called("record_manifest_artifact")
+    assert not db.called("save_repo_change")
+
+
+@pytest.mark.parametrize(
+    ("manifest_lines", "reason"),
+    [
+        (
+            [
+                "apiVersion: rbac.authorization.k8s.io/v1",
+                "kind: ClusterRole",
+                "metadata:",
+                "  name: forbidden-role",
+                "rules: []",
+            ],
+            "unsupported manifest kind: rbac.authorization.k8s.io/v1/ClusterRole",
+        ),
+        (
+            [
+                "apiVersion: extensions/v1beta1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: legacy-api",
+                "spec:",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: legacy-api",
+                "          image: ghcr.io/project/legacy-api:v1",
+            ],
+            "unsupported manifest kind: extensions/v1beta1/Deployment",
+        ),
+    ],
+)
+def test_render_rejects_unsupported_kubernetes_resource_contract(
+    monkeypatch, tmp_path, manifest_lines: list[str], reason: str
+) -> None:
+    manifest = tmp_path / "unsupported.yaml"
+    manifest.write_text("\n".join(manifest_lines), encoding="utf-8")
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(manifest))
+
+    render = load_service("gitops/manifest-render-worker")
+    db = SpyDb()
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="bad123", image="ignored", replicas=1),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert outs[0].reason == reason
     assert db.called("record_manifest_artifact")
     assert not db.called("save_repo_change")
 
