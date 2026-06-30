@@ -17,14 +17,12 @@ spec:
         - name: gateway
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/api-gateway/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
-            - name: REDIS_URL
-              value: redis://redis:6379/0
+          command: ["python", "src/services/api-gateway/app.py"]
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
           ports:
             - name: http
               containerPort: 8000
@@ -53,28 +51,37 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gitops-sync-worker
+  name: alert-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: gitops-sync-worker
+      app: alert-worker
   template:
     metadata:
       labels:
-        app: gitops-sync-worker
+        app: alert-worker
     spec:
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops-sync-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          command: ["python", "src/services/alert-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -95,12 +102,21 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/command-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          command: ["python", "src/services/command-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -121,61 +137,263 @@ spec:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/rca-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          command: ["python", "src/services/rca-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dashboard-projection-service
+  name: dashboard-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: dashboard-projection-service
+      app: dashboard-worker
   template:
     metadata:
       labels:
-        app: dashboard-projection-service
+        app: dashboard-worker
     spec:
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/dashboard-projection-service/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          command: ["python", "src/services/projection/dashboard-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: audit-timeline-service
+  name: audit-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: audit-timeline-service
+      app: audit-worker
   template:
     metadata:
       labels:
-        app: audit-timeline-service
+        app: audit-worker
     spec:
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/audit-timeline-service/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          command: ["python", "src/services/projection/audit-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-pull-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: git-pull-worker
+  template:
+    metadata:
+      labels:
+        app: git-pull-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/gitops/git-pull-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manifest-render-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manifest-render-worker
+  template:
+    metadata:
+      labels:
+        app: manifest-render-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/gitops/manifest-render-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diff-worker
+  template:
+    metadata:
+      labels:
+        app: diff-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/gitops/diff-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-analyze-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diff-analyze-worker
+  template:
+    metadata:
+      labels:
+        app: diff-analyze-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/gitops/diff-analyze-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scm-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scm-worker
+  template:
+    metadata:
+      labels:
+        app: scm-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/gitops/scm-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
