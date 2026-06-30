@@ -16,12 +16,18 @@ from domains.identity.dependencies import require_agent, require_session
 from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.bodies import CommandCompletedBody, CommandRequestedBody, Diff
+from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
+)
+from packages.contracts.gateway.responses import (
+    AcceptedResponse,
+    AgentCommandPollResponse,
+    CommandStartedResponse,
+    EventIdAcceptedResponse,
 )
 from packages.runtime.dependencies import get_db, get_events
 
@@ -48,7 +54,7 @@ def command_diff(payload: CommandRequest) -> Diff:
 
 async def lease_next_command(
     db: Any, cluster_id: str, agent_id: str, timeout: int
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """롱폴 — 이 클러스터의 다음 명령을 timeout 까지 대기하며 리스(아웃바운드 단일 채널)."""
     deadline = time.time() + min(timeout, MAX_POLL_SECONDS)
     while time.time() < deadline:
@@ -61,12 +67,12 @@ async def lease_next_command(
     return None
 
 
-@router.post(gateway_routes.COMMANDS_PATH)
+@router.post(gateway_routes.COMMANDS_PATH, response_model=AcceptedResponse)
 async def commands(
     payload: CommandRequest,
     current: Any = Depends(require_session),
     events: Any = Depends(get_events),
-) -> dict[str, Any]:
+) -> AcceptedResponse:
     accepted = await events.accept_body(
         CommandRequestedBody(
             cluster_id=payload.cluster_id,
@@ -78,44 +84,48 @@ async def commands(
         ),
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return accepted.response()
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
+    )
 
 
 # agent 라우트 — 라우터 단위 가드(필터)로 일괄 인증.
 agent_router = APIRouter(dependencies=[Depends(require_agent)])
 
 
-@agent_router.get(gateway_routes.AGENT_COMMAND_POLL_PATH)
+@agent_router.get(gateway_routes.AGENT_COMMAND_POLL_PATH, response_model=AgentCommandPollResponse)
 async def poll_command(
     cluster_id: str = Target.DEFAULT_CLUSTER_ID,
     agent_id: str = "target-agent",
     timeout: int = DEFAULT_POLL_SECONDS,
     db: Any = Depends(get_db),
-) -> dict[str, Any]:
+) -> AgentCommandPollResponse:
     # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
     row = await lease_next_command(db, cluster_id, agent_id, timeout)
-    return {Gateway.COMMAND: row}
+    return AgentCommandPollResponse(command=row)
 
 
-@agent_router.post(gateway_routes.AGENT_COMMAND_START_PATH)
+@agent_router.post(gateway_routes.AGENT_COMMAND_START_PATH, response_model=CommandStartedResponse)
 async def command_start(
     command_id: str, payload: CommandStartRequest, db: Any = Depends(get_db)
-) -> dict[str, Any]:
+) -> CommandStartedResponse:
     correlation_id = await db.start_agent_command(
         command_id, payload.lease_id, payload.agent_id, CommandStatus.RUNNING
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-    return {Gateway.ACCEPTED: True, Gateway.CORRELATION_ID: correlation_id}
+    return CommandStartedResponse(accepted=True, correlation_id=correlation_id)
 
 
-@agent_router.post(gateway_routes.AGENT_COMMAND_RESULT_PATH)
+@agent_router.post(gateway_routes.AGENT_COMMAND_RESULT_PATH, response_model=EventIdAcceptedResponse)
 async def command_result(
     command_id: str,
     payload: CommandResultRequest,
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
-) -> dict[str, Any]:
+) -> EventIdAcceptedResponse:
     result = payload.model_dump()
     correlation_id = await db.complete_agent_command(
         command_id, result, payload.lease_id, payload.agent_id
@@ -125,7 +135,7 @@ async def command_result(
     accepted = await events.accept_body(
         CommandCompletedBody(command_id=command_id, result=result), correlation_id
     )
-    return {Gateway.ACCEPTED: True, Gateway.EVENT_ID: accepted.event.event_id}
+    return EventIdAcceptedResponse(accepted=True, event_id=accepted.event.event_id)
 
 
 router.include_router(agent_router)

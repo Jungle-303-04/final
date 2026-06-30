@@ -65,7 +65,7 @@ def test_signup_requests_email_verification_without_session_cookie(monkeypatch) 
     events = FakeEvents()
     request = Request({"type": "http", "headers": []})
 
-    async def run() -> dict[str, Any]:
+    async def run() -> Any:
         return await identity_router.signup(
             SignupRequest(
                 email="local@example.com",
@@ -79,9 +79,9 @@ def test_signup_requests_email_verification_without_session_cookie(monkeypatch) 
 
     body = asyncio.run(run())
 
-    assert body["accepted"] is True
-    assert body["verification_required"] is True
-    assert body["email"] == "local@example.com"
+    assert body.accepted is True
+    assert body.verification_required is True
+    assert body.email == "local@example.com"
     assert events.bodies[0].email == "local@example.com"
     assert events.bodies[0].verification_url.startswith(
         "https://app.example.test/auth/verify-email?token="
@@ -95,7 +95,7 @@ def test_resend_verification_requests_email_without_session_cookie(monkeypatch) 
     events = FakeEvents()
     request = Request({"type": "http", "headers": []})
 
-    async def run() -> dict[str, Any]:
+    async def run() -> Any:
         return await identity_router.resend_verification(
             ResendEmailVerificationRequest(
                 email="local@example.com",
@@ -108,8 +108,8 @@ def test_resend_verification_requests_email_without_session_cookie(monkeypatch) 
 
     body = asyncio.run(run())
 
-    assert body["accepted"] is True
-    assert body["verification_required"] is True
+    assert body.accepted is True
+    assert body.verification_required is True
     assert events.bodies[0].verification_url.startswith(
         "https://app.example.test/auth/verify-email?token=email-token-2"
     )
@@ -120,7 +120,7 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     response = Response()
     password_auth = FakePasswordAuth()
 
-    async def run() -> dict[str, Any]:
+    async def run() -> Any:
         return await identity_router.login(
             LoginRequest(email="local@example.com", password="local-password"),
             response=response,
@@ -130,7 +130,7 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     body = asyncio.run(run())
     cookie = response.headers["set-cookie"].lower()
 
-    assert body["authenticated"] is True
+    assert body.authenticated is True
     assert "service_session=login-token" in cookie
     assert "httponly" in cookie
 
@@ -177,7 +177,7 @@ def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
     response = Response()
     password_auth = FakePasswordAuth()
 
-    async def run() -> dict[str, bool]:
+    async def run() -> Any:
         return await identity_router.logout(
             response=response,
             current=SimpleNamespace(token="login-token", user_id="user-1", roles=["owner"]),
@@ -187,7 +187,7 @@ def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
     body = asyncio.run(run())
     cookie = response.headers["set-cookie"].lower()
 
-    assert body["authenticated"] is False
+    assert body.authenticated is False
     assert password_auth.deleted == "login-token"
     assert "service_session=" in cookie
     assert "max-age=0" in cookie
