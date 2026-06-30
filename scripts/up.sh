@@ -162,7 +162,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/min
 for deploy in \
   api-gateway \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
-  command-worker rca-worker \
+  alert-worker command-worker rca-worker \
   dashboard-worker audit-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout restart "deploy/${deploy}"
 done
@@ -170,7 +170,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api
 
 for deploy in \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
-  command-worker rca-worker \
+  alert-worker command-worker rca-worker \
   dashboard-worker audit-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status "deploy/${deploy}" --timeout=180s
 done
@@ -180,25 +180,13 @@ MGMT_NODE_IP="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddres
 MANAGEMENT_BASE_URL="http://${MGMT_NODE_IP}:30080"
 
 echo "==> deploying target cluster with management URL: ${MANAGEMENT_BASE_URL}"
-kubectl --context "kind-${TARGET_CLUSTER}" create namespace target \
-  --dry-run=client -o yaml | kubectl --context "kind-${TARGET_CLUSTER}" apply -f -
-kubectl --context "kind-${TARGET_CLUSTER}" -n target create configmap target-runtime-config \
-  --from-literal=TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
-  --from-literal=EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
-  --from-literal=PROMETHEUS_BASE_URL="http://fake-prometheus:8000" \
-  --from-literal=LOKI_BASE_URL="http://fake-loki:8000" \
-  --dry-run=client -o yaml | kubectl --context "kind-${TARGET_CLUSTER}" apply -f -
-kubectl --context "kind-${TARGET_CLUSTER}" -n target create secret generic target-runtime-secret \
-  --from-literal=AGENT_TOKEN="${AGENT_TOKEN}" \
-  --dry-run=client -o yaml | kubectl --context "kind-${TARGET_CLUSTER}" apply -f -
-sed "s#__MANAGEMENT_BASE_URL__#${MANAGEMENT_BASE_URL}#g" "${ROOT_DIR}/deploy/target/target.yaml" \
-  | kubectl --context "kind-${TARGET_CLUSTER}" apply -f -
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-prometheus --timeout=120s
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-loki --timeout=120s
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-otel --timeout=120s
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status daemonset/optional-node-collector --timeout=120s
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout restart deploy/cluster-agent
-kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/cluster-agent --timeout=180s
+BASE_URL="http://localhost:18080" \
+MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
+TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
+TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
+EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
+IMAGE_NAME="${IMAGE_NAME}" \
+bash "${ROOT_DIR}/scripts/register-target.sh"
 
 echo
 echo "service is ready."

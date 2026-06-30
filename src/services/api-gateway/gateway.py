@@ -15,6 +15,7 @@ from domains.identity.dependencies import require_agent
 from domains.identity.router import router as identity_router
 from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
+from domains.target.router import router as target_router
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
@@ -60,6 +61,7 @@ class ApiGateway:
         app = self.app
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         self._register_ingest_routes(app)
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
