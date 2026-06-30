@@ -19,6 +19,7 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-target-cluster-01}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -75,8 +76,12 @@ if [ -z "${MINIO_ROOT_PASSWORD}" ]; then
   MINIO_ROOT_PASSWORD="$(openssl rand -hex 32)"
 fi
 
-echo "==> building ${IMAGE_NAME}"
-docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
+if [ "${SKIP_BUILD}" = "1" ]; then
+  echo "==> skipping image build for ${IMAGE_NAME}"
+else
+  echo "==> building ${IMAGE_NAME}"
+  docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
+fi
 
 if ! kind get clusters | grep -qx "${MGMT_CLUSTER}"; then
   echo "==> creating management cluster: ${MGMT_CLUSTER}"
