@@ -7,8 +7,14 @@ from settings import (
     LOKI_QUERY_LIMIT,
     LOKI_TIMEOUT_SECONDS,
     PROMETHEUS_TIMEOUT_SECONDS,
+    TEMPO_QUERY_LIMIT,
+    TEMPO_TIMEOUT_SECONDS,
 )
-from telemetry_queries import LOKI_LOG_QUERIES, PROMETHEUS_INSTANT_QUERIES
+from telemetry_queries import (
+    LOKI_LOG_QUERIES,
+    OPEN_TELEMETRY_SPAN_QUERIES,
+    PROMETHEUS_INSTANT_QUERIES,
+)
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
@@ -18,17 +24,20 @@ class EvidenceCollector:
         self,
         prometheus_base_url: str,
         loki_base_url: str,
+        tempo_base_url: str,
         fake_evidence: Callable[[], JsonObject],
     ) -> None:
         self.prometheus_base_url = prometheus_base_url.rstrip("/")
         self.loki_base_url = loki_base_url.rstrip("/")
+        self.tempo_base_url = tempo_base_url.rstrip("/")
         self.fake_evidence = fake_evidence
 
-    # Build the full evidence payload; metrics and logs are replaced with real query data.
+    # Build the full evidence payload; telemetry sections are replaced with real query data.
     async def collect_evidence(self) -> JsonObject:
         evidence = self.fake_evidence()
         evidence["metrics"] = await self.collect_prometheus_metrics()
         evidence["logs"] = await self.collect_loki_logs()
+        evidence["traces"] = await self.collect_tempo_traces()
         return evidence
 
     # Run every configured Prometheus query and package the normalized results.
@@ -157,5 +166,50 @@ class EvidenceCollector:
             "result_type": result_type,
             "streams": streams,
             "line_count": sum(len(stream["values"]) for stream in streams),
+            "raw": payload,
+        }
+
+    # Run every configured Tempo TraceQL search and package normalized trace summaries.
+    async def collect_tempo_traces(self) -> JsonObject:
+        """Collect configured Tempo trace search results."""
+        try:
+            async with httpx.AsyncClient(timeout=TEMPO_TIMEOUT_SECONDS) as client:
+                trace_results = {}
+
+                for span_query in OPEN_TELEMETRY_SPAN_QUERIES:
+                    payload = await self.query_tempo(client, span_query.traceql)
+
+                    trace_results[span_query.query_name] = {
+                        "query": span_query.traceql,
+                        **self.normalize_tempo_payload(payload),
+                    }
+
+            return {
+                "source": "tempo",
+                "results": trace_results,
+            }
+
+        except Exception as exc:
+            print(f"tempo trace collection failed: {exc}", flush=True)
+            return self.fake_evidence()["traces"]
+
+    # Actually request one TraceQL search from Tempo and return the parsed response body.
+    async def query_tempo(self, client: httpx.AsyncClient, traceql: str) -> JsonObject:
+        response = await client.get(
+            f"{self.tempo_base_url}/api/search",
+            params={"q": traceql, "limit": TEMPO_QUERY_LIMIT},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # Convert Tempo search responses into a stable evidence-friendly structure.
+    def normalize_tempo_payload(self, payload: JsonObject) -> JsonObject:
+        traces = payload.get("traces", [])
+        if not isinstance(traces, list):
+            traces = []
+
+        return {
+            "traces": traces,
+            "trace_count": len(traces),
             "raw": payload,
         }

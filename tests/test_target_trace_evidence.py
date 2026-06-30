@@ -13,7 +13,7 @@ TARGET_AGENT_PATH = ROOT_DIR / "services" / "target-cluster-agent" / "evidence.p
 
 def load_evidence_module():
     spec = importlib.util.spec_from_file_location(
-        "test_target_log_evidence_module",
+        "test_target_trace_evidence_module",
         TARGET_AGENT_PATH,
     )
     if spec is None or spec.loader is None:
@@ -45,7 +45,7 @@ def fake_evidence() -> dict[str, object]:
     }
 
 
-def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
+def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
     collector = module.EvidenceCollector(
         "http://prometheus.target.svc:9090",
@@ -54,34 +54,29 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
         fake_evidence,
     )
 
-    async def fake_query_loki(_client, query: str) -> dict[str, object]:
+    async def fake_query_tempo(_client, traceql: str) -> dict[str, object]:
         return {
-            "status": "success",
-            "data": {
-                "resultType": "streams",
-                "result": [
-                    {
-                        "stream": {
-                            "namespace": "target",
-                            "app": "optional-node-collector",
-                            "query": query,
-                        },
-                        "values": [["1782822589742000000", "node_runtime_sample"]],
-                    }
-                ],
-            },
+            "traces": [
+                {
+                    "traceID": "trace-123",
+                    "rootServiceName": "checkout-api",
+                    "rootTraceName": "GET /checkout",
+                    "durationMs": 842,
+                    "query": traceql,
+                }
+            ]
         }
 
-    collector.query_loki = fake_query_loki
+    collector.query_tempo = fake_query_tempo
 
-    logs = asyncio.run(collector.collect_loki_logs())
+    traces = asyncio.run(collector.collect_tempo_traces())
     payload = fake_evidence()
-    payload["logs"] = logs
+    payload["traces"] = traces
 
     validated = AgentEvidenceRequest.model_validate(payload)
+    results = validated.traces["results"]
 
-    assert len(validated.logs) == 3
-    assert validated.logs[0]["source"] == "loki"
-    assert validated.logs[0]["line_count"] == 1
-    assert validated.logs[0]["streams"][0]["stream"]["namespace"] == "target"
-    assert validated.logs[0]["streams"][0]["values"][0]["line"] == "node_runtime_sample"
+    assert validated.traces["source"] == "tempo"
+    assert "checkout_slow_spans" in results
+    assert results["checkout_slow_spans"]["trace_count"] == 1
+    assert results["checkout_slow_spans"]["traces"][0]["traceID"] == "trace-123"

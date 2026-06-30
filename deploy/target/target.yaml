@@ -318,6 +318,9 @@ spec:
             # Helm release "loki" creates loki-gateway for read/write HTTP APIs.
             - name: LOKI_BASE_URL
               value: "http://loki-gateway.target.svc"
+            # Helm release "tempo" stores traces forwarded by OpenTelemetry Collector.
+            - name: TEMPO_BASE_URL
+              value: "http://tempo.target.svc:3200"
             # Evidence collection loop interval in seconds.
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"

@@ -50,6 +50,7 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     collector = module.EvidenceCollector(
         "http://prometheus.target.svc:9090",
         "http://loki-gateway.target.svc",
+        "http://tempo.target.svc:3200",
         fake_evidence,
     )
 
