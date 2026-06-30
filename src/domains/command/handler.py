@@ -67,7 +67,7 @@ POLICY = Policy.build(COMMAND_CONFIG.policy_rules)
 
 
 def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
-    if command.diff.desired_image and command.diff.desired_image == command.diff.actual_image:
+    if command.diff.is_image_only_noop():
         return PolicyResult.reject(Sandbox.NO_DIFF_REASON)
     return POLICY.evaluate(ModelLookup(command))
 
