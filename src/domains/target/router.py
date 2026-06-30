@@ -342,19 +342,18 @@ async def register_target(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     scoped_payload = payload.model_copy(update={"workspace_id": workspace_id})
 
-    if hasattr(db, "register_target_cluster"):
-        db.register_target_cluster(
-            {
-                "workspace_id": workspace_id,
-                "user_id": current.user_id,
-                "cluster_id": scoped_payload.cluster_id,
-                "name": scoped_payload.name,
-                "environment": scoped_payload.environment,
-                "settings": scoped_payload.model_dump(
-                    exclude={"apply", "kube_context"},
-                ),
-            }
-        )
+    db.register_target_cluster(
+        {
+            "workspace_id": workspace_id,
+            "user_id": current.user_id,
+            "cluster_id": scoped_payload.cluster_id,
+            "name": scoped_payload.name,
+            "environment": scoped_payload.environment,
+            "settings": scoped_payload.model_dump(
+                exclude={"apply", "kube_context"},
+            ),
+        }
+    )
 
     manifest = target_install_manifest(scoped_payload, agent_token)
     apply_output = (
