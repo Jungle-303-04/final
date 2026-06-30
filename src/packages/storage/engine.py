@@ -32,6 +32,9 @@ AGENT_COMMAND_COMPAT_COLUMNS = {
     "started_at": "alter table agent_commands add column if not exists started_at timestamptz",
     "completed_at": "alter table agent_commands add column if not exists completed_at timestamptz",
 }
+EVENT_COMPAT_COLUMNS = {
+    "causation_id": "alter table events add column if not exists causation_id text",
+}
 USER_ACCOUNT_COMPAT_COLUMNS = {
     "email": "alter table user_accounts add column if not exists email text",
     "password_hash": "alter table user_accounts add column if not exists password_hash text",
@@ -193,6 +196,13 @@ class DatabaseConnection:
     def ensure_compatible_schema(self) -> None:
         """Keep local demo DBs usable until a real migration tool is introduced."""
         with self.engine.begin() as conn:
+            existing_event_columns = self._existing_columns(conn, "events")
+            for column, statement in EVENT_COMPAT_COLUMNS.items():
+                if column in existing_event_columns:
+                    continue
+                conn.execute(text("set local lock_timeout = '5s'"))
+                conn.execute(text(statement))
+
             existing_columns = self._existing_columns(conn, "agent_commands")
             for column, statement in AGENT_COMMAND_COMPAT_COLUMNS.items():
                 if column in existing_columns:
