@@ -10,7 +10,12 @@ from packages.contracts.event_bus.bodies import (
     CommandQueuedForAgentBody,
     Diff,
     DiffAnalyzedBody,
+    DiffDetectedBody,
     GitWebhookReceivedBody,
+    ManifestRenderedBody,
+    RenderedManifest,
+    RenderedMetadata,
+    RenderedSpec,
 )
 
 
@@ -162,6 +167,85 @@ def test_workflow_controller_does_not_complete_manifest_diff_only_by_same_image(
     ]
     assert db.called("resolve_workflow_approval")
     assert outs[-1].decision == "auto-approved"
+
+
+def test_workflow_controller_uses_deployment_name_as_application_name_on_render() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+
+    outs = run_handler(
+        workflow.on_manifest_rendered,
+        ManifestRenderedBody(
+            rendered_manifest=RenderedManifest(
+                api_version="apps/v1",
+                kind="Deployment",
+                metadata=RenderedMetadata(name="checkout-api", namespace="sandbox"),
+                spec=RenderedSpec(replicas=2, image="checkout:new"),
+                manifest={"apiVersion": "apps/v1", "kind": "Deployment"},
+            ),
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded"]
+    upserts = [args[0] for name, args in db.calls if name == "upsert_application"]
+    assert upserts[0]["name"] == "checkout-api"
+    assert db.called("start_workflow_run")
+
+
+def test_workflow_controller_does_not_upsert_application_from_auxiliary_manifest() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+
+    outs = run_handler(
+        workflow.on_manifest_rendered,
+        ManifestRenderedBody(
+            rendered_manifest=RenderedManifest(
+                api_version="v1",
+                kind="ConfigMap",
+                metadata=RenderedMetadata(name="checkout-api-config", namespace="sandbox"),
+                spec=RenderedSpec(),
+                manifest={"apiVersion": "v1", "kind": "ConfigMap"},
+            ),
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded"]
+    assert not db.called("upsert_application")
+    assert not db.called("start_workflow_run")
+    assert db.called("update_workflow_run")
+
+
+def test_workflow_controller_does_not_upsert_application_from_resource_diff() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+
+    outs = run_handler(
+        workflow.on_diff_detected,
+        DiffDetectedBody(
+            diff=Diff(
+                resource="configmap/checkout-api-config",
+                namespace="sandbox",
+                desired_image="",
+                actual_image="resource-not-inspected",
+                risk=Sandbox.RISK_TAG,
+                application_id="app-1",
+                workflow_run_id="workflow-1",
+                desired_manifest={"apiVersion": "v1", "kind": "ConfigMap"},
+            )
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded"]
+    assert not db.called("upsert_application")
+    assert not db.called("start_workflow_run")
+    assert db.called("update_workflow_run")
 
 
 def test_workflow_controller_links_command_lifecycle_to_run() -> None:
