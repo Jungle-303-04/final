@@ -2711,9 +2711,7 @@ tests/test_integration_contracts.py
 전체 검증:
 
 ```bash
-uv run ruff check services packages tests
-uv run ruff format --check services packages tests
-uv run python -m pytest
+bash scripts/test.sh
 ```
 
 ## 19. 첫 구현자가 헷갈리면 보는 최소 요약
