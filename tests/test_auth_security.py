@@ -9,13 +9,43 @@ from conftest import ROOT, load_file
 from fastapi import HTTPException, Request, Response
 
 
-def test_require_agent_fail_closed_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
+class AgentAuthDb:
+    def __init__(self, deps: object) -> None:
+        self.deps = deps
+
+    def authenticate_cluster_agent(self, token_hash: str) -> dict[str, str] | None:
+        if token_hash == self.deps.hash_agent_token("agent-secret"):
+            return {"workspace_id": "workspace-1", "cluster_id": "cluster-1"}
+        return None
+
+
+def request_with_agent_token(token: str | None, db: object) -> Request:
+    headers: list[tuple[bytes, bytes]] = []
+    if token is not None:
+        headers.append((b"x-agent-token", token.encode()))
+    app = SimpleNamespace(state=SimpleNamespace(db=db))
+    return Request({"type": "http", "headers": headers, "app": app})
+
+
+def test_require_cluster_agent_uses_registered_token_identity() -> None:
     deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
-    monkeypatch.delenv("AGENT_TOKEN", raising=False)  # 토큰 미설정
-    request = Request({"type": "http", "headers": []})
+    identity = deps.require_cluster_agent(
+        request_with_agent_token("agent-secret", AgentAuthDb(deps))
+    )
+
+    assert identity.workspace_id == "workspace-1"
+    assert identity.cluster_id == "cluster-1"
+
+
+def test_require_cluster_agent_fail_closed_without_registered_token() -> None:
+    deps = load_file(ROOT / "src" / "domains" / "identity" / "dependencies.py", "id_deps")
     with pytest.raises(HTTPException) as exc:
-        deps.require_agent(request)
-    assert exc.value.status_code == 503  # 약한 기본값으로 열리지 않고 거부
+        deps.require_cluster_agent(request_with_agent_token("wrong-token", AgentAuthDb(deps)))
+    assert exc.value.status_code == 401
+
+    with pytest.raises(HTTPException) as missing:
+        deps.require_cluster_agent(request_with_agent_token(None, AgentAuthDb(deps)))
+    assert missing.value.status_code == 401
 
 
 def test_session_cookie_is_httponly(monkeypatch: pytest.MonkeyPatch) -> None:

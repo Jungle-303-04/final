@@ -69,6 +69,13 @@ WORKSPACE_COMPAT_COLUMNS = {
     "rca_reports": {
         "workspace_id": "alter table rca_reports add column if not exists workspace_id text",
     },
+    # 일반 테이블 컬럼 호환(워크스페이스 한정 아님) — per-cluster agent 토큰 해시 추가.
+    # backfill 대상 아님(NULL = 미인증 → 재등록 시 채워짐).
+    "cluster_registrations": {
+        "agent_token_hash": (
+            "alter table cluster_registrations add column if not exists agent_token_hash text"
+        ),
+    },
 }
 WORKSPACE_BACKFILL_COLUMNS = (
     "agent_commands",
@@ -79,6 +86,10 @@ WORKSPACE_BACKFILL_COLUMNS = (
 USER_ACCOUNT_EMAIL_INDEX = (
     "create unique index if not exists ux_user_accounts_email "
     "on user_accounts (email) where email is not null"
+)
+CLUSTER_AGENT_TOKEN_HASH_INDEX = (
+    "create index if not exists ix_cluster_registrations_agent_token_hash "
+    "on cluster_registrations (agent_token_hash) where agent_token_hash is not null"
 )
 REPO_CHANGE_COMPAT_COLUMNS = {
     "workspace_id": "alter table repo_changes add column if not exists workspace_id text",
@@ -233,6 +244,7 @@ class DatabaseConnection:
                         continue
                     conn.execute(text("set local lock_timeout = '5s'"))
                     conn.execute(text(statement))
+            conn.execute(text(CLUSTER_AGENT_TOKEN_HASH_INDEX))
 
             for table_name in WORKSPACE_BACKFILL_COLUMNS:
                 conn.execute(
