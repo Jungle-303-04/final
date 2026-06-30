@@ -13,6 +13,13 @@ NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_REPO="${GITHUB_REPO:-octocat/Hello-World}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+MANIFEST_PATH="${MANIFEST_PATH:-deploy.yaml}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
+GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED:-1}"
+GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-0}"
+GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS:-5}"
 SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX:-}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
@@ -151,11 +158,18 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=REDIS_URL="${REDIS_URL}" \
   --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
   --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
+  --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
+  --from-literal=MANIFEST_PATH="${MANIFEST_PATH}" \
+  --from-literal=GITHUB_API_BASE="${GITHUB_API_BASE}" \
+  --from-literal=GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED}" \
+  --from-literal=GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED}" \
+  --from-literal=GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS}" \
   --from-literal=SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic management-runtime-secret \
   --from-literal=DATABASE_URL="${DATABASE_URL}" \
   --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}" \
+  --from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 kubectl --context "kind-${MGMT_CLUSTER}" -n management delete \
   deploy/management-api-gateway \

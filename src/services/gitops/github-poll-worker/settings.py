@@ -4,6 +4,7 @@ from packages.config.constants import Target
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID as CONTRACT_DEFAULT_DEPLOYMENT_BINDING_ID,
 )
+from packages.contracts.gitops import DEFAULT_GITHUB_API_BASE as CONTRACT_DEFAULT_GITHUB_API_BASE
 from packages.contracts.gitops import (
     DEFAULT_MANIFEST_PATH as CONTRACT_DEFAULT_MANIFEST_PATH,
 )
@@ -19,6 +20,8 @@ from packages.contracts.gitops import (
 from packages.contracts.gitops import (
     DEFAULT_WATCH_TARGET_ID as CONTRACT_DEFAULT_WATCH_TARGET_ID,
 )
+from packages.contracts.gitops import GITHUB_API_BASE_ENV as CONTRACT_GITHUB_API_BASE_ENV
+from packages.contracts.gitops import GITHUB_TOKEN_ENV as CONTRACT_GITHUB_TOKEN_ENV
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID as CONTRACT_DEFAULT_WORKSPACE_ID
 
 
@@ -53,8 +56,9 @@ class Settings:
     POLL_ONCE_ENV = "POLL_ONCE"
 
     # 공개 repo 는 무인증도 되나 시간당 60회 제한 → 토큰 있으면 인증(5000회). 데모 30초=120회/시.
-    GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
-    GITHUB_API_BASE = "https://api.github.com"
+    GITHUB_TOKEN_ENV = CONTRACT_GITHUB_TOKEN_ENV
+    GITHUB_API_BASE_ENV = CONTRACT_GITHUB_API_BASE_ENV
+    DEFAULT_GITHUB_API_BASE = CONTRACT_DEFAULT_GITHUB_API_BASE
 
     # webhook 입구가 HMAC 서명을 검증 → 폴러도 같은 시크릿으로 서명해 통과(gateway 와 동일 키).
     WEBHOOK_SECRET_ENV = "GITHUB_WEBHOOK_SECRET"
