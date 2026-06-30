@@ -49,7 +49,7 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 
 | 영역 | 현재 경로 |
 | --- | --- |
-| GitOps pipeline | `src/services/gitops/git-pull-worker`, `src/services/gitops/github-poll-worker`, `src/services/gitops/manifest-render-worker`, `src/services/gitops/diff-worker`, `src/services/gitops/diff-analyze-worker`, `src/services/gitops/scm-worker` |
+| GitOps pipeline | `src/services/gitops/git-pull-worker`, `src/services/gitops/github-poll-worker`, `src/services/gitops/workflow-controller`, `src/services/gitops/manifest-render-worker`, `src/services/gitops/diff-worker`, `src/services/gitops/diff-analyze-worker`, `src/services/gitops/scm-worker` |
 | Projection | `src/services/projection/dashboard-worker`, `src/services/projection/audit-worker` |
 | Target | `src/services/target/cluster-agent`, `src/services/target/node-collector` |
 
