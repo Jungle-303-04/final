@@ -7,8 +7,14 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.identity.models import (
+    ClusterRegistration,
     OAuthAccount,
+    RepoClusterBinding,
+    RepositoryIntegration,
     TokenVault,
+    UserAccount,
+    Workspace,
+    WorkspaceMember,
 )
 from packages.config.constants import Auth, GitHub, OAuth
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -109,3 +115,30 @@ class OAuthRepository(DatabaseConnection):
         if not row or not self._is_ready_provider_credential(row["encrypted_payload"]):
             return None
         return row["token_ref"]
+
+
+class WorkspaceAccessRepository(DatabaseConnection):
+    """워크스페이스/레포/클러스터 권한 연결용 repository 골격."""
+
+    # TODO(identity): implement user lifecycle with SSO/email login and account deactivation.
+    user_table = UserAccount.__table__
+    # TODO(identity): enforce workspace role hierarchy and permission inheritance in one policy port.
+    workspace_table = Workspace.__table__
+    member_table = WorkspaceMember.__table__
+    # TODO(gitops): connect repository records to GitHub App installation credentials and branch policy.
+    repository_table = RepositoryIntegration.__table__
+    # TODO(target): connect clusters to agent identity, token rotation, environment tier, and RBAC scope.
+    cluster_table = ClusterRegistration.__table__
+    # TODO(gitops): use bindings as the only source of truth for repo -> cluster -> namespace deploy rights.
+    binding_table = RepoClusterBinding.__table__
+
+    @staticmethod
+    def required_tables() -> set[str]:
+        return {
+            UserAccount.__tablename__,
+            Workspace.__tablename__,
+            WorkspaceMember.__tablename__,
+            RepositoryIntegration.__tablename__,
+            ClusterRegistration.__tablename__,
+            RepoClusterBinding.__tablename__,
+        }
