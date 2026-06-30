@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
@@ -11,7 +12,6 @@ from kubernetes_api import (
     kubernetes_api_base_url,
     kubernetes_client,
     kubernetes_headers,
-    kubernetes_manifest_resource,
     service_account_token,
 )
 from node_collector_manager import NodeCollectorManager
@@ -25,10 +25,28 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS
 from packages.contracts.gateway.responses import FakeTelemetryResponse, HealthResponse
+from packages.contracts.gitops import supported_kubernetes_resource
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class KubernetesManifestResource:
+    kind: str
+    api_version: str
+    namespace: str
+    name: str
+    plural: str
+    api_prefix: str
+    manifest: JsonObject
+
+    def collection_url(self, base_url: str) -> str:
+        return f"{base_url}{self.api_prefix}/namespaces/{self.namespace}/{self.plural}"
+
+    def resource_url(self, base_url: str) -> str:
+        return f"{self.collection_url(base_url)}/{self.name}"
 
 
 class AgentConfig:
@@ -806,6 +824,44 @@ def build_rollout_restart_patch() -> JsonObject:
             }
         }
     }
+
+
+def kubernetes_manifest_resource(
+    manifest: JsonObject,
+    fallback_namespace: str,
+) -> KubernetesManifestResource:
+    kind = str(manifest.get("kind", ""))
+    api_version = str(manifest.get("apiVersion", ""))
+    metadata = manifest.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("manifest metadata must be an object")
+    name = str(metadata.get("name", ""))
+    namespace = str(metadata.get("namespace") or fallback_namespace)
+    if not kind or not api_version or not name:
+        raise ValueError("manifest requires apiVersion, kind, and metadata.name")
+
+    api_prefix, plural = kubernetes_resource_api(kind, api_version)
+    normalized = {
+        **manifest,
+        "metadata": {
+            **metadata,
+            "namespace": namespace,
+        },
+    }
+    return KubernetesManifestResource(
+        kind=kind,
+        api_version=api_version,
+        namespace=namespace,
+        name=name,
+        plural=plural,
+        api_prefix=api_prefix,
+        manifest=normalized,
+    )
+
+
+def kubernetes_resource_api(kind: str, api_version: str) -> tuple[str, str]:
+    contract = supported_kubernetes_resource(api_version, kind)
+    return contract.api_prefix, contract.plural
 
 
 async def prometheus_metric_names(client: httpx.AsyncClient, base_url: str) -> list[str]:
