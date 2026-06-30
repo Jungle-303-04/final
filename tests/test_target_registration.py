@@ -40,9 +40,13 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
 
     assert "name: cluster-agent" in manifest
     assert "name: checkout-api" in manifest
+    assert "kind: DaemonSet" not in manifest
+    assert "cluster-agent-target-manage" in manifest
     assert 'MANAGEMENT_BASE_URL\n              value: "http://management.local:30080"' in manifest
     assert 'PROMETHEUS_BASE_URL: "http://fake-prometheus:8000"' in manifest
     assert 'LOKI_BASE_URL: "http://fake-loki:8000"' in manifest
+    assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
+    assert 'NODE_COLLECTOR_IMAGE: "service:local"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
 
 
