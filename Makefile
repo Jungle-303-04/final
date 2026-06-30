@@ -67,10 +67,10 @@ status: ## management/target 리소스 상태 확인
 smoke: ## 전체 이벤트 사이클 smoke 테스트
 	bash scripts/smoke.sh
 
-crash-test: ## Outbox exactly-once 크래시 테스트(make up 후)
+crash-test: ## 아웃박스 정확히 한 번 크래시 테스트(make up 후)
 	bash scripts/crash_test.sh
 
-scale: ## management worker scale. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
+scale: ## management worker 스케일 조정. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
 	@test -n "$(DEPLOYMENT)" && test -n "$(REPLICAS)"
 	bash scripts/scale.sh "$(DEPLOYMENT)" "$(REPLICAS)"
 

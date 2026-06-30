@@ -25,12 +25,12 @@ from packages.storage.engine import DatabaseConnection
 class WorkspaceAccessRepository(DatabaseConnection):
     """워크스페이스와 클러스터 등록용 repository 골격."""
 
-    # TODO(identity): implement user lifecycle with SSO/email login and account deactivation.
+    # TODO(identity): SSO/email login과 account deactivation 포함 user lifecycle 구현
     user_table = UserAccount.__table__
-    # TODO(identity): enforce workspace role hierarchy and permission inheritance in one policy port.
+    # TODO(identity): workspace role hierarchy와 permission inheritance를 단일 policy port에서 적용
     workspace_table = Workspace.__table__
     member_table = WorkspaceMember.__table__
-    # TODO(target): connect clusters to agent identity, token rotation, environment tier, and RBAC scope.
+    # TODO(target): cluster를 agent identity, token rotation, environment tier, RBAC scope와 연결
     cluster_table = ClusterRegistration.__table__
 
     @staticmethod
@@ -43,7 +43,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
         }
 
     def register_target_cluster(self, payload: JsonObject) -> JsonObject:
-        # TODO(identity): require an explicit workspace owner/admin permission before registration.
+        # TODO(identity): registration 전 명시적 workspace owner/admin permission 요구
         user_id = payload["user_id"]
         workspace_id = payload["workspace_id"]
         with self.connection() as conn:
