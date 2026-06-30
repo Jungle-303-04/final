@@ -8,13 +8,13 @@ from datetime import UTC, datetime
 
 import httpx
 from fastapi import FastAPI
-from node_collector_manager import (
-    NodeCollectorManager,
+from kubernetes_api import (
     kubernetes_api_base_url,
     kubernetes_client,
     kubernetes_headers,
     service_account_token,
 )
+from node_collector_manager import NodeCollectorManager
 from uvicorn import Config, Server
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
