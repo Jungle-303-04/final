@@ -6,7 +6,7 @@
 
 ## 담당 영역
 
-- `src/services/api-gateway`
+- `src/services/gateway/api-gateway`
 - `src/packages/contracts/gateway`
 - `src/packages/contracts/event_bus`
 - `src/packages/contracts/identity`
@@ -49,7 +49,7 @@
 
 ## Codex 지시문
 
-이 영역을 작업할 때는 `src/services/api-gateway/gateway.py`, `src/services/api-gateway/auth.py`, `src/packages/contracts/gateway`, `src/packages/contracts/event_bus`, `docs/team/conventions.md`, 이 문서를 먼저 읽어라.
+이 영역을 작업할 때는 `src/services/gateway/api-gateway/gateway.py`, `src/services/gateway/api-gateway/auth.py`, `src/packages/contracts/gateway`, `src/packages/contracts/event_bus`, `docs/team/conventions.md`, 이 문서를 먼저 읽어라.
 
 ## Gateway/Auth 최종 설계와 구현 작업서
 
@@ -2135,7 +2135,7 @@ Gateway/Auth 담당이 먼저 구현할 것:
 src/packages/contracts/gateway/requests.py
   AgentEvidenceRequest 강화
 
-src/services/api-gateway/gateway.py
+src/services/gateway/api-gateway/gateway.py
   /agent/evidence validation 강화
 
 tests/test_agent_evidence_api.py
@@ -2359,7 +2359,7 @@ OAuth와 별개로 우리 서비스 자체 로그인을 받을 준비를 한다.
 2. `src/packages/contracts/gateway/routes.py`에 `AUTH_LOGOUT_PATH = "/auth/logout"` 추가.
 3. `src/packages/contracts/gateway/requests.py`에 `LoginRequest` 추가.
 4. `src/packages/contracts/gateway/fields.py`에 필요한 response field가 없으면 추가.
-5. `src/services/api-gateway/gateway.py`에 route skeleton 추가.
+5. `src/services/gateway/api-gateway/gateway.py`에 route skeleton 추가.
 6. route skeleton은 아직 `501 not implemented` 또는 fake success가 아니라, 다음 PR에서 구현한다고 명확히 테스트한다.
 
 LoginRequest:
@@ -2390,7 +2390,7 @@ email/password로 우리 서비스 user를 검증할 수 있게 한다.
 2. `src/packages/storage/database.py`에 `IdentityRepository` 추가.
 3. `src/packages/contracts/identity` 패키지 생성.
 4. `src/packages/contracts/identity/ports.py`에 `UserStore` Protocol 추가.
-5. `src/services/api-gateway/auth.py`에 password hashing helper 추가.
+5. `src/services/gateway/api-gateway/auth.py`에 password hashing helper 추가.
 6. dev bootstrap user를 만든다.
 
 초기 dev user:
