@@ -63,8 +63,7 @@ def _discovered_repositories() -> tuple[type, ...]:
 
 
 _CORE = (EventRepository, DeadLetterRepository, OutboxRepository)
-# 모든 도메인 repo 가 domains/ 로 이전 완료 → 전부 자동 발견(이전 대기 없음).
-_PENDING: tuple[type, ...] = ()
+# 모든 도메인 repo 는 domains/ 에서 자동 발견된다.
 
 if TYPE_CHECKING:
     # 타입 검사용 스텁 — 코어+pending repo 계약을 선언(런타임엔 아래 type() 이
@@ -82,4 +81,4 @@ if TYPE_CHECKING:
         TargetAgentRepository,
     ): ...
 else:
-    Database = type("Database", _CORE + _PENDING + _discovered_repositories(), {})
+    Database = type("Database", _CORE + _discovered_repositories(), {})

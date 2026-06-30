@@ -56,3 +56,5 @@ class Sandbox:
     RISK_TAG: Final[str] = (
         "sandbox-only"  # diff 가 sandbox 한정 → 안전 판정 표식(생산자·소비자 공유)
     )
+    # 변경 없음 판정 사유(생산자 gitops·소비자 command 공유 — 중복 정의 금지)
+    NO_DIFF_REASON: Final[str] = "desired and actual images already match"
