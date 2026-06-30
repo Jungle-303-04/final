@@ -60,8 +60,8 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
         manifest = load_service("gitops/manifest-render-worker")
         diff = load_service("gitops/diff-worker")
         analyze = load_service("gitops/diff-analyze-worker")
-        alert = load_service("alert/worker")
-        command = load_service("command/worker")
+        alert = load_service("alert/alert-worker")
+        command = load_service("command/command-worker")
         repo = load_service("gitops/scm-worker")
 
         git_changed = (await run_worker(git_pull, accepted.event, db))[0]

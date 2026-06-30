@@ -3,7 +3,7 @@
 #
 # 예시:
 # * @org/platform-lead
-# /services/api-gateway/ @org/gateway-auth
+# /services/gateway/api-gateway/ @org/gateway-auth
 # /services/target-cluster-agent/ @org/target-telemetry
 #
 # 권장 담당 영역:
@@ -15,7 +15,7 @@
 # /.github/                                 @org/platform-integration
 # /deploy/                                  @org/platform-integration
 # /scripts/                                 @org/platform-integration
-# /services/api-gateway/                    @org/gateway-auth
+# /services/gateway/api-gateway/                    @org/gateway-auth
 # /services/gitops-sync-worker/             @org/gitops-command
 # /services/command-worker/                 @org/gitops-command
 # /services/rca-worker/                     @org/rca-safe-pr

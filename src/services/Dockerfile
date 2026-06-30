@@ -13,4 +13,4 @@ COPY src ./src
 
 EXPOSE 8000 9100
 
-CMD ["python", "src/services/api-gateway/app.py"]
+CMD ["python", "src/services/gateway/api-gateway/app.py"]
