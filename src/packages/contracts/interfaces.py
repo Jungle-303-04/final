@@ -68,6 +68,17 @@ class UserStore(Protocol):
 
     def get_default_workspace_id_for_user(self, user_id: str) -> str | None: ...
 
+    def grant_resource_access(self, payload: JsonObject) -> JsonObject: ...
+
+    def user_has_resource_access(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+        action: str,
+    ) -> bool: ...
+
 
 class SessionStore(Protocol):
     async def create_session(

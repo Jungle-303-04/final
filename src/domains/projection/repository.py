@@ -64,7 +64,7 @@ def workspace_id_from_payload(payload: JsonObject) -> str:
     direct = payload.get("workspace_id")
     if direct:
         return str(direct)
-    for key in ("plan", "evidence", "requested"):
+    for key in ("plan", "evidence", "requested", "diff", "next_command"):
         nested = payload.get(key)
         if isinstance(nested, Mapping) and nested.get("workspace_id"):
             return str(nested["workspace_id"])

@@ -80,6 +80,13 @@ USER_ACCOUNT_EMAIL_INDEX = (
     "create unique index if not exists ux_user_accounts_email "
     "on user_accounts (email) where email is not null"
 )
+REPO_CHANGE_COMPAT_COLUMNS = {
+    "workspace_id": "alter table repo_changes add column if not exists workspace_id text",
+    "repository_id": "alter table repo_changes add column if not exists repository_id text",
+    "watch_target_id": "alter table repo_changes add column if not exists watch_target_id text",
+    "binding_id": "alter table repo_changes add column if not exists binding_id text",
+    "manifest_path": "alter table repo_changes add column if not exists manifest_path text",
+}
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
@@ -187,6 +194,32 @@ class DatabaseConnection:
             conn.execute(text(USER_ACCOUNT_ROLE_DEFAULT))
             conn.execute(text(USER_ACCOUNT_ROLE_NOT_NULL))
             conn.execute(text(USER_ACCOUNT_EMAIL_INDEX))
+
+            existing_repo_change_columns = self._existing_columns(conn, "repo_changes")
+            for column, statement in REPO_CHANGE_COMPAT_COLUMNS.items():
+                if column in existing_repo_change_columns:
+                    continue
+                conn.execute(text("set local lock_timeout = '5s'"))
+                conn.execute(text(statement))
+            conn.execute(
+                text(
+                    """
+                    update repo_changes
+                    set workspace_id = :workspace_id
+                    where workspace_id is null
+                    """
+                ),
+                {"workspace_id": DEFAULT_WORKSPACE_ID},
+            )
+            conn.execute(
+                text(
+                    f"""
+                    alter table repo_changes
+                    alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
+                    """
+                )
+            )
+            conn.execute(text("alter table repo_changes alter column workspace_id set not null"))
 
             for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
                 existing_table_columns = self._existing_columns(conn, table_name)

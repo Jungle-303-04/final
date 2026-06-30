@@ -37,6 +37,7 @@ def build_dispatched(evt: AlertRequestedBody) -> AlertDispatchedBody:
         severity=evt.severity,
         channel=DEFAULT_ALERT_CHANNEL,
         mode=STUB_ALERT_MODE,
+        workspace_id=evt.workspace_id,
     )
 
 
