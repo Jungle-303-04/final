@@ -31,12 +31,21 @@ class AuthSessionResponse(StrictModel):
     authenticated: bool
     user_id: str
     roles: list[str]
+    workspace_id: str
 
 
 class EmailVerificationResponse(StrictModel):
     accepted: bool
     verification_required: bool
     email: str | None = None
+
+
+class UserApprovalResponse(StrictModel):
+    accepted: bool
+    user_id: str
+    status: str
+    role: str
+    workspace_id: str
 
 
 class LogoutResponse(StrictModel):
@@ -54,6 +63,13 @@ class CommandStartedResponse(StrictModel):
 
 class DashboardResponse(StrictModel):
     cards: list[JsonMap]
+
+
+class FakeTelemetryResponse(StrictModel):
+    status: str
+    data: Any | None = None
+    telemetry: str | None = None
+    path: str | None = None
 
 
 class TargetInstallResponse(StrictModel):

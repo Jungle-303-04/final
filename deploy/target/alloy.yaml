@@ -1,20 +1,20 @@
-# Values for the Grafana Alloy Helm chart.
-# Alloy is used here as the log collection pipeline that sends Kubernetes Pod logs to Loki.
+# Grafana Alloy Helm chart 값
+# Kubernetes Pod log를 Loki로 보내는 로그 수집 pipeline
 
 controller:
-  # Run one Alloy Pod for the local kind MVP.
-  # The Alloy config below uses the Kubernetes API, so a single deployment can watch Pod logs.
+  # local kind MVP용 Alloy Pod 1개
+  # Kubernetes API 사용 config, 단일 deployment로 Pod log 감시
   type: deployment
   replicas: 1
 
 alloy:
   configMap:
-    # Alloy's pipeline config. The flow is:
-    # discover Pods -> turn Kubernetes metadata into Loki labels -> read Pod logs -> push to Loki.
+    # Alloy 파이프라인 설정 흐름
+    # Pod 탐색 -> Kubernetes 메타데이터를 Loki 라벨로 변환 -> Pod log 읽기 -> Loki push
 
-    # Alloy configuration string
+    # Alloy 설정 문자열
     content: |
-      // Find Pods in the target namespace through the Kubernetes API.
+      // target namespace의 Pod를 Kubernetes API로 탐색
       discovery.kubernetes "pods" {
         role = "pod"
         namespaces {
@@ -22,42 +22,42 @@ alloy:
         }
       }
 
-      // Convert Kubernetes discovery metadata into labels that LogQL can query.
+      // Kubernetes discovery metadata를 LogQL query용 label로 변환
       discovery.relabel "pod_logs" {
         targets = discovery.kubernetes.pods.targets
 
-        // Enables LogQL selectors such as {namespace="target"}.
+        // {namespace="target"} 같은 LogQL selector 활성화
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
           target_label  = "namespace"
         }
 
-        // Enables selectors such as {app="target-cluster-agent"}.
+        // {app="target-cluster-agent"} 같은 selector 활성화
         rule {
           source_labels = ["__meta_kubernetes_pod_label_app"]
           target_label  = "app"
         }
 
-        // Keeps the original Pod name available in Loki streams.
+        // Loki stream에서 원본 Pod name 유지
         rule {
           source_labels = ["__meta_kubernetes_pod_name"]
           target_label  = "pod"
         }
 
-        // Keeps the container name available when a Pod has multiple containers.
+        // Pod에 container가 여러 개일 때 container name 유지
         rule {
           source_labels = ["__meta_kubernetes_pod_container_name"]
           target_label  = "container"
         }
       }
 
-      // Tail the discovered Kubernetes Pod logs and pass log entries to loki.write.
+      // 탐색된 Kubernetes Pod log tailing 후 loki.write로 전달
       loki.source.kubernetes "pod_logs" {
         targets    = discovery.relabel.pod_logs.output
         forward_to = [loki.write.local.receiver]
       }
 
-      // Push collected log entries into the in-cluster Loki gateway.
+      // 수집한 log entry를 cluster 내부 Loki gateway로 push
       loki.write "local" {
         endpoint {
           url = "http://loki-gateway.target.svc/loki/api/v1/push"

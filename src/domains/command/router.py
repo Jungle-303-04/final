@@ -29,6 +29,11 @@ from packages.contracts.gateway.responses import (
     CommandStartedResponse,
     EventIdAcceptedResponse,
 )
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    DEPLOY_ACCESS,
+    AccessResourceType,
+)
 from packages.runtime.dependencies import get_db, get_events
 
 DEFAULT_POLL_SECONDS = 10
@@ -37,11 +42,13 @@ POLL_SLEEP_SECONDS = 1
 LEASE_SECONDS = 60
 NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"
+ACCESS_DENIED_CODE = 403
+RESOURCE_ACCESS_DENIED = "resource access denied"
 
 router = APIRouter()
 
 
-def command_diff(payload: CommandRequest) -> Diff:
+def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
     raw = payload.diff or {
         "resource": "deployment/checkout-api",
         "namespace": payload.namespace,
@@ -49,17 +56,36 @@ def command_diff(payload: CommandRequest) -> Diff:
         "actual_image": "unknown",
         "risk": Sandbox.RISK_TAG,
     }
+    raw = {**raw, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
     return cast(Diff, Diff.from_body(raw))
 
 
+def require_cluster_deploy_access(
+    db: Any, current: Any, workspace_id: str, cluster_id: str
+) -> None:
+    if not db.user_has_resource_access(
+        current.user_id,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        cluster_id,
+        DEPLOY_ACCESS,
+    ):
+        raise HTTPException(status_code=ACCESS_DENIED_CODE, detail=RESOURCE_ACCESS_DENIED)
+
+
 async def lease_next_command(
-    db: Any, cluster_id: str, agent_id: str, timeout: int
+    db: Any, cluster_id: str, workspace_id: str, agent_id: str, timeout: int
 ) -> JsonObject | None:
     """롱폴 — 이 클러스터의 다음 명령을 timeout 까지 대기하며 리스(아웃바운드 단일 채널)."""
     deadline = time.time() + min(timeout, MAX_POLL_SECONDS)
     while time.time() < deadline:
         row = await db.lease_agent_command(
-            cluster_id, CommandStatus.QUEUED, CommandStatus.LEASED, agent_id, LEASE_SECONDS
+            cluster_id,
+            workspace_id,
+            CommandStatus.QUEUED,
+            CommandStatus.LEASED,
+            agent_id,
+            LEASE_SECONDS,
         )
         if row:
             return row
@@ -71,15 +97,19 @@ async def lease_next_command(
 async def commands(
     payload: CommandRequest,
     current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> AcceptedResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
     accepted = await events.accept_body(
         CommandRequestedBody(
             cluster_id=payload.cluster_id,
             action=payload.action,
             namespace=payload.namespace,
             reason=payload.reason or "manual command request",
-            diff=command_diff(payload),
+            diff=command_diff(payload, workspace_id),
+            workspace_id=workspace_id,
             requested_by=current.user_id,
         ),
         actor=Actor(current.user_id, tuple(current.roles)),
@@ -98,12 +128,13 @@ agent_router = APIRouter(dependencies=[Depends(require_agent)])
 @agent_router.get(gateway_routes.AGENT_COMMAND_POLL_PATH, response_model=AgentCommandPollResponse)
 async def poll_command(
     cluster_id: str = Target.DEFAULT_CLUSTER_ID,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
     agent_id: str = "target-agent",
     timeout: int = DEFAULT_POLL_SECONDS,
     db: Any = Depends(get_db),
 ) -> AgentCommandPollResponse:
     # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
-    row = await lease_next_command(db, cluster_id, agent_id, timeout)
+    row = await lease_next_command(db, cluster_id, workspace_id, agent_id, timeout)
     return AgentCommandPollResponse(command=row)
 
 
@@ -112,7 +143,11 @@ async def command_start(
     command_id: str, payload: CommandStartRequest, db: Any = Depends(get_db)
 ) -> CommandStartedResponse:
     correlation_id = await db.start_agent_command(
-        command_id, payload.lease_id, payload.agent_id, CommandStatus.RUNNING
+        command_id,
+        payload.workspace_id,
+        payload.lease_id,
+        payload.agent_id,
+        CommandStatus.RUNNING,
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
@@ -128,7 +163,11 @@ async def command_result(
 ) -> EventIdAcceptedResponse:
     result = payload.model_dump()
     correlation_id = await db.complete_agent_command(
-        command_id, result, payload.lease_id, payload.agent_id
+        command_id,
+        payload.workspace_id,
+        result,
+        payload.lease_id,
+        payload.agent_id,
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)

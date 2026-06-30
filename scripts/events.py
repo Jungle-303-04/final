@@ -16,7 +16,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR / "src") not in sys.path:
     sys.path.insert(0, str(ROOT_DIR / "src"))
 
-# App 기반 서비스의 진입 파일(app.py). import 하면 @app.sub 가 등록된다.
+# App 기반 서비스 진입 파일(app.py), import 시 @app.sub 등록
 SERVICES = [
     "rca-worker",
     "command-worker",
