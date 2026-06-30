@@ -5,9 +5,18 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
-from domains.command.router import RESOURCE_ACCESS_DENIED, command_heartbeat, commands
+from domains.command.router import (
+    RESOURCE_ACCESS_DENIED,
+    command_heartbeat,
+    command_result,
+    commands,
+)
 from domains.identity.dependencies import ClusterAgentIdentity
-from packages.contracts.gateway.requests import CommandHeartbeatRequest, CommandRequest
+from packages.contracts.gateway.requests import (
+    CommandHeartbeatRequest,
+    CommandRequest,
+    CommandResultRequest,
+)
 
 AGENT_IDENTITY = ClusterAgentIdentity(
     workspace_id="trusted-workspace",
@@ -65,6 +74,35 @@ class SpyCommandLeaseDb:
         return self.correlation_id
 
 
+class SpyCommandResultDb:
+    def __init__(self, correlation_id: str | None) -> None:
+        self.correlation_id = correlation_id
+        self.calls: list[tuple[str, str, dict[str, object], str, str]] = []
+
+    async def complete_agent_command(
+        self,
+        command_id: str,
+        workspace_id: str,
+        result: dict[str, object],
+        lease_id: str,
+        agent_id: str,
+    ) -> str | None:
+        self.calls.append((command_id, workspace_id, result, lease_id, agent_id))
+        return self.correlation_id
+
+
+class SpyResultEvents:
+    def __init__(self) -> None:
+        self.body: object | None = None
+        self.correlation_id: str | None = None
+
+    async def accept_body(self, body: object, correlation_id: str) -> object:
+        self.body = body
+        self.correlation_id = correlation_id
+        event = SimpleNamespace(event_id="evt-1")
+        return SimpleNamespace(event=event)
+
+
 def test_command_request_requires_cluster_deploy_access() -> None:
     async def run() -> None:
         db = SpyAccessDb(allowed=True)
@@ -103,6 +141,51 @@ def test_command_request_denies_without_cluster_access() -> None:
             raise AssertionError("expected HTTPException")
 
         assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_command_result_uses_trusted_agent_identity_in_result_blob() -> None:
+    async def run() -> None:
+        db = SpyCommandResultDb(correlation_id="corr-1")
+        events = SpyResultEvents()
+        response = await command_result(
+            "cmd-1",
+            CommandResultRequest(
+                workspace_id="spoofed-workspace",
+                cluster_id="spoofed-cluster",
+                agent_id="agent-1",
+                lease_id="lease-1",
+                status="completed",
+                applied=True,
+                message="applied",
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+            events=events,
+        )
+
+        assert response.accepted is True
+        assert db.calls == [
+            (
+                "cmd-1",
+                "trusted-workspace",
+                {
+                    "status": "completed",
+                    "cluster_id": "trusted-cluster",
+                    "workspace_id": "trusted-workspace",
+                    "agent_id": "agent-1",
+                    "lease_id": "lease-1",
+                    "applied": True,
+                    "message": "applied",
+                },
+                "lease-1",
+                "agent-1",
+            )
+        ]
+        assert events.correlation_id == "corr-1"
+        assert events.body.result["workspace_id"] == "trusted-workspace"
+        assert events.body.result["cluster_id"] == "trusted-cluster"
 
     asyncio.run(run())
 
