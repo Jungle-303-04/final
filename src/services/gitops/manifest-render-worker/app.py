@@ -302,31 +302,8 @@ def artifact_payload(
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
 ) -> AsyncIterator[EventBody]:
-    # 우현 원본 보존(GitOpsSyncWorkflow.handle 중 manifest + repo 저장 + render):
-    #
-    # manifest = {
-    #     "app": DEFAULT_APP_NAME,
-    #     "image": payload.get("image", DEFAULT_IMAGE),
-    #     "replicas": payload.get("replicas", DEFAULT_REPLICAS),
-    #     "namespace": SANDBOX_NAMESPACE,
-    # }
-    # self.repo.save_repo_change(evt["correlation_id"], commit_sha, manifest)
-    #
-    # rendered = {
-    #     "apiVersion": MANIFEST_API_VERSION,
-    #     "kind": MANIFEST_KIND,
-    #     "metadata": {"name": manifest["app"], "namespace": manifest["namespace"]},
-    #     "spec": {"replicas": manifest["replicas"], "image": manifest["image"]},
-    # }
-    # await self.events.publish(
-    #     EventSubject.MANIFEST_RENDERED,
-    #     SERVICE_NAME,
-    #     {"rendered_manifest": rendered},
-    #     evt["correlation_id"],
-    # )
-    #
-    # 현재 split 구조: dict 대신 Manifest/RenderedManifest 값 객체 생성
-    # 저장소 호출: EventContext[RepoChangeStore] + await
+    # Git change를 Manifest/RenderedManifest 값 객체로 변환하고 render artifact를 저장한다.
+    # subject 발행은 yield된 이벤트를 런타임이 처리한다.
     try:
         rendered_manifests = build_rendered_manifests_from_git_change(evt)
     except (subprocess.CalledProcessError, ManifestSourceError, ValueError) as exc:
