@@ -8,7 +8,7 @@ from packages.config.constants import Redis as RedisConfig
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-API_GATEWAY_DIR = ROOT_DIR / "src" / "services" / "api-gateway"
+API_GATEWAY_DIR = ROOT_DIR / "src" / "services" / "gateway" / "api-gateway"
 
 
 def load_gateway_auth_module():
