@@ -107,3 +107,64 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
     assert result["status"] == "completed"
     assert result["applied"] is False
     assert "dry-run" in result["message"]
+
+
+def test_target_agent_queries_prometheus_and_loki_directly(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/api/v1/label/__name__/values":
+            return httpx.Response(
+                200, json={"status": "success", "data": ["up", "http_requests_total"]}
+            )
+        if request.url.path == "/api/v1/query":
+            return httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "data": {
+                        "result": [
+                            {
+                                "metric": {"__name__": request.url.params["query"]},
+                                "value": [1, "1"],
+                            }
+                        ]
+                    },
+                },
+            )
+        if request.url.path == "/loki/api/v1/labels":
+            return httpx.Response(200, json={"status": "success", "data": ["pod"]})
+        if request.url.path == "/loki/api/v1/query_range":
+            return httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "data": {
+                        "result": [
+                            {
+                                "stream": {"pod": "checkout-api"},
+                                "values": [["1", "readiness failed"]],
+                            }
+                        ]
+                    },
+                },
+            )
+        return httpx.Response(404)
+
+    monkeypatch.setenv("PROMETHEUS_BASE_URL", "http://prometheus.local")
+    monkeypatch.setenv("LOKI_BASE_URL", "http://loki.local")
+    agent = agent_module.TargetClusterAgent(telemetry_transport=httpx.MockTransport(handler))
+
+    payload = asyncio.run(agent.build_evidence_payload())
+
+    assert payload["metrics"]["mode"] == "direct_prometheus_api"
+    assert payload["metrics"]["available_metric_count"] == 2
+    assert payload["metrics"]["queried_metric_count"] == 2
+    assert payload["logs"][0]["mode"] == "direct_loki_api"
+    assert payload["logs"][0]["labels"] == ["pod"]
+    assert any("/api/v1/label/__name__/values" in call for call in calls)
+    assert calls.count("/api/v1/query") == 2
+    assert "/loki/api/v1/labels" in calls
+    assert "/loki/api/v1/query_range" in calls

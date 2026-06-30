@@ -95,7 +95,11 @@ class HttpManagementPlaneClient:
 
 
 class TargetClusterAgent:
-    def __init__(self, client: ManagementPlaneClient | None = None) -> None:
+    def __init__(
+        self,
+        client: ManagementPlaneClient | None = None,
+        telemetry_transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self.base_url = env(
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
@@ -105,6 +109,7 @@ class TargetClusterAgent:
             env(Settings.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
         )
         self.client = client
+        self.telemetry_transport = telemetry_transport
 
     async def run(self) -> None:
         if self.client is not None:
@@ -133,7 +138,7 @@ class TargetClusterAgent:
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                status_code = await client.ship_evidence(self.build_evidence_payload())
+                status_code = await client.ship_evidence(await self.build_evidence_payload())
                 print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
@@ -233,13 +238,21 @@ class TargetClusterAgent:
             response.raise_for_status()
         return True, Settings.COMMAND_RESULT_MESSAGE
 
-    def build_evidence_payload(self) -> JsonObject:
-        # TODO(telemetry): replace fake collectors with Kubernetes, Prometheus, Loki, and OTel ports.
+    async def build_evidence_payload(self) -> JsonObject:
+        # TODO(telemetry): add OTel and Kubernetes API adapters with bounded, redacted snapshots.
+        async with httpx.AsyncClient(
+            transport=self.telemetry_transport,
+            timeout=Settings.TELEMETRY_TIMEOUT_SECONDS,
+        ) as telemetry_client:
+            metrics, logs = await asyncio.gather(
+                self.collect_metric_evidence(telemetry_client),
+                self.collect_log_evidence(telemetry_client),
+            )
         return {
             Gateway.CLUSTER_ID: self.cluster_id,
             "kubernetes": self.collect_kubernetes_evidence(),
-            "metrics": self.collect_metric_evidence(),
-            "logs": self.collect_log_evidence(),
+            "metrics": metrics,
+            "logs": logs,
             "traces": self.collect_trace_evidence(),
         }
 
@@ -256,20 +269,73 @@ class TargetClusterAgent:
             "events": [Settings.K8S_READINESS_FAILED_EVENT, Settings.K8S_BACKOFF_EVENT],
         }
 
-    def collect_metric_evidence(self) -> JsonObject:
-        # TODO(telemetry): query Prometheus and return bounded metric summaries, not raw samples.
+    async def collect_metric_evidence(self, client: httpx.AsyncClient) -> JsonObject:
+        # TODO(telemetry): replace all-metric sweep with workspace/cluster-scoped allowlists and windows.
+        base_url = env(
+            Settings.PROMETHEUS_BASE_URL_ENV, Settings.DEFAULT_PROMETHEUS_BASE_URL
+        ).rstrip("/")
+        try:
+            metric_names = await prometheus_metric_names(client, base_url)
+            queries = metric_names[: Settings.PROMETHEUS_MAX_METRICS] or list(
+                Settings.PROMETHEUS_FALLBACK_QUERIES
+            )
+            snapshots = [
+                await prometheus_query(client, base_url, metric_name) for metric_name in queries
+            ]
+            return {
+                "source": base_url,
+                "mode": "direct_prometheus_api",
+                "available_metric_count": len(metric_names),
+                "queried_metric_count": len(snapshots),
+                "truncated": len(metric_names) > len(queries),
+                "queries": snapshots,
+            }
+        except Exception as exc:
+            return self.fallback_metric_evidence(exc)
+
+    def fallback_metric_evidence(self, exc: Exception) -> JsonObject:
         return {
             "source": Settings.FAKE_PROMETHEUS_SOURCE,
+            "mode": "fallback_sample",
+            "error": type(exc).__name__,
             "cpu": Settings.FAKE_NODE_CPU,
             "memory_mb": Settings.FAKE_NODE_MEMORY_MB,
             "http_5xx_rate": Settings.FAKE_HTTP_5XX_RATE,
         }
 
-    def collect_log_evidence(self) -> list[JsonObject]:
-        # TODO(telemetry): query Loki and redact sensitive log fields before shipping evidence.
+    async def collect_log_evidence(self, client: httpx.AsyncClient) -> list[JsonObject]:
+        # TODO(telemetry): split Loki pulls by workspace/repo/cluster label selectors and redact secrets.
+        base_url = env(Settings.LOKI_BASE_URL_ENV, Settings.DEFAULT_LOKI_BASE_URL).rstrip("/")
+        try:
+            labels = await loki_labels(client, base_url)
+            query = env(Settings.LOKI_QUERY_ENV, Settings.DEFAULT_LOKI_QUERY)
+            payload = await loki_query_range(client, base_url, query)
+            return [
+                {
+                    "source": base_url,
+                    "mode": "direct_loki_api",
+                    "labels": labels,
+                    "query": query,
+                    "response": payload,
+                }
+            ]
+        except Exception as exc:
+            return self.fallback_log_evidence(exc)
+
+    def fallback_log_evidence(self, exc: Exception) -> list[JsonObject]:
         return [
-            {"source": Settings.FAKE_LOKI_SOURCE, "line": Settings.LOKI_ERROR_LINE},
-            {"source": Settings.FAKE_LOKI_SOURCE, "line": Settings.LOKI_WARNING_LINE},
+            {
+                "source": Settings.FAKE_LOKI_SOURCE,
+                "mode": "fallback_sample",
+                "error": type(exc).__name__,
+                "line": Settings.LOKI_ERROR_LINE,
+            },
+            {
+                "source": Settings.FAKE_LOKI_SOURCE,
+                "mode": "fallback_sample",
+                "error": type(exc).__name__,
+                "line": Settings.LOKI_WARNING_LINE,
+            },
         ]
 
     def collect_trace_evidence(self) -> JsonObject:
@@ -287,6 +353,8 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
     @app.get(gateway_routes.FAKE_TELEMETRY_CATCH_ALL_PATH)
     async def catch_all(path: str) -> dict[str, Any]:
         if kind == "prometheus":
+            if path == "api/v1/label/__name__/values":
+                return {"status": "success", "data": ["up", "http_5xx_rate"]}
             return {
                 "status": "success",
                 "data": {
@@ -300,6 +368,8 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
                 },
             }
         if kind == "loki":
+            if path == "loki/api/v1/labels":
+                return {"status": "success", "data": ["pod", "namespace"]}
             return {
                 "status": "success",
                 "data": {
@@ -367,3 +437,42 @@ def service_account_token() -> str | None:
         return None
     with open(Settings.SERVICE_ACCOUNT_TOKEN_PATH, encoding="utf-8") as token_file:
         return token_file.read().strip()
+
+
+async def prometheus_metric_names(client: httpx.AsyncClient, base_url: str) -> list[str]:
+    response = await client.get(f"{base_url}{Settings.PROMETHEUS_METRIC_NAMES_PATH}")
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data", [])
+    if not isinstance(data, list):
+        return []
+    return sorted(str(item) for item in data)
+
+
+async def prometheus_query(
+    client: httpx.AsyncClient, base_url: str, metric_name: str
+) -> JsonObject:
+    response = await client.get(
+        f"{base_url}{Settings.PROMETHEUS_QUERY_PATH}", params={"query": metric_name}
+    )
+    response.raise_for_status()
+    return {"query": metric_name, "response": response.json()}
+
+
+async def loki_labels(client: httpx.AsyncClient, base_url: str) -> list[str]:
+    response = await client.get(f"{base_url}{Settings.LOKI_LABELS_PATH}")
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data", [])
+    if not isinstance(data, list):
+        return []
+    return sorted(str(item) for item in data)
+
+
+async def loki_query_range(client: httpx.AsyncClient, base_url: str, query: str) -> JsonObject:
+    response = await client.get(
+        f"{base_url}{Settings.LOKI_QUERY_RANGE_PATH}",
+        params={"query": query, "limit": Settings.LOKI_QUERY_LIMIT},
+    )
+    response.raise_for_status()
+    return response.json()
