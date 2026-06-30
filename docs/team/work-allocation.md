@@ -20,6 +20,7 @@
 팀원별 차이는 `TEAM_MEMBER_GITHUB_ID` 값 하나뿐이며, 자동화는 GitHub issue, PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 계산한다.
 
 - 공통 프롬프트: `docs/team/codex-automation.md`
+- 파일 소유권 컨벤션: `docs/team/file-ownership-convention.md`
 - 역할별 구현 TODO 원장: `docs/team/implementation-todo.md`
 - 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
 - PR 기준: `dev` base draft PR
