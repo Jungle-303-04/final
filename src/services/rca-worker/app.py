@@ -14,7 +14,11 @@ from packages.contracts.event_bus.bodies import (
     EventBody,
     Evidence,
     EvidenceBuiltBody,
+    IncidentDetectedBody,
+    RcaActionRequiredBody,
     RcaCompletedBody,
+    RcaScenariosEvaluatedBody,
+    SafePrPolicyDecidedBody,
     SafePrRequestedBody,
 )
 from packages.contracts.stores import RcaStore
@@ -28,6 +32,12 @@ RECOMMENDED_ACTION = "Open a safe PR to pin the previous image tag"
 PR_TITLE = "Safe rollback proposal for checkout-api"
 OBJECT_EVIDENCE_PREFIX = "object://evidence"
 EVIDENCE_KIND = "rca_bundle"
+INCIDENT_DETECTED_REASON = "deterministic evidence sample indicates failure"
+INCIDENT_NOT_DETECTED_REASON = "no deterministic incident signal found"
+SELECTED_SCENARIO = "readiness-regression-after-rollout"
+RCA_CONFIDENCE = "sample"
+SAFE_PR_ROUTE = "draft_pr"
+NO_INCIDENT_ACTION_REQUIRED = "incident flag was not set"
 
 
 def build_evidence_bundle(evt: ClusterEvidenceReceivedBody, correlation_id: str) -> Evidence:
@@ -44,13 +54,42 @@ def build_evidence_bundle(evt: ClusterEvidenceReceivedBody, correlation_id: str)
     )
 
 
-def evaluate_rca_scenarios(evidence: Evidence) -> RcaCompletedBody:
+def detect_incident(evidence: Evidence) -> IncidentDetectedBody:
+    # TODO(rca): replace deterministic sample checks with policy-backed incident flag rules.
+    detected = bool(evidence.logs or evidence.kubernetes.get("pods") or evidence.metrics)
+    return IncidentDetectedBody(
+        cluster_id=evidence.cluster_id,
+        detected=detected,
+        reason=INCIDENT_DETECTED_REASON if detected else INCIDENT_NOT_DETECTED_REASON,
+    )
+
+
+def evaluate_rca_scenarios(
+    evidence: Evidence,
+) -> tuple[RcaScenariosEvaluatedBody, RcaCompletedBody]:
     # TODO(rca): evaluate evidence-backed scenarios and return insufficient_evidence when confidence is low.
     # TODO(rca): keep AI/rule analysis behind a port so prompts, rules, and fallbacks are testable.
-    return RcaCompletedBody(
-        root_cause=ROOT_CAUSE,
-        action=RECOMMENDED_ACTION,
-        evidence_ref=evidence.object_ref,
+    return (
+        RcaScenariosEvaluatedBody(
+            scenario_count=1,
+            selected=SELECTED_SCENARIO,
+            confidence=RCA_CONFIDENCE,
+            evidence_ref=evidence.object_ref,
+        ),
+        RcaCompletedBody(
+            root_cause=ROOT_CAUSE,
+            action=RECOMMENDED_ACTION,
+            evidence_ref=evidence.object_ref,
+        ),
+    )
+
+
+def decide_safe_pr_policy(report: RcaCompletedBody) -> SafePrPolicyDecidedBody:
+    # TODO(rca): implement draft_pr/auto/approval_required/forbidden policy with audit proofs.
+    return SafePrPolicyDecidedBody(
+        route=SAFE_PR_ROUTE,
+        reason="sample policy allows draft rollback PR",
+        evidence_ref=report.evidence_ref,
     )
 
 
@@ -69,16 +108,33 @@ async def on_cluster_evidence(
     evt: ClusterEvidenceReceivedBody, ctx: EventContext[RcaStore]
 ) -> AsyncIterator[EventBody]:
     evidence = build_evidence_bundle(evt, ctx.correlation_id)
-    report = evaluate_rca_scenarios(evidence)
+    incident = detect_incident(evidence)
     await ctx.db.save_evidence(ctx.correlation_id, EVIDENCE_KIND, evidence.to_body())
+
+    yield incident
+    yield EvidenceBuiltBody(evidence=evidence)
+
+    if not incident.detected:
+        yield RcaActionRequiredBody(
+            reason=NO_INCIDENT_ACTION_REQUIRED,
+            evidence_ref=evidence.object_ref,
+        )
+        return
+
+    scenarios, report = evaluate_rca_scenarios(evidence)
+    policy = decide_safe_pr_policy(report)
     await ctx.db.save_rca_report(
         ctx.correlation_id, ROOT_CAUSE, RECOMMENDED_ACTION, report.to_body()
     )
 
     # 체이닝: 다음 이벤트들을 yield. PR 생성은 repo-gateway 담당.
-    yield EvidenceBuiltBody(evidence=evidence)
+    yield scenarios
     yield report
-    yield build_safe_pr_request(report)
+    yield policy
+    if policy.route == SAFE_PR_ROUTE:
+        yield build_safe_pr_request(report)
+    else:
+        yield RcaActionRequiredBody(reason=policy.reason, evidence_ref=policy.evidence_ref)
 
 
 if __name__ == "__main__":
