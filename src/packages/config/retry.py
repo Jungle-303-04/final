@@ -6,9 +6,12 @@ import asyncio
 from collections.abc import Awaitable, Callable
 
 from packages.config.errors import fail
+from packages.config.logs import CONTEXT_KEY, get_logger
 
 DEPENDENCY_RETRY_LIMIT = 60
 DEPENDENCY_RETRY_DELAY_SECONDS = 2
+
+LOGGER = get_logger(__name__)
 
 
 async def retry_dependency(
@@ -24,6 +27,16 @@ async def retry_dependency(
             await attempt()
             return
         except Exception as exc:
-            print(f"waiting for {label} ({i + 1}/{limit}): {exc}", flush=True)
+            LOGGER.warning(
+                "dependency_waiting",
+                extra={
+                    CONTEXT_KEY: {
+                        "dependency": label,
+                        "attempt": i + 1,
+                        "limit": limit,
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
             await asyncio.sleep(delay)
     fail(f"{label} 연결 실패")

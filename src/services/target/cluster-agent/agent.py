@@ -17,11 +17,14 @@ from settings import Settings
 from uvicorn import Config, Server
 
 from packages.config.constants import Target
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
+
+LOGGER = get_logger(__name__)
 
 
 class HttpManagementPlaneClient:
@@ -145,16 +148,43 @@ class TargetClusterAgent:
                 )
                 return
             except Exception as exc:
-                print(f"agent waiting for management gateway: {exc}", flush=True)
+                LOGGER.warning(
+                    "agent_waiting_for_management_gateway",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
                 await asyncio.sleep(Settings.REGISTER_RETRY_DELAY_SECONDS)
 
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
                 status_code = await client.ship_evidence(await self.build_evidence_payload())
-                print(f"evidence shipped status={status_code}", flush=True)
+                LOGGER.info(
+                    "evidence_shipped",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            "status_code": status_code,
+                        }
+                    },
+                )
             except Exception as exc:
-                print(f"evidence ship failed: {exc}", flush=True)
+                LOGGER.warning(
+                    "evidence_ship_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
             await asyncio.sleep(self.interval)
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
@@ -167,7 +197,17 @@ class TargetClusterAgent:
                     command_id = command[Gateway.COMMAND_ID]
                     lease_id = command[Gateway.LEASE_ID]
                     action = command[Gateway.ACTION]
-                    print(f"agent executing command {command_id} action={action}", flush=True)
+                    LOGGER.info(
+                        "agent_executing_command",
+                        extra={
+                            CONTEXT_KEY: {
+                                Gateway.CLUSTER_ID: self.cluster_id,
+                                Gateway.AGENT_ID: self.agent_id,
+                                Gateway.COMMAND_ID: command_id,
+                                Gateway.ACTION: action,
+                            }
+                        },
+                    )
                     await client.start_command(command_id, self.cluster_id, lease_id, self.agent_id)
                     result = await self.execute_command(command)
                     await client.complete_command(
@@ -177,7 +217,16 @@ class TargetClusterAgent:
                         result,
                     )
             except Exception as exc:
-                print(f"command polling failed: {exc}", flush=True)
+                LOGGER.warning(
+                    "command_polling_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
                 await asyncio.sleep(Settings.COMMAND_RETRY_DELAY_SECONDS)
 
     async def reconcile_node_collector_forever(self) -> None:
@@ -188,12 +237,28 @@ class TargetClusterAgent:
     async def reconcile_node_collector_once(self) -> None:
         try:
             applied, message = await self.node_collector.reconcile()
-            print(
-                f"node collector reconcile applied={str(applied).lower()} message={message}",
-                flush=True,
+            LOGGER.info(
+                "node_collector_reconciled",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.APPLIED: applied,
+                        Gateway.MESSAGE: message,
+                    }
+                },
             )
         except Exception as exc:
-            print(f"node collector reconcile failed: {exc}", flush=True)
+            LOGGER.warning(
+                "node_collector_reconcile_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
         # TODO(target): expand action allowlist with workspace/repo/cluster policy and approval proof.
