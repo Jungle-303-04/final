@@ -35,7 +35,7 @@ force push하지 않는다.
 | 종류 | 문서 |
 | --- | --- |
 | 실행/운영 | [operations-deployment](operations-deployment.md), [production-readiness](production-readiness.md), [secrets](secrets.md) |
-| 설계 참고 | [service-split-plan](service-split-plan.md), [domain-architecture-plan](domain-architecture-plan.md), [outbox-design](outbox-design.md) |
+| 설계 참고 | [service-split-plan](service-split-plan.md), [domain-architecture-plan](domain-architecture-plan.md), [outbox-design](outbox-design.md), [Plural Console 기술 챌린지](team/plural-console-technical-challenge.md) |
 | 팀 운영 | [work-allocation](team/work-allocation.md), [implementation-todo](team/implementation-todo.md), [contract-vs-demo-boundary](team/contract-vs-demo-boundary.md), [codex-automation](team/codex-automation.md) |
 | Target 상세 | `docs/team/member-guides/target-telemetry-*.md` |
 
