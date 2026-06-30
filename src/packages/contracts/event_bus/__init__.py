@@ -12,7 +12,7 @@ from packages.contracts.event_bus.interfaces import (
 )
 from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.contracts.event_bus.subjects import STREAM_NAME, STREAM_SUBJECTS, EventSubject
-from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT, WorkerSubscription
+from packages.contracts.event_bus.subscriptions import ALL_EVENTS_SUBJECT
 
 __all__ = [
     "ALL_EVENTS_SUBJECT",
@@ -30,5 +30,4 @@ __all__ = [
     "JsonObject",
     "STREAM_NAME",
     "STREAM_SUBJECTS",
-    "WorkerSubscription",
 ]
