@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from packages.config.constants import Auth, Command, CommandStatus, OAuth, Sandbox, Target
 
-DEFAULT_WEBHOOK_IMAGE = "ghcr.io/project/checkout-api:bad"
+DEFAULT_WEBHOOK_IMAGE = "service:local"
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
 MAX_WEBHOOK_REPLICAS = 10
