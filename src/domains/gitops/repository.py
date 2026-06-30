@@ -245,9 +245,7 @@ class RepoChangeRepository(DatabaseConnection):
             values["metadata"] = dict(payload["metadata"])
         table = WorkflowRun.__table__
         statement = (
-            table.update()
-            .where(table.c.workflow_run_id == workflow_run_id)
-            .values(**values)
+            table.update().where(table.c.workflow_run_id == workflow_run_id).values(**values)
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -282,7 +280,12 @@ class RepoChangeRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
-        return {**payload, "workflow_run_id": workflow_run_id, "step_id": step_id, "name": step_name}
+        return {
+            **payload,
+            "workflow_run_id": workflow_run_id,
+            "step_id": step_id,
+            "name": step_name,
+        }
 
     def request_workflow_approval(self, payload: JsonObject) -> JsonObject:
         workflow_run_id = derive_workflow_run_id(payload)
