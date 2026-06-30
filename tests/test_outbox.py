@@ -57,6 +57,28 @@ def test_relay_publishes_then_marks_sent() -> None:
     assert store.sent == ["a", "b"]
 
 
+def test_relay_marks_only_published_on_midbatch_failure() -> None:
+    # 두 번째 발행에서 실패 → 첫 번째만 sent 표시(전체 배치 재발행 방지).
+    store = FakeOutboxStore([_evt("a"), _evt("b"), _evt("c")])
+
+    class _FailingPublisher:
+        def __init__(self) -> None:
+            self.published: list[str] = []
+
+        async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope:
+            if evt.event_id == "b":
+                raise RuntimeError("nats down")
+            self.published.append(evt.event_id)
+            return evt
+
+    relay = OutboxRelay(store, _FailingPublisher(), "api-gateway")
+    try:
+        asyncio.run(relay.run_once())
+    except RuntimeError:
+        pass
+    assert store.sent == ["a"]  # 발행 성공한 a 만 표시, b·c 는 다음에 재시도
+
+
 def test_relay_publishes_only_own_source() -> None:
     other = EventEnvelope(
         event_id="x",
