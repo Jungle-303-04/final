@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from auth import RedisSessionStore, SessionAuthService
+from auth import PasswordAuthService, SessionAuthService
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
@@ -16,8 +16,10 @@ from domains.identity.router import router as identity_router
 from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
 from domains.target.router import router as target_router
-from packages.config.constants import CommandStatus
+from packages.config.constants import Auth, CommandStatus
+from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.settings import env
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
@@ -26,6 +28,7 @@ from packages.events.bus import NatsEventBus
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
 from packages.storage.database import Database, wait_for_database
+from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 LOGGER = get_logger(__name__)
 
@@ -35,8 +38,9 @@ class ApiGateway:
         self.db = Database()
         self.bus = NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
-        self.sessions = RedisSessionStore()
+        self.sessions = RedisSessionStore(self._session_store_config())
         self.auth = SessionAuthService(self.sessions)
+        self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )
@@ -44,7 +48,24 @@ class ApiGateway:
         self.app.state.db = self.db
         self.app.state.events = self.events
         self.app.state.auth = self.auth
+        self.app.state.password_auth = self.password_auth
         self.configure_routes()
+
+    @staticmethod
+    def _session_store_config() -> RedisSessionStoreConfig:
+        return RedisSessionStoreConfig(
+            url=env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL),
+            ttl_seconds=int(env(Settings.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS)),
+            key_prefix=Settings.SESSION_KEY_PREFIX,
+            token_bytes=Settings.SESSION_TOKEN_BYTES,
+            default_roles=(Settings.OWNER_ROLE,),
+            rate_limit_key_prefix=Settings.RATE_LIMIT_KEY_PREFIX,
+            rate_limit=Settings.DEFAULT_RATE_LIMIT,
+            rate_limit_window_seconds=Settings.RATE_LIMIT_WINDOW_SECONDS,
+            email_verification_key_prefix=Settings.EMAIL_VERIFICATION_KEY_PREFIX,
+            email_verification_ttl_seconds=Settings.EMAIL_VERIFICATION_TTL_SECONDS,
+            email_verification_token_bytes=Settings.EMAIL_VERIFICATION_TOKEN_BYTES,
+        )
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:

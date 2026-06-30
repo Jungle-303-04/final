@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.identity.models import (
@@ -46,6 +46,73 @@ class WorkspaceAccessRepository(DatabaseConnection):
             conn.execute(self._cluster_upsert(payload))
         return payload
 
+    def get_user_by_email(self, email: str) -> JsonObject | None:
+        table = UserAccount.__table__
+        statement = (
+            select(
+                table.c.user_id,
+                table.c.email,
+                table.c.password_hash,
+                table.c.display_name,
+                table.c.status,
+            )
+            .where(table.c.email == email)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
+
+    def create_user(
+        self,
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        status: str,
+    ) -> JsonObject | None:
+        table = UserAccount.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                user_id=user_id,
+                email=email,
+                password_hash=password_hash,
+                display_name=display_name,
+                status=status,
+                updated_at=func.now(),
+            )
+            .on_conflict_do_nothing(index_elements=[table.c.email])
+            .returning(
+                table.c.user_id,
+                table.c.email,
+                table.c.password_hash,
+                table.c.display_name,
+                table.c.status,
+            )
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
+
+    def activate_user(self, user_id: str) -> JsonObject | None:
+        table = UserAccount.__table__
+        statement = (
+            table.update()
+            .where(table.c.user_id == user_id)
+            .values(status="active", updated_at=func.now())
+            .returning(
+                table.c.user_id,
+                table.c.email,
+                table.c.password_hash,
+                table.c.display_name,
+                table.c.status,
+            )
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
+
     @staticmethod
     def _user_upsert(user_id: str) -> Any:
         table = UserAccount.__table__
@@ -57,7 +124,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.user_id],
-            set_={"display_name": insert.excluded.display_name, "updated_at": func.now()},
+            set_={"status": "active", "updated_at": func.now()},
         )
 
     @staticmethod

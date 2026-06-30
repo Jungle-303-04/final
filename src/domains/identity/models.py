@@ -18,8 +18,11 @@ from packages.storage.base import (
 
 class UserAccount(Base):
     __tablename__ = "user_accounts"
+    __table_args__ = (UniqueConstraint("email"),)
 
     user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     display_name: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
     created_at: Mapped[Any] = created_at_column()
