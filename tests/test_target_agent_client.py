@@ -221,6 +221,43 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
     assert calls[1][2]["spec"]["template"]["spec"]["containers"][0]["image"].endswith(":v2")
 
 
+def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.method)
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "configmap/forbidden",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "v1",
+                            "kind": "ConfigMap",
+                            "metadata": {"name": "forbidden", "namespace": "kube-system"},
+                        },
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["applied"] is False
+    assert result["message"] == "only sandbox namespace writes are allowed"
+    assert calls == []
+
+
 def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
     manager_module = load_node_collector_manager_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
