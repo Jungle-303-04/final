@@ -91,6 +91,9 @@ class ClusterRegistration(Base):
     name: Mapped[str] = text_column()
     environment: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
+    # per-cluster agent 토큰의 SHA-256 해시(원문 미저장). agent 인증·테넌트 식별의 권위 소스.
+    # 기존 등록분은 NULL(재등록 전까지 agent 인증 불가) — 전역 토큰 신뢰 제거.
+    agent_token_hash: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     settings: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
