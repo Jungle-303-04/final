@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run ruff check services packages tests
+uv run ruff check src scripts tests
 uv run pytest -q

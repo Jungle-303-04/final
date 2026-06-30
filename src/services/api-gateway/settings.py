@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+from packages.config.constants import CommandStatus
+
+
+class Settings:
+    SERVICE_NAME = "api-gateway"
+    APP_TITLE = "API Gateway"
+    APP_VERSION = "0.1.0"
+
+    DEFAULT_SCOPES = "profile,email"
+    DEFAULT_AGENT_COMMAND_POLL_SECONDS = 10
+    MAX_COMMAND_POLL_SECONDS = 30
+    COMMAND_POLL_SLEEP_SECONDS = 1
+    DASHBOARD_STREAM_INTERVAL_SECONDS = 2
+
+    COMMAND_NOT_FOUND_STATUS_CODE = 404
+    CONFLICT_STATUS_CODE = 409
+    GATEWAY_ERROR_STATUS_CODE = 500
+
+    COMMAND_NOT_FOUND_MESSAGE = "command not found"
+    DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
+    DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
+    GATEWAY_ERROR_MESSAGE = "internal server error"
+
+    COMMAND_STATUS_QUEUED = CommandStatus.QUEUED
+    COMMAND_STATUS_LEASED = CommandStatus.LEASED
+    COMMAND_STATUS_RUNNING = CommandStatus.RUNNING
+    COMMAND_LEASE_SECONDS = 60
+    EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
+    DEFAULT_DEAD_LETTER_LIMIT = 50
+    MAX_DEAD_LETTER_LIMIT = 100
+
+    REDIS_URL_ENV = "REDIS_URL"
+    SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
+    SESSION_KEY_PREFIX = "session"
+    OAUTH_STATE_KEY_PREFIX = "oauth_state"
+    RATE_LIMIT_KEY_PREFIX = "rate"
+    OAUTH_STATE_TTL_SECONDS = 600
+    SESSION_TOKEN_BYTES = 32
+    DEFAULT_RATE_LIMIT = 120
+    RATE_LIMIT_WINDOW_SECONDS = 60
+    OWNER_ROLE = "owner"
+    AUTHORIZATION_HEADER = "authorization"
+    BEARER_PREFIX = "bearer "
+    SESSION_TOKEN_HEADER = "x-session-token"
+    OAUTH_AUTHORIZE_BASE_URL_ENV = "OAUTH_AUTHORIZE_BASE_URL"
+    RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
+    AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
+    OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"
+    REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
