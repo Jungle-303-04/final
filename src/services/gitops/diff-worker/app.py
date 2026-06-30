@@ -21,7 +21,7 @@ from packages.runtime.app import App, EventContext
 app = App("diff-worker")
 
 PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
-RESOURCE_REF = "deployment/checkout-api"
+DEPLOYMENT_RESOURCE_PREFIX = "deployment"
 
 
 def load_actual_resource_image(rendered: ManifestRenderedBody) -> str:
@@ -34,11 +34,18 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
     rendered = evt.rendered_manifest
     # TODO(gitops): create/update/delete 작업 유형과 기계 판독용 위험 사유 포함
     return Diff(
-        resource=RESOURCE_REF,
-        namespace=Sandbox.NAMESPACE,
+        resource=f"{DEPLOYMENT_RESOURCE_PREFIX}/{rendered.metadata.name}",
+        namespace=rendered.metadata.namespace or Sandbox.NAMESPACE,
         desired_image=rendered.spec.image,
         actual_image=actual_image,
         risk=Sandbox.RISK_TAG,
+        workspace_id=evt.workspace_id,
+        repository_id=evt.repository_id,
+        watch_target_id=evt.watch_target_id,
+        binding_id=evt.binding_id,
+        cluster_id=evt.cluster_id,
+        manifest_path=evt.manifest_path,
+        resource_class=rendered.resource_class,
     )
 
 

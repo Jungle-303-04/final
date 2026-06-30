@@ -12,6 +12,12 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import EmailVerificationResponse
+from packages.contracts.identity import (
+    DEPLOY_ACCESS,
+    READ_ACCESS,
+    AccessRole,
+    access_role_allows_action,
+)
 from packages.events.envelope import event
 
 
@@ -165,3 +171,9 @@ def test_event_body_rejects_invalid_list_item_type() -> None:
                 "traces": {},
             }
         )
+
+
+def test_resource_access_roles_are_action_scoped() -> None:
+    assert access_role_allows_action(AccessRole.VIEWER.value, READ_ACCESS)
+    assert not access_role_allows_action(AccessRole.VIEWER.value, DEPLOY_ACCESS)
+    assert access_role_allows_action(AccessRole.DEPLOYER.value, DEPLOY_ACCESS)

@@ -158,7 +158,7 @@ async def on_command_requested(
 | 영역 | 현재 subject |
 | --- | --- |
 | OAuth | `oauth.start.requested`, `oauth.connected` |
-| GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed` |
+| GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed` |
 | Agent | `agent.connected`, `cluster.evidence.received` |
 | Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
 | RCA/Safe PR | `evidence.built`, `rca.completed`, `safe_pr.requested`, `safe_pr.created`, `safe_pr.failed` |
@@ -296,6 +296,30 @@ async def on_event(evt: EventEnvelope, ctx):
 이 표준 모양은 `src/packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
 
 예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
+
+## Repo / Cluster 매핑 상태
+
+Git repo와 target cluster는 직접 1:1로 묶지 않는다. `deployment_bindings`를
+중간 매핑으로 둔다. 하나의 repo가 여러 cluster로 갈 수도 있고, 하나의 cluster가
+여러 repo를 받을 수도 있기 때문이다.
+
+```text
+git_repositories
+  -> git_watch_targets(branch/path polling cursor)
+  -> deployment_bindings(repo path -> cluster/namespace/app)
+  -> manifest_artifacts(commit별 render/invalid 상태)
+  -> command queue / target agent
+```
+
+repo 접근 가능 여부와 배포 가능한 manifest 여부는 다른 상태다. repo는 정상이어도
+YAML이 없거나 파싱할 수 없으면 `manifest.invalid` 이벤트와
+`manifest_artifacts.status=invalid_config`으로 남긴다. 이 실패는 재시도/DLQ보다
+사용자가 고쳐야 할 설정 상태에 가깝다.
+
+사용자 접근권한은 `resource_access_grants`가 담당한다. workspace owner/admin은
+전체 접근권을 갖고, 일반 사용자는 repository, cluster, deployment_binding 단위로
+viewer/deployer/maintainer/owner 권한을 받는다. token은 이벤트에 넣지 않고
+`credential_ref`만 저장한다.
 
 외부 provider 호출 실패는 가능한 한 worker 예외로 터뜨려 DLQ로 보내기보다
 `safe_pr.failed` 같은 도메인 실패 이벤트로 발행한다. 이렇게 하면 dashboard,

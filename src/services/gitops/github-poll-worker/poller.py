@@ -37,6 +37,16 @@ class GitHubPoller:
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
         self.repo = env(Settings.GITHUB_REPO_ENV, Settings.DEFAULT_GITHUB_REPO)
+        self.branch = env(Settings.GITHUB_BRANCH_ENV, Settings.DEFAULT_GITHUB_BRANCH)
+        self.workspace_id = env(Settings.WORKSPACE_ID_ENV, Settings.DEFAULT_WORKSPACE_ID)
+        self.repository_id = env(Settings.REPOSITORY_ID_ENV, Settings.DEFAULT_REPOSITORY_ID)
+        self.watch_target_id = env(Settings.WATCH_TARGET_ID_ENV, Settings.DEFAULT_WATCH_TARGET_ID)
+        self.binding_id = env(
+            Settings.DEPLOYMENT_BINDING_ID_ENV,
+            Settings.DEFAULT_DEPLOYMENT_BINDING_ID,
+        )
+        self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Settings.DEFAULT_TARGET_CLUSTER_ID)
+        self.manifest_path = env(Settings.MANIFEST_PATH_ENV, Settings.DEFAULT_MANIFEST_PATH)
         self.interval = int(env(Settings.POLL_INTERVAL_ENV, Settings.DEFAULT_POLL_INTERVAL_SECONDS))
         self.token = env(Settings.GITHUB_TOKEN_ENV, "")
         self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
@@ -86,7 +96,7 @@ class GitHubPoller:
     async def latest_commit_sha(self, client: httpx.AsyncClient) -> str | None:
         response = await client.get(
             f"{Settings.GITHUB_API_BASE}/repos/{self.repo}/commits",
-            params={"per_page": 1},
+            params={"per_page": 1, "sha": self.branch},
             headers=self._github_headers(),
         )
         if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
@@ -111,6 +121,14 @@ class GitHubPoller:
                 "commit_sha": commit_sha,
                 "image": Settings.DEFAULT_IMAGE,
                 "replicas": Settings.DEFAULT_REPLICAS,
+                "workspace_id": self.workspace_id,
+                "repository_id": self.repository_id,
+                "repo_ref": self.repo,
+                "branch": self.branch,
+                "watch_target_id": self.watch_target_id,
+                "binding_id": self.binding_id,
+                "cluster_id": self.cluster_id,
+                "manifest_path": self.manifest_path,
             }
         ).encode()
         response = await client.post(
