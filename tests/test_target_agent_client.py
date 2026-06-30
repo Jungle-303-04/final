@@ -258,6 +258,46 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
     assert calls == []
 
 
+def test_target_agent_rejects_unsupported_manifest_contract(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.method)
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "clusterrole/forbidden-role",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "rbac.authorization.k8s.io/v1",
+                            "kind": "ClusterRole",
+                            "metadata": {"name": "forbidden-role"},
+                            "rules": [],
+                        },
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["applied"] is False
+    assert (
+        result["message"] == "unsupported manifest kind: rbac.authorization.k8s.io/v1/ClusterRole"
+    )
+    assert calls == []
+
+
 def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
     manager_module = load_node_collector_manager_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
