@@ -80,6 +80,12 @@ class GitHubPoller:
             params={"per_page": 1},
             headers=self._github_headers(),
         )
+        if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
+            print(
+                f"github poll skipped repo={self.repo} status={response.status_code}",
+                flush=True,
+            )
+            return None
         response.raise_for_status()
         commits = response.json()
         return commits[0]["sha"] if commits else None
