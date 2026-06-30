@@ -14,13 +14,48 @@ CTX="${MGMT_CONTEXT:-kind-management}"
 NS="${MGMT_NS:-management}"
 N="${N:-6}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-300}"
-KILL_APPS=(manifest-render-worker repo-gateway-worker)
+GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+POSTGRES_USER="${POSTGRES_USER:-service}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
+POSTGRES_DB="${POSTGRES_DB:-service}"
+KILL_APPS=(manifest-render-worker scm-worker)
 
 log() { printf '%s [crash-test] %s\n' "$(date +%T)" "$*"; }
 
 psql_q() {
   kubectl --context "$CTX" -n "$NS" exec statefulset/postgresql -- \
-    env PGPASSWORD=service psql -U service -d service -tA -c "$1" 2>/dev/null | tr -d '[:space:]'
+    env PGPASSWORD="$POSTGRES_PASSWORD" \
+      psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "$1" 2>/dev/null \
+    | tr -d '[:space:]'
+}
+
+load_secret_key() {
+  local secret_name="$1"
+  local key="$2"
+  kubectl --context "$CTX" -n "$NS" \
+    get secret "$secret_name" -o "jsonpath={.data.${key}}" \
+    | python3 -c 'import base64, sys; print(base64.b64decode(sys.stdin.read()).decode())'
+}
+
+load_webhook_secret() {
+  load_secret_key management-runtime-secret GITHUB_WEBHOOK_SECRET
+}
+
+sign_body() {
+  BODY="$1" WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}" python3 - <<'PY'
+import hashlib
+import hmac
+import os
+
+print(
+    "sha256="
+    + hmac.new(
+        os.environ["WEBHOOK_SECRET"].encode(),
+        os.environ["BODY"].encode(),
+        hashlib.sha256,
+    ).hexdigest()
+)
+PY
 }
 
 kill_workers() {
@@ -36,12 +71,38 @@ ready_count() {
     | grep -c true || true
 }
 
-log "starting crash test: ${N} webhooks, kill targets ${KILL_APPS[*]}"
+if [ -z "$POSTGRES_PASSWORD" ]; then
+  POSTGRES_PASSWORD="$(load_secret_key postgresql-secret POSTGRES_PASSWORD)"
+fi
+
+ready_credential_sql="
+select count(*)
+from oauth_accounts oa
+join token_vault tv on tv.token_ref = oa.token_ref
+where oa.provider = 'github'
+  and oa.status = 'connected'
+  and tv.encrypted_payload ->> 'status' = 'ready'"
+ready_credential_count="$(psql_q "$ready_credential_sql")"
+ready_credential_count="${ready_credential_count:-0}"
+if [ "$ready_credential_count" -lt 1 ]; then
+  log "skipping crash test: no ready GitHub credential in token_vault"
+  log "OAuth placeholders are fail-closed; provision a Token Broker-backed credential first."
+  exit 0
+fi
+
+if [ -z "$GITHUB_WEBHOOK_SECRET" ]; then
+  GITHUB_WEBHOOK_SECRET="$(load_webhook_secret)"
+fi
+
+log "starting crash test: ${N} signed webhooks, kill targets ${KILL_APPS[*]}"
 corr_ids=()
 for i in $(seq 1 "$N"); do
+  body="{\"commit_sha\":\"crash${i}\",\"image\":\"ghcr.io/project/checkout-api:crash${i}\",\"replicas\":2}"
+  signature="$(sign_body "$body")"
   resp="$(curl -fsS -X POST "${BASE_URL}/github/webhook" \
     -H "content-type: application/json" \
-    -d "{\"commit_sha\":\"crash${i}\",\"image\":\"ghcr.io/project/checkout-api:crash${i}\",\"replicas\":2}")"
+    -H "x-hub-signature-256: ${signature}" \
+    -d "$body")"
   cid="$(printf "%s" "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin)["correlation_id"])')"
   corr_ids+=("$cid")
   log "webhook ${i} accepted correlation_id=${cid}"

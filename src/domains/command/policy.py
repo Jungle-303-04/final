@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, Protocol, cast
+
+from domains.command.policy_config import PolicyRuleConfig
+from packages.config.errors import require
+
+
+class Lookup(Protocol):
+    """이름으로 값 읽기. 룰은 dict 가 아니라 이 인터페이스에 의존."""
+
+    def value(self, field: str, default: Any = None) -> Any: ...
+
+
+@dataclass(frozen=True)
+class ModelLookup:
+    """속성(model) 기반 Lookup 구현 (Pydantic/dataclass body)."""
+
+    model: Any
+
+    def value(self, field: str, default: Any = None) -> Any:
+        return getattr(self.model, field, default)
+
+
+class Rule(Protocol):
+    reason: str
+
+    def allows(self, target: Lookup) -> bool: ...
+
+
+@dataclass(frozen=True)
+class EqualsRule:
+    name: str
+    field: str
+    expected: Any
+    reason: str
+    default: Any = None
+
+    def allows(self, target: Lookup) -> bool:
+        return target.value(self.field, self.default) == self.expected
+
+    @classmethod
+    def build(cls, config: PolicyRuleConfig) -> EqualsRule:
+        return cls(
+            name=config.name,
+            field=config.field,
+            expected=config.expected,
+            reason=config.reason,
+            default=config.default,
+        )
+
+
+@dataclass(frozen=True)
+class Result:
+    allowed: bool
+    reason: str | None = None
+
+    @classmethod
+    def allow(cls) -> Result:
+        return cls(True)
+
+    @classmethod
+    def reject(cls, reason: str) -> Result:
+        return cls(False, reason)
+
+    def require_reason(self) -> str:
+        require(self.reason is not None, "정책 거부에 reason 필요")
+        assert self.reason is not None  # require 가 보장(타입체커 내로잉)
+        return self.reason
+
+
+class Policy:
+    def __init__(self, rules: Sequence[Rule]) -> None:
+        self.rules: tuple[Rule, ...] = tuple(rules)
+
+    @classmethod
+    def build(cls, configs: tuple[PolicyRuleConfig, ...]) -> Policy:
+        rules: list[Rule] = [cast(Rule, EqualsRule.build(config)) for config in configs]
+        return cls(rules)
+
+    def evaluate(self, target: Lookup) -> Result:
+        for rule in self.rules:
+            if not rule.allows(target):
+                return Result.reject(rule.reason)
+        return Result.allow()

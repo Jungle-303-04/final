@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-API_GATEWAY_DIR = ROOT_DIR / "services" / "api-gateway"
+API_GATEWAY_DIR = ROOT_DIR / "src" / "services" / "api-gateway"
 
 
 def load_gateway_auth_module():
@@ -22,7 +22,7 @@ def load_gateway_auth_module():
 
 
 def test_service_image_requirements_include_storage_dependencies() -> None:
-    requirements = (ROOT_DIR / "services" / "requirements.txt").read_text(encoding="utf-8")
+    requirements = (ROOT_DIR / "src" / "services" / "requirements.txt").read_text(encoding="utf-8")
 
     assert "sqlalchemy==" in requirements
 

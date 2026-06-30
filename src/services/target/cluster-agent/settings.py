@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+from packages.config.constants import Command, CommandStatus
+
+
+class Settings:
+    TARGET_AGENT_SERVICE_NAME = "cluster-agent"
+    FAKE_PROMETHEUS_SERVICE_NAME = "fake-prometheus"
+    FAKE_LOKI_SERVICE_NAME = "fake-loki"
+    FAKE_OTEL_SERVICE_NAME = "fake-otel"
+
+    PROMETHEUS_TELEMETRY_KIND = "prometheus"
+    LOKI_TELEMETRY_KIND = "loki"
+    OTEL_TELEMETRY_KIND = "otel"
+
+    DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
+    MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
+    TARGET_CLUSTER_ID_ENV = "TARGET_CLUSTER_ID"
+    EVIDENCE_INTERVAL_ENV = "EVIDENCE_INTERVAL_SECONDS"
+    AGENT_TOKEN_ENV = "AGENT_TOKEN"
+    AGENT_TOKEN_HEADER = "x-agent-token"
+    HTTP_TIMEOUT_SECONDS = 20
+    TELEMETRY_TIMEOUT_SECONDS = 10
+    COMMAND_POLL_TIMEOUT_SECONDS = 15
+    COMMAND_EXECUTION_DELAY_SECONDS = 2
+    REGISTER_RETRY_DELAY_SECONDS = 3
+    COMMAND_RETRY_DELAY_SECONDS = 3
+
+    SERVICE_HOST = "0.0.0.0"
+    SERVICE_PORT_ENV = "PORT"
+    HOSTNAME_ENV = "HOSTNAME"
+    LOG_LEVEL = "info"
+    DEFAULT_SERVICE_PORT = "8000"
+    DEFAULT_AGENT_ID = "target-agent"
+    AGENT_CAPABILITIES = ["collector", "command_receiver"]
+    NODE_COLLECTOR_ENABLED_ENV = "NODE_COLLECTOR_ENABLED"
+    NODE_COLLECTOR_IMAGE_ENV = "NODE_COLLECTOR_IMAGE"
+    NODE_COLLECTOR_NAMESPACE_ENV = "NODE_COLLECTOR_NAMESPACE"
+    NODE_COLLECTOR_NAME = "optional-node-collector"
+    NODE_COLLECTOR_APP_LABEL = "optional-node-collector"
+    NODE_COLLECTOR_CONTAINER_NAME = "node-collector"
+    NODE_COLLECTOR_DEFAULT_IMAGE = "service:local"
+    NODE_COLLECTOR_DEFAULT_NAMESPACE = "target"
+    NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = 30
+    NODE_COLLECTOR_PORT = 9100
+    NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS = 15
+    NODE_COLLECTOR_CREATED_MESSAGE = "node collector daemonset created"
+    NODE_COLLECTOR_PATCHED_MESSAGE = "node collector daemonset reconciled"
+    NODE_COLLECTOR_DRY_RUN_MESSAGE = "kubernetes api not configured; node collector dry-run only"
+    NODE_COLLECTOR_DISABLED_MESSAGE = "node collector reconcile disabled"
+    NODE_COLLECTOR_MANAGED_BY_LABEL = "ops.service/managed-by"
+    NODE_COLLECTOR_MANAGED_BY_VALUE = "cluster-agent"
+
+    CHECKOUT_APP_NAME = "checkout-api"
+    CRASHING_POD_NAME = "checkout-api-7f8d"
+    CRASHING_POD_STATUS = "CrashLoopBackOff"
+    CRASHING_POD_RESTARTS = 4
+    K8S_READINESS_FAILED_EVENT = "readiness probe failed"
+    K8S_BACKOFF_EVENT = "back-off restarting failed container"
+
+    FAKE_PROMETHEUS_SOURCE = "fake-prometheus"
+    FAKE_LOKI_SOURCE = "fake-loki"
+    FAKE_OTEL_SOURCE = "fake-otel"
+    FAKE_NODE_CPU = 0.83
+    FAKE_NODE_MEMORY_MB = 512
+    FAKE_HTTP_5XX_RATE = 0.19
+    PROMETHEUS_VECTOR_VALUE = "0.19"
+    PROMETHEUS_BASE_URL_ENV = "PROMETHEUS_BASE_URL"
+    DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus:8000"
+    PROMETHEUS_METRIC_NAMES_PATH = "/api/v1/label/__name__/values"
+    PROMETHEUS_QUERY_PATH = "/api/v1/query"
+    PROMETHEUS_MAX_METRICS = 25
+    PROMETHEUS_FALLBACK_QUERIES = ("up",)
+    LOKI_BASE_URL_ENV = "LOKI_BASE_URL"
+    DEFAULT_LOKI_BASE_URL = "http://fake-loki:8000"
+    LOKI_LABELS_PATH = "/loki/api/v1/labels"
+    LOKI_QUERY_RANGE_PATH = "/loki/api/v1/query_range"
+    LOKI_QUERY_ENV = "LOKI_QUERY"
+    DEFAULT_LOKI_QUERY = '{pod=~".+"}'
+    LOKI_QUERY_LIMIT = 100
+
+    COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
+    APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
+    ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
+    COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
+    KUBERNETES_SERVICE_HOST_ENV = "KUBERNETES_SERVICE_HOST"
+    KUBERNETES_SERVICE_PORT_ENV = "KUBERNETES_SERVICE_PORT_HTTPS"
+    SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
+    LOKI_WARNING_LINE = "WARN rollback candidate detected"
+    OTEL_SLOW_SPAN = "GET /checkout"
