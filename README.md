@@ -14,6 +14,7 @@ src/services
   alert-worker
   gitops/git-pull-worker
   gitops/github-poll-worker
+  gitops/workflow-controller
   gitops/manifest-render-worker
   gitops/diff-worker
   gitops/diff-analyze-worker
@@ -71,6 +72,7 @@ make down
 ```text
 api-gateway                  관리 API Gateway
 git-pull-worker              Git webhook/polling -> git.changed
+workflow-controller          GitOps/approval/command 이벤트 -> workflow_runs/approvals
 manifest-render-worker       git.changed -> manifest.rendered
 diff-worker                  manifest.rendered -> desired.diff.detected
 diff-analyze-worker          desired.diff.detected -> diff.analyzed (안전 시 safe_pr.requested)
@@ -109,6 +111,7 @@ make kill-pod DEPLOYMENT=rca-worker
 - [docs/README.md](docs/README.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/events.md](docs/events.md)
+- [docs/gitops-fleet-control-plane.md](docs/gitops-fleet-control-plane.md)
 - [docs/operations-deployment.md](docs/operations-deployment.md)
 - [docs/service-split-plan.md](docs/service-split-plan.md)
 - [docs/secrets.md](docs/secrets.md)

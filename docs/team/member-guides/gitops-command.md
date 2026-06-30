@@ -13,6 +13,7 @@ Git Poller (git-pull-worker)
 
 GitOps split workers (5단계 파이프라인)
   git-pull-worker        -> git.changed
+  workflow-controller    -> workflow.created / workflow.step.recorded / approval.*
   manifest-render-worker -> manifest.rendered
   diff-worker            -> desired.diff.detected
   diff-analyze-worker    -> diff.analyzed (안전 시 safe_pr.requested)
@@ -31,6 +32,7 @@ Target Agent
 ## 담당 영역
 
 - `src/services/gitops/git-pull-worker`
+- `src/services/gitops/workflow-controller`
 - `src/services/gitops/manifest-render-worker`
 - `src/services/gitops/diff-worker`
 - `src/services/gitops/diff-analyze-worker`
@@ -47,6 +49,7 @@ Target Agent
 ## 현재 책임
 
 - Git 변경을 `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed` 5단계 파이프라인으로 정리한다.
+- `workflow-controller`는 기존 파이프라인을 대체하지 않고 관찰하여 `applications`, `workflow_runs`, `workflow_run_steps`, `approvals`를 갱신한다.
 - 안전한 diff면 `diff-analyze-worker`가 `safe_pr.requested`를 발행하고, `scm-worker`가 실제 PR(`safe_pr.created`)을 만든다.
 - diff 결과가 안전한 command/PR 요청 body로 변환되게 만든다.
 - command는 production write가 아니라 `sandbox` 또는 demo namespace 기준으로 제한한다.

@@ -25,6 +25,8 @@ STREAM_SUBJECTS = [
     "alert.>",
     "mail.>",
     "safe_pr.>",
+    "workflow.>",
+    "approval.>",
     "dashboard.>",
     "audit.>",
     "agent.>",
@@ -82,6 +84,16 @@ class EventSubject(StrEnum):
     SAFE_PR_REQUESTED = "safe_pr.requested"  # PR 생성 요청(공통)
     SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
     SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패
+
+    # --- GitOps 제품 상태(workflow-controller): 이벤트 흐름을 사용자 실행 객체로 투영 ---
+    WORKFLOW_CREATED = "workflow.created"  # 앱/바인딩/커밋 기준 실행 객체 생성 요청
+    WORKFLOW_RUN_STARTED = "workflow.run.started"  # 실행 객체 시작/재개
+    WORKFLOW_STEP_RECORDED = "workflow.step.recorded"  # 단계 상태 기록
+    WORKFLOW_RUN_COMPLETED = "workflow.run.completed"  # 실행 성공 종료
+    WORKFLOW_RUN_FAILED = "workflow.run.failed"  # 실행 실패 종료
+    APPROVAL_REQUESTED = "approval.requested"  # 쓰기 승인 필요
+    APPROVAL_GRANTED = "approval.granted"  # 승인 완료 또는 자동 승인
+    APPROVAL_REJECTED = "approval.rejected"  # 승인 거절
 
     # --- 읽기 모델(dashboard-worker) ---
     DASHBOARD_UPDATED = "dashboard.updated"  # 대시보드 카드 갱신

@@ -76,6 +76,10 @@ def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
     payload = {
         "correlation_id": correlation_id,
         "workspace_id": command.workspace_id,
+        "application_id": command.application_id,
+        "workflow_run_id": command.workflow_run_id,
+        "binding_id": command.binding_id,
+        "environment": command.environment,
         "cluster_id": command.cluster_id,
         "action": command.action,
         "namespace": command.namespace,
@@ -112,6 +116,10 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
             required_capability=COMMAND_CONFIG.required_agent_capability,
         ),
         workspace_id=workspace_id,
+        application_id=command.application_id,
+        workflow_run_id=command.workflow_run_id,
+        binding_id=command.binding_id,
+        environment=command.environment,
     )
 
 
@@ -141,4 +149,8 @@ async def handle_command_requested(
         command_id=plan.command_id,
         cluster_id=plan.cluster_id,
         workspace_id=plan.workspace_id,
+        application_id=plan.application_id,
+        workflow_run_id=plan.workflow_run_id,
+        binding_id=plan.binding_id,
+        environment=plan.environment,
     )

@@ -8,6 +8,12 @@ from domains.gitops.events import Diff
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID,
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_ENVIRONMENT,
+    DEFAULT_WORKFLOW_RUN_ID,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
@@ -22,6 +28,10 @@ class CommandRequestedBody(EventBody):
     reason: str
     diff: Diff
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    environment: str = DEFAULT_ENVIRONMENT
     requested_by: str | None = None
     actor: JsonObject | None = None
 
@@ -67,6 +77,10 @@ class Plan(EventBody):
     retry_policy: RetryPolicy
     routing_constraint: RoutingConstraint
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    environment: str = DEFAULT_ENVIRONMENT
 
 
 @dataclass(frozen=True)
@@ -102,6 +116,10 @@ class CommandQueuedForAgentBody(EventBody):
     command_id: str
     cluster_id: str
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    environment: str = DEFAULT_ENVIRONMENT
 
 
 @event(EventSubject.COMMAND_REJECTED)

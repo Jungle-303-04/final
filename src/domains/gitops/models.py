@@ -80,6 +80,79 @@ class DeploymentBinding(Base):
     updated_at: Mapped[Any] = updated_at_column()
 
 
+class Application(Base):
+    __tablename__ = "applications"
+    __table_args__ = (UniqueConstraint("workspace_id", "repository_id", "name"),)
+
+    application_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
+    repository_id: Mapped[str] = text_column()
+    name: Mapped[str] = text_column()
+    manifest_path: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+
+    workflow_run_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
+    application_id: Mapped[str] = text_column()
+    binding_id: Mapped[str] = text_column()
+    environment: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    commit_sha: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    current_step: Mapped[str] = text_column()
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    command_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class WorkflowRunStep(Base):
+    __tablename__ = "workflow_run_steps"
+    __table_args__ = (UniqueConstraint("workflow_run_id", "name"),)
+
+    step_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workflow_run_id: Mapped[str] = text_column()
+    workspace_id: Mapped[str] = text_column()
+    application_id: Mapped[str] = text_column()
+    binding_id: Mapped[str] = text_column()
+    environment: Mapped[str] = text_column()
+    name: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class Approval(Base):
+    __tablename__ = "approvals"
+
+    approval_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workflow_run_id: Mapped[str] = text_column()
+    workspace_id: Mapped[str] = text_column()
+    application_id: Mapped[str] = text_column()
+    binding_id: Mapped[str] = text_column()
+    environment: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    reason: Mapped[str] = text_column()
+    requested_role: Mapped[str] = text_column()
+    requested_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[dict[str, Any]] = jsonb_column()
+    expires_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
 class ManifestArtifact(Base):
     __tablename__ = "manifest_artifacts"
     __table_args__ = (UniqueConstraint("binding_id", "commit_sha", "manifest_path"),)

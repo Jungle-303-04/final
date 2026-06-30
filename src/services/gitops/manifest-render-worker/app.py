@@ -152,6 +152,9 @@ def artifact_payload(
             "repo_ref": evt.repo_ref,
             "branch": evt.branch,
             "cluster_id": evt.cluster_id,
+            "application_id": evt.application_id,
+            "workflow_run_id": evt.workflow_run_id,
+            "environment": evt.environment,
         },
     }
 
@@ -200,6 +203,10 @@ async def on_git_changed(
             commit_sha=evt.commit_sha,
             manifest_path=evt.manifest_path,
             reason=reason,
+            application_id=evt.application_id,
+            workflow_run_id=evt.workflow_run_id,
+            environment=evt.environment,
+            cluster_id=evt.cluster_id,
         )
         return
 
@@ -223,6 +230,9 @@ async def on_git_changed(
         repository_id=evt.repository_id,
         watch_target_id=evt.watch_target_id,
         binding_id=evt.binding_id,
+        application_id=evt.application_id,
+        workflow_run_id=evt.workflow_run_id,
+        environment=evt.environment,
         cluster_id=evt.cluster_id,
         commit_sha=evt.commit_sha,
         manifest_path=evt.manifest_path,
