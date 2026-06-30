@@ -23,6 +23,7 @@ from settings import (
     DEFAULT_MANAGEMENT_BASE_URL,
     DEFAULT_PROMETHEUS_BASE_URL,
     DEFAULT_SERVICE_PORT,
+    DEFAULT_TEMPO_BASE_URL,
     EVIDENCE_INTERVAL_ENV,
     FAKE_HTTP_5XX_RATE,
     FAKE_LOKI_SOURCE,
@@ -46,6 +47,7 @@ from settings import (
     SERVICE_HOST,
     SERVICE_PORT_ENV,
     TARGET_CLUSTER_ID_ENV,
+    TEMPO_BASE_URL_ENV,
 )
 from uvicorn import Config, Server
 
@@ -115,12 +117,17 @@ class TargetClusterAgent:
             LOKI_BASE_URL_ENV,
             DEFAULT_LOKI_BASE_URL,
         ).rstrip("/")
+        self.tempo_base_url = env(
+            TEMPO_BASE_URL_ENV,
+            DEFAULT_TEMPO_BASE_URL,
+        ).rstrip("/")
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
         self.evidence_collector = EvidenceCollector(
             self.prometheus_base_url,
             self.loki_base_url,
+            self.tempo_base_url,
             self.fake_evidence,
         )
 
