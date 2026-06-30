@@ -33,6 +33,23 @@ class Settings:
     DEFAULT_SERVICE_PORT = "8000"
     DEFAULT_AGENT_ID = "target-agent"
     AGENT_CAPABILITIES = ["collector", "command_receiver"]
+    NODE_COLLECTOR_ENABLED_ENV = "NODE_COLLECTOR_ENABLED"
+    NODE_COLLECTOR_IMAGE_ENV = "NODE_COLLECTOR_IMAGE"
+    NODE_COLLECTOR_NAMESPACE_ENV = "NODE_COLLECTOR_NAMESPACE"
+    NODE_COLLECTOR_NAME = "optional-node-collector"
+    NODE_COLLECTOR_APP_LABEL = "optional-node-collector"
+    NODE_COLLECTOR_CONTAINER_NAME = "node-collector"
+    NODE_COLLECTOR_DEFAULT_IMAGE = "service:local"
+    NODE_COLLECTOR_DEFAULT_NAMESPACE = "target"
+    NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = 30
+    NODE_COLLECTOR_PORT = 9100
+    NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS = 15
+    NODE_COLLECTOR_CREATED_MESSAGE = "node collector daemonset created"
+    NODE_COLLECTOR_PATCHED_MESSAGE = "node collector daemonset reconciled"
+    NODE_COLLECTOR_DRY_RUN_MESSAGE = "kubernetes api not configured; node collector dry-run only"
+    NODE_COLLECTOR_DISABLED_MESSAGE = "node collector reconcile disabled"
+    NODE_COLLECTOR_MANAGED_BY_LABEL = "ops.service/managed-by"
+    NODE_COLLECTOR_MANAGED_BY_VALUE = "cluster-agent"
 
     CHECKOUT_APP_NAME = "checkout-api"
     CRASHING_POD_NAME = "checkout-api-7f8d"

@@ -99,6 +99,7 @@ class TargetClusterAgent:
         self,
         client: ManagementPlaneClient | None = None,
         telemetry_transport: httpx.AsyncBaseTransport | None = None,
+        kubernetes_transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = env(
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
@@ -110,6 +111,14 @@ class TargetClusterAgent:
         )
         self.client = client
         self.telemetry_transport = telemetry_transport
+        self.kubernetes_transport = kubernetes_transport
+        self.node_collector_enabled = truthy(env(Settings.NODE_COLLECTOR_ENABLED_ENV, "true"))
+        self.node_collector_image = env(
+            Settings.NODE_COLLECTOR_IMAGE_ENV, Settings.NODE_COLLECTOR_DEFAULT_IMAGE
+        )
+        self.node_collector_namespace = env(
+            Settings.NODE_COLLECTOR_NAMESPACE_ENV, Settings.NODE_COLLECTOR_DEFAULT_NAMESPACE
+        )
 
     async def run(self) -> None:
         if self.client is not None:
@@ -120,7 +129,12 @@ class TargetClusterAgent:
 
     async def run_with_client(self, client: ManagementPlaneClient) -> None:
         await self.register(client)
-        await asyncio.gather(self.ship_evidence(client), self.poll_commands(client))
+        await self.reconcile_node_collector_once()
+        await asyncio.gather(
+            self.reconcile_node_collector_forever(),
+            self.ship_evidence(client),
+            self.poll_commands(client),
+        )
 
     async def register(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -166,6 +180,66 @@ class TargetClusterAgent:
             except Exception as exc:
                 print(f"command polling failed: {exc}", flush=True)
                 await asyncio.sleep(Settings.COMMAND_RETRY_DELAY_SECONDS)
+
+    async def reconcile_node_collector_forever(self) -> None:
+        while True:
+            await self.reconcile_node_collector_once()
+            await asyncio.sleep(Settings.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS)
+
+    async def reconcile_node_collector_once(self) -> None:
+        if not self.node_collector_enabled:
+            print(Settings.NODE_COLLECTOR_DISABLED_MESSAGE, flush=True)
+            return
+        try:
+            applied, message = await self.ensure_node_collector()
+            print(
+                f"node collector reconcile applied={str(applied).lower()} message={message}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(f"node collector reconcile failed: {exc}", flush=True)
+
+    async def ensure_node_collector(self) -> tuple[bool, str]:
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            return False, Settings.NODE_COLLECTOR_DRY_RUN_MESSAGE
+
+        namespace = self.node_collector_namespace
+        name = Settings.NODE_COLLECTOR_NAME
+        body = build_node_collector_daemonset(namespace, self.node_collector_image)
+        collection_url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/daemonsets"
+        resource_url = f"{collection_url}/{name}"
+        async with self.kubernetes_client() as client:
+            current = await client.get(resource_url, headers=kubernetes_headers(token))
+            if current.status_code == 404:
+                created = await client.post(
+                    collection_url,
+                    json=body,
+                    headers=kubernetes_headers(token, "application/json"),
+                )
+                created.raise_for_status()
+                return True, Settings.NODE_COLLECTOR_CREATED_MESSAGE
+            current.raise_for_status()
+            patched = await client.patch(
+                resource_url,
+                json=build_node_collector_daemonset_patch(namespace, self.node_collector_image),
+                headers=kubernetes_headers(token, "application/strategic-merge-patch+json"),
+            )
+            patched.raise_for_status()
+        return True, Settings.NODE_COLLECTOR_PATCHED_MESSAGE
+
+    def kubernetes_client(self) -> httpx.AsyncClient:
+        verify: str | bool = (
+            Settings.SERVICE_ACCOUNT_CA_PATH
+            if os.path.exists(Settings.SERVICE_ACCOUNT_CA_PATH)
+            else True
+        )
+        return httpx.AsyncClient(
+            verify=verify,
+            transport=self.kubernetes_transport,
+            timeout=Settings.HTTP_TIMEOUT_SECONDS,
+        )
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
         # TODO(target): expand action allowlist with workspace/repo/cluster policy and approval proof.
@@ -424,6 +498,95 @@ def build_rollout_restart_patch() -> JsonObject:
             }
         }
     }
+
+
+def build_node_collector_daemonset(namespace: str, image: str) -> JsonObject:
+    labels = {
+        "app": Settings.NODE_COLLECTOR_APP_LABEL,
+        Settings.NODE_COLLECTOR_MANAGED_BY_LABEL: Settings.NODE_COLLECTOR_MANAGED_BY_VALUE,
+    }
+    return {
+        "apiVersion": "apps/v1",
+        "kind": "DaemonSet",
+        "metadata": {
+            "name": Settings.NODE_COLLECTOR_NAME,
+            "namespace": namespace,
+            "labels": labels,
+        },
+        "spec": {
+            "selector": {"matchLabels": {"app": Settings.NODE_COLLECTOR_APP_LABEL}},
+            "updateStrategy": {"type": "RollingUpdate"},
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "prometheus.io/path": "/metrics",
+                        "prometheus.io/port": str(Settings.NODE_COLLECTOR_PORT),
+                        "prometheus.io/scrape": "true",
+                    },
+                    "labels": labels,
+                },
+                "spec": {
+                    "tolerations": [{"operator": "Exists"}],
+                    "containers": [
+                        {
+                            "name": Settings.NODE_COLLECTOR_CONTAINER_NAME,
+                            "image": image,
+                            "imagePullPolicy": "IfNotPresent",
+                            "command": [
+                                "python",
+                                "src/services/target/node-collector/app.py",
+                            ],
+                            "env": [
+                                {"name": "PORT", "value": str(Settings.NODE_COLLECTOR_PORT)},
+                                {
+                                    "name": "COLLECT_INTERVAL_SECONDS",
+                                    "value": str(
+                                        Settings.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS
+                                    ),
+                                },
+                                {
+                                    "name": "NODE_NAME",
+                                    "valueFrom": {"fieldRef": {"fieldPath": "spec.nodeName"}},
+                                },
+                                {
+                                    "name": "POD_NAME",
+                                    "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}},
+                                },
+                                {
+                                    "name": "POD_NAMESPACE",
+                                    "valueFrom": {
+                                        "fieldRef": {"fieldPath": "metadata.namespace"}
+                                    },
+                                },
+                            ],
+                            "ports": [
+                                {
+                                    "name": "metrics",
+                                    "containerPort": Settings.NODE_COLLECTOR_PORT,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            },
+        },
+    }
+
+
+def build_node_collector_daemonset_patch(namespace: str, image: str) -> JsonObject:
+    daemonset = build_node_collector_daemonset(namespace, image)
+    return {"metadata": daemonset["metadata"], "spec": daemonset["spec"]}
+
+
+def kubernetes_headers(token: str, content_type: str | None = None) -> dict[str, str]:
+    headers = {"authorization": f"Bearer {token}"}
+    if content_type is not None:
+        headers["content-type"] = content_type
+    return headers
+
+
+def truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def kubernetes_api_base_url() -> str | None:
