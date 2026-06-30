@@ -89,14 +89,14 @@ Docker 데몬이 켜져 있어야 compose demo가 실행된다는 것을 안다.
 ```bash
 pwd
 git status --short
-find services/target/target-cluster-agent services/target/node-collector -maxdepth 2 -type f | sort
+find src/services/target/cluster-agent src/services/target/node-collector -maxdepth 2 -type f | sort
 ```
 
 직접 확인:
 
-- `services/target/target-cluster-agent/agent.py`가 보인다.
-- `services/target/target-cluster-agent/fake_prometheus.py`가 보인다.
-- `services/target/node-collector/node_collector.py`가 보인다.
+- `src/services/target/cluster-agent/agent.py`가 보인다.
+- `src/services/target/cluster-agent/fake_telemetry.py`가 보인다.
+- `src/services/target/node-collector/node_collector.py`가 보인다.
 
 산출물:
 
@@ -112,24 +112,24 @@ find services/target/target-cluster-agent services/target/node-collector -maxdep
 현재 Target/Telemetry 관련 파일이 어디 있는지 말할 수 있다.
 ```
 
-### Task 0-2. fake-prometheus가 진짜 Prometheus가 아님을 확인
+### Task 0-2. fake telemetry Prometheus 모드가 진짜 Prometheus가 아님을 확인
 
 목표:
 
 ```text
-fake_prometheus.py는 실제 Prometheus가 아니라는 점을 이해한다.
+fake_telemetry.py의 Prometheus 모드는 실제 Prometheus가 아니라는 점을 이해한다.
 ```
 
 확인할 파일:
 
 ```bash
-sed -n '1,220p' services/target/target-cluster-agent/fake_prometheus.py
-sed -n '1,260p' services/target/target-cluster-agent/agent.py
+sed -n '1,220p' src/services/target/cluster-agent/fake_telemetry.py
+sed -n '1,260p' src/services/target/cluster-agent/agent.py
 ```
 
 직접 확인:
 
-- `fake_prometheus.py`는 `run_fake_telemetry(...)`만 호출한다.
+- `fake_telemetry.py`는 `FAKE_TELEMETRY_KIND`에 따라 fake 종류를 고른다.
 - `agent.py`의 `create_fake_telemetry_app("prometheus")`는 fixed JSON을 반환한다.
 - scrape 저장소, PromQL engine, time-series DB가 없다.
 
@@ -166,7 +166,7 @@ uv run pytest tests/test_node_collector.py
 선택 실행:
 
 ```bash
-python services/target/node-collector/app.py
+python src/services/target/node-collector/app.py
 ```
 
 다른 터미널:
@@ -245,7 +245,7 @@ docker compose up --build
 
 나중에 옮길 위치:
 
-- `examples/telemetry-evidence-demo/app/evidence_demo.py`의 변환 아이디어를 `services/target/target-cluster-agent/evidence.py`로 옮긴다.
+- `examples/telemetry-evidence-demo/app/evidence_demo.py`의 변환 아이디어를 `src/services/target/cluster-agent/evidence.py`로 옮긴다.
 
 성취 기준:
 
@@ -413,7 +413,7 @@ latest_value(...)
 나중에 옮길 위치:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 tests/test_target_metric_evidence.py
 ```
 
@@ -466,7 +466,7 @@ metric_evidence(...)
 나중에 옮길 위치:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 성취 기준:
@@ -508,7 +508,7 @@ log_evidence(...)
 나중에 옮길 위치:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 tests/test_target_log_evidence.py
 ```
 
@@ -531,7 +531,7 @@ tests/test_target_log_evidence.py
 새 파일:
 
 ```text
-services/target/target-cluster-agent/evidence.py
+src/services/target/cluster-agent/evidence.py
 ```
 
 처음 넣을 것:
@@ -545,7 +545,7 @@ MetricEvidenceDraft
 직접 확인:
 
 ```bash
-python -m py_compile services/target/target-cluster-agent/evidence.py
+python -m py_compile src/services/target/cluster-agent/evidence.py
 ```
 
 산출물:
@@ -633,7 +633,7 @@ EvidenceDraft를 나중에 Gateway/Event payload로 바꿀 위치를 정한다.
 
 아직 하지 말 것:
 
-- `packages/contracts/event_bus/bodies/` 수정.
+- `src/packages/contracts/event_bus/bodies/` 수정.
 - `cluster.evidence.received` 최종 JSON 확정.
 - Gateway endpoint DTO 확정.
 
@@ -658,4 +658,4 @@ EvidenceDraft -> dict 변환 함수 후보만 작성
 - raw data와 EvidenceDraft 차이를 설명할 수 있다.
 - `kind`, `summary`, `signals`, `source_ref` 의미를 설명할 수 있다.
 - Docker demo를 실행해서 EvidenceDraft 출력을 볼 수 있다.
-- `services/target/target-cluster-agent/evidence.py`로 옮길 함수 후보를 말할 수 있다.
+- `src/services/target/cluster-agent/evidence.py`로 옮길 함수 후보를 말할 수 있다.

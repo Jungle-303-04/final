@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+if str(ROOT_DIR / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR / "src"))
 
 # App 기반 서비스의 진입 파일(app.py). import 하면 @app.sub 가 등록된다.
 SERVICES = [
@@ -24,11 +24,9 @@ SERVICES = [
     "gitops/manifest-render-worker",
     "gitops/diff-worker",
     "gitops/diff-analyze-worker",
-    "gitops/repo-gateway-worker",
-    "demo/ping-worker",
-    "demo/ping-gateway",
-    "projection/dashboard-projection-service",
-    "projection/audit-timeline-service",
+    "gitops/scm-worker",
+    "projection/dashboard-worker",
+    "projection/audit-worker",
 ]
 
 
@@ -51,7 +49,7 @@ def main() -> None:
     # 서비스 핸들러(@app.sub) 등록.
     for service in SERVICES:
         module = service.replace("/", "_")
-        _load(ROOT_DIR / "services" / service / "app.py", f"app_{module}")
+        _load(ROOT_DIR / "src" / "services" / service / "app.py", f"app_{module}")
 
     from packages.contracts.event_bus.registry import events
 

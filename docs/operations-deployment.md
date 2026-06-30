@@ -19,7 +19,7 @@ Management Cluster
   PostgreSQL / Redis / Object Store
 
 Target Cluster
-  target-cluster-agent
+  cluster-agent
   optional node-collector
   Prometheus / Loki / OTel adapter
   Kubernetes API
@@ -37,9 +37,9 @@ Target Cluster는 기본적으로 Management Cluster로 outbound 연결한다. �
 | gitops split workers | EKS managed node group | 가능 | git-pull, manifest-render, diff, diff-analyze, repo-gateway는 stateless worker다. event와 DB만 사용한다. |
 | command-worker | EKS managed node group | 가능 | stateless worker다. command queue는 DB에 둔다. |
 | rca-worker | EKS managed node group | 가능 | stateless worker다. AI provider 호출이 붙어도 node 권한이 필요 없다. |
-| dashboard-projection-service | EKS managed node group | 가능 | event를 read model로 투영하는 stateless worker다. |
-| audit-timeline-service | EKS managed node group | 가능 | event를 audit table에 기록하는 stateless worker다. |
-| target-cluster-agent | target cluster managed node group | 제한 후보 | Kubernetes API 접근과 telemetry query는 가능하지만 node-level 수집은 분리해야 한다. |
+| dashboard-worker | EKS managed node group | 가능 | event를 read model로 투영하는 stateless worker다. |
+| audit-worker | EKS managed node group | 가능 | event를 audit table에 기록하는 stateless worker다. |
+| cluster-agent | target cluster managed node group | 제한 후보 | Kubernetes API 접근과 telemetry query는 가능하지만 node-level 수집은 분리해야 한다. |
 | node-collector | target cluster managed node group | 불가 | DaemonSet으로 노드마다 떠야 한다. |
 | NATS JetStream | EKS managed node group | 불가 | stateful workload다. 운영 단계에서는 managed event service 대체도 검토한다. |
 | PostgreSQL | RDS 후보 | 불가 | 운영에서는 DB를 cluster 내부 workload로 오래 끌고 가지 않는다. |
@@ -77,7 +77,7 @@ Fargate는 다음 조건을 모두 만족할 때만 쓴다.
 | --- | --- | --- |
 | Control plane | apiserver, scheduler, controller manager 감사/진단 로그 | EKS control plane logging |
 | Node/Application | node, kubelet, kube-proxy, pod stdout/stderr | CloudWatch Container Insights, Fluent Bit, Prometheus |
-| Product Evidence | 장애 분석용으로 정리된 evidence pack | target-cluster-agent -> api-gateway -> JetStream |
+| Product Evidence | 장애 분석용으로 정리된 evidence pack | cluster-agent -> api-gateway -> JetStream |
 
 우리 서비스는 Prometheus/Loki/OTel을 직접 대체하지 않는다. 이미 있는 관측 시스템을 adapter로 읽고, 없을 때 최소 fallback collector를 제공한다.
 
@@ -87,7 +87,7 @@ Fargate는 다음 조건을 모두 만족할 때만 쓴다.
 | --- | --- |
 | 외부 진입 | ALB/Ingress -> api-gateway |
 | 내부 통신 | service DNS와 NATS JetStream |
-| target 연결 | target-cluster-agent가 management로 outbound 연결 |
+| target 연결 | cluster-agent가 management로 outbound 연결 |
 | subnet | 운영 후보는 private subnet 중심 |
 | egress | OAuth, GitHub, AI provider, object store, log destination만 명시 허용 |
 | VPC endpoint | ECR, S3, CloudWatch, Secrets Manager 사용 시 우선 검토 |
@@ -102,7 +102,7 @@ Target Cluster에 command를 보내기 위해 target cluster API server를 외�
 | session | Redis | UI/API 사용자 인증 |
 | AWS IAM / IRSA | EKS service account annotation | AWS API 접근 권한 |
 | Kubernetes ServiceAccount/RBAC | Target Cluster | Agent가 Kubernetes API를 읽고 sandbox만 제한 write |
-| sandbox guard | command-worker, target-cluster-agent | 명령 실행 범위 검증 |
+| sandbox guard | command-worker, cluster-agent | 명령 실행 범위 검증 |
 
 ServiceAccount/RBAC는 우리가 만드는 애플리케이션 모듈이 아니라 Kubernetes 권한 리소스다. 우리 agent pod가 그 ServiceAccount로 실행되기 때문에 Kubernetes API 호출 권한이 제한된다.
 
@@ -147,7 +147,7 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | 항목 | 계획 | 이유 |
 | --- | --- | --- |
 | CI integration smoke | `.github/workflows/integration-smoke.yml`에서 nightly/manual `make up && make smoke`를 실행한다. PR 필수 check에는 Docker import smoke를 두고, 실제 kind E2E는 비용과 실행 시간을 분리해 운영한다. | uv 기반 unit CI와 Docker/runtime 환경 차이를 잡고, NATS/PostgreSQL/Redis/Kubernetes 조합 부팅 실패를 조기에 발견한다. |
-| Secret provider 경계 | fake OAuth token 저장을 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 fake 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
+| Secret provider 경계 | credential placeholder를 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 임시 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
 
 ## 참고 문서
 
