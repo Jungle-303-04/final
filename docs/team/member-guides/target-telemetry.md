@@ -23,19 +23,18 @@ Management Gateway
   -> command.completed event 발행
 ```
 
-## 왜 하위 문서로 나누는가
+## 읽는 문서 최소화
 
-Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, command queue, evidence 모델이 모두 섞인다. 한 문서에 모두 적으면 담당자가 어디부터 해야 할지 더 헷갈린다.
-
-그래서 이 메인 문서는 길잡이로만 사용한다. 실제 구현자는 아래 하위 문서를 순서대로 읽는다.
+Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, command queue, evidence 모델이 모두 섞인다. 처음에는 아래 문서만 순서대로 읽고, 나머지는 필요할 때 참고한다.
 
 | 순서 | 문서 | 언제 읽는가 |
 | --- | --- | --- |
 | 1 | [Telemetry 기본 개념](target-telemetry-concepts.md) | Prometheus scrape, Loki/OTel ingest 차이를 모를 때 |
 | 2 | [Telemetry 데이터 흐름](target-telemetry-data-flows.md) | Kubernetes 정보를 어떻게 수집/주입/조회할지 설계할 때 |
 | 3 | [Evidence 모델](target-telemetry-evidence-model.md) | Gateway/RCA로 어떤 데이터를 보낼지 정할 때 |
-| 4 | [구현 Phase 계획](target-telemetry-implementation-plan.md) | PR/커밋 단위로 작업을 시작할 때 |
-| 5 | [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md) | 실제 파일을 고치고 테스트할 때 |
+| 4 | [Evidence 학습 가이드](target-telemetry-evidence-learning-guide.md) | raw telemetry를 작은 evidence로 줄이는 연습을 할 때 |
+| 5 | [구현 Phase 계획](target-telemetry-implementation-plan.md) | PR/커밋 단위로 작업을 시작할 때 |
+| 6 | [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md) | 실제 파일을 고치고 테스트할 때 |
 
 ## 담당 영역
 
