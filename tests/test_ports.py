@@ -115,6 +115,26 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
     assert status == "queued"
 
 
+def test_command_subscriber_rejects_noop_diff() -> None:
+    command = load_service("command-worker")
+    queue = FakeAgentCommandQueue()
+    diff = command_diff()
+    diff["actual_image"] = diff["desired_image"]
+    payload = CommandRequestedBody.from_body(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": diff,
+        }
+    )
+    outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
+    assert subjects_of(outs) == ["command.rejected"]
+    assert outs[0].reason == "desired and actual images already match"
+    assert queue.queued == []
+
+
 def test_command_id_is_deterministic_for_same_input() -> None:
     command = load_service("command-worker")
     payload = CommandRequestedBody.from_body(

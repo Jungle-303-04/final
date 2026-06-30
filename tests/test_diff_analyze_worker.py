@@ -27,3 +27,19 @@ def test_unsafe_diff_skips_pr() -> None:
     unsafe = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=_diff("production")))
     assert subjects_of(unsafe) == ["diff.analyzed"]
     assert unsafe[0].safe is False
+
+
+def test_noop_diff_skips_pr_even_when_sandbox() -> None:
+    analyze = load_service("gitops/diff-analyze-worker")
+    diff = _diff("sandbox-only")
+    noop = Diff(
+        resource=diff.resource,
+        namespace=diff.namespace,
+        desired_image=diff.desired_image,
+        actual_image=diff.desired_image,
+        risk=diff.risk,
+    )
+    outs = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=noop))
+    assert subjects_of(outs) == ["diff.analyzed"]
+    assert outs[0].safe is False
+    assert outs[0].reason == "desired and actual images already match"
