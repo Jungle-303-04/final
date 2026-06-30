@@ -18,8 +18,8 @@ if str(ROOT_DIR / "src") not in sys.path:
 
 # App 기반 서비스 진입 파일(app.py), import 시 @app.sub 등록
 SERVICES = [
-    "ai/rca",
-    "command/worker",
+    "ai/rca-worker",
+    "command/command-worker",
     "gitops/git-pull-worker",
     "gitops/manifest-render-worker",
     "gitops/diff-worker",

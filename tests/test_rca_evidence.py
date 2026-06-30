@@ -6,7 +6,7 @@ from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody
 
 
 def test_rca_subscriber_yields_typed_event_chain() -> None:
-    rca = load_service("ai/rca")
+    rca = load_service("ai/rca-worker")
     db = SpyDb()
     payload = ClusterEvidenceReceivedBody(
         cluster_id="target-cluster-01",
@@ -32,7 +32,7 @@ def test_rca_subscriber_yields_typed_event_chain() -> None:
 
 
 def test_rca_subscriber_stops_when_incident_flag_is_not_set() -> None:
-    rca = load_service("ai/rca")
+    rca = load_service("ai/rca-worker")
     db = SpyDb()
     payload = ClusterEvidenceReceivedBody(
         cluster_id="target-cluster-01",

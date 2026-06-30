@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 def load_gateway_module() -> Any:
     return load_file(
-        ROOT / "src" / "services" / "api-gateway" / "gateway.py",
+        ROOT / "src" / "services" / "gateway" / "api-gateway" / "gateway.py",
         "test_api_gateway_error_handler_module",
     )
 
