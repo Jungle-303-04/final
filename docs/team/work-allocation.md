@@ -16,8 +16,11 @@
 
 ## Codex 자동화
 
-5명 모두 같은 자동화 프롬프트를 사용한다.
-팀원별 차이는 `TEAM_MEMBER_GITHUB_ID` 값 하나뿐이며, 자동화는 GitHub issue, PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 계산한다.
+5명 모두 같은 작업 세션 프롬프트를 사용한다.
+팀원별 차이는 `TEAM_MEMBER_GITHUB_ID` 값 하나뿐이며, 작업 세션은 GitHub issue,
+PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 계산한다.
+2026-06-30 기준 개인별 정기 자동화는 삭제했고, 정기 자동화는 총괄
+`final-wbs-issue-sync`와 WIKI 위생 관리 `wiki`만 유지한다.
 
 - 공통 프롬프트: `docs/team/codex-automation.md`
 - 파일 소유권 컨벤션: `docs/team/file-ownership-convention.md`
@@ -25,9 +28,9 @@
 - 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
 - PR 기준: `dev` base draft PR
 - 변경 가능 범위: 아래 작업 경계 표와 각 member guide
-- 팀원별 자동화 권한: 담당 범위 Issue 본문/체크리스트, Project WBS item/status, source/WIKI 문서 정합성은 직접 보정한다. 완료된 issue는 닫지 않고 Project status만 `완료`로 갱신한다.
+- 팀원 작업 세션 권한: 담당 범위 Issue 본문/체크리스트, Project WBS item/status, source/WIKI 문서 정합성은 직접 보정한다. 완료된 issue는 닫지 않고 Project status만 `완료`로 갱신한다.
 - 총괄 WBS 자동화 권한: 전체 WBS/Issue/Project/docs/WIKI 정합성을 보정하고, 각 상위 작업이 최소 10개 이상의 하위 task 또는 체크리스트를 유지하도록 부족분을 정의한다.
-- 자동화 금지 작업: 제품 코드 구현, commit, push, branch 생성/삭제, PR close/Ready/merge, main/dev 직접 변경.
+- 정기 자동화 금지 작업: 제품 코드 구현, commit, push, branch 생성/삭제, PR close/Ready/merge, main/dev 직접 변경.
 
 ## 작업 경계
 
