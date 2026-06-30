@@ -30,6 +30,16 @@ def _transport(posted: list[dict[str, Any]], sha: str = "abc123def456") -> httpx
     return httpx.MockTransport(handler)
 
 
+def _rate_limited_transport(posted: list[dict[str, Any]]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            return httpx.Response(403, json={"message": "rate limit exceeded"})
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"accepted": True})
+
+    return httpx.MockTransport(handler)
+
+
 def test_once_mode_posts_latest_commit_to_webhook() -> None:
     module = _load_poller()
     posted: list[dict[str, Any]] = []
@@ -56,3 +66,16 @@ def test_dedup_guard_skips_unchanged_sha() -> None:
 
     asyncio.run(go())
     assert len(posted) == 1
+
+
+def test_rate_limited_poll_exits_without_webhook_or_failure() -> None:
+    module = _load_poller()
+    posted: list[dict[str, Any]] = []
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=_rate_limited_transport(posted)) as client:
+            poller = module.GitHubPoller(client=client)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+    assert posted == []
