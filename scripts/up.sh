@@ -56,6 +56,17 @@ print("md5" + hashlib.md5((password + user).encode()).hexdigest())
 PY
 }
 
+existing_secret_value() {
+  local secret_name="$1"
+  local key="$2"
+  { kubectl --context "kind-${MGMT_CLUSTER}" -n management get secret "${secret_name}" \
+    -o "jsonpath={.data.${key}}" 2>/dev/null || true; } \
+    | python3 -c 'import base64, sys; data=sys.stdin.read().strip(); print(base64.b64decode(data).decode() if data else "")'
+}
+
+if [ -z "${POSTGRES_PASSWORD}" ]; then
+  POSTGRES_PASSWORD="$(existing_secret_value postgresql-secret POSTGRES_PASSWORD)"
+fi
 if [ -z "${POSTGRES_PASSWORD}" ]; then
   POSTGRES_PASSWORD="$(openssl rand -hex 24)"
 fi
@@ -65,13 +76,22 @@ if [ -z "${DATABASE_URL}" ]; then
 fi
 
 if [ -z "${AGENT_TOKEN}" ]; then
+  AGENT_TOKEN="$(existing_secret_value management-runtime-secret AGENT_TOKEN)"
+fi
+if [ -z "${AGENT_TOKEN}" ]; then
   AGENT_TOKEN="$(openssl rand -hex 32)"
 fi
 
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
+  GITHUB_WEBHOOK_SECRET="$(existing_secret_value management-runtime-secret GITHUB_WEBHOOK_SECRET)"
+fi
+if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
   GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
 fi
 
+if [ -z "${MINIO_ROOT_PASSWORD}" ]; then
+  MINIO_ROOT_PASSWORD="$(existing_secret_value minio-secret MINIO_ROOT_PASSWORD)"
+fi
 if [ -z "${MINIO_ROOT_PASSWORD}" ]; then
   MINIO_ROOT_PASSWORD="$(openssl rand -hex 32)"
 fi
