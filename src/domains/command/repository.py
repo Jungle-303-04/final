@@ -1,3 +1,8 @@
+"""command DB 저장소.
+
+agent_commands 테이블 조작을 감싸 라우터/워커와 SQLAlchemy 세부 구현 분리.
+"""
+
 from __future__ import annotations
 
 import uuid
