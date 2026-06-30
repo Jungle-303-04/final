@@ -98,7 +98,7 @@ class App:
         return [s.subject for s in subs], factory
 
 
-# ensure
+# 등록 확인
 
 
 def ensure_registered(body_type: type) -> Any:

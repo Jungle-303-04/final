@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
 
 import httpx
 from fastapi import FastAPI
@@ -22,6 +21,8 @@ from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
+from packages.contracts.gateway.responses import FakeTelemetryResponse, HealthResponse
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
@@ -64,12 +65,13 @@ class HttpManagementPlaneClient:
         return response.status_code
 
     async def poll_command(
-        self, cluster_id: str, agent_id: str, timeout_seconds: int
+        self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None:
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_COMMAND_POLL_PATH}",
             params={
                 Gateway.CLUSTER_ID: cluster_id,
+                Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 "timeout": timeout_seconds,
             },
@@ -79,12 +81,13 @@ class HttpManagementPlaneClient:
         return response.json().get(Gateway.COMMAND)
 
     async def start_command(
-        self, command_id: str, cluster_id: str, lease_id: str, agent_id: str
+        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
     ) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_start_path(command_id)}",
             json={
                 Gateway.CLUSTER_ID: cluster_id,
+                Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 Gateway.LEASE_ID: lease_id,
             },
@@ -93,11 +96,21 @@ class HttpManagementPlaneClient:
         response.raise_for_status()
 
     async def complete_command(
-        self, command_id: str, lease_id: str, agent_id: str, result: JsonObject
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        result: JsonObject,
     ) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
-            json={**result, Gateway.AGENT_ID: agent_id, Gateway.LEASE_ID: lease_id},
+            json={
+                **result,
+                Gateway.WORKSPACE_ID: workspace_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.LEASE_ID: lease_id,
+            },
             headers=self.headers,
         )
         response.raise_for_status()
@@ -114,6 +127,7 @@ class TargetClusterAgent:
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
         self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
+        self.workspace_id = env(Settings.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
         self.agent_id = env(Settings.HOSTNAME_ENV, Settings.DEFAULT_AGENT_ID)
         self.interval = int(
             env(Settings.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
@@ -191,10 +205,14 @@ class TargetClusterAgent:
         while True:
             try:
                 command = await client.poll_command(
-                    self.cluster_id, self.agent_id, Settings.COMMAND_POLL_TIMEOUT_SECONDS
+                    self.cluster_id,
+                    self.workspace_id,
+                    self.agent_id,
+                    Settings.COMMAND_POLL_TIMEOUT_SECONDS,
                 )
                 if command:
                     command_id = command[Gateway.COMMAND_ID]
+                    workspace_id = command.get(Gateway.WORKSPACE_ID, self.workspace_id)
                     lease_id = command[Gateway.LEASE_ID]
                     action = command[Gateway.ACTION]
                     LOGGER.info(
@@ -208,10 +226,17 @@ class TargetClusterAgent:
                             }
                         },
                     )
-                    await client.start_command(command_id, self.cluster_id, lease_id, self.agent_id)
+                    await client.start_command(
+                        command_id,
+                        self.cluster_id,
+                        str(workspace_id),
+                        lease_id,
+                        self.agent_id,
+                    )
                     result = await self.execute_command(command)
                     await client.complete_command(
                         command_id,
+                        str(workspace_id),
                         lease_id,
                         self.agent_id,
                         result,
@@ -261,8 +286,8 @@ class TargetClusterAgent:
             )
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
-        # TODO(target): expand action allowlist with workspace/repo/cluster policy and approval proof.
-        # TODO(target): capture stdout/stderr/status and report partial failure without raw secrets.
+        # TODO(target): action allowlist를 workspace/repo/cluster policy와 approval proof로 확장
+        # TODO(target): stdout/stderr/status 수집과 raw secret 없는 partial failure 보고
         if command.get(Gateway.ACTION) == Settings.APPLY_MANIFEST_ACTION:
             return await self.apply_manifest_command(command)
         if command.get(Gateway.ACTION) == Settings.ROLLOUT_RESTART_ACTION:
@@ -322,7 +347,7 @@ class TargetClusterAgent:
         return True, Settings.COMMAND_RESULT_MESSAGE
 
     async def build_evidence_payload(self) -> JsonObject:
-        # TODO(telemetry): add OTel and Kubernetes API adapters with bounded, redacted snapshots.
+        # TODO(telemetry): 제한·마스킹된 snapshot용 OTel/Kubernetes API adapter 추가
         async with httpx.AsyncClient(
             transport=self.telemetry_transport,
             timeout=Settings.TELEMETRY_TIMEOUT_SECONDS,
@@ -333,6 +358,7 @@ class TargetClusterAgent:
             )
         return {
             Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.WORKSPACE_ID: self.workspace_id,
             "kubernetes": self.collect_kubernetes_evidence(),
             "metrics": metrics,
             "logs": logs,
@@ -340,7 +366,7 @@ class TargetClusterAgent:
         }
 
     def collect_kubernetes_evidence(self) -> JsonObject:
-        # TODO(target): read pods/events/nodes with least-privilege RBAC and redact object metadata.
+        # TODO(target): least-privilege RBAC으로 pods/events/nodes 조회와 object metadata 마스킹
         return {
             "pods": [
                 {
@@ -353,7 +379,7 @@ class TargetClusterAgent:
         }
 
     async def collect_metric_evidence(self, client: httpx.AsyncClient) -> JsonObject:
-        # TODO(telemetry): replace all-metric sweep with workspace/cluster-scoped allowlists and windows.
+        # TODO(telemetry): all-metric sweep를 workspace/cluster scope allowlist와 window로 교체
         base_url = env(
             Settings.PROMETHEUS_BASE_URL_ENV, Settings.DEFAULT_PROMETHEUS_BASE_URL
         ).rstrip("/")
@@ -387,7 +413,7 @@ class TargetClusterAgent:
         }
 
     async def collect_log_evidence(self, client: httpx.AsyncClient) -> list[JsonObject]:
-        # TODO(telemetry): split Loki pulls by workspace/repo/cluster label selectors and redact secrets.
+        # TODO(telemetry): Loki pull을 workspace/repo/cluster label selector별 분리와 secret 마스킹
         base_url = env(Settings.LOKI_BASE_URL_ENV, Settings.DEFAULT_LOKI_BASE_URL).rstrip("/")
         try:
             labels = await loki_labels(client, base_url)
@@ -422,25 +448,29 @@ class TargetClusterAgent:
         ]
 
     def collect_trace_evidence(self) -> JsonObject:
-        # TODO(telemetry): query OpenTelemetry backend and summarize spans by service/operation.
+        # TODO(telemetry): OpenTelemetry backend 조회와 service/operation별 span 요약
         return {"source": Settings.FAKE_OTEL_SOURCE, "slow_span": Settings.OTEL_SLOW_SPAN}
 
 
 def create_fake_telemetry_app(kind: str) -> FastAPI:
     app = FastAPI(title=f"fake-{kind}")
 
-    @app.get(gateway_routes.HEALTHZ_PATH)
-    async def healthz() -> dict[str, str]:
-        return {Gateway.STATUS: Gateway.STATUS_OK, Gateway.SERVICE: f"fake-{kind}"}
+    @app.get(gateway_routes.HEALTHZ_PATH, response_model=HealthResponse)
+    async def healthz() -> HealthResponse:
+        return HealthResponse(status=Gateway.STATUS_OK, service=f"fake-{kind}")
 
-    @app.get(gateway_routes.FAKE_TELEMETRY_CATCH_ALL_PATH)
-    async def catch_all(path: str) -> dict[str, Any]:
+    @app.get(
+        gateway_routes.FAKE_TELEMETRY_CATCH_ALL_PATH,
+        response_model=FakeTelemetryResponse,
+        response_model_exclude_none=True,
+    )
+    async def catch_all(path: str) -> FakeTelemetryResponse:
         if kind == "prometheus":
             if path == "api/v1/label/__name__/values":
-                return {"status": "success", "data": ["up", "http_5xx_rate"]}
-            return {
-                "status": "success",
-                "data": {
+                return FakeTelemetryResponse(status="success", data=["up", "http_5xx_rate"])
+            return FakeTelemetryResponse(
+                status="success",
+                data={
                     "resultType": "vector",
                     "result": [
                         {
@@ -449,13 +479,13 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
                         }
                     ],
                 },
-            }
+            )
         if kind == "loki":
             if path == "loki/api/v1/labels":
-                return {"status": "success", "data": ["pod", "namespace"]}
-            return {
-                "status": "success",
-                "data": {
+                return FakeTelemetryResponse(status="success", data=["pod", "namespace"])
+            return FakeTelemetryResponse(
+                status="success",
+                data={
                     "result": [
                         {
                             "stream": {"pod": Settings.CHECKOUT_APP_NAME},
@@ -465,8 +495,8 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
                         }
                     ]
                 },
-            }
-        return {"status": "ok", "telemetry": "fake-otel", "path": path}
+            )
+        return FakeTelemetryResponse(status="ok", telemetry="fake-otel", path=path)
 
     return app
 

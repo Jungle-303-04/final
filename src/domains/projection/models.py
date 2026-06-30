@@ -19,6 +19,7 @@ class DashboardCard(Base):
     __tablename__ = "dashboard_cards"
 
     correlation_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
     status: Mapped[str] = text_column()
     summary: Mapped[str] = text_column()
     last_event: Mapped[str] = text_column()

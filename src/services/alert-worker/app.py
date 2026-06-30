@@ -24,19 +24,20 @@ ALERT_GATE_BLOCKED_REASON = "pre-deploy alert gate blocked"
 
 
 def allow_after_alarm_gate(evt: AlertRequestedBody) -> bool:
-    # TODO(alert): plug in workspace/repo/cluster policy, approvals, quiet hours, and severity routing.
-    # TODO(alert): block production auto deploy until Slack/Email/PagerDuty delivery is confirmed.
+    # TODO(alert): workspace/repo/cluster 정책, 승인, 조용한 시간, 심각도 라우팅 연결
+    # TODO(alert): Slack/Email/PagerDuty 전송 확인 전 production 자동 배포 차단
     return True
 
 
 def build_dispatched(evt: AlertRequestedBody) -> AlertDispatchedBody:
-    # TODO(alert): dispatch Slack/Email/PagerDuty notifications and persist provider delivery ids.
+    # TODO(alert): Slack/Email/PagerDuty 알림 전송과 provider delivery id 저장
     return AlertDispatchedBody(
         cluster_id=evt.cluster_id,
         namespace=evt.namespace,
         severity=evt.severity,
         channel=DEFAULT_ALERT_CHANNEL,
         mode=STUB_ALERT_MODE,
+        workspace_id=evt.workspace_id,
     )
 
 

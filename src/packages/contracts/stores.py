@@ -13,16 +13,34 @@ from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 
 
 class RcaStore(Protocol):
-    async def save_evidence(self, correlation_id: str, kind: str, body: JsonObject) -> None: ...
+    async def save_evidence(
+        self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject
+    ) -> None: ...
+
     async def save_rca_report(
-        self, correlation_id: str, root_cause: str, action: str, body: JsonObject
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        root_cause: str,
+        action: str,
+        body: JsonObject,
     ) -> None: ...
 
 
 class RepoChangeStore(Protocol):
     async def save_repo_change(
-        self, correlation_id: str, commit_sha: str, manifest: JsonObject
+        self,
+        correlation_id: str,
+        commit_sha: str,
+        manifest: JsonObject,
+        workspace_id: str = "default",
+        repository_id: str | None = None,
+        watch_target_id: str | None = None,
+        binding_id: str | None = None,
+        manifest_path: str | None = None,
     ) -> None: ...
+
+    async def record_manifest_artifact(self, payload: JsonObject) -> JsonObject: ...
 
 
 class PullRequestStore(Protocol):

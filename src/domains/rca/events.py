@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.CLUSTER_EVIDENCE_RECEIVED)
@@ -19,6 +20,7 @@ class ClusterEvidenceReceivedBody(EventBody):
     metrics: JsonObject
     logs: list[JsonObject]
     traces: JsonObject
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.INCIDENT_DETECTED)
@@ -29,6 +31,7 @@ class IncidentDetectedBody(EventBody):
     cluster_id: str
     detected: bool
     reason: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ class Evidence(EventBody):
     logs: list[JsonObject]
     traces: JsonObject
     object_ref: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.EVIDENCE_BUILT)
@@ -60,6 +64,7 @@ class RcaScenariosEvaluatedBody(EventBody):
     selected: str
     confidence: str
     evidence_ref: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.RCA_COMPLETED)
@@ -70,6 +75,7 @@ class RcaCompletedBody(EventBody):
     root_cause: str
     action: str
     evidence_ref: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.SAFE_PR_POLICY_DECIDED)
@@ -80,6 +86,7 @@ class SafePrPolicyDecidedBody(EventBody):
     route: str
     reason: str
     evidence_ref: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.RCA_ACTION_REQUIRED)
@@ -89,3 +96,4 @@ class RcaActionRequiredBody(EventBody):
 
     reason: str
     evidence_ref: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
