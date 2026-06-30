@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from conftest import ROOT, load_file
 from fastapi import HTTPException, Request, Response
@@ -20,7 +22,7 @@ def test_session_cookie_is_httponly(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")  # 로컬 http
     router = load_file(ROOT / "src" / "domains" / "identity" / "router.py", "id_router")
     response = Response()
-    session = {"session_token": "secret-tok", "user_id": "u", "roles": ["owner"]}
+    session = SimpleNamespace(token="secret-tok", user_id="u", roles=["owner"])
     router._set_session_cookie(response, session)
     cookie = response.headers["set-cookie"].lower()
     assert "secret-tok" in cookie  # 쿠키로 전달

@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from domains.identity.dependencies import require_session
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.fields import Gateway
+from packages.contracts.gateway.responses import DashboardResponse
 from packages.runtime.dependencies import get_db
 
 STREAM_INTERVAL_SECONDS = 2
@@ -23,19 +23,19 @@ router = APIRouter(dependencies=[Depends(require_session)])
 
 
 def read_dashboard_cards(db: Any) -> list[dict[str, Any]]:
-    # TODO(projection): scope dashboard cards by organization/project and add pagination.
+    # TODO(projection): dashboard card를 organization/project 범위로 제한, pagination 추가
     return db.list_dashboard()
 
 
 def encode_dashboard_event(cards: list[dict[str, Any]]) -> str:
-    # TODO(projection): include event ids/correlation ids so clients can resume SSE streams.
+    # TODO(projection): client SSE 재개용 event id/correlation id 포함
     encoded = json.dumps(cards, default=str)
     return f"event: {EventSubject.DASHBOARD_UPDATED}\ndata: {encoded}\n\n"
 
 
-@router.get(gateway_routes.DASHBOARD_QUERY_PATH)
-async def dashboard_query(db: Any = Depends(get_db)) -> dict[str, Any]:
-    return {Gateway.CARDS: read_dashboard_cards(db)}
+@router.get(gateway_routes.DASHBOARD_QUERY_PATH, response_model=DashboardResponse)
+async def dashboard_query(db: Any = Depends(get_db)) -> DashboardResponse:
+    return DashboardResponse(cards=read_dashboard_cards(db))
 
 
 @router.get(gateway_routes.DASHBOARD_STREAM_PATH)

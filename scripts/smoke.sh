@@ -7,7 +7,10 @@ MGMT_CONTEXT="${MGMT_CONTEXT:-kind-management}"
 MGMT_NS="${MGMT_NS:-management}"
 SMOKE_IMAGE="${SMOKE_IMAGE:-service:local}"
 COOKIE_JAR="$(mktemp)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
+
+source "${SCRIPT_DIR}/lib/auth.sh"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -51,16 +54,8 @@ echo "==> checking gateway"
 curl -fsS "${BASE_URL}/healthz"
 echo
 
-echo "==> starting GitHub OAuth"
-start_response="$(curl -fsS "${BASE_URL}/auth/oauth/github/start?user_id=local-user&scopes=profile,email,repo")"
-state="$(printf "%s" "${start_response}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["state"])')"
-
-echo "==> completing GitHub OAuth callback"
-oauth_response="$(curl -fsS -X POST "${BASE_URL}/auth/oauth/github/callback" \
-  -H "content-type: application/json" \
-  -c "${COOKIE_JAR}" \
-  -d "{\"state\":\"${state}\",\"code\":\"local-dev-code\",\"scopes\":[\"profile\",\"email\",\"repo\"]}")"
-echo "${oauth_response}"
+echo "==> logging in operator"
+login_with_password "${BASE_URL}" "${COOKIE_JAR}"
 
 echo "==> sending signed GitHub webhook"
 webhook_body="$(
