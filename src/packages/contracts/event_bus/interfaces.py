@@ -92,7 +92,7 @@ class EventClient(Protocol):
     ) -> EventEnvelope: ...
 
 
-class EventConsumerBus(EventPublisher, Protocol):
+class EventConsumerBus(EventPublisher, EnvelopePublisher, Protocol):
     """발행 + 구독이 가능한 버스(워커가 사용)."""
 
     async def connect(self) -> None: ...

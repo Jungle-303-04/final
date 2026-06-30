@@ -190,9 +190,12 @@ metadata:
   name: cluster-agent-sandbox-write
   namespace: sandbox
 rules:
+  - apiGroups: [""]
+    resources: ["services", "configmaps"]
+    verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "patch"]
+    verbs: ["get", "list", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

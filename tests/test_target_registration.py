@@ -95,6 +95,8 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
     assert 'NODE_COLLECTOR_IMAGE: "service:local"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
+    assert 'resources: ["services", "configmaps"]' in manifest
+    assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
 
 
 def test_target_registration_records_cluster_and_returns_install_manifest() -> None:
