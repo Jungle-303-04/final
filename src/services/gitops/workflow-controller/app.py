@@ -566,7 +566,9 @@ async def on_command_completed(
     run = normalize_payload(identity or {"command_id": evt.command_id, **evt.result})
     succeeded = evt.result.get("status") == CommandStatus.COMPLETED
     run_status = WorkflowRunStatus.SUCCEEDED.value if succeeded else WorkflowRunStatus.FAILED.value
-    step_status = WorkflowStepStatus.SUCCEEDED.value if succeeded else WorkflowStepStatus.FAILED.value
+    step_status = (
+        WorkflowStepStatus.SUCCEEDED.value if succeeded else WorkflowStepStatus.FAILED.value
+    )
     message = str(evt.result.get("message") or evt.result.get("status") or "")
     await ctx.db.update_workflow_run_for_command(
         {
