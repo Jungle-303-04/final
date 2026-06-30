@@ -227,6 +227,40 @@ def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
     ]
 
 
+def test_render_uses_kubernetes_default_replicas_when_deployment_omits_it(
+    monkeypatch, tmp_path
+) -> None:
+    manifest = tmp_path / "deploy.yaml"
+    manifest.write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: checkout-api",
+                "spec:",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: checkout-api",
+                "          image: ghcr.io/project/checkout-api:v2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(manifest))
+
+    render = load_service("gitops/manifest-render-worker")
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="abc123", image="ignored", replicas=2),
+        db=SpyDb(),
+    )
+
+    assert outs[0].rendered_manifest.spec.replicas == 1
+    assert "replicas" not in outs[0].rendered_manifest.manifest["spec"]
+
+
 def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) -> None:
     broken = tmp_path / "broken.yaml"
     broken.write_text("not: a deployment\n", encoding="utf-8")
@@ -253,3 +287,36 @@ def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) ->
     assert "manifest must include" in outs[0].reason
     assert db.called("record_manifest_artifact")
     assert not db.called("save_repo_change")
+
+
+def test_render_rejects_boolean_deployment_replicas(monkeypatch, tmp_path) -> None:
+    broken = tmp_path / "broken-replicas.yaml"
+    broken.write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: checkout-api",
+                "spec:",
+                "  replicas: true",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: checkout-api",
+                "          image: ghcr.io/project/checkout-api:v2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(broken))
+
+    render = load_service("gitops/manifest-render-worker")
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="bad123", image="ignored", replicas=1),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert outs[0].reason == "deployment spec.replicas must be an integer"
