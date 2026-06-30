@@ -9,11 +9,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from domains.identity.dependencies import require_session
+from domains.identity.dependencies import require_agent, require_session
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import TargetRegisterRequest
-from packages.contracts.gateway.responses import TargetInstallResponse
+from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
+from packages.contracts.gateway.responses import EvidenceSourceLeaseResponse, TargetInstallResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
 from packages.runtime.dependencies import get_db
 
@@ -22,7 +22,9 @@ AGENT_TOKEN_NOT_CONFIGURED = "agent token is not configured"
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
 
-router = APIRouter(dependencies=[Depends(require_session)])
+router = APIRouter()
+session_router = APIRouter(dependencies=[Depends(require_session)])
+agent_router = APIRouter(dependencies=[Depends(require_agent)])
 
 
 def yaml_string(value: str) -> str:
@@ -327,7 +329,7 @@ def install_response(
     )
 
 
-@router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
+@session_router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(
     payload: TargetRegisterRequest,
     current: Any = Depends(require_session),
@@ -361,3 +363,27 @@ async def register_target(
         else None
     )
     return install_response(scoped_payload, manifest, apply_output)
+
+
+@agent_router.post(
+    gateway_routes.AGENT_EVIDENCE_SOURCE_LEASE_PATH,
+    response_model=EvidenceSourceLeaseResponse,
+)
+async def lease_evidence_source(
+    source_id: str,
+    payload: EvidenceSourceLeaseRequest,
+    db: Any = Depends(get_db),
+) -> EvidenceSourceLeaseResponse:
+    lease = db.lease_evidence_source(
+        payload.cluster_id,
+        payload.workspace_id,
+        source_id,
+        payload.agent_id,
+        payload.window_start,
+        payload.lease_seconds,
+    )
+    return EvidenceSourceLeaseResponse(**lease)
+
+
+router.include_router(session_router)
+router.include_router(agent_router)
