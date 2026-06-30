@@ -17,6 +17,7 @@ from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
 from domains.target.router import router as target_router
 from packages.config.constants import CommandStatus
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
@@ -25,6 +26,8 @@ from packages.events.bus import NatsEventBus
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
 from packages.storage.database import Database, wait_for_database
+
+LOGGER = get_logger(__name__)
 
 
 class ApiGateway:
@@ -152,7 +155,11 @@ class ApiGateway:
     def _register_error_handler(self, app: FastAPI) -> None:
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
-            print(f"gateway error: {type(exc).__name__}", flush=True)
+            LOGGER.error(
+                "gateway_unhandled_error",
+                extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
+                exc_info=exc,
+            )
             return JSONResponse(
                 status_code=Settings.GATEWAY_ERROR_STATUS_CODE,
                 content={Gateway.ERROR: Settings.GATEWAY_ERROR_MESSAGE},

@@ -24,8 +24,11 @@ import json
 import httpx
 from settings import Settings
 
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
+
+LOGGER = get_logger(__name__)
 
 
 class GitHubPoller:
@@ -61,7 +64,10 @@ class GitHubPoller:
             try:
                 await self.poll_once(client)
             except Exception as exc:
-                print(f"github poll failed: {exc}", flush=True)
+                LOGGER.warning(
+                    "github_poll_failed",
+                    extra={CONTEXT_KEY: {"repo": self.repo, "exception_type": type(exc).__name__}},
+                )
                 await asyncio.sleep(Settings.POLL_RETRY_DELAY_SECONDS)
                 continue
             await asyncio.sleep(self.interval)
@@ -72,7 +78,10 @@ class GitHubPoller:
             return  # 새 커밋 없음 → webhook 안 쏨(dedup 은 ledger 가 최종 보장).
         await self.emit_webhook(client, commit_sha)
         self._last_sha = commit_sha
-        print(f"github change detected repo={self.repo} sha={commit_sha[:8]}", flush=True)
+        LOGGER.info(
+            "github_change_detected",
+            extra={CONTEXT_KEY: {"repo": self.repo, "commit_sha": commit_sha}},
+        )
 
     async def latest_commit_sha(self, client: httpx.AsyncClient) -> str | None:
         response = await client.get(
@@ -81,9 +90,14 @@ class GitHubPoller:
             headers=self._github_headers(),
         )
         if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
-            print(
-                f"github poll skipped repo={self.repo} status={response.status_code}",
-                flush=True,
+            LOGGER.info(
+                "github_poll_skipped",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": self.repo,
+                        "status_code": response.status_code,
+                    }
+                },
             )
             return None
         response.raise_for_status()
