@@ -5,6 +5,7 @@ BASE_URL="${BASE_URL:-http://localhost:18080}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-management}"
 MGMT_NS="${MGMT_NS:-management}"
+SMOKE_IMAGE="${SMOKE_IMAGE:-service:local}"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
 
@@ -62,7 +63,14 @@ oauth_response="$(curl -fsS -X POST "${BASE_URL}/auth/oauth/github/callback" \
 echo "${oauth_response}"
 
 echo "==> sending signed GitHub webhook"
-webhook_body='{"commit_sha":"abc1234","image":"ghcr.io/project/checkout-api:bad","replicas":2}'
+webhook_body="$(
+  SMOKE_IMAGE="${SMOKE_IMAGE}" python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({"commit_sha": "abc1234", "image": os.environ["SMOKE_IMAGE"], "replicas": 2}))
+PY
+)"
 signature="$(sign_body "${webhook_body}")"
 curl -fsS -X POST "${BASE_URL}/github/webhook" \
   -H "content-type: application/json" \
