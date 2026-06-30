@@ -563,13 +563,16 @@ async def on_command_completed(
     evt: CommandCompletedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
     identity = await ctx.db.get_workflow_identity_for_command(evt.command_id)
-    run = normalize_payload(identity or {"command_id": evt.command_id, **evt.result})
+    if identity is None:
+        return
+    run = normalize_payload(identity)
     succeeded = evt.result.get("status") == CommandStatus.COMPLETED
     run_status = WorkflowRunStatus.SUCCEEDED.value if succeeded else WorkflowRunStatus.FAILED.value
     step_status = (
         WorkflowStepStatus.SUCCEEDED.value if succeeded else WorkflowStepStatus.FAILED.value
     )
     message = str(evt.result.get("message") or evt.result.get("status") or "")
+    await ctx.db.attach_workflow_command(str(run["workflow_run_id"]), evt.command_id)
     await ctx.db.update_workflow_run_for_command(
         {
             **run,
