@@ -49,6 +49,20 @@ command   ◀── alert
 - **게이트웨이**: `services/gateway/api-gateway/`(단일 HTTP 진입).
 - 매니페스트 `command:` 가 이 경로를 가리킨다.
 
+## 4-1. 서비스 설정(config) 규칙
+
+설정 위치는 "서비스 성격"으로 결정한다(무조건 settings.py 강제 X). 규칙:
+
+| 서비스 유형 | 설정 위치 | 예 |
+| --- | --- | --- |
+| HTTP 게이트웨이·폴러(서비스 고유 설정 多) | `settings.py`(서비스 폴더 내) | gateway/api-gateway, gitops/github-poll-worker |
+| App 러너 워커(공유 설정만, 고유값 적음) | 러너 파일 내 인라인 상수/Config | command·alert·mail·ai 워커, gitops 분할 워커 |
+| 상주 에이전트 | 인라인 `*Config` dataclass | target/cluster-agent(AgentConfig), node-collector(NodeCollectorConfig) |
+
+공유 설정(`DATABASE_URL`·`NATS_URL` 등)은 항상 `packages/config`에서 읽는다. 서비스 폴더의
+`settings.py`는 *그 서비스에만 있는* 값만 담는다. 이 규칙은 `tests/test_service_entrypoints.py`
+(`LOCAL_SETTINGS_SERVICES`·`INLINE_CONFIG_SERVICES`)가 강제한다.
+
 ## 5. AI 에이전트(많이 생길 예정)
 
 3계층에 그대로 매핑한다:
