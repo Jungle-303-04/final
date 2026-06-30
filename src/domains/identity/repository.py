@@ -142,3 +142,113 @@ class WorkspaceAccessRepository(DatabaseConnection):
             ClusterRegistration.__tablename__,
             RepoClusterBinding.__tablename__,
         }
+
+    def register_target_cluster(self, payload: JsonObject) -> JsonObject:
+        # TODO(identity): require an explicit workspace owner/admin permission before registration.
+        # TODO(target): encrypt per-cluster bootstrap tokens through Token Broker, not DB placeholders.
+        user_id = payload["user_id"]
+        workspace_id = payload["workspace_id"]
+        token_ref = payload["agent_token_ref"]
+        with self.connection() as conn:
+            conn.execute(self._user_upsert(user_id))
+            conn.execute(self._workspace_upsert(workspace_id))
+            conn.execute(self._member_upsert(workspace_id, user_id))
+            conn.execute(
+                pg_insert(TokenVault.__table__)
+                .values(
+                    token_ref=token_ref,
+                    provider="target-agent",
+                    encrypted_payload={
+                        "status": CREDENTIAL_STATUS_READY,
+                        "note": "agent token is supplied from management secret",
+                    },
+                    updated_at=func.now(),
+                )
+                .on_conflict_do_update(
+                    index_elements=[TokenVault.__table__.c.token_ref],
+                    set_={
+                        "encrypted_payload": {
+                            "status": CREDENTIAL_STATUS_READY,
+                            "note": "agent token is supplied from management secret",
+                        },
+                        "updated_at": func.now(),
+                    },
+                )
+            )
+            conn.execute(self._cluster_upsert(payload))
+        return payload
+
+    @staticmethod
+    def _user_upsert(user_id: str) -> Any:
+        table = UserAccount.__table__
+        insert = pg_insert(table).values(
+            user_id=user_id,
+            display_name=user_id,
+            status="active",
+            updated_at=func.now(),
+        )
+        return insert.on_conflict_do_update(
+            index_elements=[table.c.user_id],
+            set_={"display_name": insert.excluded.display_name, "updated_at": func.now()},
+        )
+
+    @staticmethod
+    def _workspace_upsert(workspace_id: str) -> Any:
+        table = Workspace.__table__
+        insert = pg_insert(table).values(
+            workspace_id=workspace_id,
+            name=workspace_id,
+            slug=workspace_id,
+            status="active",
+            updated_at=func.now(),
+        )
+        return insert.on_conflict_do_update(
+            index_elements=[table.c.workspace_id],
+            set_={"status": "active", "updated_at": func.now()},
+        )
+
+    @staticmethod
+    def _member_upsert(workspace_id: str, user_id: str) -> Any:
+        table = WorkspaceMember.__table__
+        insert = pg_insert(table).values(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role="owner",
+            permissions={"target": ["register", "install"]},
+            status="active",
+            updated_at=func.now(),
+        )
+        return insert.on_conflict_do_update(
+            index_elements=[table.c.workspace_id, table.c.user_id],
+            set_={
+                "role": insert.excluded.role,
+                "permissions": insert.excluded.permissions,
+                "status": "active",
+                "updated_at": func.now(),
+            },
+        )
+
+    @staticmethod
+    def _cluster_upsert(payload: JsonObject) -> Any:
+        table = ClusterRegistration.__table__
+        insert = pg_insert(table).values(
+            workspace_id=payload["workspace_id"],
+            cluster_id=payload["cluster_id"],
+            name=payload["name"],
+            environment=payload["environment"],
+            agent_token_ref=payload["agent_token_ref"],
+            status="registered",
+            settings=payload["settings"],
+            updated_at=func.now(),
+        )
+        return insert.on_conflict_do_update(
+            index_elements=[table.c.workspace_id, table.c.cluster_id],
+            set_={
+                "name": insert.excluded.name,
+                "environment": insert.excluded.environment,
+                "agent_token_ref": insert.excluded.agent_token_ref,
+                "status": "registered",
+                "settings": insert.excluded.settings,
+                "updated_at": func.now(),
+            },
+        )
