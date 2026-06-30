@@ -128,6 +128,10 @@ class ManagementPlaneClient(Protocol):
         self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
     ) -> None: ...
 
+    async def heartbeat_command(
+        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
+    ) -> None: ...
+
     async def complete_command(
         self,
         command_id: str,
@@ -136,6 +140,16 @@ class ManagementPlaneClient(Protocol):
         agent_id: str,
         result: JsonObject,
     ) -> None: ...
+
+    async def acquire_evidence_source_lease(
+        self,
+        cluster_id: str,
+        workspace_id: str,
+        agent_id: str,
+        source_id: str,
+        window_start: str,
+        lease_seconds: int,
+    ) -> JsonObject: ...
 
 
 class OutboxReader(Protocol):

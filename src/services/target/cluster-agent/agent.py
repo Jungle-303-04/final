@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import suppress
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import FastAPI
@@ -12,15 +14,15 @@ from node_collector_manager import (
     kubernetes_headers,
     service_account_token,
 )
-from settings import Settings
 from uvicorn import Config, Server
 
-from packages.config.constants import Target
+from packages.config.constants import Command, CommandStatus, Target
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
+from packages.contracts.gateway.requests import DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS
 from packages.contracts.gateway.responses import FakeTelemetryResponse, HealthResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
@@ -28,11 +30,86 @@ from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 LOGGER = get_logger(__name__)
 
 
+class AgentConfig:
+    TARGET_AGENT_SERVICE_NAME = "cluster-agent"
+    FAKE_PROMETHEUS_SERVICE_NAME = "fake-prometheus"
+    FAKE_LOKI_SERVICE_NAME = "fake-loki"
+    FAKE_OTEL_SERVICE_NAME = "fake-otel"
+
+    PROMETHEUS_TELEMETRY_KIND = "prometheus"
+    LOKI_TELEMETRY_KIND = "loki"
+    OTEL_TELEMETRY_KIND = "otel"
+
+    DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
+    MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
+    TARGET_CLUSTER_ID_ENV = "TARGET_CLUSTER_ID"
+    WORKSPACE_ID_ENV = "WORKSPACE_ID"
+    EVIDENCE_INTERVAL_ENV = "EVIDENCE_INTERVAL_SECONDS"
+    AGENT_TOKEN_ENV = "AGENT_TOKEN"
+    AGENT_TOKEN_HEADER = "x-agent-token"
+    HTTP_TIMEOUT_SECONDS = 20
+    TELEMETRY_TIMEOUT_SECONDS = 10
+    COMMAND_POLL_TIMEOUT_SECONDS = 15
+    COMMAND_HEARTBEAT_INTERVAL_SECONDS = 20
+    COMMAND_EXECUTION_DELAY_SECONDS = 2
+    REGISTER_RETRY_DELAY_SECONDS = 3
+    COMMAND_RETRY_DELAY_SECONDS = 3
+
+    SERVICE_HOST = "0.0.0.0"
+    SERVICE_PORT_ENV = "PORT"
+    HOSTNAME_ENV = "HOSTNAME"
+    LOG_LEVEL = "info"
+    DEFAULT_SERVICE_PORT = "8000"
+    DEFAULT_AGENT_ID = "target-agent"
+    AGENT_CAPABILITIES = ["collector", "command_receiver"]
+    EVIDENCE_SOURCE_ID = "cluster-snapshot"
+    EVIDENCE_SOURCE_LEASE_SECONDS = DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS
+    NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = 30
+
+    CHECKOUT_APP_NAME = "checkout-api"
+    CRASHING_POD_NAME = "checkout-api-7f8d"
+    CRASHING_POD_STATUS = "CrashLoopBackOff"
+    CRASHING_POD_RESTARTS = 4
+    K8S_READINESS_FAILED_EVENT = "readiness probe failed"
+    K8S_BACKOFF_EVENT = "back-off restarting failed container"
+
+    FAKE_PROMETHEUS_SOURCE = "fake-prometheus"
+    FAKE_LOKI_SOURCE = "fake-loki"
+    FAKE_OTEL_SOURCE = "fake-otel"
+    FAKE_NODE_CPU = 0.83
+    FAKE_NODE_MEMORY_MB = 512
+    FAKE_HTTP_5XX_RATE = 0.19
+    PROMETHEUS_VECTOR_VALUE = "0.19"
+    PROMETHEUS_BASE_URL_ENV = "PROMETHEUS_BASE_URL"
+    DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus:8000"
+    PROMETHEUS_METRIC_NAMES_PATH = "/api/v1/label/__name__/values"
+    PROMETHEUS_QUERY_PATH = "/api/v1/query"
+    PROMETHEUS_MAX_METRICS = 25
+    PROMETHEUS_FALLBACK_QUERIES = ("up",)
+    LOKI_BASE_URL_ENV = "LOKI_BASE_URL"
+    DEFAULT_LOKI_BASE_URL = "http://fake-loki:8000"
+    LOKI_LABELS_PATH = "/loki/api/v1/labels"
+    LOKI_QUERY_RANGE_PATH = "/loki/api/v1/query_range"
+    LOKI_QUERY_ENV = "LOKI_QUERY"
+    DEFAULT_LOKI_QUERY = '{pod=~".+"}'
+    LOKI_QUERY_LIMIT = 100
+
+    COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
+    APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
+    ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
+    COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
+    LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
+    LOKI_WARNING_LINE = "WARN rollback candidate detected"
+    OTEL_SLOW_SPAN = "GET /checkout"
+
+
 class HttpManagementPlaneClient:
-    def __init__(self, base_url: str, timeout_seconds: int = Settings.HTTP_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self, base_url: str, timeout_seconds: int = AgentConfig.HTTP_TIMEOUT_SECONDS
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=timeout_seconds)
-        self.headers = {Settings.AGENT_TOKEN_HEADER: env(Settings.AGENT_TOKEN_ENV, "")}
+        self.headers = {AgentConfig.AGENT_TOKEN_HEADER: env(AgentConfig.AGENT_TOKEN_ENV, "")}
 
     async def __aenter__(self) -> HttpManagementPlaneClient:
         return self
@@ -95,6 +172,21 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
 
+    async def heartbeat_command(
+        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
+    ) -> None:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.agent_command_heartbeat_path(command_id)}",
+            json={
+                Gateway.CLUSTER_ID: cluster_id,
+                Gateway.WORKSPACE_ID: workspace_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.LEASE_ID: lease_id,
+            },
+            headers=self.headers,
+        )
+        response.raise_for_status()
+
     async def complete_command(
         self,
         command_id: str,
@@ -115,6 +207,29 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
 
+    async def acquire_evidence_source_lease(
+        self,
+        cluster_id: str,
+        workspace_id: str,
+        agent_id: str,
+        source_id: str,
+        window_start: str,
+        lease_seconds: int,
+    ) -> JsonObject:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.agent_evidence_source_lease_path(source_id)}",
+            json={
+                Gateway.CLUSTER_ID: cluster_id,
+                Gateway.WORKSPACE_ID: workspace_id,
+                Gateway.AGENT_ID: agent_id,
+                Gateway.WINDOW_START: window_start,
+                "lease_seconds": lease_seconds,
+            },
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
 
 class TargetClusterAgent:
     def __init__(
@@ -124,13 +239,13 @@ class TargetClusterAgent:
         kubernetes_transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = env(
-            Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
+            AgentConfig.MANAGEMENT_BASE_URL_ENV, AgentConfig.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
-        self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
-        self.workspace_id = env(Settings.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
-        self.agent_id = env(Settings.HOSTNAME_ENV, Settings.DEFAULT_AGENT_ID)
+        self.cluster_id = env(AgentConfig.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
+        self.workspace_id = env(AgentConfig.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
+        self.agent_id = env(AgentConfig.HOSTNAME_ENV, AgentConfig.DEFAULT_AGENT_ID)
         self.interval = int(
-            env(Settings.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
+            env(AgentConfig.EVIDENCE_INTERVAL_ENV, Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)
         )
         self.client = client
         self.telemetry_transport = telemetry_transport
@@ -158,7 +273,7 @@ class TargetClusterAgent:
                 await client.register_agent(
                     self.cluster_id,
                     self.agent_id,
-                    Settings.AGENT_CAPABILITIES,
+                    AgentConfig.AGENT_CAPABILITIES,
                 )
                 return
             except Exception as exc:
@@ -172,22 +287,12 @@ class TargetClusterAgent:
                         }
                     },
                 )
-                await asyncio.sleep(Settings.REGISTER_RETRY_DELAY_SECONDS)
+                await asyncio.sleep(AgentConfig.REGISTER_RETRY_DELAY_SECONDS)
 
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                status_code = await client.ship_evidence(await self.build_evidence_payload())
-                LOGGER.info(
-                    "evidence_shipped",
-                    extra={
-                        CONTEXT_KEY: {
-                            Gateway.CLUSTER_ID: self.cluster_id,
-                            Gateway.AGENT_ID: self.agent_id,
-                            "status_code": status_code,
-                        }
-                    },
-                )
+                await self.ship_evidence_once(client)
             except Exception as exc:
                 LOGGER.warning(
                     "evidence_ship_failed",
@@ -201,6 +306,63 @@ class TargetClusterAgent:
                 )
             await asyncio.sleep(self.interval)
 
+    async def ship_evidence_once(self, client: ManagementPlaneClient) -> bool:
+        window_start = self.current_evidence_window_start()
+        lease = await client.acquire_evidence_source_lease(
+            self.cluster_id,
+            self.workspace_id,
+            self.agent_id,
+            AgentConfig.EVIDENCE_SOURCE_ID,
+            window_start,
+            AgentConfig.EVIDENCE_SOURCE_LEASE_SECONDS,
+        )
+        if not lease.get(Gateway.LEASED):
+            LOGGER.info(
+                "evidence_source_lease_skipped",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.SOURCE_ID: AgentConfig.EVIDENCE_SOURCE_ID,
+                        Gateway.LEASED_UNTIL: lease.get(Gateway.LEASED_UNTIL),
+                    }
+                },
+            )
+            return False
+        payload = await self.build_evidence_payload()
+        payload.update(
+            {
+                Gateway.AGENT_ID: self.agent_id,
+                Gateway.SOURCE_ID: AgentConfig.EVIDENCE_SOURCE_ID,
+                Gateway.WINDOW_START: window_start,
+                Gateway.EVIDENCE_KEY: self.evidence_key(window_start),
+            }
+        )
+        status_code = await client.ship_evidence(payload)
+        LOGGER.info(
+            "evidence_shipped",
+            extra={
+                CONTEXT_KEY: {
+                    Gateway.CLUSTER_ID: self.cluster_id,
+                    Gateway.AGENT_ID: self.agent_id,
+                    Gateway.SOURCE_ID: AgentConfig.EVIDENCE_SOURCE_ID,
+                    "status_code": status_code,
+                }
+            },
+        )
+        return True
+
+    def current_evidence_window_start(self) -> str:
+        interval = max(1, self.interval)
+        current = int(time.time())
+        window_start = current - (current % interval)
+        return datetime.fromtimestamp(window_start, UTC).isoformat()
+
+    def evidence_key(self, window_start: str) -> str:
+        return ":".join(
+            [self.workspace_id, self.cluster_id, AgentConfig.EVIDENCE_SOURCE_ID, window_start]
+        )
+
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
@@ -208,7 +370,7 @@ class TargetClusterAgent:
                     self.cluster_id,
                     self.workspace_id,
                     self.agent_id,
-                    Settings.COMMAND_POLL_TIMEOUT_SECONDS,
+                    AgentConfig.COMMAND_POLL_TIMEOUT_SECONDS,
                 )
                 if command:
                     command_id = command[Gateway.COMMAND_ID]
@@ -233,7 +395,13 @@ class TargetClusterAgent:
                         lease_id,
                         self.agent_id,
                     )
-                    result = await self.execute_command(command)
+                    result = await self.execute_command_with_heartbeat(
+                        client,
+                        command,
+                        command_id,
+                        str(workspace_id),
+                        lease_id,
+                    )
                     await client.complete_command(
                         command_id,
                         str(workspace_id),
@@ -252,12 +420,56 @@ class TargetClusterAgent:
                         }
                     },
                 )
-                await asyncio.sleep(Settings.COMMAND_RETRY_DELAY_SECONDS)
+                await asyncio.sleep(AgentConfig.COMMAND_RETRY_DELAY_SECONDS)
+
+    async def execute_command_with_heartbeat(
+        self,
+        client: ManagementPlaneClient,
+        command: CommandRecord,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+    ) -> JsonObject:
+        heartbeat = asyncio.create_task(
+            self.heartbeat_command_until_done(client, command_id, workspace_id, lease_id)
+        )
+        try:
+            return await self.execute_command(command)
+        finally:
+            heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
+
+    async def heartbeat_command_until_done(
+        self,
+        client: ManagementPlaneClient,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+    ) -> None:
+        while True:
+            await asyncio.sleep(AgentConfig.COMMAND_HEARTBEAT_INTERVAL_SECONDS)
+            try:
+                await client.heartbeat_command(
+                    command_id, self.cluster_id, workspace_id, lease_id, self.agent_id
+                )
+            except Exception as exc:
+                LOGGER.warning(
+                    "command_heartbeat_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            Gateway.AGENT_ID: self.agent_id,
+                            Gateway.COMMAND_ID: command_id,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
 
     async def reconcile_node_collector_forever(self) -> None:
         while True:
             await self.reconcile_node_collector_once()
-            await asyncio.sleep(Settings.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS)
+            await asyncio.sleep(AgentConfig.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS)
 
     async def reconcile_node_collector_once(self) -> None:
         try:
@@ -286,11 +498,11 @@ class TargetClusterAgent:
             )
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
-        # TODO(target): action allowlist를 workspace/repo/cluster policy와 approval proof로 확장
-        # TODO(target): stdout/stderr/status 수집과 raw secret 없는 partial failure 보고
-        if command.get(Gateway.ACTION) == Settings.APPLY_MANIFEST_ACTION:
+        # TODO(target): action 허용 목록을 workspace/repo/cluster 정책과 승인 증거로 확장
+        # TODO(target): stdout/stderr/status 수집과 원본 secret 없는 부분 실패 보고
+        if command.get(Gateway.ACTION) == AgentConfig.APPLY_MANIFEST_ACTION:
             return await self.apply_manifest_command(command)
-        if command.get(Gateway.ACTION) == Settings.ROLLOUT_RESTART_ACTION:
+        if command.get(Gateway.ACTION) == AgentConfig.ROLLOUT_RESTART_ACTION:
             return await self.rollout_restart_command(command)
         return {
             Gateway.STATUS: "failed",
@@ -326,7 +538,7 @@ class TargetClusterAgent:
 
     def command_result(self, applied: bool, message: str) -> JsonObject:
         return {
-            Gateway.STATUS: Settings.COMMAND_COMPLETED_STATUS,
+            Gateway.STATUS: AgentConfig.COMMAND_COMPLETED_STATUS,
             Gateway.CLUSTER_ID: self.cluster_id,
             Gateway.APPLIED: applied,
             Gateway.MESSAGE: message,
@@ -344,13 +556,13 @@ class TargetClusterAgent:
         async with kubernetes_client() as client:
             response = await client.patch(url, json=patch, headers=headers)
             response.raise_for_status()
-        return True, Settings.COMMAND_RESULT_MESSAGE
+        return True, AgentConfig.COMMAND_RESULT_MESSAGE
 
     async def build_evidence_payload(self) -> JsonObject:
-        # TODO(telemetry): 제한·마스킹된 snapshot용 OTel/Kubernetes API adapter 추가
+        # TODO(telemetry): 제한·마스킹된 스냅샷용 OTel/Kubernetes API 어댑터 추가
         async with httpx.AsyncClient(
             transport=self.telemetry_transport,
-            timeout=Settings.TELEMETRY_TIMEOUT_SECONDS,
+            timeout=AgentConfig.TELEMETRY_TIMEOUT_SECONDS,
         ) as telemetry_client:
             metrics, logs = await asyncio.gather(
                 self.collect_metric_evidence(telemetry_client),
@@ -366,27 +578,27 @@ class TargetClusterAgent:
         }
 
     def collect_kubernetes_evidence(self) -> JsonObject:
-        # TODO(target): least-privilege RBAC으로 pods/events/nodes 조회와 object metadata 마스킹
+        # TODO(target): 최소 권한 RBAC으로 pods/events/nodes 조회와 object metadata 마스킹
         return {
             "pods": [
                 {
-                    "name": Settings.CRASHING_POD_NAME,
-                    "status": Settings.CRASHING_POD_STATUS,
-                    "restarts": Settings.CRASHING_POD_RESTARTS,
+                    "name": AgentConfig.CRASHING_POD_NAME,
+                    "status": AgentConfig.CRASHING_POD_STATUS,
+                    "restarts": AgentConfig.CRASHING_POD_RESTARTS,
                 }
             ],
-            "events": [Settings.K8S_READINESS_FAILED_EVENT, Settings.K8S_BACKOFF_EVENT],
+            "events": [AgentConfig.K8S_READINESS_FAILED_EVENT, AgentConfig.K8S_BACKOFF_EVENT],
         }
 
     async def collect_metric_evidence(self, client: httpx.AsyncClient) -> JsonObject:
-        # TODO(telemetry): all-metric sweep를 workspace/cluster scope allowlist와 window로 교체
+        # TODO(telemetry): 전체 metric 조회를 workspace/cluster 범위 허용 목록과 window로 교체
         base_url = env(
-            Settings.PROMETHEUS_BASE_URL_ENV, Settings.DEFAULT_PROMETHEUS_BASE_URL
+            AgentConfig.PROMETHEUS_BASE_URL_ENV, AgentConfig.DEFAULT_PROMETHEUS_BASE_URL
         ).rstrip("/")
         try:
             metric_names = await prometheus_metric_names(client, base_url)
-            queries = metric_names[: Settings.PROMETHEUS_MAX_METRICS] or list(
-                Settings.PROMETHEUS_FALLBACK_QUERIES
+            queries = metric_names[: AgentConfig.PROMETHEUS_MAX_METRICS] or list(
+                AgentConfig.PROMETHEUS_FALLBACK_QUERIES
             )
             snapshots = [
                 await prometheus_query(client, base_url, metric_name) for metric_name in queries
@@ -404,20 +616,20 @@ class TargetClusterAgent:
 
     def fallback_metric_evidence(self, exc: Exception) -> JsonObject:
         return {
-            "source": Settings.FAKE_PROMETHEUS_SOURCE,
+            "source": AgentConfig.FAKE_PROMETHEUS_SOURCE,
             "mode": "fallback_sample",
             "error": type(exc).__name__,
-            "cpu": Settings.FAKE_NODE_CPU,
-            "memory_mb": Settings.FAKE_NODE_MEMORY_MB,
-            "http_5xx_rate": Settings.FAKE_HTTP_5XX_RATE,
+            "cpu": AgentConfig.FAKE_NODE_CPU,
+            "memory_mb": AgentConfig.FAKE_NODE_MEMORY_MB,
+            "http_5xx_rate": AgentConfig.FAKE_HTTP_5XX_RATE,
         }
 
     async def collect_log_evidence(self, client: httpx.AsyncClient) -> list[JsonObject]:
-        # TODO(telemetry): Loki pull을 workspace/repo/cluster label selector별 분리와 secret 마스킹
-        base_url = env(Settings.LOKI_BASE_URL_ENV, Settings.DEFAULT_LOKI_BASE_URL).rstrip("/")
+        # TODO(telemetry): Loki 조회를 workspace/repo/cluster label selector별 분리와 secret 마스킹
+        base_url = env(AgentConfig.LOKI_BASE_URL_ENV, AgentConfig.DEFAULT_LOKI_BASE_URL).rstrip("/")
         try:
             labels = await loki_labels(client, base_url)
-            query = env(Settings.LOKI_QUERY_ENV, Settings.DEFAULT_LOKI_QUERY)
+            query = env(AgentConfig.LOKI_QUERY_ENV, AgentConfig.DEFAULT_LOKI_QUERY)
             payload = await loki_query_range(client, base_url, query)
             return [
                 {
@@ -434,22 +646,22 @@ class TargetClusterAgent:
     def fallback_log_evidence(self, exc: Exception) -> list[JsonObject]:
         return [
             {
-                "source": Settings.FAKE_LOKI_SOURCE,
+                "source": AgentConfig.FAKE_LOKI_SOURCE,
                 "mode": "fallback_sample",
                 "error": type(exc).__name__,
-                "line": Settings.LOKI_ERROR_LINE,
+                "line": AgentConfig.LOKI_ERROR_LINE,
             },
             {
-                "source": Settings.FAKE_LOKI_SOURCE,
+                "source": AgentConfig.FAKE_LOKI_SOURCE,
                 "mode": "fallback_sample",
                 "error": type(exc).__name__,
-                "line": Settings.LOKI_WARNING_LINE,
+                "line": AgentConfig.LOKI_WARNING_LINE,
             },
         ]
 
     def collect_trace_evidence(self) -> JsonObject:
-        # TODO(telemetry): OpenTelemetry backend 조회와 service/operation별 span 요약
-        return {"source": Settings.FAKE_OTEL_SOURCE, "slow_span": Settings.OTEL_SLOW_SPAN}
+        # TODO(telemetry): OpenTelemetry 백엔드 조회와 service/operation별 span 요약
+        return {"source": AgentConfig.FAKE_OTEL_SOURCE, "slow_span": AgentConfig.OTEL_SLOW_SPAN}
 
 
 def create_fake_telemetry_app(kind: str) -> FastAPI:
@@ -474,8 +686,8 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
                     "resultType": "vector",
                     "result": [
                         {
-                            "metric": {"pod": Settings.CHECKOUT_APP_NAME},
-                            "value": [time.time(), Settings.PROMETHEUS_VECTOR_VALUE],
+                            "metric": {"pod": AgentConfig.CHECKOUT_APP_NAME},
+                            "value": [time.time(), AgentConfig.PROMETHEUS_VECTOR_VALUE],
                         }
                     ],
                 },
@@ -488,9 +700,12 @@ def create_fake_telemetry_app(kind: str) -> FastAPI:
                 data={
                     "result": [
                         {
-                            "stream": {"pod": Settings.CHECKOUT_APP_NAME},
+                            "stream": {"pod": AgentConfig.CHECKOUT_APP_NAME},
                             "values": [
-                                [str(int(time.time() * 1e9)), Settings.K8S_READINESS_FAILED_EVENT]
+                                [
+                                    str(int(time.time() * 1e9)),
+                                    AgentConfig.K8S_READINESS_FAILED_EVENT,
+                                ]
                             ],
                         }
                     ]
@@ -505,9 +720,9 @@ async def run_fake_telemetry(kind: str) -> None:
     await Server(
         Config(
             create_fake_telemetry_app(kind),
-            host=Settings.SERVICE_HOST,
-            port=int(env(Settings.SERVICE_PORT_ENV, Settings.DEFAULT_SERVICE_PORT)),
-            log_level=Settings.LOG_LEVEL,
+            host=AgentConfig.SERVICE_HOST,
+            port=int(env(AgentConfig.SERVICE_PORT_ENV, AgentConfig.DEFAULT_SERVICE_PORT)),
+            log_level=AgentConfig.LOG_LEVEL,
         )
     ).serve()
 
@@ -540,7 +755,7 @@ def build_rollout_restart_patch() -> JsonObject:
 
 
 async def prometheus_metric_names(client: httpx.AsyncClient, base_url: str) -> list[str]:
-    response = await client.get(f"{base_url}{Settings.PROMETHEUS_METRIC_NAMES_PATH}")
+    response = await client.get(f"{base_url}{AgentConfig.PROMETHEUS_METRIC_NAMES_PATH}")
     response.raise_for_status()
     payload = response.json()
     data = payload.get("data", [])
@@ -553,14 +768,14 @@ async def prometheus_query(
     client: httpx.AsyncClient, base_url: str, metric_name: str
 ) -> JsonObject:
     response = await client.get(
-        f"{base_url}{Settings.PROMETHEUS_QUERY_PATH}", params={"query": metric_name}
+        f"{base_url}{AgentConfig.PROMETHEUS_QUERY_PATH}", params={"query": metric_name}
     )
     response.raise_for_status()
     return {"query": metric_name, "response": response.json()}
 
 
 async def loki_labels(client: httpx.AsyncClient, base_url: str) -> list[str]:
-    response = await client.get(f"{base_url}{Settings.LOKI_LABELS_PATH}")
+    response = await client.get(f"{base_url}{AgentConfig.LOKI_LABELS_PATH}")
     response.raise_for_status()
     payload = response.json()
     data = payload.get("data", [])
@@ -571,8 +786,8 @@ async def loki_labels(client: httpx.AsyncClient, base_url: str) -> list[str]:
 
 async def loki_query_range(client: httpx.AsyncClient, base_url: str, query: str) -> JsonObject:
     response = await client.get(
-        f"{base_url}{Settings.LOKI_QUERY_RANGE_PATH}",
-        params={"query": query, "limit": Settings.LOKI_QUERY_LIMIT},
+        f"{base_url}{AgentConfig.LOKI_QUERY_RANGE_PATH}",
+        params={"query": query, "limit": AgentConfig.LOKI_QUERY_LIMIT},
     )
     response.raise_for_status()
     return response.json()

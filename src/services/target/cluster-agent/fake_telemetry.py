@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from agent import run_fake_telemetry
-from settings import Settings
+from agent import AgentConfig, run_fake_telemetry
 
 from packages.config.settings import required_env
 from packages.runtime.service import AsyncService
 
 TELEMETRY_KIND_ENV = "FAKE_TELEMETRY_KIND"
 SERVICE_NAMES = {
-    Settings.PROMETHEUS_TELEMETRY_KIND: Settings.FAKE_PROMETHEUS_SERVICE_NAME,
-    Settings.LOKI_TELEMETRY_KIND: Settings.FAKE_LOKI_SERVICE_NAME,
-    Settings.OTEL_TELEMETRY_KIND: Settings.FAKE_OTEL_SERVICE_NAME,
+    AgentConfig.PROMETHEUS_TELEMETRY_KIND: AgentConfig.FAKE_PROMETHEUS_SERVICE_NAME,
+    AgentConfig.LOKI_TELEMETRY_KIND: AgentConfig.FAKE_LOKI_SERVICE_NAME,
+    AgentConfig.OTEL_TELEMETRY_KIND: AgentConfig.FAKE_OTEL_SERVICE_NAME,
 }
 
 

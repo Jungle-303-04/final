@@ -43,12 +43,18 @@ async def close_client(client: Any) -> None:
         lambda client: client.register_agent("cluster-1", "agent-1", ["evidence"]),
         lambda client: client.ship_evidence({"cluster_id": "cluster-1"}),
         lambda client: client.start_command("cmd-1", "cluster-1", "default", "lease-1", "agent-1"),
+        lambda client: client.heartbeat_command(
+            "cmd-1", "cluster-1", "default", "lease-1", "agent-1"
+        ),
         lambda client: client.complete_command(
             "cmd-1",
             "default",
             "lease-1",
             "agent-1",
             {"status": "completed", "cluster_id": "cluster-1"},
+        ),
+        lambda client: client.acquire_evidence_source_lease(
+            "cluster-1", "default", "agent-1", "cluster-snapshot", "2026-06-30T00:00:00Z", 30
         ),
     ],
 )
@@ -215,3 +221,70 @@ def test_target_agent_queries_prometheus_and_loki_directly(monkeypatch) -> None:
     assert calls.count("/api/v1/query") == 2
     assert "/loki/api/v1/labels" in calls
     assert "/loki/api/v1/query_range" in calls
+
+
+def test_target_agent_ships_evidence_only_after_source_lease(monkeypatch) -> None:
+    agent_module = load_agent_module()
+
+    class LeaseClient:
+        def __init__(self) -> None:
+            self.payload: dict[str, object] | None = None
+            self.leases: list[tuple[str, str, str, str, str, int]] = []
+
+        async def acquire_evidence_source_lease(
+            self,
+            cluster_id: str,
+            workspace_id: str,
+            agent_id: str,
+            source_id: str,
+            window_start: str,
+            lease_seconds: int,
+        ) -> dict[str, object]:
+            self.leases.append(
+                (cluster_id, workspace_id, agent_id, source_id, window_start, lease_seconds)
+            )
+            return {"leased": True, "lease_id": "lease-1", "leased_until": "soon"}
+
+        async def ship_evidence(self, evidence: dict[str, object]) -> int:
+            self.payload = evidence
+            return 202
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, request=request)
+
+    monkeypatch.setenv("HOSTNAME", "agent-1")
+    agent = agent_module.TargetClusterAgent(
+        telemetry_transport=httpx.MockTransport(handler),
+    )
+    client = LeaseClient()
+
+    assert asyncio.run(agent.ship_evidence_once(client)) is True
+
+    assert client.leases
+    assert client.payload is not None
+    assert client.payload["agent_id"] == "agent-1"
+    assert client.payload["source_id"] == "cluster-snapshot"
+    assert client.payload["window_start"]
+    assert client.payload["evidence_key"]
+
+
+def test_target_agent_skips_evidence_when_source_lease_is_held(monkeypatch) -> None:
+    agent_module = load_agent_module()
+
+    class BusyLeaseClient:
+        def __init__(self) -> None:
+            self.shipped = False
+
+        async def acquire_evidence_source_lease(self, *_args: object) -> dict[str, object]:
+            return {"leased": False, "lease_id": "other", "leased_until": "soon"}
+
+        async def ship_evidence(self, _evidence: dict[str, object]) -> int:
+            self.shipped = True
+            return 202
+
+    monkeypatch.setenv("HOSTNAME", "agent-1")
+    agent = agent_module.TargetClusterAgent()
+    client = BusyLeaseClient()
+
+    assert asyncio.run(agent.ship_evidence_once(client)) is False
+    assert client.shipped is False

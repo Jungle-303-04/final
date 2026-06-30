@@ -76,6 +76,7 @@ class AgentCommandRepository(DatabaseConnection):
         available = or_(
             table.c.status == queued_status,
             (table.c.status == leased_status) & (table.c.leased_until < func.now()),
+            (table.c.status == CommandStatus.RUNNING) & (table.c.leased_until < func.now()),
         )
         candidate = (
             select(table.c.command_id)
@@ -110,8 +111,10 @@ class AgentCommandRepository(DatabaseConnection):
         lease_id: str,
         agent_id: str,
         running_status: str = CommandStatus.RUNNING,
+        lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
     ) -> str | None:
         table = AgentCommand.__table__
+        leased_until = datetime.now(UTC) + timedelta(seconds=lease_seconds)
         statement = (
             update(table)
             .where(
@@ -122,7 +125,39 @@ class AgentCommandRepository(DatabaseConnection):
                 table.c.status == CommandStatus.LEASED,
                 table.c.leased_until >= func.now(),
             )
-            .values(status=running_status, started_at=func.now(), updated_at=func.now())
+            .values(
+                status=running_status,
+                leased_until=leased_until,
+                started_at=func.now(),
+                updated_at=func.now(),
+            )
+            .returning(table.c.correlation_id)
+        )
+        async with self.async_connection() as conn:
+            row = (await conn.execute(statement)).mappings().first()
+        return row["correlation_id"] if row else None
+
+    async def heartbeat_agent_command(
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
+    ) -> str | None:
+        table = AgentCommand.__table__
+        leased_until = datetime.now(UTC) + timedelta(seconds=lease_seconds)
+        statement = (
+            update(table)
+            .where(
+                table.c.command_id == command_id,
+                table.c.workspace_id == workspace_id,
+                table.c.lease_id == lease_id,
+                table.c.agent_id == agent_id,
+                table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
+                table.c.leased_until >= func.now(),
+            )
+            .values(leased_until=leased_until, updated_at=func.now())
             .returning(table.c.correlation_id)
         )
         async with self.async_connection() as conn:
@@ -146,6 +181,7 @@ class AgentCommandRepository(DatabaseConnection):
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
                 table.c.status == CommandStatus.RUNNING,
+                table.c.leased_until >= func.now(),
             )
             .values(
                 status=result["status"],

@@ -19,6 +19,7 @@ from packages.contracts.event_bus.bodies import CommandCompletedBody, CommandReq
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
+    CommandHeartbeatRequest,
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
@@ -26,6 +27,7 @@ from packages.contracts.gateway.requests import (
 from packages.contracts.gateway.responses import (
     AcceptedResponse,
     AgentCommandPollResponse,
+    CommandHeartbeatResponse,
     CommandStartedResponse,
     EventIdAcceptedResponse,
 )
@@ -148,10 +150,29 @@ async def command_start(
         payload.lease_id,
         payload.agent_id,
         CommandStatus.RUNNING,
+        LEASE_SECONDS,
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
     return CommandStartedResponse(accepted=True, correlation_id=correlation_id)
+
+
+@agent_router.post(
+    gateway_routes.AGENT_COMMAND_HEARTBEAT_PATH, response_model=CommandHeartbeatResponse
+)
+async def command_heartbeat(
+    command_id: str, payload: CommandHeartbeatRequest, db: Any = Depends(get_db)
+) -> CommandHeartbeatResponse:
+    correlation_id = await db.heartbeat_agent_command(
+        command_id,
+        payload.workspace_id,
+        payload.lease_id,
+        payload.agent_id,
+        LEASE_SECONDS,
+    )
+    if not correlation_id:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    return CommandHeartbeatResponse(accepted=True, correlation_id=correlation_id)
 
 
 @agent_router.post(gateway_routes.AGENT_COMMAND_RESULT_PATH, response_model=EventIdAcceptedResponse)
