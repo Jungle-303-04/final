@@ -8,7 +8,6 @@ class Settings:
     APP_TITLE = "API Gateway"
     APP_VERSION = "0.1.0"
 
-    DEFAULT_SCOPES = "profile,email"
     DEFAULT_AGENT_COMMAND_POLL_SECONDS = 10
     MAX_COMMAND_POLL_SECONDS = 30
     COMMAND_POLL_SLEEP_SECONDS = 1
@@ -34,9 +33,7 @@ class Settings:
     REDIS_URL_ENV = "REDIS_URL"
     SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
     SESSION_KEY_PREFIX = "session"
-    OAUTH_STATE_KEY_PREFIX = "oauth_state"
     RATE_LIMIT_KEY_PREFIX = "rate"
-    OAUTH_STATE_TTL_SECONDS = 600
     SESSION_TOKEN_BYTES = 32
     DEFAULT_RATE_LIMIT = 120
     RATE_LIMIT_WINDOW_SECONDS = 60
@@ -44,10 +41,8 @@ class Settings:
     AUTHORIZATION_HEADER = "authorization"
     BEARER_PREFIX = "bearer "
     SESSION_TOKEN_HEADER = "x-session-token"
-    OAUTH_AUTHORIZE_BASE_URL_ENV = "OAUTH_AUTHORIZE_BASE_URL"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
-    OAUTH_STATE_INVALID_MESSAGE = "invalid or expired oauth state"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
     INVALID_CREDENTIALS_MESSAGE = "invalid email or password"
     USER_STATUS_ACTIVE = "active"
