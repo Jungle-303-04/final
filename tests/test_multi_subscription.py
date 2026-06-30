@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
 
 import pytest
 
@@ -38,14 +37,12 @@ def test_app_allows_multiple_subscriptions() -> None:
     app = App("multi-worker")
 
     @app.on(GitChangedBody)
-    async def on_git(evt: GitChangedBody, ctx: object) -> AsyncIterator[EventBody]:
-        if False:
-            yield  # 빈 제너레이터
+    async def on_git(evt: GitChangedBody, ctx: object) -> list[EventBody]:
+        return []
 
     @app.on(DiffDetectedBody)
-    async def on_diff(evt: DiffDetectedBody, ctx: object) -> AsyncIterator[EventBody]:
-        if False:
-            yield
+    async def on_diff(evt: DiffDetectedBody, ctx: object) -> list[EventBody]:
+        return []
 
     subjects, factory = app._resolve()
     assert len(subjects) == 2  # 같은 워커가 두 이벤트 구독 — 더 이상 1개 강제 아님
@@ -57,13 +54,11 @@ def test_same_subject_twice_in_one_worker_is_rejected() -> None:
     app = App("dup-worker")
 
     @app.on(GitChangedBody)
-    async def first(evt: GitChangedBody, ctx: object) -> AsyncIterator[EventBody]:
-        if False:
-            yield
+    async def first(evt: GitChangedBody, ctx: object) -> list[EventBody]:
+        return []
 
     with pytest.raises(TypeError):  # 같은 subject 중복 구독 → 시작 시 거부
 
         @app.on(GitChangedBody)
-        async def second(evt: GitChangedBody, ctx: object) -> AsyncIterator[EventBody]:
-            if False:
-                yield
+        async def second(evt: GitChangedBody, ctx: object) -> list[EventBody]:
+            return []

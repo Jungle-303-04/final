@@ -68,9 +68,9 @@
 
 | 위치 | 왜 데모인가 | 나중에 무엇으로 바뀌어야 하나 |
 | --- | --- | --- |
-| `src/services/target/cluster-agent/fake_prometheus.py` | 실제 Prometheus가 아니라 fake HTTP app | real Prometheus adapter |
-| `src/services/target/cluster-agent/fake_loki.py` | 실제 Loki가 아니라 fake HTTP app | real Loki adapter |
-| `src/services/target/cluster-agent/fake_otel.py` | 실제 OTel collector가 아니라 fake HTTP app | real OTel collector/exporter |
+| `src/services/target/cluster-agent/fake_telemetry.py`의 Prometheus 모드 | 실제 Prometheus가 아니라 fake HTTP app | real Prometheus adapter |
+| `src/services/target/cluster-agent/fake_telemetry.py`의 Loki 모드 | 실제 Loki가 아니라 fake HTTP app | real Loki adapter |
+| `src/services/target/cluster-agent/fake_telemetry.py`의 OTel 모드 | 실제 OTel collector가 아니라 fake HTTP app | real OTel collector/exporter |
 | `src/services/target/cluster-agent/agent.py`의 fake evidence collectors | 장애 데이터가 실제 수집값이 아님 | Kubernetes/Prometheus/Loki/OTel adapter가 만든 Evidence |
 | `src/services/gitops/manifest-render-worker/app.py`의 `checkout-api` 기본값 | 실제 repo render가 아니라 sample manifest 생성 | Git repo checkout + Kustomize/Helm renderer |
 | `src/services/gitops/diff-worker/app.py`의 `PREVIOUS_IMAGE`, `RESOURCE_REF` | 실제 cluster diff가 아니라 fixed diff | desired/actual manifest 비교기 |
