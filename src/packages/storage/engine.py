@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from packages.config.settings import required_env
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.identity import AccountRole
 from packages.storage.schema import (
     metadata,
 )
@@ -34,7 +35,27 @@ AGENT_COMMAND_COMPAT_COLUMNS = {
 USER_ACCOUNT_COMPAT_COLUMNS = {
     "email": "alter table user_accounts add column if not exists email text",
     "password_hash": "alter table user_accounts add column if not exists password_hash text",
+    "role": "alter table user_accounts add column if not exists role text",
 }
+USER_ACCOUNT_ROLE_BACKFILL = f"""
+with ranked as (
+    select user_id,
+           row_number() over (order by created_at, user_id) as row_number
+    from user_accounts
+    where role is null
+)
+update user_accounts as users
+set role = case
+    when ranked.row_number = 1 then '{AccountRole.ADMIN.value}'
+    else '{AccountRole.MEMBER.value}'
+end
+from ranked
+where users.user_id = ranked.user_id
+"""
+USER_ACCOUNT_ROLE_DEFAULT = (
+    f"alter table user_accounts alter column role set default '{AccountRole.MEMBER.value}'"
+)
+USER_ACCOUNT_ROLE_NOT_NULL = "alter table user_accounts alter column role set not null"
 USER_ACCOUNT_EMAIL_INDEX = (
     "create unique index if not exists ux_user_accounts_email "
     "on user_accounts (email) where email is not null"
@@ -139,6 +160,9 @@ class DatabaseConnection:
                     continue
                 conn.execute(text("set local lock_timeout = '5s'"))
                 conn.execute(text(statement))
+            conn.execute(text(USER_ACCOUNT_ROLE_BACKFILL))
+            conn.execute(text(USER_ACCOUNT_ROLE_DEFAULT))
+            conn.execute(text(USER_ACCOUNT_ROLE_NOT_NULL))
             conn.execute(text(USER_ACCOUNT_EMAIL_INDEX))
 
     @staticmethod

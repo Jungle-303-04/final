@@ -12,6 +12,13 @@ from domains.identity.models import (
     WorkspaceMember,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.identity import (
+    AccountRole,
+    ClusterRegistrationStatus,
+    UserStatus,
+    WorkspaceRole,
+    WorkspaceStatus,
+)
 from packages.storage.engine import DatabaseConnection
 
 
@@ -46,6 +53,12 @@ class WorkspaceAccessRepository(DatabaseConnection):
             conn.execute(self._cluster_upsert(payload))
         return payload
 
+    def has_user_accounts(self) -> bool:
+        table = UserAccount.__table__
+        statement = select(func.count()).select_from(table)
+        with self.connection() as conn:
+            return int(conn.execute(statement).scalar_one()) > 0
+
     def get_user_by_email(self, email: str) -> JsonObject | None:
         table = UserAccount.__table__
         statement = (
@@ -55,6 +68,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
                 table.c.password_hash,
                 table.c.display_name,
                 table.c.status,
+                table.c.role,
             )
             .where(table.c.email == email)
             .limit(1)
@@ -70,6 +84,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
         password_hash: str,
         display_name: str,
         status: str,
+        role: str,
     ) -> JsonObject | None:
         table = UserAccount.__table__
         statement = (
@@ -80,6 +95,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
                 password_hash=password_hash,
                 display_name=display_name,
                 status=status,
+                role=role,
                 updated_at=func.now(),
             )
             .on_conflict_do_nothing(index_elements=[table.c.email])
@@ -89,6 +105,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
                 table.c.password_hash,
                 table.c.display_name,
                 table.c.status,
+                table.c.role,
             )
         )
         with self.connection() as conn:
@@ -100,13 +117,14 @@ class WorkspaceAccessRepository(DatabaseConnection):
         statement = (
             table.update()
             .where(table.c.user_id == user_id)
-            .values(status="active", updated_at=func.now())
+            .values(status=UserStatus.ACTIVE.value, updated_at=func.now())
             .returning(
                 table.c.user_id,
                 table.c.email,
                 table.c.password_hash,
                 table.c.display_name,
                 table.c.status,
+                table.c.role,
             )
         )
         with self.connection() as conn:
@@ -119,12 +137,13 @@ class WorkspaceAccessRepository(DatabaseConnection):
         insert = pg_insert(table).values(
             user_id=user_id,
             display_name=user_id,
-            status="active",
+            status=UserStatus.ACTIVE.value,
+            role=AccountRole.ADMIN.value,
             updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.user_id],
-            set_={"status": "active", "updated_at": func.now()},
+            set_={"status": UserStatus.ACTIVE.value, "updated_at": func.now()},
         )
 
     @staticmethod
@@ -134,12 +153,12 @@ class WorkspaceAccessRepository(DatabaseConnection):
             workspace_id=workspace_id,
             name=workspace_id,
             slug=workspace_id,
-            status="active",
+            status=WorkspaceStatus.ACTIVE.value,
             updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.workspace_id],
-            set_={"status": "active", "updated_at": func.now()},
+            set_={"status": WorkspaceStatus.ACTIVE.value, "updated_at": func.now()},
         )
 
     @staticmethod
@@ -148,9 +167,9 @@ class WorkspaceAccessRepository(DatabaseConnection):
         insert = pg_insert(table).values(
             workspace_id=workspace_id,
             user_id=user_id,
-            role="owner",
+            role=WorkspaceRole.OWNER.value,
             permissions={"target": ["register", "install"]},
-            status="active",
+            status=WorkspaceStatus.ACTIVE.value,
             updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
@@ -158,7 +177,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
             set_={
                 "role": insert.excluded.role,
                 "permissions": insert.excluded.permissions,
-                "status": "active",
+                "status": WorkspaceStatus.ACTIVE.value,
                 "updated_at": func.now(),
             },
         )
@@ -171,7 +190,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
             cluster_id=payload["cluster_id"],
             name=payload["name"],
             environment=payload["environment"],
-            status="registered",
+            status=ClusterRegistrationStatus.REGISTERED.value,
             settings=payload["settings"],
             updated_at=func.now(),
         )
@@ -180,7 +199,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
             set_={
                 "name": insert.excluded.name,
                 "environment": insert.excluded.environment,
-                "status": "registered",
+                "status": ClusterRegistrationStatus.REGISTERED.value,
                 "settings": insert.excluded.settings,
                 "updated_at": func.now(),
             },
