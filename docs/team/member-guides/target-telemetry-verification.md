@@ -124,7 +124,8 @@ Expected:
 
 Tempo stores traces forwarded by OpenTelemetry Collector.
 
-This query can succeed with zero traces when no service has emitted spans yet.
+The target-cluster-agent emits spans for its evidence collection loop, so this
+query should return traces after the agent has run for at least one interval.
 
 ```powershell
 @'
@@ -147,7 +148,7 @@ print(p)
 Expected:
 
 - `http: 200`
-- `trace count` may be `0` until a workload emits spans through OpenTelemetry.
+- `trace count` is greater than `0` after target-cluster-agent emits spans.
 
 ## 7. Check Evidence Shipping
 
@@ -177,13 +178,13 @@ published cluster.evidence.received
 ## 8. Check Latest Evidence in Management DB
 
 ```powershell
-kubectl --context kind-management -n management exec postgresql-0 -- psql -U service -d service -At -c "select payload->>'cluster_id', payload ? 'metrics', payload ? 'logs', payload ? 'traces', payload->'metrics'->>'source', payload->'traces'->>'source', (payload->'metrics'->'results') ? 'node_collector_node_pod_count', (payload->'metrics'->'results') ? 'node_collector_scrape_error', jsonb_array_length(payload->'logs') from evidence order by created_at desc limit 1;"
+kubectl --context kind-management -n management exec postgresql-0 -- psql -U service -d service -At -c "select payload->>'cluster_id', payload ? 'metrics', payload ? 'logs', payload ? 'traces', payload->'metrics'->>'source', payload->'traces'->>'source', (payload->'metrics'->'results') ? 'node_collector_node_pod_count', (payload->'metrics'->'results') ? 'node_collector_scrape_error', payload->'traces'->'results'->'target_agent_recent_spans'->>'trace_count', jsonb_array_length(payload->'logs') from evidence order by created_at desc limit 1;"
 ```
 
 Expected columns:
 
 ```text
-target-cluster-01|t|t|t|prometheus|tempo|t|t|...
+target-cluster-01|t|t|t|prometheus|tempo|t|t|20|...
 ```
 
 Meaning:
@@ -196,6 +197,7 @@ Meaning:
 - traces source is `tempo`
 - node collector pod count query exists
 - node collector scrape error query exists
+- target-agent trace count is greater than `0`
 - logs array has at least one query result
 
 ## 9. Run Unit Tests
@@ -216,4 +218,4 @@ Current state:
 - OTel Collector forwards traces to Tempo.
 - Tempo stores traces and exposes `/api/search`.
 - `target-cluster-agent` queries Tempo and replaces `evidence["traces"]`.
-- Trace results can be empty until a workload emits spans through OpenTelemetry.
+- `target-cluster-agent` emits spans for evidence collection and management API calls.

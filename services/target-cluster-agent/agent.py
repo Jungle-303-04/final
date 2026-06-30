@@ -21,6 +21,8 @@ from settings import (
     DEFAULT_AGENT_ID,
     DEFAULT_LOKI_BASE_URL,
     DEFAULT_MANAGEMENT_BASE_URL,
+    DEFAULT_OTEL_SERVICE_NAME,
+    DEFAULT_OTEL_TRACES_ENDPOINT,
     DEFAULT_PROMETHEUS_BASE_URL,
     DEFAULT_SERVICE_PORT,
     DEFAULT_TEMPO_BASE_URL,
@@ -40,7 +42,9 @@ from settings import (
     LOKI_ERROR_LINE,
     LOKI_WARNING_LINE,
     MANAGEMENT_BASE_URL_ENV,
+    OTEL_SERVICE_NAME_ENV,
     OTEL_SLOW_SPAN,
+    OTEL_TRACES_ENDPOINT_ENV,
     PROMETHEUS_BASE_URL_ENV,
     PROMETHEUS_VECTOR_VALUE,
     REGISTER_RETRY_DELAY_SECONDS,
@@ -49,12 +53,15 @@ from settings import (
     TARGET_CLUSTER_ID_ENV,
     TEMPO_BASE_URL_ENV,
 )
+from telemetry_tracing import configure_tracing, get_tracer
 from uvicorn import Config, Server
 
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
+
+TRACER = get_tracer("target-cluster-agent.agent")
 
 
 class HttpManagementPlaneClient:
@@ -77,32 +84,49 @@ class HttpManagementPlaneClient:
 
     # Tell the Management Plane that this target-cluster agent is online.
     async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
-        await self.client.post(
-            f"{self.base_url}/agent/connect",
-            json={
-                "cluster_id": cluster_id,
-                "agent_id": agent_id,
-                "capabilities": capabilities,
-            },
-        )
+        with TRACER.start_as_current_span("management.register_agent") as span:
+            span.set_attribute("cluster.id", cluster_id)
+            span.set_attribute("agent.id", agent_id)
+            response = await self.client.post(
+                f"{self.base_url}/agent/connect",
+                json={
+                    "cluster_id": cluster_id,
+                    "agent_id": agent_id,
+                    "capabilities": capabilities,
+                },
+            )
+            span.set_attribute("http.status_code", response.status_code)
 
     # Send one evidence payload to the Management Plane.
     async def ship_evidence(self, evidence: JsonObject) -> int:
-        response = await self.client.post(f"{self.base_url}/agent/evidence", json=evidence)
-        return response.status_code
+        with TRACER.start_as_current_span("management.ship_evidence") as span:
+            response = await self.client.post(f"{self.base_url}/agent/evidence", json=evidence)
+            span.set_attribute("http.status_code", response.status_code)
+            return response.status_code
 
     # Ask the Management Plane for one pending command.
     async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
-        response = await self.client.get(
-            f"{self.base_url}/agent/commands/poll",
-            params={"cluster_id": cluster_id, "timeout": timeout_seconds},
-        )
-        response.raise_for_status()
-        return response.json().get("command")
+        with TRACER.start_as_current_span("management.poll_command") as span:
+            span.set_attribute("cluster.id", cluster_id)
+            response = await self.client.get(
+                f"{self.base_url}/agent/commands/poll",
+                params={"cluster_id": cluster_id, "timeout": timeout_seconds},
+            )
+            span.set_attribute("http.status_code", response.status_code)
+            response.raise_for_status()
+            command = response.json().get("command")
+            span.set_attribute("command.found", command is not None)
+            return command
 
     # Report one command execution result back to the Management Plane.
     async def complete_command(self, command_id: str, result: JsonObject) -> None:
-        await self.client.post(f"{self.base_url}/agent/commands/{command_id}/result", json=result)
+        with TRACER.start_as_current_span("management.complete_command") as span:
+            span.set_attribute("command.id", command_id)
+            response = await self.client.post(
+                f"{self.base_url}/agent/commands/{command_id}/result",
+                json=result,
+            )
+            span.set_attribute("http.status_code", response.status_code)
 
 
 class TargetClusterAgent:
@@ -121,6 +145,12 @@ class TargetClusterAgent:
             TEMPO_BASE_URL_ENV,
             DEFAULT_TEMPO_BASE_URL,
         ).rstrip("/")
+        self.otel_service_name = env(OTEL_SERVICE_NAME_ENV, DEFAULT_OTEL_SERVICE_NAME)
+        self.otel_traces_endpoint = env(
+            OTEL_TRACES_ENDPOINT_ENV,
+            DEFAULT_OTEL_TRACES_ENDPOINT,
+        )
+        self.tracer = configure_tracing(self.otel_service_name, self.otel_traces_endpoint)
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
@@ -162,38 +192,52 @@ class TargetClusterAgent:
     async def ship_evidence(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                status_code = await client.ship_evidence(await self.collect_evidence())
-                print(f"evidence shipped status={status_code}", flush=True)
+                with self.tracer.start_as_current_span("target_agent.ship_evidence") as span:
+                    span.set_attribute("cluster.id", self.cluster_id)
+                    evidence = await self.collect_evidence()
+                    status_code = await client.ship_evidence(evidence)
+                    span.set_attribute("http.status_code", status_code)
+                    print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
             await asyncio.sleep(self.interval)
 
     # Build the full evidence payload through the telemetry evidence collector.
     async def collect_evidence(self) -> JsonObject:
-        return await self.evidence_collector.collect_evidence()
+        with self.tracer.start_as_current_span("target_agent.collect_evidence") as span:
+            span.set_attribute("cluster.id", self.cluster_id)
+            return await self.evidence_collector.collect_evidence()
 
     # Keep checking for commands and report completed command results.
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
             try:
-                command = await client.poll_command(self.cluster_id, COMMAND_POLL_TIMEOUT_SECONDS)
-                if command:
-                    command_id = command["command_id"]
-                    action = command["action"]
-                    print(
-                        f"agent executing command {command_id} action={action}",
-                        flush=True,
+                with self.tracer.start_as_current_span("target_agent.poll_commands") as span:
+                    span.set_attribute("cluster.id", self.cluster_id)
+                    command = await client.poll_command(
+                        self.cluster_id,
+                        COMMAND_POLL_TIMEOUT_SECONDS,
                     )
-                    await asyncio.sleep(COMMAND_EXECUTION_DELAY_SECONDS)
-                    await client.complete_command(
-                        command_id,
-                        {
-                            "status": COMMAND_COMPLETED_STATUS,
-                            "cluster_id": self.cluster_id,
-                            "applied": True,
-                            "message": COMMAND_RESULT_MESSAGE,
-                        },
-                    )
+                    span.set_attribute("command.found", command is not None)
+                    if command:
+                        command_id = command["command_id"]
+                        action = command["action"]
+                        span.set_attribute("command.id", command_id)
+                        span.set_attribute("command.action", action)
+                        print(
+                            f"agent executing command {command_id} action={action}",
+                            flush=True,
+                        )
+                        await asyncio.sleep(COMMAND_EXECUTION_DELAY_SECONDS)
+                        await client.complete_command(
+                            command_id,
+                            {
+                                "status": COMMAND_COMPLETED_STATUS,
+                                "cluster_id": self.cluster_id,
+                                "applied": True,
+                                "message": COMMAND_RESULT_MESSAGE,
+                            },
+                        )
             except Exception as exc:
                 print(f"command polling failed: {exc}", flush=True)
                 await asyncio.sleep(COMMAND_RETRY_DELAY_SECONDS)
