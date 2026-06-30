@@ -236,3 +236,32 @@ def test_workflow_controller_does_not_trust_agent_result_identity_without_mappin
     assert outs == []
     assert not db.called("attach_workflow_command")
     assert not db.called("update_workflow_run_for_command")
+
+
+def test_workflow_controller_treats_completed_but_unapplied_command_as_failed() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    identity = {
+        "workflow_run_id": "workflow-1",
+        "workspace_id": "workspace-1",
+        "application_id": "app-1",
+        "binding_id": "binding-1",
+        "environment": "prod",
+        "cluster_id": Target.DEFAULT_CLUSTER_ID,
+    }
+    db = workflow_db(get_workflow_identity_for_command=identity)
+
+    outs = run_handler(
+        workflow.on_command_completed,
+        CommandCompletedBody(
+            command_id="cmd-1",
+            result={
+                "status": CommandStatus.COMPLETED,
+                "applied": False,
+                "message": "kubernetes api not configured; dry-run only",
+            },
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded", "workflow.run.failed"]
+    assert outs[-1].reason == "kubernetes api not configured; dry-run only"
