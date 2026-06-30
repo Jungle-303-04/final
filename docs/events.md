@@ -157,7 +157,7 @@ async def on_command_requested(
 
 | 영역 | 현재 subject |
 | --- | --- |
-| OAuth | `oauth.start.requested`, `oauth.connected` |
+| Identity | `mail.email_verification.requested`, `mail.email_verification.sent` |
 | GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed` |
 | Agent | `agent.connected`, `cluster.evidence.received` |
 | Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
