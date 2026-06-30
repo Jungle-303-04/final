@@ -70,6 +70,15 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
     return cast(Diff, Diff.from_body(raw))
 
 
+def trusted_command_result(
+    payload: CommandResultRequest, identity: ClusterAgentIdentity
+) -> JsonObject:
+    result = payload.model_dump()
+    result["workspace_id"] = identity.workspace_id
+    result["cluster_id"] = identity.cluster_id
+    return result
+
+
 def require_cluster_deploy_access(
     db: Any, current: Any, workspace_id: str, cluster_id: str
 ) -> None:
@@ -200,7 +209,7 @@ async def command_result(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> EventIdAcceptedResponse:
-    result = payload.model_dump()
+    result = trusted_command_result(payload, identity)
     correlation_id = await db.complete_agent_command(
         command_id,
         identity.workspace_id,
