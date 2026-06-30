@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
@@ -13,9 +12,12 @@ from fastapi.responses import PlainTextResponse
 from settings import Settings
 from uvicorn import Config, Server
 
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
+
+LOGGER = get_logger(__name__)
 
 
 class Field(StrEnum):
@@ -98,16 +100,15 @@ class NodeCollector:
 
     async def log_forever(self) -> None:
         while True:
-            print(
-                json.dumps(
-                    {
+            LOGGER.info(
+                "node_runtime_sample_collected",
+                extra={
+                    CONTEXT_KEY: {
                         Gateway.SERVICE: Settings.SERVICE_NAME,
                         Field.KIND: NODE_RUNTIME_SAMPLE_KIND,
                         Field.SAMPLE: self.snapshot().to_body(),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
+                    }
+                },
             )
             await asyncio.sleep(self.interval_seconds)
 
