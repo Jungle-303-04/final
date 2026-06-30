@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 import httpx
 
 from packages.config.settings import env
+from packages.contracts.event_bus.interfaces import JsonObject
+
+
+@dataclass(frozen=True)
+class KubernetesManifestResource:
+    kind: str
+    api_version: str
+    namespace: str
+    name: str
+    plural: str
+    api_prefix: str
+    manifest: JsonObject
+
+    def collection_url(self, base_url: str) -> str:
+        return f"{base_url}{self.api_prefix}/namespaces/{self.namespace}/{self.plural}"
+
+    def resource_url(self, base_url: str) -> str:
+        return f"{self.collection_url(base_url)}/{self.name}"
 
 
 class KubernetesApiConfig:
@@ -46,3 +65,46 @@ def service_account_token() -> str | None:
         return None
     with open(KubernetesApiConfig.SERVICE_ACCOUNT_TOKEN_PATH, encoding="utf-8") as token_file:
         return token_file.read().strip()
+
+
+def kubernetes_manifest_resource(
+    manifest: JsonObject,
+    fallback_namespace: str,
+) -> KubernetesManifestResource:
+    kind = str(manifest.get("kind", ""))
+    api_version = str(manifest.get("apiVersion", ""))
+    metadata = manifest.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("manifest metadata must be an object")
+    name = str(metadata.get("name", ""))
+    namespace = str(metadata.get("namespace") or fallback_namespace)
+    if not kind or not api_version or not name:
+        raise ValueError("manifest requires apiVersion, kind, and metadata.name")
+
+    api_prefix, plural = kubernetes_resource_api(kind, api_version)
+    normalized = {
+        **manifest,
+        "metadata": {
+            **metadata,
+            "namespace": namespace,
+        },
+    }
+    return KubernetesManifestResource(
+        kind=kind,
+        api_version=api_version,
+        namespace=namespace,
+        name=name,
+        plural=plural,
+        api_prefix=api_prefix,
+        manifest=normalized,
+    )
+
+
+def kubernetes_resource_api(kind: str, api_version: str) -> tuple[str, str]:
+    if kind == "Deployment" and api_version == "apps/v1":
+        return "/apis/apps/v1", "deployments"
+    if kind == "Service" and api_version == "v1":
+        return "/api/v1", "services"
+    if kind == "ConfigMap" and api_version == "v1":
+        return "/api/v1", "configmaps"
+    raise ValueError(f"unsupported manifest kind: {api_version}/{kind}")
