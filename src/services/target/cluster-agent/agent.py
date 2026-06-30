@@ -17,7 +17,7 @@ from node_collector_manager import (
 )
 from uvicorn import Config, Server
 
-from packages.config.constants import Command, CommandStatus, Target
+from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -118,6 +118,7 @@ class AgentConfig:
     COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
     MANIFEST_PATCHED_MESSAGE = "Kubernetes manifest patched in sandbox namespace"
+    WRITE_NAMESPACE_DENIED_MESSAGE = "only sandbox namespace writes are allowed"
     LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
     LOKI_WARNING_LINE = "WARN rollback candidate detected"
     OTEL_SLOW_SPAN = "GET /checkout"
@@ -535,7 +536,7 @@ class TargetClusterAgent:
     async def apply_manifest_command(self, command: CommandRecord) -> JsonObject:
         plan = command.get("payload", {})
         diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
-        namespace = str(diff.get("namespace") or "sandbox")
+        namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
         desired_manifest = diff.get("desired_manifest")
         if isinstance(desired_manifest, dict) and desired_manifest:
             applied, message = await self.apply_kubernetes_manifest(
@@ -550,6 +551,8 @@ class TargetClusterAgent:
             return self.command_result(
                 False, "apply_manifest requires deployment resource and image"
             )
+        if namespace != Sandbox.NAMESPACE:
+            return self.command_result(False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)
         patch = build_apply_manifest_patch(deployment, image)
         applied, message = await self.patch_deployment(namespace, deployment, patch)
         return self.command_result(applied, message)
@@ -557,7 +560,9 @@ class TargetClusterAgent:
     async def rollout_restart_command(self, command: CommandRecord) -> JsonObject:
         plan = command.get("payload", {})
         diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
-        namespace = str(diff.get("namespace") or "sandbox")
+        namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
+        if namespace != Sandbox.NAMESPACE:
+            return self.command_result(False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)
         deployment = deployment_name_from_resource(str(diff.get("resource", "")))
         if not deployment:
             return self.command_result(False, "rollout_restart requires deployment resource")
@@ -577,6 +582,8 @@ class TargetClusterAgent:
             resource = kubernetes_manifest_resource(manifest, fallback_namespace)
         except ValueError as exc:
             return False, str(exc)
+        if resource.namespace != Sandbox.NAMESPACE:
+            return False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE
 
         async with kubernetes_client(self.kubernetes_transport) as client:
             current = await client.get(
