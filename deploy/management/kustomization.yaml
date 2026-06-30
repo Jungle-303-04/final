@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - storage.yaml
+  - pgbouncer.yaml
   - nats.yaml
   - services.yaml
+  - github-poll-worker.yaml
 

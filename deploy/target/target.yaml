@@ -11,13 +11,13 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: target-cluster-agent
+  name: cluster-agent
   namespace: target
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
@@ -29,20 +29,20 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-sandbox-write
   namespace: sandbox
 rules:
   - apiGroups: [""]
@@ -55,15 +55,15 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-sandbox-write
   namespace: sandbox
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-sandbox-write
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
 ---
 apiVersion: apps/v1
@@ -85,7 +85,10 @@ spec:
         - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/fake_prometheus.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: prometheus
           ports:
             - containerPort: 8000
 ---
@@ -120,7 +123,10 @@ spec:
         - name: fake-loki
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/fake_loki.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: loki
           ports:
             - containerPort: 8000
 ---
@@ -155,7 +161,10 @@ spec:
         - name: fake-otel
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/fake_otel.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: otel
           ports:
             - containerPort: 8000
 ---
@@ -193,7 +202,7 @@ spec:
         - name: node-collector
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/node-collector/runner.py"]
+          command: ["python", "src/services/target/node-collector/app.py"]
           env:
             - name: PORT
               value: "9100"
@@ -218,28 +227,29 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: target-cluster-agent
+  name: cluster-agent
   namespace: target
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: target-cluster-agent
+      app: cluster-agent
   template:
     metadata:
       labels:
-        app: target-cluster-agent
+        app: cluster-agent
     spec:
-      serviceAccountName: target-cluster-agent
+      serviceAccountName: cluster-agent
       containers:
-        - name: target-cluster-agent
+        - name: cluster-agent
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/runner.py"]
+          command: ["python", "src/services/target/cluster-agent/app.py"]
+          envFrom:
+            - configMapRef:
+                name: target-runtime-config
+            - secretRef:
+                name: target-runtime-secret
           env:
-            - name: TARGET_CLUSTER_ID
-              value: target-cluster-01
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
-            - name: EVIDENCE_INTERVAL_SECONDS
-              value: "8"
