@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import PrimaryKeyConstraint, Text
+from sqlalchemy import Boolean, PrimaryKeyConstraint, Text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,5 +44,37 @@ class EvidenceWindow(Base):
     event_id: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class TargetDesiredState(Base):
+    __tablename__ = "target_desired_states"
+    __table_args__ = (PrimaryKeyConstraint("workspace_id", "cluster_id", "component"),)
+
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    component: Mapped[str] = text_column()
+    namespace: Mapped[str] = text_column()
+    version: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    updated_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spec: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class TargetReconcileRecord(Base):
+    __tablename__ = "target_reconcile_records"
+
+    reconcile_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    desired_state_version: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    drifted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    applied: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    message: Mapped[str] = text_column()
+    details: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()

@@ -22,6 +22,7 @@ SERVICE_ENTRYPOINTS = {
     ),
     "audit-worker": ("src/services/projection/audit-worker/app.py", "App("),
     "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
+    "target-reconcile-worker": ("src/services/target/reconcile-worker/app.py", "App("),
     "node-collector": ("src/services/target/node-collector/app.py", "AsyncService("),
     "fake-prometheus": (
         "src/services/target/cluster-agent/fake_telemetry.py",
@@ -60,6 +61,7 @@ APP_BASED_SERVICES = {
     "scm-worker",
     "dashboard-worker",
     "audit-worker",
+    "target-reconcile-worker",
 }
 
 LOCAL_SETTINGS_SERVICES = {"api-gateway", "github-poll-worker"}

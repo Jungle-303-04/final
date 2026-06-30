@@ -52,6 +52,12 @@ class EventSubject(StrEnum):
     # --- 대상 클러스터/에이전트(cluster-agent) ---
     AGENT_CONNECTED = "agent.connected"  # 에이전트 등록
     CLUSTER_EVIDENCE_RECEIVED = "cluster.evidence.received"  # 증거 수신(입구)
+    CLUSTER_DESIRED_STATE_CHANGED = "cluster.desired_state.changed"  # 목표 상태 등록/변경
+    CLUSTER_RECONCILE_REQUESTED = "cluster.reconcile.requested"  # 상태 동기화 요청
+    CLUSTER_RECONCILE_STARTED = "cluster.reconcile.started"  # 상태 동기화 시작
+    CLUSTER_DRIFT_DETECTED = "cluster.drift.detected"  # 목표/실제 상태 차이
+    CLUSTER_RECONCILE_COMPLETED = "cluster.reconcile.completed"  # 상태 동기화 판정 완료
+    CLUSTER_RECONCILE_FAILED = "cluster.reconcile.failed"  # 상태 동기화 실패
 
     # --- 명령 처리(command-worker): 정책→디스패치→에이전트 큐 ---
     COMMAND_REQUESTED = "command.requested"  # 명령 요청

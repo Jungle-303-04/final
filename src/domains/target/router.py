@@ -16,12 +16,18 @@ from domains.identity.dependencies import (
     require_admin_session,
     require_cluster_agent,
 )
+from domains.target.reconciler import desired_state_version
 from packages.config.settings import env
+from packages.contracts.event_bus.bodies import (
+    ClusterDesiredStateChangedBody,
+    TargetDesiredComponent,
+)
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
 from packages.contracts.gateway.responses import EvidenceSourceLeaseResponse, TargetInstallResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
-from packages.runtime.dependencies import get_db
+from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
+from packages.runtime.dependencies import get_db, get_events
 
 AGENT_TOKEN_BYTES = 32  # per-cluster agent 토큰 엔트로피(secrets.token_urlsafe)
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
@@ -60,6 +66,48 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
         ]
         if block.strip()
     )
+
+
+def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesiredComponent]:
+    """등록 요청을 target cluster desired-state 컴포넌트로 정규화한다.
+
+    Secret 원문(agent token)은 desired-state에 저장하지 않는다. 운영 구현에서는
+    이 spec을 Helm/Kustomize/CRD desired state로 확장한다.
+    """
+
+    return [
+        TargetDesiredComponent(
+            component=TargetComponent.CLUSTER_AGENT.value,
+            namespace=TARGET_NAMESPACE,
+            version=payload.image,
+            spec={
+                "deployment": "cluster-agent",
+                "management_base_url": payload.management_base_url,
+                "evidence_interval_seconds": payload.evidence_interval_seconds,
+                "prometheus_base_url": payload.prometheus_base_url,
+                "loki_base_url": payload.loki_base_url,
+            },
+        ),
+        TargetDesiredComponent(
+            component=TargetComponent.NODE_COLLECTOR.value,
+            namespace=TARGET_NAMESPACE,
+            version=payload.image,
+            spec={
+                "enabled": payload.install_node_collector,
+                "daemonset": "optional-node-collector",
+                "managed_by": TargetComponent.CLUSTER_AGENT.value,
+            },
+        ),
+        TargetDesiredComponent(
+            component=TargetComponent.FAKE_TELEMETRY.value,
+            namespace=TARGET_NAMESPACE,
+            version=payload.image,
+            spec={
+                "enabled": payload.install_fake_telemetry,
+                "providers": ["prometheus", "loki", "otel"],
+            },
+        ),
+    ]
 
 
 def namespace_manifest(name: str) -> str:
@@ -354,13 +402,22 @@ async def register_target(
     payload: TargetRegisterRequest,
     current: Any = Depends(require_admin_session),  # kubectl apply 실행 → admin 만
     db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
 ) -> TargetInstallResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     scoped_payload = payload.model_copy(update={"workspace_id": workspace_id})
+    components = target_desired_components(scoped_payload)
+    version = desired_state_version(components)
 
     # 클러스터별 agent 토큰 생성 — 원문은 이 클러스터 secret 에만 주입, 해시만 레지스트리에 저장.
     # 전역 AGENT_TOKEN 신뢰를 제거(토큰 1개로 전 워크스페이스 접근하던 구멍 차단). 재등록 시 회전.
     agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
+    manifest = target_install_manifest(scoped_payload, agent_token)
+    apply_output = (
+        apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
+        if scoped_payload.apply
+        else None
+    )
 
     db.register_target_cluster(
         {
@@ -375,12 +432,21 @@ async def register_target(
             ),
         }
     )
-
-    manifest = target_install_manifest(scoped_payload, agent_token)
-    apply_output = (
-        apply_manifest_with_kubectl(manifest, scoped_payload.kube_context)
-        if scoped_payload.apply
-        else None
+    db.upsert_target_desired_states(
+        workspace_id,
+        scoped_payload.cluster_id,
+        [component.to_body() for component in components],
+        current.user_id,
+    )
+    await events.accept_body(
+        ClusterDesiredStateChangedBody(
+            workspace_id=workspace_id,
+            cluster_id=scoped_payload.cluster_id,
+            desired_state_version=version,
+            components=components,
+            reason="target registered",
+            requested_by=current.user_id,
+        )
     )
     return install_response(scoped_payload, manifest, apply_output)
 
