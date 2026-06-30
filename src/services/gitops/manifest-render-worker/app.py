@@ -11,6 +11,7 @@ import json
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
+from urllib import error, parse, request
 
 from packages.config.constants import Sandbox
 from packages.config.settings import env
@@ -24,7 +25,12 @@ from packages.contracts.event_bus.bodies import (
     RenderedMetadata,
     RenderedSpec,
 )
-from packages.contracts.gitops import ManifestArtifactStatus
+from packages.contracts.gitops import (
+    DEFAULT_GITHUB_API_BASE,
+    GITHUB_API_BASE_ENV,
+    GITHUB_TOKEN_ENV,
+    ManifestArtifactStatus,
+)
 from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
 
@@ -35,6 +41,50 @@ MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
 GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
 GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
+GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
+GIT_REMOTE_MANIFEST_REQUIRED_ENV = "GIT_REMOTE_MANIFEST_REQUIRED"
+GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV = "GITHUB_MANIFEST_TIMEOUT_SECONDS"
+DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
+TRUTHY_VALUES = {"1", "true", "yes", "on"}
+
+
+class ManifestSourceError(Exception):
+    """Manifest source exists conceptually but cannot be loaded."""
+
+
+def env_truthy(name: str, default: str = "") -> bool:
+    return env(name, default).strip().lower() in TRUTHY_VALUES
+
+
+def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> str:
+    api_base = env(GITHUB_API_BASE_ENV, DEFAULT_GITHUB_API_BASE).rstrip("/")
+    encoded_repo = parse.quote(repo_ref.strip("/"), safe="/")
+    encoded_path = parse.quote(manifest_path.lstrip("/"), safe="/")
+    encoded_ref = parse.quote(commit_sha, safe="")
+    return f"{api_base}/repos/{encoded_repo}/contents/{encoded_path}?ref={encoded_ref}"
+
+
+def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: str) -> str | None:
+    if not env_truthy(GIT_REMOTE_MANIFEST_ENABLED_ENV):
+        return None
+    if not repo_ref or not commit_sha or not manifest_path:
+        return None
+
+    headers = {"Accept": "application/vnd.github.raw"}
+    token = env(GITHUB_TOKEN_ENV, "")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = request.Request(github_contents_url(repo_ref, commit_sha, manifest_path), headers=headers)
+    timeout = float(
+        env(GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV, DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS)
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as response:
+            return response.read().decode("utf-8")
+    except (error.HTTPError, error.URLError, TimeoutError) as exc:
+        if env_truthy(GIT_REMOTE_MANIFEST_REQUIRED_ENV):
+            raise ManifestSourceError(f"failed to load GitHub manifest: {exc}") from exc
+        return None
 
 
 def read_manifest_source(evt: GitChangedBody) -> str | None:
@@ -57,6 +107,10 @@ def read_manifest_source(evt: GitChangedBody) -> str | None:
     if path.exists():
         # TODO(gitops): local-file 경로는 dev/test 전용, production은 repo ref 사용
         return path.read_text(encoding="utf-8")
+
+    remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
+    if remote_source is not None:
+        return remote_source
     return None
 
 
@@ -190,7 +244,7 @@ async def on_git_changed(
     # 저장소 호출: EventContext[RepoChangeStore] + await
     try:
         manifest = build_manifest_from_git_change(evt)
-    except (subprocess.CalledProcessError, ValueError) as exc:
+    except (subprocess.CalledProcessError, ManifestSourceError, ValueError) as exc:
         reason = str(exc)
         await ctx.db.record_manifest_artifact(
             artifact_payload(evt, ManifestArtifactStatus.INVALID_CONFIG.value, reason=reason)

@@ -50,6 +50,9 @@ class GitHubPoller:
         self.manifest_path = env(Settings.MANIFEST_PATH_ENV, Settings.DEFAULT_MANIFEST_PATH)
         self.interval = int(env(Settings.POLL_INTERVAL_ENV, Settings.DEFAULT_POLL_INTERVAL_SECONDS))
         self.token = env(Settings.GITHUB_TOKEN_ENV, "")
+        self.github_api_base = env(
+            Settings.GITHUB_API_BASE_ENV, Settings.DEFAULT_GITHUB_API_BASE
+        ).rstrip("/")
         self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
         self.once = bool(env(Settings.POLL_ONCE_ENV, ""))  # CronJob 모드면 1회 후 종료.
         self._client = client
@@ -112,7 +115,7 @@ class GitHubPoller:
 
     async def latest_commit_sha(self, client: httpx.AsyncClient) -> str | None:
         response = await client.get(
-            f"{Settings.GITHUB_API_BASE}/repos/{self.repo}/commits",
+            f"{self.github_api_base}/repos/{self.repo}/commits",
             params={"per_page": 1, "sha": self.branch},
             headers=self._github_headers(),
         )
