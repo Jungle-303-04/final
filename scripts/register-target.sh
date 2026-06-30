@@ -76,6 +76,9 @@ registration_response="$(curl -fsS -X POST "${BASE_URL}/targets" \
   -H "content-type: application/json" \
   -d "${registration_body}")"
 
+echo "==> removing legacy target agent deployment if present"
+kubectl --context "${TARGET_CONTEXT}" -n target delete deploy/target-cluster-agent --ignore-not-found
+
 echo "==> applying generated target install manifest"
 printf "%s" "${registration_response}" \
   | python3 -c 'import json, sys; print(json.load(sys.stdin)["install_manifest"])' \
