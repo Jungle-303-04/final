@@ -55,7 +55,7 @@ TODO:
 
 담당 경로:
 
-- `src/services/api-gateway`
+- `src/services/gateway/api-gateway`
 - `src/packages/contracts/gateway`
 - identity, integration, security 계약 패키지 후보
 
@@ -79,7 +79,7 @@ TODO:
 담당 경로:
 
 - `src/services/gitops/*`
-- `src/services/command-worker`
+- `src/services/command/command-worker`
 - command/diff/event 계약
 
 TODO:
@@ -101,7 +101,7 @@ TODO:
 
 담당 경로:
 
-- `src/services/rca-worker`
+- `src/services/ai/rca-worker`
 - `src/services/gitops/scm-worker`
 - `src/services/projection/audit-worker`
 - `src/domains/rca`

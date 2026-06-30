@@ -89,7 +89,7 @@
 
 | 범위 | 파일 |
 | --- | --- |
-| Gateway service | `src/services/api-gateway/app.py`, `src/services/api-gateway/auth.py`, `src/services/api-gateway/gateway.py`, `src/services/api-gateway/settings.py` |
+| Gateway service | `src/services/gateway/api-gateway/app.py`, `src/services/gateway/api-gateway/auth.py`, `src/services/gateway/api-gateway/gateway.py`, `src/services/gateway/api-gateway/settings.py` |
 | identity domain | `src/domains/identity/*.py` |
 | target registration API | `src/domains/target/router.py` |
 | Gateway contract | `src/packages/contracts/gateway/*.py`, `src/packages/contracts/auth.py` |
@@ -123,7 +123,7 @@
 | GitOps domain | `src/domains/gitops/*.py` |
 | command domain | `src/domains/command/*.py` |
 | GitOps workers | `src/services/gitops/github-poll-worker/*.py`, `src/services/gitops/git-pull-worker/app.py`, `src/services/gitops/manifest-render-worker/app.py`, `src/services/gitops/diff-worker/app.py`, `src/services/gitops/diff-analyze-worker/app.py` |
-| command worker | `src/services/command-worker/app.py` |
+| command worker | `src/services/command/command-worker/app.py` |
 | GitOps/command tests | `tests/test_github_poller.py`, `tests/test_git_pull_worker.py`, `tests/test_manifest_render_worker.py`, `tests/test_diff_worker.py`, `tests/test_diff_analyze_worker.py`, `tests/test_repo_gateway_worker.py`, `tests/test_event_golden_path.py` |
 | 문서 | `docs/team/member-guides/gitops-command.md` |
 
@@ -154,10 +154,10 @@
 | SCM domain | `src/domains/scm/*.py` |
 | projection domain | `src/domains/projection/*.py`, `src/domains/audit/*.py` |
 | alert event | `src/domains/alert/events.py` |
-| RCA worker | `src/services/rca-worker/app.py` |
+| RCA worker | `src/services/ai/rca-worker/app.py` |
 | SCM worker | `src/services/gitops/scm-worker/app.py` |
 | projection workers | `src/services/projection/audit-worker/app.py`, `src/services/projection/dashboard-worker/app.py` |
-| alert worker | `src/services/alert-worker/app.py` |
+| alert worker | `src/services/alert/alert-worker/app.py` |
 | RCA/projection tests | `tests/test_rca_evidence.py`, `tests/test_projection.py`, `tests/test_alert_worker.py`, `tests/test_metrics.py`, `tests/test_multi_subscription.py` |
 | 문서 | `docs/team/member-guides/rca-safe-pr.md` |
 

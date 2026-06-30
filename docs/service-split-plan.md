@@ -8,7 +8,7 @@ Kubernetes에서는 중앙 role dispatcher를 사용하지 않고 각 Deployment
 ## 현재 폴더 매핑
 
 ```text
-src/services/api-gateway
+src/services/gateway/api-gateway
   API Gateway
   OAuth/session
   command/dashboard/agent HTTP 경계
@@ -34,11 +34,11 @@ src/services/gitops/scm-worker
   유일한 outbound GitHub PR 생성자 (safe_pr.requested -> safe_pr.created/failed)
   app.py: repo write feature flag, @app.on(SafePrRequestedBody)
 
-src/services/command-worker
+src/services/command/command-worker
   Command / Control
   app.py: command policy, queue status, @app.on(CommandRequestedBody)
 
-src/services/rca-worker
+src/services/ai/rca-worker
   RCA / Evidence (PR 생성은 repo-gateway 에 위임: safe_pr.requested)
   app.py: RCA 기본 메시지, @app.on(ClusterEvidenceReceivedBody)
 
@@ -107,14 +107,14 @@ secrets
 ## 현재 실행 매핑
 
 ```text
-api-gateway        -> python src/services/api-gateway/app.py
+api-gateway        -> python src/services/gateway/api-gateway/app.py
 git-pull-worker               -> python src/services/gitops/git-pull-worker/app.py
 manifest-render-worker        -> python src/services/gitops/manifest-render-worker/app.py
 diff-worker                   -> python src/services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
 scm-worker           -> python src/services/gitops/scm-worker/app.py
-command-worker                -> python src/services/command-worker/app.py
-rca-worker                    -> python src/services/rca-worker/app.py
+command-worker                -> python src/services/command/command-worker/app.py
+rca-worker                    -> python src/services/ai/rca-worker/app.py
 dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
@@ -126,7 +126,7 @@ fake-otel                     -> python src/services/target/cluster-agent/fake_t
 
 ## 추가 분리 순서
 
-1. `src/services/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
+1. `src/services/gateway/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
 2. 각 service의 DB query를 repository 객체로 분리한다.
 3. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
 4. 실제 GitHub PR 생성은 먼저 `src/services/gitops/scm-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
