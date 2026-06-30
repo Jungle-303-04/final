@@ -128,4 +128,5 @@ def test_target_install_is_driven_by_registration_script() -> None:
 
     assert "scripts/register-target.sh" in up_script
     assert "/targets" in register_script
+    assert "delete deploy/target-cluster-agent" in register_script
     assert "kubectl --context" in register_script
