@@ -59,6 +59,10 @@ def test_schema_defines_expected_tables() -> None:
         "event_dead_letters",
         "outbox",
         "repo_changes",
+        "git_repositories",
+        "git_watch_targets",
+        "deployment_bindings",
+        "manifest_artifacts",
         "evidence",
         "rca_reports",
         "pull_requests",
@@ -68,6 +72,7 @@ def test_schema_defines_expected_tables() -> None:
         "user_accounts",
         "workspaces",
         "workspace_members",
+        "resource_access_grants",
         "cluster_registrations",
     }
     assert expected <= set(metadata.tables)
@@ -75,7 +80,35 @@ def test_schema_defines_expected_tables() -> None:
 
 def test_user_account_schema_supports_password_login() -> None:
     columns = set(metadata.tables["user_accounts"].c.keys())
-    assert {"email", "password_hash"} <= columns
+    assert {"email", "password_hash", "role"} <= columns
+
+
+def test_gitops_schema_tracks_repo_binding_and_manifest_state() -> None:
+    assert {
+        "workspace_id",
+        "repository_id",
+        "provider",
+        "repo_ref",
+        "credential_ref",
+        "status",
+    } <= set(metadata.tables["git_repositories"].c.keys())
+    assert {
+        "binding_id",
+        "workspace_id",
+        "repository_id",
+        "cluster_id",
+        "namespace",
+        "resource_class",
+        "status",
+    } <= set(metadata.tables["deployment_bindings"].c.keys())
+    assert {
+        "artifact_id",
+        "binding_id",
+        "commit_sha",
+        "manifest_path",
+        "status",
+        "status_reason",
+    } <= set(metadata.tables["manifest_artifacts"].c.keys())
 
 
 def test_workspace_access_repository_declares_management_tables() -> None:
@@ -83,6 +116,7 @@ def test_workspace_access_repository_declares_management_tables() -> None:
         "user_accounts",
         "workspaces",
         "workspace_members",
+        "resource_access_grants",
         "cluster_registrations",
     }
     assert expected == db.Database.required_tables()

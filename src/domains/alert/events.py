@@ -8,6 +8,7 @@ from domains.command.events import CommandRequestedBody
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.ALERT_REQUESTED)
@@ -21,6 +22,7 @@ class AlertRequestedBody(EventBody):
     message: str
     reason: str
     next_command: CommandRequestedBody | None = None
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.ALERT_DISPATCHED)
@@ -33,6 +35,7 @@ class AlertDispatchedBody(EventBody):
     severity: str
     channel: str
     mode: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.ALERT_REJECTED)

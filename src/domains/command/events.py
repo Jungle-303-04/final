@@ -8,6 +8,7 @@ from domains.gitops.events import Diff
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.COMMAND_REQUESTED)
@@ -20,6 +21,7 @@ class CommandRequestedBody(EventBody):
     namespace: str
     reason: str
     diff: Diff
+    workspace_id: str = DEFAULT_WORKSPACE_ID
     requested_by: str | None = None
     actor: JsonObject | None = None
 
@@ -35,6 +37,7 @@ class Plan(EventBody):
     namespace: str
     diff: JsonObject
     steps: list[str]
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,7 @@ class CommandQueuedForAgentBody(EventBody):
 
     command_id: str
     cluster_id: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.COMMAND_REJECTED)

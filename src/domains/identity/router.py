@@ -8,7 +8,11 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
 
-from domains.identity.dependencies import get_password_auth, require_session
+from domains.identity.dependencies import (
+    get_password_auth,
+    require_admin_session,
+    require_session,
+)
 from packages.config.constants import Auth
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EmailVerificationRequestedBody
@@ -22,12 +26,15 @@ from packages.contracts.gateway.responses import (
     AuthSessionResponse,
     EmailVerificationResponse,
     LogoutResponse,
+    UserApprovalResponse,
 )
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_events
 
 router = APIRouter()
 PUBLIC_BASE_URL_ENV = "PUBLIC_BASE_URL"
 EMAIL_VERIFICATION_SUCCESS_REDIRECT = "/login?verified=1"
+EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT = "/login?verified=1&approval=pending"
 
 
 def _set_session_cookie(response: Response, session: Any) -> None:
@@ -58,6 +65,7 @@ def _authenticated_body(session: Any) -> AuthSessionResponse:
         authenticated=True,
         user_id=session.user_id,
         roles=session.roles,
+        workspace_id=session.workspace_id,
     )
 
 
@@ -162,10 +170,29 @@ async def verify_email(
     redirect: str | None = None,
     password_auth: Any = Depends(get_password_auth),
 ) -> RedirectResponse:
-    current = await password_auth.verify_email(token)
+    result = await password_auth.verify_email(token)
+    if result.session is None:
+        return RedirectResponse(url=EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT, status_code=303)
     response = RedirectResponse(url=_safe_redirect_path(redirect), status_code=303)
-    _set_session_cookie(response, current)
+    _set_session_cookie(response, result.session)
     return response
+
+
+@router.post(gateway_routes.AUTH_APPROVE_USER_PATH, response_model=UserApprovalResponse)
+async def approve_user(
+    user_id: str,
+    current: Any = Depends(require_admin_session),
+    password_auth: Any = Depends(get_password_auth),
+) -> UserApprovalResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    user = await password_auth.approve_user(user_id, workspace_id)
+    return UserApprovalResponse(
+        accepted=True,
+        user_id=str(user["user_id"]),
+        status=str(user["status"]),
+        role=str(user["role"]),
+        workspace_id=str(user.get("workspace_id", workspace_id)),
+    )
 
 
 @router.post(gateway_routes.AUTH_LOGOUT_PATH, response_model=LogoutResponse)

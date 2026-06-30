@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import (
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_REPOSITORY_ID,
+)
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
 @event(EventSubject.SAFE_PR_REQUESTED)
@@ -21,6 +27,10 @@ class SafePrRequestedBody(EventBody):
     title: str
     body: str
     provider: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    manifest_path: str = DEFAULT_MANIFEST_PATH
 
 
 @event(EventSubject.SAFE_PR_CREATED)
@@ -31,6 +41,9 @@ class SafePrCreatedBody(EventBody):
     pr_url: str
     provider: str
     mode: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
 
 
 @event(EventSubject.SAFE_PR_FAILED)
@@ -41,3 +54,6 @@ class SafePrFailedBody(EventBody):
     provider: str
     title: str
     reason: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID

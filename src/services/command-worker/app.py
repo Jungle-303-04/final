@@ -55,8 +55,8 @@ NO_DIFF_REASON = "desired and actual images already match"
 
 
 def evaluate_command_policy(command: CommandRequestedBody):
-    # TODO(command): load org/project/cluster policy and evaluate action, namespace, and requester role.
-    # TODO(command): keep production writes fail-closed until approval and RBAC proof are available.
+    # TODO(command): org/project/cluster 정책 로드와 action, namespace, requester role 평가
+    # TODO(command): 승인과 RBAC proof 전까지 production write fail-closed 유지
     if command.diff.desired_image == command.diff.actual_image:
         return PolicyResult.reject(NO_DIFF_REASON)
     return POLICY.evaluate(ModelLookup(command))
@@ -65,6 +65,7 @@ def evaluate_command_policy(command: CommandRequestedBody):
 def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
     payload = {
         "correlation_id": correlation_id,
+        "workspace_id": command.workspace_id,
         "cluster_id": command.cluster_id,
         "action": command.action,
         "namespace": command.namespace,
@@ -84,12 +85,13 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         namespace=command.namespace or CONFIG.default_namespace,
         diff=command.diff.to_body(),
         steps=list(CONFIG.policy_steps),
+        workspace_id=command.workspace_id,
     )
 
 
 async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
-    # TODO(command): persist lease metadata, retry policy, and target agent routing constraints.
-    # TODO(command): make queue writes share the same outbox/UoW boundary as the command events.
+    # TODO(command): lease metadata, retry policy, target agent routing constraint 저장
+    # TODO(command): queue write와 command event의 outbox/UoW 경계 공유
     await ctx.db.queue_agent_command(
         ctx.correlation_id, plan.to_body(), CONFIG.command_status_queued
     )
@@ -110,7 +112,11 @@ async def on_command_requested(
         plan=plan, route=Route(channel=CONFIG.agent_route_channel, cluster_id=plan.cluster_id)
     )
     await queue_plan_for_agent(ctx, plan)
-    yield CommandQueuedForAgentBody(command_id=plan.command_id, cluster_id=plan.cluster_id)
+    yield CommandQueuedForAgentBody(
+        command_id=plan.command_id,
+        cluster_id=plan.cluster_id,
+        workspace_id=plan.workspace_id,
+    )
 
 
 if __name__ == "__main__":

@@ -22,9 +22,11 @@ from packages.contracts.gateway.responses import (
     DeadLettersResponse,
     EmailVerificationResponse,
     EventIdAcceptedResponse,
+    FakeTelemetryResponse,
     HealthResponse,
     LogoutResponse,
     TargetInstallResponse,
+    UserApprovalResponse,
 )
 
 __all__ = [
@@ -43,6 +45,7 @@ __all__ = [
     "DeadLettersResponse",
     "EmailVerificationResponse",
     "EventIdAcceptedResponse",
+    "FakeTelemetryResponse",
     "Gateway",
     "GitHubWebhookRequest",
     "HealthResponse",
@@ -51,5 +54,6 @@ __all__ = [
     "ResendEmailVerificationRequest",
     "SignupRequest",
     "TargetInstallResponse",
+    "UserApprovalResponse",
     "routes",
 ]
