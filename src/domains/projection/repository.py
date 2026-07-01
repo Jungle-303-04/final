@@ -17,15 +17,17 @@ from packages.storage.engine import DASHBOARD_LIMIT, DatabaseConnection, row_dic
 class DashboardRepository(DatabaseConnection):
     def upsert_dashboard(self, evt: EventEnvelope, status: str, summary: str) -> None:
         workspace_id = workspace_id_from_payload(evt.payload)
+        card_id = f"{workspace_id}:{evt.correlation_id}"
         payload = {
             "last_event_id": evt.event_id,
+            "correlation_id": evt.correlation_id,
             "last_source": evt.source,
             "last_payload": evt.payload,
             "updated_at": now_iso(),
         }
         table = DashboardCard.__table__
         insert_statement = pg_insert(table).values(
-            correlation_id=evt.correlation_id,
+            correlation_id=card_id,
             workspace_id=workspace_id,
             status=status,
             summary=summary,
