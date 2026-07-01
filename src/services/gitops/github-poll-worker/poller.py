@@ -130,6 +130,20 @@ class GitHubPoller:
                 },
             )
             return None
+        if response.status_code in Settings.ACCESS_ERROR_STATUS_CODES:
+            # 인증/접근 오류 → 예외로 CronJob 을 죽이지 않고 명확한 경고 후 스킵.
+            LOGGER.warning(
+                "github_poll_access_denied",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": self.repo,
+                        "branch": self.branch,
+                        "status_code": response.status_code,
+                        "hint": "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요",
+                    }
+                },
+            )
+            return None
         response.raise_for_status()
         commits = response.json()
         return commits[0]["sha"] if commits else None

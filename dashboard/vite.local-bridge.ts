@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -392,6 +393,34 @@ async function recoverPortForward() {
   emit(health.status === "정상" ? "portforward.recover.done" : "portforward.recover.failed", health.status, health.status === "정상" ? "Gateway port-forward 복구 완료" : "Gateway port-forward 복구 확인 필요", health.detail);
   return { health, overview: await overview() };
 }
+// GitHub webhook 시크릿을 클러스터 secret 에서 읽는다(브리지 서버측 전용, 브라우저 노출 X).
+async function webhookSecret(): Promise<string> {
+  if (process.env.GITHUB_WEBHOOK_SECRET) return process.env.GITHUB_WEBHOOK_SECRET;
+  const b64 = await opt("kubectl", [...mgmt, "get", "secret", "management-runtime-secret", "-o", "jsonpath={.data.GITHUB_WEBHOOK_SECRET}"], finalRoot, "", 7000);
+  return b64 ? Buffer.from(b64, "base64").toString("utf8") : "";
+}
+// GitHub 폴러 대체 트리거 — 게이트웨이가 요구하는 HMAC 서명을 붙여 /github/webhook 을 직접 호출.
+// (private repo/토큰 이슈로 poll-worker 가 막혀도 데모에서 파이프라인을 수동으로 여는 우회로)
+async function triggerWebhook(params: { commit_sha?: string; image?: string; replicas?: number }) {
+  const secret = await webhookSecret();
+  if (!secret) throw new Error("GITHUB_WEBHOOK_SECRET 를 가져올 수 없음 — management-runtime-secret 확인");
+  const cfg = await gitopsConfig();
+  const body = JSON.stringify({
+    commit_sha: params.commit_sha || `dashboard-${Date.now()}`,
+    image: params.image || cfg.image,
+    replicas: Number(params.replicas ?? cfg.replicas ?? 2),
+    repo_ref: process.env.GITHUB_REPO ?? "Jungle-303-04/final",
+    branch: process.env.GITHUB_BRANCH ?? "dev",
+    manifest_path: process.env.MANIFEST_PATH ?? "dashboard/config/kubernetes/desired-manifest.yaml",
+  });
+  const signature = `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+  emit("gitops.webhook", "주의", "서명된 webhook 트리거", `${gatewayTarget}/github/webhook`);
+  const res = await fetch(`${gatewayTarget}/github/webhook`, { method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": signature }, body });
+  const text = await res.text();
+  emit("gitops.webhook", res.ok ? "정상" : "오류", `webhook ${res.status}`, text.slice(0, 200));
+  if (!res.ok) throw new Error(`webhook ${res.status}: ${text}`);
+  return { accepted: true, status: res.status, result: text ? JSON.parse(text) : {}, visual: await visualState() };
+}
 async function readJson(req: IncomingMessage) { const chunks: Buffer[] = []; for await (const c of req) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)); const text = Buffer.concat(chunks).toString("utf8"); return text ? JSON.parse(text) : {}; }
 function send(res: ServerResponse, status: number, data: unknown) { res.statusCode = status; res.setHeader("content-type", "application/json; charset=utf-8"); res.end(JSON.stringify(data, null, 2)); }
 async function api(req: IncomingMessage, res: ServerResponse, pathName: string) { try {
@@ -406,6 +435,7 @@ async function api(req: IncomingMessage, res: ServerResponse, pathName: string) 
   if (req.method === "POST" && pathName === "/gitops/save-version") return send(res, 200, await saveVersion(String((await readJson(req)).content ?? "")));
   if (req.method === "POST" && pathName === "/gitops/pr") { const b = await readJson(req); return send(res, 200, await createPr(String(b.base ?? "main"), String(b.title ?? "dashboard: update kubernetes manifest"), String(b.body ?? "Created from ReleaseGraph dashboard."))); }
   if (req.method === "POST" && pathName === "/gitops/pull-build-deploy") { const pipeline = await pullBuild(); const deployed = await deploy(); return send(res, 200, { pipeline, deployed, overview: await overview(), visual: await visualState() }); }
+  if (req.method === "POST" && pathName === "/github-trigger") { const b = await readJson(req); return send(res, 200, await triggerWebhook({ commit_sha: b.commit_sha, image: b.image, replicas: b.replicas })); }
   if (req.method === "POST" && pathName === "/cluster/deploy") return send(res, 200, await deploy());
   if (req.method === "POST" && pathName === "/cluster/scale") { const b = await readJson(req); return send(res, 200, await scale(String(b.namespace ?? "sandbox"), String(b.deployment ?? "checkout-api"), Number(b.replicas ?? 2))); }
   if (req.method === "POST" && pathName === "/fault/gateway/down") return send(res, 200, await fault());
