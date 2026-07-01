@@ -12,6 +12,9 @@ from collections.abc import AsyncIterator, Mapping
 from domains.gitops.repository import (
     derive_application_id,
     derive_approval_id,
+    derive_deployment_binding_id,
+    derive_repository_id,
+    derive_watch_target_id,
     derive_workflow_run_id,
 )
 from packages.config.constants import CommandStatus, Sandbox, Target
@@ -39,7 +42,6 @@ from packages.contracts.event_bus.bodies import (
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
-    DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_ENVIRONMENT,
     ApprovalStatus,
     WorkflowRunStatus,
@@ -58,13 +60,25 @@ MANUAL_APPROVAL_ROLE = AccessRole.DEPLOYER.value
 
 
 def normalize_payload(payload: JsonObject) -> JsonObject:
-    application_id = derive_application_id(payload)
-    enriched = {
+    repository_id = derive_repository_id(payload)
+    watch_target_id = derive_watch_target_id({**payload, "repository_id": repository_id})
+    binding_id = derive_deployment_binding_id(
+        {**payload, "repository_id": repository_id, "watch_target_id": watch_target_id}
+    )
+    scoped_payload = {
         **payload,
+        "repository_id": repository_id,
+        "watch_target_id": watch_target_id,
+        "binding_id": binding_id,
+    }
+    application_id = derive_application_id(scoped_payload)
+    enriched = {
+        **scoped_payload,
         "application_id": application_id,
-        "workflow_run_id": derive_workflow_run_id({**payload, "application_id": application_id}),
+        "workflow_run_id": derive_workflow_run_id(
+            {**scoped_payload, "application_id": application_id}
+        ),
         "workspace_id": str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
-        "binding_id": str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
         "environment": str(payload.get("environment", DEFAULT_ENVIRONMENT)),
         "cluster_id": str(payload.get("cluster_id", Target.DEFAULT_CLUSTER_ID)),
     }
