@@ -4,6 +4,11 @@ from dataclasses import replace
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
+from domains.gitops.repository import (
+    derive_deployment_binding_id,
+    derive_repository_id,
+    derive_watch_target_id,
+)
 from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.event_bus.bodies import (
     CommandCompletedBody,
@@ -17,6 +22,7 @@ from packages.contracts.event_bus.bodies import (
     RenderedMetadata,
     RenderedSpec,
 )
+from packages.contracts.gitops import DEFAULT_DEPLOYMENT_BINDING_ID
 
 
 def workflow_db(**returns):
@@ -83,6 +89,51 @@ def test_workflow_controller_starts_run_from_git_webhook() -> None:
     assert db.called("record_workflow_step")
     assert outs[1].workflow_run_id == "workflow-1"
     assert outs[2].step == "git"
+
+
+def test_workflow_controller_emits_workspace_scoped_default_ids() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+    payload = {
+        "workspace_id": "workspace-b",
+        "repo_ref": "org/checkout",
+        "cluster_id": Target.DEFAULT_CLUSTER_ID,
+        "manifest_path": "deploy/app.yaml",
+    }
+    expected_repository_id = derive_repository_id(payload)
+    expected_watch_target_id = derive_watch_target_id(
+        {**payload, "repository_id": expected_repository_id}
+    )
+    expected_binding_id = derive_deployment_binding_id(
+        {
+            **payload,
+            "repository_id": expected_repository_id,
+            "watch_target_id": expected_watch_target_id,
+        }
+    )
+
+    outs = run_handler(
+        workflow.on_git_webhook,
+        GitWebhookReceivedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-b",
+            repo_ref="org/checkout",
+            manifest_path="deploy/app.yaml",
+        ),
+        db,
+    )
+
+    started = outs[1]
+    start_calls = [args[0] for name, args in db.calls if name == "start_workflow_run"]
+    assert expected_binding_id != DEFAULT_DEPLOYMENT_BINDING_ID
+    assert started.repository_id == expected_repository_id
+    assert started.watch_target_id == expected_watch_target_id
+    assert started.binding_id == expected_binding_id
+    assert start_calls[0]["repository_id"] == expected_repository_id
+    assert start_calls[0]["watch_target_id"] == expected_watch_target_id
+    assert start_calls[0]["binding_id"] == expected_binding_id
 
 
 def test_workflow_controller_requests_approval_for_unsafe_diff() -> None:
