@@ -29,6 +29,7 @@ from packages.contracts.gitops import (
 )
 from packages.events.envelope import event
 from packages.storage import database as db
+from packages.storage import engine as storage_engine
 from packages.storage.repositories.event import EventRepository
 from packages.storage.schema import metadata
 
@@ -57,6 +58,11 @@ def test_serialize_command_isoformats_lease() -> None:
     out = db.serialize_command({"command_id": "c1", "leased_until": datetime(2026, 1, 1)})
     assert out["leased_until"] == "2026-01-01T00:00:00"
     assert out["command_id"] == "c1"
+
+
+def test_manifest_artifact_compat_migration_adds_workspace_id() -> None:
+    statement = storage_engine.MANIFEST_ARTIFACT_COMPAT_COLUMNS["workspace_id"]
+    assert "alter table manifest_artifacts add column if not exists workspace_id text" == statement
 
 
 def test_row_dict_copies_mapping() -> None:

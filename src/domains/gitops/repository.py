@@ -503,18 +503,51 @@ class RepoChangeRepository(DatabaseConnection):
         }
 
     def mark_watch_observed(
-        self, watch_target_id: str, commit_sha: str, workspace_id: str = DEFAULT_WORKSPACE_ID
+        self,
+        watch_target_id: str,
+        commit_sha: str,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+        repository_id: str = DEFAULT_REPOSITORY_ID,
+        branch: str = DEFAULT_REPO_BRANCH,
+        manifest_path: str = DEFAULT_MANIFEST_PATH,
     ) -> None:
         table = GitWatchTarget.__table__
-        statement = (
-            table.update()
-            .where(table.c.watch_target_id == watch_target_id, table.c.workspace_id == workspace_id)
-            .values(
-                last_seen_commit_sha=commit_sha, last_polled_at=func.now(), updated_at=func.now()
-            )
+        insert = pg_insert(table).values(
+            watch_target_id=watch_target_id,
+            workspace_id=workspace_id,
+            repository_id=repository_id,
+            branch=branch,
+            manifest_path=manifest_path,
+            interval_seconds=30,
+            last_seen_commit_sha=commit_sha,
+            last_polled_at=func.now(),
+            status=WatchTargetStatus.ACTIVE.value,
+            settings={},
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.watch_target_id],
+            set_={
+                "last_seen_commit_sha": insert.excluded.last_seen_commit_sha,
+                "last_polled_at": func.now(),
+                "updated_at": func.now(),
+            },
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def get_watch_last_seen_commit_sha(
+        self, watch_target_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> str | None:
+        table = GitWatchTarget.__table__
+        statement = (
+            select(table.c.last_seen_commit_sha)
+            .where(table.c.watch_target_id == watch_target_id, table.c.workspace_id == workspace_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            value = conn.execute(statement).scalar_one_or_none()
+        return str(value) if value else None
 
     def _grant_owner_if_present(
         self,

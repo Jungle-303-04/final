@@ -101,6 +101,9 @@ REPO_CHANGE_COMPAT_COLUMNS = {
     "binding_id": "alter table repo_changes add column if not exists binding_id text",
     "manifest_path": "alter table repo_changes add column if not exists manifest_path text",
 }
+MANIFEST_ARTIFACT_COMPAT_COLUMNS = {
+    "workspace_id": "alter table manifest_artifacts add column if not exists workspace_id text",
+}
 MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE = """
 do $$
 declare
@@ -275,6 +278,34 @@ class DatabaseConnection:
                 )
             )
             conn.execute(text("alter table repo_changes alter column workspace_id set not null"))
+
+            existing_manifest_artifact_columns = self._existing_columns(conn, "manifest_artifacts")
+            for column, statement in MANIFEST_ARTIFACT_COMPAT_COLUMNS.items():
+                if column in existing_manifest_artifact_columns:
+                    continue
+                conn.execute(text("set local lock_timeout = '5s'"))
+                conn.execute(text(statement))
+            conn.execute(
+                text(
+                    """
+                    update manifest_artifacts
+                    set workspace_id = :workspace_id
+                    where workspace_id is null
+                    """
+                ),
+                {"workspace_id": DEFAULT_WORKSPACE_ID},
+            )
+            conn.execute(
+                text(
+                    f"""
+                    alter table manifest_artifacts
+                    alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
+                    """
+                )
+            )
+            conn.execute(
+                text("alter table manifest_artifacts alter column workspace_id set not null")
+            )
             conn.execute(text(MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE))
             conn.execute(text(MANIFEST_ARTIFACT_WORKSPACE_UNIQUE))
 
