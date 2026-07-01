@@ -2,7 +2,7 @@
 
 우현 원본에는 없던 새 outbound 경계. 원본은 diff 후 command를 직접
 요청했지만, 현 구조는 안전한 GitOps 복구를 위해 PR 생성 책임을 이
-게이트웨이로 중앙화.
+게이트웨이로 중앙화. PR 생성 성공 뒤에만 후속 alert/apply 흐름을 연다.
 """
 
 from __future__ import annotations
@@ -91,6 +91,8 @@ async def on_safe_pr_requested(
         ),
     ):
         yield out
+        if isinstance(out, SafePrCreatedBody) and evt.next_alert is not None:
+            yield evt.next_alert
 
 
 if __name__ == "__main__":
