@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from domains.alert.events import AlertRequestedBody
 from packages.contracts.event_bus.bodies.base import EventBody
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
@@ -37,6 +38,7 @@ class SafePrRequestedBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     environment: str = DEFAULT_ENVIRONMENT
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    next_alert: AlertRequestedBody | None = None
 
 
 @event(EventSubject.SAFE_PR_CREATED)

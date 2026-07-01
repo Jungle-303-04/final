@@ -56,6 +56,7 @@ def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
         workflow_run_id=diff.workflow_run_id,
         environment=diff.environment,
         manifest_path=diff.manifest_path,
+        next_alert=build_pre_deploy_alert_request(diff),
     )
 
 
@@ -98,10 +99,8 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
     safe, reason = evaluate_safe_pr_policy(diff)
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
-        # 안전 판정 후 바로 실행하지 않고 PR 제안과 alert gate를 먼저 발행한다.
-        # alert-worker가 gate를 통과시키면 command.requested가 연결된다.
+        # PR 생성 성공 뒤에만 alert/apply 흐름이 이어진다.
         yield build_safe_pr_request(diff)
-        yield build_pre_deploy_alert_request(diff)
 
 
 if __name__ == "__main__":
