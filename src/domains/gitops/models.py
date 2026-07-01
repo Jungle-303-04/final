@@ -155,7 +155,15 @@ class Approval(Base):
 
 class ManifestArtifact(Base):
     __tablename__ = "manifest_artifacts"
-    __table_args__ = (UniqueConstraint("binding_id", "commit_sha", "manifest_path"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "binding_id",
+            "commit_sha",
+            "manifest_path",
+            name="ux_manifest_artifacts_workspace_binding_commit_path",
+        ),
+    )
 
     artifact_id: Mapped[str] = mapped_column(Text, primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))

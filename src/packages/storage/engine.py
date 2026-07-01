@@ -101,6 +101,35 @@ REPO_CHANGE_COMPAT_COLUMNS = {
     "binding_id": "alter table repo_changes add column if not exists binding_id text",
     "manifest_path": "alter table repo_changes add column if not exists manifest_path text",
 }
+MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE = """
+do $$
+declare
+    old_constraint text;
+begin
+    select con.conname
+    into old_constraint
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = current_schema()
+      and rel.relname = 'manifest_artifacts'
+      and con.contype = 'u'
+      and (
+          select array_agg(att.attname order by ord.ordinality)
+          from unnest(con.conkey) with ordinality as ord(attnum, ordinality)
+          join pg_attribute att on att.attrelid = rel.oid and att.attnum = ord.attnum
+      ) = array['binding_id', 'commit_sha', 'manifest_path']
+    limit 1;
+
+    if old_constraint is not null then
+        execute format('alter table manifest_artifacts drop constraint %I', old_constraint);
+    end if;
+end $$;
+"""
+MANIFEST_ARTIFACT_WORKSPACE_UNIQUE = """
+create unique index if not exists ux_manifest_artifacts_workspace_binding_commit_path
+on manifest_artifacts (workspace_id, binding_id, commit_sha, manifest_path)
+"""
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
@@ -246,6 +275,8 @@ class DatabaseConnection:
                 )
             )
             conn.execute(text("alter table repo_changes alter column workspace_id set not null"))
+            conn.execute(text(MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE))
+            conn.execute(text(MANIFEST_ARTIFACT_WORKSPACE_UNIQUE))
 
             for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
                 existing_table_columns = self._existing_columns(conn, table_name)
