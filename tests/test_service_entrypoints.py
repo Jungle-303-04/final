@@ -154,6 +154,11 @@ def test_target_install_is_driven_by_registration_script() -> None:
     assert "kubectl --context" in register_script
 
 
+def test_up_script_restarts_new_management_workers() -> None:
+    up_script = read_project_file("scripts/up.sh")
+    assert "workflow-controller alert-worker mail-worker command-worker" in up_script
+
+
 def test_node_collector_is_agent_managed_not_static_manifest() -> None:
     target_manifest = read_project_file("deploy/target/target.yaml")
     manager_source = read_project_file(
