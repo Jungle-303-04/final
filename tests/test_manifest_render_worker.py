@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from urllib import error
 
 import pytest
 from conftest import SpyDb, load_service, run_handler, subjects_of
@@ -23,6 +24,7 @@ def test_render_emits_manifest_rendered() -> None:
     assert outs[0].binding_id == "binding-default"
     assert db.called("save_repo_change")
     assert db.called("record_manifest_artifact")
+    assert db.called("mark_watch_observed")
 
 
 def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
@@ -141,6 +143,35 @@ def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
     assert manifest.spec.image == "ghcr.io/project/checkout-api:demo"
 
 
+def test_render_treats_remote_manifest_fetch_failure_as_invalid_by_default(monkeypatch) -> None:
+    render = load_service("gitops/manifest-render-worker")
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
+    monkeypatch.delenv("GIT_REMOTE_MANIFEST_REQUIRED", raising=False)
+
+    def fail_urlopen(_req: object, timeout: float) -> object:
+        raise error.URLError("temporary unavailable")
+
+    monkeypatch.setattr(render.request, "urlopen", fail_urlopen)
+
+    db = SpyDb()
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="ignored",
+            replicas=1,
+            repo_ref="owner/demo",
+            manifest_path="k8s/deploy.yaml",
+        ),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert "failed to load GitHub manifest" in outs[0].reason
+    assert not db.called("save_repo_change")
+    assert not db.called("mark_watch_observed")
+
+
 def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
     monkeypatch, tmp_path
 ) -> None:
@@ -218,6 +249,7 @@ def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
     assert outs[1].rendered_manifest.manifest["spec"]["ports"][0]["port"] == 80
     assert outs[2].rendered_manifest.manifest["data"]["LOG_LEVEL"] == "info"
     assert sum(1 for call in db.calls if call[0] == "save_repo_change") == 3
+    assert sum(1 for call in db.calls if call[0] == "mark_watch_observed") == 1
     artifact_paths = [
         call[1][0]["manifest_path"] for call in db.calls if call[0] == "record_manifest_artifact"
     ]
@@ -288,6 +320,7 @@ def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) ->
     assert "manifest must include" in outs[0].reason
     assert db.called("record_manifest_artifact")
     assert not db.called("save_repo_change")
+    assert not db.called("mark_watch_observed")
 
 
 @pytest.mark.parametrize(

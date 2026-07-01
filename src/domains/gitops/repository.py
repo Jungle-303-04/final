@@ -363,6 +363,30 @@ class RepoChangeRepository(DatabaseConnection):
             conn.execute(statement)
         return {**payload, "workflow_run_id": workflow_run_id, "approval_id": approval_id}
 
+    def get_workflow_approval(
+        self, approval_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> JsonObject | None:
+        table = Approval.__table__
+        statement = (
+            select(
+                table.c.approval_id,
+                table.c.workflow_run_id,
+                table.c.workspace_id,
+                table.c.application_id,
+                table.c.binding_id,
+                table.c.environment,
+                table.c.status,
+                table.c.reason,
+                table.c.requested_role,
+                table.c.details,
+            )
+            .where(table.c.approval_id == approval_id, table.c.workspace_id == workspace_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
+
     def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None:
         table = WorkflowRun.__table__
         statement = (
