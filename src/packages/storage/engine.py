@@ -118,10 +118,10 @@ begin
       and rel.relname = 'manifest_artifacts'
       and con.contype = 'u'
       and (
-          select array_agg(att.attname order by ord.ordinality)
+          select array_agg(att.attname::text order by ord.ordinality)
           from unnest(con.conkey) with ordinality as ord(attnum, ordinality)
           join pg_attribute att on att.attrelid = rel.oid and att.attnum = ord.attnum
-      ) = array['binding_id', 'commit_sha', 'manifest_path']
+      ) = array['binding_id', 'commit_sha', 'manifest_path']::text[]
     limit 1;
 
     if old_constraint is not null then

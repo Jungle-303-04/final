@@ -82,7 +82,6 @@ class ApiGateway:
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncIterator[None]:
         await wait_for_database(self.db)
-        self.db.init()  # 스키마 보장은 시작 시 1회만(readyz 프로브에서 DDL 돌리지 않도록).
         await self.sessions.connect()
         await self.bus.connect()
         try:
