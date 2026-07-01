@@ -27,7 +27,7 @@ def test_git_pull_emits_git_changed() -> None:
     assert outs[0].commit_sha == "abc123"
     assert outs[0].image == "img:new"
     assert outs[0].replicas == 2
-    assert db.called("mark_watch_observed")
+    assert not db.called("mark_watch_observed")
 
 
 def test_git_pull_skips_already_seen_commit() -> None:

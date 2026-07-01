@@ -90,7 +90,7 @@ def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: s
         with request.urlopen(req, timeout=timeout) as response:
             return response.read().decode("utf-8")
     except (error.HTTPError, error.URLError, TimeoutError) as exc:
-        if env_truthy(GIT_REMOTE_MANIFEST_REQUIRED_ENV):
+        if env_truthy(GIT_REMOTE_MANIFEST_REQUIRED_ENV, "1"):
             raise ManifestSourceError(f"failed to load GitHub manifest: {exc}") from exc
         return None
 
@@ -356,6 +356,14 @@ async def on_git_changed(
             commit_sha=evt.commit_sha,
             manifest_path=evt.manifest_path,
         )
+    await ctx.db.mark_watch_observed(
+        evt.watch_target_id,
+        evt.commit_sha,
+        evt.workspace_id,
+        evt.repository_id,
+        evt.branch,
+        evt.manifest_path,
+    )
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ from packages.contracts.event_bus.bodies import (
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
+    SafePrFailedBody,
 )
 from packages.contracts.gitops import DEFAULT_DEPLOYMENT_BINDING_ID
 
@@ -180,11 +181,9 @@ def test_workflow_controller_auto_approves_safe_diff() -> None:
     assert subjects_of(outs) == [
         "workflow.step.recorded",
         "workflow.step.recorded",
-        "approval.granted",
     ]
     assert db.called("request_workflow_approval")
     assert db.called("resolve_workflow_approval")
-    assert outs[-1].decision == "auto-approved"
 
 
 def test_workflow_controller_does_not_complete_manifest_diff_only_by_same_image() -> None:
@@ -216,10 +215,34 @@ def test_workflow_controller_does_not_complete_manifest_diff_only_by_same_image(
     assert subjects_of(outs) == [
         "workflow.step.recorded",
         "workflow.step.recorded",
-        "approval.granted",
     ]
     assert db.called("resolve_workflow_approval")
-    assert outs[-1].decision == "auto-approved"
+
+
+def test_workflow_controller_fails_run_when_safe_pr_fails() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+
+    outs = run_handler(
+        workflow.on_safe_pr_failed,
+        SafePrFailedBody(
+            provider="github",
+            title="Apply sandbox manifest",
+            reason="safe pr creation failed",
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded", "workflow.run.failed"]
+    assert db.called("update_workflow_run")
+    assert outs[-1].workflow_run_id == "workflow-1"
+    assert outs[-1].reason == "safe pr creation failed"
 
 
 def test_workflow_controller_uses_deployment_name_as_application_name_on_render() -> None:

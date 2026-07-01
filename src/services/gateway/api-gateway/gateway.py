@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
 
 from domains.command.router import router as command_router
+from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -99,6 +100,7 @@ class ApiGateway:
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
+        app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
