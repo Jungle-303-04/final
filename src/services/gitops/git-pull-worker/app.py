@@ -10,10 +10,38 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 
+from domains.gitops.repository import (
+    derive_application_id,
+    derive_deployment_binding_id,
+    derive_repository_id,
+    derive_watch_target_id,
+    derive_workflow_run_id,
+)
 from packages.contracts.event_bus.bodies import EventBody, GitChangedBody, GitWebhookReceivedBody
+from packages.contracts.event_bus.interfaces import JsonObject
 from packages.runtime.app import App, EventContext
 
 app = App("git-pull-worker")
+
+
+def normalize_gitops_identity(payload: JsonObject) -> JsonObject:
+    repository_id = derive_repository_id(payload)
+    watch_target_id = derive_watch_target_id({**payload, "repository_id": repository_id})
+    binding_id = derive_deployment_binding_id(
+        {**payload, "repository_id": repository_id, "watch_target_id": watch_target_id}
+    )
+    scoped = {
+        **payload,
+        "repository_id": repository_id,
+        "watch_target_id": watch_target_id,
+        "binding_id": binding_id,
+    }
+    application_id = derive_application_id(scoped)
+    return {
+        **scoped,
+        "application_id": application_id,
+        "workflow_run_id": derive_workflow_run_id({**scoped, "application_id": application_id}),
+    }
 
 
 @app.on(GitWebhookReceivedBody)
@@ -23,18 +51,19 @@ async def on_git_webhook(
     # Git webhook은 계약 객체로 정규화되어 들어오므로 commit 식별자만 보정한다.
     # manifest 생성은 다음 단계 manifest-render-worker 책임이다.
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
+    identity = normalize_gitops_identity(evt.to_body())
     yield GitChangedBody(
         commit_sha=commit_sha,
         image=evt.image,
         replicas=evt.replicas,
-        workspace_id=evt.workspace_id,
-        repository_id=evt.repository_id,
+        workspace_id=str(identity["workspace_id"]),
+        repository_id=str(identity["repository_id"]),
         repo_ref=evt.repo_ref,
         branch=evt.branch,
-        watch_target_id=evt.watch_target_id,
-        binding_id=evt.binding_id,
-        application_id=evt.application_id,
-        workflow_run_id=evt.workflow_run_id,
+        watch_target_id=str(identity["watch_target_id"]),
+        binding_id=str(identity["binding_id"]),
+        application_id=str(identity["application_id"]),
+        workflow_run_id=str(identity["workflow_run_id"]),
         environment=evt.environment,
         cluster_id=evt.cluster_id,
         manifest_path=evt.manifest_path,
