@@ -406,8 +406,8 @@ async def on_diff_analyzed(
             ctx,
             run,
             WorkflowRunStatus.APPLYING.value,
-            WorkflowStepName.APPLY.value,
-            "policy auto-approved; waiting for command execution",
+            WorkflowStepName.SAFE_PR.value,
+            "policy auto-approved; creating safe PR",
             {"risk": evt.risk},
         )
         yield await record_step(
@@ -417,17 +417,6 @@ async def on_diff_analyzed(
             WorkflowStepStatus.SKIPPED.value,
             "approval not required by sandbox policy",
             {"safe": True},
-        )
-        yield ApprovalGrantedBody(
-            approval_id=str(approval["approval_id"]),
-            workflow_run_id=str(run["workflow_run_id"]),
-            application_id=str(run["application_id"]),
-            workspace_id=str(run["workspace_id"]),
-            binding_id=str(run["binding_id"]),
-            environment=str(run["environment"]),
-            decided_by=SYSTEM_POLICY_APPROVER,
-            decision="auto-approved",
-            details={"safe": True, "risk": evt.risk},
         )
         return
 
@@ -480,13 +469,30 @@ async def on_safe_pr_created(
 async def on_safe_pr_failed(
     evt: SafePrFailedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
-    yield await record_step(
+    run = await transition_run(
         ctx,
         gitops_payload(evt),
+        WorkflowRunStatus.FAILED.value,
+        WorkflowStepName.SAFE_PR.value,
+        evt.reason,
+        {"provider": evt.provider, "title": evt.title},
+    )
+    yield await record_step(
+        ctx,
+        run,
         WorkflowStepName.SAFE_PR.value,
         WorkflowStepStatus.FAILED.value,
         evt.reason,
         {"provider": evt.provider, "title": evt.title},
+    )
+    yield WorkflowRunFailedBody(
+        workflow_run_id=str(run["workflow_run_id"]),
+        application_id=str(run["application_id"]),
+        reason=evt.reason,
+        workspace_id=str(run["workspace_id"]),
+        binding_id=str(run["binding_id"]),
+        environment=str(run["environment"]),
+        details={"provider": evt.provider, "title": evt.title},
     )
 
 

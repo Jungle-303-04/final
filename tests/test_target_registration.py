@@ -8,7 +8,13 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
-from domains.target.router import lease_evidence_source, register_target, target_install_manifest
+from domains.target.router import (
+    KUBE_CONTEXT_NOT_ALLOWED,
+    apply_manifest_with_kubectl,
+    lease_evidence_source,
+    register_target,
+    target_install_manifest,
+)
 from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
 
 
@@ -133,6 +139,8 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert match is not None
     assert db.registered[0]["agent_token_hash"] == hash_agent_token(match.group(1))
     assert "agent_token" not in db.registered[0]
+    # 응답의 agent_token 은 매니페스트에 주입된 원문과 동일(대시보드가 x-agent-token 으로 사용)
+    assert response.agent_token == match.group(1)
 
 
 def test_target_registration_apply_failure_does_not_record_state(monkeypatch) -> None:
@@ -161,6 +169,16 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
     assert db.registered == []
     assert db.desired_states == []
     assert events.accepted == []
+
+
+def test_target_apply_requires_context_when_allowlist_is_configured(monkeypatch) -> None:
+    monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "kind-target")
+
+    with pytest.raises(HTTPException) as exc:
+        apply_manifest_with_kubectl("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: x\n", None)
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == KUBE_CONTEXT_NOT_ALLOWED
 
 
 def test_evidence_source_lease_route_delegates_to_management_store() -> None:

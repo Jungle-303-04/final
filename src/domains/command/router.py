@@ -131,9 +131,9 @@ async def commands(
     )
 
 
-# agent 라우트 — 라우터 단위 가드(필터)로 per-cluster 토큰 인증.
+# agent 라우트 — 각 핸들러의 identity dependency 로 per-cluster 토큰 인증.
 # workspace_id/cluster_id 는 토큰으로 인증된 identity 에서만 취하고 body/query 는 신뢰 안 함.
-agent_router = APIRouter(dependencies=[Depends(require_cluster_agent)])
+agent_router = APIRouter()
 
 
 @agent_router.get(gateway_routes.AGENT_COMMAND_POLL_PATH, response_model=AgentCommandPollResponse)

@@ -148,6 +148,10 @@ class CommandRequest(StrictModel):
     diff: dict[str, Any] | None = None
 
 
+class ApprovalDecisionRequest(StrictModel):
+    reason: str | None = None
+
+
 class CommandStartRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID

@@ -18,6 +18,8 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
+PENDING_EVIDENCE_EVENT_ID_PREFIX = "pending:"
+
 
 class TargetAgentRepository(DatabaseConnection):
     def upsert_target_desired_states(
@@ -241,3 +243,79 @@ class TargetAgentRepository(DatabaseConnection):
                 .one()
             )
         return {"duplicate": True, **dict(existing)}
+
+    def claim_evidence_window(
+        self,
+        evidence_key: str,
+        workspace_id: str,
+        cluster_id: str,
+        source_id: str,
+        window_start: str,
+        agent_id: str | None,
+        payload: JsonObject,
+    ) -> JsonObject:
+        pending_id = f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}{uuid.uuid4()}"
+        table = EvidenceWindow.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                evidence_key=evidence_key,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                source_id=source_id,
+                window_start=window_start,
+                agent_id=agent_id,
+                event_id=pending_id,
+                correlation_id=pending_id,
+                payload=payload,
+                updated_at=func.now(),
+            )
+            .on_conflict_do_nothing(index_elements=[table.c.evidence_key])
+            .returning(table.c.event_id, table.c.correlation_id)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+            if row:
+                return {"claimed": True, "duplicate": False, **dict(row)}
+            existing = (
+                conn.execute(
+                    select(table.c.event_id, table.c.correlation_id).where(
+                        table.c.evidence_key == evidence_key
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return {"claimed": False, "duplicate": True, **dict(existing)}
+
+    def complete_evidence_window(
+        self,
+        evidence_key: str,
+        event_id: str,
+        correlation_id: str,
+        payload: JsonObject,
+    ) -> JsonObject:
+        table = EvidenceWindow.__table__
+        statement = (
+            table.update()
+            .where(table.c.evidence_key == evidence_key)
+            .values(
+                event_id=event_id,
+                correlation_id=correlation_id,
+                payload=payload,
+                updated_at=func.now(),
+            )
+            .returning(table.c.event_id, table.c.correlation_id)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return dict(row)
+
+    def release_pending_evidence_window(self, evidence_key: str) -> None:
+        table = EvidenceWindow.__table__
+        statement = table.delete().where(
+            table.c.evidence_key == evidence_key,
+            table.c.event_id.like(f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}%"),
+        )
+        with self.connection() as conn:
+            conn.execute(statement)

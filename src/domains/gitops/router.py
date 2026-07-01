@@ -2,18 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from domains.gitops.dependencies import verify_github_signature
-from packages.contracts.event_bus.bodies import GitWebhookReceivedBody
+from domains.identity.dependencies import require_session
+from packages.config.constants import Command, Sandbox, Target
+from packages.contracts.auth import Actor
+from packages.contracts.event_bus.bodies import (
+    ApprovalGrantedBody,
+    ApprovalRejectedBody,
+    CommandRequestedBody,
+    Diff,
+    GitWebhookReceivedBody,
+)
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import GitHubWebhookRequest
-from packages.contracts.gateway.responses import AcceptedEventResponse
-from packages.runtime.dependencies import get_events
+from packages.contracts.gateway.requests import ApprovalDecisionRequest, GitHubWebhookRequest
+from packages.contracts.gateway.responses import AcceptedEventResponse, AcceptedResponse
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, DEPLOY_ACCESS, AccessResourceType
+from packages.runtime.dependencies import get_db, get_events
 
 router = APIRouter(dependencies=[Depends(verify_github_signature)])
+approval_router = APIRouter()
+APPROVAL_NOT_FOUND = "approval not found"
+APPROVAL_DIFF_MISSING = "approval diff is missing"
+APPROVAL_ACCESS_DENIED = "approval access denied"
+APPROVAL_CONFLICT = "approval already resolved"
+HTTP_NOT_FOUND = 404
+HTTP_FORBIDDEN = 403
+HTTP_CONFLICT = 409
 
 
 def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody:
@@ -31,4 +50,135 @@ async def github_webhook(
         event_id=accepted.event.event_id,
         correlation_id=accepted.event.correlation_id,
         event=accepted.event.to_dict(),
+    )
+
+
+def approval_details(record: Mapping[str, Any]) -> dict[str, Any]:
+    details = record.get("details", {})
+    return dict(details) if isinstance(details, Mapping) else {}
+
+
+def approval_diff(record: Mapping[str, Any]) -> Diff:
+    raw = approval_details(record).get("diff")
+    if not isinstance(raw, Mapping):
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=APPROVAL_DIFF_MISSING)
+    return cast(Diff, Diff.from_body(raw))
+
+
+def ensure_approval_is_open(record: Mapping[str, Any]) -> None:
+    if str(record.get("status")) not in {"requested", "not_required"}:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=APPROVAL_CONFLICT)
+
+
+def require_approval_deploy_access(db: Any, current: Any, workspace_id: str, diff: Diff) -> None:
+    if not db.user_has_resource_access(
+        current.user_id,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
+        DEPLOY_ACCESS,
+    ):
+        raise HTTPException(status_code=HTTP_FORBIDDEN, detail=APPROVAL_ACCESS_DENIED)
+
+
+def approval_command_request(
+    record: Mapping[str, Any],
+    diff: Diff,
+    reason: str | None,
+    user_id: str,
+) -> CommandRequestedBody:
+    return CommandRequestedBody(
+        cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
+        action=Command.APPLY_MANIFEST_ACTION,
+        namespace=diff.namespace or Sandbox.NAMESPACE,
+        reason=reason or "approval granted",
+        diff=diff,
+        workspace_id=str(record["workspace_id"]),
+        application_id=str(record["application_id"]),
+        workflow_run_id=str(record["workflow_run_id"]),
+        binding_id=str(record["binding_id"]),
+        environment=str(record["environment"]),
+        requested_by=user_id,
+    )
+
+
+def approval_record_or_404(db: Any, approval_id: str, workspace_id: str) -> dict[str, Any]:
+    record = db.get_workflow_approval(approval_id, workspace_id)
+    if record is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=APPROVAL_NOT_FOUND)
+    return record
+
+
+@approval_router.post(gateway_routes.APPROVAL_GRANT_PATH, response_model=AcceptedResponse)
+async def grant_approval(
+    approval_id: str,
+    payload: ApprovalDecisionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    record = approval_record_or_404(db, approval_id, workspace_id)
+    ensure_approval_is_open(record)
+    diff = approval_diff(record)
+    require_approval_deploy_access(db, current, workspace_id, diff)
+    command = approval_command_request(record, diff, payload.reason, current.user_id)
+    details = {
+        **approval_details(record),
+        "decision_reason": payload.reason,
+        "command_requested": command.to_body(),
+    }
+    accepted = await events.accept_body(
+        ApprovalGrantedBody(
+            approval_id=approval_id,
+            workflow_run_id=str(record["workflow_run_id"]),
+            application_id=str(record["application_id"]),
+            workspace_id=workspace_id,
+            binding_id=str(record["binding_id"]),
+            environment=str(record["environment"]),
+            decided_by=current.user_id,
+            decision="granted",
+            details=details,
+        ),
+        actor=Actor(current.user_id, tuple(current.roles)),
+    )
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
+    )
+
+
+@approval_router.post(gateway_routes.APPROVAL_REJECT_PATH, response_model=AcceptedResponse)
+async def reject_approval(
+    approval_id: str,
+    payload: ApprovalDecisionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    record = approval_record_or_404(db, approval_id, workspace_id)
+    ensure_approval_is_open(record)
+    diff = approval_diff(record)
+    require_approval_deploy_access(db, current, workspace_id, diff)
+    reason = payload.reason or "approval rejected"
+    accepted = await events.accept_body(
+        ApprovalRejectedBody(
+            approval_id=approval_id,
+            workflow_run_id=str(record["workflow_run_id"]),
+            application_id=str(record["application_id"]),
+            reason=reason,
+            workspace_id=workspace_id,
+            binding_id=str(record["binding_id"]),
+            environment=str(record["environment"]),
+            decided_by=current.user_id,
+            details={**approval_details(record), "decision_reason": reason},
+        ),
+        actor=Actor(current.user_id, tuple(current.roles)),
+    )
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
     )

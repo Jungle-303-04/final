@@ -12,15 +12,15 @@ DATABASE_URL="${DATABASE_URL:-}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
-GITHUB_REPO="${GITHUB_REPO:-octocat/Hello-World}"
-GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
-MANIFEST_PATH="${MANIFEST_PATH:-deploy.yaml}"
+GITHUB_REPO="${GITHUB_REPO:-Jungle-303-04/final}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
+MANIFEST_PATH="${MANIFEST_PATH:-dashboard/config/kubernetes/desired-manifest.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED:-1}"
-GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-0}"
+GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-1}"
 GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS:-5}"
-SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX:-}"
+SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX:-https://github.local/pull}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-target-cluster-01}"
@@ -189,6 +189,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/pgb
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/nats --timeout=180s
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
+kubectl --context "kind-${MGMT_CLUSTER}" -n management get cronjob/github-poll-worker >/dev/null
 for deploy in \
   api-gateway \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
