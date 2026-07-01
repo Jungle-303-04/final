@@ -17,13 +17,12 @@ def event(
     # 흐름 시작점. causation 은 직전 이벤트(없으면 None=뿌리).
     event_id = str(uuid.uuid4())
     correlation = correlation_id or payload.get("correlation_id") or event_id
-    causation = causation_id or payload.get("causation_id")
     return EventEnvelope(
         event_id=event_id,
         subject=subject,
         source=source,
         correlation_id=correlation,
-        causation_id=causation,
+        causation_id=causation_id,
         created_at=now_iso(),
         payload=payload,
     )

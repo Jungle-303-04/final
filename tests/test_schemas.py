@@ -80,6 +80,17 @@ def test_event_uses_payload_correlation_id() -> None:
     assert created.payload["commit_sha"] == "abc123"
 
 
+def test_event_ignores_payload_causation_id() -> None:
+    created = event(
+        "git.webhook.received",
+        "test",
+        {"causation_id": "spoofed-parent", "commit_sha": "abc123"},
+    )
+
+    assert created.causation_id is None
+    assert created.payload["causation_id"] == "spoofed-parent"
+
+
 def test_event_uses_standard_envelope_fields() -> None:
     created = event(
         "command.dispatched",
