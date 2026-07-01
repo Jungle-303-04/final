@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from domains import registry
+from domains.gitops.repository import RepoChangeRepository
 from domains.projection.repository import DashboardRepository
 from packages.events.envelope import event
 from packages.storage import database as db
@@ -157,6 +158,38 @@ def test_dashboard_upsert_namespaces_correlation_id_by_workspace() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     assert compiled.params["correlation_id"] == "workspace-b:corr-shared"
     assert compiled.params["payload"]["correlation_id"] == "corr-shared"
+
+
+def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
+    recorded: list[Any] = []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    repository.record_manifest_artifact(
+        {
+            "workspace_id": "workspace-b",
+            "repository_id": "repo-1",
+            "binding_id": "binding-shared",
+            "commit_sha": "abc123",
+            "manifest_path": "deploy/app.yaml",
+            "status": "rendered",
+            "rendered_manifest": {"kind": "Deployment"},
+            "source_summary": {},
+        }
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    assert "ON CONFLICT (workspace_id, binding_id, commit_sha, manifest_path)" in str(compiled)
+    assert compiled.params["workspace_id"] == "workspace-b"
 
 
 def test_user_account_schema_supports_password_login() -> None:
