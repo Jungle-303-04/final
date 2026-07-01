@@ -70,6 +70,9 @@ class Settings:
     POLL_MAX_BACKOFF_SECONDS = 300  # 연속 실패 지수 백오프 상한(5분)
     POLL_BACKOFF_JITTER_SECONDS = 3  # thundering herd 완화용 지터
     SOFT_SKIP_STATUS_CODES = {403, 429}
+    # 인증/접근 오류 — CronJob 을 '실패'로 죽이지 않고 명확한 경고 후 스킵.
+    # (private repo 무인증 404, 토큰 만료 401 등 설정 문제 → 로그로 드러내되 파이프라인은 계속)
+    ACCESS_ERROR_STATUS_CODES = {401, 404}
 
     # webhook 바디 기본값(폴러는 commit_sha 만 실제로 채우고 image/replicas 는 데모 기본).
     DEFAULT_IMAGE = "service:local"
