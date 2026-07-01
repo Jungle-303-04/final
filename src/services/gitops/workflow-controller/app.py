@@ -24,6 +24,7 @@ from packages.contracts.event_bus.bodies import (
     ApprovalRequestedBody,
     CommandCompletedBody,
     CommandQueuedForAgentBody,
+    CommandRejectedBody,
     CommandRequestedBody,
     DiffAnalyzedBody,
     DiffDetectedBody,
@@ -587,6 +588,38 @@ async def on_command_queued(
         WorkflowStepStatus.RUNNING.value,
         "command queued for agent",
         {"command_id": evt.command_id, "cluster_id": evt.cluster_id},
+    )
+
+
+@app.on(CommandRejectedBody)
+async def on_command_rejected(
+    evt: CommandRejectedBody, ctx: EventContext[WorkflowStore]
+) -> AsyncIterator[EventBody]:
+    run = normalize_payload(evt.requested)
+    await transition_run(
+        ctx,
+        run,
+        WorkflowRunStatus.FAILED.value,
+        WorkflowStepName.APPLY.value,
+        evt.reason,
+        {"requested": evt.requested},
+    )
+    yield await record_step(
+        ctx,
+        run,
+        WorkflowStepName.APPLY.value,
+        WorkflowStepStatus.FAILED.value,
+        evt.reason,
+        {"requested": evt.requested},
+    )
+    yield WorkflowRunFailedBody(
+        workflow_run_id=str(run["workflow_run_id"]),
+        application_id=str(run["application_id"]),
+        reason=evt.reason,
+        workspace_id=str(run["workspace_id"]),
+        binding_id=str(run["binding_id"]),
+        environment=str(run["environment"]),
+        details={"requested": evt.requested},
     )
 
 

@@ -114,6 +114,7 @@ class AgentConfig:
     LOKI_QUERY_LIMIT = 100
 
     COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
+    COMMAND_FAILED_STATUS = CommandStatus.FAILED
     APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
     ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
     COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
@@ -596,21 +597,28 @@ class TargetClusterAgent:
                     json=resource.manifest,
                     headers=kubernetes_headers(token, "application/json"),
                 )
-                created.raise_for_status()
+                if created.is_error:
+                    return False, kubernetes_failure_message("create", created)
                 return True, AgentConfig.MANIFEST_CREATED_MESSAGE
 
-            current.raise_for_status()
+            if current.is_error:
+                return False, kubernetes_failure_message("get", current)
             patched = await client.patch(
                 resource.resource_url(base_url),
                 json=resource.manifest,
                 headers=kubernetes_headers(token, "application/merge-patch+json"),
             )
-            patched.raise_for_status()
+            if patched.is_error:
+                return False, kubernetes_failure_message("patch", patched)
         return True, AgentConfig.MANIFEST_PATCHED_MESSAGE
 
     def command_result(self, applied: bool, message: str) -> JsonObject:
         return {
-            Gateway.STATUS: AgentConfig.COMMAND_COMPLETED_STATUS,
+            Gateway.STATUS: (
+                AgentConfig.COMMAND_COMPLETED_STATUS
+                if applied
+                else AgentConfig.COMMAND_FAILED_STATUS
+            ),
             Gateway.CLUSTER_ID: self.cluster_id,
             Gateway.APPLIED: applied,
             Gateway.MESSAGE: message,
@@ -627,7 +635,8 @@ class TargetClusterAgent:
         headers = kubernetes_headers(token, "application/strategic-merge-patch+json")
         async with kubernetes_client(self.kubernetes_transport) as client:
             response = await client.patch(url, json=patch, headers=headers)
-            response.raise_for_status()
+            if response.is_error:
+                return False, kubernetes_failure_message("patch", response)
         return True, AgentConfig.COMMAND_RESULT_MESSAGE
 
     async def build_evidence_payload(self) -> JsonObject:
@@ -824,6 +833,14 @@ def build_rollout_restart_patch() -> JsonObject:
             }
         }
     }
+
+
+def kubernetes_failure_message(action: str, response: httpx.Response) -> str:
+    detail = response.text.strip()
+    if len(detail) > 200:
+        detail = f"{detail[:197]}..."
+    suffix = f": {detail}" if detail else ""
+    return f"kubernetes {action} failed ({response.status_code}){suffix}"
 
 
 def kubernetes_manifest_resource(

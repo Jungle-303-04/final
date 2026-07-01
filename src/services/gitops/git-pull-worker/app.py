@@ -52,6 +52,19 @@ async def on_git_webhook(
     # manifest 생성은 다음 단계 manifest-render-worker 책임이다.
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
     identity = normalize_gitops_identity(evt.to_body())
+    last_seen = await ctx.db.get_watch_last_seen_commit_sha(
+        str(identity["watch_target_id"]), str(identity["workspace_id"])
+    )
+    if last_seen == commit_sha:
+        return
+    await ctx.db.mark_watch_observed(
+        str(identity["watch_target_id"]),
+        commit_sha,
+        str(identity["workspace_id"]),
+        str(identity["repository_id"]),
+        evt.branch,
+        evt.manifest_path,
+    )
     yield GitChangedBody(
         commit_sha=commit_sha,
         image=evt.image,

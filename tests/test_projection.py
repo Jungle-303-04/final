@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
+from domains.projection.repository import workspace_id_from_payload
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope
 
@@ -52,6 +53,22 @@ def test_dashboard_marks_failed_command_result_as_attention() -> None:
     assert subjects_of(outs) == ["dashboard.updated"]
     assert outs[0].status == "attention"
     assert db.calls[0][1][1] == "attention"
+
+
+def test_dashboard_uses_command_result_workspace() -> None:
+    assert (
+        workspace_id_from_payload(
+            {
+                "command_id": "cmd-1",
+                "result": {
+                    "workspace_id": "workspace-2",
+                    "status": CommandStatus.COMPLETED,
+                    "applied": True,
+                },
+            }
+        )
+        == "workspace-2"
+    )
 
 
 def test_dashboard_ignores_its_own_event() -> None:
