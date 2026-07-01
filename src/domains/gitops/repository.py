@@ -456,7 +456,12 @@ class RepoChangeRepository(DatabaseConnection):
             updated_at=func.now(),
         )
         statement = insert.on_conflict_do_update(
-            index_elements=[table.c.binding_id, table.c.commit_sha, table.c.manifest_path],
+            index_elements=[
+                table.c.workspace_id,
+                table.c.binding_id,
+                table.c.commit_sha,
+                table.c.manifest_path,
+            ],
             set_={
                 "status": insert.excluded.status,
                 "status_reason": insert.excluded.status_reason,
