@@ -14,7 +14,7 @@ from packages.contracts.gateway.responses import AcceptedResponse
 from packages.runtime.dependencies import get_db, get_events
 
 # per-cluster 토큰 인증 — evidence 의 workspace/cluster 는 토큰 identity 에서만 취한다.
-router = APIRouter(dependencies=[Depends(require_cluster_agent)])
+router = APIRouter()
 DEFAULT_EVIDENCE_SOURCE_ID = "cluster-snapshot"
 
 
@@ -50,6 +50,8 @@ async def agent_evidence(
     db: Any = Depends(get_db),
 ) -> AcceptedResponse:
     evidence_key = scoped_evidence_key(identity, payload.evidence_key)
+    evidence_body = build_cluster_evidence_body(payload, identity)
+    claimed_evidence_key: str | None = None
     if evidence_key:
         existing = db.get_evidence_window(evidence_key)
         if existing:
@@ -58,27 +60,41 @@ async def agent_evidence(
                 event_id=existing["event_id"],
                 correlation_id=existing["correlation_id"],
             )
-
-    evidence_body = build_cluster_evidence_body(payload, identity)
-    accepted = await events.accept_body(evidence_body, payload.correlation_id)
-    if evidence_key:
-        recorded = db.record_evidence_window(
+        claimed = db.claim_evidence_window(
             evidence_key,
             identity.workspace_id,
             identity.cluster_id,
             evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
             evidence_body.window_start or evidence_body.evidence_key,
             evidence_body.agent_id,
+            evidence_body.to_body(),
+        )
+        if claimed["duplicate"]:
+            return AcceptedResponse(
+                accepted=True,
+                event_id=claimed["event_id"],
+                correlation_id=claimed["correlation_id"],
+            )
+        claimed_evidence_key = evidence_key
+
+    try:
+        accepted = await events.accept_body(evidence_body, payload.correlation_id)
+    except Exception:
+        if claimed_evidence_key:
+            db.release_pending_evidence_window(claimed_evidence_key)
+        raise
+    if evidence_key:
+        recorded = db.complete_evidence_window(
+            evidence_key,
             accepted.event.event_id,
             accepted.event.correlation_id,
             evidence_body.to_body(),
         )
-        if recorded["duplicate"]:
-            return AcceptedResponse(
-                accepted=True,
-                event_id=recorded["event_id"],
-                correlation_id=recorded["correlation_id"],
-            )
+        return AcceptedResponse(
+            accepted=True,
+            event_id=recorded["event_id"],
+            correlation_id=recorded["correlation_id"],
+        )
     return AcceptedResponse(
         accepted=True,
         event_id=accepted.event.event_id,
