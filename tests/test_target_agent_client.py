@@ -119,9 +119,47 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
         )
     )
 
-    assert result["status"] == "completed"
+    assert result["status"] == "failed"
     assert result["applied"] is False
     assert "dry-run" in result["message"]
+
+
+def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"kind": "ConfigMap"}, request=request)
+        return httpx.Response(403, text="forbidden", request=request)
+
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "configmap/checkout-api-config",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "v1",
+                            "kind": "ConfigMap",
+                            "metadata": {"name": "checkout-api-config", "namespace": "sandbox"},
+                            "data": {"LOG_LEVEL": "info"},
+                        },
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["message"] == "kubernetes patch failed (403): forbidden"
 
 
 def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> None:
