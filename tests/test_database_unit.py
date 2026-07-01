@@ -15,8 +15,18 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from domains import registry
-from domains.gitops.repository import RepoChangeRepository
+from domains.gitops.repository import (
+    RepoChangeRepository,
+    derive_deployment_binding_id,
+    derive_repository_id,
+    derive_watch_target_id,
+)
 from domains.projection.repository import DashboardRepository
+from packages.contracts.gitops import (
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_REPOSITORY_ID,
+    DEFAULT_WATCH_TARGET_ID,
+)
 from packages.events.envelope import event
 from packages.storage import database as db
 from packages.storage.repositories.event import EventRepository
@@ -190,6 +200,74 @@ def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     assert "ON CONFLICT (workspace_id, binding_id, commit_sha, manifest_path)" in str(compiled)
     assert compiled.params["workspace_id"] == "workspace-b"
+
+
+def test_gitops_default_ids_are_workspace_scoped() -> None:
+    base = {
+        "repo_ref": "org/checkout",
+        "cluster_id": "target-cluster-01",
+        "namespace": "sandbox",
+        "app_name": "checkout-api",
+    }
+    workspace_a = {**base, "workspace_id": "workspace-a"}
+    workspace_b = {**base, "workspace_id": "workspace-b"}
+
+    assert derive_repository_id(workspace_a) != derive_repository_id(workspace_b)
+    assert derive_repository_id(workspace_a) != DEFAULT_REPOSITORY_ID
+    assert derive_watch_target_id(workspace_a) != derive_watch_target_id(workspace_b)
+    assert derive_watch_target_id(workspace_a) != DEFAULT_WATCH_TARGET_ID
+    assert derive_deployment_binding_id(workspace_a) != derive_deployment_binding_id(workspace_b)
+    assert derive_deployment_binding_id(workspace_a) != DEFAULT_DEPLOYMENT_BINDING_ID
+
+    assert (
+        derive_repository_id({**workspace_a, "repository_id": "repo-explicit"}) == "repo-explicit"
+    )
+    assert (
+        derive_watch_target_id({**workspace_a, "watch_target_id": "watch-explicit"})
+        == "watch-explicit"
+    )
+    assert (
+        derive_deployment_binding_id({**workspace_a, "binding_id": "binding-explicit"})
+        == "binding-explicit"
+    )
+
+
+def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
+    recorded: list[Any] = []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+    payload = {
+        "workspace_id": "workspace-b",
+        "repo_ref": "org/checkout",
+        "cluster_id": "target-cluster-01",
+        "namespace": "sandbox",
+        "app_name": "checkout-api",
+    }
+
+    repo = repository.register_repository(payload)
+    watch = repository.register_watch_target(payload)
+    binding = repository.register_deployment_binding(payload)
+
+    assert repo["repository_id"] != DEFAULT_REPOSITORY_ID
+    assert watch["watch_target_id"] != DEFAULT_WATCH_TARGET_ID
+    assert binding["binding_id"] != DEFAULT_DEPLOYMENT_BINDING_ID
+    assert watch["repository_id"] == repo["repository_id"]
+    assert binding["repository_id"] == repo["repository_id"]
+    assert binding["watch_target_id"] == watch["watch_target_id"]
+
+    compiled = [statement.compile(dialect=postgresql.dialect()) for statement in recorded]
+    assert compiled[0].params["repository_id"] == repo["repository_id"]
+    assert compiled[1].params["watch_target_id"] == watch["watch_target_id"]
+    assert compiled[2].params["binding_id"] == binding["binding_id"]
 
 
 def test_user_account_schema_supports_password_login() -> None:
