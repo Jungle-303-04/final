@@ -157,6 +157,20 @@ def test_target_install_is_driven_by_registration_script() -> None:
 def test_up_script_restarts_new_management_workers() -> None:
     up_script = read_project_file("scripts/up.sh")
     assert "workflow-controller alert-worker mail-worker command-worker" in up_script
+    assert "get cronjob/github-poll-worker" in up_script
+    assert "Jungle-303-04/final" in up_script
+    assert "dashboard/config/kubernetes/desired-manifest.yaml" in up_script
+
+
+def test_smoke_requires_gitops_webhook_correlation_completion() -> None:
+    smoke_script = read_project_file("scripts/smoke.sh")
+    assert "abc1234" not in smoke_script
+    assert "latest_commit_sha" in smoke_script
+    assert "repo_ref" in smoke_script
+    assert "manifest_path" in smoke_script
+    assert "WEBHOOK_CORRELATION_ID" in smoke_script
+    assert "workflow.run.completed" in smoke_script
+    assert "dashboard.updated" not in smoke_script
 
 
 def test_node_collector_is_agent_managed_not_static_manifest() -> None:

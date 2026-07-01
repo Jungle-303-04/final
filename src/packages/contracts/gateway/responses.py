@@ -90,6 +90,9 @@ class TargetInstallResponse(StrictModel):
     applied: bool
     apply_output: str | None
     install_manifest: str
+    # 이 클러스터의 per-cluster agent 토큰(원문). 등록 관리자에게 1회 반환 —
+    # agent 배포 secret 주입 및 agent 인증(x-agent-token)에 사용. 서버는 해시만 저장.
+    agent_token: str
 
 
 class DeadLettersResponse(StrictModel):

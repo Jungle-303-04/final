@@ -3,6 +3,7 @@ from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
+    ApprovalDecisionRequest,
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
@@ -35,6 +36,7 @@ __all__ = [
     "AgentConnectRequest",
     "AgentCommandPollResponse",
     "AgentEvidenceRequest",
+    "ApprovalDecisionRequest",
     "AuthSessionResponse",
     "CommandStartedResponse",
     "CommandRequest",

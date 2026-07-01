@@ -39,7 +39,7 @@ KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취한다.
-agent_router = APIRouter(dependencies=[Depends(require_cluster_agent)])
+agent_router = APIRouter()
 
 
 def yaml_string(value: str) -> str:
@@ -371,7 +371,10 @@ def allowed_kube_contexts() -> set[str]:
 def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
     # 입력(컨텍스트) 검증을 먼저 — 허용목록이 비어있으면(미설정) 어떤 명시 컨텍스트도
     # 거부(fail-closed), 설정돼 있으면 목록에 든 컨텍스트만 허용. 임의 클러스터 적용 차단.
-    if kube_context and kube_context not in allowed_kube_contexts():
+    allowlist = allowed_kube_contexts()
+    if allowlist and not kube_context:
+        raise HTTPException(status_code=403, detail=KUBE_CONTEXT_NOT_ALLOWED)
+    if kube_context and kube_context not in allowlist:
         raise HTTPException(status_code=403, detail=KUBE_CONTEXT_NOT_ALLOWED)
     if not shutil.which("kubectl"):
         raise HTTPException(status_code=503, detail=KUBECTL_NOT_AVAILABLE)
@@ -386,7 +389,7 @@ def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
 
 
 def install_response(
-    payload: TargetRegisterRequest, manifest: str, apply_output: str | None
+    payload: TargetRegisterRequest, manifest: str, apply_output: str | None, agent_token: str
 ) -> TargetInstallResponse:
     return TargetInstallResponse(
         registered=True,
@@ -395,6 +398,7 @@ def install_response(
         applied=apply_output is not None,
         apply_output=apply_output,
         install_manifest=manifest,
+        agent_token=agent_token,
     )
 
 
@@ -451,7 +455,7 @@ async def register_target(
             requested_by=current.user_id,
         )
     )
-    return install_response(scoped_payload, manifest, apply_output)
+    return install_response(scoped_payload, manifest, apply_output, agent_token)
 
 
 @agent_router.post(

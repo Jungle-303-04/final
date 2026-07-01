@@ -8,6 +8,7 @@ DESIRED_DIFF_DETECTED 발행 블록에 대응. 렌더 결과와 현재 상태 �
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 from packages.config.constants import Sandbox
 from packages.contracts.event_bus.bodies import (
@@ -20,14 +21,22 @@ from packages.runtime.app import App, EventContext
 
 app = App("diff-worker")
 
-PREVIOUS_IMAGE = "ghcr.io/project/checkout-api:previous"
+UNKNOWN_ACTUAL_IMAGE = "unknown"
 RESOURCE_NOT_INSPECTED = "resource-not-inspected"
 
 
-def load_actual_resource_image(rendered: ManifestRenderedBody) -> str:
-    # TODO(gitops): target cluster desired/actual 상태 읽기 전용 어댑터 조회
-    # TODO(gitops): image뿐 아니라 리소스 식별자, namespace, kind, 필드 경로 비교
-    return PREVIOUS_IMAGE
+async def load_actual_resource_image(evt: ManifestRenderedBody, ctx: EventContext[Any]) -> str:
+    try:
+        reader = ctx.db.get_actual_resource_image
+    except AttributeError:
+        return UNKNOWN_ACTUAL_IMAGE
+    actual = await reader(
+        evt.workspace_id,
+        evt.cluster_id,
+        evt.rendered_manifest.metadata.namespace or Sandbox.NAMESPACE,
+        resource_ref(evt.rendered_manifest.kind, evt.rendered_manifest.metadata.name),
+    )
+    return str(actual) if actual else UNKNOWN_ACTUAL_IMAGE
 
 
 def resource_ref(kind: str, name: str) -> str:
@@ -70,7 +79,7 @@ async def on_manifest_rendered(
 ) -> AsyncIterator[EventBody]:
     # 렌더 결과를 Diff 값 객체로 변환하고 subject 발행은 런타임 yield가 처리한다.
     actual_image = (
-        load_actual_resource_image(evt)
+        await load_actual_resource_image(evt, ctx)
         if evt.rendered_manifest.spec.image
         else RESOURCE_NOT_INSPECTED
     )
