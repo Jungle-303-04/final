@@ -54,7 +54,7 @@ from packages.storage.engine import DatabaseConnection
 class RepoChangeRepository(DatabaseConnection):
     def register_repository(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        repository_id = str(payload.get("repository_id", DEFAULT_REPOSITORY_ID))
+        repository_id = derive_repository_id(payload)
         user_id = payload.get("user_id")
         table = GitRepository.__table__
         insert = pg_insert(table).values(
@@ -89,12 +89,13 @@ class RepoChangeRepository(DatabaseConnection):
 
     def register_watch_target(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        watch_target_id = str(payload.get("watch_target_id", DEFAULT_WATCH_TARGET_ID))
+        repository_id = derive_repository_id(payload)
+        watch_target_id = derive_watch_target_id({**payload, "repository_id": repository_id})
         table = GitWatchTarget.__table__
         insert = pg_insert(table).values(
             watch_target_id=watch_target_id,
             workspace_id=workspace_id,
-            repository_id=str(payload.get("repository_id", DEFAULT_REPOSITORY_ID)),
+            repository_id=repository_id,
             branch=str(payload.get("branch", DEFAULT_REPO_BRANCH)),
             manifest_path=str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
             interval_seconds=int(payload.get("interval_seconds", 30)),
@@ -119,18 +120,27 @@ class RepoChangeRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
-        return {**payload, "workspace_id": workspace_id, "watch_target_id": watch_target_id}
+        return {
+            **payload,
+            "workspace_id": workspace_id,
+            "repository_id": repository_id,
+            "watch_target_id": watch_target_id,
+        }
 
     def register_deployment_binding(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        binding_id = str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID))
+        repository_id = derive_repository_id(payload)
+        watch_target_id = derive_watch_target_id({**payload, "repository_id": repository_id})
+        binding_id = derive_deployment_binding_id(
+            {**payload, "repository_id": repository_id, "watch_target_id": watch_target_id}
+        )
         user_id = payload.get("user_id")
         table = DeploymentBinding.__table__
         insert = pg_insert(table).values(
             binding_id=binding_id,
             workspace_id=workspace_id,
-            repository_id=str(payload.get("repository_id", DEFAULT_REPOSITORY_ID)),
-            watch_target_id=payload.get("watch_target_id", DEFAULT_WATCH_TARGET_ID),
+            repository_id=repository_id,
+            watch_target_id=watch_target_id,
             cluster_id=str(payload["cluster_id"]),
             namespace=str(payload["namespace"]),
             app_name=str(payload["app_name"]),
@@ -163,11 +173,17 @@ class RepoChangeRepository(DatabaseConnection):
         self._grant_owner_if_present(
             workspace_id, user_id, AccessResourceType.DEPLOYMENT_BINDING.value, binding_id
         )
-        return {**payload, "workspace_id": workspace_id, "binding_id": binding_id}
+        return {
+            **payload,
+            "workspace_id": workspace_id,
+            "repository_id": repository_id,
+            "watch_target_id": watch_target_id,
+            "binding_id": binding_id,
+        }
 
     def upsert_application(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
-        repository_id = str(payload.get("repository_id", DEFAULT_REPOSITORY_ID))
+        repository_id = derive_repository_id(payload)
         application_id = derive_application_id(payload)
         table = Application.__table__
         insert = pg_insert(table).values(
@@ -199,7 +215,7 @@ class RepoChangeRepository(DatabaseConnection):
         workflow_run_id = derive_workflow_run_id(payload)
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         application_id = derive_application_id(payload)
-        binding_id = str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID))
+        binding_id = derive_deployment_binding_id(payload)
         table = WorkflowRun.__table__
         insert = pg_insert(table).values(
             workflow_run_id=workflow_run_id,
@@ -263,7 +279,7 @@ class RepoChangeRepository(DatabaseConnection):
             workflow_run_id=workflow_run_id,
             workspace_id=str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             application_id=derive_application_id(payload),
-            binding_id=str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            binding_id=derive_deployment_binding_id(payload),
             environment=str(payload.get("environment", DEFAULT_ENVIRONMENT)),
             name=step_name,
             status=str(payload.get("status", WorkflowStepStatus.SUCCEEDED.value)),
@@ -298,7 +314,7 @@ class RepoChangeRepository(DatabaseConnection):
             workflow_run_id=workflow_run_id,
             workspace_id=str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             application_id=derive_application_id(payload),
-            binding_id=str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            binding_id=derive_deployment_binding_id(payload),
             environment=str(payload.get("environment", DEFAULT_ENVIRONMENT)),
             status=str(payload.get("status", ApprovalStatus.REQUESTED.value)),
             reason=str(payload.get("reason", "")),
@@ -439,14 +455,20 @@ class RepoChangeRepository(DatabaseConnection):
             conn.execute(statement)
 
     def record_manifest_artifact(self, payload: JsonObject) -> JsonObject:
-        artifact_id = str(payload.get("artifact_id") or manifest_artifact_id(payload))
+        repository_id = derive_repository_id(payload)
+        watch_target_id = derive_watch_target_id({**payload, "repository_id": repository_id})
+        binding_id = derive_deployment_binding_id(payload)
+        artifact_id = str(
+            payload.get("artifact_id")
+            or manifest_artifact_id({**payload, "binding_id": binding_id})
+        )
         table = ManifestArtifact.__table__
         insert = pg_insert(table).values(
             artifact_id=artifact_id,
             workspace_id=str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
-            repository_id=str(payload.get("repository_id", DEFAULT_REPOSITORY_ID)),
-            watch_target_id=payload.get("watch_target_id"),
-            binding_id=str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            repository_id=repository_id,
+            watch_target_id=watch_target_id,
+            binding_id=binding_id,
             commit_sha=str(payload["commit_sha"]),
             manifest_path=str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
             status=str(payload.get("status", ManifestArtifactStatus.RENDERED.value)),
@@ -472,7 +494,13 @@ class RepoChangeRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
-        return {**payload, "artifact_id": artifact_id}
+        return {
+            **payload,
+            "artifact_id": artifact_id,
+            "repository_id": repository_id,
+            "watch_target_id": watch_target_id,
+            "binding_id": binding_id,
+        }
 
     def mark_watch_observed(
         self, watch_target_id: str, commit_sha: str, workspace_id: str = DEFAULT_WORKSPACE_ID
@@ -522,6 +550,50 @@ def manifest_artifact_id(payload: JsonObject) -> str:
     return f"manifest-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
+def derive_repository_id(payload: JsonObject) -> str:
+    explicit = payload.get("repository_id")
+    if explicit and explicit != DEFAULT_REPOSITORY_ID:
+        return str(explicit)
+    raw = "|".join(
+        [
+            str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            str(payload.get("repo_ref", DEFAULT_REPO_REF)),
+        ]
+    )
+    return f"repo-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_watch_target_id(payload: JsonObject) -> str:
+    explicit = payload.get("watch_target_id")
+    if explicit and explicit != DEFAULT_WATCH_TARGET_ID:
+        return str(explicit)
+    raw = "|".join(
+        [
+            str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            derive_repository_id(payload),
+            str(payload.get("branch", DEFAULT_REPO_BRANCH)),
+            str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
+        ]
+    )
+    return f"watch-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_deployment_binding_id(payload: JsonObject) -> str:
+    explicit = payload.get("binding_id")
+    if explicit and explicit != DEFAULT_DEPLOYMENT_BINDING_ID:
+        return str(explicit)
+    raw = "|".join(
+        [
+            str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            derive_repository_id(payload),
+            str(payload.get("cluster_id", Target.DEFAULT_CLUSTER_ID)),
+            str(payload.get("namespace", "sandbox")),
+            str(payload.get("app_name", DEFAULT_APPLICATION_ID)),
+        ]
+    )
+    return f"binding-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
 def derive_application_id(payload: JsonObject) -> str:
     explicit = payload.get("application_id")
     if explicit and explicit != DEFAULT_APPLICATION_ID:
@@ -529,7 +601,7 @@ def derive_application_id(payload: JsonObject) -> str:
     raw = "|".join(
         [
             str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
-            str(payload.get("repository_id", DEFAULT_REPOSITORY_ID)),
+            derive_repository_id(payload),
             str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
             str(payload.get("name") or payload.get("app_name") or DEFAULT_APPLICATION_ID),
         ]
@@ -545,7 +617,7 @@ def derive_workflow_run_id(payload: JsonObject) -> str:
         [
             str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             derive_application_id(payload),
-            str(payload.get("binding_id", DEFAULT_DEPLOYMENT_BINDING_ID)),
+            derive_deployment_binding_id(payload),
             str(payload.get("environment", DEFAULT_ENVIRONMENT)),
             str(payload.get("commit_sha", "")),
         ]
