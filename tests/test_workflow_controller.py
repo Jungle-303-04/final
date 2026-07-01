@@ -13,6 +13,8 @@ from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.event_bus.bodies import (
     CommandCompletedBody,
     CommandQueuedForAgentBody,
+    CommandRejectedBody,
+    CommandRequestedBody,
     Diff,
     DiffAnalyzedBody,
     DiffDetectedBody,
@@ -346,6 +348,34 @@ def test_workflow_controller_links_command_lifecycle_to_run() -> None:
     assert completed_db.called("attach_workflow_command")
     assert completed_db.called("update_workflow_run_for_command")
     assert completed[-1].workflow_run_id == "workflow-1"
+
+
+def test_workflow_controller_fails_run_when_command_rejected() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+    requested = CommandRequestedBody(
+        cluster_id=Target.DEFAULT_CLUSTER_ID,
+        action="delete",
+        namespace=Sandbox.NAMESPACE,
+        reason="unsafe command",
+        diff=workflow_diff(),
+        workspace_id="workspace-1",
+        application_id="app-1",
+        workflow_run_id="workflow-1",
+        binding_id="binding-1",
+        environment="prod",
+    )
+
+    outs = run_handler(
+        workflow.on_command_rejected,
+        CommandRejectedBody(reason="unsupported command action", requested=requested.to_body()),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded", "workflow.run.failed"]
+    assert db.called("update_workflow_run")
+    assert outs[-1].workflow_run_id == "workflow-1"
+    assert outs[-1].reason == "unsupported command action"
 
 
 def test_workflow_controller_does_not_trust_agent_result_identity_without_mapping() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from conftest import load_service, run_handler, subjects_of
+from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.gitops.repository import (
     derive_deployment_binding_id,
@@ -17,14 +17,30 @@ from packages.contracts.gitops import (
 
 def test_git_pull_emits_git_changed() -> None:
     git_pull = load_service("gitops/git-pull-worker")
+    db = SpyDb()
     outs = run_handler(
         git_pull.on_git_webhook,
         GitWebhookReceivedBody(commit_sha="abc123", image="img:new", replicas=2),
+        db=db,
     )
     assert subjects_of(outs) == ["git.changed"]
     assert outs[0].commit_sha == "abc123"
     assert outs[0].image == "img:new"
     assert outs[0].replicas == 2
+    assert db.called("mark_watch_observed")
+
+
+def test_git_pull_skips_already_seen_commit() -> None:
+    git_pull = load_service("gitops/git-pull-worker")
+    db = SpyDb(get_watch_last_seen_commit_sha="abc123")
+    outs = run_handler(
+        git_pull.on_git_webhook,
+        GitWebhookReceivedBody(commit_sha="abc123", image="img:new", replicas=2),
+        db=db,
+    )
+
+    assert outs == []
+    assert not db.called("mark_watch_observed")
 
 
 def test_git_pull_normalizes_default_gitops_ids() -> None:
@@ -57,6 +73,7 @@ def test_git_pull_normalizes_default_gitops_ids() -> None:
             repo_ref="org/checkout",
             manifest_path="deploy/app.yaml",
         ),
+        db=SpyDb(),
     )
 
     changed = outs[0]
