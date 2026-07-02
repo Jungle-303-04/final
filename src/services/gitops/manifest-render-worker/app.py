@@ -16,6 +16,7 @@ from urllib import error, parse, request
 
 import yaml
 
+from domains.gitops.diffing import extract_declared_field_paths
 from packages.config.constants import Sandbox
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import (
@@ -172,6 +173,7 @@ def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
         metadata=RenderedMetadata(name=name, namespace=namespace),
         spec=rendered_spec_from_payload(kind, payload),
         manifest=payload,
+        declared_fields=extract_declared_field_paths(payload),
     )
 
 
@@ -259,6 +261,7 @@ def render_deployment_manifest(manifest: Manifest) -> RenderedManifest:
         metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
         spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
         manifest=raw,
+        declared_fields=extract_declared_field_paths(raw),
     )
 
 
