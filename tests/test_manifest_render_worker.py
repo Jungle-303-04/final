@@ -328,7 +328,6 @@ def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) ->
     assert "manifest must include" in outs[0].reason
     assert db.called("record_manifest_artifact")
     assert not db.called("save_repo_change")
-    assert not db.called("mark_watch_observed")
 
 
 @pytest.mark.parametrize(

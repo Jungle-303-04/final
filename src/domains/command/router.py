@@ -20,7 +20,7 @@ from domains.identity.dependencies import (
 )
 from packages.config.constants import CommandStatus, Sandbox
 from packages.contracts.auth import Actor
-from packages.contracts.event_bus.bodies import CommandCompletedBody, CommandRequestedBody, Diff
+from packages.contracts.event_bus.bodies import CommandRequestedBody, Diff
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
@@ -200,25 +200,22 @@ async def command_result(
     payload: CommandResultRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
-    events: Any = Depends(get_events),
 ) -> EventIdAcceptedResponse:
     result = payload.model_dump()
     result["workspace_id"] = identity.workspace_id
     result["cluster_id"] = identity.cluster_id
-    correlation_id = await db.complete_agent_command(
+    completed = await db.complete_agent_command_and_stage_event(
         command_id,
         identity.workspace_id,
         identity.cluster_id,
         result,
         payload.lease_id,
         payload.agent_id,
+        "api-gateway",
     )
-    if not correlation_id:
+    if completed is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-    accepted = await events.accept_body(
-        CommandCompletedBody(command_id=command_id, result=result), correlation_id
-    )
-    return EventIdAcceptedResponse(accepted=True, event_id=accepted.event.event_id)
+    return EventIdAcceptedResponse(accepted=True, event_id=completed.event_id)
 
 
 router.include_router(agent_router)

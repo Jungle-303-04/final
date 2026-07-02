@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from typing import cast
 
 from packages.config.errors import require
@@ -48,7 +48,8 @@ class ApiEventGateway:
     ) -> AcceptedEvent:
         event_payload = dict(payload)
         if actor is not None:
-            event_payload.setdefault(Gateway.REQUESTED_BY, actor.user_id)
+            if not event_payload.get(Gateway.REQUESTED_BY):
+                event_payload[Gateway.REQUESTED_BY] = actor.user_id
             if not event_payload.get(Gateway.ACTOR):
                 event_payload[Gateway.ACTOR] = actor.to_body()
         evt = await self.events.emit(
@@ -66,5 +67,27 @@ class ApiEventGateway:
         subject = getattr(body, "__subject__", None)
         require(isinstance(subject, str), f"{body.__class__.__name__} 에 subject 없음", TypeError)
         return await self.accept(
-            cast(str, subject), body.to_body(), correlation_id, causation_id, actor
+            cast(str, subject),
+            _body_payload_with_actor(body, actor),
+            correlation_id,
+            causation_id,
         )
+
+
+def _body_payload_with_actor(body: EventBody, actor: Actor | None = None) -> JsonObject:
+    payload = body.to_body()
+    if actor is None:
+        return payload
+
+    allowed_keys = _event_body_payload_keys(body)
+    if Gateway.REQUESTED_BY in allowed_keys and not payload.get(Gateway.REQUESTED_BY):
+        payload[Gateway.REQUESTED_BY] = actor.user_id
+    if Gateway.ACTOR in allowed_keys and not payload.get(Gateway.ACTOR):
+        payload[Gateway.ACTOR] = actor.to_body()
+    return payload
+
+
+def _event_body_payload_keys(body: EventBody) -> set[str]:
+    if not is_dataclass(body):
+        return set(body.to_body())
+    return {item.metadata.get("payload_name", item.name) for item in fields(body)}
