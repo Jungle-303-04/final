@@ -12,8 +12,10 @@ from providers import (
 from providers.base import ProviderResult
 from span import get_tracer
 from telemetry_queries import (
+    DEFAULT_TELEMETRY_QUERY_DEFINITIONS,
     SOURCE_EVIDENCE_KEYS,
     TelemetryQueryDefinition,
+    TelemetryQueryRegistry,
     TelemetrySource,
 )
 
@@ -34,8 +36,26 @@ class EvidenceCollector:
     def __init__(
         self,
         providers: Iterable[TelemetryProvider],
+        registry: TelemetryQueryRegistry | None = None,
     ) -> None:
         self.providers = {provider.evidence_key: provider for provider in providers}
+        self.registry = registry or TelemetryQueryRegistry(DEFAULT_TELEMETRY_QUERY_DEFINITIONS)
+        self.refresh_provider_queries()
+
+    def register_query(self, definition: TelemetryQueryDefinition) -> TelemetryQueryDefinition:
+        registered = self.registry.register(definition)
+        self.refresh_provider_queries()
+        return registered
+
+    def import_queries(self, path: str) -> tuple[TelemetryQueryDefinition, ...]:
+        definitions = self.registry.import_path(path)
+        self.refresh_provider_queries()
+        return definitions
+
+    def refresh_provider_queries(self) -> None:
+        for provider in self.providers.values():
+            definitions = self.registry.for_source(provider.source)
+            provider.queries = tuple(definition.to_provider_query() for definition in definitions)
 
     # Build the telemetry evidence payload from every configured provider.
     async def collect_evidence(self) -> JsonObject:

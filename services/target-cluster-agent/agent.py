@@ -26,6 +26,7 @@ from settings import (
     DEFAULT_MANAGEMENT_BASE_URL,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
+    DEFAULT_TELEMETRY_QUERY_PATH,
     EVIDENCE_FAILURE_POLICY_ENV,
     EVIDENCE_INTERVAL_ENV,
     EVIDENCE_PROVIDER_WORKERS_ENV,
@@ -36,12 +37,19 @@ from settings import (
     MANAGEMENT_BASE_URL_ENV,
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
+    QUERY_IMPORT_ACTION,
+    QUERY_REGISTER_ACTION,
     QUERY_RUN_ACTION,
     REGISTER_RETRY_DELAY_SECONDS,
     TARGET_CLUSTER_ID_ENV,
+    TELEMETRY_QUERY_PATH_ENV,
 )
 from span import configure_tracing, get_tracer
-from telemetry_queries import TelemetryQueryDefinition
+from telemetry_queries import (
+    TelemetryQueryDefinition,
+    TelemetryQueryRegistry,
+    load_query_definitions,
+)
 
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
 from packages.config.settings import env
@@ -156,6 +164,10 @@ class TargetClusterAgent:
             EVIDENCE_QUEUE_DB_PATH_ENV,
             DEFAULT_EVIDENCE_QUEUE_DB_PATH,
         )
+        self.telemetry_query_path = env(
+            TELEMETRY_QUERY_PATH_ENV,
+            DEFAULT_TELEMETRY_QUERY_PATH,
+        )
         self.client = client
         if providers is None:
             providers = (
@@ -163,7 +175,10 @@ class TargetClusterAgent:
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
             )
-        self.evidence_collector = EvidenceCollector(providers)
+        self.query_registry = TelemetryQueryRegistry(
+            load_query_definitions(self.telemetry_query_path)
+        )
+        self.evidence_collector = EvidenceCollector(providers, self.query_registry)
         self.evidence_scheduler = EvidenceScheduler(
             cluster_id=self.cluster_id,
             collector=self.evidence_collector,
@@ -234,6 +249,10 @@ class TargetClusterAgent:
         try:
             if action == QUERY_RUN_ACTION:
                 return await self.run_query_command(payload)
+            if action == QUERY_REGISTER_ACTION:
+                return await self.register_query_command(payload)
+            if action == QUERY_IMPORT_ACTION:
+                return await self.import_query_path_command(payload)
             return await self.apply_default_command()
         except Exception as exc:
             return {
@@ -246,6 +265,8 @@ class TargetClusterAgent:
     async def run_query_command(self, payload: JsonObject) -> JsonObject:
         definition = self.query_definition_from_payload(payload)
         result = await self.evidence_collector.run_query(definition)
+        if payload.get("register") is True:
+            self.evidence_collector.register_query(definition)
         return {
             "status": COMMAND_COMPLETED_STATUS,
             "cluster_id": self.cluster_id,
@@ -253,6 +274,31 @@ class TargetClusterAgent:
             "message": "telemetry query executed",
             "query": definition.__dict__,
             "result": result,
+        }
+
+    async def register_query_command(self, payload: JsonObject) -> JsonObject:
+        definition = self.query_definition_from_payload(payload)
+        self.evidence_collector.register_query(definition)
+        return {
+            "status": COMMAND_COMPLETED_STATUS,
+            "cluster_id": self.cluster_id,
+            "applied": True,
+            "message": "telemetry query registered",
+            "query": definition.__dict__,
+        }
+
+    async def import_query_path_command(self, payload: JsonObject) -> JsonObject:
+        query_path = payload.get("path") or payload.get("query_path") or payload.get("query_file")
+        if not isinstance(query_path, str) or not query_path.strip():
+            raise ValueError("telemetry query import requires a query path")
+        definitions = self.evidence_collector.import_queries(query_path)
+        return {
+            "status": COMMAND_COMPLETED_STATUS,
+            "cluster_id": self.cluster_id,
+            "applied": True,
+            "message": "telemetry query file imported",
+            "imported_count": len(definitions),
+            "queries": [definition.__dict__ for definition in definitions],
         }
 
     async def apply_default_command(self) -> JsonObject:
@@ -275,4 +321,9 @@ class TargetClusterAgent:
         query = payload.get("query", payload)
         if not isinstance(query, dict):
             raise ValueError("telemetry query command requires a query object")
+        if "query" not in query:
+            source = query.get("source")
+            name = query.get("name")
+            if isinstance(source, str) and isinstance(name, str):
+                return self.query_registry.get(source, name)
         return TelemetryQueryDefinition.from_mapping(query)

@@ -6,7 +6,7 @@ from providers import (
     TelemetryProvider,
     TempoTracesProvider,
 )
-from telemetry_queries import TelemetryQueryDefinition
+from telemetry_queries import TelemetryQueryDefinition, TelemetryQueryRegistry
 
 from evidence.collector import EvidenceCollector
 from evidence.scheduler import EvidenceScheduler
@@ -37,5 +37,6 @@ __all__ = [
     "PrometheusMetricsProvider",
     "TelemetryProvider",
     "TelemetryQueryDefinition",
+    "TelemetryQueryRegistry",
     "TempoTracesProvider",
 ]
