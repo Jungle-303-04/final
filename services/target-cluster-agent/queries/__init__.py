@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from queries.payloads import TelemetryQueryCommandPayload, TelemetryQueryImportPayload
 from queries.registry import (
     DEFAULT_TELEMETRY_QUERY_DEFINITIONS,
     LOKI_LOG_QUERIES,
@@ -24,7 +25,9 @@ __all__ = [
     "LokiLogQuery",
     "OpenTelemetrySpanQuery",
     "PrometheusInstantQuery",
+    "TelemetryQueryCommandPayload",
     "TelemetryQueryDefinition",
+    "TelemetryQueryImportPayload",
     "TelemetryQueryRegistry",
     "TelemetrySource",
     "load_query_definitions",
