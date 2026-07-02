@@ -317,6 +317,15 @@ async def on_git_changed(
         await ctx.db.record_manifest_artifact(
             artifact_payload(evt, ManifestArtifactStatus.INVALID_CONFIG.value, reason=reason)
         )
+        if isinstance(exc, ValueError):
+            await ctx.db.mark_watch_observed(
+                evt.watch_target_id,
+                evt.commit_sha,
+                evt.workspace_id,
+                evt.repository_id,
+                evt.branch,
+                evt.manifest_path,
+            )
         yield ManifestInvalidBody(
             workspace_id=evt.workspace_id,
             repository_id=evt.repository_id,
