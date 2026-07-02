@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from types import SimpleNamespace
 
@@ -14,8 +15,17 @@ from domains.target.router import (
     lease_evidence_source,
     register_target,
     target_install_manifest,
+    update_cluster_policy,
 )
-from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
+from packages.contracts.gateway.requests import (
+    AgentPolicy,
+    BootstrapPolicy,
+    DesiredResource,
+    EvidenceProviderPolicy,
+    EvidenceRuntimePolicy,
+    EvidenceSourceLeaseRequest,
+    TargetRegisterRequest,
+)
 
 
 class FakeDb:
@@ -72,6 +82,29 @@ class FakeLeaseDb:
         }
 
 
+class FakePolicyDb:
+    def __init__(self, existing: AgentPolicy) -> None:
+        self.current = existing.model_dump()
+        self.saved: list[dict[str, object]] = []
+
+    def get_cluster_policy(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
+        assert workspace_id == "default"
+        assert cluster_id == "cluster-1"
+        return self.current
+
+    def upsert_cluster_policy(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        policy: dict[str, object],
+    ) -> dict[str, object]:
+        assert workspace_id == "default"
+        assert cluster_id == "cluster-1"
+        self.current = policy
+        self.saved.append(policy)
+        return policy
+
+
 def target_request() -> TargetRegisterRequest:
     return TargetRegisterRequest(
         cluster_id="target-cluster-01",
@@ -117,8 +150,6 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
             events=events,
         )
 
-    import asyncio
-
     response = asyncio.run(run())
 
     assert response.registered is True
@@ -161,8 +192,6 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
             events=events,
         )
 
-    import asyncio
-
     with pytest.raises(HTTPException):
         asyncio.run(run())
 
@@ -199,10 +228,56 @@ def test_evidence_source_lease_route_delegates_to_management_store() -> None:
             db=FakeLeaseDb(),
         )
 
-    import asyncio
-
     response = asyncio.run(run())
 
     assert response.leased is True
     assert str(response.lease_id).startswith("trusted-cluster:trusted-workspace:")
     assert "prometheus.default" in str(response.lease_id)
+
+
+def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
+    existing_policy = AgentPolicy(
+        cluster_id="cluster-1",
+        generation=1,
+        evidence=EvidenceRuntimePolicy(
+            failure_policy="strict",
+            providers={
+                "metrics": EvidenceProviderPolicy(interval_seconds=10),
+                "logs": EvidenceProviderPolicy(interval_seconds=20),
+            },
+        ),
+        bootstrap=BootstrapPolicy(
+            resources=[
+                DesiredResource(
+                    resource_id="target-agent-policy",
+                    kind="ConfigMap",
+                    namespace="target",
+                    name="target-agent-policy",
+                )
+            ]
+        ),
+    )
+    db = FakePolicyDb(existing_policy)
+    partial_update = AgentPolicy(
+        cluster_id="cluster-1",
+        generation=2,
+        evidence=EvidenceRuntimePolicy(
+            providers={"logs": EvidenceProviderPolicy(interval_seconds=45)}
+        ),
+    )
+
+    response = asyncio.run(
+        update_cluster_policy(
+            "cluster-1",
+            partial_update,
+            current=SimpleNamespace(workspace_id="default"),
+            db=db,
+        )
+    )
+
+    merged = AgentPolicy.model_validate(response["policy"])
+    assert merged.generation == 2
+    assert merged.evidence.failure_policy == "strict"
+    assert merged.evidence.providers["metrics"].interval_seconds == 10
+    assert merged.evidence.providers["logs"].interval_seconds == 45
+    assert merged.bootstrap.resources[0].resource_id == "target-agent-policy"
