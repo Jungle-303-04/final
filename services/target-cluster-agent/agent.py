@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Iterable
 
 import httpx
-from evidence import EvidenceCollector
+from evidence import EvidenceCollector, EvidenceScheduler, EvidenceTaskStore
 from providers import (
     LokiLogsProvider,
     PrometheusMetricsProvider,
@@ -20,10 +20,17 @@ from settings import (
     COMMAND_RESULT_MESSAGE,
     COMMAND_RETRY_DELAY_SECONDS,
     DEFAULT_AGENT_ID,
+    DEFAULT_EVIDENCE_FAILURE_POLICY,
+    DEFAULT_EVIDENCE_PROVIDER_WORKERS,
+    DEFAULT_EVIDENCE_QUEUE_DB_PATH,
     DEFAULT_MANAGEMENT_BASE_URL,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
+    EVIDENCE_FAILURE_POLICY_ENV,
     EVIDENCE_INTERVAL_ENV,
+    EVIDENCE_PROVIDER_WORKERS_ENV,
+    EVIDENCE_QUEUE_DB_PATH_ENV,
+    EVIDENCE_TASK_LEASE_SECONDS,
     HOSTNAME_ENV,
     HTTP_TIMEOUT_SECONDS,
     MANAGEMENT_BASE_URL_ENV,
@@ -42,6 +49,19 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 TRACER = get_tracer("target-cluster-agent.agent")
+
+
+def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for part in raw_counts.split(","):
+        item = part.strip()
+        if not item:
+            continue
+        provider_key, separator, raw_count = item.partition("=")
+        if not separator:
+            raise ValueError(f"invalid provider worker setting: {item}")
+        counts[provider_key.strip()] = max(1, int(raw_count.strip()))
+    return counts
 
 
 class HttpManagementPlaneClient:
@@ -125,6 +145,17 @@ class TargetClusterAgent:
         self.tracer = configure_tracing(self.otel_service_name, self.otel_traces_endpoint)
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
+        self.evidence_provider_worker_counts = parse_provider_worker_counts(
+            env(EVIDENCE_PROVIDER_WORKERS_ENV, DEFAULT_EVIDENCE_PROVIDER_WORKERS)
+        )
+        self.evidence_failure_policy = env(
+            EVIDENCE_FAILURE_POLICY_ENV,
+            DEFAULT_EVIDENCE_FAILURE_POLICY,
+        )
+        self.evidence_queue_db_path = env(
+            EVIDENCE_QUEUE_DB_PATH_ENV,
+            DEFAULT_EVIDENCE_QUEUE_DB_PATH,
+        )
         self.client = client
         if providers is None:
             providers = (
@@ -133,6 +164,16 @@ class TargetClusterAgent:
                 TempoTracesProvider.from_config(env),
             )
         self.evidence_collector = EvidenceCollector(providers)
+        self.evidence_scheduler = EvidenceScheduler(
+            cluster_id=self.cluster_id,
+            collector=self.evidence_collector,
+            store=EvidenceTaskStore(self.evidence_queue_db_path),
+            provider_keys=tuple(self.evidence_collector.providers),
+            provider_worker_counts=self.evidence_provider_worker_counts,
+            failure_policy=self.evidence_failure_policy,
+            interval_seconds=self.interval,
+            lease_seconds=EVIDENCE_TASK_LEASE_SECONDS,
+        )
 
     # Start the agent with either the injected client or a real HTTP client.
     async def run(self) -> None:
@@ -145,7 +186,7 @@ class TargetClusterAgent:
     # Register once, then run evidence shipping and command polling together.
     async def run_with_client(self, client: ManagementPlaneClient) -> None:
         await self.register(client)
-        await asyncio.gather(self.ship_evidence(client), self.poll_commands(client))
+        await asyncio.gather(self.evidence_scheduler.run(client), self.poll_commands(client))
 
     # Retry registration until the Management Plane accepts this agent.
     async def register(self, client: ManagementPlaneClient) -> None:
@@ -160,31 +201,6 @@ class TargetClusterAgent:
             except Exception as exc:
                 print(f"agent waiting for management gateway: {exc}", flush=True)
                 await asyncio.sleep(REGISTER_RETRY_DELAY_SECONDS)
-
-    # Periodically collect evidence and send it through the Management Plane client.
-    async def ship_evidence(self, client: ManagementPlaneClient) -> None:
-        while True:
-            try:
-                with self.tracer.start_as_current_span("target_agent.ship_evidence") as span:
-                    span.attr("cluster.id", self.cluster_id)
-                    evidence = await self.collect_evidence()
-                    status_code = await client.ship_evidence(evidence)
-                    span.attr("http.status_code", status_code)
-                    print(f"evidence shipped status={status_code}", flush=True)
-            except Exception as exc:
-                print(f"evidence ship failed: {exc}", flush=True)
-            await asyncio.sleep(self.interval)
-
-    # Build the full evidence payload through the telemetry evidence collector.
-    async def collect_evidence(self) -> JsonObject:
-        with self.tracer.start_as_current_span("target_agent.collect_evidence") as span:
-            span.attr("cluster.id", self.cluster_id)
-            telemetry_evidence = await self.evidence_collector.collect_evidence()
-            return {
-                "cluster_id": self.cluster_id,
-                "kubernetes": {},
-                **telemetry_evidence,
-            }
 
     # Keep checking for commands and report completed command results.
     async def poll_commands(self, client: ManagementPlaneClient) -> None:

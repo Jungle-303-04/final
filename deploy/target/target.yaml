@@ -117,6 +117,18 @@ subjects:
     name: node-collector
     namespace: target
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: target-agent-evidence-queue
+  namespace: target
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
 # optional-node-collector runs one collector Pod per Kubernetes node.
 # The current kind target cluster has one node, so this DaemonSet currently creates one Pod.
 # Each Pod exposes /metrics on port 9100 for Prometheus and writes structured JSON logs
@@ -218,3 +230,16 @@ spec:
             # Evidence collection loop interval in seconds.
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"
+            - name: EVIDENCE_PROVIDER_WORKERS
+              value: "metrics=1,logs=1,traces=1"
+            - name: EVIDENCE_FAILURE_POLICY
+              value: "allow_partial"
+            - name: EVIDENCE_QUEUE_DB_PATH
+              value: "/data/evidence-queue.db"
+          volumeMounts:
+            - name: evidence-queue-data
+              mountPath: /data
+      volumes:
+        - name: evidence-queue-data
+          persistentVolumeClaim:
+            claimName: target-agent-evidence-queue

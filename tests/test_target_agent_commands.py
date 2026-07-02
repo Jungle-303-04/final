@@ -29,6 +29,10 @@ def load_agent_module():
         "providers.prometheus_providers",
         "providers.tempo_providers",
         "evidence",
+        "evidence.collector",
+        "evidence.scheduler",
+        "evidence.store",
+        "evidence.uploader",
     )
     previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(TARGET_AGENT_PATH.parent))
