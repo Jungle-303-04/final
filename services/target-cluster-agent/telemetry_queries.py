@@ -13,6 +13,7 @@ SOURCE_EVIDENCE_KEYS: dict[TelemetrySource, str] = {
     "tempo": "traces",
 }
 
+DEFAULT_QUERY_PATH = Path(__file__).with_name("queries")
 SUPPORTED_QUERY_FILE_SUFFIXES = {".json"}
 
 
@@ -69,7 +70,7 @@ class TelemetryQueryRegistry:
             self.register(definition)
         return definitions
 
-    def import_file(self, path: str | Path) -> tuple[TelemetryQueryDefinition, ...]:
+    def import_path(self, path: str | Path) -> tuple[TelemetryQueryDefinition, ...]:
         return self.register_many(load_query_definitions(path))
 
     def get(self, source: TelemetrySource, name: str) -> TelemetryQueryDefinition:
@@ -78,19 +79,47 @@ class TelemetryQueryRegistry:
         except KeyError as exc:
             raise ValueError(f"unknown telemetry query: {source}/{name}") from exc
 
+    def for_source(self, source: TelemetrySource) -> tuple[TelemetryQueryDefinition, ...]:
+        return tuple(
+            definition
+            for (definition_source, _name), definition in self.definitions.items()
+            if definition_source == source
+        )
+
 
 def load_query_definitions(path: str | Path) -> tuple[TelemetryQueryDefinition, ...]:
-    query_file = Path(path)
+    query_path = Path(path)
+    if query_path.is_dir():
+        definitions: list[TelemetryQueryDefinition] = []
+        for query_file in sorted(query_path.rglob("*.json")):
+            definitions.extend(load_query_definitions(query_file))
+        return tuple(definitions)
+
+    query_file = query_path
     if query_file.suffix not in SUPPORTED_QUERY_FILE_SUFFIXES:
         supported = ", ".join(sorted(SUPPORTED_QUERY_FILE_SUFFIXES))
         raise ValueError(f"unsupported telemetry query file: {query_file}; supported: {supported}")
 
     payload = json.loads(query_file.read_text(encoding="utf-8"))
+    file_source = payload.get("source") if isinstance(payload, dict) else None
     rows = payload.get("queries", payload) if isinstance(payload, dict) else payload
     if not isinstance(rows, list):
         raise ValueError("telemetry query file must contain a list or a 'queries' list")
 
-    return tuple(TelemetryQueryDefinition.from_mapping(row) for row in rows)
+    return tuple(query_definition_from_file_row(row, file_source, query_file) for row in rows)
+
+
+def query_definition_from_file_row(
+    row: object,
+    file_source: object,
+    query_file: Path,
+) -> TelemetryQueryDefinition:
+    if not isinstance(row, dict):
+        raise ValueError(f"telemetry query file row must be an object: {query_file}")
+    payload = dict(row)
+    if "source" not in payload and isinstance(file_source, str):
+        payload["source"] = file_source
+    return TelemetryQueryDefinition.from_mapping(payload)
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:
@@ -121,120 +150,19 @@ class OpenTelemetrySpanQuery:
     traceql: str
 
 
-# Connection-check queries that are expected to exist in the local target cluster.
-PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = (
-    PrometheusInstantQuery(
-        metric_name="scrape_targets_up",
-        description="Prometheus scrape target health for the target cluster.",
-        promql="up",
-    ),
-    PrometheusInstantQuery(
-        metric_name="target_pod_info",
-        description="Pods discovered by kube-state-metrics in the target namespace.",
-        promql='kube_pod_info{namespace="target"}',
-    ),
-    PrometheusInstantQuery(
-        metric_name="target_deployment_replicas",
-        description="Deployment replica counts reported by kube-state-metrics.",
-        promql='kube_deployment_status_replicas{namespace="target"}',
-    ),
-    PrometheusInstantQuery(
-        metric_name="node_cpu_usage_ratio",
-        description="Node CPU usage ratio from Prometheus node-exporter metrics.",
-        promql='1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))',
-    ),
-    PrometheusInstantQuery(
-        metric_name="node_memory_usage_ratio",
-        description="Node memory usage ratio from Prometheus node-exporter metrics.",
-        promql="1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-    ),
-    PrometheusInstantQuery(
-        metric_name="node_filesystem_usage_ratio",
-        description="Node filesystem usage ratio from Prometheus node-exporter metrics.",
-        promql=(
-            '1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"} '
-            '/ node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"})'
-        ),
-    ),
-    PrometheusInstantQuery(
-        metric_name="node_collector_node_pod_count",
-        description="Pods scheduled on each Kubernetes node reported by optional-node-collector.",
-        promql="node_collector_node_pod_count",
-    ),
-    PrometheusInstantQuery(
-        metric_name="node_collector_node_not_ready_pod_count",
-        description="Not Ready Pods on each Kubernetes node reported by optional-node-collector.",
-        promql="node_collector_node_not_ready_pod_count",
-    ),
-    PrometheusInstantQuery(
-        metric_name="node_collector_scrape_error",
-        description="Whether optional-node-collector failed to read Kubernetes API data.",
-        promql="node_collector_scrape_error",
-    ),
+DEFAULT_TELEMETRY_QUERY_DEFINITIONS = load_query_definitions(DEFAULT_QUERY_PATH)
+PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = tuple(
+    cast(PrometheusInstantQuery, definition.to_provider_query())
+    for definition in DEFAULT_TELEMETRY_QUERY_DEFINITIONS
+    if definition.source == "prometheus"
 )
-
-
-# Dummy LogQL queries for the future Loki adapter.
-LOKI_LOG_QUERIES: tuple[LokiLogQuery, ...] = (
-    LokiLogQuery(
-        query_name="target_namespace_errors",
-        description="Error logs emitted by workloads in the target namespace.",
-        logql='{k8s_namespace_name="target"} |= "ERROR"',
-    ),
-    LokiLogQuery(
-        query_name="node_collector_runtime_samples",
-        description="Structured runtime samples emitted by optional-node-collector.",
-        logql=(
-            '{k8s_namespace_name="target", k8s_container_name="node-collector"} '
-            '|= "node_runtime_sample"'
-        ),
-    ),
-    LokiLogQuery(
-        query_name="target_agent_warnings",
-        description="Warnings or failures emitted by the target-cluster-agent.",
-        logql=(
-            '{k8s_namespace_name="target", k8s_container_name="target-cluster-agent"} '
-            '|~ "WARN|ERROR|failed"'
-        ),
-    ),
+LOKI_LOG_QUERIES: tuple[LokiLogQuery, ...] = tuple(
+    cast(LokiLogQuery, definition.to_provider_query())
+    for definition in DEFAULT_TELEMETRY_QUERY_DEFINITIONS
+    if definition.source == "loki"
 )
-
-
-# Tempo stores traces from OpenTelemetry Collector and supports TraceQL search.
-OPEN_TELEMETRY_SPAN_QUERIES: tuple[OpenTelemetrySpanQuery, ...] = (
-    OpenTelemetrySpanQuery(
-        query_name="checkout_slow_spans",
-        description="Slow checkout spans for demo RCA evidence.",
-        traceql='{ resource.service.name = "checkout-api" }',
-    ),
-    OpenTelemetrySpanQuery(
-        query_name="target_agent_error_spans",
-        description="Error spans emitted by the target-cluster-agent.",
-        traceql='{ resource.service.name = "target-cluster-agent" && status = error }',
-    ),
-    OpenTelemetrySpanQuery(
-        query_name="target_agent_recent_spans",
-        description="Recent spans emitted by the target-cluster-agent evidence loop.",
-        traceql='{ resource.service.name = "target-cluster-agent" }',
-    ),
-    OpenTelemetrySpanQuery(
-        query_name="management_gateway_spans",
-        description="Management Gateway request spans related to agent traffic.",
-        traceql='{ resource.service.name = "api-gateway" }',
-    ),
-)
-
-DEFAULT_TELEMETRY_QUERY_DEFINITIONS: tuple[TelemetryQueryDefinition, ...] = (
-    *(
-        TelemetryQueryDefinition("prometheus", query.metric_name, query.description, query.promql)
-        for query in PROMETHEUS_INSTANT_QUERIES
-    ),
-    *(
-        TelemetryQueryDefinition("loki", query.query_name, query.description, query.logql)
-        for query in LOKI_LOG_QUERIES
-    ),
-    *(
-        TelemetryQueryDefinition("tempo", query.query_name, query.description, query.traceql)
-        for query in OPEN_TELEMETRY_SPAN_QUERIES
-    ),
+OPEN_TELEMETRY_SPAN_QUERIES: tuple[OpenTelemetrySpanQuery, ...] = tuple(
+    cast(OpenTelemetrySpanQuery, definition.to_provider_query())
+    for definition in DEFAULT_TELEMETRY_QUERY_DEFINITIONS
+    if definition.source == "tempo"
 )

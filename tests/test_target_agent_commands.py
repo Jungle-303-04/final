@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -68,3 +69,63 @@ def test_agent_unwraps_queued_command_payload() -> None:
     )
 
     assert payload["query"]["source"] == "prometheus"
+
+
+def test_agent_registers_query_for_scheduled_provider_collection() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    agent.evidence_collector = module.EvidenceCollector([metrics_provider])
+    agent.query_registry = agent.evidence_collector.registry
+
+    result = asyncio.run(
+        agent.register_query_command(
+            {
+                "query": {
+                    "source": "prometheus",
+                    "name": "custom_up",
+                    "description": "Custom scrape check.",
+                    "query": "up",
+                }
+            }
+        )
+    )
+
+    assert result["status"] == module.COMMAND_COMPLETED_STATUS
+    assert any(query.metric_name == "custom_up" for query in metrics_provider.queries)
+    selected = agent.query_definition_from_payload(
+        {"query": {"source": "prometheus", "name": "custom_up"}}
+    )
+    assert selected.query == "up"
+
+
+def test_agent_imports_query_directory_for_scheduler(tmp_path: Path) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    agent.evidence_collector = module.EvidenceCollector([metrics_provider])
+    agent.query_registry = agent.evidence_collector.registry
+    query_dir = tmp_path / "queries" / "prometheus"
+    query_dir.mkdir(parents=True)
+    (query_dir / "custom.json").write_text(
+        """
+        {
+          "source": "prometheus",
+          "queries": [
+            {
+              "name": "imported_up",
+              "description": "Imported scrape check.",
+              "query": "up"
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    result = asyncio.run(agent.import_query_path_command({"path": str(tmp_path / "queries")}))
+
+    assert result["imported_count"] == 1
+    assert any(query.metric_name == "imported_up" for query in metrics_provider.queries)
