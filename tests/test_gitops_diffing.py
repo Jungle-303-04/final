@@ -43,9 +43,7 @@ def test_managed_deployment_fields_ignore_runtime_metadata() -> None:
     assert fields == {
         "spec.replicas": 2,
         "spec.template.spec.containers[name=app].image": "checkout-api:v1",
-        "spec.template.spec.containers[name=app].resources": {
-            "requests": {"cpu": "100m"}
-        },
+        "spec.template.spec.containers[name=app].resources": {"requests": {"cpu": "100m"}},
     }
 
 
@@ -75,13 +73,9 @@ def test_field_level_3way_classifies_drift() -> None:
 
 def test_field_level_3way_classifies_conflict() -> None:
     changes = compare_managed_fields(
-        old_desired={
-            "spec.template.spec.containers[name=app].image": "checkout-api:v1"
-        },
+        old_desired={"spec.template.spec.containers[name=app].image": "checkout-api:v1"},
         live={"spec.template.spec.containers[name=app].image": "checkout-api:hotfix"},
-        new_desired={
-            "spec.template.spec.containers[name=app].image": "checkout-api:v2"
-        },
+        new_desired={"spec.template.spec.containers[name=app].image": "checkout-api:v2"},
     )
 
     assert summarize_status(changes) == "review_required"

@@ -9,6 +9,13 @@ from enum import StrEnum
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+from kubernetes_api import KubernetesApiClient
+from metric_collectors import (
+    MetricCollector,
+    PodMetricCollector,
+    collector_status_metric_sample,
+)
+from prometheus_metrics import MetricSample, render_prometheus_metrics
 from uvicorn import Config, Server
 
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -71,12 +78,21 @@ class NodeRuntimeSample:
 
 class NodeCollector:
     def __init__(
-        self, node_name: str, pod_name: str, namespace: str, interval_seconds: int
+        self,
+        node_name: str,
+        pod_name: str,
+        namespace: str,
+        interval_seconds: int,
+        kubernetes: KubernetesApiClient | None = None,
     ) -> None:
         self.node_name = node_name
         self.pod_name = pod_name
         self.namespace = namespace
         self.interval_seconds = interval_seconds
+        self.kubernetes = kubernetes or KubernetesApiClient()
+        self.collectors: tuple[MetricCollector, ...] = (
+            PodMetricCollector(self.kubernetes, self.node_name),
+        )
 
     @classmethod
     def from_env(cls) -> NodeCollector:
@@ -106,25 +122,60 @@ class NodeCollector:
             runtime=NodeCollectorConfig.RUNTIME_NAME,
         )
 
-    def prometheus_metrics(self) -> str:
+    async def prometheus_metrics(self) -> str:
         sample = self.snapshot()
-        labels = f'node="{sample.node_name}",runtime="{sample.runtime}"'
-        return "\n".join(
-            [
-                "# HELP node_collector_cpu_usage_ratio Node CPU usage ratio.",
-                "# TYPE node_collector_cpu_usage_ratio gauge",
-                (f"node_collector_cpu_usage_ratio{{{labels}}} {sample.cpu_usage_ratio}"),
-                ("# HELP node_collector_memory_working_set_bytes Node memory working set."),
-                "# TYPE node_collector_memory_working_set_bytes gauge",
-                (
-                    f"node_collector_memory_working_set_bytes{{{labels}}} {sample.memory_working_set_bytes}"
-                ),
-                ("# HELP node_collector_filesystem_usage_ratio Node filesystem usage ratio."),
-                "# TYPE node_collector_filesystem_usage_ratio gauge",
-                f"node_collector_filesystem_usage_ratio{{{labels}}} {sample.filesystem_usage_ratio}",
-                "",
-            ]
-        )
+        metric_labels = {"node": sample.node_name, "runtime": sample.runtime}
+        metrics = [
+            MetricSample(
+                name="node_collector_cpu_usage_ratio",
+                help="Node CPU usage ratio.",
+                value=sample.cpu_usage_ratio,
+                labels=metric_labels,
+            ),
+            MetricSample(
+                name="node_collector_memory_working_set_bytes",
+                help="Node memory working set.",
+                value=sample.memory_working_set_bytes,
+                labels=metric_labels,
+            ),
+            MetricSample(
+                name="node_collector_filesystem_usage_ratio",
+                help="Node filesystem usage ratio.",
+                value=sample.filesystem_usage_ratio,
+                labels=metric_labels,
+            ),
+        ]
+
+        for collector in self.collectors:
+            try:
+                metrics.extend(await collector.collect(metric_labels))
+                metrics.append(
+                    collector_status_metric_sample(
+                        metric_labels,
+                        collector.collector_name,
+                        has_error=False,
+                    )
+                )
+            except Exception as exc:
+                LOGGER.warning(
+                    "node_metric_collector_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.SERVICE: NodeCollectorConfig.SERVICE_NAME,
+                            "collector": collector.collector_name,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
+                metrics.append(
+                    collector_status_metric_sample(
+                        metric_labels,
+                        collector.collector_name,
+                        has_error=True,
+                    )
+                )
+
+        return render_prometheus_metrics(metrics)
 
     async def log_forever(self) -> None:
         while True:
@@ -171,7 +222,8 @@ def create_app(collector: NodeCollector | None = None) -> FastAPI:
     @app.get(METRICS_PATH, response_class=PlainTextResponse)
     async def metrics() -> PlainTextResponse:
         return PlainTextResponse(
-            node_collector.prometheus_metrics(), media_type=NodeCollectorConfig.METRIC_CONTENT_TYPE
+            await node_collector.prometheus_metrics(),
+            media_type=NodeCollectorConfig.METRIC_CONTENT_TYPE,
         )
 
     return app

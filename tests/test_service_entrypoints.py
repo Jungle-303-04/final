@@ -128,9 +128,6 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         'args: ["audit-worker"]',
         'args: ["target-agent"]',
         'args: ["node-collector"]',
-        'args: ["fake-prometheus"]',
-        'args: ["fake-loki"]',
-        'args: ["fake-otel"]',
     ]
     for legacy_arg in legacy_role_args:
         assert legacy_arg not in manifests

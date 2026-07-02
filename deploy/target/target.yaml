@@ -30,13 +30,16 @@ kind: ClusterRole
 metadata:
   name: cluster-agent-read
 rules:
+  # Read-only access to cluster objects used for evidence and command context.
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+  # Read-only access to workload controllers.
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets"]
     verbs: ["get", "list", "watch"]
 ---
+# Bind the read-only ClusterRole above to the cluster-agent ServiceAccount.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -50,6 +53,46 @@ subjects:
     name: cluster-agent
     namespace: target
 ---
+# Write permissions for target-agent owned resources only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-self-manage
+  namespace: target
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["target-agent-policy"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["cluster-agent"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-self-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-self-manage
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: target-agent-policy
+  namespace: target
+data:
+  owner: cluster-agent
+---
+# Write permissions are scoped to sandbox only.
+# The agent can patch demo workloads/configmaps there without mutating target telemetry.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -60,6 +103,7 @@ rules:
     resources: ["daemonsets"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
+# Bind sandbox write permissions to the cluster-agent ServiceAccount.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -215,6 +259,17 @@ spec:
     - port: 8000
       targetPort: 8000
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: target-agent-state
+  namespace: target
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -250,3 +305,18 @@ spec:
               value: service:local
             - name: NODE_COLLECTOR_NAMESPACE
               value: target
+            - name: EVIDENCE_QUEUE_DB_PATH
+              value: /var/lib/target-agent/evidence-queue.db
+            - name: AGENT_CONTROL_DB_PATH
+              value: /var/lib/target-agent/agent-control.db
+            - name: OTEL_SERVICE_NAME
+              value: target-cluster-agent
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://opentelemetry-collector.target.svc:4318/v1/traces
+          volumeMounts:
+            - name: target-agent-state
+              mountPath: /var/lib/target-agent
+      volumes:
+        - name: target-agent-state
+          persistentVolumeClaim:
+            claimName: target-agent-state

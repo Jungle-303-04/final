@@ -1,0 +1,33 @@
+# Values for the Grafana Tempo Helm chart.
+# Tempo stores traces that OpenTelemetry Collector forwards through OTLP.
+
+fullnameOverride: tempo
+replicas: 1
+
+tempo:
+  # Keep the local MVP quiet and self-contained.
+  reportingEnabled: false
+  retention: 24h
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: true
+  size: 5Gi

@@ -23,6 +23,10 @@ AGENT_COMMAND_START_PATH = "/agent/commands/{command_id}/start"
 AGENT_COMMAND_HEARTBEAT_PATH = "/agent/commands/{command_id}/heartbeat"
 AGENT_COMMAND_RESULT_PATH = "/agent/commands/{command_id}/result"
 AGENT_EVIDENCE_SOURCE_LEASE_PATH = "/agent/evidence-sources/{source_id}/lease"
+AGENT_POLICY_PATH = "/agent/policy"
+AGENT_POLICY_STATUS_PATH = "/agent/policy/status"
+AGENT_RECONCILE_STATUS_PATH = "/agent/reconcile/status"
+CLUSTER_POLICY_PATH = "/clusters/{cluster_id}/policy"
 FAKE_TELEMETRY_CATCH_ALL_PATH = "/{path:path}"
 
 

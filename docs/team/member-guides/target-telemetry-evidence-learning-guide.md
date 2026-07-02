@@ -82,14 +82,15 @@ EvidenceDraft 예시:
 ```text
 src/services/target/cluster-agent/agent.py
 src/services/target/cluster-agent/fake_telemetry.py
-src/services/target/cluster-agent/settings.py
+src/services/target/cluster-agent/config.py
 ```
 
 추후 분리 후보:
 
 ```text
-src/services/target/cluster-agent/evidence.py
-src/services/target/cluster-agent/telemetry_clients.py
+src/services/target/cluster-agent/evidence/
+src/services/target/cluster-agent/providers/
+src/services/target/cluster-agent/queries/
 ```
 
 테스트 후보:
