@@ -75,3 +75,7 @@ COMMAND_RESULT_MESSAGE = "Kubernetes action applied in sandbox namespace"
 QUERY_RUN_ACTION = "telemetry.query.run"
 QUERY_REGISTER_ACTION = "telemetry.query.register"
 QUERY_IMPORT_ACTION = "telemetry.query.import"
+
+KUBERNETES_DEPLOYMENT_PATCH_ACTION = "k8s.apps.v1.deployments.patch"
+KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"
+KUBERNETES_CONFIGMAP_PATCH_ACTION = "k8s.core.v1.configmaps.patch"
