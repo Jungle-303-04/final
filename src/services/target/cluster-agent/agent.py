@@ -10,6 +10,7 @@ import httpx
 from commands import (
     AgentCommandRegistry,
     CommandContext,
+    CommandResultOutbox,
     KubernetesApiClient,
     KubernetesPatchPayload,
     KubernetesScalePayload,
@@ -47,9 +48,13 @@ from config import (
     AGENT_CONTROL_DB_PATH_ENV,
     BOOTSTRAP_MODE_ENV,
     CLUSTER_ROLE_ENV,
+    COMMAND_OUTBOX_DB_PATH_ENV,
+    COMMAND_OUTBOX_FLUSH_INTERVAL_SECONDS,
+    COMMAND_OUTBOX_MAX_ATTEMPTS,
     DEFAULT_AGENT_CONTROL_DB_PATH,
     DEFAULT_BOOTSTRAP_MODE,
     DEFAULT_CLUSTER_ROLE,
+    DEFAULT_COMMAND_OUTBOX_DB_PATH,
     DEFAULT_EVIDENCE_FAILURE_POLICY,
     DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
     DEFAULT_EVIDENCE_PROVIDER_WORKERS,
@@ -414,6 +419,10 @@ class TargetClusterAgent:
             AGENT_CONTROL_DB_PATH_ENV,
             DEFAULT_AGENT_CONTROL_DB_PATH,
         )
+        self.command_outbox_db_path = env(
+            COMMAND_OUTBOX_DB_PATH_ENV,
+            DEFAULT_COMMAND_OUTBOX_DB_PATH,
+        )
         self.policy_sync_interval_seconds = int(
             env(POLICY_SYNC_INTERVAL_ENV, DEFAULT_POLICY_SYNC_INTERVAL_SECONDS)
         )
@@ -437,6 +446,7 @@ class TargetClusterAgent:
         self.evidence_collector = EvidenceCollector(providers, self.query_registry)
         self.evidence_store = EvidenceTaskStore(self.evidence_queue_db_path)
         self.control_store = AgentControlStore(self.agent_control_db_path)
+        self.command_outbox = CommandResultOutbox(self.command_outbox_db_path)
         self._workload_control_authority = object()
         self.evidence_scheduler = EvidenceScheduler(
             cluster_id=self.cluster_id,
@@ -569,6 +579,7 @@ class TargetClusterAgent:
             self.workload_controller.run(),
             self.reconciler.run(client),
             self.poll_commands(client),
+            self.flush_command_results_forever(client),
         )
 
     async def register(self, client: ManagementPlaneClient) -> None:
@@ -706,13 +717,14 @@ class TargetClusterAgent:
                         str(workspace_id),
                         lease_id,
                     )
-                    await client.complete_command(
-                        command_id,
-                        str(workspace_id),
-                        lease_id,
-                        self.agent_id,
-                        result,
+                    self.command_outbox.enqueue_result(
+                        command_id=command_id,
+                        workspace_id=str(workspace_id),
+                        lease_id=lease_id,
+                        agent_id=self.agent_id,
+                        result=result,
                     )
+                    await self.flush_command_results_once(client)
             except Exception as exc:
                 LOGGER.warning(
                     "command_polling_failed",
@@ -725,6 +737,46 @@ class TargetClusterAgent:
                     },
                 )
                 await asyncio.sleep(AgentConfig.COMMAND_RETRY_DELAY_SECONDS)
+
+    async def flush_command_results_forever(self, client: ManagementPlaneClient) -> None:
+        while True:
+            await self.flush_command_results_once(client)
+            await asyncio.sleep(COMMAND_OUTBOX_FLUSH_INTERVAL_SECONDS)
+
+    async def flush_command_results_once(self, client: ManagementPlaneClient) -> bool:
+        record = self.command_outbox.next_result()
+        if record is None:
+            return False
+        try:
+            await client.complete_command(
+                record.command_id,
+                record.workspace_id,
+                record.lease_id,
+                record.agent_id,
+                record.result,
+            )
+            self.command_outbox.mark_sent(record.command_id)
+            return True
+        except Exception as exc:
+            abandoned = self.command_outbox.record_failure(
+                record.command_id,
+                str(exc),
+                COMMAND_OUTBOX_MAX_ATTEMPTS,
+            )
+            LOGGER.warning(
+                "command_result_flush_failed",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.COMMAND_ID: record.command_id,
+                        "attempt_count": record.attempt_count + 1,
+                        "abandoned": abandoned,
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
+            return False
 
     async def execute_command_with_heartbeat(
         self,

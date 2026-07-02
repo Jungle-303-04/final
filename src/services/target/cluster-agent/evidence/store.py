@@ -54,6 +54,8 @@ class EvidenceTaskStore:
                 cluster_id text not null,
                 status text not null,
                 scheduled_for real not null,
+                upload_attempt_count integer not null default 0,
+                upload_error text,
                 created_at real not null,
                 updated_at real not null
             );
@@ -83,6 +85,20 @@ class EvidenceTaskStore:
             """
         )
         self.conn.commit()
+        self.ensure_collection_columns()
+
+    def ensure_collection_columns(self) -> None:
+        columns = {
+            str(row["name"]) for row in self.conn.execute("pragma table_info(evidence_collections)")
+        }
+        if "upload_attempt_count" not in columns:
+            self.conn.execute(
+                "alter table evidence_collections "
+                "add column upload_attempt_count integer not null default 0"
+            )
+        if "upload_error" not in columns:
+            self.conn.execute("alter table evidence_collections add column upload_error text")
+        self.conn.commit()
 
     def recover_expired_leases(self, now: float) -> None:
         self.conn.execute(
@@ -107,14 +123,25 @@ class EvidenceTaskStore:
             cursor = self.conn.execute(
                 """
                 insert or ignore into evidence_collections
-                    (collection_id, cluster_id, status, scheduled_for, created_at, updated_at)
-                values (?, ?, ?, ?, ?, ?)
+                    (
+                        collection_id,
+                        cluster_id,
+                        status,
+                        scheduled_for,
+                        upload_attempt_count,
+                        upload_error,
+                        created_at,
+                        updated_at
+                    )
+                values (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     collection_id,
                     cluster_id,
                     COLLECTION_STATUS_OPEN,
                     scheduled_for,
+                    0,
+                    None,
                     now,
                     now,
                 ),
@@ -289,7 +316,9 @@ class EvidenceTaskStore:
             self.conn.execute(
                 """
                 update evidence_collections
-                set status = ?, updated_at = ?
+                set status = ?,
+                    upload_error = null,
+                    updated_at = ?
                 where collection_id = ?
                 """,
                 (COLLECTION_STATUS_UPLOADED, now, collection_id),
@@ -305,6 +334,45 @@ class EvidenceTaskStore:
                 """,
                 (COLLECTION_STATUS_FAILED, now, collection_id),
             )
+
+    def record_upload_failure(
+        self,
+        collection_id: str,
+        error: str,
+        max_attempts: int,
+        now: float,
+    ) -> bool:
+        with self.conn:
+            self.conn.execute(
+                """
+                update evidence_collections
+                set upload_attempt_count = upload_attempt_count + 1,
+                    upload_error = ?,
+                    updated_at = ?
+                where collection_id = ? and status = ?
+                """,
+                (error, now, collection_id, COLLECTION_STATUS_OPEN),
+            )
+            row = self.conn.execute(
+                """
+                select upload_attempt_count
+                from evidence_collections
+                where collection_id = ?
+                """,
+                (collection_id,),
+            ).fetchone()
+            attempt_count = 0 if row is None else int(row["upload_attempt_count"])
+            if attempt_count >= max_attempts:
+                self.conn.execute(
+                    """
+                    update evidence_collections
+                    set status = ?, updated_at = ?
+                    where collection_id = ?
+                    """,
+                    (COLLECTION_STATUS_FAILED, now, collection_id),
+                )
+                return True
+        return False
 
     def collection_has_failed_task(self, collection_id: str) -> bool:
         row = self.conn.execute(
