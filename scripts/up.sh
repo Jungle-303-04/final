@@ -81,10 +81,6 @@ MANAGEMENT_BASE_URL="http://${MGMT_NODE_IP}:30080"
 echo "==> deploying target cluster with management URL: ${MANAGEMENT_BASE_URL}"
 sed "s#__MANAGEMENT_BASE_URL__#${MANAGEMENT_BASE_URL}#g" "${ROOT_DIR}/deploy/target/target.yaml" \
   | kubectl --context "kind-${TARGET_CLUSTER}" apply -f -
-# Legacy fake telemetry services are no longer applied from target.yaml.
-# kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-prometheus --timeout=120s
-# kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-loki --timeout=120s
-# kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status deploy/fake-otel --timeout=120s
 kubectl --context "kind-${TARGET_CLUSTER}" -n target rollout status daemonset/optional-node-collector --timeout=120s
 echo "==> installing target telemetry"
 bash "${ROOT_DIR}/scripts/install-telemetry.sh"

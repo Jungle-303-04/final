@@ -100,6 +100,7 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
                     "cluster_id": "target-cluster-01",
                     "action": "rollout_restart",
                     "namespace": "sandbox",
+                    "payload": {"query": {"source": "prometheus", "name": "up", "query": "up"}},
                 },
                 "correlation_id": "corr-2",
             }
@@ -109,6 +110,7 @@ def test_command_workflow_queues_agent_command_through_port() -> None:
         correlation_id, plan, status = queue.queued[0]
         assert correlation_id == "corr-2"
         assert plan["cluster_id"] == "target-cluster-01"
+        assert plan["payload"]["query"]["source"] == "prometheus"
         assert status == "queued"
         assert [evt["subject"] for evt in events.published] == [
             "command.dispatch.ready",

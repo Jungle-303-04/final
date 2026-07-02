@@ -98,9 +98,6 @@ dashboard-projection-service  -> python services/dashboard-projection-service/ru
 audit-timeline-service        -> python services/audit-timeline-service/runner.py
 target-cluster-agent          -> python services/target-cluster-agent/runner.py
 optional-node-collector       -> python services/node-collector/runner.py
-fake-prometheus               -> python services/target-cluster-agent/fake_prometheus.py
-fake-loki                     -> python services/target-cluster-agent/fake_loki.py
-fake-otel                     -> python services/target-cluster-agent/fake_otel.py
 ```
 
 ## 추가 분리 순서

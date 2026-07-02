@@ -112,6 +112,41 @@ def test_collector_accepts_selected_provider_keys() -> None:
     assert evidence["metrics"]["source"] == "prometheus"
 
 
+def test_collector_runs_one_off_query_definition() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    collector = module.EvidenceCollector([metrics_provider])
+
+    async def fake_query_prometheus(_client, metric_query) -> dict[str, object]:
+        return {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {"query": metric_query.promql},
+                        "value": [1782822589.742, "1"],
+                    }
+                ],
+            },
+        }
+
+    collector.providers["metrics"].query = fake_query_prometheus
+    definition = module.TelemetryQueryDefinition.from_mapping(
+        {
+            "source": "prometheus",
+            "name": "one_off_up",
+            "description": "One-off scrape check.",
+            "query": "up",
+        }
+    )
+
+    result = asyncio.run(collector.run_query(definition))
+
+    assert result["source"] == "prometheus"
+    assert result["results"]["one_off_up"]["samples"][0]["value"] == 1.0
+
+
 def test_collector_rejects_unknown_provider_keys() -> None:
     module = load_evidence_module()
     collector = module.EvidenceCollector([])
