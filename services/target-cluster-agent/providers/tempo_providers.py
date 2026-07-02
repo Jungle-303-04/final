@@ -36,12 +36,12 @@ class TempoTracesProvider:
         telemetry_query: OpenTelemetrySpanQuery,
     ) -> JsonObject:
         with TRACER.start_as_current_span("tempo.search") as span:
-            span.set_attribute("tempo.traceql", telemetry_query.traceql)
+            span.attr("tempo.traceql", telemetry_query.traceql)
             response = await client.get(
                 f"{self.base_url}/api/search",
                 params={"q": telemetry_query.traceql, "limit": TEMPO_QUERY_LIMIT},
             )
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
             response.raise_for_status()
             return response.json()
 
