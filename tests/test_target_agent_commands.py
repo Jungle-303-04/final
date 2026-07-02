@@ -30,6 +30,7 @@ def load_agent_module():
         "commands",
         "commands.context",
         "commands.kubernetes",
+        "commands.outbox",
         "commands.registry",
         "control",
         "control.policy",
@@ -77,6 +78,33 @@ class FakeKubernetesClient:
         return {"patched": True}
 
 
+class FakeCommandResultClient:
+    def __init__(self, *, fail_once: bool = False) -> None:
+        self.fail_once = fail_once
+        self.completed: list[dict[str, object]] = []
+
+    async def complete_command(
+        self,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        result: dict[str, object],
+    ) -> None:
+        if self.fail_once:
+            self.fail_once = False
+            raise RuntimeError("gateway unavailable")
+        self.completed.append(
+            {
+                "command_id": command_id,
+                "workspace_id": workspace_id,
+                "lease_id": lease_id,
+                "agent_id": agent_id,
+                "result": result,
+            }
+        )
+
+
 def register_agent_commands(module: object, agent: object) -> None:
     agent.command_registry = module.AgentCommandRegistry.from_instance(
         agent,
@@ -108,6 +136,47 @@ def test_agent_unwraps_queued_command_payload() -> None:
     )
 
     assert payload["query"]["source"] == "prometheus"
+
+
+def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.agent_id = "agent-1"
+    agent.command_outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    agent.command_outbox.enqueue_result(
+        command_id="cmd-1",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={"status": "completed", "cluster_id": "cluster-1"},
+    )
+    client = FakeCommandResultClient(fail_once=True)
+
+    assert asyncio.run(agent.flush_command_results_once(client)) is False
+    assert agent.command_outbox.pending_count() == 1
+    assert asyncio.run(agent.flush_command_results_once(client)) is True
+
+    assert agent.command_outbox.pending_count() == 0
+    assert client.completed[0]["command_id"] == "cmd-1"
+
+
+def test_command_result_outbox_abandons_poison_result(tmp_path: Path) -> None:
+    module = load_agent_module()
+    outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    outbox.enqueue_result(
+        command_id="cmd-1",
+        workspace_id="default",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        result={"status": "completed", "cluster_id": "cluster-1"},
+    )
+
+    assert outbox.record_failure("cmd-1", "lease expired", max_attempts=1) is True
+
+    assert outbox.pending_count() == 0
+    assert outbox.abandoned_count() == 1
+    assert outbox.next_result() is None
 
 
 def test_agent_registers_query_for_scheduled_provider_collection() -> None:
