@@ -14,6 +14,11 @@ MAX_WEBHOOK_REPLICAS = 10
 DEFAULT_COMMAND_ACTION = "rollout_restart"
 DEFAULT_COMMAND_STATUS = "completed"
 EMPTY_COMMAND_MESSAGE = ""
+DEFAULT_AGENT_POLICY_GENERATION = 1
+DEFAULT_PROVIDER_INTERVAL_SECONDS = 8
+DEFAULT_PROVIDER_MIN_WORKERS = 1
+DEFAULT_PROVIDER_MAX_WORKERS = 3
+DEFAULT_QUEUE_AGE_TARGET_SECONDS = 15
 
 
 class StrictModel(BaseModel):
@@ -65,3 +70,64 @@ class CommandResultRequest(StrictModel):
     cluster_id: str = DEFAULT_TARGET_CLUSTER_ID
     applied: bool = False
     message: str = EMPTY_COMMAND_MESSAGE
+
+
+class EvidenceProviderPolicy(StrictModel):
+    enabled: bool = True
+    interval_seconds: int = Field(default=DEFAULT_PROVIDER_INTERVAL_SECONDS, ge=1)
+    min_workers: int = Field(default=DEFAULT_PROVIDER_MIN_WORKERS, ge=0)
+    max_workers: int = Field(default=DEFAULT_PROVIDER_MAX_WORKERS, ge=0)
+    queue_age_target_seconds: int = Field(default=DEFAULT_QUEUE_AGE_TARGET_SECONDS, ge=1)
+
+
+class EvidenceRuntimePolicy(StrictModel):
+    failure_policy: Literal["allow_partial", "strict"] = "allow_partial"
+    providers: dict[str, EvidenceProviderPolicy] = Field(default_factory=dict)
+
+
+class DesiredResource(StrictModel):
+    resource_id: str
+    scope: Literal["target-agent", "system", "user-workload"] = "target-agent"
+    kind: Literal["ConfigMap", "Deployment"]
+    namespace: str
+    name: str
+    action: Literal["observe", "apply"] = "observe"
+    state: dict[str, Any] = Field(default_factory=dict)
+
+
+class BootstrapPolicy(StrictModel):
+    mode: Literal["management", "target"] = "target"
+    resources: list[DesiredResource] = Field(default_factory=list)
+
+
+class DesiredStatePolicy(StrictModel):
+    resources: list[DesiredResource] = Field(default_factory=list)
+
+
+class AgentPolicy(StrictModel):
+    cluster_id: str = DEFAULT_TARGET_CLUSTER_ID
+    generation: int = Field(default=DEFAULT_AGENT_POLICY_GENERATION, ge=1)
+    cluster_role: Literal["management", "target"] = "target"
+    evidence: EvidenceRuntimePolicy = Field(default_factory=EvidenceRuntimePolicy)
+    bootstrap: BootstrapPolicy = Field(default_factory=BootstrapPolicy)
+    desired_state: DesiredStatePolicy = Field(default_factory=DesiredStatePolicy)
+
+
+class AgentPolicyResponse(StrictModel):
+    policy: AgentPolicy | None = None
+
+
+class AgentPolicyStatusRequest(StrictModel):
+    cluster_id: str = DEFAULT_TARGET_CLUSTER_ID
+    generation: int = Field(default=DEFAULT_AGENT_POLICY_GENERATION, ge=1)
+    status: Literal["applied", "failed", "unchanged"] = "applied"
+    message: str = EMPTY_COMMAND_MESSAGE
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentReconcileStatusRequest(StrictModel):
+    cluster_id: str = DEFAULT_TARGET_CLUSTER_ID
+    generation: int = Field(default=DEFAULT_AGENT_POLICY_GENERATION, ge=1)
+    status: Literal["applied", "failed", "unchanged"] = "unchanged"
+    message: str = EMPTY_COMMAND_MESSAGE
+    details: dict[str, Any] = Field(default_factory=dict)

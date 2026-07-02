@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import httpx
+from queries import LOKI_LOG_QUERIES, LokiLogQuery
 from settings import (
     DEFAULT_LOKI_BASE_URL,
     LOKI_BASE_URL_ENV,
     LOKI_QUERY_LIMIT,
     LOKI_TIMEOUT_SECONDS,
 )
-from telemetry_queries import LOKI_LOG_QUERIES, LokiLogQuery
 
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
@@ -41,7 +41,7 @@ class LokiLogsProvider:
                 f"{self.base_url}/loki/api/v1/query_range",
                 params={"query": telemetry_query.logql, "limit": LOKI_QUERY_LIMIT},
             )
-            span.attr("http.status_code", response.status_code)
+            span.http_status(response.status_code)
             response.raise_for_status()
             return response.json()
 

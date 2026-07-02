@@ -122,6 +122,37 @@ class Database:
             )
             """,
             """
+            create table if not exists cluster_policies (
+                cluster_id text primary key,
+                generation integer not null,
+                policy jsonb not null,
+                created_at timestamptz not null default now(),
+                updated_at timestamptz not null default now()
+            )
+            """,
+            """
+            create table if not exists agent_policy_status (
+                id bigserial primary key,
+                cluster_id text not null,
+                generation integer not null,
+                status text not null,
+                message text not null,
+                details jsonb not null default '{}'::jsonb,
+                created_at timestamptz not null default now()
+            )
+            """,
+            """
+            create table if not exists agent_reconcile_status (
+                id bigserial primary key,
+                cluster_id text not null,
+                generation integer not null,
+                status text not null,
+                message text not null,
+                details jsonb not null default '{}'::jsonb,
+                created_at timestamptz not null default now()
+            )
+            """,
+            """
             create table if not exists dashboard_cards (
                 correlation_id text primary key,
                 status text not null,
@@ -564,6 +595,89 @@ class Database:
                 )
                 row = cur.fetchone()
                 return row["correlation_id"] if row else None
+
+    def upsert_cluster_policy(self, cluster_id: str, policy: JsonObject) -> JsonObject:
+        generation = int(policy.get("generation", 1))
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select generation
+                    from cluster_policies
+                    where cluster_id = %s
+                    """,
+                    (cluster_id,),
+                )
+                existing = cur.fetchone()
+                if existing and int(existing["generation"]) >= generation:
+                    raise ValueError(
+                        "policy generation must be greater than the current generation"
+                    )
+                cur.execute(
+                    """
+                    insert into cluster_policies
+                        (cluster_id, generation, policy, updated_at)
+                    values (%s, %s, %s, now())
+                    on conflict (cluster_id) do update set
+                        generation = excluded.generation,
+                        policy = excluded.policy,
+                        updated_at = now()
+                    returning policy
+                    """,
+                    (cluster_id, generation, json.dumps(policy)),
+                )
+                row = cur.fetchone()
+                return dict(row["policy"])
+
+    def get_cluster_policy(self, cluster_id: str) -> JsonObject | None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select policy
+                    from cluster_policies
+                    where cluster_id = %s
+                    """,
+                    (cluster_id,),
+                )
+                row = cur.fetchone()
+                return dict(row["policy"]) if row else None
+
+    def save_agent_policy_status(self, payload: JsonObject) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into agent_policy_status
+                        (cluster_id, generation, status, message, details)
+                    values (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        payload["cluster_id"],
+                        payload["generation"],
+                        payload["status"],
+                        payload.get("message", ""),
+                        json.dumps(payload.get("details", {})),
+                    ),
+                )
+
+    def save_agent_reconcile_status(self, payload: JsonObject) -> None:
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into agent_reconcile_status
+                        (cluster_id, generation, status, message, details)
+                    values (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        payload["cluster_id"],
+                        payload["generation"],
+                        payload["status"],
+                        payload.get("message", ""),
+                        json.dumps(payload.get("details", {})),
+                    ),
+                )
 
     def save_evidence(self, correlation_id: str, kind: str, payload: JsonObject) -> None:
         with self.connect() as conn:

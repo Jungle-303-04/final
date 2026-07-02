@@ -6,11 +6,11 @@ from providers import (
     TelemetryProvider,
     TempoTracesProvider,
 )
-from telemetry_queries import TelemetryQueryDefinition, TelemetryQueryRegistry
+from queries import TelemetryQueryDefinition, TelemetryQueryRegistry
 
 from evidence.collector import EvidenceCollector
 from evidence.scheduler import EvidenceScheduler
-from evidence.store import EvidenceTask, EvidenceTaskStore
+from evidence.store import EvidenceTask, EvidenceTaskStore, ProviderQueueStats
 from evidence.uploader import (
     FAILURE_POLICY_ALLOW_PARTIAL,
     FAILURE_POLICY_STRICT,
@@ -35,6 +35,7 @@ __all__ = [
     "EvidenceUploader",
     "LokiLogsProvider",
     "PrometheusMetricsProvider",
+    "ProviderQueueStats",
     "TelemetryProvider",
     "TelemetryQueryDefinition",
     "TelemetryQueryRegistry",

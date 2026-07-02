@@ -51,6 +51,44 @@ subjects:
     name: target-cluster-agent
     namespace: target
 ---
+# Write permissions for target-agent owned resources only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: target-cluster-agent-self-manage
+  namespace: target
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["target-agent-policy"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["target-cluster-agent"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: target-cluster-agent-self-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: target-cluster-agent-self-manage
+subjects:
+  - kind: ServiceAccount
+    name: target-cluster-agent
+    namespace: target
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: target-agent-policy
+  namespace: target
+data:
+  owner: target-cluster-agent
+---
 # Write permissions are scoped to sandbox only.
 # The agent can patch demo workloads/configmaps there without mutating target telemetry.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -227,15 +265,31 @@ spec:
               value: "target-cluster-agent"
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: "http://opentelemetry-collector.target.svc:4318/v1/traces"
+            - name: CLUSTER_ROLE
+              value: "target"
+            - name: BOOTSTRAP_MODE
+              value: "target"
             # Evidence collection loop interval in seconds.
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "8"
+            - name: POLICY_SYNC_INTERVAL_SECONDS
+              value: "15"
+            - name: RECONCILE_INTERVAL_SECONDS
+              value: "30"
             - name: EVIDENCE_PROVIDER_WORKERS
               value: "metrics=1,logs=1,traces=1"
+            - name: EVIDENCE_PROVIDER_MAX_WORKERS
+              value: "metrics=3,logs=3,traces=3"
+            - name: WORKLOAD_CONTROLLER_INTERVAL_SECONDS
+              value: "5"
+            - name: WORKLOAD_QUEUE_AGE_TARGET_SECONDS
+              value: "15"
             - name: EVIDENCE_FAILURE_POLICY
               value: "allow_partial"
             - name: EVIDENCE_QUEUE_DB_PATH
               value: "/data/evidence-queue.db"
+            - name: AGENT_CONTROL_DB_PATH
+              value: "/data/agent-control.db"
             - name: TELEMETRY_QUERY_PATH
               value: "services/target-cluster-agent/queries"
           volumeMounts:
