@@ -27,7 +27,6 @@ STREAM_SUBJECTS = [
     "safe_pr.>",
     "workflow.>",
     "approval.>",
-    "dashboard.>",
     "audit.>",
     "agent.>",
     "dead_letter.>",
@@ -94,9 +93,6 @@ class EventSubject(StrEnum):
     APPROVAL_REQUESTED = "approval.requested"  # 쓰기 승인 필요
     APPROVAL_GRANTED = "approval.granted"  # 승인 완료 또는 자동 승인
     APPROVAL_REJECTED = "approval.rejected"  # 승인 거절
-
-    # --- 읽기 모델(dashboard-worker) ---
-    DASHBOARD_UPDATED = "dashboard.updated"  # 대시보드 카드 갱신
 
     # --- 신뢰성(공통): 재시도 소진 시 DLQ ---
     DEAD_LETTER_CREATED = "dead_letter.created"  # 죽은 편지(DLQ) 적재

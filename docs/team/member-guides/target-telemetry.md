@@ -35,6 +35,7 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 | 4 | [Evidence 학습 가이드](target-telemetry-evidence-learning-guide.md) | raw telemetry를 작은 evidence로 줄이는 연습을 할 때 |
 | 5 | [구현 Phase 계획](target-telemetry-implementation-plan.md) | PR/커밋 단위로 작업을 시작할 때 |
 | 6 | [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md) | 실제 파일을 고치고 테스트할 때 |
+| 7 | [Target Agent Local Queue / Spool](target-agent-local-queue.md) | 명령 처리와 evidence 수집이 몰릴 때 agent가 어떻게 버틸지 설계할 때 |
 
 ## 담당 영역
 
@@ -108,6 +109,7 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 - command 실행은 idempotent하게 만든다. 같은 command가 재전달될 수 있다.
 - command 결과 payload에는 raw secret, kubeconfig, service account token을 넣지 않는다.
 - raw telemetry를 Gateway로 그대로 보내지 말고 evidence로 축약한다.
+- 운영 단계에서는 command/result와 telemetry/evidence를 같은 loop에서 바로 처리하지 않고, bounded queue와 local durable spool로 우선순위와 재전송 경계를 둔다. 자세한 판단 기준은 [Target Agent Local Queue / Spool](target-agent-local-queue.md)을 따른다.
 
 ## 작업 시작 순서
 

@@ -16,7 +16,6 @@ import domains
 from domains.audit.repository import AuditLogRepository
 from domains.command.repository import AgentCommandRepository
 from domains.identity.repository import WorkspaceAccessRepository
-from domains.projection.repository import DashboardRepository
 from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
 from domains.target.repository import TargetAgentRepository
@@ -74,7 +73,6 @@ if TYPE_CHECKING:
         AgentCommandRepository,
         RcaRepository,
         PullRequestRepository,
-        DashboardRepository,
         AuditLogRepository,
         TargetAgentRepository,
     ): ...
