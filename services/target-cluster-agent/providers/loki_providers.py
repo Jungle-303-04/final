@@ -36,12 +36,12 @@ class LokiLogsProvider:
         telemetry_query: LokiLogQuery,
     ) -> JsonObject:
         with TRACER.start_as_current_span("loki.query_range") as span:
-            span.set_attribute("loki.query", telemetry_query.logql)
+            span.attr("loki.query", telemetry_query.logql)
             response = await client.get(
                 f"{self.base_url}/loki/api/v1/query_range",
                 params={"query": telemetry_query.logql, "limit": LOKI_QUERY_LIMIT},
             )
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
             response.raise_for_status()
             return response.json()
 

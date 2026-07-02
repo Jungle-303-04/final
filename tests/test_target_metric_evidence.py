@@ -5,6 +5,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -23,6 +25,9 @@ def load_evidence_module():
     module_names = (
         "settings",
         "telemetry_queries",
+        "span",
+        "span.base",
+        "span.otel",
         "providers",
         "providers.base",
         "providers.loki_providers",
@@ -64,9 +69,9 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
             },
         }
 
-    collector.telemetry_providers["metrics"].query = fake_query_prometheus
+    collector.providers["metrics"].query = fake_query_prometheus
 
-    metrics = asyncio.run(collector.collect_prometheus_metrics())
+    metrics = asyncio.run(collector.collect("metrics"))["metrics"]
     payload = {
         "cluster_id": "target-cluster-01",
         "kubernetes": {},
@@ -83,3 +88,33 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
         results["node_collector_node_pod_count"]["samples"][0]["metric"]["node"]
         == "target-control-plane"
     )
+
+
+def test_collector_accepts_selected_provider_keys() -> None:
+    module = load_evidence_module()
+    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
+    collector = module.EvidenceCollector([metrics_provider])
+
+    async def fake_query_prometheus(_client, _metric_query) -> dict[str, object]:
+        return {
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [],
+            },
+        }
+
+    collector.providers["metrics"].query = fake_query_prometheus
+
+    evidence = asyncio.run(collector.collect("metrics"))
+
+    assert list(evidence) == ["metrics"]
+    assert evidence["metrics"]["source"] == "prometheus"
+
+
+def test_collector_rejects_unknown_provider_keys() -> None:
+    module = load_evidence_module()
+    collector = module.EvidenceCollector([])
+
+    with pytest.raises(ValueError, match="unknown evidence provider key"):
+        asyncio.run(collector.collect("metrics"))

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 import httpx
-from telemetry_tracing import get_tracer
+from span import get_tracer
 
 from packages.contracts.event_bus.interfaces import JsonObject
 

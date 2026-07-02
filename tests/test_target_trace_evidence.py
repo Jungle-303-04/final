@@ -23,6 +23,9 @@ def load_evidence_module():
     module_names = (
         "settings",
         "telemetry_queries",
+        "span",
+        "span.base",
+        "span.otel",
         "providers",
         "providers.base",
         "providers.loki_providers",
@@ -60,9 +63,9 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
             ]
         }
 
-    collector.telemetry_providers["traces"].query = fake_query_tempo
+    collector.providers["traces"].query = fake_query_tempo
 
-    traces = asyncio.run(collector.collect_tempo_traces())
+    traces = asyncio.run(collector.collect("traces"))["traces"]
     payload = {
         "cluster_id": "target-cluster-01",
         "kubernetes": {},
