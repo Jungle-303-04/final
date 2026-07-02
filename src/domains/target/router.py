@@ -23,6 +23,7 @@ from packages.contracts.event_bus.bodies import (
     TargetDesiredComponent,
 )
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.policy_merge import merge_agent_policy
 from packages.contracts.gateway.requests import (
     AgentPolicy,
     AgentPolicyResponse,
@@ -270,6 +271,7 @@ data:
   NODE_COLLECTOR_NAMESPACE: "target"
   EVIDENCE_QUEUE_DB_PATH: "/var/lib/target-agent/evidence-queue.db"
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
+  COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"
   OTEL_SERVICE_NAME: "target-cluster-agent"
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://opentelemetry-collector.target.svc:4318/v1/traces"
 """
@@ -534,8 +536,13 @@ async def update_cluster_policy(
             status_code=409,
             detail="cluster_id does not match policy payload",
         )
+    existing = db.get_cluster_policy(workspace_id, cluster_id)
+    base_policy = (
+        AgentPolicy.model_validate(existing) if existing else AgentPolicy(cluster_id=cluster_id)
+    )
+    merged_policy = merge_agent_policy(base_policy, payload)
     try:
-        stored = db.upsert_cluster_policy(workspace_id, cluster_id, payload.model_dump())
+        stored = db.upsert_cluster_policy(workspace_id, cluster_id, merged_policy.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"accepted": True, "policy": stored}

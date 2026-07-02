@@ -7,12 +7,15 @@ from commands.kubernetes import (
     KubernetesPatchPayload,
     KubernetesScalePayload,
 )
+from commands.outbox import CommandResultOutbox, CommandResultRecord
 from commands.registry import AgentCommandRegistry, command_handler, kubernetes_command
 
 __all__ = [
     "AgentCommandRegistry",
     "CommandContext",
     "CommandResult",
+    "CommandResultOutbox",
+    "CommandResultRecord",
     "KubernetesApiClient",
     "KubernetesGetPayload",
     "KubernetesPatchPayload",
