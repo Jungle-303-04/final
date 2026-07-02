@@ -127,6 +127,8 @@ spec:
               value: "/data/evidence-queue.db"
             - name: AGENT_CONTROL_DB_PATH
               value: "/data/agent-control.db"
+            - name: COMMAND_OUTBOX_DB_PATH
+              value: "/data/command-outbox.db"
             - name: TELEMETRY_QUERY_PATH
               value: "src/services/target/cluster-agent/queries"
           volumeMounts:

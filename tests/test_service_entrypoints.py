@@ -174,3 +174,13 @@ def test_node_collector_is_agent_managed_not_static_manifest() -> None:
     assert "kind: DaemonSet" not in target_manifest
     assert "cluster-agent-target-manage" in target_manifest
     assert "src/services/target/node-collector/app.py" in manager_source
+
+
+def test_otel_collector_pipelines_reference_defined_exporters() -> None:
+    values = read_project_file("deploy/target/opentelemetry.yaml")
+
+    assert "otlp/tempo:" in values
+    assert "otlphttp/loki:" in values
+    assert "- otlp/tempo" in values
+    assert "- otlphttp/loki" in values
+    assert "otlp_grpc/tempo" not in values

@@ -245,3 +245,21 @@ def test_upload_failure_keeps_collection_open_for_retry(tmp_path: Path) -> None:
 
     assert scheduler.store.has_unuploaded_collection()
     assert scheduler.store.next_uploadable_collection() is not None
+
+
+def test_upload_failure_is_quarantined_after_retry_budget(tmp_path: Path) -> None:
+    module = load_scheduler_module()
+    scheduler = make_scheduler(module, tmp_path, FakeCollector())
+    client = FakeClient(status_code=500)
+
+    scheduler.schedule_once(now=100.0)
+    assert asyncio.run(scheduler.work_once("metrics", "metrics-worker"))
+    assert asyncio.run(scheduler.work_once("logs", "logs-worker"))
+    assert asyncio.run(scheduler.work_once("traces", "traces-worker"))
+
+    assert asyncio.run(scheduler.upload_once(client)) == module.UPLOAD_FAILED
+    assert asyncio.run(scheduler.upload_once(client)) == module.UPLOAD_FAILED
+    assert asyncio.run(scheduler.upload_once(client)) == module.UPLOAD_FAILED
+
+    assert not scheduler.store.has_unuploaded_collection()
+    assert scheduler.store.next_uploadable_collection() is None

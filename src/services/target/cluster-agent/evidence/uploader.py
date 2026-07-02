@@ -15,6 +15,7 @@ FAILURE_POLICY_ALLOW_PARTIAL = "allow_partial"
 FAILURE_POLICY_STRICT = "strict"
 
 DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_MAX_UPLOAD_ATTEMPTS = 3
 DEFAULT_POLL_SECONDS = 1.0
 DEFAULT_UPLOAD_RETRY_SECONDS = 5.0
 SUCCESS_STATUS_MIN = 200
@@ -32,6 +33,7 @@ class EvidenceUploader:
         agent_id: str,
         source_id: str,
         source_lease_seconds: int,
+        max_upload_attempts: int = DEFAULT_MAX_UPLOAD_ATTEMPTS,
     ) -> None:
         self.store = store
         self.failure_policy = self.validate_failure_policy(failure_policy)
@@ -40,6 +42,7 @@ class EvidenceUploader:
         self.agent_id = agent_id
         self.source_id = source_id
         self.source_lease_seconds = source_lease_seconds
+        self.max_upload_attempts = max(1, max_upload_attempts)
 
     def set_failure_policy(self, failure_policy: str) -> None:
         self.failure_policy = self.validate_failure_policy(failure_policy)
@@ -99,6 +102,17 @@ class EvidenceUploader:
             return UPLOAD_DONE
         except Exception as exc:
             print(f"evidence upload failed collection={collection_id}: {exc}", flush=True)
+            exhausted = self.store.record_upload_failure(
+                collection_id,
+                str(exc),
+                self.max_upload_attempts,
+                time.time(),
+            )
+            if exhausted:
+                print(
+                    f"evidence collection failed id={collection_id} reason=upload_exhausted",
+                    flush=True,
+                )
             return UPLOAD_FAILED
 
     def validate_failure_policy(self, failure_policy: str) -> str:

@@ -25,6 +25,7 @@ SERVICE_LOCAL_MODULES = (
     "commands",
     "commands.context",
     "commands.kubernetes",
+    "commands.outbox",
     "commands.registry",
     "control",
     "control.policy",

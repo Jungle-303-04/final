@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from packages.contracts.event_bus.interfaces import JsonObject
+
+COMMAND_RESULT_STATUS_ABANDONED = "abandoned"
+COMMAND_RESULT_STATUS_PENDING = "pending"
+
+
+@dataclass(frozen=True)
+class CommandResultRecord:
+    command_id: str
+    workspace_id: str
+    lease_id: str
+    agent_id: str
+    result: JsonObject
+    attempt_count: int
+
+
+class CommandResultOutbox:
+    def __init__(self, db_path: str) -> None:
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(db_path, timeout=5.0)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("pragma journal_mode = wal")
+        self.conn.execute("pragma busy_timeout = 5000")
+        self.init_schema()
+
+    def init_schema(self) -> None:
+        self.conn.executescript(
+            """
+            create table if not exists command_results (
+                command_id text primary key,
+                workspace_id text not null,
+                lease_id text not null,
+                agent_id text not null,
+                status text not null default 'pending',
+                result_json text not null,
+                attempt_count integer not null default 0,
+                last_error text,
+                created_at real not null,
+                updated_at real not null
+            );
+
+            create index if not exists idx_command_results_created
+                on command_results(status, created_at);
+            """
+        )
+        self.conn.commit()
+        self.ensure_columns()
+
+    def ensure_columns(self) -> None:
+        columns = {
+            str(row["name"]) for row in self.conn.execute("pragma table_info(command_results)")
+        }
+        if "status" not in columns:
+            self.conn.execute(
+                "alter table command_results add column status text not null default 'pending'"
+            )
+        self.conn.commit()
+
+    def enqueue_result(
+        self,
+        *,
+        command_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        result: JsonObject,
+        now: float | None = None,
+    ) -> None:
+        timestamp = time.time() if now is None else now
+        with self.conn:
+            self.conn.execute(
+                """
+                insert into command_results (
+                    command_id,
+                    workspace_id,
+                    lease_id,
+                    agent_id,
+                    status,
+                    result_json,
+                    attempt_count,
+                    last_error,
+                    created_at,
+                    updated_at
+                )
+                values (?, ?, ?, ?, ?, ?, 0, null, ?, ?)
+                on conflict (command_id) do update set
+                    workspace_id = excluded.workspace_id,
+                    lease_id = excluded.lease_id,
+                    agent_id = excluded.agent_id,
+                    status = excluded.status,
+                    result_json = excluded.result_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    command_id,
+                    workspace_id,
+                    lease_id,
+                    agent_id,
+                    COMMAND_RESULT_STATUS_PENDING,
+                    json.dumps(result),
+                    timestamp,
+                    timestamp,
+                ),
+            )
+
+    def next_result(self) -> CommandResultRecord | None:
+        row = self.conn.execute(
+            """
+            select command_id, workspace_id, lease_id, agent_id, result_json, attempt_count
+            from command_results
+            where status = ?
+            order by created_at
+            limit 1
+            """,
+            (COMMAND_RESULT_STATUS_PENDING,),
+        ).fetchone()
+        if row is None:
+            return None
+        result = json.loads(row["result_json"])
+        if not isinstance(result, dict):
+            result = {"raw_result": result}
+        return CommandResultRecord(
+            command_id=str(row["command_id"]),
+            workspace_id=str(row["workspace_id"]),
+            lease_id=str(row["lease_id"]),
+            agent_id=str(row["agent_id"]),
+            result=result,
+            attempt_count=int(row["attempt_count"]),
+        )
+
+    def mark_sent(self, command_id: str) -> None:
+        with self.conn:
+            self.conn.execute("delete from command_results where command_id = ?", (command_id,))
+
+    def record_failure(
+        self,
+        command_id: str,
+        error: str,
+        max_attempts: int,
+        now: float | None = None,
+    ) -> bool:
+        timestamp = time.time() if now is None else now
+        with self.conn:
+            self.conn.execute(
+                """
+                update command_results
+                set attempt_count = attempt_count + 1,
+                    last_error = ?,
+                    updated_at = ?
+                where command_id = ? and status = ?
+                """,
+                (error, timestamp, command_id, COMMAND_RESULT_STATUS_PENDING),
+            )
+            row = self.conn.execute(
+                """
+                select attempt_count
+                from command_results
+                where command_id = ?
+                """,
+                (command_id,),
+            ).fetchone()
+            attempt_count = 0 if row is None else int(row["attempt_count"])
+            if attempt_count >= max(1, max_attempts):
+                self.conn.execute(
+                    """
+                    update command_results
+                    set status = ?, updated_at = ?
+                    where command_id = ?
+                    """,
+                    (COMMAND_RESULT_STATUS_ABANDONED, timestamp, command_id),
+                )
+                return True
+        return False
+
+    def pending_count(self) -> int:
+        row = self.conn.execute(
+            "select count(*) as count from command_results where status = ?",
+            (COMMAND_RESULT_STATUS_PENDING,),
+        ).fetchone()
+        return 0 if row is None else int(row["count"])
+
+    def abandoned_count(self) -> int:
+        row = self.conn.execute(
+            "select count(*) as count from command_results where status = ?",
+            (COMMAND_RESULT_STATUS_ABANDONED,),
+        ).fetchone()
+        return 0 if row is None else int(row["count"])
