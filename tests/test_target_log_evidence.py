@@ -20,41 +20,34 @@ def load_evidence_module():
         raise RuntimeError(f"cannot load module: {TARGET_AGENT_PATH}")
 
     module = importlib.util.module_from_spec(spec)
-    previous_modules = {
-        name: sys.modules.pop(name, None) for name in ("settings", "telemetry_queries")
-    }
+    module_names = (
+        "settings",
+        "telemetry_queries",
+        "providers",
+        "providers.base",
+        "providers.loki_providers",
+        "providers.prometheus_providers",
+        "providers.tempo_providers",
+    )
+    previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(TARGET_AGENT_PATH.parent))
     try:
         spec.loader.exec_module(module)
         return module
     finally:
         sys.path.remove(str(TARGET_AGENT_PATH.parent))
-        for name in ("settings", "telemetry_queries"):
+        for name in module_names:
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
                 sys.modules[name] = previous_modules[name]
 
 
-def fake_evidence() -> dict[str, object]:
-    return {
-        "cluster_id": "target-cluster-01",
-        "kubernetes": {},
-        "metrics": {},
-        "logs": [],
-        "traces": {},
-    }
-
-
 def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
-    collector = module.EvidenceCollector(
-        "http://prometheus.target.svc:9090",
-        "http://loki-gateway.target.svc",
-        "http://tempo.target.svc:3200",
-        fake_evidence,
-    )
+    logs_provider = module.LokiLogsProvider.from_config(lambda _name, default: default)
+    collector = module.EvidenceCollector([logs_provider])
 
-    async def fake_query_loki(_client, query: str) -> dict[str, object]:
+    async def fake_query_loki(_client, log_query) -> dict[str, object]:
         return {
             "status": "success",
             "data": {
@@ -64,7 +57,7 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
                         "stream": {
                             "namespace": "target",
                             "app": "optional-node-collector",
-                            "query": query,
+                            "query": log_query.logql,
                         },
                         "values": [["1782822589742000000", "node_runtime_sample"]],
                     }
@@ -72,11 +65,14 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
             },
         }
 
-    collector.query_loki = fake_query_loki
+    collector.telemetry_providers["logs"].query = fake_query_loki
 
     logs = asyncio.run(collector.collect_loki_logs())
-    payload = fake_evidence()
-    payload["logs"] = logs
+    payload = {
+        "cluster_id": "target-cluster-01",
+        "kubernetes": {},
+        "logs": logs,
+    }
 
     validated = AgentEvidenceRequest.model_validate(payload)
 

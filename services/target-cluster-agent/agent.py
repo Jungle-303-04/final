@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
 from evidence import EvidenceCollector
 from fastapi import FastAPI
+from providers import (
+    LokiLogsProvider,
+    PrometheusMetricsProvider,
+    TelemetryProvider,
+    TempoTracesProvider,
+)
 from settings import (
     AGENT_CAPABILITIES,
     CHECKOUT_APP_NAME,
@@ -15,43 +22,24 @@ from settings import (
     COMMAND_POLL_TIMEOUT_SECONDS,
     COMMAND_RESULT_MESSAGE,
     COMMAND_RETRY_DELAY_SECONDS,
-    CRASHING_POD_NAME,
-    CRASHING_POD_RESTARTS,
-    CRASHING_POD_STATUS,
     DEFAULT_AGENT_ID,
-    DEFAULT_LOKI_BASE_URL,
     DEFAULT_MANAGEMENT_BASE_URL,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
-    DEFAULT_PROMETHEUS_BASE_URL,
     DEFAULT_SERVICE_PORT,
-    DEFAULT_TEMPO_BASE_URL,
     EVIDENCE_INTERVAL_ENV,
-    FAKE_HTTP_5XX_RATE,
-    FAKE_LOKI_SOURCE,
-    FAKE_NODE_CPU,
-    FAKE_NODE_MEMORY_MB,
-    FAKE_OTEL_SOURCE,
-    FAKE_PROMETHEUS_SOURCE,
     HOSTNAME_ENV,
     HTTP_TIMEOUT_SECONDS,
-    K8S_BACKOFF_EVENT,
     K8S_READINESS_FAILED_EVENT,
     LOG_LEVEL,
-    LOKI_BASE_URL_ENV,
-    LOKI_ERROR_LINE,
-    LOKI_WARNING_LINE,
     MANAGEMENT_BASE_URL_ENV,
     OTEL_SERVICE_NAME_ENV,
-    OTEL_SLOW_SPAN,
     OTEL_TRACES_ENDPOINT_ENV,
-    PROMETHEUS_BASE_URL_ENV,
     PROMETHEUS_VECTOR_VALUE,
     REGISTER_RETRY_DELAY_SECONDS,
     SERVICE_HOST,
     SERVICE_PORT_ENV,
     TARGET_CLUSTER_ID_ENV,
-    TEMPO_BASE_URL_ENV,
 )
 from telemetry_tracing import configure_tracing, get_tracer
 from uvicorn import Config, Server
@@ -131,20 +119,12 @@ class HttpManagementPlaneClient:
 
 class TargetClusterAgent:
     # Read runtime settings and optionally accept a test/mock Management Plane client.
-    def __init__(self, client: ManagementPlaneClient | None = None) -> None:
+    def __init__(
+        self,
+        client: ManagementPlaneClient | None = None,
+        telemetry_providers: Iterable[TelemetryProvider] | None = None,
+    ) -> None:
         self.base_url = env(MANAGEMENT_BASE_URL_ENV, DEFAULT_MANAGEMENT_BASE_URL).rstrip("/")
-        self.prometheus_base_url = env(
-            PROMETHEUS_BASE_URL_ENV,
-            DEFAULT_PROMETHEUS_BASE_URL,
-        ).rstrip("/")
-        self.loki_base_url = env(
-            LOKI_BASE_URL_ENV,
-            DEFAULT_LOKI_BASE_URL,
-        ).rstrip("/")
-        self.tempo_base_url = env(
-            TEMPO_BASE_URL_ENV,
-            DEFAULT_TEMPO_BASE_URL,
-        ).rstrip("/")
         self.otel_service_name = env(OTEL_SERVICE_NAME_ENV, DEFAULT_OTEL_SERVICE_NAME)
         self.otel_traces_endpoint = env(
             OTEL_TRACES_ENDPOINT_ENV,
@@ -154,12 +134,13 @@ class TargetClusterAgent:
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
-        self.evidence_collector = EvidenceCollector(
-            self.prometheus_base_url,
-            self.loki_base_url,
-            self.tempo_base_url,
-            self.fake_evidence,
-        )
+        if telemetry_providers is None:
+            telemetry_providers = (
+                PrometheusMetricsProvider.from_config(env),
+                LokiLogsProvider.from_config(env),
+                TempoTracesProvider.from_config(env),
+            )
+        self.evidence_collector = EvidenceCollector(telemetry_providers)
 
     # Start the agent with either the injected client or a real HTTP client.
     async def run(self) -> None:
@@ -206,7 +187,12 @@ class TargetClusterAgent:
     async def collect_evidence(self) -> JsonObject:
         with self.tracer.start_as_current_span("target_agent.collect_evidence") as span:
             span.set_attribute("cluster.id", self.cluster_id)
-            return await self.evidence_collector.collect_evidence()
+            telemetry_evidence = await self.evidence_collector.collect_evidence()
+            return {
+                "cluster_id": self.cluster_id,
+                "kubernetes": {},
+                **telemetry_evidence,
+            }
 
     # Keep checking for commands and report completed command results.
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
@@ -241,36 +227,6 @@ class TargetClusterAgent:
             except Exception as exc:
                 print(f"command polling failed: {exc}", flush=True)
                 await asyncio.sleep(COMMAND_RETRY_DELAY_SECONDS)
-
-    # Return demo evidence used as the baseline and as fallback data.
-    def fake_evidence(self) -> JsonObject:
-        return {
-            "cluster_id": self.cluster_id,
-            "kubernetes": {
-                "pods": [
-                    {
-                        "name": CRASHING_POD_NAME,
-                        "status": CRASHING_POD_STATUS,
-                        "restarts": CRASHING_POD_RESTARTS,
-                    }
-                ],
-                "events": [K8S_READINESS_FAILED_EVENT, K8S_BACKOFF_EVENT],
-            },
-            "metrics": {
-                "source": FAKE_PROMETHEUS_SOURCE,
-                "cpu": FAKE_NODE_CPU,
-                "memory_mb": FAKE_NODE_MEMORY_MB,
-                "http_5xx_rate": FAKE_HTTP_5XX_RATE,
-            },
-            "logs": [
-                {
-                    "source": FAKE_LOKI_SOURCE,
-                    "line": LOKI_ERROR_LINE,
-                },
-                {"source": FAKE_LOKI_SOURCE, "line": LOKI_WARNING_LINE},
-            ],
-            "traces": {"source": FAKE_OTEL_SOURCE, "slow_span": OTEL_SLOW_SPAN},
-        }
 
 
 # Create a fake telemetry FastAPI app for Prometheus, Loki, or OTel demos.

@@ -47,22 +47,9 @@ DEFAULT_AGENT_ID = "target-agent"
 AGENT_CAPABILITIES = ["collector", "command_receiver"]
 
 CHECKOUT_APP_NAME = "checkout-api"
-CRASHING_POD_NAME = "checkout-api-7f8d"
-CRASHING_POD_STATUS = "CrashLoopBackOff"
-CRASHING_POD_RESTARTS = 4
 K8S_READINESS_FAILED_EVENT = "readiness probe failed"
-K8S_BACKOFF_EVENT = "back-off restarting failed container"
 
-FAKE_PROMETHEUS_SOURCE = "fake-prometheus"
-FAKE_LOKI_SOURCE = "fake-loki"
-FAKE_OTEL_SOURCE = "fake-otel"
-FAKE_NODE_CPU = 0.83
-FAKE_NODE_MEMORY_MB = 512
-FAKE_HTTP_5XX_RATE = 0.19
 PROMETHEUS_VECTOR_VALUE = "0.19"
 
 COMMAND_COMPLETED_STATUS = "completed"
 COMMAND_RESULT_MESSAGE = "fake Kubernetes action applied in sandbox namespace"
-LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
-LOKI_WARNING_LINE = "WARN rollback candidate detected"
-OTEL_SLOW_SPAN = "GET /checkout"

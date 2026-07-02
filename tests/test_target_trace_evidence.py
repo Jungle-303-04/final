@@ -20,41 +20,34 @@ def load_evidence_module():
         raise RuntimeError(f"cannot load module: {TARGET_AGENT_PATH}")
 
     module = importlib.util.module_from_spec(spec)
-    previous_modules = {
-        name: sys.modules.pop(name, None) for name in ("settings", "telemetry_queries")
-    }
+    module_names = (
+        "settings",
+        "telemetry_queries",
+        "providers",
+        "providers.base",
+        "providers.loki_providers",
+        "providers.prometheus_providers",
+        "providers.tempo_providers",
+    )
+    previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(TARGET_AGENT_PATH.parent))
     try:
         spec.loader.exec_module(module)
         return module
     finally:
         sys.path.remove(str(TARGET_AGENT_PATH.parent))
-        for name in ("settings", "telemetry_queries"):
+        for name in module_names:
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
                 sys.modules[name] = previous_modules[name]
 
 
-def fake_evidence() -> dict[str, object]:
-    return {
-        "cluster_id": "target-cluster-01",
-        "kubernetes": {},
-        "metrics": {},
-        "logs": [],
-        "traces": {},
-    }
-
-
 def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
-    collector = module.EvidenceCollector(
-        "http://prometheus.target.svc:9090",
-        "http://loki-gateway.target.svc",
-        "http://tempo.target.svc:3200",
-        fake_evidence,
-    )
+    traces_provider = module.TempoTracesProvider.from_config(lambda _name, default: default)
+    collector = module.EvidenceCollector([traces_provider])
 
-    async def fake_query_tempo(_client, traceql: str) -> dict[str, object]:
+    async def fake_query_tempo(_client, span_query) -> dict[str, object]:
         return {
             "traces": [
                 {
@@ -62,16 +55,19 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
                     "rootServiceName": "checkout-api",
                     "rootTraceName": "GET /checkout",
                     "durationMs": 842,
-                    "query": traceql,
+                    "query": span_query.traceql,
                 }
             ]
         }
 
-    collector.query_tempo = fake_query_tempo
+    collector.telemetry_providers["traces"].query = fake_query_tempo
 
     traces = asyncio.run(collector.collect_tempo_traces())
-    payload = fake_evidence()
-    payload["traces"] = traces
+    payload = {
+        "cluster_id": "target-cluster-01",
+        "kubernetes": {},
+        "traces": traces,
+    }
 
     validated = AgentEvidenceRequest.model_validate(payload)
     results = validated.traces["results"]
