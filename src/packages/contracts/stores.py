@@ -7,7 +7,7 @@ ctx.db 는 AsyncDb 로 감싸져 모든 메서드가 async → 여기 메서드�
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 
@@ -81,10 +81,6 @@ class TargetReconcileStore(Protocol):
     ) -> list[JsonObject]: ...
 
     async def record_target_reconcile_result(self, payload: JsonObject) -> JsonObject: ...
-
-
-class DashboardStore(Protocol):
-    async def upsert_dashboard(self, evt: EventEnvelope, status: Any, summary: str) -> None: ...
 
 
 class AuditStore(Protocol):

@@ -21,7 +21,6 @@ from domains.gitops.repository import (
     derive_repository_id,
     derive_watch_target_id,
 )
-from domains.projection.repository import DashboardRepository
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_REPOSITORY_ID,
@@ -94,7 +93,6 @@ def test_schema_defines_expected_tables() -> None:
         "rca_reports",
         "pull_requests",
         "agent_commands",
-        "dashboard_cards",
         "audit_log",
         "user_accounts",
         "workspaces",
@@ -140,40 +138,6 @@ def test_record_event_persists_causation_id() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     assert "causation_id" in str(compiled)
     assert compiled.params["causation_id"] == "parent-event-1"
-
-
-def test_dashboard_upsert_namespaces_correlation_id_by_workspace() -> None:
-    recorded: list[Any] = []
-
-    class FakeConnection:
-        def execute(self, statement: Any) -> None:
-            recorded.append(statement)
-
-    @contextmanager
-    def fake_connection():
-        yield FakeConnection()
-
-    repository = object.__new__(DashboardRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
-
-    repository.upsert_dashboard(
-        event(
-            "command.completed",
-            "command-worker",
-            {
-                "workspace_id": "workspace-b",
-                "command_id": "cmd-1",
-                "result": {"status": "completed"},
-            },
-            correlation_id="corr-shared",
-        ),
-        "done",
-        "command.completed from command-worker",
-    )
-
-    compiled = recorded[0].compile(dialect=postgresql.dialect())
-    assert compiled.params["correlation_id"] == "workspace-b:corr-shared"
-    assert compiled.params["payload"]["correlation_id"] == "corr-shared"
 
 
 def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
