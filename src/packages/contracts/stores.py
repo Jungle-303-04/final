@@ -1,0 +1,87 @@
+"""워커가 ctx.db 로 보는 능력별 store(async). 서비스는 자기 store 만 본다.
+
+ctx.db 는 AsyncDb 로 감싸져 모든 메서드가 async → 여기 메서드도 async.
+핸들러가 `ctx: EventContext[RcaStore]` 로 받으면 IDE·타입체커가 그 store 의
+메서드만 노출한다(다른 서비스 DB 능력은 안 보임).
+"""
+
+from __future__ import annotations
+
+from typing import Protocol
+
+from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
+
+
+class RcaStore(Protocol):
+    async def save_evidence(
+        self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject
+    ) -> None: ...
+
+    async def save_rca_report(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        root_cause: str,
+        action: str,
+        body: JsonObject,
+    ) -> None: ...
+
+
+class RepoChangeStore(Protocol):
+    async def save_repo_change(
+        self,
+        correlation_id: str,
+        commit_sha: str,
+        manifest: JsonObject,
+        workspace_id: str = "default",
+        repository_id: str | None = None,
+        watch_target_id: str | None = None,
+        binding_id: str | None = None,
+        manifest_path: str | None = None,
+    ) -> None: ...
+
+    async def record_manifest_artifact(self, payload: JsonObject) -> JsonObject: ...
+
+
+class WorkflowStore(Protocol):
+    async def upsert_application(self, payload: JsonObject) -> JsonObject: ...
+
+    async def start_workflow_run(self, payload: JsonObject) -> JsonObject: ...
+
+    async def update_workflow_run(self, payload: JsonObject) -> JsonObject: ...
+
+    async def record_workflow_step(self, payload: JsonObject) -> JsonObject: ...
+
+    async def request_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
+
+    async def resolve_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
+
+    async def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None: ...
+
+    async def update_workflow_run_for_command(self, payload: JsonObject) -> JsonObject: ...
+
+    async def get_workflow_identity_for_command(self, command_id: str) -> JsonObject | None: ...
+
+
+class PullRequestStore(Protocol):
+    async def save_pull_request(
+        self, correlation_id: str, pr_url: str, title: str, body: str, status: str
+    ) -> None: ...
+
+
+class AgentCommandStore(Protocol):
+    async def queue_agent_command(
+        self, correlation_id: str, plan: JsonObject, status: str
+    ) -> None: ...
+
+
+class TargetReconcileStore(Protocol):
+    async def list_target_desired_states(
+        self, workspace_id: str, cluster_id: str
+    ) -> list[JsonObject]: ...
+
+    async def record_target_reconcile_result(self, payload: JsonObject) -> JsonObject: ...
+
+
+class AuditStore(Protocol):
+    async def append_audit_log(self, evt: EventEnvelope) -> None: ...

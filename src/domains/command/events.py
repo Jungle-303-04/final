@@ -1,0 +1,140 @@
+"""command-worker 이벤트 body."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from domains.gitops.events import Diff
+from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
+from packages.contracts.event_bus.registry import event
+from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID,
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_ENVIRONMENT,
+    DEFAULT_WORKFLOW_RUN_ID,
+)
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.COMMAND_REQUESTED)
+@dataclass(frozen=True)
+class CommandRequestedBody(EventBody):
+    """command.requested — 이 diff를 sandbox에 적용해 달라."""
+
+    cluster_id: str
+    action: str
+    namespace: str
+    reason: str
+    diff: Diff
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    environment: str = DEFAULT_ENVIRONMENT
+    requested_by: str | None = None
+    actor: JsonObject | None = None
+
+
+@dataclass(frozen=True)
+class LeaseMetadata(EventBody):
+    """명령 lease 유지 기준."""
+
+    lease_seconds: int
+    heartbeat_interval_seconds: int
+
+
+@dataclass(frozen=True)
+class RetryPolicy(EventBody):
+    """agent 실행 실패 후 재처리 기준."""
+
+    max_attempts: int
+    retry_delay_seconds: int
+
+
+@dataclass(frozen=True)
+class RoutingConstraint(EventBody):
+    """명령을 맡을 수 있는 target agent 조건."""
+
+    channel: str
+    cluster_id: str
+    workspace_id: str
+    required_capability: str
+
+
+@dataclass(frozen=True)
+class Plan(EventBody):
+    """에이전트가 실행할 명령 계획(값 객체)."""
+
+    command_id: str
+    idempotency_key: str
+    cluster_id: str
+    action: str
+    namespace: str
+    diff: JsonObject
+    steps: list[str]
+    lease: LeaseMetadata
+    retry_policy: RetryPolicy
+    routing_constraint: RoutingConstraint
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    environment: str = DEFAULT_ENVIRONMENT
+
+
+@dataclass(frozen=True)
+class Route(EventBody):
+    """명령을 보낼 경로(채널/클러스터, 값 객체)."""
+
+    channel: str
+    cluster_id: str
+
+
+@event(EventSubject.COMMAND_DISPATCH_READY)
+@dataclass(frozen=True)
+class CommandDispatchReadyBody(EventBody):
+    """command.dispatch.ready — 정책 통과, 실행 계획 수립."""
+
+    plan: Plan
+
+
+@event(EventSubject.COMMAND_DISPATCHED)
+@dataclass(frozen=True)
+class CommandDispatchedBody(EventBody):
+    """command.dispatched — 대상 클러스터 라우팅."""
+
+    plan: Plan
+    route: Route
+
+
+@event(EventSubject.COMMAND_QUEUED_FOR_AGENT)
+@dataclass(frozen=True)
+class CommandQueuedForAgentBody(EventBody):
+    """command.queued_for_agent — 에이전트 폴링 큐에 적재."""
+
+    command_id: str
+    cluster_id: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    environment: str = DEFAULT_ENVIRONMENT
+
+
+@event(EventSubject.COMMAND_REJECTED)
+@dataclass(frozen=True)
+class CommandRejectedBody(EventBody):
+    """command.rejected — 정책 위반으로 거부(원요청 첨부)."""
+
+    reason: str
+    requested: JsonObject
+
+
+@event(EventSubject.COMMAND_COMPLETED)
+@dataclass(frozen=True)
+class CommandCompletedBody(EventBody):
+    """command.completed — 에이전트가 명령 실행 결과를 보고."""
+
+    command_id: str
+    result: JsonObject
