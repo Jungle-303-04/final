@@ -1,0 +1,25 @@
+{
+  "source": "tempo",
+  "queries": [
+    {
+      "name": "checkout_slow_spans",
+      "description": "Slow checkout spans for demo RCA evidence.",
+      "query": "{ resource.service.name = \"checkout-api\" }"
+    },
+    {
+      "name": "target_agent_error_spans",
+      "description": "Error spans emitted by the target-cluster-agent.",
+      "query": "{ resource.service.name = \"target-cluster-agent\" && status = error }"
+    },
+    {
+      "name": "target_agent_recent_spans",
+      "description": "Recent spans emitted by the target-cluster-agent evidence loop.",
+      "query": "{ resource.service.name = \"target-cluster-agent\" }"
+    },
+    {
+      "name": "management_gateway_spans",
+      "description": "Management Gateway request spans related to agent traffic.",
+      "query": "{ resource.service.name = \"api-gateway\" }"
+    }
+  ]
+}

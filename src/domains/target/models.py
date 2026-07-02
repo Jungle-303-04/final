@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, PrimaryKeyConstraint, Text
+from sqlalchemy import BigInteger, Boolean, Integer, PrimaryKeyConstraint, Text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -78,3 +78,41 @@ class TargetReconcileRecord(Base):
     details: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
+
+
+class AgentPolicyRecord(Base):
+    __tablename__ = "agent_policies"
+    __table_args__ = (PrimaryKeyConstraint("workspace_id", "cluster_id"),)
+
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class AgentPolicyStatusRecord(Base):
+    __tablename__ = "agent_policy_status"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = text_column()
+    message: Mapped[str] = text_column()
+    details: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+
+
+class AgentReconcileStatusRecord(Base):
+    __tablename__ = "agent_reconcile_status"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = text_column()
+    message: Mapped[str] = text_column()
+    details: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()

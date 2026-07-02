@@ -1,0 +1,50 @@
+{
+  "source": "prometheus",
+  "queries": [
+    {
+      "name": "scrape_targets_up",
+      "description": "Prometheus scrape target health for the target cluster.",
+      "query": "up"
+    },
+    {
+      "name": "target_pod_info",
+      "description": "Pods discovered by kube-state-metrics in the target namespace.",
+      "query": "kube_pod_info{namespace=\"target\"}"
+    },
+    {
+      "name": "target_deployment_replicas",
+      "description": "Deployment replica counts reported by kube-state-metrics.",
+      "query": "kube_deployment_status_replicas{namespace=\"target\"}"
+    },
+    {
+      "name": "node_cpu_usage_ratio",
+      "description": "Node CPU usage ratio from Prometheus node-exporter metrics.",
+      "query": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))"
+    },
+    {
+      "name": "node_memory_usage_ratio",
+      "description": "Node memory usage ratio from Prometheus node-exporter metrics.",
+      "query": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)"
+    },
+    {
+      "name": "node_filesystem_usage_ratio",
+      "description": "Node filesystem usage ratio from Prometheus node-exporter metrics.",
+      "query": "1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"/var\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\",mountpoint=\"/var\"})"
+    },
+    {
+      "name": "node_collector_node_pod_count",
+      "description": "Pods scheduled on each Kubernetes node reported by optional-node-collector.",
+      "query": "node_collector_node_pod_count"
+    },
+    {
+      "name": "node_collector_node_not_ready_pod_count",
+      "description": "Not Ready Pods on each Kubernetes node reported by optional-node-collector.",
+      "query": "node_collector_node_not_ready_pod_count"
+    },
+    {
+      "name": "node_collector_scrape_error",
+      "description": "Whether optional-node-collector failed to read Kubernetes API data.",
+      "query": "node_collector_scrape_error"
+    }
+  ]
+}
