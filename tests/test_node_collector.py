@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -16,16 +17,23 @@ def load_node_collector_module():
         raise RuntimeError(f"cannot load module: {NODE_COLLECTOR_PATH}")
     module = importlib.util.module_from_spec(spec)
     sys.modules["test_node_collector_module"] = module
-    previous_settings = sys.modules.pop("settings", None)
+    module_names = (
+        "kubernetes_api",
+        "metric_collectors",
+        "node_collector",
+        "prometheus_metrics",
+    )
+    previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(NODE_COLLECTOR_PATH.parent))
     try:
         spec.loader.exec_module(module)
         return module
     finally:
         sys.path.remove(str(NODE_COLLECTOR_PATH.parent))
-        sys.modules.pop("settings", None)
-        if previous_settings is not None:
-            sys.modules["settings"] = previous_settings
+        for name in module_names:
+            sys.modules.pop(name, None)
+            if previous_modules[name] is not None:
+                sys.modules[name] = previous_modules[name]
 
 
 def test_node_collector_snapshot_uses_downward_api_identity() -> None:
@@ -47,15 +55,46 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
 
 def test_node_collector_exposes_prometheus_metrics() -> None:
     module = load_node_collector_module()
+
+    class FakeKubernetesApi:
+        async def list_pods(self) -> dict[str, object]:
+            return {
+                "items": [
+                    {
+                        "spec": {"nodeName": "target-control-plane"},
+                        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+                    },
+                    {
+                        "spec": {"nodeName": "target-control-plane"},
+                        "status": {"conditions": [{"type": "Ready", "status": "False"}]},
+                    },
+                    {
+                        "spec": {"nodeName": "other-node"},
+                        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+                    },
+                ]
+            }
+
     collector = module.NodeCollector(
         node_name="target-control-plane",
         pod_name="optional-node-collector-abc",
         namespace="target",
         interval_seconds=15,
+        kubernetes=FakeKubernetesApi(),
     )
 
-    metrics = collector.prometheus_metrics()
+    metrics = asyncio.run(collector.prometheus_metrics())
 
-    assert "node_collector_cpu_usage_ratio" in metrics
+    assert (
+        'node_collector_scrape_error{node="target-control-plane",'
+        'runtime="containerd",collector="pod"} 0'
+    ) in metrics
+    assert (
+        'node_collector_node_pod_count{node="target-control-plane",runtime="containerd"} 2'
+    ) in metrics
+    assert (
+        'node_collector_node_not_ready_pod_count{node="target-control-plane",'
+        'runtime="containerd"} 1'
+    ) in metrics
     assert 'node="target-control-plane"' in metrics
     assert 'runtime="containerd"' in metrics

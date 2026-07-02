@@ -185,9 +185,9 @@
 | 범위 | 파일 |
 | --- | --- |
 | target domain | `src/domains/target/router.py` |
-| cluster agent | `src/services/target/cluster-agent/agent.py`, `src/services/target/cluster-agent/app.py`, `src/services/target/cluster-agent/settings.py`, `src/services/target/cluster-agent/node_collector_manager.py`, `src/services/target/cluster-agent/fake_telemetry.py` |
-| node collector | `src/services/target/node-collector/app.py`, `src/services/target/node-collector/node_collector.py`, `src/services/target/node-collector/settings.py` |
-| target deploy | `deploy/target/target.yaml`, `deploy/target/prometheus.yaml`, `deploy/target/loki.yaml`, `deploy/target/alloy.yaml`, `deploy/target/opentelemetry.yaml`, `deploy/kind/target.yaml` |
+| cluster agent | `src/services/target/cluster-agent/agent.py`, `src/services/target/cluster-agent/app.py`, `src/services/target/cluster-agent/config.py`, `src/services/target/cluster-agent/node_collector_manager.py`, `src/services/target/cluster-agent/fake_telemetry.py` |
+| node collector | `src/services/target/node-collector/app.py`, `src/services/target/node-collector/node_collector.py`, `src/services/target/node-collector/kubernetes_api.py`, `src/services/target/node-collector/metric_collectors.py`, `src/services/target/node-collector/prometheus_metrics.py` |
+| target deploy | `deploy/target/target.yaml`, `deploy/target/prometheus.yaml`, `deploy/target/loki.yaml`, `deploy/target/opentelemetry.yaml`, `deploy/kind/target.yaml` |
 | target scripts | `scripts/register-target.sh`, `scripts/install-telemetry.sh`, `scripts/status.sh` |
 | target tests | `tests/test_target_agent_client.py`, `tests/test_target_registration.py`, `tests/test_node_collector.py`, `tests/test_service_entrypoints.py` |
 | 문서 | `docs/team/member-guides/target-telemetry.md`, `docs/team/member-guides/target-telemetry-*.md` |

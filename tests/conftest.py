@@ -14,6 +14,42 @@ from packages.runtime.app import EventContext
 
 ROOT = Path(__file__).resolve().parents[1]
 
+SERVICE_LOCAL_MODULES = (
+    "settings",
+    "config",
+    "kubernetes_api",
+    "metric_collectors",
+    "prometheus_metrics",
+    "node_collector",
+    "node_collector_manager",
+    "commands",
+    "commands.context",
+    "commands.kubernetes",
+    "commands.registry",
+    "control",
+    "control.policy",
+    "control.reconciler",
+    "control.store",
+    "evidence",
+    "evidence.collector",
+    "evidence.scheduler",
+    "evidence.store",
+    "evidence.uploader",
+    "providers",
+    "providers.base",
+    "providers.loki_providers",
+    "providers.prometheus_providers",
+    "providers.tempo_providers",
+    "queries",
+    "queries.payloads",
+    "queries.registry",
+    "span",
+    "span.base",
+    "span.otel",
+    "workload",
+    "workload.controller",
+)
+
 
 def load_file(path: Path, name: str) -> Any:
     spec = importlib.util.spec_from_file_location(name, path)
@@ -21,16 +57,19 @@ def load_file(path: Path, name: str) -> Any:
         raise RuntimeError(f"cannot load: {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    previous = sys.modules.pop("settings", None)
+    previous_modules = {
+        module_name: sys.modules.pop(module_name, None) for module_name in SERVICE_LOCAL_MODULES
+    }
     sys.path.insert(0, str(path.parent))
     try:
         spec.loader.exec_module(module)
         return module
     finally:
         sys.path.remove(str(path.parent))
-        sys.modules.pop("settings", None)
-        if previous is not None:
-            sys.modules["settings"] = previous
+        for module_name in SERVICE_LOCAL_MODULES:
+            sys.modules.pop(module_name, None)
+            if previous_modules[module_name] is not None:
+                sys.modules[module_name] = previous_modules[module_name]
 
 
 def load_service(name: str) -> Any:

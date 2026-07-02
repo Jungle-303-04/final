@@ -181,4 +181,3 @@ flowchart TD
 - 실제 Kubernetes/SCM/Slack/GitHub API 호출은 port/interface 뒤에 둔다.
 - test는 넓게 만들기보다 domain pure logic, router edge case, worker event mapping을
   작게 검증한다.
-

@@ -9,6 +9,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.target.models import (
+    AgentPolicyRecord,
+    AgentPolicyStatusRecord,
+    AgentReconcileStatusRecord,
     EvidenceSourceLease,
     EvidenceWindow,
     TargetDesiredState,
@@ -22,6 +25,94 @@ PENDING_EVIDENCE_EVENT_ID_PREFIX = "pending:"
 
 
 class TargetAgentRepository(DatabaseConnection):
+    def upsert_cluster_policy(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        policy: JsonObject,
+    ) -> JsonObject:
+        generation = int(policy.get("generation", 1))
+        table = AgentPolicyRecord.__table__
+        with self.connection() as conn:
+            existing = (
+                conn.execute(
+                    select(table.c.generation).where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.cluster_id == cluster_id,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if existing and int(existing["generation"]) >= generation:
+                raise ValueError("policy generation must be greater than the current generation")
+
+            statement = (
+                pg_insert(table)
+                .values(
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    generation=generation,
+                    policy=policy,
+                    updated_at=func.now(),
+                )
+                .on_conflict_do_update(
+                    index_elements=[table.c.workspace_id, table.c.cluster_id],
+                    set_={
+                        "generation": generation,
+                        "policy": policy,
+                        "updated_at": func.now(),
+                    },
+                )
+                .returning(table.c.policy)
+            )
+            row = conn.execute(statement).mappings().one()
+        return dict(row["policy"])
+
+    def get_cluster_policy(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
+        table = AgentPolicyRecord.__table__
+        statement = select(table.c.policy).where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row["policy"]) if row else None
+
+    def save_agent_policy_status(
+        self,
+        workspace_id: str,
+        payload: JsonObject,
+    ) -> None:
+        table = AgentPolicyStatusRecord.__table__
+        statement = pg_insert(table).values(
+            workspace_id=workspace_id,
+            cluster_id=payload["cluster_id"],
+            generation=payload["generation"],
+            status=payload["status"],
+            message=payload.get("message", ""),
+            details=payload.get("details", {}),
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
+    def save_agent_reconcile_status(
+        self,
+        workspace_id: str,
+        payload: JsonObject,
+    ) -> None:
+        table = AgentReconcileStatusRecord.__table__
+        statement = pg_insert(table).values(
+            workspace_id=workspace_id,
+            cluster_id=payload["cluster_id"],
+            generation=payload["generation"],
+            status=payload["status"],
+            message=payload.get("message", ""),
+            details=payload.get("details", {}),
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+
     def upsert_target_desired_states(
         self,
         workspace_id: str,

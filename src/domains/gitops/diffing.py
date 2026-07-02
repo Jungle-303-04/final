@@ -64,9 +64,7 @@ def rendered_manifest_to_object(rendered: Any) -> JsonObject:
 def snapshot_from_rendered_manifest(
     rendered: Any, *, source: str = "rendered_manifest"
 ) -> ManagedFieldSnapshot:
-    return snapshot_from_kubernetes_object(
-        rendered_manifest_to_object(rendered), source=source
-    )
+    return snapshot_from_kubernetes_object(rendered_manifest_to_object(rendered), source=source)
 
 
 def extract_declared_field_paths(obj: Mapping[str, Any]) -> list[str]:
@@ -74,9 +72,7 @@ def extract_declared_field_paths(obj: Mapping[str, Any]) -> list[str]:
     return sorted(extract_managed_fields(obj))
 
 
-def snapshot_from_kubernetes_object(
-    obj: Mapping[str, Any], *, source: str
-) -> ManagedFieldSnapshot:
+def snapshot_from_kubernetes_object(obj: Mapping[str, Any], *, source: str) -> ManagedFieldSnapshot:
     metadata = _mapping(obj.get("metadata"))
     kind = str(obj.get("kind", "Unknown"))
     name = str(metadata.get("name", "unknown"))
