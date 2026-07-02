@@ -72,10 +72,6 @@ class EvidenceSourceLeaseResponse(StrictModel):
     leased_until: str | None = None
 
 
-class DashboardResponse(StrictModel):
-    cards: list[JsonMap]
-
-
 class FakeTelemetryResponse(StrictModel):
     status: str
     data: Any | None = None

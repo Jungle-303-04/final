@@ -16,7 +16,6 @@ from packages.storage.schema import (
 )
 
 DATABASE_URL_ENV = "DATABASE_URL"
-DASHBOARD_LIMIT = 25
 ERROR_MESSAGE_LIMIT = 2000
 
 # 상태 어휘(흩어진 리터럴 단일화)
@@ -63,9 +62,6 @@ WORKSPACE_COMPAT_COLUMNS = {
     "agent_commands": {
         "workspace_id": "alter table agent_commands add column if not exists workspace_id text",
     },
-    "dashboard_cards": {
-        "workspace_id": "alter table dashboard_cards add column if not exists workspace_id text",
-    },
     "evidence": {
         "workspace_id": "alter table evidence add column if not exists workspace_id text",
     },
@@ -82,7 +78,6 @@ WORKSPACE_COMPAT_COLUMNS = {
 }
 WORKSPACE_BACKFILL_COLUMNS = (
     "agent_commands",
-    "dashboard_cards",
     "evidence",
     "rca_reports",
 )

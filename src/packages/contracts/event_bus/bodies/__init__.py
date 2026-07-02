@@ -5,7 +5,7 @@
 - 접미사 없는 명사 = 본문 안에 끼워지는 값 객체(예: Manifest, Diff, Plan).
 규칙: 입력은 Pydantic으로 검증, 출력(이 패키지)은 dataclass로 구성.
 
-도메인별 base/gitops/command/rca/dashboard 모듈로 분리, 여기서 전부
+도메인별 base/gitops/command/rca 모듈로 분리, 여기서 전부
 재노출 → `from packages.contracts.event_bus.bodies import X`로 사용.
 """
 
@@ -51,7 +51,6 @@ from domains.gitops.events import (
     WorkflowStepRecordedBody,
 )
 from domains.mail.events import EmailVerificationRequestedBody, EmailVerificationSentBody
-from domains.projection.events import DashboardUpdatedBody
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
     Evidence,
@@ -99,7 +98,6 @@ __all__ = [
     "CommandQueuedForAgentBody",
     "CommandRejectedBody",
     "CommandRequestedBody",
-    "DashboardUpdatedBody",
     "DiffDetectedBody",
     "Diff",
     "DiffAnalyzedBody",

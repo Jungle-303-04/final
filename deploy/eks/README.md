@@ -49,7 +49,6 @@ Fargate는 stateless workload에만 선택 적용한다.
 - gitops-sync-worker
 - command-worker
 - rca-worker
-- dashboard-worker
 - audit-worker
 
 사용하지 않는 대상:

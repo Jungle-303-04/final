@@ -17,10 +17,6 @@ SERVICE_ENTRYPOINTS = {
     "mail-worker": ("src/services/mail/mail-worker/app.py", "App("),
     "command-worker": ("src/services/command/command-worker/app.py", "App("),
     "rca-worker": ("src/services/ai/rca-worker/app.py", "App("),
-    "dashboard-worker": (
-        "src/services/projection/dashboard-worker/app.py",
-        "App(",
-    ),
     "audit-worker": ("src/services/projection/audit-worker/app.py", "App("),
     "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
     "target-reconcile-worker": ("src/services/target/reconcile-worker/app.py", "App("),
@@ -61,7 +57,6 @@ APP_BASED_SERVICES = {
     "diff-worker",
     "diff-analyze-worker",
     "scm-worker",
-    "dashboard-worker",
     "audit-worker",
     "target-reconcile-worker",
 }
@@ -130,7 +125,6 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         'args: ["gitops-sync-worker"]',
         'args: ["command-worker"]',
         'args: ["rca-worker"]',
-        'args: ["dashboard-worker"]',
         'args: ["audit-worker"]',
         'args: ["target-agent"]',
         'args: ["node-collector"]',
@@ -159,18 +153,19 @@ def test_up_script_restarts_new_management_workers() -> None:
     assert "workflow-controller alert-worker mail-worker command-worker" in up_script
     assert "get cronjob/github-poll-worker" in up_script
     assert "Jungle-303-04/final" in up_script
-    assert "dashboard/config/kubernetes/desired-manifest.yaml" in up_script
+    assert "deploy/target/target.yaml" in up_script
 
 
-def test_smoke_requires_gitops_webhook_correlation_completion() -> None:
+def test_smoke_posts_webhook_and_command_without_dashboard_dependency() -> None:
     smoke_script = read_project_file("scripts/smoke.sh")
     assert "abc1234" not in smoke_script
     assert "latest_commit_sha" in smoke_script
     assert "repo_ref" in smoke_script
     assert "manifest_path" in smoke_script
-    assert "WEBHOOK_CORRELATION_ID" in smoke_script
-    assert "workflow.run.completed" in smoke_script
-    assert "dashboard.updated" not in smoke_script
+    assert "webhook_correlation_id" in smoke_script
+    assert "manual smoke command" in smoke_script
+    assert "workflow.run.completed" not in smoke_script
+    assert "/dashboard/query" not in smoke_script
 
 
 def test_node_collector_is_agent_managed_not_static_manifest() -> None:

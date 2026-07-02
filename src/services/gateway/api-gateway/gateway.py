@@ -17,7 +17,6 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
-from domains.projection.router import router as projection_router
 from domains.rca.router import router as rca_router
 from domains.target.router import router as target_router
 from packages.config.constants import Auth, CommandStatus
@@ -104,7 +103,6 @@ class ApiGateway:
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         self._register_dead_letter_routes(app)
-        app.include_router(projection_router)  # projection 도메인 라우터(대시보드)
         self._register_metrics_routes(app)
         self._register_error_handler(app)
 

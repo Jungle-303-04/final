@@ -14,7 +14,7 @@ REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_REPO="${GITHUB_REPO:-Jungle-303-04/final}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-MANIFEST_PATH="${MANIFEST_PATH:-dashboard/config/kubernetes/desired-manifest.yaml}"
+MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED:-1}"
@@ -40,6 +40,14 @@ need kubectl
 need curl
 need openssl
 need python3
+
+valid_github_token() {
+  local token="$1"
+  [[ -n "${token}" ]] || return 1
+  [[ "${token}" != *"<"* && "${token}" != *">"* ]] || return 1
+  [[ "${token}" != ghp_여기* ]] || return 1
+  LC_ALL=C grep -q '^[[:print:]]\+$' <<<"${token}"
+}
 
 if ! docker info >/dev/null 2>&1; then
   echo "Docker is not running." >&2
@@ -86,6 +94,9 @@ if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
 fi
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
   GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+fi
+if [ -z "${GITHUB_TOKEN}" ]; then
+  GITHUB_TOKEN="$(existing_secret_value management-runtime-secret GITHUB_TOKEN)"
 fi
 
 if [ -z "${MINIO_ROOT_PASSWORD}" ]; then
@@ -166,10 +177,15 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS}" \
   --from-literal=SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
+SECRET_ARGS=(
+  --from-literal=DATABASE_URL="${DATABASE_URL}"
+  --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
+)
+if valid_github_token "${GITHUB_TOKEN}"; then
+  SECRET_ARGS+=(--from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}")
+fi
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic management-runtime-secret \
-  --from-literal=DATABASE_URL="${DATABASE_URL}" \
-  --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}" \
-  --from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}" \
+  "${SECRET_ARGS[@]}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 kubectl --context "kind-${MGMT_CLUSTER}" -n management delete \
   deploy/management-api-gateway \
@@ -194,7 +210,7 @@ for deploy in \
   api-gateway \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
   workflow-controller alert-worker mail-worker command-worker target-reconcile-worker rca-worker \
-  dashboard-worker audit-worker; do
+  audit-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout restart "deploy/${deploy}"
 done
 kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api-gateway --timeout=180s
@@ -202,7 +218,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api
 for deploy in \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
   workflow-controller alert-worker mail-worker command-worker target-reconcile-worker rca-worker \
-  dashboard-worker audit-worker; do
+  audit-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status "deploy/${deploy}" --timeout=180s
 done
 
@@ -223,7 +239,6 @@ echo
 echo "service is ready."
 echo "Gateway:      http://localhost:18080"
 echo "Health:       http://localhost:18080/healthz"
-echo "Dashboard:    http://localhost:18080/dashboard/query"
 echo
 echo "Run smoke test:"
 echo "  bash ${ROOT_DIR}/scripts/smoke.sh"
