@@ -8,13 +8,11 @@ TARGET_NAMESPACE="${TARGET_NAMESPACE:-target}"
 
 PROMETHEUS_RELEASE="${PROMETHEUS_RELEASE:-prometheus}"
 LOKI_RELEASE="${LOKI_RELEASE:-loki}"
-ALLOY_RELEASE="${ALLOY_RELEASE:-alloy}"
 TEMPO_RELEASE="${TEMPO_RELEASE:-tempo}"
 OTEL_RELEASE="${OTEL_RELEASE:-opentelemetry-collector}"
 
 PROMETHEUS_VALUES="${PROMETHEUS_VALUES:-${ROOT_DIR}/deploy/target/prometheus.yaml}"
 LOKI_VALUES="${LOKI_VALUES:-${ROOT_DIR}/deploy/target/loki.yaml}"
-ALLOY_VALUES="${ALLOY_VALUES:-${ROOT_DIR}/deploy/target/alloy.yaml}"
 TEMPO_VALUES="${TEMPO_VALUES:-${ROOT_DIR}/deploy/target/tempo.yaml}"
 OTEL_VALUES="${OTEL_VALUES:-${ROOT_DIR}/deploy/target/opentelemetry.yaml}"
 
@@ -76,14 +74,6 @@ helm upgrade --install "${LOKI_RELEASE}" grafana/loki \
   --wait \
   --timeout 5m
 
-echo "==> installing Grafana Alloy"
-helm upgrade --install "${ALLOY_RELEASE}" grafana/alloy \
-  --kube-context "${TARGET_CONTEXT}" \
-  --namespace "${TARGET_NAMESPACE}" \
-  --values "${ALLOY_VALUES}" \
-  --wait \
-  --timeout 5m
-
 echo "==> installing Tempo"
 helm upgrade --install "${TEMPO_RELEASE}" grafana/tempo \
   --kube-context "${TARGET_CONTEXT}" \
@@ -107,9 +97,6 @@ wait_rollouts daemonset "app.kubernetes.io/instance=${PROMETHEUS_RELEASE}" 180s
 wait_rollouts deployment "app.kubernetes.io/instance=${LOKI_RELEASE}" 180s
 wait_rollouts statefulset "app.kubernetes.io/instance=${LOKI_RELEASE}" 180s
 wait_rollouts daemonset "app.kubernetes.io/instance=${LOKI_RELEASE}" 180s
-wait_rollouts deployment "app.kubernetes.io/instance=${ALLOY_RELEASE}" 180s
-wait_rollouts statefulset "app.kubernetes.io/instance=${ALLOY_RELEASE}" 180s
-wait_rollouts daemonset "app.kubernetes.io/instance=${ALLOY_RELEASE}" 180s
 wait_rollouts deployment "app.kubernetes.io/instance=${TEMPO_RELEASE}" 180s
 wait_rollouts statefulset "app.kubernetes.io/instance=${TEMPO_RELEASE}" 180s
 wait_rollouts daemonset "app.kubernetes.io/instance=${TEMPO_RELEASE}" 180s

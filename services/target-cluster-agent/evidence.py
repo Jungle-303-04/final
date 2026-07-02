@@ -11,6 +11,11 @@ from providers import (
 )
 from providers.base import ProviderResult
 from span import get_tracer
+from telemetry_queries import (
+    SOURCE_EVIDENCE_KEYS,
+    TelemetryQueryDefinition,
+    TelemetrySource,
+)
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
@@ -60,15 +65,29 @@ class EvidenceCollector:
     async def _collect_provider(self, evidence_key: str) -> ProviderResult:
         return await self._collect_with_provider(self.providers[evidence_key])
 
+    async def run_query(self, definition: TelemetryQueryDefinition) -> ProviderResult:
+        provider = self._provider_for_source(definition.source)
+        return await self._collect_with_queries(provider, (definition.to_provider_query(),))
+
+    def _provider_for_source(self, source: TelemetrySource) -> TelemetryProvider:
+        return self.providers[SOURCE_EVIDENCE_KEYS[source]]
+
     # Execute the common collect -> query -> normalize -> package flow through a provider.
     async def _collect_with_provider(self, provider: TelemetryProvider) -> ProviderResult:
+        return await self._collect_with_queries(provider, provider.queries)
+
+    async def _collect_with_queries(
+        self,
+        provider: TelemetryProvider,
+        queries: tuple[object, ...],
+    ) -> ProviderResult:
         with TRACER.start_as_current_span(provider.span_name) as span:
-            span.count(provider.query_count_attribute, provider.queries)
+            span.count(provider.query_count_attribute, queries)
             try:
                 async with httpx.AsyncClient(timeout=provider.timeout_seconds) as client:
                     results = provider.empty_results()
 
-                    for telemetry_query in provider.queries:
+                    for telemetry_query in queries:
                         payload = await provider.query(client, telemetry_query)
                         provider.append_result(results, telemetry_query, payload)
 

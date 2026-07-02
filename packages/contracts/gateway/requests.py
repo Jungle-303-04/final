@@ -57,6 +57,7 @@ class CommandRequest(StrictModel):
     namespace: Literal["sandbox"] = SANDBOX_NAMESPACE
     reason: str | None = None
     diff: dict[str, Any] | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class CommandResultRequest(StrictModel):
