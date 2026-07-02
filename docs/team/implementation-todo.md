@@ -138,6 +138,7 @@ TODO:
 - TODO(telemetry): Prometheus, Loki, OpenTelemetry adapter는 raw telemetry 전체가 아니라 EvidenceDraft/summary evidence로 축약한다.
 - TODO(telemetry): Kubernetes pod/event/node reader는 최소 RBAC와 sandbox write 제한을 테스트로 증명한다.
 - TODO(telemetry): fake Prometheus/Loki/OTel adapter는 fallback으로 남기되 실제 adapter와 같은 interface를 구현한다.
+- TODO(target): Target Agent는 command/result를 telemetry/evidence보다 우선 처리하도록 bounded queue와 local durable outbound spool 설계를 적용한다. 세부 기준은 `docs/team/member-guides/target-agent-local-queue.md`를 따른다.
 
 완료 기준:
 

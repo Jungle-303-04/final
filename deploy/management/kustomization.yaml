@@ -5,6 +5,6 @@ resources:
   - storage.yaml
   - pgbouncer.yaml
   - nats.yaml
+  - rbac.yaml
   - services.yaml
   - github-poll-worker.yaml
-

@@ -8,7 +8,7 @@ MGMT_NS="${MGMT_NS:-management}"
 SMOKE_IMAGE="${SMOKE_IMAGE:-service:local}"
 GITHUB_REPO="${GITHUB_REPO:-Jungle-303-04/final}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-MANIFEST_PATH="${MANIFEST_PATH:-dashboard/config/kubernetes/desired-manifest.yaml}"
+MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 SMOKE_COMMIT_SHA="${SMOKE_COMMIT_SHA:-}"
@@ -140,39 +140,5 @@ echo
 
 echo "==> waiting for async workers"
 sleep 18
-
-echo "==> dashboard query"
-dashboard="$(curl -fsS -b "${COOKIE_JAR}" "${BASE_URL}/dashboard/query")"
-echo "${dashboard}"
-echo
-
-if ! DASHBOARD_JSON="${dashboard}" WEBHOOK_CORRELATION_ID="${webhook_correlation_id}" python3 - <<'PY'
-import json
-import os
-import sys
-
-payload = json.loads(os.environ["DASHBOARD_JSON"])
-cards = payload.get("cards", payload if isinstance(payload, list) else [])
-target = None
-for card in cards:
-    event_payload = card.get("payload", {})
-    if event_payload.get("correlation_id") == os.environ["WEBHOOK_CORRELATION_ID"]:
-        target = card
-        break
-
-if not target:
-    print("dashboard does not include the GitOps webhook correlation", file=sys.stderr)
-    sys.exit(1)
-
-if target.get("last_event") not in {"command.completed", "workflow.run.completed"}:
-    print(
-        f"GitOps webhook did not complete; last_event={target.get('last_event')}",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-PY
-then
-  exit 1
-fi
 
 echo "Smoke test passed."

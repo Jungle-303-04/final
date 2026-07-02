@@ -25,7 +25,6 @@ SERVICES = [
     "gitops/diff-worker",
     "gitops/diff-analyze-worker",
     "gitops/scm-worker",
-    "projection/dashboard-worker",
     "projection/audit-worker",
 ]
 
