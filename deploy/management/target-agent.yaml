@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: target-cluster-agent
+  name: cluster-agent
   namespace: management
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: management-target-cluster-agent-read
+  name: management-cluster-agent-read
 rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
@@ -19,14 +19,14 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: management-target-cluster-agent-read
+  name: management-cluster-agent-read
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: management-target-cluster-agent-read
+  name: management-cluster-agent-read
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: management
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -41,7 +41,7 @@ rules:
     verbs: ["get", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    resourceNames: ["target-cluster-agent"]
+    resourceNames: ["cluster-agent"]
     verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -55,7 +55,7 @@ roleRef:
   name: management-target-agent-self-manage
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: management
 ---
 apiVersion: v1
@@ -64,7 +64,7 @@ metadata:
   name: target-agent-policy
   namespace: management
 data:
-  owner: target-cluster-agent
+  owner: cluster-agent
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -80,24 +80,24 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: target-cluster-agent
+  name: cluster-agent
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: target-cluster-agent
+      app: cluster-agent
   template:
     metadata:
       labels:
-        app: target-cluster-agent
+        app: cluster-agent
     spec:
-      serviceAccountName: target-cluster-agent
+      serviceAccountName: cluster-agent
       containers:
         - name: agent
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/runner.py"]
+          command: ["python", "src/services/target/cluster-agent/app.py"]
           env:
             - name: MANAGEMENT_BASE_URL
               value: "http://api-gateway:8000"
@@ -109,6 +109,8 @@ spec:
               value: "management"
             - name: OTEL_SERVICE_NAME
               value: "target-cluster-agent"
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: "http://opentelemetry-collector.management.svc:4318/v1/traces"
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "15"
             - name: POLICY_SYNC_INTERVAL_SECONDS
@@ -126,7 +128,7 @@ spec:
             - name: AGENT_CONTROL_DB_PATH
               value: "/data/agent-control.db"
             - name: TELEMETRY_QUERY_PATH
-              value: "services/target-cluster-agent/queries"
+              value: "src/services/target/cluster-agent/queries"
           volumeMounts:
             - name: agent-control-data
               mountPath: /data

@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   python-checks:
@@ -12,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6.3.0
         with:
           python-version: "3.13"
 
@@ -26,10 +27,16 @@ jobs:
         run: uv sync --locked
 
       - name: Ruff lint
-        run: uv run ruff check services packages tests
+        run: uv run ruff check src scripts tests
+
+      - name: Ruff format check
+        run: uv run ruff format --check src scripts tests
+
+      - name: Import boundaries (services → domains → packages)
+        run: PYTHONPATH=src uv run lint-imports --config .importlinter
 
       - name: Python compile
-        run: python -m compileall -q services packages
+        run: python -m compileall -q src scripts
 
       - name: Unit tests
         run: uv run pytest -q
@@ -39,10 +46,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5.1.0
 
       - name: Validate management manifests offline
         run: |
@@ -62,4 +69,25 @@ jobs:
               -summary
 
       - name: Build service image
-        run: docker build -f services/Dockerfile -t service:ci .
+        run: docker build -f src/services/Dockerfile -t service:ci .
+
+      - name: Container import smoke
+        run: |
+          docker run --rm -i \
+            -e DATABASE_URL=postgresql://user:pass@postgresql:5432/service \
+            service:ci python - <<'PY'
+          import sys
+
+          import sqlalchemy
+
+          from packages.storage.database import Database
+
+          sys.path.insert(0, "/app/src/services/gateway/api-gateway")
+          from gateway import ApiGateway
+
+          assert sqlalchemy.__version__
+          assert Database().sqlalchemy_url.startswith("postgresql+psycopg://")
+          # ApiGateway 구성이 RedisSessionStore·라우터·인증서비스까지 실제로 빌드한다.
+          assert ApiGateway().app.title
+          print("container smoke ok")
+          PY

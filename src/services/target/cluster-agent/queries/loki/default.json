@@ -1,0 +1,20 @@
+{
+  "source": "loki",
+  "queries": [
+    {
+      "name": "target_namespace_errors",
+      "description": "Error logs emitted by workloads in the target namespace.",
+      "query": "{k8s_namespace_name=\"target\"} |= \"ERROR\""
+    },
+    {
+      "name": "node_collector_runtime_samples",
+      "description": "Structured runtime samples emitted by optional-node-collector.",
+      "query": "{k8s_namespace_name=\"target\", k8s_container_name=\"node-collector\"} |= \"node_runtime_sample\""
+    },
+    {
+      "name": "target_agent_warnings",
+      "description": "Warnings or failures emitted by the target-cluster-agent.",
+      "query": "{k8s_namespace_name=\"target\", k8s_container_name=\"cluster-agent\"} |~ \"WARN|ERROR|failed\""
+    }
+  ]
+}

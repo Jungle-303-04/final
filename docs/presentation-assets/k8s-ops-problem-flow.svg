@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#6f8fbd"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .font { font-family: 'Apple SD Gothic Neo', 'AppleGothic', 'Arial Unicode MS', sans-serif; }
+      .title { font-size: 54px; font-weight: 900; fill: #0f172a; }
+      .sub { font-size: 25px; font-weight: 700; fill: #475569; }
+      .label { font-size: 22px; font-weight: 900; fill: #0f172a; }
+      .small { font-size: 18px; font-weight: 750; fill: #475569; }
+      .tiny { font-size: 16px; font-weight: 750; fill: #64748b; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#3158e8"/>
+  <rect x="48" y="36" width="1504" height="828" rx="28" fill="#fff" filter="url(#shadow)"/>
+
+  <text x="110" y="122" class="font title">왜 Kubernetes 운영 자동화가 필요한가?</text>
+  <line x1="110" y1="164" x2="1490" y2="164" stroke="#3158e8" stroke-width="3"/>
+  <text x="110" y="212" class="font sub">GitOps, 클러스터 상태, 모니터링 데이터가 흩어져 운영자가 직접 연결해야 합니다.</text>
+
+  <!-- Left: scattered tools -->
+  <text x="255" y="292" text-anchor="middle" class="font label">분산된 운영 도구</text>
+  <g class="font">
+    <rect x="105" y="325" width="140" height="64" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="3"/>
+    <text x="175" y="365" text-anchor="middle" font-size="22" font-weight="900" fill="#9a3412">GitHub</text>
+
+    <rect x="295" y="325" width="140" height="64" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="3"/>
+    <text x="365" y="365" text-anchor="middle" font-size="22" font-weight="900" fill="#1d4ed8">Kubernetes</text>
+
+    <rect x="105" y="430" width="140" height="64" rx="14" fill="#fff1f2" stroke="#ef4444" stroke-width="3"/>
+    <text x="175" y="470" text-anchor="middle" font-size="22" font-weight="900" fill="#b91c1c">Prometheus</text>
+
+    <rect x="295" y="430" width="140" height="64" rx="14" fill="#f5f3ff" stroke="#7c3aed" stroke-width="3"/>
+    <text x="365" y="470" text-anchor="middle" font-size="22" font-weight="900" fill="#6d28d9">Loki</text>
+
+    <rect x="105" y="535" width="140" height="64" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="3"/>
+    <text x="175" y="575" text-anchor="middle" font-size="22" font-weight="900" fill="#15803d">Slack</text>
+
+    <rect x="295" y="535" width="140" height="64" rx="14" fill="#ecfeff" stroke="#06b6d4" stroke-width="3"/>
+    <text x="365" y="575" text-anchor="middle" font-size="22" font-weight="900" fill="#0e7490">PR 도구</text>
+  </g>
+
+  <!-- Tool lines -->
+  <g stroke="#9fb3d9" stroke-width="4" stroke-linecap="round" fill="none">
+    <path d="M245 357 C340 350 420 390 510 446"/>
+    <path d="M435 357 C470 370 500 400 535 446"/>
+    <path d="M245 462 C350 452 430 455 510 470"/>
+    <path d="M435 462 C470 462 500 465 535 470"/>
+    <path d="M245 567 C350 555 425 520 510 494"/>
+    <path d="M435 567 C475 542 510 520 535 494"/>
+  </g>
+
+  <!-- Center operator -->
+  <rect x="540" y="300" width="520" height="360" rx="24" fill="#f8fbff" stroke="#c7d2fe" stroke-width="4"/>
+  <circle cx="800" cy="420" r="72" fill="#e0edff" stroke="#3158e8" stroke-width="4"/>
+  <text x="800" y="408" text-anchor="middle" class="font" font-size="30" font-weight="900" fill="#3158e8">운영자</text>
+  <text x="800" y="446" text-anchor="middle" class="font" font-size="22" font-weight="850" fill="#3158e8">수동 판단</text>
+
+  <g class="font">
+    <rect x="585" y="540" width="188" height="70" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="3"/>
+    <text x="679" y="569" text-anchor="middle" font-size="20" font-weight="900" fill="#9a3412">배포 영향</text>
+    <text x="679" y="594" text-anchor="middle" font-size="17" font-weight="750" fill="#9a3412">직접 비교</text>
+
+    <rect x="827" y="540" width="188" height="70" rx="14" fill="#fff1f2" stroke="#ef4444" stroke-width="3"/>
+    <text x="921" y="569" text-anchor="middle" font-size="20" font-weight="900" fill="#b91c1c">장애 원인</text>
+    <text x="921" y="594" text-anchor="middle" font-size="17" font-weight="750" fill="#b91c1c">직접 추적</text>
+  </g>
+
+  <text x="800" y="337" text-anchor="middle" class="font label">도구 사이의 맥락을 사람이 연결</text>
+  <text x="800" y="635" text-anchor="middle" class="font small">context switching · 수동 비교 · 느린 RCA</text>
+
+  <!-- Right outcomes -->
+  <line x1="1060" y1="480" x2="1132" y2="480" stroke="#6f8fbd" stroke-width="7" marker-end="url(#arrow)"/>
+  <text x="1305" y="292" text-anchor="middle" class="font label">결과</text>
+
+  <g class="font">
+    <rect x="1160" y="325" width="300" height="92" rx="16" fill="#fee2e2" stroke="#ef4444" stroke-width="3"/>
+    <text x="1310" y="365" text-anchor="middle" font-size="25" font-weight="900" fill="#b91c1c">배포 판단 지연</text>
+    <text x="1310" y="395" text-anchor="middle" font-size="18" font-weight="750" fill="#7f1d1d">Git 변경의 실제 영향 파악 어려움</text>
+
+    <rect x="1160" y="450" width="300" height="92" rx="16" fill="#fff7ed" stroke="#f97316" stroke-width="3"/>
+    <text x="1310" y="490" text-anchor="middle" font-size="25" font-weight="900" fill="#9a3412">장애 대응 지연</text>
+    <text x="1310" y="520" text-anchor="middle" font-size="18" font-weight="750" fill="#7c2d12">로그·이벤트·메트릭을 수동 분석</text>
+
+    <rect x="1160" y="575" width="300" height="92" rx="16" fill="#f5f3ff" stroke="#7c3aed" stroke-width="3"/>
+    <text x="1310" y="615" text-anchor="middle" font-size="25" font-weight="900" fill="#6d28d9">복구 제안 누락</text>
+    <text x="1310" y="645" text-anchor="middle" font-size="18" font-weight="750" fill="#4c1d95">알림 이후 다음 행동이 분리됨</text>
+  </g>
+
+  <!-- Bottom solution bridge -->
+  <rect x="215" y="735" width="1170" height="78" rx="18" fill="#3158e8"/>
+  <text x="800" y="785" text-anchor="middle" class="font" font-size="32" font-weight="900" fill="#ffffff">
+    필요한 것: GitOps · 모니터링 · 승인 · AI 진단을 하나의 운영 Workflow로 연결
+  </text>
+</svg>

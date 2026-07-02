@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+from packages.config.constants import CommandStatus
+
+
+class Settings:
+    SERVICE_NAME = "api-gateway"
+    APP_TITLE = "API Gateway"
+    APP_VERSION = "0.1.0"
+
+    DEFAULT_AGENT_COMMAND_POLL_SECONDS = 10
+    MAX_COMMAND_POLL_SECONDS = 30
+    COMMAND_POLL_SLEEP_SECONDS = 1
+
+    COMMAND_NOT_FOUND_STATUS_CODE = 404
+    CONFLICT_STATUS_CODE = 409
+    GATEWAY_ERROR_STATUS_CODE = 500
+
+    COMMAND_NOT_FOUND_MESSAGE = "command not found"
+    DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
+    DEAD_LETTER_REPLAYED_MESSAGE = "dead letter already replayed"
+    GATEWAY_ERROR_MESSAGE = "internal server error"
+
+    COMMAND_STATUS_QUEUED = CommandStatus.QUEUED
+    COMMAND_STATUS_LEASED = CommandStatus.LEASED
+    COMMAND_STATUS_RUNNING = CommandStatus.RUNNING
+    COMMAND_LEASE_SECONDS = 60
+    EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
+    DEFAULT_DEAD_LETTER_LIMIT = 50
+    MAX_DEAD_LETTER_LIMIT = 100
+
+    REDIS_URL_ENV = "REDIS_URL"
+    SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
+    SESSION_KEY_PREFIX = "session"
+    RATE_LIMIT_KEY_PREFIX = "rate"
+    AUTH_ABUSE_RATE_WINDOW_SECONDS = 15 * 60
+    AUTH_ABUSE_FIRST_LOCK_SECONDS = 15 * 60
+    AUTH_ABUSE_SECOND_LOCK_SECONDS = 60 * 60
+    AUTH_ABUSE_THIRD_LOCK_SECONDS = 24 * 60 * 60
+    AUTH_ABUSE_STRIKE_TTL_SECONDS = 24 * 60 * 60
+    SIGNUP_EMAIL_RATE_LIMIT = 3
+    SIGNUP_IP_RATE_LIMIT = 20
+    RESEND_EMAIL_RATE_LIMIT = SIGNUP_EMAIL_RATE_LIMIT
+    RESEND_IP_RATE_LIMIT = SIGNUP_IP_RATE_LIMIT
+    EMAIL_VERIFICATION_KEY_PREFIX = "email_verify"
+    EMAIL_VERIFICATION_TTL_SECONDS = 60 * 60
+    EMAIL_VERIFICATION_TOKEN_BYTES = 32
+    SESSION_TOKEN_BYTES = 32
+    DEFAULT_RATE_LIMIT = 120
+    RATE_LIMIT_WINDOW_SECONDS = 60
+    AUTHORIZATION_HEADER = "authorization"
+    BEARER_PREFIX = "bearer "
+    SESSION_TOKEN_HEADER = "x-session-token"
+    METRICS_TOKEN_ENV = (
+        "METRICS_TOKEN"  # 설정 시 /metrics 에 Bearer 강제(미설정=내부 스크레이핑 허용)
+    )
+    RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
+    AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
+    REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
+    INVALID_CREDENTIALS_MESSAGE = "invalid email or password"
+    EMAIL_VERIFICATION_REQUIRED_MESSAGE = "email verification required"
+    EMAIL_VERIFICATION_INVALID_MESSAGE = "invalid or expired email verification token"
+    ACCOUNT_APPROVAL_REQUIRED_MESSAGE = "account approval required"
+    PASSWORD_CONFIRMATION_MISMATCH_MESSAGE = "password confirmation does not match"
+    USER_ALREADY_EXISTS_MESSAGE = "user already exists"
+    USER_NOT_FOUND_MESSAGE = "user not found"

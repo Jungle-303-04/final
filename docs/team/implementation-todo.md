@@ -1,0 +1,154 @@
+# 역할별 구현 TODO 원장
+
+이 문서는 WIKI `projects/final` 문서와 source `docs/team/*`를 맞춰 본 뒤,
+각 담당자가 실제 구현해야 할 항목만 모아 둔 원장이다.
+제품 코드를 대신 구현하지 않고, 담당자가 자기 브랜치에서 작은 PR 단위로
+옮길 수 있도록 경로, 연결 계약, 완료 기준을 함께 적는다.
+
+확인 기준:
+
+- WIKI repo: `/Users/woonyong/workspace/Krafton-Jungle/WIKI/projects/final`
+- 핵심 WIKI 문서: `README.md`, `wbs.md`, `team-work-allocation.md`,
+  `team-conventions.md`, `event-queue-system-guide.md`, `mvp-plan.md`,
+  `architecture.md`, `member-guides/*.md`
+- source 문서: `docs/team/work-allocation.md`, `docs/team/conventions.md`,
+  `docs/team/member-guides/*.md`, `docs/events.md`
+- GitHub wiki 기능은 2026-06-30 확인 시 비활성화되어 있으며,
+  형제 경로 WIKI repo가 실제 문서 원본이다.
+
+## 공통 규칙
+
+- TODO는 GitHub Project WBS 또는 담당 issue의 체크리스트로 옮긴 뒤 구현한다.
+- PR 하나는 하나의 담당 영역 또는 하나의 vertical slice만 바꾼다.
+- 새 API, event, DB table, Kubernetes 권한은 코드, 테스트, source docs, WIKI를 함께 갱신한다.
+- fake adapter는 데모 fallback으로 남길 수 있지만 UI/API/문서에서 실제 구현처럼 표현하지 않는다.
+- production namespace write는 금지하고 `sandbox` namespace write만 정책/승인 경계 안에서 허용한다.
+
+## Platform / Integration
+
+담당 경로:
+
+- `src/packages/config`
+- `src/packages/contracts`
+- `src/packages/events`
+- `src/packages/runtime`
+- `src/packages/storage`
+- `.github`
+- `deploy`
+- `scripts`
+
+TODO:
+
+- TODO(platform): `make check`, `make smoke`, `make status`가 같은 runtime dependency 집합을 보도록 CI와 로컬 명령을 맞춘다.
+- TODO(platform): 새 event subject/body가 `src/packages/contracts/event_bus`, `docs/events.md`, 테스트에 동시에 반영되는 contract gate를 보강한다.
+- TODO(platform): outbox relay가 provider side effect 전 crash injection 시나리오를 통과하도록 운영 검증을 유지한다.
+- TODO(platform): dashboard read model 확장 시 `dashboard.updated`, query API, SSE stream이 같은 correlation 기준을 쓰는지 검증한다.
+- TODO(platform): 데모 전 E2E runbook을 command 입력, evidence, RCA, Safe PR fake, dashboard, DLQ/replay까지 한 줄로 실행 가능하게 유지한다.
+
+완료 기준:
+
+- `make check` 통과.
+- 이벤트 카탈로그(`python scripts/events.py`)가 새 subject/body와 실제 producer/consumer를 설명한다.
+- Runtime/DB/relay 변경에는 최소 하나의 failure-path 테스트가 있다.
+
+## Gateway / Auth
+
+담당 경로:
+
+- `src/services/gateway/api-gateway`
+- `src/packages/contracts/gateway`
+- identity, integration, security 계약 패키지 후보
+
+TODO:
+
+- TODO(gateway): 일반 로그인, 세션, 로그아웃 route를 schema-first로 추가하고 secret/session token이 event payload에 들어가지 않게 한다.
+- TODO(gateway): org/project role guard를 route별 복붙이 아니라 공통 policy/port로 연결한다.
+- TODO(gateway): GitHub repo integration target, credential ref, credential binding 구조를 만든 뒤 Token Broker 경계로 provider token을 숨긴다.
+- TODO(gateway): `POST /agent/evidence`는 request schema 검증 후 `cluster.evidence.received`만 발행하고 worker 로직을 직접 실행하지 않는다.
+- TODO(gateway): agent registry/status, command poll/result API가 Target/Telemetry와 같은 DTO를 쓰도록 계약을 고정한다.
+- TODO(gateway): Git watch target 등록/조회/manual poll API는 Gateway가 설정과 권한만 관리하고 polling 실행은 worker가 맡게 한다.
+
+완료 기준:
+
+- Gateway route 테스트가 valid request, invalid schema, unauthorized/forbidden, secret non-leak을 모두 포함한다.
+- Gateway가 외부 HTTP write의 유일한 입구라는 제약을 깨지 않는다.
+- 새 route는 `src/packages/contracts/gateway/routes.py`와 request/response 계약을 동반한다.
+
+## GitOps / Command
+
+담당 경로:
+
+- `src/services/gitops/*`
+- `src/services/command/command-worker`
+- command/diff/event 계약
+
+TODO:
+
+- TODO(gitops): git polling 입력에서 `git.changed`까지 idempotent하게 감지하고 같은 commit을 중복 발행하지 않는다.
+- TODO(gitops): manifest render는 실제 Git/Kustomize 실패를 구조화된 에러로 다루고 raw exception을 event payload에 넣지 않는다.
+- TODO(gitops): desired diff는 create/update/delete와 risk reason을 구조화해서 Safe PR/command 판단의 근거가 되게 한다.
+- TODO(command): `command.requested`는 namespace/action 정책을 범용 rule로 검사하고 production write를 fail-closed한다.
+- TODO(command): dispatch/queue 단계는 Target Agent를 직접 호출하지 않고 agent command queue 계약만 사용한다.
+- TODO(command): queue 저장 실패와 event 발행 불일치가 생기지 않도록 outbox/UoW 경계를 Platform과 맞춘다.
+
+완료 기준:
+
+- `git.changed -> manifest.rendered -> desired.diff.detected -> diff.analyzed` handler chain 테스트가 있다.
+- `command.requested -> command.dispatch.ready -> command.queued_for_agent -> command.completed` 흐름 테스트가 있다.
+- 정책 거부 케이스는 `command.rejected`와 audit/dashboard 영향까지 검증한다.
+
+## RCA / Safe PR
+
+담당 경로:
+
+- `src/services/ai/rca-worker`
+- `src/services/gitops/scm-worker`
+- `src/services/projection/audit-worker`
+- `src/domains/rca`
+- `src/domains/scm`
+
+TODO:
+
+- TODO(rca): evidence가 부족한 경우 RCA를 억지로 생성하지 않고 insufficient evidence 상태를 event/body로 표현한다.
+- TODO(rca): RCA baseline은 `cluster.evidence.received` 원본을 정규화한 evidence bundle만 근거로 삼고 추측 문자열을 상수로 고정하지 않는다.
+- TODO(rca): AI 기본 질의 경계는 evidence, RCA result, command 승인, PR 설명/재생성 입력을 분리한 port/interface로 둔다.
+- TODO(rca): `rca.completed` 이후 Safe PR 후보와 approval-required 후보를 분기하는 정책 body를 정의한다.
+- TODO(scm): 실제 GitHub branch/commit/PR 생성은 feature flag와 token/ref 검증을 통과한 경우에만 실행한다.
+- TODO(audit): command, RCA, PR 상태가 같은 `correlation_id`로 timeline에 남도록 projection을 보강한다.
+
+완료 기준:
+
+- RCA output은 evidence reference와 root-cause/action 근거를 가진다.
+- Safe PR 실제 write 테스트는 fake client와 feature-flag-off fail-closed 케이스를 포함한다.
+- repo write 실패는 `safe_pr.failed`와 audit timeline에 남는다.
+
+## Target / Agent / Telemetry
+
+담당 경로:
+
+- `src/services/target/cluster-agent`
+- `src/services/target/node-collector`
+- `deploy/target`
+
+TODO:
+
+- TODO(target): Target Agent는 inbound port 없이 Gateway HTTP API로만 outbound 연결한다.
+- TODO(target): agent registry/status와 heartbeat payload를 Gateway/Auth 계약과 맞춘다.
+- TODO(target): command polling/result 보고는 Gateway가 내려준 correlation을 유지하고 DB/NATS를 직접 알지 않게 한다.
+- TODO(telemetry): Prometheus, Loki, OpenTelemetry adapter는 raw telemetry 전체가 아니라 EvidenceDraft/summary evidence로 축약한다.
+- TODO(telemetry): Kubernetes pod/event/node reader는 최소 RBAC와 sandbox write 제한을 테스트로 증명한다.
+- TODO(telemetry): fake Prometheus/Loki/OTel adapter는 fallback으로 남기되 실제 adapter와 같은 interface를 구현한다.
+- TODO(target): Target Agent는 command/result를 telemetry/evidence보다 우선 처리하도록 bounded queue와 local durable outbound spool 설계를 적용한다. 세부 기준은 `docs/team/member-guides/target-agent-local-queue.md`를 따른다.
+
+완료 기준:
+
+- Agent가 `/agent/evidence`, `/agent/commands/poll`, `/agent/commands/{id}/result` 계약을 통해서만 management plane과 통신한다.
+- telemetry evidence에는 source/ref/timestamp가 포함되어 RCA가 근거를 추적할 수 있다.
+- Kubernetes write adapter는 sandbox namespace 외 요청을 거부한다.
+
+## Cross-Role 계약 TODO
+
+- TODO(cross-role): evidence schema 변경은 Target/Telemetry, Gateway/Auth, RCA/Safe PR이 같은 PR 설명에 승인/영향을 남긴다.
+- TODO(cross-role): command payload 변경은 Gateway/Auth, GitOps/Command, Target/Telemetry가 함께 테스트한다.
+- TODO(cross-role): Safe PR 실제 연동 전 GitHub token scope, branch naming, rollback 방법을 WIKI/source docs에 반영한다.
+- TODO(cross-role): dashboard button이 실제 API/event/read model chain 없이 성공처럼 보이면 release gate에서 차단한다.
