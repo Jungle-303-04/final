@@ -4,7 +4,15 @@ import asyncio
 from collections.abc import Iterable, Mapping
 
 import httpx
-from commands import AgentCommandRegistry, command_handler
+from commands import (
+    AgentCommandRegistry,
+    CommandContext,
+    KubernetesApiClient,
+    KubernetesPatchPayload,
+    KubernetesScalePayload,
+    command_handler,
+    kubernetes_command,
+)
 from control import AgentControlStore, AgentPolicySync, DesiredStateReconciler
 from evidence import EvidenceCollector, EvidenceScheduler, EvidenceTaskStore
 from providers import (
@@ -14,7 +22,9 @@ from providers import (
     TempoTracesProvider,
 )
 from queries import (
+    TelemetryQueryCommandPayload,
     TelemetryQueryDefinition,
+    TelemetryQueryImportPayload,
     TelemetryQueryRegistry,
     load_query_definitions,
 )
@@ -23,7 +33,6 @@ from settings import (
     AGENT_CONTROL_DB_PATH_ENV,
     BOOTSTRAP_MODE_ENV,
     CLUSTER_ROLE_ENV,
-    COMMAND_COMPLETED_STATUS,
     COMMAND_EXECUTION_DELAY_SECONDS,
     COMMAND_FAILED_STATUS,
     COMMAND_POLL_TIMEOUT_SECONDS,
@@ -53,6 +62,9 @@ from settings import (
     EVIDENCE_TASK_LEASE_SECONDS,
     HOSTNAME_ENV,
     HTTP_TIMEOUT_SECONDS,
+    KUBERNETES_CONFIGMAP_PATCH_ACTION,
+    KUBERNETES_DEPLOYMENT_PATCH_ACTION,
+    KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     MANAGEMENT_BASE_URL_ENV,
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
@@ -349,8 +361,12 @@ class TargetClusterAgent:
             store=self.control_store,
             interval_seconds=self.reconcile_interval_seconds,
         )
+        self.kubernetes = KubernetesApiClient()
         self.command_registry = AgentCommandRegistry.from_instance(
             self,
+            cluster_id=self.cluster_id,
+            cluster_role=self.cluster_role,
+            kubernetes=self.kubernetes,
             default_handler=self.apply_default_command,
         )
 
@@ -486,7 +502,11 @@ class TargetClusterAgent:
         action = command["action"]
         payload = self.command_payload(command)
         try:
-            return await self.command_registry.execute(action, payload)
+            return await self.command_registry.execute(
+                action,
+                payload,
+                metadata={"command.id": command.get("command_id", "")},
+            )
         except Exception as exc:
             return {
                 "status": COMMAND_FAILED_STATUS,
@@ -495,56 +515,125 @@ class TargetClusterAgent:
                 "message": str(exc),
             }
 
-    @command_handler(QUERY_RUN_ACTION)
-    async def run_query_command(self, payload: JsonObject) -> JsonObject:
-        definition = self.query_definition_from_payload(payload)
+    @command_handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
+    async def run_query_command(
+        self,
+        ctx: CommandContext[TelemetryQueryCommandPayload],
+    ) -> JsonObject:
+        definition = self.query_definition_from_payload(ctx.payload.definition_payload())
         result = await self.evidence_collector.run_query(definition)
-        if payload.get("register") is True:
+        if ctx.payload.should_register():
             self.evidence_collector.register_query(definition)
-        return {
-            "status": COMMAND_COMPLETED_STATUS,
-            "cluster_id": self.cluster_id,
-            "applied": False,
-            "message": "telemetry query executed",
-            "query": definition.__dict__,
-            "result": result,
-        }
+        return ctx.ok(
+            "telemetry query executed",
+            query=definition.__dict__,
+            result=result,
+        )
 
-    @command_handler(QUERY_REGISTER_ACTION)
-    async def register_query_command(self, payload: JsonObject) -> JsonObject:
-        definition = self.query_definition_from_payload(payload)
+    @command_handler(QUERY_REGISTER_ACTION, payload_model=TelemetryQueryCommandPayload)
+    async def register_query_command(
+        self,
+        ctx: CommandContext[TelemetryQueryCommandPayload],
+    ) -> JsonObject:
+        definition = self.query_definition_from_payload(ctx.payload.definition_payload())
         self.evidence_collector.register_query(definition)
-        return {
-            "status": COMMAND_COMPLETED_STATUS,
-            "cluster_id": self.cluster_id,
-            "applied": True,
-            "message": "telemetry query registered",
-            "query": definition.__dict__,
-        }
+        return ctx.ok(
+            "telemetry query registered",
+            applied=True,
+            query=definition.__dict__,
+        )
 
-    @command_handler(QUERY_IMPORT_ACTION)
-    async def import_query_path_command(self, payload: JsonObject) -> JsonObject:
-        query_path = payload.get("path") or payload.get("query_path") or payload.get("query_file")
-        if not isinstance(query_path, str) or not query_path.strip():
-            raise ValueError("telemetry query import requires a query path")
-        definitions = self.evidence_collector.import_queries(query_path)
-        return {
-            "status": COMMAND_COMPLETED_STATUS,
-            "cluster_id": self.cluster_id,
-            "applied": True,
-            "message": "telemetry query file imported",
-            "imported_count": len(definitions),
-            "queries": [definition.__dict__ for definition in definitions],
-        }
+    @command_handler(QUERY_IMPORT_ACTION, payload_model=TelemetryQueryImportPayload)
+    async def import_query_path_command(
+        self,
+        ctx: CommandContext[TelemetryQueryImportPayload],
+    ) -> JsonObject:
+        definitions = self.evidence_collector.import_queries(ctx.payload.resolved_path())
+        return ctx.ok(
+            "telemetry query file imported",
+            applied=True,
+            imported_count=len(definitions),
+            queries=[definition.__dict__ for definition in definitions],
+        )
 
-    async def apply_default_command(self, _payload: JsonObject | None = None) -> JsonObject:
+    @kubernetes_command(
+        KUBERNETES_DEPLOYMENT_PATCH_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="deployments",
+        verb="patch",
+        payload_model=KubernetesPatchPayload,
+    )
+    async def patch_deployment_command(
+        self,
+        ctx: CommandContext[KubernetesPatchPayload],
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=ctx.payload.namespace,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body=ctx.payload.patch_body(),
+        )
+        return ctx.ok("kubernetes deployment patched", applied=True, result=result)
+
+    @kubernetes_command(
+        KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="deployments",
+        verb="patch",
+        payload_model=KubernetesScalePayload,
+    )
+    async def scale_deployment_command(
+        self,
+        ctx: CommandContext[KubernetesScalePayload],
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=ctx.payload.namespace,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body=ctx.payload.patch_body(),
+            subresource="scale",
+        )
+        return ctx.ok(
+            "kubernetes deployment scaled",
+            applied=True,
+            replicas=ctx.payload.replicas,
+            result=result,
+        )
+
+    @kubernetes_command(
+        KUBERNETES_CONFIGMAP_PATCH_ACTION,
+        api_group="core",
+        version="v1",
+        resource="configmaps",
+        verb="patch",
+        payload_model=KubernetesPatchPayload,
+    )
+    async def patch_configmap_command(
+        self,
+        ctx: CommandContext[KubernetesPatchPayload],
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=ctx.payload.namespace,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body=ctx.payload.patch_body(),
+        )
+        return ctx.ok("kubernetes configmap patched", applied=True, result=result)
+
+    async def apply_default_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         await asyncio.sleep(COMMAND_EXECUTION_DELAY_SECONDS)
-        return {
-            "status": COMMAND_COMPLETED_STATUS,
-            "cluster_id": self.cluster_id,
-            "applied": True,
-            "message": COMMAND_RESULT_MESSAGE,
-        }
+        return ctx.ok(COMMAND_RESULT_MESSAGE, applied=True)
 
     def command_payload(self, command: CommandRecord) -> JsonObject:
         payload = command.get("payload") or {}
@@ -554,7 +643,8 @@ class TargetClusterAgent:
         return nested_payload if isinstance(nested_payload, dict) else payload
 
     def query_definition_from_payload(self, payload: JsonObject) -> TelemetryQueryDefinition:
-        query = payload.get("query", payload)
+        query_value = payload.get("query")
+        query = query_value if isinstance(query_value, dict) else payload
         if not isinstance(query, dict):
             raise ValueError("telemetry query command requires a query object")
         if "query" not in query:
