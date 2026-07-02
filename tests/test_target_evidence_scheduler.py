@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -159,6 +161,25 @@ def test_scheduler_runs_provider_workers_and_aggregates_completed_collection(
     assert shipped.logs[0]["source"] == "loki"
     assert shipped.traces["source"] == "tempo"
     assert not scheduler.store.has_unuploaded_collection()
+
+
+def test_scheduler_requires_authority_to_resize_worker_pool(tmp_path: Path) -> None:
+    module = load_scheduler_module()
+    authority = object()
+    scheduler = module.EvidenceScheduler(
+        cluster_id="cluster-1",
+        collector=FakeCollector(),
+        store=module.EvidenceTaskStore(str(tmp_path / "evidence-queue.db")),
+        provider_keys=("metrics",),
+        provider_worker_counts={"metrics": 1},
+        interval_seconds=8,
+        lease_seconds=60,
+        worker_pool_authority=authority,
+    )
+
+    assert scheduler.resize_provider_workers("metrics", 2, authority=authority) == 2
+    with pytest.raises(PermissionError):
+        scheduler.resize_provider_workers("metrics", 3, authority=object())
 
 
 def test_allow_partial_policy_uploads_collection_with_empty_failed_provider(

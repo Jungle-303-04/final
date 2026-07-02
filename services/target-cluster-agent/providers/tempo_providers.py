@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import httpx
+from queries import OPEN_TELEMETRY_SPAN_QUERIES, OpenTelemetrySpanQuery
 from settings import (
     DEFAULT_TEMPO_BASE_URL,
     TEMPO_BASE_URL_ENV,
     TEMPO_QUERY_LIMIT,
     TEMPO_TIMEOUT_SECONDS,
 )
-from telemetry_queries import OPEN_TELEMETRY_SPAN_QUERIES, OpenTelemetrySpanQuery
 
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
@@ -41,7 +41,7 @@ class TempoTracesProvider:
                 f"{self.base_url}/api/search",
                 params={"q": telemetry_query.traceql, "limit": TEMPO_QUERY_LIMIT},
             )
-            span.attr("http.status_code", response.status_code)
+            span.http_status(response.status_code)
             response.raise_for_status()
             return response.json()
 

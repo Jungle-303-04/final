@@ -29,6 +29,9 @@ class OtelSpan:
     def flag(self, key: str, value: bool) -> None:
         self.attr(key, value)
 
+    def http_status(self, status_code: int) -> None:
+        self.attr("http.status_code", status_code)
+
     def fields_present(
         self,
         namespace: str,

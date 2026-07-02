@@ -10,14 +10,14 @@ from providers import (
     TempoTracesProvider,
 )
 from providers.base import ProviderResult
-from span import get_tracer
-from telemetry_queries import (
+from queries import (
     DEFAULT_TELEMETRY_QUERY_DEFINITIONS,
     SOURCE_EVIDENCE_KEYS,
     TelemetryQueryDefinition,
     TelemetryQueryRegistry,
     TelemetrySource,
 )
+from span import get_tracer
 
 from packages.contracts.event_bus.interfaces import JsonObject
 

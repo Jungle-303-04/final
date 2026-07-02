@@ -40,8 +40,16 @@ from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway.requests import (
     AgentConnectRequest,
     AgentEvidenceRequest,
+    AgentPolicy,
+    AgentPolicyResponse,
+    AgentPolicyStatusRequest,
+    AgentReconcileStatusRequest,
+    BootstrapPolicy,
     CommandRequest,
     CommandResultRequest,
+    DesiredStatePolicy,
+    EvidenceProviderPolicy,
+    EvidenceRuntimePolicy,
     GitHubWebhookRequest,
     OAuthCallbackRequest,
 )
@@ -161,6 +169,77 @@ class ApiGateway:
                 "correlation_id": evt["correlation_id"],
             }
 
+        @app.get("/agent/policy")
+        async def agent_policy(
+            cluster_id: str = DEFAULT_TARGET_CLUSTER_ID,
+            generation: int = 0,
+        ) -> dict[str, Any]:
+            policy = self.db.get_cluster_policy(cluster_id) or self.default_agent_policy(
+                cluster_id
+            ).model_dump()
+            if int(policy["generation"]) <= generation:
+                return AgentPolicyResponse(policy=None).model_dump()
+            return AgentPolicyResponse(policy=AgentPolicy.model_validate(policy)).model_dump()
+
+        @app.put("/clusters/{cluster_id}/policy")
+        async def update_cluster_policy(
+            cluster_id: str,
+            request: Request,
+            payload: AgentPolicy,
+        ) -> dict[str, Any]:
+            await self.auth.require_session(request)
+            if payload.cluster_id != cluster_id:
+                raise HTTPException(
+                    status_code=CONFLICT_STATUS_CODE,
+                    detail="cluster_id does not match policy payload",
+                )
+            try:
+                stored = self.db.upsert_cluster_policy(cluster_id, payload.model_dump())
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=CONFLICT_STATUS_CODE,
+                    detail=str(exc),
+                ) from exc
+            evt = await publish_and_record(
+                self.bus,
+                self.db,
+                EventSubject.AGENT_POLICY_UPDATED,
+                SERVICE_NAME,
+                stored,
+                cluster_id,
+            )
+            return {"accepted": True, "event_id": evt["event_id"], "policy": stored}
+
+        @app.post("/agent/policy/status")
+        async def agent_policy_status(payload: AgentPolicyStatusRequest) -> dict[str, Any]:
+            status = payload.model_dump()
+            self.db.save_agent_policy_status(status)
+            evt = await publish_and_record(
+                self.bus,
+                self.db,
+                EventSubject.AGENT_POLICY_REPORTED,
+                SERVICE_NAME,
+                status,
+                payload.cluster_id,
+            )
+            return {"accepted": True, "event_id": evt["event_id"]}
+
+        @app.post("/agent/reconcile/status")
+        async def agent_reconcile_status(
+            payload: AgentReconcileStatusRequest,
+        ) -> dict[str, Any]:
+            status = payload.model_dump()
+            self.db.save_agent_reconcile_status(status)
+            evt = await publish_and_record(
+                self.bus,
+                self.db,
+                EventSubject.AGENT_RECONCILE_REPORTED,
+                SERVICE_NAME,
+                status,
+                payload.cluster_id,
+            )
+            return {"accepted": True, "event_id": evt["event_id"]}
+
         @app.post("/commands")
         async def commands(request: Request, payload: CommandRequest) -> dict[str, Any]:
             current = await self.auth.require_session(request)
@@ -268,6 +347,22 @@ class ApiGateway:
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             print(f"gateway error: {exc}", flush=True)
             return JSONResponse(status_code=GATEWAY_ERROR_STATUS_CODE, content={"error": str(exc)})
+
+    def default_agent_policy(self, cluster_id: str) -> AgentPolicy:
+        cluster_role = "management" if cluster_id.startswith("management") else "target"
+        return AgentPolicy(
+            cluster_id=cluster_id,
+            cluster_role=cluster_role,
+            evidence=EvidenceRuntimePolicy(
+                providers={
+                    "metrics": EvidenceProviderPolicy(),
+                    "logs": EvidenceProviderPolicy(),
+                    "traces": EvidenceProviderPolicy(),
+                }
+            ),
+            bootstrap=BootstrapPolicy(mode=cluster_role),
+            desired_state=DesiredStatePolicy(),
+        )
 
 
 def create_app() -> FastAPI:
