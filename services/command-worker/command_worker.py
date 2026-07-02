@@ -40,6 +40,7 @@ class CommandWorkflow:
             "cluster_id": payload.get("cluster_id", DEFAULT_TARGET_CLUSTER_ID),
             "action": payload.get("action", DEFAULT_COMMAND_ACTION),
             "namespace": namespace,
+            "payload": payload.get("payload", {}),
             "steps": POLICY_STEPS,
         }
         await self.events.publish(

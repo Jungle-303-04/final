@@ -92,7 +92,7 @@ class NodeCollector:
         )
 
     async def log_forever(self) -> None:
-        # The same snapshot is also written as structured stdout for Loki/Alloy.
+        # The same snapshot is also written as structured stdout for Loki.
         while True:
             print(
                 json.dumps(
@@ -139,7 +139,6 @@ class NodeCollector:
     async def prometheus_metrics(self) -> str:
         # Prometheus pulls text from /metrics; this method bridges collection to text output.
         return render_prometheus_metrics(await self.metric_samples())
-
 
 
 def create_app(collector: NodeCollector | None = None) -> FastAPI:

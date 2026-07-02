@@ -69,9 +69,6 @@ rca-worker                   evidence -> RCA -> safe PR
 dashboard-projection-service dashboard read model
 audit-timeline-service       audit log
 target-cluster-agent         대상 클러스터 outbound agent
-fake-prometheus              fake metrics source
-fake-loki                    fake logs source
-fake-otel                    fake trace source
 node-collector               선택형 DaemonSet collector
 ```
 

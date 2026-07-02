@@ -22,7 +22,6 @@ Expected:
 
 - `prometheus-*` Pods are `Running`.
 - `loki-*` Pods are `Running`.
-- `alloy-*` is `Running`.
 - `tempo-*` is `Running`.
 - `opentelemetry-collector-*` is `Running`.
 - `optional-node-collector-*` is `Running`.
@@ -95,7 +94,7 @@ Use stdin so PowerShell quoting does not break LogQL.
 @'
 import httpx
 
-query = '{namespace="target", app="optional-node-collector"} |= "node_runtime_sample"'
+query = '{k8s_namespace_name="target", k8s_container_name="node-collector"} |= "node_runtime_sample"'
 r = httpx.get(
     "http://loki-gateway.target.svc/loki/api/v1/query_range",
     params={"query": query, "limit": 5, "direction": "backward"},

@@ -1,13 +1,18 @@
 # Values for the OpenTelemetry Collector Helm chart.
 # This file controls how the collector is installed in the target Kubernetes cluster.
 
-mode: deployment
-replicaCount: 1
+mode: daemonset
 fullnameOverride: opentelemetry-collector
 
 image:
   # The Kubernetes distribution includes receivers/processors commonly used in clusters.
   repository: otel/opentelemetry-collector-k8s
+
+presets:
+  # Collect Kubernetes container stdout/stderr from /var/log/pods on every node.
+  logsCollection:
+    enabled: true
+    includeCollectorLogs: false
 
 resources:
   requests:
@@ -44,7 +49,12 @@ config:
       endpoint: tempo.target.svc:4317
       tls:
         insecure: true
-    # Keep logs/metrics self-contained until they are routed to dedicated backends.
+    # Send Kubernetes Pod logs to Loki's native OTLP endpoint.
+    otlphttp/loki:
+      endpoint: http://loki-gateway.target.svc/otlp
+      tls:
+        insecure: true
+    # Keep metrics self-contained until they are routed to a dedicated backend.
     debug: {}
 
   extensions:
@@ -73,11 +83,12 @@ config:
       logs:
         receivers:
           - otlp
+          - filelog
         processors:
           - memory_limiter
           - batch
         exporters:
-          - debug
+          - otlphttp/loki
 
 ports:
   otlp:

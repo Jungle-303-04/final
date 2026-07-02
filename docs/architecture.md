@@ -58,9 +58,6 @@ dashboard-projection-service  -> python services/dashboard-projection-service/ru
 audit-timeline-service        -> python services/audit-timeline-service/runner.py
 target-cluster-agent          -> python services/target-cluster-agent/runner.py
 optional-node-collector       -> python services/node-collector/runner.py
-fake-prometheus               -> python services/target-cluster-agent/fake_prometheus.py
-fake-loki                     -> python services/target-cluster-agent/fake_loki.py
-fake-otel                     -> python services/target-cluster-agent/fake_otel.py
 ```
 
 서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 runner, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
@@ -130,9 +127,6 @@ services/target-cluster-agent/settings.py
 
 - `target-cluster-agent`
 - `node-collector`: `optional-node-collector` DaemonSet으로 실행
-- `fake-prometheus`
-- `fake-loki`
-- `fake-otel`
 - Kubernetes `ServiceAccount/RBAC`
 
 ## 이벤트 흐름

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Iterable
-from typing import Any
 
 import httpx
 from evidence import EvidenceCollector
-from fastapi import FastAPI
 from providers import (
     LokiLogsProvider,
     PrometheusMetricsProvider,
@@ -16,9 +13,9 @@ from providers import (
 )
 from settings import (
     AGENT_CAPABILITIES,
-    CHECKOUT_APP_NAME,
     COMMAND_COMPLETED_STATUS,
     COMMAND_EXECUTION_DELAY_SECONDS,
+    COMMAND_FAILED_STATUS,
     COMMAND_POLL_TIMEOUT_SECONDS,
     COMMAND_RESULT_MESSAGE,
     COMMAND_RETRY_DELAY_SECONDS,
@@ -26,23 +23,18 @@ from settings import (
     DEFAULT_MANAGEMENT_BASE_URL,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
-    DEFAULT_SERVICE_PORT,
     EVIDENCE_INTERVAL_ENV,
     HOSTNAME_ENV,
     HTTP_TIMEOUT_SECONDS,
-    K8S_READINESS_FAILED_EVENT,
-    LOG_LEVEL,
     MANAGEMENT_BASE_URL_ENV,
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
-    PROMETHEUS_VECTOR_VALUE,
+    QUERY_RUN_ACTION,
     REGISTER_RETRY_DELAY_SECONDS,
-    SERVICE_HOST,
-    SERVICE_PORT_ENV,
     TARGET_CLUSTER_ID_ENV,
 )
 from span import configure_tracing, get_tracer
-from uvicorn import Config, Server
+from telemetry_queries import TelemetryQueryDefinition
 
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
 from packages.config.settings import env
@@ -214,70 +206,57 @@ class TargetClusterAgent:
                             f"agent executing command {command_id} action={action}",
                             flush=True,
                         )
-                        await asyncio.sleep(COMMAND_EXECUTION_DELAY_SECONDS)
-                        await client.complete_command(
-                            command_id,
-                            {
-                                "status": COMMAND_COMPLETED_STATUS,
-                                "cluster_id": self.cluster_id,
-                                "applied": True,
-                                "message": COMMAND_RESULT_MESSAGE,
-                            },
-                        )
+                        result = await self.execute_command(command)
+                        await client.complete_command(command_id, result)
             except Exception as exc:
                 print(f"command polling failed: {exc}", flush=True)
                 await asyncio.sleep(COMMAND_RETRY_DELAY_SECONDS)
 
-
-# Create a fake telemetry FastAPI app for Prometheus, Loki, or OTel demos.
-def create_fake_telemetry_app(kind: str) -> FastAPI:
-    app = FastAPI(title=f"fake-{kind}")
-
-    # Provide a simple health endpoint for fake telemetry services.
-    @app.get("/healthz")
-    async def healthz() -> dict[str, str]:
-        return {"status": "ok", "service": f"fake-{kind}"}
-
-    # Return fake telemetry data for any requested path.
-    @app.get("/{path:path}")
-    async def catch_all(path: str) -> dict[str, Any]:
-        if kind == "prometheus":
+    async def execute_command(self, command: CommandRecord) -> JsonObject:
+        action = command["action"]
+        payload = self.command_payload(command)
+        try:
+            if action == QUERY_RUN_ACTION:
+                return await self.run_query_command(payload)
+            return await self.apply_default_command()
+        except Exception as exc:
             return {
-                "status": "success",
-                "data": {
-                    "resultType": "vector",
-                    "result": [
-                        {
-                            "metric": {"pod": CHECKOUT_APP_NAME},
-                            "value": [time.time(), PROMETHEUS_VECTOR_VALUE],
-                        }
-                    ],
-                },
+                "status": COMMAND_FAILED_STATUS,
+                "cluster_id": self.cluster_id,
+                "applied": False,
+                "message": str(exc),
             }
-        if kind == "loki":
-            return {
-                "status": "success",
-                "data": {
-                    "result": [
-                        {
-                            "stream": {"pod": CHECKOUT_APP_NAME},
-                            "values": [[str(int(time.time() * 1e9)), K8S_READINESS_FAILED_EVENT]],
-                        }
-                    ]
-                },
-            }
-        return {"status": "ok", "telemetry": "fake-otel", "path": path}
 
-    return app
+    async def run_query_command(self, payload: JsonObject) -> JsonObject:
+        definition = self.query_definition_from_payload(payload)
+        result = await self.evidence_collector.run_query(definition)
+        return {
+            "status": COMMAND_COMPLETED_STATUS,
+            "cluster_id": self.cluster_id,
+            "applied": False,
+            "message": "telemetry query executed",
+            "query": definition.__dict__,
+            "result": result,
+        }
 
+    async def apply_default_command(self) -> JsonObject:
+        await asyncio.sleep(COMMAND_EXECUTION_DELAY_SECONDS)
+        return {
+            "status": COMMAND_COMPLETED_STATUS,
+            "cluster_id": self.cluster_id,
+            "applied": True,
+            "message": COMMAND_RESULT_MESSAGE,
+        }
 
-# Run one fake telemetry service with uvicorn.
-async def run_fake_telemetry(kind: str) -> None:
-    await Server(
-        Config(
-            create_fake_telemetry_app(kind),
-            host=SERVICE_HOST,
-            port=int(env(SERVICE_PORT_ENV, DEFAULT_SERVICE_PORT)),
-            log_level=LOG_LEVEL,
-        )
-    ).serve()
+    def command_payload(self, command: CommandRecord) -> JsonObject:
+        payload = command.get("payload") or {}
+        if not isinstance(payload, dict):
+            return {}
+        nested_payload = payload.get("payload")
+        return nested_payload if isinstance(nested_payload, dict) else payload
+
+    def query_definition_from_payload(self, payload: JsonObject) -> TelemetryQueryDefinition:
+        query = payload.get("query", payload)
+        if not isinstance(query, dict):
+            raise ValueError("telemetry query command requires a query object")
+        return TelemetryQueryDefinition.from_mapping(query)

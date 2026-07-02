@@ -25,9 +25,6 @@ SERVICE_ENTRYPOINTS = {
     ),
     "target-cluster-agent": ("services/target-cluster-agent/runner.py", "AsyncService("),
     "node-collector": ("services/node-collector/runner.py", "AsyncService("),
-    "fake-prometheus": ("services/target-cluster-agent/fake_prometheus.py", "AsyncService("),
-    "fake-loki": ("services/target-cluster-agent/fake_loki.py", "AsyncService("),
-    "fake-otel": ("services/target-cluster-agent/fake_otel.py", "AsyncService("),
 }
 
 WORKER_ENTRYPOINTS = [
@@ -119,9 +116,6 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         'args: ["audit-timeline-service"]',
         'args: ["target-agent"]',
         'args: ["node-collector"]',
-        'args: ["fake-prometheus"]',
-        'args: ["fake-loki"]',
-        'args: ["fake-otel"]',
     ]
     for legacy_arg in legacy_role_args:
         assert legacy_arg not in manifests
