@@ -1,25 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TARGET_AGENT_PATH = ROOT_DIR / "services" / "target-cluster-agent" / "evidence.py"
+TARGET_AGENT_DIR = ROOT_DIR / "services" / "target-cluster-agent"
 
 
 def load_evidence_module():
-    spec = importlib.util.spec_from_file_location(
-        "test_target_log_evidence_module",
-        TARGET_AGENT_PATH,
-    )
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load module: {TARGET_AGENT_PATH}")
-
-    module = importlib.util.module_from_spec(spec)
     module_names = (
         "settings",
         "telemetry_queries",
@@ -31,14 +23,15 @@ def load_evidence_module():
         "providers.loki_providers",
         "providers.prometheus_providers",
         "providers.tempo_providers",
+        "evidence",
+        "evidence.collector",
     )
     previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
-    sys.path.insert(0, str(TARGET_AGENT_PATH.parent))
+    sys.path.insert(0, str(TARGET_AGENT_DIR))
     try:
-        spec.loader.exec_module(module)
-        return module
+        return importlib.import_module("evidence")
     finally:
-        sys.path.remove(str(TARGET_AGENT_PATH.parent))
+        sys.path.remove(str(TARGET_AGENT_DIR))
         for name in module_names:
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
