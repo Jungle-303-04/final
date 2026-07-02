@@ -21,12 +21,11 @@ src/services
   gitops/scm-worker
   command-worker
   rca-worker
-  projection/dashboard-worker
   projection/audit-worker
   target/cluster-agent
   target/node-collector
 src/domains
-  identity, gitops, command, rca, scm, projection, audit, alert, target
+  identity, gitops, command, rca, scm, audit, alert, target
 src/packages
   config                 env, runtime 기본값, 시간 helper
   contracts              gateway/event_bus/auth/store 계약과 Protocol port
@@ -54,7 +53,6 @@ make smoke
 접속:
 
 - Gateway health: <http://localhost:18080/healthz>
-- Dashboard query: <http://localhost:18080/dashboard/query>
 
 정리:
 
@@ -66,7 +64,7 @@ make down
 
 각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python src/services/<service-name>/app.py`처럼 서비스별 entrypoint로 분리한다.
 
-한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용합니다. `@app.on(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). cross-cutting projector(dashboard, audit)는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
+한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용합니다. `@app.on(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
 서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둡니다. 여러 서비스가 공유하는 이벤트 subject, envelope, body, stream 계약은 `src/packages/contracts/event_bus`에 둡니다.
 
 ```text
@@ -79,7 +77,6 @@ diff-analyze-worker          desired.diff.detected -> diff.analyzed (안전 시 
 scm-worker                   safe_pr.requested -> safe_pr.created/safe_pr.failed (유일한 PR 생성자)
 command-worker               command policy/dispatch/agent queue
 rca-worker                   evidence -> RCA -> safe_pr.requested
-dashboard-worker             dashboard read model
 audit-worker                 audit log
 alert-worker                 alarm/notification event boundary
 cluster-agent                대상 클러스터 outbound agent

@@ -23,8 +23,6 @@ AGENT_COMMAND_START_PATH = "/agent/commands/{command_id}/start"
 AGENT_COMMAND_HEARTBEAT_PATH = "/agent/commands/{command_id}/heartbeat"
 AGENT_COMMAND_RESULT_PATH = "/agent/commands/{command_id}/result"
 AGENT_EVIDENCE_SOURCE_LEASE_PATH = "/agent/evidence-sources/{source_id}/lease"
-DASHBOARD_QUERY_PATH = "/dashboard/query"
-DASHBOARD_STREAM_PATH = "/dashboard/stream"
 FAKE_TELEMETRY_CATCH_ALL_PATH = "/{path:path}"
 
 

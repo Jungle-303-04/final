@@ -248,7 +248,7 @@ def render() -> None:
     draw_card(draw, 700, 255, 390, 120)
     draw_number(draw, 730, 285, 5, COLORS["orange"])
     draw_text(draw, 775, 276, "보호 API 진입", BOX_TITLE)
-    draw_text(draw, 760, 310, "/commands, /dashboard/query", TEXT, COLORS["text"])
+    draw_text(draw, 760, 310, "/commands, /dead-letters", TEXT, COLORS["text"])
     draw_text(draw, 760, 338, "1. request schema 검증", SMALL, COLORS["small"])
     draw_text(draw, 760, 363, "2. require_session → project role 검사", SMALL, COLORS["small"])
 
