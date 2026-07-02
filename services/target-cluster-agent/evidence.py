@@ -11,7 +11,6 @@ from providers import (
     TempoTracesProvider,
 )
 from providers.base import TRACER, ProviderResult
-from telemetry_tracing import mark_span_error
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
@@ -86,7 +85,7 @@ class EvidenceCollector:
                 return provider.build_response(results)
 
             except Exception as exc:
-                mark_span_error(span, exc)
+                span.mark_error(exc)
                 span.set_attribute(f"{provider.source}.fallback_used", True)
                 print(f"{provider.failure_message}: {exc}", flush=True)
                 return provider.build_response(provider.empty_results())
