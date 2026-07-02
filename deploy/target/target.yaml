@@ -236,6 +236,8 @@ spec:
               value: "allow_partial"
             - name: EVIDENCE_QUEUE_DB_PATH
               value: "/data/evidence-queue.db"
+            - name: TELEMETRY_QUERY_PATH
+              value: "services/target-cluster-agent/queries"
           volumeMounts:
             - name: evidence-queue-data
               mountPath: /data
