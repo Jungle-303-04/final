@@ -15,7 +15,7 @@ from packages.contracts.gateway.requests import (
 )
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TARGET_AGENT_DIR = ROOT_DIR / "services" / "target-cluster-agent"
+TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 
 
 def load_control_module():
@@ -24,7 +24,7 @@ def load_control_module():
         "control.policy",
         "control.reconciler",
         "control.store",
-        "settings",
+        "config",
         "span",
         "span.base",
         "span.otel",
@@ -220,7 +220,7 @@ def test_reconciler_applies_target_agent_owned_configmap(tmp_path: Path) -> None
         namespace="target",
         name="target-agent-policy",
         action="apply",
-        state={"data": {"owner": "target-cluster-agent"}},
+        state={"data": {"owner": "cluster-agent"}},
     )
     policy = AgentPolicy(
         cluster_id="cluster-1",
@@ -252,7 +252,7 @@ def test_reconciler_retries_failed_apply_for_same_hash(tmp_path: Path) -> None:
         namespace="target",
         name="target-agent-policy",
         action="apply",
-        state={"data": {"owner": "target-cluster-agent"}},
+        state={"data": {"owner": "cluster-agent"}},
     )
     store.save_policy(
         AgentPolicy(

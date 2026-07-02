@@ -10,27 +10,44 @@
 - 관리 영역의 서비스들은 NATS JetStream을 통해 비동기로 통신한다.
 - 저장소는 Kubernetes workload로 분리해 실행한다.
 - 대상 클러스터 Agent는 관리 영역으로 outbound 연결만 맺는다.
-- OAuth provider token은 Dashboard 상태가 아니라 Token Vault record로 관리한다.
-- Dashboard와 command API는 Gateway OAuth flow가 발급한 session을 요구한다.
+- 외부 provider credential은 Dashboard 상태가 아니라 credential_ref/Token Broker 경계로 관리한다.
+- Dashboard와 command API는 Gateway 내부 로그인(email/password)이 발급한 Redis session을 요구한다.
+
+## 운영 배포 기준
+
+운영 배포 기준은 [operations-deployment.md](operations-deployment.md)를 따른다.
+
+현재 제품 구조는 그대로 유지한다. EKS 발표자료에서 흡수할 부분은 제품 내부 흐름이 아니라 배포 substrate, node type, 권한, 관측성 기준이다.
+
+| 항목 | 기준 |
+| --- | --- |
+| 관리 클러스터 | EKS managed node group 중심으로 검토 |
+| Fargate | stateless API/worker 일부만 후보 |
+| node-collector | DaemonSet이므로 Fargate-only 배치 금지 |
+| stateful store | 운영 후보는 RDS, ElastiCache, S3 같은 managed service |
+| target 연결 | cluster-agent outbound 연결 유지 |
+| 권한 | 내부 session, 외부 credential, AWS IAM/IRSA, Kubernetes ServiceAccount/RBAC를 분리 |
+| 관측성 | CloudWatch, Prometheus, Loki, OTel을 provider adapter로 수용 |
 
 ## 서비스 배치
 
 ```text
 services
-  + api-gateway       HTTP 경계, OAuth/session, dashboard API
-  + gitops-sync-worker           Git webhook -> manifest/diff/command
+  + api-gateway       HTTP 경계, 내부 로그인/session, dashboard API
+  + gitops            Git 변경 -> workflow state -> manifest/diff/analyze/repo write split workers
   + command-worker               command policy -> target agent queue
+  + target/reconcile-worker      target desired state -> reconcile result
   + rca-worker                   evidence -> RCA -> safe PR event
-  + dashboard-projection-service dashboard read model projection
-  + audit-timeline-service       변경 불가능한 audit timeline
-  + target-cluster-agent         Target Cluster Agent와 telemetry adapter
-  + node-collector               선택형 DaemonSet node/runtime metrics source
+  + projection/dashboard-worker dashboard read model projection
+  + projection/audit-worker       변경 불가능한 audit timeline
+  + target/cluster-agent             Target Cluster Agent와 telemetry adapter
+  + target/node-collector                   선택형 DaemonSet node/runtime metrics source
 
 packages
   + config                       env, 상수, 시간 helper
   + contracts                    gateway/event_bus/dashboard 계약과 Protocol port
     - gateway                    API Gateway 요청 Pydantic schema
-    - event_bus                  stream, subject, subscription, event port
+    - event_bus                  stream, subject, subscription, envelope, body 계약
     - dashboard                  dashboard read model status 계약
   + events                       event envelope, NATS JetStream, DLQ event sink
   + storage                      PostgreSQL 저장소와 schema 초기화
@@ -50,17 +67,26 @@ secrets                         SOPS/age 기반 secret 공유 템플릿
 각 Kubernetes workload는 중앙 dispatcher에 role 문자열을 넘기지 않는다. Deployment/DaemonSet이 각 서비스 entrypoint를 직접 실행한다.
 
 ```text
-api-gateway        -> python services/api-gateway/runner.py
-gitops-sync-worker            -> python services/gitops-sync-worker/runner.py
-command-worker                -> python services/command-worker/runner.py
-rca-worker                    -> python services/rca-worker/runner.py
-dashboard-projection-service  -> python services/dashboard-projection-service/runner.py
-audit-timeline-service        -> python services/audit-timeline-service/runner.py
-target-cluster-agent          -> python services/target-cluster-agent/runner.py
-optional-node-collector       -> python services/node-collector/runner.py
+api-gateway        -> python src/services/gateway/api-gateway/app.py
+git-pull-worker               -> python src/services/gitops/git-pull-worker/app.py
+workflow-controller           -> python src/services/gitops/workflow-controller/app.py
+manifest-render-worker        -> python src/services/gitops/manifest-render-worker/app.py
+diff-worker                   -> python src/services/gitops/diff-worker/app.py
+diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
+scm-worker           -> python src/services/gitops/scm-worker/app.py
+command-worker                -> python src/services/command/command-worker/app.py
+target-reconcile-worker       -> python src/services/target/reconcile-worker/app.py
+rca-worker                    -> python src/services/ai/rca-worker/app.py
+dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
+audit-worker        -> python src/services/projection/audit-worker/app.py
+cluster-agent          -> python src/services/target/cluster-agent/app.py
+optional-node-collector       -> python src/services/target/node-collector/app.py
+fake-prometheus               -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=prometheus)
+fake-loki                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=loki)
+fake-otel                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=otel)
 ```
 
-서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 runner, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
+서비스는 Kubernetes workload와 entrypoint 기준으로 분리한다. base image나 공통 Dockerfile을 임시로 공유하더라도 서비스별 `app.py` entrypoint, command, health, restart 경계는 합치지 않는다. 운영 부담과 배포 요구가 커지면 같은 entrypoint를 유지한 채 서비스별 Dockerfile/image로 나눈다.
 
 ## 복구와 장애 격리
 
@@ -68,7 +94,7 @@ optional-node-collector       -> python services/node-collector/runner.py
 
 | 기준 | 설명 |
 | --- | --- |
-| health | HTTP 서비스는 `/healthz`, worker/agent는 runner 생존과 log/event 처리 상태로 확인한다. |
+| health | HTTP 서비스는 `/healthz`, worker/agent는 `app.py` entrypoint 생존과 log/event 처리 상태로 확인한다. |
 | restart | `scripts/kill-pod.sh <deployment>` 뒤 Deployment가 새 pod를 만든다. |
 | retry | worker handler 실패는 `event_processing` retry 상태를 거쳐 DLQ로 이동한다. |
 | isolation | 한 서비스 장애가 다른 서비스 process를 같이 죽이면 안 된다. |
@@ -76,35 +102,50 @@ optional-node-collector       -> python services/node-collector/runner.py
 
 ## 포트와 어댑터
 
-공통 인터페이스는 `packages/contracts` 하위 계약 폴더에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
+공통 인터페이스는 `src/packages/contracts` 하위 계약 폴더에 둔다. 서비스 코드는 가능한 한 PostgreSQL, NATS, `httpx` 같은 구현체가 아니라 아래 포트에 의존한다.
 
-- `packages/contracts/event_bus`: stream, subject, worker subscription, event publish/consume 경계
+- `src/packages/contracts/event_bus`: stream, subject, worker subscription, envelope, body, event publish/consume 경계
 - `EventPublisher`, `EventRecorder`, `EventConsumerBus`: NATS JetStream을 교체할 수 있는 경계
 - `EventClient`: 서비스 코드가 사용하는 publish 경계
-- `packages/contracts/gateway`: API Gateway HTTP 요청 schema
-- `RepoChangeStore`, `AgentCommandQueue`, `RcaStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
+- `EventEnvelope`: workflow handler가 받는 이벤트 객체. transport/wire 필드는 소문자 `payload`이며, 서비스 코드는 `evt["payload"]` 대신 `evt.payload`처럼 속성 접근을 사용한다.
+- `src/packages/contracts/event_bus/bodies/`: 서비스가 발행하는 event body dataclass 계약(base class `EventBody`). wire key 별칭이 필요하면 body class에서만 관리한다.
+- `src/packages/contracts/gateway`: API Gateway HTTP 요청 schema
+- `WorkflowStore`, `DashboardReadModel`, `AuditLogStore`: PostgreSQL 저장소 경계
 - `OAuthAccountStore`, `SessionStore`: OAuth/token/session 저장 경계
 - `ManagementPlaneClient`: Target Agent가 Management API와 통신하는 transport 경계
+- `TargetReconcileStore`: target desired-state와 reconcile 결과 저장 경계
+- `ActualStateReader`: 운영 구현에서 Kubernetes watch/cache 또는 agent 보고를 연결할 actual-state 조회 경계
 
-현재 concrete adapter는 `packages/storage/database.py`의 `Database`, `packages/events/bus.py`의 `EventBus`, `services/target-cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
+현재 concrete adapter는 `src/packages/storage/database.py`의 `Database`, `src/packages/events/bus.py`의 `NatsEventBus`, `src/services/target/cluster-agent/agent.py`의 `HttpManagementPlaneClient`다.
 
-각 service runner는 `packages/runtime/service.py`의 실행 객체만 사용한다.
+한 서비스는 한 파일 `app.py`다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용한다.
 
-- `FastApiService`: HTTP API process
-- `WorkerService`: JetStream subject 구독 worker process
-- `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
+```python
+app = App("rca-worker")
 
-서비스 폴더에서 `EventHandlerSpec`, `WorkerRuntime`, NATS client를 직접 조립하지 않는다. 새 worker는 자기 `settings.py`에 `SUBSCRIPTION = WorkerSubscription(...)`을 선언하고 runner에서는 `WorkerService.from_subscription(SUBSCRIPTION, handler_factory).run()` 형태로 추가한다.
+@app.on(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
+async def on_evidence(evt, ctx):
+    yield EvidenceBuiltBody(...)        # 체이닝 = 다음 body를 yield
 
-서비스별 설정은 각 서비스 폴더의 `settings.py`가 소유한다.
-
-```text
-services/api-gateway/settings.py
-services/command-worker/settings.py
-services/target-cluster-agent/settings.py
+if __name__ == "__main__":
+    app.run()
 ```
 
-팀원이 자기 담당 서비스를 수정할 때는 먼저 해당 `settings.py`를 확인한다. 구독 subject는 각 worker `settings.py`의 `SUBSCRIPTION`에서 확인한다. 여러 서비스가 공유하는 event subject와 stream 계약은 `packages/contracts/event_bus`에 둔다.
+`App.run()`은 내부적으로 `src/packages/runtime/service.py`의 실행 객체와 `WorkerRuntime`을 조립한다. 즉 `WorkerService`/`WorkerRuntime`은 런타임 내부 구현이며 서비스 작성자는 직접 다루지 않는다. 실행 객체 종류:
+
+- `FastApiService`: HTTP API process
+- `WorkerService`: JetStream subject 구독 worker process(내부용)
+- `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
+
+dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+
+```python
+@app.on_any
+async def on_event(evt: EventEnvelope, ctx):
+    ctx.db.append_audit_log(evt)
+```
+
+서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.on(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `src/packages/contracts/event_bus`에 둔다.
 
 이벤트 작성, 구독, retry, DLQ, replay 기준은 `docs/events.md`를 따른다.
 
@@ -113,11 +154,17 @@ services/target-cluster-agent/settings.py
 관리 클러스터:
 
 - `api-gateway`
-- `gitops-sync-worker`
+- `git-pull-worker`
+- `workflow-controller`
+- `manifest-render-worker`
+- `diff-worker`
+- `diff-analyze-worker`
+- `scm-worker`
 - `command-worker`
+- `target-reconcile-worker`
 - `rca-worker`
-- `dashboard-projection-service`
-- `audit-timeline-service`
+- `dashboard-worker`
+- `audit-worker`
 - `nats`
 - `postgresql`
 - `redis`
@@ -125,7 +172,7 @@ services/target-cluster-agent/settings.py
 
 대상 클러스터:
 
-- `target-cluster-agent`
+- `cluster-agent`
 - `node-collector`: `optional-node-collector` DaemonSet으로 실행
 - Kubernetes `ServiceAccount/RBAC`
 
@@ -135,18 +182,32 @@ services/target-cluster-agent/settings.py
 GitHub webhook
 -> API Gateway
 -> NATS git.webhook.received
--> GitOps Sync Worker
+-> Workflow Controller가 Application/WorkflowRun 시작
+-> GitOps split workers
+-> NATS workflow.step.recorded / approval.requested 또는 approval.granted
 -> NATS command.requested
 -> Command Worker
 -> Target Agent용 command queue 저장
+-> Workflow Controller가 apply 단계와 command_id 연결
 -> Target Cluster Agent가 polling 후 command 완료
 -> NATS command.completed
+-> NATS workflow.run.completed 또는 workflow.run.failed
 
 Target Cluster Agent
 -> API Gateway /agent/evidence
 -> NATS cluster.evidence.received
 -> RCA Worker
--> evidence.built -> rca.completed -> safe_pr.created
+-> evidence.built -> rca.completed -> safe_pr.requested
+-> Repo Gateway Worker
+-> safe_pr.created
+
+Target 등록 / desired-state
+-> API Gateway /targets
+-> target_desired_states 저장
+-> NATS cluster.desired_state.changed
+-> Target Reconcile Worker
+-> cluster.reconcile.requested
+-> cluster.reconcile.completed
 
 모든 event
 -> Dashboard Projection Service
@@ -157,7 +218,7 @@ Target Cluster Agent
 실패한 event 처리:
 
 ```text
-packages/runtime/worker.py
+src/packages/runtime/worker.py
 -> event_processing retrying
 -> NATS nak
 -> max attempts 초과
@@ -166,20 +227,19 @@ packages/runtime/worker.py
 -> Gateway /dead-letters replay
 ```
 
-## OAuth 흐름
+## 내부 로그인 흐름
 
 ```text
 UI
--> /auth/oauth/{provider}/start
--> OAuth provider redirect
--> /auth/oauth/{provider}/callback
--> Gateway가 provider token을 Token Vault에 저장
--> Gateway가 user/provider metadata를 PostgreSQL에 저장
+-> /auth/signup
+-> mail.email_verification.requested
+-> /auth/verify-email
+-> /auth/login
 -> Gateway가 session을 Redis에 저장
--> Gateway가 oauth.connected 발행
+-> Gateway가 httpOnly session cookie 발급
 ```
 
-현재 구현은 fake token exchange를 사용한다. 실제 Google/GitHub OAuth를 붙일 때는 provider adapter만 교체하고 내부 저장 구조와 event flow는 유지한다. UI 호출은 반환된 session token을 `Authorization: Bearer <token>`으로 전달해야 한다.
+현재 구현은 OAuth를 로그인으로 사용하지 않는다. 실제 Google/GitHub 같은 외부 연결은 integration target/credential_ref/Token Broker 흐름으로 별도 추가한다. UI 호출은 httpOnly session cookie로 인증한다.
 
 ## 실행
 

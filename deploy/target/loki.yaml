@@ -1,4 +1,4 @@
-# Values for the Grafana Loki Helm chart.
+# Grafana Loki Helm chart 값
 
 deploymentMode: SingleBinary
 
@@ -25,6 +25,15 @@ singleBinary:
   persistence:
     enabled: true
     size: 5Gi
+
+# kind/local 대상 클러스터는 작게 구성. Loki chart는 기본으로
+# memcached result/chunk cache 활성화, chunk cache request는 약 9.8Gi
+# production 설치에서는 cache size 조정 또는 재활성화
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
 
 read:
   replicas: 0
