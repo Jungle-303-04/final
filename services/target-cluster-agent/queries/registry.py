@@ -13,7 +13,7 @@ SOURCE_EVIDENCE_KEYS: dict[TelemetrySource, str] = {
     "tempo": "traces",
 }
 
-DEFAULT_QUERY_PATH = Path(__file__).with_name("queries")
+DEFAULT_QUERY_PATH = Path(__file__).parent
 SUPPORTED_QUERY_FILE_SUFFIXES = {".json"}
 
 

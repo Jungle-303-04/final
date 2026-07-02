@@ -26,6 +26,9 @@ class EvidenceUploader:
         self.store = store
         self.failure_policy = self.validate_failure_policy(failure_policy)
 
+    def set_failure_policy(self, failure_policy: str) -> None:
+        self.failure_policy = self.validate_failure_policy(failure_policy)
+
     async def run(self, client: ManagementPlaneClient) -> None:
         while True:
             result = await self.upload_once(client)
