@@ -15,9 +15,12 @@ from domains.command.models import (
     AgentCommand,
 )
 from packages.config.constants import CommandStatus
-from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.event_bus.bodies import CommandCompletedBody
+from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
+from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
+from packages.events.envelope import event
 from packages.storage.engine import (
     DEFAULT_COMMAND_LEASE_SECONDS,
     UNKNOWN_AGENT_ID,
@@ -25,6 +28,7 @@ from packages.storage.engine import (
     row_dict,
     serialize_command,
 )
+from packages.storage.schema import EventModel, OutboxModel
 
 
 class AgentCommandRepository(DatabaseConnection):
@@ -173,7 +177,7 @@ class AgentCommandRepository(DatabaseConnection):
             row = (await conn.execute(statement)).mappings().first()
         return row["correlation_id"] if row else None
 
-    async def complete_agent_command(
+    async def complete_agent_command_and_stage_event(
         self,
         command_id: str,
         workspace_id: str,
@@ -181,18 +185,21 @@ class AgentCommandRepository(DatabaseConnection):
         result: JsonObject,
         lease_id: str,
         agent_id: str,
-    ) -> str | None:
-        table = AgentCommand.__table__
+        source: str,
+    ) -> EventEnvelope | None:
+        command_table = AgentCommand.__table__
+        event_table = EventModel.__table__
+        outbox_table = OutboxModel.__table__
         statement = (
-            update(table)
+            update(command_table)
             .where(
-                table.c.command_id == command_id,
-                table.c.workspace_id == workspace_id,
-                table.c.cluster_id == cluster_id,
-                table.c.lease_id == lease_id,
-                table.c.agent_id == agent_id,
-                table.c.status == CommandStatus.RUNNING,
-                table.c.leased_until >= func.now(),
+                command_table.c.command_id == command_id,
+                command_table.c.workspace_id == workspace_id,
+                command_table.c.cluster_id == cluster_id,
+                command_table.c.lease_id == lease_id,
+                command_table.c.agent_id == agent_id,
+                command_table.c.status == CommandStatus.RUNNING,
+                command_table.c.leased_until >= func.now(),
             )
             .values(
                 status=result["status"],
@@ -200,11 +207,45 @@ class AgentCommandRepository(DatabaseConnection):
                 completed_at=func.now(),
                 updated_at=func.now(),
             )
-            .returning(table.c.correlation_id)
+            .returning(command_table.c.correlation_id)
         )
-        async with self.async_connection() as conn:
+        async with self.async_engine.begin() as conn:
             row = (await conn.execute(statement)).mappings().first()
-        return row["correlation_id"] if row else None
+            if not row:
+                return None
+
+            completed = event(
+                EventSubject.COMMAND_COMPLETED,
+                source,
+                CommandCompletedBody(command_id=command_id, result=result).to_body(),
+                str(row["correlation_id"]),
+            )
+            await conn.execute(
+                pg_insert(event_table)
+                .values(
+                    event_id=completed.event_id,
+                    subject=completed.subject,
+                    source=completed.source,
+                    correlation_id=completed.correlation_id,
+                    causation_id=completed.causation_id,
+                    payload=completed.payload,
+                )
+                .on_conflict_do_nothing(index_elements=[event_table.c.event_id])
+            )
+            await conn.execute(
+                pg_insert(outbox_table)
+                .values(
+                    event_id=completed.event_id,
+                    subject=completed.subject,
+                    source=completed.source,
+                    correlation_id=completed.correlation_id,
+                    causation_id=completed.causation_id,
+                    occurred_at=completed.created_at,
+                    payload=completed.payload,
+                )
+                .on_conflict_do_nothing(index_elements=[outbox_table.c.event_id])
+            )
+        return completed
 
     def command_status_counts(self) -> dict[str, int]:
         table = AgentCommand.__table__

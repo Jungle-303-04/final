@@ -171,6 +171,10 @@ def row_dict(row: Any) -> JsonObject:
 _ACTIVE_CONN: ContextVar[Connection | None] = ContextVar("active_conn", default=None)
 
 
+def has_active_connection() -> bool:
+    return _ACTIVE_CONN.get() is not None
+
+
 class DatabaseConnection:
     def __init__(self) -> None:
         self.url = required_env(DATABASE_URL_ENV)
