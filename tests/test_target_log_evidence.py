@@ -23,6 +23,9 @@ def load_evidence_module():
     module_names = (
         "settings",
         "telemetry_queries",
+        "span",
+        "span.base",
+        "span.otel",
         "providers",
         "providers.base",
         "providers.loki_providers",
@@ -65,9 +68,9 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
             },
         }
 
-    collector.telemetry_providers["logs"].query = fake_query_loki
+    collector.providers["logs"].query = fake_query_loki
 
-    logs = asyncio.run(collector.collect_loki_logs())
+    logs = asyncio.run(collector.collect("logs"))["logs"]
     payload = {
         "cluster_id": "target-cluster-01",
         "kubernetes": {},
