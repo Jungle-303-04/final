@@ -1,0 +1,10 @@
+# 팀 공유 포맷/린트 훅 — git 커밋 시 자동 적용(에디터 무관).
+# 설치: make hooks  (또는: uv run pre-commit install)
+# ruff 버전은 uv.lock 과 동일하게 고정 → 팀 전원 같은 포맷 결과.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.19
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: [--fix]

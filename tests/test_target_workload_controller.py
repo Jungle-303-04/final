@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TARGET_AGENT_DIR = ROOT_DIR / "services" / "target-cluster-agent"
+TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 
 
 def load_workload_modules():

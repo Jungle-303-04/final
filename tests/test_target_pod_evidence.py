@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-NODE_COLLECTOR_PATH = ROOT_DIR / "services" / "node-collector" / "metric_collectors.py"
+NODE_COLLECTOR_PATH = (
+    ROOT_DIR / "src" / "services" / "target" / "node-collector" / "metric_collectors.py"
+)
 
 
 def load_metric_collectors_module():
@@ -21,7 +23,7 @@ def load_metric_collectors_module():
     sys.modules["test_target_pod_evidence_module"] = module
     previous_modules = {
         name: sys.modules.pop(name, None)
-        for name in ("settings", "kubernetes_api", "prometheus_metrics")
+        for name in ("config", "kubernetes_api", "prometheus_metrics")
     }
     sys.path.insert(0, str(NODE_COLLECTOR_PATH.parent))
     try:
@@ -29,7 +31,7 @@ def load_metric_collectors_module():
         return module
     finally:
         sys.path.remove(str(NODE_COLLECTOR_PATH.parent))
-        for name in ("settings", "kubernetes_api", "prometheus_metrics"):
+        for name in ("config", "kubernetes_api", "prometheus_metrics"):
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
                 sys.modules[name] = previous_modules[name]

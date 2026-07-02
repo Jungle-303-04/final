@@ -8,12 +8,12 @@ from pathlib import Path
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TARGET_AGENT_DIR = ROOT_DIR / "services" / "target-cluster-agent"
+TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 
 
 def load_evidence_module():
     module_names = (
-        "settings",
+        "config",
         "queries",
         "queries.registry",
         "span",

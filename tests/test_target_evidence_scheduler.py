@@ -11,7 +11,7 @@ import pytest
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TARGET_AGENT_DIR = ROOT_DIR / "services" / "target-cluster-agent"
+TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 
 
 def load_scheduler_module():
@@ -62,6 +62,9 @@ class FakeClient:
         self.shipped.append(evidence)
         return self.status_code
 
+    async def acquire_evidence_source_lease(self, *_args: object) -> dict[str, Any]:
+        return {"leased": True, "lease_id": "lease-1", "leased_until": "soon"}
+
 
 def make_scheduler(
     module: Any,
@@ -75,12 +78,16 @@ def make_scheduler(
         kwargs["failure_policy"] = failure_policy
     return module.EvidenceScheduler(
         cluster_id="cluster-1",
+        workspace_id="default",
+        agent_id="agent-1",
+        source_id="cluster-snapshot",
         collector=collector,
         store=module.EvidenceTaskStore(str(tmp_path / "evidence-queue.db")),
         provider_keys=("metrics", "logs", "traces"),
         provider_worker_counts={"metrics": 1, "logs": 2, "traces": 1},
         interval_seconds=8,
         lease_seconds=60,
+        source_lease_seconds=30,
         max_attempts=1,
         **kwargs,
     )
@@ -168,12 +175,16 @@ def test_scheduler_requires_authority_to_resize_worker_pool(tmp_path: Path) -> N
     authority = object()
     scheduler = module.EvidenceScheduler(
         cluster_id="cluster-1",
+        workspace_id="default",
+        agent_id="agent-1",
+        source_id="cluster-snapshot",
         collector=FakeCollector(),
         store=module.EvidenceTaskStore(str(tmp_path / "evidence-queue.db")),
         provider_keys=("metrics",),
         provider_worker_counts={"metrics": 1},
         interval_seconds=8,
         lease_seconds=60,
+        source_lease_seconds=30,
         worker_pool_authority=authority,
     )
 

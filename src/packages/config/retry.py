@@ -1,0 +1,42 @@
+"""의존성 기동 대기 — nats·postgres 등이 뜰 때까지 재시도하는 공용 헬퍼."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+
+from packages.config.errors import fail
+from packages.config.logs import CONTEXT_KEY, get_logger
+
+DEPENDENCY_RETRY_LIMIT = 60
+DEPENDENCY_RETRY_DELAY_SECONDS = 2
+
+LOGGER = get_logger(__name__)
+
+
+async def retry_dependency(
+    attempt: Callable[[], Awaitable[None]],
+    *,
+    label: str,
+    limit: int = DEPENDENCY_RETRY_LIMIT,
+    delay: int = DEPENDENCY_RETRY_DELAY_SECONDS,
+) -> None:
+    """attempt 가 성공할 때까지 limit 회 재시도(간격 delay). 끝내 실패하면 fail 로 종료."""
+    for i in range(limit):
+        try:
+            await attempt()
+            return
+        except Exception as exc:
+            LOGGER.warning(
+                "dependency_waiting",
+                extra={
+                    CONTEXT_KEY: {
+                        "dependency": label,
+                        "attempt": i + 1,
+                        "limit": limit,
+                        "exception_type": type(exc).__name__,
+                    }
+                },
+            )
+            await asyncio.sleep(delay)
+    fail(f"{label} 연결 실패")

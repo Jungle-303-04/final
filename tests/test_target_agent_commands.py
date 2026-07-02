@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-TARGET_AGENT_PATH = ROOT_DIR / "services" / "target-cluster-agent" / "agent.py"
+TARGET_AGENT_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "agent.py"
 
 
 def load_agent_module():
@@ -18,8 +18,9 @@ def load_agent_module():
         raise RuntimeError(f"cannot load module: {TARGET_AGENT_PATH}")
 
     module = importlib.util.module_from_spec(spec)
+    previous_agent_module = sys.modules.pop(spec.name, None)
     module_names = (
-        "settings",
+        "config",
         "queries",
         "queries.payloads",
         "queries.registry",
@@ -50,10 +51,14 @@ def load_agent_module():
     previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(TARGET_AGENT_PATH.parent))
     try:
+        sys.modules[spec.name] = module
         spec.loader.exec_module(module)
         return module
     finally:
         sys.path.remove(str(TARGET_AGENT_PATH.parent))
+        sys.modules.pop(spec.name, None)
+        if previous_agent_module is not None:
+            sys.modules[spec.name] = previous_agent_module
         for name in module_names:
             sys.modules.pop(name, None)
             if previous_modules[name] is not None:
@@ -181,8 +186,8 @@ def test_agent_routes_unknown_command_to_default_handler() -> None:
 
     result = asyncio.run(agent.execute_command({"action": "unknown.action", "payload": {}}))
 
-    assert result["status"] == "completed"
-    assert result["applied"] is True
+    assert result["status"] == "failed"
+    assert result["applied"] is False
 
 
 def test_agent_imports_query_directory_for_scheduler(tmp_path: Path) -> None:
@@ -240,7 +245,7 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
                 "payload": {
                     "namespace": "target",
-                    "name": "target-cluster-agent",
+                    "name": "cluster-agent",
                     "replicas": 3,
                 },
             }
