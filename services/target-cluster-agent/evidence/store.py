@@ -25,6 +25,16 @@ class EvidenceTask:
     attempt_count: int
 
 
+@dataclass(frozen=True)
+class ProviderQueueStats:
+    provider_key: str
+    queued: int
+    leased: int
+    completed: int
+    failed: int
+    oldest_queued_age_seconds: float
+
+
 class EvidenceTaskStore:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -319,6 +329,51 @@ class EvidenceTaskStore:
             (COLLECTION_STATUS_OPEN,),
         ).fetchone()
         return row is not None
+
+    def provider_queue_stats(
+        self,
+        provider_keys: tuple[str, ...],
+        now: float,
+    ) -> dict[str, ProviderQueueStats]:
+        stats: dict[str, ProviderQueueStats] = {}
+        for provider_key in provider_keys:
+            rows = self.conn.execute(
+                """
+                select status, count(*) as task_count
+                from evidence_tasks
+                where provider_key = ?
+                group by status
+                """,
+                (provider_key,),
+            ).fetchall()
+            counts = {str(row["status"]): int(row["task_count"]) for row in rows}
+            oldest_queued = self.conn.execute(
+                """
+                select min(created_at) as oldest_created_at
+                from evidence_tasks
+                where provider_key = ? and status = ?
+                """,
+                (provider_key, TASK_STATUS_QUEUED),
+            ).fetchone()
+            oldest_created_at = (
+                None
+                if oldest_queued is None
+                else oldest_queued["oldest_created_at"]
+            )
+            oldest_age = (
+                0.0
+                if oldest_created_at is None
+                else max(0.0, now - float(oldest_created_at))
+            )
+            stats[provider_key] = ProviderQueueStats(
+                provider_key=provider_key,
+                queued=counts.get(TASK_STATUS_QUEUED, 0),
+                leased=counts.get(TASK_STATUS_LEASED, 0),
+                completed=counts.get(TASK_STATUS_COMPLETED, 0),
+                failed=counts.get(TASK_STATUS_FAILED, 0),
+                oldest_queued_age_seconds=oldest_age,
+            )
+        return stats
 
     def touch_collection(self, collection_id: str, now: float) -> None:
         self.conn.execute(

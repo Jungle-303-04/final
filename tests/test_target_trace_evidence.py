@@ -14,7 +14,8 @@ TARGET_AGENT_DIR = ROOT_DIR / "services" / "target-cluster-agent"
 def load_evidence_module():
     module_names = (
         "settings",
-        "telemetry_queries",
+        "queries",
+        "queries.registry",
         "span",
         "span.base",
         "span.otel",

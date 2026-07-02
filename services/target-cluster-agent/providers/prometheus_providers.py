@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import httpx
+from queries import PROMETHEUS_INSTANT_QUERIES, PrometheusInstantQuery
 from settings import (
     DEFAULT_PROMETHEUS_BASE_URL,
     PROMETHEUS_BASE_URL_ENV,
     PROMETHEUS_TIMEOUT_SECONDS,
 )
-from telemetry_queries import PROMETHEUS_INSTANT_QUERIES, PrometheusInstantQuery
 
 from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
@@ -40,7 +40,7 @@ class PrometheusMetricsProvider:
                 f"{self.base_url}/api/v1/query",
                 params={"query": telemetry_query.promql},
             )
-            span.attr("http.status_code", response.status_code)
+            span.http_status(response.status_code)
             response.raise_for_status()
             return response.json()
 

@@ -14,6 +14,8 @@ class TraceSpan(Protocol):
 
     def flag(self, key: str, value: bool) -> None: ...
 
+    def http_status(self, status_code: int) -> None: ...
+
     def fields_present(
         self,
         namespace: str,
