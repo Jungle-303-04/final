@@ -35,12 +35,12 @@ class PrometheusMetricsProvider:
         telemetry_query: PrometheusInstantQuery,
     ) -> JsonObject:
         with TRACER.start_as_current_span("prometheus.query") as span:
-            span.set_attribute("prometheus.query", telemetry_query.promql)
+            span.attr("prometheus.query", telemetry_query.promql)
             response = await client.get(
                 f"{self.base_url}/api/v1/query",
                 params={"query": telemetry_query.promql},
             )
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
             response.raise_for_status()
             return response.json()
 

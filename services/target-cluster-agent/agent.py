@@ -41,7 +41,7 @@ from settings import (
     SERVICE_PORT_ENV,
     TARGET_CLUSTER_ID_ENV,
 )
-from telemetry_tracing import configure_tracing, get_tracer
+from span import configure_tracing, get_tracer
 from uvicorn import Config, Server
 
 from packages.config.constants import DEFAULT_EVIDENCE_INTERVAL_SECONDS, DEFAULT_TARGET_CLUSTER_ID
@@ -73,8 +73,8 @@ class HttpManagementPlaneClient:
     # Tell the Management Plane that this target-cluster agent is online.
     async def register_agent(self, cluster_id: str, agent_id: str, capabilities: list[str]) -> None:
         with TRACER.start_as_current_span("management.register_agent") as span:
-            span.set_attribute("cluster.id", cluster_id)
-            span.set_attribute("agent.id", agent_id)
+            span.attr("cluster.id", cluster_id)
+            span.attr("agent.id", agent_id)
             response = await self.client.post(
                 f"{self.base_url}/agent/connect",
                 json={
@@ -83,38 +83,38 @@ class HttpManagementPlaneClient:
                     "capabilities": capabilities,
                 },
             )
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
 
     # Send one evidence payload to the Management Plane.
     async def ship_evidence(self, evidence: JsonObject) -> int:
         with TRACER.start_as_current_span("management.ship_evidence") as span:
             response = await self.client.post(f"{self.base_url}/agent/evidence", json=evidence)
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
             return response.status_code
 
     # Ask the Management Plane for one pending command.
     async def poll_command(self, cluster_id: str, timeout_seconds: int) -> CommandRecord | None:
         with TRACER.start_as_current_span("management.poll_command") as span:
-            span.set_attribute("cluster.id", cluster_id)
+            span.attr("cluster.id", cluster_id)
             response = await self.client.get(
                 f"{self.base_url}/agent/commands/poll",
                 params={"cluster_id": cluster_id, "timeout": timeout_seconds},
             )
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
             response.raise_for_status()
             command = response.json().get("command")
-            span.set_attribute("command.found", command is not None)
+            span.flag("command.found", command is not None)
             return command
 
     # Report one command execution result back to the Management Plane.
     async def complete_command(self, command_id: str, result: JsonObject) -> None:
         with TRACER.start_as_current_span("management.complete_command") as span:
-            span.set_attribute("command.id", command_id)
+            span.attr("command.id", command_id)
             response = await self.client.post(
                 f"{self.base_url}/agent/commands/{command_id}/result",
                 json=result,
             )
-            span.set_attribute("http.status_code", response.status_code)
+            span.attr("http.status_code", response.status_code)
 
 
 class TargetClusterAgent:
@@ -122,7 +122,7 @@ class TargetClusterAgent:
     def __init__(
         self,
         client: ManagementPlaneClient | None = None,
-        telemetry_providers: Iterable[TelemetryProvider] | None = None,
+        providers: Iterable[TelemetryProvider] | None = None,
     ) -> None:
         self.base_url = env(MANAGEMENT_BASE_URL_ENV, DEFAULT_MANAGEMENT_BASE_URL).rstrip("/")
         self.otel_service_name = env(OTEL_SERVICE_NAME_ENV, DEFAULT_OTEL_SERVICE_NAME)
@@ -134,13 +134,13 @@ class TargetClusterAgent:
         self.cluster_id = env(TARGET_CLUSTER_ID_ENV, DEFAULT_TARGET_CLUSTER_ID)
         self.interval = int(env(EVIDENCE_INTERVAL_ENV, DEFAULT_EVIDENCE_INTERVAL_SECONDS))
         self.client = client
-        if telemetry_providers is None:
-            telemetry_providers = (
+        if providers is None:
+            providers = (
                 PrometheusMetricsProvider.from_config(env),
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
             )
-        self.evidence_collector = EvidenceCollector(telemetry_providers)
+        self.evidence_collector = EvidenceCollector(providers)
 
     # Start the agent with either the injected client or a real HTTP client.
     async def run(self) -> None:
@@ -174,10 +174,10 @@ class TargetClusterAgent:
         while True:
             try:
                 with self.tracer.start_as_current_span("target_agent.ship_evidence") as span:
-                    span.set_attribute("cluster.id", self.cluster_id)
+                    span.attr("cluster.id", self.cluster_id)
                     evidence = await self.collect_evidence()
                     status_code = await client.ship_evidence(evidence)
-                    span.set_attribute("http.status_code", status_code)
+                    span.attr("http.status_code", status_code)
                     print(f"evidence shipped status={status_code}", flush=True)
             except Exception as exc:
                 print(f"evidence ship failed: {exc}", flush=True)
@@ -186,7 +186,7 @@ class TargetClusterAgent:
     # Build the full evidence payload through the telemetry evidence collector.
     async def collect_evidence(self) -> JsonObject:
         with self.tracer.start_as_current_span("target_agent.collect_evidence") as span:
-            span.set_attribute("cluster.id", self.cluster_id)
+            span.attr("cluster.id", self.cluster_id)
             telemetry_evidence = await self.evidence_collector.collect_evidence()
             return {
                 "cluster_id": self.cluster_id,
@@ -199,17 +199,17 @@ class TargetClusterAgent:
         while True:
             try:
                 with self.tracer.start_as_current_span("target_agent.poll_commands") as span:
-                    span.set_attribute("cluster.id", self.cluster_id)
+                    span.attr("cluster.id", self.cluster_id)
                     command = await client.poll_command(
                         self.cluster_id,
                         COMMAND_POLL_TIMEOUT_SECONDS,
                     )
-                    span.set_attribute("command.found", command is not None)
+                    span.flag("command.found", command is not None)
                     if command:
                         command_id = command["command_id"]
                         action = command["action"]
-                        span.set_attribute("command.id", command_id)
-                        span.set_attribute("command.action", action)
+                        span.attr("command.id", command_id)
+                        span.attr("command.action", action)
                         print(
                             f"agent executing command {command_id} action={action}",
                             flush=True,
