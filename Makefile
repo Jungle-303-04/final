@@ -11,12 +11,12 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync doctor lint format test check build-image up install-telemetry down status smoke scale kill-pod clean
+.PHONY: help setup env sync hooks doctor lint format test events crash-test check build-image up install-telemetry down status smoke scale kill-pod clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-setup: env sync ## 최초 개발 환경 준비
+setup: env sync hooks ## 최초 개발 환경 준비
 
 env: ## .env 파일 생성
 	@if [[ -f .env ]]; then \
@@ -33,13 +33,19 @@ doctor: ## 로컬 필수 도구 점검
 	bash scripts/doctor.sh
 
 lint: ## Ruff 린트 검사
-	uv run ruff check services packages tests
+	uv run ruff check src scripts tests
 
 format: ## Ruff 포맷 적용
-	uv run ruff format services packages tests
+	uv run ruff format src scripts tests
+
+hooks: ## git 커밋 훅 설치(pre-commit, 팀 공통 포맷 강제)
+	uv run pre-commit install
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
+
+events: ## 등록된 이벤트/구독자 한눈에 보기
+	uv run python scripts/events.py
 
 check: doctor test ## 개발 전/커밋 전 전체 점검
 
@@ -61,7 +67,10 @@ status: ## management/target 리소스 상태 확인
 smoke: ## 전체 이벤트 사이클 smoke 테스트
 	bash scripts/smoke.sh
 
-scale: ## management worker scale. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
+crash-test: ## 아웃박스 정확히 한 번 크래시 테스트(make up 후)
+	bash scripts/crash_test.sh
+
+scale: ## management worker 스케일 조정. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
 	@test -n "$(DEPLOYMENT)" && test -n "$(REPLICAS)"
 	bash scripts/scale.sh "$(DEPLOYMENT)" "$(REPLICAS)"
 
@@ -71,5 +80,5 @@ kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYM
 
 clean: ## Python 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
-	find services packages tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find src tests scripts -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -name .DS_Store -delete

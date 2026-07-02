@@ -1,0 +1,40 @@
+# 아키텍처 의존 경계 강제 — import-linter (CI에서 lint-imports 실행).
+# 규칙: services → domains → packages (안쪽 커널로만 의존). 역방향 금지.
+# 예외 2곳(의도적): 이벤트 계약 facade 집계 + storage 합성 루트. 후속 정리 후보.
+#
+# services 가 root 가 아닌 이유: 서비스 디렉터리는 하이픈(예: command-worker)이라 Python 패키지로
+# import 불가 + 스크립트 entrypoint(from settings ...)다. 즉 서비스끼리 import 자체가 구조적으로
+# 불가능하므로 별도 계약이 필요 없다. domains/packages 가 services 를 안 쓰는 것만 아래에서 강제.
+
+[importlinter]
+root_packages =
+    packages
+    domains
+include_external_packages = True
+
+[importlinter:contract:layered]
+name = Layered: domains(위) → packages(아래), 역방향 금지
+type = layers
+layers =
+    domains
+    packages
+ignore_imports =
+    # 이벤트 계약 facade: 도메인이 소유한 이벤트 바디를 packages.contracts 가 집계(재export)
+    packages.contracts.event_bus.bodies -> domains.*.events
+    # 합성 루트: 동적 Database/테이블 로딩(도메인 자동 발견)
+    packages.storage.database -> domains.registry
+    packages.storage.engine -> domains.registry
+
+[importlinter:contract:no-services-in-lib]
+name = packages/domains 는 services 를 import 하지 않음
+type = forbidden
+source_modules =
+    packages
+    domains
+forbidden_modules =
+    services
+
+# NOTE: 도메인별 fine-grained 격리(예: "identity 는 형제 도메인 import 금지")는 현재
+# import-linter 로 강제 못 한다 — 모든 이벤트 바디가 packages.contracts.event_bus.bodies 한
+# 모듈에 집계돼, 그걸 import 하는 순간 전 도메인 events 를 '간접 import'한 것으로 잡히기 때문.
+# bodies facade 를 도메인별로 분리(후속)하면 도메인 의존 그래프도 계약으로 강제할 수 있다.

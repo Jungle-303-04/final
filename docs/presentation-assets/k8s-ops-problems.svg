@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#6f8fbd"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="#3158e8"/>
+  <rect x="48" y="36" width="1504" height="828" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+
+  <text x="110" y="125" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="54" font-weight="900" fill="#0f172a">
+    Kubernetes 운영이 어려운 이유
+  </text>
+  <line x1="110" y1="164" x2="1490" y2="164" stroke="#3158e8" stroke-width="3"/>
+  <text x="110" y="212" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="25" font-weight="700" fill="#475569">
+    운영 도구와 데이터가 흩어져 있어 배포 판단과 장애 대응을 사람이 직접 연결해야 합니다.
+  </text>
+
+  <!-- Card 1 -->
+  <rect x="105" y="270" width="420" height="410" rx="18" fill="#f8fbff" stroke="#c7d2fe" stroke-width="3"/>
+  <circle cx="315" cy="375" r="54" fill="#e0edff" stroke="#3158e8" stroke-width="3"/>
+  <text x="315" y="390" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="28" font-weight="900" fill="#3158e8">운영자</text>
+
+  <g font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="19" font-weight="800">
+    <rect x="145" y="304" width="92" height="48" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+    <text x="191" y="335" text-anchor="middle" fill="#9a3412">GitHub</text>
+    <rect x="390" y="304" width="92" height="48" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <text x="436" y="335" text-anchor="middle" fill="#1d4ed8">K8s</text>
+    <rect x="130" y="420" width="105" height="48" rx="10" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+    <text x="182" y="451" text-anchor="middle" fill="#b91c1c">Alert</text>
+    <rect x="396" y="420" width="104" height="48" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+    <text x="448" y="451" text-anchor="middle" fill="#15803d">Metrics</text>
+    <rect x="257" y="500" width="116" height="48" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+    <text x="315" y="531" text-anchor="middle" fill="#6d28d9">Logs</text>
+  </g>
+
+  <g stroke="#94a3b8" stroke-width="3" stroke-linecap="round">
+    <line x1="237" y1="328" x2="270" y2="352"/>
+    <line x1="390" y1="328" x2="360" y2="352"/>
+    <line x1="235" y1="444" x2="272" y2="404"/>
+    <line x1="396" y1="444" x2="358" y2="404"/>
+    <line x1="315" y1="500" x2="315" y2="430"/>
+  </g>
+
+  <text x="315" y="595" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="31" font-weight="900" fill="#0f172a">
+    도구 분산
+  </text>
+  <text x="315" y="635" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="21" font-weight="700" fill="#475569">
+    GitHub · K8s · 모니터링 · 알림을
+  </text>
+  <text x="315" y="666" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="21" font-weight="700" fill="#475569">
+    각각 확인해야 합니다.
+  </text>
+
+  <!-- Card 2 -->
+  <rect x="590" y="270" width="420" height="410" rx="18" fill="#f8fbff" stroke="#c7d2fe" stroke-width="3"/>
+  <rect x="636" y="325" width="108" height="80" rx="12" fill="#fff7ed" stroke="#f97316" stroke-width="3"/>
+  <text x="690" y="357" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="22" font-weight="900" fill="#9a3412">Git PR</text>
+  <text x="690" y="386" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="17" font-weight="700" fill="#9a3412">변경 발생</text>
+
+  <line x1="748" y1="365" x2="805" y2="365" stroke="#6f8fbd" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <rect x="815" y="316" width="128" height="98" rx="14" fill="#eaf1ff" stroke="#3158e8" stroke-width="3"/>
+  <text x="879" y="351" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="23" font-weight="900" fill="#3158e8">Diff ?</text>
+  <text x="879" y="382" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="17" font-weight="700" fill="#3158e8">영향 불명</text>
+
+  <line x1="946" y1="365" x2="985" y2="365" stroke="#6f8fbd" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <g transform="translate(958 330)">
+    <path d="M38 0 L76 70 H0 Z" fill="#fef3c7" stroke="#f59e0b" stroke-width="4"/>
+    <text x="38" y="54" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="900" fill="#b45309">!</text>
+  </g>
+
+  <rect x="662" y="451" width="276" height="70" rx="14" fill="#fee2e2" stroke="#ef4444" stroke-width="3"/>
+  <text x="800" y="496" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="25" font-weight="900" fill="#b91c1c">
+    배포 전 영향 예측 어려움
+  </text>
+
+  <text x="800" y="595" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="31" font-weight="900" fill="#0f172a">
+    배포 위험 판단
+  </text>
+  <text x="800" y="635" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="21" font-weight="700" fill="#475569">
+    Git 변경이 실제 클러스터에 미칠
+  </text>
+  <text x="800" y="666" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="21" font-weight="700" fill="#475569">
+    영향을 배포 전 알기 어렵습니다.
+  </text>
+
+  <!-- Card 3 -->
+  <rect x="1075" y="270" width="420" height="410" rx="18" fill="#f8fbff" stroke="#c7d2fe" stroke-width="3"/>
+  <g font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="20" font-weight="800">
+    <rect x="1118" y="318" width="116" height="54" rx="11" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+    <text x="1176" y="352" text-anchor="middle" fill="#15803d">Metrics</text>
+    <rect x="1350" y="318" width="100" height="54" rx="11" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+    <text x="1400" y="352" text-anchor="middle" fill="#6d28d9">Logs</text>
+    <rect x="1124" y="455" width="104" height="54" rx="11" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <text x="1176" y="489" text-anchor="middle" fill="#1d4ed8">Events</text>
+    <rect x="1344" y="455" width="112" height="54" rx="11" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+    <text x="1400" y="489" text-anchor="middle" fill="#9a3412">Alerts</text>
+  </g>
+  <circle cx="1287" cy="416" r="62" fill="#fff1f2" stroke="#ef4444" stroke-width="4"/>
+  <text x="1287" y="404" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="24" font-weight="900" fill="#b91c1c">RCA</text>
+  <text x="1287" y="437" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="38" font-weight="900" fill="#b91c1c">?</text>
+
+  <g stroke="#94a3b8" stroke-width="3" stroke-linecap="round" stroke-dasharray="7 7">
+    <line x1="1234" y1="346" x2="1245" y2="385"/>
+    <line x1="1350" y1="346" x2="1329" y2="385"/>
+    <line x1="1228" y1="482" x2="1245" y2="449"/>
+    <line x1="1344" y1="482" x2="1329" y2="449"/>
+  </g>
+
+  <text x="1285" y="595" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="31" font-weight="900" fill="#0f172a">
+    장애 대응 지연
+  </text>
+  <text x="1285" y="635" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="21" font-weight="700" fill="#475569">
+    로그 · 이벤트 · 메트릭이 흩어져
+  </text>
+  <text x="1285" y="666" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="21" font-weight="700" fill="#475569">
+    원인 분석과 복구 제안이 늦어집니다.
+  </text>
+
+  <!-- Bottom conclusion -->
+  <rect x="240" y="735" width="1120" height="78" rx="18" fill="#3158e8"/>
+  <text x="800" y="785" text-anchor="middle" font-family="'Apple SD Gothic Neo','AppleGothic','Arial Unicode MS',sans-serif" font-size="32" font-weight="900" fill="#ffffff">
+    운영 신호를 하나의 Workflow로 연결해야 합니다.
+  </text>
+</svg>

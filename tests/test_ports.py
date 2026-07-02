@@ -1,60 +1,39 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
-import sys
-from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
-from packages.events.bus import publish_and_record
+from conftest import ROOT, load_file, load_service, run_handler, subjects_of
+
+from packages.contracts.event_bus.bodies import CommandRequestedBody
+from packages.contracts.event_bus.interfaces import EventEnvelope
+from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-COMMAND_WORKER_PATH = ROOT_DIR / "services" / "command-worker" / "command_worker.py"
-
-
-def load_module(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load module: {path}")
-    module = importlib.util.module_from_spec(spec)
-    previous_settings = sys.modules.pop("settings", None)
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.path.remove(str(path.parent))
-        sys.modules.pop("settings", None)
-        if previous_settings is not None:
-            sys.modules["settings"] = previous_settings
 
 
 class FakeEventPublisher:
     def __init__(self) -> None:
-        self.published: list[dict[str, Any]] = []
+        self.published: list[EventEnvelope] = []
 
-    async def publish(
+    async def emit(
         self,
         subject: str,
         source: str,
         payload: dict[str, Any],
         correlation_id: str | None = None,
-    ) -> dict[str, Any]:
-        created = event(subject, source, payload, correlation_id)
+        causation_id: str | None = None,
+    ) -> EventEnvelope:
+        created = event(subject, source, payload, correlation_id, causation_id)
         self.published.append(created)
         return created
 
 
-class FakeEventClient(FakeEventPublisher):
-    pass
-
-
 class FakeEventRecorder:
     def __init__(self) -> None:
-        self.recorded: list[dict[str, Any]] = []
+        self.recorded: list[EventEnvelope] = []
 
-    def record_event(self, evt: dict[str, Any]) -> None:
+    def record_event(self, evt: EventEnvelope) -> None:
         self.recorded.append(evt)
 
 
@@ -62,60 +41,130 @@ class FakeAgentCommandQueue:
     def __init__(self) -> None:
         self.queued: list[tuple[str, dict[str, Any], str]] = []
 
-    def queue_agent_command(self, correlation_id: str, plan: dict[str, Any], status: str) -> None:
+    async def queue_agent_command(
+        self, correlation_id: str, plan: dict[str, Any], status: str
+    ) -> None:
         self.queued.append((correlation_id, plan, status))
+
+
+def command_diff() -> dict[str, str]:
+    return {
+        "resource": "deployment/checkout-api",
+        "namespace": "sandbox",
+        "desired_image": "ghcr.io/project/checkout-api:new",
+        "actual_image": "ghcr.io/project/checkout-api:old",
+        "risk": "sandbox-only",
+    }
 
 
 def test_publish_and_record_uses_event_ports() -> None:
     async def run() -> None:
         publisher = FakeEventPublisher()
         recorder = FakeEventRecorder()
-
-        created = await publish_and_record(
-            publisher,
-            recorder,
-            "command.requested",
-            "test",
-            {"cluster_id": "target-cluster-01"},
-            "corr-1",
+        client = RecordedEventClient(publisher, recorder)
+        created = await client.emit(
+            "command.requested", "test", {"cluster_id": "target-cluster-01"}, "corr-1"
         )
-
-        assert created["correlation_id"] == "corr-1"
+        assert created.correlation_id == "corr-1"
         assert publisher.published == [created]
         assert recorder.recorded == [created]
 
     asyncio.run(run())
 
 
-def test_command_workflow_queues_agent_command_through_port() -> None:
+def test_recorded_event_client_inherits_current_causation_id() -> None:
     async def run() -> None:
-        module = load_module(COMMAND_WORKER_PATH, "test_command_worker")
-        events = FakeEventClient()
-        queue = FakeAgentCommandQueue()
-        workflow = module.CommandWorkflow(events, queue)
-
-        await workflow.handle(
-            {
-                "payload": {
-                    "cluster_id": "target-cluster-01",
-                    "action": "rollout_restart",
-                    "namespace": "sandbox",
-                    "payload": {"query": {"source": "prometheus", "name": "up", "query": "up"}},
-                },
-                "correlation_id": "corr-2",
-            }
-        )
-
-        assert len(queue.queued) == 1
-        correlation_id, plan, status = queue.queued[0]
-        assert correlation_id == "corr-2"
-        assert plan["cluster_id"] == "target-cluster-01"
-        assert plan["payload"]["query"]["source"] == "prometheus"
-        assert status == "queued"
-        assert [evt["subject"] for evt in events.published] == [
-            "command.dispatch.ready",
-            "command.dispatched",
-            "command.queued_for_agent",
-        ]
+        publisher = FakeEventPublisher()
+        recorder = FakeEventRecorder()
+        client = RecordedEventClient(publisher, recorder)
+        with event_causation("parent-event-1"):
+            created = await client.emit(
+                "command.dispatched", "command-worker", {"command_id": "cmd-1"}, "corr-1"
+            )
+        assert created.causation_id == "parent-event-1"
+        assert publisher.published == [created]
+        assert recorder.recorded == [created]
 
     asyncio.run(run())
+
+
+def test_command_subscriber_emits_dispatch_chain() -> None:
+    command = load_service("command/command-worker")
+    queue = FakeAgentCommandQueue()
+    payload = CommandRequestedBody.from_body(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": command_diff(),
+        }
+    )
+    outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
+    assert subjects_of(outs) == [
+        "command.dispatch.ready",
+        "command.dispatched",
+        "command.queued_for_agent",
+    ]
+    assert len(queue.queued) == 1
+    correlation_id, plan, status = queue.queued[0]
+    assert correlation_id == "corr-2"
+    assert plan["cluster_id"] == "target-cluster-01"
+    assert plan["command_id"] == outs[0].plan.command_id
+    assert plan["diff"]["resource"] == "deployment/checkout-api"
+    assert plan["idempotency_key"]
+    assert status == "queued"
+
+
+def test_command_subscriber_rejects_noop_diff() -> None:
+    command = load_service("command/command-worker")
+    queue = FakeAgentCommandQueue()
+    diff = command_diff()
+    diff["actual_image"] = diff["desired_image"]
+    payload = CommandRequestedBody.from_body(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": diff,
+        }
+    )
+    outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
+    assert subjects_of(outs) == ["command.rejected"]
+    assert outs[0].reason == "desired and actual images already match"
+    assert queue.queued == []
+
+
+def test_command_id_is_deterministic_for_same_input() -> None:
+    command = load_file(ROOT / "src" / "domains" / "command" / "handler.py", "test_command_handler")
+    payload = CommandRequestedBody.from_body(
+        {
+            "cluster_id": "target-cluster-01",
+            "action": "rollout_restart",
+            "namespace": "sandbox",
+            "reason": "rollout",
+            "diff": command_diff(),
+        }
+    )
+
+    first = command.build_plan(payload, "corr-2")
+    second = command.build_plan(payload, "corr-2")
+
+    assert first.command_id == second.command_id
+
+
+def test_policy_evaluates_dict_and_model_lookups_alike() -> None:
+    policy = load_file(ROOT / "src" / "domains" / "command" / "policy.py", "test_command_policy")
+    rule = policy.EqualsRule(
+        name="sandbox_namespace",
+        field="namespace",
+        expected="sandbox",
+        reason="only sandbox namespace writes are allowed",
+        default="sandbox",
+    )
+    engine = policy.Policy([rule])
+    model_target = policy.ModelLookup(SimpleNamespace(namespace="sandbox"))
+    rejected = policy.ModelLookup(SimpleNamespace(namespace="production"))
+    assert engine.evaluate(model_target).allowed is True
+    assert engine.evaluate(rejected).allowed is False

@@ -13,18 +13,35 @@ spec:
       labels:
         app: api-gateway
     spec:
+      serviceAccountName: api-gateway
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: gateway
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/api-gateway/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
-            - name: REDIS_URL
-              value: redis://redis:6379/0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gateway/api-gateway/app.py"]
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
           ports:
             - name: http
               containerPort: 8000
@@ -34,6 +51,8 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service
@@ -53,28 +72,110 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gitops-sync-worker
+  name: alert-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: gitops-sync-worker
+      app: alert-worker
   template:
     metadata:
       labels:
-        app: gitops-sync-worker
+        app: alert-worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/gitops-sync-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/alert/alert-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mail-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mail-worker
+  template:
+    metadata:
+      labels:
+        app: mail-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/mail/mail-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -91,16 +192,152 @@ spec:
       labels:
         app: command-worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/command-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/command/command-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-controller
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workflow-controller
+  template:
+    metadata:
+      labels:
+        app: workflow-controller
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/workflow-controller/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target-reconcile-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: target-reconcile-worker
+  template:
+    metadata:
+      labels:
+        app: target-reconcile-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/target/reconcile-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -117,65 +354,365 @@ spec:
       labels:
         app: rca-worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/rca-worker/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/ai/rca-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dashboard-projection-service
+  name: audit-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: dashboard-projection-service
+      app: audit-worker
   template:
     metadata:
       labels:
-        app: dashboard-projection-service
+        app: audit-worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/dashboard-projection-service/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/projection/audit-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: audit-timeline-service
+  name: git-pull-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: audit-timeline-service
+      app: git-pull-worker
   template:
     metadata:
       labels:
-        app: audit-timeline-service
+        app: git-pull-worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/audit-timeline-service/runner.py"]
-          env:
-            - name: DATABASE_URL
-              value: postgresql://service:service@postgresql:5432/service
-            - name: NATS_URL
-              value: nats://nats:4222
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/git-pull-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manifest-render-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manifest-render-worker
+  template:
+    metadata:
+      labels:
+        app: manifest-render-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/manifest-render-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diff-worker
+  template:
+    metadata:
+      labels:
+        app: diff-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/diff-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: diff-analyze-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: diff-analyze-worker
+  template:
+    metadata:
+      labels:
+        app: diff-analyze-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/diff-analyze-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scm-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scm-worker
+  template:
+    metadata:
+      labels:
+        app: scm-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/scm-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret

@@ -1,11 +1,11 @@
-# Values for the OpenTelemetry Collector Helm chart.
-# This file controls how the collector is installed in the target Kubernetes cluster.
+# OpenTelemetry Collector Helm chart 값
+# target Kubernetes cluster의 collector 설치 제어
 
 mode: daemonset
 fullnameOverride: opentelemetry-collector
 
 image:
-  # The Kubernetes distribution includes receivers/processors commonly used in clusters.
+  # cluster에서 자주 쓰는 receiver/processor 포함 Kubernetes distribution
   repository: otel/opentelemetry-collector-k8s
 
 presets:
@@ -31,7 +31,7 @@ config:
         http:
           endpoint: ${env:MY_POD_IP}:4318
 
-    # Disable default non-OTLP receivers for the first local integration pass.
+    # 첫 local integration pass에서는 기본 non-OTLP receiver 비활성화
     jaeger: null
     prometheus: null
     zipkin: null
@@ -44,17 +44,7 @@ config:
     batch: {}
 
   exporters:
-    # Send traces to the in-cluster Tempo service through OTLP/gRPC.
-    otlp_grpc/tempo:
-      endpoint: tempo.target.svc:4317
-      tls:
-        insecure: true
-    # Send Kubernetes Pod logs to Loki's native OTLP endpoint.
-    otlphttp/loki:
-      endpoint: http://loki-gateway.target.svc/otlp
-      tls:
-        insecure: true
-    # Keep metrics self-contained until they are routed to a dedicated backend.
+    # 첫 collector 설치를 자체 완결로 두는 debug exporter
     debug: {}
 
   extensions:
@@ -102,7 +92,7 @@ ports:
     servicePort: 4318
     protocol: TCP
 
-  # Match the disabled receivers above.
+  # 위에서 비활성화한 receiver와 일치
   jaeger-compact:
     enabled: false
   jaeger-thrift:

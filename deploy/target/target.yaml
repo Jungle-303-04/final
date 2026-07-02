@@ -1,8 +1,14 @@
-# Namespaces used by the target cluster demo.
-# target:
-#   Runs telemetry components, optional-node-collector, and target-cluster-agent.
-# sandbox:
-#   Receives limited write actions from target-cluster-agent during safe command demos.
+# =============================================================================
+# 샘플/CI 스키마 검증용 매니페스트 — 단독 배포 대상 아님.
+#
+# 실제 cluster-agent 설치 매니페스트는 런타임에 api-gateway 의
+# target 도메인(src/domains/target/router.py: target_install_manifest)이
+# 클러스터 등록 요청마다 생성/적용한다. 이 파일은 그 출력의 정적 참조본으로,
+# 생성기가 주입하는 target-runtime-config(ConfigMap)/target-runtime-secret(Secret)
+# 은 의도적으로 빠져 있다. `kubectl apply -f` 로 직접 띄우면 cluster-agent 가
+# 그 두 리소스를 envFrom 으로 찾지 못해 기동하지 않는다.
+# 용도: kubeconform 등 CI 스키마 검증 + 리뷰용 형상 참고.
+# =============================================================================
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -13,20 +19,16 @@ kind: Namespace
 metadata:
   name: sandbox
 ---
-# Permissions used by target-cluster-agent.
-# This ServiceAccount is the identity used by the target-cluster-agent Pod.
-# It is separate from node-collector so agent permissions and collector permissions
-# can evolve independently.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: target-cluster-agent
+  name: cluster-agent
   namespace: target
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 rules:
   # Read-only access to cluster objects used for evidence and command context.
   - apiGroups: [""]
@@ -34,28 +36,28 @@ rules:
     verbs: ["get", "list", "watch"]
   # Read-only access to workload controllers.
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
+    resources: ["deployments", "replicasets", "daemonsets"]
     verbs: ["get", "list", "watch"]
 ---
-# Bind the read-only ClusterRole above to the target-cluster-agent ServiceAccount.
+# Bind the read-only ClusterRole above to the cluster-agent ServiceAccount.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: target-cluster-agent-read
+  name: cluster-agent-read
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
 ---
 # Write permissions for target-agent owned resources only.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: target-cluster-agent-self-manage
+  name: cluster-agent-self-manage
   namespace: target
 rules:
   - apiGroups: [""]
@@ -64,21 +66,21 @@ rules:
     verbs: ["get", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    resourceNames: ["target-cluster-agent"]
+    resourceNames: ["cluster-agent"]
     verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: target-cluster-agent-self-manage
+  name: cluster-agent-self-manage
   namespace: target
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: target-cluster-agent-self-manage
+  name: cluster-agent-self-manage
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
 ---
 apiVersion: v1
@@ -87,215 +89,234 @@ metadata:
   name: target-agent-policy
   namespace: target
 data:
-  owner: target-cluster-agent
+  owner: cluster-agent
 ---
 # Write permissions are scoped to sandbox only.
 # The agent can patch demo workloads/configmaps there without mutating target telemetry.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: target-cluster-agent-sandbox-write
-  namespace: sandbox
+  name: cluster-agent-target-manage
+  namespace: target
 rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "patch"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
-# Bind sandbox write permissions to the target-cluster-agent ServiceAccount.
+# Bind sandbox write permissions to the cluster-agent ServiceAccount.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-target-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-target-manage
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-sandbox-write
+  namespace: sandbox
+rules:
+  - apiGroups: [""]
+    resources: ["services", "configmaps"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-sandbox-write
   namespace: sandbox
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: target-cluster-agent-sandbox-write
+  name: cluster-agent-sandbox-write
 subjects:
   - kind: ServiceAccount
-    name: target-cluster-agent
+    name: cluster-agent
     namespace: target
 ---
-# Permissions used by optional-node-collector.
-# This ServiceAccount is mounted into optional-node-collector Pods.
-# The collector will read its in-cluster token and call the Kubernetes API with httpx.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: node-collector
-  namespace: target
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: node-collector-read
-rules:
-  # Minimal read-only permissions for the first node-level metric pass.
-  # pods: list Pods and count the ones scheduled on this collector's NODE_NAME.
-  # nodes: read node identity/status later without adding another RBAC block.
-  # No create/update/delete/watch permissions are granted here.
-  - apiGroups: [""]
-    resources: ["pods", "nodes"]
-    verbs: ["get", "list"]
----
-# Bind node-collector-read to the node-collector ServiceAccount in target namespace.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: node-collector-read
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: node-collector-read
-subjects:
-  - kind: ServiceAccount
-    name: node-collector
-    namespace: target
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: target-agent-evidence-queue
-  namespace: target
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-# optional-node-collector runs one collector Pod per Kubernetes node.
-# The current kind target cluster has one node, so this DaemonSet currently creates one Pod.
-# Each Pod exposes /metrics on port 9100 for Prometheus and writes structured JSON logs
-# to stdout for Loki through OpenTelemetry Collector log collection.
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: optional-node-collector
-  namespace: target
-spec:
-  selector:
-    matchLabels:
-      app: optional-node-collector
-  template:
-    metadata:
-      annotations:
-        # Prometheus chart discovers annotated Pods and scrapes this /metrics endpoint.
-        prometheus.io/path: /metrics
-        prometheus.io/port: "9100"
-        prometheus.io/scrape: "true"
-      labels:
-        app: optional-node-collector
-    spec:
-      # Gives the collector the pods/nodes read-only permissions declared above.
-      serviceAccountName: node-collector
-      containers:
-        - name: node-collector
-          image: service:local
-          imagePullPolicy: IfNotPresent
-          command: ["python", "services/node-collector/runner.py"]
-          env:
-            - name: PORT
-              value: "9100"
-            - name: COLLECT_INTERVAL_SECONDS
-              value: "15"
-            # Downward API: Kubernetes injects the node and Pod identity into the container.
-            # The collector uses NODE_NAME to compute node-scoped metrics.
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-          ports:
-            - name: metrics
-              containerPort: 9100
----
-# target-cluster-agent sends collected evidence to the management plane.
-# It queries Prometheus/Loki, builds evidence, and POSTs it to the management API.
-# Prometheus and Loki URLs point to real Helm-installed services in this namespace.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: target-cluster-agent
+  name: fake-prometheus
   namespace: target
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: target-cluster-agent
+      app: fake-prometheus
   template:
     metadata:
       labels:
-        app: target-cluster-agent
+        app: fake-prometheus
     spec:
-      # Uses the agent RBAC above, not the node-collector ServiceAccount.
-      serviceAccountName: target-cluster-agent
       containers:
-        - name: target-cluster-agent
+        - name: fake-prometheus
           image: service:local
           imagePullPolicy: IfNotPresent
-          command: ["python", "services/target-cluster-agent/runner.py"]
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
           env:
-            - name: TARGET_CLUSTER_ID
-              value: target-cluster-01
-            # scripts/up.sh replaces this placeholder with the management cluster NodePort URL.
+            - name: FAKE_TELEMETRY_KIND
+              value: prometheus
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-prometheus
+  namespace: target
+spec:
+  selector:
+    app: fake-prometheus
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-loki
+  namespace: target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fake-loki
+  template:
+    metadata:
+      labels:
+        app: fake-loki
+    spec:
+      containers:
+        - name: fake-loki
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: loki
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-loki
+  namespace: target
+spec:
+  selector:
+    app: fake-loki
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fake-otel
+  namespace: target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fake-otel
+  template:
+    metadata:
+      labels:
+        app: fake-otel
+    spec:
+      containers:
+        - name: fake-otel
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
+          env:
+            - name: FAKE_TELEMETRY_KIND
+              value: otel
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fake-otel
+  namespace: target
+spec:
+  selector:
+    app: fake-otel
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: target-agent-state
+  namespace: target
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-agent
+  namespace: target
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-agent
+  template:
+    metadata:
+      labels:
+        app: cluster-agent
+    spec:
+      serviceAccountName: cluster-agent
+      containers:
+        - name: cluster-agent
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/target/cluster-agent/app.py"]
+          envFrom:
+            - configMapRef:
+                name: target-runtime-config
+            - secretRef:
+                name: target-runtime-secret
+          env:
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
-            # Helm release "prometheus" creates this in-cluster Service.
-            - name: PROMETHEUS_BASE_URL
-              value: "http://prometheus.target.svc:9090"
-            # Helm release "loki" creates loki-gateway for read/write HTTP APIs.
-            - name: LOKI_BASE_URL
-              value: "http://loki-gateway.target.svc"
-            # Helm release "tempo" stores traces forwarded by OpenTelemetry Collector.
-            - name: TEMPO_BASE_URL
-              value: "http://tempo.target.svc:3200"
-            # OpenTelemetry SDK sends spans to the in-cluster Collector, then Tempo stores them.
-            - name: OTEL_SERVICE_NAME
-              value: "target-cluster-agent"
-            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              value: "http://opentelemetry-collector.target.svc:4318/v1/traces"
-            - name: CLUSTER_ROLE
-              value: "target"
-            - name: BOOTSTRAP_MODE
-              value: "target"
-            # Evidence collection loop interval in seconds.
-            - name: EVIDENCE_INTERVAL_SECONDS
-              value: "8"
-            - name: POLICY_SYNC_INTERVAL_SECONDS
-              value: "15"
-            - name: RECONCILE_INTERVAL_SECONDS
-              value: "30"
-            - name: EVIDENCE_PROVIDER_WORKERS
-              value: "metrics=1,logs=1,traces=1"
-            - name: EVIDENCE_PROVIDER_MAX_WORKERS
-              value: "metrics=3,logs=3,traces=3"
-            - name: WORKLOAD_CONTROLLER_INTERVAL_SECONDS
-              value: "5"
-            - name: WORKLOAD_QUEUE_AGE_TARGET_SECONDS
-              value: "15"
-            - name: EVIDENCE_FAILURE_POLICY
-              value: "allow_partial"
+            - name: NODE_COLLECTOR_ENABLED
+              value: "true"
+            - name: NODE_COLLECTOR_IMAGE
+              value: service:local
+            - name: NODE_COLLECTOR_NAMESPACE
+              value: target
             - name: EVIDENCE_QUEUE_DB_PATH
-              value: "/data/evidence-queue.db"
+              value: /var/lib/target-agent/evidence-queue.db
             - name: AGENT_CONTROL_DB_PATH
-              value: "/data/agent-control.db"
-            - name: TELEMETRY_QUERY_PATH
-              value: "services/target-cluster-agent/queries"
+              value: /var/lib/target-agent/agent-control.db
+            - name: OTEL_SERVICE_NAME
+              value: target-cluster-agent
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://opentelemetry-collector.target.svc:4318/v1/traces
           volumeMounts:
-            - name: evidence-queue-data
-              mountPath: /data
+            - name: target-agent-state
+              mountPath: /var/lib/target-agent
       volumes:
-        - name: evidence-queue-data
+        - name: target-agent-state
           persistentVolumeClaim:
-            claimName: target-agent-evidence-queue
+            claimName: target-agent-state

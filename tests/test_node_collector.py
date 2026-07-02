@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-NODE_COLLECTOR_PATH = ROOT_DIR / "services" / "node-collector" / "node_collector.py"
+NODE_COLLECTOR_PATH = (
+    ROOT_DIR / "src" / "services" / "target" / "node-collector" / "node_collector.py"
+)
 
 
 def load_node_collector_module():
@@ -15,16 +17,23 @@ def load_node_collector_module():
         raise RuntimeError(f"cannot load module: {NODE_COLLECTOR_PATH}")
     module = importlib.util.module_from_spec(spec)
     sys.modules["test_node_collector_module"] = module
-    previous_settings = sys.modules.pop("settings", None)
+    module_names = (
+        "kubernetes_api",
+        "metric_collectors",
+        "node_collector",
+        "prometheus_metrics",
+    )
+    previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(NODE_COLLECTOR_PATH.parent))
     try:
         spec.loader.exec_module(module)
         return module
     finally:
         sys.path.remove(str(NODE_COLLECTOR_PATH.parent))
-        sys.modules.pop("settings", None)
-        if previous_settings is not None:
-            sys.modules["settings"] = previous_settings
+        for name in module_names:
+            sys.modules.pop(name, None)
+            if previous_modules[name] is not None:
+                sys.modules[name] = previous_modules[name]
 
 
 def test_node_collector_snapshot_uses_downward_api_identity() -> None:
@@ -36,7 +45,7 @@ def test_node_collector_snapshot_uses_downward_api_identity() -> None:
         interval_seconds=15,
     )
 
-    payload = asyncio.run(collector.snapshot()).to_payload()
+    payload = collector.snapshot().to_body()
 
     assert payload["node_name"] == "target-control-plane"
     assert payload["pod_name"] == "optional-node-collector-abc"
