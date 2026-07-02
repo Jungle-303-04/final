@@ -20,6 +20,10 @@ def test_render_emits_manifest_rendered() -> None:
     assert subjects_of(outs) == ["manifest.rendered"]
     assert outs[0].rendered_manifest.spec.image == "img:new"
     assert outs[0].rendered_manifest.api_version == "apps/v1"
+    assert outs[0].rendered_manifest.declared_fields == [
+        "spec.replicas",
+        "spec.template.spec.containers[name=checkout-api].image",
+    ]
     assert outs[0].workspace_id == "default"
     assert outs[0].binding_id == "binding-default"
     assert db.called("save_repo_change")
@@ -246,6 +250,10 @@ def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
     assert outs[0].rendered_manifest.metadata.namespace == "sandbox"
     assert outs[0].rendered_manifest.spec.replicas == 5
     assert outs[0].rendered_manifest.spec.image == "ghcr.io/project/checkout-api:v2"
+    assert outs[0].rendered_manifest.declared_fields == [
+        "spec.replicas",
+        "spec.template.spec.containers[name=checkout-api].image",
+    ]
     assert outs[1].rendered_manifest.manifest["spec"]["ports"][0]["port"] == 80
     assert outs[2].rendered_manifest.manifest["data"]["LOG_LEVEL"] == "info"
     assert sum(1 for call in db.calls if call[0] == "save_repo_change") == 3
