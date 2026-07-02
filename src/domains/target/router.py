@@ -23,7 +23,14 @@ from packages.contracts.event_bus.bodies import (
     TargetDesiredComponent,
 )
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import EvidenceSourceLeaseRequest, TargetRegisterRequest
+from packages.contracts.gateway.requests import (
+    AgentPolicy,
+    AgentPolicyResponse,
+    AgentPolicyStatusRequest,
+    AgentReconcileStatusRequest,
+    EvidenceSourceLeaseRequest,
+    TargetRegisterRequest,
+)
 from packages.contracts.gateway.responses import EvidenceSourceLeaseResponse, TargetInstallResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
@@ -60,6 +67,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             sandbox_rbac_manifest(),
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token),
+            target_agent_state_pvc_manifest(),
             fake_telemetry,
             checkout_api_manifest(payload.image),
             cluster_agent_manifest(payload),
@@ -142,6 +150,35 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets"]
     verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-self-manage
+  namespace: target
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["target-agent-policy"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["cluster-agent"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-self-manage
+  namespace: target
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-self-manage
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -231,6 +268,10 @@ data:
   NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: "target"
+  EVIDENCE_QUEUE_DB_PATH: "/var/lib/target-agent/evidence-queue.db"
+  AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
+  OTEL_SERVICE_NAME: "target-cluster-agent"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://opentelemetry-collector.target.svc:4318/v1/traces"
 """
 
 
@@ -252,6 +293,21 @@ def fake_telemetry_manifest(image: str) -> str:
         fake_telemetry_deployment(kind, image) + "\n---\n" + fake_telemetry_service(kind)
         for kind in ("prometheus", "loki", "otel")
     )
+
+
+def target_agent_state_pvc_manifest() -> str:
+    return """
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: target-agent-state
+  namespace: target
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+"""
 
 
 def fake_telemetry_deployment(kind: str, image: str) -> str:
@@ -360,6 +416,13 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: {yaml_string(payload.management_base_url)}
+          volumeMounts:
+            - name: target-agent-state
+              mountPath: /var/lib/target-agent
+      volumes:
+        - name: target-agent-state
+          persistentVolumeClaim:
+            claimName: target-agent-state
 """
 
 
@@ -456,6 +519,66 @@ async def register_target(
         )
     )
     return install_response(scoped_payload, manifest, apply_output, agent_token)
+
+
+@router.put(gateway_routes.CLUSTER_POLICY_PATH)
+async def update_cluster_policy(
+    cluster_id: str,
+    payload: AgentPolicy,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> dict[str, Any]:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    if payload.cluster_id != cluster_id:
+        raise HTTPException(
+            status_code=409,
+            detail="cluster_id does not match policy payload",
+        )
+    try:
+        stored = db.upsert_cluster_policy(workspace_id, cluster_id, payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"accepted": True, "policy": stored}
+
+
+@agent_router.get(
+    gateway_routes.AGENT_POLICY_PATH,
+    response_model=AgentPolicyResponse,
+)
+async def agent_policy(
+    cluster_id: str,
+    generation: int = 0,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
+) -> AgentPolicyResponse:
+    if cluster_id != identity.cluster_id:
+        raise HTTPException(status_code=403, detail="cluster_id does not match agent identity")
+    policy = db.get_cluster_policy(identity.workspace_id, identity.cluster_id)
+    if policy is None or int(policy.get("generation", 0)) <= generation:
+        return AgentPolicyResponse(policy=None)
+    return AgentPolicyResponse(policy=AgentPolicy.model_validate(policy))
+
+
+@agent_router.post(gateway_routes.AGENT_POLICY_STATUS_PATH)
+async def agent_policy_status(
+    payload: AgentPolicyStatusRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
+) -> dict[str, bool]:
+    status = payload.model_copy(update={"cluster_id": identity.cluster_id}).model_dump()
+    db.save_agent_policy_status(identity.workspace_id, status)
+    return {"accepted": True}
+
+
+@agent_router.post(gateway_routes.AGENT_RECONCILE_STATUS_PATH)
+async def agent_reconcile_status(
+    payload: AgentReconcileStatusRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
+) -> dict[str, bool]:
+    status = payload.model_copy(update={"cluster_id": identity.cluster_id}).model_dump()
+    db.save_agent_reconcile_status(identity.workspace_id, status)
+    return {"accepted": True}
 
 
 @agent_router.post(

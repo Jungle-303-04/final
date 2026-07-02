@@ -174,9 +174,6 @@ async def on_event(evt: EventEnvelope, ctx):
 
 - `cluster-agent`
 - `node-collector`: `optional-node-collector` DaemonSet으로 실행
-- `fake-prometheus`
-- `fake-loki`
-- `fake-otel`
 - Kubernetes `ServiceAccount/RBAC`
 
 ## 이벤트 흐름
