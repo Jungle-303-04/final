@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 TARGET_AGENT_SERVICE_NAME = "target-cluster-agent"
-FAKE_PROMETHEUS_SERVICE_NAME = "fake-prometheus"
-FAKE_LOKI_SERVICE_NAME = "fake-loki"
-FAKE_OTEL_SERVICE_NAME = "fake-otel"
-
-PROMETHEUS_TELEMETRY_KIND = "prometheus"
-LOKI_TELEMETRY_KIND = "loki"
-OTEL_TELEMETRY_KIND = "otel"
 
 DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
-DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus.target.svc:8000"
-DEFAULT_LOKI_BASE_URL = "http://fake-loki.target.svc:8000"
+DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
+DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
 DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
 DEFAULT_OTEL_SERVICE_NAME = "target-cluster-agent"
 DEFAULT_OTEL_TRACES_ENDPOINT = "http://opentelemetry-collector.target.svc:4318/v1/traces"
@@ -38,18 +31,12 @@ COMMAND_EXECUTION_DELAY_SECONDS = 2
 REGISTER_RETRY_DELAY_SECONDS = 3
 COMMAND_RETRY_DELAY_SECONDS = 3
 
-SERVICE_HOST = "0.0.0.0"
-SERVICE_PORT_ENV = "PORT"
 HOSTNAME_ENV = "HOSTNAME"
-LOG_LEVEL = "info"
-DEFAULT_SERVICE_PORT = "8000"
 DEFAULT_AGENT_ID = "target-agent"
 AGENT_CAPABILITIES = ["collector", "command_receiver"]
 
-CHECKOUT_APP_NAME = "checkout-api"
-K8S_READINESS_FAILED_EVENT = "readiness probe failed"
-
-PROMETHEUS_VECTOR_VALUE = "0.19"
-
 COMMAND_COMPLETED_STATUS = "completed"
-COMMAND_RESULT_MESSAGE = "fake Kubernetes action applied in sandbox namespace"
+COMMAND_FAILED_STATUS = "failed"
+COMMAND_RESULT_MESSAGE = "Kubernetes action applied in sandbox namespace"
+
+QUERY_RUN_ACTION = "telemetry.query.run"
