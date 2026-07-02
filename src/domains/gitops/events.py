@@ -60,6 +60,10 @@ class RenderedManifest(EventBody):
     spec: RenderedSpec
     resource_class: str = ResourceClass.APPLICATION.value
     manifest: JsonObject = field(default_factory=dict)
+    declared_fields: list[str] = field(default_factory=list)
+    managed_fields: list[str] = field(default_factory=list)
+    ignored_fields: list[str] = field(default_factory=list)
+    last_approved_snapshot: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,10 @@ class Diff(EventBody):
     manifest_path: str = DEFAULT_MANIFEST_PATH
     resource_class: str = ResourceClass.APPLICATION.value
     desired_manifest: JsonObject = field(default_factory=dict)
+    status: str = "legacy_image_diff"
+    has_changes: bool = True
+    changes: list[dict[str, object]] = field(default_factory=list)
+    basis: JsonObject = field(default_factory=dict)
 
     def is_image_only_noop(self) -> bool:
         """이미지 비교만으로 no-op 판정이 가능한 legacy diff인지 확인."""
