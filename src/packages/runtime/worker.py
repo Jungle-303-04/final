@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from packages.config.logs import get_logger
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import (
     EventClient,
     EventConsumerBus,
@@ -34,11 +35,18 @@ if TYPE_CHECKING:
 
 logger = get_logger("worker")
 
-DEFAULT_MAX_ATTEMPTS = 3
+# 워커 처리량·재시도 정책 — 서비스별 deploy env 로 오버라이드 가능(기본값 불변).
+# 주의: WORKER_HANDLER_TIMEOUT_SECONDS 를 올리면 NATS_ACK_WAIT_SECONDS(events/bus.py,
+# 기본 60s)도 그보다 크게 함께 올려야 처리 중 재배달 중복이 방지됨.
+WORKER_MAX_ATTEMPTS_ENV = "WORKER_MAX_ATTEMPTS"  # 핸들러 재시도 상한(소진 시 DLQ 종결)
+WORKER_FETCH_BATCH_SIZE_ENV = "WORKER_FETCH_BATCH_SIZE"  # 루프당 subject 별 fetch 개수
+WORKER_HANDLER_TIMEOUT_ENV = "WORKER_HANDLER_TIMEOUT_SECONDS"  # 핸들러 hang 상한 초
+DEFAULT_MAX_ATTEMPTS = int(env(WORKER_MAX_ATTEMPTS_ENV, "3"))
 DEFAULT_RETRY_DELAY_SECONDS = 2
-DEFAULT_FETCH_BATCH_SIZE = 1
+DEFAULT_FETCH_BATCH_SIZE = int(env(WORKER_FETCH_BATCH_SIZE_ENV, "1"))
 DEFAULT_FETCH_TIMEOUT_SECONDS = 1
-DEFAULT_HANDLER_TIMEOUT_SECONDS = 30  # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
+# 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
+DEFAULT_HANDLER_TIMEOUT_SECONDS = int(env(WORKER_HANDLER_TIMEOUT_ENV, "30"))
 DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS = 10
 HEARTBEAT_PATH = "/tmp/heartbeat"  # liveness exec probe 가 mtime 신선도 검사
 
