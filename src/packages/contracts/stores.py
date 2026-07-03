@@ -89,3 +89,9 @@ class TargetReconcileStore(Protocol):
 
 class AuditStore(Protocol):
     async def append_audit_log(self, evt: EventEnvelope) -> None: ...
+
+
+class AiConversationStore(Protocol):
+    async def record_ai_response(self, payload: JsonObject) -> None: ...
+
+    async def record_ai_failure(self, payload: JsonObject) -> None: ...
