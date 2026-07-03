@@ -119,7 +119,14 @@ class AiConversationRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
-    def list_ai_messages(self, workspace_id: str, conversation_id: str) -> list[JsonObject]:
+    def list_ai_messages(
+        self,
+        workspace_id: str,
+        conversation_id: str,
+        *,
+        newest: int | None = None,
+    ) -> list[JsonObject]:
+        """대화 메시지 목록. newest 지정 시 최근 N개만(시간 오름차순 반환)."""
         statement = (
             select(self.message_table)
             .where(
@@ -128,5 +135,15 @@ class AiConversationRepository(DatabaseConnection):
             )
             .order_by(self.message_table.c.created_at, self.message_table.c.message_id)
         )
+        if newest is not None:
+            statement = (
+                statement.order_by(None)
+                .order_by(
+                    self.message_table.c.created_at.desc(),
+                    self.message_table.c.message_id.desc(),
+                )
+                .limit(newest)
+            )
         with self.connection() as conn:
-            return [row_dict(row) for row in conn.execute(statement).mappings()]
+            rows = [row_dict(row) for row in conn.execute(statement).mappings()]
+        return list(reversed(rows)) if newest is not None else rows
