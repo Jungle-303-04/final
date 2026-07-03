@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import importlib
 import sys
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from domains.identity.dependencies import ClusterAgentIdentity
+from domains.target.evidence_jobs import PENDING_EVIDENCE_EVENT_ID_PREFIX
 from domains.target.router import (
     evidence_job_result,
     poll_evidence_job,
@@ -59,6 +61,15 @@ class FakeCollector:
         if provider_key == "logs":
             return {"logs": [{"source": "loki", "streams": []}]}
         return {"traces": {"source": "tempo", "results": {}}}
+
+    async def collect_query_policy(
+        self,
+        evidence_key: str,
+        definitions: tuple[object, ...],
+    ) -> dict[str, Any]:
+        if not definitions:
+            raise RuntimeError(f"{evidence_key} missing query policy")
+        return await self.collect(evidence_key)
 
 
 class FakeEvidenceJobClient:
@@ -149,6 +160,7 @@ def test_central_worker_polls_job_and_reports_provider_result() -> None:
             "job_id": "job-metrics",
             "provider_key": "metrics",
             "lease_id": "lease-1",
+            "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
         }
     )
     collector = FakeCollector()
@@ -169,6 +181,7 @@ def test_central_worker_reports_provider_failure_for_retry_budget() -> None:
             "job_id": "job-traces",
             "provider_key": "traces",
             "lease_id": "lease-1",
+            "provider_policy": {"queries": [{"name": "slow_spans", "query": "{}"}]},
         }
     )
     scheduler = make_scheduler(module, FakeCollector({"traces"}))
@@ -269,6 +282,119 @@ class FakeEvents:
         return SimpleNamespace(event=SimpleNamespace(event_id="evt-1", correlation_id="corr-1"))
 
 
+class BulkEvidenceCollector:
+    def __init__(self) -> None:
+        self.calls: Counter[str] = Counter()
+        self.query_names: Counter[str] = Counter()
+
+    async def collect_query_policy(
+        self,
+        evidence_key: str,
+        definitions: tuple[object, ...],
+    ) -> dict[str, Any]:
+        if len(definitions) != 1:
+            raise RuntimeError(f"expected one query for {evidence_key}, got {len(definitions)}")
+        definition = definitions[0]
+        self.calls[evidence_key] += 1
+        self.query_names[definition.name] += 1
+        if evidence_key == "metrics":
+            return {"metrics": {"source": "prometheus", "results": {"bulk": {}}}}
+        if evidence_key == "logs":
+            return {"logs": [{"source": "loki", "streams": []}]}
+        return {"traces": {"source": "tempo", "results": {"bulk": {}}}}
+
+
+class BulkEvidenceJobClient:
+    def __init__(self) -> None:
+        self.jobs_by_provider: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+        self.completed_job_ids: set[str] = set()
+        self.duplicate_completions: list[str] = []
+        self.window_providers: dict[str, set[str]] = defaultdict(set)
+        self.emitted_windows: set[str] = set()
+        self.lock = asyncio.Lock()
+
+    async def schedule_evidence_jobs(
+        self,
+        source_id: str,
+        window_start: str,
+        provider_keys: list[str],
+    ) -> dict[str, Any]:
+        evidence_key = f"workspace-1:cluster-1:{source_id}:{window_start}"
+        async with self.lock:
+            for provider_key in provider_keys:
+                job_id = f"{evidence_key}:{provider_key}"
+                self.jobs_by_provider[provider_key].append(
+                    {
+                        "job_id": job_id,
+                        "evidence_key": evidence_key,
+                        "provider_key": provider_key,
+                        "lease_id": f"lease-{job_id}",
+                        "provider_policy": {
+                            "queries": [
+                                {
+                                    "name": f"{provider_key}_bulk_query",
+                                    "description": "Bulk evidence stress query.",
+                                    "query": "up",
+                                }
+                            ]
+                        },
+                    }
+                )
+        return {
+            "accepted": True,
+            "evidence_key": evidence_key,
+            "queued": len(provider_keys),
+            "job_ids": [f"{evidence_key}:{provider_key}" for provider_key in provider_keys],
+        }
+
+    async def poll_evidence_job(
+        self,
+        provider_key: str,
+        agent_id: str,
+        timeout_seconds: int,
+    ) -> dict[str, Any] | None:
+        async with self.lock:
+            if not self.jobs_by_provider[provider_key]:
+                return None
+            job = self.jobs_by_provider[provider_key].popleft()
+            job["agent_id"] = agent_id
+            return job
+
+    async def complete_evidence_job(
+        self,
+        job_id: str,
+        agent_id: str,
+        lease_id: str,
+        status: str,
+        result: dict[str, Any],
+        error: str,
+    ) -> dict[str, Any]:
+        async with self.lock:
+            if job_id in self.completed_job_ids:
+                self.duplicate_completions.append(job_id)
+            self.completed_job_ids.add(job_id)
+            evidence_key, provider_key = job_id.rsplit(":", 1)
+            self.window_providers[evidence_key].add(provider_key)
+            if self.window_providers[evidence_key] == {"metrics", "logs", "traces"}:
+                self.emitted_windows.add(evidence_key)
+        return {"accepted": True, "evidence_key": evidence_key}
+
+    def pending_count(self) -> int:
+        return sum(len(queue) for queue in self.jobs_by_provider.values())
+
+
+async def drain_bulk_jobs(
+    scheduler: Any,
+    client: BulkEvidenceJobClient,
+    provider_key: str,
+    worker_index: int,
+) -> int:
+    processed = 0
+    while await scheduler.work_once(client, provider_key, f"{provider_key}-{worker_index}"):
+        processed += 1
+    return processed
+
+
 def test_schedule_evidence_jobs_uses_identity_scoped_central_ticket_queue() -> None:
     db = FakeEvidenceJobDb()
     response = asyncio.run(
@@ -326,3 +452,87 @@ def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
     assert db.recorded[0]["payload"]["workspace_id"] == "workspace-1"
     assert events.body is not None
     assert events.body.evidence_key == "workspace-1:cluster-1:cluster-snapshot:window-1"
+
+
+def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
+    class PendingWindowDb(FakeEvidenceJobDb):
+        def get_evidence_window(self, _evidence_key: str) -> dict[str, str]:
+            return {
+                "event_id": f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}existing",
+                "correlation_id": f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}existing",
+            }
+
+        def evidence_payload_if_ready(self, _evidence_key: str) -> dict[str, Any]:
+            raise AssertionError("pending window should stop duplicate emission")
+
+    db = PendingWindowDb()
+    events = FakeEvents()
+
+    response = asyncio.run(
+        evidence_job_result(
+            "job-metrics",
+            EvidenceJobResultRequest(
+                agent_id="agent-1",
+                lease_id="lease-1",
+                status="completed",
+                result={"metrics": {"source": "prometheus"}},
+            ),
+            IDENTITY,
+            db,
+            events,
+        )
+    )
+
+    assert response.accepted is True
+    assert response.evidence_key == "workspace-1:cluster-1:cluster-snapshot:window-1"
+    assert response.event_id is None
+    assert events.body is None
+
+
+def test_massive_evidence_jobs_complete_once_without_worker_deadlock() -> None:
+    module = load_evidence_module()
+    window_count = 2_000
+    workers_per_provider = 8
+    provider_keys = ("metrics", "logs", "traces")
+    collector = BulkEvidenceCollector()
+    client = BulkEvidenceJobClient()
+    scheduler = module.EvidenceJobScheduler(
+        cluster_id="cluster-1",
+        workspace_id="workspace-1",
+        agent_id="agent-1",
+        source_id="cluster-snapshot",
+        collector=collector,
+        provider_keys=provider_keys,
+        provider_worker_counts={
+            provider_key: workers_per_provider for provider_key in provider_keys
+        },
+        interval_seconds=1,
+    )
+
+    async def run_bulk() -> list[int]:
+        for window_index in range(window_count):
+            window_start = f"bulk-window-{window_index:05d}"
+            await client.schedule_evidence_jobs(
+                "cluster-snapshot",
+                window_start,
+                list(provider_keys),
+            )
+        tasks = [
+            asyncio.create_task(drain_bulk_jobs(scheduler, client, provider_key, worker_index))
+            for provider_key in provider_keys
+            for worker_index in range(workers_per_provider)
+        ]
+        return await asyncio.wait_for(asyncio.gather(*tasks), timeout=10)
+
+    processed_counts = asyncio.run(run_bulk())
+    total_jobs = window_count * len(provider_keys)
+
+    assert sum(processed_counts) == total_jobs
+    assert len(client.completed_job_ids) == total_jobs
+    assert client.duplicate_completions == []
+    assert client.pending_count() == 0
+    assert len(client.emitted_windows) == window_count
+    assert sum(collector.calls.values()) == total_jobs
+    for provider_key in provider_keys:
+        assert collector.calls[provider_key] == window_count
+        assert collector.query_names[f"{provider_key}_bulk_query"] == window_count
