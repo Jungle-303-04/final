@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
-from packages.contracts.event_bus.processing import EventProcessingStatus
+from packages.contracts.event_bus.processing import CLAIM_BLOCKED, EventProcessingStatus
 from packages.contracts.interfaces import EventProcessingRecord
 from packages.events.envelope import event
 from packages.runtime.worker import EventProcessor, EventRetryPolicy
@@ -175,6 +175,63 @@ def test_event_processor_dead_letters_after_max_attempts() -> None:
             (evt.event_id, "command-worker", EventProcessingStatus.DEAD_LETTERED)
         ]
         assert dead_letters.captured[0][1:] == ("command-worker", "permanent failure", 2)
+
+    asyncio.run(run())
+
+
+def test_event_processor_skips_terminal_duplicate_with_ack() -> None:
+    async def run() -> None:
+        evt = event("command.requested", "test", {"ok": True}, "corr-4")
+        message = FakeMessage(evt.to_dict())
+        store = FakeProcessingStore(status=EventProcessingStatus.PROCESSED)
+        dead_letters = FakeDeadLetters()
+
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
+            raise AssertionError("이미 종결된 이벤트는 핸들러 실행 금지")
+
+        processor = EventProcessor(
+            "command-worker",
+            handler,
+            store,  # type: ignore[arg-type]
+            dead_letters,  # type: ignore[arg-type]
+            EventRetryPolicy(max_attempts=2),
+        )
+
+        await processor.process(message)
+
+        assert message.acked is True
+        assert message.nak_delay is None
+        assert store.finished == []
+
+    asyncio.run(run())
+
+
+def test_event_processor_naks_when_claim_blocked_by_fresh_processing() -> None:
+    # 다른 인스턴스의 신선한 PROCESSING → claim 미획득. 종결이 아니므로 ack 로
+    # 소거하지 않고 nak 로 재확인을 예약함(원 처리자 사망 시 유실 방지).
+    async def run() -> None:
+        evt = event("command.requested", "test", {"ok": True}, "corr-5")
+        message = FakeMessage(evt.to_dict())
+        store = FakeProcessingStore(status=CLAIM_BLOCKED)
+        dead_letters = FakeDeadLetters()
+
+        async def handler(_received: EventEnvelope) -> list[EventEnvelope]:
+            raise AssertionError("claim 미획득 이벤트는 핸들러 실행 금지")
+
+        processor = EventProcessor(
+            "command-worker",
+            handler,
+            store,  # type: ignore[arg-type]
+            dead_letters,  # type: ignore[arg-type]
+            EventRetryPolicy(max_attempts=2, retry_delay_seconds=5),
+        )
+
+        await processor.process(message)
+
+        assert message.acked is False
+        assert message.nak_delay == 5
+        assert store.finished == []
+        assert dead_letters.captured == []
 
     asyncio.run(run())
 

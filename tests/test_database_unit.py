@@ -23,6 +23,7 @@ from domains.gitops.repository import (
     derive_watch_target_id,
 )
 from domains.target.repository import TargetAgentRepository
+from packages.contracts.event_bus.processing import CLAIM_BLOCKED
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_REPOSITORY_ID,
@@ -31,6 +32,7 @@ from packages.contracts.gitops import (
 from packages.events.envelope import event
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
+from packages.storage.repositories import event as event_repository
 from packages.storage.repositories.event import EventRepository
 from packages.storage.repositories.outbox import OutboxRepository
 from packages.storage.schema import metadata
@@ -170,6 +172,84 @@ def test_record_event_persists_causation_id() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     assert "causation_id" in str(compiled)
     assert compiled.params["causation_id"] == "parent-event-1"
+
+
+def test_event_claim_upsert_guards_fresh_processing_lease() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> None:
+            return None
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    repository.begin_event_processing(
+        event("git.changed", "git-pull-worker", {}, correlation_id="corr-1"),
+        consumer="command-worker",
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    # 단일 원자 UPSERT: insert 와 claim 이 분리되지 않음
+    assert "INSERT INTO event_processing" in sql
+    assert "ON CONFLICT (event_id, consumer) DO UPDATE" in sql
+    assert "attempts + " in sql
+    # 종결 상태는 재클레임 불가 + 신선한 PROCESSING 은 신선도 창이 지나야 재클레임 가능
+    assert "NOT IN" in sql
+    assert f"interval '{event_repository.PROCESSING_STALE_SECONDS} seconds'" in sql
+    assert "RETURNING event_processing.status, event_processing.attempts" in sql
+
+
+def test_begin_event_processing_reports_blocked_when_fresh_claim_exists() -> None:
+    class FakeResult:
+        def __init__(self, row: dict[str, object] | None = None) -> None:
+            self.row = row
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self.row
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def execute(self, statement: Any) -> FakeResult:
+            self.calls += 1
+            if self.calls == 1:  # claim 거절(신선한 PROCESSING)
+                return FakeResult(None)
+            return FakeResult({"status": "processing", "attempts": 2})
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(EventRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    record = repository.begin_event_processing(
+        event("git.changed", "git-pull-worker", {}, correlation_id="corr-1"),
+        consumer="command-worker",
+    )
+
+    # PROCESSING 그대로 돌려주면 워커가 획득으로 오인 → 미획득 신호로 치환됨
+    assert record.status == CLAIM_BLOCKED
+    assert record.attempts == 2
 
 
 def test_outbox_claim_uses_skip_locked_lease_update() -> None:
