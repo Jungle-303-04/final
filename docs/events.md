@@ -260,7 +260,9 @@ if __name__ == "__main__":
 
 `@app.on(BodyType)`이 구독할 subject를 body 타입에서 자동으로 유도한다. 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). 테스트나 카탈로그가 필요하면 `app.subscriptions`로 등록된 구독 계약을 확인한다.
 
-dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
+본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker는 planned 항목이며
+현재 repository에는 구현/배포된 `src/services/projection/dashboard-worker`가 없다.
 
 ```python
 @app.on_any
@@ -281,10 +283,12 @@ async def on_event(evt: EventEnvelope, ctx):
 | Workflow Controller (App) | `src/services/gitops/workflow-controller/app.py` | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed`, `safe_pr.created`, `safe_pr.failed`, `approval.granted`, `approval.rejected`, `command.queued_for_agent`, `command.completed` |
 | Repo Gateway Worker (App) | `src/services/gitops/scm-worker/app.py` | `safe_pr.requested` |
 | Command Worker (App) | `src/services/command/command-worker/app.py` | `command.requested` |
+| Alert Worker (App) | `src/services/alert/alert-worker/app.py` | `alert.requested` |
+| Mail Worker (App) | `src/services/mail/mail-worker/app.py` | `mail.email_verification.requested` |
 | Target Reconcile Worker (App) | `src/services/target/reconcile-worker/app.py` | `cluster.desired_state.changed`, `cluster.reconcile.requested` |
 | RCA Worker (App) | `src/services/ai/rca-worker/app.py` | `cluster.evidence.received` |
-| Dashboard Projection Service (`@app.on_any`) | `src/services/projection/dashboard-worker/app.py` | `>` |
 | Audit Timeline Service (`@app.on_any`) | `src/services/projection/audit-worker/app.py` | `>` |
+| Dashboard Projection Service | planned | `>` |
 
 ## Outbound Gateway 패턴
 

@@ -36,7 +36,7 @@ work-allocation 의 5인 분배를 바운디드 컨텍스트로 분해한다.
 | src/services/command/command-worker | **command** | GitOps/Command | 명령 정책→target agent 큐(control-plane) |
 | src/services/ai/rca-worker | **rca** | RCA/Safe PR | 증거→근본원인분석 |
 | src/services/gitops/scm-worker | **scm** | RCA/Safe PR | GitHub PR 생성(유일 outbound writer) |
-| src/services/projection/dashboard-worker | **projection** | (대시보드 owner) | 대시보드 read model |
+| dashboard projection worker (planned) | **projection** | (대시보드 owner) | 대시보드 read model |
 | src/services/projection/audit-worker | **audit** | RCA/Safe PR | 불변 감사 타임라인 |
 | src/services/target/* | **telemetry** | Target/Telemetry | target agent·관측성 어댑터·증거 수집·명령 실행 |
 | dashboard/(UI) | **frontend** | (미정) | React/Vite UI, node 생태계 |

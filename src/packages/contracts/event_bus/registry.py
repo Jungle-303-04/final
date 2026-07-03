@@ -37,7 +37,7 @@ class EventRegistry:
 
     def __init__(self) -> None:
         self._defs: dict[EventSubject, type[EventBodyContract]] = {}
-        self._handlers: dict[EventSubject, tuple[str, str]] = {}
+        self._handlers: dict[EventSubject, list[tuple[str, str]]] = {}
         self._raw_handlers: list[tuple[str, str]] = []
 
     def define(
@@ -52,20 +52,28 @@ class EventRegistry:
 
     def note_handler(self, service: str, sub: Subscription) -> None:
         """App 이 자기 핸들러를 카탈로그에 알린다(make events 표시용)."""
-        self._handlers[sub.subject] = (service, sub.fn.__name__)
+        binding = (service, sub.fn.__name__)
+        handlers = self._handlers.setdefault(sub.subject, [])
+        if binding not in handlers:
+            handlers.append(binding)
 
     def note_raw_handler(self, service: str, handler: str) -> None:
         """전체(>) 구독 프로젝터를 카탈로그에 알린다."""
-        self._raw_handlers.append((service, handler))
+        binding = (service, handler)
+        if binding not in self._raw_handlers:
+            self._raw_handlers.append(binding)
 
     def describe(self) -> str:
         rows = ["EVENTS (한눈에 보기)", ""]
         for subject, body_type in sorted(self._defs.items()):
             names = ", ".join(f.name for f in fields(cast(type[Any], body_type)))
-            service, handler = self._handlers.get(subject, ("-", "-"))
-            rows.append(
-                f"{subject:<28} {body_type.__name__:<26} by={service}/{handler}  fields=({names})"
+            handlers = ", ".join(
+                f"{service}/{handler}"
+                for service, handler in sorted(self._handlers.get(subject, []))
             )
+            if not handlers:
+                handlers = "-"
+            rows.append(f"{subject:<28} {body_type.__name__:<26} by={handlers}  fields=({names})")
         if self._raw_handlers:
             rows.append("")
             rows.append("ALL-EVENT 구독(프로젝터):")

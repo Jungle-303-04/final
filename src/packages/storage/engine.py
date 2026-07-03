@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from packages.config.constants import CommandStatus
 from packages.config.settings import required_env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
@@ -17,6 +18,11 @@ from packages.storage.schema import (
 
 DATABASE_URL_ENV = "DATABASE_URL"
 ERROR_MESSAGE_LIMIT = 2000
+DB_LOCK_TIMEOUT = "5s"
+DB_STATEMENT_TIMEOUT = "30s"
+DB_IDLE_IN_TRANSACTION_TIMEOUT = "30s"
+SCHEMA_INIT_LOCK_NAMESPACE = 774897281
+SCHEMA_INIT_LOCK_KEY = 20260703
 
 # 상태 어휘(흩어진 리터럴 단일화)
 DEAD_LETTER_STATUS_OPEN = "open"
@@ -95,6 +101,23 @@ USER_ACCOUNT_EMAIL_INDEX = (
 CLUSTER_AGENT_TOKEN_HASH_INDEX = (
     "create index if not exists ix_cluster_registrations_agent_token_hash "
     "on cluster_registrations (agent_token_hash) where agent_token_hash is not null"
+)
+OPERATIONAL_INDEXES = (
+    (
+        "create index if not exists ix_agent_commands_available "
+        "on agent_commands (workspace_id, cluster_id, status, created_at) "
+        f"where status in ('{CommandStatus.QUEUED}', '{CommandStatus.LEASED}', "
+        f"'{CommandStatus.RUNNING}')"
+    ),
+    ("create index if not exists ix_event_processing_status on event_processing (status)"),
+    (
+        "create index if not exists ix_event_dead_letters_open "
+        f"on event_dead_letters (status, id) where status = '{DEAD_LETTER_STATUS_OPEN}'"
+    ),
+    (
+        "create index if not exists ix_events_correlation_created "
+        "on events (correlation_id, created_at)"
+    ),
 )
 REPO_CHANGE_COMPAT_COLUMNS = {
     "workspace_id": "alter table repo_changes add column if not exists workspace_id text",
@@ -182,6 +205,29 @@ def has_active_connection() -> bool:
     return _ACTIVE_CONN.get() is not None
 
 
+def configure_transaction(conn: Connection) -> None:
+    conn.execute(text(f"set local lock_timeout = '{DB_LOCK_TIMEOUT}'"))
+    conn.execute(text(f"set local statement_timeout = '{DB_STATEMENT_TIMEOUT}'"))
+    conn.execute(
+        text(f"set local idle_in_transaction_session_timeout = '{DB_IDLE_IN_TRANSACTION_TIMEOUT}'")
+    )
+
+
+def acquire_schema_init_lock(conn: Connection) -> None:
+    conn.execute(
+        text("select pg_advisory_xact_lock(:namespace, :key)"),
+        {"namespace": SCHEMA_INIT_LOCK_NAMESPACE, "key": SCHEMA_INIT_LOCK_KEY},
+    )
+
+
+async def configure_async_transaction(conn: Any) -> None:
+    await conn.execute(text(f"set local lock_timeout = '{DB_LOCK_TIMEOUT}'"))
+    await conn.execute(text(f"set local statement_timeout = '{DB_STATEMENT_TIMEOUT}'"))
+    await conn.execute(
+        text(f"set local idle_in_transaction_session_timeout = '{DB_IDLE_IN_TRANSACTION_TIMEOUT}'")
+    )
+
+
 class DatabaseConnection:
     def __init__(self) -> None:
         self.url = required_env(DATABASE_URL_ENV)
@@ -199,12 +245,14 @@ class DatabaseConnection:
             yield active  # UoW 트랜잭션에 합류(commit 은 UoW 소유)
             return
         with self.engine.begin() as conn:
+            configure_transaction(conn)
             yield conn
 
     @contextmanager
     def unit_of_work(self):
         """한 트랜잭션 — 안에서 connection() 호출은 모두 이 커넥션을 쓴다."""
         with self.engine.begin() as conn:
+            configure_transaction(conn)
             token = _ACTIVE_CONN.set(conn)
             try:
                 yield conn
@@ -214,6 +262,7 @@ class DatabaseConnection:
     @asynccontextmanager
     async def async_connection(self):
         async with self.async_engine.begin() as conn:
+            await configure_async_transaction(conn)
             yield conn
 
     def check_ready(self) -> None:
@@ -225,58 +274,97 @@ class DatabaseConnection:
         from domains.registry import load_domain_tables
 
         load_domain_tables()  # domains/*/tables.py 자동 등록(create_all 전)
-        metadata.create_all(self.engine)
-        self.ensure_compatible_schema()
-        ensure_default_workspace = getattr(self, "ensure_default_workspace", None)
-        if callable(ensure_default_workspace):
-            ensure_default_workspace()
-
-    def ensure_compatible_schema(self) -> None:
-        """Keep local demo DBs usable until a real migration tool is introduced."""
         with self.engine.begin() as conn:
-            existing_event_columns = self._existing_columns(conn, "events")
-            for column, statement in EVENT_COMPAT_COLUMNS.items():
-                if column in existing_event_columns:
-                    continue
-                conn.execute(text("set local lock_timeout = '5s'"))
-                conn.execute(text(statement))
+            configure_transaction(conn)
+            acquire_schema_init_lock(conn)
+            token = _ACTIVE_CONN.set(conn)
+            try:
+                metadata.create_all(conn)
+                self.ensure_compatible_schema(conn)
+                ensure_default_workspace = getattr(self, "ensure_default_workspace", None)
+                if callable(ensure_default_workspace):
+                    ensure_default_workspace()
+            finally:
+                _ACTIVE_CONN.reset(token)
 
-            existing_outbox_columns = self._existing_columns(conn, "outbox")
-            for column, statement in OUTBOX_COMPAT_COLUMNS.items():
-                if column in existing_outbox_columns:
-                    continue
-                conn.execute(text("set local lock_timeout = '5s'"))
-                conn.execute(text(statement))
-            conn.execute(text(OUTBOX_CLAIM_INDEX))
+    def ensure_compatible_schema(self, existing_conn: Connection | None = None) -> None:
+        """Keep local demo DBs usable until a real migration tool is introduced."""
+        if existing_conn is not None:
+            self._apply_compatible_schema(existing_conn)
+            return
 
-            existing_columns = self._existing_columns(conn, "agent_commands")
-            for column, statement in AGENT_COMMAND_COMPAT_COLUMNS.items():
-                if column in existing_columns:
-                    continue
-                conn.execute(text("set local lock_timeout = '5s'"))
-                conn.execute(text(statement))
+        with self.engine.begin() as conn:
+            configure_transaction(conn)
+            acquire_schema_init_lock(conn)
+            self._apply_compatible_schema(conn)
 
-            existing_user_columns = self._existing_columns(conn, "user_accounts")
-            for column, statement in USER_ACCOUNT_COMPAT_COLUMNS.items():
-                if column in existing_user_columns:
-                    continue
-                conn.execute(text("set local lock_timeout = '5s'"))
-                conn.execute(text(statement))
-            conn.execute(text(USER_ACCOUNT_ROLE_BACKFILL))
-            conn.execute(text(USER_ACCOUNT_ROLE_DEFAULT))
-            conn.execute(text(USER_ACCOUNT_ROLE_NOT_NULL))
-            conn.execute(text(USER_ACCOUNT_EMAIL_INDEX))
+    def _apply_compatible_schema(self, conn: Connection) -> None:
+        self._add_missing_columns(conn, "events", EVENT_COMPAT_COLUMNS)
+        self._add_missing_columns(conn, "outbox", OUTBOX_COMPAT_COLUMNS)
+        conn.execute(text(OUTBOX_CLAIM_INDEX))
 
-            existing_repo_change_columns = self._existing_columns(conn, "repo_changes")
-            for column, statement in REPO_CHANGE_COMPAT_COLUMNS.items():
-                if column in existing_repo_change_columns:
-                    continue
-                conn.execute(text("set local lock_timeout = '5s'"))
-                conn.execute(text(statement))
+        self._add_missing_columns(conn, "agent_commands", AGENT_COMMAND_COMPAT_COLUMNS)
+        self._add_missing_columns(conn, "user_accounts", USER_ACCOUNT_COMPAT_COLUMNS)
+        conn.execute(text(USER_ACCOUNT_ROLE_BACKFILL))
+        conn.execute(text(USER_ACCOUNT_ROLE_DEFAULT))
+        conn.execute(text(USER_ACCOUNT_ROLE_NOT_NULL))
+        conn.execute(text(USER_ACCOUNT_EMAIL_INDEX))
+
+        self._add_missing_columns(conn, "repo_changes", REPO_CHANGE_COMPAT_COLUMNS)
+        conn.execute(
+            text(
+                """
+                update repo_changes
+                set workspace_id = :workspace_id
+                where workspace_id is null
+                """
+            ),
+            {"workspace_id": DEFAULT_WORKSPACE_ID},
+        )
+        conn.execute(
+            text(
+                f"""
+                alter table repo_changes
+                alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
+                """
+            )
+        )
+        conn.execute(text("alter table repo_changes alter column workspace_id set not null"))
+
+        self._add_missing_columns(conn, "manifest_artifacts", MANIFEST_ARTIFACT_COMPAT_COLUMNS)
+        conn.execute(
+            text(
+                """
+                update manifest_artifacts
+                set workspace_id = :workspace_id
+                where workspace_id is null
+                """
+            ),
+            {"workspace_id": DEFAULT_WORKSPACE_ID},
+        )
+        conn.execute(
+            text(
+                f"""
+                alter table manifest_artifacts
+                alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
+                """
+            )
+        )
+        conn.execute(text("alter table manifest_artifacts alter column workspace_id set not null"))
+        conn.execute(text(MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE))
+        conn.execute(text(MANIFEST_ARTIFACT_WORKSPACE_UNIQUE))
+
+        for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
+            self._add_missing_columns(conn, table_name, columns)
+        conn.execute(text(CLUSTER_AGENT_TOKEN_HASH_INDEX))
+        for statement in OPERATIONAL_INDEXES:
+            conn.execute(text(statement))
+
+        for table_name in WORKSPACE_BACKFILL_COLUMNS:
             conn.execute(
                 text(
-                    """
-                    update repo_changes
+                    f"""
+                    update {table_name}
                     set workspace_id = :workspace_id
                     where workspace_id is null
                     """
@@ -286,79 +374,33 @@ class DatabaseConnection:
             conn.execute(
                 text(
                     f"""
-                    alter table repo_changes
+                    alter table {table_name}
                     alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
                     """
                 )
-            )
-            conn.execute(text("alter table repo_changes alter column workspace_id set not null"))
-
-            existing_manifest_artifact_columns = self._existing_columns(conn, "manifest_artifacts")
-            for column, statement in MANIFEST_ARTIFACT_COMPAT_COLUMNS.items():
-                if column in existing_manifest_artifact_columns:
-                    continue
-                conn.execute(text("set local lock_timeout = '5s'"))
-                conn.execute(text(statement))
-            conn.execute(
-                text(
-                    """
-                    update manifest_artifacts
-                    set workspace_id = :workspace_id
-                    where workspace_id is null
-                    """
-                ),
-                {"workspace_id": DEFAULT_WORKSPACE_ID},
             )
             conn.execute(
                 text(
                     f"""
-                    alter table manifest_artifacts
-                    alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
+                    alter table {table_name}
+                    alter column workspace_id set not null
                     """
                 )
             )
-            conn.execute(
-                text("alter table manifest_artifacts alter column workspace_id set not null")
-            )
-            conn.execute(text(MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE))
-            conn.execute(text(MANIFEST_ARTIFACT_WORKSPACE_UNIQUE))
 
-            for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
-                existing_table_columns = self._existing_columns(conn, table_name)
-                for column, statement in columns.items():
-                    if column in existing_table_columns:
-                        continue
-                    conn.execute(text("set local lock_timeout = '5s'"))
-                    conn.execute(text(statement))
-            conn.execute(text(CLUSTER_AGENT_TOKEN_HASH_INDEX))
+    def _add_missing_columns(
+        self, conn: Connection, table_name: str, columns: dict[str, str]
+    ) -> None:
+        existing_columns = self._existing_columns(conn, table_name)
+        for column, statement in columns.items():
+            if column in existing_columns:
+                continue
+            self._execute_schema_ddl(conn, statement)
 
-            for table_name in WORKSPACE_BACKFILL_COLUMNS:
-                conn.execute(
-                    text(
-                        f"""
-                        update {table_name}
-                        set workspace_id = :workspace_id
-                        where workspace_id is null
-                        """
-                    ),
-                    {"workspace_id": DEFAULT_WORKSPACE_ID},
-                )
-                conn.execute(
-                    text(
-                        f"""
-                        alter table {table_name}
-                        alter column workspace_id set default '{DEFAULT_WORKSPACE_ID}'
-                        """
-                    )
-                )
-                conn.execute(
-                    text(
-                        f"""
-                        alter table {table_name}
-                        alter column workspace_id set not null
-                        """
-                    )
-                )
+    @staticmethod
+    def _execute_schema_ddl(conn: Connection, statement: str) -> None:
+        conn.execute(text(f"set local lock_timeout = '{DB_LOCK_TIMEOUT}'"))
+        conn.execute(text(statement))
 
     @staticmethod
     def _existing_columns(conn: Connection, table_name: str) -> set[str]:
