@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from domains.ai.events import AiConversationStartedBody, AiMessageReceivedBody
+from domains.ai.events import AiMessageReceivedBody
 from domains.ai.repository import ROLE_USER, STATUS_WAITING
 from domains.identity.dependencies import require_session
 from packages.contracts.auth import Actor
@@ -75,17 +75,6 @@ async def create_conversation(
             "agent": agent,
             "metadata": {"source": "http"},
         }
-    )
-    await events.accept_body(
-        AiConversationStartedBody(
-            conversation_id=conversation_id,
-            title=title,
-            agent=agent,
-            user_id=current.user_id,
-            workspace_id=workspace_id,
-            context=payload.context,
-        ),
-        actor=Actor(current.user_id, tuple(current.roles)),
     )
     accepted = await events.accept_body(
         AiMessageReceivedBody(

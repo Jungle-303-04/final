@@ -17,7 +17,6 @@ _MODULE_BY_NAME = {
     "AlertDispatchedBody": "domains.alert.events",
     "AlertRejectedBody": "domains.alert.events",
     "AlertRequestedBody": "domains.alert.events",
-    "AiConversationStartedBody": "domains.ai.events",
     "AiMessageFailedBody": "domains.ai.events",
     "AiMessageReceivedBody": "domains.ai.events",
     "AiMessageRespondedBody": "domains.ai.events",
