@@ -35,8 +35,8 @@ def _load(path: Path, name: str) -> None:
 
 
 def main() -> None:
-    # 이벤트 타입 정의(@event) 등록.
-    importlib.import_module("packages.contracts.event_bus.bodies")
+    # 이벤트 타입 정의(@event) 등록 — domains/*/events.py 자동 발견.
+    importlib.import_module("domains.registry").load_domain_events()
 
     # 서비스 핸들러(@app.on) 등록 — App 기반(worker) 서비스 자동 발견.
     for svc in discover_services(ROOT_DIR):
