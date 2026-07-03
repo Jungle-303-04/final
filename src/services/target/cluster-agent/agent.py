@@ -4,7 +4,6 @@ import asyncio
 import time
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import httpx
 from commands import (
@@ -18,7 +17,7 @@ from commands import (
     kubernetes_command,
 )
 from control import AgentControlStore, AgentPolicySync, DesiredStateReconciler
-from evidence import EvidenceCollector, EvidenceScheduler, EvidenceTaskStore
+from evidence import EvidenceCollector, EvidenceJobScheduler
 from fastapi import FastAPI
 from kubernetes_api import (
     kubernetes_api_base_url,
@@ -36,13 +35,10 @@ from providers import (
 from queries import (
     TelemetryQueryCommandPayload,
     TelemetryQueryDefinition,
-    TelemetryQueryImportPayload,
     TelemetryQueryRegistry,
-    load_query_definitions,
 )
 from span import configure_tracing
 from uvicorn import Config, Server
-from workload import ClusterWorkloadController
 
 from config import (
     AGENT_CONTROL_DB_PATH_ENV,
@@ -58,32 +54,21 @@ from config import (
     DEFAULT_EVIDENCE_FAILURE_POLICY,
     DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
     DEFAULT_EVIDENCE_PROVIDER_WORKERS,
-    DEFAULT_EVIDENCE_QUEUE_DB_PATH,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
     DEFAULT_POLICY_SYNC_INTERVAL_SECONDS,
     DEFAULT_RECONCILE_INTERVAL_SECONDS,
-    DEFAULT_TELEMETRY_QUERY_PATH,
-    DEFAULT_WORKLOAD_CONTROLLER_INTERVAL_SECONDS,
-    DEFAULT_WORKLOAD_QUEUE_AGE_TARGET_SECONDS,
     EVIDENCE_FAILURE_POLICY_ENV,
     EVIDENCE_PROVIDER_MAX_WORKERS_ENV,
     EVIDENCE_PROVIDER_WORKERS_ENV,
-    EVIDENCE_QUEUE_DB_PATH_ENV,
-    EVIDENCE_TASK_LEASE_SECONDS,
     KUBERNETES_CONFIGMAP_PATCH_ACTION,
     KUBERNETES_DEPLOYMENT_PATCH_ACTION,
     KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
     POLICY_SYNC_INTERVAL_ENV,
-    QUERY_IMPORT_ACTION,
-    QUERY_REGISTER_ACTION,
     QUERY_RUN_ACTION,
     RECONCILE_INTERVAL_ENV,
-    TELEMETRY_QUERY_PATH_ENV,
-    WORKLOAD_CONTROLLER_INTERVAL_ENV,
-    WORKLOAD_QUEUE_AGE_TARGET_ENV,
 )
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -92,7 +77,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import (
-    DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS,
+    DEFAULT_QUEUE_AGE_TARGET_SECONDS,
     AgentPolicy,
     BootstrapPolicy,
     DesiredStatePolicy,
@@ -105,6 +90,11 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
+QUERY_SOURCE_BY_PROVIDER = {
+    "metrics": "prometheus",
+    "logs": "loki",
+    "traces": "tempo",
+}
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -170,7 +160,6 @@ class AgentConfig:
     DEFAULT_AGENT_ID = "target-agent"
     AGENT_CAPABILITIES = ["collector", "command_receiver"]
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
-    EVIDENCE_SOURCE_LEASE_SECONDS = DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS
     NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = 30
 
     CHECKOUT_APP_NAME = "checkout-api"
@@ -243,15 +232,6 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
 
-    async def ship_evidence(self, evidence: JsonObject) -> int:
-        response = await self.client.post(
-            f"{self.base_url}{gateway_routes.AGENT_EVIDENCE_PATH}",
-            json=evidence,
-            headers=self.headers,
-        )
-        response.raise_for_status()
-        return response.status_code
-
     async def poll_command(
         self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None:
@@ -318,23 +298,59 @@ class HttpManagementPlaneClient:
         )
         response.raise_for_status()
 
-    async def acquire_evidence_source_lease(
+    async def schedule_evidence_jobs(
         self,
-        cluster_id: str,
-        workspace_id: str,
-        agent_id: str,
         source_id: str,
         window_start: str,
-        lease_seconds: int,
+        provider_keys: list[str],
     ) -> JsonObject:
         response = await self.client.post(
-            f"{self.base_url}{gateway_routes.agent_evidence_source_lease_path(source_id)}",
+            f"{self.base_url}{gateway_routes.AGENT_EVIDENCE_JOB_SCHEDULE_PATH}",
             json={
-                Gateway.CLUSTER_ID: cluster_id,
-                Gateway.WORKSPACE_ID: workspace_id,
-                Gateway.AGENT_ID: agent_id,
+                Gateway.SOURCE_ID: source_id,
                 Gateway.WINDOW_START: window_start,
-                "lease_seconds": lease_seconds,
+                Gateway.PROVIDER_KEYS: provider_keys,
+            },
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def poll_evidence_job(
+        self,
+        provider_key: str,
+        agent_id: str,
+        timeout_seconds: int,
+    ) -> JsonObject | None:
+        response = await self.client.get(
+            f"{self.base_url}{gateway_routes.AGENT_EVIDENCE_JOB_POLL_PATH}",
+            params={
+                Gateway.PROVIDER_KEY: provider_key,
+                Gateway.AGENT_ID: agent_id,
+                "timeout": timeout_seconds,
+            },
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        return response.json().get(Gateway.JOB)
+
+    async def complete_evidence_job(
+        self,
+        job_id: str,
+        agent_id: str,
+        lease_id: str,
+        status: str,
+        result: JsonObject,
+        error: str,
+    ) -> JsonObject:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.agent_evidence_job_result_path(job_id)}",
+            json={
+                Gateway.AGENT_ID: agent_id,
+                Gateway.LEASE_ID: lease_id,
+                Gateway.STATUS: status,
+                Gateway.RESULT: result,
+                Gateway.ERROR: error,
             },
             headers=self.headers,
         )
@@ -400,21 +416,6 @@ class TargetClusterAgent:
             EVIDENCE_FAILURE_POLICY_ENV,
             DEFAULT_EVIDENCE_FAILURE_POLICY,
         )
-        self.workload_controller_interval_seconds = int(
-            env(
-                WORKLOAD_CONTROLLER_INTERVAL_ENV,
-                DEFAULT_WORKLOAD_CONTROLLER_INTERVAL_SECONDS,
-            )
-        )
-        self.workload_queue_age_target_seconds = int(
-            env(
-                WORKLOAD_QUEUE_AGE_TARGET_ENV,
-                DEFAULT_WORKLOAD_QUEUE_AGE_TARGET_SECONDS,
-            )
-        )
-        self.evidence_queue_db_path = env(
-            EVIDENCE_QUEUE_DB_PATH_ENV, DEFAULT_EVIDENCE_QUEUE_DB_PATH
-        )
         self.agent_control_db_path = env(
             AGENT_CONTROL_DB_PATH_ENV,
             DEFAULT_AGENT_CONTROL_DB_PATH,
@@ -429,7 +430,6 @@ class TargetClusterAgent:
         self.reconcile_interval_seconds = int(
             env(RECONCILE_INTERVAL_ENV, DEFAULT_RECONCILE_INTERVAL_SECONDS)
         )
-        self.telemetry_query_path = env(TELEMETRY_QUERY_PATH_ENV, DEFAULT_TELEMETRY_QUERY_PATH)
         self.client = client
         self.telemetry_transport = telemetry_transport
         self.kubernetes_transport = kubernetes_transport
@@ -440,37 +440,19 @@ class TargetClusterAgent:
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
             )
-        self.query_registry = TelemetryQueryRegistry(
-            load_query_definitions(self.telemetry_query_path)
-        )
+        self.query_registry = TelemetryQueryRegistry()
         self.evidence_collector = EvidenceCollector(providers, self.query_registry)
-        self.evidence_store = EvidenceTaskStore(self.evidence_queue_db_path)
         self.control_store = AgentControlStore(self.agent_control_db_path)
         self.command_outbox = CommandResultOutbox(self.command_outbox_db_path)
-        self._workload_control_authority = object()
-        self.evidence_scheduler = EvidenceScheduler(
+        self.evidence_scheduler = EvidenceJobScheduler(
             cluster_id=self.cluster_id,
             workspace_id=self.workspace_id,
             agent_id=self.agent_id,
             source_id=AgentConfig.EVIDENCE_SOURCE_ID,
             collector=self.evidence_collector,
-            store=self.evidence_store,
             provider_keys=tuple(self.evidence_collector.providers),
             provider_worker_counts=self.evidence_provider_worker_counts,
-            failure_policy=self.evidence_failure_policy,
             interval_seconds=self.interval,
-            lease_seconds=EVIDENCE_TASK_LEASE_SECONDS,
-            source_lease_seconds=AgentConfig.EVIDENCE_SOURCE_LEASE_SECONDS,
-            worker_pool_authority=self._workload_control_authority,
-        )
-        self.workload_controller = ClusterWorkloadController(
-            worker_pool=self.evidence_scheduler,
-            store=self.evidence_store,
-            authority=self._workload_control_authority,
-            min_worker_counts=self.evidence_provider_worker_counts,
-            max_worker_counts=self.evidence_provider_max_worker_counts,
-            interval_seconds=self.workload_controller_interval_seconds,
-            queue_age_target_seconds=self.workload_queue_age_target_seconds,
         )
         self.default_policy = self.build_default_policy()
         self.policy_sync = AgentPolicySync(
@@ -502,7 +484,7 @@ class TargetClusterAgent:
                 interval_seconds=self.interval,
                 min_workers=self.evidence_provider_worker_counts.get(provider_key, 1),
                 max_workers=self.evidence_provider_max_worker_counts.get(provider_key, 3),
-                queue_age_target_seconds=self.workload_queue_age_target_seconds,
+                queue_age_target_seconds=DEFAULT_QUEUE_AGE_TARGET_SECONDS,
             )
             for provider_key in self.evidence_collector.providers
         }
@@ -527,8 +509,7 @@ class TargetClusterAgent:
         enabled_provider_keys: set[str] = set()
         provider_intervals: dict[str, int] = {}
         min_worker_counts: dict[str, int] = {}
-        max_worker_counts: dict[str, int] = {}
-        queue_age_targets: dict[str, int] = {}
+        registered_queries: dict[str, list[str]] = {}
         for provider_key in self.evidence_collector.providers:
             provider_policy = policy.evidence.providers.get(
                 provider_key,
@@ -539,8 +520,10 @@ class TargetClusterAgent:
             )
             provider_intervals[provider_key] = provider_policy.interval_seconds
             min_worker_counts[provider_key] = provider_policy.min_workers
-            max_worker_counts[provider_key] = provider_policy.max_workers
-            queue_age_targets[provider_key] = provider_policy.queue_age_target_seconds
+            registered_queries[provider_key] = self.register_policy_queries(
+                provider_key,
+                provider_policy.queries,
+            )
             if provider_policy.enabled:
                 enabled_provider_keys.add(provider_key)
 
@@ -548,18 +531,32 @@ class TargetClusterAgent:
             provider_intervals=provider_intervals,
             enabled_provider_keys=enabled_provider_keys,
         )
-        self.evidence_scheduler.set_failure_policy(policy.evidence.failure_policy)
-        self.workload_controller.configure_worker_policy(
-            min_worker_counts=min_worker_counts,
-            max_worker_counts=max_worker_counts,
-            queue_age_targets=queue_age_targets,
-        )
+        self.evidence_scheduler.set_worker_counts(min_worker_counts)
         return {
             "generation": policy.generation,
             "cluster_role": policy.cluster_role,
             "bootstrap_mode": policy.bootstrap.mode,
             "enabled_providers": sorted(enabled_provider_keys),
+            "evidence_worker_counts": min_worker_counts,
+            "registered_queries": registered_queries,
         }
+
+    def register_policy_queries(
+        self,
+        provider_key: str,
+        queries: list[JsonObject],
+    ) -> list[str]:
+        source = QUERY_SOURCE_BY_PROVIDER.get(provider_key)
+        if source is None:
+            return []
+        definitions: list[TelemetryQueryDefinition] = []
+        for query in queries:
+            payload = dict(query)
+            payload.setdefault("source", source)
+            definition = TelemetryQueryDefinition.from_mapping(payload)
+            definitions.append(definition)
+        self.evidence_collector.replace_queries(source, tuple(definitions))
+        return [definition.name for definition in definitions]
 
     async def run(self) -> None:
         if self.client is not None:
@@ -576,7 +573,6 @@ class TargetClusterAgent:
             self.policy_sync.run(client),
             self.reconcile_node_collector_forever(),
             self.evidence_scheduler.run(client),
-            self.workload_controller.run(),
             self.reconciler.run(client),
             self.poll_commands(client),
             self.flush_command_results_forever(client),
@@ -603,80 +599,6 @@ class TargetClusterAgent:
                     },
                 )
                 await asyncio.sleep(AgentConfig.REGISTER_RETRY_DELAY_SECONDS)
-
-    async def ship_evidence(self, client: ManagementPlaneClient) -> None:
-        while True:
-            try:
-                await self.ship_evidence_once(client)
-            except Exception as exc:
-                LOGGER.warning(
-                    "evidence_ship_failed",
-                    extra={
-                        CONTEXT_KEY: {
-                            Gateway.CLUSTER_ID: self.cluster_id,
-                            Gateway.AGENT_ID: self.agent_id,
-                            "exception_type": type(exc).__name__,
-                        }
-                    },
-                )
-            await asyncio.sleep(self.interval)
-
-    async def ship_evidence_once(self, client: ManagementPlaneClient) -> bool:
-        window_start = self.current_evidence_window_start()
-        lease = await client.acquire_evidence_source_lease(
-            self.cluster_id,
-            self.workspace_id,
-            self.agent_id,
-            AgentConfig.EVIDENCE_SOURCE_ID,
-            window_start,
-            AgentConfig.EVIDENCE_SOURCE_LEASE_SECONDS,
-        )
-        if not lease.get(Gateway.LEASED):
-            LOGGER.info(
-                "evidence_source_lease_skipped",
-                extra={
-                    CONTEXT_KEY: {
-                        Gateway.CLUSTER_ID: self.cluster_id,
-                        Gateway.AGENT_ID: self.agent_id,
-                        Gateway.SOURCE_ID: AgentConfig.EVIDENCE_SOURCE_ID,
-                        Gateway.LEASED_UNTIL: lease.get(Gateway.LEASED_UNTIL),
-                    }
-                },
-            )
-            return False
-        payload = await self.build_evidence_payload()
-        payload.update(
-            {
-                Gateway.AGENT_ID: self.agent_id,
-                Gateway.SOURCE_ID: AgentConfig.EVIDENCE_SOURCE_ID,
-                Gateway.WINDOW_START: window_start,
-                Gateway.EVIDENCE_KEY: self.evidence_key(window_start),
-            }
-        )
-        status_code = await client.ship_evidence(payload)
-        LOGGER.info(
-            "evidence_shipped",
-            extra={
-                CONTEXT_KEY: {
-                    Gateway.CLUSTER_ID: self.cluster_id,
-                    Gateway.AGENT_ID: self.agent_id,
-                    Gateway.SOURCE_ID: AgentConfig.EVIDENCE_SOURCE_ID,
-                    "status_code": status_code,
-                }
-            },
-        )
-        return True
-
-    def current_evidence_window_start(self) -> str:
-        interval = max(1, self.interval)
-        current = int(time.time())
-        window_start = current - (current % interval)
-        return datetime.fromtimestamp(window_start, UTC).isoformat()
-
-    def evidence_key(self, window_start: str) -> str:
-        return ":".join(
-            [self.workspace_id, self.cluster_id, AgentConfig.EVIDENCE_SOURCE_ID, window_start]
-        )
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -879,38 +801,10 @@ class TargetClusterAgent:
     ) -> JsonObject:
         definition = self.query_definition_from_payload(ctx.payload.definition_payload())
         result = await self.evidence_collector.run_query(definition)
-        if ctx.payload.should_register():
-            self.evidence_collector.register_query(definition)
         return ctx.ok(
             "telemetry query executed",
             query=definition.__dict__,
             result=result,
-        )
-
-    @command_handler(QUERY_REGISTER_ACTION, payload_model=TelemetryQueryCommandPayload)
-    async def register_query_command(
-        self,
-        ctx: CommandContext[TelemetryQueryCommandPayload],
-    ) -> JsonObject:
-        definition = self.query_definition_from_payload(ctx.payload.definition_payload())
-        self.evidence_collector.register_query(definition)
-        return ctx.ok(
-            "telemetry query registered",
-            applied=True,
-            query=definition.__dict__,
-        )
-
-    @command_handler(QUERY_IMPORT_ACTION, payload_model=TelemetryQueryImportPayload)
-    async def import_query_path_command(
-        self,
-        ctx: CommandContext[TelemetryQueryImportPayload],
-    ) -> JsonObject:
-        definitions = self.evidence_collector.import_queries(ctx.payload.resolved_path())
-        return ctx.ok(
-            "telemetry query file imported",
-            applied=True,
-            imported_count=len(definitions),
-            queries=[definition.__dict__ for definition in definitions],
         )
 
     @kubernetes_command(
@@ -1113,111 +1007,6 @@ class TargetClusterAgent:
             if response.is_error:
                 return False, kubernetes_failure_message("patch", response)
         return True, AgentConfig.COMMAND_RESULT_MESSAGE
-
-    async def build_evidence_payload(self) -> JsonObject:
-        # TODO(telemetry): 제한·마스킹된 스냅샷용 OTel/Kubernetes API 어댑터 추가
-        async with httpx.AsyncClient(
-            transport=self.telemetry_transport,
-            timeout=AgentConfig.TELEMETRY_TIMEOUT_SECONDS,
-        ) as telemetry_client:
-            metrics, logs = await asyncio.gather(
-                self.collect_metric_evidence(telemetry_client),
-                self.collect_log_evidence(telemetry_client),
-            )
-        return {
-            Gateway.CLUSTER_ID: self.cluster_id,
-            Gateway.WORKSPACE_ID: self.workspace_id,
-            "kubernetes": self.collect_kubernetes_evidence(),
-            "metrics": metrics,
-            "logs": logs,
-            "traces": self.collect_trace_evidence(),
-        }
-
-    def collect_kubernetes_evidence(self) -> JsonObject:
-        # TODO(target): 최소 권한 RBAC으로 pods/events/nodes 조회와 object metadata 마스킹
-        return {
-            "pods": [
-                {
-                    "name": AgentConfig.CRASHING_POD_NAME,
-                    "status": AgentConfig.CRASHING_POD_STATUS,
-                    "restarts": AgentConfig.CRASHING_POD_RESTARTS,
-                }
-            ],
-            "events": [AgentConfig.K8S_READINESS_FAILED_EVENT, AgentConfig.K8S_BACKOFF_EVENT],
-        }
-
-    async def collect_metric_evidence(self, client: httpx.AsyncClient) -> JsonObject:
-        # TODO(telemetry): 전체 metric 조회를 workspace/cluster 범위 허용 목록과 window로 교체
-        base_url = env(
-            AgentConfig.PROMETHEUS_BASE_URL_ENV, AgentConfig.DEFAULT_PROMETHEUS_BASE_URL
-        ).rstrip("/")
-        try:
-            metric_names = await prometheus_metric_names(client, base_url)
-            queries = metric_names[: AgentConfig.PROMETHEUS_MAX_METRICS] or list(
-                AgentConfig.PROMETHEUS_FALLBACK_QUERIES
-            )
-            snapshots = [
-                await prometheus_query(client, base_url, metric_name) for metric_name in queries
-            ]
-            return {
-                "source": base_url,
-                "mode": "direct_prometheus_api",
-                "available_metric_count": len(metric_names),
-                "queried_metric_count": len(snapshots),
-                "truncated": len(metric_names) > len(queries),
-                "queries": snapshots,
-            }
-        except Exception as exc:
-            return self.fallback_metric_evidence(exc)
-
-    def fallback_metric_evidence(self, exc: Exception) -> JsonObject:
-        return {
-            "source": AgentConfig.FAKE_PROMETHEUS_SOURCE,
-            "mode": "fallback_sample",
-            "error": type(exc).__name__,
-            "cpu": AgentConfig.FAKE_NODE_CPU,
-            "memory_mb": AgentConfig.FAKE_NODE_MEMORY_MB,
-            "http_5xx_rate": AgentConfig.FAKE_HTTP_5XX_RATE,
-        }
-
-    async def collect_log_evidence(self, client: httpx.AsyncClient) -> list[JsonObject]:
-        # TODO(telemetry): Loki 조회를 workspace/repo/cluster label selector별 분리와 secret 마스킹
-        base_url = env(AgentConfig.LOKI_BASE_URL_ENV, AgentConfig.DEFAULT_LOKI_BASE_URL).rstrip("/")
-        try:
-            labels = await loki_labels(client, base_url)
-            query = env(AgentConfig.LOKI_QUERY_ENV, AgentConfig.DEFAULT_LOKI_QUERY)
-            payload = await loki_query_range(client, base_url, query)
-            return [
-                {
-                    "source": base_url,
-                    "mode": "direct_loki_api",
-                    "labels": labels,
-                    "query": query,
-                    "response": payload,
-                }
-            ]
-        except Exception as exc:
-            return self.fallback_log_evidence(exc)
-
-    def fallback_log_evidence(self, exc: Exception) -> list[JsonObject]:
-        return [
-            {
-                "source": AgentConfig.FAKE_LOKI_SOURCE,
-                "mode": "fallback_sample",
-                "error": type(exc).__name__,
-                "line": AgentConfig.LOKI_ERROR_LINE,
-            },
-            {
-                "source": AgentConfig.FAKE_LOKI_SOURCE,
-                "mode": "fallback_sample",
-                "error": type(exc).__name__,
-                "line": AgentConfig.LOKI_WARNING_LINE,
-            },
-        ]
-
-    def collect_trace_evidence(self) -> JsonObject:
-        # TODO(telemetry): OpenTelemetry 백엔드 조회와 service/operation별 span 요약
-        return {"source": AgentConfig.FAKE_OTEL_SOURCE, "slow_span": AgentConfig.OTEL_SLOW_SPAN}
 
 
 def create_fake_telemetry_app(kind: str) -> FastAPI:

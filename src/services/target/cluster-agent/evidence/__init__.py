@@ -9,33 +9,13 @@ from providers import (
 from queries import TelemetryQueryDefinition, TelemetryQueryRegistry
 
 from evidence.collector import EvidenceCollector
-from evidence.scheduler import EvidenceScheduler
-from evidence.store import EvidenceTask, EvidenceTaskStore, ProviderQueueStats
-from evidence.uploader import (
-    FAILURE_POLICY_ALLOW_PARTIAL,
-    FAILURE_POLICY_STRICT,
-    UPLOAD_DONE,
-    UPLOAD_FAILED,
-    UPLOAD_IDLE,
-    UPLOAD_SKIPPED,
-    EvidenceUploader,
-)
+from evidence.jobs import EvidenceJobScheduler
 
 __all__ = [
-    "FAILURE_POLICY_ALLOW_PARTIAL",
-    "FAILURE_POLICY_STRICT",
-    "UPLOAD_DONE",
-    "UPLOAD_FAILED",
-    "UPLOAD_IDLE",
-    "UPLOAD_SKIPPED",
     "EvidenceCollector",
-    "EvidenceScheduler",
-    "EvidenceTask",
-    "EvidenceTaskStore",
-    "EvidenceUploader",
+    "EvidenceJobScheduler",
     "LokiLogsProvider",
     "PrometheusMetricsProvider",
-    "ProviderQueueStats",
     "TelemetryProvider",
     "TelemetryQueryDefinition",
     "TelemetryQueryRegistry",

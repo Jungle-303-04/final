@@ -43,6 +43,16 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
     traces_provider = module.TempoTracesProvider.from_config(lambda _name, default: default)
     collector = module.EvidenceCollector([traces_provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "tempo",
+                "name": "checkout_slow_spans",
+                "description": "Slow checkout spans.",
+                "query": '{ resource.service.name = "checkout-api" }',
+            }
+        )
+    )
 
     async def fake_query_tempo(_client, span_query) -> dict[str, object]:
         return {

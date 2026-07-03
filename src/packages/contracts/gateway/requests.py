@@ -33,9 +33,8 @@ DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus:8000"
 DEFAULT_LOKI_BASE_URL = "http://fake-loki:8000"
 MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
-DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS = 30
-MIN_EVIDENCE_SOURCE_LEASE_SECONDS = 5
-MAX_EVIDENCE_SOURCE_LEASE_SECONDS = 300
+DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS = 3
+MAX_EVIDENCE_JOB_MAX_ATTEMPTS = 10
 DEFAULT_AGENT_POLICY_GENERATION = 1
 DEFAULT_PROVIDER_INTERVAL_SECONDS = 8
 DEFAULT_PROVIDER_MIN_WORKERS = 1
@@ -178,16 +177,18 @@ class CommandResultRequest(StrictModel):
     message: str = EMPTY_COMMAND_MESSAGE
 
 
-class EvidenceSourceLeaseRequest(StrictModel):
-    cluster_id: str = Target.DEFAULT_CLUSTER_ID
-    workspace_id: str = DEFAULT_WORKSPACE_ID
-    agent_id: str
+class EvidenceJobScheduleRequest(StrictModel):
+    source_id: str = "cluster-snapshot"
     window_start: str
-    lease_seconds: int = Field(
-        default=DEFAULT_EVIDENCE_SOURCE_LEASE_SECONDS,
-        ge=MIN_EVIDENCE_SOURCE_LEASE_SECONDS,
-        le=MAX_EVIDENCE_SOURCE_LEASE_SECONDS,
-    )
+    provider_keys: list[str] = Field(min_length=1)
+
+
+class EvidenceJobResultRequest(StrictModel):
+    agent_id: str
+    lease_id: str
+    status: Literal["completed", "failed"]
+    result: dict[str, Any] = Field(default_factory=dict)
+    error: str = ""
 
 
 class EvidenceProviderPolicy(StrictModel):
@@ -196,10 +197,16 @@ class EvidenceProviderPolicy(StrictModel):
     min_workers: int = Field(default=DEFAULT_PROVIDER_MIN_WORKERS, ge=0)
     max_workers: int = Field(default=DEFAULT_PROVIDER_MAX_WORKERS, ge=0)
     queue_age_target_seconds: int = Field(default=DEFAULT_QUEUE_AGE_TARGET_SECONDS, ge=1)
+    queries: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class EvidenceRuntimePolicy(StrictModel):
     failure_policy: Literal["allow_partial", "strict"] = "allow_partial"
+    max_attempts: int = Field(
+        default=DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS,
+        ge=1,
+        le=MAX_EVIDENCE_JOB_MAX_ATTEMPTS,
+    )
     providers: dict[str, EvidenceProviderPolicy] = Field(default_factory=dict)
 
 

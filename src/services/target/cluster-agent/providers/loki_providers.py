@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import httpx
-from queries import LOKI_LOG_QUERIES, LokiLogQuery
+from queries import LokiLogQuery
 
 from config import (
     DEFAULT_LOKI_BASE_URL,
@@ -21,7 +21,7 @@ class LokiLogsProvider:
     result_count_attribute = "loki.result_count"
     timeout_seconds = LOKI_TIMEOUT_SECONDS
     failure_message = "loki log collection failed"
-    queries = LOKI_LOG_QUERIES
+    queries: tuple[LokiLogQuery, ...] = ()
 
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")

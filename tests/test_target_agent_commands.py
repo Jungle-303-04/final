@@ -43,11 +43,7 @@ def load_agent_module():
         "providers.tempo_providers",
         "evidence",
         "evidence.collector",
-        "evidence.scheduler",
-        "evidence.store",
-        "evidence.uploader",
-        "workload",
-        "workload.controller",
+        "evidence.jobs",
     )
     previous_modules = {name: sys.modules.pop(name, None) for name in module_names}
     sys.path.insert(0, str(TARGET_AGENT_PATH.parent))
@@ -179,71 +175,6 @@ def test_command_result_outbox_abandons_poison_result(tmp_path: Path) -> None:
     assert outbox.next_result() is None
 
 
-def test_agent_registers_query_for_scheduled_provider_collection() -> None:
-    module = load_agent_module()
-    agent = object.__new__(module.TargetClusterAgent)
-    agent.cluster_id = "cluster-1"
-    agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
-    agent.evidence_collector = module.EvidenceCollector([metrics_provider])
-    agent.query_registry = agent.evidence_collector.registry
-    register_agent_commands(module, agent)
-
-    result = asyncio.run(
-        agent.execute_command(
-            {
-                "action": module.QUERY_REGISTER_ACTION,
-                "payload": {
-                    "query": {
-                        "source": "prometheus",
-                        "name": "custom_up",
-                        "description": "Custom scrape check.",
-                        "query": "up",
-                    }
-                },
-            }
-        )
-    )
-
-    assert result["status"] == "completed"
-    assert any(query.metric_name == "custom_up" for query in metrics_provider.queries)
-    selected = agent.query_definition_from_payload(
-        {"query": {"source": "prometheus", "name": "custom_up"}}
-    )
-    assert selected.query == "up"
-
-
-def test_agent_routes_command_through_registered_handler() -> None:
-    module = load_agent_module()
-    agent = object.__new__(module.TargetClusterAgent)
-    agent.cluster_id = "cluster-1"
-    agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
-    agent.evidence_collector = module.EvidenceCollector([metrics_provider])
-    agent.query_registry = agent.evidence_collector.registry
-    register_agent_commands(module, agent)
-
-    result = asyncio.run(
-        agent.execute_command(
-            {
-                "action": module.QUERY_REGISTER_ACTION,
-                "payload": {
-                    "query": {
-                        "source": "prometheus",
-                        "name": "registered_by_registry",
-                        "query": "up",
-                    }
-                },
-            }
-        )
-    )
-
-    assert result["status"] == "completed"
-    assert any(query.metric_name == "registered_by_registry" for query in metrics_provider.queries)
-
-
 def test_agent_routes_unknown_command_to_default_handler() -> None:
     module = load_agent_module()
     module.COMMAND_EXECUTION_DELAY_SECONDS = 0
@@ -257,47 +188,6 @@ def test_agent_routes_unknown_command_to_default_handler() -> None:
 
     assert result["status"] == "failed"
     assert result["applied"] is False
-
-
-def test_agent_imports_query_directory_for_scheduler(tmp_path: Path) -> None:
-    module = load_agent_module()
-    agent = object.__new__(module.TargetClusterAgent)
-    agent.cluster_id = "cluster-1"
-    agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
-    agent.evidence_collector = module.EvidenceCollector([metrics_provider])
-    agent.query_registry = agent.evidence_collector.registry
-    register_agent_commands(module, agent)
-    query_dir = tmp_path / "queries" / "prometheus"
-    query_dir.mkdir(parents=True)
-    (query_dir / "custom.json").write_text(
-        """
-        {
-          "source": "prometheus",
-          "queries": [
-            {
-              "name": "imported_up",
-              "description": "Imported scrape check.",
-              "query": "up"
-            }
-          ]
-        }
-        """,
-        encoding="utf-8",
-    )
-
-    result = asyncio.run(
-        agent.execute_command(
-            {
-                "action": module.QUERY_IMPORT_ACTION,
-                "payload": {"path": str(tmp_path / "queries")},
-            }
-        )
-    )
-
-    assert result["imported_count"] == 1
-    assert any(query.metric_name == "imported_up" for query in metrics_provider.queries)
 
 
 def test_kubernetes_command_uses_typed_payload_and_client() -> None:
