@@ -137,6 +137,20 @@ def test_pool_options_env_defaults_remain_unchanged() -> None:
     assert storage_engine.DB_POOL_TIMEOUT_ENV == "DB_POOL_TIMEOUT_SECONDS"
 
 
+def test_connect_args_enable_pgbouncer_compat_only_for_psycopg() -> None:
+    # psycopg 한정: PgBouncer 호환 위해 server-side prepared statement 비활성화
+    args = storage_engine.connect_args_for("postgresql+psycopg://u:p@host/db")
+    assert args == {"prepare_threshold": None}
+
+
+def test_connect_args_empty_for_other_drivers() -> None:
+    # 타 드라이버(SQLite 등)는 psycopg 전용 옵션을 모르는 인자로 거부 — 전달 금지
+    assert storage_engine.connect_args_for("sqlite:///tmp/test.db") == {}
+    assert storage_engine.connect_args_for("sqlite+aiosqlite:///:memory:") == {}
+    # POOL_OPTIONS 자체에는 드라이버 전용 옵션이 남아 있지 않아야 함
+    assert "connect_args" not in storage_engine.POOL_OPTIONS
+
+
 def test_connection_reuses_active_connection_once() -> None:
     repository = object.__new__(storage_engine.DatabaseConnection)
     active = object()
