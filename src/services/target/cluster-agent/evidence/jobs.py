@@ -73,7 +73,10 @@ class EvidenceJobScheduler:
 
     async def schedule_forever(self, client: ManagementPlaneClient) -> None:
         while True:
-            await self.schedule_once(client)
+            try:
+                await self.schedule_once(client)
+            except Exception as exc:
+                print(f"evidence schedule failed: {exc}", flush=True)
             await asyncio.sleep(1)
 
     async def schedule_once(
@@ -111,7 +114,12 @@ class EvidenceJobScheduler:
         worker_id: str,
     ) -> None:
         while True:
-            if not await self.work_once(client, provider_key, worker_id):
+            try:
+                processed = await self.work_once(client, provider_key, worker_id)
+            except Exception as exc:
+                print(f"evidence worker failed: {worker_id}: {exc}", flush=True)
+                processed = False
+            if not processed:
                 await asyncio.sleep(DEFAULT_JOB_POLL_SECONDS)
 
     async def work_once(
@@ -132,14 +140,6 @@ class EvidenceJobScheduler:
         lease_id = str(job[Gateway.LEASE_ID])
         try:
             result = await self.collect_job(job, provider_key)
-            await client.complete_evidence_job(
-                job_id,
-                self.agent_id,
-                lease_id,
-                CommandStatus.COMPLETED,
-                result,
-                "",
-            )
         except Exception as exc:
             await client.complete_evidence_job(
                 job_id,
@@ -149,6 +149,16 @@ class EvidenceJobScheduler:
                 {},
                 str(exc),
             )
+            return True
+
+        await client.complete_evidence_job(
+            job_id,
+            self.agent_id,
+            lease_id,
+            CommandStatus.COMPLETED,
+            result,
+            "",
+        )
         return True
 
     async def collect_job(self, job: JsonObject, provider_key: str) -> JsonObject:
