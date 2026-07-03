@@ -50,6 +50,12 @@ from packages.contracts.identity import (
 )
 from packages.storage.engine import DatabaseConnection
 
+# 원자 해결 대상으로 열림으로 간주하는 승인 상태 — 라우터의 open 판정과 동일해야 함
+OPEN_APPROVAL_STATUSES = (
+    ApprovalStatus.REQUESTED.value,
+    ApprovalStatus.NOT_REQUIRED.value,
+)
+
 
 class RepoChangeRepository(DatabaseConnection):
     def register_repository(self, payload: JsonObject) -> JsonObject:
@@ -343,6 +349,41 @@ class RepoChangeRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
         return {**payload, "workflow_run_id": workflow_run_id, "approval_id": approval_id}
+
+    def resolve_workflow_approval_if_open(
+        self,
+        approval_id: str,
+        workspace_id: str,
+        status: str,
+        decided_by: str | None,
+        decision: str | None,
+        details: JsonObject,
+    ) -> bool:
+        """열린 승인만 원자적으로 해결함 — 동시 grant/reject 중 첫 요청만 성공.
+
+        검사(open 여부)와 갱신이 한 UPDATE 라 read-then-write 경합이 없음.
+        False 반환 = 이미 해결됨(호출자는 409 로 응답).
+        """
+        table = Approval.__table__
+        statement = (
+            table.update()
+            .where(
+                table.c.approval_id == approval_id,
+                table.c.workspace_id == workspace_id,
+                table.c.status.in_(OPEN_APPROVAL_STATUSES),
+            )
+            .values(
+                status=status,
+                decided_by=decided_by,
+                decision=decision,
+                details=dict(details),
+                updated_at=func.now(),
+            )
+            .returning(table.c.approval_id)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).first()
+        return row is not None
 
     def resolve_workflow_approval(self, payload: JsonObject) -> JsonObject:
         workflow_run_id = derive_workflow_run_id(payload)
