@@ -75,7 +75,6 @@ class EventSubject(StrEnum):
     SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패
 
     # --- AI conversation API: HTTP 대화 요청 -> agent worker -> 응답 이벤트 ---
-    AI_CONVERSATION_STARTED = "ai.conversation.started"  # 대화 세션 생성
     AI_MESSAGE_RECEIVED = "ai.message.received"  # 사용자 메시지 수신
     AI_MESSAGE_RESPONDED = "ai.message.responded"  # agent 응답 생성
     AI_MESSAGE_FAILED = "ai.message.failed"  # agent 응답 실패
