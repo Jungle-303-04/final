@@ -32,6 +32,7 @@ from packages.events.envelope import event
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
 from packages.storage.repositories.event import EventRepository
+from packages.storage.repositories.outbox import OutboxRepository
 from packages.storage.schema import metadata
 
 
@@ -113,6 +114,17 @@ def test_event_schema_preserves_causation_id() -> None:
     assert "causation_id" in set(metadata.tables["events"].c.keys())
 
 
+def test_outbox_schema_supports_relay_leases() -> None:
+    columns = set(metadata.tables["outbox"].c.keys())
+    assert {"lease_id", "leased_until", "sent_at"} <= columns
+
+
+def test_outbox_compat_migration_adds_relay_lease_columns() -> None:
+    assert "lease_id" in storage_engine.OUTBOX_COMPAT_COLUMNS
+    assert "leased_until" in storage_engine.OUTBOX_COMPAT_COLUMNS
+    assert "ix_outbox_claim" in storage_engine.OUTBOX_CLAIM_INDEX
+
+
 def test_record_event_persists_causation_id() -> None:
     recorded: list[Any] = []
 
@@ -140,6 +152,94 @@ def test_record_event_persists_causation_id() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     assert "causation_id" in str(compiled)
     assert compiled.params["causation_id"] == "parent-event-1"
+
+
+def test_outbox_claim_uses_skip_locked_lease_update() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class FakeAsyncConnection:
+        async def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @asynccontextmanager
+    async def fake_async_connection():
+        yield FakeAsyncConnection()
+
+    repository = object.__new__(OutboxRepository)
+    repository.async_connection = fake_async_connection  # type: ignore[method-assign]
+
+    asyncio.run(repository.unsent_events(100, "api-gateway"))
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    assert "UPDATE outbox" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "leased_until" in sql
+    assert compiled.params["source_1"] == "api-gateway"
+
+
+def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def __init__(self, row: dict[str, object] | None = None) -> None:
+            self.row = row
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self.row
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            if len(recorded) == 1:
+                return FakeResult({"event_id": "evt-1", "correlation_id": "corr-1"})
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(TargetAgentRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    result = repository.record_evidence_event_once(
+        evidence_key="workspace-1:cluster-1:cluster-snapshot:window-1",
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        source_id="cluster-snapshot",
+        window_start="window-1",
+        agent_id="agent-1",
+        event_envelope=event(
+            "cluster.evidence.received",
+            "api-gateway",
+            {"workspace_id": "workspace-1", "cluster_id": "cluster-1"},
+            "corr-1",
+        ),
+        payload={"workspace_id": "workspace-1", "cluster_id": "cluster-1"},
+    )
+
+    assert result == {"duplicate": False, "event_id": "evt-1", "correlation_id": "corr-1"}
+    window_sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+    event_sql = str(recorded[1].compile(dialect=postgresql.dialect()))
+    outbox_sql = str(recorded[2].compile(dialect=postgresql.dialect()))
+
+    assert "INSERT INTO evidence_windows" in window_sql
+    assert "ON CONFLICT" in window_sql
+    assert "INSERT INTO events" in event_sql
+    assert "INSERT INTO outbox" in outbox_sql
+    assert "lease_id" in outbox_sql
 
 
 def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, fields, is_dataclass
 from typing import cast
 
@@ -14,6 +15,7 @@ from packages.contracts.event_bus.interfaces import (
 )
 from packages.contracts.gateway.fields import Gateway
 from packages.events.bus import RecordedEventClient
+from packages.events.envelope import event
 
 
 @dataclass(frozen=True)
@@ -52,9 +54,40 @@ class ApiEventGateway:
                 event_payload[Gateway.REQUESTED_BY] = actor.user_id
             if not event_payload.get(Gateway.ACTOR):
                 event_payload[Gateway.ACTOR] = actor.to_body()
+        durable = await self.accept_via_outbox_if_supported(
+            subject,
+            event_payload,
+            correlation_id,
+            causation_id,
+        )
+        if durable is not None:
+            return durable
         evt = await self.events.emit(
             subject, self.source, event_payload, correlation_id, causation_id
         )
+        return AcceptedEvent(evt)
+
+    async def accept_via_outbox_if_supported(
+        self,
+        subject: str,
+        payload: JsonObject,
+        correlation_id: str | None,
+        causation_id: str | None,
+    ) -> AcceptedEvent | None:
+        recorder = self.events.recorder
+        unit_of_work = getattr(recorder, "unit_of_work", None)
+        stage_events = getattr(recorder, "stage_events", None)
+        if not callable(unit_of_work) or not callable(stage_events):
+            return None
+
+        evt = event(subject, self.source, payload, correlation_id, causation_id)
+
+        def stage() -> None:
+            with unit_of_work() as conn:
+                recorder.record_event(evt)
+                stage_events(conn, [evt])
+
+        await asyncio.to_thread(stage)
         return AcceptedEvent(evt)
 
     async def accept_body(
