@@ -26,6 +26,27 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-target-cluster-01}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
+LLM_PROVIDER="${LLM_PROVIDER:-fake}"
+LLM_MODEL="${LLM_MODEL:-}"
+LLM_BASE_URL="${LLM_BASE_URL:-}"
+LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-30}"
+LLM_MAX_RETRIES="${LLM_MAX_RETRIES:-2}"
+LLM_MAX_TOKENS="${LLM_MAX_TOKENS:-1024}"
+LLM_API_KEY="${LLM_API_KEY:-}"
+OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+OPENAI_BASE_URL="${OPENAI_BASE_URL:-}"
+OPENAI_MODEL="${OPENAI_MODEL:-}"
+OPENAI_COMPATIBLE_API_KEY="${OPENAI_COMPATIBLE_API_KEY:-}"
+OPENAI_COMPATIBLE_BASE_URL="${OPENAI_COMPATIBLE_BASE_URL:-}"
+OPENAI_COMPATIBLE_MODEL="${OPENAI_COMPATIBLE_MODEL:-}"
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-}"
+ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-}"
+ANTHROPIC_VERSION="${ANTHROPIC_VERSION:-2023-06-01}"
+GEMINI_API_KEY="${GEMINI_API_KEY:-}"
+GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
+GEMINI_BASE_URL="${GEMINI_BASE_URL:-}"
+GEMINI_MODEL="${GEMINI_MODEL:-}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -98,6 +119,17 @@ fi
 if [ -z "${GITHUB_TOKEN}" ]; then
   GITHUB_TOKEN="$(existing_secret_value management-runtime-secret GITHUB_TOKEN)"
 fi
+for key in \
+  LLM_API_KEY \
+  OPENAI_API_KEY \
+  OPENAI_COMPATIBLE_API_KEY \
+  ANTHROPIC_API_KEY \
+  GEMINI_API_KEY \
+  GOOGLE_API_KEY; do
+  if [ -z "${!key}" ]; then
+    printf -v "${key}" "%s" "$(existing_secret_value management-runtime-secret "${key}")"
+  fi
+done
 
 if [ -z "${MINIO_ROOT_PASSWORD}" ]; then
   MINIO_ROOT_PASSWORD="$(existing_secret_value minio-secret MINIO_ROOT_PASSWORD)"
@@ -176,6 +208,21 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED}" \
   --from-literal=GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS}" \
   --from-literal=SCM_PR_URL_PREFIX="${SCM_PR_URL_PREFIX}" \
+  --from-literal=LLM_PROVIDER="${LLM_PROVIDER}" \
+  --from-literal=LLM_MODEL="${LLM_MODEL}" \
+  --from-literal=LLM_BASE_URL="${LLM_BASE_URL}" \
+  --from-literal=LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS}" \
+  --from-literal=LLM_MAX_RETRIES="${LLM_MAX_RETRIES}" \
+  --from-literal=LLM_MAX_TOKENS="${LLM_MAX_TOKENS}" \
+  --from-literal=OPENAI_BASE_URL="${OPENAI_BASE_URL}" \
+  --from-literal=OPENAI_MODEL="${OPENAI_MODEL}" \
+  --from-literal=OPENAI_COMPATIBLE_BASE_URL="${OPENAI_COMPATIBLE_BASE_URL}" \
+  --from-literal=OPENAI_COMPATIBLE_MODEL="${OPENAI_COMPATIBLE_MODEL}" \
+  --from-literal=ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL}" \
+  --from-literal=ANTHROPIC_MODEL="${ANTHROPIC_MODEL}" \
+  --from-literal=ANTHROPIC_VERSION="${ANTHROPIC_VERSION}" \
+  --from-literal=GEMINI_BASE_URL="${GEMINI_BASE_URL}" \
+  --from-literal=GEMINI_MODEL="${GEMINI_MODEL}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 SECRET_ARGS=(
   --from-literal=DATABASE_URL="${DATABASE_URL}"
@@ -184,6 +231,17 @@ SECRET_ARGS=(
 if valid_github_token "${GITHUB_TOKEN}"; then
   SECRET_ARGS+=(--from-literal=GITHUB_TOKEN="${GITHUB_TOKEN}")
 fi
+for key in \
+  LLM_API_KEY \
+  OPENAI_API_KEY \
+  OPENAI_COMPATIBLE_API_KEY \
+  ANTHROPIC_API_KEY \
+  GEMINI_API_KEY \
+  GOOGLE_API_KEY; do
+  if [ -n "${!key}" ]; then
+    SECRET_ARGS+=(--from-literal="${key}=${!key}")
+  fi
+done
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic management-runtime-secret \
   "${SECRET_ARGS[@]}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -

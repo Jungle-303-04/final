@@ -59,6 +59,27 @@ AWS를 쓰는 사용자는 AWS provider를 붙이면 되고, Vault를 쓰는 사
 provider를 붙이면 된다. 오픈소스 기본 배포는 특정 클라우드를 필수로 하지
 않는다.
 
+## LLM Gateway 키
+
+AI worker는 `packages.ai.llm.LlmGateway`를 통해 provider adapter를 선택한다.
+기본값은 `LLM_PROVIDER=fake`라서 키 없이 로컬/CI가 돈다. 실제 provider를 쓰려면
+아래 값 중 하나를 Kubernetes Secret 또는 실행 환경변수로 주입한다.
+
+| provider | 선택 값 | 필요한 Secret |
+| --- | --- | --- |
+| OpenAI | `LLM_PROVIDER=openai` | `OPENAI_API_KEY` |
+| OpenAI 호환 API(OpenRouter/Groq/vLLM 등) | `LLM_PROVIDER=openai-compatible` | `OPENAI_COMPATIBLE_API_KEY` 또는 `LLM_API_KEY` |
+| Anthropic Claude | `LLM_PROVIDER=anthropic` | `ANTHROPIC_API_KEY` |
+| Google Gemini | `LLM_PROVIDER=gemini` | `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY` |
+
+모델과 endpoint는 provider별 env로 덮어쓴다.
+
+- 공통: `LLM_MODEL`, `LLM_BASE_URL`, `LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `LLM_MAX_TOKENS`
+- OpenAI: `OPENAI_MODEL`, `OPENAI_BASE_URL`
+- OpenAI 호환: `OPENAI_COMPATIBLE_MODEL`, `OPENAI_COMPATIBLE_BASE_URL`
+- Anthropic: `ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_VERSION`
+- Gemini: `GEMINI_MODEL`, `GEMINI_BASE_URL`
+
 ## 팀 공유가 필요할 때
 
 초반에는 `config/env/app.env.example`에 키 이름만 공유하고 실제 값은 메신저에 붙이지 않습니다. 값 공유가 잦아지면 1Password, Doppler 같은 팀용 시크릿 도구를 검토합니다.

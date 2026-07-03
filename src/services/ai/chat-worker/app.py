@@ -6,13 +6,14 @@ from collections.abc import AsyncIterator
 
 from domains.ai.agent import OperationsChatAgent
 from domains.ai.events import AiMessageFailedBody, AiMessageReceivedBody, AiMessageRespondedBody
-from packages.ai.llm import build_llm_client
+from packages.ai.llm import build_llm_client, describe_llm_client
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import AiConversationStore
 from packages.runtime.app import App, EventContext
 
 app = App("ai-chat-worker")
-agent = OperationsChatAgent(build_llm_client())
+llm_client = build_llm_client()
+agent = OperationsChatAgent(llm_client)
 
 
 def response_message_id(request_message_id: str) -> str:
@@ -34,7 +35,7 @@ async def on_ai_message_received(
             agent=evt.agent,
             workspace_id=evt.workspace_id,
             metadata={
-                "llm": "configured-client",
+                "llm": describe_llm_client(llm_client),
                 "raw_length": result.get("raw_length", 0),
                 "request_event_id": ctx.event_id,
                 "correlation_id": ctx.correlation_id,
