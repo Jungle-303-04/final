@@ -78,6 +78,8 @@ class AgentCommandStore(Protocol):
         self, correlation_id: str, plan: JsonObject, status: str
     ) -> None: ...
 
+    async def fail_expired_agent_commands(self) -> list[JsonObject]: ...
+
 
 class TargetReconcileStore(Protocol):
     async def list_target_desired_states(
