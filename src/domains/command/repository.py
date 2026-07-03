@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.events import CommandCompletedBody
@@ -29,6 +29,11 @@ from packages.storage.engine import (
     serialize_command,
 )
 from packages.storage.schema import EventModel, OutboxModel
+
+# 만료 명령 janitor 기준 — lease 만료 직후는 재리스 후보(lease_agent_command)라
+# 건드리지 않고, 이 유예가 지나도록 어떤 에이전트도 집지 않은 명령만 소진으로 간주함.
+EXPIRED_COMMAND_GRACE_SECONDS = 300
+EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the command"
 
 
 class AgentCommandRepository(DatabaseConnection):
@@ -246,6 +251,46 @@ class AgentCommandRepository(DatabaseConnection):
                 .on_conflict_do_nothing(index_elements=[outbox_table.c.event_id])
             )
         return completed
+
+    def fail_expired_agent_commands(
+        self, grace_seconds: int = EXPIRED_COMMAND_GRACE_SECONDS
+    ) -> list[JsonObject]:
+        """만료 방치 명령을 FAILED 로 종결하고 종결된 행을 반환함(완료 이벤트 발행용).
+
+        LEASED/RUNNING 인데 lease 만료 후 유예(grace)까지 지난 명령은 완료 이벤트가
+        영영 없어 workflow 가 영구 APPLYING 으로 남음(감사 C6). 단일 원자
+        UPDATE ... RETURNING 으로 정리해 호출자가 CommandCompleted(FAILED)를 흘림.
+        """
+        table = AgentCommand.__table__
+        failure = {
+            "status": CommandStatus.FAILED,
+            "applied": False,
+            "message": EXPIRED_COMMAND_FAILURE_MESSAGE,
+        }
+        statement = (
+            update(table)
+            .where(
+                table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
+                table.c.leased_until
+                < func.now() - text(f"interval '{int(grace_seconds)} seconds'"),
+            )
+            .values(
+                status=CommandStatus.FAILED,
+                result=failure,
+                completed_at=func.now(),
+                updated_at=func.now(),
+            )
+            .returning(
+                table.c.command_id,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.correlation_id,
+                table.c.result,
+            )
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [row_dict(row) for row in rows]
 
     def command_status_counts(self) -> dict[str, int]:
         table = AgentCommand.__table__
