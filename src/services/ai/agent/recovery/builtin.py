@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from services.ai.agent.defaults import ActionRoutes
-from services.ai.agent.rulekit import RecoveryActionSpec, fallback_recovery, recovery_for
+from services.ai.agent.playbooks import RecoveryActionSpec, rca
 
 routes = ActionRoutes()
 
 
-@recovery_for(
+@rca.recovery(
     root_causes=("oom_killed",),
     actions=(
         RecoveryActionSpec(
@@ -43,7 +43,7 @@ class OomKilledRecoveryActions:
     pass
 
 
-@recovery_for(
+@rca.recovery(
     root_causes=("bad_image_rollout", "app_startup_failure"),
     actions=(
         RecoveryActionSpec(
@@ -66,7 +66,7 @@ class RolloutRecoveryActions:
     pass
 
 
-@recovery_for(
+@rca.recovery(
     root_causes=("config_env_error",),
     actions=(
         RecoveryActionSpec(
@@ -89,7 +89,7 @@ class ConfigRecoveryActions:
     pass
 
 
-@fallback_recovery(
+@rca.fallback(
     actions=(
         RecoveryActionSpec(
             action_type="manual_analysis",

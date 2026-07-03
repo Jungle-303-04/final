@@ -12,8 +12,8 @@ from domains.rca.events import (
 )
 from packages.contracts.event_bus.bodies import EventBody
 from services.ai.agent.defaults import ActionRoutes, RcaMessages, RecoveryDefaults
+from services.ai.agent.playbooks.recovery import RecoveryRule, build_recovery_context
 from services.ai.agent.recovery.catalog import registered_recovery_rules
-from services.ai.agent.rulekit.recovery import RecoveryRule, build_recovery_context
 
 NO_RECOVERY_CANDIDATES = "복구 후보를 생성할 수 없습니다."
 
