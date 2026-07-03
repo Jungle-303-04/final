@@ -16,6 +16,7 @@ from domains.gitops.diffing import (
     compare_managed_fields,
     extract_declared_field_paths,
     rendered_manifest_to_object,
+    resource_ref,
     snapshot_from_kubernetes_object,
     snapshot_from_rendered_manifest,
     summarize_status,
@@ -57,10 +58,6 @@ async def load_actual_resource_image(evt: ManifestRenderedBody, ctx: EventContex
         resource_ref(evt.rendered_manifest.kind, evt.rendered_manifest.metadata.name),
     )
     return str(actual) if actual else UNKNOWN_ACTUAL_IMAGE
-
-
-def resource_ref(kind: str, name: str) -> str:
-    return f"{kind.lower()}/{name}"
 
 
 def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
