@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 from queries import OpenTelemetrySpanQuery
+from telemetry_registry import telemetry
 
 from config import (
     DEFAULT_TEMPO_BASE_URL,
@@ -13,9 +14,12 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
 
 
+@telemetry.source(
+    source="tempo",
+    evidence_key="traces",
+    query_type=OpenTelemetrySpanQuery,
+)
 class TempoTracesProvider:
-    evidence_key = "traces"
-    source = "tempo"
     span_name = "tempo.collect"
     query_count_attribute = "tempo.query_count"
     result_count_attribute = "tempo.result_count"
