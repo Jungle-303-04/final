@@ -250,7 +250,15 @@ class DatabaseConnection:
 
     @contextmanager
     def unit_of_work(self):
-        """한 트랜잭션 — 안에서 connection() 호출은 모두 이 커넥션을 쓴다."""
+        """한 트랜잭션 — 안에서 connection() 호출은 모두 이 커넥션을 사용.
+
+        이미 활성 UoW 안이면 새 트랜잭션을 열지 않고 합류 — 중첩 호출이
+        바깥 트랜잭션보다 먼저 커밋되는 원자성 파괴 방지(commit 은 최상위 UoW 소유).
+        """
+        active = _ACTIVE_CONN.get()
+        if active is not None:
+            yield active
+            return
         with self.engine.begin() as conn:
             configure_transaction(conn)
             token = _ACTIVE_CONN.set(conn)
