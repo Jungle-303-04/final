@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from domains.identity.dependencies import ClusterAgentIdentity
 from domains.target.evidence_jobs import PENDING_EVIDENCE_EVENT_ID_PREFIX
 from domains.target.router import (
@@ -173,6 +175,48 @@ def test_central_worker_polls_job_and_reports_provider_result() -> None:
     assert client.completed[0]["result"]["metrics"]["source"] == "prometheus"
 
 
+def test_success_result_report_error_does_not_mark_job_failed() -> None:
+    module = load_evidence_module()
+
+    class FailingCompleteClient(FakeEvidenceJobClient):
+        async def complete_evidence_job(
+            self,
+            job_id: str,
+            agent_id: str,
+            lease_id: str,
+            status: str,
+            result: dict[str, Any],
+            error: str,
+        ) -> dict[str, Any]:
+            self.completed.append(
+                {
+                    "job_id": job_id,
+                    "agent_id": agent_id,
+                    "lease_id": lease_id,
+                    "status": status,
+                    "result": result,
+                    "error": error,
+                }
+            )
+            raise RuntimeError("result endpoint unavailable")
+
+    client = FailingCompleteClient()
+    client.jobs.append(
+        {
+            "job_id": "job-metrics",
+            "provider_key": "metrics",
+            "lease_id": "lease-1",
+            "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
+        }
+    )
+    scheduler = make_scheduler(module, FakeCollector())
+
+    with pytest.raises(RuntimeError, match="result endpoint unavailable"):
+        asyncio.run(scheduler.work_once(client, "metrics", "metrics-worker"))
+
+    assert [attempt["status"] for attempt in client.completed] == ["completed"]
+
+
 def test_central_worker_reports_provider_failure_for_retry_budget() -> None:
     module = load_evidence_module()
     client = FakeEvidenceJobClient()
@@ -190,6 +234,65 @@ def test_central_worker_reports_provider_failure_for_retry_budget() -> None:
 
     assert client.completed[0]["status"] == "failed"
     assert client.completed[0]["error"] == "traces failed"
+
+
+def test_scheduler_loop_survives_management_schedule_errors() -> None:
+    module = load_evidence_module()
+    scheduler = make_scheduler(module)
+
+    class FailingScheduleClient(FakeEvidenceJobClient):
+        async def schedule_evidence_jobs(
+            self,
+            source_id: str,
+            window_start: str,
+            provider_keys: list[str],
+        ) -> dict[str, Any]:
+            raise RuntimeError("management unavailable")
+
+    async def run_once() -> None:
+        task = asyncio.create_task(scheduler.schedule_forever(FailingScheduleClient()))
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(run_once())
+
+
+def test_worker_loop_survives_result_report_errors() -> None:
+    module = load_evidence_module()
+    scheduler = make_scheduler(module)
+
+    class FailingCompleteClient(FakeEvidenceJobClient):
+        async def complete_evidence_job(
+            self,
+            job_id: str,
+            agent_id: str,
+            lease_id: str,
+            status: str,
+            result: dict[str, Any],
+            error: str,
+        ) -> dict[str, Any]:
+            raise RuntimeError("result endpoint unavailable")
+
+    client = FailingCompleteClient()
+    client.jobs.append(
+        {
+            "job_id": "job-metrics",
+            "provider_key": "metrics",
+            "lease_id": "lease-1",
+            "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
+        }
+    )
+
+    async def run_once() -> None:
+        task = asyncio.create_task(scheduler.work_forever(client, "metrics", "metrics-worker"))
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(run_once())
 
 
 class FakeEvidenceJobDb:
@@ -267,6 +370,13 @@ class FakeEvidenceJobDb:
 
     def release_pending_evidence_window(self, _evidence_key: str) -> None:
         raise AssertionError("release should not be called")
+
+    def release_stale_pending_evidence_window(
+        self,
+        _evidence_key: str,
+        _stale_after_seconds: int,
+    ) -> bool:
+        return False
 
 
 class FakeEvents:
@@ -487,6 +597,55 @@ def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
     assert response.evidence_key == "workspace-1:cluster-1:cluster-snapshot:window-1"
     assert response.event_id is None
     assert events.body is None
+
+
+def test_stale_pending_evidence_window_is_reclaimed_and_emitted() -> None:
+    class StaleWindowDb(FakeEvidenceJobDb):
+        def __init__(self) -> None:
+            super().__init__()
+            self.released_stale = False
+
+        def get_evidence_window(self, _evidence_key: str) -> dict[str, str] | None:
+            if self.released_stale:
+                return None
+            return {
+                "event_id": f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}stale",
+                "correlation_id": f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}stale",
+            }
+
+        def release_stale_pending_evidence_window(
+            self,
+            evidence_key: str,
+            _stale_after_seconds: int,
+        ) -> bool:
+            self.released_stale = True
+            self.claimed.append(f"released:{evidence_key}")
+            return True
+
+    db = StaleWindowDb()
+    events = FakeEvents()
+
+    response = asyncio.run(
+        evidence_job_result(
+            "job-metrics",
+            EvidenceJobResultRequest(
+                agent_id="agent-1",
+                lease_id="lease-1",
+                status="completed",
+                result={"metrics": {"source": "prometheus"}},
+            ),
+            IDENTITY,
+            db,
+            events,
+        )
+    )
+
+    assert response.event_id == "evt-1"
+    assert db.claimed == [
+        "released:workspace-1:cluster-1:cluster-snapshot:window-1",
+        "workspace-1:cluster-1:cluster-snapshot:window-1",
+    ]
+    assert events.body is not None
 
 
 def test_massive_evidence_jobs_complete_once_without_worker_deadlock() -> None:

@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
+    DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
     EVIDENCE_JOB_STATUS_COMPLETED,
     EVIDENCE_JOB_STATUS_FAILED,
     EVIDENCE_JOB_STATUS_LEASED,
@@ -487,7 +488,7 @@ class TargetAgentRepository(DatabaseConnection):
 
     def get_evidence_window(self, evidence_key: str) -> JsonObject | None:
         table = EvidenceWindow.__table__
-        statement = select(table.c.event_id, table.c.correlation_id).where(
+        statement = select(table.c.event_id, table.c.correlation_id, table.c.updated_at).where(
             table.c.evidence_key == evidence_key
         )
         with self.connection() as conn:
@@ -614,3 +615,23 @@ class TargetAgentRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def release_stale_pending_evidence_window(
+        self,
+        evidence_key: str,
+        stale_after_seconds: int = DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
+    ) -> bool:
+        table = EvidenceWindow.__table__
+        stale_before = datetime.now(UTC) - timedelta(seconds=stale_after_seconds)
+        statement = (
+            table.delete()
+            .where(
+                table.c.evidence_key == evidence_key,
+                table.c.event_id.like(f"{PENDING_EVIDENCE_EVENT_ID_PREFIX}%"),
+                table.c.updated_at < stale_before,
+            )
+            .returning(table.c.evidence_key)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return row is not None
