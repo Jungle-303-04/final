@@ -1,0 +1,73 @@
+"""명령 카탈로그(@command.action) 검증 — 존재 + 정책 메타데이터의 단일 출처."""
+
+from __future__ import annotations
+
+import pytest
+
+from domains.command.actions import (
+    CommandCatalog,
+    allowed_command_actions,
+    command_action_for_recovery,
+    command_action_spec,
+    registered_command_actions,
+)
+from packages.config.constants import Command, Sandbox
+
+
+def test_builtin_actions_registered_with_policy_metadata() -> None:
+    actions = registered_command_actions()
+
+    assert {spec.action for spec in actions} >= {
+        Command.DEFAULT_ACTION,
+        Command.APPLY_MANIFEST_ACTION,
+    }
+    for spec in actions:
+        assert spec.allowed_namespaces == (Sandbox.NAMESPACE,)
+
+
+def test_spec_lookup_and_namespace_policy() -> None:
+    spec = command_action_spec(Command.DEFAULT_ACTION)
+
+    assert spec is not None
+    assert spec.allows_namespace(Sandbox.NAMESPACE)
+    assert not spec.allows_namespace("kube-system")
+    assert command_action_spec("nope") is None
+
+
+def test_recovery_alias_resolution() -> None:
+    assert command_action_for_recovery("rollout_restart") == Command.DEFAULT_ACTION
+    assert command_action_for_recovery("unknown") is None
+    assert Command.DEFAULT_ACTION in allowed_command_actions()
+
+
+def test_conflicting_action_registration_fails_fast() -> None:
+    catalog = CommandCatalog()
+
+    @catalog.action("x", allowed_namespaces=("a",))
+    class First: ...
+
+    with pytest.raises(ValueError, match="duplicate command action: x"):
+
+        @catalog.action("x", allowed_namespaces=("b",))
+        class Second: ...
+
+
+def test_identical_redeclaration_is_idempotent() -> None:
+    catalog = CommandCatalog()
+
+    @catalog.action("x", allowed_namespaces=("a",))
+    class First: ...
+
+    @catalog.action("x", allowed_namespaces=("a",))
+    class Reloaded: ...
+
+    assert First.__command_spec__ == Reloaded.__command_spec__
+
+
+def test_empty_allowed_namespaces_means_unrestricted() -> None:
+    catalog = CommandCatalog()
+
+    @catalog.action("y")
+    class Unrestricted: ...
+
+    assert Unrestricted.__command_spec__.allows_namespace("anywhere")
