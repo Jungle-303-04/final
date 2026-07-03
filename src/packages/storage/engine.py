@@ -34,6 +34,13 @@ AGENT_COMMAND_COMPAT_COLUMNS = {
 EVENT_COMPAT_COLUMNS = {
     "causation_id": "alter table events add column if not exists causation_id text",
 }
+OUTBOX_COMPAT_COLUMNS = {
+    "lease_id": "alter table outbox add column if not exists lease_id text",
+    "leased_until": "alter table outbox add column if not exists leased_until timestamptz",
+}
+OUTBOX_CLAIM_INDEX = (
+    "create index if not exists ix_outbox_claim on outbox (source, sent_at, leased_until, id)"
+)
 USER_ACCOUNT_COMPAT_COLUMNS = {
     "email": "alter table user_accounts add column if not exists email text",
     "password_hash": "alter table user_accounts add column if not exists password_hash text",
@@ -233,6 +240,14 @@ class DatabaseConnection:
                     continue
                 conn.execute(text("set local lock_timeout = '5s'"))
                 conn.execute(text(statement))
+
+            existing_outbox_columns = self._existing_columns(conn, "outbox")
+            for column, statement in OUTBOX_COMPAT_COLUMNS.items():
+                if column in existing_outbox_columns:
+                    continue
+                conn.execute(text("set local lock_timeout = '5s'"))
+                conn.execute(text(statement))
+            conn.execute(text(OUTBOX_CLAIM_INDEX))
 
             existing_columns = self._existing_columns(conn, "agent_commands")
             for column, statement in AGENT_COMMAND_COMPAT_COLUMNS.items():

@@ -104,13 +104,16 @@ class ApiGateway:
         relay = OutboxRelay(self.db, self.bus, Settings.SERVICE_NAME)
         while True:
             try:
-                await relay.run_once()
+                sent = await relay.run_once()
             except Exception as exc:
                 LOGGER.warning(
                     "gateway_outbox_relay_error",
                     extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
                     exc_info=exc,
                 )
+                sent = 0
+            if sent >= relay.batch:
+                continue
             await asyncio.sleep(Settings.OUTBOX_RELAY_INTERVAL_SECONDS)
 
     def configure_routes(self) -> None:

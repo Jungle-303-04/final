@@ -20,6 +20,7 @@ from packages.contracts.event_bus.interfaces import (
     JsonObject,
 )
 from packages.contracts.event_bus.subjects import (
+    STREAM_DUPLICATE_WINDOW_SECONDS,
     STREAM_MAX_AGE_SECONDS,
     STREAM_MAX_BYTES,
     STREAM_NAME,
@@ -30,6 +31,7 @@ from packages.contracts.interfaces import DeadLetterStore
 from packages.events.envelope import event
 
 NATS_URL_ENV = "NATS_URL"
+NATS_MSG_ID_HEADER = "Nats-Msg-Id"
 logger = get_logger("event_bus")
 CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
     "current_event_causation_id", default=None
@@ -99,6 +101,7 @@ class NatsEventBus(EventBus):
                 storage="file",
                 max_age=STREAM_MAX_AGE_SECONDS,
                 max_bytes=STREAM_MAX_BYTES,
+                duplicate_window=STREAM_DUPLICATE_WINDOW_SECONDS,
             )
         except not_found:
             await self.js.add_stream(
@@ -107,6 +110,7 @@ class NatsEventBus(EventBus):
                 storage="file",
                 max_age=STREAM_MAX_AGE_SECONDS,
                 max_bytes=STREAM_MAX_BYTES,
+                duplicate_window=STREAM_DUPLICATE_WINDOW_SECONDS,
             )
 
     async def emit(
@@ -119,13 +123,21 @@ class NatsEventBus(EventBus):
     ) -> EventEnvelope:
         assert self.js is not None
         evt = event(subject, source, payload, correlation_id, causation_id)
-        await self.js.publish(subject, json.dumps(evt.to_dict()).encode())
+        await self.js.publish(
+            subject,
+            json.dumps(evt.to_dict()).encode(),
+            headers={NATS_MSG_ID_HEADER: evt.event_id},
+        )
         logger.info("emitted", extra={"context": event_context(evt)})
         return evt
 
     async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope:
         assert self.js is not None
-        await self.js.publish(evt.subject, json.dumps(evt.to_dict()).encode())
+        await self.js.publish(
+            evt.subject,
+            json.dumps(evt.to_dict()).encode(),
+            headers={NATS_MSG_ID_HEADER: evt.event_id},
+        )
         logger.info("relayed", extra={"context": event_context(evt)})
         return evt
 

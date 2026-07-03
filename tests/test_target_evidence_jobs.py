@@ -347,26 +347,29 @@ class FakeEvidenceJobDb:
             "traces": {"source": "tempo", "results": {}},
         }
 
-    def claim_evidence_window(self, evidence_key: str, *_args: object) -> dict[str, Any]:
-        self.claimed.append(evidence_key)
-        return {"duplicate": False, "event_id": "pending-1", "correlation_id": "pending-1"}
-
-    def complete_evidence_window(
+    def record_evidence_event_once(
         self,
+        *,
         evidence_key: str,
-        event_id: str,
-        correlation_id: str,
+        event_envelope: Any,
         payload: dict[str, Any],
+        **kwargs: Any,
     ) -> dict[str, Any]:
+        self.claimed.append(evidence_key)
         self.recorded.append(
             {
                 "evidence_key": evidence_key,
-                "event_id": event_id,
-                "correlation_id": correlation_id,
+                "event_id": event_envelope.event_id,
+                "correlation_id": event_envelope.correlation_id,
                 "payload": payload,
+                "kwargs": kwargs,
             }
         )
-        return {"event_id": event_id, "correlation_id": correlation_id}
+        return {
+            "duplicate": False,
+            "event_id": event_envelope.event_id,
+            "correlation_id": event_envelope.correlation_id,
+        }
 
     def release_pending_evidence_window(self, _evidence_key: str) -> None:
         raise AssertionError("release should not be called")
@@ -382,6 +385,7 @@ class FakeEvidenceJobDb:
 class FakeEvents:
     def __init__(self) -> None:
         self.body: object | None = None
+        self.source = "api-gateway"
 
     async def accept_body(
         self,
@@ -557,11 +561,13 @@ def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
         )
     )
 
-    assert response.event_id == "evt-1"
+    assert response.event_id is not None
     assert db.claimed == ["workspace-1:cluster-1:cluster-snapshot:window-1"]
     assert db.recorded[0]["payload"]["workspace_id"] == "workspace-1"
-    assert events.body is not None
-    assert events.body.evidence_key == "workspace-1:cluster-1:cluster-snapshot:window-1"
+    assert db.recorded[0]["payload"]["evidence_key"] == (
+        "workspace-1:cluster-1:cluster-snapshot:window-1"
+    )
+    assert events.body is None
 
 
 def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
@@ -640,12 +646,12 @@ def test_stale_pending_evidence_window_is_reclaimed_and_emitted() -> None:
         )
     )
 
-    assert response.event_id == "evt-1"
+    assert response.event_id is not None
     assert db.claimed == [
         "released:workspace-1:cluster-1:cluster-snapshot:window-1",
         "workspace-1:cluster-1:cluster-snapshot:window-1",
     ]
-    assert events.body is not None
+    assert events.body is None
 
 
 def test_massive_evidence_jobs_complete_once_without_worker_deadlock() -> None:
