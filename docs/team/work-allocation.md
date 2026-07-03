@@ -2,7 +2,8 @@
 
 이 문서는 프로젝트를 5개의 명확한 담당 영역으로 나눈다. 각 팀원은 `docs/team/codex-automation.md`의 공통 프롬프트와 자신의 영역에 맞는 member guide를 Codex 지시 문서로 사용할 수 있다.
 
-대시보드는 이번 5인 분배에서 제외한다. 현재 dashboard projection은 공통 read model로 유지하고, 실제 UI 구현을 시작할 때 별도 담당을 다시 정한다.
+대시보드는 이번 5인 분배에서 제외한다. 현재 repository에는 구현/배포된
+`dashboard-worker`가 없으며, 실제 UI와 dashboard projection을 시작할 때 별도 담당을 다시 정한다.
 
 ## 역할 요약
 
@@ -50,7 +51,7 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 | 영역 | 현재 경로 |
 | --- | --- |
 | GitOps pipeline | `src/services/gitops/git-pull-worker`, `src/services/gitops/github-poll-worker`, `src/services/gitops/workflow-controller`, `src/services/gitops/manifest-render-worker`, `src/services/gitops/diff-worker`, `src/services/gitops/diff-analyze-worker`, `src/services/gitops/scm-worker` |
-| Projection | `src/services/projection/dashboard-worker`, `src/services/projection/audit-worker` |
+| Projection | `src/services/projection/audit-worker`; dashboard projection은 planned |
 | Target | `src/services/target/cluster-agent`, `src/services/target/node-collector` |
 
 ## 2026-06-30 기준 미흡한 부분

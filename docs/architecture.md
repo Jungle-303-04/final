@@ -10,8 +10,9 @@
 - 관리 영역의 서비스들은 NATS JetStream을 통해 비동기로 통신한다.
 - 저장소는 Kubernetes workload로 분리해 실행한다.
 - 대상 클러스터 Agent는 관리 영역으로 outbound 연결만 맺는다.
-- 외부 provider credential은 Dashboard 상태가 아니라 credential_ref/Token Broker 경계로 관리한다.
-- Dashboard와 command API는 Gateway 내부 로그인(email/password)이 발급한 Redis session을 요구한다.
+- 외부 provider credential은 UI 상태가 아니라 credential_ref/Token Broker 경계로 관리한다.
+- command API는 Gateway 내부 로그인(email/password)이 발급한 Redis session을 요구한다.
+- dashboard UI/API와 dashboard projection worker는 아직 이 repository의 실행 단위가 아니다.
 
 ## 운영 배포 기준
 
@@ -38,17 +39,17 @@ services
   + command-worker               command policy -> target agent queue
   + target/reconcile-worker      target desired state -> reconcile result
   + rca-worker                   evidence -> RCA -> safe PR event
-  + projection/dashboard-worker dashboard read model projection
   + projection/audit-worker       변경 불가능한 audit timeline
+  + alert-worker                  알림 boundary(stub adapter)
+  + mail-worker                   이메일 인증 발송/log boundary
   + target/cluster-agent             Target Cluster Agent와 telemetry adapter
   + target/node-collector                   선택형 DaemonSet node/runtime metrics source
 
 packages
   + config                       env, 상수, 시간 helper
-  + contracts                    gateway/event_bus/dashboard 계약과 Protocol port
+  + contracts                    gateway/event_bus/auth/store 계약과 Protocol port
     - gateway                    API Gateway 요청 Pydantic schema
     - event_bus                  stream, subject, subscription, envelope, body 계약
-    - dashboard                  dashboard read model status 계약
   + events                       event envelope, NATS JetStream, DLQ event sink
   + storage                      PostgreSQL 저장소와 schema 초기화
   + runtime                      FastAPI/worker/async service 실행 객체
@@ -77,8 +78,9 @@ scm-worker           -> python src/services/gitops/scm-worker/app.py
 command-worker                -> python src/services/command/command-worker/app.py
 target-reconcile-worker       -> python src/services/target/reconcile-worker/app.py
 rca-worker                    -> python src/services/ai/rca-worker/app.py
-dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
+alert-worker        -> python src/services/alert/alert-worker/app.py
+mail-worker         -> python src/services/mail/mail-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
 optional-node-collector       -> python src/services/target/node-collector/app.py
 fake-prometheus               -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=prometheus)
@@ -137,7 +139,8 @@ if __name__ == "__main__":
 - `WorkerService`: JetStream subject 구독 worker process(내부용)
 - `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
 
-dashboard, audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고, 본문 대신 전체 `EventEnvelope`를 받는다.
+audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
+본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker는 planned 항목이다.
 
 ```python
 @app.on_any
@@ -163,8 +166,9 @@ async def on_event(evt: EventEnvelope, ctx):
 - `command-worker`
 - `target-reconcile-worker`
 - `rca-worker`
-- `dashboard-worker`
 - `audit-worker`
+- `alert-worker`
+- `mail-worker`
 - `nats`
 - `postgresql`
 - `redis`
@@ -210,9 +214,12 @@ Target 등록 / desired-state
 -> cluster.reconcile.completed
 
 모든 event
--> Dashboard Projection Service
--> Dashboard read model
--> Gateway의 dashboard query/stream
+-> Audit Worker
+-> audit log
+
+Dashboard Projection Service / dashboard query/stream
+-> planned. 현재 이 repository에는 `src/services/projection/dashboard-worker`와
+   dashboard route가 없다.
 ```
 
 실패한 event 처리:
@@ -251,7 +258,6 @@ bash scripts/smoke.sh
 접속:
 
 - Gateway health: <http://localhost:18080/healthz>
-- Dashboard query: <http://localhost:18080/dashboard/query>
 - Session check: <http://localhost:18080/auth/session>
 
 관리 worker scale:

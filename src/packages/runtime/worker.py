@@ -39,6 +39,7 @@ DEFAULT_RETRY_DELAY_SECONDS = 2
 DEFAULT_FETCH_BATCH_SIZE = 1
 DEFAULT_FETCH_TIMEOUT_SECONDS = 1
 DEFAULT_HANDLER_TIMEOUT_SECONDS = 30  # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
+DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS = 10
 HEARTBEAT_PATH = "/tmp/heartbeat"  # liveness exec probe 가 mtime 신선도 검사
 
 
@@ -49,6 +50,7 @@ class EventRetryPolicy:
     fetch_batch_size: int = DEFAULT_FETCH_BATCH_SIZE
     fetch_timeout_seconds: int = DEFAULT_FETCH_TIMEOUT_SECONDS
     handler_timeout_seconds: int = DEFAULT_HANDLER_TIMEOUT_SECONDS
+    dead_letter_timeout_seconds: int = DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -111,7 +113,17 @@ class EventProcessor:
         try:
             evt = self.codec.decode(message)
         except Exception as exc:
-            await self.dead_letters.capture_raw(message.data, self.service_name, exc)
+            try:
+                await asyncio.wait_for(
+                    self.dead_letters.capture_raw(message.data, self.service_name, exc),
+                    timeout=self.retry_policy.dead_letter_timeout_seconds,
+                )
+            except Exception as capture_error:
+                logger.error(
+                    "raw_dead_letter_capture_failed",
+                    extra={"context": {"consumer": self.service_name}},
+                    exc_info=capture_error,
+                )
             logger.error(
                 "decode_dead_letter",
                 extra={"context": {"consumer": self.service_name}},
@@ -154,7 +166,20 @@ class EventProcessor:
             # DLQ 기록을 먼저, ledger DEAD_LETTERED 표시를 나중에 한다. 둘이 한 트랜잭션이 아니라
             # 사이에 크래시할 수 있는데, 이 순서면 '유실'이 아니라 '재처리(최악 중복 DLQ)'가 된다
             # — DLQ 행은 남고 상태는 아직 안 닫혀 재배달 시 다시 처리/DLQ(복구 가능).
-            await self.dead_letters.capture(evt, self.service_name, error, attempts)
+            try:
+                await asyncio.wait_for(
+                    self.dead_letters.capture(evt, self.service_name, error, attempts),
+                    timeout=self.retry_policy.dead_letter_timeout_seconds,
+                )
+            except Exception as capture_error:
+                self.ledger.retry(evt, error)
+                logger.error(
+                    "dead_letter_capture_failed",
+                    extra={"context": context},
+                    exc_info=capture_error,
+                )
+                await message.nak(delay=self.retry_policy.retry_delay_seconds)
+                return
             self.ledger.dead_letter(evt, error)
             logger.error("dead_letter", extra={"context": context}, exc_info=error)
             await message.ack()

@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
 
 DEFAULT_BATCH = 1000
+DEFAULT_PUBLISH_TIMEOUT_SECONDS = 10
 
 
 class OutboxRelay:
@@ -19,11 +22,13 @@ class OutboxRelay:
         publisher: EnvelopePublisher,
         source: str,
         batch: int = DEFAULT_BATCH,
+        publish_timeout_seconds: int = DEFAULT_PUBLISH_TIMEOUT_SECONDS,
     ) -> None:
         self.store = store
         self.publisher = publisher
         self.source = source  # 자기 서비스가 적재한 행만 relay
         self.batch = batch
+        self.publish_timeout_seconds = publish_timeout_seconds
 
     async def run_once(self) -> int:
         """미발행 outbox 를 한 배치 발행하고 '발행된 것만' sent 표시. 발행 건수 반환.
@@ -35,7 +40,10 @@ class OutboxRelay:
         published: list[str] = []
         try:
             for evt in rows:
-                await self.publisher.publish_envelope(evt)
+                await asyncio.wait_for(
+                    self.publisher.publish_envelope(evt),
+                    timeout=self.publish_timeout_seconds,
+                )
                 published.append(evt.event_id)
         finally:
             if published:

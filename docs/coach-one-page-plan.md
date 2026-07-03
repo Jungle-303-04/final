@@ -42,7 +42,7 @@ Kubernetes 클러스터의 이벤트, 로그, 메트릭을 수집해 장애 근�
 
 | 기간 | 목표 | 데모 기준 |
 | --- | --- | --- |
-| 1주차, 2026-06-27 ~ 2026-07-01 | 전체 End-to-End 흐름 연결 | Git webhook 또는 agent evidence 입력부터 RCA, Safe PR dry-run, command queue, dashboard read model까지 끊기지 않게 동작 |
+| 1주차, 2026-06-27 ~ 2026-07-01 | 전체 End-to-End 흐름 연결 | Git webhook 또는 agent evidence 입력부터 RCA, Safe PR dry-run, command queue까지 끊기지 않게 동작. dashboard read model은 planned |
 | 2주차, 2026-07-04 ~ 2026-07-10 | fake 제거와 AI 기본 모듈 | 실제 GitHub OAuth/PR, Prometheus/Loki adapter 일부, AI chat, 복구안 추천, 승인 guard 기본 구현 |
 | 3주차 | MVP 완성 | 장애 주입부터 근거 조회, RCA, 복구안 승인, command 실행, PR 제안까지 통합 데모 |
 | 4~5주차 | 고도화와 발표 안정화 | multi-cluster, agent policy, AI eval, backpressure 중 선택 고도화 |
@@ -93,11 +93,11 @@ flowchart LR
 
 | 서비스 | 역할 |
 | --- | --- |
-| API Gateway | 모든 외부 요청의 입구이며 OAuth/session, webhook, command, dashboard query/stream, DLQ API를 담당 |
+| API Gateway | 모든 외부 요청의 입구이며 OAuth/session, webhook, command, DLQ API를 담당 |
 | GitOps split workers | Git 변경을 manifest render, desired diff, command.requested event로 변환 |
 | Command Worker | command policy를 검사하고 sandbox command만 target agent queue로 보냄 |
 | RCA Worker | cluster evidence를 묶어 RCA를 만들고 Safe PR 또는 복구 제안 event를 생성 |
-| Dashboard Projection Service | 모든 주요 event를 화면용 read model로 갱신 |
+| Dashboard Projection Service | planned. 화면용 read model과 query/stream은 후속 UI/API 작업에서 추가 |
 | Audit Timeline Service | 누가 어떤 event와 명령을 만들었는지 감사 로그로 보존 |
 | Target Cluster Agent | 대상 클러스터 안에서 Kubernetes API와 telemetry를 읽고, 승인된 command만 실행 |
 | Node Collector | DaemonSet으로 노드/runtime 지표와 로그 샘플을 제공하는 선택형 수집기 |
