@@ -10,17 +10,6 @@ from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
-@event(EventSubject.AI_CONVERSATION_STARTED)
-@dataclass(frozen=True)
-class AiConversationStartedBody(EventBody):
-    conversation_id: str
-    title: str
-    agent: str
-    user_id: str
-    workspace_id: str = DEFAULT_WORKSPACE_ID
-    context: JsonObject | None = None
-
-
 @event(EventSubject.AI_MESSAGE_RECEIVED)
 @dataclass(frozen=True)
 class AiMessageReceivedBody(EventBody):
