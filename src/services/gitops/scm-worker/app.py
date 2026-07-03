@@ -23,16 +23,24 @@ SCM_PR_URL_PREFIX_ENV = "SCM_PR_URL_PREFIX"
 PR_MODE = "stub_pr_adapter"
 PR_STATUS_CREATED = "created"
 PR_NUMBER_MODULO = 100000
-MISSING_PR_ADAPTER_MESSAGE = "github pr adapter not configured"
+MISSING_PR_ADAPTER_MESSAGE = (
+    f"{SCM_PR_URL_PREFIX_ENV} 미설정 — PR 어댑터 없이 기동하면 자동 승인 배포(safe PR)가 "
+    "런타임에 전부 실패함. deploy env 에 PR URL prefix 설정 필요"
+)
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
+
+
+def validate_pr_url_prefix(raw: str) -> str:
+    """PR URL prefix 검증(순수 함수) — 비어 있으면 명확한 한국어 메시지로 실패함."""
+    prefix = raw.strip().rstrip("/")
+    if not prefix:
+        raise RuntimeError(MISSING_PR_ADAPTER_MESSAGE)
+    return prefix
 
 
 def resolve_pr_url_prefix() -> str:
     # TODO(scm): stub URL prefix를 실제 GitHub App adapter response URL로 교체
-    prefix = env(SCM_PR_URL_PREFIX_ENV, "").rstrip("/")
-    if not prefix:
-        raise RuntimeError(MISSING_PR_ADAPTER_MESSAGE)
-    return prefix
+    return validate_pr_url_prefix(env(SCM_PR_URL_PREFIX_ENV, ""))
 
 
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
@@ -92,4 +100,6 @@ async def on_safe_pr_requested(
 
 
 if __name__ == "__main__":
+    # 부팅 fail-fast — 설정 없이 떠서 이벤트마다 실패하는 대신 기동 시점에 즉시 종료함
+    resolve_pr_url_prefix()
     app.run()
