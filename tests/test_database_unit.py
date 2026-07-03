@@ -127,6 +127,16 @@ def test_outbox_compat_migration_adds_relay_lease_columns() -> None:
     assert "ix_outbox_claim" in storage_engine.OUTBOX_CLAIM_INDEX
 
 
+def test_pool_options_env_defaults_remain_unchanged() -> None:
+    # env 미설정 시 기존 하드코딩 값과 동일해야 함(배포 호환)
+    assert storage_engine.POOL_OPTIONS["pool_size"] == 2
+    assert storage_engine.POOL_OPTIONS["max_overflow"] == 2
+    assert storage_engine.POOL_OPTIONS["pool_timeout"] == 10
+    assert storage_engine.DB_POOL_SIZE_ENV == "DB_POOL_SIZE"
+    assert storage_engine.DB_MAX_OVERFLOW_ENV == "DB_MAX_OVERFLOW"
+    assert storage_engine.DB_POOL_TIMEOUT_ENV == "DB_POOL_TIMEOUT_SECONDS"
+
+
 def test_connection_reuses_active_connection_once() -> None:
     repository = object.__new__(storage_engine.DatabaseConnection)
     active = object()
