@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -16,7 +17,19 @@ SERVICE_ENTRYPOINTS = {
     "alert-worker": ("src/services/alert/alert-worker/app.py", "App("),
     "mail-worker": ("src/services/mail/mail-worker/app.py", "App("),
     "command-worker": ("src/services/command/command-worker/app.py", "App("),
+    "evidence-worker": ("src/services/ai/evidence-worker/app.py", "App("),
+    "incident-worker": ("src/services/ai/incident-worker/app.py", "App("),
+    "plan-worker": ("src/services/ai/plan-worker/app.py", "App("),
+    "analyze-worker": ("src/services/ai/analyze-worker/app.py", "App("),
     "rca-worker": ("src/services/ai/rca-worker/app.py", "App("),
+    "recovery-worker": ("src/services/ai/recovery-worker/app.py", "App("),
+    "select-worker": ("src/services/ai/select-worker/app.py", "App("),
+    "dispatch-worker": ("src/services/ai/dispatch-worker/app.py", "App("),
+    "backlog-worker": ("src/services/ai/backlog-worker/app.py", "App("),
+    "safe-pr-worker": ("src/services/ai/safe-pr-worker/app.py", "App("),
+    "ai-diff-worker": ("src/services/ai/diff-worker/app.py", "App("),
+    "rollout-worker": ("src/services/ai/rollout-worker/app.py", "App("),
+    "approval-worker": ("src/services/ai/approval-worker/app.py", "App("),
     "audit-worker": ("src/services/projection/audit-worker/app.py", "App("),
     "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
     "target-reconcile-worker": ("src/services/target/reconcile-worker/app.py", "App("),
@@ -47,10 +60,22 @@ def test_services_have_direct_process_entrypoints() -> None:
 
 # App(한 파일) 서비스는 runner 파일 안에서 이름과 기본값 관리
 APP_BASED_SERVICES = {
-    "rca-worker",
-    "command-worker",
+    "ai-diff-worker",
+    "analyze-worker",
+    "approval-worker",
     "alert-worker",
+    "backlog-worker",
+    "command-worker",
+    "dispatch-worker",
+    "evidence-worker",
+    "incident-worker",
     "mail-worker",
+    "plan-worker",
+    "rca-worker",
+    "recovery-worker",
+    "rollout-worker",
+    "safe-pr-worker",
+    "select-worker",
     "git-pull-worker",
     "workflow-controller",
     "manifest-render-worker",
@@ -87,6 +112,22 @@ def test_services_use_expected_config_location() -> None:
             assert INLINE_CONFIG_SERVICES[service] in source
 
 
+def test_literal_app_service_names_are_unique() -> None:
+    literal_names: dict[str, str] = {}
+    for service, (relative_path, expected_helper) in SERVICE_ENTRYPOINTS.items():
+        if expected_helper != "App(":
+            continue
+        source = read_project_file(relative_path)
+        match = re.search(r"""App\(\s*["']([^"']+)["']\s*\)""", source)
+        if match is None:
+            continue
+        app_name = match.group(1)
+        assert app_name not in literal_names, (
+            f"{service} and {literal_names[app_name]} share App name {app_name}"
+        )
+        literal_names[app_name] = service
+
+
 def test_contracts_are_grouped_by_boundary() -> None:
     assert (ROOT_DIR / "src" / "packages" / "contracts" / "gateway" / "requests.py").exists()
     assert (ROOT_DIR / "src" / "packages" / "contracts" / "event_bus" / "subjects.py").exists()
@@ -109,6 +150,7 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
     manifests = "\n".join(
         [
             read_project_file("deploy/management/services.yaml"),
+            read_project_file("deploy/management/ai-workers.yaml"),
             read_project_file("deploy/management/github-poll-worker.yaml"),
             read_project_file("deploy/target/target.yaml"),
         ]
@@ -148,6 +190,8 @@ def test_target_install_is_driven_by_registration_script() -> None:
 def test_up_script_restarts_new_management_workers() -> None:
     up_script = read_project_file("scripts/up.sh")
     assert "workflow-controller alert-worker mail-worker command-worker" in up_script
+    assert "evidence-worker incident-worker plan-worker analyze-worker" in up_script
+    assert "safe-pr-worker ai-diff-worker rollout-worker approval-worker" in up_script
     assert "get cronjob/github-poll-worker" in up_script
     assert "Jungle-303-04/final" in up_script
     assert "deploy/target/target.yaml" in up_script
