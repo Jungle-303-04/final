@@ -372,6 +372,41 @@ def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
     assert compiled.params["workspace_id"] == "workspace-b"
 
 
+def test_workflow_approval_atomic_resolution_only_updates_open_rows() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def first(self) -> tuple[str] | None:
+            return ("approval-1",)
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    resolved = repository.resolve_workflow_approval_if_open(
+        "approval-1", "workspace-1", "granted", "user-1", "granted", {}
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    assert resolved is True
+    # 검사와 갱신이 한 UPDATE — 열린 상태(requested/not_required)만 해결 가능
+    assert "UPDATE approvals" in sql
+    assert "status IN" in sql
+    assert "RETURNING approvals.approval_id" in sql
+    assert compiled.params["approval_id_1"] == "approval-1"
+    assert compiled.params["workspace_id_1"] == "workspace-1"
+
+
 def test_gitops_default_ids_are_workspace_scoped() -> None:
     base = {
         "repo_ref": "org/checkout",

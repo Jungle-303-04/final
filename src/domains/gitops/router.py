@@ -21,6 +21,7 @@ from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import ApprovalDecisionRequest, GitHubWebhookRequest
 from packages.contracts.gateway.responses import AcceptedEventResponse, AcceptedResponse
+from packages.contracts.gitops import ApprovalStatus
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, DEPLOY_ACCESS, AccessResourceType
 from packages.runtime.dependencies import get_db, get_events
 
@@ -109,6 +110,27 @@ def approval_record_or_404(db: Any, approval_id: str, workspace_id: str) -> dict
     return record
 
 
+def resolve_approval_or_409(
+    db: Any,
+    approval_id: str,
+    workspace_id: str,
+    status: str,
+    decided_by: str,
+    decision: str,
+    details: dict[str, Any],
+) -> None:
+    """열린 승인을 원자 UPDATE 로 해결 — 이미 해결됐으면 409.
+
+    검사와 갱신이 한 문장이라 동시 grant/reject 중 첫 요청만 통과하고,
+    이벤트(ApprovalGranted/Rejected)는 이 갱신이 성공한 경우에만 발행됨.
+    """
+    resolved = db.resolve_workflow_approval_if_open(
+        approval_id, workspace_id, status, decided_by, decision, details
+    )
+    if not resolved:
+        raise HTTPException(status_code=HTTP_CONFLICT, detail=APPROVAL_CONFLICT)
+
+
 @approval_router.post(gateway_routes.APPROVAL_GRANT_PATH, response_model=AcceptedResponse)
 async def grant_approval(
     approval_id: str,
@@ -128,6 +150,15 @@ async def grant_approval(
         "decision_reason": payload.reason,
         "command_requested": command.to_body(),
     }
+    resolve_approval_or_409(
+        db,
+        approval_id,
+        workspace_id,
+        ApprovalStatus.GRANTED.value,
+        current.user_id,
+        "granted",
+        details,
+    )
     accepted = await events.accept_body(
         ApprovalGrantedBody(
             approval_id=approval_id,
@@ -163,6 +194,16 @@ async def reject_approval(
     diff = approval_diff(record)
     require_approval_deploy_access(db, current, workspace_id, diff)
     reason = payload.reason or "approval rejected"
+    details = {**approval_details(record), "decision_reason": reason}
+    resolve_approval_or_409(
+        db,
+        approval_id,
+        workspace_id,
+        ApprovalStatus.REJECTED.value,
+        current.user_id,
+        "rejected",
+        details,
+    )
     accepted = await events.accept_body(
         ApprovalRejectedBody(
             approval_id=approval_id,
@@ -173,7 +214,7 @@ async def reject_approval(
             binding_id=str(record["binding_id"]),
             environment=str(record["environment"]),
             decided_by=current.user_id,
-            details={**approval_details(record), "decision_reason": reason},
+            details=details,
         ),
         actor=Actor(current.user_id, tuple(current.roles)),
     )
