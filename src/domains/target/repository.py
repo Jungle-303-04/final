@@ -5,14 +5,24 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.target.evidence_jobs import (
+    DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
+    EVIDENCE_JOB_STATUS_COMPLETED,
+    EVIDENCE_JOB_STATUS_FAILED,
+    EVIDENCE_JOB_STATUS_LEASED,
+    EVIDENCE_JOB_STATUS_QUEUED,
+    aggregate_evidence_payload,
+    evidence_job_id,
+    evidence_key,
+)
 from domains.target.models import (
     AgentPolicyRecord,
     AgentPolicyStatusRecord,
     AgentReconcileStatusRecord,
-    EvidenceSourceLease,
+    EvidenceJob,
     EvidenceWindow,
     TargetDesiredState,
     TargetReconcileRecord,
@@ -219,67 +229,246 @@ class TargetAgentRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().one()
         return dict(row)
 
-    def lease_evidence_source(
+    def queue_evidence_jobs(
         self,
-        cluster_id: str,
+        *,
         workspace_id: str,
+        cluster_id: str,
         source_id: str,
-        agent_id: str,
         window_start: str,
-        lease_seconds: int,
+        provider_keys: list[str],
+        failure_policy: str,
+        max_attempts: int,
+        policy_generation: int,
+        provider_policies: dict[str, JsonObject],
     ) -> JsonObject:
-        table = EvidenceSourceLease.__table__
+        table = EvidenceJob.__table__
+        parent_key = evidence_key(workspace_id, cluster_id, source_id, window_start)
+        job_ids: list[str] = []
+        with self.connection() as conn:
+            for provider_key in dict.fromkeys(provider_keys):
+                job_id = evidence_job_id(
+                    workspace_id,
+                    cluster_id,
+                    source_id,
+                    window_start,
+                    provider_key,
+                )
+                statement = (
+                    pg_insert(table)
+                    .values(
+                        job_id=job_id,
+                        evidence_key=parent_key,
+                        workspace_id=workspace_id,
+                        cluster_id=cluster_id,
+                        source_id=source_id,
+                        provider_key=provider_key,
+                        window_start=window_start,
+                        policy_generation=policy_generation,
+                        provider_policy=provider_policies.get(provider_key, {}),
+                        status=EVIDENCE_JOB_STATUS_QUEUED,
+                        lease_id=None,
+                        agent_id=None,
+                        leased_until=None,
+                        attempt_count=0,
+                        max_attempts=max_attempts,
+                        failure_policy=failure_policy,
+                        result=None,
+                        error=None,
+                        updated_at=func.now(),
+                    )
+                    .on_conflict_do_nothing(index_elements=[table.c.job_id])
+                    .returning(table.c.job_id)
+                )
+                row = conn.execute(statement).mappings().first()
+                if row:
+                    job_ids.append(str(row["job_id"]))
+        return {
+            "accepted": True,
+            "evidence_key": parent_key,
+            "queued": len(job_ids),
+            "job_ids": job_ids,
+        }
+
+    async def lease_evidence_job(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        provider_key: str,
+        agent_id: str,
+        lease_seconds: int = DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
+    ) -> JsonObject | None:
+        table = EvidenceJob.__table__
         lease_id = str(uuid.uuid4())
         leased_until = datetime.now(UTC) + timedelta(seconds=lease_seconds)
-        statement = (
-            pg_insert(table)
-            .values(
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                source_id=source_id,
-                agent_id=agent_id,
-                lease_id=lease_id,
-                window_start=window_start,
-                leased_until=leased_until,
-                updated_at=func.now(),
-            )
-            .on_conflict_do_update(
-                index_elements=[table.c.workspace_id, table.c.cluster_id, table.c.source_id],
-                set_={
-                    "agent_id": agent_id,
-                    "lease_id": lease_id,
-                    "window_start": window_start,
-                    "leased_until": leased_until,
-                    "updated_at": func.now(),
-                },
-                where=or_(table.c.leased_until < func.now(), table.c.agent_id == agent_id),
-            )
-            .returning(table.c.lease_id, table.c.leased_until)
+        columns = (
+            table.c.job_id,
+            table.c.evidence_key,
+            table.c.workspace_id,
+            table.c.cluster_id,
+            table.c.source_id,
+            table.c.provider_key,
+            table.c.window_start,
+            table.c.policy_generation,
+            table.c.provider_policy,
+            table.c.status,
+            table.c.lease_id,
+            table.c.agent_id,
+            table.c.leased_until,
+            table.c.attempt_count,
+            table.c.max_attempts,
+            table.c.failure_policy,
         )
+        available = or_(
+            table.c.status == EVIDENCE_JOB_STATUS_QUEUED,
+            (table.c.status == EVIDENCE_JOB_STATUS_LEASED) & (table.c.leased_until < func.now()),
+        )
+        candidate = (
+            select(table.c.job_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.provider_key == provider_key,
+                available,
+            )
+            .order_by(table.c.created_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+            .scalar_subquery()
+        )
+        async with self.async_connection() as conn:
+            statement = (
+                update(table)
+                .where(table.c.job_id == candidate)
+                .values(
+                    status=EVIDENCE_JOB_STATUS_LEASED,
+                    lease_id=lease_id,
+                    agent_id=agent_id,
+                    leased_until=leased_until,
+                    attempt_count=table.c.attempt_count + 1,
+                    error=None,
+                    updated_at=func.now(),
+                )
+                .returning(*columns)
+            )
+            row = (await conn.execute(statement)).mappings().first()
+        return self.serialize_evidence_job(dict(row)) if row else None
+
+    def complete_evidence_job(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        job_id: str,
+        lease_id: str,
+        agent_id: str,
+        status: str,
+        result: JsonObject,
+        error: str,
+    ) -> JsonObject | None:
+        table = EvidenceJob.__table__
         with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
-            if row:
-                return {
-                    "leased": True,
-                    "lease_id": row["lease_id"],
-                    "leased_until": iso_or_none(row["leased_until"]),
-                }
-            existing = (
+            active = (
                 conn.execute(
-                    select(table.c.lease_id, table.c.leased_until).where(
+                    select(
+                        table.c.job_id,
+                        table.c.evidence_key,
+                        table.c.attempt_count,
+                        table.c.max_attempts,
+                    )
+                    .where(
+                        table.c.job_id == job_id,
                         table.c.workspace_id == workspace_id,
                         table.c.cluster_id == cluster_id,
-                        table.c.source_id == source_id,
+                        table.c.lease_id == lease_id,
+                        table.c.agent_id == agent_id,
+                        table.c.status == EVIDENCE_JOB_STATUS_LEASED,
+                        table.c.leased_until >= func.now(),
                     )
+                    .with_for_update()
                 )
                 .mappings()
                 .first()
             )
-        return {
-            "leased": False,
-            "lease_id": existing["lease_id"] if existing else None,
-            "leased_until": iso_or_none(existing["leased_until"]) if existing else None,
-        }
+            if active is None:
+                existing = (
+                    conn.execute(
+                        select(
+                            table.c.job_id,
+                            table.c.evidence_key,
+                            table.c.status,
+                        ).where(
+                            table.c.job_id == job_id,
+                            table.c.workspace_id == workspace_id,
+                            table.c.cluster_id == cluster_id,
+                            table.c.lease_id == lease_id,
+                            table.c.agent_id == agent_id,
+                            table.c.status.in_(
+                                (
+                                    EVIDENCE_JOB_STATUS_COMPLETED,
+                                    EVIDENCE_JOB_STATUS_FAILED,
+                                    EVIDENCE_JOB_STATUS_QUEUED,
+                                )
+                            ),
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+                return dict(existing) if existing else None
+
+            next_status = EVIDENCE_JOB_STATUS_COMPLETED
+            if status == EVIDENCE_JOB_STATUS_FAILED:
+                next_status = (
+                    EVIDENCE_JOB_STATUS_FAILED
+                    if int(active["attempt_count"]) >= int(active["max_attempts"])
+                    else EVIDENCE_JOB_STATUS_QUEUED
+                )
+
+            row = (
+                conn.execute(
+                    update(table)
+                    .where(table.c.job_id == job_id)
+                    .values(
+                        status=next_status,
+                        result=result if next_status == EVIDENCE_JOB_STATUS_COMPLETED else None,
+                        error=error or None,
+                        updated_at=func.now(),
+                    )
+                    .returning(table.c.job_id, table.c.evidence_key, table.c.status)
+                )
+                .mappings()
+                .one()
+            )
+            return dict(row)
+
+    def evidence_payload_if_ready(self, evidence_key_value: str) -> JsonObject | None:
+        table = EvidenceJob.__table__
+        statement = (
+            select(
+                table.c.evidence_key,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.source_id,
+                table.c.provider_key,
+                table.c.window_start,
+                table.c.status,
+                table.c.failure_policy,
+                table.c.agent_id,
+                table.c.result,
+            )
+            .where(table.c.evidence_key == evidence_key_value)
+            .order_by(table.c.provider_key)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings()]
+        return aggregate_evidence_payload(rows)
+
+    def serialize_evidence_job(self, row: JsonObject) -> JsonObject:
+        item = dict(row)
+        item["leased_until"] = iso_or_none(item.get("leased_until"))
+        return item
 
     def get_evidence_window(self, evidence_key: str) -> JsonObject | None:
         table = EvidenceWindow.__table__

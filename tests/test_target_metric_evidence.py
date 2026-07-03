@@ -45,6 +45,16 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
     metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
     collector = module.EvidenceCollector([metrics_provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "prometheus",
+                "name": "node_collector_node_pod_count",
+                "description": "Pods scheduled on each Kubernetes node.",
+                "query": "node_collector_node_pod_count",
+            }
+        )
+    )
 
     async def fake_query_prometheus(_client, metric_query) -> dict[str, object]:
         return {
@@ -88,6 +98,16 @@ def test_collector_accepts_selected_provider_keys() -> None:
     module = load_evidence_module()
     metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
     collector = module.EvidenceCollector([metrics_provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "prometheus",
+                "name": "scrape_targets_up",
+                "description": "Prometheus scrape target health.",
+                "query": "up",
+            }
+        )
+    )
 
     async def fake_query_prometheus(_client, _metric_query) -> dict[str, object]:
         return {

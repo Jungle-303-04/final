@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import httpx
-from queries import PROMETHEUS_INSTANT_QUERIES, PrometheusInstantQuery
+from queries import PrometheusInstantQuery
 
 from config import (
     DEFAULT_PROMETHEUS_BASE_URL,
@@ -20,7 +20,7 @@ class PrometheusMetricsProvider:
     result_count_attribute = "prometheus.result_count"
     timeout_seconds = PROMETHEUS_TIMEOUT_SECONDS
     failure_message = "prometheus metrics collection failed"
-    queries = PROMETHEUS_INSTANT_QUERIES
+    queries: tuple[PrometheusInstantQuery, ...] = ()
 
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")

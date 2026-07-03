@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import secrets
 import shutil
 import subprocess
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,10 +18,20 @@ from domains.identity.dependencies import (
     require_admin_session,
     require_cluster_agent,
 )
+from domains.target.evidence_jobs import (
+    DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
+    DEFAULT_EVIDENCE_SOURCE_ID,
+)
+from domains.target.evidence_policy import (
+    default_agent_policy,
+    enabled_provider_keys,
+    provider_policy_snapshots,
+)
 from domains.target.reconciler import desired_state_version
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import (
     ClusterDesiredStateChangedBody,
+    ClusterEvidenceReceivedBody,
     TargetDesiredComponent,
 )
 from packages.contracts.gateway import routes as gateway_routes
@@ -29,10 +41,16 @@ from packages.contracts.gateway.requests import (
     AgentPolicyResponse,
     AgentPolicyStatusRequest,
     AgentReconcileStatusRequest,
-    EvidenceSourceLeaseRequest,
+    EvidenceJobResultRequest,
+    EvidenceJobScheduleRequest,
     TargetRegisterRequest,
 )
-from packages.contracts.gateway.responses import EvidenceSourceLeaseResponse, TargetInstallResponse
+from packages.contracts.gateway.responses import (
+    EvidenceJobPollResponse,
+    EvidenceJobResultResponse,
+    EvidenceJobScheduleResponse,
+    TargetInstallResponse,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
 from packages.runtime.dependencies import get_db, get_events
@@ -44,6 +62,11 @@ KUBECTL_APPLY_FAILED = "target install apply failed"
 # 미설정 시 컨텍스트 미지정(현재 kubeconfig)만 허용 — 페이로드로 임의 컨텍스트 지정 불가.
 KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
 KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
+DEFAULT_EVIDENCE_JOB_POLL_SECONDS = 10
+MAX_EVIDENCE_JOB_POLL_SECONDS = 30
+EVIDENCE_JOB_POLL_SLEEP_SECONDS = 1
+NOT_FOUND_CODE = 404
+EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취한다.
@@ -68,7 +91,6 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             sandbox_rbac_manifest(),
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token),
-            target_agent_state_pvc_manifest(),
             fake_telemetry,
             checkout_api_manifest(payload.image),
             cluster_agent_manifest(payload),
@@ -269,7 +291,6 @@ data:
   NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: "target"
-  EVIDENCE_QUEUE_DB_PATH: "/var/lib/target-agent/evidence-queue.db"
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
   COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"
   OTEL_SERVICE_NAME: "target-cluster-agent"
@@ -295,21 +316,6 @@ def fake_telemetry_manifest(image: str) -> str:
         fake_telemetry_deployment(kind, image) + "\n---\n" + fake_telemetry_service(kind)
         for kind in ("prometheus", "loki", "otel")
     )
-
-
-def target_agent_state_pvc_manifest() -> str:
-    return """
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: target-agent-state
-  namespace: target
-spec:
-  accessModes: ["ReadWriteOnce"]
-  resources:
-    requests:
-      storage: 1Gi
-"""
 
 
 def fake_telemetry_deployment(kind: str, image: str) -> str:
@@ -419,12 +425,11 @@ spec:
             - name: MANAGEMENT_BASE_URL
               value: {yaml_string(payload.management_base_url)}
           volumeMounts:
-            - name: target-agent-state
+            - name: target-agent-runtime
               mountPath: /var/lib/target-agent
       volumes:
-        - name: target-agent-state
-          persistentVolumeClaim:
-            claimName: target-agent-state
+        - name: target-agent-runtime
+          emptyDir: {{}}
 """
 
 
@@ -504,6 +509,12 @@ async def register_target(
             ),
         }
     )
+    if db.get_cluster_policy(workspace_id, scoped_payload.cluster_id) is None:
+        policy = default_agent_policy(
+            cluster_id=scoped_payload.cluster_id,
+            interval_seconds=scoped_payload.evidence_interval_seconds,
+        )
+        db.upsert_cluster_policy(workspace_id, scoped_payload.cluster_id, policy.model_dump())
     db.upsert_target_desired_states(
         workspace_id,
         scoped_payload.cluster_id,
@@ -538,7 +549,9 @@ async def update_cluster_policy(
         )
     existing = db.get_cluster_policy(workspace_id, cluster_id)
     base_policy = (
-        AgentPolicy.model_validate(existing) if existing else AgentPolicy(cluster_id=cluster_id)
+        AgentPolicy.model_validate(existing)
+        if existing
+        else default_agent_policy(cluster_id=cluster_id)
     )
     merged_policy = merge_agent_policy(base_policy, payload)
     try:
@@ -589,24 +602,165 @@ async def agent_reconcile_status(
 
 
 @agent_router.post(
-    gateway_routes.AGENT_EVIDENCE_SOURCE_LEASE_PATH,
-    response_model=EvidenceSourceLeaseResponse,
+    gateway_routes.AGENT_EVIDENCE_JOB_SCHEDULE_PATH,
+    response_model=EvidenceJobScheduleResponse,
 )
-async def lease_evidence_source(
-    source_id: str,
-    payload: EvidenceSourceLeaseRequest,
+async def schedule_evidence_jobs(
+    payload: EvidenceJobScheduleRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
-) -> EvidenceSourceLeaseResponse:
-    lease = db.lease_evidence_source(
-        identity.cluster_id,  # body 가 아닌 토큰 identity 기준
-        identity.workspace_id,
-        source_id,
-        payload.agent_id,
-        payload.window_start,
-        payload.lease_seconds,
+) -> EvidenceJobScheduleResponse:
+    stored_policy = db.get_cluster_policy(identity.workspace_id, identity.cluster_id)
+    policy = (
+        AgentPolicy.model_validate(stored_policy)
+        if stored_policy
+        else default_agent_policy(cluster_id=identity.cluster_id)
     )
-    return EvidenceSourceLeaseResponse(**lease)
+    provider_keys = enabled_provider_keys(policy, payload.provider_keys)
+    queued = db.queue_evidence_jobs(
+        workspace_id=identity.workspace_id,
+        cluster_id=identity.cluster_id,
+        source_id=payload.source_id,
+        window_start=payload.window_start,
+        provider_keys=provider_keys,
+        failure_policy=policy.evidence.failure_policy,
+        max_attempts=policy.evidence.max_attempts,
+        policy_generation=policy.generation,
+        provider_policies=provider_policy_snapshots(policy, provider_keys),
+    )
+    return EvidenceJobScheduleResponse(**queued)
+
+
+async def lease_next_evidence_job(
+    db: Any,
+    cluster_id: str,
+    workspace_id: str,
+    provider_key: str,
+    agent_id: str,
+    timeout: int,
+) -> dict[str, Any] | None:
+    deadline = time.time() + min(timeout, MAX_EVIDENCE_JOB_POLL_SECONDS)
+    while time.time() < deadline:
+        row = await db.lease_evidence_job(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            provider_key=provider_key,
+            agent_id=agent_id,
+            lease_seconds=DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
+        )
+        if row:
+            return row
+        await asyncio.sleep(EVIDENCE_JOB_POLL_SLEEP_SECONDS)
+    return None
+
+
+@agent_router.get(
+    gateway_routes.AGENT_EVIDENCE_JOB_POLL_PATH,
+    response_model=EvidenceJobPollResponse,
+)
+async def poll_evidence_job(
+    provider_key: str,
+    agent_id: str = "target-agent",
+    timeout: int = DEFAULT_EVIDENCE_JOB_POLL_SECONDS,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
+) -> EvidenceJobPollResponse:
+    job = await lease_next_evidence_job(
+        db,
+        identity.cluster_id,
+        identity.workspace_id,
+        provider_key,
+        agent_id,
+        timeout,
+    )
+    return EvidenceJobPollResponse(job=job)
+
+
+async def emit_evidence_if_ready(
+    evidence_key: str,
+    events: Any,
+    db: Any,
+) -> EvidenceJobResultResponse | None:
+    existing = db.get_evidence_window(evidence_key)
+    if existing:
+        return EvidenceJobResultResponse(
+            accepted=True,
+            evidence_key=evidence_key,
+            event_id=existing["event_id"],
+            correlation_id=existing["correlation_id"],
+        )
+
+    payload = db.evidence_payload_if_ready(evidence_key)
+    if payload is None:
+        return None
+
+    evidence_body = ClusterEvidenceReceivedBody(**payload)
+    claimed = db.claim_evidence_window(
+        evidence_key,
+        evidence_body.workspace_id,
+        evidence_body.cluster_id,
+        evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
+        evidence_body.window_start or evidence_key,
+        evidence_body.agent_id,
+        evidence_body.to_body(),
+    )
+    if claimed["duplicate"]:
+        return EvidenceJobResultResponse(
+            accepted=True,
+            evidence_key=evidence_key,
+            event_id=claimed["event_id"],
+            correlation_id=claimed["correlation_id"],
+        )
+
+    try:
+        accepted = await events.accept_body(evidence_body, payload.get("correlation_id"))
+    except Exception:
+        db.release_pending_evidence_window(evidence_key)
+        raise
+
+    recorded = db.complete_evidence_window(
+        evidence_key,
+        accepted.event.event_id,
+        accepted.event.correlation_id,
+        evidence_body.to_body(),
+    )
+    return EvidenceJobResultResponse(
+        accepted=True,
+        evidence_key=evidence_key,
+        event_id=recorded["event_id"],
+        correlation_id=recorded["correlation_id"],
+    )
+
+
+@agent_router.post(
+    gateway_routes.AGENT_EVIDENCE_JOB_RESULT_PATH,
+    response_model=EvidenceJobResultResponse,
+)
+async def evidence_job_result(
+    job_id: str,
+    payload: EvidenceJobResultRequest,
+    identity: ClusterAgentIdentity = Depends(require_cluster_agent),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> EvidenceJobResultResponse:
+    result = db.complete_evidence_job(
+        workspace_id=identity.workspace_id,
+        cluster_id=identity.cluster_id,
+        job_id=job_id,
+        lease_id=payload.lease_id,
+        agent_id=payload.agent_id,
+        status=payload.status,
+        result=payload.result,
+        error=payload.error,
+    )
+    if result is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=EVIDENCE_JOB_NOT_FOUND)
+
+    evidence_key = str(result["evidence_key"])
+    emitted = await emit_evidence_if_ready(evidence_key, events, db)
+    if emitted:
+        return emitted
+    return EvidenceJobResultResponse(accepted=True, evidence_key=evidence_key)
 
 
 router.include_router(agent_router)

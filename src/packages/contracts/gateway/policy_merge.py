@@ -34,6 +34,8 @@ def merge_evidence_policy(
     payload = base.model_dump()
     if "failure_policy" in incoming.model_fields_set:
         payload["failure_policy"] = incoming.failure_policy
+    if "max_attempts" in incoming.model_fields_set:
+        payload["max_attempts"] = incoming.max_attempts
     providers = dict(payload.get("providers", {}))
     if "providers" in incoming.model_fields_set:
         for provider_key, provider_policy in incoming.providers.items():

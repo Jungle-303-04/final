@@ -66,10 +66,22 @@ class CommandHeartbeatResponse(StrictModel):
     correlation_id: str
 
 
-class EvidenceSourceLeaseResponse(StrictModel):
-    leased: bool
-    lease_id: str | None = None
-    leased_until: str | None = None
+class EvidenceJobScheduleResponse(StrictModel):
+    accepted: bool
+    evidence_key: str
+    queued: int
+    job_ids: list[str]
+
+
+class EvidenceJobPollResponse(StrictModel):
+    job: JsonMap | None
+
+
+class EvidenceJobResultResponse(StrictModel):
+    accepted: bool
+    evidence_key: str | None = None
+    event_id: str | None = None
+    correlation_id: str | None = None
 
 
 class FakeTelemetryResponse(StrictModel):
