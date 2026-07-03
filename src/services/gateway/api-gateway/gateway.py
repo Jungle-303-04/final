@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
 
+from domains.ai.router import router as ai_router
 from domains.command.router import router as command_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
@@ -121,6 +122,7 @@ class ApiGateway:
         app = self.app
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
