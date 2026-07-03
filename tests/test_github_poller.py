@@ -78,6 +78,16 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
     ]
 
 
+def test_poll_once_env_parses_only_truthy_values(monkeypatch) -> None:
+    module = _load_poller()
+
+    monkeypatch.setenv("POLL_ONCE", "0")
+    assert module.GitHubPoller().once is False
+
+    monkeypatch.setenv("POLL_ONCE", "true")
+    assert module.GitHubPoller().once is True
+
+
 def test_dedup_guard_skips_unchanged_sha() -> None:
     module = _load_poller()
     posted: list[dict[str, Any]] = []
