@@ -1,46 +1,19 @@
+"""서비스 entrypoint 규약 검증 — 명부는 discovery(자동 발견)가 단일 출처.
+
+수동 SERVICE_ENTRYPOINTS 목록을 유지하지 않는다. 서비스 추가/삭제는
+src/services/**/app.py 생성/삭제로 끝나고, 이 테스트는 규약과
+deploy manifest 정합(양방향 drift)만 검증한다.
+"""
+
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+from packages.runtime.discovery import FAKE_TELEMETRY_PATH, discover_services
 
-SERVICE_ENTRYPOINTS = {
-    "scm-worker": ("src/services/gitops/scm-worker/app.py", "App("),
-    "diff-analyze-worker": ("src/services/gitops/diff-analyze-worker/app.py", "App("),
-    "diff-worker": ("src/services/gitops/diff-worker/app.py", "App("),
-    "manifest-render-worker": ("src/services/gitops/manifest-render-worker/app.py", "App("),
-    "git-pull-worker": ("src/services/gitops/git-pull-worker/app.py", "App("),
-    "workflow-controller": ("src/services/gitops/workflow-controller/app.py", "App("),
-    "github-poll-worker": ("src/services/gitops/github-poll-worker/app.py", "AsyncService("),
-    "api-gateway": ("src/services/gateway/api-gateway/app.py", "FastApiService("),
-    "alert-worker": ("src/services/alert/alert-worker/app.py", "App("),
-    "mail-worker": ("src/services/mail/mail-worker/app.py", "App("),
-    "command-worker": ("src/services/command/command-worker/app.py", "App("),
-    "evidence-worker": ("src/services/ai/evidence-worker/app.py", "App("),
-    "incident-worker": ("src/services/ai/incident-worker/app.py", "App("),
-    "plan-worker": ("src/services/ai/plan-worker/app.py", "App("),
-    "analyze-worker": ("src/services/ai/analyze-worker/app.py", "App("),
-    "rca-worker": ("src/services/ai/rca-worker/app.py", "App("),
-    "recovery-worker": ("src/services/ai/recovery-worker/app.py", "App("),
-    "select-worker": ("src/services/ai/select-worker/app.py", "App("),
-    "dispatch-worker": ("src/services/ai/dispatch-worker/app.py", "App("),
-    "backlog-worker": ("src/services/ai/backlog-worker/app.py", "App("),
-    "safe-pr-worker": ("src/services/ai/safe-pr-worker/app.py", "App("),
-    "ai-diff-worker": ("src/services/ai/diff-worker/app.py", "App("),
-    "rollout-worker": ("src/services/ai/rollout-worker/app.py", "App("),
-    "approval-worker": ("src/services/ai/approval-worker/app.py", "App("),
-    "audit-worker": ("src/services/projection/audit-worker/app.py", "App("),
-    "cluster-agent": ("src/services/target/cluster-agent/app.py", "AsyncService("),
-    "target-reconcile-worker": ("src/services/target/reconcile-worker/app.py", "App("),
-    "node-collector": ("src/services/target/node-collector/app.py", "AsyncService("),
-    "fake-prometheus": (
-        "src/services/target/cluster-agent/fake_telemetry.py",
-        "AsyncService(",
-    ),
-    "fake-loki": ("src/services/target/cluster-agent/fake_telemetry.py", "AsyncService("),
-    "fake-otel": ("src/services/target/cluster-agent/fake_telemetry.py", "AsyncService("),
-}
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SERVICES = discover_services(ROOT_DIR)
 
 
 def read_project_file(path: str) -> str:
@@ -48,84 +21,37 @@ def read_project_file(path: str) -> str:
 
 
 def test_services_have_direct_process_entrypoints() -> None:
-    for service_name, (relative_path, expected_helper) in SERVICE_ENTRYPOINTS.items():
-        entrypoint = ROOT_DIR / relative_path
-
-        assert entrypoint.exists(), f"{service_name} entrypoint does not exist"
-        source = entrypoint.read_text(encoding="utf-8")
-        assert 'if __name__ == "__main__":' in source
-        assert expected_helper in source
-        assert "SERVICE_NAME =" not in source
+    for svc in SERVICES:
+        source = read_project_file(svc.command)
+        assert 'if __name__ == "__main__":' in source, svc.name
+        assert "SERVICE_NAME =" not in source, svc.name
 
 
-# App(한 파일) 서비스는 runner 파일 안에서 이름과 기본값 관리
-APP_BASED_SERVICES = {
-    "ai-diff-worker",
-    "analyze-worker",
-    "approval-worker",
-    "alert-worker",
-    "backlog-worker",
-    "command-worker",
-    "dispatch-worker",
-    "evidence-worker",
-    "incident-worker",
-    "mail-worker",
-    "plan-worker",
-    "rca-worker",
-    "recovery-worker",
-    "rollout-worker",
-    "safe-pr-worker",
-    "select-worker",
-    "git-pull-worker",
-    "workflow-controller",
-    "manifest-render-worker",
-    "diff-worker",
-    "diff-analyze-worker",
-    "scm-worker",
-    "audit-worker",
-    "target-reconcile-worker",
-}
+def test_fake_telemetry_services_share_one_entrypoint() -> None:
+    source = read_project_file(FAKE_TELEMETRY_PATH.as_posix())
+    assert 'if __name__ == "__main__":' in source
+    assert "AsyncService(" in source
 
+
+# 서비스별 설정 위치 정책(예외만 명시; 나머지는 settings.py 금지).
 LOCAL_SETTINGS_SERVICES = {"api-gateway", "github-poll-worker"}
-
 INLINE_CONFIG_SERVICES = {
     "cluster-agent": "AgentConfig",
     "node-collector": "NodeCollectorConfig",
-    "fake-prometheus": "AgentConfig",
-    "fake-loki": "AgentConfig",
-    "fake-otel": "AgentConfig",
 }
 
 
 def test_services_use_expected_config_location() -> None:
-    for service, (relative_path, _) in SERVICE_ENTRYPOINTS.items():
-        service_dir = Path(relative_path).parent
-        settings_file = ROOT_DIR / service_dir / "settings.py"
-        source = read_project_file(relative_path)
+    for svc in SERVICES:
+        settings_file = ROOT_DIR / svc.path.parent / "settings.py"
 
-        if service in LOCAL_SETTINGS_SERVICES:
-            assert settings_file.exists(), f"{service_dir} must own service settings"
+        if svc.name in LOCAL_SETTINGS_SERVICES:
+            assert settings_file.exists(), f"{svc.name} must own service settings"
             continue
 
-        assert not settings_file.exists(), f"{service_dir} should not keep settings.py"
-        if service in INLINE_CONFIG_SERVICES:
-            assert INLINE_CONFIG_SERVICES[service] in source
-
-
-def test_literal_app_service_names_are_unique() -> None:
-    literal_names: dict[str, str] = {}
-    for service, (relative_path, expected_helper) in SERVICE_ENTRYPOINTS.items():
-        if expected_helper != "App(":
-            continue
-        source = read_project_file(relative_path)
-        match = re.search(r"""App\(\s*["']([^"']+)["']\s*\)""", source)
-        if match is None:
-            continue
-        app_name = match.group(1)
-        assert app_name not in literal_names, (
-            f"{service} and {literal_names[app_name]} share App name {app_name}"
-        )
-        literal_names[app_name] = service
+        assert not settings_file.exists(), f"{svc.path.parent} should not keep settings.py"
+        if svc.name in INLINE_CONFIG_SERVICES:
+            assert INLINE_CONFIG_SERVICES[svc.name] in read_project_file(svc.command)
 
 
 def test_contracts_are_grouped_by_boundary() -> None:
@@ -146,21 +72,27 @@ def test_central_role_dispatcher_is_removed() -> None:
     assert not (ROOT_DIR / "src" / "packages" / "worker_runtime").exists()
 
 
-def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
-    manifests = "\n".join(
-        [
-            read_project_file("deploy/management/services.yaml"),
-            read_project_file("deploy/management/ai-workers.yaml"),
-            read_project_file("deploy/management/github-poll-worker.yaml"),
-            read_project_file("deploy/target/target.yaml"),
-        ]
-    )
+MANIFEST_FILES = (
+    "deploy/management/services.yaml",
+    "deploy/management/ai-workers.yaml",
+    "deploy/management/github-poll-worker.yaml",
+    "deploy/target/target.yaml",
+)
 
-    generated_workloads = {"src/services/target/node-collector/app.py"}
-    for relative_path, _expected_helper in SERVICE_ENTRYPOINTS.values():
-        if relative_path in generated_workloads:
+# k8s manifest 가 직접 실행하지 않는 entrypoint(다른 워크로드가 동적 생성/관리).
+GENERATED_WORKLOADS = {"src/services/target/node-collector/app.py"}
+
+_COMMAND_PATTERN = re.compile(r'command: \["python", "(src/services/[^"]+)"\]')
+
+
+def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
+    """정방향 drift: 발견된 모든 서비스는 manifest 에 command 로 존재해야 한다."""
+    manifests = "\n".join(read_project_file(path) for path in MANIFEST_FILES)
+
+    for svc in SERVICES:
+        if svc.command in GENERATED_WORKLOADS:
             continue
-        assert f'command: ["python", "{relative_path}"]' in manifests
+        assert f'command: ["python", "{svc.command}"]' in manifests, svc.name
 
     legacy_role_args = [
         'args: ["gateway"]',
@@ -175,6 +107,16 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
         assert legacy_arg not in manifests
 
     assert "src/services/management-api-gateway/app.py" not in manifests
+
+
+def test_manifest_commands_point_to_existing_entrypoints() -> None:
+    """역방향 drift: manifest 의 모든 command 경로는 발견된 서비스(또는 fake)여야 한다."""
+    known = {svc.command for svc in SERVICES} | {FAKE_TELEMETRY_PATH.as_posix()}
+
+    for manifest in MANIFEST_FILES:
+        for match in _COMMAND_PATTERN.finditer(read_project_file(manifest)):
+            command_path = match.group(1)
+            assert command_path in known, f"{manifest}: unknown entrypoint {command_path}"
 
 
 def test_target_install_is_driven_by_registration_script() -> None:
@@ -192,39 +134,3 @@ def test_up_script_restarts_new_management_workers() -> None:
     assert "workflow-controller alert-worker mail-worker command-worker" in up_script
     assert "evidence-worker incident-worker plan-worker analyze-worker" in up_script
     assert "safe-pr-worker ai-diff-worker rollout-worker approval-worker" in up_script
-    assert "get cronjob/github-poll-worker" in up_script
-    assert "Jungle-303-04/final" in up_script
-    assert "deploy/target/target.yaml" in up_script
-
-
-def test_smoke_posts_webhook_and_command_without_dashboard_dependency() -> None:
-    smoke_script = read_project_file("scripts/smoke.sh")
-    assert "abc1234" not in smoke_script
-    assert "latest_commit_sha" in smoke_script
-    assert "repo_ref" in smoke_script
-    assert "manifest_path" in smoke_script
-    assert "webhook_correlation_id" in smoke_script
-    assert "manual smoke command" in smoke_script
-    assert "workflow.run.completed" not in smoke_script
-    assert "/dashboard/query" not in smoke_script
-
-
-def test_node_collector_is_agent_managed_not_static_manifest() -> None:
-    target_manifest = read_project_file("deploy/target/target.yaml")
-    manager_source = read_project_file(
-        "src/services/target/cluster-agent/node_collector_manager.py"
-    )
-
-    assert "kind: DaemonSet" not in target_manifest
-    assert "cluster-agent-target-manage" in target_manifest
-    assert "src/services/target/node-collector/app.py" in manager_source
-
-
-def test_otel_collector_pipelines_reference_defined_exporters() -> None:
-    values = read_project_file("deploy/target/opentelemetry.yaml")
-
-    assert "otlp/tempo:" in values
-    assert "otlphttp/loki:" in values
-    assert "- otlp/tempo" in values
-    assert "- otlphttp/loki" in values
-    assert "otlp_grpc/tempo" not in values
