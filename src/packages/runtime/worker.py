@@ -16,7 +16,7 @@ from packages.contracts.event_bus.interfaces import (
     EventHandler,
     EventMessage,
 )
-from packages.contracts.event_bus.processing import EventProcessingStatus
+from packages.contracts.event_bus.processing import TERMINAL_STATUSES, EventProcessingStatus
 from packages.contracts.event_bus.subscriptions import durable_name
 from packages.contracts.interfaces import EventProcessingStore
 from packages.events.bus import (
@@ -135,8 +135,13 @@ class EventProcessor:
         #    재시도 횟수 미누적으로 영구 DLQ 미도달 위험 → claim 과 업무 분리
         with self.store.unit_of_work():
             processing = self.ledger.begin(evt)  # 처리대장에 "처리 시작" 기록 + attempt 증가
-        if processing.status != EventProcessingStatus.PROCESSING:
+        if processing.status in TERMINAL_STATUSES:
             await message.ack()  # 이미 처리됨/소진됨(중복) → 건너뛰기(정확히 한 번 핵심)
+            return
+        if processing.status != EventProcessingStatus.PROCESSING:
+            # claim 미획득(다른 인스턴스의 신선한 PROCESSING 등) — 종결이 아니므로
+            # ack 로 소거하면 원 처리자가 죽었을 때 이벤트 유실 → nak 로 재확인 예약
+            await message.nak(delay=self.retry_policy.retry_delay_seconds)
             return
         attempts = processing.attempts  # 지금까지 시도 횟수(커밋되어 누적)
         # 2) 업무쓰기 + outbox 적재 + ledger 완료를 한 트랜잭션으로(원자성).
