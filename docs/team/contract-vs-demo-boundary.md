@@ -33,9 +33,11 @@
 | `src/packages/contracts/event_bus/processing.py` | 처리 상태값 | retry, processed, dead-lettered 상태의 공통 언어다. |
 | `src/packages/contracts/gateway/requests.py` | Gateway HTTP request schema | 외부 API 요청 body가 어떤 형태인지 정한다. |
 | `src/packages/contracts/gateway/routes.py` | Gateway route path | UI, CLI, agent가 호출할 HTTP 경로의 기준이다. |
-| `src/domains/projection/events.py` | 현재 Dashboard 상태값 | projection/read model에서 같은 상태 언어를 쓰는 현재 위치다. 공유 계약으로 승격할 때는 TODO와 테스트를 함께 옮긴다. |
 | `src/packages/contracts/stores.py` | worker별 DB 능력 port | handler가 어떤 저장 기능만 사용할 수 있는지 제한한다. |
 | `src/packages/contracts/interfaces.py` | session, OAuth, DLQ, outbox port | Gateway/runtime이 구현체가 아니라 port에 의존하게 한다. |
+
+Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작할 때
+`src/packages/contracts` 아래에 계약과 테스트를 함께 추가한다.
 
 계약 파일을 바꿀 때는 아래를 같이 바꿔야 한다.
 
@@ -62,22 +64,30 @@
 
 다만 `src/packages/storage/database.py`는 실제 어댑터이지만 아직 repository가 완전히 분리된 구조는 아니다. 즉 운영 구조의 일부지만 개선 여지가 있는 구현체다.
 
-## 4. 데모 또는 임시 구현
+## 4. 데모/미구현 인벤토리
 
-아래는 계약이 아니라 흐름 확인용이다. 팀원이 이 값을 그대로 확장하면 안 된다.
+아래는 계약이 아니라 흐름 확인용이거나 아직 계획만 있는 항목이다. 팀원이 이 값을
+제품 계약처럼 설명하거나 그대로 확장하면 안 된다. 새 PR에서 이 표의 항목을 실제
+구현으로 바꾸면, 같은 PR에서 상태와 완료 기준도 갱신한다.
 
-| 위치 | 왜 데모인가 | 나중에 무엇으로 바뀌어야 하나 |
-| --- | --- | --- |
-| `src/services/target/cluster-agent/fake_telemetry.py`의 Prometheus 모드 | 실제 Prometheus가 아니라 fake HTTP app | real Prometheus adapter |
-| `src/services/target/cluster-agent/fake_telemetry.py`의 Loki 모드 | 실제 Loki가 아니라 fake HTTP app | real Loki adapter |
-| `src/services/target/cluster-agent/fake_telemetry.py`의 OTel 모드 | 실제 OTel collector가 아니라 fake HTTP app | real OTel collector/exporter |
-| `src/services/target/cluster-agent/agent.py`의 fake evidence collectors | 장애 데이터가 실제 수집값이 아님 | Kubernetes/Prometheus/Loki/OTel adapter가 만든 Evidence |
-| `src/services/gitops/manifest-render-worker/app.py`의 `checkout-api` 기본값 | 실제 repo render가 아니라 sample manifest 생성 | Git repo checkout + Kustomize/Helm renderer |
-| `src/services/gitops/diff-worker/app.py`의 `PREVIOUS_IMAGE`, `RESOURCE_REF` | 실제 cluster diff가 아니라 fixed diff | desired/actual manifest 비교기 |
-| `src/services/ai/rca-worker/app.py`의 고정 RCA 결과 | AI 분석이 아니라 deterministic sample | `RcaAnalyzerPort` 뒤의 LLM/rule analyzer |
-| `src/services/gitops/scm-worker/app.py`의 fake PR URL | 실제 GitHub PR 생성이 아님 | GitHub App/PAT adapter |
-| `src/domains/identity/repository.py`의 credential placeholder | 실제 provider token exchange가 아님 | SecretVault/TokenBroker adapter |
-| `tests/**`의 fixture 값 | 테스트 입력일 뿐 운영 계약 아님 | 계약 변경 시 fixture도 같이 변경 |
+| 항목 | 상태 | 현재 동작 | 실제 구현 완료 기준 |
+| --- | --- | --- | --- |
+| Prometheus telemetry | fake fallback | `fake_telemetry.py`가 고정 HTTP 응답을 제공하고 agent가 fallback source로 읽는다. | 실제 Prometheus/AMP/Mimir query adapter, label/window 제한, secret 마스킹, 실패 테스트 |
+| Loki telemetry | fake fallback | `fake_telemetry.py`가 Loki처럼 생긴 고정 응답을 제공한다. | 실제 Loki/OpenSearch/CloudWatch Logs adapter, selector 제한, payload 축약 테스트 |
+| OTel/trace telemetry | fake fallback | `fake_telemetry.py`가 trace backend 대신 고정 응답을 준다. | 실제 Tempo/OTel collector/query adapter, service/operation/window 기준 요약 테스트 |
+| Kubernetes evidence collector | partial demo | agent가 일부 Kubernetes/fallback sample evidence를 만든다. | 최소 RBAC으로 pods/events/nodes 조회, object metadata 마스킹, EvidenceDraft/summary 계약 테스트 |
+| Node collector install manifest | inline demo | cluster-agent가 inline DaemonSet YAML을 만든다. | Helm/Kustomize render 또는 typed manifest builder, upgrade/rollback 기준, RBAC 테스트 |
+| Git manifest source | demo/dev fallback | `checkout-api` 기본값과 local-file/remote file 경로로 manifest를 만든다. | Git repo checkout/cache, commit provenance, Kustomize/Helm/raw YAML renderer, 구조화된 render error |
+| Desired diff | partial demo | 이전 snapshot이 없으면 demo fallback을 사용하고 risk string 중심으로 판단한다. | cluster-aware desired/live/last-approved 비교, create/update/delete 구조화, policy reason 테스트 |
+| Diff risk/approval policy | partial demo | namespace/risk string 기반으로 safe PR/alert/command를 분기한다. | workspace/repo/cluster/environment 정책, approval_required/forbidden route, rollout checklist |
+| RCA analyzer | deterministic sample | evidence를 기반으로 하지만 RCA 문구와 confidence가 sample 중심이다. | `RcaAnalyzerPort` 뒤의 rule/LLM adapter, insufficient evidence 상태, evidence ref 기반 근거 |
+| LLM client | fake adapter | `build_llm_client()`가 항상 `FakeLlmClient`를 반환한다. | provider/model/api key 설정, timeout/retry, prompt boundary, unit/fake + integration test |
+| Safe PR creation | stub adapter | `scm-worker`가 실제 branch/commit/PR 대신 fake URL을 만든다. | feature flag, token/ref 검증, branch/commit/PR 생성, repo allowlist, failure event/audit |
+| Alert delivery | stub adapter | `alert-worker`가 Slack/Email/PagerDuty 전송 없이 `alert.dispatched`를 만든다. | provider delivery id 저장, 조용한 시간/승인 정책, production 자동 배포 fail-closed |
+| Credential/Token Broker | placeholder | identity repository에 credential placeholder와 TODO가 남아 있다. | SecretVault/TokenBroker port, provider token 저장/회전/감사, event/log non-leak 테스트 |
+| Dashboard projection worker | planned | 현재 repository에 `src/services/projection/dashboard-worker`가 없다. | App 기반 `@app.on_any` worker, read model schema, query/stream route, smoke assertion |
+| Dashboard UI/API | planned | auth redirect 문자열 외에 dashboard route가 없다. | 운영 workflow console UI, session guard, read model query, E2E smoke에서 결과 검증 |
+| Tests fixtures | fixture only | 테스트 입력/기대값으로 sample 값이 존재한다. | 계약 변경 시 fixture 갱신. fixture 값을 제품 계약으로 문서화하지 않음 |
 
 ## 5. 현재 가장 헷갈리는 지점
 

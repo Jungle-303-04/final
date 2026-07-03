@@ -206,11 +206,11 @@ UI의 첫 화면은 "상태를 보는 dashboard"가 아니라 "운영 workflow c
 - NATS JetStream 기반 event spine.
 - outbox, retry, DLQ, event processing ledger.
 - `@app.on(...)` 기반 worker chaining.
-- `dashboard-worker`, `audit-worker`의 전체 이벤트 projection.
+- `audit-worker`의 전체 이벤트 projection. `dashboard-worker`는 planned 항목이다.
 - per-cluster agent token과 outbound long-poll command 경계.
 - target desired state와 reconcile record의 초기 모델.
 - GitHub webhook, split GitOps worker, manifest artifact 저장 모델.
-- dashboard React/Vite UI skeleton.
+- dashboard React/Vite UI skeleton은 repository 밖/후속 UI 작업 기준이며, 현재 backend repository에는 dashboard route와 projection worker가 없다.
 
 ### 현재 주요 흐름
 

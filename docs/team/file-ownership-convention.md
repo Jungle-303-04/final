@@ -144,7 +144,8 @@
 
 담당자: `ummfieg`
 
-목표: evidence 기반 incident/RCA 흐름, Safe PR 요청, audit timeline, dashboard projection 입력을 관리한다.
+목표: evidence 기반 incident/RCA 흐름, Safe PR 요청, audit timeline을 관리한다.
+dashboard projection은 아직 구현되지 않은 planned 영역이다.
 
 직접 관리 파일:
 
@@ -152,11 +153,11 @@
 | --- | --- |
 | RCA domain | `src/domains/rca/*.py` |
 | SCM domain | `src/domains/scm/*.py` |
-| projection domain | `src/domains/projection/*.py`, `src/domains/audit/*.py` |
+| projection domain | `src/domains/audit/*.py`; dashboard projection domain은 planned |
 | alert event | `src/domains/alert/events.py` |
 | RCA worker | `src/services/ai/rca-worker/app.py` |
 | SCM worker | `src/services/gitops/scm-worker/app.py` |
-| projection workers | `src/services/projection/audit-worker/app.py`, `src/services/projection/dashboard-worker/app.py` |
+| projection workers | `src/services/projection/audit-worker/app.py`; dashboard worker는 planned |
 | alert worker | `src/services/alert/alert-worker/app.py` |
 | RCA/projection tests | `tests/test_rca_evidence.py`, `tests/test_projection.py`, `tests/test_alert_worker.py`, `tests/test_metrics.py`, `tests/test_multi_subscription.py` |
 | 문서 | `docs/team/member-guides/rca-safe-pr.md` |
