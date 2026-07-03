@@ -1,8 +1,9 @@
 """등록된 이벤트와 구독자를 한눈에 출력한다.
 
 사용: python scripts/events.py   (또는 make events)
-body 정의(@events.reg)와 서비스 핸들러(@app.sub)를 import 해 레지스트리를
-채운 뒤 표로 보여준다. App 으로 마이그레이션한 서비스를 SERVICES 에 추가.
+body 정의(@event)와 서비스 핸들러(@app.on)를 import 해 레지스트리를
+채운 뒤 표로 보여준다. 서비스 목록은 수동 관리하지 않는다 —
+discovery 가 App 기반(worker) 서비스를 자동 발견해 로드한다.
 """
 
 from __future__ import annotations
@@ -16,21 +17,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR / "src") not in sys.path:
     sys.path.insert(0, str(ROOT_DIR / "src"))
 
-# App 기반 서비스 진입 파일(app.py), import 시 @app.on 등록
-SERVICES = [
-    "ai/rca-worker",
-    "alert/alert-worker",
-    "command/command-worker",
-    "gitops/git-pull-worker",
-    "gitops/workflow-controller",
-    "gitops/manifest-render-worker",
-    "gitops/diff-worker",
-    "gitops/diff-analyze-worker",
-    "gitops/scm-worker",
-    "mail/mail-worker",
-    "projection/audit-worker",
-    "target/reconcile-worker",
-]
+from packages.runtime.discovery import discover_services  # noqa: E402
 
 
 def _load(path: Path, name: str) -> None:
@@ -48,13 +35,14 @@ def _load(path: Path, name: str) -> None:
 
 
 def main() -> None:
-    # 이벤트 타입 정의(@events.reg) 등록.
+    # 이벤트 타입 정의(@event) 등록.
     importlib.import_module("packages.contracts.event_bus.bodies")
 
-    # 서비스 핸들러(@app.sub) 등록.
-    for service in SERVICES:
-        module = service.replace("/", "_").replace("-", "_")
-        _load(ROOT_DIR / "src" / "services" / service / "app.py", f"app_{module}")
+    # 서비스 핸들러(@app.on) 등록 — App 기반(worker) 서비스 자동 발견.
+    for svc in discover_services(ROOT_DIR):
+        if svc.kind != "worker":
+            continue
+        _load(ROOT_DIR / svc.path, f"app_{svc.name.replace('-', '_')}")
 
     from packages.contracts.event_bus.registry import events
 
