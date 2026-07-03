@@ -81,7 +81,7 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 | Desired diff | partial demo | 이전 snapshot이 없으면 demo fallback을 사용하고 risk string 중심으로 판단한다. | cluster-aware desired/live/last-approved 비교, create/update/delete 구조화, policy reason 테스트 |
 | Diff risk/approval policy | partial demo | namespace/risk string 기반으로 safe PR/alert/command를 분기한다. | workspace/repo/cluster/environment 정책, approval_required/forbidden route, rollout checklist |
 | RCA analyzer | deterministic sample | evidence를 기반으로 하지만 RCA 문구와 confidence가 sample 중심이다. | `RcaAnalyzerPort` 뒤의 rule/LLM adapter, insufficient evidence 상태, evidence ref 기반 근거 |
-| LLM client | fake adapter | `build_llm_client()`가 항상 `FakeLlmClient`를 반환한다. | provider/model/api key 설정, timeout/retry, prompt boundary, unit/fake + integration test |
+| LLM client | gateway + adapters | 기본은 `fake`이고, `LLM_PROVIDER`로 OpenAI/OpenAI 호환/Anthropic/Gemini adapter를 선택한다. | provider별 live smoke, 비용/쿼터 guardrail, prompt boundary, 통합 회귀 테스트 |
 | Safe PR creation | stub adapter | `scm-worker`가 실제 branch/commit/PR 대신 fake URL을 만든다. | feature flag, token/ref 검증, branch/commit/PR 생성, repo allowlist, failure event/audit |
 | Alert delivery | stub adapter | `alert-worker`가 Slack/Email/PagerDuty 전송 없이 `alert.dispatched`를 만든다. | provider delivery id 저장, 조용한 시간/승인 정책, production 자동 배포 fail-closed |
 | Credential/Token Broker | placeholder | identity repository에 credential placeholder와 TODO가 남아 있다. | SecretVault/TokenBroker port, provider token 저장/회전/감사, event/log non-leak 테스트 |
