@@ -62,7 +62,7 @@ async def on_safe_pr_requested(
     async def create_pr() -> str:
         return await create_safe_pr(evt, ctx)
 
-    def created(pr_url: str) -> SafePrCreatedBody:
+    def created_body(pr_url: str) -> SafePrCreatedBody:
         return SafePrCreatedBody(
             pr_url=pr_url,
             provider=evt.provider,
@@ -77,7 +77,7 @@ async def on_safe_pr_requested(
 
     async for out in deliver(
         call=create_pr,
-        ok=created,
+        ok=created_body,
         fail=lambda exc: SafePrFailedBody(
             provider=evt.provider,
             title=evt.title,

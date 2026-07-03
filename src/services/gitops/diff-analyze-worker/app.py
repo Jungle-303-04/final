@@ -38,7 +38,7 @@ def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
     return safe, SAFE_REASON if safe else UNSAFE_REASON
 
 
-def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
+def build_safe_pr_request_body(diff: Diff) -> SafePrRequestedBody:
     # TODO(gitops): rendered manifest patch, rollback plan, reviewer checklist 포함
     summary = (
         f"{diff.resource}: {diff.actual_image} → {diff.desired_image}"
@@ -56,11 +56,11 @@ def build_safe_pr_request(diff: Diff) -> SafePrRequestedBody:
         workflow_run_id=diff.workflow_run_id,
         environment=diff.environment,
         manifest_path=diff.manifest_path,
-        next_alert=build_pre_deploy_alert_request(diff),
+        next_alert=build_pre_deploy_alert_request_body(diff),
     )
 
 
-def build_auto_command_request(diff: Diff) -> CommandRequestedBody:
+def build_auto_command_request_body(diff: Diff) -> CommandRequestedBody:
     # TODO(gitops): workspace/repo/cluster environment별 auto deploy route policy화
     return CommandRequestedBody(
         cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
@@ -76,7 +76,7 @@ def build_auto_command_request(diff: Diff) -> CommandRequestedBody:
     )
 
 
-def build_pre_deploy_alert_request(diff: Diff) -> AlertRequestedBody:
+def build_pre_deploy_alert_request_body(diff: Diff) -> AlertRequestedBody:
     # TODO(alert): deployment window, blast radius, approver list, rollback metadata 포함
     return AlertRequestedBody(
         cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
@@ -84,7 +84,7 @@ def build_pre_deploy_alert_request(diff: Diff) -> AlertRequestedBody:
         severity=PRE_DEPLOY_ALERT_SEVERITY,
         message=f"pre-deploy check passed for {diff.resource}",
         reason="safe sandbox deploy will continue after alert gate",
-        next_command=build_auto_command_request(diff),
+        next_command=build_auto_command_request_body(diff),
         workspace_id=diff.workspace_id,
         application_id=diff.application_id,
         workflow_run_id=diff.workflow_run_id,
@@ -100,7 +100,7 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
         # PR 생성 성공 뒤에만 alert/apply 흐름이 이어진다.
-        yield build_safe_pr_request(diff)
+        yield build_safe_pr_request_body(diff)
 
 
 if __name__ == "__main__":

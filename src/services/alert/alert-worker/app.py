@@ -29,7 +29,7 @@ def allow_after_alarm_gate(evt: AlertRequestedBody) -> bool:
     return True
 
 
-def build_dispatched(evt: AlertRequestedBody) -> AlertDispatchedBody:
+def build_dispatched_body(evt: AlertRequestedBody) -> AlertDispatchedBody:
     # TODO(alert): Slack/Email/PagerDuty 알림 전송과 provider delivery id 저장
     return AlertDispatchedBody(
         cluster_id=evt.cluster_id,
@@ -53,7 +53,7 @@ async def on_alert_requested(
         yield AlertRejectedBody(reason=ALERT_GATE_BLOCKED_REASON, requested=evt.to_body())
         return
 
-    yield build_dispatched(evt)
+    yield build_dispatched_body(evt)
     if evt.next_command is not None:
         yield evt.next_command
 

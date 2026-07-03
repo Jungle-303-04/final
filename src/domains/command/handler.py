@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections.abc import AsyncIterator
 
+from domains.command.actions import allowed_command_actions
 from domains.command.policy import (
     DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS,
     DEFAULT_COMMAND_LEASE_SECONDS,
@@ -57,7 +58,7 @@ COMMAND_CONFIG = CommandConfig(
         PolicyRuleConfig(
             name="command_action_allowlist",
             field=Gateway.ACTION,
-            allowed_values=(Command.DEFAULT_ACTION, Command.APPLY_MANIFEST_ACTION),
+            allowed_values=allowed_command_actions(),
             default=Command.DEFAULT_ACTION,
             reason="unsupported command action",
         ),
