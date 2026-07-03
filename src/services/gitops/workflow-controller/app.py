@@ -2,7 +2,7 @@
 
 기존 git-pull/render/diff/command worker chain은 그대로 둔다. 이 worker는 같은
 이벤트를 관찰해 Application, WorkflowRun, WorkflowRunStep, Approval 상태를 기록하고
-콘솔이 읽을 수 있는 workflow.* / approval.* 이벤트를 발행한다.
+콘솔이 읽을 수 있는 workflow.* / approval.* 이벤트를 발행함.
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ def diff_payload(evt: DiffDetectedBody | DiffAnalyzedBody) -> JsonObject:
 
 
 def rendered_application_name(evt: ManifestRenderedBody) -> str | None:
-    """Application 이름 후보는 workload manifest에서만 가져온다.
+    """Application 이름 후보는 workload manifest에서만 가져옴.
 
     한 파일에 Service/ConfigMap이 같이 렌더될 때 부속 리소스 이름이 Application.name을
     덮으면 콘솔에서 앱이 checkout-api-config 같은 이름으로 보인다.

@@ -101,7 +101,7 @@ RESERVED_STREAM_SUBJECTS = ("audit.>",)
 def _derived_stream_subjects() -> list[str]:
     """스트림 subject 와일드카드를 EventSubject 에서 자동 파생.
 
-    새 이벤트/도메인을 enum 에 추가하면 "<도메인>.>" 가 자동 포함된다 —
+    새 이벤트/도메인을 enum 에 추가하면 "<도메인>.>" 가 자동 포함됨 —
     수동 와일드카드 목록 동기화 불필요.
     """
     prefixes = {value.split(".", 1)[0] + ".>" for value in EventSubject}

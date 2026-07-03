@@ -2,7 +2,7 @@
 
 팀원이 domains/<새도메인>/{tables,repo}.py 를 추가하면 자동 포함된다(packages/ 0 수정).
 아직 domains/ 로 이전 전인 도메인(rca·command·auth·projection)은 임시로 명시 —
-이전되면 _PENDING 에서 빠지고 자동 발견으로 흡수된다.
+이전되면 _PENDING 에서 빠지고 자동 발견으로 흡수됨.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def load_domain_events() -> None:
     """domains/*/events.py 임포트 → @event 데코레이터가 EventRegistry 에 자동 등록.
 
     이벤트 카탈로그(make events)나 전 도메인 계약이 필요한 곳(합성 루트)에서 호출.
-    새 도메인 이벤트는 events.py 생성만으로 카탈로그에 포함된다.
+    새 도메인 이벤트는 events.py 생성만으로 카탈로그에 포함됨.
     """
     _domain_modules("events")
 
@@ -69,7 +69,7 @@ def _discovered_repositories() -> tuple[type, ...]:
 
 
 _CORE = (EventRepository, DeadLetterRepository, OutboxRepository)
-# 모든 도메인 repo 는 domains/ 에서 자동 발견된다.
+# 모든 도메인 repo 는 domains/ 에서 자동 발견됨.
 
 if TYPE_CHECKING:
     # 타입 검사용 스텁 — 코어+pending repo 계약을 선언(런타임엔 아래 type() 이

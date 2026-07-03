@@ -159,7 +159,7 @@ class RcaRuleMissing(EventBody):
 @event(EventSubject.RCA_RULE_MISSING)
 @dataclass(frozen=True)
 class RcaRuleMissingBody(EventBody):
-    """rca.rule_missing — 대표 증상과 매칭되는 RCA rule이 없다."""
+    """rca.rule_missing — 대표 증상과 매칭되는 RCA rule이 없음."""
 
     rule_missing: RcaRuleMissing
     incident: IncidentRecord
@@ -185,7 +185,7 @@ class RcaBacklogItemCreatedBody(EventBody):
 @event(EventSubject.RCA_AI_FALLBACK_REQUESTED)
 @dataclass(frozen=True)
 class RcaAiFallbackRequestedBody(EventBody):
-    """rca.ai_fallback.requested — rule 미매칭 시 AI fallback 분석을 요청한다."""
+    """rca.ai_fallback.requested — rule 미매칭 시 AI fallback 분석을 요청함."""
 
     reason: str
     evidence_ref: str
@@ -307,7 +307,7 @@ class RecoveryPlan(EventBody):
 @event(EventSubject.RECOVERY_PLANNED)
 @dataclass(frozen=True)
 class RecoveryPlannedBody(EventBody):
-    """recovery.planned — RCA 결과를 복구 계획으로 바꾼다."""
+    """recovery.planned — RCA 결과를 복구 계획으로 바꿈."""
 
     draft: HealingActionDraft
     plan: RecoveryPlan | None = None
@@ -317,7 +317,7 @@ class RecoveryPlannedBody(EventBody):
 @event(EventSubject.RECOVERY_SELECTION_REQUESTED)
 @dataclass(frozen=True)
 class RecoverySelectionRequestedBody(EventBody):
-    """recovery.selection_requested — 사람이 복구 후보를 선택해야 한다."""
+    """recovery.selection_requested — 사람이 복구 후보를 선택해야 함."""
 
     plan: RecoveryPlan
     reason: str

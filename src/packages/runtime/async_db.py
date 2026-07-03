@@ -1,8 +1,8 @@
 """sync DB 를 async 로 감싸 호출 방식을 통일.
 
-일반 sync 메서드는 스레드풀(asyncio.to_thread)로 실행한다. 다만 worker UoW 안에서는
-ContextVar 의 active SQLAlchemy connection 을 재사용하므로 같은 스레드에서 실행한다.
-워커는 항상 `await ctx.db.x(...)` 한 가지로 호출한다.
+일반 sync 메서드는 스레드풀(asyncio.to_thread)로 실행함. 다만 worker UoW 안에서는
+ContextVar 의 active SQLAlchemy connection 을 재사용하므로 같은 스레드에서 실행함.
+워커는 항상 `await ctx.db.x(...)` 한 가지로 호출함.
 """
 
 from __future__ import annotations

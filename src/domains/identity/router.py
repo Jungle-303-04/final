@@ -90,7 +90,7 @@ TRUST_PROXY_ENV = "TRUST_PROXY"
 
 def _client_key(request: Request) -> str:
     # X-Forwarded-For 는 신뢰 프록시(TRUST_PROXY=1) 뒤에서만 신뢰 — 아니면 헤더 스푸핑으로
-    # 레이트리밋을 우회할 수 있다. 기본은 소켓 peer IP 사용.
+    # 레이트리밋을 우회할 수 있음. 기본은 소켓 peer IP 사용.
     if env(TRUST_PROXY_ENV, "") == "1":
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:

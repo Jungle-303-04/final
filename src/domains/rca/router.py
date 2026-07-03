@@ -15,7 +15,7 @@ from packages.contracts.gateway.responses import AcceptedResponse
 from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 
-# per-cluster 토큰 인증 — evidence 의 workspace/cluster 는 토큰 identity 에서만 취한다.
+# per-cluster 토큰 인증 — evidence 의 workspace/cluster 는 토큰 identity 에서만 취함.
 router = APIRouter()
 DEFAULT_EVIDENCE_SOURCE_ID = "cluster-snapshot"
 
