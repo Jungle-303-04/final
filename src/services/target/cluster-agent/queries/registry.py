@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Self, cast
+from typing import Any, Self
 
-TelemetrySource = Literal["prometheus", "loki", "tempo"]
+from telemetry_registry import ensure_sources_loaded, telemetry
 
-SOURCE_EVIDENCE_KEYS: dict[TelemetrySource, str] = {
-    "prometheus": "metrics",
-    "loki": "logs",
-    "tempo": "traces",
-}
+# 소스 목록은 하드코딩하지 않는다 — @telemetry.source 로 등록된 provider 가 단일 출처.
+TelemetrySource = str
 
 
 @dataclass(frozen=True)
@@ -21,28 +18,22 @@ class TelemetryQueryDefinition:
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> Self:
+        ensure_sources_loaded()
         source = _required_text(payload, "source")
-        if source not in SOURCE_EVIDENCE_KEYS:
-            supported = ", ".join(SOURCE_EVIDENCE_KEYS)
-            raise ValueError(
-                f"unsupported telemetry query source: {source}; supported: {supported}"
-            )
+        telemetry.spec(source)  # 미등록 소스면 supported 목록과 함께 즉시 예외
 
         return cls(
-            source=cast(TelemetrySource, source),
+            source=source,
             name=_required_text(payload, "name"),
             description=str(payload.get("description", "")),
             query=_required_text(payload, "query"),
         )
 
-    def to_provider_query(
-        self,
-    ) -> PrometheusInstantQuery | LokiLogQuery | OpenTelemetrySpanQuery:
-        if self.source == "prometheus":
-            return PrometheusInstantQuery(self.name, self.description, self.query)
-        if self.source == "loki":
-            return LokiLogQuery(self.name, self.description, self.query)
-        return OpenTelemetrySpanQuery(self.name, self.description, self.query)
+    def to_provider_query(self) -> Any:
+        """등록된 소스 계약(query_type)으로 provider 쿼리 값 객체를 만든다."""
+        ensure_sources_loaded()
+        query_type = telemetry.query_type_for(self.source)
+        return query_type(self.name, self.description, self.query)
 
 
 class TelemetryQueryRegistry:

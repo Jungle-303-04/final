@@ -11,12 +11,12 @@ from providers import (
 )
 from providers.base import ProviderResult
 from queries import (
-    SOURCE_EVIDENCE_KEYS,
     TelemetryQueryDefinition,
     TelemetryQueryRegistry,
     TelemetrySource,
 )
 from span import get_tracer
+from telemetry_registry import telemetry
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
@@ -102,7 +102,7 @@ class EvidenceCollector:
         return await self._collect_with_queries(provider, (definition.to_provider_query(),))
 
     def _provider_for_source(self, source: TelemetrySource) -> TelemetryProvider:
-        return self.providers[SOURCE_EVIDENCE_KEYS[source]]
+        return self.providers[telemetry.spec(source).evidence_key]
 
     # Execute the common collect -> query -> normalize -> package flow through a provider.
     async def _collect_with_provider(self, provider: TelemetryProvider) -> ProviderResult:
