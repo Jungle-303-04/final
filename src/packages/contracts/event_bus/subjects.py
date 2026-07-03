@@ -11,31 +11,6 @@ STREAM_MAX_AGE_SECONDS = 7 * 24 * 60 * 60  # 7일
 STREAM_MAX_BYTES = 1024 * 1024 * 1024  # 1 GiB
 STREAM_DUPLICATE_WINDOW_SECONDS = 24 * 60 * 60  # relay crash/retry 중복 publish 억제
 
-# 스트림이 받는 subject 와일드카드. 도메인별로 "<도메인>.>" 한 줄씩.
-# 새 도메인 이벤트 추가 시 여기 와일드카드도 함께.
-STREAM_SUBJECTS = [
-    "git.>",
-    "manifest.>",
-    "desired.>",
-    "diff.>",
-    "cluster.>",
-    "incident.>",
-    "evidence.>",
-    "command.>",
-    "rca.>",
-    "recovery.>",
-    "alert.>",
-    "mail.>",
-    "safe_pr.>",
-    "rollout.>",
-    "workflow.>",
-    "approval.>",
-    "audit.>",
-    "agent.>",
-    "ai.>",
-    "dead_letter.>",
-]
-
 
 class EventSubject(StrEnum):
     """이벤트 subject(주제).
@@ -117,3 +92,20 @@ class EventSubject(StrEnum):
 
     # --- 신뢰성(공통): 재시도 소진 시 DLQ ---
     DEAD_LETTER_CREATED = "dead_letter.created"  # 죽은 편지(DLQ) 적재
+
+
+# 발행 enum 없이 구독자만 있는 예약 프리픽스(예: audit 프로젝터 산출물용).
+RESERVED_STREAM_SUBJECTS = ("audit.>",)
+
+
+def _derived_stream_subjects() -> list[str]:
+    """스트림 subject 와일드카드를 EventSubject 에서 자동 파생.
+
+    새 이벤트/도메인을 enum 에 추가하면 "<도메인>.>" 가 자동 포함된다 —
+    수동 와일드카드 목록 동기화 불필요.
+    """
+    prefixes = {value.split(".", 1)[0] + ".>" for value in EventSubject}
+    return sorted(prefixes | set(RESERVED_STREAM_SUBJECTS))
+
+
+STREAM_SUBJECTS = _derived_stream_subjects()

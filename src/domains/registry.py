@@ -45,6 +45,15 @@ def load_domain_tables() -> None:
     _domain_modules("models")
 
 
+def load_domain_events() -> None:
+    """domains/*/events.py 임포트 → @event 데코레이터가 EventRegistry 에 자동 등록.
+
+    이벤트 카탈로그(make events)나 전 도메인 계약이 필요한 곳(합성 루트)에서 호출.
+    새 도메인 이벤트는 events.py 생성만으로 카탈로그에 포함된다.
+    """
+    _domain_modules("events")
+
+
 def _discovered_repositories() -> tuple[type, ...]:
     """domains/*/repo.py 에서 정의된 DatabaseConnection 하위 repo 수집."""
     found: list[type] = []
