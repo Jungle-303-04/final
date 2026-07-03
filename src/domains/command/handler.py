@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 
 from domains.command.actions import allowed_command_actions, command_action_spec
 from domains.command.events import (
+    CommandCompletedBody,
     CommandDispatchedBody,
     CommandDispatchReadyBody,
     CommandQueuedForAgentBody,
@@ -157,6 +158,19 @@ async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan)
     await ctx.db.queue_agent_command(
         ctx.correlation_id, plan.to_body(), COMMAND_CONFIG.command_status_queued
     )
+
+
+async def sweep_expired_agent_commands(
+    ctx: EventContext[AgentCommandStore],
+) -> AsyncIterator[EventBody]:
+    """만료 방치 명령 janitor — 명령 이벤트 처리 길목에서 기회적으로 수행함.
+
+    전용 스케줄러 없이 command-worker 의 이벤트 경로에 편승 — 종결된 명령마다
+    CommandCompleted(FAILED)를 흘려 workflow 가 영구 APPLYING 에 갇히지 않게 함.
+    """
+    expired = await ctx.db.fail_expired_agent_commands() or []
+    for row in expired:
+        yield CommandCompletedBody(command_id=str(row["command_id"]), result=dict(row["result"]))
 
 
 async def handle_command_requested(

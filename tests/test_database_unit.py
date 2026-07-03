@@ -690,6 +690,46 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
     assert "RETURNING evidence_jobs.job_id" in update_sql
 
 
+def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> None:
+    from domains.command.repository import (
+        EXPIRED_COMMAND_GRACE_SECONDS,
+        AgentCommandRepository,
+    )
+
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    assert repository.fail_expired_agent_commands() == []
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    # 단일 원자 UPDATE ... RETURNING — LEASED/RUNNING 이면서 유예까지 지난 lease 만 종결
+    assert "UPDATE agent_commands" in sql
+    assert "status IN" in sql
+    assert f"interval '{EXPIRED_COMMAND_GRACE_SECONDS} seconds'" in sql
+    assert "RETURNING agent_commands.command_id" in sql
+    assert compiled.params["status"] == "failed"
+
+
 def test_user_account_schema_supports_password_login() -> None:
     columns = set(metadata.tables["user_accounts"].c.keys())
     assert {"email", "password_hash", "role"} <= columns
