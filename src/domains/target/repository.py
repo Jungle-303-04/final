@@ -14,6 +14,7 @@ from domains.target.evidence_jobs import (
     EVIDENCE_JOB_STATUS_FAILED,
     EVIDENCE_JOB_STATUS_LEASED,
     EVIDENCE_JOB_STATUS_QUEUED,
+    PENDING_EVIDENCE_EVENT_ID_PREFIX,
     aggregate_evidence_payload,
     evidence_job_id,
     evidence_key,
@@ -30,8 +31,6 @@ from domains.target.models import (
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
-
-PENDING_EVIDENCE_EVENT_ID_PREFIX = "pending:"
 
 
 class TargetAgentRepository(DatabaseConnection):
