@@ -38,6 +38,7 @@ from queries import (
     TelemetryQueryRegistry,
 )
 from span import configure_tracing
+from telemetry_registry import telemetry
 from uvicorn import Config, Server
 
 from config import (
@@ -90,11 +91,6 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
-QUERY_SOURCE_BY_PROVIDER = {
-    "metrics": "prometheus",
-    "logs": "loki",
-    "traces": "tempo",
-}
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -546,7 +542,7 @@ class TargetClusterAgent:
         provider_key: str,
         queries: list[JsonObject],
     ) -> list[str]:
-        source = QUERY_SOURCE_BY_PROVIDER.get(provider_key)
+        source = telemetry.source_for_provider(provider_key)
         if source is None:
             return []
         definitions: list[TelemetryQueryDefinition] = []

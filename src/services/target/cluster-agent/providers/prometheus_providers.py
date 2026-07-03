@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 from queries import PrometheusInstantQuery
+from telemetry_registry import telemetry
 
 from config import (
     DEFAULT_PROMETHEUS_BASE_URL,
@@ -12,9 +13,12 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
 
 
+@telemetry.source(
+    source="prometheus",
+    evidence_key="metrics",
+    query_type=PrometheusInstantQuery,
+)
 class PrometheusMetricsProvider:
-    evidence_key = "metrics"
-    source = "prometheus"
     span_name = "prometheus.collect"
     query_count_attribute = "prometheus.query_count"
     result_count_attribute = "prometheus.result_count"

@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Protocol
 
-from queries import SOURCE_EVIDENCE_KEYS, TelemetryQueryDefinition
+from queries import TelemetryQueryDefinition
+from telemetry_registry import telemetry
 
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -19,9 +20,6 @@ DEFAULT_JOB_POLL_TIMEOUT_SECONDS = 10
 
 class EvidenceSource(Protocol):
     async def collect(self, *evidence_keys: str) -> JsonObject: ...
-
-
-SOURCE_BY_PROVIDER = {provider_key: source for source, provider_key in SOURCE_EVIDENCE_KEYS.items()}
 
 
 class EvidenceJobScheduler:
@@ -172,7 +170,7 @@ class EvidenceJobScheduler:
         job: JsonObject,
         provider_key: str,
     ) -> tuple[TelemetryQueryDefinition, ...]:
-        source = SOURCE_BY_PROVIDER.get(provider_key)
+        source = telemetry.source_for_provider(provider_key)
         if source is None:
             return ()
         provider_policy = job.get(Gateway.PROVIDER_POLICY, {})
