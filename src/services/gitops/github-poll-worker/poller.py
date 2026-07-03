@@ -30,6 +30,11 @@ from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 
 LOGGER = get_logger(__name__)
+TRUTHY_VALUES = {"1", "true", "yes", "on"}
+
+
+def env_truthy(name: str) -> bool:
+    return env(name, "").strip().lower() in TRUTHY_VALUES
 
 
 class GitHubPoller:
@@ -54,7 +59,7 @@ class GitHubPoller:
             Settings.GITHUB_API_BASE_ENV, Settings.DEFAULT_GITHUB_API_BASE
         ).rstrip("/")
         self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
-        self.once = bool(env(Settings.POLL_ONCE_ENV, ""))  # CronJob 모드면 1회 후 종료.
+        self.once = env_truthy(Settings.POLL_ONCE_ENV)  # CronJob 모드면 1회 후 종료.
         self._client = client
         self._last_sha: str | None = None  # 같은 커밋 중복 POST 만 줄이는 메모리 가드(최소)
 
