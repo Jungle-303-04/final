@@ -1,7 +1,7 @@
 """target desired-state 비교 로직.
 
-이 모듈은 Kubernetes API를 직접 호출하지 않는다. 운영 구현에서는
-ActualStateReader port 뒤에 Kubernetes watch/cache/agent 보고를 연결한다.
+이 모듈은 Kubernetes API를 직접 호출하지 않음. 운영 구현에서는
+ActualStateReader port 뒤에 Kubernetes watch/cache/agent 보고를 연결함.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ class ReconcileDecision:
 
 
 class TargetReconciler:
-    """desired component 목록과 actual snapshot을 비교해 drift를 판정한다."""
+    """desired component 목록과 actual snapshot을 비교해 drift를 판정함."""
 
     def evaluate(
         self,

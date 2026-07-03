@@ -316,8 +316,8 @@ def artifact_payload(
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
 ) -> AsyncIterator[EventBody]:
-    # Git change를 Manifest/RenderedManifest 값 객체로 변환하고 render artifact를 저장한다.
-    # subject 발행은 yield된 이벤트를 런타임이 처리한다.
+    # Git change를 Manifest/RenderedManifest 값 객체로 변환하고 render artifact를 저장함.
+    # subject 발행은 yield된 이벤트를 런타임이 처리함.
     try:
         rendered_manifests = build_rendered_manifests_from_git_change(evt)
     except (

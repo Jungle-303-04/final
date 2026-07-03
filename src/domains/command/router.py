@@ -1,7 +1,7 @@
 """command 도메인 HTTP 라우터 — 명령 발행 + agent 명령 풀(롱폴)·시작·결과.
 
 agent 라우트는 APIRouter(dependencies=[Depends(require_cluster_agent)]) 로 라우터 단위
-per-cluster 토큰 인증 — workspace_id/cluster_id 는 body 가 아닌 토큰 identity 에서만 취한다.
+per-cluster 토큰 인증 — workspace_id/cluster_id 는 body 가 아닌 토큰 identity 에서만 취함.
 """
 
 from __future__ import annotations

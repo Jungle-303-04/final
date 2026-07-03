@@ -1,7 +1,7 @@
 """identity 인가 가드(필터) — Depends 로 라우터/라우트에 선언적으로 적용.
 
 클로저로 매 핸들러에서 검사하는 대신, 가드를 한 곳에 정의하고
-APIRouter(dependencies=[Depends(require_*)]) 또는 라우트 인자로 선언한다.
+APIRouter(dependencies=[Depends(require_*)]) 또는 라우트 인자로 선언함.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ ADMIN_AUTH_REQUIRED_MESSAGE = "admin role required"
 
 
 def hash_agent_token(token: str) -> str:
-    """agent 토큰 → SHA-256 hex. 원문은 저장하지 않고 이 해시만 저장/비교한다."""
+    """agent 토큰 → SHA-256 hex. 원문은 저장하지 않고 이 해시만 저장/비교함."""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -53,7 +53,7 @@ def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
     """per-cluster agent 토큰 가드 — fail-closed.
 
     x-agent-token 을 해시해 등록 레지스트리에서 클러스터를 찾고, 그 클러스터의
-    권위 (workspace_id, cluster_id) 를 돌려준다. agent 라우트는 이 값을 쓰고
+    권위 (workspace_id, cluster_id) 를 돌려줌. agent 라우트는 이 값을 쓰고
     요청 body 의 workspace_id/cluster_id 는 신뢰하지 않는다(크로스 테넌트 차단).
     토큰 없음/미등록/미인증(해시 불일치)은 모두 401.
     """

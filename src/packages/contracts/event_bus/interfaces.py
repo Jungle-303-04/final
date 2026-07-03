@@ -55,7 +55,7 @@ class EventMessage(Protocol):
 
 
 class EventSubscription(Protocol):
-    """pull 구독. fetch로 메시지를 배치로 당겨온다."""
+    """pull 구독. fetch로 메시지를 배치로 당겨옴."""
 
     async def fetch(self, batch: int, timeout: float | None = None) -> Sequence[EventMessage]: ...
 
