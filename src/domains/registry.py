@@ -54,6 +54,15 @@ def load_domain_events() -> None:
     _domain_modules("events")
 
 
+def load_domain_tools() -> None:
+    """domains/*/tools.py 임포트 → @ai.tool 데코레이터가 ToolRegistry 에 자동 등록.
+
+    LLM 도구가 필요한 서비스(chat-worker 등)가 부팅 시 호출.
+    새 도메인 도구는 tools.py 생성만으로 레지스트리에 포함됨.
+    """
+    _domain_modules("tools")
+
+
 def _discovered_repositories() -> tuple[type, ...]:
     """domains/*/repo.py 에서 정의된 DatabaseConnection 하위 repo 수집."""
     found: list[type] = []

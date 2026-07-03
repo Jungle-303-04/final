@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.rca.models import Evidence, RcaBacklogItem, RcaReport
@@ -55,6 +55,18 @@ class RcaRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[JsonObject]:
+        """최근 RCA 리포트 조회(최신순) — AI 도구 등 읽기 전용 소비자용."""
+        table = RcaReport.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.created_at.desc(), table.c.id.desc())
+            .limit(limit)
+        )
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute(statement).mappings()]
 
     def save_rca_report(
         self,
