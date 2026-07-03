@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
+from domains.rca.events import (
     RcaActionRequiredBody,
     RecoveryActionSelectedBody,
     RecoveryPlannedBody,
     RecoverySelectionRequestedBody,
 )
+from packages.contracts.event_bus.bodies import EventBody
 
 NO_PLAN_REASON = "복구 계획이 없습니다."
 SELECTION_REQUIRED_REASON = "사용자 복구 조치 선택이 필요합니다."

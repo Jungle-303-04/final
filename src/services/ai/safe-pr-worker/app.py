@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
-    SafePrPatchPreparedBody,
-    SafePrRequestedBody,
-)
+from domains.rca.events import SafePrPatchPreparedBody
+from domains.scm.events import SafePrRequestedBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App
 
 app = App("safe-pr-worker")

@@ -8,12 +8,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    AlertDispatchedBody,
-    AlertRejectedBody,
-    AlertRequestedBody,
-    EventBody,
-)
+from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
 app = App("alert-worker")

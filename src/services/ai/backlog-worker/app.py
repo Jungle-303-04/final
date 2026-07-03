@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from packages.contracts.event_bus.bodies import RcaBacklogItemCreatedBody
+from domains.rca.events import RcaBacklogItemCreatedBody
 from packages.contracts.stores import RcaBacklogStore
 from packages.runtime.app import App, EventContext
 

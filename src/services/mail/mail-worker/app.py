@@ -6,13 +6,10 @@ import smtplib
 from collections.abc import AsyncIterator
 from email.message import EmailMessage
 
+from domains.mail.events import EmailVerificationRequestedBody, EmailVerificationSentBody
 from packages.config.logs import get_logger
 from packages.config.settings import env
-from packages.contracts.event_bus.bodies import (
-    EmailVerificationRequestedBody,
-    EmailVerificationSentBody,
-    EventBody,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
 app = App("mail-worker")

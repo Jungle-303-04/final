@@ -10,10 +10,7 @@ from events import (
     record_reconcile,
 )
 
-from packages.contracts.event_bus.bodies import (
-    ClusterDesiredStateChangedBody,
-    ClusterReconcileRequestedBody,
-)
+from domains.target.events import ClusterDesiredStateChangedBody, ClusterReconcileRequestedBody
 from packages.runtime.app import App
 
 __all__ = [

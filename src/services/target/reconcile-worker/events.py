@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from domains.target.reconciler import ActualStateSnapshot, TargetReconciler
-from packages.contracts.event_bus.bodies import (
+from domains.target.events import (
     ClusterDesiredStateChangedBody,
     ClusterDriftDetectedBody,
     ClusterReconcileCompletedBody,
     ClusterReconcileRequestedBody,
     ClusterReconcileStartedBody,
-    EventBody,
     TargetDesiredComponent,
 )
+from domains.target.reconciler import ActualStateSnapshot, TargetReconciler
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.stores import TargetReconcileStore
 from packages.contracts.target import TargetReconcileStatus
