@@ -111,3 +111,16 @@ class DeadLetterReplayResponse(StrictModel):
     accepted: bool
     dead_letter_id: int
     replay_event: JsonMap
+
+
+class AiConversationAcceptedResponse(StrictModel):
+    accepted: bool
+    conversation_id: str
+    message_id: str
+    event_id: str
+    correlation_id: str
+
+
+class AiConversationResponse(StrictModel):
+    conversation: JsonMap
+    messages: list[JsonMap]

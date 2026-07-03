@@ -40,6 +40,8 @@ DEFAULT_PROVIDER_INTERVAL_SECONDS = 8
 DEFAULT_PROVIDER_MIN_WORKERS = 1
 DEFAULT_PROVIDER_MAX_WORKERS = 3
 DEFAULT_QUEUE_AGE_TARGET_SECONDS = 15
+DEFAULT_AI_AGENT = "operations-chat"
+MAX_AI_MESSAGE_LENGTH = 16_000
 
 # agent evidence 페이로드 상한 — 무한 크기 수집물이 DB/NATS/LLM 컨텍스트를 압박하지 않도록.
 MAX_EVIDENCE_LOG_ENTRIES = 2000
@@ -150,6 +152,19 @@ class CommandRequest(StrictModel):
     namespace: str = Sandbox.NAMESPACE
     reason: str | None = None
     diff: dict[str, Any] | None = None
+
+
+class AiConversationCreateRequest(StrictModel):
+    message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
+    title: str | None = Field(default=None, max_length=120)
+    agent: str = Field(default=DEFAULT_AI_AGENT, min_length=1, max_length=80)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class AiMessageCreateRequest(StrictModel):
+    message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
+    agent: str | None = Field(default=None, min_length=1, max_length=80)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalDecisionRequest(StrictModel):

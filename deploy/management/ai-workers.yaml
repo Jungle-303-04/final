@@ -1,6 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: ai-chat-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-chat-worker
+  template:
+    metadata:
+      labels:
+        app: ai-chat-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/ai/chat-worker/app.py"]
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: evidence-worker
   namespace: management
 spec:

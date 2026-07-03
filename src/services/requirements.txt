@@ -6,3 +6,6 @@ PyYAML==6.0.3
 redis==6.4.0
 sqlalchemy==2.0.51
 httpx==0.28.1
+opentelemetry-api==1.43.0
+opentelemetry-exporter-otlp-proto-http==1.43.0
+opentelemetry-sdk==1.43.0
