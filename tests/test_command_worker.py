@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from types import SimpleNamespace
 
 from domains.command.events import (
+    CommandCompletedBody,
     CommandDispatchedBody,
     CommandDispatchReadyBody,
     CommandQueuedForAgentBody,
@@ -19,6 +20,7 @@ from domains.command.handler import (
     build_plan,
     handle_command_requested,
     route_for_plan,
+    sweep_expired_agent_commands,
 )
 from domains.gitops.events import Diff
 from packages.config.constants import Command, Sandbox, Target
@@ -179,6 +181,52 @@ def test_command_handler_queues_manifest_diff_even_when_image_matches() -> None:
         CommandQueuedForAgentBody,
     ]
     assert store.calls[0][1]["diff"]["desired_manifest"]["spec"]["replicas"] == 3
+
+
+def test_sweep_expired_commands_emits_failed_completion_per_row() -> None:
+    # janitor: lease 만료 방치 명령을 FAILED 종결 이벤트로 흘려 workflow 를 풀어줌(감사 C6)
+    failed_result = {
+        "status": "failed",
+        "applied": False,
+        "message": "command lease expired; no agent completed the command",
+    }
+
+    class JanitorStore:
+        def __init__(self) -> None:
+            self.swept = 0
+
+        async def fail_expired_agent_commands(self) -> list[dict[str, object]]:
+            self.swept += 1
+            return [
+                {"command_id": "cmd-9", "result": failed_result},
+                {"command_id": "cmd-10", "result": failed_result},
+            ]
+
+    async def run() -> tuple[list[EventBody], JanitorStore]:
+        store = JanitorStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(sweep_expired_agent_commands(ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert store.swept == 1
+    assert [type(event) for event in events] == [CommandCompletedBody, CommandCompletedBody]
+    assert events[0].command_id == "cmd-9"
+    assert events[0].result["status"] == "failed"
+    assert events[0].result["applied"] is False
+
+
+def test_sweep_expired_commands_is_quiet_when_nothing_expired() -> None:
+    class EmptyStore:
+        async def fail_expired_agent_commands(self) -> list[dict[str, object]]:
+            return []
+
+    async def run() -> list[EventBody]:
+        ctx = SimpleNamespace(correlation_id="corr-1", db=EmptyStore())
+        return await collect_events(sweep_expired_agent_commands(ctx))
+
+    assert asyncio.run(run()) == []
 
 
 def test_command_handler_rejects_unsupported_action_before_queue() -> None:
