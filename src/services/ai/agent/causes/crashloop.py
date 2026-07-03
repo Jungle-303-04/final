@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from services.ai.agent.rulekit import CauseCandidateSpec, causes_for
+from services.ai.agent.playbooks import CauseCandidateSpec, rca
 
 
-@causes_for(
+@rca.cause(
     symptoms=("CrashLoopBackOff", "pod_restart_loop"),
     required_sources=("kubernetes", "metrics", "logs"),
     candidates=(
