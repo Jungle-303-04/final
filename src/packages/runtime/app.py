@@ -30,14 +30,16 @@ from packages.runtime.dispatch import (
     make_raw_handler,
     make_router,
 )
+from packages.runtime.spec import ServiceSpec
 
 # App 과 EventContext 함께 쓰므로 여기서 재노출.
-__all__ = ["App", "EventContext"]
+__all__ = ["App", "EventContext", "ServiceSpec"]
 
 
 class App:
-    def __init__(self, name: str) -> None:
-        self.name = name
+    def __init__(self, spec: str | ServiceSpec) -> None:
+        self.spec = ServiceSpec(name=spec) if isinstance(spec, str) else spec
+        self.name = self.spec.name
         self._handlers: dict[EventSubject, Subscription] = {}
         self._raw: tuple[Callable[..., Any], bool] | None = None
 
