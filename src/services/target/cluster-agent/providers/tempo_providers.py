@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import httpx
-from queries import OPEN_TELEMETRY_SPAN_QUERIES, OpenTelemetrySpanQuery
+from queries import OpenTelemetrySpanQuery
 
 from config import (
     DEFAULT_TEMPO_BASE_URL,
@@ -21,7 +21,7 @@ class TempoTracesProvider:
     result_count_attribute = "tempo.result_count"
     timeout_seconds = TEMPO_TIMEOUT_SECONDS
     failure_message = "tempo trace collection failed"
-    queries = OPEN_TELEMETRY_SPAN_QUERIES
+    queries: tuple[OpenTelemetrySpanQuery, ...] = ()
 
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")

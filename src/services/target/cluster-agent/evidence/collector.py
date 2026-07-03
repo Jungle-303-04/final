@@ -11,7 +11,6 @@ from providers import (
 )
 from providers.base import ProviderResult
 from queries import (
-    DEFAULT_TELEMETRY_QUERY_DEFINITIONS,
     SOURCE_EVIDENCE_KEYS,
     TelemetryQueryDefinition,
     TelemetryQueryRegistry,
@@ -39,7 +38,7 @@ class EvidenceCollector:
         registry: TelemetryQueryRegistry | None = None,
     ) -> None:
         self.providers = {provider.evidence_key: provider for provider in providers}
-        self.registry = registry or TelemetryQueryRegistry(DEFAULT_TELEMETRY_QUERY_DEFINITIONS)
+        self.registry = registry or TelemetryQueryRegistry()
         self.refresh_provider_queries()
 
     def register_query(self, definition: TelemetryQueryDefinition) -> TelemetryQueryDefinition:
@@ -47,10 +46,14 @@ class EvidenceCollector:
         self.refresh_provider_queries()
         return registered
 
-    def import_queries(self, path: str) -> tuple[TelemetryQueryDefinition, ...]:
-        definitions = self.registry.import_path(path)
+    def replace_queries(
+        self,
+        source: TelemetrySource,
+        definitions: tuple[TelemetryQueryDefinition, ...],
+    ) -> tuple[TelemetryQueryDefinition, ...]:
+        registered = self.registry.replace_source(source, definitions)
         self.refresh_provider_queries()
-        return definitions
+        return registered
 
     def refresh_provider_queries(self) -> None:
         for provider in self.providers.values():
@@ -72,6 +75,15 @@ class EvidenceCollector:
             for evidence_key in selected_keys:
                 evidence[evidence_key] = await self._collect_provider(evidence_key)
             return evidence
+
+    async def collect_query_policy(
+        self,
+        evidence_key: str,
+        definitions: tuple[TelemetryQueryDefinition, ...],
+    ) -> JsonObject:
+        provider = self.providers[evidence_key]
+        queries = tuple(definition.to_provider_query() for definition in definitions)
+        return {evidence_key: await self._collect_with_queries(provider, queries)}
 
     def _select_provider_keys(self, requested_keys: tuple[str, ...]) -> tuple[str, ...]:
         selected_keys = requested_keys or tuple(self.providers)

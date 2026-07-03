@@ -33,9 +33,7 @@ SERVICE_LOCAL_MODULES = (
     "control.store",
     "evidence",
     "evidence.collector",
-    "evidence.scheduler",
-    "evidence.store",
-    "evidence.uploader",
+    "evidence.jobs",
     "providers",
     "providers.base",
     "providers.loki_providers",
@@ -47,8 +45,6 @@ SERVICE_LOCAL_MODULES = (
     "span",
     "span.base",
     "span.otel",
-    "workload",
-    "workload.controller",
 )
 
 

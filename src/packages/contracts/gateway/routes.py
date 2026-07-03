@@ -22,7 +22,9 @@ AGENT_COMMAND_POLL_PATH = "/agent/commands/poll"
 AGENT_COMMAND_START_PATH = "/agent/commands/{command_id}/start"
 AGENT_COMMAND_HEARTBEAT_PATH = "/agent/commands/{command_id}/heartbeat"
 AGENT_COMMAND_RESULT_PATH = "/agent/commands/{command_id}/result"
-AGENT_EVIDENCE_SOURCE_LEASE_PATH = "/agent/evidence-sources/{source_id}/lease"
+AGENT_EVIDENCE_JOB_SCHEDULE_PATH = "/agent/evidence/jobs"
+AGENT_EVIDENCE_JOB_POLL_PATH = "/agent/evidence/jobs/poll"
+AGENT_EVIDENCE_JOB_RESULT_PATH = "/agent/evidence/jobs/{job_id}/result"
 AGENT_POLICY_PATH = "/agent/policy"
 AGENT_POLICY_STATUS_PATH = "/agent/policy/status"
 AGENT_RECONCILE_STATUS_PATH = "/agent/reconcile/status"
@@ -42,5 +44,5 @@ def agent_command_heartbeat_path(command_id: str) -> str:
     return AGENT_COMMAND_HEARTBEAT_PATH.format(command_id=command_id)
 
 
-def agent_evidence_source_lease_path(source_id: str) -> str:
-    return AGENT_EVIDENCE_SOURCE_LEASE_PATH.format(source_id=source_id)
+def agent_evidence_job_result_path(job_id: str) -> str:
+    return AGENT_EVIDENCE_JOB_RESULT_PATH.format(job_id=job_id)

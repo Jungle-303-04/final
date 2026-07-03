@@ -118,8 +118,6 @@ class ManagementPlaneClient(Protocol):
         self, cluster_id: str, agent_id: str, capabilities: list[str]
     ) -> None: ...
 
-    async def ship_evidence(self, evidence: JsonObject) -> int: ...
-
     async def poll_command(
         self, cluster_id: str, workspace_id: str, agent_id: str, timeout_seconds: int
     ) -> CommandRecord | None: ...
@@ -141,14 +139,28 @@ class ManagementPlaneClient(Protocol):
         result: JsonObject,
     ) -> None: ...
 
-    async def acquire_evidence_source_lease(
+    async def schedule_evidence_jobs(
         self,
-        cluster_id: str,
-        workspace_id: str,
-        agent_id: str,
         source_id: str,
         window_start: str,
-        lease_seconds: int,
+        provider_keys: list[str],
+    ) -> JsonObject: ...
+
+    async def poll_evidence_job(
+        self,
+        provider_key: str,
+        agent_id: str,
+        timeout_seconds: int,
+    ) -> JsonObject | None: ...
+
+    async def complete_evidence_job(
+        self,
+        job_id: str,
+        agent_id: str,
+        lease_id: str,
+        status: str,
+        result: JsonObject,
+        error: str,
     ) -> JsonObject: ...
 
     async def fetch_policy(self, cluster_id: str, generation: int) -> JsonObject | None: ...
