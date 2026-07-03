@@ -23,9 +23,11 @@ STREAM_SUBJECTS = [
     "evidence.>",
     "command.>",
     "rca.>",
+    "recovery.>",
     "alert.>",
     "mail.>",
     "safe_pr.>",
+    "rollout.>",
     "workflow.>",
     "approval.>",
     "audit.>",
@@ -72,9 +74,20 @@ class EventSubject(StrEnum):
     # --- 원인 분석/안전 PR(rca-worker) ---
     INCIDENT_DETECTED = "incident.detected"  # 장애 플래그 판단 결과
     EVIDENCE_BUILT = "evidence.built"  # 증거 번들 구성
-    RCA_SCENARIOS_EVALUATED = "rca.scenarios.evaluated"  # RCA 후보 시나리오 평가
+    EVIDENCE_BUNDLE_BUILT = "evidence.bundle.built"  # RCA 판단 근거 묶음 구성
+    RCA_CANDIDATES_PLANNED = "rca.candidates.planned"  # RCA 원인 후보 생성
+    RCA_CANDIDATES_EVALUATED = "rca.candidates.evaluated"  # RCA 원인 후보 평가
     RCA_COMPLETED = "rca.completed"  # 근본 원인 분석 완료
-    SAFE_PR_POLICY_DECIDED = "safe_pr.policy_decided"  # PR/자동/승인필요 라우트 결정
+    RCA_RULE_MISSING = "rca.rule_missing"  # RCA rule 매칭 실패
+    RCA_BACKLOG_ITEM_CREATED = "rca.backlog.created"  # RCA 개선 backlog 적재
+    RCA_AI_FALLBACK_REQUESTED = "rca.ai_fallback.requested"  # AI fallback 분석 요청
+    RECOVERY_PLANNED = "recovery.planned"  # 복구 조치 계획 수립
+    RECOVERY_SELECTION_REQUESTED = "recovery.selection_requested"  # 사용자 복구 후보 선택 요청
+    RECOVERY_ACTION_SELECTED = "recovery.action_selected"  # 복구 후보 선택 완료
+    SAFE_PR_PATCH_PREPARED = "safe_pr.patch_prepared"  # Safe PR 패치 초안 준비
+    DIFF_EXPLAINED = "diff.explained"  # 패치 diff 와 위험 설명
+    ROLLOUT_DIAGNOSED = "rollout.diagnosed"  # 롤아웃 상태 진단
+    APPROVAL_RECOMMENDED = "approval.recommended"  # 승인/거절 보조 판단
     RCA_ACTION_REQUIRED = "rca.action_required"  # 자동 진행 불가, 사람 조치 필요
     ALERT_REQUESTED = "alert.requested"  # 알람 전송/사전 배포 게이트 요청
     ALERT_DISPATCHED = "alert.dispatched"  # 알람 전송 완료(또는 stub 통과)
