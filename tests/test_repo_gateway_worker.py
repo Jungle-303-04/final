@@ -70,6 +70,25 @@ def test_repo_gateway_does_not_emit_next_alert_when_pr_fails(monkeypatch) -> Non
     assert not db.called("save_pull_request")
 
 
+def test_validate_pr_url_prefix_fails_fast_with_korean_message() -> None:
+    # 부팅 시 검증되는 순수 함수 — 미설정/공백이면 명확한 한국어 메시지로 즉시 실패
+    repo = load_service("gitops/scm-worker")
+
+    for missing in ("", "   ", "/"):
+        try:
+            repo.validate_pr_url_prefix(missing)
+        except RuntimeError as exc:
+            assert "SCM_PR_URL_PREFIX" in str(exc)
+            assert "미설정" in str(exc)
+        else:
+            raise AssertionError("빈 prefix 는 RuntimeError 여야 함")
+
+    assert (
+        repo.validate_pr_url_prefix("https://github.test.local/pr/")
+        == "https://github.test.local/pr"
+    )
+
+
 class FailingDb(SpyDb):
     def save_pull_request(self, *args: object) -> None:
         self.calls.append(("save_pull_request", args))
