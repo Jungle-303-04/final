@@ -11,6 +11,12 @@
 
 from __future__ import annotations
 
+from domains.ai.events import (
+    AiConversationStartedBody,
+    AiMessageFailedBody,
+    AiMessageReceivedBody,
+    AiMessageRespondedBody,
+)
 from domains.alert.events import (
     AlertDispatchedBody,
     AlertRejectedBody,
@@ -103,6 +109,10 @@ __all__ = [
     "AlertDispatchedBody",
     "AlertRejectedBody",
     "AlertRequestedBody",
+    "AiConversationStartedBody",
+    "AiMessageFailedBody",
+    "AiMessageReceivedBody",
+    "AiMessageRespondedBody",
     "ApprovalGrantedBody",
     "ApprovalRecommendedBody",
     "ApprovalRejectedBody",
