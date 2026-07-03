@@ -47,6 +47,9 @@ test: ## 린트와 테스트 실행
 events: ## 등록된 이벤트/구독자 한눈에 보기
 	uv run python scripts/events.py
 
+services: ## 서비스 명부 한눈에 보기(src/services 자동 발견)
+	uv run python scripts/services.py
+
 check: doctor test ## 개발 전/커밋 전 전체 점검
 
 build-image: ## service Docker 이미지 빌드
