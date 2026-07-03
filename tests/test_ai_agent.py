@@ -26,7 +26,8 @@ def test_fake_llm_and_agent_run() -> None:
     assert fake.prompts == ["summarize: evidence"]  # prompt 기록
 
 
-def test_build_llm_client_is_runnable_fake() -> None:
+def test_build_llm_client_is_runnable_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     # 미구현이어도 NotImplementedError 로 터지지 않고 Fake 가 응답.
     out = asyncio.run(build_llm_client().complete("x"))
     assert isinstance(out, str)
