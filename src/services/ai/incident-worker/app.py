@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import EventBody, EvidenceBuiltBody
+from domains.rca.events import EvidenceBuiltBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 from services.ai.agent.pipeline import IncidentPipeline
 

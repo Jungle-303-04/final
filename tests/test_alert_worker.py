@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import AlertRequestedBody, CommandRequestedBody, Diff
+from domains.alert.events import AlertRequestedBody
+from domains.command.events import CommandRequestedBody
+from domains.gitops.events import Diff
 
 
 def test_alert_worker_dispatches_then_auto_deploys_after_gate() -> None:

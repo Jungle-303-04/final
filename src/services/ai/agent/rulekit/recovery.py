@@ -4,14 +4,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from packages.contracts.event_bus.bodies import (
+from domains.rca.events import (
     HealingActionDraft,
     IncidentRecord,
-    JsonObject,
     RcaCompletedBody,
     RcaReportDetail,
     RecoveryActionCandidate,
 )
+from packages.contracts.event_bus.bodies import JsonObject
 from services.ai.agent.defaults import RecoveryDefaults
 
 

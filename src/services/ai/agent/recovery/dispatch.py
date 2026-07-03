@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from domains.command.actions import command_action_for_recovery
-from packages.config.constants import GitHub, Sandbox, Target
-from packages.contracts.event_bus.bodies import (
-    CommandRequestedBody,
-    Diff,
-    EventBody,
+from domains.command.events import CommandRequestedBody
+from domains.gitops.events import Diff
+from domains.rca.events import (
     RcaActionRequiredBody,
     RecoveryActionCandidate,
     RecoveryActionSelectedBody,
     RecoveryPlan,
-    SafePrRequestedBody,
 )
+from domains.scm.events import SafePrRequestedBody
+from packages.config.constants import GitHub, Sandbox, Target
+from packages.contracts.event_bus.bodies import EventBody
 from services.ai.agent.defaults import ActionRoutes
 
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."

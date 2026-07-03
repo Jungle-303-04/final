@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    ClusterEvidenceReceivedBody,
-    EventBody,
-    EvidenceBuiltBody,
-)
+from domains.rca.events import ClusterEvidenceReceivedBody, EvidenceBuiltBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import RcaStore
 from packages.runtime.app import App, EventContext
 from services.ai.agent.pipeline import EvidencePipeline

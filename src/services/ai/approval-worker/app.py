@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
+from domains.rca.events import (
     ApprovalRecommendedBody,
-    EventBody,
     RecoverySelectionRequestedBody,
     RolloutDiagnosedBody,
 )
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App
 
 app = App("approval-worker")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import Diff, DiffDetectedBody
+from domains.gitops.events import Diff, DiffDetectedBody
 
 
 def _diff(risk: str) -> Diff:

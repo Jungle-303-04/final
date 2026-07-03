@@ -5,13 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from domains.ai.agent import OperationsChatAgent
+from domains.ai.events import AiMessageFailedBody, AiMessageReceivedBody, AiMessageRespondedBody
 from packages.ai.llm import build_llm_client
-from packages.contracts.event_bus.bodies import (
-    AiMessageFailedBody,
-    AiMessageReceivedBody,
-    AiMessageRespondedBody,
-    EventBody,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import AiConversationStore
 from packages.runtime.app import App, EventContext
 

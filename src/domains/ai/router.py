@@ -7,13 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.ai.events import AiConversationStartedBody, AiMessageReceivedBody
 from domains.ai.repository import ROLE_USER, STATUS_WAITING
 from domains.identity.dependencies import require_session
 from packages.contracts.auth import Actor
-from packages.contracts.event_bus.bodies import (
-    AiConversationStartedBody,
-    AiMessageReceivedBody,
-)
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AiConversationCreateRequest,
