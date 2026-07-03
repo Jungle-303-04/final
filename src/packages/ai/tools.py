@@ -118,13 +118,16 @@ class ToolRegistry:
 
 
 def _same_contract(a: ToolSpec, b: ToolSpec) -> bool:
-    """모듈 재로딩 시 함수 객체는 달라져도 계약(이름 기준)이 같으면 동일 선언."""
+    """모듈 재로딩 시 함수 객체는 달라져도 계약(이름 기준)이 같으면 동일 선언.
+
+    모듈 경로는 비교하지 않음 — 서비스 로컬 모듈은 로딩 방식에 따라
+    "tools"/파일 로더 별칭 등 다른 이름으로 재실행될 수 있음.
+    """
     return (
         a.description == b.description
         and a.parameters == b.parameters
         and a.locales == b.locales
         and a.handler.__qualname__ == b.handler.__qualname__
-        and a.handler.__module__ == b.handler.__module__
     )
 
 
