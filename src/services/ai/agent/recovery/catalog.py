@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from services.ai.agent.rulekit.discovery import load_rule_modules
-from services.ai.agent.rulekit.recovery import registered_recovery_rules
+from services.ai.agent.playbooks.discovery import load_rule_modules
+from services.ai.agent.playbooks.recovery import registered_recovery_rules
 
 load_rule_modules(
     package_name="services.ai.agent.recovery",

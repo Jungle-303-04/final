@@ -11,7 +11,7 @@ from domains.rca.events import (
     RcaRuleMissing,
 )
 from services.ai.agent.causes.catalog import cause_rules, evidence_rules
-from services.ai.agent.rulekit.cause import CauseRule, EvidenceRequirementRule
+from services.ai.agent.playbooks.cause import CauseRule, EvidenceRequirementRule
 
 DEFAULT_REQUIRED_EVIDENCE = ["kubernetes"]
 MATCHING_CAUSE_RULE_EVIDENCE = "matching_cause_rule"

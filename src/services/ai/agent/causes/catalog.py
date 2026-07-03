@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from services.ai.agent.rulekit.cause import cause_rules, evidence_rules
-from services.ai.agent.rulekit.discovery import load_rule_modules
+from services.ai.agent.playbooks.cause import cause_rules, evidence_rules
+from services.ai.agent.playbooks.discovery import load_rule_modules
 
 load_rule_modules(
     package_name="services.ai.agent.causes",
