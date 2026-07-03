@@ -163,3 +163,17 @@ def command_spec(handler: Any) -> CommandSpec | None:
     wrapped = getattr(handler, "__func__", None)
     wrapped_spec = getattr(wrapped, COMMAND_SPEC_ATTRIBUTE, None)
     return wrapped_spec if isinstance(wrapped_spec, CommandSpec) else None
+
+
+class CommandDecorators:
+    """에이전트 명령 등록 네임스페이스 — 규칙: 등록은 @command.<단어>.
+
+    @command.handler(action)  일반 명령 실행 핸들러
+    @command.k8s(action, api_group=..., verb=...)  k8s 리소스/권한 선언 포함 핸들러
+    """
+
+    handler = staticmethod(command_handler)
+    k8s = staticmethod(kubernetes_command)
+
+
+command = CommandDecorators()
