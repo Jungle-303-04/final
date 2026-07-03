@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from domains.ai.agent import OperationsChatAgent
+from domains.ai.agent import build_system_prompt
 from domains.ai.messages import DEFAULT_LOCALE, registered_message_keys, text
+from packages.ai.engine import ConversationEngine
+from packages.ai.tools import ToolContext, ToolRegistry
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -38,20 +40,26 @@ def test_prompt_includes_history_and_locale() -> None:
     import asyncio
 
     llm = _EchoLlm()
-    agent = OperationsChatAgent(llm)
+    engine = ConversationEngine(llm, ToolRegistry())
 
     class Evt:
         agent = "ops"
         conversation_id = "c1"
         workspace_id = "w1"
         context = {"locale": "ko"}
-        content = "왜 파드가 재시작되나요?"
 
     history = [
         {"role": "user", "content": "first question"},
         {"role": "assistant", "content": "first answer"},
     ]
-    asyncio.run(agent.run(Evt(), history=history, locale="ko"))
+    asyncio.run(
+        engine.respond(
+            system_prompt=build_system_prompt(Evt(), "ko"),
+            history=history,
+            user_message="왜 파드가 재시작되나요?",
+            context=ToolContext(db=None, workspace_id="w1"),
+        )
+    )
 
     prompt = llm.last_prompt
     assert text("chat.system_prompt", "ko").splitlines()[0] in prompt

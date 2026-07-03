@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICE_LOCAL_MODULES = (
     "settings",
     "config",
+    "tools",
     "kubernetes_api",
     "metric_collectors",
     "prometheus_metrics",
