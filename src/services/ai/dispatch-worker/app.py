@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import EventBody, RecoveryActionSelectedBody
+from domains.rca.events import RecoveryActionSelectedBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App
 from services.ai.agent.recovery.dispatch import RecoveryDispatcher
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody, Evidence
+from domains.rca.events import ClusterEvidenceReceivedBody, Evidence
 from services.ai.agent.defaults import EvidenceDefaults
 
 

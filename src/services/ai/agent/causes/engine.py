@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.contracts.event_bus.bodies import (
+from domains.rca.events import (
     CauseCandidate,
     CauseEvaluation,
     EvidenceBundle,

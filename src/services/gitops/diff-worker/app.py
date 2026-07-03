@@ -20,14 +20,9 @@ from domains.gitops.diffing import (
     snapshot_from_rendered_manifest,
     summarize_status,
 )
+from domains.gitops.events import Diff, DiffDetectedBody, ManifestRenderedBody, RenderedManifest
 from packages.config.constants import Sandbox
-from packages.contracts.event_bus.bodies import (
-    Diff,
-    DiffDetectedBody,
-    EventBody,
-    ManifestRenderedBody,
-    RenderedManifest,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
 app = App("diff-worker")

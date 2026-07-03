@@ -6,7 +6,7 @@ from urllib import error
 import pytest
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import GitChangedBody
+from domains.gitops.events import GitChangedBody
 
 
 def test_render_emits_manifest_rendered() -> None:

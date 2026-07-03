@@ -5,7 +5,7 @@ from typing import Any
 
 from conftest import SpyDb, load_service
 
-from packages.contracts.event_bus.bodies import GitWebhookReceivedBody
+from domains.gitops.events import GitWebhookReceivedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.events.envelope import event

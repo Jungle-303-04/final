@@ -18,6 +18,8 @@ from domains.identity.dependencies import (
     require_admin_session,
     require_cluster_agent,
 )
+from domains.rca.events import ClusterEvidenceReceivedBody
+from domains.target.events import ClusterDesiredStateChangedBody, TargetDesiredComponent
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
     DEFAULT_EVIDENCE_SOURCE_ID,
@@ -31,11 +33,6 @@ from domains.target.evidence_policy import (
 )
 from domains.target.reconciler import desired_state_version
 from packages.config.settings import env
-from packages.contracts.event_bus.bodies import (
-    ClusterDesiredStateChangedBody,
-    ClusterEvidenceReceivedBody,
-    TargetDesiredComponent,
-)
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.policy_merge import merge_agent_policy
 from packages.contracts.gateway.requests import (

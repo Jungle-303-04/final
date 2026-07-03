@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
+from domains.rca.events import (
     Evidence,
     EvidenceBundleBuiltBody,
     IncidentDetectedBody,
     IncidentRecord,
-    JsonObject,
     RcaActionRequiredBody,
 )
+from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from services.ai.agent.defaults import IncidentMessages, RcaMessages
 from services.ai.agent.pipeline.evidence_bundle import build_incident_evidence_bundle
 

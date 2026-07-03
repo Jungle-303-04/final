@@ -6,7 +6,7 @@ from typing import Any
 
 from conftest import ROOT, load_file, load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import CommandRequestedBody
+from domains.command.events import CommandRequestedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event

@@ -4,9 +4,9 @@ from typing import Any
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import (
+from domains.command.events import CommandCompletedBody
+from domains.rca.events import (
     ClusterEvidenceReceivedBody,
-    CommandCompletedBody,
     Evidence,
     EvidenceBundle,
     IncidentRecord,

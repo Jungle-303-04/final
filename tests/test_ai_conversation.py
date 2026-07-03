@@ -7,10 +7,10 @@ from typing import Any
 import pytest
 
 from domains.ai.agent import OperationsChatAgent
+from domains.ai.events import AiMessageReceivedBody
 from domains.ai.router import create_conversation
 from packages.ai import llm
 from packages.ai.llm import FakeLlmClient
-from packages.contracts.event_bus.bodies import AiMessageReceivedBody
 from packages.contracts.gateway.requests import AiConversationCreateRequest
 from packages.events.envelope import event
 
