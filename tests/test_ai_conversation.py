@@ -284,7 +284,6 @@ def test_create_conversation_stores_user_message_and_emits_agent_event() -> None
     assert db.conversations[0]["title"] == "checkout incident"
     assert db.messages[0]["role"] == "user"
     assert [body.__subject__ for body in events.bodies] == [
-        "ai.conversation.started",
         "ai.message.received",
     ]
     assert events.bodies[-1].conversation_id == response.conversation_id
