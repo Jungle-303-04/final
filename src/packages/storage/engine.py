@@ -161,8 +161,6 @@ on manifest_artifacts (workspace_id, binding_id, commit_sha, manifest_path)
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
-# prepare_threshold=None: PgBouncer transaction pooling 에서 prepared statement 가
-# 트랜잭션을 가로질러 깨지지 않도록 psycopg server-side prepared statement 비활성화.
 # 게이트웨이(전 트래픽 + long-poll)와 워커(배치)의 트래픽 특성이 달라
 # 풀 크기·대기 한도는 서비스별 deploy env 로 오버라이드 가능(기본값 불변).
 DB_POOL_SIZE_ENV = "DB_POOL_SIZE"  # 풀 상주 커넥션 수(기본 2)
@@ -174,8 +172,19 @@ POOL_OPTIONS = {
     "pool_timeout": int(env(DB_POOL_TIMEOUT_ENV, "10")),
     "pool_pre_ping": True,
     "pool_recycle": 300,
-    "connect_args": {"prepare_threshold": None},
 }
+
+
+def connect_args_for(sqlalchemy_url: str) -> dict[str, object]:
+    """드라이버별 connect_args — 드라이버 전용 옵션을 타 드라이버에 전달하지 않음.
+
+    psycopg 한정 prepare_threshold=None: PgBouncer transaction pooling 에서
+    prepared statement 가 트랜잭션을 가로질러 깨지지 않도록 비활성화.
+    SQLite 등 다른 드라이버는 이 옵션을 모르는 인자로 거부하므로 분기 필수.
+    """
+    if sqlalchemy_url.startswith("postgresql+psycopg"):
+        return {"prepare_threshold": None}
+    return {}
 
 
 def compact_error(error: str) -> str:
@@ -236,8 +245,13 @@ async def configure_async_transaction(conn: Any) -> None:
 class DatabaseConnection:
     def __init__(self) -> None:
         self.url = required_env(DATABASE_URL_ENV)
-        self.engine: Engine = create_engine(self.sqlalchemy_url, **POOL_OPTIONS)
-        self.async_engine: AsyncEngine = create_async_engine(self.sqlalchemy_url, **POOL_OPTIONS)
+        connect_args = connect_args_for(self.sqlalchemy_url)
+        self.engine: Engine = create_engine(
+            self.sqlalchemy_url, connect_args=connect_args, **POOL_OPTIONS
+        )
+        self.async_engine: AsyncEngine = create_async_engine(
+            self.sqlalchemy_url, connect_args=connect_args, **POOL_OPTIONS
+        )
 
     @property
     def sqlalchemy_url(self) -> str:
