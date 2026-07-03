@@ -27,6 +27,10 @@ class RcaStore(Protocol):
     ) -> None: ...
 
 
+class RcaBacklogStore(Protocol):
+    async def upsert_rca_backlog_item(self, body: JsonObject) -> None: ...
+
+
 class RepoChangeStore(Protocol):
     async def save_repo_change(
         self,

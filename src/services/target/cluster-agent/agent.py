@@ -778,11 +778,6 @@ class TargetClusterAgent:
     async def execute_command(self, command: CommandRecord) -> JsonObject:
         # TODO(target): action 허용 목록을 workspace/repo/cluster 정책과 승인 증거로 확장
         # TODO(target): stdout/stderr/status 수집과 원본 secret 없는 부분 실패 보고
-        if command.get(Gateway.ACTION) == AgentConfig.APPLY_MANIFEST_ACTION:
-            return await self.apply_manifest_command(command)
-        if command.get(Gateway.ACTION) == AgentConfig.ROLLOUT_RESTART_ACTION:
-            return await self.rollout_restart_command(command)
-
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
         try:
@@ -904,9 +899,9 @@ class TargetClusterAgent:
                 return self.query_registry.get(source, name)
         return TelemetryQueryDefinition.from_mapping(query)
 
-    async def apply_manifest_command(self, command: CommandRecord) -> JsonObject:
-        plan = command.get("payload", {})
-        diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
+    @command_handler(AgentConfig.APPLY_MANIFEST_ACTION)
+    async def apply_manifest_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
+        diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
         desired_manifest = diff.get("desired_manifest")
         if isinstance(desired_manifest, dict) and desired_manifest:
@@ -928,9 +923,9 @@ class TargetClusterAgent:
         applied, message = await self.patch_deployment(namespace, deployment, patch)
         return self.command_result(applied, message)
 
-    async def rollout_restart_command(self, command: CommandRecord) -> JsonObject:
-        plan = command.get("payload", {})
-        diff = plan.get("diff", {}) if isinstance(plan, dict) else {}
+    @command_handler(AgentConfig.ROLLOUT_RESTART_ACTION)
+    async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
+        diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
         if namespace != Sandbox.NAMESPACE:
             return self.command_result(False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)

@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.storage.base import Base, created_at_column, jsonb_column, text_column
+from packages.storage.base import (
+    Base,
+    created_at_column,
+    jsonb_column,
+    text_column,
+    updated_at_column,
+)
 
 
 class Evidence(Base):
@@ -31,3 +37,21 @@ class RcaReport(Base):
     action: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
+
+
+class RcaBacklogItem(Base):
+    __tablename__ = "rca_backlog_items"
+
+    backlog_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
+    incident_id: Mapped[str] = text_column()
+    symptom: Mapped[str] = text_column()
+    title: Mapped[str] = text_column()
+    reason: Mapped[str] = text_column()
+    evidence_ref: Mapped[str] = text_column()
+    missing_evidence: Mapped[dict[str, Any]] = jsonb_column()
+    status: Mapped[str] = text_column()
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
