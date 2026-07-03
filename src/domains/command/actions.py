@@ -6,7 +6,7 @@
                     allowed_namespaces=(Sandbox.NAMESPACE,))
     class RolloutRestartCommand: ...
 
-handler 는 action 목록/네임스페이스 기준을 직접 알지 않고 카탈로그를 읽는다 —
+handler 는 action 목록/네임스페이스 기준을 직접 알지 않고 카탈로그를 읽음 —
 새 명령의 허용 조건은 데코레이터 인자로 선언한다(handler 수정 없음).
 """
 
@@ -79,7 +79,7 @@ class CommandCatalog:
 
 command = CommandCatalog()
 
-# 하위 호환 별칭(기존 소비자 유지) — 신규 코드는 @command.action / command.* 를 쓴다.
+# 하위 호환 별칭(기존 소비자 유지) — 신규 코드는 @command.action / command.* 를 씀.
 command_action = command.action
 registered_command_actions = command.actions
 allowed_command_actions = command.allowed_actions

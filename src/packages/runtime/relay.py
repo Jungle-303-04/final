@@ -1,7 +1,7 @@
 """OutboxRelay — outbox 에 적재된 이벤트를 NATS 로 발행(소비 루프와 별도).
 
 저장된 봉투를 같은 event_id 로 발행 → relay 재시도 시 downstream 이 dedup.
-각 워커는 자기 outbox 만 relay 한다.
+각 워커는 자기 outbox 만 relay 함.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class OutboxRelay:
         """미발행 outbox 를 한 배치 발행하고 '발행된 것만' sent 표시. 발행 건수 반환.
 
         발행 도중 실패해도 finally 로 '이미 발행된 것'만 표시 → 다음 루프가 전체 배치를
-        재발행하지 않는다(중복 최소화). 미발행 행은 표시 안 돼 다음에 재시도된다.
+        재발행하지 않는다(중복 최소화). 미발행 행은 표시 안 돼 다음에 재시도됨.
         """
         rows = await self.store.unsent_events(self.batch, self.source)
         published: list[str] = []

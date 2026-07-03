@@ -1,4 +1,4 @@
-"""워커가 ctx.db 로 보는 능력별 store(async). 서비스는 자기 store 만 본다.
+"""워커가 ctx.db 로 보는 능력별 store(async). 서비스는 자기 store 만 봄.
 
 ctx.db 는 AsyncDb 로 감싸져 모든 메서드가 async → 여기 메서드도 async.
 핸들러가 `ctx: EventContext[RcaStore]` 로 받으면 IDE·타입체커가 그 store 의

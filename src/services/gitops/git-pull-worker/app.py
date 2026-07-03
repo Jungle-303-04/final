@@ -49,8 +49,8 @@ def normalize_gitops_identity(payload: JsonObject) -> JsonObject:
 async def on_git_webhook(
     evt: GitWebhookReceivedBody, ctx: EventContext
 ) -> AsyncIterator[EventBody]:
-    # Git webhook은 계약 객체로 정규화되어 들어오므로 commit 식별자만 보정한다.
-    # manifest 생성은 다음 단계 manifest-render-worker 책임이다.
+    # Git webhook은 계약 객체로 정규화되어 들어오므로 commit 식별자만 보정함.
+    # manifest 생성은 다음 단계 manifest-render-worker 책임임.
     commit_sha = evt.commit_sha or str(uuid.uuid4())[:8]
     identity = normalize_gitops_identity(evt.to_body())
     last_seen = await ctx.db.get_watch_last_seen_commit_sha(
