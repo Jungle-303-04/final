@@ -35,10 +35,17 @@ latest_commit_sha() {
     header_args=(-H "authorization: Bearer ${GITHUB_TOKEN}")
   fi
   local response
-  response="$(
-    curl -fsS "${header_args[@]}" \
-      "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}"
-  )"
+  if [ "${#header_args[@]}" -gt 0 ]; then
+    response="$(
+      curl -fsS "${header_args[@]}" \
+        "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}"
+    )"
+  else
+    response="$(
+      curl -fsS \
+        "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}"
+    )"
+  fi
   GITHUB_COMMITS_JSON="${response}" python3 - <<'PY'
 import json
 import os
