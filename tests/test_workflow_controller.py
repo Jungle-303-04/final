@@ -4,17 +4,13 @@ from dataclasses import replace
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from domains.gitops.repository import (
-    derive_deployment_binding_id,
-    derive_repository_id,
-    derive_watch_target_id,
-)
-from packages.config.constants import CommandStatus, Sandbox, Target
-from packages.contracts.event_bus.bodies import (
+from domains.command.events import (
     CommandCompletedBody,
     CommandQueuedForAgentBody,
     CommandRejectedBody,
     CommandRequestedBody,
+)
+from domains.gitops.events import (
     Diff,
     DiffAnalyzedBody,
     DiffDetectedBody,
@@ -23,8 +19,14 @@ from packages.contracts.event_bus.bodies import (
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
-    SafePrFailedBody,
 )
+from domains.gitops.repository import (
+    derive_deployment_binding_id,
+    derive_repository_id,
+    derive_watch_target_id,
+)
+from domains.scm.events import SafePrFailedBody
+from packages.config.constants import CommandStatus, Sandbox, Target
 from packages.contracts.gitops import DEFAULT_DEPLOYMENT_BINDING_ID
 
 

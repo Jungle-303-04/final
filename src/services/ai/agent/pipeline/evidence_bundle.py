@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from packages.contracts.event_bus.bodies import (
+from domains.rca.events import (
     ClusterEvidenceReceivedBody,
     Evidence,
     EvidenceBundle,

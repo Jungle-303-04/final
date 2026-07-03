@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
+from domains.rca.events import (
     HealingActionDraft,
     RcaActionRequiredBody,
     RcaCompletedBody,
@@ -11,6 +10,7 @@ from packages.contracts.event_bus.bodies import (
     RecoveryPlan,
     RecoveryPlannedBody,
 )
+from packages.contracts.event_bus.bodies import EventBody
 from services.ai.agent.defaults import ActionRoutes, RcaMessages, RecoveryDefaults
 from services.ai.agent.recovery.catalog import registered_recovery_rules
 from services.ai.agent.rulekit.recovery import RecoveryRule, build_recovery_context

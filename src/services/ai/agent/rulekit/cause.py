@@ -4,11 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from packages.contracts.event_bus.bodies import (
-    CauseCandidate,
-    EvidenceBundle,
-    IncidentRecord,
-)
+from domains.rca.events import CauseCandidate, EvidenceBundle, IncidentRecord
 
 
 class EvidenceRequirementRule(Protocol):

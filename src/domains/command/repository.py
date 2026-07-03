@@ -11,11 +11,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.command.events import CommandCompletedBody
 from domains.command.models import (
     AgentCommand,
 )
 from packages.config.constants import CommandStatus
-from packages.contracts.event_bus.bodies import CommandCompletedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID

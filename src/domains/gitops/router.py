@@ -7,17 +7,17 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.command.events import CommandRequestedBody
 from domains.gitops.dependencies import verify_github_signature
-from domains.identity.dependencies import require_session
-from packages.config.constants import Command, Sandbox, Target
-from packages.contracts.auth import Actor
-from packages.contracts.event_bus.bodies import (
+from domains.gitops.events import (
     ApprovalGrantedBody,
     ApprovalRejectedBody,
-    CommandRequestedBody,
     Diff,
     GitWebhookReceivedBody,
 )
+from domains.identity.dependencies import require_session
+from packages.config.constants import Command, Sandbox, Target
+from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import ApprovalDecisionRequest, GitHubWebhookRequest
 from packages.contracts.gateway.responses import AcceptedEventResponse, AcceptedResponse

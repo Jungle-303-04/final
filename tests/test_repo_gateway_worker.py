@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import AlertRequestedBody, SafePrRequestedBody
+from domains.alert.events import AlertRequestedBody
+from domains.scm.events import SafePrRequestedBody
 
 
 def _alert() -> AlertRequestedBody:

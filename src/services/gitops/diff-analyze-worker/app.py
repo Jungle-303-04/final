@@ -9,16 +9,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from domains.alert.events import AlertRequestedBody
+from domains.command.events import CommandRequestedBody
+from domains.gitops.events import Diff, DiffAnalyzedBody, DiffDetectedBody
+from domains.scm.events import SafePrRequestedBody
 from packages.config.constants import Command, GitHub, Sandbox, Target
-from packages.contracts.event_bus.bodies import (
-    AlertRequestedBody,
-    CommandRequestedBody,
-    Diff,
-    DiffAnalyzedBody,
-    DiffDetectedBody,
-    EventBody,
-    SafePrRequestedBody,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
 app = App("diff-analyze-worker")

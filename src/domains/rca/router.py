@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from domains.identity.dependencies import ClusterAgentIdentity, require_cluster_agent
-from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody
+from domains.rca.events import ClusterEvidenceReceivedBody
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 from packages.contracts.gateway.responses import AcceptedResponse

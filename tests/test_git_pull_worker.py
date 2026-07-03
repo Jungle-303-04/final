@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
+from domains.gitops.events import GitWebhookReceivedBody
 from domains.gitops.repository import (
     derive_deployment_binding_id,
     derive_repository_id,
     derive_watch_target_id,
 )
-from packages.contracts.event_bus.bodies import GitWebhookReceivedBody
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_REPOSITORY_ID,

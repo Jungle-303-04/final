@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
-from packages.contracts.event_bus.bodies import EmailVerificationRequestedBody
+from domains.mail.events import EmailVerificationRequestedBody
 
 
 def test_mail_worker_logs_email_verification_without_smtp(monkeypatch) -> None:

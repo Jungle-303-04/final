@@ -10,13 +10,9 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
+from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
-from packages.contracts.event_bus.bodies import (
-    EventBody,
-    SafePrCreatedBody,
-    SafePrFailedBody,
-    SafePrRequestedBody,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import App, EventContext
 from packages.runtime.outbound import deliver

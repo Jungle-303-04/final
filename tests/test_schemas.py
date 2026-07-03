@@ -1,7 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody, CommandRequestedBody
+from domains.command.events import CommandRequestedBody
+from domains.rca.events import ClusterEvidenceReceivedBody
 from packages.contracts.event_bus.bodies.base import EventBodyDecodeError
 from packages.contracts.gateway.requests import (
     CommandRequest,
@@ -115,7 +116,7 @@ def test_event_uses_standard_envelope_fields() -> None:
 
 
 def test_payload_nested_decode_roundtrip() -> None:
-    from packages.contracts.event_bus.bodies import (
+    from domains.gitops.events import (
         ManifestRenderedBody,
         RenderedManifest,
         RenderedMetadata,

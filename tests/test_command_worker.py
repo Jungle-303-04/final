@@ -4,6 +4,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 
+from domains.command.events import (
+    CommandDispatchedBody,
+    CommandDispatchReadyBody,
+    CommandQueuedForAgentBody,
+    CommandRejectedBody,
+    CommandRequestedBody,
+    Plan,
+)
 from domains.command.handler import (
     COMMAND_CONFIG,
     MANIFEST_NAMESPACE_MISMATCH_REASON,
@@ -14,15 +22,7 @@ from domains.command.handler import (
 )
 from domains.gitops.events import Diff
 from packages.config.constants import Command, Sandbox, Target
-from packages.contracts.event_bus.bodies import (
-    CommandDispatchedBody,
-    CommandDispatchReadyBody,
-    CommandQueuedForAgentBody,
-    CommandRejectedBody,
-    CommandRequestedBody,
-    EventBody,
-    Plan,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 
+from domains.gitops.events import GitChangedBody, GitWebhookReceivedBody
 from domains.gitops.repository import (
     derive_application_id,
     derive_deployment_binding_id,
@@ -17,7 +18,7 @@ from domains.gitops.repository import (
     derive_watch_target_id,
     derive_workflow_run_id,
 )
-from packages.contracts.event_bus.bodies import EventBody, GitChangedBody, GitWebhookReceivedBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.runtime.app import App, EventContext
 
