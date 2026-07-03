@@ -3,14 +3,18 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from fastapi import HTTPException
+
 from domains.gitops.router import grant_approval, reject_approval
 from packages.contracts.gateway.requests import ApprovalDecisionRequest
 
 
 class ApprovalDb:
-    def __init__(self, allowed: bool = True) -> None:
+    def __init__(self, allowed: bool = True, open_for_resolution: bool = True) -> None:
         self.allowed = allowed
+        self.open_for_resolution = open_for_resolution
         self.access_calls: list[tuple[str, str, str, str, str]] = []
+        self.resolutions: list[tuple[str, str, str, str, str]] = []
 
     def get_workflow_approval(self, approval_id: str, workspace_id: str) -> dict[str, object]:
         return {
@@ -51,6 +55,18 @@ class ApprovalDb:
         self.access_calls.append((user_id, workspace_id, resource_type, resource_id, action))
         return self.allowed
 
+    def resolve_workflow_approval_if_open(
+        self,
+        approval_id: str,
+        workspace_id: str,
+        status: str,
+        decided_by: str,
+        decision: str,
+        details: dict[str, object],
+    ) -> bool:
+        self.resolutions.append((approval_id, workspace_id, status, decided_by, decision))
+        return self.open_for_resolution
+
 
 class ApprovalEvents:
     def __init__(self) -> None:
@@ -84,6 +100,7 @@ def test_grant_approval_emits_granted_event_with_command_request() -> None:
 
     assert response.accepted is True
     assert db.access_calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy")]
+    assert db.resolutions == [("approval-1", "workspace-1", "granted", "user-1", "granted")]
     assert events.body is not None
     assert events.body.__subject__ == "approval.granted"
     assert events.body.details["command_requested"]["action"] == "apply_manifest"
@@ -107,3 +124,50 @@ def test_reject_approval_emits_rejected_event() -> None:
     assert events.body is not None
     assert events.body.__subject__ == "approval.rejected"
     assert events.body.reason == "not safe"
+
+
+def test_grant_approval_conflicts_when_already_resolved() -> None:
+    # 동시 grant 경합: 원자 UPDATE 가 0행이면 409 — 두 번째 요청은 이벤트를 발행하지 않음
+    async def run() -> tuple[HTTPException, ApprovalDb, ApprovalEvents]:
+        db = ApprovalDb(open_for_resolution=False)
+        events = ApprovalEvents()
+        try:
+            await grant_approval(
+                "approval-1",
+                ApprovalDecisionRequest(reason="second click"),
+                current_session(),
+                db,
+                events,
+            )
+        except HTTPException as exc:
+            return exc, db, events
+        raise AssertionError("이미 해결된 승인은 409 여야 함")
+
+    exc, db, events = asyncio.run(run())
+
+    assert exc.status_code == 409
+    assert db.resolutions == [
+        ("approval-1", "workspace-1", "granted", "user-1", "granted"),
+    ]
+    assert events.body is None  # 원자 갱신 실패 시 ApprovalGranted 미발행
+
+
+def test_reject_approval_conflicts_when_already_resolved() -> None:
+    async def run() -> tuple[HTTPException, ApprovalEvents]:
+        events = ApprovalEvents()
+        try:
+            await reject_approval(
+                "approval-1",
+                ApprovalDecisionRequest(reason="late reject"),
+                current_session(),
+                ApprovalDb(open_for_resolution=False),
+                events,
+            )
+        except HTTPException as exc:
+            return exc, events
+        raise AssertionError("이미 해결된 승인은 409 여야 함")
+
+    exc, events = asyncio.run(run())
+
+    assert exc.status_code == 409
+    assert events.body is None  # 원자 갱신 실패 시 ApprovalRejected 미발행
