@@ -32,6 +32,15 @@ from packages.events.envelope import event
 
 NATS_URL_ENV = "NATS_URL"
 NATS_MSG_ID_HEADER = "Nats-Msg-Id"
+# JetStream 컨슈머 재배달 정책(모두 env 오버라이드 가능).
+# ack_wait 는 워커 핸들러 타임아웃(runtime/worker.py, 기본 30s)보다 커야
+# 처리 중 재배달로 인한 동시 중복 처리가 방지됨.
+ACK_WAIT_SECONDS_ENV = "NATS_ACK_WAIT_SECONDS"
+DEFAULT_ACK_WAIT_SECONDS = "60"  # 핸들러 타임아웃(30s)의 2배 — 처리 중 재배달 금지 창
+MAX_DELIVER_ENV = "NATS_MAX_DELIVER"
+DEFAULT_MAX_DELIVER = "4"  # 워커 재시도 상한(기본 3) + 1 — 소진 후 DLQ 로 종결
+MAX_ACK_PENDING_ENV = "NATS_MAX_ACK_PENDING"
+DEFAULT_MAX_ACK_PENDING = "100"  # 컨슈머당 미확인 in-flight 상한(폭주 억제)
 logger = get_logger("event_bus")
 CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
     "current_event_causation_id", default=None
@@ -48,6 +57,17 @@ def nats_not_found_error() -> type[Exception]:
     from nats.js.errors import NotFoundError
 
     return NotFoundError
+
+
+def consumer_config() -> Any:
+    """pull 컨슈머 재배달 정책 — 재배달 창(ack_wait)·상한(max_deliver)·in-flight 한도 고정."""
+    from nats.js.api import ConsumerConfig
+
+    return ConsumerConfig(
+        ack_wait=int(env(ACK_WAIT_SECONDS_ENV, DEFAULT_ACK_WAIT_SECONDS)),
+        max_deliver=int(env(MAX_DELIVER_ENV, DEFAULT_MAX_DELIVER)),
+        max_ack_pending=int(env(MAX_ACK_PENDING_ENV, DEFAULT_MAX_ACK_PENDING)),
+    )
 
 
 def event_context(evt: EventEnvelope) -> dict[str, str | None]:
@@ -143,7 +163,9 @@ class NatsEventBus(EventBus):
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
         assert self.js is not None
-        return await self.js.pull_subscribe(subject, durable=durable, stream=STREAM_NAME)
+        return await self.js.pull_subscribe(
+            subject, durable=durable, stream=STREAM_NAME, config=consumer_config()
+        )
 
     async def close(self) -> None:
         if self.nc:

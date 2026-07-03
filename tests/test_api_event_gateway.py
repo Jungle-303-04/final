@@ -7,7 +7,7 @@ from typing import Any
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
-from packages.events.bus import NATS_MSG_ID_HEADER, NatsEventBus
+from packages.events.bus import NATS_MSG_ID_HEADER, NatsEventBus, consumer_config
 from packages.events.envelope import event
 from packages.runtime.gateway import ApiEventGateway
 
@@ -109,5 +109,67 @@ def test_nats_publish_uses_event_id_as_message_id_header() -> None:
         await bus.publish_envelope(evt)
 
         assert fake_js.published[0]["headers"][NATS_MSG_ID_HEADER] == evt.event_id
+
+    asyncio.run(run())
+
+
+def test_consumer_config_defaults_bound_redelivery(monkeypatch) -> None:
+    # ack_wait > 핸들러 타임아웃(30s) → 처리 중 재배달 중복 방지,
+    # max_deliver = 재시도 상한 + 1, max_ack_pending 은 in-flight 폭주 억제.
+    monkeypatch.delenv("NATS_ACK_WAIT_SECONDS", raising=False)
+    monkeypatch.delenv("NATS_MAX_DELIVER", raising=False)
+    monkeypatch.delenv("NATS_MAX_ACK_PENDING", raising=False)
+
+    config = consumer_config()
+
+    assert config.ack_wait == 60
+    assert config.max_deliver == 4
+    assert config.max_ack_pending == 100
+
+
+def test_consumer_config_reads_env_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("NATS_ACK_WAIT_SECONDS", "120")
+    monkeypatch.setenv("NATS_MAX_DELIVER", "6")
+    monkeypatch.setenv("NATS_MAX_ACK_PENDING", "50")
+
+    config = consumer_config()
+
+    assert config.ack_wait == 120
+    assert config.max_deliver == 6
+    assert config.max_ack_pending == 50
+
+
+def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:
+    async def run() -> None:
+        class FakeJetStream:
+            def __init__(self) -> None:
+                self.calls: list[dict[str, object]] = []
+
+            async def pull_subscribe(
+                self,
+                subject: str,
+                durable: str,
+                stream: str,
+                config: object | None = None,
+            ) -> object:
+                self.calls.append(
+                    {"subject": subject, "durable": durable, "stream": stream, "config": config}
+                )
+                return object()
+
+        bus = NatsEventBus()
+        fake_js = FakeJetStream()
+        bus.js = fake_js
+
+        await bus.subscribe("command.requested", durable="command-worker")
+
+        call = fake_js.calls[0]
+        assert call["subject"] == "command.requested"
+        assert call["durable"] == "command-worker"
+        config = call["config"]
+        assert config is not None
+        assert config.ack_wait == 60
+        assert config.max_deliver == 4
+        assert config.max_ack_pending == 100
 
     asyncio.run(run())
