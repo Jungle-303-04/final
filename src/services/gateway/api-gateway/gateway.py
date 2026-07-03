@@ -19,6 +19,7 @@ from domains.identity.dependencies import (
 )
 from domains.identity.router import router as identity_router
 from domains.rca.router import router as rca_router
+from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
@@ -224,6 +225,12 @@ class ApiGateway:
                 "command_leased_oldest_age_seconds": self.db.oldest_command_age_seconds(
                     CommandStatus.LEASED
                 ),
+                "evidence_job_queue_oldest_age_seconds": (
+                    self.db.oldest_evidence_job_age_seconds(EVIDENCE_JOB_STATUS_QUEUED)
+                ),
+                "evidence_job_leased_oldest_age_seconds": (
+                    self.db.oldest_evidence_job_age_seconds(EVIDENCE_JOB_STATUS_LEASED)
+                ),
             }
             body = render_prometheus_metrics(scalar_metrics)
             body += render_labeled_counter(
@@ -233,6 +240,11 @@ class ApiGateway:
             )
             body += render_labeled_counter(
                 "command_status_total", self.db.command_status_counts(), "status"
+            )
+            body += render_labeled_counter(
+                "evidence_job_status_total",
+                self.db.evidence_job_status_counts(),
+                "status",
             )
             return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 

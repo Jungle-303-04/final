@@ -465,6 +465,22 @@ class TargetAgentRepository(DatabaseConnection):
             rows = [dict(row) for row in conn.execute(statement).mappings()]
         return aggregate_evidence_payload(rows)
 
+    def evidence_job_status_counts(self) -> dict[str, int]:
+        table = EvidenceJob.__table__
+        statement = select(table.c.status, func.count().label("count")).group_by(table.c.status)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {row["status"]: int(row["count"]) for row in rows}
+
+    def oldest_evidence_job_age_seconds(self, status: str) -> float:
+        table = EvidenceJob.__table__
+        statement = select(func.extract("epoch", func.now() - func.min(table.c.created_at))).where(
+            table.c.status == status
+        )
+        with self.connection() as conn:
+            age = conn.execute(statement).scalar()
+        return float(age or 0)
+
     def serialize_evidence_job(self, row: JsonObject) -> JsonObject:
         item = dict(row)
         item["leased_until"] = iso_or_none(item.get("leased_until"))
