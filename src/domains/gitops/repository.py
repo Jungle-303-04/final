@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.models import AgentCommand
@@ -55,6 +56,49 @@ OPEN_APPROVAL_STATUSES = (
     ApprovalStatus.REQUESTED.value,
     ApprovalStatus.NOT_REQUIRED.value,
 )
+
+# 워크플로 상태 전이 순위 — 숫자가 클수록 뒤 단계. 같은 순위 재기록은 허용(멱등 재갱신).
+# 재배달·지연 이벤트가 뒤 단계 상태를 앞 단계로 되돌리는 회귀(SUCCEEDED→APPLYING 등) 차단 기준.
+WORKFLOW_STATUS_RANKS: dict[str, int] = {
+    WorkflowRunStatus.STARTED.value: 1,
+    WorkflowRunStatus.RENDERING.value: 2,
+    WorkflowRunStatus.DIFFING.value: 3,
+    WorkflowRunStatus.POLICY_CHECKING.value: 4,
+    WorkflowRunStatus.WAITING_FOR_APPROVAL.value: 5,
+    WorkflowRunStatus.APPLYING.value: 6,
+    WorkflowRunStatus.ROLLOUT_WAITING.value: 7,
+    WorkflowRunStatus.SUCCEEDED.value: 8,
+    WorkflowRunStatus.FAILED.value: 8,  # 실패는 어느 단계에서도 도달 가능 → 최고 순위
+}
+# 종결 상태 — 어떤 상태로도 다시 갱신되지 않음(회귀 불가)
+TERMINAL_WORKFLOW_STATUSES = (
+    WorkflowRunStatus.SUCCEEDED.value,
+    WorkflowRunStatus.FAILED.value,
+)
+
+
+def workflow_status_rank(column: Any) -> Any:
+    """상태 컬럼을 전이 순위로 바꾸는 CASE 식 — guarded UPDATE 의 비교 기준."""
+    return case(
+        *[(column == status, rank) for status, rank in WORKFLOW_STATUS_RANKS.items()],
+        else_=0,
+    )
+
+
+def workflow_transition_guard(table: Any, new_status: Any) -> Any:
+    """허용 전이 조건: 현재가 종결이 아니고 새 상태 순위가 현재 순위 이상임.
+
+    new_status 는 문자열(guarded UPDATE) 또는 excluded 컬럼(upsert) 모두 가능.
+    """
+    new_rank = (
+        WORKFLOW_STATUS_RANKS.get(str(new_status), 0)
+        if isinstance(new_status, str)
+        else workflow_status_rank(new_status)
+    )
+    return and_(
+        table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
+        workflow_status_rank(table.c.status) <= new_rank,
+    )
 
 
 class RepoChangeRepository(DatabaseConnection):
@@ -238,6 +282,7 @@ class RepoChangeRepository(DatabaseConnection):
             metadata=dict(payload.get("metadata", {})),
             updated_at=func.now(),
         )
+        # 생성은 무조건, 기존 행 갱신은 허용 전이일 때만(종결 회귀·역행 차단)
         statement = insert.on_conflict_do_update(
             index_elements=[table.c.workflow_run_id],
             set_={
@@ -248,6 +293,7 @@ class RepoChangeRepository(DatabaseConnection):
                 "metadata": insert.excluded.metadata,
                 "updated_at": func.now(),
             },
+            where=workflow_transition_guard(table, insert.excluded.status),
         )
         with self.connection() as conn:
             conn.execute(statement)
@@ -268,9 +314,11 @@ class RepoChangeRepository(DatabaseConnection):
         if "metadata" in payload:
             values["metadata"] = dict(payload["metadata"])
         table = WorkflowRun.__table__
-        statement = (
-            table.update().where(table.c.workflow_run_id == workflow_run_id).values(**values)
-        )
+        statement = table.update().where(table.c.workflow_run_id == workflow_run_id)
+        if "status" in values:
+            # 상태 변경은 허용 전이일 때만 반영 — 재배달 이벤트의 상태 회귀 차단
+            statement = statement.where(workflow_transition_guard(table, str(values["status"])))
+        statement = statement.values(**values)
         with self.connection() as conn:
             conn.execute(statement)
         return {**payload, "workflow_run_id": workflow_run_id}
@@ -447,7 +495,11 @@ class RepoChangeRepository(DatabaseConnection):
         if "metadata" in payload:
             values["metadata"] = dict(payload["metadata"])
         table = WorkflowRun.__table__
-        statement = table.update().where(table.c.command_id == command_id).values(**values)
+        statement = table.update().where(table.c.command_id == command_id)
+        if "status" in values:
+            # 상태 변경은 허용 전이일 때만 반영 — 재배달 완료 이벤트의 상태 회귀 차단
+            statement = statement.where(workflow_transition_guard(table, str(values["status"])))
+        statement = statement.values(**values)
         with self.connection() as conn:
             conn.execute(statement)
         return payload
