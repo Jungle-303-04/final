@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -11,6 +12,7 @@ from packages.contracts.event_bus.bodies import ClusterEvidenceReceivedBody
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AgentEvidenceRequest
 from packages.contracts.gateway.responses import AcceptedResponse
+from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 
 # per-cluster 토큰 인증 — evidence 의 workspace/cluster 는 토큰 identity 에서만 취한다.
@@ -51,52 +53,43 @@ async def agent_evidence(
 ) -> AcceptedResponse:
     evidence_key = scoped_evidence_key(identity, payload.evidence_key)
     evidence_body = build_cluster_evidence_body(payload, identity)
-    claimed_evidence_key: str | None = None
+    event_envelope = event(
+        evidence_body.__subject__,
+        getattr(events, "source", "api-gateway"),
+        evidence_body.to_body(),
+        payload.correlation_id,
+    )
     if evidence_key:
-        existing = db.get_evidence_window(evidence_key)
+        existing = await db_call(db.get_evidence_window, evidence_key)
         if existing:
             return AcceptedResponse(
                 accepted=True,
                 event_id=existing["event_id"],
                 correlation_id=existing["correlation_id"],
             )
-        claimed = db.claim_evidence_window(
-            evidence_key,
-            identity.workspace_id,
-            identity.cluster_id,
-            evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
-            evidence_body.window_start or evidence_body.evidence_key,
-            evidence_body.agent_id,
-            evidence_body.to_body(),
-        )
-        if claimed["duplicate"]:
-            return AcceptedResponse(
-                accepted=True,
-                event_id=claimed["event_id"],
-                correlation_id=claimed["correlation_id"],
-            )
-        claimed_evidence_key = evidence_key
-
-    try:
-        accepted = await events.accept_body(evidence_body, payload.correlation_id)
-    except Exception:
-        if claimed_evidence_key:
-            db.release_pending_evidence_window(claimed_evidence_key)
-        raise
-    if evidence_key:
-        recorded = db.complete_evidence_window(
-            evidence_key,
-            accepted.event.event_id,
-            accepted.event.correlation_id,
-            evidence_body.to_body(),
+        recorded = await db_call(
+            db.record_evidence_event_once,
+            evidence_key=evidence_key,
+            workspace_id=identity.workspace_id,
+            cluster_id=identity.cluster_id,
+            source_id=evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
+            window_start=evidence_body.window_start or evidence_body.evidence_key or evidence_key,
+            agent_id=evidence_body.agent_id,
+            event_envelope=event_envelope,
+            payload=evidence_body.to_body(),
         )
         return AcceptedResponse(
             accepted=True,
             event_id=recorded["event_id"],
             correlation_id=recorded["correlation_id"],
         )
+    recorded = await db_call(db.stage_event_once, event_envelope)
     return AcceptedResponse(
         accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
+        event_id=recorded["event_id"],
+        correlation_id=recorded["correlation_id"],
     )
+
+
+async def db_call(func: Any, *args: Any, **kwargs: Any) -> Any:
+    return await asyncio.to_thread(func, *args, **kwargs)

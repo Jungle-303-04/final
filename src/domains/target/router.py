@@ -55,6 +55,7 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
+from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 
 AGENT_TOKEN_BYTES = 32  # per-cluster agent 토큰 엔트로피(secrets.token_urlsafe)
@@ -706,46 +707,25 @@ async def emit_evidence_if_ready(
         return None
 
     evidence_body = ClusterEvidenceReceivedBody(**payload)
-    claimed: dict[str, Any] | None = None
-    for _attempt in range(2):
-        claimed = await db_call(
-            db.claim_evidence_window,
-            evidence_key,
-            evidence_body.workspace_id,
-            evidence_body.cluster_id,
-            evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
-            evidence_body.window_start or evidence_key,
-            evidence_body.agent_id,
-            evidence_body.to_body(),
-        )
-        if not claimed["duplicate"]:
-            break
-        if str(claimed["event_id"]).startswith(PENDING_EVIDENCE_EVENT_ID_PREFIX):
-            if await release_stale_pending_evidence_window(db, evidence_key):
-                continue
-            return None
-        return EvidenceJobResultResponse(
-            accepted=True,
-            evidence_key=evidence_key,
-            event_id=claimed["event_id"],
-            correlation_id=claimed["correlation_id"],
-        )
-    if claimed is None or claimed["duplicate"]:
-        return None
-
-    try:
-        accepted = await events.accept_body(evidence_body, payload.get("correlation_id"))
-    except Exception:
-        await db_call(db.release_pending_evidence_window, evidence_key)
-        raise
-
-    recorded = await db_call(
-        db.complete_evidence_window,
-        evidence_key,
-        accepted.event.event_id,
-        accepted.event.correlation_id,
+    event_envelope = event(
+        evidence_body.__subject__,
+        getattr(events, "source", "api-gateway"),
         evidence_body.to_body(),
+        payload.get("correlation_id"),
     )
+    recorded = await db_call(
+        db.record_evidence_event_once,
+        evidence_key=evidence_key,
+        workspace_id=evidence_body.workspace_id,
+        cluster_id=evidence_body.cluster_id,
+        source_id=evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
+        window_start=evidence_body.window_start or evidence_key,
+        agent_id=evidence_body.agent_id,
+        event_envelope=event_envelope,
+        payload=evidence_body.to_body(),
+    )
+    if str(recorded["event_id"]).startswith(PENDING_EVIDENCE_EVENT_ID_PREFIX):
+        return None
     return EvidenceJobResultResponse(
         accepted=True,
         evidence_key=evidence_key,

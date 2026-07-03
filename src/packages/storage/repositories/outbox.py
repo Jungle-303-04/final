@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select, update
+import uuid
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
@@ -11,6 +14,8 @@ from packages.storage.engine import (
 from packages.storage.schema import (
     OutboxModel,
 )
+
+DEFAULT_OUTBOX_LEASE_SECONDS = 60
 
 
 class OutboxRepository(DatabaseConnection):
@@ -28,17 +33,30 @@ class OutboxRepository(DatabaseConnection):
                     causation_id=evt.causation_id,
                     occurred_at=evt.created_at,
                     payload=evt.payload,
+                    lease_id=None,
+                    leased_until=None,
                 )
                 .on_conflict_do_nothing(index_elements=[table.c.event_id])
             )
 
     async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]:
         table = OutboxModel.__table__
-        stmt = (
-            select(table)
-            .where(table.c.sent_at.is_(None), table.c.source == source)
+        lease_id = str(uuid.uuid4())
+        leased_until = datetime.now(UTC) + timedelta(seconds=DEFAULT_OUTBOX_LEASE_SECONDS)
+        available = or_(table.c.lease_id.is_(None), table.c.leased_until < func.now())
+        claimable = (
+            select(table.c.id)
+            .where(table.c.sent_at.is_(None), table.c.source == source, available)
             .order_by(table.c.id)
             .limit(limit)
+            .with_for_update(skip_locked=True)
+            .cte("claimable_outbox")
+        )
+        stmt = (
+            update(table)
+            .where(table.c.id.in_(select(claimable.c.id)))
+            .values(lease_id=lease_id, leased_until=leased_until)
+            .returning(table)
         )
         async with self.async_connection() as conn:
             rows = (await conn.execute(stmt)).mappings().all()
@@ -59,7 +77,11 @@ class OutboxRepository(DatabaseConnection):
 
     async def mark_events_sent(self, event_ids: list[str]) -> None:
         table = OutboxModel.__table__
-        stmt = update(table).where(table.c.event_id.in_(event_ids)).values(sent_at=func.now())
+        stmt = (
+            update(table)
+            .where(table.c.event_id.in_(event_ids))
+            .values(sent_at=func.now(), lease_id=None, leased_until=None)
+        )
         async with self.async_connection() as conn:
             await conn.execute(stmt)
 
