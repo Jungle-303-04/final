@@ -38,25 +38,41 @@ class FailingEvents(SpyEvents):
 class DedupeDb:
     def __init__(self, existing: dict[str, str] | None = None) -> None:
         self.existing = existing
-        self.claims: list[tuple[object, ...]] = []
-        self.completed: list[tuple[object, ...]] = []
+        self.recorded: list[dict[str, object]] = []
+        self.staged: list[object] = []
         self.released: list[str] = []
-        self.claim_duplicate = False
 
     def get_evidence_window(self, _evidence_key: str) -> dict[str, str] | None:
         return self.existing
 
-    def claim_evidence_window(self, evidence_key: str, *_args: object) -> dict[str, object]:
-        self.claims.append((evidence_key, *_args))
-        if self.claim_duplicate:
-            return {"duplicate": True, "event_id": "evt-old", "correlation_id": "corr-old"}
-        return {"duplicate": False, "event_id": "pending-1", "correlation_id": "pending-1"}
-
-    def complete_evidence_window(
-        self, evidence_key: str, event_id: str, correlation_id: str, payload: object
+    def record_evidence_event_once(
+        self,
+        *,
+        evidence_key: str,
+        event_envelope: object,
+        payload: object,
+        **kwargs: object,
     ) -> dict[str, object]:
-        self.completed.append((evidence_key, event_id, correlation_id, payload))
-        return {"event_id": event_id, "correlation_id": correlation_id}
+        self.recorded.append(
+            {
+                "evidence_key": evidence_key,
+                "event_envelope": event_envelope,
+                "payload": payload,
+                "kwargs": kwargs,
+            }
+        )
+        return {
+            "duplicate": False,
+            "event_id": event_envelope.event_id,
+            "correlation_id": event_envelope.correlation_id,
+        }
+
+    def stage_event_once(self, event_envelope: object) -> dict[str, object]:
+        self.staged.append(event_envelope)
+        return {
+            "event_id": event_envelope.event_id,
+            "correlation_id": event_envelope.correlation_id,
+        }
 
     def release_pending_evidence_window(self, evidence_key: str) -> None:
         self.released.append(evidence_key)
@@ -88,62 +104,50 @@ def test_agent_evidence_dedupes_existing_window_before_emitting_event() -> None:
     assert events.accepted == 0
 
 
-def test_agent_evidence_claims_window_before_emitting_event() -> None:
+def test_agent_evidence_records_window_and_outbox_without_direct_emit() -> None:
     events = SpyEvents()
     db = DedupeDb()
 
     response = asyncio.run(agent_evidence(evidence_request(), AGENT_IDENTITY, events, db))
 
-    assert response.event_id == "evt-new"
-    assert response.correlation_id == "corr-new"
-    assert events.accepted == 1
-    assert events.body is not None
-    assert events.body.workspace_id == "trusted-workspace"
-    assert events.body.cluster_id == "trusted-cluster"
-    assert db.claims
-    assert db.completed
-    claimed_key = db.claims[0][0]
-    completed_key = db.completed[0][0]
-    assert events.body.evidence_key == claimed_key
-    assert claimed_key == completed_key
+    assert response.event_id
+    assert response.correlation_id
+    assert events.accepted == 0
+    assert db.recorded
+    claimed_key = db.recorded[0]["evidence_key"]
     assert claimed_key.startswith("trusted-workspace:trusted-cluster:")
-    assert db.claims[0][1:3] == ("trusted-workspace", "trusted-cluster")
-    stored_payload = db.completed[0][-1]
+    assert db.recorded[0]["kwargs"]["workspace_id"] == "trusted-workspace"
+    assert db.recorded[0]["kwargs"]["cluster_id"] == "trusted-cluster"
+    stored_payload = db.recorded[0]["payload"]
     assert stored_payload["workspace_id"] == "trusted-workspace"
     assert stored_payload["cluster_id"] == "trusted-cluster"
     assert stored_payload["evidence_key"] == claimed_key
 
 
-def test_agent_evidence_does_not_emit_when_window_claim_loses_race() -> None:
+def test_agent_evidence_reuses_existing_window_without_outbox_duplicate() -> None:
     events = SpyEvents()
-    db = DedupeDb()
-    db.claim_duplicate = True
+    db = DedupeDb(existing={"event_id": "evt-old", "correlation_id": "corr-old"})
 
     response = asyncio.run(agent_evidence(evidence_request(), AGENT_IDENTITY, events, db))
 
     assert response.event_id == "evt-old"
     assert response.correlation_id == "corr-old"
     assert events.accepted == 0
-    assert db.claims
-    assert db.completed == []
+    assert db.recorded == []
     assert db.released == []
 
 
-def test_agent_evidence_releases_pending_claim_when_emit_fails() -> None:
-    events = FailingEvents()
+def test_agent_evidence_without_key_stages_event_outbox() -> None:
+    events = SpyEvents()
     db = DedupeDb()
+    request = evidence_request().model_copy(update={"evidence_key": None})
 
-    try:
-        asyncio.run(agent_evidence(evidence_request(), AGENT_IDENTITY, events, db))
-    except RuntimeError as exc:
-        assert str(exc) == "event bus unavailable"
-    else:
-        raise AssertionError("agent_evidence should propagate event bus failure")
+    response = asyncio.run(agent_evidence(request, AGENT_IDENTITY, events, db))
 
-    assert events.accepted == 1
-    assert db.claims
-    assert db.completed == []
-    assert db.released == [db.claims[0][0]]
+    assert response.event_id
+    assert response.correlation_id
+    assert events.accepted == 0
+    assert len(db.staged) == 1
 
 
 def test_agent_evidence_key_is_namespaced_by_trusted_identity() -> None:
@@ -154,7 +158,7 @@ def test_agent_evidence_key_is_namespaced_by_trusted_identity() -> None:
 
     asyncio.run(agent_evidence(evidence_request(), AGENT_IDENTITY, events, db))
 
-    recorded_key = db.claims[0][0]
+    recorded_key = db.recorded[0]["evidence_key"]
     assert recorded_key.startswith("trusted-workspace:trusted-cluster:")
     # agent 가 위조한 workspace-1 접두사가 키 선두를 차지하지 못한다.
     assert not recorded_key.startswith("workspace-1:")

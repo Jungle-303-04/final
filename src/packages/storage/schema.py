@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Integer, PrimaryKeyConstraint, Text
+from sqlalchemy import BigInteger, Index, Integer, PrimaryKeyConstraint, Text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,6 +61,7 @@ class EventDeadLetter(Base):
 
 class OutboxModel(Base):
     __tablename__ = "outbox"
+    __table_args__ = (Index("ix_outbox_claim", "source", "sent_at", "leased_until", "id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
@@ -70,6 +71,8 @@ class OutboxModel(Base):
     causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     occurred_at: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
+    lease_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    leased_until: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     sent_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
 
