@@ -21,6 +21,7 @@ from domains.identity.dependencies import (
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
     DEFAULT_EVIDENCE_SOURCE_ID,
+    PENDING_EVIDENCE_EVENT_ID_PREFIX,
 )
 from domains.target.evidence_policy import (
     default_agent_policy,
@@ -683,6 +684,8 @@ async def emit_evidence_if_ready(
 ) -> EvidenceJobResultResponse | None:
     existing = db.get_evidence_window(evidence_key)
     if existing:
+        if str(existing["event_id"]).startswith(PENDING_EVIDENCE_EVENT_ID_PREFIX):
+            return None
         return EvidenceJobResultResponse(
             accepted=True,
             evidence_key=evidence_key,
@@ -705,6 +708,8 @@ async def emit_evidence_if_ready(
         evidence_body.to_body(),
     )
     if claimed["duplicate"]:
+        if str(claimed["event_id"]).startswith(PENDING_EVIDENCE_EVENT_ID_PREFIX):
+            return None
         return EvidenceJobResultResponse(
             accepted=True,
             evidence_key=evidence_key,

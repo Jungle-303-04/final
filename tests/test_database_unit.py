@@ -6,7 +6,8 @@ repository 의 실제 SQL 실행은 Postgres 전용(jsonb·on_conflict)이라 �
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+import asyncio
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
@@ -21,6 +22,7 @@ from domains.gitops.repository import (
     derive_repository_id,
     derive_watch_target_id,
 )
+from domains.target.repository import TargetAgentRepository
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_REPOSITORY_ID,
@@ -238,6 +240,115 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
     assert compiled[0].params["repository_id"] == repo["repository_id"]
     assert compiled[1].params["watch_target_id"] == watch["watch_target_id"]
     assert compiled[2].params["binding_id"] == binding["binding_id"]
+
+
+def test_evidence_job_lease_uses_skip_locked_candidate_update() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> None:
+            return None
+
+    class FakeAsyncConnection:
+        async def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @asynccontextmanager
+    async def fake_async_connection():
+        yield FakeAsyncConnection()
+
+    repository = object.__new__(TargetAgentRepository)
+    repository.async_connection = fake_async_connection  # type: ignore[method-assign]
+
+    asyncio.run(
+        repository.lease_evidence_job(
+            workspace_id="workspace-1",
+            cluster_id="cluster-1",
+            provider_key="metrics",
+            agent_id="agent-1",
+            lease_seconds=60,
+        )
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    assert "UPDATE evidence_jobs" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "RETURNING evidence_jobs.job_id" in sql
+    assert compiled.params["workspace_id_1"] == "workspace-1"
+    assert compiled.params["cluster_id_1"] == "cluster-1"
+    assert compiled.params["provider_key_1"] == "metrics"
+
+
+def test_evidence_job_completion_locks_one_job_before_update() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def __init__(self, first_row: dict[str, object] | None = None) -> None:
+            self.first_row = first_row
+
+        def mappings(self) -> FakeResult:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self.first_row
+
+        def one(self) -> dict[str, object]:
+            return {
+                "job_id": "job-1",
+                "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                "status": "completed",
+            }
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            self.calls += 1
+            if self.calls == 1:
+                return FakeResult(
+                    {
+                        "job_id": "job-1",
+                        "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                        "attempt_count": 1,
+                        "max_attempts": 3,
+                    }
+                )
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(TargetAgentRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    result = repository.complete_evidence_job(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        job_id="job-1",
+        lease_id="lease-1",
+        agent_id="agent-1",
+        status="completed",
+        result={"metrics": {"source": "prometheus"}},
+        error="",
+    )
+
+    select_sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+    update_sql = str(recorded[1].compile(dialect=postgresql.dialect()))
+
+    assert result is not None
+    assert "FROM evidence_jobs" in select_sql
+    assert "FOR UPDATE" in select_sql
+    assert "UPDATE evidence_jobs" in update_sql
+    assert "RETURNING evidence_jobs.job_id" in update_sql
 
 
 def test_user_account_schema_supports_password_login() -> None:
