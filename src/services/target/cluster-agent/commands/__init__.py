@@ -8,7 +8,12 @@ from commands.kubernetes import (
     KubernetesScalePayload,
 )
 from commands.outbox import CommandResultOutbox, CommandResultRecord
-from commands.registry import AgentCommandRegistry, command_handler, kubernetes_command
+from commands.registry import (
+    AgentCommandRegistry,
+    command,
+    command_handler,
+    kubernetes_command,
+)
 
 __all__ = [
     "AgentCommandRegistry",
@@ -20,6 +25,7 @@ __all__ = [
     "KubernetesGetPayload",
     "KubernetesPatchPayload",
     "KubernetesScalePayload",
+    "command",
     "command_handler",
     "kubernetes_command",
 ]

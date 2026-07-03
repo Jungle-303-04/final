@@ -13,8 +13,7 @@ from commands import (
     KubernetesApiClient,
     KubernetesPatchPayload,
     KubernetesScalePayload,
-    command_handler,
-    kubernetes_command,
+    command,
 )
 from control import AgentControlStore, AgentPolicySync, DesiredStateReconciler
 from evidence import EvidenceCollector, EvidenceJobScheduler
@@ -785,7 +784,7 @@ class TargetClusterAgent:
         except Exception as exc:
             return self.command_result(False, str(exc))
 
-    @command_handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
+    @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
     async def run_query_command(
         self,
         ctx: CommandContext[TelemetryQueryCommandPayload],
@@ -798,7 +797,7 @@ class TargetClusterAgent:
             result=result,
         )
 
-    @kubernetes_command(
+    @command.k8s(
         KUBERNETES_DEPLOYMENT_PATCH_ACTION,
         api_group="apps",
         version="v1",
@@ -821,7 +820,7 @@ class TargetClusterAgent:
         )
         return ctx.ok("kubernetes deployment patched", applied=True, result=result)
 
-    @kubernetes_command(
+    @command.k8s(
         KUBERNETES_DEPLOYMENT_SCALE_ACTION,
         api_group="apps",
         version="v1",
@@ -850,7 +849,7 @@ class TargetClusterAgent:
             result=result,
         )
 
-    @kubernetes_command(
+    @command.k8s(
         KUBERNETES_CONFIGMAP_PATCH_ACTION,
         api_group="core",
         version="v1",
@@ -895,7 +894,7 @@ class TargetClusterAgent:
                 return self.query_registry.get(source, name)
         return TelemetryQueryDefinition.from_mapping(query)
 
-    @command_handler(AgentConfig.APPLY_MANIFEST_ACTION)
+    @command.handler(AgentConfig.APPLY_MANIFEST_ACTION)
     async def apply_manifest_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
@@ -919,7 +918,7 @@ class TargetClusterAgent:
         applied, message = await self.patch_deployment(namespace, deployment, patch)
         return self.command_result(applied, message)
 
-    @command_handler(AgentConfig.ROLLOUT_RESTART_ACTION)
+    @command.handler(AgentConfig.ROLLOUT_RESTART_ACTION)
     async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
