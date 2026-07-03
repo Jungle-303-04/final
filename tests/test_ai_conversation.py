@@ -4,8 +4,11 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+import pytest
+
 from domains.ai.agent import OperationsChatAgent
 from domains.ai.router import create_conversation
+from packages.ai import llm
 from packages.ai.llm import FakeLlmClient
 from packages.contracts.event_bus.bodies import AiMessageReceivedBody
 from packages.contracts.gateway.requests import AiConversationCreateRequest
@@ -32,6 +35,20 @@ def test_operations_chat_agent_uses_llm_client() -> None:
     assert result["content"] == "agent answer"
     assert "checkout-api" in llm.prompts[0]
     assert "target-cluster-01" in llm.prompts[0]
+
+
+def test_llm_client_defaults_to_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    assert isinstance(llm.build_llm_client(), FakeLlmClient)
+
+
+def test_http_llm_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "http")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="LLM_API_KEY"):
+        llm.build_llm_client()
 
 
 @dataclass(frozen=True)
