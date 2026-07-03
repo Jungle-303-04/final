@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 from queries import LokiLogQuery
+from telemetry_registry import telemetry
 
 from config import (
     DEFAULT_LOKI_BASE_URL,
@@ -13,9 +14,13 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from providers.base import TRACER, ConfigReader
 
 
+@telemetry.source(
+    source="loki",
+    evidence_key="logs",
+    query_type=LokiLogQuery,
+    empty_payload=list,  # 로그 payload 는 목록 형태
+)
 class LokiLogsProvider:
-    evidence_key = "logs"
-    source = "loki"
     span_name = "loki.collect"
     query_count_attribute = "loki.query_count"
     result_count_attribute = "loki.result_count"
