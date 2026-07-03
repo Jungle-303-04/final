@@ -18,13 +18,13 @@ class AiAgent(ABC):
         self.llm = llm
 
     @abstractmethod
-    def build_prompt(self, evt: Any) -> str:
-        """이벤트 → LLM 프롬프트(에이전트별 구현)."""
+    def build_prompt(self, evt: Any, **context: Any) -> str:
+        """이벤트(+선택 컨텍스트: history/locale 등) → LLM 프롬프트(에이전트별 구현)."""
 
     @abstractmethod
     def parse_result(self, raw: str) -> Any:
         """LLM 출력 → 결과 이벤트 바디(에이전트별 구현)."""
 
-    async def run(self, evt: Any) -> Any:
-        raw = await self.llm.complete(self.build_prompt(evt))
+    async def run(self, evt: Any, **context: Any) -> Any:
+        raw = await self.llm.complete(self.build_prompt(evt, **context))
         return self.parse_result(raw)
