@@ -1,3 +1,15 @@
+"""명령 카탈로그 — @command.action 이 "존재하는 명령 + 정책 메타데이터"의 단일 출처.
+
+규칙: 등록은 @command.<단어>, 조회는 registered_*()/catalog 메서드.
+    @command.action("rollout_restart",
+                    recovery_aliases=("rollout_restart",),
+                    allowed_namespaces=(Sandbox.NAMESPACE,))
+    class RolloutRestartCommand: ...
+
+handler 는 action 목록/네임스페이스 기준을 직접 알지 않고 카탈로그를 읽는다 —
+새 명령의 허용 조건은 데코레이터 인자로 선언한다(handler 수정 없음).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -8,38 +20,68 @@ from dataclasses import dataclass
 class CommandActionSpec:
     action: str
     recovery_aliases: tuple[str, ...] = ()
+    allowed_namespaces: tuple[str, ...] = ()  # 빈 튜플 = 네임스페이스 제한 없음
+    requires_approval: bool = False
 
     def matches_recovery_action(self, value: str) -> bool:
         return value == self.action or value in self.recovery_aliases
 
-
-COMMAND_ACTIONS: list[CommandActionSpec] = []
-
-
-def command_action(
-    action: str,
-    *,
-    recovery_aliases: tuple[str, ...] = (),
-) -> Callable[[type], type]:
-    def decorator(marker: type) -> type:
-        COMMAND_ACTIONS.append(CommandActionSpec(action, recovery_aliases))
-        return marker
-
-    return decorator
+    def allows_namespace(self, namespace: str) -> bool:
+        return not self.allowed_namespaces or namespace in self.allowed_namespaces
 
 
-def registered_command_actions() -> tuple[CommandActionSpec, ...]:
-    import domains.command.builtin_actions  # noqa: F401
+class CommandCatalog:
+    """명령 카탈로그 레지스트리. 충돌 등록은 즉시 예외, 동일 재선언은 멱등."""
 
-    return tuple(COMMAND_ACTIONS)
+    def __init__(self) -> None:
+        self._specs: dict[str, CommandActionSpec] = {}
+
+    def action(
+        self,
+        action: str,
+        *,
+        recovery_aliases: tuple[str, ...] = (),
+        allowed_namespaces: tuple[str, ...] = (),
+        requires_approval: bool = False,
+    ) -> Callable[[type], type]:
+        spec = CommandActionSpec(action, recovery_aliases, allowed_namespaces, requires_approval)
+
+        def decorator(marker: type) -> type:
+            existing = self._specs.get(action)
+            if existing is not None and existing != spec:
+                raise ValueError(f"duplicate command action: {action}")
+            self._specs[action] = spec
+            marker.__command_spec__ = spec  # type: ignore[attr-defined]
+            return marker
+
+        return decorator
+
+    def actions(self) -> tuple[CommandActionSpec, ...]:
+        import domains.command.builtin_actions  # noqa: F401  # 내장 액션 등록 유발
+
+        return tuple(self._specs.values())
+
+    def allowed_actions(self) -> tuple[str, ...]:
+        return tuple(spec.action for spec in self.actions())
+
+    def spec_for(self, action: str) -> CommandActionSpec | None:
+        for spec in self.actions():
+            if spec.action == action:
+                return spec
+        return None
+
+    def action_for_recovery(self, value: str) -> str | None:
+        for spec in self.actions():
+            if spec.matches_recovery_action(value):
+                return spec.action
+        return None
 
 
-def allowed_command_actions() -> tuple[str, ...]:
-    return tuple(spec.action for spec in registered_command_actions())
+command = CommandCatalog()
 
-
-def command_action_for_recovery(value: str) -> str | None:
-    for spec in registered_command_actions():
-        if spec.matches_recovery_action(value):
-            return spec.action
-    return None
+# 하위 호환 별칭(기존 소비자 유지) — 신규 코드는 @command.action / command.* 를 쓴다.
+command_action = command.action
+registered_command_actions = command.actions
+allowed_command_actions = command.allowed_actions
+command_action_for_recovery = command.action_for_recovery
+command_action_spec = command.spec_for

@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import AsyncIterator
 
-from domains.command.actions import allowed_command_actions
+from domains.command.actions import allowed_command_actions, command_action_spec
 from domains.command.events import (
     CommandDispatchedBody,
     CommandDispatchReadyBody,
@@ -67,6 +67,7 @@ COMMAND_CONFIG = CommandConfig(
 POLICY = Policy.build(COMMAND_CONFIG.policy_rules)
 NAMESPACE_MISMATCH_REASON = "command namespace must match diff namespace"
 MANIFEST_NAMESPACE_MISMATCH_REASON = "manifest namespace must match command namespace"
+ACTION_NAMESPACE_REASON = "namespace not allowed for this command action"
 
 
 def desired_manifest_namespace(command: CommandRequestedBody) -> str | None:
@@ -87,7 +88,14 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     manifest_namespace = desired_manifest_namespace(command)
     if manifest_namespace is not None and manifest_namespace != command.namespace:
         return PolicyResult.reject(MANIFEST_NAMESPACE_MISMATCH_REASON)
-    return POLICY.evaluate(ModelLookup(command))
+    result = POLICY.evaluate(ModelLookup(command))
+    if not result.allowed:
+        return result
+    # 액션별 정책 메타데이터(@command.action allowed_namespaces) — 카탈로그가 기준.
+    spec = command_action_spec(command.action)
+    if spec is not None and not spec.allows_namespace(command.namespace):
+        return PolicyResult.reject(ACTION_NAMESPACE_REASON)
+    return result
 
 
 def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
