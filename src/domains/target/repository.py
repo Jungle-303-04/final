@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -29,9 +30,10 @@ from domains.target.models import (
     TargetDesiredState,
     TargetReconcileRecord,
 )
-from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.target import TargetDesiredStateStatus
 from packages.storage.engine import DatabaseConnection, iso_or_none
+from packages.storage.schema import EventModel, OutboxModel
 
 
 class TargetAgentRepository(DatabaseConnection):
@@ -539,6 +541,103 @@ class TargetAgentRepository(DatabaseConnection):
                 .one()
             )
         return {"duplicate": True, **dict(existing)}
+
+    def record_evidence_event_once(
+        self,
+        *,
+        evidence_key: str,
+        workspace_id: str,
+        cluster_id: str,
+        source_id: str,
+        window_start: str,
+        agent_id: str | None,
+        event_envelope: EventEnvelope,
+        payload: JsonObject,
+    ) -> JsonObject:
+        window_table = EvidenceWindow.__table__
+        event_table = EventModel.__table__
+        outbox_table = OutboxModel.__table__
+        with self.connection() as conn:
+            inserted = (
+                conn.execute(
+                    pg_insert(window_table)
+                    .values(
+                        evidence_key=evidence_key,
+                        workspace_id=workspace_id,
+                        cluster_id=cluster_id,
+                        source_id=source_id,
+                        window_start=window_start,
+                        agent_id=agent_id,
+                        event_id=event_envelope.event_id,
+                        correlation_id=event_envelope.correlation_id,
+                        payload=payload,
+                        updated_at=func.now(),
+                    )
+                    .on_conflict_do_nothing(index_elements=[window_table.c.evidence_key])
+                    .returning(window_table.c.event_id, window_table.c.correlation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if inserted is None:
+                existing = (
+                    conn.execute(
+                        select(window_table.c.event_id, window_table.c.correlation_id).where(
+                            window_table.c.evidence_key == evidence_key
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                return {"duplicate": True, **dict(existing)}
+
+            self.stage_event_envelope(conn, event_table, outbox_table, event_envelope)
+        return {"duplicate": False, **dict(inserted)}
+
+    def stage_event_once(self, event_envelope: EventEnvelope) -> JsonObject:
+        event_table = EventModel.__table__
+        outbox_table = OutboxModel.__table__
+        with self.connection() as conn:
+            self.stage_event_envelope(conn, event_table, outbox_table, event_envelope)
+        return {
+            "event_id": event_envelope.event_id,
+            "correlation_id": event_envelope.correlation_id,
+        }
+
+    def stage_event_envelope(
+        self,
+        conn: Any,
+        event_table: Any,
+        outbox_table: Any,
+        event_envelope: EventEnvelope,
+    ) -> None:
+        conn.execute(
+            pg_insert(event_table)
+            .values(
+                event_id=event_envelope.event_id,
+                subject=event_envelope.subject,
+                source=event_envelope.source,
+                correlation_id=event_envelope.correlation_id,
+                causation_id=event_envelope.causation_id,
+                payload=event_envelope.payload,
+            )
+            .on_conflict_do_nothing(index_elements=[event_table.c.event_id])
+        )
+        conn.execute(
+            pg_insert(outbox_table)
+            .values(
+                event_id=event_envelope.event_id,
+                subject=event_envelope.subject,
+                source=event_envelope.source,
+                correlation_id=event_envelope.correlation_id,
+                causation_id=event_envelope.causation_id,
+                occurred_at=event_envelope.created_at,
+                payload=event_envelope.payload,
+                lease_id=None,
+                leased_until=None,
+            )
+            .on_conflict_do_nothing(index_elements=[outbox_table.c.event_id])
+        )
 
     def claim_evidence_window(
         self,

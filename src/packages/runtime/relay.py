@@ -9,7 +9,7 @@ from __future__ import annotations
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
 
-DEFAULT_BATCH = 100
+DEFAULT_BATCH = 1000
 
 
 class OutboxRelay:
