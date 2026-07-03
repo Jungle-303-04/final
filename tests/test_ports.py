@@ -46,6 +46,9 @@ class FakeAgentCommandQueue:
     ) -> None:
         self.queued.append((correlation_id, plan, status))
 
+    async def fail_expired_agent_commands(self) -> list[dict[str, Any]]:
+        return []  # janitor 대상 없음(AgentCommandStore 계약 충족용)
+
 
 def command_diff() -> dict[str, str]:
     return {
