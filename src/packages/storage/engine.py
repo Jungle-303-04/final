@@ -9,7 +9,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from packages.config.constants import CommandStatus
-from packages.config.settings import required_env
+from packages.config.settings import env, required_env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
 from packages.storage.schema import (
@@ -163,10 +163,15 @@ on manifest_artifacts (workspace_id, binding_id, commit_sha, manifest_path)
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
 # prepare_threshold=None: PgBouncer transaction pooling 에서 prepared statement 가
 # 트랜잭션을 가로질러 깨지지 않도록 psycopg server-side prepared statement 비활성화.
+# 게이트웨이(전 트래픽 + long-poll)와 워커(배치)의 트래픽 특성이 달라
+# 풀 크기·대기 한도는 서비스별 deploy env 로 오버라이드 가능(기본값 불변).
+DB_POOL_SIZE_ENV = "DB_POOL_SIZE"  # 풀 상주 커넥션 수(기본 2)
+DB_MAX_OVERFLOW_ENV = "DB_MAX_OVERFLOW"  # 순간 초과 허용 커넥션 수(기본 2)
+DB_POOL_TIMEOUT_ENV = "DB_POOL_TIMEOUT_SECONDS"  # 풀 커넥션 대기 한도 초(기본 10)
 POOL_OPTIONS = {
-    "pool_size": 2,
-    "max_overflow": 2,
-    "pool_timeout": 10,
+    "pool_size": int(env(DB_POOL_SIZE_ENV, "2")),
+    "max_overflow": int(env(DB_MAX_OVERFLOW_ENV, "2")),
+    "pool_timeout": int(env(DB_POOL_TIMEOUT_ENV, "10")),
     "pool_pre_ping": True,
     "pool_recycle": 300,
     "connect_args": {"prepare_threshold": None},
