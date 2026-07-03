@@ -37,7 +37,7 @@ Target Cluster는 기본적으로 Management Cluster로 outbound 연결한다. �
 | gitops split workers | EKS managed node group | 가능 | git-pull, workflow-controller, manifest-render, diff, diff-analyze, scm-worker는 stateless worker다. event와 DB만 사용한다. |
 | command-worker | EKS managed node group | 가능 | stateless worker다. command queue는 DB에 둔다. |
 | rca-worker | EKS managed node group | 가능 | stateless worker다. AI provider 호출이 붙어도 node 권한이 필요 없다. |
-| dashboard-worker | EKS managed node group | 가능 | event를 read model로 투영하는 stateless worker다. |
+| dashboard-worker (planned) | EKS managed node group | 가능 | 현재 repository에는 구현/배포되지 않았고, 추가 시 event를 read model로 투영하는 stateless worker가 된다. |
 | audit-worker | EKS managed node group | 가능 | event를 audit table에 기록하는 stateless worker다. |
 | cluster-agent | target cluster managed node group | 제한 후보 | Kubernetes API 접근과 telemetry query는 가능하지만 node-level 수집은 분리해야 한다. |
 | node-collector | target cluster managed node group | 불가 | DaemonSet으로 노드마다 떠야 한다. |

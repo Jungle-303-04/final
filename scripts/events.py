@@ -16,16 +16,20 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR / "src") not in sys.path:
     sys.path.insert(0, str(ROOT_DIR / "src"))
 
-# App 기반 서비스 진입 파일(app.py), import 시 @app.sub 등록
+# App 기반 서비스 진입 파일(app.py), import 시 @app.on 등록
 SERVICES = [
     "ai/rca-worker",
+    "alert/alert-worker",
     "command/command-worker",
     "gitops/git-pull-worker",
+    "gitops/workflow-controller",
     "gitops/manifest-render-worker",
     "gitops/diff-worker",
     "gitops/diff-analyze-worker",
     "gitops/scm-worker",
+    "mail/mail-worker",
     "projection/audit-worker",
+    "target/reconcile-worker",
 ]
 
 
@@ -35,8 +39,10 @@ def _load(path: Path, name: str) -> None:
         raise RuntimeError(f"cannot load: {path}")
     # 서비스 내부 모듈(command_config 등) import 를 위해 디렉토리를 path 에.
     sys.path.insert(0, str(path.parent))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     try:
-        spec.loader.exec_module(importlib.util.module_from_spec(spec))
+        spec.loader.exec_module(module)
     finally:
         sys.path.remove(str(path.parent))
 
@@ -47,7 +53,7 @@ def main() -> None:
 
     # 서비스 핸들러(@app.sub) 등록.
     for service in SERVICES:
-        module = service.replace("/", "_")
+        module = service.replace("/", "_").replace("-", "_")
         _load(ROOT_DIR / "src" / "services" / service / "app.py", f"app_{module}")
 
     from packages.contracts.event_bus.registry import events

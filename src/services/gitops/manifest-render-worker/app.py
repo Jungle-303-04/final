@@ -53,7 +53,9 @@ GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
 GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
 GIT_REMOTE_MANIFEST_REQUIRED_ENV = "GIT_REMOTE_MANIFEST_REQUIRED"
 GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV = "GITHUB_MANIFEST_TIMEOUT_SECONDS"
+GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS"
 DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
+DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS = "5"
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 
 
@@ -109,6 +111,12 @@ def read_manifest_source(evt: GitChangedBody) -> str | None:
             check=True,
             capture_output=True,
             text=True,
+            timeout=float(
+                env(
+                    GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV,
+                    DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS,
+                )
+            ),
         )
         return result.stdout
 
@@ -312,7 +320,12 @@ async def on_git_changed(
     # subject 발행은 yield된 이벤트를 런타임이 처리한다.
     try:
         rendered_manifests = build_rendered_manifests_from_git_change(evt)
-    except (subprocess.CalledProcessError, ManifestSourceError, ValueError) as exc:
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        ManifestSourceError,
+        ValueError,
+    ) as exc:
         reason = str(exc)
         await ctx.db.record_manifest_artifact(
             artifact_payload(evt, ManifestArtifactStatus.INVALID_CONFIG.value, reason=reason)
