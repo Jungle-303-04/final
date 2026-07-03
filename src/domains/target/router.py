@@ -21,6 +21,7 @@ from domains.identity.dependencies import (
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
     DEFAULT_EVIDENCE_SOURCE_ID,
+    DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
     PENDING_EVIDENCE_EVENT_ID_PREFIX,
 )
 from domains.target.evidence_policy import (
@@ -611,14 +612,19 @@ async def schedule_evidence_jobs(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> EvidenceJobScheduleResponse:
-    stored_policy = db.get_cluster_policy(identity.workspace_id, identity.cluster_id)
+    stored_policy = await db_call(
+        db.get_cluster_policy,
+        identity.workspace_id,
+        identity.cluster_id,
+    )
     policy = (
         AgentPolicy.model_validate(stored_policy)
         if stored_policy
         else default_agent_policy(cluster_id=identity.cluster_id)
     )
     provider_keys = enabled_provider_keys(policy, payload.provider_keys)
-    queued = db.queue_evidence_jobs(
+    queued = await db_call(
+        db.queue_evidence_jobs,
         workspace_id=identity.workspace_id,
         cluster_id=identity.cluster_id,
         source_id=payload.source_id,
@@ -682,33 +688,41 @@ async def emit_evidence_if_ready(
     events: Any,
     db: Any,
 ) -> EvidenceJobResultResponse | None:
-    existing = db.get_evidence_window(evidence_key)
+    existing = await db_call(db.get_evidence_window, evidence_key)
     if existing:
         if str(existing["event_id"]).startswith(PENDING_EVIDENCE_EVENT_ID_PREFIX):
-            return None
-        return EvidenceJobResultResponse(
-            accepted=True,
-            evidence_key=evidence_key,
-            event_id=existing["event_id"],
-            correlation_id=existing["correlation_id"],
-        )
+            if not await release_stale_pending_evidence_window(db, evidence_key):
+                return None
+        else:
+            return EvidenceJobResultResponse(
+                accepted=True,
+                evidence_key=evidence_key,
+                event_id=existing["event_id"],
+                correlation_id=existing["correlation_id"],
+            )
 
-    payload = db.evidence_payload_if_ready(evidence_key)
+    payload = await db_call(db.evidence_payload_if_ready, evidence_key)
     if payload is None:
         return None
 
     evidence_body = ClusterEvidenceReceivedBody(**payload)
-    claimed = db.claim_evidence_window(
-        evidence_key,
-        evidence_body.workspace_id,
-        evidence_body.cluster_id,
-        evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
-        evidence_body.window_start or evidence_key,
-        evidence_body.agent_id,
-        evidence_body.to_body(),
-    )
-    if claimed["duplicate"]:
+    claimed: dict[str, Any] | None = None
+    for _attempt in range(2):
+        claimed = await db_call(
+            db.claim_evidence_window,
+            evidence_key,
+            evidence_body.workspace_id,
+            evidence_body.cluster_id,
+            evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
+            evidence_body.window_start or evidence_key,
+            evidence_body.agent_id,
+            evidence_body.to_body(),
+        )
+        if not claimed["duplicate"]:
+            break
         if str(claimed["event_id"]).startswith(PENDING_EVIDENCE_EVENT_ID_PREFIX):
+            if await release_stale_pending_evidence_window(db, evidence_key):
+                continue
             return None
         return EvidenceJobResultResponse(
             accepted=True,
@@ -716,14 +730,17 @@ async def emit_evidence_if_ready(
             event_id=claimed["event_id"],
             correlation_id=claimed["correlation_id"],
         )
+    if claimed is None or claimed["duplicate"]:
+        return None
 
     try:
         accepted = await events.accept_body(evidence_body, payload.get("correlation_id"))
     except Exception:
-        db.release_pending_evidence_window(evidence_key)
+        await db_call(db.release_pending_evidence_window, evidence_key)
         raise
 
-    recorded = db.complete_evidence_window(
+    recorded = await db_call(
+        db.complete_evidence_window,
         evidence_key,
         accepted.event.event_id,
         accepted.event.correlation_id,
@@ -748,7 +765,8 @@ async def evidence_job_result(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> EvidenceJobResultResponse:
-    result = db.complete_evidence_job(
+    result = await db_call(
+        db.complete_evidence_job,
         workspace_id=identity.workspace_id,
         cluster_id=identity.cluster_id,
         job_id=job_id,
@@ -766,6 +784,20 @@ async def evidence_job_result(
     if emitted:
         return emitted
     return EvidenceJobResultResponse(accepted=True, evidence_key=evidence_key)
+
+
+async def db_call(func: Any, *args: Any, **kwargs: Any) -> Any:
+    return await asyncio.to_thread(func, *args, **kwargs)
+
+
+async def release_stale_pending_evidence_window(db: Any, evidence_key: str) -> bool:
+    return bool(
+        await db_call(
+            db.release_stale_pending_evidence_window,
+            evidence_key,
+            DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS,
+        )
+    )
 
 
 router.include_router(agent_router)
