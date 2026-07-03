@@ -7,14 +7,13 @@ from typing import Any
 
 import httpx
 import pytest
+from conftest import load_service, run_handler
 
-from domains.ai.agent import OperationsChatAgent
 from domains.ai.events import AiMessageReceivedBody
 from domains.ai.router import create_conversation
 from packages.ai import llm
 from packages.ai.llm import (
     AnthropicMessagesAdapter,
-    FakeLlmClient,
     GeminiGenerateContentAdapter,
     LlmGateway,
     LlmProviderSettings,
@@ -25,26 +24,69 @@ from packages.contracts.gateway.requests import AiConversationCreateRequest
 from packages.events.envelope import event
 
 
-def test_operations_chat_agent_uses_llm_client() -> None:
-    llm = FakeLlmClient("agent answer")
-    agent = OperationsChatAgent(llm)
+class ScriptedLlm:
+    """응답 대본을 순서대로 재생하는 가짜 LLM."""
 
-    result = asyncio.run(
-        agent.run(
-            AiMessageReceivedBody(
-                conversation_id="aic-1",
-                message_id="aim-1",
-                content="why is checkout-api crashing?",
-                agent="operations-chat",
-                user_id="user-1",
-                context={"cluster_id": "target-cluster-01"},
-            )
-        )
+    def __init__(self, *replies: str) -> None:
+        self.replies = list(replies)
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt: str, **options: Any) -> str:
+        self.prompts.append(prompt)
+        return self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
+
+
+class FakeConversationStore:
+    """chat-worker 가 호출하는 대화 저장소 메서드만 흉내냄."""
+
+    def __init__(self) -> None:
+        self.responses: list[dict[str, Any]] = []
+        self.failures: list[dict[str, Any]] = []
+
+    async def list_ai_messages(
+        self, workspace_id: str, conversation_id: str, *, newest: int | None = None
+    ) -> list[dict[str, Any]]:
+        return [{"role": "user", "content": "earlier question"}]
+
+    async def record_ai_response(self, payload: dict[str, Any]) -> None:
+        self.responses.append(payload)
+
+    async def record_ai_failure(self, payload: dict[str, Any]) -> None:
+        self.failures.append(payload)
+
+
+def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
+    worker = load_service("ai/chat-worker")
+    scripted = ScriptedLlm(
+        json.dumps({"type": "tool_call", "tool": "list_command_actions", "arguments": {}}),
+        json.dumps({"type": "final", "content": "restart is allowed"}),
+    )
+    worker.engine.llm = scripted
+    store = FakeConversationStore()
+
+    outs = run_handler(
+        worker.on_ai_message_received,
+        AiMessageReceivedBody(
+            conversation_id="aic-1",
+            message_id="aim-1",
+            content="why is checkout-api crashing?",
+            agent="operations-chat",
+            user_id="user-1",
+            context={"cluster_id": "target-cluster-01"},
+        ),
+        db=store,
     )
 
-    assert result["content"] == "agent answer"
-    assert "checkout-api" in llm.prompts[0]
-    assert "target-cluster-01" in llm.prompts[0]
+    assert [out.__subject__ for out in outs] == ["ai.message.responded"]
+    assert outs[0].content == "restart is allowed"
+    trace = outs[0].metadata["tool_trace"]
+    assert trace[0]["tool"] == "list_command_actions"
+    assert trace[0]["ok"] is True
+    # 시스템 프롬프트에 대화 정체성/요청 컨텍스트/히스토리가 주입됨
+    assert "checkout-api" in scripted.prompts[0]
+    assert "target-cluster-01" in scripted.prompts[0]
+    assert "[user] earlier question" in scripted.prompts[0]
+    assert store.responses and store.responses[0]["content"] == "restart is allowed"
 
 
 def test_llm_client_defaults_to_fake(monkeypatch: pytest.MonkeyPatch) -> None:
