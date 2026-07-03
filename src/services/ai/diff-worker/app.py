@@ -1,4 +1,4 @@
-"""diff-worker — safe_pr.patch_prepared -> diff.explained."""
+"""ai-diff-worker — safe_pr.patch_prepared -> diff.explained."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from packages.contracts.event_bus.bodies import (
 )
 from packages.runtime.app import App
 
-app = App("diff-worker")
+app = App("ai-diff-worker")
 
 
 @app.on(SafePrPatchPreparedBody)
