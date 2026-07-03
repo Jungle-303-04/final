@@ -90,9 +90,13 @@ def run_handler(
     handler: Callable[..., AsyncIterator[Any]], payload: Any, db: Any = None, **fields: Any
 ) -> list[Any]:
     ctx = make_context(db=db, **fields)
+    params = [p for p in inspect.signature(handler).parameters.values() if p.name != "self"]
+    if len(params) not in {1, 2}:
+        raise TypeError(f"{handler.__name__} 시그니처는 (evt) 또는 (evt, ctx)")
+    wants_ctx = len(params) == 2
 
     async def go() -> list[Any]:
-        result = handler(payload, ctx)
+        result = handler(payload, ctx) if wants_ctx else handler(payload)
         if inspect.isasyncgen(result):
             return [out async for out in result]
         value = await result
