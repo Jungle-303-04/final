@@ -9,6 +9,28 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 
+from domains.command.events import (
+    CommandCompletedBody,
+    CommandQueuedForAgentBody,
+    CommandRejectedBody,
+    CommandRequestedBody,
+)
+from domains.gitops.events import (
+    ApprovalGrantedBody,
+    ApprovalRejectedBody,
+    ApprovalRequestedBody,
+    DiffAnalyzedBody,
+    DiffDetectedBody,
+    GitChangedBody,
+    GitWebhookReceivedBody,
+    ManifestInvalidBody,
+    ManifestRenderedBody,
+    WorkflowCreatedBody,
+    WorkflowRunCompletedBody,
+    WorkflowRunFailedBody,
+    WorkflowRunStartedBody,
+    WorkflowStepRecordedBody,
+)
 from domains.gitops.repository import (
     derive_application_id,
     derive_approval_id,
@@ -17,30 +39,9 @@ from domains.gitops.repository import (
     derive_watch_target_id,
     derive_workflow_run_id,
 )
+from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from packages.config.constants import CommandStatus, Sandbox, Target
-from packages.contracts.event_bus.bodies import (
-    ApprovalGrantedBody,
-    ApprovalRejectedBody,
-    ApprovalRequestedBody,
-    CommandCompletedBody,
-    CommandQueuedForAgentBody,
-    CommandRejectedBody,
-    CommandRequestedBody,
-    DiffAnalyzedBody,
-    DiffDetectedBody,
-    EventBody,
-    GitChangedBody,
-    GitWebhookReceivedBody,
-    ManifestInvalidBody,
-    ManifestRenderedBody,
-    SafePrCreatedBody,
-    SafePrFailedBody,
-    WorkflowCreatedBody,
-    WorkflowRunCompletedBody,
-    WorkflowRunFailedBody,
-    WorkflowRunStartedBody,
-    WorkflowStepRecordedBody,
-)
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
     DEFAULT_ENVIRONMENT,

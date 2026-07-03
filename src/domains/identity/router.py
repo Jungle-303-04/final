@@ -13,9 +13,9 @@ from domains.identity.dependencies import (
     require_admin_session,
     require_session,
 )
+from domains.mail.events import EmailVerificationRequestedBody
 from packages.config.constants import Auth
 from packages.config.settings import env
-from packages.contracts.event_bus.bodies import EmailVerificationRequestedBody
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     LoginRequest,

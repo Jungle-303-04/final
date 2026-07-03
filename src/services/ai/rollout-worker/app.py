@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from packages.contracts.event_bus.bodies import (
-    CommandCompletedBody,
-    EventBody,
-    RolloutDiagnosedBody,
-)
+from domains.command.events import CommandCompletedBody
+from domains.rca.events import RolloutDiagnosedBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App
 
 app = App("rollout-worker")

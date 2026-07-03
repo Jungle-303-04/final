@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
+from domains.target.events import (
+    ClusterDesiredStateChangedBody,
+    ClusterReconcileRequestedBody,
+    TargetDesiredComponent,
+)
 from domains.target.reconciler import (
     ActualStateSnapshot,
     TargetReconciler,
     desired_state_version,
-)
-from packages.contracts.event_bus.bodies import (
-    ClusterDesiredStateChangedBody,
-    ClusterReconcileRequestedBody,
-    TargetDesiredComponent,
 )
 from packages.contracts.target import TargetReconcileStatus
 

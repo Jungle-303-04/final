@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from packages.config.constants import Sandbox
-from packages.contracts.event_bus.bodies import (
+from domains.gitops.events import (
     ManifestRenderedBody,
     RenderedManifest,
     RenderedMetadata,
     RenderedSpec,
 )
+from packages.config.constants import Sandbox
 
 
 def test_diff_emits_desired_diff() -> None:

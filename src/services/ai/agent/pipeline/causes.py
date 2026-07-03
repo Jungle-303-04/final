@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from packages.contracts.event_bus.bodies import (
-    EventBody,
+from domains.rca.events import (
     EvidenceBundleBuiltBody,
     RcaActionRequiredBody,
     RcaAiFallbackRequestedBody,
@@ -14,6 +13,7 @@ from packages.contracts.event_bus.bodies import (
     RcaRuleMissing,
     RcaRuleMissingBody,
 )
+from packages.contracts.event_bus.bodies import EventBody
 from services.ai.agent.causes.engine import (
     NO_MATCHING_RULE_MESSAGE,
     analyze_root_cause,

@@ -6,7 +6,8 @@ import asyncio
 
 import pytest
 
-from packages.contracts.event_bus.bodies import DiffDetectedBody, EventBody, GitChangedBody
+from domains.gitops.events import DiffDetectedBody, GitChangedBody
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.events.envelope import event
 from packages.runtime.app import App

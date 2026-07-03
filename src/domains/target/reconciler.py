@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from packages.contracts.event_bus.bodies import TargetDesiredComponent, TargetDrift
+from domains.target.events import TargetDesiredComponent, TargetDrift
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TargetReconcileStatus
 

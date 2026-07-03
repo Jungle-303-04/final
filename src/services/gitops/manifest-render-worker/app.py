@@ -17,10 +17,7 @@ from urllib import error, parse, request
 import yaml
 
 from domains.gitops.diffing import extract_declared_field_paths
-from packages.config.constants import Sandbox
-from packages.config.settings import env
-from packages.contracts.event_bus.bodies import (
-    EventBody,
+from domains.gitops.events import (
     GitChangedBody,
     Manifest,
     ManifestInvalidBody,
@@ -29,6 +26,9 @@ from packages.contracts.event_bus.bodies import (
     RenderedMetadata,
     RenderedSpec,
 )
+from packages.config.constants import Sandbox
+from packages.config.settings import env
+from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gitops import (
     DEFAULT_GITHUB_API_BASE,
     GITHUB_API_BASE_ENV,

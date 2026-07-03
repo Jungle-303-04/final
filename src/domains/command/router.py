@@ -12,7 +12,9 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.command.events import CommandRequestedBody
 from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
+from domains.gitops.events import Diff
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
     require_cluster_agent,
@@ -20,7 +22,6 @@ from domains.identity.dependencies import (
 )
 from packages.config.constants import CommandStatus, Sandbox
 from packages.contracts.auth import Actor
-from packages.contracts.event_bus.bodies import CommandRequestedBody, Diff
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
