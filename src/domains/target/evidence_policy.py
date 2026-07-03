@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+from packages.config.constants import Target
+from packages.contracts.gateway.requests import (
+    AgentPolicy,
+    BootstrapPolicy,
+    DesiredStatePolicy,
+    EvidenceProviderPolicy,
+    EvidenceRuntimePolicy,
+)
+
+DEFAULT_EVIDENCE_FAILURE_POLICY = "allow_partial"
+DEFAULT_EVIDENCE_PROVIDER_WORKERS = 1
+DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS = 3
+DEFAULT_CLUSTER_ROLE = "target"
+DEFAULT_BOOTSTRAP_MODE = "target"
+
+DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
+    "metrics": [
+        {
+            "name": "scrape_targets_up",
+            "description": "Prometheus scrape target health for the target cluster.",
+            "query": "up",
+        },
+        {
+            "name": "target_pod_info",
+            "description": "Pods discovered by kube-state-metrics in the target namespace.",
+            "query": 'kube_pod_info{namespace="target"}',
+        },
+        {
+            "name": "target_deployment_replicas",
+            "description": "Deployment replica counts reported by kube-state-metrics.",
+            "query": 'kube_deployment_status_replicas{namespace="target"}',
+        },
+        {
+            "name": "node_cpu_usage_ratio",
+            "description": "Node CPU usage ratio from Prometheus node-exporter metrics.",
+            "query": '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))',
+        },
+        {
+            "name": "node_memory_usage_ratio",
+            "description": "Node memory usage ratio from Prometheus node-exporter metrics.",
+            "query": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+        },
+        {
+            "name": "node_filesystem_usage_ratio",
+            "description": "Node filesystem usage ratio from Prometheus node-exporter metrics.",
+            "query": (
+                '1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"} '
+                '/ node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"})'
+            ),
+        },
+        {
+            "name": "node_collector_node_pod_count",
+            "description": "Pods scheduled on each Kubernetes node reported by optional-node-collector.",
+            "query": "node_collector_node_pod_count",
+        },
+        {
+            "name": "node_collector_node_not_ready_pod_count",
+            "description": (
+                "Not Ready Pods on each Kubernetes node reported by optional-node-collector."
+            ),
+            "query": "node_collector_node_not_ready_pod_count",
+        },
+        {
+            "name": "node_collector_scrape_error",
+            "description": "Whether optional-node-collector failed to read Kubernetes API data.",
+            "query": "node_collector_scrape_error",
+        },
+    ],
+    "logs": [
+        {
+            "name": "target_namespace_errors",
+            "description": "Error logs emitted by workloads in the target namespace.",
+            "query": '{k8s_namespace_name="target"} |= "ERROR"',
+        },
+        {
+            "name": "node_collector_runtime_samples",
+            "description": "Structured runtime samples emitted by optional-node-collector.",
+            "query": (
+                '{k8s_namespace_name="target", k8s_container_name="node-collector"} '
+                '|= "node_runtime_sample"'
+            ),
+        },
+        {
+            "name": "target_agent_warnings",
+            "description": "Warnings or failures emitted by the target-cluster-agent.",
+            "query": (
+                '{k8s_namespace_name="target", k8s_container_name="cluster-agent"} '
+                '|~ "WARN|ERROR|failed"'
+            ),
+        },
+    ],
+    "traces": [
+        {
+            "name": "checkout_slow_spans",
+            "description": "Slow checkout spans for demo RCA evidence.",
+            "query": '{ resource.service.name = "checkout-api" }',
+        },
+        {
+            "name": "target_agent_error_spans",
+            "description": "Error spans emitted by the target-cluster-agent.",
+            "query": '{ resource.service.name = "target-cluster-agent" && status = error }',
+        },
+        {
+            "name": "target_agent_recent_spans",
+            "description": "Recent spans emitted by the target-cluster-agent evidence loop.",
+            "query": '{ resource.service.name = "target-cluster-agent" }',
+        },
+        {
+            "name": "management_gateway_spans",
+            "description": "Management Gateway request spans related to agent traffic.",
+            "query": '{ resource.service.name = "api-gateway" }',
+        },
+    ],
+}
+
+
+def default_evidence_provider_policy(
+    provider_key: str,
+    interval_seconds: int,
+) -> EvidenceProviderPolicy:
+    return EvidenceProviderPolicy(
+        enabled=True,
+        interval_seconds=interval_seconds,
+        min_workers=DEFAULT_EVIDENCE_PROVIDER_WORKERS,
+        max_workers=DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
+        queries=list(DEFAULT_EVIDENCE_PROVIDER_QUERIES.get(provider_key, [])),
+    )
+
+
+def default_evidence_providers(interval_seconds: int) -> dict[str, EvidenceProviderPolicy]:
+    return {
+        provider_key: default_evidence_provider_policy(provider_key, interval_seconds)
+        for provider_key in DEFAULT_EVIDENCE_PROVIDER_QUERIES
+    }
+
+
+def default_agent_policy(
+    *,
+    cluster_id: str,
+    cluster_role: str = DEFAULT_CLUSTER_ROLE,
+    interval_seconds: int = int(Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS),
+    failure_policy: str = DEFAULT_EVIDENCE_FAILURE_POLICY,
+    bootstrap_mode: str = DEFAULT_BOOTSTRAP_MODE,
+    generation: int = 1,
+) -> AgentPolicy:
+    return AgentPolicy(
+        cluster_id=cluster_id,
+        cluster_role=cluster_role,
+        generation=generation,
+        evidence=EvidenceRuntimePolicy(
+            failure_policy=failure_policy,
+            providers=default_evidence_providers(interval_seconds),
+        ),
+        bootstrap=BootstrapPolicy(mode=bootstrap_mode),
+        desired_state=DesiredStatePolicy(),
+    )
+
+
+def enabled_provider_keys(policy: AgentPolicy, requested_provider_keys: list[str]) -> list[str]:
+    keys: list[str] = []
+    for provider_key in dict.fromkeys(requested_provider_keys):
+        provider_policy = policy.evidence.providers.get(provider_key)
+        if provider_policy is None or provider_policy.enabled:
+            keys.append(provider_key)
+    return keys
+
+
+def provider_policy_snapshots(
+    policy: AgentPolicy,
+    provider_keys: list[str],
+) -> dict[str, dict[str, object]]:
+    return {
+        provider_key: policy.evidence.providers.get(
+            provider_key,
+            EvidenceProviderPolicy(),
+        ).model_dump()
+        for provider_key in provider_keys
+    }

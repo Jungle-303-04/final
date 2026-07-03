@@ -99,7 +99,7 @@ def test_schema_defines_expected_tables() -> None:
         "workspace_members",
         "resource_access_grants",
         "cluster_registrations",
-        "evidence_source_leases",
+        "evidence_jobs",
         "evidence_windows",
         "target_desired_states",
         "target_reconcile_records",

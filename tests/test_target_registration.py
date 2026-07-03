@@ -12,8 +12,8 @@ from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
 from domains.target.router import (
     KUBE_CONTEXT_NOT_ALLOWED,
     apply_manifest_with_kubectl,
-    lease_evidence_source,
     register_target,
+    schedule_evidence_jobs,
     target_install_manifest,
     update_cluster_policy,
 )
@@ -21,9 +21,9 @@ from packages.contracts.gateway.requests import (
     AgentPolicy,
     BootstrapPolicy,
     DesiredResource,
+    EvidenceJobScheduleRequest,
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
-    EvidenceSourceLeaseRequest,
     TargetRegisterRequest,
 )
 
@@ -32,6 +32,7 @@ class FakeDb:
     def __init__(self) -> None:
         self.registered: list[dict[str, object]] = []
         self.desired_states: list[dict[str, object]] = []
+        self.policy: dict[str, object] | None = None
 
     def register_target_cluster(self, payload: dict[str, object]) -> dict[str, object]:
         self.registered.append(payload)
@@ -55,6 +56,18 @@ class FakeDb:
         )
         return self.desired_states
 
+    def get_cluster_policy(self, _workspace_id: str, _cluster_id: str) -> dict[str, object] | None:
+        return self.policy
+
+    def upsert_cluster_policy(
+        self,
+        _workspace_id: str,
+        _cluster_id: str,
+        policy: dict[str, object],
+    ) -> dict[str, object]:
+        self.policy = policy
+        return policy
+
 
 class FakeEvents:
     def __init__(self) -> None:
@@ -65,20 +78,19 @@ class FakeEvents:
         return object()
 
 
-class FakeLeaseDb:
-    def lease_evidence_source(
-        self,
-        cluster_id: str,
-        workspace_id: str,
-        source_id: str,
-        agent_id: str,
-        window_start: str,
-        lease_seconds: int,
-    ) -> dict[str, object]:
+class FakeEvidenceJobDb:
+    def get_cluster_policy(self, _workspace_id: str, _cluster_id: str) -> None:
+        return None
+
+    def queue_evidence_jobs(self, **kwargs: object) -> dict[str, object]:
         return {
-            "leased": True,
-            "lease_id": f"{cluster_id}:{workspace_id}:{source_id}:{agent_id}:{window_start}:{lease_seconds}",
-            "leased_until": "2026-06-30T00:00:30+00:00",
+            "accepted": True,
+            "evidence_key": (
+                f"{kwargs['workspace_id']}:{kwargs['cluster_id']}:"
+                f"{kwargs['source_id']}:{kwargs['window_start']}"
+            ),
+            "queued": len(kwargs["provider_keys"]),
+            "job_ids": [f"job-{provider}" for provider in kwargs["provider_keys"]],
         }
 
 
@@ -170,6 +182,8 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert match is not None
     assert db.registered[0]["agent_token_hash"] == hash_agent_token(match.group(1))
     assert "agent_token" not in db.registered[0]
+    assert db.policy is not None
+    assert db.policy["cluster_id"] == "target-cluster-01"
     # 응답의 agent_token 은 매니페스트에 주입된 원문과 동일(대시보드가 x-agent-token 으로 사용)
     assert response.agent_token == match.group(1)
 
@@ -210,29 +224,26 @@ def test_target_apply_requires_context_when_allowlist_is_configured(monkeypatch)
     assert exc.value.detail == KUBE_CONTEXT_NOT_ALLOWED
 
 
-def test_evidence_source_lease_route_delegates_to_management_store() -> None:
+def test_evidence_job_schedule_route_delegates_to_management_store() -> None:
     async def run():
-        return await lease_evidence_source(
-            "prometheus.default",
-            EvidenceSourceLeaseRequest(
-                cluster_id="cluster-1",
-                workspace_id="workspace-1",
-                agent_id="agent-1",
+        return await schedule_evidence_jobs(
+            EvidenceJobScheduleRequest(
+                source_id="cluster-snapshot",
                 window_start="2026-06-30T00:00:00+00:00",
-                lease_seconds=30,
+                provider_keys=["metrics", "logs"],
             ),
             identity=ClusterAgentIdentity(
                 workspace_id="trusted-workspace",
                 cluster_id="trusted-cluster",
             ),
-            db=FakeLeaseDb(),
+            db=FakeEvidenceJobDb(),
         )
 
     response = asyncio.run(run())
 
-    assert response.leased is True
-    assert str(response.lease_id).startswith("trusted-cluster:trusted-workspace:")
-    assert "prometheus.default" in str(response.lease_id)
+    assert response.evidence_key.startswith("trusted-workspace:trusted-cluster:")
+    assert response.queued == 2
+    assert response.job_ids == ["job-metrics", "job-logs"]
 
 
 def test_cluster_policy_update_preserves_existing_unset_fields() -> None:

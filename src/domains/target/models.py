@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, Integer, PrimaryKeyConstraint, Text
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import BigInteger, Boolean, Index, Integer, PrimaryKeyConstraint, Text
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.storage.base import (
@@ -15,21 +15,6 @@ from packages.storage.base import (
     text_column,
     updated_at_column,
 )
-
-
-class EvidenceSourceLease(Base):
-    __tablename__ = "evidence_source_leases"
-    __table_args__ = (PrimaryKeyConstraint("workspace_id", "cluster_id", "source_id"),)
-
-    workspace_id: Mapped[str] = text_column()
-    cluster_id: Mapped[str] = text_column()
-    source_id: Mapped[str] = text_column()
-    agent_id: Mapped[str] = text_column()
-    lease_id: Mapped[str] = text_column()
-    window_start: Mapped[str] = text_column()
-    leased_until: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    created_at: Mapped[Any] = created_at_column()
-    updated_at: Mapped[Any] = updated_at_column()
 
 
 class EvidenceWindow(Base):
@@ -44,6 +29,42 @@ class EvidenceWindow(Base):
     event_id: Mapped[str] = text_column()
     correlation_id: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class EvidenceJob(Base):
+    __tablename__ = "evidence_jobs"
+    __table_args__ = (
+        Index(
+            "ix_evidence_jobs_claim",
+            "workspace_id",
+            "cluster_id",
+            "provider_key",
+            "status",
+            "created_at",
+        ),
+        Index("ix_evidence_jobs_window", "evidence_key"),
+    )
+
+    job_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    evidence_key: Mapped[str] = text_column()
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    source_id: Mapped[str] = text_column()
+    provider_key: Mapped[str] = text_column()
+    window_start: Mapped[str] = text_column()
+    policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider_policy: Mapped[dict[str, Any]] = jsonb_column()
+    status: Mapped[str] = text_column()
+    lease_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    leased_until: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+    failure_policy: Mapped[str] = text_column()
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
 

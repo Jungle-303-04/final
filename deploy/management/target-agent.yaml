@@ -66,17 +66,6 @@ metadata:
 data:
   owner: cluster-agent
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: management-agent-control
-  namespace: management
-spec:
-  accessModes: ["ReadWriteOnce"]
-  resources:
-    requests:
-      storage: 1Gi
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -123,18 +112,13 @@ spec:
               value: "metrics=2,logs=2,traces=2"
             - name: EVIDENCE_FAILURE_POLICY
               value: "allow_partial"
-            - name: EVIDENCE_QUEUE_DB_PATH
-              value: "/data/evidence-queue.db"
             - name: AGENT_CONTROL_DB_PATH
               value: "/data/agent-control.db"
             - name: COMMAND_OUTBOX_DB_PATH
               value: "/data/command-outbox.db"
-            - name: TELEMETRY_QUERY_PATH
-              value: "src/services/target/cluster-agent/queries"
           volumeMounts:
             - name: agent-control-data
               mountPath: /data
       volumes:
         - name: agent-control-data
-          persistentVolumeClaim:
-            claimName: management-agent-control
+          emptyDir: {}
