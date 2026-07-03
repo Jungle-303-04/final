@@ -90,6 +90,14 @@ class FakeDeadLetters:
         )
 
 
+def test_retry_policy_env_defaults_remain_unchanged() -> None:
+    # env 미설정 시 기존 하드코딩 값과 동일해야 함(배포 호환)
+    policy = EventRetryPolicy()
+    assert policy.max_attempts == 3
+    assert policy.fetch_batch_size == 1
+    assert policy.handler_timeout_seconds == 30
+
+
 def test_event_processor_acks_successful_handler() -> None:
     async def run() -> None:
         evt = event("command.requested", "test", {"ok": True}, "corr-1")
