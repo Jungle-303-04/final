@@ -43,6 +43,17 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
     logs_provider = module.LokiLogsProvider.from_config(lambda _name, default: default)
     collector = module.EvidenceCollector([logs_provider])
+    for index in range(3):
+        collector.register_query(
+            module.TelemetryQueryDefinition.from_mapping(
+                {
+                    "source": "loki",
+                    "name": f"target_log_query_{index}",
+                    "description": "Target log query.",
+                    "query": '{k8s_namespace_name="target"}',
+                }
+            )
+        )
 
     async def fake_query_loki(_client, log_query) -> dict[str, object]:
         return {

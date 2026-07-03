@@ -3,24 +3,28 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Protocol
 
-from evidence.store import EvidenceTaskStore
-from evidence.uploader import (
-    DEFAULT_MAX_ATTEMPTS,
-    DEFAULT_POLL_SECONDS,
-    FAILURE_POLICY_ALLOW_PARTIAL,
-    EvidenceUploader,
-)
+from queries import SOURCE_EVIDENCE_KEYS, TelemetryQueryDefinition
+
+from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.interfaces import ManagementPlaneClient
+
+DEFAULT_JOB_POLL_SECONDS = 1.0
+DEFAULT_JOB_POLL_TIMEOUT_SECONDS = 10
 
 
 class EvidenceSource(Protocol):
     async def collect(self, *evidence_keys: str) -> JsonObject: ...
 
 
-class EvidenceScheduler:
+SOURCE_BY_PROVIDER = {provider_key: source for source, provider_key in SOURCE_EVIDENCE_KEYS.items()}
+
+
+class EvidenceJobScheduler:
     def __init__(
         self,
         *,
@@ -29,31 +33,15 @@ class EvidenceScheduler:
         agent_id: str,
         source_id: str,
         collector: EvidenceSource,
-        store: EvidenceTaskStore,
         provider_keys: tuple[str, ...],
         provider_worker_counts: Mapping[str, int],
-        failure_policy: str = FAILURE_POLICY_ALLOW_PARTIAL,
         interval_seconds: int,
-        lease_seconds: int,
-        source_lease_seconds: int,
-        worker_pool_authority: object | None = None,
-        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     ) -> None:
         self.cluster_id = cluster_id
         self.workspace_id = workspace_id
         self.agent_id = agent_id
         self.source_id = source_id
         self.collector = collector
-        self.store = store
-        self.uploader = EvidenceUploader(
-            store,
-            failure_policy,
-            cluster_id=cluster_id,
-            workspace_id=workspace_id,
-            agent_id=agent_id,
-            source_id=source_id,
-            source_lease_seconds=source_lease_seconds,
-        )
         self.provider_keys = provider_keys
         self.provider_worker_counts = {
             provider_key: max(0, provider_worker_counts.get(provider_key, 1))
@@ -65,9 +53,7 @@ class EvidenceScheduler:
         self.enabled_provider_keys = set(provider_keys)
         self.next_provider_runs = {provider_key: 0.0 for provider_key in provider_keys}
         self.interval_seconds = interval_seconds
-        self.lease_seconds = lease_seconds
-        self.max_attempts = max_attempts
-        self._worker_pool_authority = worker_pool_authority or object()
+        self._client: ManagementPlaneClient | None = None
         self._worker_tasks: dict[str, list[asyncio.Task[None]]] = {
             provider_key: [] for provider_key in provider_keys
         }
@@ -75,42 +61,40 @@ class EvidenceScheduler:
         self._workers_started = False
 
     async def run(self, client: ManagementPlaneClient) -> None:
-        self.store.recover_expired_leases(time.time())
+        self._client = client
         self._workers_started = True
-        self.reconcile_worker_pools()
+        self.reconcile_worker_pools(client)
         try:
-            await asyncio.gather(
-                self.schedule_forever(),
-                self.uploader.run(client),
-            )
+            await self.schedule_forever(client)
         finally:
             self._workers_started = False
+            self._client = None
             await self.stop_workers()
 
-    async def schedule_forever(self) -> None:
+    async def schedule_forever(self, client: ManagementPlaneClient) -> None:
         while True:
-            self.schedule_once()
+            await self.schedule_once(client)
             await asyncio.sleep(1)
 
-    def schedule_once(self, now: float | None = None) -> str | None:
+    async def schedule_once(
+        self,
+        client: ManagementPlaneClient,
+        now: float | None = None,
+    ) -> str | None:
         now = time.time() if now is None else now
-        self.store.recover_expired_leases(now)
         due_provider_keys = self.due_provider_keys(now)
         if not due_provider_keys:
             return None
 
-        collection_id = self.new_collection_id(now)
-        created = self.store.create_collection(
-            collection_id=collection_id,
-            cluster_id=self.cluster_id,
-            provider_keys=due_provider_keys,
-            scheduled_for=now,
-            now=now,
+        window_start = self.new_window_start(now)
+        response = await client.schedule_evidence_jobs(
+            self.source_id,
+            window_start,
+            list(due_provider_keys),
         )
-        if created:
-            for provider_key in due_provider_keys:
-                self.next_provider_runs[provider_key] = now + self.provider_intervals[provider_key]
-        return collection_id if created else None
+        for provider_key in due_provider_keys:
+            self.next_provider_runs[provider_key] = now + self.provider_intervals[provider_key]
+        return str(response.get(Gateway.EVIDENCE_KEY) or window_start)
 
     def due_provider_keys(self, now: float) -> tuple[str, ...]:
         return tuple(
@@ -120,25 +104,81 @@ class EvidenceScheduler:
             and now >= self.next_provider_runs[provider_key]
         )
 
-    async def work_forever(self, provider_key: str, worker_id: str) -> None:
+    async def work_forever(
+        self,
+        client: ManagementPlaneClient,
+        provider_key: str,
+        worker_id: str,
+    ) -> None:
         while True:
-            if not await self.work_once(provider_key, worker_id):
-                await asyncio.sleep(DEFAULT_POLL_SECONDS)
+            if not await self.work_once(client, provider_key, worker_id):
+                await asyncio.sleep(DEFAULT_JOB_POLL_SECONDS)
 
-    async def work_once(self, provider_key: str, worker_id: str) -> bool:
-        task = self.store.lease_task(provider_key, worker_id, self.lease_seconds, time.time())
-        if task is None:
+    async def work_once(
+        self,
+        client: ManagementPlaneClient,
+        provider_key: str,
+        worker_id: str,
+    ) -> bool:
+        job = await client.poll_evidence_job(
+            provider_key,
+            self.agent_id,
+            DEFAULT_JOB_POLL_TIMEOUT_SECONDS,
+        )
+        if job is None:
             return False
 
+        job_id = str(job[Gateway.JOB_ID])
+        lease_id = str(job[Gateway.LEASE_ID])
         try:
-            result = await self.collector.collect(task.provider_key)
-            self.store.complete_task(task, result, time.time())
+            result = await self.collect_job(job, provider_key)
+            await client.complete_evidence_job(
+                job_id,
+                self.agent_id,
+                lease_id,
+                CommandStatus.COMPLETED,
+                result,
+                "",
+            )
         except Exception as exc:
-            self.store.fail_task(task, str(exc), self.max_attempts, time.time())
+            await client.complete_evidence_job(
+                job_id,
+                self.agent_id,
+                lease_id,
+                CommandStatus.FAILED,
+                {},
+                str(exc),
+            )
         return True
 
-    async def upload_once(self, client: ManagementPlaneClient) -> str:
-        return await self.uploader.upload_once(client)
+    async def collect_job(self, job: JsonObject, provider_key: str) -> JsonObject:
+        definitions = self.job_query_definitions(job, provider_key)
+        if hasattr(self.collector, "collect_query_policy"):
+            return await self.collector.collect_query_policy(provider_key, definitions)
+        return await self.collector.collect(provider_key)
+
+    def job_query_definitions(
+        self,
+        job: JsonObject,
+        provider_key: str,
+    ) -> tuple[TelemetryQueryDefinition, ...]:
+        source = SOURCE_BY_PROVIDER.get(provider_key)
+        if source is None:
+            return ()
+        provider_policy = job.get(Gateway.PROVIDER_POLICY, {})
+        if not isinstance(provider_policy, Mapping):
+            return ()
+        query_rows = provider_policy.get("queries", [])
+        if not isinstance(query_rows, list):
+            return ()
+        definitions: list[TelemetryQueryDefinition] = []
+        for query in query_rows:
+            if not isinstance(query, Mapping):
+                continue
+            payload = dict(query)
+            payload.setdefault("source", source)
+            definitions.append(TelemetryQueryDefinition.from_mapping(payload))
+        return tuple(definitions)
 
     def configure_schedule(
         self,
@@ -158,8 +198,17 @@ class EvidenceScheduler:
             self.provider_intervals[provider_key] = max(1, interval_seconds)
             self.next_provider_runs.setdefault(provider_key, 0.0)
 
-    def set_failure_policy(self, failure_policy: str) -> None:
-        self.uploader.set_failure_policy(failure_policy)
+    def set_worker_counts(
+        self,
+        provider_worker_counts: Mapping[str, int],
+    ) -> None:
+        for provider_key in self.provider_keys:
+            self.provider_worker_counts[provider_key] = max(
+                0,
+                provider_worker_counts.get(provider_key, self.provider_worker_counts[provider_key]),
+            )
+            if self._client is not None:
+                self.reconcile_worker_pool(provider_key, self._client)
 
     def current_worker_counts(self) -> dict[str, int]:
         self.prune_finished_workers()
@@ -170,26 +219,15 @@ class EvidenceScheduler:
             for provider_key in self.provider_keys
         }
 
-    def resize_provider_workers(
+    def reconcile_worker_pools(self, client: ManagementPlaneClient) -> None:
+        for provider_key in self.provider_keys:
+            self.reconcile_worker_pool(provider_key, client)
+
+    def reconcile_worker_pool(
         self,
         provider_key: str,
-        worker_count: int,
-        *,
-        authority: object,
-    ) -> int:
-        if authority is not self._worker_pool_authority:
-            raise PermissionError("worker pool resize is limited to ClusterWorkloadController")
-        if provider_key not in self.provider_worker_counts:
-            raise ValueError(f"unknown evidence provider worker pool: {provider_key}")
-        self.provider_worker_counts[provider_key] = max(0, worker_count)
-        self.reconcile_worker_pool(provider_key)
-        return self.provider_worker_counts[provider_key]
-
-    def reconcile_worker_pools(self) -> None:
-        for provider_key in self.provider_keys:
-            self.reconcile_worker_pool(provider_key)
-
-    def reconcile_worker_pool(self, provider_key: str) -> None:
+        client: ManagementPlaneClient,
+    ) -> None:
         self.prune_finished_workers()
         if not self._workers_started:
             return
@@ -199,7 +237,7 @@ class EvidenceScheduler:
         while len(tasks) < desired_count:
             worker_id = self.next_worker_id(provider_key)
             task = asyncio.create_task(
-                self.work_forever(provider_key, worker_id),
+                self.work_forever(client, provider_key, worker_id),
                 name=f"evidence-{worker_id}",
             )
             tasks.append(task)
@@ -226,5 +264,8 @@ class EvidenceScheduler:
         self._worker_serials[provider_key] += 1
         return f"{provider_key}-worker-{worker_index}"
 
-    def new_collection_id(self, now: float) -> str:
-        return f"{self.cluster_id}:{int(now * 1000)}"
+    def new_window_start(self, now: float) -> str:
+        interval = max(1, self.interval_seconds)
+        current = int(now)
+        window_start = current - (current % interval)
+        return datetime.fromtimestamp(window_start, UTC).isoformat()

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Literal, Self, cast
 
 TelemetrySource = Literal["prometheus", "loki", "tempo"]
@@ -12,9 +10,6 @@ SOURCE_EVIDENCE_KEYS: dict[TelemetrySource, str] = {
     "loki": "logs",
     "tempo": "traces",
 }
-
-DEFAULT_QUERY_PATH = Path(__file__).parent
-SUPPORTED_QUERY_FILE_SUFFIXES = {".json"}
 
 
 @dataclass(frozen=True)
@@ -70,8 +65,15 @@ class TelemetryQueryRegistry:
             self.register(definition)
         return definitions
 
-    def import_path(self, path: str | Path) -> tuple[TelemetryQueryDefinition, ...]:
-        return self.register_many(load_query_definitions(path))
+    def replace_source(
+        self,
+        source: TelemetrySource,
+        definitions: tuple[TelemetryQueryDefinition, ...],
+    ) -> tuple[TelemetryQueryDefinition, ...]:
+        self.definitions = {
+            key: definition for key, definition in self.definitions.items() if key[0] != source
+        }
+        return self.register_many(definitions)
 
     def get(self, source: TelemetrySource, name: str) -> TelemetryQueryDefinition:
         try:
@@ -85,41 +87,6 @@ class TelemetryQueryRegistry:
             for (definition_source, _name), definition in self.definitions.items()
             if definition_source == source
         )
-
-
-def load_query_definitions(path: str | Path) -> tuple[TelemetryQueryDefinition, ...]:
-    query_path = Path(path)
-    if query_path.is_dir():
-        definitions: list[TelemetryQueryDefinition] = []
-        for query_file in sorted(query_path.rglob("*.json")):
-            definitions.extend(load_query_definitions(query_file))
-        return tuple(definitions)
-
-    query_file = query_path
-    if query_file.suffix not in SUPPORTED_QUERY_FILE_SUFFIXES:
-        supported = ", ".join(sorted(SUPPORTED_QUERY_FILE_SUFFIXES))
-        raise ValueError(f"unsupported telemetry query file: {query_file}; supported: {supported}")
-
-    payload = json.loads(query_file.read_text(encoding="utf-8"))
-    file_source = payload.get("source") if isinstance(payload, dict) else None
-    rows = payload.get("queries", payload) if isinstance(payload, dict) else payload
-    if not isinstance(rows, list):
-        raise ValueError("telemetry query file must contain a list or a 'queries' list")
-
-    return tuple(query_definition_from_file_row(row, file_source, query_file) for row in rows)
-
-
-def query_definition_from_file_row(
-    row: object,
-    file_source: object,
-    query_file: Path,
-) -> TelemetryQueryDefinition:
-    if not isinstance(row, dict):
-        raise ValueError(f"telemetry query file row must be an object: {query_file}")
-    payload = dict(row)
-    if "source" not in payload and isinstance(file_source, str):
-        payload["source"] = file_source
-    return TelemetryQueryDefinition.from_mapping(payload)
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:
@@ -148,21 +115,3 @@ class OpenTelemetrySpanQuery:
     query_name: str
     description: str
     traceql: str
-
-
-DEFAULT_TELEMETRY_QUERY_DEFINITIONS = load_query_definitions(DEFAULT_QUERY_PATH)
-PROMETHEUS_INSTANT_QUERIES: tuple[PrometheusInstantQuery, ...] = tuple(
-    cast(PrometheusInstantQuery, definition.to_provider_query())
-    for definition in DEFAULT_TELEMETRY_QUERY_DEFINITIONS
-    if definition.source == "prometheus"
-)
-LOKI_LOG_QUERIES: tuple[LokiLogQuery, ...] = tuple(
-    cast(LokiLogQuery, definition.to_provider_query())
-    for definition in DEFAULT_TELEMETRY_QUERY_DEFINITIONS
-    if definition.source == "loki"
-)
-OPEN_TELEMETRY_SPAN_QUERIES: tuple[OpenTelemetrySpanQuery, ...] = tuple(
-    cast(OpenTelemetrySpanQuery, definition.to_provider_query())
-    for definition in DEFAULT_TELEMETRY_QUERY_DEFINITIONS
-    if definition.source == "tempo"
-)

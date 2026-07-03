@@ -9,6 +9,12 @@ import httpx
 import pytest
 from conftest import ROOT, load_file
 
+from packages.contracts.gateway.requests import (
+    AgentPolicy,
+    EvidenceProviderPolicy,
+    EvidenceRuntimePolicy,
+)
+
 
 def load_agent_module() -> Any:
     return load_file(
@@ -42,7 +48,12 @@ async def close_client(client: Any) -> None:
     "call",
     [
         lambda client: client.register_agent("cluster-1", "agent-1", ["evidence"]),
-        lambda client: client.ship_evidence({"cluster_id": "cluster-1"}),
+        lambda client: client.schedule_evidence_jobs(
+            "cluster-snapshot",
+            "2026-06-30T00:00:00Z",
+            ["metrics"],
+        ),
+        lambda client: client.poll_evidence_job("metrics", "agent-1", 1),
         lambda client: client.start_command("cmd-1", "cluster-1", "default", "lease-1", "agent-1"),
         lambda client: client.heartbeat_command(
             "cmd-1", "cluster-1", "default", "lease-1", "agent-1"
@@ -54,8 +65,13 @@ async def close_client(client: Any) -> None:
             "agent-1",
             {"status": "completed", "cluster_id": "cluster-1"},
         ),
-        lambda client: client.acquire_evidence_source_lease(
-            "cluster-1", "default", "agent-1", "cluster-snapshot", "2026-06-30T00:00:00Z", 30
+        lambda client: client.complete_evidence_job(
+            "job-1",
+            "agent-1",
+            "lease-1",
+            "completed",
+            {"metrics": {}},
+            "",
         ),
     ],
 )
@@ -75,17 +91,31 @@ def test_management_client_write_calls_raise_on_gateway_error(
     asyncio.run(run())
 
 
-def test_management_client_ship_evidence_returns_success_status() -> None:
+def test_management_client_polls_evidence_job() -> None:
     agent_module = load_agent_module()
-    client = make_client(agent_module, status_code=202)
 
-    async def run() -> int:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"job": {"job_id": "job-1", "provider_key": "metrics", "lease_id": "lease-1"}},
+            request=request,
+        )
+
+    client = agent_module.HttpManagementPlaneClient("http://management.local")
+    asyncio.run(client.client.aclose())
+    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler), timeout=1)
+
+    async def run() -> dict[str, object] | None:
         try:
-            return await client.ship_evidence({"cluster_id": "cluster-1"})
+            return await client.poll_evidence_job("metrics", "agent-1", 1)
         finally:
             await close_client(client)
 
-    assert asyncio.run(run()) == 202
+    assert asyncio.run(run()) == {
+        "job_id": "job-1",
+        "provider_key": "metrics",
+        "lease_id": "lease-1",
+    }
 
 
 def test_target_agent_builds_apply_manifest_patch() -> None:
@@ -375,129 +405,28 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
     assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH"]
 
 
-def test_target_agent_queries_prometheus_and_loki_directly(monkeypatch) -> None:
+def test_target_agent_registers_query_policy_from_management_policy() -> None:
     agent_module = load_agent_module()
-    calls: list[str] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request.url.path)
-        if request.url.path == "/api/v1/label/__name__/values":
-            return httpx.Response(
-                200, json={"status": "success", "data": ["up", "http_requests_total"]}
-            )
-        if request.url.path == "/api/v1/query":
-            return httpx.Response(
-                200,
-                json={
-                    "status": "success",
-                    "data": {
-                        "result": [
-                            {
-                                "metric": {"__name__": request.url.params["query"]},
-                                "value": [1, "1"],
-                            }
-                        ]
-                    },
-                },
-            )
-        if request.url.path == "/loki/api/v1/labels":
-            return httpx.Response(200, json={"status": "success", "data": ["pod"]})
-        if request.url.path == "/loki/api/v1/query_range":
-            return httpx.Response(
-                200,
-                json={
-                    "status": "success",
-                    "data": {
-                        "result": [
-                            {
-                                "stream": {"pod": "checkout-api"},
-                                "values": [["1", "readiness failed"]],
-                            }
-                        ]
-                    },
-                },
-            )
-        return httpx.Response(404)
-
-    monkeypatch.setenv("PROMETHEUS_BASE_URL", "http://prometheus.local")
-    monkeypatch.setenv("LOKI_BASE_URL", "http://loki.local")
-    agent = agent_module.TargetClusterAgent(telemetry_transport=httpx.MockTransport(handler))
-
-    payload = asyncio.run(agent.build_evidence_payload())
-
-    assert payload["metrics"]["mode"] == "direct_prometheus_api"
-    assert payload["metrics"]["available_metric_count"] == 2
-    assert payload["metrics"]["queried_metric_count"] == 2
-    assert payload["logs"][0]["mode"] == "direct_loki_api"
-    assert payload["logs"][0]["labels"] == ["pod"]
-    assert any("/api/v1/label/__name__/values" in call for call in calls)
-    assert calls.count("/api/v1/query") == 2
-    assert "/loki/api/v1/labels" in calls
-    assert "/loki/api/v1/query_range" in calls
-
-
-def test_target_agent_ships_evidence_only_after_source_lease(monkeypatch) -> None:
-    agent_module = load_agent_module()
-
-    class LeaseClient:
-        def __init__(self) -> None:
-            self.payload: dict[str, object] | None = None
-            self.leases: list[tuple[str, str, str, str, str, int]] = []
-
-        async def acquire_evidence_source_lease(
-            self,
-            cluster_id: str,
-            workspace_id: str,
-            agent_id: str,
-            source_id: str,
-            window_start: str,
-            lease_seconds: int,
-        ) -> dict[str, object]:
-            self.leases.append(
-                (cluster_id, workspace_id, agent_id, source_id, window_start, lease_seconds)
-            )
-            return {"leased": True, "lease_id": "lease-1", "leased_until": "soon"}
-
-        async def ship_evidence(self, evidence: dict[str, object]) -> int:
-            self.payload = evidence
-            return 202
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, request=request)
-
-    monkeypatch.setenv("HOSTNAME", "agent-1")
-    agent = agent_module.TargetClusterAgent(
-        telemetry_transport=httpx.MockTransport(handler),
-    )
-    client = LeaseClient()
-
-    assert asyncio.run(agent.ship_evidence_once(client)) is True
-
-    assert client.leases
-    assert client.payload is not None
-    assert client.payload["agent_id"] == "agent-1"
-    assert client.payload["source_id"] == "cluster-snapshot"
-    assert client.payload["window_start"]
-    assert client.payload["evidence_key"]
-
-
-def test_target_agent_skips_evidence_when_source_lease_is_held(monkeypatch) -> None:
-    agent_module = load_agent_module()
-
-    class BusyLeaseClient:
-        def __init__(self) -> None:
-            self.shipped = False
-
-        async def acquire_evidence_source_lease(self, *_args: object) -> dict[str, object]:
-            return {"leased": False, "lease_id": "other", "leased_until": "soon"}
-
-        async def ship_evidence(self, _evidence: dict[str, object]) -> int:
-            self.shipped = True
-            return 202
-
-    monkeypatch.setenv("HOSTNAME", "agent-1")
     agent = agent_module.TargetClusterAgent()
-    client = BusyLeaseClient()
+    policy = AgentPolicy(
+        cluster_id=agent.cluster_id,
+        evidence=EvidenceRuntimePolicy(
+            providers={
+                "metrics": EvidenceProviderPolicy(
+                    queries=[
+                        {
+                            "name": "checkout_error_rate",
+                            "description": "Checkout error rate",
+                            "query": 'sum(rate(http_requests_total{status=~"5.."}[5m]))',
+                        }
+                    ]
+                )
+            }
+        ),
+    )
 
-    assert asyncio.run(agent.ship_evidence_once(client)) is False
-    assert client.shipped is False
+    result = agent.apply_policy(policy)
+    definition = agent.query_registry.get("prometheus", "checkout_error_rate")
+
+    assert result["registered_queries"]["metrics"] == ["checkout_error_rate"]
+    assert definition.query.startswith("sum(rate")
