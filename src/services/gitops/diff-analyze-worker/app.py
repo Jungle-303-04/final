@@ -95,7 +95,7 @@ async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIter
     safe, reason = evaluate_safe_pr_policy(diff)
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)
     if safe:
-        # PR 생성 성공 뒤에만 alert/apply 흐름이 이어진다.
+        # PR 생성 성공 뒤에만 alert/apply 흐름이 이어짐.
         yield build_safe_pr_request_body(diff)
 
 

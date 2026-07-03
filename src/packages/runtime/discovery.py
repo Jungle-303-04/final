@@ -1,8 +1,8 @@
 """서비스 명부 자동 발견 — src/services/**/app.py 스캔이 단일 출처.
 
 기존에는 같은 서비스 목록이 scripts/events.py(SERVICES), 테스트(SERVICE_ENTRYPOINTS),
-deploy manifest, 문서 표에 각각 수동으로 존재했다. 이 모듈이 그 목록들을 대체한다:
-명부가 필요한 곳은 discover_services() 를 읽는다. 서비스 추가 = app.py 생성으로 끝.
+deploy manifest, 문서 표에 각각 수동으로 존재했다. 이 모듈이 그 목록들을 대체함:
+명부가 필요한 곳은 discover_services() 를 읽음. 서비스 추가 = app.py 생성으로 끝.
 
 정적 스캔(import 없음)이라 부작용이 없고, 이름 중복은 즉시 예외(fail-fast).
 서비스 identity 는 App("이름")/ServiceSpec(name=...) 리터럴, 없으면 디렉터리명.
@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-# entrypoint 파일명 규약. 이 이름의 파일이 있으면 서비스로 간주한다.
+# entrypoint 파일명 규약. 이 이름의 파일이 있으면 서비스로 간주함.
 ENTRYPOINT_FILENAME = "app.py"
 SERVICES_ROOT = Path("src") / "services"
 

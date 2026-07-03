@@ -1,6 +1,6 @@
 """ServiceSpec — 서비스 자기선언(명찰).
 
-서비스의 정체성(이름/그룹/종류/배포형태)을 entrypoint 안에서 한 번만 선언한다.
+서비스의 정체성(이름/그룹/종류/배포형태)을 entrypoint 안에서 한 번만 선언함.
     app = App(ServiceSpec(name="diff-worker", group="gitops"))
 
 이 선언(또는 App("이름") 축약형)이 서비스 명부의 단일 출처다.
@@ -20,7 +20,7 @@ DEFAULT_WORKLOAD = "Deployment"
 
 @dataclass(frozen=True)
 class ServiceSpec:
-    """서비스 메타데이터. name 외에는 관례적 기본값을 가진다."""
+    """서비스 메타데이터. name 외에는 관례적 기본값을 가짐."""
 
     name: str
     group: str = ""  # src/services/<group>/<서비스>/ 의 group (미지정 시 경로에서 유추)
