@@ -1,17 +1,32 @@
-"""LLM 포트(Protocol) + fake 어댑터.
+"""LLM port and adapters.
 
-모든 AI 에이전트가 `LlmClient` 포트에 의존한다. 실제 provider 어댑터는 팀원이 구현하고,
-개발/테스트는 `FakeLlmClient`(결정적, 네트워크 無)를 쓴다. NotImplementedError 지뢰 없음 —
-실수로 연결돼도 런타임이 터지지 않는다(기본이 Fake).
+All AI agents depend on the `LlmClient` port. Local and CI default to a
+deterministic fake client; deployed environments can opt into an
+OpenAI-compatible HTTP chat-completions adapter with environment variables.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any, Protocol
+
+import httpx
+
+from packages.config.settings import env
+
+LLM_PROVIDER_ENV = "LLM_PROVIDER"
+LLM_BASE_URL_ENV = "LLM_BASE_URL"
+LLM_API_KEY_ENV = "LLM_API_KEY"
+LLM_MODEL_ENV = "LLM_MODEL"
+LLM_TIMEOUT_SECONDS_ENV = "LLM_TIMEOUT_SECONDS"
+DEFAULT_LLM_PROVIDER = "fake"
+DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_LLM_MODEL = "gpt-4o-mini"
+DEFAULT_LLM_TIMEOUT_SECONDS = "30"
 
 
 class LlmClient(Protocol):
-    """에이전트가 의존하는 추상 LLM 포트. provider 어댑터로 구현한다."""
+    """Abstract LLM port used by agents."""
 
     async def complete(self, prompt: str, **options: Any) -> str: ...
 
@@ -19,7 +34,7 @@ class LlmClient(Protocol):
 
 
 class FakeLlmClient:
-    """결정적 fake 어댑터 — 개발/테스트용. 호출 prompt 를 기록하고 정해진 값을 돌려준다."""
+    """Deterministic fake adapter for local development and tests."""
 
     def __init__(self, canned_text: str = "fake-llm-response") -> None:
         self.canned_text = canned_text
@@ -35,11 +50,90 @@ class FakeLlmClient:
         return {key: None for key in schema.get("properties", {})}
 
 
-def build_llm_client() -> LlmClient:
-    """기본 LLM 클라이언트.
+class OpenAiCompatibleLlmClient:
+    """HTTP adapter for OpenAI-compatible chat-completions APIs."""
 
-    TODO(ai): 환경설정(provider·model·api_key)으로 실제 어댑터(OpenAI/Anthropic/로컬) 반환 +
-    공통 가드(타임아웃·재시도·토큰/비용 상한·구조화 출력 검증·PII 마스킹) 적용.
-    현재는 안전한 Fake 반환 — 미구현이어도 런타임이 터지지 않는다.
-    """
-    return FakeLlmClient()
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        timeout_seconds: float,
+    ) -> None:
+        if not api_key:
+            raise ValueError(f"{LLM_API_KEY_ENV} is required for HTTP LLM provider")
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+
+    async def complete(self, prompt: str, **options: Any) -> str:
+        data = await self._chat_completion(
+            prompt,
+            response_format=options.pop("response_format", None),
+            **options,
+        )
+        choices = data.get("choices") or []
+        if not choices:
+            raise ValueError("LLM response did not include choices")
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise ValueError("LLM response message content is missing")
+        return content
+
+    async def complete_json(self, prompt: str, schema: dict[str, Any], **options: Any) -> Any:
+        json_prompt = (
+            f"{prompt}\n\n"
+            "Return only JSON that matches this JSON Schema:\n"
+            f"{json.dumps(schema, ensure_ascii=False, sort_keys=True)}"
+        )
+        raw = await self.complete(
+            json_prompt,
+            response_format={"type": "json_object"},
+            **options,
+        )
+        return json.loads(raw)
+
+    async def _chat_completion(
+        self,
+        prompt: str,
+        *,
+        response_format: dict[str, Any] | None = None,
+        **options: Any,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": options.pop("model", self.model),
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": options.pop("temperature", 0.2),
+        }
+        if response_format is not None:
+            payload["response_format"] = response_format
+        payload.update(options)
+        headers = {
+            "authorization": f"Bearer {self.api_key}",
+            "content-type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            return response.json()
+
+
+def build_llm_client() -> LlmClient:
+    provider = env(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER).strip().lower()
+    if provider in ("", "fake"):
+        return FakeLlmClient()
+    if provider in ("http", "openai", "openai-compatible"):
+        return OpenAiCompatibleLlmClient(
+            base_url=env(LLM_BASE_URL_ENV, DEFAULT_LLM_BASE_URL),
+            api_key=env(LLM_API_KEY_ENV, ""),
+            model=env(LLM_MODEL_ENV, DEFAULT_LLM_MODEL),
+            timeout_seconds=float(env(LLM_TIMEOUT_SECONDS_ENV, DEFAULT_LLM_TIMEOUT_SECONDS)),
+        )
+    raise ValueError(f"unsupported LLM provider: {provider}")
