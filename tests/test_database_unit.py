@@ -372,6 +372,102 @@ def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
     assert compiled.params["workspace_id"] == "workspace-b"
 
 
+def test_workflow_status_ranks_never_allow_terminal_regression() -> None:
+    from domains.gitops.repository import TERMINAL_WORKFLOW_STATUSES, WORKFLOW_STATUS_RANKS
+
+    non_terminal = [
+        status for status in WORKFLOW_STATUS_RANKS if status not in TERMINAL_WORKFLOW_STATUSES
+    ]
+    terminal_rank = max(WORKFLOW_STATUS_RANKS.values())
+
+    # 종결(SUCCEEDED/FAILED)은 최고 순위 — 어떤 비종결 상태도 종결보다 앞설 수 없음
+    for status in TERMINAL_WORKFLOW_STATUSES:
+        assert WORKFLOW_STATUS_RANKS[status] == terminal_rank
+    for status in non_terminal:
+        assert WORKFLOW_STATUS_RANKS[status] < terminal_rank
+    # 진행 단계는 선형 순서(회귀 판단 기준)
+    assert (
+        WORKFLOW_STATUS_RANKS["started"]
+        < WORKFLOW_STATUS_RANKS["rendering"]
+        < WORKFLOW_STATUS_RANKS["diffing"]
+        < WORKFLOW_STATUS_RANKS["policy_checking"]
+        < WORKFLOW_STATUS_RANKS["waiting_for_approval"]
+        < WORKFLOW_STATUS_RANKS["applying"]
+        < WORKFLOW_STATUS_RANKS["rollout_waiting"]
+        < WORKFLOW_STATUS_RANKS["succeeded"]
+    )
+
+
+def _capture_workflow_statements() -> tuple[Any, list[Any]]:
+    recorded: list[Any] = []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> None:
+            recorded.append(statement)
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+    return repository, recorded
+
+
+def test_start_workflow_run_upsert_guards_status_transition() -> None:
+    repository, recorded = _capture_workflow_statements()
+
+    repository.start_workflow_run(
+        {
+            "workspace_id": "workspace-1",
+            "workflow_run_id": "workflow-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "status": "applying",
+            "current_step": "apply",
+        }
+    )
+
+    sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+
+    # 생성은 무조건, 기존 행 갱신은 허용 전이일 때만(WHERE 의 CASE 순위 비교)
+    assert "ON CONFLICT (workflow_run_id) DO UPDATE" in sql
+    assert "WHERE" in sql
+    assert "CASE" in sql
+    assert "NOT IN" in sql  # 종결 상태는 갱신 불가
+
+
+def test_update_workflow_run_guards_only_when_status_changes() -> None:
+    repository, recorded = _capture_workflow_statements()
+
+    repository.update_workflow_run(
+        {"workflow_run_id": "workflow-1", "status": "succeeded", "summary": "done"}
+    )
+    repository.update_workflow_run({"workflow_run_id": "workflow-1", "summary": "note only"})
+
+    guarded = str(recorded[0].compile(dialect=postgresql.dialect()))
+    unguarded = str(recorded[1].compile(dialect=postgresql.dialect()))
+
+    assert "CASE" in guarded
+    assert "NOT IN" in guarded
+    assert "CASE" not in unguarded  # 상태 미변경 갱신(요약 등)은 전이 검사 불필요
+
+
+def test_update_workflow_run_for_command_guards_status_transition() -> None:
+    repository, recorded = _capture_workflow_statements()
+
+    repository.update_workflow_run_for_command(
+        {"command_id": "cmd-1", "status": "applying", "summary": "redelivered"}
+    )
+
+    sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+
+    # 재배달 완료/큐잉 이벤트가 SUCCEEDED 를 APPLYING 으로 되돌릴 수 없음
+    assert "UPDATE workflow_runs" in sql
+    assert "CASE" in sql
+    assert "NOT IN" in sql
+
+
 def test_workflow_approval_atomic_resolution_only_updates_open_rows() -> None:
     recorded: list[Any] = []
 
