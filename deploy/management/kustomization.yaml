@@ -7,4 +7,5 @@ resources:
   - nats.yaml
   - rbac.yaml
   - services.yaml
+  - ai-workers.yaml
   - github-poll-worker.yaml
