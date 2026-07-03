@@ -72,7 +72,7 @@ NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
 
 router = APIRouter()
-# per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취한다.
+# per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
 agent_router = APIRouter()
 
 
@@ -103,10 +103,10 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
 
 
 def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesiredComponent]:
-    """등록 요청을 target cluster desired-state 컴포넌트로 정규화한다.
+    """등록 요청을 target cluster desired-state 컴포넌트로 정규화함.
 
-    Secret 원문(agent token)은 desired-state에 저장하지 않는다. 운영 구현에서는
-    이 spec을 Helm/Kustomize/CRD desired state로 확장한다.
+    Secret 원문(agent token)은 desired-state에 저장하지 않음. 운영 구현에서는
+    이 spec을 Helm/Kustomize/CRD desired state로 확장함.
     """
 
     return [

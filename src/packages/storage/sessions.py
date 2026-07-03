@@ -47,10 +47,10 @@ class RedisSessionStore:
         self.client: AsyncRedis | None = None
 
     async def connect(self) -> None:
-        # 타임아웃/헬스체크 없으면 half-open(죽은) 연결에서 명령이 무한 대기한다
+        # 타임아웃/헬스체크 없으면 half-open(죽은) 연결에서 명령이 무한 대기함
         # (control-plane 재시작·엔드포인트 churn 후 로그인 setex 가 영원히 멈추던 원인).
         # socket_timeout 으로 응답을 유한하게 끊고, health_check_interval 로 idle 연결을
-        # 쓰기 전에 ping 검증, keepalive/retry 로 끊긴 연결을 자동 복구한다.
+        # 쓰기 전에 ping 검증, keepalive/retry 로 끊긴 연결을 자동 복구함.
         self.client = AsyncRedis.from_url(
             self.config.url,
             decode_responses=True,

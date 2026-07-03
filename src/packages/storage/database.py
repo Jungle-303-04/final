@@ -1,7 +1,7 @@
 """Database 공개 진입점(하위호환) — 합성은 domains/registry 가 담당.
 
 엔진·트랜잭션·헬퍼는 engine.py, 도메인 repo 합성은 domains/registry.py(도메인 zone).
-여기서는 그 Database 와 테스트·하위호환용 모듈 헬퍼를 재노출한다.
+여기서는 그 Database 와 테스트·하위호환용 모듈 헬퍼를 재노출함.
 """
 
 from __future__ import annotations

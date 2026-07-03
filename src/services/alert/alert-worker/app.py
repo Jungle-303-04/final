@@ -1,6 +1,6 @@
 """alert-worker — alert.requested → alert.dispatched → optional command.requested.
 
-현재는 사전 배포 알림 경계를 통과하면 즉시 자동 배포 이벤트를 이어준다.
+현재는 사전 배포 알림 경계를 통과하면 즉시 자동 배포 이벤트를 이어줌.
 나중에 승인/차단 정책은 allow_after_alarm_gate() 내부에 넣는다.
 """
 

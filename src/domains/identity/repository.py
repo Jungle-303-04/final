@@ -439,7 +439,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
     def authenticate_cluster_agent(self, token_hash: str) -> JsonObject | None:
         """agent 토큰 해시 → 등록된 클러스터의 권위 (workspace_id, cluster_id).
 
-        매칭 없으면 None(호출측 401). 빈/NULL 해시는 절대 매칭하지 않는다
+        매칭 없으면 None(호출측 401). 빈/NULL 해시는 절대 매칭하지 않음
         (token_hash 가 빈 문자열이면 호출 전 차단; NULL 컬럼은 동등비교에서 제외).
         """
         if not token_hash:

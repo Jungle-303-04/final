@@ -9,7 +9,7 @@ SOURCE_EVIDENCE_KEYS dict, to_provider_query if-elif, agent 의 역방향 dict)�
     class PrometheusMetricsProvider: ...
 
 새 소스 추가 = providers/ 아래 파일 1개. collector/queries/agent 는
-소스 목록을 모른 채 telemetry.spec()/sources() 만 읽는다.
+소스 목록을 모른 채 telemetry.spec()/sources() 만 읽음.
 중복 등록은 즉시 예외(fail-fast). 이 모듈은 의존 없는 leaf 다(순환 import 방지).
 """
 
@@ -43,14 +43,14 @@ class TelemetryRegistry:
         query_type: type,
         empty_payload: Callable[[], object] = dict,
     ) -> Callable[[type], type]:
-        """provider 클래스 데코레이터 — 소스 계약을 스스로 선언한다."""
+        """provider 클래스 데코레이터 — 소스 계약을 스스로 선언함."""
         spec = TelemetrySourceSpec(source, evidence_key, query_type, empty_payload)
 
         def decorate(cls: type) -> type:
             existing = self._specs.get(source)
             if existing is not None and not _same_contract(existing, spec):
                 raise ValueError(f"duplicate telemetry source: {source}")
-            # 동일 계약 재선언(모듈 재로딩)은 멱등 — 다른 계약만 차단한다.
+            # 동일 계약 재선언(모듈 재로딩)은 멱등 — 다른 계약만 차단함.
             self._specs[source] = spec
             cls.__source_spec__ = spec  # type: ignore[attr-defined]
             cls.source = source  # type: ignore[attr-defined]
@@ -116,7 +116,7 @@ def registered_telemetry_sources() -> tuple[TelemetrySourceSpec, ...]:
 
 
 def ensure_sources_loaded() -> None:
-    """providers 패키지를 임포트해 @telemetry.source 등록을 보장한다."""
+    """providers 패키지를 임포트해 @telemetry.source 등록을 보장함."""
     if not telemetry.source_names():
         import importlib
 
