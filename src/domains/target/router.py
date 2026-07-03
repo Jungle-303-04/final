@@ -61,6 +61,9 @@ from packages.runtime.dependencies import get_db, get_events
 AGENT_TOKEN_BYTES = 32  # per-cluster agent 토큰 엔트로피(secrets.token_urlsafe)
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
 KUBECTL_APPLY_FAILED = "target install apply failed"
+KUBECTL_APPLY_TIMEOUT = "target install apply timed out"
+KUBECTL_APPLY_TIMEOUT_SECONDS_ENV = "KUBECTL_APPLY_TIMEOUT_SECONDS"
+DEFAULT_KUBECTL_APPLY_TIMEOUT_SECONDS = "30"
 # 콤마구분 허용 컨텍스트 목록. 설정 시 목록 밖 --context 거부(임의 클러스터 적용 차단).
 # 미설정 시 컨텍스트 미지정(현재 kubeconfig)만 허용 — 페이로드로 임의 컨텍스트 지정 불가.
 KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
@@ -455,7 +458,19 @@ def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
     if kube_context:
         command.extend(["--context", kube_context])
     command.extend(["apply", "-f", "-"])
-    result = subprocess.run(command, input=manifest, capture_output=True, text=True, check=False)
+    try:
+        result = subprocess.run(
+            command,
+            input=manifest,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=float(
+                env(KUBECTL_APPLY_TIMEOUT_SECONDS_ENV, DEFAULT_KUBECTL_APPLY_TIMEOUT_SECONDS)
+            ),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail=KUBECTL_APPLY_TIMEOUT) from exc
     if result.returncode != 0:
         raise HTTPException(status_code=502, detail=KUBECTL_APPLY_FAILED)
     return result.stdout

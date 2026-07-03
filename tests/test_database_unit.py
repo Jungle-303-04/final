@@ -125,6 +125,24 @@ def test_outbox_compat_migration_adds_relay_lease_columns() -> None:
     assert "ix_outbox_claim" in storage_engine.OUTBOX_CLAIM_INDEX
 
 
+def test_connection_reuses_active_connection_once() -> None:
+    repository = object.__new__(storage_engine.DatabaseConnection)
+    active = object()
+    token = storage_engine._ACTIVE_CONN.set(active)  # type: ignore[arg-type]
+    try:
+        with repository.connection() as conn:
+            assert conn is active
+    finally:
+        storage_engine._ACTIVE_CONN.reset(token)
+
+
+def test_operational_indexes_do_not_duplicate_outbox_claim_index() -> None:
+    assert all(
+        "ix_outbox_unsent_source_id" not in statement
+        for statement in storage_engine.OPERATIONAL_INDEXES
+    )
+
+
 def test_record_event_persists_causation_id() -> None:
     recorded: list[Any] = []
 

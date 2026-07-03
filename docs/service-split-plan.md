@@ -46,13 +46,13 @@ src/services/ai/rca-worker
   RCA / Evidence (PR 생성은 repo-gateway 에 위임: safe_pr.requested)
   app.py: RCA 기본 메시지, @app.on(ClusterEvidenceReceivedBody)
 
-src/services/projection/dashboard-worker
-  Read Model / Dashboard Projection
-  app.py: projection 상태 규칙, @app.on_any (모든 이벤트 >)
-
 src/services/projection/audit-worker
   Audit Timeline
   app.py: @app.on_any (모든 이벤트 >)
+
+src/services/projection/dashboard-worker
+  Planned. 현재 repository에는 구현/배포된 dashboard projection worker가 없다.
+  dashboard read model/UI를 시작할 때 App 기반 @app.on_any 서비스로 추가한다.
 
 src/services/target/cluster-agent
   Target Cluster Agent
@@ -81,8 +81,8 @@ src/packages/contracts/event_bus
   worker subscription
   publish/consume port
 
-src/domains/projection/events.py
-  현재 dashboard status 값. 공유 계약으로 승격할 때는 src/packages/contracts 아래에 새 계약과 테스트를 함께 추가
+dashboard projection/read model
+  Planned. 공유 계약이 필요해지는 시점에 src/packages/contracts 아래에 계약과 테스트를 함께 추가
 
 src/packages/events
   NATS JetStream adapter
@@ -119,9 +119,11 @@ diff-worker                   -> python src/services/gitops/diff-worker/app.py
 diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/app.py
 scm-worker           -> python src/services/gitops/scm-worker/app.py
 command-worker                -> python src/services/command/command-worker/app.py
+target-reconcile-worker       -> python src/services/target/reconcile-worker/app.py
 rca-worker                    -> python src/services/ai/rca-worker/app.py
-dashboard-worker  -> python src/services/projection/dashboard-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
+alert-worker        -> python src/services/alert/alert-worker/app.py
+mail-worker         -> python src/services/mail/mail-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
 optional-node-collector       -> python src/services/target/node-collector/app.py
 fake-prometheus               -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=prometheus)
