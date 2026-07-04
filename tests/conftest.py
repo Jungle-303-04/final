@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICE_LOCAL_MODULES = (
     "settings",
     "config",
+    "github_provider",
     "tools",
     "kubernetes_api",
     "metric_collectors",
@@ -110,6 +111,47 @@ def run_handler(
 
 def subjects_of(payloads: list[Any]) -> list[str]:
     return [p.__subject__ for p in payloads]
+
+
+def github_scm_transport(
+    pr_html_url: str = "https://github.test.local/project/repo/pull/7",
+    *,
+    branch_exists: bool = False,
+    file_exists: bool = False,
+    pr_exists: bool = False,
+    fail_pr_status: int | None = None,
+    calls: list[tuple[str, str]] | None = None,
+) -> Any:
+    """GithubScmProvider 용 GitHub REST 흐름(base ref → branch → contents → pulls) mock."""
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if calls is not None:
+            calls.append((request.method, path))
+        if request.method == "GET" and "/git/ref/heads/" in path:
+            return httpx.Response(200, json={"object": {"sha": "base-sha"}})
+        if request.method == "POST" and path.endswith("/git/refs"):
+            if branch_exists:
+                return httpx.Response(422, json={"message": "Reference already exists"})
+            return httpx.Response(201, json={"ref": "refs/heads/created"})
+        if request.method == "PUT" and "/contents/" in path:
+            if file_exists and b'"sha"' not in request.content:
+                return httpx.Response(422, json={"message": "sha required for update"})
+            return httpx.Response(201, json={"content": {"sha": "blob-sha"}})
+        if request.method == "GET" and "/contents/" in path:
+            return httpx.Response(200, json={"sha": "blob-sha"})
+        if request.method == "POST" and path.endswith("/pulls"):
+            if fail_pr_status is not None:
+                return httpx.Response(fail_pr_status, json={"message": "server error"})
+            if pr_exists:
+                return httpx.Response(422, json={"message": "A pull request already exists"})
+            return httpx.Response(201, json={"html_url": pr_html_url})
+        if request.method == "GET" and path.endswith("/pulls"):
+            return httpx.Response(200, json=[{"html_url": pr_html_url}])
+        return httpx.Response(404, json={"message": f"unexpected {request.method} {path}"})
+
+    return httpx.MockTransport(handler)
 
 
 class SpyDb:
