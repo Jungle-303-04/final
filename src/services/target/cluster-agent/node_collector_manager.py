@@ -21,8 +21,14 @@ class NodeCollectorManagerConfig:
     NODE_COLLECTOR_CONTAINER_NAME = "node-collector"
     NODE_COLLECTOR_DEFAULT_IMAGE = "service:local"
     NODE_COLLECTOR_DEFAULT_NAMESPACE = "target"
-    NODE_COLLECTOR_PORT = 9100
-    NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS = 15
+    NODE_COLLECTOR_PORT_ENV = "NODE_COLLECTOR_PORT"
+    NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV = "NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS"
+    # 수집기 포트/수집 주기 — 클러스터 사정에 맞춰 env 로 오버라이드 가능함.
+    # env 미설정 시 기존 하드코딩 값(9100/15초)과 동일함(배포 호환).
+    NODE_COLLECTOR_PORT = int(env(NODE_COLLECTOR_PORT_ENV, "9100"))
+    NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS = int(
+        env(NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV, "15")
+    )
     NODE_COLLECTOR_CREATED_MESSAGE = "node collector daemonset created"
     NODE_COLLECTOR_PATCHED_MESSAGE = "node collector daemonset reconciled"
     NODE_COLLECTOR_DRY_RUN_MESSAGE = "kubernetes api not configured; node collector dry-run only"

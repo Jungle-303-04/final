@@ -405,6 +405,17 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
     assert asyncio.run(run_with_get_status(200)) == ["GET", "PATCH"]
 
 
+def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
+    # env 미설정 시 기존 하드코딩 값(9100/15초)과 동일해야 함(배포 호환)
+    config = load_node_collector_manager_module().NodeCollectorManagerConfig
+    assert config.NODE_COLLECTOR_PORT == 9100
+    assert config.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS == 15
+    assert config.NODE_COLLECTOR_PORT_ENV == "NODE_COLLECTOR_PORT"
+    assert config.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV == (
+        "NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS"
+    )
+
+
 def test_target_agent_registers_query_policy_from_management_policy() -> None:
     agent_module = load_agent_module()
     agent = agent_module.TargetClusterAgent()
