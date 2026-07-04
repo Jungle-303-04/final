@@ -156,3 +156,39 @@ def test_webhook_provider_delivery_error_rejects_and_blocks_next_command(monkeyp
 
     assert subjects_of(outs) == ["alert.rejected"]
     assert outs[0].reason == "alert dispatch failed"
+
+
+def test_alert_policy_blocks_configured_severity(monkeypatch) -> None:
+    alert = load_service("alert/alert-worker")
+    monkeypatch.setenv("ALERT_BLOCKED_SEVERITIES", "critical")
+
+    outs = run_handler(alert.on_alert_requested, _alert_request(severity="critical"))
+
+    assert subjects_of(outs) == ["alert.rejected"]
+    assert outs[0].reason == "alert severity blocked by policy"
+
+
+def test_alert_policy_blocks_auto_command_outside_allowed_environment(monkeypatch) -> None:
+    alert = load_service("alert/alert-worker")
+    monkeypatch.setenv("ALERT_AUTO_COMMAND_ENVIRONMENTS", "sandbox")
+    command = CommandRequestedBody(
+        cluster_id="target-cluster-01",
+        action="apply_manifest",
+        namespace="sandbox",
+        reason="safe sandbox gitops apply",
+        diff=Diff(
+            resource="deployment/checkout-api",
+            namespace="sandbox",
+            desired_image="img:new",
+            actual_image="img:old",
+            risk="sandbox-only",
+        ),
+    )
+
+    outs = run_handler(
+        alert.on_alert_requested,
+        _alert_request(environment="production", next_command=command),
+    )
+
+    assert subjects_of(outs) == ["alert.rejected"]
+    assert outs[0].reason == "auto command not allowed for environment"
