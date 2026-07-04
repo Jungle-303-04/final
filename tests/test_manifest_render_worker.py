@@ -76,11 +76,68 @@ def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
     assert len(manifest.artifact_digest) == len("sha256:") + 64
 
 
+def test_render_reads_manifest_from_checkout_cache(monkeypatch, tmp_path) -> None:
+    repo = tmp_path / "source-repo"
+    cache = tmp_path / "cache"
+    repo.mkdir()
+    (repo / "deploy.yaml").write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: cached-api",
+                "  namespace: sandbox",
+                "spec:",
+                "  replicas: 2",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: cached-api",
+                "          image: ghcr.io/project/cached-api:1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "deploy.yaml"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True)
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    monkeypatch.setenv("GIT_CHECKOUT_CACHE_ENABLED", "1")
+    monkeypatch.setenv("GIT_CHECKOUT_CACHE_REQUIRED", "1")
+    monkeypatch.setenv("GIT_CACHE_REMOTE_URL", str(repo))
+    monkeypatch.setenv("GIT_CACHE_DIR", str(cache))
+
+    render = load_service("gitops/manifest-render-worker")
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha=sha,
+            image="ignored",
+            replicas=1,
+            repo_ref="owner/cached",
+            manifest_path="deploy.yaml",
+        ),
+        db=SpyDb(),
+    )
+
+    manifest = outs[0].rendered_manifest
+    assert manifest.metadata.name == "cached-api"
+    assert manifest.spec.replicas == 2
+    assert manifest.spec.image == "ghcr.io/project/cached-api:1"
+    assert any(cache.glob("*.git"))
+
+
 def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
     render = load_service("gitops/manifest-render-worker")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
     monkeypatch.setenv("GITHUB_API_BASE", "https://api.github.test")
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
+    monkeypatch.setenv("GITHUB_TOKEN_REF", "env:GITHUB_TOKEN")
     calls: list[tuple[str, str | None, float]] = []
 
     class Response:
