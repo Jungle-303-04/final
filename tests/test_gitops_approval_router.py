@@ -106,6 +106,10 @@ def test_grant_approval_emits_granted_event_with_command_request() -> None:
     assert events.body.__subject__ == "approval.granted"
     assert events.body.details["command_requested"]["action"] == "apply_manifest"
     assert events.body.details["command_requested"]["cluster_id"] == "cluster-1"
+    assert events.body.details["command_requested"]["approval_ref"] == "approval-1"
+    assert events.body.details["command_requested"]["policy_decision_ref"] == (
+        "approval:approval-1:granted"
+    )
 
 
 def test_reject_approval_emits_rejected_event() -> None:

@@ -306,6 +306,8 @@ async def on_event(evt: EventEnvelope, ctx):
 
 `safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch로 변환하고, `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서와 patch file을 같은 PR branch에 커밋한다. rollback patch, approval evidence, diff basis/ref 강제는 아직 P0 하드닝 잔여 작업이다.
 
+`command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 거부하고, `Plan`과 `command.queued_for_agent`에도 같은 ref를 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다. ref의 만료/권한 검증과 TokenVault 연동은 아직 다음 P0 작업이다.
+
 ## Repo / Cluster 매핑 상태
 
 Git repo와 target cluster는 직접 1:1로 묶지 않는다. `deployment_bindings`를

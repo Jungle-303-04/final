@@ -36,6 +36,12 @@ def test_safe_diff_requests_pr() -> None:
     assert safe[1].next_alert.next_command.action == "apply_manifest"
     assert safe[1].next_alert.next_command.cluster_id == "cluster-1"
     assert safe[1].next_alert.next_command.workspace_id == "workspace-1"
+    assert safe[1].next_alert.next_command.approval_ref == (
+        "auto-approval:sandbox-safe-pr:workflow-default"
+    )
+    assert safe[1].next_alert.next_command.policy_decision_ref == (
+        "policy-decision:sandbox-safe:workflow-default"
+    )
 
 
 def test_unsafe_diff_skips_pr() -> None:
