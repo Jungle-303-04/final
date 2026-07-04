@@ -85,7 +85,7 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 | LLM client | gateway + adapters | `LLM_PROVIDER`로 OpenAI/OpenAI 호환/Anthropic/Gemini adapter를 선택한다. 현재 tool loop는 JSON-only prompt protocol 기반이다. | provider별 live smoke, function-calling 수준 schema, 비용/쿼터 guardrail, tool authorization, 통합 회귀 테스트 |
 | Safe PR creation | partial real adapter | `scm-worker`는 GitHub branch/commit/PR REST provider를 가진다. `safe_pr.requested.patches`가 있으면 검토 문서와 함께 실제 repository file patch를 커밋하고, unsafe path는 GitHub write 전에 실패시킨다. | feature flag, token/ref 검증, repo allowlist, rollback patch commit, diff basis/ref, approval evidence, failure event/audit |
 | Alert delivery | stub adapter | `alert-worker`가 Slack/Email/PagerDuty 전송 없이 `alert.dispatched`를 만든다. | provider delivery id 저장, 조용한 시간/승인 정책, production 자동 배포 fail-closed |
-| Credential/Token Broker | placeholder | identity repository에 credential placeholder와 TODO가 남아 있다. | SecretVault/TokenBroker port, provider token 저장/회전/감사, event/log non-leak 테스트 |
+| Credential/Token Broker | partial port | GitHub provider는 `TokenVaultPort`와 env 기반 `GITHUB_TOKEN_REF`를 지원한다. identity repository credential placeholder와 외부 vault adapter는 아직 남아 있다. | SecretVault/TokenBroker port, provider token 저장/회전/감사, event/log non-leak 테스트 |
 | Dashboard projection worker | planned | 현재 repository에 `src/services/projection/dashboard-worker`가 없다. | App 기반 `@app.on_any` worker, read model schema, query/stream route, smoke assertion |
 | Dashboard UI/API | planned | auth redirect 문자열 외에 dashboard route가 없다. | 운영 workflow console UI, session guard, read model query, E2E smoke에서 결과 검증 |
 | Tests fixtures | fixture only | 테스트 입력/기대값으로 sample 값이 존재한다. | 계약 변경 시 fixture 갱신. fixture 값을 제품 계약으로 문서화하지 않음 |
