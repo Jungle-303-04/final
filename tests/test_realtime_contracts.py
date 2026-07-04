@@ -1,0 +1,113 @@
+"""realtime.v1 계약 검증 — 메시지 schema 와 bounded 상한이 계약으로 강제되는지."""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from packages.contracts.realtime import (
+    MAX_HOT_PODS,
+    MAX_WINDOW_MS,
+    REALTIME_PROTOCOL,
+    HelloMessage,
+    HotPod,
+    LiveSummary,
+    LiveSummaryMessage,
+    PingMessage,
+    ResourceDelta,
+    SnapshotMessage,
+    Subscription,
+    delta_key_parts,
+    parse_realtime_message,
+)
+
+CLUSTER = "target-cluster-01"
+
+
+def sample_summary(**overrides) -> LiveSummary:
+    base = {
+        "cluster_id": CLUSTER,
+        "window_ms": 500,
+        "pods_ready": 12,
+        "pods_total": 13,
+        "restart_delta": 1,
+        "rollout_phase": "progressing",
+        "hot_pods": [{"namespace": "sandbox", "pod": "checkout-abc", "cpu_ratio": 0.72}],
+    }
+    base.update(overrides)
+    return LiveSummary.model_validate(base)
+
+
+def test_parses_every_message_type() -> None:
+    messages = [
+        {"type": "hello", "protocol": REALTIME_PROTOCOL},
+        {"type": "snapshot", "seq": 10, "state": {"clusters": {}}},
+        {
+            "type": "live.summary",
+            "seq": 11,
+            "cluster_id": CLUSTER,
+            "summary": sample_summary().model_dump(),
+        },
+        {
+            "type": "resource.delta",
+            "seq": 12,
+            "op": "replace",
+            "key": f"{CLUSTER}/sandbox/pod/checkout",
+            "value": {"ready": True},
+        },
+        {"type": "ping", "ts": 1720000000.123},
+    ]
+    parsed = [parse_realtime_message(message) for message in messages]
+
+    assert isinstance(parsed[0], HelloMessage)
+    assert isinstance(parsed[1], SnapshotMessage)
+    assert isinstance(parsed[2], LiveSummaryMessage)
+    assert isinstance(parsed[3], ResourceDelta)
+    assert isinstance(parsed[4], PingMessage)
+
+
+def test_unknown_type_rejected() -> None:
+    with pytest.raises(ValidationError):
+        parse_realtime_message({"type": "raw.metrics", "data": []})
+
+
+def test_extra_fields_rejected() -> None:
+    with pytest.raises(ValidationError):
+        parse_realtime_message(
+            {"type": "ping", "ts": 1.0, "raw_prometheus_response": {"huge": "blob"}}
+        )
+
+
+def test_hot_pods_bounded_by_contract() -> None:
+    too_many = [{"namespace": "sandbox", "pod": f"pod-{i}"} for i in range(MAX_HOT_PODS + 1)]
+    with pytest.raises(ValidationError):
+        sample_summary(hot_pods=too_many)
+
+
+def test_window_ms_bounded_by_contract() -> None:
+    with pytest.raises(ValidationError):
+        sample_summary(window_ms=MAX_WINDOW_MS + 1)
+
+
+def test_negative_counts_rejected() -> None:
+    with pytest.raises(ValidationError):
+        sample_summary(pods_ready=-1)
+    with pytest.raises(ValidationError):
+        HotPod(namespace="sandbox", pod="p", restart_count=-1)
+
+
+def test_subscription_requires_workspace() -> None:
+    with pytest.raises(ValidationError):
+        Subscription(workspace_id="")
+    subscription = Subscription(workspace_id="ws-1")
+    assert subscription.cluster_id == ""
+
+
+def test_delta_key_parts() -> None:
+    assert delta_key_parts(f"{CLUSTER}/sandbox/pod/checkout-abc") == (
+        CLUSTER,
+        "sandbox",
+        "pod",
+        "checkout-abc",
+    )
+    assert delta_key_parts(CLUSTER) == (CLUSTER, "", "", "")
