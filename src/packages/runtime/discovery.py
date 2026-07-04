@@ -18,9 +18,6 @@ from pathlib import Path
 ENTRYPOINT_FILENAME = "app.py"
 SERVICES_ROOT = Path("src") / "services"
 
-# 한 파일에 fake 텔레메트리 서비스 3종(prometheus/loki/otel)을 담는 의도적 예외.
-FAKE_TELEMETRY_PATH = SERVICES_ROOT / "target" / "cluster-agent" / "fake_telemetry.py"
-
 # 런타임 헬퍼 → 서비스 종류. \b 로 FastApiService 내부 부분 문자열 오탐 방지.
 _RUNNER_KINDS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bApp\("), "worker"),

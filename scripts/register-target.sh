@@ -8,8 +8,8 @@ TARGET_NAME="${TARGET_NAME:-target-cluster}"
 TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-sandbox}"
 WORKSPACE_ID="${WORKSPACE_ID:-default}"
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"
-PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://fake-prometheus:8000}"
-LOKI_BASE_URL="${LOKI_BASE_URL:-http://fake-loki:8000}"
+PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://prometheus.target.svc:9090}"
+LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 IMAGE_NAME="${IMAGE_NAME:-service:local}"
 INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
@@ -89,7 +89,6 @@ print(json.dumps({
     "loki_base_url": os.environ["LOKI_BASE_URL"],
     "evidence_interval_seconds": int(os.environ["EVIDENCE_INTERVAL_SECONDS"]),
     "image": os.environ["IMAGE_NAME"],
-    "install_fake_telemetry": True,
     "install_node_collector": install_node_collector,
     "apply": False,
 }))
@@ -110,9 +109,6 @@ printf "%s" "${registration_response}" \
   | python3 -c 'import json, sys; print(json.load(sys.stdin)["install_manifest"])' \
   | kubectl --context "${TARGET_CONTEXT}" apply -f -
 
-kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/fake-prometheus --timeout=120s
-kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/fake-loki --timeout=120s
-kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/fake-otel --timeout=120s
 kubectl --context "${TARGET_CONTEXT}" -n sandbox rollout status deploy/checkout-api --timeout=120s
 kubectl --context "${TARGET_CONTEXT}" -n target rollout restart deploy/cluster-agent
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/cluster-agent --timeout=180s
