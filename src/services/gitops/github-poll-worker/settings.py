@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.config.constants import Target
+from packages.config.settings import env
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID as CONTRACT_DEFAULT_DEPLOYMENT_BINDING_ID,
 )
@@ -65,10 +66,19 @@ class Settings:
     SIGNATURE_HEADER = "x-hub-signature-256"
     SIGNATURE_PREFIX = "sha256="
 
-    HTTP_TIMEOUT_SECONDS = 20
-    POLL_RETRY_DELAY_SECONDS = 5
-    POLL_MAX_BACKOFF_SECONDS = 300  # 연속 실패 지수 백오프 상한(5분)
-    POLL_BACKOFF_JITTER_SECONDS = 3  # thundering herd 완화용 지터
+    # 폴링 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+    HTTP_TIMEOUT_SECONDS_ENV = "HTTP_TIMEOUT_SECONDS"  # GitHub/webhook HTTP 타임아웃 초(기본 20)
+    HTTP_TIMEOUT_SECONDS = int(env(HTTP_TIMEOUT_SECONDS_ENV, "20"))
+    POLL_RETRY_DELAY_SECONDS_ENV = "POLL_RETRY_DELAY_SECONDS"  # 실패 재시도 기본 간격 초(기본 5)
+    POLL_RETRY_DELAY_SECONDS = int(env(POLL_RETRY_DELAY_SECONDS_ENV, "5"))
+    POLL_MAX_BACKOFF_SECONDS_ENV = (
+        "POLL_MAX_BACKOFF_SECONDS"  # 연속 실패 지수 백오프 상한 초(기본 300)
+    )
+    POLL_MAX_BACKOFF_SECONDS = int(env(POLL_MAX_BACKOFF_SECONDS_ENV, "300"))
+    POLL_BACKOFF_JITTER_SECONDS_ENV = (
+        "POLL_BACKOFF_JITTER_SECONDS"  # thundering herd 완화용 지터 초(기본 3)
+    )
+    POLL_BACKOFF_JITTER_SECONDS = int(env(POLL_BACKOFF_JITTER_SECONDS_ENV, "3"))
     SOFT_SKIP_STATUS_CODES = {403, 429}
     # 인증/접근 오류 — CronJob 을 '실패'로 죽이지 않고 명확한 경고 후 스킵.
     # (private repo 무인증 404, 토큰 만료 401 등 설정 문제 → 로그로 드러내되 파이프라인은 계속)

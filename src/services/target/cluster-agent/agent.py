@@ -40,6 +40,7 @@ from span import configure_tracing
 from telemetry_registry import telemetry
 from uvicorn import Config, Server
 
+import config as agent_config
 from config import (
     AGENT_CONTROL_DB_PATH_ENV,
     BOOTSTRAP_MODE_ENV,
@@ -139,13 +140,14 @@ class AgentConfig:
     EVIDENCE_INTERVAL_ENV = "EVIDENCE_INTERVAL_SECONDS"
     AGENT_TOKEN_ENV = "AGENT_TOKEN"
     AGENT_TOKEN_HEADER = "x-agent-token"
-    HTTP_TIMEOUT_SECONDS = 20
+    # 타이밍 튜닝값은 config 모듈이 단일 원천(env 오버라이드 가능) — 중복 리터럴 금지
+    HTTP_TIMEOUT_SECONDS = agent_config.HTTP_TIMEOUT_SECONDS
     TELEMETRY_TIMEOUT_SECONDS = 10
-    COMMAND_POLL_TIMEOUT_SECONDS = 15
-    COMMAND_HEARTBEAT_INTERVAL_SECONDS = 20
-    COMMAND_EXECUTION_DELAY_SECONDS = 2
-    REGISTER_RETRY_DELAY_SECONDS = 3
-    COMMAND_RETRY_DELAY_SECONDS = 3
+    COMMAND_POLL_TIMEOUT_SECONDS = agent_config.COMMAND_POLL_TIMEOUT_SECONDS
+    COMMAND_HEARTBEAT_INTERVAL_SECONDS = agent_config.COMMAND_HEARTBEAT_INTERVAL_SECONDS
+    COMMAND_EXECUTION_DELAY_SECONDS = agent_config.COMMAND_EXECUTION_DELAY_SECONDS
+    REGISTER_RETRY_DELAY_SECONDS = agent_config.REGISTER_RETRY_DELAY_SECONDS
+    COMMAND_RETRY_DELAY_SECONDS = agent_config.COMMAND_RETRY_DELAY_SECONDS
 
     SERVICE_HOST = "0.0.0.0"
     SERVICE_PORT_ENV = "PORT"
@@ -155,7 +157,9 @@ class AgentConfig:
     DEFAULT_AGENT_ID = "target-agent"
     AGENT_CAPABILITIES = ["collector", "command_receiver"]
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
-    NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = 30
+    NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = (
+        agent_config.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS
+    )
 
     CHECKOUT_APP_NAME = "checkout-api"
     CRASHING_POD_NAME = "checkout-api-7f8d"
