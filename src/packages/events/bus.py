@@ -41,7 +41,7 @@ MAX_DELIVER_ENV = "NATS_MAX_DELIVER"
 DEFAULT_MAX_DELIVER = "4"  # 워커 재시도 상한(기본 3) + 1 — 소진 후 DLQ 로 종결
 MAX_ACK_PENDING_ENV = "NATS_MAX_ACK_PENDING"
 DEFAULT_MAX_ACK_PENDING = "100"  # 컨슈머당 미확인 in-flight 상한(폭주 억제)
-logger = get_logger("event_bus")
+LOGGER = get_logger(__name__)
 CURRENT_CAUSATION_ID: ContextVar[str | None] = ContextVar(
     "current_event_causation_id", default=None
 )
@@ -148,7 +148,7 @@ class NatsEventBus(EventBus):
             json.dumps(evt.to_dict()).encode(),
             headers={NATS_MSG_ID_HEADER: evt.event_id},
         )
-        logger.info("emitted", extra={"context": event_context(evt)})
+        LOGGER.info("emitted", extra={"context": event_context(evt)})
         return evt
 
     async def publish_envelope(self, evt: EventEnvelope) -> EventEnvelope:
@@ -158,7 +158,7 @@ class NatsEventBus(EventBus):
             json.dumps(evt.to_dict()).encode(),
             headers={NATS_MSG_ID_HEADER: evt.event_id},
         )
-        logger.info("relayed", extra={"context": event_context(evt)})
+        LOGGER.info("relayed", extra={"context": event_context(evt)})
         return evt
 
     async def subscribe(self, subject: str, durable: str) -> EventSubscription:
