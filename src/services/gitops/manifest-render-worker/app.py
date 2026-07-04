@@ -7,6 +7,7 @@ Kubernetes manifest로 바꾸는 책임만 분리.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from collections.abc import AsyncIterator
@@ -181,8 +182,19 @@ def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
         metadata=RenderedMetadata(name=name, namespace=namespace),
         spec=rendered_spec_from_payload(kind, payload),
         manifest=payload,
+        artifact_digest=manifest_artifact_digest(payload),
         declared_fields=extract_declared_field_paths(payload),
     )
+
+
+def manifest_artifact_digest(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return f"sha256:{hashlib.sha256(canonical.encode()).hexdigest()}"
 
 
 def rendered_spec_from_payload(kind: str, payload: dict[str, Any]) -> RenderedSpec:
@@ -257,6 +269,7 @@ def artifact_payload(
         "manifest_path": artifact_manifest_path(evt, rendered),
         "status": status,
         "status_reason": reason,
+        "artifact_digest": rendered.artifact_digest if rendered is not None else None,
         "rendered_manifest": rendered.to_body() if rendered is not None else None,
         "source_summary": {
             "repo_ref": evt.repo_ref,

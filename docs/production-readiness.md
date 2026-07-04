@@ -11,9 +11,9 @@ shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규�
   보내고, 핸들러는 `await ctx.db.x(...)`로 통일. 남은 sync 경로(ledger·api-gateway
   라우트)는 실DB smoke 테스트(`make up`) 후 단계적으로.
 - [ ] P0 실운영 자동 변경 하드닝: repo checkout/cache, 승인 스냅샷, rollback
-  patch PR, approval evidence 만료/권한 검증, 외부 SecretVault. rendered manifest patch PR,
-  write command approval_ref/policy_decision_ref 전달/누락 거부, GitHub token_ref env vault는
-  1차 구현됨. 상세 기준은
+  patch PR, approval evidence 만료/권한 검증, 외부 SecretVault. rendered artifact digest,
+  rendered manifest patch PR, write command approval_ref/policy_decision_ref 전달/누락 거부,
+  GitHub token_ref env vault는 1차 구현됨. 상세 기준은
   [hardening-roadmap](hardening-roadmap.md)을 따른다.
 - [ ] P1 AI/tool guardrail과 control-plane observability: function-calling 수준 schema,
   tool 권한, 비용 한도, DLQ/lag/outbox/trace metrics.
@@ -26,7 +26,7 @@ shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규�
 
 | 항목 | 현재 위험 | 차단 해제 기준 |
 | --- | --- | --- |
-| 실제 repo source | local-file/dev fallback과 GitHub contents 경로가 섞여 있다. | production route는 commit_sha, repo_ref, artifact digest가 있는 source만 허용한다. |
+| 실제 repo source | rendered artifact digest는 기록된다. local-file/dev fallback과 GitHub contents 경로가 아직 섞여 있다. | production route는 commit_sha, repo_ref, artifact digest가 있는 source만 허용한다. |
 | 승인 스냅샷 | diff-worker가 previous-approved snapshot demo fallback을 쓴다. | approval_id/policy_id/commit_sha와 연결된 last-approved managed-field snapshot을 저장한다. |
 | 정책 route | risk string과 namespace 중심이다. | operation, namespace, resource class, environment, approval state로 `safe_pr`/`approval_required`/`forbidden`/`command`를 결정한다. |
 | Safe PR 내용 | GitHub PR 경계와 rendered manifest patch 커밋 경로는 있다. rollback patch, diff basis, approval evidence는 아직 약하다. | PR diff에 실제 manifest patch 또는 rollback patch가 포함되고, PR body가 diff basis와 approval evidence를 연결한다. |
