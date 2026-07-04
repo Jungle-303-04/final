@@ -21,7 +21,13 @@ def test_discovers_all_entrypoints() -> None:
 
     names = {svc.name for svc in services}
     # 대표 서비스 존재 확인(전수 나열은 하지 않는다 — 그게 이 모듈의 목적).
-    assert {"api-gateway", "diff-worker", "ai-diff-worker", "cluster-agent"} <= names
+    assert {
+        "api-gateway",
+        "diff-worker",
+        "ai-diff-worker",
+        "cluster-agent",
+        "realtime-gateway",
+    } <= names
     assert len(services) >= 28
 
 
@@ -29,6 +35,7 @@ def test_kind_classification() -> None:
     by_name = {svc.name: svc for svc in discover_services(ROOT_DIR)}
 
     assert by_name["api-gateway"].kind == "http"
+    assert by_name["realtime-gateway"].kind == "http"
     assert by_name["cluster-agent"].kind == "async"
     assert by_name["diff-worker"].kind == "worker"
 
