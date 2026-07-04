@@ -18,9 +18,11 @@ from queries import (
 from span import get_tracer
 from telemetry_registry import telemetry
 
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 
 TRACER = get_tracer("target-cluster-agent.evidence")
+LOGGER = get_logger(__name__)
 
 __all__ = [
     "EvidenceCollector",
@@ -130,5 +132,9 @@ class EvidenceCollector:
             except Exception as exc:
                 span.error(exc)
                 span.flag(f"{provider.source}.fallback_used", True)
-                print(f"{provider.failure_message}: {exc}", flush=True)
+                LOGGER.warning(
+                    provider.failure_message,
+                    extra={CONTEXT_KEY: {"source": provider.source}},
+                    exc_info=exc,
+                )
                 return provider.build_response(provider.empty_results())

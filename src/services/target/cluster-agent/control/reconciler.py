@@ -22,11 +22,13 @@ from control.store import (
     ReconcileResult,
     desired_resource_hash,
 )
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway.requests import AgentPolicy, DesiredResource
 from packages.contracts.interfaces import ManagementPlaneClient
 
 TRACER = get_tracer("target-cluster-agent.reconciler")
+LOGGER = get_logger(__name__)
 
 RECONCILE_APPLIED = "applied"
 RECONCILE_FAILED = "failed"
@@ -127,7 +129,11 @@ class DesiredStateReconciler:
                 details = await self.reconcile_once()
                 await client.report_reconcile_status(details)
             except Exception as exc:
-                print(f"desired-state reconcile failed: {exc}", flush=True)
+                LOGGER.warning(
+                    "desired_state_reconcile_failed",
+                    extra={CONTEXT_KEY: {"cluster_id": self.cluster_id}},
+                    exc_info=exc,
+                )
             await asyncio.sleep(self.interval_seconds)
 
     async def reconcile_once(self, policy: AgentPolicy | None = None) -> dict[str, object]:

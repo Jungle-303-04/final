@@ -42,7 +42,7 @@ _MODULE_BY_NAME = {
     "DeadLetterCreatedBody": "packages.contracts.event_bus.bodies.platform",
     "Diff": "domains.gitops.events",
     "DiffAnalyzedBody": "domains.gitops.events",
-    "DiffDetectedBody": "domains.gitops.events",
+    "DesiredDesiredDiffDetectedBody": "domains.gitops.events",
     "DiffExplainedBody": "domains.rca.events",
     "EmailVerificationRequestedBody": "domains.mail.events",
     "EmailVerificationSentBody": "domains.mail.events",

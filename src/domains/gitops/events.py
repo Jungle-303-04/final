@@ -186,7 +186,7 @@ class ManifestInvalidBody(EventBody):
 
 @event(EventSubject.DESIRED_DIFF_DETECTED)
 @dataclass(frozen=True)
-class DiffDetectedBody(EventBody):
+class DesiredDesiredDiffDetectedBody(EventBody):
     """desired.diff.detected — 적용해야 할 차이를 감지."""
 
     diff: Diff
