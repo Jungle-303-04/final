@@ -7,12 +7,15 @@
 이벤트와 저장소 경계를 지난다.
 
 오픈소스 기본값은 로컬/CI가 쉬운 `env` fallback이다. 운영에서는 ref prefix로
-provider를 선택한다.
+provider를 선택한다. 현재 실제 adapter가 있는 prefix는 `env:`, `k8s-secret:`,
+`aws-sm:`이다.
 
 | ref 예시 | 의미 |
 | --- | --- |
 | `GITHUB_TOKEN` | 하위호환: 환경변수 `GITHUB_TOKEN` |
 | `env:GITHUB_TOKEN` | 명시적 env provider |
+| `k8s-secret:management/github-app#token` | Kubernetes Secret `management/github-app`의 `token` key |
+| `k8s-secret:management/github-app?key=token` | 같은 의미의 query key 형식 |
 | `aws-sm:/<app>/<env>/github-app` | AWS Secrets Manager secret string 전체 |
 | `aws-sm:/<app>/<env>/github-app#token` | AWS Secrets Manager JSON field `token` |
 | `aws-sm:/<app>/<env>/github-app?stage=AWSPREVIOUS#token` | rotation 검증용 version stage |
@@ -21,7 +24,8 @@ GitHub Safe PR provider는 `GITHUB_TOKEN_REF`가 있으면 그 ref를 읽고, �
 호환을 위해 `GITHUB_TOKEN`을 secret ref로 사용한다.
 
 외부 사용자는 SOPS/age, AWS Secrets Manager, Vault, 1Password, External Secrets 중
-무엇을 쓰든 된다. 기본 실행은 환경변수/Kubernetes Secret으로 충분하고, AWS를 직접
+무엇을 쓰든 된다. 서비스 코드는 그 도구를 직접 알지 않고 `SecretVaultPort` 뒤에서
+ref만 해석한다. 기본 실행은 환경변수/Kubernetes Secret으로 충분하고, AWS를 직접
 읽어야 하면 `aws` optional dependency와 `aws-sm:` ref를 사용한다.
 
 ## 인터페이스 기준
@@ -41,6 +45,7 @@ database_url = required_env("DATABASE_URL")
 - 기본값은 env/Kubernetes Secret 주입이다.
 - 운영 provider는 `SecretVaultPort` adapter 뒤에 숨긴다.
 - secret read audit log는 provider와 ref hash만 남기고 실제 값을 남기지 않는다.
+- `/providers/catalog`는 현재 사용 가능한 secret provider와 지원 예정 provider를 구분한다.
 
 ## 로컬
 
@@ -69,6 +74,18 @@ CI/CD에서 필요한 값은 GitHub Actions Secrets를 씁니다.
 - GCP: Secret Manager
 - Azure: Key Vault
 - Kubernetes: External Secrets로 외부 secret을 Kubernetes Secret으로 동기화
+
+Kubernetes Secret을 직접 읽는 예:
+
+```bash
+SECRET_VAULT_PROVIDER=auto
+TOKEN_VAULT_PROVIDER=auto
+GITHUB_TOKEN_REF=k8s-secret:management/github-app#token
+```
+
+`k8s-secret:` adapter는 in-cluster service account token으로 Kubernetes API를 읽는다.
+필요하면 `KUBEHEAL_K8S_API_BASE`, `KUBEHEAL_K8S_TOKEN_PATH`,
+`KUBEHEAL_K8S_CA_CERT_PATH`로 API endpoint와 인증 파일 경로를 덮어쓴다.
 
 AWS Secrets Manager를 직접 읽는 예:
 
