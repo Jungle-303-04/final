@@ -24,41 +24,33 @@ RCA 결과를 실제 GitHub write로 바로 연결하지 않고, 먼저 안전�
 
 1. `RcaCompletedBody`를 입력으로 받는 Safe PR 정책 함수를 만든다.
 2. `recommended_fix`가 없거나 confidence가 낮으면 PR 제안을 만들지 않는다.
-3. `SafePrProposal` DTO를 정의한다.
-4. DTO에는 최소한 아래 필드를 둔다.
-   - `correlation_id`
-   - `repo_ref`
-   - `base_ref`
-   - `branch_name`
-   - `file_changes`
-   - `rationale`
-   - `evidence_refs`
-5. `safe_pr.requested`는 제안이고, `safe_pr.created`는 실제 provider write 완료라는 차이를 문서화한다.
-6. branch 이름 충돌 방지를 위해 correlation 또는 short id를 포함한다.
-7. file change shape 검증 테스트를 추가한다.
+3. 현재 `SafePrRequestedBody`가 가진 필드를 확인한다.
+   - `title`
+   - `body`
+   - `provider`
+   - `workspace_id`
+   - `repository_id`
+   - `binding_id`
+   - `application_id`
+   - `workflow_run_id`
+   - `environment`
+   - `manifest_path`
+   - `next_alert`
+4. patch/file change가 필요하면 현재 구조의 `SafePrPatchPreparedBody`를 먼저 사용한다.
+5. branch name, file changes를 `SafePrRequestedBody`에 직접 넣고 싶으면 계약 변경 PR로 분리한다.
+6. `safe_pr.requested`는 요청이고, `safe_pr.created`는 실제 provider write 완료라는 차이를 문서화한다.
+7. title/body/provider shape 검증 테스트를 추가한다.
 
-## 예시 branch 이름
-
-```text
-kubeheal/corr-123-rca-fix
-```
-
-## 예시 proposal
+## 예시 request
 
 ```json
 {
-  "correlation_id": "corr-123",
-  "repo_ref": "github://org/repo",
-  "base_ref": "main",
-  "branch_name": "kubeheal/corr-123-rca-fix",
-  "file_changes": [
-    {
-      "path": "deployments/checkout.yaml",
-      "patch": "--- old\n+++ new\n..."
-    }
-  ],
-  "rationale": "RCA evidence indicates crash loop in checkout deployment",
-  "evidence_refs": ["evidence-123"]
+  "title": "KubeHeal RCA fix proposal",
+  "body": "RCA evidence indicates crash loop in checkout deployment.",
+  "provider": "github",
+  "workspace_id": "workspace-1",
+  "repository_id": "default-repository",
+  "manifest_path": "deployments/checkout.yaml"
 }
 ```
 
@@ -77,6 +69,7 @@ uv run ruff check src tests
 - no recommended fix 또는 insufficient 상태에서는 PR 제안이 나오지 않는다.
 - proposal payload에 provider token이 없다.
 - `safe_pr.requested`와 `safe_pr.created` 의미가 분리되어 있다.
+- patch/file change 필드가 필요하면 별도 계약 변경으로 추적되어 있다.
 
 ## 다음 작업
 
