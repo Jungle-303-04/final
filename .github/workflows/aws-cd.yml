@@ -1,0 +1,139 @@
+name: AWS CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_clusters:
+        description: Create EKS clusters if they are missing
+        required: false
+        type: boolean
+        default: false
+      ensure_ebs_csi:
+        description: Ensure EBS CSI add-on and gp3 StorageClass
+        required: false
+        type: boolean
+        default: false
+      bootstrap_admin:
+        description: Bootstrap/update the admin account from AUTH_* secrets
+        required: false
+        type: boolean
+        default: false
+      register_targets:
+        description: Re-register target clusters with the new image
+        required: false
+        type: boolean
+        default: false
+      run_smoke:
+        description: Run scripts/smoke.sh after deployment
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    name: Test before deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: python -m pip install uv
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run checks
+        run: bash scripts/test.sh
+
+  deploy:
+    name: Deploy to AWS EKS
+    runs-on: ubuntu-latest
+    needs: test
+    environment: aws-test
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      MGMT_CLUSTER: ${{ vars.MGMT_CLUSTER || 'kubernetes-ops' }}
+      TARGET_CLUSTER_1: ${{ vars.TARGET_CLUSTER_1 || 'cluster-1' }}
+      TARGET_CLUSTER_2: ${{ vars.TARGET_CLUSTER_2 || 'cluster-2' }}
+      MGMT_DISPLAY_NAME: ${{ vars.MGMT_DISPLAY_NAME || 'kubernetes-ops' }}
+      TARGET_1_DISPLAY_NAME: ${{ vars.TARGET_1_DISPLAY_NAME || 'cluster-1' }}
+      TARGET_2_DISPLAY_NAME: ${{ vars.TARGET_2_DISPLAY_NAME || 'cluster-2' }}
+      ECR_REPO: ${{ vars.ECR_REPO || 'kubernetes-ops-service' }}
+      IMAGE_TAG: ${{ github.sha }}
+      CREATE_CLUSTERS: ${{ inputs.create_clusters && '1' || vars.AWS_CREATE_CLUSTERS || '0' }}
+      ENSURE_EBS_CSI: ${{ inputs.ensure_ebs_csi && '1' || vars.AWS_ENSURE_EBS_CSI || '0' }}
+      BOOTSTRAP_ADMIN: ${{ inputs.bootstrap_admin && '1' || vars.AWS_BOOTSTRAP_ADMIN || '0' }}
+      REGISTER_TARGETS: ${{ inputs.register_targets && '1' || vars.AWS_REGISTER_TARGETS || '0' }}
+      RUN_SMOKE: ${{ inputs.run_smoke && '1' || vars.AWS_RUN_SMOKE || '0' }}
+      CONFIGURE_ROUTE53: ${{ vars.CONFIGURE_ROUTE53 || '1' }}
+      CONFIGURE_CLOUDFLARE: ${{ vars.CONFIGURE_CLOUDFLARE || '1' }}
+      CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN || 'k8s.woonyong.org' }}
+      ROUTE53_ZONE_NAME: ${{ vars.ROUTE53_ZONE_NAME || 'woonyong.org.' }}
+      CLOUDFLARE_ZONE_NAME: ${{ vars.CLOUDFLARE_ZONE_NAME || 'woonyong.org' }}
+      CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      AUTH_EMAIL: ${{ secrets.AUTH_EMAIL }}
+      AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+      GITHUB_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+      GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'fake' }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
+      OPENAI_COMPATIBLE_BASE_URL: ${{ vars.OPENAI_COMPATIBLE_BASE_URL }}
+      OPENAI_COMPATIBLE_MODEL: ${{ vars.OPENAI_COMPATIBLE_MODEL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GEMINI_BASE_URL: ${{ vars.GEMINI_BASE_URL }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v5.1.0
+
+      - name: Install eksctl when cluster management is enabled
+        if: env.CREATE_CLUSTERS == '1' || env.ENSURE_EBS_CSI == '1'
+        run: |
+          set -euo pipefail
+          curl -sSL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" \
+            | tar xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin/eksctl
+          eksctl version
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy
+        run: bash scripts/aws-up.sh
+
+      - name: Dump management state on failure
+        if: failure()
+        run: |
+          kubectl --context "${MGMT_CLUSTER}" -n management get pods -o wide || true
+          kubectl --context "${MGMT_CLUSTER}" -n management logs deploy/api-gateway || true
