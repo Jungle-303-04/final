@@ -126,7 +126,7 @@ def target_request() -> TargetRegisterRequest:
         environment="sandbox",
         workspace_id="default",
         management_base_url="http://management.local:30080",
-        image="service:local",
+        image="ghcr.io/acme/kubeheal-agent:test",
     )
 
 
@@ -139,17 +139,32 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
 
     assert "name: cluster-agent" in manifest
-    assert "name: checkout-api" in manifest
+    assert "name: checkout-api" not in manifest
     assert "kind: DaemonSet" not in manifest
     assert "cluster-agent-target-manage" in manifest
     assert 'MANAGEMENT_BASE_URL\n              value: "http://management.local:30080"' in manifest
     assert 'PROMETHEUS_BASE_URL: "http://prometheus.target.svc:9090"' in manifest
     assert 'LOKI_BASE_URL: "http://loki-gateway.target.svc"' in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
-    assert 'NODE_COLLECTOR_IMAGE: "service:local"' in manifest
+    assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'resources: ["services", "configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
+
+
+def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
+    request = target_request().model_copy(
+        update={
+            "install_sample_workload": True,
+            "sample_workload_name": "demo-api",
+            "sample_workload_image": "ghcr.io/acme/demo-api:test",
+        }
+    )
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert 'name: "demo-api"' in manifest
+    assert 'image: "ghcr.io/acme/demo-api:test"' in manifest
 
 
 def test_target_registration_records_cluster_and_returns_install_manifest() -> None:

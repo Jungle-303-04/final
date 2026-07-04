@@ -84,6 +84,7 @@ class Settings:
     # (private repo 무인증 404, 토큰 만료 401 등 설정 문제 → 로그로 드러내되 파이프라인은 계속)
     ACCESS_ERROR_STATUS_CODES = {401, 404}
 
-    # webhook 바디 기본값(폴러는 commit_sha 만 실제로 채우고 image/replicas 는 데모 기본).
-    DEFAULT_IMAGE = "service:local"
+    WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
+    # webhook 바디 기본값은 두지 않는다. 배포 이미지는 repo manifest 또는 명시 env 로만 들어온다.
+    DEFAULT_IMAGE = ""
     DEFAULT_REPLICAS = 2

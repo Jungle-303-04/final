@@ -20,7 +20,7 @@ class NodeCollectorManagerConfig:
     NODE_COLLECTOR_NAME = "optional-node-collector"
     NODE_COLLECTOR_APP_LABEL = "optional-node-collector"
     NODE_COLLECTOR_CONTAINER_NAME = "node-collector"
-    NODE_COLLECTOR_DEFAULT_IMAGE = "service:local"
+    NODE_COLLECTOR_DEFAULT_IMAGE = ""
     NODE_COLLECTOR_DEFAULT_NAMESPACE = "target"
     NODE_COLLECTOR_PORT_ENV = "NODE_COLLECTOR_PORT"
     NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV = "NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS"
@@ -34,6 +34,7 @@ class NodeCollectorManagerConfig:
     NODE_COLLECTOR_PATCHED_MESSAGE = "node collector daemonset reconciled"
     NODE_COLLECTOR_DRY_RUN_MESSAGE = "kubernetes api not configured; node collector dry-run only"
     NODE_COLLECTOR_DISABLED_MESSAGE = "node collector reconcile disabled"
+    NODE_COLLECTOR_IMAGE_REQUIRED_MESSAGE = "node collector image is required"
     NODE_COLLECTOR_MANAGED_BY_LABEL = "ops.service/managed-by"
     NODE_COLLECTOR_MANAGED_BY_VALUE = "cluster-agent"
 
@@ -76,6 +77,8 @@ class NodeCollectorManager:
     async def reconcile(self) -> tuple[bool, str]:
         if not self.enabled:
             return False, NodeCollectorManagerConfig.NODE_COLLECTOR_DISABLED_MESSAGE
+        if not self.image:
+            return False, NodeCollectorManagerConfig.NODE_COLLECTOR_IMAGE_REQUIRED_MESSAGE
         base_url = kubernetes_api_base_url()
         token = service_account_token()
         if not base_url or not token:
