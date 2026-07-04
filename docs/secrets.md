@@ -13,9 +13,9 @@ provider를 선택한다.
 | --- | --- |
 | `GITHUB_TOKEN` | 하위호환: 환경변수 `GITHUB_TOKEN` |
 | `env:GITHUB_TOKEN` | 명시적 env provider |
-| `aws-sm:/kubeheal/prod/github-app` | AWS Secrets Manager secret string 전체 |
-| `aws-sm:/kubeheal/prod/github-app#token` | AWS Secrets Manager JSON field `token` |
-| `aws-sm:/kubeheal/prod/github-app?stage=AWSPREVIOUS#token` | rotation 검증용 version stage |
+| `aws-sm:/<app>/<env>/github-app` | AWS Secrets Manager secret string 전체 |
+| `aws-sm:/<app>/<env>/github-app#token` | AWS Secrets Manager JSON field `token` |
+| `aws-sm:/<app>/<env>/github-app?stage=AWSPREVIOUS#token` | rotation 검증용 version stage |
 
 GitHub Safe PR provider는 `GITHUB_TOKEN_REF`가 있으면 그 ref를 읽고, 없으면 기존
 호환을 위해 `GITHUB_TOKEN`을 secret ref로 사용한다.
@@ -75,7 +75,7 @@ AWS Secrets Manager를 직접 읽는 예:
 ```bash
 SECRET_VAULT_PROVIDER=auto
 TOKEN_VAULT_PROVIDER=auto
-GITHUB_TOKEN_REF=aws-sm:/kubeheal/prod/github-app#token
+GITHUB_TOKEN_REF=aws-sm:/my-app/prod/github-app#token
 SECRET_VAULT_AWS_REGION=us-east-1
 ```
 

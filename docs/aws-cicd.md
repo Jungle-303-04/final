@@ -34,13 +34,16 @@ GitHub environment secret에 저장한다.
 
 ## 기본 리소스 이름
 
-기본값은 이번 AWS 테스트 환경에 맞춰 서울 리전과 요청한 영어 이름을 사용한다.
+기본값은 공개 저장소와 데모 계정에서도 바로 이해되는 앱형 이름을 사용한다.
 GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
-- management EKS cluster: `kubernetes-ops`
-- target EKS cluster 1: `cluster-1`
-- target EKS cluster 2: `cluster-2`
-- ECR repository: `kubernetes-ops-service`
+- app/resource prefix: `kubeheal`
+- AWS region: `us-east-1`
+- management EKS cluster: `kubeheal-mgmt`
+- target EKS cluster 1: `kubeheal-target-a`
+- target EKS cluster 2: `kubeheal-target-b`
+- ECR repository: `kubeheal-service`
+- display names: `KubeHeal Management`, `KubeHeal Target A`, `KubeHeal Target B`
 - dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
 
 기본 노드 스펙:
@@ -51,14 +54,15 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 ## 배포 방식
 
-`main`/`dev` push는 테스트를 실행한다. 실제 AWS 배포는 아래 둘 중 하나일 때만 실행된다.
+`dev` push는 먼저 `Promote Dev To Main` workflow에서 테스트와 Docker build를 실행한다.
+통과하면 `dev`를 `main`에 merge하고, `main` push가 AWS CD를 실행한다.
+
+실제 AWS 배포는 아래 둘 중 하나일 때 실행된다.
 
 - GitHub Actions에서 `AWS CD` workflow를 수동 실행
-- repository variable `AWS_AUTO_DEPLOY=1` 설정
+- `main` push. 필요하면 repository variable `AWS_AUTO_DEPLOY=0`으로 자동 배포를 끈다.
 
-자동 배포 기본값을 꺼둔 이유는 공개 레포 fork에서 AWS secret 없이 deploy job이 실패하거나,
-원치 않는 클라우드 리소스를 만들지 않게 하기 위해서다. 배포 job의 기본값은 기존 EKS
-클러스터가 있다고 가정한다.
+배포 job의 기본값은 기존 EKS 클러스터가 있다고 가정한다.
 
 - Docker image build
 - ECR push
@@ -78,13 +82,17 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 권장 repository variables:
 
-- `PROJECT_SLUG`: 리소스 접두사. 기본 `kubernetes-ops`
-- `AWS_REGION`: 기본 `ap-northeast-2`
-- `MGMT_CLUSTER`: 기본 `kubernetes-ops`
-- `TARGET_CLUSTER_1`: 기본 `cluster-1`
-- `TARGET_CLUSTER_2`: 기본 `cluster-2`
-- `ECR_REPO`: 기본 `kubernetes-ops-service`
-- `AWS_AUTO_DEPLOY`: push 배포를 켤 때만 `1`
+- `PROJECT_SLUG`: 리소스 접두사. 기본 `kubeheal`
+- `AWS_REGION`: 기본 `us-east-1`
+- `MGMT_CLUSTER`: 기본 `kubeheal-mgmt`
+- `TARGET_CLUSTER_1`: 기본 `kubeheal-target-a`
+- `TARGET_CLUSTER_2`: 기본 `kubeheal-target-b`
+- `ECR_REPO`: 기본 `kubeheal-service`
+- `AUTO_PROMOTE_DEV_TO_MAIN`: `0`이면 dev 자동 main 승격 비활성화
+- `AWS_AUTO_DEPLOY`: `0`이면 main push 자동 AWS 배포 비활성화
+- `GIT_CHECKOUT_CACHE_ENABLED`: 기본 AWS CD `1`
+- `GIT_CHECKOUT_CACHE_REQUIRED`: 기본 `0`. cache 실패 시 GitHub Contents API fallback 허용
+- `COMMAND_JANITOR_INTERVAL_SECONDS`: 기본 `15`
 - `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
 
 `AUTH_PASSWORD`가 비어 있으면 배포 스크립트가 임시 비밀번호를 생성한다. CI 로그 유출을 막기 위해
