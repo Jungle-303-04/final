@@ -21,7 +21,12 @@ from domains.gitops.diffing import (
     snapshot_from_rendered_manifest,
     summarize_status,
 )
-from domains.gitops.events import Diff, DiffDetectedBody, ManifestRenderedBody, RenderedManifest
+from domains.gitops.events import (
+    DesiredDesiredDiffDetectedBody,
+    Diff,
+    ManifestRenderedBody,
+    RenderedManifest,
+)
 from packages.config.constants import RiskLevel, Sandbox
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
@@ -244,7 +249,7 @@ async def on_manifest_rendered(
         else RESOURCE_NOT_INSPECTED
     )
     diff = build_desired_diff(evt, actual_image)
-    yield DiffDetectedBody(diff=diff)
+    yield DesiredDesiredDiffDetectedBody(diff=diff)
 
 
 if __name__ == "__main__":

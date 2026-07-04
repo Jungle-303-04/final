@@ -39,7 +39,6 @@ DEAD_LETTER_STATUS_OPEN = "open"
 DEAD_LETTER_STATUS_REPLAYED = "replayed"
 RAW_DEAD_LETTER_SUBJECT = "__decode_failed__"
 UNKNOWN_AGENT_ID = "unknown-agent"
-DEFAULT_COMMAND_LEASE_SECONDS = 60
 AGENT_COMMAND_COMPAT_COLUMNS = {
     "lease_id": "alter table agent_commands add column if not exists lease_id text",
     "agent_id": "alter table agent_commands add column if not exists agent_id text",

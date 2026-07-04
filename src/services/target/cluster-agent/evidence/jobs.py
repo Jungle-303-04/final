@@ -10,12 +10,14 @@ from queries import TelemetryQueryDefinition
 from telemetry_registry import telemetry
 
 from packages.config.constants import CommandStatus
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.interfaces import ManagementPlaneClient
 
 DEFAULT_JOB_POLL_SECONDS = 1.0
 DEFAULT_JOB_POLL_TIMEOUT_SECONDS = 10
+LOGGER = get_logger(__name__)
 
 
 class EvidenceSource(Protocol):
@@ -74,7 +76,11 @@ class EvidenceJobScheduler:
             try:
                 await self.schedule_once(client)
             except Exception as exc:
-                print(f"evidence schedule failed: {exc}", flush=True)
+                LOGGER.warning(
+                    "evidence_schedule_failed",
+                    extra={CONTEXT_KEY: {"cluster_id": self.cluster_id}},
+                    exc_info=exc,
+                )
             await asyncio.sleep(1)
 
     async def schedule_once(
@@ -115,7 +121,11 @@ class EvidenceJobScheduler:
             try:
                 processed = await self.work_once(client, provider_key, worker_id)
             except Exception as exc:
-                print(f"evidence worker failed: {worker_id}: {exc}", flush=True)
+                LOGGER.warning(
+                    "evidence_worker_failed",
+                    extra={CONTEXT_KEY: {"worker_id": worker_id, "provider_key": provider_key}},
+                    exc_info=exc,
+                )
                 processed = False
             if not processed:
                 await asyncio.sleep(DEFAULT_JOB_POLL_SECONDS)

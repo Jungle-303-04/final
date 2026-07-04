@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 
 from domains.alert.events import AlertRequestedBody
 from domains.command.events import CommandRequestedBody
-from domains.gitops.events import Diff, DiffAnalyzedBody, DiffDetectedBody
+from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff, DiffAnalyzedBody
 from domains.scm.events import SafePrRequestedBody
 from packages.config.constants import Command, GitHub, RiskLevel, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
@@ -89,8 +89,10 @@ def build_pre_deploy_alert_request_body(diff: Diff) -> AlertRequestedBody:
     )
 
 
-@app.on(DiffDetectedBody)
-async def on_desired_diff(evt: DiffDetectedBody, ctx: EventContext) -> AsyncIterator[EventBody]:
+@app.on(DesiredDesiredDiffDetectedBody)
+async def on_desired_diff(
+    evt: DesiredDesiredDiffDetectedBody, ctx: EventContext
+) -> AsyncIterator[EventBody]:
     diff = evt.diff
     safe, reason = evaluate_safe_pr_policy(diff)
     yield DiffAnalyzedBody(diff=diff, safe=safe, risk=diff.risk, reason=reason)

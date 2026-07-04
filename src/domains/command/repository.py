@@ -15,6 +15,7 @@ from domains.command.events import CommandCompletedBody
 from domains.command.models import (
     AgentCommand,
 )
+from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
@@ -22,7 +23,6 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
 from packages.events.envelope import event
 from packages.storage.engine import (
-    DEFAULT_COMMAND_LEASE_SECONDS,
     UNKNOWN_AGENT_ID,
     DatabaseConnection,
     row_dict,
