@@ -5,6 +5,7 @@
 원본 설계 문서:
 
 - [RCA / Safe PR 멤버 가이드](../rca-safe-pr.md)
+- [팀 간 구현 연결과 테스트 가이드](../../cross-role-implementation-test-guide.md)
 
 ## 사용 방법
 
@@ -29,6 +30,7 @@ cluster.evidence.received
 
 | 순서 | 파일 | 끝 상태 |
 | --- | --- | --- |
+| 0 | [현재 코드 지도와 테스트 기준](00-current-code-map.md) | 실제 body/worker/test 위치를 확인함 |
 | 1 | [Evidence 입력 계약](01-evidence-input-contract.md) | RCA가 받는 evidence shape와 거부 기준이 고정됨 |
 | 2 | [Evidence Builder](02-evidence-builder.md) | raw evidence가 RCA용 Evidence DTO로 정규화됨 |
 | 3 | [RCA Result와 Fake Analyzer](03-rca-result-fake-analyzer.md) | AI 없이도 deterministic RCA 결과를 만들 수 있음 |
@@ -43,4 +45,4 @@ cluster.evidence.received
 - raw token, PAT, kubeconfig, provider response 전체를 event, response, log, audit에 넣지 않는다.
 - RCA worker에서 직접 GitHub PR을 만들지 않는다.
 - evidence reference 없이 높은 confidence의 root cause를 만들지 않는다.
-- `correlation_id`를 새로 갈아끼우지 않는다.
+- envelope의 `correlation_id`를 새로 갈아끼우지 않는다. body에 `correlation_id` 필드를 추가하려면 계약 변경으로 다룬다.

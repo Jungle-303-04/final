@@ -31,30 +31,65 @@
    - `node`
 3. 필수 필드를 명확히 한다.
    - `cluster_id`
-   - `timestamp` 또는 `observed_at`
-   - `kind`
-   - `payload`
-   - `correlation_id`
-4. 필수 필드가 없으면 RCA를 진행하지 않고 명확한 reject 또는 insufficient 상태로 끝내는 기준을 정한다.
-5. secret처럼 보이는 값이 payload에 있으면 마스킹하거나 거부한다.
-6. `docs/events.md`에 정상 예시와 거부 예시를 추가한다.
-7. 정상 payload, 필드 누락, secret-like value 테스트를 추가한다.
+   - `kubernetes`
+   - `metrics`
+   - `logs`
+   - `traces`
+   - `workspace_id`
+   - `agent_id`
+   - `source_id`
+   - `window_start`
+   - `evidence_key`
+4. `correlation_id`는 body 필드가 아니라 envelope 메타데이터라는 점을 문서에 명시한다. HTTP `AgentEvidenceRequest.correlation_id`는 Gateway가 envelope correlation으로 연결할 수 있다.
+5. 필수 필드가 없으면 RCA를 진행하지 않고 명확한 reject 또는 insufficient 상태로 끝내는 기준을 정한다.
+6. secret처럼 보이는 값이 payload에 있으면 마스킹하거나 거부한다.
+7. `docs/events.md`에 정상 예시와 거부 예시를 추가한다.
+8. 정상 payload, 필드 누락, secret-like value 테스트를 추가한다.
 
 ## 예시 payload
 
 ```json
 {
   "cluster_id": "target-dev",
-  "kind": "pod",
-  "observed_at": "2026-07-04T09:00:00Z",
+  "workspace_id": "workspace-1",
+  "agent_id": "agent-1",
+  "source_id": "cluster-snapshot",
+  "window_start": "2026-07-04T09:00:00Z",
+  "evidence_key": "workspace-1:target-dev:cluster-snapshot:2026-07-04T09:00:00Z",
+  "kubernetes": {
+    "resource": {
+      "kind": "deployment",
+      "name": "checkout-api",
+      "namespace": "sandbox"
+    },
+    "pods": [
+      {
+        "name": "checkout-api-5d9c",
+        "status": "CrashLoopBackOff"
+      }
+    ],
+    "symptom": "CrashLoopBackOff",
+    "severity": "high"
+  },
+  "metrics": {
+    "memory": "near-limit"
+  },
+  "logs": [
+    {
+      "line": "OOMKilled"
+    }
+  ],
+  "traces": {}
+}
+```
+
+Envelope 예시:
+
+```json
+{
+  "subject": "cluster.evidence.received",
   "correlation_id": "corr-123",
-  "payload": {
-    "namespace": "sandbox",
-    "pod": "checkout-api-5d9c",
-    "phase": "Running",
-    "container_reason": "CrashLoopBackOff",
-    "restart_count": 7
-  }
+  "payload": "<위 body>"
 }
 ```
 
@@ -71,6 +106,7 @@ uv run ruff check src tests
 
 - RCA 입력 evidence kind와 필수 필드가 문서화되어 있다.
 - 필수 필드 누락 시 RCA가 추측으로 진행하지 않는다.
+- body 필드와 envelope `correlation_id`가 구분되어 있다.
 - secret-like value 처리 기준이 테스트로 고정되어 있다.
 - 새 계약이 `docs/events.md`와 코드 테스트에 같이 반영되어 있다.
 

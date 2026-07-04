@@ -23,6 +23,7 @@
 - 새 API, event, DB table, Kubernetes 권한은 코드, 테스트, source docs, WIKI를 함께 갱신한다.
 - fake adapter는 데모 fallback으로 남길 수 있지만 UI/API/문서에서 실제 구현처럼 표현하지 않는다.
 - production namespace write는 금지하고 `sandbox` namespace write만 정책/승인 경계 안에서 허용한다.
+- 역할 간 입력/출력, 테스트 선택, 모순 점검은 `docs/team/cross-role-implementation-test-guide.md`를 기준으로 한다.
 
 ## Platform / Integration
 
