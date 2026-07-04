@@ -19,7 +19,6 @@ import yaml
 from domains.gitops.diffing import extract_declared_field_paths
 from domains.gitops.events import (
     GitChangedBody,
-    Manifest,
     ManifestInvalidBody,
     ManifestRenderedBody,
     RenderedManifest,
@@ -36,14 +35,11 @@ from packages.contracts.gitops import (
     ManifestArtifactStatus,
     supported_kubernetes_resource,
 )
-from packages.contracts.gitops.renderer import ManifestRenderer
 from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
 
 app = App("manifest-render-worker")
 
-DEFAULT_APP_NAME = "checkout-api"
-MANIFEST_API_VERSION = "apps/v1"
 MANIFEST_KIND = "Deployment"
 METADATA_FIELD = "metadata"
 SPEC_FIELD = "spec"
@@ -58,6 +54,9 @@ GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS
 DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
 DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS = "5"
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
+# manifest 원천(local clone/파일/GitHub contents) 어디에서도 소스를 못 찾은 경우의 사유.
+# 합성 manifest 생성 대신 manifest.invalid 로 정직하게 실패함.
+MANIFEST_SOURCE_UNAVAILABLE_REASON = "manifest source unavailable"
 
 
 class ManifestSourceError(Exception):
@@ -225,65 +224,12 @@ def deployment_image(spec: dict[str, Any]) -> str:
     return str(first.get("image", ""))
 
 
-def build_manifest_from_git_change(evt: GitChangedBody) -> Manifest:
-    # TODO(gitops): commit metadata 보존으로 render 실패와 repo revision 추적
-    return Manifest(
-        app=DEFAULT_APP_NAME,
-        image=evt.image,
-        replicas=evt.replicas,
-        namespace=Sandbox.NAMESPACE,
-        manifest_path=evt.manifest_path,
-    )
-
-
 def build_rendered_manifests_from_git_change(evt: GitChangedBody) -> list[RenderedManifest]:
     source = read_manifest_source(evt)
-    if source is not None:
-        return parse_rendered_manifest_source(source)
-    return [RENDERER.render(build_manifest_from_git_change(evt))]
-
-
-class DeploymentRenderer:
-    """ManifestRenderer 구현 — Deployment 전용 stub shape 를 렌더함."""
-
-    def render(self, manifest: Manifest) -> RenderedManifest:
-        # TODO(gitops): Deployment 전용 shape를 Kustomize/Helm renderer 출력으로 교체
-        # TODO(gitops): raw exception 대신 구조화된 render 오류 반환
-        raw = {
-            "apiVersion": MANIFEST_API_VERSION,
-            "kind": MANIFEST_KIND,
-            "metadata": {"name": manifest.app, "namespace": manifest.namespace},
-            "spec": {
-                "replicas": manifest.replicas,
-                "template": {
-                    "spec": {
-                        "containers": [
-                            {
-                                "name": manifest.app,
-                                "image": manifest.image,
-                            }
-                        ]
-                    }
-                },
-            },
-        }
-        return RenderedManifest(
-            api_version=MANIFEST_API_VERSION,
-            kind=MANIFEST_KIND,
-            metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
-            spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
-            manifest=raw,
-            declared_fields=extract_declared_field_paths(raw),
-        )
-
-
-# 렌더 전략 주입 지점 — 지금은 Deployment stub 렌더러 하나만 씀.
-RENDERER: ManifestRenderer = DeploymentRenderer()
-
-
-def render_deployment_manifest(manifest: Manifest) -> RenderedManifest:
-    """기존 호출자 호환용 — 렌더 전략 인스턴스로 위임함."""
-    return RENDERER.render(manifest)
+    if source is None:
+        # 소스 없이 Deployment 를 합성하지 않음 — 정직한 실패 경로(manifest.invalid)로 보냄.
+        raise ManifestSourceError(MANIFEST_SOURCE_UNAVAILABLE_REASON)
+    return parse_rendered_manifest_source(source)
 
 
 def rendered_resource_suffix(rendered: RenderedManifest) -> str:
