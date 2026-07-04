@@ -2,6 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+default_github_repo() {
+  local url
+  url="$(git -C "${ROOT_DIR}" config --get remote.origin.url 2>/dev/null || true)"
+  url="${url%.git}"
+  case "${url}" in
+    git@github.com:*) echo "${url#git@github.com:}" ;;
+    https://github.com/*) echo "${url#https://github.com/}" ;;
+    http://github.com/*) echo "${url#http://github.com/}" ;;
+  esac
+}
+
 IMAGE_NAME="${IMAGE_NAME:-service:local}"
 MGMT_CLUSTER="${MGMT_CLUSTER:-management}"
 TARGET_CLUSTER="${TARGET_CLUSTER:-target}"
@@ -12,7 +24,7 @@ DATABASE_URL="${DATABASE_URL:-}"
 NATS_URL="${NATS_URL:-nats://nats:4222}"
 REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
-GITHUB_REPO="${GITHUB_REPO:-example-org/example-repo}"
+GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
