@@ -19,6 +19,7 @@ def test_diff_emits_desired_diff() -> None:
             kind="Deployment",
             metadata=RenderedMetadata(name="checkout-api", namespace="sandbox"),
             spec=RenderedSpec(replicas=2, image="img:new"),
+            artifact_digest="sha256:test-digest",
             manifest={
                 "apiVersion": "apps/v1",
                 "kind": "Deployment",
@@ -59,6 +60,7 @@ def test_diff_emits_desired_diff() -> None:
         "spec.replicas",
         "spec.template.spec.containers[name=checkout-api].image",
     ]
+    assert outs[0].diff.basis["artifact_digest"] == "sha256:test-digest"
 
 
 def test_diff_marks_non_sandbox_namespace_unsafe() -> None:

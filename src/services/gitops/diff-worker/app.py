@@ -99,6 +99,8 @@ def build_desired_diff(evt: ManifestRenderedBody, actual_image: str) -> Diff:
         policy_source=policy.source,
     )
     basis.update(dry_run_meta)
+    if rendered.artifact_digest:
+        basis["artifact_digest"] = rendered.artifact_digest
     image_path = managed_image_path(rendered)
     return Diff(
         resource=new_desired.resource or resource_ref(rendered.kind, rendered.metadata.name),
