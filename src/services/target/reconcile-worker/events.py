@@ -8,6 +8,7 @@ from domains.target.events import (
     ClusterDesiredStateChangedBody,
     ClusterDriftDetectedBody,
     ClusterReconcileCompletedBody,
+    ClusterReconcileFailedBody,
     ClusterReconcileRequestedBody,
     ClusterReconcileStartedBody,
     TargetDesiredComponent,
@@ -38,52 +39,63 @@ async def on_reconcile_requested(
     evt: ClusterReconcileRequestedBody, ctx: EventContext[TargetReconcileStore]
 ) -> AsyncIterator[EventBody]:
     rows = await ctx.db.list_target_desired_states(evt.workspace_id, evt.cluster_id)
-    components = [component_from_row(row) for row in rows]
-    yield ClusterReconcileStartedBody(
-        workspace_id=evt.workspace_id,
-        cluster_id=evt.cluster_id,
-        desired_state_version=evt.desired_state_version,
-        component_count=len(components),
-    )
+    try:
+        components = [component_from_row(row) for row in rows]
+        yield ClusterReconcileStartedBody(
+            workspace_id=evt.workspace_id,
+            cluster_id=evt.cluster_id,
+            desired_state_version=evt.desired_state_version,
+            component_count=len(components),
+        )
 
-    if evt.actual_state is None:
+        if evt.actual_state is None:
+            completed = ClusterReconcileCompletedBody(
+                workspace_id=evt.workspace_id,
+                cluster_id=evt.cluster_id,
+                desired_state_version=evt.desired_state_version,
+                status=TargetReconcileStatus.REQUESTED.value,
+                drifted=False,
+                applied=False,
+                message=ACTUAL_STATE_PENDING_MESSAGE,
+            )
+            await record_reconcile(ctx, completed, components, evt.actual_state)
+            yield completed
+            return
+
+        decision = TargetReconciler().evaluate(
+            components,
+            ActualStateSnapshot(components=actual_components(evt.actual_state)),
+        )
+        if decision.drifted:
+            yield ClusterDriftDetectedBody(
+                workspace_id=evt.workspace_id,
+                cluster_id=evt.cluster_id,
+                desired_state_version=evt.desired_state_version,
+                drifts=decision.drifts,
+            )
+
         completed = ClusterReconcileCompletedBody(
             workspace_id=evt.workspace_id,
             cluster_id=evt.cluster_id,
             desired_state_version=evt.desired_state_version,
-            status=TargetReconcileStatus.REQUESTED.value,
-            drifted=False,
+            status=decision.status,
+            drifted=decision.drifted,
             applied=False,
-            message=ACTUAL_STATE_PENDING_MESSAGE,
+            message=decision.message,
+            drifts=decision.drifts,
         )
         await record_reconcile(ctx, completed, components, evt.actual_state)
         yield completed
-        return
-
-    decision = TargetReconciler().evaluate(
-        components,
-        ActualStateSnapshot(components=actual_components(evt.actual_state)),
-    )
-    if decision.drifted:
-        yield ClusterDriftDetectedBody(
+    except Exception as exc:
+        failed = ClusterReconcileFailedBody(
             workspace_id=evt.workspace_id,
             cluster_id=evt.cluster_id,
             desired_state_version=evt.desired_state_version,
-            drifts=decision.drifts,
+            error_type=type(exc).__name__,
+            message=str(exc) or type(exc).__name__,
         )
-
-    completed = ClusterReconcileCompletedBody(
-        workspace_id=evt.workspace_id,
-        cluster_id=evt.cluster_id,
-        desired_state_version=evt.desired_state_version,
-        status=decision.status,
-        drifted=decision.drifted,
-        applied=False,
-        message=decision.message,
-        drifts=decision.drifts,
-    )
-    await record_reconcile(ctx, completed, components, evt.actual_state)
-    yield completed
+        await record_reconcile_failure(ctx, failed, evt.actual_state)
+        yield failed
 
 
 def component_from_row(row: JsonObject) -> TargetDesiredComponent:
@@ -119,6 +131,28 @@ async def record_reconcile(
                 "desired_components": [component.to_body() for component in desired_components],
                 "actual_state": actual_state,
                 "drifts": [drift.to_body() for drift in completed.drifts],
+            },
+        }
+    )
+
+
+async def record_reconcile_failure(
+    ctx: EventContext[TargetReconcileStore],
+    failed: ClusterReconcileFailedBody,
+    actual_state: JsonObject | None,
+) -> None:
+    await ctx.db.record_target_reconcile_result(
+        {
+            "workspace_id": failed.workspace_id,
+            "cluster_id": failed.cluster_id,
+            "desired_state_version": failed.desired_state_version,
+            "status": failed.status,
+            "drifted": False,
+            "applied": False,
+            "message": failed.message,
+            "details": {
+                "error_type": failed.error_type,
+                "actual_state": actual_state,
             },
         }
     )
