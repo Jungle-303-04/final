@@ -38,6 +38,7 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 | 5 | [구현 Phase 계획](target-telemetry-implementation-plan.md) | PR/커밋 단위로 작업을 시작할 때 |
 | 6 | [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md) | 실제 파일을 고치고 테스트할 때 |
 | 7 | [Target Agent Local Queue / Spool](target-agent-local-queue.md) | 명령 처리와 evidence 수집이 몰릴 때 agent가 어떻게 버틸지 설계할 때 |
+| 8 | [Target Agent Command / Evidence 구현 가이드](target-agent-command-evidence-flow.md) | command poll/result, evidence job schedule/poll/result 구현을 코드 기준으로 확인할 때 |
 
 ## 담당 영역
 
