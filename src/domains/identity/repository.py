@@ -32,15 +32,15 @@ from packages.storage.engine import DatabaseConnection
 
 
 class WorkspaceAccessRepository(DatabaseConnection):
-    """워크스페이스와 클러스터 등록용 repository 골격."""
+    """워크스페이스, 사용자, 리소스 접근권, 클러스터 등록 repository."""
 
-    # TODO(identity): SSO/email login과 account deactivation 포함 user lifecycle 구현
+    # 계정 수명주기(SSO/email/deactivation)는 UserRepository 계층에서 확장한다.
     user_table = UserAccount.__table__
-    # TODO(identity): workspace role hierarchy와 permission inheritance를 단일 policy port에서 적용
+    # 역할 상속과 권한 평가는 packages.contracts.identity 의 policy helper를 기준으로 한다.
     workspace_table = Workspace.__table__
     member_table = WorkspaceMember.__table__
     access_table = ResourceAccessGrant.__table__
-    # TODO(target): cluster를 agent identity, token rotation, environment tier, RBAC scope와 연결
+    # cluster 등록은 agent identity, token hash, environment, RBAC scope의 영속 경계다.
     cluster_table = ClusterRegistration.__table__
 
     @staticmethod
@@ -54,7 +54,7 @@ class WorkspaceAccessRepository(DatabaseConnection):
         }
 
     def register_target_cluster(self, payload: JsonObject) -> JsonObject:
-        # TODO(identity): registration 전 명시적 workspace owner/admin permission 요구
+        # HTTP router에서 session/resource access를 검증하고, repository는 upsert 원자성을 책임진다.
         user_id = payload["user_id"]
         workspace_id = payload["workspace_id"]
         with self.connection() as conn:
