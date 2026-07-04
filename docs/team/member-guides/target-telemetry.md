@@ -46,7 +46,7 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 - `src/services/target/node-collector`
 - `deploy/target`
 - `src/packages/contracts/agent` 또는 agent 관련 request/response 계약
-- fake/real Prometheus, Loki, OpenTelemetry adapter
+- Prometheus, Loki, Tempo/OpenTelemetry provider adapter
 - ServiceAccount/RBAC manifest
 
 ## 한 작업씩 따라가는 문서
@@ -63,7 +63,7 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 - Agent는 NATS를 직접 알지 않는다. Gateway HTTP API만 호출한다.
 - Node Collector는 secret 없이 node/runtime 정보를 수집한다.
 - Kubernetes write 권한은 `sandbox` namespace 또는 demo namespace로 제한한다.
-- Prometheus/Loki/OTel은 fake adapter -> one real adapter -> ingest/exporter 순서로 확장한다.
+- Prometheus/Loki/Tempo는 provider adapter와 query policy를 통해 evidence job으로 수집한다.
 - command 결과는 Gateway에 보고해서 Management Plane의 event 흐름으로 들어가게 한다.
 
 ## 가장 중요한 설계 판단
@@ -115,7 +115,7 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 - Target Agent는 NATS가 아니라 Management Gateway를 호출한다.
 - write 권한은 `sandbox` namespace로 제한한다.
 - RBAC는 최소 권한 원칙을 따른다.
-- fake telemetry는 fallback으로 유지한다.
+- telemetry provider 장애는 bounded empty payload와 warning log로 degrade한다.
 - Node Collector는 secret 없이 `/metrics`와 structured stdout log를 제공한다.
 - Kubernetes client, telemetry client는 interface/adapter 뒤에 둔다.
 - command 실행은 idempotent하게 만든다. 같은 command가 재전달될 수 있다.
@@ -128,18 +128,18 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 
 ## 작업 시작 순서
 
-Management Gateway API 계약은 아직 구현 중이므로 처음부터 Agent-Gateway 계약을 고정하지 않는다. 먼저 Prometheus를 독립적으로 설치하고, 더미 데이터를 넣고, 다시 query로 꺼내는 폐쇄 루프를 만든다.
+현재 Agent-Gateway 계약은 `/agent/commands/*`, `/agent/evidence/jobs/*`, `/agent/policy` 기준으로 구현되어 있다. 새 작업은 먼저 실제 HTTP 계약과 provider adapter를 확인한 뒤, Prometheus/Loki/Tempo query를 작은 evidence payload로 줄이는 폐쇄 루프를 만든다.
 
 1. Prometheus를 Helm으로 설치하고 values/dry-run 기준을 정리한다.
 2. 더미 `/metrics` exporter를 만들어 Prometheus가 scrape하게 한다.
 3. Prometheus query API로 더미 metric을 직접 조회한다.
 4. Prometheus query를 코드 구조로 감싼다.
-5. Target Agent 안에 더미 query API를 만들고, 받은 query를 Prometheus에 실행한다.
-6. Agent가 Prometheus 결과를 더미 response/evidence 형태로 돌려준다.
+5. Target Agent의 provider adapter와 query registry를 통해 Prometheus query를 실행한다.
+6. Agent가 provider result를 bounded evidence payload 형태로 돌려준다.
 7. Kubernetes API로 pod/event evidence를 수집한다.
 8. Node Collector `/metrics`를 구현하고 Prometheus에 scrape시킨다.
 9. Node Collector metric을 Agent query API로 다시 꺼내본다.
-10. 그 다음 Gateway API 계약이 준비되면 실제 `POST /agent/evidence` 흐름과 연결한다.
+10. `/agent/evidence/jobs` schedule/poll/result 흐름으로 provider job을 연결한다.
 11. command 실행 전 approval evidence와 action allowlist를 검증한다.
 12. 부분 성공/부분 실패 result schema를 Gateway command result 계약과 맞춘다.
 13. provider failure/fallback, evidence freshness, payload size를 control-plane metric/audit metadata로 남긴다.

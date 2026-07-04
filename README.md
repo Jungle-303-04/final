@@ -79,10 +79,7 @@ command-worker               command policy/dispatch/agent queue
 rca-worker                   evidence -> RCA -> safe_pr.requested
 audit-worker                 audit log
 alert-worker                 alarm/notification event boundary
-cluster-agent                대상 클러스터 outbound agent
-fake-prometheus              fake metrics source
-fake-loki                    fake logs source
-fake-otel                    fake trace source
+cluster-agent                대상 클러스터 outbound agent, command receiver, evidence job scheduler
 node-collector               선택형 DaemonSet collector
 ```
 
