@@ -21,17 +21,33 @@
 | Agent 인증 | cluster별 agent token hash를 저장하고 agent API는 token identity 기준으로 동작한다. |
 | Desired state | target 등록 시 cluster-agent/node-collector desired state를 저장하고 reconcile event를 발행한다. |
 | GitOps source | commit/ref 기반 remote source와 checkout cache를 지원한다. local fallback은 설정으로 통제한다. |
-| Secret | `env:`와 `aws-sm:` ref가 `SecretVaultPort`/`TokenVaultPort` adapter 뒤에서 동작한다. |
+| Provider registry | `GET /providers/catalog`, `POST /providers/validate`가 source/deploy/cloud/secret provider의 지원 상태와 credential ref 요구사항을 노출한다. |
+| Secret | `env:`, `k8s-secret:`, `aws-sm:` ref가 `SecretVaultPort`/`TokenVaultPort` adapter 뒤에서 동작한다. |
 
 ## 프론트 버튼과 API 매핑
 
 | UI 버튼 | 백엔드 동작 |
 | --- | --- |
 | 설치 미리보기 | `POST /targets` with `apply=false`; manifest와 agent token을 보여준다. |
-| 바로 설치 | `POST /targets` with `apply=true`; `KUBE_CONTEXT_ALLOWLIST`에 있는 context만 허용한다. |
+| 바로 설치 | `POST /targets` with `apply=true`, `deploy_provider=kube-context`; `KUBE_CONTEXT_ALLOWLIST`에 있는 context만 허용한다. |
 | 정책 갱신 | `PUT /clusters/{cluster_id}/policy`; 기존 정책과 부분 merge한다. |
 | agent reconcile 확인 | agent status/reconcile endpoint와 dashboard projection을 연결한다. |
 | GitOps 앱 연결 | repository/watch target/deployment binding 등록 후 Git webhook 또는 poller가 흐름을 시작한다. |
+| provider 선택 | `GET /providers/catalog`로 선택지를 그리고, 저장/실행 전 `POST /providers/validate`로 미구현 provider와 credential ref 오류를 막는다. |
+
+## Provider registry
+
+현재 registry는 provider를 네 그룹으로 나눈다.
+
+| 그룹 | 현재 available | unavailable로 노출되는 항목 |
+| --- | --- | --- |
+| source | `github` | `git-url`, `gitlab`, `bitbucket` |
+| deploy | `manual-manifest`, `kube-context`, `github-actions` | `argocd`, `jenkins` |
+| cloud | `existing-k8s`, `local`, `aws` | `gcp`, `azure` |
+| secret | `env`, `k8s-secret`, `aws-sm` | `vault`, `gcp-sm` |
+
+미구현 항목은 UI에 "준비 중"으로 보여줄 수는 있지만, `POST /providers/validate`와 런타임
+검증에서는 실패한다. 더미 성공 경로를 만들지 않는다.
 
 ## 클라우드 선택성
 
@@ -53,5 +69,6 @@ GitHub API, PostgreSQL, NATS, Redis를 기준으로 동작한다. AWS 전용 부
 - Helm chart 또는 Kustomize package를 실제 파일 artifact로 생성하는 renderer adapter.
 - 웹앱의 설치 preview/confirm 화면.
 - kubeconfig를 직접 업로드하지 않는 agent-first bootstrap 방식.
+- GitLab/Bitbucket, Argo CD/Jenkins, GCP/Azure, Vault/GCP Secret Manager adapter.
 - approval/token rotation의 만료 검증과 감사 기록 강화.
 - dashboard projection에서 install/reconcile/command 상태를 한 화면으로 묶기.

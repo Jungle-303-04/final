@@ -2,11 +2,25 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:18080}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+default_github_repo() {
+  local url
+  url="$(git -C "${ROOT_DIR}" config --get remote.origin.url 2>/dev/null || true)"
+  url="${url%.git}"
+  case "${url}" in
+    git@github.com:*) echo "${url#git@github.com:}" ;;
+    https://github.com/*) echo "${url#https://github.com/}" ;;
+    http://github.com/*) echo "${url#http://github.com/}" ;;
+  esac
+}
+
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-management}"
 MGMT_NS="${MGMT_NS:-management}"
 SMOKE_IMAGE="${SMOKE_IMAGE:-service:local}"
-GITHUB_REPO="${GITHUB_REPO:-example-org/example-repo}"
+GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
@@ -14,7 +28,6 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 SMOKE_COMMIT_SHA="${SMOKE_COMMIT_SHA:-}"
 COOKIE_JAR="$(mktemp)"
 WEBHOOK_RESPONSE="$(mktemp)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 trap 'rm -f "${COOKIE_JAR}" "${WEBHOOK_RESPONSE}"' EXIT
 
 source "${SCRIPT_DIR}/lib/auth.sh"
@@ -30,6 +43,10 @@ need curl
 need python3
 
 latest_commit_sha() {
+  if [ -z "${GITHUB_REPO}" ]; then
+    echo "GITHUB_REPO is required when the current git remote is not a GitHub repository." >&2
+    exit 1
+  fi
   local header_args=()
   if [ -n "${GITHUB_TOKEN}" ]; then
     header_args=(-H "authorization: Bearer ${GITHUB_TOKEN}")
