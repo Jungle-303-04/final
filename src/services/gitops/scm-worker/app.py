@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
+from packages.contracts.scm.provider import ScmProvider
 from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import App, EventContext
 from packages.runtime.outbound import deliver
@@ -43,14 +44,28 @@ def resolve_pr_url_prefix() -> str:
     return validate_pr_url_prefix(env(SCM_PR_URL_PREFIX_ENV, ""))
 
 
+class StubScmProvider:
+    """ScmProvider 구현 — 실제 SCM 호출 없이 PR URL 을 합성하는 스텁."""
+
+    async def create_pull_request(
+        self, request: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
+    ) -> str:
+        # TODO(scm): branch 생성, patch commit, PR 생성, provider response 원자 저장
+        # TODO(scm): write 전 repo allowlist, branch naming, rollback metadata 검증
+        pr_url = f"{resolve_pr_url_prefix()}/{int(time.time()) % PR_NUMBER_MODULO}"
+        await ctx.db.save_pull_request(
+            ctx.correlation_id, pr_url, request.title, request.body, PR_STATUS_CREATED
+        )
+        return pr_url
+
+
+# PR 생성 전략 주입 지점 — 지금은 스텁 provider 하나만 씀.
+SCM_PROVIDER: ScmProvider = StubScmProvider()
+
+
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
-    # TODO(scm): branch 생성, patch commit, PR 생성, provider response 원자 저장
-    # TODO(scm): write 전 repo allowlist, branch naming, rollback metadata 검증
-    pr_url = f"{resolve_pr_url_prefix()}/{int(time.time()) % PR_NUMBER_MODULO}"
-    await ctx.db.save_pull_request(
-        ctx.correlation_id, pr_url, evt.title, evt.body, PR_STATUS_CREATED
-    )
-    return pr_url
+    """기존 호출자 호환용 — SCM 전략 인스턴스로 위임함."""
+    return await SCM_PROVIDER.create_pull_request(evt, ctx)
 
 
 def safe_pr_failure_reason(exc: Exception) -> str:
