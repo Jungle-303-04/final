@@ -17,6 +17,7 @@ from domains.target.router import (
     schedule_evidence_jobs,
     target_install_manifest,
     update_cluster_policy,
+    validate_target_install_providers,
 )
 from packages.contracts.gateway.requests import (
     AgentPolicy,
@@ -212,6 +213,52 @@ def test_target_registration_apply_failure_does_not_record_state(monkeypatch) ->
     assert db.registered == []
     assert db.desired_states == []
     assert events.accepted == []
+
+
+def test_target_registration_apply_defaults_to_kube_context_provider(monkeypatch) -> None:
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(update={"apply": True})
+
+    def fake_apply(_manifest: str, _kube_context: str | None) -> str:
+        return "applied"
+
+    monkeypatch.setattr("domains.target.router.apply_manifest_with_kubectl", fake_apply)
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.applied is True
+    assert db.registered[0]["settings"]["deploy_provider"] == "kube-context"
+
+
+def test_target_registration_rejects_explicit_manual_provider_for_direct_apply() -> None:
+    request = target_request().model_copy(
+        update={"apply": True, "deploy_provider": "manual-manifest"}
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        validate_target_install_providers(request)
+
+    assert exc.value.status_code == 422
+    assert "direct apply requires deploy_provider=kube-context" in exc.value.detail
+
+
+def test_target_registration_rejects_unavailable_cloud_provider() -> None:
+    request = target_request().model_copy(update={"cloud_provider": "gcp"})
+
+    with pytest.raises(HTTPException) as exc:
+        validate_target_install_providers(request)
+
+    assert exc.value.status_code == 422
+    assert "cloud provider 'gcp' unavailable" in exc.value.detail
 
 
 def test_target_apply_requires_context_when_allowlist_is_configured(monkeypatch) -> None:
