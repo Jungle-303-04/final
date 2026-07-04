@@ -3,22 +3,24 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-AWS_REGION="${AWS_REGION:-ap-northeast-2}"
-MGMT_CLUSTER="${MGMT_CLUSTER:-kubernetes-ops}"
-TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-cluster-1}"
-TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-cluster-2}"
+PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
+TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
+TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-${PROJECT_SLUG}-target-b}"
 
 if [[ "${MGMT_CLUSTER}" == "management" ]]; then
-  MGMT_CLUSTER="${AWS_MGMT_CLUSTER:-kubernetes-ops}"
+  MGMT_CLUSTER="${AWS_MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
 fi
 
-MGMT_DISPLAY_NAME="${MGMT_DISPLAY_NAME:-kubernetes-ops}"
-TARGET_1_DISPLAY_NAME="${TARGET_1_DISPLAY_NAME:-cluster-1}"
-TARGET_2_DISPLAY_NAME="${TARGET_2_DISPLAY_NAME:-cluster-2}"
+MGMT_DISPLAY_NAME="${MGMT_DISPLAY_NAME:-${MGMT_CLUSTER}}"
+TARGET_1_DISPLAY_NAME="${TARGET_1_DISPLAY_NAME:-${TARGET_CLUSTER_1}}"
+TARGET_2_DISPLAY_NAME="${TARGET_2_DISPLAY_NAME:-${TARGET_CLUSTER_2}}"
 
-ECR_REPO="${ECR_REPO:-kubernetes-ops-service}"
+ECR_REPO="${ECR_REPO:-${PROJECT_SLUG}-service}"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 IMAGE_NAME="${IMAGE_NAME:-}"
+DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 
 MGMT_NODE_TYPE="${MGMT_NODE_TYPE:-t3.xlarge}"
 MGMT_NODES="${MGMT_NODES:-2}"
@@ -36,7 +38,7 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
-GITHUB_REPO="${GITHUB_REPO:-Jungle-303-04/final}"
+GITHUB_REPO="${GITHUB_REPO:-example-org/example-repo}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
@@ -70,7 +72,7 @@ GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
 GEMINI_BASE_URL="${GEMINI_BASE_URL:-}"
 GEMINI_MODEL="${GEMINI_MODEL:-}"
 
-AUTH_EMAIL="${AUTH_EMAIL:-ops@example.local}"
+AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
 RUN_SMOKE="${RUN_SMOKE:-0}"
@@ -78,11 +80,11 @@ CREATE_CLUSTERS="${CREATE_CLUSTERS:-1}"
 ENSURE_EBS_CSI="${ENSURE_EBS_CSI:-1}"
 BOOTSTRAP_ADMIN="${BOOTSTRAP_ADMIN:-1}"
 REGISTER_TARGETS="${REGISTER_TARGETS:-1}"
-CONFIGURE_ROUTE53="${CONFIGURE_ROUTE53:-1}"
-CONFIGURE_CLOUDFLARE="${CONFIGURE_CLOUDFLARE:-1}"
-CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-k8s.woonyong.org}"
-ROUTE53_ZONE_NAME="${ROUTE53_ZONE_NAME:-woonyong.org.}"
-CLOUDFLARE_ZONE_NAME="${CLOUDFLARE_ZONE_NAME:-woonyong.org}"
+CONFIGURE_ROUTE53="${CONFIGURE_ROUTE53:-0}"
+CONFIGURE_CLOUDFLARE="${CONFIGURE_CLOUDFLARE:-0}"
+CUSTOM_DOMAIN="${CUSTOM_DOMAIN:-}"
+ROUTE53_ZONE_NAME="${ROUTE53_ZONE_NAME:-}"
+CLOUDFLARE_ZONE_NAME="${CLOUDFLARE_ZONE_NAME:-}"
 CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
@@ -90,7 +92,7 @@ EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-15}"
 PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://prometheus.target.svc:9090}"
 LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 
-RUNTIME_DIR="$(mktemp -d)"
+RUNTIME_DIR="$(mktemp -d "${ROOT_DIR}/.aws-up.XXXXXX")"
 PORT_FORWARD_PID=""
 GENERATED_AUTH_PASSWORD="0"
 
@@ -111,6 +113,16 @@ need() {
 
 log() {
   printf '==> %s\n' "$1"
+}
+
+require_domain_config() {
+  local provider="$1"
+  local domain="$2"
+  local zone="$3"
+  if [[ -z "${domain}" || -z "${zone}" ]]; then
+    echo "${provider} DNS requires CUSTOM_DOMAIN and zone name env values" >&2
+    exit 1
+  fi
 }
 
 need aws
@@ -186,7 +198,7 @@ metadata:
   region: ${AWS_REGION}
   tags:
     DisplayName: "${display_name}"
-    Project: "kubernetes-ops"
+    Project: "${PROJECT_SLUG}"
     Role: "${role}"
 iam:
   withOIDC: true
@@ -201,7 +213,7 @@ managedNodeGroups:
       role: "${role}"
     tags:
       DisplayName: "${display_name}"
-      Project: "kubernetes-ops"
+      Project: "${PROJECT_SLUG}"
       Role: "${role}"
 YAML
 }
@@ -219,7 +231,7 @@ tag_cluster() {
   aws eks tag-resource \
     --region "${AWS_REGION}" \
     --resource-arn "${arn}" \
-    --tags "DisplayName=${display_name},Project=kubernetes-ops,Role=${role}" >/dev/null
+    --tags "DisplayName=${display_name},Project=${PROJECT_SLUG},Role=${role}" >/dev/null
 }
 
 tag_node_instances() {
@@ -246,7 +258,7 @@ tag_node_instances() {
     --resources ${instance_ids} \
     --tags \
       "Key=Name,Value=${display_name}" \
-      "Key=Project,Value=kubernetes-ops" \
+      "Key=Project,Value=${PROJECT_SLUG}" \
       "Key=Role,Value=${role}" >/dev/null
 }
 
@@ -310,7 +322,7 @@ ensure_ecr_image() {
   fi
 
   log "building Docker image: ${IMAGE_NAME}"
-  docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
+  docker build --platform "${DOCKER_PLATFORM}" -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
 
   log "pushing Docker image: ${IMAGE_NAME}"
   docker push "${IMAGE_NAME}"
@@ -530,7 +542,7 @@ apply_management_plane() {
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ${ROOT_DIR}/deploy/management
+  - ../../deploy/management
 images:
   - name: service
     newName: ${image_repo}
@@ -573,6 +585,7 @@ gateway_load_balancer_host() {
 
 configure_route53_record() {
   local lb_host="$1"
+  require_domain_config "Route53" "${CUSTOM_DOMAIN}" "${ROUTE53_ZONE_NAME}"
   local record_name="${CUSTOM_DOMAIN%.}."
   local zone_name="${ROUTE53_ZONE_NAME%.}."
   local zone_id
@@ -658,6 +671,8 @@ configure_cloudflare_record() {
   local record_id
   local body_file="${RUNTIME_DIR}/cloudflare-record.json"
 
+  require_domain_config "Cloudflare" "${CUSTOM_DOMAIN}" "${CLOUDFLARE_ZONE_NAME}"
+
   if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
     log "Cloudflare API token is not set; skipping ${CUSTOM_DOMAIN}"
     return 0
@@ -702,7 +717,7 @@ PY
   "content": "${lb_host}",
   "ttl": 60,
   "proxied": false,
-  "comment": "kubernetes-ops api-gateway"
+  "comment": "${PROJECT_SLUG} api-gateway"
 }
 JSON
 
@@ -746,6 +761,7 @@ bootstrap_admin() {
   BOOTSTRAP_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:15432/${POSTGRES_DB}" \
   AUTH_EMAIL="${AUTH_EMAIL}" \
   AUTH_PASSWORD="${AUTH_PASSWORD}" \
+  PROJECT_SLUG="${PROJECT_SLUG}" \
   uv run python - <<'PY'
 from __future__ import annotations
 
@@ -781,7 +797,8 @@ def hash_password(password: str) -> str:
 
 email = os.environ["AUTH_EMAIL"].strip().lower()
 password_hash = hash_password(os.environ["AUTH_PASSWORD"])
-user_id = "user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"kubernetes-ops:{email}"))
+project_slug = os.environ["PROJECT_SLUG"]
+user_id = "user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{email}"))
 
 with psycopg.connect(os.environ["BOOTSTRAP_DATABASE_URL"]) as conn:
     with conn.cursor() as cur:
