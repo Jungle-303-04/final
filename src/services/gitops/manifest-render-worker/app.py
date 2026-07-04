@@ -125,10 +125,10 @@ def github_token() -> str:
     token_ref = env(GITHUB_TOKEN_REF_ENV, "").strip()
     if token_ref:
         return build_token_vault().read_token(SecretRef(token_ref))
-    token = env(GITHUB_TOKEN_ENV, "").strip()
-    if token:
+    try:
         return build_token_vault("env").read_token(SecretRef(GITHUB_TOKEN_ENV))
-    return ""
+    except SecretNotFound:
+        return ""
 
 
 def github_auth_header() -> str | None:
