@@ -101,6 +101,8 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
             "namespace": "sandbox",
             "reason": "rollout",
             "diff": command_diff(),
+            "approval_ref": "approval-1",
+            "policy_decision_ref": "policy-decision-1",
         }
     )
     outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
@@ -115,6 +117,8 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
     assert plan["cluster_id"] == "target-cluster-01"
     assert plan["command_id"] == outs[0].plan.command_id
     assert plan["diff"]["resource"] == "deployment/checkout-api"
+    assert plan["approval_ref"] == "approval-1"
+    assert plan["policy_decision_ref"] == "policy-decision-1"
     assert plan["idempotency_key"]
     assert status == "queued"
 
@@ -148,6 +152,8 @@ def test_command_id_is_deterministic_for_same_input() -> None:
             "namespace": "sandbox",
             "reason": "rollout",
             "diff": command_diff(),
+            "approval_ref": "approval-1",
+            "policy_decision_ref": "policy-decision-1",
         }
     )
 

@@ -103,7 +103,13 @@ def test_command_request_requires_cluster_deploy_access() -> None:
         db = SpyAccessDb(allowed=True)
         events = SpyEvents()
         response = await commands(
-            CommandRequest(cluster_id="cluster-1", action="apply_manifest", diff=manual_diff()),
+            CommandRequest(
+                cluster_id="cluster-1",
+                action="apply_manifest",
+                diff=manual_diff(),
+                approval_ref="approval-1",
+                policy_decision_ref="policy-decision-1",
+            ),
             current_session(),
             db,
             events,
@@ -115,6 +121,8 @@ def test_command_request_requires_cluster_deploy_access() -> None:
         assert events.body.workspace_id == "workspace-1"
         assert events.body.diff.cluster_id == "cluster-1"
         assert events.body.diff.resource == "deployment/checkout-api"
+        assert events.body.approval_ref == "approval-1"
+        assert events.body.policy_decision_ref == "policy-decision-1"
 
     asyncio.run(run())
 
