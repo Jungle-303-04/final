@@ -5,6 +5,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import TracebackType
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
@@ -25,14 +26,41 @@ class CommandResultRecord:
 class CommandResultOutbox:
     def __init__(self, db_path: str) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(db_path, timeout=5.0)
+        self.conn: sqlite3.Connection | None = sqlite3.connect(db_path, timeout=5.0)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("pragma journal_mode = wal")
         self.conn.execute("pragma busy_timeout = 5000")
         self.init_schema()
 
+    def __enter__(self) -> CommandResultOutbox:
+        return self
+
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return
+        conn.close()
+        self.conn = None
+
+    def connection(self) -> sqlite3.Connection:
+        if self.conn is None:
+            raise RuntimeError("CommandResultOutbox is closed")
+        return self.conn
+
     def init_schema(self) -> None:
-        self.conn.executescript(
+        conn = self.connection()
+        conn.executescript(
             """
             create table if not exists command_results (
                 command_id text primary key,
@@ -51,18 +79,17 @@ class CommandResultOutbox:
                 on command_results(status, created_at);
             """
         )
-        self.conn.commit()
+        conn.commit()
         self.ensure_columns()
 
     def ensure_columns(self) -> None:
-        columns = {
-            str(row["name"]) for row in self.conn.execute("pragma table_info(command_results)")
-        }
+        conn = self.connection()
+        columns = {str(row["name"]) for row in conn.execute("pragma table_info(command_results)")}
         if "status" not in columns:
-            self.conn.execute(
+            conn.execute(
                 "alter table command_results add column status text not null default 'pending'"
             )
-        self.conn.commit()
+        conn.commit()
 
     def enqueue_result(
         self,
@@ -75,8 +102,9 @@ class CommandResultOutbox:
         now: float | None = None,
     ) -> None:
         timestamp = time.time() if now is None else now
-        with self.conn:
-            self.conn.execute(
+        conn = self.connection()
+        with conn:
+            conn.execute(
                 """
                 insert into command_results (
                     command_id,
@@ -112,16 +140,20 @@ class CommandResultOutbox:
             )
 
     def next_result(self) -> CommandResultRecord | None:
-        row = self.conn.execute(
-            """
+        row = (
+            self.connection()
+            .execute(
+                """
             select command_id, workspace_id, lease_id, agent_id, result_json, attempt_count
             from command_results
             where status = ?
             order by created_at
             limit 1
             """,
-            (COMMAND_RESULT_STATUS_PENDING,),
-        ).fetchone()
+                (COMMAND_RESULT_STATUS_PENDING,),
+            )
+            .fetchone()
+        )
         if row is None:
             return None
         result = json.loads(row["result_json"])
@@ -137,8 +169,9 @@ class CommandResultOutbox:
         )
 
     def mark_sent(self, command_id: str) -> None:
-        with self.conn:
-            self.conn.execute("delete from command_results where command_id = ?", (command_id,))
+        conn = self.connection()
+        with conn:
+            conn.execute("delete from command_results where command_id = ?", (command_id,))
 
     def record_failure(
         self,
@@ -148,8 +181,9 @@ class CommandResultOutbox:
         now: float | None = None,
     ) -> bool:
         timestamp = time.time() if now is None else now
-        with self.conn:
-            self.conn.execute(
+        conn = self.connection()
+        with conn:
+            conn.execute(
                 """
                 update command_results
                 set attempt_count = attempt_count + 1,
@@ -159,7 +193,7 @@ class CommandResultOutbox:
                 """,
                 (error, timestamp, command_id, COMMAND_RESULT_STATUS_PENDING),
             )
-            row = self.conn.execute(
+            row = conn.execute(
                 """
                 select attempt_count
                 from command_results
@@ -169,7 +203,7 @@ class CommandResultOutbox:
             ).fetchone()
             attempt_count = 0 if row is None else int(row["attempt_count"])
             if attempt_count >= max(1, max_attempts):
-                self.conn.execute(
+                conn.execute(
                     """
                     update command_results
                     set status = ?, updated_at = ?
@@ -181,15 +215,23 @@ class CommandResultOutbox:
         return False
 
     def pending_count(self) -> int:
-        row = self.conn.execute(
-            "select count(*) as count from command_results where status = ?",
-            (COMMAND_RESULT_STATUS_PENDING,),
-        ).fetchone()
+        row = (
+            self.connection()
+            .execute(
+                "select count(*) as count from command_results where status = ?",
+                (COMMAND_RESULT_STATUS_PENDING,),
+            )
+            .fetchone()
+        )
         return 0 if row is None else int(row["count"])
 
     def abandoned_count(self) -> int:
-        row = self.conn.execute(
-            "select count(*) as count from command_results where status = ?",
-            (COMMAND_RESULT_STATUS_ABANDONED,),
-        ).fetchone()
+        row = (
+            self.connection()
+            .execute(
+                "select count(*) as count from command_results where status = ?",
+                (COMMAND_RESULT_STATUS_ABANDONED,),
+            )
+            .fetchone()
+        )
         return 0 if row is None else int(row["count"])
