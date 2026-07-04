@@ -117,3 +117,14 @@ class AiConversationAcceptedResponse(StrictModel):
 class AiConversationResponse(StrictModel):
     conversation: JsonMap
     messages: list[JsonMap]
+
+
+class ProviderCatalogResponse(StrictModel):
+    providers: dict[str, list[JsonMap]]
+
+
+class ProviderValidationResponse(StrictModel):
+    valid: bool
+    errors: list[str]
+    warnings: list[str]
+    selected: dict[str, JsonMap]
