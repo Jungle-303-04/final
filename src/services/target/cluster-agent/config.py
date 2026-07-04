@@ -103,3 +103,18 @@ QUERY_RUN_ACTION = "telemetry.query.run"
 KUBERNETES_DEPLOYMENT_PATCH_ACTION = "k8s.apps.v1.deployments.patch"
 KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"
 KUBERNETES_CONFIGMAP_PATCH_ACTION = "k8s.core.v1.configmaps.patch"
+
+# realtime live summary — management realtime-gateway 로 bounded 요약을 outbound push.
+# node-collector/Prometheus scrape 경로와 무관한 별도 스트림(끄면 기존 동작과 동일).
+LIVE_SUMMARY_ENABLED_ENV = "LIVE_SUMMARY_ENABLED"
+DEFAULT_LIVE_SUMMARY_ENABLED = "true"
+LIVE_SUMMARY_INTERVAL_SECONDS_ENV = "LIVE_SUMMARY_INTERVAL_SECONDS"  # 0.25~60 clamp(기본 1.0)
+DEFAULT_LIVE_SUMMARY_INTERVAL_SECONDS = "1.0"
+MIN_LIVE_SUMMARY_INTERVAL_SECONDS = 0.25
+MAX_LIVE_SUMMARY_INTERVAL_SECONDS = 60.0
+LIVE_SUMMARY_RETRY_DELAY_SECONDS_ENV = "LIVE_SUMMARY_RETRY_DELAY_SECONDS"  # 재접속 백오프(기본 3)
+LIVE_SUMMARY_RETRY_DELAY_SECONDS = float(env(LIVE_SUMMARY_RETRY_DELAY_SECONDS_ENV, "3"))
+REALTIME_GATEWAY_URL_ENV = "REALTIME_GATEWAY_URL"  # 미설정 시 MANAGEMENT_BASE_URL 에서 유도
+DEFAULT_REALTIME_GATEWAY_NODEPORT = 30090  # deploy/management/services.yaml 의 NodePort 와 정렬
+LIVE_SUMMARY_POD_LIST_LIMIT = 200  # 네임스페이스당 pod 조회 상한(무제한 목록 금지)
+LIVE_SUMMARY_NAMESPACES = ("target", "sandbox")
