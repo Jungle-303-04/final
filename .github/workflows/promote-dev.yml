@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -64,3 +65,8 @@ jobs:
           git checkout -B main origin/main
           git merge --no-ff origin/dev -m "ci: dev 자동 승격 / main 병합 / 배포 준비"
           git push origin HEAD:main
+
+      - name: Dispatch AWS deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run aws-cd.yml --ref main
