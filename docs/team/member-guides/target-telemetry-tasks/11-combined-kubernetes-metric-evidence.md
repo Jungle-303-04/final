@@ -53,7 +53,7 @@ Kubernetes pod/event evidence와 Prometheus metric evidence를 같은 cluster/na
 ## 검증
 
 ```bash
-uv run pytest tests/test_target_pod_evidence.py tests/test_target_metric_evidence.py tests/test_agent_evidence_ingest.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py tests/test_target_metric_evidence.py tests/test_agent_evidence_ingest.py -q
 uv run ruff check src tests
 ```
 

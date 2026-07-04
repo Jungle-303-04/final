@@ -58,7 +58,7 @@ src/services/target/cluster-agent
   Target Cluster Agent
   telemetry adapter
   command receiver
-  app.py: agent 연결, fake telemetry, polling 간격
+  app.py: agent 연결, policy sync, evidence job scheduler, provider adapter, command polling
 
 src/services/target/node-collector
   선택형 DaemonSet collector
@@ -126,9 +126,10 @@ alert-worker        -> python src/services/alert/alert-worker/app.py
 mail-worker         -> python src/services/mail/mail-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
 optional-node-collector       -> python src/services/target/node-collector/app.py
-fake-prometheus               -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=prometheus)
-fake-loki                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=loki)
-fake-otel                     -> python src/services/target/cluster-agent/fake_telemetry.py (FAKE_TELEMETRY_KIND=otel)
+target-prometheus             -> deploy/target/prometheus.yaml
+target-loki                   -> deploy/target/loki.yaml
+target-otel-collector         -> deploy/target/opentelemetry.yaml
+target-tempo                  -> deploy/target/tempo.yaml
 ```
 
 ## 추가 분리 순서

@@ -31,8 +31,9 @@ def telemetry_module():
 def test_builtin_sources_registered_by_decorator(telemetry_module) -> None:
     telemetry = telemetry_module.telemetry
 
-    assert telemetry.source_names() == ("loki", "prometheus", "tempo")
+    assert telemetry.source_names() == ("kubernetes", "loki", "prometheus", "tempo")
     assert telemetry.evidence_keys() == {
+        "kubernetes": "kubernetes",
         "prometheus": "metrics",
         "loki": "logs",
         "tempo": "traces",
@@ -45,6 +46,8 @@ def test_spec_carries_query_type_and_empty_payload(telemetry_module) -> None:
     assert telemetry.spec("loki").empty_payload() == []
     assert telemetry.spec("prometheus").empty_payload() == {}
     assert telemetry.query_type_for("prometheus").__name__ == "PrometheusInstantQuery"
+    assert telemetry.range_query_type_for("prometheus").__name__ == "PrometheusRangeQuery"
+    assert telemetry.range_query_type_for("loki") is None
 
 
 def test_reverse_lookup_by_provider_key(telemetry_module) -> None:
@@ -55,7 +58,7 @@ def test_reverse_lookup_by_provider_key(telemetry_module) -> None:
 
 
 def test_unknown_source_fails_with_supported_list(telemetry_module) -> None:
-    with pytest.raises(ValueError, match="supported: loki, prometheus, tempo"):
+    with pytest.raises(ValueError, match="supported: kubernetes, loki, prometheus, tempo"):
         telemetry_module.telemetry.spec("elasticsearch")
 
 
@@ -105,6 +108,20 @@ def test_query_definition_uses_registry(telemetry_module) -> None:
             {"source": "loki", "name": "err", "query": '{app="x"} |= "error"'}
         )
         assert type(definition.to_provider_query()).__name__ == "LokiLogQuery"
+
+        range_definition = module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "prometheus",
+                "name": "restart_rate",
+                "query": "rate(kube_pod_container_status_restarts_total[5m])",
+                "range_seconds": 900,
+                "step_seconds": 30,
+            }
+        )
+        range_query = range_definition.to_provider_query()
+        assert type(range_query).__name__ == "PrometheusRangeQuery"
+        assert range_query.range_seconds == 900
+        assert range_query.step_seconds == 30
 
         with pytest.raises(ValueError, match="unsupported telemetry query source"):
             module.TelemetryQueryDefinition.from_mapping(

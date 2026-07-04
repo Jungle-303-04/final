@@ -51,14 +51,13 @@ Prometheus query 결과를 raw samples 전체가 아니라 작은 evidence summa
 ## 검증
 
 ```bash
-uv run pytest tests/test_target_metric_evidence.py
-uv run ruff check src tests
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py -q
 ```
 
 ## 완료 기준
 
 - Prometheus raw response 전체를 반환하지 않는다.
-- MetricEvidence에 source query와 window가 남는다.
+- provider result에 source query와 window가 남는다.
 - payload 크기 제한이 테스트되어 있다.
 - RCA가 읽을 수 있는 kind/summary 구조가 보인다.
 
