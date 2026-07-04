@@ -34,14 +34,13 @@ GitHub environment secret에 저장한다.
 
 ## 기본 리소스 이름
 
-공개 레포에서 바로 fork해도 개인/팀 리소스 이름이 섞이지 않도록 기본값은
-`PROJECT_SLUG`에서 파생한다. 기본 `PROJECT_SLUG`는 `kubeheal`이고, GitHub repository
-variables나 로컬 env로 덮어쓴다.
+기본값은 이번 AWS 테스트 환경에 맞춰 서울 리전과 요청한 영어 이름을 사용한다.
+GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
-- management EKS cluster: `${PROJECT_SLUG}-mgmt`
-- target EKS cluster 1: `${PROJECT_SLUG}-target-a`
-- target EKS cluster 2: `${PROJECT_SLUG}-target-b`
-- ECR repository: `${PROJECT_SLUG}-service`
+- management EKS cluster: `kubernetes-ops`
+- target EKS cluster 1: `cluster-1`
+- target EKS cluster 2: `cluster-2`
+- ECR repository: `kubernetes-ops-service`
 - dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
 
 기본 노드 스펙:
@@ -79,8 +78,12 @@ variables나 로컬 env로 덮어쓴다.
 
 권장 repository variables:
 
-- `PROJECT_SLUG`: 리소스 접두사. 예: `acme-ops`
-- `AWS_REGION`: 예: `us-east-1`, `ap-northeast-2`
+- `PROJECT_SLUG`: 리소스 접두사. 기본 `kubernetes-ops`
+- `AWS_REGION`: 기본 `ap-northeast-2`
+- `MGMT_CLUSTER`: 기본 `kubernetes-ops`
+- `TARGET_CLUSTER_1`: 기본 `cluster-1`
+- `TARGET_CLUSTER_2`: 기본 `cluster-2`
+- `ECR_REPO`: 기본 `kubernetes-ops-service`
 - `AWS_AUTO_DEPLOY`: push 배포를 켤 때만 `1`
 - `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
 
