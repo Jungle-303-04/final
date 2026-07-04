@@ -79,7 +79,7 @@ SECRETS_MANAGER_PREFIX
 IRSA_ROLE_ARN_LIST
 ```
 
-위 값이 정해지기 전에는 EKS manifest를 fake로 만들지 않는다. 대신 이 문서를 기준으로 local manifest와 차이를 추적한다.
+위 값이 정해지기 전에는 EKS manifest를 임의 값으로 만들지 않는다. 대신 이 문서를 기준으로 local manifest와 차이를 추적한다.
 
 ## 운영 전 체크리스트
 
