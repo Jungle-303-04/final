@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 
-DEFAULT_EVIDENCE_JOB_LEASE_SECONDS = 60
+# evidence job 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+DEFAULT_EVIDENCE_JOB_LEASE_SECONDS_ENV = "EVIDENCE_JOB_LEASE_SECONDS"  # 잡 리스 유지 초(기본 60)
+DEFAULT_EVIDENCE_JOB_LEASE_SECONDS = int(env(DEFAULT_EVIDENCE_JOB_LEASE_SECONDS_ENV, "60"))
 DEFAULT_EVIDENCE_SOURCE_ID = "cluster-snapshot"
-DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS = 120
+DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS_ENV = (
+    "PENDING_EVIDENCE_EVENT_TTL_SECONDS"  # pending 창 회수 TTL 초(기본 120)
+)
+DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS = int(
+    env(DEFAULT_PENDING_EVIDENCE_EVENT_TTL_SECONDS_ENV, "120")
+)
 EVIDENCE_FAILURE_POLICY_STRICT = "strict"
 EVIDENCE_JOB_STATUS_COMPLETED = "completed"
 EVIDENCE_JOB_STATUS_FAILED = "failed"
