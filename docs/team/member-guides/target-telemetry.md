@@ -46,6 +46,12 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 - fake/real Prometheus, Loki, OpenTelemetry adapter
 - ServiceAccount/RBAC manifest
 
+## 한 작업씩 따라가는 문서
+
+실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [Target / Telemetry 선형 작업 가이드](target-telemetry-tasks/README.md)를 1번부터 순서대로 따른다.
+
+각 페이지는 한 PR 또는 한 작업 단위로 끝나도록 작성되어 있으며, `완료 기준`을 만족해야 다음 페이지로 넘어간다. 첫 엔드 기준은 `node-collector /metrics -> real Prometheus scrape -> Prometheus query API -> MetricEvidence summary` 폐쇄 루프다.
+
 ## 현재 책임
 
 - Target Agent는 inbound port 없이 outbound-only 구조를 유지한다.

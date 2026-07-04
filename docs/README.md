@@ -23,6 +23,11 @@
 | `ummfieg` | RCA / Safe PR / Audit | [rca-safe-pr](team/member-guides/rca-safe-pr.md) | `projects/final/member-guides/rca-safe-pr.md` |
 | `minmings111` | Target / Agent / Telemetry | [target-telemetry](team/member-guides/target-telemetry.md) | `projects/final/member-guides/target-telemetry.md` |
 
+작업을 바로 시작할 때는 큰 역할 문서보다 아래 선형 작업 페이지를 우선 본다.
+
+- `ummfieg`: [RCA / Safe PR 선형 작업 가이드](team/member-guides/rca-safe-pr-tasks/README.md)
+- `minmings111`: [Target / Telemetry 선형 작업 가이드](team/member-guides/target-telemetry-tasks/README.md)
+
 ## 작업자 브랜치 정렬
 
 작업자 브랜치는 각 작업자가 직접 `dev`를 반영한다. 다른 사람이 대신 merge, rebase,
