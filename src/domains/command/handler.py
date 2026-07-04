@@ -69,6 +69,8 @@ POLICY = Policy.build(COMMAND_CONFIG.policy_rules)
 NAMESPACE_MISMATCH_REASON = "command namespace must match diff namespace"
 MANIFEST_NAMESPACE_MISMATCH_REASON = "manifest namespace must match command namespace"
 ACTION_NAMESPACE_REASON = "namespace not allowed for this command action"
+MISSING_APPROVAL_REF_REASON = "write command requires approval_ref"
+MISSING_POLICY_DECISION_REF_REASON = "write command requires policy_decision_ref"
 
 
 def desired_manifest_namespace(command: CommandRequestedBody) -> str | None:
@@ -96,6 +98,11 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     spec = command_action_spec(command.action)
     if spec is not None and not spec.allows_namespace(command.namespace):
         return PolicyResult.reject(ACTION_NAMESPACE_REASON)
+    if spec is not None and spec.requires_approval:
+        if not command.approval_ref:
+            return PolicyResult.reject(MISSING_APPROVAL_REF_REASON)
+        if not command.policy_decision_ref:
+            return PolicyResult.reject(MISSING_POLICY_DECISION_REF_REASON)
     return result
 
 
@@ -110,6 +117,8 @@ def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
         "cluster_id": command.cluster_id,
         "action": command.action,
         "namespace": command.namespace,
+        "approval_ref": command.approval_ref,
+        "policy_decision_ref": command.policy_decision_ref,
         "diff": command.diff.to_body(),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -147,6 +156,8 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         workflow_run_id=command.workflow_run_id,
         binding_id=command.binding_id,
         environment=command.environment,
+        approval_ref=command.approval_ref,
+        policy_decision_ref=command.policy_decision_ref,
     )
 
 
@@ -193,4 +204,6 @@ async def handle_command_requested(
         workflow_run_id=plan.workflow_run_id,
         binding_id=plan.binding_id,
         environment=plan.environment,
+        approval_ref=plan.approval_ref,
+        policy_decision_ref=plan.policy_decision_ref,
     )

@@ -101,6 +101,8 @@ def approval_command_request(
         binding_id=str(record["binding_id"]),
         environment=str(record["environment"]),
         requested_by=user_id,
+        approval_ref=str(record["approval_id"]),
+        policy_decision_ref=f"approval:{record['approval_id']}:granted",
     )
 
 

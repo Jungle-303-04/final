@@ -26,6 +26,8 @@ UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
 PR_TITLE = "Apply sandbox manifest"
 PRE_DEPLOY_ALERT_SEVERITY = "info"
 MANIFEST_PATCH_DESCRIPTION = "rendered Kubernetes manifest"
+AUTO_APPROVAL_REF_PREFIX = "auto-approval:sandbox-safe-pr"
+AUTO_POLICY_DECISION_REF_PREFIX = "policy-decision:sandbox-safe"
 
 
 def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
@@ -88,6 +90,8 @@ def build_auto_command_request_body(diff: Diff) -> CommandRequestedBody:
         workflow_run_id=diff.workflow_run_id,
         binding_id=diff.binding_id,
         environment=diff.environment,
+        approval_ref=f"{AUTO_APPROVAL_REF_PREFIX}:{diff.workflow_run_id}",
+        policy_decision_ref=f"{AUTO_POLICY_DECISION_REF_PREFIX}:{diff.workflow_run_id}",
     )
 
 

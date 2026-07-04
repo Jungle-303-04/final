@@ -115,6 +115,8 @@ def build_command_request_body(
         ),
         workspace_id=workspace_id,
         requested_by=selected_by,
+        approval_ref=str(selected.draft.params.get("approval_ref") or ""),
+        policy_decision_ref=str(selected.draft.params.get("policy_decision_ref") or ""),
         actor={
             "plan_id": plan.plan_id,
             "action_id": selected.action_id,
