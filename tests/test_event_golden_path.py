@@ -44,8 +44,31 @@ async def run_worker(module: Any, incoming: EventEnvelope, db: Any) -> list[Even
     return await handler(incoming)
 
 
-def test_api_to_outbound_gateway_golden_path(monkeypatch) -> None:
+def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SCM_PR_URL_PREFIX", "https://github.test.local/project/repo/pull")
+
+    # manifest 소스는 실제 파일에서만 읽음(합성 폴백 없음) — 골든 패스 입력을 파일로 제공함.
+    manifest_source = tmp_path / "deploy.yaml"
+    manifest_source.write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: checkout-api",
+                "  namespace: sandbox",
+                "spec:",
+                "  replicas: 2",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: checkout-api",
+                "          image: ghcr.io/project/checkout-api:new",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(manifest_source))
 
     async def run() -> None:
         db = SpyDb()
