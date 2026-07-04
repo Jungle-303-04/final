@@ -9,10 +9,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
+from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
 app = App("alert-worker")
+LOGGER = get_logger(__name__)
 
 DEFAULT_ALERT_CHANNEL = "ops"
 STUB_ALERT_MODE = "stub_alarm_adapter"
@@ -52,6 +54,28 @@ async def on_alert_requested(
     yield build_dispatched_body(evt)
     if evt.next_command is not None:
         yield evt.next_command
+
+
+@app.on(AlertDispatchedBody)
+async def on_alert_dispatched(evt: AlertDispatchedBody) -> None:
+    # TODO: 알림 결과 후속 처리(재시도/에스컬레이션) 연결
+    LOGGER.info(
+        "alert dispatched",
+        extra={
+            "context": {
+                "cluster_id": evt.cluster_id,
+                "severity": evt.severity,
+                "channel": evt.channel,
+                "mode": evt.mode,
+            }
+        },
+    )
+
+
+@app.on(AlertRejectedBody)
+async def on_alert_rejected(evt: AlertRejectedBody) -> None:
+    # TODO: 알림 결과 후속 처리(재시도/에스컬레이션) 연결
+    LOGGER.warning("alert rejected", extra={"context": {"reason": evt.reason}})
 
 
 if __name__ == "__main__":
