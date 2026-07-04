@@ -22,3 +22,9 @@ dashboard/test-results/
 .coverage
 htmlcov/
 .mypy_cache/
+
+# Local AI assistant artifacts
+.claude/
+.codex/
+CODE_REVIEW_REPORT.md
+DEV_BRANCH_STATUS.md
