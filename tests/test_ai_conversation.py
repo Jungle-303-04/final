@@ -90,24 +90,35 @@ def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
     assert store.responses and store.responses[0]["content"] == "restart is allowed"
 
 
-def test_llm_client_defaults_to_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_llm_client_defaults_to_openai_and_boots_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 기본 provider 는 openai — 자격 증명 없이도 게이트웨이 생성(부팅)은 성공하고,
+    # API 키 부재는 요청 시점 ValueError 로 실패함(합성 응답 없음).
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     client = llm.build_llm_client()
 
     assert isinstance(client, LlmGateway)
-    assert client.metadata()["provider"] == "fake"
-    assert asyncio.run(client.complete("hello")) == "fake-llm-response"
+    assert client.default_provider == "openai"
+    with pytest.raises(ValueError, match="API_KEY"):
+        asyncio.run(client.complete("hello"))
 
 
-def test_http_llm_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_http_llm_provider_requires_api_key_per_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "http")
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
+    client = llm.build_llm_client()
+
     with pytest.raises(ValueError, match="API_KEY"):
-        llm.build_llm_client()
+        asyncio.run(client.complete("hello"))
 
 
 def test_llm_gateway_selects_anthropic_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
