@@ -7,6 +7,7 @@
 - [Target / Telemetry 멤버 가이드](../target-telemetry.md)
 - [Target / Telemetry 구현 Phase 계획](../target-telemetry-implementation-plan.md)
 - [Prometheus 실전 Runbook](../target-telemetry-prometheus-runbook.md)
+- [팀 간 구현 연결과 테스트 가이드](../../cross-role-implementation-test-guide.md)
 
 ## 사용 방법
 
@@ -33,6 +34,7 @@ node-collector /metrics
 
 | 순서 | 파일 | 끝 상태 |
 | --- | --- | --- |
+| 0 | [현재 코드 지도와 테스트 기준](00-current-code-map.md) | 실제 route/client/test 위치를 확인함 |
 | 1 | [Fake/Real Telemetry 경계](01-fake-real-telemetry-boundary.md) | fake Prometheus와 real Prometheus 차이가 문서화됨 |
 | 2 | [Observability 설치 경계](02-observability-stack-boundary.md) | 플랫폼 관측 설치물과 user workload diff가 분리됨 |
 | 3 | [Prometheus Helm Values](03-prometheus-helm-values.md) | secret 없는 Helm values 초안이 생김 |

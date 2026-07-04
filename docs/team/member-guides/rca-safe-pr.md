@@ -36,9 +36,11 @@ Audit Timeline Service
 
 ## 한 작업씩 따라가는 문서
 
-실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [RCA / Safe PR 선형 작업 가이드](rca-safe-pr-tasks/README.md)를 1번부터 순서대로 따른다.
+실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [RCA / Safe PR 선형 작업 가이드](rca-safe-pr-tasks/README.md)를 0번부터 순서대로 따른다.
 
 각 페이지는 한 PR 또는 한 작업 단위로 끝나도록 작성되어 있으며, `완료 기준`을 만족해야 다음 페이지로 넘어간다.
+
+팀 간 입력/출력, event envelope, 테스트 선택 기준은 [팀 간 구현 연결과 테스트 가이드](../cross-role-implementation-test-guide.md)를 함께 따른다.
 
 ## 현재 책임
 
