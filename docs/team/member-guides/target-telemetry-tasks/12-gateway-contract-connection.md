@@ -35,7 +35,7 @@ Agent의 debug/evidence 흐름을 Management Gateway의 실제 HTTP 계약에 �
 5. command result request body에는 현재 `correlation_id` 필드가 없다. correlation은 Gateway가 command queue와 event envelope 기준으로 유지한다.
 6. Agent는 DB/NATS를 직접 import하지 않는다.
 7. credential, kubeconfig, bearer token을 response/event/log에 남기지 않는다.
-8. fake Gateway client로 evidence 전송, command start, heartbeat, result 보고를 테스트한다.
+8. 주입 가능한 Gateway client로 evidence 전송, command start, heartbeat, result 보고를 테스트한다.
 
 ## 확인할 코드 냄새
 
@@ -48,7 +48,7 @@ src/services/target/cluster-agent 안에 DB session 직접 사용이 있으면 �
 
 ```bash
 rg -n "nats|JetStream|Session|sessionmaker" src/services/target/cluster-agent
-uv run pytest tests/test_target_agent_client.py tests/test_agent_evidence_ingest.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_client.py tests/test_agent_evidence_ingest.py -q
 uv run ruff check src tests
 ```
 

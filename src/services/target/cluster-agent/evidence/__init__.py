@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from providers import (
+    KubernetesSnapshotProvider,
     LokiLogsProvider,
     PrometheusMetricsProvider,
     TelemetryProvider,
@@ -14,6 +15,7 @@ from evidence.jobs import EvidenceJobScheduler
 __all__ = [
     "EvidenceCollector",
     "EvidenceJobScheduler",
+    "KubernetesSnapshotProvider",
     "LokiLogsProvider",
     "PrometheusMetricsProvider",
     "TelemetryProvider",

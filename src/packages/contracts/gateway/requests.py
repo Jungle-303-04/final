@@ -174,6 +174,12 @@ class CommandRequest(StrictModel):
     policy_decision_ref: str | None = None
 
 
+class AgentDebugQueryRequest(StrictModel):
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    query: dict[str, Any]
+    reason: str | None = None
+
+
 class AiConversationCreateRequest(StrictModel):
     message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
     title: str | None = Field(default=None, max_length=120)

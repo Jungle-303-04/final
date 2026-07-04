@@ -66,6 +66,12 @@ class CommandHeartbeatResponse(StrictModel):
     correlation_id: str
 
 
+class AgentDebugQueryResponse(StrictModel):
+    accepted: bool
+    command_id: str
+    correlation_id: str
+
+
 class EvidenceJobScheduleResponse(StrictModel):
     accepted: bool
     evidence_key: str

@@ -32,11 +32,13 @@ Audit Timeline Service
 - AI RCA Service logic
 - Safe PR request/proposal logic
 - RCA/audit 관련 worker test
-- GitHub PR adapter 또는 fake adapter. 실제 PR 발급은 repo-gateway 중심으로 둔다.
+- GitHub PR adapter 경계. 실제 PR 발급은 `scm-worker` 중심으로 두고, 테스트는 주입 가능한 transport/provider로 격리한다.
 
 ## 한 작업씩 따라가는 문서
 
 실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [RCA / Safe PR 선형 작업 가이드](rca-safe-pr-tasks/README.md)를 0번부터 순서대로 따른다.
+
+처음 합류한 팀원은 먼저 [역할별 실습 가이드](../role-practice-guide.md)의 가인 섹션에서 현재 흐름과 테스트를 한 번 따라간 뒤, 이 문서와 선형 작업 가이드로 들어간다.
 
 각 페이지는 한 PR 또는 한 작업 단위로 끝나도록 작성되어 있으며, `완료 기준`을 만족해야 다음 페이지로 넘어간다.
 
@@ -45,7 +47,7 @@ Audit Timeline Service
 ## 현재 책임
 
 - RCA Worker는 직접 PR을 생성하지 않고 `safe_pr.requested`를 만든다.
-- repo-gateway가 `safe_pr.requested`를 받아 GitHub branch/commit/PR client 또는 fake adapter로 처리한다.
+- `scm-worker`가 `safe_pr.requested`를 받아 GitHub branch/commit/PR client로 처리하고, 자격 증명/설정 누락은 `safe_pr.failed`로 남긴다.
 - RCA 결과는 evidence 기반으로만 생성한다.
 - Safe PR side effect는 token/ref 확인과 feature flag로 보호한다.
 - audit timeline이 command, RCA, PR 상태를 추적하게 한다.
@@ -84,10 +86,10 @@ Audit Timeline Service
 | --- | --- | --- |
 | 1 | Evidence 입력 계약 정리 | RCA가 무엇을 받아야 하는지 고정한다. |
 | 2 | Evidence Builder | raw evidence를 분석 가능한 구조로 정리한다. |
-| 3 | RCA Result DTO와 fake analyzer | AI 없이도 downstream을 개발할 수 있다. |
+| 3 | RCA Result DTO와 rule-first analyzer | AI fallback 없이도 downstream을 개발할 수 있다. |
 | 4 | RCA completed event | dashboard/audit이 원인 분석 결과를 볼 수 있다. |
 | 5 | Safe PR proposal DTO | 실제 GitHub write 전에 제안 형태를 고정한다. |
-| 6 | GitHub PR adapter fake -> guarded real | 외부 write를 안전하게 분리한다. |
+| 6 | guarded GitHub PR adapter | 외부 write를 안전하게 분리한다. |
 | 7 | Audit Timeline projection | 전체 흐름 추적을 보장한다. |
 | 8 | RCA/Safe PR chain test | evidence에서 PR 제안까지 연결 검증한다. |
 | 9 | AI fallback 연결 | rule 미매칭 incident를 실제 LLM/tool pipeline 또는 명시적 action-required로 보낸다. |
@@ -119,7 +121,7 @@ RCA Worker가 어떤 evidence를 입력으로 받는지 명확히 한다.
 
 - Target/Telemetry 담당자가 어떤 필드를 보내야 하는지 알아야 한다.
 - RCA가 입력을 추측하면 분석 품질이 흔들린다.
-- evidence 계약이 안정되어야 fake evidence로 병렬 작업이 가능하다.
+- evidence 계약이 안정되어야 fixture evidence로 병렬 작업이 가능하다.
 
 구현할 것:
 
@@ -183,7 +185,7 @@ raw evidence를 RCA가 읽기 쉬운 Evidence 모델로 정리한다.
 - metric spike evidence -> normalized evidence.
 - unknown evidence kind 처리.
 
-## Phase 3. RCA Result DTO와 fake analyzer
+## Phase 3. RCA Result DTO와 rule-first analyzer
 
 목표:
 
@@ -199,10 +201,9 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 
 구현할 것:
 
-- `RcaAnalyzer` Protocol.
-- `FakeRcaAnalyzer`.
-- `RcaResult` DTO.
-- fields: summary, root_cause, confidence, evidence_refs, recommended_fix.
+- `src/services/ai/agent/causes/*.py` rule.
+- `CauseCandidate`, `CauseEvaluation`, `RcaCompletedBody` DTO.
+- fields: root_cause, action, confidence, evidence_ref, supporting_evidence, missing_evidence.
 
 생각할 것:
 
@@ -217,7 +218,7 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 
 테스트:
 
-- fake analyzer가 deterministic result를 만든다.
+- 같은 fixture evidence는 deterministic result를 만든다.
 - evidence_refs가 비어 있으면 실패 또는 낮은 confidence.
 
 ## Phase 4. RCA completed event
@@ -297,28 +298,27 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 - no recommended_fix -> no proposal.
 - file change shape 검증.
 
-## Phase 6. GitHub PR adapter fake -> guarded real
+## Phase 6. Guarded GitHub PR adapter
 
 목표:
 
 ```text
-Fake GitHub adapter를 먼저 두고, 실제 PR 생성은 feature flag와 Token Broker 뒤에 둔다.
+SCM provider 경계를 두고, 실제 PR 생성은 GithubScmProvider와 token vault 경계 뒤에 둔다.
 ```
 
 왜 해야 하는가:
 
 - 외부 write는 프로젝트에서 가장 위험한 side effect 중 하나다.
-- adapter를 분리해야 테스트에서 GitHub를 호출하지 않는다.
-- token은 event가 아니라 Token Broker/credential ref로 받아야 한다.
+- provider를 분리해야 테스트에서 GitHub를 호출하지 않는다.
+- token은 event가 아니라 `GITHUB_TOKEN_REF`/vault 또는 로컬 env 경계로 받아야 한다.
 
 구현할 것:
 
-- `PullRequestClient` Protocol.
-- `FakePullRequestClient`.
-- real client skeleton.
-- feature flag: `SAFE_PR_WRITE_ENABLED`.
-- `TokenBroker.issue(..., action=create_pr)`.
-- PR URL, branch, commit SHA만 event에 남김.
+- `ScmProvider` Protocol.
+- `GithubScmProvider`.
+- `SCM_PROVIDER`, `SCM_REPO`, `GITHUB_TOKEN_REF`/`GITHUB_TOKEN` 설정.
+- 자격 증명 누락 시 worker 부팅 실패가 아니라 `safe_pr.failed`.
+- PR URL과 provider mode만 result event에 남김.
 
 생각할 것:
 
@@ -333,9 +333,9 @@ Fake GitHub adapter를 먼저 두고, 실제 PR 생성은 feature flag와 Token 
 
 테스트:
 
-- feature flag off -> proposal only 또는 write skipped.
-- feature flag on + fake token -> fake PR 생성.
-- 권한 실패 시 vault/token read 없음.
+- provider mismatch -> `safe_pr.failed`.
+- missing `SCM_REPO` 또는 token -> `safe_pr.failed`.
+- injected HTTP transport -> 실제 GitHub 호출 없이 `safe_pr.created`.
 
 ## Phase 7. Audit Timeline projection
 
@@ -380,7 +380,7 @@ event 흐름을 audit_log로 기록해서 나중에 추적 가능하게 한다.
 목표:
 
 ```text
-evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
+evidence input에서 RCA 결과와 Safe PR 요청/결과 이벤트까지 테스트 provider로 연결한다.
 ```
 
 왜 해야 하는가:
@@ -395,7 +395,7 @@ evidence input에서 RCA 결과와 PR 제안까지 fake adapter로 연결한다.
 - `evidence.built`.
 - `rca.completed`.
 - `safe_pr.requested`.
-- repo-gateway fake adapter의 `safe_pr.created`.
+- `scm-worker` 테스트 provider/transport의 `safe_pr.created` 또는 `safe_pr.failed`.
 - audit log append.
 
 ## PR 체크리스트

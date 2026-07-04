@@ -39,7 +39,7 @@ node_collector_filesystem_usage_ratio
 ## 검증
 
 ```bash
-uv run pytest tests/test_node_collector.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_collector.py -q
 bash scripts/telemetry/prometheus-template.sh >/tmp/prometheus.yaml
 rg "node-collector|optional-node-collector|prometheus.io/scrape" /tmp/prometheus.yaml deploy/target
 ```
