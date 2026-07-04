@@ -31,7 +31,7 @@ shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규�
 | Safe PR 내용 | GitHub PR 경계와 rendered manifest patch 커밋 경로는 있다. rollback patch, diff basis, approval evidence는 아직 약하다. | PR diff에 실제 manifest patch 또는 rollback patch가 포함되고, PR body가 diff basis와 approval evidence를 연결한다. |
 | Agent 실행 | command-worker와 agent가 write command의 approval_ref/policy_decision_ref 누락을 거부한다. ref 만료, 권한, workspace/repo/cluster 정책 연결은 아직 약하다. | command와 agent가 같은 action catalog, approval_ref, policy_decision_ref를 검증한다. |
 | Credential | credential/token broker가 placeholder다. | TokenVault/SecretVault port, token rotation, missing scope, non-leak 테스트가 있다. |
-| 부분 실패 | stdout/stderr/status와 per-resource partial failure 보고가 약하다. | sanitized stdout/stderr, retryable flag, applied flag, resource별 result가 command result에 남는다. |
+| 부분 실패 | agent command result에 sanitized stdout/stderr, retryable flag, applied flag, resource별 result가 남는다. 더 깊은 단계별 partial apply와 retry 분류는 아직 약하다. | sanitized stdout/stderr, retryable flag, applied flag, resource별 result가 command result에 남는다. |
 
 ## P0 — 워커 liveness probe (exec 하트비트)
 

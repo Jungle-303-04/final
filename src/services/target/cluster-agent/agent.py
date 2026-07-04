@@ -89,6 +89,15 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 
 LOGGER = get_logger(__name__)
+COMMAND_OUTPUT_LIMIT = 2000
+SENSITIVE_OUTPUT_MARKERS = (
+    "authorization",
+    "bearer ",
+    "kubeconfig",
+    "password",
+    "secret",
+    "token",
+)
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -740,7 +749,6 @@ class TargetClusterAgent:
             )
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
-        # TODO(target): stdout/stderr/status 수집과 원본 secret 없는 부분 실패 보고
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
         if self.write_action_requires_approval(action) and not self.has_approval_evidence(command):
@@ -902,32 +910,46 @@ class TargetClusterAgent:
                 desired_manifest,
                 namespace,
             )
-            return self.command_result(applied, message)
+            return self.command_result(applied, message, resource=str(diff.get("resource", "")))
 
         deployment = deployment_name_from_resource(str(diff.get("resource", "")))
         image = str(diff.get("desired_image", ""))
         if not deployment or not image:
             return self.command_result(
-                False, "apply_manifest requires deployment resource and image"
+                False,
+                "apply_manifest requires deployment resource and image",
+                resource=str(diff.get("resource", "")),
             )
         if namespace != Sandbox.NAMESPACE:
-            return self.command_result(False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)
+            return self.command_result(
+                False,
+                AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE,
+                resource=str(diff.get("resource", "")),
+            )
         patch = build_apply_manifest_patch(deployment, image)
         applied, message = await self.patch_deployment(namespace, deployment, patch)
-        return self.command_result(applied, message)
+        return self.command_result(applied, message, resource=str(diff.get("resource", "")))
 
     @command.handler(AgentConfig.ROLLOUT_RESTART_ACTION)
     async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
         if namespace != Sandbox.NAMESPACE:
-            return self.command_result(False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)
+            return self.command_result(
+                False,
+                AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE,
+                resource=str(diff.get("resource", "")),
+            )
         deployment = deployment_name_from_resource(str(diff.get("resource", "")))
         if not deployment:
-            return self.command_result(False, "rollout_restart requires deployment resource")
+            return self.command_result(
+                False,
+                "rollout_restart requires deployment resource",
+                resource=str(diff.get("resource", "")),
+            )
         patch = build_rollout_restart_patch()
         applied, message = await self.patch_deployment(namespace, deployment, patch)
-        return self.command_result(applied, message)
+        return self.command_result(applied, message, resource=str(diff.get("resource", "")))
 
     async def apply_kubernetes_manifest(
         self, manifest: JsonObject, fallback_namespace: str
@@ -969,16 +991,38 @@ class TargetClusterAgent:
                 return False, kubernetes_failure_message("patch", patched)
         return True, AgentConfig.MANIFEST_PATCHED_MESSAGE
 
-    def command_result(self, applied: bool, message: str) -> JsonObject:
+    def command_result(
+        self,
+        applied: bool,
+        message: str,
+        *,
+        resource: str = "",
+        retryable: bool = False,
+        stdout: str = "",
+        stderr: str = "",
+    ) -> JsonObject:
+        status = (
+            AgentConfig.COMMAND_COMPLETED_STATUS if applied else AgentConfig.COMMAND_FAILED_STATUS
+        )
+        resource_status = []
+        if resource:
+            resource_status.append(
+                {
+                    "resource": resource,
+                    "status": status,
+                    "applied": applied,
+                    "message": message,
+                }
+            )
         return {
-            Gateway.STATUS: (
-                AgentConfig.COMMAND_COMPLETED_STATUS
-                if applied
-                else AgentConfig.COMMAND_FAILED_STATUS
-            ),
+            Gateway.STATUS: status,
             Gateway.CLUSTER_ID: self.cluster_id,
             Gateway.APPLIED: applied,
             Gateway.MESSAGE: message,
+            Gateway.RETRYABLE: retryable,
+            Gateway.RESOURCES: resource_status,
+            Gateway.STDOUT: sanitize_command_output(stdout or (message if applied else "")),
+            Gateway.STDERR: sanitize_command_output(stderr or ("" if applied else message)),
         }
 
     async def patch_deployment(
@@ -1030,6 +1074,23 @@ def kubernetes_failure_message(action: str, response: httpx.Response) -> str:
         detail = f"{detail[:197]}..."
     suffix = f": {detail}" if detail else ""
     return f"kubernetes {action} failed ({response.status_code}){suffix}"
+
+
+def sanitize_command_output(value: object) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    lines = []
+    for line in text.splitlines():
+        lowered = line.lower()
+        if any(marker in lowered for marker in SENSITIVE_OUTPUT_MARKERS):
+            lines.append("[redacted]")
+            continue
+        lines.append(line)
+    sanitized = "\n".join(lines)
+    if len(sanitized) <= COMMAND_OUTPUT_LIMIT:
+        return sanitized
+    return f"{sanitized[: COMMAND_OUTPUT_LIMIT - 3]}..."
 
 
 def kubernetes_manifest_resource(
