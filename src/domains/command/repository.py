@@ -18,7 +18,6 @@ from domains.command.models import (
 from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
-from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
 from packages.events.envelope import event
@@ -219,12 +218,8 @@ class AgentCommandRepository(DatabaseConnection):
             if not row:
                 return None
 
-            completed = event(
-                EventSubject.COMMAND_COMPLETED,
-                source,
-                CommandCompletedBody(command_id=command_id, result=result).to_body(),
-                str(row["correlation_id"]),
-            )
+            body = CommandCompletedBody(command_id=command_id, result=result)
+            completed = event(body.__subject__, source, body.to_body(), str(row["correlation_id"]))
             await conn.execute(
                 pg_insert(event_table)
                 .values(
