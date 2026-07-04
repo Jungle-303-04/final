@@ -20,7 +20,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
-from packages.config.constants import CommandStatus, Sandbox
+from packages.config.constants import CommandStatus
 from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -57,22 +57,17 @@ NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"
 ACCESS_DENIED_CODE = 403
 RESOURCE_ACCESS_DENIED = "resource access denied"
-# diff 미지정(수동 명령) 시 폴백 — 데모 placeholder. 운영에선 클라이언트가 diff 를 채운다.
-MANUAL_DIFF_RESOURCE = "deployment/checkout-api"
-MANUAL_DIFF_ACTUAL_IMAGE = "unknown"
+# 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
+UNPROCESSABLE_CODE = 422
+MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
 
 router = APIRouter()
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
-    raw = payload.diff or {
-        "resource": MANUAL_DIFF_RESOURCE,
-        "namespace": payload.namespace,
-        "desired_image": payload.action,
-        "actual_image": MANUAL_DIFF_ACTUAL_IMAGE,
-        "risk": Sandbox.RISK_TAG,
-    }
-    raw = {**raw, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
+    if not payload.diff:
+        raise HTTPException(status_code=UNPROCESSABLE_CODE, detail=MANUAL_DIFF_REQUIRED_MESSAGE)
+    raw = {**payload.diff, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
     return cast(Diff, Diff.from_body(raw))
 
 

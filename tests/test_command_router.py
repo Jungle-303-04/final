@@ -88,12 +88,22 @@ class SpyCommandLeaseDb:
         return self.correlation_id
 
 
+def manual_diff() -> dict[str, str]:
+    return {
+        "resource": "deployment/checkout-api",
+        "namespace": "sandbox",
+        "desired_image": "img:new",
+        "actual_image": "img:old",
+        "risk": "sandbox-only",
+    }
+
+
 def test_command_request_requires_cluster_deploy_access() -> None:
     async def run() -> None:
         db = SpyAccessDb(allowed=True)
         events = SpyEvents()
         response = await commands(
-            CommandRequest(cluster_id="cluster-1", action="apply_manifest"),
+            CommandRequest(cluster_id="cluster-1", action="apply_manifest", diff=manual_diff()),
             current_session(),
             db,
             events,
@@ -104,6 +114,30 @@ def test_command_request_requires_cluster_deploy_access() -> None:
         assert events.body is not None
         assert events.body.workspace_id == "workspace-1"
         assert events.body.diff.cluster_id == "cluster-1"
+        assert events.body.diff.resource == "deployment/checkout-api"
+
+    asyncio.run(run())
+
+
+def test_command_request_without_diff_is_rejected() -> None:
+    # 서버가 임의 대상(diff)을 합성하지 않음 — 수동 명령도 클라이언트가 명시해야 함
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        events = SpyEvents()
+        try:
+            await commands(
+                CommandRequest(cluster_id="cluster-1", action="apply_manifest"),
+                current_session(),
+                db,
+                events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert "diff is required" in exc.detail
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert events.body is None
 
     asyncio.run(run())
 
