@@ -32,6 +32,8 @@ AGENT_POLICY_PATH = "/agent/policy"
 AGENT_POLICY_STATUS_PATH = "/agent/policy/status"
 AGENT_RECONCILE_STATUS_PATH = "/agent/reconcile/status"
 CLUSTER_POLICY_PATH = "/clusters/{cluster_id}/policy"
+PROVIDERS_CATALOG_PATH = "/providers/catalog"
+PROVIDERS_VALIDATE_PATH = "/providers/validate"
 
 
 def agent_command_result_path(command_id: str) -> str:

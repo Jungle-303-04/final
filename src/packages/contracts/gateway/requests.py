@@ -144,6 +144,8 @@ class TargetRegisterRequest(StrictModel):
     install_node_collector: bool = True
     apply: bool = False
     kube_context: str | None = None
+    cloud_provider: str = "existing-k8s"
+    deploy_provider: str = "manual-manifest"
 
 
 class CommandRequest(StrictModel):
@@ -269,6 +271,15 @@ class AgentPolicyStatusRequest(StrictModel):
     status: Literal["applied", "failed", "unchanged"] = "applied"
     message: str = EMPTY_COMMAND_MESSAGE
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProviderSelectionRequest(StrictModel):
+    source_provider: str | None = None
+    deploy_provider: str | None = None
+    cloud_provider: str | None = None
+    secret_provider: str | None = None
+    capabilities: list[str] = Field(default_factory=list)
+    credential_refs: dict[str, str] = Field(default_factory=dict)
 
 
 class AgentReconcileStatusRequest(StrictModel):
