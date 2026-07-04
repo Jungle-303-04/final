@@ -10,6 +10,7 @@ from packages.config.constants import Nats, Runtime
 from packages.config.logs import get_logger
 from packages.config.retry import retry_dependency
 from packages.config.settings import env
+from packages.contracts.event_bus.bodies.platform import DeadLetterCreatedBody
 from packages.contracts.event_bus.interfaces import (
     EventBus,
     EventClient,
@@ -25,7 +26,6 @@ from packages.contracts.event_bus.subjects import (
     STREAM_MAX_BYTES,
     STREAM_NAME,
     STREAM_SUBJECTS,
-    EventSubject,
 )
 from packages.contracts.interfaces import DeadLetterStore
 from packages.events.envelope import event
@@ -202,20 +202,22 @@ class DeadLetterSink:
         self, evt: EventEnvelope, consumer: str, error: Exception, attempts: int
     ) -> EventEnvelope:
         dead_letter = self.store.record_dead_letter(evt, consumer, str(error), attempts)
+        body = DeadLetterCreatedBody.from_body(dead_letter)
         return await self.events.emit(
-            EventSubject.DEAD_LETTER_CREATED,
+            body.__subject__,
             self.source,
-            dead_letter,
+            body.to_body(),
             evt.correlation_id,
             evt.event_id,
         )
 
     async def capture_raw(self, raw: bytes, consumer: str, error: Exception) -> EventEnvelope:
         dead_letter = self.store.record_raw_dead_letter(raw, consumer, str(error))
+        body = DeadLetterCreatedBody.from_body(dead_letter)
         return await self.events.emit(
-            EventSubject.DEAD_LETTER_CREATED,
+            body.__subject__,
             self.source,
-            dead_letter,
+            body.to_body(),
             dead_letter["correlation_id"],
             dead_letter["original_event_id"],
         )
