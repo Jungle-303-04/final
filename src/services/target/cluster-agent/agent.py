@@ -451,6 +451,11 @@ class TargetClusterAgent:
             default_handler=self.apply_default_command,
         )
 
+    def close(self) -> None:
+        for store in (self.control_store, self.command_outbox):
+            with suppress(Exception):
+                store.close()
+
     def build_default_policy(self) -> AgentPolicy:
         providers = {
             provider_key: EvidenceProviderPolicy(
@@ -533,11 +538,14 @@ class TargetClusterAgent:
         return [definition.name for definition in definitions]
 
     async def run(self) -> None:
-        if self.client is not None:
-            await self.run_with_client(self.client)
-            return
-        async with HttpManagementPlaneClient(self.base_url) as client:
-            await self.run_with_client(client)
+        try:
+            if self.client is not None:
+                await self.run_with_client(self.client)
+                return
+            async with HttpManagementPlaneClient(self.base_url) as client:
+                await self.run_with_client(client)
+        finally:
+            self.close()
 
     async def run_with_client(self, client: ManagementPlaneClient) -> None:
         self.policy_sync.apply_stored_or_default()
