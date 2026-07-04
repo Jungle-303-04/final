@@ -21,6 +21,20 @@
 - `correlation_id`는 대부분 body 필드가 아니라 `EventEnvelope` 메타데이터다.
 - body에 새 필드를 넣는 일은 계약 변경이다. `docs/events.md`, 테스트, producer/consumer를 같이 바꾼다.
 - fake adapter는 fallback이다. 문서와 UI에서 실제 구현처럼 표현하지 않는다.
+- production write, 실제 provider write, AI tool 실행은 [하드닝 로드맵](../hardening-roadmap.md)의 P0/P1 release gate를 통과해야 한다.
+
+## 하드닝 연결 게이트
+
+아래 변경은 한 역할의 PR만으로 끝내지 않는다. 관련 역할 문서와 테스트를 같이 갱신한다.
+
+| 변경 | 같이 확인할 역할 | 필수 테스트/근거 |
+| --- | --- | --- |
+| 실제 manifest patch PR | GitOps / Command, RCA / Safe PR | PR diff에 manifest patch/rollback patch가 있고 feature flag off가 fail-closed |
+| approval_ref 기반 write command | Gateway / Auth, GitOps / Command, Target / Agent | approval 만료/누락/권한 불일치 거부 |
+| TokenVault/SecretVault 도입 | Gateway / Auth, Platform, RCA / Safe PR | provider token이 event/log/DLQ에 없는 non-leak test |
+| action allowlist 확장 | GitOps / Command, Target / Agent | namespace/action/resource/environment별 허용/거부 |
+| AI tool schema/authorization | RCA / Safe PR, Gateway / Auth, Platform | malformed reply, invalid output, unauthorized tool call, budget exceeded |
+| control-plane metrics/trace | Platform, Target / Telemetry | worker latency, NATS lag, outbox age, DLQ율, command queue age, correlation trace |
 
 ## 실제 코드 기준 계약 지도
 

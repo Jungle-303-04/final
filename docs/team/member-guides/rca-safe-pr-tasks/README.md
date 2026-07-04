@@ -40,6 +40,15 @@ cluster.evidence.received
 | 7 | [Audit Timeline Projection](07-audit-timeline-projection.md) | command/RCA/PR event가 correlation timeline에 남음 |
 | 8 | [Chain Test](08-rca-safe-pr-chain-test.md) | evidence 입력부터 fake PR/audit까지 한 줄로 검증됨 |
 
+## 하드닝 후속 작업
+
+8번 이후에는 [하드닝 로드맵](../../../hardening-roadmap.md)의 P0/P1 기준을 따른다.
+
+- Safe PR은 실제 manifest patch 또는 rollback patch를 포함해야 한다.
+- AI fallback은 실제 tool pipeline에 연결하거나 demo claim에서 제거한다.
+- AI tool은 input/output schema, authorization, cost guardrail, malformed reply 테스트를 가진다.
+- RCA는 profile별 expected label과 top-k hit rate를 기록한다.
+
 ## 공통 금지 사항
 
 - raw token, PAT, kubeconfig, provider response 전체를 event, response, log, audit에 넣지 않는다.

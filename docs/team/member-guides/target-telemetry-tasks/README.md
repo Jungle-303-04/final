@@ -49,6 +49,15 @@ node-collector /metrics
 | 12 | [Gateway 계약 연결](12-gateway-contract-connection.md) | `/agent/evidence`, command poll/result 계약에 연결됨 |
 | 13 | [Loki / OTel Ingest 경로](13-loki-otel-ingest-path.md) | Prometheus 이후 log 또는 trace 경로 하나가 검증됨 |
 
+## 하드닝 후속 작업
+
+13번 이후에는 [하드닝 로드맵](../../../hardening-roadmap.md)의 Target/Agent와 control-plane observability 기준을 따른다.
+
+- write command는 approval_ref와 policy_decision_ref 없이는 실행하지 않는다.
+- action allowlist는 workspace/repo/cluster/environment/namespace/resource class를 함께 본다.
+- command result는 resource별 status, sanitized stdout/stderr, retryable flag, applied flag를 포함한다.
+- evidence provider failure/fallback, source freshness, payload size를 metric 또는 audit metadata에 남긴다.
+
 ## 공통 금지 사항
 
 - fake Prometheus를 real Prometheus처럼 확장하지 않는다.

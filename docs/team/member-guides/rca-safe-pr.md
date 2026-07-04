@@ -90,6 +90,22 @@ Audit Timeline Service
 | 6 | GitHub PR adapter fake -> guarded real | 외부 write를 안전하게 분리한다. |
 | 7 | Audit Timeline projection | 전체 흐름 추적을 보장한다. |
 | 8 | RCA/Safe PR chain test | evidence에서 PR 제안까지 연결 검증한다. |
+| 9 | AI fallback 연결 | rule 미매칭 incident를 실제 LLM/tool pipeline 또는 명시적 action-required로 보낸다. |
+| 10 | Tool schema/authorization | JSON-only loop를 schema, 권한, 비용 한도가 있는 tool protocol로 보강한다. |
+| 11 | Manifest patch PR body | Safe PR 설명에 evidence, diff basis, rollback, 실제 patch ref를 포함한다. |
+| 12 | RCA eval set | 장애 profile별 expected label과 top-k hit rate를 기록한다. |
+
+## 하드닝 Phase 기준
+
+Phase 9 이후는 `docs/hardening-roadmap.md`의 AI/RCA와 Safe PR 항목을 따른다.
+
+완료 기준:
+
+- AI fallback worker는 단순 로그 sink가 아니라 RCA pipeline에 연결되거나, 제품 설명에서 fallback claim을 제거한다.
+- ToolSpec은 input schema, output schema, authorization requirement, cost class를 가진다.
+- malformed model reply, invalid tool output, unauthorized tool call, budget exceeded가 테스트된다.
+- RCA 결과는 evidence_ref와 supporting/missing evidence를 포함하고, insufficient evidence를 확정 원인처럼 표시하지 않는다.
+- Safe PR body는 실제 manifest patch/rollback patch와 evidence/diff basis를 연결한다.
 
 ## Phase 1. Evidence 입력 계약 정리
 

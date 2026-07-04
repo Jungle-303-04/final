@@ -121,6 +121,9 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 - command 결과 payload에는 raw secret, kubeconfig, service account token을 넣지 않는다.
 - raw telemetry를 Gateway로 그대로 보내지 말고 evidence로 축약한다.
 - 운영 단계에서는 command/result와 telemetry/evidence를 같은 loop에서 바로 처리하지 않고, bounded queue와 local durable spool로 우선순위와 재전송 경계를 둔다. 자세한 판단 기준은 [Target Agent Local Queue / Spool](target-agent-local-queue.md)을 따른다.
+- write command는 approval_ref와 policy_decision_ref가 없으면 실행하지 않는다.
+- action allowlist는 workspace, repo, cluster, environment, namespace, resource class를 함께 본다.
+- command result는 성공/실패 한 줄이 아니라 resource별 status, sanitized stdout/stderr, retryable flag, applied flag를 포함한다.
 
 ## 작업 시작 순서
 
@@ -136,6 +139,9 @@ Management Gateway API 계약은 아직 구현 중이므로 처음부터 Agent-G
 8. Node Collector `/metrics`를 구현하고 Prometheus에 scrape시킨다.
 9. Node Collector metric을 Agent query API로 다시 꺼내본다.
 10. 그 다음 Gateway API 계약이 준비되면 실제 `POST /agent/evidence` 흐름과 연결한다.
+11. command 실행 전 approval evidence와 action allowlist를 검증한다.
+12. 부분 성공/부분 실패 result schema를 Gateway command result 계약과 맞춘다.
+13. provider failure/fallback, evidence freshness, payload size를 control-plane metric/audit metadata로 남긴다.
 
 상세 Phase는 [구현 Phase 계획](target-telemetry-implementation-plan.md)을 따른다.
 실제 구현은 [Prometheus 실전 Runbook](target-telemetry-prometheus-runbook.md)의 PR 단위 체크리스트를 그대로 따라간다.
@@ -152,6 +158,9 @@ Management Gateway API 계약은 아직 구현 중이므로 처음부터 Agent-G
 - telemetry provider token이 evidence/event/log에 없음
 - Prometheus/Loki/OTel 연결 변경 시 query path와 ingest path를 구분해서 설명
 - raw telemetry를 Gateway로 보내지 않고 summary evidence로 축약
+- write command에 approval_ref/policy_decision_ref가 있고 agent가 이를 검증
+- command result에 resource별 status, sanitized stdout/stderr, retryable flag, applied flag 포함
+- provider fallback/source freshness/payload size가 metric 또는 audit metadata에 남음
 
 ## 처음 읽을 파일
 

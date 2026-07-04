@@ -7,6 +7,11 @@
 "운영 워크플로우를 UI로 쉽게 관리하는 경험"은 가져오되, 더 가볍고 더 뾰족한
 GitOps 중심 제품으로 경쟁한다.
 
+실운영 자동 변경, 실제 manifest patch PR, approval evidence, control-plane
+observability 같은 차단 조건은 [hardening-roadmap](hardening-roadmap.md)을 최신
+release gate로 삼는다. 이 문서의 장기 전환안이 하드닝 로드맵과 충돌하면
+하드닝 로드맵을 우선한다.
+
 ## 한 문장 정의
 
 여러 Kubernetes 클러스터를 하나의 UI에서 연결하고, Git을 source of truth로 삼아

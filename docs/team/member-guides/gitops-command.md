@@ -97,6 +97,22 @@ Worker 담당자가 꼭 알아야 할 것:
 | 6 | Command policy rule 구조 | namespace/action 제한을 범용 rule로 검사한다. |
 | 7 | Planner/Dispatcher/Queue 연결 | command를 Agent가 poll할 수 있는 상태로 만든다. |
 | 8 | E2E worker chain test | subject/body 연결이 끊기지 않았는지 검증한다. |
+| 9 | Repo checkout/cache hardening | local-file fallback을 dev/test 전용으로 제한하고 commit provenance를 남긴다. |
+| 10 | Approved snapshot + policy route | last-approved snapshot과 operation/resource/environment 정책으로 diff route를 결정한다. |
+| 11 | Manifest patch Safe PR | 검토 문서가 아니라 실제 manifest patch/rollback patch가 들어간 PR을 만든다. |
+| 12 | Approval evidence command gate | approval_ref/policy_decision_ref 없는 write command를 fail-closed한다. |
+
+## 하드닝 Phase 기준
+
+Phase 9 이후는 `docs/hardening-roadmap.md`의 P0 GitOps 항목을 따른다.
+
+완료 기준:
+
+- `manifest-render-worker`는 production route에서 `repo_ref`, `commit_sha`, `manifest_path`, artifact digest 없이 `manifest.rendered`를 만들지 않는다.
+- `diff-worker`는 demo previous-approved fallback 없이 last-approved managed-field snapshot으로 intended/drift/conflict를 판정한다.
+- `diff-analyze-worker`는 risk string 대신 operation, namespace, resource class, environment, approval state를 보고 `safe_pr`, `approval_required`, `forbidden`, `command_requested` 중 하나를 반환한다.
+- `scm-worker`가 만드는 PR에는 실제 manifest patch 또는 rollback patch가 포함된다.
+- `command-worker`가 agent queue에 넣는 write command에는 approval_ref와 policy_decision_ref가 포함된다.
 
 ## Phase 1. GitOps worker 입력/출력 계약 정리
 
