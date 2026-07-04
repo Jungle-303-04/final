@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 
 from github_provider import GithubScmProvider
 
+from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
@@ -25,9 +26,7 @@ SCM_PROVIDER_ENV = "SCM_PROVIDER"  # PR 생성 provider 선택(현재 github 만
 DEFAULT_SCM_PROVIDER = "github"
 PR_MODE = "github_rest"
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
-UNSUPPORTED_SCM_PROVIDER_MESSAGE = (
-    f"{SCM_PROVIDER_ENV} 값이 지원 목록에 없음 — 지원: {DEFAULT_SCM_PROVIDER}"
-)
+UNSUPPORTED_SCM_PROVIDER_MESSAGE = f"{SCM_PROVIDER_ENV} 값이 provider registry 지원 목록에 없음"
 
 
 def build_scm_provider(name: str | None = None) -> ScmProvider:
@@ -37,17 +36,30 @@ def build_scm_provider(name: str | None = None) -> ScmProvider:
     safe_pr.failed 로 처리함 — provider 이름 오설정만 부팅 fail-fast.
     """
     provider = (name or env(SCM_PROVIDER_ENV, DEFAULT_SCM_PROVIDER)).strip().lower()
-    if provider == DEFAULT_SCM_PROVIDER:
+    try:
+        definition = require_available_provider(ProviderCategory.SOURCE, provider)
+    except ValueError as exc:
+        raise RuntimeError(f"{UNSUPPORTED_SCM_PROVIDER_MESSAGE} (got: {provider})") from exc
+    if definition.key == DEFAULT_SCM_PROVIDER:
         return GithubScmProvider()
-    raise RuntimeError(f"{UNSUPPORTED_SCM_PROVIDER_MESSAGE} (got: {provider})")
+    raise RuntimeError(
+        f"{SCM_PROVIDER_ENV} adapter binding is missing for provider: {definition.key}"
+    )
 
 
 # PR 생성 전략 주입 지점 — 테스트는 transport 를 주입한 provider 로 교체함.
+ACTIVE_SCM_PROVIDER = (
+    env(SCM_PROVIDER_ENV, DEFAULT_SCM_PROVIDER).strip().lower() or DEFAULT_SCM_PROVIDER
+)
 SCM_PROVIDER: ScmProvider = build_scm_provider()
 
 
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
     """기존 호출자 호환용 — SCM 전략 인스턴스로 위임함."""
+    if evt.provider != ACTIVE_SCM_PROVIDER:
+        raise RuntimeError(
+            f"safe_pr provider mismatch: event={evt.provider}, worker={ACTIVE_SCM_PROVIDER}"
+        )
     return await SCM_PROVIDER.create_pull_request(evt, ctx)
 
 
