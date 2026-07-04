@@ -19,8 +19,8 @@ from domains.gitops.events import (
     ApprovalGrantedBody,
     ApprovalRejectedBody,
     ApprovalRequestedBody,
+    DesiredDesiredDiffDetectedBody,
     DiffAnalyzedBody,
-    DiffDetectedBody,
     GitChangedBody,
     GitWebhookReceivedBody,
     ManifestInvalidBody,
@@ -93,7 +93,7 @@ def gitops_payload(evt: EventBody, app_name: str | None = None) -> JsonObject:
     return normalize_payload(payload)
 
 
-def diff_payload(evt: DiffDetectedBody | DiffAnalyzedBody) -> JsonObject:
+def diff_payload(evt: DesiredDesiredDiffDetectedBody | DiffAnalyzedBody) -> JsonObject:
     diff = evt.diff
     resource_name = diff.resource.split("/", 1)[-1] if "/" in diff.resource else diff.resource
     payload = diff.to_body()
@@ -327,9 +327,9 @@ async def on_manifest_invalid(
     )
 
 
-@app.on(DiffDetectedBody)
+@app.on(DesiredDesiredDiffDetectedBody)
 async def on_diff_detected(
-    evt: DiffDetectedBody, ctx: EventContext[WorkflowStore]
+    evt: DesiredDesiredDiffDetectedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
     run = await transition_run(
         ctx,

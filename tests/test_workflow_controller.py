@@ -11,9 +11,9 @@ from domains.command.events import (
     CommandRequestedBody,
 )
 from domains.gitops.events import (
+    DesiredDesiredDiffDetectedBody,
     Diff,
     DiffAnalyzedBody,
-    DiffDetectedBody,
     GitWebhookReceivedBody,
     ManifestRenderedBody,
     RenderedManifest,
@@ -305,7 +305,7 @@ def test_workflow_controller_does_not_upsert_application_from_resource_diff() ->
 
     outs = run_handler(
         workflow.on_diff_detected,
-        DiffDetectedBody(
+        DesiredDesiredDiffDetectedBody(
             diff=Diff(
                 resource="configmap/checkout-api-config",
                 namespace="sandbox",

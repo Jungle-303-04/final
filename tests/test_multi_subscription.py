@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from domains.gitops.events import DiffDetectedBody, GitChangedBody
+from domains.gitops.events import DesiredDesiredDiffDetectedBody, GitChangedBody
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.events.envelope import event
@@ -41,13 +41,13 @@ def test_app_allows_multiple_subscriptions() -> None:
     async def on_git(evt: GitChangedBody, ctx: object) -> list[EventBody]:
         return []
 
-    @app.on(DiffDetectedBody)
-    async def on_diff(evt: DiffDetectedBody, ctx: object) -> list[EventBody]:
+    @app.on(DesiredDesiredDiffDetectedBody)
+    async def on_diff(evt: DesiredDesiredDiffDetectedBody, ctx: object) -> list[EventBody]:
         return []
 
     subjects, factory = app._resolve()
     assert len(subjects) == 2  # 같은 워커가 두 이벤트 구독 — 더 이상 1개 강제 아님
-    assert set(subjects) == {GitChangedBody.__subject__, DiffDetectedBody.__subject__}
+    assert set(subjects) == {GitChangedBody.__subject__, DesiredDesiredDiffDetectedBody.__subject__}
     assert callable(factory)
 
 

@@ -33,7 +33,7 @@ from packages.runtime.relay import OutboxRelay
 if TYPE_CHECKING:
     from packages.storage.database import Database
 
-logger = get_logger("worker")
+LOGGER = get_logger(__name__)
 
 # 워커 처리량·재시도 정책 — 서비스별 deploy env 로 오버라이드 가능(기본값 불변).
 # 주의: WORKER_HANDLER_TIMEOUT_SECONDS 를 올리면 NATS_ACK_WAIT_SECONDS(events/bus.py,
@@ -134,12 +134,12 @@ class EventProcessor:
                     timeout=self.retry_policy.dead_letter_timeout_seconds,
                 )
             except Exception as capture_error:
-                logger.error(
+                LOGGER.error(
                     "raw_dead_letter_capture_failed",
                     extra={"context": {"consumer": self.service_name}},
                     exc_info=capture_error,
                 )
-            logger.error(
+            LOGGER.error(
                 "decode_dead_letter",
                 extra={"context": {"consumer": self.service_name}},
                 exc_info=exc,
@@ -163,7 +163,7 @@ class EventProcessor:
         try:
             with self.store.unit_of_work() as conn:
                 context = {**event_context(evt), "consumer": self.service_name}
-                logger.info("handling", extra={"context": context})
+                LOGGER.info("handling", extra={"context": context})
                 with event_causation(evt.event_id):  # 자식 이벤트들의 부모 = 이 이벤트
                     # 핸들러 hang 상한: 초과 시 TimeoutError → 아래 except → fail()(재시도/DLQ).
                     # 트랜잭션 안이라 취소돼도 롤백 → 부분 쓰기 없음.
@@ -193,7 +193,7 @@ class EventProcessor:
                 )
             except Exception as capture_error:
                 self.ledger.retry(evt, error)
-                logger.error(
+                LOGGER.error(
                     "dead_letter_capture_failed",
                     extra={"context": context},
                     exc_info=capture_error,
@@ -201,12 +201,12 @@ class EventProcessor:
                 await message.nak(delay=self.retry_policy.retry_delay_seconds)
                 return
             self.ledger.dead_letter(evt, error)
-            logger.error("dead_letter", extra={"context": context}, exc_info=error)
+            LOGGER.error("dead_letter", extra={"context": context}, exc_info=error)
             await message.ack()
             return
 
         self.ledger.retry(evt, error)
-        logger.warning("retry", extra={"context": context}, exc_info=error)
+        LOGGER.warning("retry", extra={"context": context}, exc_info=error)
         await message.nak(delay=self.retry_policy.retry_delay_seconds)
 
 
@@ -250,14 +250,14 @@ class WorkerRuntime:
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
         lifecycle = {"consumer": self.spec.service_name, "subjects": list(self.spec.subjects)}
-        logger.info("subscribed", extra={"context": lifecycle})
+        LOGGER.info("subscribed", extra={"context": lifecycle})
 
         while not stopping.is_set():
             Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
             try:
                 await relay.run_once()  # outbox → NATS 발행
             except Exception as exc:
-                logger.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
+                LOGGER.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
             for _subject, sub in subs:
                 try:
                     messages = await sub.fetch(
@@ -267,7 +267,7 @@ class WorkerRuntime:
                 except TimeoutError:
                     continue
                 except Exception as exc:
-                    logger.warning("fetch_error", extra={"context": lifecycle}, exc_info=exc)
+                    LOGGER.warning("fetch_error", extra={"context": lifecycle}, exc_info=exc)
                     await asyncio.sleep(1)
                     continue
 
@@ -275,7 +275,7 @@ class WorkerRuntime:
                     try:
                         await processor.process(message)
                     except Exception as exc:
-                        logger.error("processor_error", extra={"context": lifecycle}, exc_info=exc)
+                        LOGGER.error("processor_error", extra={"context": lifecycle}, exc_info=exc)
                         await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
 
         await self.bus.close()
