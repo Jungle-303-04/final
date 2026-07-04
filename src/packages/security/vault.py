@@ -65,9 +65,9 @@ class AwsSecretsManagerSecretVault(SecretVaultPort):
     """AWS Secrets Manager adapter.
 
     Ref examples:
-    - aws-sm:/kubeheal/prod/github-token
-    - aws-sm:/kubeheal/prod/github#token
-    - aws-sm:/kubeheal/prod/github?stage=AWSPREVIOUS#token
+    - aws-sm:/my-app/prod/github-token
+    - aws-sm:/my-app/prod/github#token
+    - aws-sm:/my-app/prod/github?stage=AWSPREVIOUS#token
     """
 
     def __init__(self, client: Any | None = None, region_name: str | None = None) -> None:
