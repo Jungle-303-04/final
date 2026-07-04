@@ -35,7 +35,7 @@
 | GitOps source-of-truth | GitOps / Command, Platform | repo checkout/cache, commit provenance, rendered artifact digest, last-approved snapshot이 연결된다. |
 | 실제 manifest patch PR | GitOps / Command, RCA / Safe PR | Safe PR이 검토 문서만이 아니라 실제 manifest patch 또는 rollback patch를 커밋한다. rendered manifest patch 커밋 경로는 구현됐고, rollback/diff basis/approval evidence는 남은 P0다. |
 | Policy route | GitOps / Command, Gateway / Auth, Target / Agent | operation, namespace, resource class, environment, approval state로 route를 결정하고 audit에 남긴다. |
-| Token boundary | Gateway / Auth, Platform | TokenVault/SecretVault port, credential_ref, rotation, non-leak 테스트가 있다. |
+| Token boundary | Gateway / Auth, Platform | TokenVault/SecretVault port, credential_ref, rotation, non-leak 테스트가 있다. GitHub provider env token_ref 경로는 구현됐고, 외부 vault/rotation/scope 검증은 남았다. |
 | Approval evidence | Gateway / Auth, GitOps / Command, Target / Agent | write command에 approval_ref/policy_decision_ref가 있고 agent가 이를 검증한다. 누락 거부와 payload 전달은 구현됐고, ref 만료/권한 검증은 남은 P0다. |
 | Agent partial failure | Target / Agent, Platform | sanitized stdout/stderr, per-resource status, retryable flag, applied flag가 command result에 남는다. 기본 result schema는 구현됐고, 단계별 partial apply와 retryable 분류 고도화는 남았다. |
 | AI tool guardrail | RCA / Safe PR, Platform, Gateway / Auth | tool schema, tool authorization, cost/timeout guardrail, malformed reply 테스트가 있다. |
@@ -87,7 +87,7 @@ TODO:
 - TODO(gateway): `POST /agent/evidence`는 request schema 검증 후 `cluster.evidence.received`만 발행하고 worker 로직을 직접 실행하지 않는다.
 - TODO(gateway): agent registry/status, command poll/result API가 Target/Telemetry와 같은 DTO를 쓰도록 계약을 고정한다.
 - TODO(gateway): Git watch target 등록/조회/manual poll API는 Gateway가 설정과 권한만 관리하고 polling 실행은 worker가 맡게 한다.
-- TODO(gateway): `TokenVaultPort`/`SecretVault` port를 만들고 provider token은 event/log/DLQ에 직접 남지 않게 한다.
+- TODO(gateway): `TokenVaultPort`/`SecretVault` port를 만들고 provider token은 event/log/DLQ에 직접 남지 않게 한다. 기본 port와 GitHub provider env token_ref 사용은 구현됐고 Gateway credential binding 연결은 남았다.
 - TODO(gateway): approval_ref, policy_decision_ref, approver, expiry를 command/write API와 audit에 연결한다. command API 전달은 구현됐고 approver/expiry 검증은 남았다.
 - TODO(gateway): AI tool 실행 전 user/session/workspace/action scope를 확인할 policy port를 제공한다.
 
