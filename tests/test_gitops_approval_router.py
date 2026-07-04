@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from fastapi import HTTPException
@@ -171,3 +172,57 @@ def test_reject_approval_conflicts_when_already_resolved() -> None:
 
     assert exc.status_code == 409
     assert events.body is None  # 원자 갱신 실패 시 ApprovalRejected 미발행
+
+
+class TransactionalApprovalDb(ApprovalDb):
+    """unit_of_work 를 제공해 승인 해결과 이벤트 스테이징이 한 트랜잭션인지 기록함."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.uow_active = False
+        self.resolved_in_uow: list[bool] = []
+
+    @contextmanager
+    def unit_of_work(self):
+        self.uow_active = True
+        try:
+            yield self
+        finally:
+            self.uow_active = False
+
+    def resolve_workflow_approval_if_open(self, *args: object, **kwargs: object) -> bool:
+        self.resolved_in_uow.append(self.uow_active)
+        return super().resolve_workflow_approval_if_open(*args, **kwargs)
+
+
+class UowTrackingApprovalEvents(ApprovalEvents):
+    def __init__(self, db: TransactionalApprovalDb) -> None:
+        super().__init__()
+        self.db = db
+        self.accepted_in_uow: list[bool] = []
+
+    async def accept_body(self, body: object, actor: object | None = None) -> object:
+        self.accepted_in_uow.append(self.db.uow_active)
+        return await super().accept_body(body, actor)
+
+
+def test_grant_approval_wraps_resolution_and_event_in_single_transaction() -> None:
+    # 승인 해결(원자 UPDATE)과 이벤트 스테이징이 하나의 unit_of_work 안에서 실행돼야 함
+    # (이벤트 스테이징 실패 시 해결도 롤백 → '해결됐지만 이벤트 없는' 고아 승인 방지).
+    async def run() -> tuple[TransactionalApprovalDb, UowTrackingApprovalEvents]:
+        db = TransactionalApprovalDb()
+        events = UowTrackingApprovalEvents(db)
+        await grant_approval(
+            "approval-1",
+            ApprovalDecisionRequest(reason="looks safe"),
+            current_session(),
+            db,
+            events,
+        )
+        return db, events
+
+    db, events = asyncio.run(run())
+
+    assert db.resolved_in_uow == [True]
+    assert events.accepted_in_uow == [True]
+    assert db.uow_active is False
