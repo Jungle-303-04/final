@@ -93,9 +93,9 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
     ],
     "traces": [
         {
-            "name": "checkout_slow_spans",
-            "description": "Slow checkout spans for demo RCA evidence.",
-            "query": '{ resource.service.name = "checkout-api" }',
+            "name": "application_error_spans",
+            "description": "Recent application spans that ended with an error status.",
+            "query": "{ status = error }",
         },
         {
             "name": "target_agent_error_spans",

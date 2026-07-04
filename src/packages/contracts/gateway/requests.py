@@ -13,14 +13,12 @@ from packages.contracts.gitops import (
     DEFAULT_ENVIRONMENT,
     DEFAULT_MANIFEST_PATH,
     DEFAULT_REPO_BRANCH,
-    DEFAULT_REPO_REF,
     DEFAULT_REPOSITORY_ID,
     DEFAULT_WATCH_TARGET_ID,
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
-DEFAULT_WEBHOOK_IMAGE = "service:local"
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
 MAX_WEBHOOK_REPLICAS = 10
@@ -28,7 +26,6 @@ DEFAULT_COMMAND_STATUS: Literal["completed", "failed"] = CommandStatus.COMPLETED
 EMPTY_COMMAND_MESSAGE = ""
 DEFAULT_TARGET_NAME = "target-cluster"
 DEFAULT_TARGET_ENVIRONMENT = "sandbox"
-DEFAULT_TARGET_IMAGE = "service:local"
 # target cluster 실제 관측 스택 Service 주소(deploy/target/*.yaml Helm values와 정렬됨)
 DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
@@ -71,13 +68,13 @@ class ResendEmailVerificationRequest(StrictModel):
 
 class GitHubWebhookRequest(StrictModel):
     commit_sha: str
-    image: str = DEFAULT_WEBHOOK_IMAGE
+    image: str = Field(min_length=1)
     replicas: int = Field(
         default=DEFAULT_WEBHOOK_REPLICAS, ge=MIN_WEBHOOK_REPLICAS, le=MAX_WEBHOOK_REPLICAS
     )
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
-    repo_ref: str = DEFAULT_REPO_REF
+    repo_ref: str = Field(min_length=1)
     branch: str = DEFAULT_REPO_BRANCH
     watch_target_id: str = DEFAULT_WATCH_TARGET_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
@@ -133,7 +130,7 @@ class TargetRegisterRequest(StrictModel):
     environment: str = DEFAULT_TARGET_ENVIRONMENT
     workspace_id: str = DEFAULT_WORKSPACE_ID
     management_base_url: str = Field(min_length=1)
-    image: str = DEFAULT_TARGET_IMAGE
+    image: str = Field(min_length=1)
     prometheus_base_url: str = DEFAULT_PROMETHEUS_BASE_URL
     loki_base_url: str = DEFAULT_LOKI_BASE_URL
     evidence_interval_seconds: int = Field(
@@ -142,10 +139,29 @@ class TargetRegisterRequest(StrictModel):
         le=MAX_EVIDENCE_INTERVAL_SECONDS,
     )
     install_node_collector: bool = True
+    install_sample_workload: bool = False
+    sample_workload_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+    )
+    sample_workload_image: str | None = Field(default=None, min_length=1)
     apply: bool = False
     kube_context: str | None = None
     cloud_provider: str = "existing-k8s"
     deploy_provider: str = "manual-manifest"
+
+    @model_validator(mode="after")
+    def _sample_workload_requires_explicit_config(self) -> TargetRegisterRequest:
+        if self.install_sample_workload and (
+            not self.sample_workload_name or not self.sample_workload_image
+        ):
+            raise ValueError(
+                "sample_workload_name and sample_workload_image are required "
+                "when install_sample_workload is true"
+            )
+        return self
 
 
 class CommandRequest(StrictModel):

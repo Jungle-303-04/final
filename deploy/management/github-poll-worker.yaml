@@ -30,7 +30,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: poller
-              image: service:local
+              image: kubeheal-service:latest
               imagePullPolicy: IfNotPresent
               command: ["python", "src/services/gitops/github-poll-worker/app.py"]
               envFrom:

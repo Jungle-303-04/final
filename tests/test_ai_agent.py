@@ -51,8 +51,8 @@ def test_build_llm_client_boots_without_credentials(monkeypatch: pytest.MonkeyPa
 
     client = build_llm_client()
     assert isinstance(client, LlmGateway)
-    assert client.default_provider == "openai"
-    with pytest.raises(ValueError, match="API_KEY"):
+    assert client.default_provider == "unconfigured"
+    with pytest.raises(ValueError, match="LLM_PROVIDER"):
         asyncio.run(client.complete("x"))
 
 

@@ -16,6 +16,11 @@ from packages.contracts.gateway.requests import (
 )
 
 
+@pytest.fixture(autouse=True)
+def management_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MANAGEMENT_BASE_URL", "http://management.local")
+
+
 def load_agent_module() -> Any:
     return load_file(
         ROOT / "src" / "services" / "target" / "cluster-agent" / "agent.py",

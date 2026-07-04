@@ -5,7 +5,7 @@ from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
-DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
+DEFAULT_MANAGEMENT_BASE_URL = ""
 DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
 DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
