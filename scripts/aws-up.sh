@@ -95,6 +95,7 @@ LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 RUNTIME_DIR="$(mktemp -d "${ROOT_DIR}/.aws-up.XXXXXX")"
 PORT_FORWARD_PID=""
 GENERATED_AUTH_PASSWORD="0"
+CUSTOM_DOMAIN_CONFIGURED="0"
 
 cleanup() {
   if [[ -n "${PORT_FORWARD_PID}" ]]; then
@@ -634,6 +635,7 @@ JSON
       --output text
   )"
   aws route53 wait resource-record-sets-changed --id "${change_id}" || true
+  CUSTOM_DOMAIN_CONFIGURED="1"
 }
 
 cloudflare_zone_id() {
@@ -736,6 +738,7 @@ JSON
       --data @"${body_file}" \
       "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" >/dev/null
   fi
+  CUSTOM_DOMAIN_CONFIGURED="1"
 }
 
 custom_domain_base_url() {
@@ -942,7 +945,7 @@ main() {
   if [[ "${CONFIGURE_CLOUDFLARE}" == "1" ]]; then
     configure_cloudflare_record "${lb_host}"
   fi
-  if [[ "${CONFIGURE_ROUTE53}" == "1" || "${CONFIGURE_CLOUDFLARE}" == "1" ]]; then
+  if [[ "${CUSTOM_DOMAIN_CONFIGURED}" == "1" ]]; then
     if domain_url="$(custom_domain_base_url)"; then
       base_url="${domain_url}"
     else
@@ -970,7 +973,7 @@ main() {
   echo
   echo "AWS setup is ready."
   echo "Gateway: ${base_url}"
-  if [[ "${CONFIGURE_ROUTE53}" == "1" ]]; then
+  if [[ "${CUSTOM_DOMAIN_CONFIGURED}" == "1" ]]; then
     echo "Custom domain: http://${CUSTOM_DOMAIN}"
   fi
   echo "Management cluster: ${MGMT_CLUSTER} (${MGMT_DISPLAY_NAME})"

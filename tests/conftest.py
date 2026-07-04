@@ -26,6 +26,7 @@ SERVICE_LOCAL_MODULES = (
     "prometheus_metrics",
     "node_collector",
     "node_collector_manager",
+    "node_collector_spec",
     "commands",
     "commands.context",
     "commands.kubernetes",
