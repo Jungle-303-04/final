@@ -16,6 +16,7 @@ from typing import Any
 from urllib import error, parse, request
 
 import yaml
+from repo_cache import GitRepoCache, GitRepoCacheError
 
 from domains.gitops.diffing import extract_declared_field_paths
 from domains.gitops.events import (
@@ -33,11 +34,14 @@ from packages.contracts.gitops import (
     DEFAULT_GITHUB_API_BASE,
     GITHUB_API_BASE_ENV,
     GITHUB_TOKEN_ENV,
+    GITHUB_TOKEN_REF_ENV,
     ManifestArtifactStatus,
     supported_kubernetes_resource,
 )
+from packages.contracts.security import SecretRef
 from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
+from packages.security import SecretNotFound, build_token_vault
 
 app = App("manifest-render-worker")
 
@@ -50,12 +54,19 @@ GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
 GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
 GIT_MANIFEST_SOURCE_MODE_ENV = "GIT_MANIFEST_SOURCE_MODE"
 GIT_LOCAL_MANIFEST_ENABLED_ENV = "GIT_LOCAL_MANIFEST_ENABLED"
+GIT_CHECKOUT_CACHE_ENABLED_ENV = "GIT_CHECKOUT_CACHE_ENABLED"
+GIT_CHECKOUT_CACHE_REQUIRED_ENV = "GIT_CHECKOUT_CACHE_REQUIRED"
+GIT_CACHE_DIR_ENV = "GIT_CACHE_DIR"
+GIT_CACHE_REMOTE_URL_ENV = "GIT_CACHE_REMOTE_URL"
+GIT_CACHE_MAX_BYTES_ENV = "GIT_CACHE_MAX_BYTES"
+GIT_CACHE_MAX_REPOS_ENV = "GIT_CACHE_MAX_REPOS"
 GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
 GIT_REMOTE_MANIFEST_REQUIRED_ENV = "GIT_REMOTE_MANIFEST_REQUIRED"
 GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV = "GITHUB_MANIFEST_TIMEOUT_SECONDS"
 GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS"
 DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
 DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS = "5"
+DEFAULT_GIT_CACHE_DIR = "/tmp/gitops-repo-cache"
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 SOURCE_MODE_AUTO = "auto"
 SOURCE_MODE_REMOTE = "remote"
@@ -84,6 +95,14 @@ def remote_manifest_enabled() -> bool:
     return env_truthy(GIT_REMOTE_MANIFEST_ENABLED_ENV)
 
 
+def checkout_cache_enabled() -> bool:
+    return env_truthy(GIT_CHECKOUT_CACHE_ENABLED_ENV)
+
+
+def checkout_cache_required() -> bool:
+    return env_truthy(GIT_CHECKOUT_CACHE_REQUIRED_ENV)
+
+
 def local_manifest_enabled(mode: str) -> bool:
     if mode == SOURCE_MODE_LOCAL:
         return True
@@ -93,6 +112,70 @@ def local_manifest_enabled(mode: str) -> bool:
         return True
     # 개발/테스트 편의를 위해 remote source가 꺼진 auto 모드에서만 local fallback 허용.
     return not remote_manifest_enabled()
+
+
+def env_int(name: str, default: str = "0") -> int:
+    try:
+        return max(0, int(env(name, default)))
+    except ValueError:
+        return max(0, int(default))
+
+
+def github_token() -> str:
+    token_ref = env(GITHUB_TOKEN_REF_ENV, "").strip()
+    if token_ref:
+        return build_token_vault().read_token(SecretRef(token_ref))
+    token = env(GITHUB_TOKEN_ENV, "").strip()
+    if token:
+        return build_token_vault("env").read_token(SecretRef(GITHUB_TOKEN_ENV))
+    return ""
+
+
+def github_auth_header() -> str | None:
+    try:
+        token = github_token()
+    except SecretNotFound:
+        return None
+    return f"Authorization: Bearer {token}" if token else None
+
+
+def repo_remote_url(repo_ref: str) -> str:
+    configured = env(GIT_CACHE_REMOTE_URL_ENV, "").strip()
+    if configured:
+        return configured
+    normalized = repo_ref.strip()
+    if not normalized:
+        return ""
+    if "://" in normalized or normalized.startswith("git@"):
+        return normalized
+    return f"https://github.com/{normalized.strip('/')}.git"
+
+
+def read_checkout_cache_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None:
+    if not checkout_cache_enabled():
+        return None
+    remote_url = repo_remote_url(evt.repo_ref)
+    if not remote_url:
+        return None
+    cache = GitRepoCache(
+        cache_dir=env(GIT_CACHE_DIR_ENV, DEFAULT_GIT_CACHE_DIR),
+        remote_url=remote_url,
+        timeout_seconds=float(
+            env(
+                GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV,
+                DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS,
+            )
+        ),
+        max_bytes=env_int(GIT_CACHE_MAX_BYTES_ENV),
+        max_repos=env_int(GIT_CACHE_MAX_REPOS_ENV),
+        http_extra_header=github_auth_header(),
+    )
+    try:
+        return cache.read_file(evt.commit_sha, manifest_path)
+    except GitRepoCacheError:
+        if checkout_cache_required():
+            raise
+        return None
 
 
 def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> str:
@@ -110,7 +193,10 @@ def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: s
         return None
 
     headers = {"Accept": "application/vnd.github.raw"}
-    token = env(GITHUB_TOKEN_ENV, "")
+    try:
+        token = github_token()
+    except SecretNotFound as exc:
+        raise ManifestSourceError(f"failed to load {GITHUB_TOKEN_REF_ENV}") from exc
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = request.Request(github_contents_url(repo_ref, commit_sha, manifest_path), headers=headers)
@@ -156,6 +242,9 @@ def read_manifest_source(evt: GitChangedBody) -> str | None:
 
     mode = manifest_source_mode()
     if mode != SOURCE_MODE_LOCAL:
+        cached_source = read_checkout_cache_manifest_source(evt, manifest_path)
+        if cached_source is not None:
+            return cached_source
         remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
         if remote_source is not None:
             return remote_source
@@ -328,6 +417,7 @@ async def on_git_changed(
     except (
         subprocess.CalledProcessError,
         subprocess.TimeoutExpired,
+        GitRepoCacheError,
         ManifestSourceError,
         ValueError,
     ) as exc:
