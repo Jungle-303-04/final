@@ -10,7 +10,27 @@ shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규�
 - [x] P0 async DB(워커 핸들러 경로): `AsyncDb` 프록시로 sync 메서드를 스레드풀에
   보내고, 핸들러는 `await ctx.db.x(...)`로 통일. 남은 sync 경로(ledger·api-gateway
   라우트)는 실DB smoke 테스트(`make up`) 후 단계적으로.
+- [ ] P0 실운영 자동 변경 하드닝: repo checkout/cache, 승인 스냅샷, 실제 manifest
+  patch PR, approval evidence, TokenVault, action allowlist. 상세 기준은
+  [hardening-roadmap](hardening-roadmap.md)을 따른다.
+- [ ] P1 AI/tool guardrail과 control-plane observability: function-calling 수준 schema,
+  tool 권한, 비용 한도, DLQ/lag/outbox/trace metrics.
 - [ ] P1 KEDA · P2 타입 db · 나중(마이그레이션·스키마버전·메트릭).
+
+## P0 — 실운영 자동 변경 차단 조건
+
+현재 코드는 event runtime과 GitHub PR 생성 경계를 갖고 있지만, production 자동 변경을
+말하려면 아래 항목이 모두 닫혀야 한다.
+
+| 항목 | 현재 위험 | 차단 해제 기준 |
+| --- | --- | --- |
+| 실제 repo source | local-file/dev fallback과 GitHub contents 경로가 섞여 있다. | production route는 commit_sha, repo_ref, artifact digest가 있는 source만 허용한다. |
+| 승인 스냅샷 | diff-worker가 previous-approved snapshot demo fallback을 쓴다. | approval_id/policy_id/commit_sha와 연결된 last-approved managed-field snapshot을 저장한다. |
+| 정책 route | risk string과 namespace 중심이다. | operation, namespace, resource class, environment, approval state로 `safe_pr`/`approval_required`/`forbidden`/`command`를 결정한다. |
+| Safe PR 내용 | GitHub PR 경계는 있지만 실제 manifest patch가 아니라 검토 문서 중심이다. | PR diff에 실제 manifest patch 또는 rollback patch가 포함된다. |
+| Agent 실행 | agent action allowlist가 workspace/repo/cluster 정책과 승인 근거까지 확장되지 않았다. | command와 agent가 같은 action catalog, approval_ref, policy_decision_ref를 검증한다. |
+| Credential | credential/token broker가 placeholder다. | TokenVault/SecretVault port, token rotation, missing scope, non-leak 테스트가 있다. |
+| 부분 실패 | stdout/stderr/status와 per-resource partial failure 보고가 약하다. | sanitized stdout/stderr, retryable flag, applied flag, resource별 result가 command result에 남는다. |
 
 ## P0 — 워커 liveness probe (exec 하트비트)
 

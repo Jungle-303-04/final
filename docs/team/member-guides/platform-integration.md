@@ -97,6 +97,10 @@ Infrastructure
 | 6 | DLQ/replay 운영 가이드 | 실패 복구 방법을 팀에 제공한다. |
 | 7 | Outbox 도입 판단 문서 | DB write + event publish 불일치 시점을 준비한다. |
 | 8 | Team guide/issue split 관리 | 큰 작업을 PR 단위 이슈로 쪼개 유지한다. |
+| 9 | Control-plane observability | worker latency, NATS lag, outbox age, DLQ율, command queue age를 metric/trace로 노출한다. |
+| 10 | Schema/version gate | event version과 DB migration 기준을 세워 contract drift를 막는다. |
+
+Phase 9 이후의 release gate는 [hardening-roadmap](../../hardening-roadmap.md)을 따른다.
 
 ## Phase 1. 이벤트 계약 문서/예제 정비
 
