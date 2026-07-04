@@ -21,7 +21,7 @@ GitHub environment secret에 저장한다.
 - `MINIO_ROOT_PASSWORD`
 - `GH_WEBHOOK_SECRET`
 - `GH_APP_TOKEN`
-- `CLOUDFLARE_API_TOKEN` if `k8s.woonyong.org` is managed in Cloudflare
+- `CLOUDFLARE_API_TOKEN` if `CONFIGURE_CLOUDFLARE=1`
 
 선택 secret:
 
@@ -34,11 +34,15 @@ GitHub environment secret에 저장한다.
 
 ## 기본 리소스 이름
 
-- management EKS cluster: `kubernetes-ops`
-- target EKS cluster 1: `cluster-1`
-- target EKS cluster 2: `cluster-2`
-- ECR repository: `kubernetes-ops-service`
-- dashboard/API domain: `k8s.woonyong.org`
+공개 레포에서 바로 fork해도 개인/팀 리소스 이름이 섞이지 않도록 기본값은
+`PROJECT_SLUG`에서 파생한다. 기본 `PROJECT_SLUG`는 `kubeheal`이고, GitHub repository
+variables나 로컬 env로 덮어쓴다.
+
+- management EKS cluster: `${PROJECT_SLUG}-mgmt`
+- target EKS cluster 1: `${PROJECT_SLUG}-target-a`
+- target EKS cluster 2: `${PROJECT_SLUG}-target-b`
+- ECR repository: `${PROJECT_SLUG}-service`
+- dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
 
 기본 노드 스펙:
 
@@ -48,15 +52,22 @@ GitHub environment secret에 저장한다.
 
 ## 배포 방식
 
-기본 push 배포는 기존 EKS 클러스터가 있다고 가정한다.
+`main`/`dev` push는 테스트를 실행한다. 실제 AWS 배포는 아래 둘 중 하나일 때만 실행된다.
+
+- GitHub Actions에서 `AWS CD` workflow를 수동 실행
+- repository variable `AWS_AUTO_DEPLOY=1` 설정
+
+자동 배포 기본값을 꺼둔 이유는 공개 레포 fork에서 AWS secret 없이 deploy job이 실패하거나,
+원치 않는 클라우드 리소스를 만들지 않게 하기 위해서다. 배포 job의 기본값은 기존 EKS
+클러스터가 있다고 가정한다.
 
 - Docker image build
 - ECR push
 - management runtime ConfigMap/Secret upsert
 - management manifests apply
 - `api-gateway` LoadBalancer health check
-- Route53 `k8s.woonyong.org` CNAME upsert when hosted zone exists
-- Cloudflare `k8s.woonyong.org` CNAME upsert when `CLOUDFLARE_API_TOKEN` exists
+- Route53 CNAME upsert when `CONFIGURE_ROUTE53=1`, `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME` are set
+- Cloudflare CNAME upsert when `CONFIGURE_CLOUDFLARE=1`, `CUSTOM_DOMAIN`, `CLOUDFLARE_ZONE_NAME`, `CLOUDFLARE_API_TOKEN` are set
 
 `workflow_dispatch`에서 아래 입력을 켜면 더 넓은 작업도 수행한다.
 
@@ -65,6 +76,13 @@ GitHub environment secret에 저장한다.
 - `bootstrap_admin`: `AUTH_EMAIL`/`AUTH_PASSWORD`로 admin 계정 부트스트랩
 - `register_targets`: 새 이미지로 target 2개 재등록
 - `run_smoke`: 배포 후 `scripts/smoke.sh` 실행
+
+권장 repository variables:
+
+- `PROJECT_SLUG`: 리소스 접두사. 예: `acme-ops`
+- `AWS_REGION`: 예: `us-east-1`, `ap-northeast-2`
+- `AWS_AUTO_DEPLOY`: push 배포를 켤 때만 `1`
+- `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
 
 `AUTH_PASSWORD`가 비어 있으면 배포 스크립트가 임시 비밀번호를 생성한다. CI 로그 유출을 막기 위해
 생성된 값은 기본적으로 출력하지 않는다. 로컬 디버그에서만
