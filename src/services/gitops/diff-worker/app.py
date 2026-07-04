@@ -37,6 +37,7 @@ UNKNOWN_ACTUAL_IMAGE = "unknown"
 RESOURCE_NOT_INSPECTED = "resource-not-inspected"
 ENABLE_SSA_DRY_RUN_ENV = "GITOPS_ENABLE_SSA_DRY_RUN"
 FIELD_MANAGER_ENV = "GITOPS_FIELD_MANAGER"
+REQUIRE_APPROVED_SNAPSHOT_ENV = "GITOPS_REQUIRE_APPROVED_SNAPSHOT"
 DEFAULT_FIELD_MANAGER = "myjob-gitops"
 # 기존 소비자 호환용 별칭 — 원본 정의는 RiskLevel 에 있음
 REVIEW_REQUIRED_RISK = RiskLevel.REVIEW_REQUIRED
@@ -139,11 +140,15 @@ def load_field_policy(rendered: RenderedManifest) -> FieldPolicy:
     )
     if has_explicit_policy:
         managed_fields = sorted(set(rendered.managed_fields))
+        if not managed_fields and rendered.last_approved_snapshot:
+            managed_fields = sorted(set(rendered.last_approved_snapshot))
         source = "rendered_policy"
+    elif approved_snapshot_required():
+        managed_fields = []
+        source = "missing_approved_policy"
     else:
-        # Demo fallback until manifest.rendered carries a persisted policy id/snapshot.
         managed_fields = declared_fields
-        source = "demo_declared_fields"
+        source = "dev_declared_fields_fallback"
     unknown_fields = sorted(set(declared_fields) - set(managed_fields) - set(ignored_fields))
     return FieldPolicy(
         declared_fields=declared_fields,
@@ -212,12 +217,19 @@ def load_previous_desired_snapshot(
             source="last_approved_snapshot",
         )
 
-    # TODO(gitops): replace demo fallback with an approved managed-field snapshot from storage.
+    if approved_snapshot_required():
+        return ManagedFieldSnapshot(
+            resource=live.resource,
+            namespace=live.namespace,
+            fields={},
+            source="missing_last_approved_snapshot",
+        )
+
     return ManagedFieldSnapshot(
         resource=live.resource,
         namespace=live.namespace,
         fields=dict(live.fields),
-        source="demo_previous_approved_fields",
+        source="dev_previous_live_fallback",
     )
 
 
@@ -225,8 +237,12 @@ def managed_image_path(rendered: RenderedManifest) -> str:
     return f"spec.template.spec.containers[name={rendered.metadata.name}].image"
 
 
-def env_enabled(name: str) -> bool:
-    return getenv(name, "").lower() in {"1", "true", "yes", "on"}
+def env_enabled(name: str, default: str = "") -> bool:
+    return getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+def approved_snapshot_required() -> bool:
+    return env_enabled(REQUIRE_APPROVED_SNAPSHOT_ENV)
 
 
 def risk_for_diff(namespace: str, status: str) -> RiskLevel:

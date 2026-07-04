@@ -59,6 +59,8 @@ app = App("workflow-controller")
 DEFAULT_APP_NAME = "checkout-api"
 SYSTEM_POLICY_APPROVER = "system-policy"
 MANUAL_APPROVAL_ROLE = AccessRole.DEPLOYER.value
+POLICY_DECISION_REF_PREFIX = "policy-decision"
+POLICY_ROUTE_SAFE_PR = "safe_pr"
 
 
 def normalize_payload(payload: JsonObject) -> JsonObject:
@@ -205,6 +207,10 @@ def approval_payload(payload: JsonObject, reason: str, status: str) -> JsonObjec
         "reason": reason,
         "requested_role": MANUAL_APPROVAL_ROLE,
     }
+
+
+def policy_decision_ref(approval_id: str, route: str) -> str:
+    return f"{POLICY_DECISION_REF_PREFIX}:{approval_id}:{route}"
 
 
 def command_result_succeeded(result: JsonObject) -> bool:
@@ -393,6 +399,16 @@ async def on_diff_analyzed(
 
     if evt.safe:
         approval = approval_payload(run, evt.reason, ApprovalStatus.NOT_REQUIRED.value)
+        approval_ref = str(approval["approval_id"])
+        details = {
+            "safe": True,
+            "risk": evt.risk,
+            "policy_route": POLICY_ROUTE_SAFE_PR,
+            "policy_decision_ref": policy_decision_ref(approval_ref, POLICY_ROUTE_SAFE_PR),
+            "approval_ref": approval_ref,
+            "diff": evt.diff.to_body(),
+        }
+        approval = {**approval, "details": details}
         await ctx.db.request_workflow_approval(approval)
         await ctx.db.resolve_workflow_approval(
             {
@@ -400,7 +416,7 @@ async def on_diff_analyzed(
                 "status": ApprovalStatus.GRANTED.value,
                 "decided_by": SYSTEM_POLICY_APPROVER,
                 "decision": "auto-approved",
-                "details": {"safe": True, "risk": evt.risk},
+                "details": details,
             }
         )
         await transition_run(
