@@ -11,7 +11,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync hooks doctor lint format test events crash-test check build-image up install-telemetry down status smoke scale kill-pod clean
+.PHONY: help setup env sync hooks doctor lint format test events crash-test check build-image up install-telemetry down status smoke scale kill-pod aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -80,6 +80,12 @@ scale: ## management worker 스케일 조정. 예: make scale DEPLOYMENT=rca-wor
 kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYMENT=rca-worker
 	@test -n "$(DEPLOYMENT)"
 	bash scripts/kill-pod.sh "$(DEPLOYMENT)"
+
+aws-up: ## AWS EKS management + target 2개 테스트 환경 생성
+	bash scripts/aws-up.sh
+
+aws-down: ## AWS EKS 테스트 환경 삭제
+	bash scripts/aws-down.sh
 
 clean: ## Python 캐시 삭제
 	rm -rf .pytest_cache .ruff_cache
