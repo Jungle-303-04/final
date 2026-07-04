@@ -32,7 +32,7 @@
 
 | 축 | 담당 조율 | 완료 기준 |
 | --- | --- | --- |
-| GitOps source-of-truth | GitOps / Command, Platform | repo checkout/cache, commit provenance, rendered artifact digest, last-approved snapshot이 연결된다. |
+| GitOps source-of-truth | GitOps / Command, Platform | repo checkout/cache, commit provenance, rendered artifact digest, last-approved snapshot이 연결된다. rendered artifact digest는 구현됐고 checkout/cache와 approved snapshot은 남았다. |
 | 실제 manifest patch PR | GitOps / Command, RCA / Safe PR | Safe PR이 검토 문서만이 아니라 실제 manifest patch 또는 rollback patch를 커밋한다. rendered manifest patch 커밋 경로는 구현됐고, rollback/diff basis/approval evidence는 남은 P0다. |
 | Policy route | GitOps / Command, Gateway / Auth, Target / Agent | operation, namespace, resource class, environment, approval state로 route를 결정하고 audit에 남긴다. |
 | Token boundary | Gateway / Auth, Platform | TokenVault/SecretVault port, credential_ref, rotation, non-leak 테스트가 있다. GitHub provider env token_ref 경로는 구현됐고, 외부 vault/rotation/scope 검증은 남았다. |

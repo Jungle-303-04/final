@@ -72,6 +72,8 @@ def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
     assert manifest.metadata.namespace == "sandbox"
     assert manifest.spec.replicas == 3
     assert manifest.spec.image == "ghcr.io/project/pulled-api:1"
+    assert manifest.artifact_digest.startswith("sha256:")
+    assert len(manifest.artifact_digest) == len("sha256:") + 64
 
 
 def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
@@ -250,6 +252,7 @@ def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
         "spec.replicas",
         "spec.template.spec.containers[name=checkout-api].image",
     ]
+    assert outs[0].rendered_manifest.artifact_digest.startswith("sha256:")
     assert outs[1].rendered_manifest.manifest["spec"]["ports"][0]["port"] == 80
     assert outs[2].rendered_manifest.manifest["data"]["LOG_LEVEL"] == "info"
     assert sum(1 for call in db.calls if call[0] == "save_repo_change") == 3
@@ -262,6 +265,10 @@ def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
         f"{source}#service/checkout-api",
         f"{source}#configmap/checkout-api-config",
     ]
+    artifact_digests = [
+        call[1][0]["artifact_digest"] for call in db.calls if call[0] == "record_manifest_artifact"
+    ]
+    assert artifact_digests == [out.rendered_manifest.artifact_digest for out in outs]
 
 
 def test_render_uses_kubernetes_default_replicas_when_deployment_omits_it(
