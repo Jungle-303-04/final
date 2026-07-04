@@ -42,6 +42,7 @@ from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
 from packages.runtime.relay import OutboxRelay
 from packages.storage.database import Database, wait_for_database
+from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 LOGGER = get_logger(__name__)
@@ -198,13 +199,20 @@ class ApiGateway:
                     detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
                 )
 
-            accepted = await self.events.accept(
-                dead_letter["original_subject"],
-                dead_letter[Gateway.PAYLOAD],
-                dead_letter[Gateway.CORRELATION_ID],
-                dead_letter["original_event_id"],
-            )
-            self.db.mark_dead_letter_replayed(dead_letter_id, accepted.event.event_id)
+            # replay 이벤트 스테이징과 replay 표시(열린 행만 원자 UPDATE)를 한 트랜잭션으로 —
+            # 동시 replay 는 첫 요청만 통과하고, 진 요청의 스테이징은 롤백됨(이중 재발행 방지).
+            with unit_of_work_or_null(self.db):
+                accepted = await self.events.accept(
+                    dead_letter["original_subject"],
+                    dead_letter[Gateway.PAYLOAD],
+                    dead_letter[Gateway.CORRELATION_ID],
+                    dead_letter["original_event_id"],
+                )
+                if not self.db.mark_dead_letter_replayed(dead_letter_id, accepted.event.event_id):
+                    raise HTTPException(
+                        status_code=Settings.CONFLICT_STATUS_CODE,
+                        detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
+                    )
             return DeadLetterReplayResponse(
                 accepted=True,
                 dead_letter_id=dead_letter_id,

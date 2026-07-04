@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -292,3 +293,74 @@ def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
     assert merged.evidence.providers["metrics"].interval_seconds == 10
     assert merged.evidence.providers["logs"].interval_seconds == 45
     assert merged.bootstrap.resources[0].resource_id == "target-agent-policy"
+
+
+class TransactionalFakeDb(FakeDb):
+    """unit_of_work 를 제공해 등록·정책·desired-state 쓰기가 한 트랜잭션인지 기록함."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.uow_active = False
+        self.calls: list[tuple[str, bool]] = []
+
+    @contextmanager
+    def unit_of_work(self):
+        self.uow_active = True
+        try:
+            yield self
+        finally:
+            self.uow_active = False
+
+    def register_target_cluster(self, payload: dict[str, object]) -> dict[str, object]:
+        self.calls.append(("register", self.uow_active))
+        return super().register_target_cluster(payload)
+
+    def upsert_cluster_policy(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        policy: dict[str, object],
+    ) -> dict[str, object]:
+        self.calls.append(("policy", self.uow_active))
+        return super().upsert_cluster_policy(workspace_id, cluster_id, policy)
+
+    def upsert_target_desired_states(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        components: list[dict[str, object]],
+        updated_by: str | None,
+    ) -> list[dict[str, object]]:
+        self.calls.append(("desired_states", self.uow_active))
+        return super().upsert_target_desired_states(
+            workspace_id, cluster_id, components, updated_by
+        )
+
+
+class UowTrackingEvents(FakeEvents):
+    def __init__(self, db: TransactionalFakeDb) -> None:
+        super().__init__()
+        self.db = db
+        self.accepted_in_uow: list[bool] = []
+
+    async def accept_body(self, body: object, *args: object) -> object:
+        self.accepted_in_uow.append(self.db.uow_active)
+        return await super().accept_body(body, *args)
+
+
+def test_target_registration_wraps_writes_and_event_in_single_transaction() -> None:
+    # 등록·정책·desired-state·이벤트 스테이징이 하나의 unit_of_work 안에서 실행돼야 함
+    # (부분 실패 시 정책/desired-state 없는 반쪽 등록 고아 방지).
+    db = TransactionalFakeDb()
+    events = UowTrackingEvents(db)
+
+    async def run():
+        current = SimpleNamespace(user_id="admin-1", workspace_id="default")
+        return await register_target(target_request(), current=current, db=db, events=events)
+
+    response = asyncio.run(run())
+
+    assert response.registered is True
+    assert db.calls == [("register", True), ("policy", True), ("desired_states", True)]
+    assert events.accepted_in_uow == [True]
+    assert db.uow_active is False
