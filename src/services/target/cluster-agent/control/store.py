@@ -6,6 +6,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import TracebackType
 
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.requests import AgentPolicy, DesiredResource
@@ -35,14 +36,41 @@ class AgentControlStore:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(db_path, timeout=5.0)
+        self.conn: sqlite3.Connection | None = sqlite3.connect(db_path, timeout=5.0)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("pragma journal_mode = wal")
         self.conn.execute("pragma busy_timeout = 5000")
         self.init_schema()
 
+    def __enter__(self) -> AgentControlStore:
+        return self
+
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return
+        conn.close()
+        self.conn = None
+
+    def connection(self) -> sqlite3.Connection:
+        if self.conn is None:
+            raise RuntimeError("AgentControlStore is closed")
+        return self.conn
+
     def init_schema(self) -> None:
-        self.conn.executescript(
+        conn = self.connection()
+        conn.executescript(
             """
             create table if not exists agent_policy (
                 policy_id text primary key,
@@ -64,12 +92,13 @@ class AgentControlStore:
             );
             """
         )
-        self.conn.commit()
+        conn.commit()
 
     def save_policy(self, policy: AgentPolicy) -> None:
         now = time.time()
-        with self.conn:
-            self.conn.execute(
+        conn = self.connection()
+        with conn:
+            conn.execute(
                 """
                 insert into agent_policy
                     (policy_id, generation, payload_json, updated_at)
@@ -88,46 +117,59 @@ class AgentControlStore:
             )
 
     def load_policy(self) -> AgentPolicy | None:
-        row = self.conn.execute(
-            """
+        row = (
+            self.connection()
+            .execute(
+                """
             select payload_json
             from agent_policy
             where policy_id = ?
             """,
-            (ACTIVE_POLICY_ID,),
-        ).fetchone()
+                (ACTIVE_POLICY_ID,),
+            )
+            .fetchone()
+        )
         if row is None:
             return None
         return AgentPolicy.model_validate_json(str(row["payload_json"]))
 
     def active_generation(self) -> int:
-        row = self.conn.execute(
-            """
+        row = (
+            self.connection()
+            .execute(
+                """
             select generation
             from agent_policy
             where policy_id = ?
             """,
-            (ACTIVE_POLICY_ID,),
-        ).fetchone()
+                (ACTIVE_POLICY_ID,),
+            )
+            .fetchone()
+        )
         return int(row["generation"]) if row else 0
 
     def last_successful_resource_hash(self, resource_id: str) -> str | None:
-        row = self.conn.execute(
-            """
+        row = (
+            self.connection()
+            .execute(
+                """
             select desired_hash, status
             from reconcile_resources
             where resource_id = ?
             """,
-            (resource_id,),
-        ).fetchone()
+                (resource_id,),
+            )
+            .fetchone()
+        )
         if row is None or row["status"] not in SUCCESSFUL_RECONCILE_STATUSES:
             return None
         return str(row["desired_hash"])
 
     def save_reconcile_result(self, result: ReconcileResult) -> None:
         now = time.time()
-        with self.conn:
-            self.conn.execute(
+        conn = self.connection()
+        with conn:
+            conn.execute(
                 """
                 insert into reconcile_resources (
                     resource_id,
