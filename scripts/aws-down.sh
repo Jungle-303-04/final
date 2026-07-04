@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AWS_REGION="${AWS_REGION:-ap-northeast-2}"
-MGMT_CLUSTER="${MGMT_CLUSTER:-kubernetes-ops}"
-TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-cluster-1}"
-TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-cluster-2}"
-ECR_REPO="${ECR_REPO:-kubernetes-ops-service}"
+PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
+TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
+TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-${PROJECT_SLUG}-target-b}"
+ECR_REPO="${ECR_REPO:-${PROJECT_SLUG}-service}"
 DELETE_ECR="${DELETE_ECR:-0}"
 
 need() {
