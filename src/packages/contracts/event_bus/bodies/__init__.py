@@ -84,6 +84,7 @@ _MODULE_BY_NAME = {
     "RoutingConstraint": "domains.command.events",
     "SafePrCreatedBody": "domains.scm.events",
     "SafePrFailedBody": "domains.scm.events",
+    "SafePrFilePatch": "domains.scm.events",
     "SafePrPatchPreparedBody": "domains.rca.events",
     "SafePrRequestedBody": "domains.scm.events",
     "TargetDesiredComponent": "domains.target.events",

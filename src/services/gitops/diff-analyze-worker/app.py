@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+import yaml
+
 from domains.alert.events import AlertRequestedBody
 from domains.command.events import CommandRequestedBody
 from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff, DiffAnalyzedBody
-from domains.scm.events import SafePrRequestedBody
+from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from packages.config.constants import Command, GitHub, RiskLevel, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
@@ -23,6 +25,7 @@ SAFE_REASON = "sandbox 한정 변경이라 안전"
 UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
 PR_TITLE = "Apply sandbox manifest"
 PRE_DEPLOY_ALERT_SEVERITY = "info"
+MANIFEST_PATCH_DESCRIPTION = "rendered Kubernetes manifest"
 
 
 def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
@@ -35,7 +38,6 @@ def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
 
 
 def build_safe_pr_request_body(diff: Diff) -> SafePrRequestedBody:
-    # TODO(gitops): rendered manifest patch, rollback plan, reviewer checklist 포함
     summary = (
         f"{diff.resource}: {diff.actual_image} → {diff.desired_image}"
         if diff.desired_image and diff.desired_image != diff.actual_image
@@ -52,8 +54,25 @@ def build_safe_pr_request_body(diff: Diff) -> SafePrRequestedBody:
         workflow_run_id=diff.workflow_run_id,
         environment=diff.environment,
         manifest_path=diff.manifest_path,
+        patches=build_manifest_patches(diff),
         next_alert=build_pre_deploy_alert_request_body(diff),
     )
+
+
+def build_manifest_patches(diff: Diff) -> list[SafePrFilePatch]:
+    if not diff.desired_manifest:
+        return []
+    return [
+        SafePrFilePatch(
+            path=diff.manifest_path,
+            content=yaml.safe_dump(
+                diff.desired_manifest,
+                sort_keys=False,
+                allow_unicode=True,
+            ),
+            description=MANIFEST_PATCH_DESCRIPTION,
+        )
+    ]
 
 
 def build_auto_command_request_body(diff: Diff) -> CommandRequestedBody:
