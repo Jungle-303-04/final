@@ -27,6 +27,7 @@ class TelemetrySourceSpec:
     evidence_key: str  # 증거 payload 의 키(예: "metrics")
     query_type: type  # 이 소스의 쿼리 값 객체(예: PrometheusInstantQuery)
     empty_payload: Callable[[], object] = dict  # 수집 실패 시 빈 payload 모양
+    range_query_type: type | None = None  # range query 지원 소스만 선언
 
 
 class TelemetryRegistry:
@@ -42,9 +43,16 @@ class TelemetryRegistry:
         evidence_key: str,
         query_type: type,
         empty_payload: Callable[[], object] = dict,
+        range_query_type: type | None = None,
     ) -> Callable[[type], type]:
         """provider 클래스 데코레이터 — 소스 계약을 스스로 선언함."""
-        spec = TelemetrySourceSpec(source, evidence_key, query_type, empty_payload)
+        spec = TelemetrySourceSpec(
+            source,
+            evidence_key,
+            query_type,
+            empty_payload,
+            range_query_type,
+        )
 
         def decorate(cls: type) -> type:
             existing = self._specs.get(source)
@@ -88,6 +96,9 @@ class TelemetryRegistry:
     def query_type_for(self, source: str) -> type:
         return self.spec(source).query_type
 
+    def range_query_type_for(self, source: str) -> type | None:
+        return self.spec(source).range_query_type
+
     def describe(self) -> str:
         rows = ["TELEMETRY SOURCES (한눈에 보기)", ""]
         for spec in self.sources():
@@ -104,7 +115,12 @@ def _same_contract(a: TelemetrySourceSpec, b: TelemetrySourceSpec) -> bool:
         a.evidence_key == b.evidence_key
         and a.query_type.__name__ == b.query_type.__name__
         and a.empty_payload == b.empty_payload
+        and _type_name(a.range_query_type) == _type_name(b.range_query_type)
     )
+
+
+def _type_name(value: type | None) -> str | None:
+    return value.__name__ if value is not None else None
 
 
 telemetry = TelemetryRegistry()

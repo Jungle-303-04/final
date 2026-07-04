@@ -102,7 +102,12 @@ make kill-pod DEPLOYMENT=rca-worker
 
 ## 문서
 
+- [docs/onboarding/README.md](docs/onboarding/README.md)
+- [docs/onboarding/minjeong-command-target-evidence.md](docs/onboarding/minjeong-command-target-evidence.md)
+- [docs/onboarding/gain-evidence-rca.md](docs/onboarding/gain-evidence-rca.md)
+- [docs/onboarding/chanbin-frontend.md](docs/onboarding/chanbin-frontend.md)
 - [docs/README.md](docs/README.md)
+- [docs/team/role-practice-guide.md](docs/team/role-practice-guide.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/events.md](docs/events.md)
 - [docs/team/member-guides/target-agent-command-evidence-flow.md](docs/team/member-guides/target-agent-command-evidence-flow.md)

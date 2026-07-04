@@ -29,9 +29,20 @@ IDENTITY = ClusterAgentIdentity(workspace_id="workspace-1", cluster_id="cluster-
 
 def load_evidence_module():
     module_names = (
+        "config",
         "queries",
         "queries.payloads",
         "queries.registry",
+        "span",
+        "span.base",
+        "span.otel",
+        "providers",
+        "providers.base",
+        "providers.kubernetes_providers",
+        "providers.loki_providers",
+        "providers.prometheus_providers",
+        "providers.tempo_providers",
+        "kubernetes_api",
         "evidence",
         "evidence.collector",
         "evidence.jobs",
@@ -48,7 +59,7 @@ def load_evidence_module():
                 sys.modules[name] = previous_modules[name]
 
 
-class FakeCollector:
+class InMemoryEvidenceCollector:
     def __init__(self, failing_keys: set[str] | None = None) -> None:
         self.failing_keys = failing_keys or set()
         self.collected: list[str] = []
@@ -58,6 +69,8 @@ class FakeCollector:
         self.collected.append(provider_key)
         if provider_key in self.failing_keys:
             raise RuntimeError(f"{provider_key} failed")
+        if provider_key == "kubernetes":
+            return {"kubernetes": {"cluster": {"cluster_id": "cluster-1"}}}
         if provider_key == "metrics":
             return {"metrics": {"source": "prometheus", "results": {}}}
         if provider_key == "logs":
@@ -130,15 +143,15 @@ class FakeEvidenceJobClient:
         return {"accepted": True, "evidence_key": "evidence-1"}
 
 
-def make_scheduler(module: Any, collector: FakeCollector | None = None):
+def make_scheduler(module: Any, collector: InMemoryEvidenceCollector | None = None):
     return module.EvidenceJobScheduler(
         cluster_id="cluster-1",
         workspace_id="workspace-1",
         agent_id="agent-1",
         source_id="cluster-snapshot",
-        collector=collector or FakeCollector(),
-        provider_keys=("metrics", "logs", "traces"),
-        provider_worker_counts={"metrics": 1, "logs": 1, "traces": 1},
+        collector=collector or InMemoryEvidenceCollector(),
+        provider_keys=("kubernetes", "metrics", "logs", "traces"),
+        provider_worker_counts={"kubernetes": 1, "metrics": 1, "logs": 1, "traces": 1},
         interval_seconds=8,
     )
 
@@ -151,7 +164,7 @@ def test_central_scheduler_registers_due_provider_jobs_without_local_queue() -> 
     evidence_key = asyncio.run(scheduler.schedule_once(client, now=100.0))
 
     assert evidence_key == "workspace-1:cluster-1:cluster-snapshot:1970-01-01T00:01:36+00:00"
-    assert client.scheduled[0]["provider_keys"] == ["metrics", "logs", "traces"]
+    assert client.scheduled[0]["provider_keys"] == ["kubernetes", "metrics", "logs", "traces"]
 
 
 def test_central_worker_polls_job_and_reports_provider_result() -> None:
@@ -165,7 +178,7 @@ def test_central_worker_polls_job_and_reports_provider_result() -> None:
             "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
         }
     )
-    collector = FakeCollector()
+    collector = InMemoryEvidenceCollector()
     scheduler = make_scheduler(module, collector)
 
     assert asyncio.run(scheduler.work_once(client, "metrics", "metrics-worker")) is True
@@ -209,7 +222,7 @@ def test_success_result_report_error_does_not_mark_job_failed() -> None:
             "provider_policy": {"queries": [{"name": "up", "query": "up"}]},
         }
     )
-    scheduler = make_scheduler(module, FakeCollector())
+    scheduler = make_scheduler(module, InMemoryEvidenceCollector())
 
     with pytest.raises(RuntimeError, match="result endpoint unavailable"):
         asyncio.run(scheduler.work_once(client, "metrics", "metrics-worker"))
@@ -228,7 +241,7 @@ def test_central_worker_reports_provider_failure_for_retry_budget() -> None:
             "provider_policy": {"queries": [{"name": "slow_spans", "query": "{}"}]},
         }
     )
-    scheduler = make_scheduler(module, FakeCollector({"traces"}))
+    scheduler = make_scheduler(module, InMemoryEvidenceCollector({"traces"}))
 
     assert asyncio.run(scheduler.work_once(client, "traces", "traces-worker")) is True
 
@@ -411,6 +424,8 @@ class BulkEvidenceCollector:
         definition = definitions[0]
         self.calls[evidence_key] += 1
         self.query_names[definition.name] += 1
+        if evidence_key == "kubernetes":
+            return {"kubernetes": {"cluster": {"cluster_id": "cluster-1"}}}
         if evidence_key == "metrics":
             return {"metrics": {"source": "prometheus", "results": {"bulk": {}}}}
         if evidence_key == "logs":
@@ -489,7 +504,12 @@ class BulkEvidenceJobClient:
             self.completed_job_ids.add(job_id)
             evidence_key, provider_key = job_id.rsplit(":", 1)
             self.window_providers[evidence_key].add(provider_key)
-            if self.window_providers[evidence_key] == {"metrics", "logs", "traces"}:
+            if self.window_providers[evidence_key] == {
+                "kubernetes",
+                "metrics",
+                "logs",
+                "traces",
+            }:
                 self.emitted_windows.add(evidence_key)
         return {"accepted": True, "evidence_key": evidence_key}
 
@@ -658,7 +678,7 @@ def test_massive_evidence_jobs_complete_once_without_worker_deadlock() -> None:
     module = load_evidence_module()
     window_count = 2_000
     workers_per_provider = 8
-    provider_keys = ("metrics", "logs", "traces")
+    provider_keys = ("kubernetes", "metrics", "logs", "traces")
     collector = BulkEvidenceCollector()
     client = BulkEvidenceJobClient()
     scheduler = module.EvidenceJobScheduler(

@@ -23,11 +23,10 @@
 node-collector /metrics
   -> real Prometheus scrape
   -> Prometheus HTTP query API
-  -> Python query client
-  -> Agent debug query API
-  -> MetricEvidence summary
-  -> Kubernetes pod/event evidence 결합
-  -> POST /agent/evidence
+  -> cluster-agent provider
+  -> evidence job result
+  -> Kubernetes snapshot evidence 결합
+  -> cluster.evidence.received
 ```
 
 ## 작업 순서
@@ -35,16 +34,16 @@ node-collector /metrics
 | 순서 | 파일 | 끝 상태 |
 | --- | --- | --- |
 | 0 | [현재 코드 지도와 테스트 기준](00-current-code-map.md) | 실제 route/client/test 위치를 확인함 |
-| 1 | [Fake/Real Telemetry 경계](01-fake-real-telemetry-boundary.md) | fake Prometheus와 real Prometheus 차이가 문서화됨 |
+| 1 | [Telemetry Provider 경계](01-telemetry-provider-boundary.md) | 현재 provider와 evidence job 경계가 문서화됨 |
 | 2 | [Observability 설치 경계](02-observability-stack-boundary.md) | 플랫폼 관측 설치물과 user workload diff가 분리됨 |
 | 3 | [Prometheus Helm Values](03-prometheus-helm-values.md) | secret 없는 Helm values 초안이 생김 |
 | 4 | [Helm Template / Dry-run](04-helm-template-dry-run.md) | apply 없이 생성 YAML을 검증할 수 있음 |
 | 5 | [Node Collector Scrape Target](05-node-collector-scrape-target.md) | Prometheus가 node-collector `/metrics`를 scrape함 |
 | 6 | [Prometheus Query 직접 검증](06-prometheus-query-verification.md) | scrape된 metric을 query API로 다시 읽음 |
 | 7 | [Prometheus Query Client](07-prometheus-query-client.md) | query API 호출이 코드 adapter로 감싸짐 |
-| 8 | [Agent Debug Query API](08-agent-debug-query-api.md) | Gateway 없이 agent가 query를 실행함 |
+| 8 | [Agent Debug Query API](08-agent-debug-query-api.md) | Gateway가 `telemetry.query.run` command를 queue에 넣음 |
 | 9 | [MetricEvidence Summary](09-metric-evidence-summary.md) | raw query 결과가 작은 evidence로 축약됨 |
-| 10 | [Kubernetes Pod/Event Reader](10-kubernetes-pod-event-reader.md) | pod 상태와 event를 evidence 재료로 읽음 |
+| 10 | [Kubernetes Pod/Event Reader](10-kubernetes-pod-event-reader.md) | `KubernetesSnapshotProvider`가 snapshot evidence를 만듦 |
 | 11 | [Kubernetes + Metric Evidence 결합](11-combined-kubernetes-metric-evidence.md) | pod 상태와 Prometheus metric이 같은 resource 기준으로 묶임 |
 | 12 | [Gateway 계약 연결](12-gateway-contract-connection.md) | `/agent/evidence`, command poll/result 계약에 연결됨 |
 | 13 | [Loki / OTel Ingest 경로](13-loki-otel-ingest-path.md) | Prometheus 이후 log 또는 trace 경로 하나가 검증됨 |
@@ -60,7 +59,7 @@ node-collector /metrics
 
 ## 공통 금지 사항
 
-- fake Prometheus를 real Prometheus처럼 확장하지 않는다.
+- provider 결과는 실제 evidence job 경로로 검증한다.
 - Target Agent에 raw NATS client나 DB session을 넣지 않는다.
 - raw Prometheus/Loki/OTel response 전체를 event로 보내지 않는다.
 - `deploy/target/target.yaml`을 통째로 갈아엎지 않는다.

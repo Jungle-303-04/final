@@ -6,42 +6,75 @@
 
 ## 현재 프로젝트 기준 상태
 
-먼저 현재 repo에 이미 있는 것과 아직 없는 것을 구분한다.
+먼저 현재 repo에 실제로 구현된 흐름을 기준으로 본다.
 
 현재 있는 것:
 
-- `src/services/target/cluster-agent/fake_telemetry.py` (`FAKE_TELEMETRY_KIND=prometheus`)
-  - 실제 Prometheus가 아니다.
-  - `agent.py`의 `create_fake_telemetry_app("prometheus")`를 실행한다.
-  - Prometheus처럼 생긴 JSON을 고정으로 반환하는 fake server다.
-  - scrape 저장소도 없고 PromQL query engine도 없다.
+- `src/services/target/cluster-agent/providers/prometheus_providers.py`
+  - `PROMETHEUS_BASE_URL`의 HTTP API를 호출한다.
+  - `PrometheusInstantQuery`는 `/api/v1/query`를 호출한다.
+  - `PrometheusRangeQuery`는 `/api/v1/query_range`를 호출한다.
+  - provider 정책에 `range_seconds`, `step_seconds`를 넣으면 range query로 실행된다.
+  - provider 결과는 `metrics` bucket으로 정규화된다.
 
-- `src/services/target/node-collector/node_collector.py`
+- `src/services/target/cluster-agent/providers/kubernetes_providers.py`
+  - `KubernetesSnapshotProvider`가 Kubernetes API를 읽는다.
+  - pods, events, nodes, workloads, services, endpoint slices를 조회한다.
+  - provider 결과는 `kubernetes` bucket으로 정규화된다.
+  - `metrics/logs/traces`와 같은 evidence job scheduler/poll/result 흐름으로 실행된다.
+
+- `src/services/target/cluster-agent/providers/loki_providers.py`
+  - `LOKI_BASE_URL`의 query_range API를 호출한다.
+  - provider 결과는 `logs` bucket으로 정규화된다.
+
+- `src/services/target/cluster-agent/providers/tempo_providers.py`
+  - `TEMPO_BASE_URL`의 trace search API를 호출한다.
+  - provider 결과는 `traces` bucket으로 정규화된다.
+
+- `src/services/target/cluster-agent/telemetry_registry.py`
+  - provider가 `@telemetry.source(...)`로 source, evidence key, query type, range query type을 등록한다.
+  - collector와 scheduler가 source 목록을 직접 하드코딩하지 않게 한다.
+
+- `src/services/target/node-collector/app.py`
   - 이미 `GET /metrics` endpoint가 있다.
   - Prometheus text format 형태로 sample metric을 반환한다.
   - 첫 real Prometheus scrape target으로 쓰기 좋다.
 
+- `deploy/target/prometheus.yaml`, `deploy/target/loki.yaml`, `deploy/target/opentelemetry.yaml`, `deploy/target/tempo.yaml`
+  - target cluster의 관측성 backend manifest다.
+
 - `deploy/target/target.yaml`
-  - `fake-prometheus`, `fake-loki`, `fake-otel` Deployment가 있다.
   - `cluster-agent`가 뜨고, 그 agent가 `optional-node-collector` DaemonSet을 생성/패치한다.
   - 정적 target manifest에 node collector DaemonSet을 직접 넣지 않는다.
 
-아직 없는 것:
+이번 기준에서 추가로 구현된 것:
 
-- real Prometheus Helm values.
-- real Prometheus 설치 README.
-- Prometheus가 node-collector를 scrape하는 실제 검증.
-- Prometheus query API를 호출하는 Python client.
+- Prometheus range query 값 객체와 provider 처리.
+  - 값 객체: `src/services/target/cluster-agent/queries/registry.py`의 `PrometheusRangeQuery`
+  - provider 처리: `PrometheusMetricsProvider.query_range()`
+  - 검증: `tests/test_target_metric_evidence.py::test_prometheus_range_query_is_normalized_into_series`
+
 - Agent debug query API.
-- Prometheus query 결과를 `MetricEvidence`로 축약하는 코드.
+  - route 상수: `src/packages/contracts/gateway/routes.py`의 `AGENT_DEBUG_QUERY_PATH`
+  - 요청/응답: `AgentDebugQueryRequest`, `AgentDebugQueryResponse`
+  - router: `src/domains/command/router.py`의 `agent_debug_query()`
+  - 동작: `telemetry.query.run` command를 `agent_commands` queue에 넣고 Target Agent가 poll해서 실행한다.
+  - 검증: `tests/test_command_router.py::test_agent_debug_query_requires_cluster_read_access_and_queues_agent_command`
 
-따라서 첫 구현 목표는 이것이다.
+- Kubernetes snapshot provider.
+  - provider: `KubernetesSnapshotProvider`
+  - source/evidence key: `kubernetes -> kubernetes`
+  - 기본 query: `src/domains/target/evidence_policy.py`의 `target_namespace_snapshot`
+  - 검증: `tests/test_target_kubernetes_evidence.py`
+
+따라서 현재 구현을 운영 환경에서 확인할 때 기준은 이것이다.
 
 ```text
-fake telemetry Prometheus 모드를 키우지 않는다.
-real Prometheus를 설치한다.
-이미 있는 node-collector /metrics를 Prometheus가 scrape하게 한다.
-Prometheus query API로 node_collector_* metric을 다시 꺼낸다.
+실제 provider manifest를 띄운다.
+node-collector /metrics를 Prometheus가 scrape하게 한다.
+cluster-agent가 Kubernetes API와 Prometheus/Loki/Tempo API를 query한다.
+provider 결과를 evidence job result로 제출한다.
+management가 cluster.evidence.received로 aggregate한다.
 ```
 
 ## 두 방향을 분리한다
@@ -53,7 +86,8 @@ Direction A. 외부 관측 플랫폼에서 꺼내오기
   Prometheus / Loki / OTel backend
     -> Target Agent 또는 Management Gateway adapter가 query
     -> 필요한 부분만 evidence로 축약
-    -> POST /agent/evidence
+    -> POST /agent/evidence/jobs/{job_id}/result
+    -> cluster.evidence.received
 
 Direction B. 우리가 수집한 데이터를 관측 플랫폼에 넣기
   Kubernetes API / kubelet / Node Collector
@@ -104,9 +138,10 @@ Kubernetes API
 
 처음 선택:
 
-- demo 1차: Node Collector가 `/metrics`를 만들고 fake evidence도 Gateway로 보낸다.
-- demo 2차: Prometheus가 Node Collector `/metrics`를 scrape하게 한다.
-- demo 3차: Agent가 Prometheus query API로 metric을 읽어 evidence로 축약한다.
+- 1차: Node Collector가 `/metrics`를 만든다.
+- 2차: Prometheus가 Node Collector `/metrics`를 scrape하게 한다.
+- 3차: Agent가 Prometheus query API로 metric을 읽어 evidence로 축약한다.
+- 4차: Loki/Tempo provider도 같은 evidence job 흐름으로 묶는다.
 
 ## 우리가 수집한 노드/파드 정보를 Prometheus/Loki/OTel에 넣을 수 있는가?
 
@@ -137,13 +172,14 @@ Pod stdout/stderr
   -> Loki
 ```
 
-또는 demo 단계:
+또는 agent가 직접 보조 evidence를 만들 때:
 
 ```text
 Target Agent
   -> Kubernetes API로 최근 pod log 일부 조회
   -> secret redaction
-  -> POST /agent/evidence
+  -> provider result에 포함
+  -> POST /agent/evidence/jobs/{job_id}/result
 ```
 
 Traces:
@@ -160,22 +196,24 @@ Application SDK
 관측 플랫폼에서 꺼낸 데이터는 그대로 Gateway로 보내지 않는다. Agent가 evidence로 축약해서 보낸다.
 
 ```text
-Prometheus query_range 결과
-  -> max/recent/rate 같은 summary 계산
-  -> MetricEvidence
-  -> POST /agent/evidence
+Prometheus query 결과
+  -> sample/result summary 계산
+  -> metrics bucket
+  -> POST /agent/evidence/jobs/{job_id}/result
 
 Loki query_range 결과
   -> 최근 error log N개만 선택
   -> secret redaction
-  -> LogEvidence
-  -> POST /agent/evidence
+  -> logs bucket
+  -> POST /agent/evidence/jobs/{job_id}/result
 
 Kubernetes API pod/event 조회
   -> phase, reason, message, restart_count 정리
-  -> PodEvidence
-  -> POST /agent/evidence
+  -> kubernetes bucket
+  -> POST /agent/evidence/jobs/{job_id}/result
 ```
+
+현재 repo에는 direct `POST /agent/evidence` route도 남아 있다. 하지만 팀 실습과 운영 기본 흐름은 evidence job schedule/poll/result 경로를 우선으로 본다.
 
 왜 축약해야 하는가:
 
@@ -186,36 +224,35 @@ Kubernetes API pod/event 조회
 
 ## 우리 프로젝트의 우선순위
 
-Management Gateway API 계약이 아직 고정되지 않은 동안에는 Gateway 전송부터 만들지 않는다. 먼저 Prometheus만으로 독립적인 폐쇄 루프를 만든다.
+현재는 Gateway evidence job 계약이 있으므로, provider 단독 구현과 Gateway job 흐름을 함께 확인한다.
 
 ```text
-Prometheus Helm 설치
-  -> 더미 /metrics exporter
+target observability manifest 적용
+  -> node-collector /metrics
   -> Prometheus scrape
   -> Prometheus query API
-  -> Agent debug query API
-  -> 더미 MetricEvidence response
+  -> cluster-agent provider
+  -> evidence job result
+  -> cluster.evidence.received
 ```
 
-그 다음 실제 Kubernetes와 연결한다.
+그 다음 Kubernetes snapshot과 metric 보강을 같이 확인한다.
 
-1. Prometheus Helm 설치와 dry-run.
-2. 더미 `/metrics` exporter를 Prometheus에 scrape시킴.
-3. Prometheus query API로 더미 metric 조회.
-4. Agent debug query API가 query를 받아 Prometheus에 실행.
-5. query 결과를 더미 MetricEvidence로 축약.
-6. Kubernetes API로 pod 상태와 event를 직접 읽어 evidence 재료 생성.
-7. Node Collector `/metrics`로 기본 node/runtime metric 제공.
-8. Node Collector metric을 Prometheus에서 query로 다시 회수.
-9. Gateway API 계약이 준비되면 `POST /agent/evidence`로 연결.
-10. Loki query adapter와 OTel trace adapter는 마지막에 추가.
+1. target observability manifest 적용과 dry-run.
+2. Node Collector `/metrics`로 기본 node/runtime metric 제공.
+3. Prometheus가 Node Collector metric을 scrape하는지 확인.
+4. cluster-agent가 Prometheus query API로 metric을 읽는지 확인.
+5. query 결과를 bounded `metrics` bucket으로 축약.
+6. `/agent/evidence/jobs`로 provider job을 만들고 poll/result로 완료.
+7. 같은 `evidence_key`가 한 번만 `cluster.evidence.received`로 나오는지 확인.
+8. Loki query adapter와 Tempo trace adapter도 같은 job 흐름으로 연결.
+9. `KubernetesSnapshotProvider`가 `kubernetes` bucket을 채우고, kube-state-metrics는 metric 보강용으로 사용한다.
 
 이 순서의 장점:
 
-- Gateway 계약이 바뀌어도 Prometheus 설치/query 작업은 버리지 않는다.
 - 작업자가 Prometheus scrape/query 개념을 먼저 손으로 확인할 수 있다.
 - Kubernetes API와 Node Collector를 붙이기 전에 metric 입출력 구조를 이해할 수 있다.
-- 나중에 Gateway 계약이 준비되면 debug API를 실제 client adapter로 바꾸면 된다.
+- Gateway job queue, provider worker, aggregate event까지 한 흐름으로 확인할 수 있다.
 
 ## GitOps diff 대상과 observability 설치물은 분리한다
 
@@ -405,5 +442,5 @@ Prometheus, Loki, OTel backend가 인증을 요구할 수 있다.
 
 - provider token은 Agent log, event, evidence payload에 넣지 않는다.
 - 최종 구조에서는 Gateway/Auth의 IntegrationTarget, CredentialRef, TokenBroker를 통해 받는다.
-- demo 단계에서는 fake token 또는 local-only env를 쓰되 문서에 명확히 표시한다.
+- 로컬 검증에서는 dummy token 또는 local-only env를 쓰되 제품 credential과 분리해 표시한다.
 - query 실패 시 token 값을 error message에 포함하지 않는다.

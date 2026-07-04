@@ -45,7 +45,7 @@ class PrometheusClient(Protocol):
 ## 검증
 
 ```bash
-uv run pytest tests/test_target_metric_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py -q
 uv run ruff check src tests
 ```
 

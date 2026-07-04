@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 import httpx
 from providers import (
+    KubernetesSnapshotProvider,
     LokiLogsProvider,
     PrometheusMetricsProvider,
     TelemetryProvider,
@@ -26,6 +27,7 @@ LOGGER = get_logger(__name__)
 
 __all__ = [
     "EvidenceCollector",
+    "KubernetesSnapshotProvider",
     "LokiLogsProvider",
     "PrometheusMetricsProvider",
     "TelemetryProvider",
