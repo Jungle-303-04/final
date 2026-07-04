@@ -89,3 +89,7 @@ def test_manifest_diff_with_same_image_is_not_treated_as_noop() -> None:
     assert subjects_of(outs) == ["diff.analyzed", "safe_pr.requested"]
     assert outs[0].safe is True
     assert outs[1].body == "deployment/checkout-api: apply rendered manifest"
+    assert len(outs[1].patches) == 1
+    assert outs[1].patches[0].path == "deploy.yaml"
+    assert "apiVersion: apps/v1" in outs[1].patches[0].content
+    assert "replicas: 3" in outs[1].patches[0].content

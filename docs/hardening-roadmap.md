@@ -1,6 +1,6 @@
 # 하드닝 로드맵
 
-이 문서는 현재 코드가 이미 가진 강점 위에, 실운영 자동 변경과 연구/논문 수준 주장에 필요한 보강 계획을 정리한다. 기준은 2026-07-04 코드 상태다.
+이 문서는 현재 코드가 이미 가진 강점 위에, 실운영 자동 변경과 연구/논문 수준 주장에 필요한 보강 계획을 정리한다. 기준은 2026-07-05 코드 상태다.
 
 범위:
 
@@ -28,11 +28,13 @@ P0는 production 자동 변경을 말하기 전에 끝나야 하는 작업이다
 | Render | raw YAML, Kustomize, Helm renderer를 adapter로 분리한다. render error는 structured reason으로 `manifest.invalid`에 남긴다. | render 결과가 resource별 artifact로 저장되고, source commit/ref 없이 생성된 manifest는 production route에서 거부된다. |
 | Approval snapshot | last-approved managed-field snapshot을 DB에 저장한다. snapshot은 approval_id, policy_id, commit_sha, rendered artifact digest와 연결한다. | `diff-worker`의 demo previous-approved fallback 없이 approved snapshot 기준으로 intended/drift/conflict를 구분하는 테스트가 있다. |
 | Policy route | diff risk string 대신 operation, namespace, resource class, environment, approval state, action metadata로 route를 결정한다. | route 결과가 `safe_pr`, `approval_required`, `forbidden`, `command_requested` 중 하나로 구조화되고 audit에 남는다. |
-| Manifest patch PR | Safe PR은 검토 문서만 커밋하지 않고 실제 manifest patch 또는 rollback patch를 포함한다. | PR diff에 Kubernetes manifest 변경이 있으며, body에는 diff basis, rollback, reviewer checklist, approval evidence가 포함된다. |
+| Manifest patch PR | Safe PR 요청은 실제 manifest patch 또는 rollback patch를 파일 패치로 싣고, `scm-worker`는 검토 문서와 패치 파일을 같은 PR branch에 커밋한다. | PR diff에 Kubernetes manifest 변경이 있으며, body에는 diff basis, rollback, reviewer checklist, approval evidence가 포함된다. |
 | Command safety | command-worker와 cluster-agent가 같은 action catalog를 기준으로 검증한다. | production/sandbox/observability action이 policy로 분리되고, 허용되지 않은 namespace/action은 Gateway와 agent 양쪽에서 거부된다. |
 | Approval evidence | command payload와 agent 실행 metadata에 approval_ref/policy_decision_ref를 싣는다. | agent는 approval_ref가 없거나 만료된 write command를 fail-closed한다. |
 | Partial failure | agent result schema에 per-resource status, sanitized stdout/stderr, retryable flag, applied flag를 둔다. | 부분 성공/부분 실패가 `command.completed`와 audit timeline에서 구분된다. |
 | Token boundary | `TokenVaultPort`/`SecretVault`를 만들고 provider token은 event, log, DB payload에 직접 저장하지 않는다. | token rotation, revoked credential, missing scope, secret non-leak 테스트가 있다. |
+
+현 구현 메모: `diff-analyze-worker`는 `desired_manifest`가 있으면 `SafePrFilePatch`를 생성하고, GitHub provider는 repository-relative path 검증 뒤 GitHub Contents API로 manifest patch file을 커밋한다. 아직 남은 P0는 rollback patch 생성, diff basis/ref 강제, reviewer checklist, approval evidence, feature flag, token/ref 검증, repo allowlist다.
 
 ## P1. AI 도구와 RCA 신뢰성
 
