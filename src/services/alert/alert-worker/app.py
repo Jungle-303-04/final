@@ -1,8 +1,4 @@
-"""alert-worker — alert.requested → alert.dispatched → optional command.requested.
-
-현재는 사전 배포 알림 경계를 통과하면 즉시 자동 배포 이벤트를 이어줌.
-나중에 승인/차단 정책은 check_alert_policy() 내부에 넣는다.
-"""
+"""alert-worker — alert.requested → alert.dispatched → optional command.requested."""
 
 from __future__ import annotations
 
@@ -29,6 +25,11 @@ WEBHOOK_PROVIDER_NAME = "webhook"
 ALERT_WEBHOOK_URL_ENV = "ALERT_WEBHOOK_URL"
 ALERT_HTTP_TIMEOUT_SECONDS_ENV = "ALERT_HTTP_TIMEOUT_SECONDS"  # 웹훅 타임아웃 초(기본 10)
 DEFAULT_ALERT_HTTP_TIMEOUT_SECONDS = "10"
+ALERT_BLOCKED_SEVERITIES_ENV = "ALERT_BLOCKED_SEVERITIES"
+ALERT_AUTO_COMMAND_ENVIRONMENTS_ENV = "ALERT_AUTO_COMMAND_ENVIRONMENTS"
+DEFAULT_ALERT_AUTO_COMMAND_ENVIRONMENTS = "sandbox,staging"
+ALERT_SEVERITY_BLOCKED_REASON = "alert severity blocked by policy"
+AUTO_COMMAND_ENVIRONMENT_DENIED_REASON = "auto command not allowed for environment"
 # 웹훅 URL 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 alert.requested 는 alert.rejected 경로로 흐름.
 MISSING_WEBHOOK_URL_MESSAGE = (
@@ -37,10 +38,8 @@ MISSING_WEBHOOK_URL_MESSAGE = (
 )
 
 
-def allow_after_alarm_gate(evt: AlertRequestedBody) -> bool:
-    # TODO(alert): workspace/repo/cluster 정책, 승인, 조용한 시간, 심각도 라우팅 연결
-    # TODO(alert): Slack/Email/PagerDuty 전송 확인 전 production 자동 배포 차단
-    return True
+def csv_values(value: str) -> set[str]:
+    return {item.strip().lower() for item in value.split(",") if item.strip()}
 
 
 @dataclass(frozen=True)
@@ -52,10 +51,18 @@ class AlertPolicyDecision:
 
 
 def check_alert_policy(evt: AlertRequestedBody) -> AlertPolicyDecision:
-    """전송 전 정책 검증 훅 — 지금은 알람 게이트만 보고 항상 허용함."""
-    # TODO: 알림 정책(중복 억제/속도 제한/심각도 라우팅) 연결
-    if not allow_after_alarm_gate(evt):
-        return AlertPolicyDecision(allowed=False, reason=ALERT_GATE_BLOCKED_REASON)
+    """전송 전 정책 검증 — env 정책으로 severity와 자동 명령 환경을 제한."""
+    blocked_severities = csv_values(env(ALERT_BLOCKED_SEVERITIES_ENV, ""))
+    if evt.severity.strip().lower() in blocked_severities:
+        return AlertPolicyDecision(allowed=False, reason=ALERT_SEVERITY_BLOCKED_REASON)
+    allowed_auto_command_envs = csv_values(
+        env(ALERT_AUTO_COMMAND_ENVIRONMENTS_ENV, DEFAULT_ALERT_AUTO_COMMAND_ENVIRONMENTS)
+    )
+    if evt.next_command is not None and evt.environment.lower() not in allowed_auto_command_envs:
+        return AlertPolicyDecision(
+            allowed=False,
+            reason=AUTO_COMMAND_ENVIRONMENT_DENIED_REASON,
+        )
     return AlertPolicyDecision(allowed=True)
 
 
@@ -162,7 +169,6 @@ async def on_alert_requested(
 
 @app.on(AlertDispatchedBody)
 async def on_alert_dispatched(evt: AlertDispatchedBody) -> None:
-    # TODO: 알림 결과 후속 처리(재시도/에스컬레이션) 연결
     LOGGER.info(
         "alert dispatched",
         extra={
@@ -178,7 +184,6 @@ async def on_alert_dispatched(evt: AlertDispatchedBody) -> None:
 
 @app.on(AlertRejectedBody)
 async def on_alert_rejected(evt: AlertRejectedBody) -> None:
-    # TODO: 알림 결과 후속 처리(재시도/에스컬레이션) 연결
     LOGGER.warning("alert rejected", extra={"context": {"reason": evt.reason}})
 
 
