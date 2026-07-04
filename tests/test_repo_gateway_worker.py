@@ -3,7 +3,7 @@ from __future__ import annotations
 from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
 
 from domains.alert.events import AlertRequestedBody
-from domains.scm.events import SafePrRequestedBody
+from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 
 PR_HTML_URL = "https://github.test.local/project/repo/pull/7"
 
@@ -56,6 +56,81 @@ def test_repo_gateway_creates_pr_from_request(monkeypatch) -> None:
         ("PUT", "/repos/project/repo/contents/.gitops/safe-pr/workflow-default.md"),
         ("POST", "/repos/project/repo/pulls"),
     ]
+
+
+def test_repo_gateway_commits_manifest_patches(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+    outs = run_handler(
+        repo.on_safe_pr_requested,
+        SafePrRequestedBody(
+            title="t",
+            body="b",
+            provider="github",
+            manifest_path="deploy/app.yaml",
+            patches=[
+                SafePrFilePatch(
+                    path="deploy/app.yaml",
+                    content="apiVersion: apps/v1\nkind: Deployment\n",
+                    description="rendered Kubernetes manifest",
+                )
+            ],
+        ),
+        db=db,
+    )
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert calls == [
+        ("GET", "/repos/project/repo/git/ref/heads/main"),
+        ("POST", "/repos/project/repo/git/refs"),
+        ("PUT", "/repos/project/repo/contents/.gitops/safe-pr/workflow-default.md"),
+        ("PUT", "/repos/project/repo/contents/deploy/app.yaml"),
+        ("POST", "/repos/project/repo/pulls"),
+    ]
+    assert db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_unsafe_patch_path_before_github_write(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+    outs = run_handler(
+        repo.on_safe_pr_requested,
+        SafePrRequestedBody(
+            title="t",
+            body="b",
+            provider="github",
+            manifest_path="deploy/app.yaml",
+            patches=[SafePrFilePatch(path="../secret.yaml", content="x")],
+        ),
+        db=db,
+    )
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == []
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_rejects_space_prefixed_absolute_patch_path(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+    outs = run_handler(
+        repo.on_safe_pr_requested,
+        SafePrRequestedBody(
+            title="t",
+            body="b",
+            provider="github",
+            manifest_path="deploy/app.yaml",
+            patches=[SafePrFilePatch(path=" /secret.yaml", content="x")],
+        ),
+        db=db,
+    )
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == []
+    assert not db.called("save_pull_request")
 
 
 def test_repo_gateway_is_idempotent_on_redelivery(monkeypatch) -> None:
