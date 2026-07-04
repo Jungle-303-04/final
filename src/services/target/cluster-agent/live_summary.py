@@ -26,7 +26,9 @@ from kubernetes_api import (
 import config as agent_config
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.realtime import (
+    AGENT_LIVE_PATH,
     MAX_HOT_PODS,
     HotPod,
     LiveSummary,
@@ -35,7 +37,6 @@ from packages.contracts.realtime import (
 
 LOGGER = get_logger(__name__)
 
-AGENT_LIVE_PATH = "/live/agent"
 CRASH_LOOP_REASON = "CrashLoopBackOff"
 
 SummaryCollector = Callable[[], Awaitable[LiveSummary | None]]
@@ -210,7 +211,7 @@ class LiveSummaryPublisher:
 
     @property
     def endpoint(self) -> str:
-        return f"{self.gateway_url}{AGENT_LIVE_PATH}?cluster_id={self.cluster_id}"
+        return f"{self.gateway_url}{AGENT_LIVE_PATH}?{Gateway.CLUSTER_ID}={self.cluster_id}"
 
     async def run(self) -> None:
         if not self.enabled or not self.gateway_url:

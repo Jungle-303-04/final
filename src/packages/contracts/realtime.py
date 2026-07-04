@@ -17,6 +17,14 @@ from packages.contracts.gateway.base import StrictModel
 
 REALTIME_PROTOCOL = "realtime.v1"
 
+# WebSocket 경로 — producer(cluster-agent)와 gateway 가 같은 계약을 import 함(중복 리터럴 금지).
+AGENT_LIVE_PATH = "/live/agent"
+BROWSER_LIVE_PATH = "/live/browser"
+
+# snapshot.state 구조 키 — browser 소비자가 최초 렌더링에 쓰는 read model 의 계약.
+STATE_CLUSTERS_KEY = "clusters"
+STATE_RESOURCES_KEY = "resources"
+
 # live summary 상한 — 사용자 수와 무관하게 agent payload 가 bounded 이도록 계약으로 강제.
 MAX_HOT_PODS = 20
 MAX_WINDOW_MS = 60_000
