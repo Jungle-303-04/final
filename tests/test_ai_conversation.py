@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -287,3 +288,62 @@ def test_create_conversation_stores_user_message_and_emits_agent_event() -> None
         "ai.message.received",
     ]
     assert events.bodies[-1].conversation_id == response.conversation_id
+
+
+class TransactionalFakeDb(FakeDb):
+    """unit_of_work 를 제공해 쓰기·이벤트 스테이징이 한 트랜잭션으로 묶이는지 기록함."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.uow_active = False
+        self.calls: list[tuple[str, bool]] = []
+
+    @contextmanager
+    def unit_of_work(self):
+        self.uow_active = True
+        try:
+            yield self
+        finally:
+            self.uow_active = False
+
+    def create_ai_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(("create_conversation", self.uow_active))
+        return super().create_ai_conversation(payload)
+
+    def append_ai_message(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(("append_message", self.uow_active))
+        return super().append_ai_message(payload)
+
+
+class UowTrackingEvents(FakeEvents):
+    """accept_body 시점에 db 트랜잭션이 열려 있는지 기록함."""
+
+    def __init__(self, db: TransactionalFakeDb) -> None:
+        super().__init__()
+        self.db = db
+        self.accepted_in_uow: list[bool] = []
+
+    async def accept_body(self, body: Any, *args: Any, **kwargs: Any) -> Any:
+        self.accepted_in_uow.append(self.db.uow_active)
+        return await super().accept_body(body, *args, **kwargs)
+
+
+def test_create_conversation_wraps_writes_and_event_in_single_transaction() -> None:
+    # 대화 생성·첫 메시지·이벤트 스테이징이 하나의 unit_of_work 안에서 실행돼야 함
+    # (부분 실패 시 메시지 없는 대화·이벤트 없는 메시지 고아 방지).
+    db = TransactionalFakeDb()
+    events = UowTrackingEvents(db)
+
+    response = asyncio.run(
+        create_conversation(
+            AiConversationCreateRequest(message="wrap me in one transaction"),
+            current=CurrentUser(),
+            db=db,
+            events=events,
+        )
+    )
+
+    assert response.accepted is True
+    assert db.calls == [("create_conversation", True), ("append_message", True)]
+    assert events.accepted_in_uow == [True]
+    assert db.uow_active is False  # 핸들러 종료 후 트랜잭션 정리 확인

@@ -54,6 +54,7 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistratio
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
 from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
+from packages.storage.engine import unit_of_work_or_null
 
 AGENT_TOKEN_BYTES = 32  # per-cluster agent 토큰 엔트로피(secrets.token_urlsafe)
 KUBECTL_NOT_AVAILABLE = "kubectl is not available to api-gateway"
@@ -519,41 +520,44 @@ async def register_target(
         else None
     )
 
-    db.register_target_cluster(
-        {
-            "workspace_id": workspace_id,
-            "user_id": current.user_id,
-            "cluster_id": scoped_payload.cluster_id,
-            "name": scoped_payload.name,
-            "environment": scoped_payload.environment,
-            "agent_token_hash": hash_agent_token(agent_token),
-            "settings": scoped_payload.model_dump(
-                exclude={"apply", "kube_context"},
-            ),
-        }
-    )
-    if db.get_cluster_policy(workspace_id, scoped_payload.cluster_id) is None:
-        policy = default_agent_policy(
-            cluster_id=scoped_payload.cluster_id,
-            interval_seconds=scoped_payload.evidence_interval_seconds,
+    # 클러스터 등록·정책·desired-state·이벤트 스테이징을 한 트랜잭션으로 —
+    # 부분 실패 시 정책/desired-state 없는 반쪽 등록(고아)이 남지 않음.
+    with unit_of_work_or_null(db):
+        db.register_target_cluster(
+            {
+                "workspace_id": workspace_id,
+                "user_id": current.user_id,
+                "cluster_id": scoped_payload.cluster_id,
+                "name": scoped_payload.name,
+                "environment": scoped_payload.environment,
+                "agent_token_hash": hash_agent_token(agent_token),
+                "settings": scoped_payload.model_dump(
+                    exclude={"apply", "kube_context"},
+                ),
+            }
         )
-        db.upsert_cluster_policy(workspace_id, scoped_payload.cluster_id, policy.model_dump())
-    db.upsert_target_desired_states(
-        workspace_id,
-        scoped_payload.cluster_id,
-        [component.to_body() for component in components],
-        current.user_id,
-    )
-    await events.accept_body(
-        ClusterDesiredStateChangedBody(
-            workspace_id=workspace_id,
-            cluster_id=scoped_payload.cluster_id,
-            desired_state_version=version,
-            components=components,
-            reason="target registered",
-            requested_by=current.user_id,
+        if db.get_cluster_policy(workspace_id, scoped_payload.cluster_id) is None:
+            policy = default_agent_policy(
+                cluster_id=scoped_payload.cluster_id,
+                interval_seconds=scoped_payload.evidence_interval_seconds,
+            )
+            db.upsert_cluster_policy(workspace_id, scoped_payload.cluster_id, policy.model_dump())
+        db.upsert_target_desired_states(
+            workspace_id,
+            scoped_payload.cluster_id,
+            [component.to_body() for component in components],
+            current.user_id,
         )
-    )
+        await events.accept_body(
+            ClusterDesiredStateChangedBody(
+                workspace_id=workspace_id,
+                cluster_id=scoped_payload.cluster_id,
+                desired_state_version=version,
+                components=components,
+                reason="target registered",
+                requested_by=current.user_id,
+            )
+        )
     return install_response(scoped_payload, manifest, apply_output, agent_token)
 
 

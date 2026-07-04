@@ -99,19 +99,29 @@ class DeadLetterRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return serialize_dead_letter(row) if row else None
 
-    def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> None:
+    def mark_dead_letter_replayed(self, dead_letter_id: int, replay_event_id: str) -> bool:
+        """열린 dead letter 만 원자 UPDATE 로 replay 표시 — 첫 요청만 True 반환함.
+
+        검사(status)와 갱신이 한 문장이라 SELECT 후 갱신 사이에 끼어드는 동시
+        replay 가 이중 재발행으로 이어지지 않음(진 요청은 False → 409 처리).
+        """
         table = EventDeadLetter.__table__
         statement = (
             update(table)
-            .where(table.c.id == dead_letter_id)
+            .where(
+                table.c.id == dead_letter_id,
+                table.c.status == DEAD_LETTER_STATUS_OPEN,
+            )
             .values(
                 status=DEAD_LETTER_STATUS_REPLAYED,
                 replayed_at=func.now(),
                 replay_event_id=replay_event_id,
             )
+            .returning(table.c.id)
         )
         with self.connection() as conn:
-            conn.execute(statement)
+            row = conn.execute(statement).first()
+        return row is not None
 
     def open_dead_letter_count(self) -> int:
         table = EventDeadLetter.__table__

@@ -22,6 +22,7 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db, get_events
+from packages.storage.engine import unit_of_work_or_null
 
 router = APIRouter()
 DEFAULT_AGENT = "operations-chat"
@@ -54,40 +55,43 @@ async def create_conversation(
     conversation_id = new_id("aic")
     message_id = new_id("aim")
     title = title_for(payload)
-    db.create_ai_conversation(
-        {
-            "conversation_id": conversation_id,
-            "workspace_id": workspace_id,
-            "user_id": current.user_id,
-            "title": title,
-            "agent": agent,
-            "status": STATUS_WAITING,
-            "context": payload.context,
-        }
-    )
-    db.append_ai_message(
-        {
-            "message_id": message_id,
-            "conversation_id": conversation_id,
-            "workspace_id": workspace_id,
-            "role": ROLE_USER,
-            "content": payload.message,
-            "agent": agent,
-            "metadata": {"source": "http"},
-        }
-    )
-    accepted = await events.accept_body(
-        AiMessageReceivedBody(
-            conversation_id=conversation_id,
-            message_id=message_id,
-            content=payload.message,
-            agent=agent,
-            user_id=current.user_id,
-            workspace_id=workspace_id,
-            context=payload.context,
-        ),
-        actor=Actor(current.user_id, tuple(current.roles)),
-    )
+    # 대화 생성·첫 메시지·이벤트 스테이징을 한 트랜잭션으로 — 부분 실패 시
+    # 메시지 없는 대화(고아) 또는 이벤트 없는 메시지가 남지 않음.
+    with unit_of_work_or_null(db):
+        db.create_ai_conversation(
+            {
+                "conversation_id": conversation_id,
+                "workspace_id": workspace_id,
+                "user_id": current.user_id,
+                "title": title,
+                "agent": agent,
+                "status": STATUS_WAITING,
+                "context": payload.context,
+            }
+        )
+        db.append_ai_message(
+            {
+                "message_id": message_id,
+                "conversation_id": conversation_id,
+                "workspace_id": workspace_id,
+                "role": ROLE_USER,
+                "content": payload.message,
+                "agent": agent,
+                "metadata": {"source": "http"},
+            }
+        )
+        accepted = await events.accept_body(
+            AiMessageReceivedBody(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                content=payload.message,
+                agent=agent,
+                user_id=current.user_id,
+                workspace_id=workspace_id,
+                context=payload.context,
+            ),
+            actor=Actor(current.user_id, tuple(current.roles)),
+        )
     return AiConversationAcceptedResponse(
         accepted=True,
         conversation_id=conversation_id,
@@ -114,30 +118,32 @@ async def append_message(
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     agent = payload.agent or str(conversation["agent"])
     message_id = new_id("aim")
-    db.append_ai_message(
-        {
-            "message_id": message_id,
-            "conversation_id": conversation_id,
-            "workspace_id": workspace_id,
-            "role": ROLE_USER,
-            "content": payload.message,
-            "agent": agent,
-            "metadata": {"source": "http"},
-        }
-    )
-    db.mark_ai_conversation_status(workspace_id, conversation_id, STATUS_WAITING)
-    accepted = await events.accept_body(
-        AiMessageReceivedBody(
-            conversation_id=conversation_id,
-            message_id=message_id,
-            content=payload.message,
-            agent=agent,
-            user_id=current.user_id,
-            workspace_id=workspace_id,
-            context=payload.context or conversation.get("context") or {},
-        ),
-        actor=Actor(current.user_id, tuple(current.roles)),
-    )
+    # 메시지 추가·상태 갱신·이벤트 스테이징을 한 트랜잭션으로(부분 실패 고아 방지).
+    with unit_of_work_or_null(db):
+        db.append_ai_message(
+            {
+                "message_id": message_id,
+                "conversation_id": conversation_id,
+                "workspace_id": workspace_id,
+                "role": ROLE_USER,
+                "content": payload.message,
+                "agent": agent,
+                "metadata": {"source": "http"},
+            }
+        )
+        db.mark_ai_conversation_status(workspace_id, conversation_id, STATUS_WAITING)
+        accepted = await events.accept_body(
+            AiMessageReceivedBody(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                content=payload.message,
+                agent=agent,
+                user_id=current.user_id,
+                workspace_id=workspace_id,
+                context=payload.context or conversation.get("context") or {},
+            ),
+            actor=Actor(current.user_id, tuple(current.roles)),
+        )
     return AiConversationAcceptedResponse(
         accepted=True,
         conversation_id=conversation_id,

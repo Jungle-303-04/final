@@ -24,6 +24,7 @@ from packages.contracts.gateway.responses import AcceptedEventResponse, Accepted
 from packages.contracts.gitops import ApprovalStatus
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, DEPLOY_ACCESS, AccessResourceType
 from packages.runtime.dependencies import get_db, get_events
+from packages.storage.engine import unit_of_work_or_null
 
 router = APIRouter(dependencies=[Depends(verify_github_signature)])
 approval_router = APIRouter()
@@ -150,29 +151,32 @@ async def grant_approval(
         "decision_reason": payload.reason,
         "command_requested": command.to_body(),
     }
-    resolve_approval_or_409(
-        db,
-        approval_id,
-        workspace_id,
-        ApprovalStatus.GRANTED.value,
-        current.user_id,
-        "granted",
-        details,
-    )
-    accepted = await events.accept_body(
-        ApprovalGrantedBody(
-            approval_id=approval_id,
-            workflow_run_id=str(record["workflow_run_id"]),
-            application_id=str(record["application_id"]),
-            workspace_id=workspace_id,
-            binding_id=str(record["binding_id"]),
-            environment=str(record["environment"]),
-            decided_by=current.user_id,
-            decision="granted",
-            details=details,
-        ),
-        actor=Actor(current.user_id, tuple(current.roles)),
-    )
+    # 승인 해결(원자 UPDATE)과 이벤트 스테이징을 한 트랜잭션으로 — 이벤트 스테이징이
+    # 실패하면 해결도 롤백되어 '해결됐지만 후속 이벤트 없는' 고아 승인 방지.
+    with unit_of_work_or_null(db):
+        resolve_approval_or_409(
+            db,
+            approval_id,
+            workspace_id,
+            ApprovalStatus.GRANTED.value,
+            current.user_id,
+            "granted",
+            details,
+        )
+        accepted = await events.accept_body(
+            ApprovalGrantedBody(
+                approval_id=approval_id,
+                workflow_run_id=str(record["workflow_run_id"]),
+                application_id=str(record["application_id"]),
+                workspace_id=workspace_id,
+                binding_id=str(record["binding_id"]),
+                environment=str(record["environment"]),
+                decided_by=current.user_id,
+                decision="granted",
+                details=details,
+            ),
+            actor=Actor(current.user_id, tuple(current.roles)),
+        )
     return AcceptedResponse(
         accepted=True,
         event_id=accepted.event.event_id,
@@ -195,29 +199,31 @@ async def reject_approval(
     require_approval_deploy_access(db, current, workspace_id, diff)
     reason = payload.reason or "approval rejected"
     details = {**approval_details(record), "decision_reason": reason}
-    resolve_approval_or_409(
-        db,
-        approval_id,
-        workspace_id,
-        ApprovalStatus.REJECTED.value,
-        current.user_id,
-        "rejected",
-        details,
-    )
-    accepted = await events.accept_body(
-        ApprovalRejectedBody(
-            approval_id=approval_id,
-            workflow_run_id=str(record["workflow_run_id"]),
-            application_id=str(record["application_id"]),
-            reason=reason,
-            workspace_id=workspace_id,
-            binding_id=str(record["binding_id"]),
-            environment=str(record["environment"]),
-            decided_by=current.user_id,
-            details=details,
-        ),
-        actor=Actor(current.user_id, tuple(current.roles)),
-    )
+    # grant 와 동일 — 해결과 이벤트 스테이징을 한 트랜잭션으로 묶음.
+    with unit_of_work_or_null(db):
+        resolve_approval_or_409(
+            db,
+            approval_id,
+            workspace_id,
+            ApprovalStatus.REJECTED.value,
+            current.user_id,
+            "rejected",
+            details,
+        )
+        accepted = await events.accept_body(
+            ApprovalRejectedBody(
+                approval_id=approval_id,
+                workflow_run_id=str(record["workflow_run_id"]),
+                application_id=str(record["application_id"]),
+                reason=reason,
+                workspace_id=workspace_id,
+                binding_id=str(record["binding_id"]),
+                environment=str(record["environment"]),
+                decided_by=current.user_id,
+                details=details,
+            ),
+            actor=Actor(current.user_id, tuple(current.roles)),
+        )
     return AcceptedResponse(
         accepted=True,
         event_id=accepted.event.event_id,
