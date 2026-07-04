@@ -90,9 +90,6 @@ def yaml_string(value: str) -> str:
 
 
 def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) -> str:
-    fake_telemetry = (
-        fake_telemetry_manifest(payload.image) if payload.install_fake_telemetry else ""
-    )
     return "\n---\n".join(
         block.strip()
         for block in [
@@ -103,7 +100,6 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             sandbox_rbac_manifest(),
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token),
-            fake_telemetry,
             checkout_api_manifest(payload.image),
             cluster_agent_manifest(payload),
         ]
@@ -139,15 +135,6 @@ def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesi
                 "enabled": payload.install_node_collector,
                 "daemonset": "optional-node-collector",
                 "managed_by": TargetComponent.CLUSTER_AGENT.value,
-            },
-        ),
-        TargetDesiredComponent(
-            component=TargetComponent.FAKE_TELEMETRY.value,
-            namespace=TARGET_NAMESPACE,
-            version=payload.image,
-            spec={
-                "enabled": payload.install_fake_telemetry,
-                "providers": ["prometheus", "loki", "otel"],
             },
         ),
     ]
@@ -320,61 +307,6 @@ metadata:
 type: Opaque
 stringData:
   AGENT_TOKEN: {yaml_string(agent_token)}
-"""
-
-
-def fake_telemetry_manifest(image: str) -> str:
-    return "\n---\n".join(
-        fake_telemetry_deployment(kind, image) + "\n---\n" + fake_telemetry_service(kind)
-        for kind in ("prometheus", "loki", "otel")
-    )
-
-
-def fake_telemetry_deployment(kind: str, image: str) -> str:
-    app = f"fake-{kind}"
-    return f"""
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {app}
-  namespace: target
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: {app}
-  template:
-    metadata:
-      labels:
-        app: {app}
-    spec:
-      containers:
-        - name: {app}
-          image: {yaml_string(image)}
-          imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/target/cluster-agent/fake_telemetry.py"]
-          env:
-            - name: FAKE_TELEMETRY_KIND
-              value: {kind}
-          ports:
-            - containerPort: 8000
-"""
-
-
-def fake_telemetry_service(kind: str) -> str:
-    app = f"fake-{kind}"
-    return f"""
-apiVersion: v1
-kind: Service
-metadata:
-  name: {app}
-  namespace: target
-spec:
-  selector:
-    app: {app}
-  ports:
-    - port: 8000
-      targetPort: 8000
 """
 
 
