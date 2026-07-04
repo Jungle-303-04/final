@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from packages.config.constants import Command
 from packages.config.settings import env
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
@@ -74,8 +75,8 @@ NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = int(
 )
 DEFAULT_AGENT_CONTROL_DB_PATH = "/tmp/target-agent/agent-control.db"
 DEFAULT_COMMAND_OUTBOX_DB_PATH = "/tmp/target-agent/command-outbox.db"
-DEFAULT_EVIDENCE_PROVIDER_WORKERS = "metrics=1,logs=1,traces=1"
-DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS = "metrics=3,logs=3,traces=3"
+DEFAULT_EVIDENCE_PROVIDER_WORKERS = "kubernetes=1,metrics=1,logs=1,traces=1"
+DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS = "kubernetes=2,metrics=3,logs=3,traces=3"
 DEFAULT_EVIDENCE_FAILURE_POLICY = "allow_partial"
 DEFAULT_POLICY_SYNC_INTERVAL_SECONDS = 15
 DEFAULT_RECONCILE_INTERVAL_SECONDS = 30
@@ -99,7 +100,7 @@ COMMAND_COMPLETED_STATUS = "completed"
 COMMAND_FAILED_STATUS = "failed"
 COMMAND_RESULT_MESSAGE = "Kubernetes action applied in sandbox namespace"
 
-QUERY_RUN_ACTION = "telemetry.query.run"
+QUERY_RUN_ACTION = Command.TELEMETRY_QUERY_RUN_ACTION
 
 KUBERNETES_DEPLOYMENT_PATCH_ACTION = "k8s.apps.v1.deployments.patch"
 KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"

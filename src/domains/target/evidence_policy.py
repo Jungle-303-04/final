@@ -16,6 +16,13 @@ DEFAULT_CLUSTER_ROLE = "target"
 DEFAULT_BOOTSTRAP_MODE = "target"
 
 DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
+    "kubernetes": [
+        {
+            "name": "target_namespace_snapshot",
+            "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the target namespace.",
+            "query": "target",
+        },
+    ],
     "metrics": [
         {
             "name": "scrape_targets_up",
@@ -54,6 +61,8 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "name": "node_collector_node_pod_count",
             "description": "Pods scheduled on each Kubernetes node reported by optional-node-collector.",
             "query": "node_collector_node_pod_count",
+            "range_seconds": "900",
+            "step_seconds": "30",
         },
         {
             "name": "node_collector_node_not_ready_pod_count",
@@ -61,6 +70,8 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
                 "Not Ready Pods on each Kubernetes node reported by optional-node-collector."
             ),
             "query": "node_collector_node_not_ready_pod_count",
+            "range_seconds": "900",
+            "step_seconds": "30",
         },
         {
             "name": "node_collector_scrape_error",

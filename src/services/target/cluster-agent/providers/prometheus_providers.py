@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
+
 import httpx
-from queries import PrometheusInstantQuery
+from queries import PrometheusInstantQuery, PrometheusRangeQuery
 from telemetry_registry import telemetry
 
 from config import (
@@ -17,6 +19,7 @@ from providers.base import TRACER, ConfigReader
     source="prometheus",
     evidence_key="metrics",
     query_type=PrometheusInstantQuery,
+    range_query_type=PrometheusRangeQuery,
 )
 class PrometheusMetricsProvider:
     span_name = "prometheus.collect"
@@ -24,7 +27,7 @@ class PrometheusMetricsProvider:
     result_count_attribute = "prometheus.result_count"
     timeout_seconds = PROMETHEUS_TIMEOUT_SECONDS
     failure_message = "prometheus metrics collection failed"
-    queries: tuple[PrometheusInstantQuery, ...] = ()
+    queries: tuple[PrometheusInstantQuery | PrometheusRangeQuery, ...] = ()
 
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
@@ -34,6 +37,15 @@ class PrometheusMetricsProvider:
         return cls(read_config(PROMETHEUS_BASE_URL_ENV, DEFAULT_PROMETHEUS_BASE_URL))
 
     async def query(
+        self,
+        client: httpx.AsyncClient,
+        telemetry_query: PrometheusInstantQuery | PrometheusRangeQuery,
+    ) -> JsonObject:
+        if isinstance(telemetry_query, PrometheusRangeQuery):
+            return await self.query_range(client, telemetry_query)
+        return await self.query_instant(client, telemetry_query)
+
+    async def query_instant(
         self,
         client: httpx.AsyncClient,
         telemetry_query: PrometheusInstantQuery,
@@ -48,17 +60,42 @@ class PrometheusMetricsProvider:
             response.raise_for_status()
             return response.json()
 
+    async def query_range(
+        self,
+        client: httpx.AsyncClient,
+        telemetry_query: PrometheusRangeQuery,
+    ) -> JsonObject:
+        end = time.time()
+        start = end - telemetry_query.range_seconds
+        step = telemetry_query.step_seconds or max(1, telemetry_query.range_seconds // 30)
+        with TRACER.start_as_current_span("prometheus.query_range") as span:
+            span.attr("prometheus.query", telemetry_query.promql)
+            span.attr("prometheus.range_seconds", telemetry_query.range_seconds)
+            response = await client.get(
+                f"{self.base_url}/api/v1/query_range",
+                params={
+                    "query": telemetry_query.promql,
+                    "start": f"{start:.3f}",
+                    "end": f"{end:.3f}",
+                    "step": str(step),
+                },
+            )
+            span.http_status(response.status_code)
+            response.raise_for_status()
+            return response.json()
+
     def empty_results(self) -> JsonObject:
         return {}
 
     def append_result(
         self,
         results: JsonObject,
-        telemetry_query: PrometheusInstantQuery,
+        telemetry_query: PrometheusInstantQuery | PrometheusRangeQuery,
         payload: JsonObject,
     ) -> None:
         results[telemetry_query.metric_name] = {
             "query": telemetry_query.promql,
+            **self.query_metadata(telemetry_query),
             **self.normalize_payload(payload),
         }
 
@@ -91,8 +128,45 @@ class PrometheusMetricsProvider:
                 "raw": payload,
             }
 
+        if result_type == "matrix":  # range query time series values
+            series = []
+            for item in result:
+                values = []
+                for raw_value in item.get("values", []):
+                    values.append(
+                        {
+                            "timestamp": raw_value[0] if len(raw_value) >= 1 else None,
+                            "value": float(raw_value[1]) if len(raw_value) >= 2 else None,
+                        }
+                    )
+                series.append(
+                    {
+                        "metric": item.get("metric", {}),
+                        "values": values,
+                    }
+                )
+
+            return {
+                "result_type": result_type,
+                "series": series,
+                "point_count": sum(len(item["values"]) for item in series),
+                "raw": payload,
+            }
+
         return {  # other result type(not vector)
             "result_type": result_type,
             "result": result,
             "raw": payload,
+        }
+
+    def query_metadata(
+        self,
+        telemetry_query: PrometheusInstantQuery | PrometheusRangeQuery,
+    ) -> JsonObject:
+        if not isinstance(telemetry_query, PrometheusRangeQuery):
+            return {"query_mode": "instant"}
+        return {
+            "query_mode": "range",
+            "range_seconds": telemetry_query.range_seconds,
+            "step_seconds": telemetry_query.step_seconds,
         }

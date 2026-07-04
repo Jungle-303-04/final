@@ -42,6 +42,7 @@ class Command:
     DEFAULT_ACTION: Final[str] = "rollout_restart"
     APPLY_MANIFEST_ACTION: Final[str] = "apply_manifest"
     DELETE_WORKLOAD_ACTION: Final[str] = "delete_workload"
+    TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
 
 
 class CommandStatus:

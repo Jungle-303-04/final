@@ -9,7 +9,7 @@ Prometheus, Loki, OTel 설치 YAML을 사용자 workload GitOps diff 대상과 �
 - `deploy/target/target.yaml`
 - `docs/team/member-guides/target-telemetry-data-flows.md`
 - `docs/team/contract-vs-demo-boundary.md`
-- [01. Fake / Real Telemetry 경계](01-fake-real-telemetry-boundary.md)
+- [01. Telemetry Provider 경계](01-telemetry-provider-boundary.md)
 
 ## 수정 후보
 

@@ -26,6 +26,7 @@ from kubernetes_api import (
 from live_summary import LiveSummaryPublisher
 from node_collector_manager import NodeCollectorManager
 from providers import (
+    KubernetesSnapshotProvider,
     LokiLogsProvider,
     PrometheusMetricsProvider,
     TelemetryProvider,
@@ -410,6 +411,10 @@ class TargetClusterAgent:
         )
         if providers is None:
             providers = (
+                KubernetesSnapshotProvider(
+                    cluster_id=self.cluster_id,
+                    transport=kubernetes_transport,
+                ),
                 PrometheusMetricsProvider.from_config(env),
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
