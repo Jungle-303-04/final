@@ -48,6 +48,8 @@ TEMPLATE_FIELD = "template"
 CONTAINERS_FIELD = "containers"
 GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
 GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
+GIT_MANIFEST_SOURCE_MODE_ENV = "GIT_MANIFEST_SOURCE_MODE"
+GIT_LOCAL_MANIFEST_ENABLED_ENV = "GIT_LOCAL_MANIFEST_ENABLED"
 GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
 GIT_REMOTE_MANIFEST_REQUIRED_ENV = "GIT_REMOTE_MANIFEST_REQUIRED"
 GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV = "GITHUB_MANIFEST_TIMEOUT_SECONDS"
@@ -55,6 +57,9 @@ GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS
 DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
 DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS = "5"
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
+SOURCE_MODE_AUTO = "auto"
+SOURCE_MODE_REMOTE = "remote"
+SOURCE_MODE_LOCAL = "local"
 # manifest 원천(local clone/파일/GitHub contents) 어디에서도 소스를 못 찾은 경우의 사유.
 # 합성 manifest 생성 대신 manifest.invalid 로 정직하게 실패함.
 MANIFEST_SOURCE_UNAVAILABLE_REASON = "manifest source unavailable"
@@ -68,6 +73,28 @@ def env_truthy(name: str, default: str = "") -> bool:
     return env(name, default).strip().lower() in TRUTHY_VALUES
 
 
+def manifest_source_mode() -> str:
+    mode = env(GIT_MANIFEST_SOURCE_MODE_ENV, SOURCE_MODE_AUTO).strip().lower()
+    if mode in {SOURCE_MODE_AUTO, SOURCE_MODE_REMOTE, SOURCE_MODE_LOCAL}:
+        return mode
+    raise ManifestSourceError(f"{GIT_MANIFEST_SOURCE_MODE_ENV} must be one of auto, remote, local")
+
+
+def remote_manifest_enabled() -> bool:
+    return env_truthy(GIT_REMOTE_MANIFEST_ENABLED_ENV)
+
+
+def local_manifest_enabled(mode: str) -> bool:
+    if mode == SOURCE_MODE_LOCAL:
+        return True
+    if mode == SOURCE_MODE_REMOTE:
+        return False
+    if env_truthy(GIT_LOCAL_MANIFEST_ENABLED_ENV):
+        return True
+    # 개발/테스트 편의를 위해 remote source가 꺼진 auto 모드에서만 local fallback 허용.
+    return not remote_manifest_enabled()
+
+
 def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> str:
     api_base = env(GITHUB_API_BASE_ENV, DEFAULT_GITHUB_API_BASE).rstrip("/")
     encoded_repo = parse.quote(repo_ref.strip("/"), safe="/")
@@ -77,7 +104,7 @@ def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> s
 
 
 def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: str) -> str | None:
-    if not env_truthy(GIT_REMOTE_MANIFEST_ENABLED_ENV):
+    if not remote_manifest_enabled():
         return None
     if not repo_ref or not commit_sha or not manifest_path:
         return None
@@ -99,14 +126,9 @@ def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: s
         return None
 
 
-def read_manifest_source(evt: GitChangedBody) -> str | None:
-    manifest_path = env(GIT_MANIFEST_PATH_ENV, evt.manifest_path)
-    if not manifest_path:
-        return None
-
+def read_local_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None:
     repo_path = env(GIT_REPO_PATH_ENV, "")
     if repo_path:
-        # TODO(gitops): local clone 접근을 repo integration checkout/cache로 교체
         result = subprocess.run(
             ["git", "-C", repo_path, "show", f"{evt.commit_sha}:{manifest_path}"],
             check=True,
@@ -123,12 +145,23 @@ def read_manifest_source(evt: GitChangedBody) -> str | None:
 
     path = Path(manifest_path)
     if path.exists():
-        # TODO(gitops): local-file 경로는 dev/test 전용, production은 repo ref 사용
         return path.read_text(encoding="utf-8")
+    return None
 
-    remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
-    if remote_source is not None:
-        return remote_source
+
+def read_manifest_source(evt: GitChangedBody) -> str | None:
+    manifest_path = env(GIT_MANIFEST_PATH_ENV, evt.manifest_path)
+    if not manifest_path:
+        return None
+
+    mode = manifest_source_mode()
+    if mode != SOURCE_MODE_LOCAL:
+        remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
+        if remote_source is not None:
+            return remote_source
+
+    if local_manifest_enabled(mode):
+        return read_local_manifest_source(evt, manifest_path)
     return None
 
 

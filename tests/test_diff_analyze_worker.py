@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from conftest import load_service, run_handler, subjects_of
+from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff
+from domains.gitops.repository import derive_approval_id
 
 
 def _diff(risk: str) -> Diff:
@@ -21,9 +22,14 @@ def _diff(risk: str) -> Diff:
 
 def test_safe_diff_requests_pr() -> None:
     analyze = load_service("gitops/diff-analyze-worker")
+    db = SpyDb()
     safe = run_handler(
-        analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=_diff("sandbox-only"))
+        analyze.on_desired_diff,
+        DesiredDesiredDiffDetectedBody(diff=_diff("sandbox-only")),
+        db=db,
     )
+    approval_ref = derive_approval_id("workflow-default")
+    policy_decision_ref = f"policy-decision:{approval_ref}:safe_pr"
     assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested"]
     assert safe[0].safe is True
     assert safe[1].workspace_id == "workspace-1"
@@ -36,12 +42,14 @@ def test_safe_diff_requests_pr() -> None:
     assert safe[1].next_alert.next_command.action == "apply_manifest"
     assert safe[1].next_alert.next_command.cluster_id == "cluster-1"
     assert safe[1].next_alert.next_command.workspace_id == "workspace-1"
-    assert safe[1].next_alert.next_command.approval_ref == (
-        "auto-approval:sandbox-safe-pr:workflow-default"
-    )
-    assert safe[1].next_alert.next_command.policy_decision_ref == (
-        "policy-decision:sandbox-safe:workflow-default"
-    )
+    assert safe[1].next_alert.next_command.approval_ref == approval_ref
+    assert safe[1].next_alert.next_command.policy_decision_ref == policy_decision_ref
+    assert db.called("request_workflow_approval")
+    assert db.called("resolve_workflow_approval")
+    approval_payload = db.calls[0][1][0]
+    assert approval_payload["approval_id"] == approval_ref
+    assert approval_payload["details"]["policy_decision_ref"] == policy_decision_ref
+    assert approval_payload["details"]["policy_route"] == "safe_pr"
 
 
 def test_unsafe_diff_skips_pr() -> None:
