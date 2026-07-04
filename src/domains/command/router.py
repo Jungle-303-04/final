@@ -21,6 +21,7 @@ from domains.identity.dependencies import (
     require_session,
 )
 from packages.config.constants import CommandStatus, Sandbox
+from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
@@ -44,9 +45,13 @@ from packages.contracts.identity import (
 )
 from packages.runtime.dependencies import get_db, get_events
 
-DEFAULT_POLL_SECONDS = 10
-MAX_POLL_SECONDS = 30
-POLL_SLEEP_SECONDS = 1
+# 롱폴 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+DEFAULT_POLL_SECONDS_ENV = "COMMAND_POLL_DEFAULT_SECONDS"  # 롱폴 기본 대기 초(기본 10)
+DEFAULT_POLL_SECONDS = int(env(DEFAULT_POLL_SECONDS_ENV, "10"))
+MAX_POLL_SECONDS_ENV = "COMMAND_POLL_MAX_SECONDS"  # 롱폴 최대 대기 초(기본 30)
+MAX_POLL_SECONDS = int(env(MAX_POLL_SECONDS_ENV, "30"))
+POLL_SLEEP_SECONDS_ENV = "COMMAND_POLL_SLEEP_SECONDS"  # 롱폴 반복 간 대기 초(기본 1)
+POLL_SLEEP_SECONDS = int(env(POLL_SLEEP_SECONDS_ENV, "1"))
 LEASE_SECONDS = DEFAULT_COMMAND_LEASE_SECONDS
 NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"

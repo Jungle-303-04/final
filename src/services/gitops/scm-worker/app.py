@@ -23,7 +23,8 @@ app = App("scm-worker")
 SCM_PR_URL_PREFIX_ENV = "SCM_PR_URL_PREFIX"
 PR_MODE = "stub_pr_adapter"
 PR_STATUS_CREATED = "created"
-PR_NUMBER_MODULO = 100000
+PR_NUMBER_MODULO_ENV = "PR_NUMBER_MODULO"  # 스텁 PR 번호 합성용 모듈로(기본 100000)
+PR_NUMBER_MODULO = int(env(PR_NUMBER_MODULO_ENV, "100000"))
 MISSING_PR_ADAPTER_MESSAGE = (
     f"{SCM_PR_URL_PREFIX_ENV} 미설정 — PR 어댑터 없이 기동하면 자동 승인 배포(safe PR)가 "
     "런타임에 전부 실패함. deploy env 에 PR URL prefix 설정 필요"

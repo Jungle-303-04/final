@@ -22,8 +22,11 @@ SMTP_PASSWORD_ENV = "SMTP_PASSWORD"
 SMTP_FROM_ENV = "SMTP_FROM"
 SMTP_STARTTLS_ENV = "SMTP_STARTTLS"
 
+SMTP_TIMEOUT_SECONDS_ENV = "SMTP_TIMEOUT_SECONDS"  # SMTP 연결/전송 타임아웃 초(기본 10)
+
 DEFAULT_SMTP_PORT = "587"
 DEFAULT_SMTP_FROM = "noreply@example.local"
+DEFAULT_SMTP_TIMEOUT_SECONDS = "10"
 SMTP_MODE = "smtp"
 LOG_MODE = "log"
 
@@ -60,7 +63,8 @@ def send_email_verification(evt: EmailVerificationRequestedBody) -> str:
     port = int(env(SMTP_PORT_ENV, DEFAULT_SMTP_PORT))
     username = env(SMTP_USERNAME_ENV, "")
     password = env(SMTP_PASSWORD_ENV, "")
-    with smtplib.SMTP(host, port, timeout=10) as client:
+    timeout_seconds = int(env(SMTP_TIMEOUT_SECONDS_ENV, DEFAULT_SMTP_TIMEOUT_SECONDS))
+    with smtplib.SMTP(host, port, timeout=timeout_seconds) as client:
         if env(SMTP_STARTTLS_ENV, "1") != "0":
             client.starttls()
         if username:

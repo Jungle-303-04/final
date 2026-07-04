@@ -12,7 +12,10 @@ class KubernetesApiConfig:
     SERVICE_PORT_ENV = "KUBERNETES_SERVICE_PORT_HTTPS"
     SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
     SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    HTTP_TIMEOUT_SECONDS = 20
+    HTTP_TIMEOUT_SECONDS_ENV = (
+        "KUBERNETES_HTTP_TIMEOUT_SECONDS"  # k8s API HTTP 타임아웃 초(기본 20)
+    )
+    HTTP_TIMEOUT_SECONDS = int(env(HTTP_TIMEOUT_SECONDS_ENV, "20"))
 
 
 def kubernetes_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:

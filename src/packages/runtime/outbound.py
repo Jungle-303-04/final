@@ -41,7 +41,8 @@ class HttpOutbound:
 
     BASE_URL_ENV = "DEMO_CALLBACK_BASE_URL"
     DEFAULT_BASE_URL = "http://api-gateway:8000"
-    TIMEOUT_SECONDS = 5
+    TIMEOUT_SECONDS_ENV = "OUTBOUND_HTTP_TIMEOUT_SECONDS"  # 아웃바운드 POST 타임아웃 초(기본 5)
+    TIMEOUT_SECONDS = int(env(TIMEOUT_SECONDS_ENV, "5"))
 
     def __init__(self, base_url: str | None = None) -> None:
         default = env(self.BASE_URL_ENV, self.DEFAULT_BASE_URL)

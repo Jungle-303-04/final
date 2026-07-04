@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import asyncio
 
+from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
 
-DEFAULT_BATCH = 1000
-DEFAULT_PUBLISH_TIMEOUT_SECONDS = 10
+# relay 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+DEFAULT_BATCH_ENV = "OUTBOX_RELAY_BATCH"  # 한 번에 발행할 outbox 행 수(기본 1000)
+DEFAULT_BATCH = int(env(DEFAULT_BATCH_ENV, "1000"))
+DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV = (
+    "OUTBOX_PUBLISH_TIMEOUT_SECONDS"  # 건당 발행 대기 한도 초(기본 10)
+)
+DEFAULT_PUBLISH_TIMEOUT_SECONDS = int(env(DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV, "10"))
 
 
 class OutboxRelay:
