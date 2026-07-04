@@ -271,7 +271,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management get cronjob/github-poll-w
 for deploy in \
   api-gateway \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
-  workflow-controller alert-worker mail-worker command-worker target-reconcile-worker rca-worker \
+  workflow-controller alert-worker mail-worker command-worker command-janitor target-reconcile-worker rca-worker \
   evidence-worker incident-worker plan-worker analyze-worker recovery-worker select-worker \
   dispatch-worker backlog-worker safe-pr-worker ai-diff-worker rollout-worker approval-worker \
   audit-worker; do
@@ -281,7 +281,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api
 
 for deploy in \
   git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
-  workflow-controller alert-worker mail-worker command-worker target-reconcile-worker rca-worker \
+  workflow-controller alert-worker mail-worker command-worker command-janitor target-reconcile-worker rca-worker \
   evidence-worker incident-worker plan-worker analyze-worker recovery-worker select-worker \
   dispatch-worker backlog-worker safe-pr-worker ai-diff-worker rollout-worker approval-worker \
   audit-worker; do
