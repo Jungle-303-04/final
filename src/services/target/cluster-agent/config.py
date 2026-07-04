@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from packages.config.settings import env
+from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
@@ -117,4 +118,4 @@ LIVE_SUMMARY_RETRY_DELAY_SECONDS = float(env(LIVE_SUMMARY_RETRY_DELAY_SECONDS_EN
 REALTIME_GATEWAY_URL_ENV = "REALTIME_GATEWAY_URL"  # 미설정 시 MANAGEMENT_BASE_URL 에서 유도
 DEFAULT_REALTIME_GATEWAY_NODEPORT = 30090  # deploy/management/services.yaml 의 NodePort 와 정렬
 LIVE_SUMMARY_POD_LIST_LIMIT = 200  # 네임스페이스당 pod 조회 상한(무제한 목록 금지)
-LIVE_SUMMARY_NAMESPACES = ("target", "sandbox")
+LIVE_SUMMARY_NAMESPACES = (TARGET_NAMESPACE, SANDBOX_NAMESPACE)  # 계약이 단일 출처

@@ -19,7 +19,10 @@ from hub import BrowserClient, RealtimeHub
 
 from domains.identity.dependencies import AGENT_TOKEN_HEADER, hash_agent_token
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.contracts.gateway.fields import Gateway
 from packages.contracts.realtime import (
+    AGENT_LIVE_PATH,
+    BROWSER_LIVE_PATH,
     HelloMessage,
     LiveSummaryMessage,
     PingMessage,
@@ -34,8 +37,6 @@ from packages.storage.database import Database, wait_for_database
 LOGGER = get_logger(__name__)
 
 GATEWAY_NAME = "realtime-gateway"
-AGENT_WS_PATH = "/live/agent"
-BROWSER_WS_PATH = "/live/browser"
 
 # browser 로 보낼 것이 없을 때 keepalive ping 주기.
 BROWSER_PING_INTERVAL_SECONDS = 15.0
@@ -87,7 +88,7 @@ def create_app(
     async def readyz() -> str:
         return "ok"
 
-    @app.websocket(AGENT_WS_PATH)
+    @app.websocket(AGENT_LIVE_PATH)
     async def agent_live(websocket: WebSocket) -> None:
         await websocket.accept()
         token = websocket.headers.get(AGENT_TOKEN_HEADER, "")
@@ -95,8 +96,8 @@ def create_app(
         if identity is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
-        cluster_id = str(identity["cluster_id"])
-        requested_cluster = websocket.query_params.get("cluster_id", cluster_id)
+        cluster_id = str(identity[Gateway.CLUSTER_ID])
+        requested_cluster = websocket.query_params.get(Gateway.CLUSTER_ID, cluster_id)
         if requested_cluster != cluster_id:
             # 토큰의 클러스터가 권위 — 다른 클러스터로의 발행 시도는 차단(크로스 테넌트 금지).
             await websocket.close(code=CLOSE_UNAUTHORIZED)
@@ -115,19 +116,15 @@ def create_app(
                 "agent_stream_disconnected", extra={CONTEXT_KEY: {"cluster_id": cluster_id}}
             )
 
-    @app.websocket(BROWSER_WS_PATH)
+    @app.websocket(BROWSER_LIVE_PATH)
     async def browser_live(websocket: WebSocket) -> None:
         await websocket.accept()
-        workspace_id = websocket.query_params.get("workspace_id", "")
-        if not workspace_id:
+        # query param 이름은 Subscription 계약 필드가 단일 출처(별도 리터럴 금지).
+        params = {name: websocket.query_params.get(name, "") for name in Subscription.model_fields}
+        if not params[Gateway.WORKSPACE_ID]:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
-        subscription = Subscription(
-            workspace_id=workspace_id,
-            cluster_id=websocket.query_params.get("cluster_id", ""),
-            namespace=websocket.query_params.get("namespace", ""),
-            app=websocket.query_params.get("app", ""),
-        )
+        subscription = Subscription(**params)
         client = hub.register_browser(subscription)
         sender = asyncio.create_task(_browser_send_loop(websocket, hub, client))
         try:
