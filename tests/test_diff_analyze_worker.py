@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import load_service, run_handler, subjects_of
 
-from domains.gitops.events import Diff, DiffDetectedBody
+from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff
 
 
 def _diff(risk: str) -> Diff:
@@ -21,7 +21,9 @@ def _diff(risk: str) -> Diff:
 
 def test_safe_diff_requests_pr() -> None:
     analyze = load_service("gitops/diff-analyze-worker")
-    safe = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=_diff("sandbox-only")))
+    safe = run_handler(
+        analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=_diff("sandbox-only"))
+    )
     assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested"]
     assert safe[0].safe is True
     assert safe[1].workspace_id == "workspace-1"
@@ -39,7 +41,7 @@ def test_safe_diff_requests_pr() -> None:
 def test_unsafe_diff_skips_pr() -> None:
     analyze = load_service("gitops/diff-analyze-worker")
     unsafe = run_handler(
-        analyze.on_desired_diff, DiffDetectedBody(diff=_diff("non-sandbox-namespace"))
+        analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=_diff("non-sandbox-namespace"))
     )
     assert subjects_of(unsafe) == ["diff.analyzed"]
     assert unsafe[0].safe is False
@@ -55,7 +57,7 @@ def test_noop_diff_skips_pr_even_when_sandbox() -> None:
         actual_image=diff.desired_image,
         risk=diff.risk,
     )
-    outs = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=noop))
+    outs = run_handler(analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=noop))
     assert subjects_of(outs) == ["diff.analyzed"]
     assert outs[0].safe is False
     assert outs[0].reason == "desired and actual images already match"
@@ -82,7 +84,7 @@ def test_manifest_diff_with_same_image_is_not_treated_as_noop() -> None:
         },
     )
 
-    outs = run_handler(analyze.on_desired_diff, DiffDetectedBody(diff=manifest_diff))
+    outs = run_handler(analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=manifest_diff))
 
     assert subjects_of(outs) == ["diff.analyzed", "safe_pr.requested"]
     assert outs[0].safe is True

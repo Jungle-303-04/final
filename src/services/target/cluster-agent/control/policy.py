@@ -6,12 +6,14 @@ from collections.abc import Callable
 from span import get_tracer
 
 from control.store import AgentControlStore
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.policy_merge import merge_agent_policy
 from packages.contracts.gateway.requests import AgentPolicy
 from packages.contracts.interfaces import ManagementPlaneClient
 
 TRACER = get_tracer("target-cluster-agent.policy")
+LOGGER = get_logger(__name__)
 
 PolicyApplier = Callable[[AgentPolicy], JsonObject]
 
@@ -48,7 +50,11 @@ class AgentPolicySync:
             try:
                 await self.sync_once(client)
             except Exception as exc:
-                print(f"policy sync failed: {exc}", flush=True)
+                LOGGER.warning(
+                    "policy_sync_failed",
+                    extra={CONTEXT_KEY: {"cluster_id": self.cluster_id}},
+                    exc_info=exc,
+                )
             await asyncio.sleep(self.interval_seconds)
 
     async def sync_once(self, client: ManagementPlaneClient) -> str:
