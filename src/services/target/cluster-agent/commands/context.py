@@ -7,6 +7,7 @@ from typing import Any, Literal, Protocol, TypeVar
 from pydantic import BaseModel
 
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gateway.fields import Gateway
 
 COMMAND_COMPLETED_STATUS = "completed"
 COMMAND_FAILED_STATUS = "failed"
@@ -65,13 +66,21 @@ class CommandResult:
         message: str,
         *,
         applied: bool = False,
+        retryable: bool = False,
+        resources: list[JsonObject] | None = None,
+        stdout: str = "",
+        stderr: str = "",
         **fields: Any,
     ) -> JsonObject:
         return {
-            "status": COMMAND_COMPLETED_STATUS,
-            "cluster_id": cluster_id,
-            "applied": applied,
-            "message": message,
+            Gateway.STATUS: COMMAND_COMPLETED_STATUS,
+            Gateway.CLUSTER_ID: cluster_id,
+            Gateway.APPLIED: applied,
+            Gateway.MESSAGE: message,
+            Gateway.RETRYABLE: retryable,
+            Gateway.RESOURCES: resources or [],
+            Gateway.STDOUT: stdout,
+            Gateway.STDERR: stderr,
             **fields,
         }
 
@@ -81,13 +90,21 @@ class CommandResult:
         message: str,
         *,
         applied: bool = False,
+        retryable: bool = False,
+        resources: list[JsonObject] | None = None,
+        stdout: str = "",
+        stderr: str = "",
         **fields: Any,
     ) -> JsonObject:
         return {
-            "status": COMMAND_FAILED_STATUS,
-            "cluster_id": cluster_id,
-            "applied": applied,
-            "message": message,
+            Gateway.STATUS: COMMAND_FAILED_STATUS,
+            Gateway.CLUSTER_ID: cluster_id,
+            Gateway.APPLIED: applied,
+            Gateway.MESSAGE: message,
+            Gateway.RETRYABLE: retryable,
+            Gateway.RESOURCES: resources or [],
+            Gateway.STDOUT: stdout,
+            Gateway.STDERR: stderr,
             **fields,
         }
 

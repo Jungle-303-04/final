@@ -160,6 +160,17 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
     assert result["status"] == "failed"
     assert result["applied"] is False
     assert "dry-run" in result["message"]
+    assert result["retryable"] is False
+    assert result["resources"] == [
+        {
+            "resource": "deployment/checkout-api",
+            "status": "failed",
+            "applied": False,
+            "message": "kubernetes api not configured; dry-run only",
+        }
+    ]
+    assert result["stdout"] == ""
+    assert "dry-run" in result["stderr"]
 
 
 def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatch) -> None:
@@ -185,6 +196,8 @@ def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatc
     assert result["status"] == "failed"
     assert result["applied"] is False
     assert result["message"] == "write command requires approval_ref and policy_decision_ref"
+    assert result["resources"] == []
+    assert result["stderr"] == "write command requires approval_ref and policy_decision_ref"
 
 
 def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
@@ -224,6 +237,9 @@ def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
     assert result["status"] == "failed"
     assert result["applied"] is False
     assert result["message"] == "kubernetes patch failed (403): forbidden"
+    assert result["resources"][0]["resource"] == "configmap/checkout-api-config"
+    assert result["resources"][0]["status"] == "failed"
+    assert result["stderr"] == "kubernetes patch failed (403): forbidden"
 
 
 def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> None:
@@ -264,6 +280,11 @@ def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> N
     )
 
     assert result["applied"] is True
+    assert result["retryable"] is False
+    assert result["resources"][0]["resource"] == "configmap/checkout-api-config"
+    assert result["resources"][0]["status"] == "completed"
+    assert result["stdout"] == "Kubernetes manifest created in sandbox namespace"
+    assert result["stderr"] == ""
     assert [call[0] for call in calls] == ["GET", "POST"]
     assert calls[0][1] == "/api/v1/namespaces/sandbox/configmaps/checkout-api-config"
     assert calls[1][1] == "/api/v1/namespaces/sandbox/configmaps"
@@ -319,6 +340,8 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
     )
 
     assert result["applied"] is True
+    assert result["resources"][0]["resource"] == "deployment/checkout-api"
+    assert result["resources"][0]["status"] == "completed"
     assert [call[0] for call in calls] == ["GET", "PATCH"]
     assert calls[1][1] == "/apis/apps/v1/namespaces/sandbox/deployments/checkout-api"
     assert calls[1][2]["spec"]["replicas"] == 5
@@ -360,6 +383,8 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
 
     assert result["applied"] is False
     assert result["message"] == "only sandbox namespace writes are allowed"
+    assert result["resources"][0]["resource"] == "configmap/forbidden"
+    assert result["stderr"] == "only sandbox namespace writes are allowed"
     assert calls == []
 
 
@@ -401,7 +426,14 @@ def test_target_agent_rejects_unsupported_manifest_contract(monkeypatch) -> None
     assert (
         result["message"] == "unsupported manifest kind: rbac.authorization.k8s.io/v1/ClusterRole"
     )
+    assert result["resources"][0]["resource"] == "clusterrole/forbidden-role"
     assert calls == []
+
+
+def test_target_agent_sanitizes_command_output() -> None:
+    agent_module = load_agent_module()
+
+    assert agent_module.sanitize_command_output("ok\ntoken=secret-value") == "ok\n[redacted]"
 
 
 def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> None:
