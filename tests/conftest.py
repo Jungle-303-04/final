@@ -18,6 +18,7 @@ SERVICE_LOCAL_MODULES = (
     "settings",
     "config",
     "github_provider",
+    "repo_cache",
     "tools",
     "hub",
     "kubernetes_api",
