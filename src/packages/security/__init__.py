@@ -1,5 +1,23 @@
 from __future__ import annotations
 
-from packages.security.vault import EnvSecretVault, EnvTokenVault, SecretNotFound
+from packages.security.vault import (
+    AwsSecretsManagerSecretVault,
+    EnvSecretVault,
+    EnvTokenVault,
+    RoutingSecretVault,
+    SecretNotFound,
+    SecretProviderUnavailable,
+    build_secret_vault,
+    build_token_vault,
+)
 
-__all__ = ["EnvSecretVault", "EnvTokenVault", "SecretNotFound"]
+__all__ = [
+    "AwsSecretsManagerSecretVault",
+    "EnvSecretVault",
+    "EnvTokenVault",
+    "RoutingSecretVault",
+    "SecretNotFound",
+    "SecretProviderUnavailable",
+    "build_secret_vault",
+    "build_token_vault",
+]

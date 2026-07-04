@@ -25,7 +25,7 @@ from packages.contracts.gitops import (
 from packages.contracts.security import SecretRef, TokenVaultPort
 from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import EventContext
-from packages.security import EnvTokenVault, SecretNotFound
+from packages.security import SecretNotFound, build_token_vault
 
 SCM_REPO_ENV = "SCM_REPO"  # PR 을 만들 저장소("owner/repo")
 SCM_BASE_BRANCH_ENV = "SCM_BASE_BRANCH"  # PR base 브랜치(기본 main)
@@ -106,7 +106,7 @@ class GithubScmProvider:
         token_vault: TokenVaultPort | None = None,
     ) -> None:
         self.transport = transport
-        self.token_vault = token_vault or EnvTokenVault()
+        self.token_vault = token_vault or build_token_vault()
 
     async def create_pull_request(
         self, request: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
