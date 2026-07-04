@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Final
 
 
@@ -52,11 +53,18 @@ class CommandStatus:
     FAILED: Final = "failed"
 
 
+class RiskLevel(StrEnum):
+    """diff 위험도 태그(생산자 gitops·소비자 command 공유) — wire 에는 값 문자열 그대로 실림."""
+
+    SANDBOX_ONLY = "sandbox-only"  # sandbox 한정 변경 → 안전 판정 표식
+    NON_SANDBOX_NAMESPACE = "non-sandbox-namespace"  # sandbox 밖 네임스페이스 → 검토 필요
+    REVIEW_REQUIRED = "review-required"  # 렌더 상태상 사람 검토 필요
+
+
 class Sandbox:
     NAMESPACE: Final[str] = "sandbox"
-    RISK_TAG: Final[str] = (
-        "sandbox-only"  # diff 가 sandbox 한정 → 안전 판정 표식(생산자·소비자 공유)
-    )
-    UNSAFE_NAMESPACE_RISK_TAG: Final[str] = "non-sandbox-namespace"
+    # 기존 소비자 호환용 별칭 — 원본 정의는 RiskLevel 에 있음
+    RISK_TAG: Final[RiskLevel] = RiskLevel.SANDBOX_ONLY
+    UNSAFE_NAMESPACE_RISK_TAG: Final[RiskLevel] = RiskLevel.NON_SANDBOX_NAMESPACE
     # 변경 없음 판정 사유(생산자 gitops·소비자 command 공유 — 중복 정의 금지)
     NO_DIFF_REASON: Final[str] = "desired and actual images already match"
