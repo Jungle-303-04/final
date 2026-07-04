@@ -25,25 +25,30 @@ RCA 결과를 event body로 발행해서 audit, dashboard, Safe PR 단계가 같
 
 1. 현재 `rca.completed` subject/body가 있는지 확인한다.
 2. 없으면 subject와 body를 추가한다.
-3. body에는 `correlation_id`, `cluster_id`, `status`, `summary`, `root_cause`, `confidence`, `evidence_refs`, `recommended_fix`를 넣는다.
-4. insufficient evidence도 같은 body의 `status`로 표현할지, 별도 subject로 둘지 결정하고 문서화한다.
-5. RCA worker handler가 `RcaResult`를 받아 body DTO를 `yield`하게 한다.
-6. raw AI response, token, provider detail은 event에 넣지 않는다.
-7. `docs/events.md`에 completed와 insufficient 예시를 추가한다.
-8. `correlation_id` 유지 테스트를 추가한다.
+3. 현재 body의 최상위 필드는 `root_cause`, `action`, `evidence_ref`, `workspace_id`라는 점을 확인한다.
+4. confidence와 상세 근거는 `RcaReportDetail`에 넣는다.
+5. insufficient evidence는 `RcaCompletedBody.status` 같은 새 필드를 만들기 전에, 현재 구조의 `RcaActionRequiredBody`, `RcaRuleMissingBody`, `RcaAiFallbackRequestedBody`로 표현할 수 있는지 먼저 판단한다.
+6. RCA worker handler가 `RcaResult`를 받아 현재 계약에 맞는 body DTO를 `yield`하게 한다.
+7. raw AI response, token, provider detail은 event에 넣지 않는다.
+8. `docs/events.md`에 completed와 insufficient/action_required 예시를 추가한다.
+9. envelope `correlation_id` 유지 테스트를 추가한다.
 
 ## 예시 event shape
 
 ```json
 {
-  "correlation_id": "corr-123",
-  "cluster_id": "target-dev",
-  "status": "completed",
-  "summary": "pod restart loop detected",
   "root_cause": "container crash loop",
-  "confidence": 0.72,
-  "evidence_refs": ["evidence-123"],
-  "recommended_fix": "inspect deployment env and rollout restart after fix"
+  "action": "plan_recovery",
+  "evidence_ref": "object://evidence/corr-123.json",
+  "workspace_id": "workspace-1",
+  "rca_detail": {
+    "root_cause": "container crash loop",
+    "confidence": 0.72,
+    "selected_candidate_id": "crashloop",
+    "supporting_evidence": ["kubernetes", "logs"],
+    "missing_evidence": [],
+    "reason": "CrashLoopBackOff and restart count were observed"
+  }
 }
 ```
 
@@ -58,7 +63,7 @@ uv run ruff check src tests
 
 - RCA 결과가 typed event body로 발행된다.
 - insufficient evidence가 retry 대상 오류와 구분된다.
-- `correlation_id`가 입력 evidence에서 RCA output까지 유지된다.
+- envelope `correlation_id`가 입력 evidence에서 RCA output까지 유지된다.
 - event payload에 raw token, raw provider response가 없다.
 
 ## 다음 작업

@@ -26,6 +26,7 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 - 공통 프롬프트: `docs/team/codex-automation.md`
 - 파일 소유권 컨벤션: `docs/team/file-ownership-convention.md`
 - 역할별 구현 TODO 원장: `docs/team/implementation-todo.md`
+- 팀 간 연결/테스트 기준: `docs/team/cross-role-implementation-test-guide.md`
 - 작업 원장: `Jungle-303-04/final` Issues와 Project WBS
 - PR 기준: `dev` base draft PR
 - 변경 가능 범위: 아래 작업 경계 표와 각 member guide
@@ -83,3 +84,5 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 - 새 DB table: 담당자가 `Database.init`, docs, test coverage를 함께 수정한다.
 - 새 Kubernetes permission: Target/Telemetry가 PR에서 RBAC 범위를 설명한다.
 - dashboard 의존성이 생기는 API 변경: 현재는 Gateway/Auth와 Platform/Integration이 문서에 먼저 남긴다.
+- body 필드와 envelope 메타데이터를 구분한다. `correlation_id`는 기본적으로 `EventEnvelope` 기준이며, body에 새로 넣으려면 계약 변경 PR로 다룬다.
+- 각 PR의 테스트 선택은 [팀 간 구현 연결과 테스트 가이드](cross-role-implementation-test-guide.md)를 따른다.
