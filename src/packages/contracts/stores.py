@@ -67,6 +67,12 @@ class WorkflowStore(Protocol):
     async def get_workflow_identity_for_command(self, command_id: str) -> JsonObject | None: ...
 
 
+class PolicyDecisionStore(Protocol):
+    async def request_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
+
+    async def resolve_workflow_approval(self, payload: JsonObject) -> JsonObject: ...
+
+
 class PullRequestStore(Protocol):
     async def save_pull_request(
         self, correlation_id: str, pr_url: str, title: str, body: str, status: str
