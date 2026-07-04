@@ -66,16 +66,16 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || vars.AWS_AUTO_DEPLOY == '1' }}
     environment: aws-test
     env:
-      PROJECT_SLUG: ${{ vars.PROJECT_SLUG || 'kubeheal' }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      PROJECT_SLUG: ${{ vars.PROJECT_SLUG || 'kubernetes-ops' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-      MGMT_CLUSTER: ${{ vars.MGMT_CLUSTER || 'kubeheal-mgmt' }}
-      TARGET_CLUSTER_1: ${{ vars.TARGET_CLUSTER_1 || 'kubeheal-target-a' }}
-      TARGET_CLUSTER_2: ${{ vars.TARGET_CLUSTER_2 || 'kubeheal-target-b' }}
-      MGMT_DISPLAY_NAME: ${{ vars.MGMT_DISPLAY_NAME || vars.MGMT_CLUSTER || 'kubeheal-mgmt' }}
-      TARGET_1_DISPLAY_NAME: ${{ vars.TARGET_1_DISPLAY_NAME || vars.TARGET_CLUSTER_1 || 'kubeheal-target-a' }}
-      TARGET_2_DISPLAY_NAME: ${{ vars.TARGET_2_DISPLAY_NAME || vars.TARGET_CLUSTER_2 || 'kubeheal-target-b' }}
-      ECR_REPO: ${{ vars.ECR_REPO || 'kubeheal-service' }}
+      MGMT_CLUSTER: ${{ vars.MGMT_CLUSTER || 'kubernetes-ops' }}
+      TARGET_CLUSTER_1: ${{ vars.TARGET_CLUSTER_1 || 'cluster-1' }}
+      TARGET_CLUSTER_2: ${{ vars.TARGET_CLUSTER_2 || 'cluster-2' }}
+      MGMT_DISPLAY_NAME: ${{ vars.MGMT_DISPLAY_NAME || vars.MGMT_CLUSTER || 'kubernetes-ops' }}
+      TARGET_1_DISPLAY_NAME: ${{ vars.TARGET_1_DISPLAY_NAME || vars.TARGET_CLUSTER_1 || 'cluster-1' }}
+      TARGET_2_DISPLAY_NAME: ${{ vars.TARGET_2_DISPLAY_NAME || vars.TARGET_CLUSTER_2 || 'cluster-2' }}
+      ECR_REPO: ${{ vars.ECR_REPO || 'kubernetes-ops-service' }}
       IMAGE_TAG: ${{ github.sha }}
       GITHUB_REPO: ${{ vars.GITHUB_REPO || github.repository }}
       GITHUB_BRANCH: ${{ vars.GITHUB_BRANCH || github.ref_name }}
@@ -84,6 +84,8 @@ jobs:
       BOOTSTRAP_ADMIN: ${{ github.event.inputs.bootstrap_admin == 'true' && '1' || vars.AWS_BOOTSTRAP_ADMIN || '0' }}
       REGISTER_TARGETS: ${{ github.event.inputs.register_targets == 'true' && '1' || vars.AWS_REGISTER_TARGETS || '0' }}
       RUN_SMOKE: ${{ github.event.inputs.run_smoke == 'true' && '1' || vars.AWS_RUN_SMOKE || '0' }}
+      SKIP_LB_HEALTH_WAIT: ${{ vars.SKIP_LB_HEALTH_WAIT || '0' }}
+      DOCKER_PLATFORM: ${{ vars.DOCKER_PLATFORM || 'linux/amd64' }}
       CONFIGURE_ROUTE53: ${{ vars.CONFIGURE_ROUTE53 || '0' }}
       CONFIGURE_CLOUDFLARE: ${{ vars.CONFIGURE_CLOUDFLARE || '0' }}
       CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
@@ -97,7 +99,7 @@ jobs:
       MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
       GITHUB_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
       GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN }}
-      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'fake' }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openai' }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
