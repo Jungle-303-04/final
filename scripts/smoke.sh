@@ -142,7 +142,7 @@ echo "==> sending manual UI command"
 curl -fsS -X POST "${BASE_URL}/commands" \
   -b "${COOKIE_JAR}" \
   -H "content-type: application/json" \
-  -d '{"cluster_id":"target-cluster-01","action":"rollout_restart","namespace":"sandbox","reason":"manual smoke command"}'
+  -d '{"cluster_id":"target-cluster-01","action":"rollout_restart","namespace":"sandbox","reason":"manual smoke command","diff":{"resource":"deployment/checkout-api","namespace":"sandbox","desired_image":"","actual_image":"","risk":"sandbox-only"}}'
 echo
 
 echo "==> waiting for async workers"
