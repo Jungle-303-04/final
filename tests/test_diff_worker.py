@@ -55,12 +55,55 @@ def test_diff_emits_desired_diff() -> None:
     assert outs[0].diff.risk == Sandbox.RISK_TAG
     assert outs[0].diff.status == "intended_change"
     assert outs[0].diff.has_changes is True
-    assert outs[0].diff.basis["policy_source"] == "demo_declared_fields"
+    assert outs[0].diff.basis["policy_source"] == "dev_declared_fields_fallback"
     assert outs[0].diff.basis["policy_managed_fields"] == [
         "spec.replicas",
         "spec.template.spec.containers[name=checkout-api].image",
     ]
     assert outs[0].diff.basis["artifact_digest"] == "sha256:test-digest"
+
+
+def test_diff_requires_approved_snapshot_when_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("GITOPS_REQUIRE_APPROVED_SNAPSHOT", "1")
+    diff = load_service("gitops/diff-worker")
+    payload = ManifestRenderedBody(
+        rendered_manifest=RenderedManifest(
+            api_version="apps/v1",
+            kind="Deployment",
+            metadata=RenderedMetadata(name="checkout-api", namespace="sandbox"),
+            spec=RenderedSpec(replicas=2, image="img:new"),
+            manifest={
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+                "spec": {
+                    "replicas": 2,
+                    "template": {
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": "checkout-api",
+                                    "image": "img:new",
+                                }
+                            ]
+                        }
+                    },
+                },
+            },
+        )
+    )
+
+    outs = run_handler(diff.on_manifest_rendered, payload)
+
+    assert outs[0].diff.status == "adoption_required"
+    assert outs[0].diff.risk == "review-required"
+    assert outs[0].diff.basis["old_desired_source"] == "missing_last_approved_snapshot"
+    assert outs[0].diff.basis["policy_source"] == "missing_approved_policy"
+    assert outs[0].diff.basis["policy_managed_fields"] == []
+    assert outs[0].diff.basis["unknown_fields"] == [
+        "spec.replicas",
+        "spec.template.spec.containers[name=checkout-api].image",
+    ]
 
 
 def test_diff_marks_non_sandbox_namespace_unsafe() -> None:

@@ -43,8 +43,11 @@ GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
+GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE:-remote}"
+GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED:-0}"
 GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED:-1}"
 GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-1}"
+GITOPS_REQUIRE_APPROVED_SNAPSHOT="${GITOPS_REQUIRE_APPROVED_SNAPSHOT:-1}"
 GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS:-5}"
 SCM_PROVIDER="${SCM_PROVIDER:-github}"
 SCM_REPO="${SCM_REPO:-${GITHUB_REPO}}"
@@ -76,6 +79,7 @@ AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
 RUN_SMOKE="${RUN_SMOKE:-0}"
+SKIP_LB_HEALTH_WAIT="${SKIP_LB_HEALTH_WAIT:-0}"
 CREATE_CLUSTERS="${CREATE_CLUSTERS:-1}"
 ENSURE_EBS_CSI="${ENSURE_EBS_CSI:-1}"
 BOOTSTRAP_ADMIN="${BOOTSTRAP_ADMIN:-1}"
@@ -486,8 +490,11 @@ EOF
     --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
     --from-literal=MANIFEST_PATH="${MANIFEST_PATH}" \
     --from-literal=GITHUB_API_BASE="${GITHUB_API_BASE}" \
+    --from-literal=GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE}" \
+    --from-literal=GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED}" \
     --from-literal=GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED}" \
     --from-literal=GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED}" \
+    --from-literal=GITOPS_REQUIRE_APPROVED_SNAPSHOT="${GITOPS_REQUIRE_APPROVED_SNAPSHOT}" \
     --from-literal=GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS}" \
     --from-literal=SCM_PROVIDER="${SCM_PROVIDER}" \
     --from-literal=SCM_REPO="${SCM_REPO}" \
@@ -574,7 +581,10 @@ gateway_load_balancer_host() {
       kubectl --context "${MGMT_CLUSTER}" -n management get svc api-gateway \
         -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true
     )"
-    if [[ -n "${host}" ]] && curl -fsS "http://${host}/healthz" >/dev/null 2>&1; then
+    if [[ -n "${host}" ]] && {
+      [[ "${SKIP_LB_HEALTH_WAIT}" == "1" ]] \
+        || curl -fsS "http://${host}/healthz" >/dev/null 2>&1
+    }; then
       printf '%s\n' "${host}"
       return
     fi
@@ -883,7 +893,9 @@ basic_status() {
   log "${TARGET_2_DISPLAY_NAME} target pods"
   kubectl --context "${TARGET_CLUSTER_2}" -n target get pods -o wide
   log "gateway health"
-  curl -fsS "${base_url}/healthz"
+  if ! curl -fsS "${base_url}/healthz"; then
+    echo "gateway health check failed from this machine; verify DNS propagation for ${base_url}" >&2
+  fi
   echo
 }
 
