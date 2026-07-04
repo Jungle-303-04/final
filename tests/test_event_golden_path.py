@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from conftest import SpyDb, load_service
+from conftest import SpyDb, github_scm_transport, load_service
 
 from domains.gitops.events import GitWebhookReceivedBody
 from packages.contracts.event_bus.interfaces import EventEnvelope
@@ -45,7 +45,8 @@ async def run_worker(module: Any, incoming: EventEnvelope, db: Any) -> list[Even
 
 
 def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("SCM_PR_URL_PREFIX", "https://github.test.local/project/repo/pull")
+    monkeypatch.setenv("GITHUB_TOKEN", "token-1")
+    monkeypatch.setenv("SCM_REPO", "project/repo")
 
     # manifest 소스는 실제 파일에서만 읽음(합성 폴백 없음) — 골든 패스 입력을 파일로 제공함.
     manifest_source = tmp_path / "deploy.yaml"
@@ -86,6 +87,11 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
         alert = load_service("alert/alert-worker")
         command = load_service("command/command-worker")
         repo = load_service("gitops/scm-worker")
+        monkeypatch.setattr(
+            repo,
+            "SCM_PROVIDER",
+            repo.GithubScmProvider(transport=github_scm_transport()),
+        )
 
         git_changed = (await run_worker(git_pull, accepted.event, db))[0]
         rendered = (await run_worker(manifest, git_changed, db))[0]
