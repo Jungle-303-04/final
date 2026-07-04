@@ -104,7 +104,7 @@ def create_app(
             return
 
         await websocket.send_json(HelloMessage().model_dump(mode="json"))
-        LOGGER.info("agent_stream_connected", extra={CONTEXT_KEY: {"cluster_id": cluster_id}})
+        LOGGER.info("agent_stream_connected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}})
         try:
             while True:
                 payload = await websocket.receive_json()
@@ -113,7 +113,7 @@ def create_app(
                     return
         except WebSocketDisconnect:
             LOGGER.info(
-                "agent_stream_disconnected", extra={CONTEXT_KEY: {"cluster_id": cluster_id}}
+                "agent_stream_disconnected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
             )
 
     @app.websocket(BROWSER_LIVE_PATH)
@@ -147,7 +147,9 @@ def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> bool:
     try:
         message = parse_realtime_message(payload)
     except ValueError:
-        LOGGER.warning("agent_message_invalid", extra={CONTEXT_KEY: {"cluster_id": cluster_id}})
+        LOGGER.warning(
+            "agent_message_invalid", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
+        )
         return False
     if isinstance(message, PingMessage):
         return True
