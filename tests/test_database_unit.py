@@ -33,6 +33,7 @@ from packages.events.envelope import event
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
 from packages.storage.repositories import event as event_repository
+from packages.storage.repositories.dead_letter import DeadLetterRepository
 from packages.storage.repositories.event import EventRepository
 from packages.storage.repositories.outbox import OutboxRepository
 from packages.storage.schema import metadata
@@ -854,3 +855,56 @@ def test_domain_module_discovery_raises_nested_import_failure(monkeypatch) -> No
 
     with pytest.raises(ModuleNotFoundError, match="nested_dependency"):
         registry._domain_modules("models")
+
+
+def test_unit_of_work_or_null_uses_db_transaction_or_noop() -> None:
+    # unit_of_work 가 있으면 그 트랜잭션을 쓰고, 없으면(테스트 페이크 등) no-op 이어야 함
+    class WithUow:
+        def __init__(self) -> None:
+            self.entered = 0
+
+        @contextmanager
+        def unit_of_work(self):
+            self.entered += 1
+            yield "conn"
+
+    db = WithUow()
+    with storage_engine.unit_of_work_or_null(db) as conn:
+        assert conn == "conn"
+    assert db.entered == 1
+
+    with storage_engine.unit_of_work_or_null(object()) as conn:
+        assert conn is None
+
+
+def test_mark_dead_letter_replayed_guards_open_status_atomically() -> None:
+    # SELECT 후 갱신 사이의 동시 replay 경쟁 제거 — 열린 행만 원자 UPDATE 로 표시
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def first(self) -> None:
+            return None  # 이미 replay 된 행 → 갱신 0건
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(DeadLetterRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    replayed = repository.mark_dead_letter_replayed(7, "evt-replay-1")
+
+    assert replayed is False
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "UPDATE event_dead_letters" in sql
+    assert "WHERE" in sql
+    assert "RETURNING event_dead_letters.id" in sql
+    params = set(compiled.params.values())
+    assert storage_engine.DEAD_LETTER_STATUS_OPEN in params  # WHERE: 열린 행만
+    assert storage_engine.DEAD_LETTER_STATUS_REPLAYED in params  # SET: replay 표시
