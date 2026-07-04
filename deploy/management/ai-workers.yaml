@@ -335,3 +335,29 @@ spec:
                 name: management-runtime-config
             - secretRef:
                 name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rca-fallback-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rca-fallback-worker
+  template:
+    metadata:
+      labels:
+        app: rca-fallback-worker
+    spec:
+      containers:
+        - name: worker
+          image: service:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/ai/rca-fallback-worker/app.py"]
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret

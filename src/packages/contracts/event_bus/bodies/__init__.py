@@ -39,6 +39,7 @@ _MODULE_BY_NAME = {
     "CommandQueuedForAgentBody": "domains.command.events",
     "CommandRejectedBody": "domains.command.events",
     "CommandRequestedBody": "domains.command.events",
+    "DeadLetterCreatedBody": "packages.contracts.event_bus.bodies.platform",
     "Diff": "domains.gitops.events",
     "DiffAnalyzedBody": "domains.gitops.events",
     "DiffDetectedBody": "domains.gitops.events",
