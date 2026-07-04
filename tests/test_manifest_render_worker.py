@@ -145,6 +145,65 @@ def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
     assert manifest.spec.image == "ghcr.io/project/checkout-api:demo"
 
 
+def test_render_prefers_remote_manifest_when_remote_is_enabled(monkeypatch, tmp_path) -> None:
+    render = load_service("gitops/manifest-render-worker")
+    local = tmp_path / "deploy.yaml"
+    local.write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: local-api",
+                "spec:",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: local-api",
+                "          image: local",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(local))
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_REQUIRED", "1")
+
+    class Response:
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"\n".join(
+                [
+                    b"apiVersion: apps/v1",
+                    b"kind: Deployment",
+                    b"metadata:",
+                    b"  name: remote-api",
+                    b"spec:",
+                    b"  template:",
+                    b"    spec:",
+                    b"      containers:",
+                    b"        - name: remote-api",
+                    b"          image: remote",
+                ]
+            )
+
+    monkeypatch.setattr(render.request, "urlopen", lambda *_args, **_kwargs: Response())
+
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="abc123", image="ignored", replicas=1),
+        db=SpyDb(),
+    )
+
+    assert outs[0].rendered_manifest.metadata.name == "remote-api"
+    assert outs[0].rendered_manifest.spec.image == "remote"
+
+
 def test_render_treats_remote_manifest_fetch_failure_as_invalid_by_default(monkeypatch) -> None:
     render = load_service("gitops/manifest-render-worker")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
@@ -172,6 +231,39 @@ def test_render_treats_remote_manifest_fetch_failure_as_invalid_by_default(monke
     assert "failed to load GitHub manifest" in outs[0].reason
     assert not db.called("save_repo_change")
     assert not db.called("mark_watch_observed")
+
+
+def test_render_does_not_fall_back_to_local_when_remote_is_required(monkeypatch, tmp_path) -> None:
+    render = load_service("gitops/manifest-render-worker")
+    local = tmp_path / "deploy.yaml"
+    local.write_text(
+        "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: local-api",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(local))
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_REQUIRED", "1")
+
+    def fail_urlopen(_req: object, timeout: float) -> object:
+        raise error.URLError("temporary unavailable")
+
+    monkeypatch.setattr(render.request, "urlopen", fail_urlopen)
+
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="abc123", image="ignored", replicas=1),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert "failed to load GitHub manifest" in outs[0].reason
 
 
 def test_render_emits_each_kubernetes_object_from_multi_document_yaml(
