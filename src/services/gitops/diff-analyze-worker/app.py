@@ -13,7 +13,7 @@ from domains.alert.events import AlertRequestedBody
 from domains.command.events import CommandRequestedBody
 from domains.gitops.events import Diff, DiffAnalyzedBody, DiffDetectedBody
 from domains.scm.events import SafePrRequestedBody
-from packages.config.constants import Command, GitHub, Sandbox, Target
+from packages.config.constants import Command, GitHub, RiskLevel, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
@@ -26,11 +26,11 @@ PRE_DEPLOY_ALERT_SEVERITY = "info"
 
 
 def evaluate_safe_pr_policy(diff: Diff) -> tuple[bool, str]:
-    # TODO(gitops): risk string check를 operation, namespace, RBAC policy rule로 교체
+    # TODO(gitops): risk enum check를 operation, namespace, RBAC policy rule로 교체
     # TODO(gitops): production 영향 시 approval_required/forbidden route 반환
     if diff.is_image_only_noop():
         return False, Sandbox.NO_DIFF_REASON
-    safe = diff.risk == Sandbox.RISK_TAG
+    safe = diff.risk is RiskLevel.SANDBOX_ONLY
     return safe, SAFE_REASON if safe else UNSAFE_REASON
 
 

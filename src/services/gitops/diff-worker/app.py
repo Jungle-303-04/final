@@ -22,7 +22,7 @@ from domains.gitops.diffing import (
     summarize_status,
 )
 from domains.gitops.events import Diff, DiffDetectedBody, ManifestRenderedBody, RenderedManifest
-from packages.config.constants import Sandbox
+from packages.config.constants import RiskLevel, Sandbox
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
@@ -33,7 +33,8 @@ RESOURCE_NOT_INSPECTED = "resource-not-inspected"
 ENABLE_SSA_DRY_RUN_ENV = "GITOPS_ENABLE_SSA_DRY_RUN"
 FIELD_MANAGER_ENV = "GITOPS_FIELD_MANAGER"
 DEFAULT_FIELD_MANAGER = "myjob-gitops"
-REVIEW_REQUIRED_RISK = "review-required"
+# 기존 소비자 호환용 별칭 — 원본 정의는 RiskLevel 에 있음
+REVIEW_REQUIRED_RISK = RiskLevel.REVIEW_REQUIRED
 
 
 @dataclass(frozen=True)
@@ -221,12 +222,12 @@ def env_enabled(name: str) -> bool:
     return getenv(name, "").lower() in {"1", "true", "yes", "on"}
 
 
-def risk_for_diff(namespace: str, status: str) -> str:
+def risk_for_diff(namespace: str, status: str) -> RiskLevel:
     if namespace != Sandbox.NAMESPACE:
-        return Sandbox.UNSAFE_NAMESPACE_RISK_TAG
+        return RiskLevel.NON_SANDBOX_NAMESPACE
     if status in {"review_required", "adoption_required"}:
-        return REVIEW_REQUIRED_RISK
-    return Sandbox.RISK_TAG
+        return RiskLevel.REVIEW_REQUIRED
+    return RiskLevel.SANDBOX_ONLY
 
 
 def has_actionable_changes(changes: list[dict[str, object]]) -> bool:

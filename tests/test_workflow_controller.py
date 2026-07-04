@@ -147,7 +147,7 @@ def test_workflow_controller_requests_approval_for_unsafe_diff() -> None:
     outs = run_handler(
         workflow.on_diff_analyzed,
         DiffAnalyzedBody(
-            diff=workflow_diff("production"),
+            diff=workflow_diff("non-sandbox-namespace"),
             safe=False,
             risk="production",
             reason="production requires approval",
