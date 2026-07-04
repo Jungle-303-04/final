@@ -34,6 +34,12 @@ Audit Timeline Service
 - RCA/audit 관련 worker test
 - GitHub PR adapter 또는 fake adapter. 실제 PR 발급은 repo-gateway 중심으로 둔다.
 
+## 한 작업씩 따라가는 문서
+
+실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [RCA / Safe PR 선형 작업 가이드](rca-safe-pr-tasks/README.md)를 1번부터 순서대로 따른다.
+
+각 페이지는 한 PR 또는 한 작업 단위로 끝나도록 작성되어 있으며, `완료 기준`을 만족해야 다음 페이지로 넘어간다.
+
 ## 현재 책임
 
 - RCA Worker는 직접 PR을 생성하지 않고 `safe_pr.requested`를 만든다.
