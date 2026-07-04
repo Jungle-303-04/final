@@ -225,6 +225,23 @@ def test_repo_gateway_emits_failed_event_on_github_error(monkeypatch) -> None:
     assert not db.called("save_pull_request")
 
 
+def test_repo_gateway_rejects_event_provider_mismatch(monkeypatch) -> None:
+    _github_env(monkeypatch)
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+
+    outs = run_handler(
+        repo.on_safe_pr_requested,
+        SafePrRequestedBody(title="t", body="b", provider="gitlab"),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert calls == []
+    assert not db.called("save_pull_request")
+
+
 def test_build_scm_provider_rejects_unknown_provider() -> None:
     # provider 이름 오설정만 부팅 fail-fast(자격 증명은 요청 시점 실패)
     repo = load_service("gitops/scm-worker")
