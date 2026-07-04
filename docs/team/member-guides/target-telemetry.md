@@ -15,6 +15,8 @@ Target Cluster
     -> POST /agent/connect
     -> POST /agent/evidence
     -> GET /agent/commands/poll
+    -> POST /agent/commands/{command_id}/start
+    -> POST /agent/commands/{command_id}/heartbeat
     -> POST /agent/commands/{command_id}/result
 
 Management Gateway
@@ -48,9 +50,11 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 
 ## 한 작업씩 따라가는 문서
 
-실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [Target / Telemetry 선형 작업 가이드](target-telemetry-tasks/README.md)를 1번부터 순서대로 따른다.
+실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [Target / Telemetry 선형 작업 가이드](target-telemetry-tasks/README.md)를 0번부터 순서대로 따른다.
 
 각 페이지는 한 PR 또는 한 작업 단위로 끝나도록 작성되어 있으며, `완료 기준`을 만족해야 다음 페이지로 넘어간다. 첫 엔드 기준은 `node-collector /metrics -> real Prometheus scrape -> Prometheus query API -> MetricEvidence summary` 폐쇄 루프다.
+
+팀 간 입력/출력, Gateway route, event envelope, 테스트 선택 기준은 [팀 간 구현 연결과 테스트 가이드](../cross-role-implementation-test-guide.md)를 함께 따른다.
 
 ## 현재 책임
 
@@ -94,8 +98,9 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 
 - evidence를 보내면 Gateway가 `cluster.evidence.received`를 발행한다.
 - command poll을 호출하면 Gateway가 DB의 agent command queue에서 하나를 lease한다.
+- command start/heartbeat는 lease가 살아 있음을 Gateway에 보고한다.
 - command result를 보내면 Gateway가 command 완료 이벤트를 발행한다.
-- Agent는 `correlation_id`를 새로 만들지 않는다. Gateway가 내려준 command에 있으면 그대로 돌려준다.
+- Agent는 `correlation_id`를 새로 만들지 않는다. 현재 command result 계약에서는 `command_id`와 `lease_id`를 유지하고, event correlation은 Gateway/command queue가 관리한다.
 - Agent는 credential, kubeconfig, bearer token을 response/event/log에 남기지 않는다.
 
 모르는 상태에서 작업할 때의 기준:
