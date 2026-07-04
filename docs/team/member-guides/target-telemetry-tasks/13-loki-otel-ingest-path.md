@@ -58,7 +58,7 @@ Prometheus 흐름이 안정된 뒤, log 또는 trace ingest 경로 하나를 작
 ## 검증
 
 ```bash
-uv run pytest tests/test_target_log_evidence.py tests/test_target_trace_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_log_evidence.py tests/test_target_trace_evidence.py -q
 uv run ruff check src tests
 ```
 

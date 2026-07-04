@@ -7,12 +7,14 @@ from fastapi import HTTPException
 
 from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
+    agent_debug_query,
     command_heartbeat,
     command_start,
     commands,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from packages.contracts.gateway.requests import (
+    AgentDebugQueryRequest,
     CommandHeartbeatRequest,
     CommandRequest,
     CommandStartRequest,
@@ -39,6 +41,20 @@ class SpyAccessDb:
     ) -> bool:
         self.calls.append((user_id, workspace_id, resource_type, resource_id, action))
         return self.allowed
+
+
+class SpyDebugQueryDb(SpyAccessDb):
+    def __init__(self, allowed: bool) -> None:
+        super().__init__(allowed)
+        self.queued: list[tuple[str, dict[str, object], str]] = []
+
+    def queue_agent_command(
+        self,
+        correlation_id: str,
+        plan: dict[str, object],
+        status: str,
+    ) -> None:
+        self.queued.append((correlation_id, plan, status))
 
 
 class SpyEvents:
@@ -168,6 +184,81 @@ def test_command_request_denies_without_cluster_access() -> None:
             raise AssertionError("expected HTTPException")
 
         assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_agent_debug_query_requires_cluster_read_access_and_queues_agent_command() -> None:
+    async def run() -> None:
+        db = SpyDebugQueryDb(allowed=True)
+        response = await agent_debug_query(
+            AgentDebugQueryRequest(
+                cluster_id="cluster-1",
+                query={
+                    "source": "prometheus",
+                    "name": "restart_rate",
+                    "query": "increase(kube_pod_container_status_restarts_total[15m])",
+                    "range_seconds": 900,
+                    "step_seconds": 30,
+                },
+                reason="RCA 확인용",
+            ),
+            current_session(),
+            db,
+        )
+
+        assert response.accepted is True
+        assert response.command_id.startswith("cmd-debug-")
+        assert response.correlation_id.startswith("corr-debug-")
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "read")]
+        assert len(db.queued) == 1
+
+        correlation_id, plan, status = db.queued[0]
+        assert correlation_id == response.correlation_id
+        assert status == "queued"
+        assert plan["command_id"] == response.command_id
+        assert plan["action"] == "telemetry.query.run"
+        assert plan["namespace"] == "sandbox"
+        assert plan["reason"] == "RCA 확인용"
+        assert plan["payload"] == {
+            "query": {
+                "source": "prometheus",
+                "name": "restart_rate",
+                "query": "increase(kube_pod_container_status_restarts_total[15m])",
+                "range_seconds": 900,
+                "step_seconds": 30,
+            }
+        }
+        assert plan["routing_constraint"] == {
+            "channel": "agent",
+            "cluster_id": "cluster-1",
+            "workspace_id": "workspace-1",
+            "required_capability": "collector",
+        }
+
+    asyncio.run(run())
+
+
+def test_agent_debug_query_denies_without_cluster_read_access() -> None:
+    async def run() -> None:
+        db = SpyDebugQueryDb(allowed=False)
+        try:
+            await agent_debug_query(
+                AgentDebugQueryRequest(
+                    cluster_id="cluster-1",
+                    query={"source": "prometheus", "name": "up", "query": "up"},
+                ),
+                current_session(),
+                db,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail == RESOURCE_ACCESS_DENIED
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "read")]
+        assert db.queued == []
 
     asyncio.run(run())
 

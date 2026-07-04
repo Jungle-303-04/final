@@ -67,26 +67,26 @@ AgentEvidenceRequest(
 Target Agent HTTP client를 바꾸면 실행한다.
 
 ```bash
-uv run pytest tests/test_target_agent_client.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_client.py -q
 ```
 
 Node Collector를 바꾸면 실행한다.
 
 ```bash
-uv run pytest tests/test_node_collector.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_collector.py -q
 ```
 
 Evidence provider나 summary를 바꾸면 실행한다.
 
 ```bash
-uv run pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_trace_evidence.py
-uv run pytest tests/test_target_pod_evidence.py tests/test_agent_evidence_ingest.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_trace_evidence.py -q
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py tests/test_agent_evidence_ingest.py -q
 ```
 
 Command 실행 경로를 바꾸면 실행한다.
 
 ```bash
-uv run pytest tests/test_target_agent_commands.py tests/test_command_worker.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_commands.py tests/test_command_worker.py -q
 ```
 
 ## 코드 읽는 순서
@@ -100,7 +100,7 @@ uv run pytest tests/test_target_agent_commands.py tests/test_command_worker.py
 ## 모순 방지 규칙
 
 - Target Agent가 NATS, JetStream, DB session을 직접 import하면 안 된다.
-- Prometheus fake server를 real Prometheus처럼 설명하지 않는다.
+- Prometheus provider와 target Prometheus manifest를 같은 것으로 설명하지 않는다.
 - Prometheus query path와 scrape path를 섞지 않는다.
 - command result body에 없는 `correlation_id`를 agent가 되돌려야 한다고 쓰지 않는다. 현재는 `command_id`와 `lease_id`가 핵심이다.
 - raw telemetry 전체를 Gateway로 보내지 않는다. summary evidence로 줄인다.
@@ -108,4 +108,4 @@ uv run pytest tests/test_target_agent_commands.py tests/test_command_worker.py
 
 ## 다음 작업
 
-[01. Fake / Real Telemetry 경계](01-fake-real-telemetry-boundary.md)
+[01. Telemetry Provider 경계](01-telemetry-provider-boundary.md)

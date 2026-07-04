@@ -7,6 +7,8 @@
 
 Target Agent는 NATS, JetStream, PostgreSQL을 직접 알면 안 된다. Agent 입장에서 Management Plane은 HTTP API이고, Management Plane 내부에서는 worker, DB queue, outbox, event runtime이 상태 전이를 책임진다.
 
+처음 연습하는 팀원은 먼저 [역할별 실습 가이드](../role-practice-guide.md)의 민정 섹션을 따라간 뒤, 세부 구현이 필요할 때 이 문서를 기준서로 사용한다.
+
 ## 코드 기준 파일
 
 | 영역 | 기준 파일 | 역할 |
@@ -27,7 +29,7 @@ Target Agent는 NATS, JetStream, PostgreSQL을 직접 알면 안 된다. Agent �
 | Target evidence scheduler | `src/services/target/cluster-agent/evidence/jobs.py` | due provider 계산, schedule, provider별 worker pool |
 | Target evidence collector | `src/services/target/cluster-agent/evidence/collector.py` | provider query 실행과 payload 구성 |
 | Telemetry provider registry | `src/services/target/cluster-agent/telemetry_registry.py` | `source -> evidence_key -> query_type` 등록 |
-| Telemetry providers | `src/services/target/cluster-agent/providers/` | Prometheus, Loki, Tempo adapter |
+| Telemetry providers | `src/services/target/cluster-agent/providers/` | Kubernetes, Prometheus, Loki, Tempo provider |
 | Query model | `src/services/target/cluster-agent/queries/` | query definition과 `telemetry.query.run` payload |
 
 ## Command 전체 흐름
@@ -70,6 +72,7 @@ Command는 push가 아니라 pull이다. Management Plane은 Target Cluster API 
 
 ```python
 COMMANDS_PATH = "/commands"
+AGENT_DEBUG_QUERY_PATH = "/agent/debug/query"
 AGENT_COMMAND_POLL_PATH = "/agent/commands/poll"
 AGENT_COMMAND_START_PATH = "/agent/commands/{command_id}/start"
 AGENT_COMMAND_HEARTBEAT_PATH = "/agent/commands/{command_id}/heartbeat"
@@ -202,6 +205,68 @@ class CommandResultRequest(StrictModel):
 ```
 
 Gateway는 `complete_agent_command_and_stage_event()`로 `agent_commands`를 완료 상태로 바꾸고, 같은 transaction 안에서 `command.completed`를 event/outbox에 stage한다.
+
+## Agent debug query API
+
+개발 중에 provider query 하나만 Target Agent로 보내 확인해야 할 때는 `POST /agent/debug/query`를 쓴다.
+
+이 API는 일반 배포 command가 아니다. 읽기 권한으로 provider query를 agent command queue에 넣고, Target Agent가 기존 command poll/start/heartbeat/result 흐름으로 실행하게 하는 디버그용 입구다.
+
+요청 schema:
+
+```python
+class AgentDebugQueryRequest(StrictModel):
+    cluster_id: str
+    query: dict[str, Any]
+    reason: str | None = None
+```
+
+응답 schema:
+
+```python
+class AgentDebugQueryResponse(StrictModel):
+    accepted: bool
+    command_id: str
+    correlation_id: str
+```
+
+요청 예시:
+
+```json
+{
+  "cluster_id": "target-cluster-01",
+  "reason": "RCA 확인용",
+  "query": {
+    "source": "prometheus",
+    "name": "restart_rate",
+    "description": "Restart trend for target namespace.",
+    "query": "increase(kube_pod_container_status_restarts_total{namespace=\"target\"}[15m])",
+    "range_seconds": 900,
+    "step_seconds": 30
+  }
+}
+```
+
+Gateway 내부 동작:
+
+```text
+POST /agent/debug/query
+  -> cluster read access 확인
+  -> action=telemetry.query.run plan 생성
+  -> db.queue_agent_command(correlation_id, plan, queued)
+  -> Target Agent GET /agent/commands/poll
+  -> Target Agent가 TelemetryQueryDefinition으로 query 실행
+  -> /agent/commands/{command_id}/result
+```
+
+확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_command_router.py::test_agent_debug_query_requires_cluster_read_access_and_queues_agent_command \
+  tests/test_target_agent_commands.py \
+  -q
+```
 
 ## Command event 전이
 
@@ -422,10 +487,10 @@ async def scale_deployment_command(
    최소 테스트:
 
    ```bash
-   uv run pytest tests/test_command_catalog.py
-   uv run pytest tests/test_command_worker.py
-   uv run pytest tests/test_target_agent_commands.py
-   uv run pytest tests/test_command_router.py
+   PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_catalog.py
+   PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_worker.py
+   PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_commands.py
+   PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_router.py
    ```
 
 ## Evidence job 전체 흐름
@@ -436,7 +501,7 @@ sequenceDiagram
     participant Scheduler as EvidenceJobScheduler
     participant Gateway as API Gateway
     participant DB as evidence_jobs / evidence_windows
-    participant Provider as Prometheus/Loki/Tempo
+    participant Provider as Kubernetes/Prometheus/Loki/Tempo
     participant Bus as Event Runtime
     participant RCA as RCA Worker
 
@@ -639,7 +704,19 @@ Aggregate 결과 shape:
   "window_start": "2026-07-05T10:00:00+00:00",
   "evidence_key": "workspace-1:target-cluster-01:cluster-snapshot:2026-07-05T10:00:00+00:00",
   "agent_id": "target-agent-0",
-  "kubernetes": {},
+  "kubernetes": {
+    "cluster": {
+      "cluster_id": "target-cluster-01",
+      "namespace": "target"
+    },
+    "pods": [],
+    "events": [],
+    "nodes": [],
+    "workloads": [],
+    "services": [],
+    "endpoints": [],
+    "provider_status": {}
+  },
   "metrics": {},
   "logs": [],
   "traces": {}
@@ -714,7 +791,16 @@ class EvidenceRuntimePolicy(StrictModel):
     providers: dict[str, EvidenceProviderPolicy] = {}
 ```
 
-Management 기본 policy는 `src/domains/target/evidence_policy.py`의 `DEFAULT_EVIDENCE_PROVIDER_QUERIES`에서 만든다. 현재 기본 provider는 `metrics`, `logs`, `traces`다.
+Management 기본 policy는 `src/domains/target/evidence_policy.py`의 `DEFAULT_EVIDENCE_PROVIDER_QUERIES`에서 만든다. 현재 기본 provider는 `kubernetes`, `metrics`, `logs`, `traces`다.
+
+기본 provider key:
+
+| provider key | source | evidence payload key | provider class | query 값 객체 |
+| --- | --- | --- | --- | --- |
+| `kubernetes` | `kubernetes` | `kubernetes` | `KubernetesSnapshotProvider` | `KubernetesSnapshotQuery` |
+| `metrics` | `prometheus` | `metrics` | `PrometheusMetricsProvider` | `PrometheusInstantQuery`, `PrometheusRangeQuery` |
+| `logs` | `loki` | `logs` | `LokiLogsProvider` | `LokiLogQuery` |
+| `traces` | `tempo` | `traces` | `TempoTracesProvider` | `OpenTelemetrySpanQuery` |
 
 Agent는 policy를 받으면 `apply_policy()`에서 다음을 수행한다.
 
@@ -729,17 +815,33 @@ Query definition shape:
 ```json
 {
   "source": "prometheus",
-  "name": "scrape_targets_up",
-  "description": "Prometheus scrape target health for the target cluster.",
-  "query": "up"
+  "name": "node_collector_node_pod_count",
+  "description": "Pods scheduled on each Kubernetes node.",
+  "query": "node_collector_node_pod_count",
+  "range_seconds": 900,
+  "step_seconds": 30
 }
 ```
 
 `source`가 생략된 경우 Agent는 provider key로 source를 역조회해서 채운다. 예를 들어 `provider_key=metrics`이면 `source=prometheus`가 된다.
+`range_seconds`가 있으면 Prometheus는 `PrometheusRangeQuery`로 바뀌고, `/api/v1/query_range`를 호출한다. range query를 지원하지 않는 source에 `range_seconds`를 넣으면 `TelemetryQueryDefinition.to_provider_query()`에서 거절된다.
+
+Kubernetes snapshot query 예시:
+
+```json
+{
+  "source": "kubernetes",
+  "name": "target_namespace_snapshot",
+  "description": "Kubernetes namespace snapshot.",
+  "query": "target"
+}
+```
+
+여기서 `query` 값은 namespace다. 위 예시는 `target` namespace의 pods, events, nodes, workloads, services, endpoint slices를 읽어 `kubernetes` bucket에 넣는다.
 
 ## 기존 provider에 query 추가하기
 
-기존 Prometheus/Loki/Tempo provider에 query만 추가하는 경우 provider code를 바꾸지 않아도 된다.
+기존 Kubernetes/Prometheus/Loki/Tempo provider에 query만 추가하는 경우 provider code를 바꾸지 않아도 된다.
 
 방법 1. 기본 policy에 추가:
 
@@ -778,7 +880,9 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES["metrics"].append(
           {
             "name": "sandbox_pod_restarts",
             "description": "Restart count for pods in sandbox namespace.",
-            "query": "kube_pod_container_status_restarts_total{namespace=\"sandbox\"}"
+            "query": "increase(kube_pod_container_status_restarts_total{namespace=\"sandbox\"}[15m])",
+            "range_seconds": 900,
+            "step_seconds": 30
           }
         ]
       }
@@ -865,8 +969,8 @@ class MyBackendProvider:
 5. 테스트를 추가한다.
 
    ```bash
-   uv run pytest tests/test_telemetry_registry.py tests/test_provider_registry.py
-   uv run pytest tests/test_target_evidence_jobs.py
+   PYTHONPATH=src .venv/bin/python -m pytest tests/test_telemetry_registry.py
+   PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_evidence_jobs.py
    ```
 
 ## Direct evidence push 경로
@@ -943,37 +1047,37 @@ Evidence provider 또는 query를 추가할 때:
 Command route/worker/agent:
 
 ```bash
-uv run pytest tests/test_command_catalog.py
-uv run pytest tests/test_command_router.py
-uv run pytest tests/test_command_worker.py
-uv run pytest tests/test_command_janitor.py
-uv run pytest tests/test_target_agent_client.py
-uv run pytest tests/test_target_agent_commands.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_catalog.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_router.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_worker.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_janitor.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_client.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_commands.py
 ```
 
 Evidence job/scheduler/provider:
 
 ```bash
-uv run pytest tests/test_target_evidence_jobs.py
-uv run pytest tests/test_agent_evidence_ingest.py
-uv run pytest tests/test_target_metric_evidence.py
-uv run pytest tests/test_target_log_evidence.py
-uv run pytest tests/test_target_trace_evidence.py
-uv run pytest tests/test_telemetry_registry.py
-uv run pytest tests/test_provider_registry.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_evidence_jobs.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_agent_evidence_ingest.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_log_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_trace_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_telemetry_registry.py
 ```
 
 End-to-end event 연결:
 
 ```bash
-uv run pytest tests/test_event_golden_path.py
-uv run pytest tests/test_workflow_controller.py
-uv run pytest tests/test_rca_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_event_golden_path.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_workflow_controller.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py
 ```
 
 전체 정적/단위 확인:
 
 ```bash
 uv run ruff check src tests
-uv run pytest
+PYTHONPATH=src .venv/bin/python -m pytest
 ```
