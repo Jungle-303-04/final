@@ -58,6 +58,26 @@ def test_repo_gateway_creates_pr_from_request(monkeypatch) -> None:
     ]
 
 
+def test_repo_gateway_reads_github_token_from_token_ref(monkeypatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GITHUB_TOKEN_REF", "GITHUB_TOKEN_FROM_REF")
+    monkeypatch.setenv("GITHUB_TOKEN_FROM_REF", "token-1")
+    monkeypatch.setenv("SCM_REPO", "project/repo")
+    monkeypatch.setenv("SCM_BASE_BRANCH", "main")
+    calls: list[tuple[str, str]] = []
+    repo = _load_with_transport(monkeypatch, calls=calls)
+    db = SpyDb()
+    outs = run_handler(
+        repo.on_safe_pr_requested,
+        SafePrRequestedBody(title="t", body="b", provider="github"),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert calls[0] == ("GET", "/repos/project/repo/git/ref/heads/main")
+    assert db.called("save_pull_request")
+
+
 def test_repo_gateway_commits_manifest_patches(monkeypatch) -> None:
     _github_env(monkeypatch)
     calls: list[tuple[str, str]] = []

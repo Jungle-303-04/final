@@ -1,9 +1,11 @@
 # 시크릿 관리
 
-시크릿 도구는 강제하지 않는다. 현재 코드베이스에는 별도 `SecretProvider`
-추상화가 없다. 서비스 설정은 `src/packages/config/settings.py`의 `env(name,
-default)`로 환경변수에서 읽고, provider token은 평문 값이 아니라
+시크릿 도구는 강제하지 않는다. 현재 코드베이스에는 기본 `EnvSecretVault`와
+`EnvTokenVault`가 있다. 서비스 설정은 `src/packages/config/settings.py`의
+`env(name, default)`로 환경변수에서 읽고, provider token은 평문 값이 아니라
 `token_ref`/`credential_ref` 같은 참조로만 이벤트와 저장소 경계를 지난다.
+GitHub Safe PR provider는 `GITHUB_TOKEN_REF`가 있으면 그 값을 환경변수 이름으로
+해석하고, 없으면 기존 호환을 위해 `GITHUB_TOKEN`을 secret ref로 사용한다.
 
 외부 사용자는 SOPS/age, AWS Secrets Manager, Vault, 1Password, External
 Secrets 중 무엇을 쓰든 최종적으로 Kubernetes Secret 또는 실행 환경변수로

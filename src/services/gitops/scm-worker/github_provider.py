@@ -20,9 +20,12 @@ from packages.contracts.gitops import (
     DEFAULT_GITHUB_API_BASE,
     GITHUB_API_BASE_ENV,
     GITHUB_TOKEN_ENV,
+    GITHUB_TOKEN_REF_ENV,
 )
+from packages.contracts.security import SecretRef, TokenVaultPort
 from packages.contracts.stores import PullRequestStore
 from packages.runtime.app import EventContext
+from packages.security import EnvTokenVault, SecretNotFound
 
 SCM_REPO_ENV = "SCM_REPO"  # PR 을 만들 저장소("owner/repo")
 SCM_BASE_BRANCH_ENV = "SCM_BASE_BRANCH"  # PR base 브랜치(기본 main)
@@ -40,7 +43,7 @@ PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
 MISSING_GITHUB_CONFIG_MESSAGE = (
-    f"{GITHUB_TOKEN_ENV}/{SCM_REPO_ENV} 미설정 — GitHub 자격 증명 없이는 safe PR 을 "
+    f"{GITHUB_TOKEN_REF_ENV}/{GITHUB_TOKEN_ENV}/{SCM_REPO_ENV} 미설정 — GitHub 자격 증명 없이는 safe PR 을 "
     "생성할 수 없음. deploy secret/env 에 토큰과 대상 저장소를 설정해야 함"
 )
 MISSING_EXISTING_PR_MESSAGE = (
@@ -97,16 +100,24 @@ def validate_request_paths(request: SafePrRequestedBody) -> None:
 class GithubScmProvider:
     """ScmProvider 구현 — GitHub REST API 호출로 PR html_url 을 반환함."""
 
-    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        transport: httpx.AsyncBaseTransport | None = None,
+        token_vault: TokenVaultPort | None = None,
+    ) -> None:
         self.transport = transport
+        self.token_vault = token_vault or EnvTokenVault()
 
     async def create_pull_request(
         self, request: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
     ) -> str:
-        token = env(GITHUB_TOKEN_ENV, "").strip()
         repo = env(SCM_REPO_ENV, "").strip()
-        if not token or not repo:
+        if not repo:
             raise RuntimeError(MISSING_GITHUB_CONFIG_MESSAGE)
+        try:
+            token = self.github_token()
+        except SecretNotFound as exc:
+            raise RuntimeError(MISSING_GITHUB_CONFIG_MESSAGE) from exc
         base_branch = env(SCM_BASE_BRANCH_ENV, DEFAULT_SCM_BASE_BRANCH).strip() or (
             DEFAULT_SCM_BASE_BRANCH
         )
@@ -124,6 +135,10 @@ class GithubScmProvider:
             ctx.correlation_id, pr_url, request.title, request.body, PR_STATUS_CREATED
         )
         return pr_url
+
+    def github_token(self) -> str:
+        token_ref = env(GITHUB_TOKEN_REF_ENV, GITHUB_TOKEN_ENV).strip() or GITHUB_TOKEN_ENV
+        return self.token_vault.read_token(SecretRef(token_ref))
 
     def client(self, token: str) -> httpx.AsyncClient:
         return httpx.AsyncClient(
