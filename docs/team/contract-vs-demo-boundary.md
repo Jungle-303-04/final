@@ -80,9 +80,9 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 | Git manifest source | demo/dev fallback | `checkout-api` 기본값과 local-file/remote file 경로로 manifest를 만든다. | Git repo checkout/cache, commit provenance, Kustomize/Helm/raw YAML renderer, 구조화된 render error |
 | Desired diff | partial demo | 이전 snapshot이 없으면 demo fallback을 사용하고 risk string 중심으로 판단한다. | cluster-aware desired/live/last-approved 비교, create/update/delete 구조화, policy reason 테스트 |
 | Diff risk/approval policy | partial demo | namespace/risk string 기반으로 safe PR/alert/command를 분기한다. | workspace/repo/cluster/environment 정책, approval_required/forbidden route, rollout checklist |
-| RCA analyzer | deterministic sample | evidence를 기반으로 하지만 RCA 문구와 confidence가 sample 중심이다. | `RcaAnalyzerPort` 뒤의 rule/LLM adapter, insufficient evidence 상태, evidence ref 기반 근거 |
-| LLM client | gateway + adapters | 기본은 `fake`이고, `LLM_PROVIDER`로 OpenAI/OpenAI 호환/Anthropic/Gemini adapter를 선택한다. | provider별 live smoke, 비용/쿼터 guardrail, prompt boundary, 통합 회귀 테스트 |
-| Safe PR creation | stub adapter | `scm-worker`가 실제 branch/commit/PR 대신 fake URL을 만든다. | feature flag, token/ref 검증, branch/commit/PR 생성, repo allowlist, failure event/audit |
+| RCA analyzer | rule/playbook baseline | CrashLoopBackOff 중심 rule과 evidence source 매칭으로 후보를 평가한다. AI fallback worker는 아직 분석 pipeline에 연결되지 않았다. | `RcaAnalyzerPort` 뒤의 rule/LLM adapter, insufficient evidence 상태, evidence ref 기반 근거, fault-injection eval |
+| LLM client | gateway + adapters | `LLM_PROVIDER`로 OpenAI/OpenAI 호환/Anthropic/Gemini adapter를 선택한다. 현재 tool loop는 JSON-only prompt protocol 기반이다. | provider별 live smoke, function-calling 수준 schema, 비용/쿼터 guardrail, tool authorization, 통합 회귀 테스트 |
+| Safe PR creation | partial real adapter | `scm-worker`는 GitHub branch/commit/PR REST provider를 가진다. 다만 현재 PR 내용은 실제 manifest patch보다 검토 문서 중심이다. | feature flag, token/ref 검증, repo allowlist, 실제 manifest patch/rollback patch commit, failure event/audit |
 | Alert delivery | stub adapter | `alert-worker`가 Slack/Email/PagerDuty 전송 없이 `alert.dispatched`를 만든다. | provider delivery id 저장, 조용한 시간/승인 정책, production 자동 배포 fail-closed |
 | Credential/Token Broker | placeholder | identity repository에 credential placeholder와 TODO가 남아 있다. | SecretVault/TokenBroker port, provider token 저장/회전/감사, event/log non-leak 테스트 |
 | Dashboard projection worker | planned | 현재 repository에 `src/services/projection/dashboard-worker`가 없다. | App 기반 `@app.on_any` worker, read model schema, query/stream route, smoke assertion |

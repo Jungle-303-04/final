@@ -147,6 +147,11 @@ Phase 6. 두 번째 도구 추가
 Phase 7. 추상화 확정
   GitHub, Prometheus가 같은 Provider/Target/Action/Broker 구조로 동작하면
   Loki, Grafana, PostgreSQL, OTel을 adapter로 확장한다.
+
+Hardening gate
+  production write와 AI tool 실행은 approval_ref, policy_decision_ref,
+  TokenVault/SecretVault, action scope, non-leak test가 모두 준비된 뒤 허용한다.
+  세부 기준은 docs/hardening-roadmap.md를 따른다.
 ```
 
 이 순서가 중요한 이유:

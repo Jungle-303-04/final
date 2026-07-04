@@ -69,6 +69,11 @@ node-collector /metrics
 | 11 | Kubernetes 상태를 metric/evidence로 연결 | pod/event 정보와 Prometheus metric을 함께 볼 수 있게 한다. |
 | 12 | Gateway 계약 연결 | Management API가 준비되면 실제 connect/evidence/poll/result 계약에 붙인다. |
 | 13 | Loki/OTel ingest 경로 | Prometheus 흐름이 안정된 뒤 log/trace를 확장한다. |
+| 14 | Approval evidence/action allowlist | write command를 approval_ref와 policy_decision_ref 기준으로 fail-closed한다. |
+| 15 | Partial failure result schema | resource별 status, sanitized stdout/stderr, retryable flag, applied flag를 Gateway result와 맞춘다. |
+| 16 | Control-plane telemetry metadata | provider failure/fallback, source freshness, payload size를 metric/audit metadata로 남긴다. |
+
+Phase 14 이후는 [하드닝 로드맵](../../hardening-roadmap.md)의 Target/Agent 기준을 따른다.
 
 ## Phase 1. 현재 fake/real telemetry 차이 문서화
 
