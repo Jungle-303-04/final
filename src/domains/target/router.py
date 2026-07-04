@@ -17,6 +17,7 @@ from domains.identity.dependencies import (
     require_admin_session,
     require_cluster_agent,
 )
+from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody
 from domains.target.events import ClusterDesiredStateChangedBody, TargetDesiredComponent
 from domains.target.evidence_jobs import (
@@ -66,6 +67,9 @@ DEFAULT_KUBECTL_APPLY_TIMEOUT_SECONDS = "30"
 # 미설정 시 컨텍스트 미지정(현재 kubeconfig)만 허용 — 페이로드로 임의 컨텍스트 지정 불가.
 KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
 KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
+DIRECT_APPLY_DEPLOY_PROVIDER = "kube-context"
+MANUAL_MANIFEST_DEPLOY_PROVIDER = "manual-manifest"
+TARGET_PROVIDER_INVALID = "target install provider selection is invalid"
 # evidence job 롱폴 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_EVIDENCE_JOB_POLL_SECONDS_ENV = (
     "EVIDENCE_JOB_POLL_DEFAULT_SECONDS"  # 롱폴 기본 대기 초(기본 10)
@@ -121,6 +125,37 @@ def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesi
 def allowed_kube_contexts() -> set[str]:
     raw = env(KUBE_CONTEXT_ALLOWLIST_ENV, "")
     return {item.strip() for item in raw.split(",") if item.strip()}
+
+
+def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> TargetRegisterRequest:
+    if payload.apply and "deploy_provider" not in payload.model_fields_set:
+        return payload.model_copy(update={"deploy_provider": DIRECT_APPLY_DEPLOY_PROVIDER})
+    return payload
+
+
+def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
+    try:
+        require_available_provider(ProviderCategory.CLOUD, payload.cloud_provider)
+        require_available_provider(ProviderCategory.DEPLOY, payload.deploy_provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{TARGET_PROVIDER_INVALID}: {exc}") from exc
+
+    if payload.apply and payload.deploy_provider != DIRECT_APPLY_DEPLOY_PROVIDER:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{TARGET_PROVIDER_INVALID}: direct apply requires "
+                f"deploy_provider={DIRECT_APPLY_DEPLOY_PROVIDER}"
+            ),
+        )
+    if payload.kube_context and payload.deploy_provider != DIRECT_APPLY_DEPLOY_PROVIDER:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{TARGET_PROVIDER_INVALID}: kube_context requires "
+                f"deploy_provider={DIRECT_APPLY_DEPLOY_PROVIDER}"
+            ),
+        )
 
 
 def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
@@ -179,7 +214,10 @@ async def register_target(
     events: Any = Depends(get_events),
 ) -> TargetInstallResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    scoped_payload = payload.model_copy(update={"workspace_id": workspace_id})
+    scoped_payload = normalize_target_provider_defaults(payload).model_copy(
+        update={"workspace_id": workspace_id}
+    )
+    validate_target_install_providers(scoped_payload)
     components = target_desired_components(scoped_payload)
     version = desired_state_version(components)
 
