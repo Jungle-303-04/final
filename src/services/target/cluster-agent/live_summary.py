@@ -217,7 +217,7 @@ class LiveSummaryPublisher:
         if not self.enabled or not self.gateway_url:
             LOGGER.info(
                 "live_summary_disabled",
-                extra={CONTEXT_KEY: {"cluster_id": self.cluster_id, "enabled": self.enabled}},
+                extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: self.cluster_id, "enabled": self.enabled}},
             )
             return
         headers = {agent_config.AGENT_TOKEN_HEADER: self.token}
@@ -232,7 +232,7 @@ class LiveSummaryPublisher:
                     "live_summary_stream_retry",
                     extra={
                         CONTEXT_KEY: {
-                            "cluster_id": self.cluster_id,
+                            Gateway.CLUSTER_ID: self.cluster_id,
                             "exception_type": type(exc).__name__,
                         }
                     },
