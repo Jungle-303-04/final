@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 from conftest import ROOT, load_file
 
 
@@ -18,6 +19,12 @@ def _load_poller() -> Any:
     return load_file(
         ROOT / "src" / "services" / "gitops" / "github-poll-worker" / "poller.py", "svc_poller"
     )
+
+
+@pytest.fixture(autouse=True)
+def poller_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_REPO", "example/repo")
+    monkeypatch.setenv("GITOPS_WEBHOOK_IMAGE", "ghcr.io/example/app:test")
 
 
 def _transport(posted: list[dict[str, Any]], sha: str = "abc123def456") -> httpx.MockTransport:
@@ -64,14 +71,14 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
     assert posted == [
         {
             "commit_sha": "abc123def456",
-            "image": "service:local",
+            "image": "ghcr.io/example/app:test",
             "replicas": 2,
             "workspace_id": "default",
-            "repository_id": "repo-default",
-            "repo_ref": "octocat/Hello-World",
+            "repository_id": "",
+            "repo_ref": "example/repo",
             "branch": "main",
-            "watch_target_id": "watch-default",
-            "binding_id": "binding-default",
+            "watch_target_id": "",
+            "binding_id": "",
             "cluster_id": "target-cluster-01",
             "manifest_path": "deploy.yaml",
         }
@@ -113,9 +120,7 @@ def test_github_api_base_env_controls_poll_endpoint(monkeypatch) -> None:
             await poller.poll_once(client)
 
     asyncio.run(go())
-    assert calls[0].startswith(
-        "https://github.enterprise.local/api/v3/repos/octocat/Hello-World/commits"
-    )
+    assert calls[0].startswith("https://github.enterprise.local/api/v3/repos/example/repo/commits")
 
 
 def test_rate_limited_poll_exits_without_webhook_or_failure() -> None:

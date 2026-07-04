@@ -49,11 +49,12 @@ def test_repo_gateway_creates_pr_from_request(monkeypatch) -> None:
     assert outs[0].provider == "github"
     assert outs[0].mode == "github_rest"
     assert db.called("save_pull_request")
+    change_doc_path = f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"
     # base ref 조회 → 브랜치 생성 → 변경 문서 커밋 → PR 생성 순으로 호출됨
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("POST", "/repos/project/repo/git/refs"),
-        ("PUT", "/repos/project/repo/contents/.gitops/safe-pr/workflow-default.md"),
+        ("PUT", change_doc_path),
         ("POST", "/repos/project/repo/pulls"),
     ]
 
@@ -101,10 +102,11 @@ def test_repo_gateway_commits_manifest_patches(monkeypatch) -> None:
         db=db,
     )
     assert subjects_of(outs) == ["safe_pr.created"]
+    change_doc_path = f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("POST", "/repos/project/repo/git/refs"),
-        ("PUT", "/repos/project/repo/contents/.gitops/safe-pr/workflow-default.md"),
+        ("PUT", change_doc_path),
         ("PUT", "/repos/project/repo/contents/deploy/app.yaml"),
         ("POST", "/repos/project/repo/pulls"),
     ]

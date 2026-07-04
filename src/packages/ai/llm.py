@@ -40,7 +40,7 @@ GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
 GEMINI_BASE_URL_ENV = "GEMINI_BASE_URL"
 GEMINI_MODEL_ENV = "GEMINI_MODEL"
 
-DEFAULT_LLM_PROVIDER = "openai"
+DEFAULT_LLM_PROVIDER = "unconfigured"
 DEFAULT_LLM_TIMEOUT_SECONDS = "30"
 DEFAULT_LLM_MAX_RETRIES = "2"
 DEFAULT_LLM_MAX_TOKENS = "1024"
@@ -60,9 +60,11 @@ PROVIDER_OPENAI = "openai"
 PROVIDER_OPENAI_COMPATIBLE = "openai-compatible"
 PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_GEMINI = "gemini"
+PROVIDER_UNCONFIGURED = "unconfigured"
 
 _PROVIDER_ALIASES = {
-    "": PROVIDER_OPENAI,  # env 미설정 시 기본 provider — 자격 증명 검증은 요청 시점에 함
+    "": PROVIDER_UNCONFIGURED,
+    "unconfigured": PROVIDER_UNCONFIGURED,
     "http": PROVIDER_OPENAI_COMPATIBLE,
     "openai_compatible": PROVIDER_OPENAI_COMPATIBLE,
     "openai-compatible": PROVIDER_OPENAI_COMPATIBLE,
@@ -309,13 +311,23 @@ class GeminiGenerateContentAdapter:
             return _extract_gemini_text(response.json())
 
 
+@dataclass(slots=True)
+class UnconfiguredLlmAdapter:
+    settings: LlmProviderSettings
+
+    async def complete(self, request: LlmRequest) -> str:
+        raise ValueError(f"{LLM_PROVIDER_ENV} is required")
+
+
 def build_llm_client() -> LlmClient:
-    # provider 이름 오설정은 여기(부팅)에서 즉시 실패, API 키 부재는 요청 시점에
+    # provider 이름 오설정은 여기(부팅)에서 즉시 실패, 미설정/API 키 부재는 요청 시점에
     # ValueError 로 실패해 워커의 실패 이벤트(ai.message.failed 등) 경로로 수렴함.
     return LlmGateway(default_provider=env(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER))
 
 
 def build_provider_adapter(settings: LlmProviderSettings) -> LlmProviderAdapter:
+    if settings.provider == PROVIDER_UNCONFIGURED:
+        return UnconfiguredLlmAdapter(settings)
     if settings.provider in {PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE}:
         return OpenAiChatCompletionsAdapter(settings)
     if settings.provider == PROVIDER_ANTHROPIC:
@@ -331,6 +343,17 @@ def load_provider_settings(provider: str) -> LlmProviderSettings:
     max_retries = int(env(LLM_MAX_RETRIES_ENV, DEFAULT_LLM_MAX_RETRIES))
     default_max_tokens = int(env(LLM_MAX_TOKENS_ENV, DEFAULT_LLM_MAX_TOKENS))
 
+    if normalized == PROVIDER_UNCONFIGURED:
+        return LlmProviderSettings(
+            provider=normalized,
+            base_url="",
+            api_key="",
+            api_key_env=None,
+            model="",
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            default_max_tokens=default_max_tokens,
+        )
     if normalized == PROVIDER_OPENAI:
         return _http_settings(
             provider=normalized,

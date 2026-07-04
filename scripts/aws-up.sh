@@ -69,7 +69,7 @@ SCM_PROVIDER="${SCM_PROVIDER:-github}"
 SCM_REPO="${SCM_REPO:-${GITHUB_REPO}}"
 SCM_BASE_BRANCH="${SCM_BASE_BRANCH:-${GITHUB_BRANCH}}"
 
-LLM_PROVIDER="${LLM_PROVIDER:-fake}"
+LLM_PROVIDER="${LLM_PROVIDER:-}"
 LLM_MODEL="${LLM_MODEL:-}"
 LLM_BASE_URL="${LLM_BASE_URL:-}"
 LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-30}"
@@ -338,7 +338,7 @@ ensure_ecr_image() {
   aws ecr get-login-password --region "${AWS_REGION}" \
     | docker login --username AWS --password-stdin "${registry}" >/dev/null
 
-  if [[ -z "${IMAGE_NAME}" || "${IMAGE_NAME}" == "service:local" ]]; then
+  if [[ -z "${IMAGE_NAME}" ]]; then
     IMAGE_NAME="${repo_uri}:${IMAGE_TAG}"
   fi
 
@@ -505,6 +505,7 @@ EOF
     --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
     --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
     --from-literal=MANIFEST_PATH="${MANIFEST_PATH}" \
+    --from-literal=GITOPS_WEBHOOK_IMAGE="${IMAGE_NAME}" \
     --from-literal=GITHUB_API_BASE="${GITHUB_API_BASE}" \
     --from-literal=GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE}" \
     --from-literal=GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED}" \
@@ -573,7 +574,7 @@ kind: Kustomization
 resources:
   - ../../deploy/management
 images:
-  - name: service
+  - name: kubeheal-service
     newName: ${image_repo}
     newTag: ${image_tag}
 EOF
