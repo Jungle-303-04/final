@@ -23,6 +23,7 @@ from kubernetes_api import (
     kubernetes_headers,
     service_account_token,
 )
+from live_summary import LiveSummaryPublisher
 from node_collector_manager import NodeCollectorManager
 from providers import (
     LokiLogsProvider,
@@ -387,6 +388,12 @@ class TargetClusterAgent:
         self.telemetry_transport = telemetry_transport
         self.kubernetes_transport = kubernetes_transport
         self.node_collector = NodeCollectorManager.from_env(kubernetes_transport)
+        # realtime live summary — outbound WS 1개(browser fan-out 은 realtime-gateway 책임)
+        self.live_summary = LiveSummaryPublisher.from_env(
+            cluster_id=self.cluster_id,
+            management_base_url=self.base_url,
+            kubernetes_transport=kubernetes_transport,
+        )
         if providers is None:
             providers = (
                 PrometheusMetricsProvider.from_config(env),
@@ -529,6 +536,7 @@ class TargetClusterAgent:
             self.reconciler.run(client),
             self.poll_commands(client),
             self.flush_command_results_forever(client),
+            self.live_summary.run(),
         )
 
     async def register(self, client: ManagementPlaneClient) -> None:

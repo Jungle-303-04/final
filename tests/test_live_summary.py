@@ -1,0 +1,197 @@
+"""cluster-agent live summary 검증 — bounded payload, 요약 계산, 게이트웨이 URL 유도."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from contextlib import suppress
+from typing import Any
+
+from conftest import ROOT, load_file
+
+from packages.contracts.realtime import MAX_HOT_PODS, LiveSummary
+
+CLUSTER = "target-cluster-01"
+MAX_STREAM_PAYLOAD_BYTES = 16_384  # live summary 1건의 직렬화 상한(넉넉한 안전 마진)
+
+
+def load_live_summary_module() -> Any:
+    return load_file(
+        ROOT / "src" / "services" / "target" / "cluster-agent" / "live_summary.py",
+        "test_live_summary_module",
+    )
+
+
+def pod(
+    namespace: str = "sandbox",
+    name: str = "checkout-abc",
+    *,
+    ready: bool = True,
+    restarts: int = 0,
+    crash_loop: bool = False,
+) -> dict[str, Any]:
+    state = {"waiting": {"reason": "CrashLoopBackOff"}} if crash_loop else {"running": {}}
+    return {
+        "metadata": {"namespace": namespace, "name": name},
+        "status": {
+            "containerStatuses": [
+                {"ready": ready, "restartCount": restarts, "state": state},
+            ]
+        },
+    }
+
+
+class FakeConnection:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    async def send(self, message: str) -> None:
+        self.sent.append(message)
+
+
+class FakeConnector:
+    """websockets.connect 대역 — (url, headers) 기록 + 고정 연결 반환."""
+
+    def __init__(self) -> None:
+        self.connection = FakeConnection()
+        self.urls: list[str] = []
+        self.headers: list[dict[str, str]] = []
+
+    def __call__(self, url: str, headers: dict[str, str]) -> FakeConnector:
+        self.urls.append(url)
+        self.headers.append(headers)
+        return self
+
+    async def __aenter__(self) -> FakeConnection:
+        return self.connection
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+
+def test_summarize_counts_ready_restarts_and_phase() -> None:
+    module = load_live_summary_module()
+    collector = module.KubernetesPodSummaryCollector(CLUSTER, window_ms=1000)
+
+    first = collector.summarize(
+        [
+            pod(name="ok-1"),
+            pod(name="warming", ready=False),
+            pod(namespace="target", name="collector", restarts=2),
+        ]
+    )
+    assert first.pods_total == 3
+    assert first.pods_ready == 2
+    assert first.restart_delta == 0  # 첫 관측은 기준점 — delta 없음
+    assert first.rollout_phase == "progressing"
+    assert {hot.pod for hot in first.hot_pods} == {"warming", "collector"}
+
+    second = collector.summarize(
+        [
+            pod(name="ok-1"),
+            pod(name="warming"),
+            pod(namespace="target", name="collector", restarts=3, crash_loop=True),
+        ]
+    )
+    assert second.restart_delta == 1
+    assert second.rollout_phase == "degraded"
+
+
+def test_summarize_hot_pods_stay_bounded() -> None:
+    module = load_live_summary_module()
+    collector = module.KubernetesPodSummaryCollector(CLUSTER, window_ms=1000)
+    pods = [pod(name=f"broken-{i}", ready=False) for i in range(MAX_HOT_PODS * 3)]
+    summary = collector.summarize(pods)
+    assert len(summary.hot_pods) == MAX_HOT_PODS
+    assert summary.pods_total == MAX_HOT_PODS * 3
+
+
+def test_publisher_streams_bounded_live_summary_payloads() -> None:
+    module = load_live_summary_module()
+    connector = FakeConnector()
+
+    async def collector() -> LiveSummary:
+        return LiveSummary(
+            cluster_id=CLUSTER,
+            window_ms=500,
+            pods_ready=12,
+            pods_total=13,
+            restart_delta=1,
+            rollout_phase="progressing",
+        )
+
+    publisher = module.LiveSummaryPublisher(
+        cluster_id=CLUSTER,
+        gateway_url="ws://management-host:30090",
+        token="secret-token",
+        interval_seconds=0.01,
+        collector=collector,
+        connect=connector,
+    )
+
+    async def run_until_three_messages() -> None:
+        task = asyncio.create_task(publisher.run())
+        try:
+            while len(connector.connection.sent) < 3:
+                await asyncio.sleep(0.005)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    asyncio.run(asyncio.wait_for(run_until_three_messages(), timeout=5))
+
+    assert connector.urls[0] == f"ws://management-host:30090/live/agent?cluster_id={CLUSTER}"
+    assert connector.headers[0] == {"x-agent-token": "secret-token"}
+    for raw in connector.connection.sent:
+        assert len(raw.encode()) < MAX_STREAM_PAYLOAD_BYTES
+        message = json.loads(raw)
+        assert message["type"] == "live.summary"
+        assert message["cluster_id"] == CLUSTER
+        assert len(message["summary"]["hot_pods"]) <= MAX_HOT_PODS
+
+
+def test_publisher_disabled_returns_immediately() -> None:
+    module = load_live_summary_module()
+    connector = FakeConnector()
+
+    async def collector() -> LiveSummary | None:
+        raise AssertionError("비활성 시 수집 자체가 없어야 함")
+
+    publisher = module.LiveSummaryPublisher(
+        cluster_id=CLUSTER,
+        gateway_url="ws://management-host:30090",
+        token="t",
+        interval_seconds=0.01,
+        collector=collector,
+        connect=connector,
+        enabled=False,
+    )
+    asyncio.run(asyncio.wait_for(publisher.run(), timeout=1))
+    assert connector.urls == []
+
+
+def test_publisher_without_gateway_url_is_noop() -> None:
+    module = load_live_summary_module()
+    connector = FakeConnector()
+
+    async def collector() -> LiveSummary | None:
+        return None
+
+    publisher = module.LiveSummaryPublisher(
+        cluster_id=CLUSTER,
+        gateway_url="",
+        token="t",
+        interval_seconds=0.01,
+        collector=collector,
+        connect=connector,
+    )
+    asyncio.run(asyncio.wait_for(publisher.run(), timeout=1))
+    assert connector.urls == []
+
+
+def test_derive_gateway_url_from_management_base_url() -> None:
+    module = load_live_summary_module()
+    assert module.derive_gateway_url("http://192.168.0.10:30080") == "ws://192.168.0.10:30090"
+    assert module.derive_gateway_url("https://mgmt.example.com") == "wss://mgmt.example.com:30090"
+    assert module.derive_gateway_url("") == ""
