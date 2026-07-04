@@ -27,6 +27,16 @@ def test_provider_catalog_groups_runtime_choices() -> None:
     assert any(item["key"] == "k8s-secret" for item in grouped["secret"])
 
 
+def test_provider_catalog_can_disable_available_provider(monkeypatch) -> None:
+    monkeypatch.setenv("KUBEHEAL_DISABLED_PROVIDERS", "cloud:aws")
+
+    grouped = catalog_body()
+    aws = next(item for item in grouped["cloud"] if item["key"] == "aws")
+
+    assert aws["status"] == "unavailable"
+    assert aws["unavailable_reason"] == "disabled by KUBEHEAL_DISABLED_PROVIDERS"
+
+
 def test_require_available_provider_fails_closed_for_planned_adapters() -> None:
     try:
         require_available_provider(ProviderCategory.SOURCE, "gitlab")
