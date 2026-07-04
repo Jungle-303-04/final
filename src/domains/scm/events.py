@@ -6,7 +6,7 @@ safe_pr.requested → repo-gateway 가 PR 생성 → safe_pr.created.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from domains.alert.events import AlertRequestedBody
 from packages.contracts.event_bus.bodies.base import EventBody
@@ -23,6 +23,15 @@ from packages.contracts.gitops import (
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
+@dataclass(frozen=True)
+class SafePrFilePatch(EventBody):
+    """Safe PR branch에 커밋할 파일 변경."""
+
+    path: str
+    content: str
+    description: str = ""
+
+
 @event(EventSubject.SAFE_PR_REQUESTED)
 @dataclass(frozen=True)
 class SafePrRequestedBody(EventBody):
@@ -31,6 +40,7 @@ class SafePrRequestedBody(EventBody):
     title: str
     body: str
     provider: str
+    patches: list[SafePrFilePatch] = field(default_factory=list)
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID

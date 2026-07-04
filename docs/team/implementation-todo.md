@@ -33,7 +33,7 @@
 | 축 | 담당 조율 | 완료 기준 |
 | --- | --- | --- |
 | GitOps source-of-truth | GitOps / Command, Platform | repo checkout/cache, commit provenance, rendered artifact digest, last-approved snapshot이 연결된다. |
-| 실제 manifest patch PR | GitOps / Command, RCA / Safe PR | Safe PR이 검토 문서만이 아니라 실제 manifest patch 또는 rollback patch를 커밋한다. |
+| 실제 manifest patch PR | GitOps / Command, RCA / Safe PR | Safe PR이 검토 문서만이 아니라 실제 manifest patch 또는 rollback patch를 커밋한다. rendered manifest patch 커밋 경로는 구현됐고, rollback/diff basis/approval evidence는 남은 P0다. |
 | Policy route | GitOps / Command, Gateway / Auth, Target / Agent | operation, namespace, resource class, environment, approval state로 route를 결정하고 audit에 남긴다. |
 | Token boundary | Gateway / Auth, Platform | TokenVault/SecretVault port, credential_ref, rotation, non-leak 테스트가 있다. |
 | Approval evidence | Gateway / Auth, GitOps / Command, Target / Agent | write command에 approval_ref/policy_decision_ref가 있고 agent가 이를 검증한다. |
@@ -113,7 +113,7 @@ TODO:
 - TODO(gitops): production route에서는 local-file fallback 없이 repo checkout/cache 또는 GitHub contents source만 허용한다.
 - TODO(gitops): rendered artifact digest와 last-approved managed-field snapshot을 저장하고 diff basis에 연결한다.
 - TODO(gitops): diff route는 risk string이 아니라 operation, namespace, resource class, environment, approval state로 `safe_pr`/`approval_required`/`forbidden`/`command_requested`를 반환한다.
-- TODO(gitops): Safe PR 요청 body에 실제 manifest patch/rollback patch ref, reviewer checklist, diff basis를 포함한다.
+- TODO(gitops): Safe PR 요청 body에 rollback patch ref, reviewer checklist, diff basis를 포함한다. rendered manifest patch는 `SafePrFilePatch`로 전달한다.
 - TODO(command): `command.requested`는 namespace/action 정책을 범용 rule로 검사하고 production write를 fail-closed한다.
 - TODO(command): write command는 approval_ref/policy_decision_ref가 없으면 fail-closed하고, agent queue payload에도 같은 근거를 싣는다.
 - TODO(command): dispatch/queue 단계는 Target Agent를 직접 호출하지 않고 agent command queue 계약만 사용한다.
@@ -145,7 +145,7 @@ TODO:
 - TODO(rca): CrashLoopBackOff 외 장애 profile과 fault-injection expected label을 만들어 RCA top-k hit rate를 기록한다.
 - TODO(rca): `rca.completed` 이후 Safe PR 후보와 approval-required 후보를 분기하는 정책 body를 정의한다.
 - TODO(scm): 실제 GitHub branch/commit/PR 생성은 feature flag와 token/ref 검증을 통과한 경우에만 실행한다.
-- TODO(scm): 실제 PR은 proposal markdown만 커밋하지 않고 manifest patch/rollback patch를 포함해야 한다.
+- TODO(scm): 실제 PR은 proposal markdown만 커밋하지 않고 manifest patch/rollback patch를 포함해야 한다. rendered manifest patch 커밋은 구현됐고 rollback patch, feature flag, token/ref 검증, repo allowlist가 남았다.
 - TODO(audit): command, RCA, PR 상태가 같은 `correlation_id`로 timeline에 남도록 projection을 보강한다.
 
 완료 기준:
