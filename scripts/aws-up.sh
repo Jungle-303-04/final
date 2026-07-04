@@ -3,6 +3,17 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+default_github_repo() {
+  local url
+  url="$(git -C "${ROOT_DIR}" config --get remote.origin.url 2>/dev/null || true)"
+  url="${url%.git}"
+  case "${url}" in
+    git@github.com:*) echo "${url#git@github.com:}" ;;
+    https://github.com/*) echo "${url#https://github.com/}" ;;
+    http://github.com/*) echo "${url#http://github.com/}" ;;
+  esac
+}
+
 PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
@@ -38,7 +49,7 @@ MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
-GITHUB_REPO="${GITHUB_REPO:-example-org/example-repo}"
+GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
