@@ -125,6 +125,8 @@ def test_target_install_is_driven_by_registration_script() -> None:
 
 def test_up_script_restarts_new_management_workers() -> None:
     up_script = read_project_file("scripts/up.sh")
-    assert "workflow-controller alert-worker mail-worker command-worker" in up_script
+    assert (
+        "workflow-controller alert-worker mail-worker command-worker command-janitor" in up_script
+    )
     assert "evidence-worker incident-worker plan-worker analyze-worker" in up_script
     assert "safe-pr-worker ai-diff-worker rollout-worker approval-worker" in up_script

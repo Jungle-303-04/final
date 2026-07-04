@@ -8,7 +8,7 @@ STREAM_NAME = "SERVICE_EVENTS"
 # 스트림 보존 한계. 무한 증가/암묵적 드롭을 막는 위생 설정.
 # discard 기본값은 old(가득 차면 오래된 것부터 제거). max_age 는 초 단위.
 STREAM_MAX_AGE_SECONDS = 7 * 24 * 60 * 60  # 7일
-STREAM_MAX_BYTES = 1024 * 1024 * 1024  # 1 GiB
+STREAM_MAX_BYTES = 512 * 1024 * 1024  # 512 MiB; 1Gi PVC의 파일시스템 오버헤드 고려
 STREAM_DUPLICATE_WINDOW_SECONDS = 24 * 60 * 60  # relay crash/retry 중복 publish 억제
 
 
