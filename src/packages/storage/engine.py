@@ -18,9 +18,19 @@ from packages.storage.schema import (
 
 DATABASE_URL_ENV = "DATABASE_URL"
 ERROR_MESSAGE_LIMIT = 2000
-DB_LOCK_TIMEOUT = "5s"
-DB_STATEMENT_TIMEOUT = "30s"
-DB_IDLE_IN_TRANSACTION_TIMEOUT = "30s"
+# 트랜잭션 안전 타임아웃 — 워크로드 특성이 다른 배포는 env(ms 단위)로 오버라이드 가능함.
+# env 미설정 시 기존 하드코딩 값(5s/30s/30s)과 같은 의미의 ms 값이 적용됨(배포 호환).
+DB_LOCK_TIMEOUT_MS_ENV = "DB_LOCK_TIMEOUT_MS"  # 잠금 대기 한도 ms(기본 5000)
+DB_STATEMENT_TIMEOUT_MS_ENV = "DB_STATEMENT_TIMEOUT_MS"  # 쿼리 실행 한도 ms(기본 30000)
+DB_IDLE_IN_TRANSACTION_TIMEOUT_MS_ENV = (
+    "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS"  # 유휴 트랜잭션 한도 ms(기본 30000)
+)
+DB_LOCK_TIMEOUT = f"{int(env(DB_LOCK_TIMEOUT_MS_ENV, '5000'))}ms"
+DB_STATEMENT_TIMEOUT = f"{int(env(DB_STATEMENT_TIMEOUT_MS_ENV, '30000'))}ms"
+DB_IDLE_IN_TRANSACTION_TIMEOUT = f"{int(env(DB_IDLE_IN_TRANSACTION_TIMEOUT_MS_ENV, '30000'))}ms"
+# 스키마 초기화 advisory lock 식별자 — 여러 워커가 동시에 create_all/호환 마이그레이션을
+# 실행하지 못하게 전 배포가 같은 (namespace, key)로 pg_advisory_xact_lock 을 잡음.
+# 모든 프로세스가 동일 잠금을 공유해야 상호 배제가 성립하므로 env 오버라이드 없는 고정값임.
 SCHEMA_INIT_LOCK_NAMESPACE = 774897281
 SCHEMA_INIT_LOCK_KEY = 20260703
 

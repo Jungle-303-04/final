@@ -137,6 +137,18 @@ def test_pool_options_env_defaults_remain_unchanged() -> None:
     assert storage_engine.DB_POOL_TIMEOUT_ENV == "DB_POOL_TIMEOUT_SECONDS"
 
 
+def test_transaction_timeout_env_defaults_remain_unchanged() -> None:
+    # env 미설정 시 기존 하드코딩 값(5s/30s/30s)과 같은 의미의 ms 값이어야 함(배포 호환)
+    assert storage_engine.DB_LOCK_TIMEOUT == "5000ms"
+    assert storage_engine.DB_STATEMENT_TIMEOUT == "30000ms"
+    assert storage_engine.DB_IDLE_IN_TRANSACTION_TIMEOUT == "30000ms"
+    assert storage_engine.DB_LOCK_TIMEOUT_MS_ENV == "DB_LOCK_TIMEOUT_MS"
+    assert storage_engine.DB_STATEMENT_TIMEOUT_MS_ENV == "DB_STATEMENT_TIMEOUT_MS"
+    assert (
+        storage_engine.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS_ENV == "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS"
+    )
+
+
 def test_connect_args_enable_pgbouncer_compat_only_for_psycopg() -> None:
     # psycopg 한정: PgBouncer 호환 위해 server-side prepared statement 비활성화
     args = storage_engine.connect_args_for("postgresql+psycopg://u:p@host/db")
