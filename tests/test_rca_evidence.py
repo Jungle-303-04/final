@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
@@ -153,7 +154,7 @@ def report_for(root_cause: str) -> RcaCompletedBody:
     )
 
 
-def test_crashloop_flow_reaches_auto_command_queue() -> None:
+def test_crashloop_flow_requires_approval_evidence_before_command_queue() -> None:
     db = SpyDb()
 
     rca_events = run_to_rca(crashloop_payload(), db=db, correlation_id="corr-auto")
@@ -219,6 +220,44 @@ def test_crashloop_flow_reaches_auto_command_queue() -> None:
         command,
         db=queue_db,
         correlation_id="corr-auto",
+    )
+    assert subjects_of(command_outs) == ["command.rejected"]
+    assert command_outs[0].reason == "write command requires approval_ref"
+    assert not queue_db.called("queue_agent_command")
+
+    selected = dispatch_outs[0].actor
+    assert isinstance(selected, dict)
+    approved_candidate = replace(
+        select_outs[0].selected,
+        draft=replace(
+            select_outs[0].selected.draft,
+            params={
+                **select_outs[0].selected.draft.params,
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
+            },
+        ),
+    )
+    approved_selection = replace(
+        select_outs[0],
+        selected=approved_candidate,
+        selected_by="operator",
+        auto_selected=False,
+    )
+    approved_dispatch_outs = run_handler(
+        dispatch_worker.on_recovery_action_selected,
+        approved_selection,
+    )
+    approved_command = approved_dispatch_outs[0]
+    assert approved_command.approval_ref == "approval-1"
+    assert approved_command.policy_decision_ref == "policy-decision-1"
+
+    queue_db = SpyDb()
+    command_outs = run_handler(
+        command_worker.on_command_requested,
+        approved_command,
+        db=queue_db,
+        correlation_id="corr-approved",
     )
     assert subjects_of(command_outs) == [
         "command.dispatch.ready",

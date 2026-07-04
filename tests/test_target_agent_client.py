@@ -40,6 +40,13 @@ def make_client(agent_module: Any, status_code: int) -> Any:
     return client
 
 
+def approval_evidence() -> dict[str, str]:
+    return {
+        "approval_ref": "approval-1",
+        "policy_decision_ref": "policy-decision-1",
+    }
+
+
 async def close_client(client: Any) -> None:
     await client.close()
 
@@ -138,6 +145,7 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
         agent.execute_command(
             {
                 "action": "apply_manifest",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "deployment/checkout-api",
@@ -152,6 +160,31 @@ def test_target_agent_apply_manifest_dry_run_without_kubernetes_api(monkeypatch)
     assert result["status"] == "failed"
     assert result["applied"] is False
     assert "dry-run" in result["message"]
+
+
+def test_target_agent_rejects_write_command_without_approval_evidence(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    agent = agent_module.TargetClusterAgent()
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "apply_manifest",
+                "payload": {
+                    "diff": {
+                        "resource": "deployment/checkout-api",
+                        "namespace": "sandbox",
+                        "desired_image": "img:new",
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["message"] == "write command requires approval_ref and policy_decision_ref"
 
 
 def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
@@ -171,6 +204,7 @@ def test_target_agent_reports_kubernetes_apply_failure(monkeypatch) -> None:
         agent.execute_command(
             {
                 "action": "apply_manifest",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "configmap/checkout-api-config",
@@ -212,6 +246,7 @@ def test_target_agent_creates_configmap_from_rendered_manifest(monkeypatch) -> N
         agent.execute_command(
             {
                 "action": "apply_manifest",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "configmap/checkout-api-config",
@@ -254,6 +289,7 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
         agent.execute_command(
             {
                 "action": "apply_manifest",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "deployment/checkout-api",
@@ -306,6 +342,7 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
         agent.execute_command(
             {
                 "action": "apply_manifest",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "configmap/forbidden",
@@ -343,6 +380,7 @@ def test_target_agent_rejects_unsupported_manifest_contract(monkeypatch) -> None
         agent.execute_command(
             {
                 "action": "apply_manifest",
+                **approval_evidence(),
                 "payload": {
                     "diff": {
                         "resource": "clusterrole/forbidden-role",

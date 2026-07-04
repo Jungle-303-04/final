@@ -16,6 +16,8 @@ from domains.command.events import (
 from domains.command.handler import (
     COMMAND_CONFIG,
     MANIFEST_NAMESPACE_MISMATCH_REASON,
+    MISSING_APPROVAL_REF_REASON,
+    MISSING_POLICY_DECISION_REF_REASON,
     NAMESPACE_MISMATCH_REASON,
     build_plan,
     handle_command_requested,
@@ -36,7 +38,12 @@ class SpyAgentCommandStore:
         self.calls.append((correlation_id, plan, status))
 
 
-def command_request(action: str = Command.DEFAULT_ACTION) -> CommandRequestedBody:
+def command_request(
+    action: str = Command.DEFAULT_ACTION,
+    *,
+    approval_ref: str | None = "approval-1",
+    policy_decision_ref: str | None = "policy-decision-1",
+) -> CommandRequestedBody:
     return CommandRequestedBody(
         cluster_id=Target.DEFAULT_CLUSTER_ID,
         action=action,
@@ -51,6 +58,8 @@ def command_request(action: str = Command.DEFAULT_ACTION) -> CommandRequestedBod
         ),
         workspace_id="workspace-1",
         requested_by="user-1",
+        approval_ref=approval_ref,
+        policy_decision_ref=policy_decision_ref,
     )
 
 
@@ -75,6 +84,8 @@ def configmap_command_request() -> CommandRequestedBody:
         ),
         workspace_id="workspace-1",
         requested_by="user-1",
+        approval_ref="approval-1",
+        policy_decision_ref="policy-decision-1",
     )
 
 
@@ -99,6 +110,8 @@ def manifest_command_request_with_same_image() -> CommandRequestedBody:
         ),
         workspace_id="workspace-1",
         requested_by="user-1",
+        approval_ref="approval-1",
+        policy_decision_ref="policy-decision-1",
     )
 
 
@@ -121,6 +134,8 @@ def test_build_plan_includes_agent_execution_metadata() -> None:
     assert route.channel == COMMAND_CONFIG.agent_route_channel
     assert roundtrip.lease.lease_seconds == COMMAND_CONFIG.lease_seconds
     assert body["routing_constraint"]["workspace_id"] == "workspace-1"
+    assert body["approval_ref"] == "approval-1"
+    assert body["policy_decision_ref"] == "policy-decision-1"
 
 
 def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:
@@ -145,6 +160,8 @@ def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:
     assert plan_payload["lease"]["lease_seconds"] == COMMAND_CONFIG.lease_seconds
     assert plan_payload["retry_policy"]["max_attempts"] == COMMAND_CONFIG.retry_max_attempts
     assert plan_payload["routing_constraint"]["cluster_id"] == Target.DEFAULT_CLUSTER_ID
+    assert events[-1].approval_ref == "approval-1"
+    assert events[-1].policy_decision_ref == "policy-decision-1"
 
 
 def test_command_handler_allows_non_image_manifest_diff() -> None:
@@ -244,6 +261,46 @@ def test_command_handler_rejects_unsupported_action_before_queue() -> None:
     assert store.calls == []
 
 
+def test_command_handler_rejects_write_command_without_approval_ref() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(
+            handle_command_requested(
+                command_request(approval_ref=None, policy_decision_ref="policy-decision-1"),
+                ctx,
+            )
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == MISSING_APPROVAL_REF_REASON
+    assert store.calls == []
+
+
+def test_command_handler_rejects_write_command_without_policy_decision_ref() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(
+            handle_command_requested(
+                command_request(approval_ref="approval-1", policy_decision_ref=None),
+                ctx,
+            )
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == MISSING_POLICY_DECISION_REF_REASON
+    assert store.calls == []
+
+
 def test_command_handler_rejects_diff_namespace_mismatch_before_queue() -> None:
     request = command_request()
     mismatched = CommandRequestedBody(
@@ -260,6 +317,8 @@ def test_command_handler_rejects_diff_namespace_mismatch_before_queue() -> None:
         ),
         workspace_id=request.workspace_id,
         requested_by=request.requested_by,
+        approval_ref=request.approval_ref,
+        policy_decision_ref=request.policy_decision_ref,
     )
 
     async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
@@ -297,6 +356,8 @@ def test_command_handler_rejects_manifest_namespace_mismatch_before_queue() -> N
         ),
         workspace_id=request.workspace_id,
         requested_by=request.requested_by,
+        approval_ref=request.approval_ref,
+        policy_decision_ref=request.policy_decision_ref,
     )
 
     async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:

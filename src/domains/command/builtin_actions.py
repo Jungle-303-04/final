@@ -8,6 +8,7 @@ from packages.config.constants import Command, Sandbox
     Command.DEFAULT_ACTION,
     recovery_aliases=("rollout_restart",),
     allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=True,
 )
 class RolloutRestartCommand:
     pass
@@ -17,6 +18,7 @@ class RolloutRestartCommand:
     Command.APPLY_MANIFEST_ACTION,
     recovery_aliases=("apply_manifest",),
     allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=True,
 )
 class ApplyManifestCommand:
     pass
