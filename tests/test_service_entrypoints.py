@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from packages.runtime.discovery import FAKE_TELEMETRY_PATH, discover_services
+from packages.runtime.discovery import discover_services
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SERVICES = discover_services(ROOT_DIR)
@@ -25,12 +25,6 @@ def test_services_have_direct_process_entrypoints() -> None:
         source = read_project_file(svc.command)
         assert 'if __name__ == "__main__":' in source, svc.name
         assert "SERVICE_NAME =" not in source, svc.name
-
-
-def test_fake_telemetry_services_share_one_entrypoint() -> None:
-    source = read_project_file(FAKE_TELEMETRY_PATH.as_posix())
-    assert 'if __name__ == "__main__":' in source
-    assert "AsyncService(" in source
 
 
 # 서비스별 설정 위치 정책(예외만 명시; 나머지는 settings.py 금지).
@@ -110,8 +104,8 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
 
 
 def test_manifest_commands_point_to_existing_entrypoints() -> None:
-    """역방향 drift: manifest 의 모든 command 경로는 발견된 서비스(또는 fake)여야 한다."""
-    known = {svc.command for svc in SERVICES} | {FAKE_TELEMETRY_PATH.as_posix()}
+    """역방향 drift: manifest 의 모든 command 경로는 발견된 서비스여야 한다."""
+    known = {svc.command for svc in SERVICES}
 
     for manifest in MANIFEST_FILES:
         for match in _COMMAND_PATTERN.finditer(read_project_file(manifest)):
