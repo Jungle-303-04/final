@@ -20,6 +20,7 @@ _MODULE_BY_NAME = {
     "AiMessageFailedBody": "domains.ai.events",
     "AiMessageReceivedBody": "domains.ai.events",
     "AiMessageRespondedBody": "domains.ai.events",
+    "AgentConnectedBody": "domains.target.events",
     "ApprovalGrantedBody": "domains.gitops.events",
     "ApprovalRecommendedBody": "domains.rca.events",
     "ApprovalRejectedBody": "domains.gitops.events",

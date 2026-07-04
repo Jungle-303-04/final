@@ -35,6 +35,12 @@ class TargetReconcileDb:
         return payload
 
 
+class InvalidTargetReconcileDb(TargetReconcileDb):
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows = [{"namespace": "target", "version": "service:v1"}]
+
+
 def desired_component() -> TargetDesiredComponent:
     return TargetDesiredComponent(
         component="cluster-agent",
@@ -134,3 +140,21 @@ def test_target_reconcile_worker_emits_drift_when_actual_differs() -> None:
     ]
     assert outs[1].drifts[0].reason == "component version differs"
     assert db.records[0]["drifted"] is True
+
+
+def test_target_reconcile_worker_emits_failed_when_desired_state_is_invalid() -> None:
+    worker = load_service("target/reconcile-worker")
+    db = InvalidTargetReconcileDb()
+    body = ClusterReconcileRequestedBody(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        desired_state_version="v1",
+        reason="manual check",
+    )
+
+    outs = run_handler(worker.on_reconcile_requested, body, db=db)
+
+    assert subjects_of(outs) == ["cluster.reconcile.failed"]
+    assert outs[0].status == TargetReconcileStatus.FAILED.value
+    assert outs[0].error_type == "KeyError"
+    assert db.records[0]["status"] == TargetReconcileStatus.FAILED.value
