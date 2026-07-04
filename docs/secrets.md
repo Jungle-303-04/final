@@ -1,16 +1,28 @@
 # 시크릿 관리
 
-시크릿 도구는 강제하지 않는다. 현재 코드베이스에는 기본 `EnvSecretVault`와
-`EnvTokenVault`가 있다. 서비스 설정은 `src/packages/config/settings.py`의
-`env(name, default)`로 환경변수에서 읽고, provider token은 평문 값이 아니라
-`token_ref`/`credential_ref` 같은 참조로만 이벤트와 저장소 경계를 지난다.
-GitHub Safe PR provider는 `GITHUB_TOKEN_REF`가 있으면 그 값을 환경변수 이름으로
-해석하고, 없으면 기존 호환을 위해 `GITHUB_TOKEN`을 secret ref로 사용한다.
+시크릿 도구는 강제하지 않는다. 현재 코드베이스에는 `SecretVaultPort`와
+`TokenVaultPort`가 있고, 기본 provider는 `SECRET_VAULT_PROVIDER=auto`다. 서비스
+설정은 `src/packages/config/settings.py`의 `env(name, default)`로 환경변수에서
+읽고, provider token은 평문 값이 아니라 `token_ref`/`credential_ref` 같은 참조로만
+이벤트와 저장소 경계를 지난다.
 
-외부 사용자는 SOPS/age, AWS Secrets Manager, Vault, 1Password, External
-Secrets 중 무엇을 쓰든 최종적으로 Kubernetes Secret 또는 실행 환경변수로
-주입하면 된다. 서비스 코드가 특정 secret manager SDK를 직접 import하지 않는
-경계를 유지한다.
+오픈소스 기본값은 로컬/CI가 쉬운 `env` fallback이다. 운영에서는 ref prefix로
+provider를 선택한다.
+
+| ref 예시 | 의미 |
+| --- | --- |
+| `GITHUB_TOKEN` | 하위호환: 환경변수 `GITHUB_TOKEN` |
+| `env:GITHUB_TOKEN` | 명시적 env provider |
+| `aws-sm:/kubeheal/prod/github-app` | AWS Secrets Manager secret string 전체 |
+| `aws-sm:/kubeheal/prod/github-app#token` | AWS Secrets Manager JSON field `token` |
+| `aws-sm:/kubeheal/prod/github-app?stage=AWSPREVIOUS#token` | rotation 검증용 version stage |
+
+GitHub Safe PR provider는 `GITHUB_TOKEN_REF`가 있으면 그 ref를 읽고, 없으면 기존
+호환을 위해 `GITHUB_TOKEN`을 secret ref로 사용한다.
+
+외부 사용자는 SOPS/age, AWS Secrets Manager, Vault, 1Password, External Secrets 중
+무엇을 쓰든 된다. 기본 실행은 환경변수/Kubernetes Secret으로 충분하고, AWS를 직접
+읽어야 하면 `aws` optional dependency와 `aws-sm:` ref를 사용한다.
 
 ## 인터페이스 기준
 
@@ -26,8 +38,9 @@ database_url = required_env("DATABASE_URL")
 
 - 서비스 코드는 SOPS, AWS, Vault 같은 특정 도구를 직접 import하지 않는다.
 - 서비스 코드는 실행 설정은 환경변수로 읽고, provider credential은 `token_ref` 또는 `credential_ref`만 전달한다.
-- 우리 내부 기본값은 env/Kubernetes Secret 주입이다.
-- 특정 운영 환경용 provider는 adapter로 추가한다.
+- 기본값은 env/Kubernetes Secret 주입이다.
+- 운영 provider는 `SecretVaultPort` adapter 뒤에 숨긴다.
+- secret read audit log는 provider와 ref hash만 남기고 실제 값을 남기지 않는다.
 
 ## 로컬
 
@@ -57,9 +70,18 @@ CI/CD에서 필요한 값은 GitHub Actions Secrets를 씁니다.
 - Azure: Key Vault
 - Kubernetes: External Secrets로 외부 secret을 Kubernetes Secret으로 동기화
 
-AWS를 쓰는 사용자는 AWS provider를 붙이면 되고, Vault를 쓰는 사용자는 Vault
-provider를 붙이면 된다. 오픈소스 기본 배포는 특정 클라우드를 필수로 하지
-않는다.
+AWS Secrets Manager를 직접 읽는 예:
+
+```bash
+SECRET_VAULT_PROVIDER=auto
+TOKEN_VAULT_PROVIDER=auto
+GITHUB_TOKEN_REF=aws-sm:/kubeheal/prod/github-app#token
+SECRET_VAULT_AWS_REGION=us-east-1
+```
+
+AWS adapter는 Secrets Manager의 KMS 암호화, IAM 권한, version stage 기반 rotation
+운영을 그대로 사용한다. `aws-sm:` ref를 실제로 읽을 때 `boto3`가 필요하다. 오픈소스
+기본 배포는 특정 클라우드를 필수로 하지 않는다.
 
 ## LLM Gateway 키
 
