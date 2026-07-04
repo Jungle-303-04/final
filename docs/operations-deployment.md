@@ -148,6 +148,14 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | --- | --- | --- |
 | CI integration smoke | `.github/workflows/integration-smoke.yml`에서 nightly/manual `make up && make smoke`를 실행한다. PR 필수 check에는 Docker import smoke를 두고, 실제 kind E2E는 비용과 실행 시간을 분리해 운영한다. | uv 기반 unit CI와 Docker/runtime 환경 차이를 잡고, NATS/PostgreSQL/Redis/Kubernetes 조합 부팅 실패를 조기에 발견한다. |
 | Secret provider 경계 | credential placeholder를 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 임시 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
+| GitOps source hardening | repo checkout/cache, rendered artifact digest, last-approved snapshot, policy decision ref를 GitOps pipeline에 연결한다. | Git을 source of truth로 말하려면 commit provenance와 승인된 비교 기준이 있어야 한다. |
+| Safe PR hardening | PR provider는 실제 manifest patch/rollback patch를 커밋하고, proposal-only 문서는 보조 자료로 둔다. | 검토 문서만 있는 PR은 배포 변경을 검증하거나 rollback할 수 없다. |
+| Control-plane metrics | worker 처리 시간, NATS lag, outbox age, DLQ율, command queue age, LLM latency/cost를 Prometheus metric으로 노출한다. | evidence provider 수집과 제품 runtime 신뢰성은 별도 문제다. 운영 장애를 잡으려면 control-plane 자체 계측이 필요하다. |
+| Trace correlation | Gateway, event emit, worker handler, DB write, outbox relay, provider call, agent result에 `correlation_id`/`causation_id` span attribute를 붙인다. | Dapper/Pivot Tracing식 원인 추적을 하려면 서비스별 로그가 아니라 하나의 흐름으로 이어져야 한다. |
+| Approval evidence | production write command는 approval_ref, policy_decision_ref, approver, expiry를 검증한 뒤에만 agent가 실행한다. | Gateway/command-worker가 통과시킨 요청도 target agent에서 다시 fail-closed해야 한다. |
+| Partial failure reporting | agent command result에 resource별 status, sanitized stdout/stderr, retryable flag, applied flag를 추가한다. | 자동 변경은 성공/실패 이분법만으로는 복구와 감사가 어렵다. |
+
+세부 실행 순서와 release gate는 [hardening-roadmap](hardening-roadmap.md)을 따른다.
 
 ## 참고 문서
 
