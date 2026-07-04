@@ -7,6 +7,7 @@ from kubernetes_api import (
     kubernetes_headers,
     service_account_token,
 )
+from node_collector_spec import node_collector_daemonset
 
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -42,7 +43,6 @@ class NodeCollectorManager:
 
     인계 기준: target registration은 cluster-agent 설치까지만 담당.
     이후 collector rollout과 drift correction은 target-agent 경계에서 처리.
-    TODO(target): inline DaemonSet을 Helm/Kustomize 렌더링 collector spec으로 교체
     """
 
     def __init__(
@@ -105,66 +105,19 @@ class NodeCollectorManager:
         return True, NodeCollectorManagerConfig.NODE_COLLECTOR_PATCHED_MESSAGE
 
     def daemonset(self) -> JsonObject:
-        labels = {
-            "app": NodeCollectorManagerConfig.NODE_COLLECTOR_APP_LABEL,
-            NodeCollectorManagerConfig.NODE_COLLECTOR_MANAGED_BY_LABEL: NodeCollectorManagerConfig.NODE_COLLECTOR_MANAGED_BY_VALUE,
-        }
-        return {
-            "apiVersion": "apps/v1",
-            "kind": "DaemonSet",
-            "metadata": {
-                "name": NodeCollectorManagerConfig.NODE_COLLECTOR_NAME,
-                "namespace": self.namespace,
-                "labels": labels,
-            },
-            "spec": {
-                "selector": {
-                    "matchLabels": {"app": NodeCollectorManagerConfig.NODE_COLLECTOR_APP_LABEL}
-                },
-                "updateStrategy": {"type": "RollingUpdate"},
-                "template": {
-                    "metadata": {
-                        "annotations": {
-                            "prometheus.io/path": "/metrics",
-                            "prometheus.io/port": str(
-                                NodeCollectorManagerConfig.NODE_COLLECTOR_PORT
-                            ),
-                            "prometheus.io/scrape": "true",
-                        },
-                        "labels": labels,
-                    },
-                    "spec": {
-                        "tolerations": [{"operator": "Exists"}],
-                        "containers": [node_collector_container(self.image)],
-                    },
-                },
-            },
-        }
-
-
-def node_collector_container(image: str) -> JsonObject:
-    return {
-        "name": NodeCollectorManagerConfig.NODE_COLLECTOR_CONTAINER_NAME,
-        "image": image,
-        "imagePullPolicy": "IfNotPresent",
-        "command": ["python", "src/services/target/node-collector/app.py"],
-        "env": [
-            {"name": "PORT", "value": str(NodeCollectorManagerConfig.NODE_COLLECTOR_PORT)},
-            {
-                "name": "COLLECT_INTERVAL_SECONDS",
-                "value": str(NodeCollectorManagerConfig.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS),
-            },
-            {"name": "NODE_NAME", "valueFrom": {"fieldRef": {"fieldPath": "spec.nodeName"}}},
-            {"name": "POD_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}},
-            {
-                "name": "POD_NAMESPACE",
-                "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}},
-            },
-        ],
-        "ports": [
-            {"name": "metrics", "containerPort": NodeCollectorManagerConfig.NODE_COLLECTOR_PORT}
-        ],
-    }
+        return node_collector_daemonset(
+            name=NodeCollectorManagerConfig.NODE_COLLECTOR_NAME,
+            namespace=self.namespace,
+            image=self.image,
+            app_label=NodeCollectorManagerConfig.NODE_COLLECTOR_APP_LABEL,
+            managed_by_label=NodeCollectorManagerConfig.NODE_COLLECTOR_MANAGED_BY_LABEL,
+            managed_by_value=NodeCollectorManagerConfig.NODE_COLLECTOR_MANAGED_BY_VALUE,
+            container_name=NodeCollectorManagerConfig.NODE_COLLECTOR_CONTAINER_NAME,
+            port=NodeCollectorManagerConfig.NODE_COLLECTOR_PORT,
+            collect_interval_seconds=(
+                NodeCollectorManagerConfig.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS
+            ),
+        )
 
 
 def truthy(value: str) -> bool:
