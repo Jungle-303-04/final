@@ -14,7 +14,9 @@ default_github_repo() {
   esac
 }
 
-IMAGE_NAME="${IMAGE_NAME:-service:local}"
+PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
+LOCAL_IMAGE_NAME="${LOCAL_IMAGE_NAME:-${PROJECT_SLUG}:local}"
+IMAGE_NAME="${IMAGE_NAME:-${LOCAL_IMAGE_NAME}}"
 MGMT_CLUSTER="${MGMT_CLUSTER:-management}"
 TARGET_CLUSTER="${TARGET_CLUSTER:-target}"
 POSTGRES_USER="${POSTGRES_USER:-service}"
@@ -48,7 +50,7 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-target-cluster-01}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
-LLM_PROVIDER="${LLM_PROVIDER:-fake}"
+LLM_PROVIDER="${LLM_PROVIDER:-}"
 LLM_MODEL="${LLM_MODEL:-}"
 LLM_BASE_URL="${LLM_BASE_URL:-}"
 LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-30}"
@@ -97,7 +99,7 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-RUNTIME_DIR="$(mktemp -d)"
+RUNTIME_DIR="$(mktemp -d "${ROOT_DIR}/.up.XXXXXX")"
 cleanup() {
   rm -rf "${RUNTIME_DIR}"
 }
@@ -119,6 +121,16 @@ existing_secret_value() {
   { kubectl --context "kind-${MGMT_CLUSTER}" -n management get secret "${secret_name}" \
     -o "jsonpath={.data.${key}}" 2>/dev/null || true; } \
     | python3 -c 'import base64, sys; data=sys.stdin.read().strip(); print(base64.b64decode(data).decode() if data else "")'
+}
+
+image_repo_and_tag() {
+  local image="$1"
+  local last_segment="${image##*/}"
+  if [[ "${last_segment}" == *:* ]]; then
+    printf '%s\n%s\n' "${image%:*}" "${image##*:}"
+  else
+    printf '%s\n%s\n' "${image}" "latest"
+  fi
 }
 
 if [ -z "${POSTGRES_PASSWORD}" ]; then
@@ -225,6 +237,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
   --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
   --from-literal=MANIFEST_PATH="${MANIFEST_PATH}" \
+  --from-literal=GITOPS_WEBHOOK_IMAGE="${IMAGE_NAME}" \
   --from-literal=GITHUB_API_BASE="${GITHUB_API_BASE}" \
   --from-literal=GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE}" \
   --from-literal=GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED}" \
@@ -283,7 +296,20 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management delete \
   deploy/api-gateway \
   svc/api-gateway \
   --ignore-not-found
-kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${ROOT_DIR}/deploy/management"
+MANAGEMENT_OVERLAY="${RUNTIME_DIR}/management-kustomization"
+mkdir -p "${MANAGEMENT_OVERLAY}"
+mapfile -t IMAGE_PARTS < <(image_repo_and_tag "${IMAGE_NAME}")
+cat >"${MANAGEMENT_OVERLAY}/kustomization.yaml" <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../deploy/management
+images:
+  - name: kubeheal-service
+    newName: ${IMAGE_PARTS[0]}
+    newTag: ${IMAGE_PARTS[1]}
+EOF
+kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_OVERLAY}"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
   command-orchestrator command-dispatcher agent-connection-gateway \
@@ -321,18 +347,22 @@ MGMT_NODE_IP="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddres
 MANAGEMENT_BASE_URL="http://${MGMT_NODE_IP}:30080"
 
 echo "==> deploying target cluster with management URL: ${MANAGEMENT_BASE_URL}"
-BASE_URL="http://localhost:18080" \
+GATEWAY_PORT="${GATEWAY_PORT:-18080}"
+BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}" \
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
 TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
 TARGET_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID}" \
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
 IMAGE_NAME="${IMAGE_NAME}" \
+INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}" \
+SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}" \
+SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}" \
 bash "${ROOT_DIR}/scripts/register-target.sh"
 
 echo
 echo "service is ready."
-echo "Gateway:      http://localhost:18080"
-echo "Health:       http://localhost:18080/healthz"
+echo "Gateway:      ${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
+echo "Health:       ${BASE_URL:-http://localhost:${GATEWAY_PORT}}/healthz"
 echo
 echo "Run smoke test:"
 echo "  bash ${ROOT_DIR}/scripts/smoke.sh"

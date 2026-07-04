@@ -59,6 +59,7 @@ class GitHubPoller:
             Settings.GITHUB_API_BASE_ENV, Settings.DEFAULT_GITHUB_API_BASE
         ).rstrip("/")
         self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
+        self.image = env(Settings.WEBHOOK_IMAGE_ENV, Settings.DEFAULT_IMAGE)
         self.once = env_truthy(Settings.POLL_ONCE_ENV)  # CronJob 모드면 1회 후 종료.
         self._client = client
         self._last_sha: str | None = None  # 같은 커밋 중복 POST 만 줄이는 메모리 가드(최소)
@@ -119,6 +120,7 @@ class GitHubPoller:
         )
 
     async def latest_commit_sha(self, client: httpx.AsyncClient) -> str | None:
+        self.require_poll_config()
         response = await client.get(
             f"{self.github_api_base}/repos/{self.repo}/commits",
             params={"per_page": 1, "sha": self.branch},
@@ -154,11 +156,13 @@ class GitHubPoller:
         return commits[0]["sha"] if commits else None
 
     async def emit_webhook(self, client: httpx.AsyncClient, commit_sha: str) -> None:
+        if not self.image:
+            raise ValueError(f"{Settings.WEBHOOK_IMAGE_ENV} is required")
         # 서명은 전송 바이트와 정확히 일치 필요 → json= 대신 직접 직렬화한 content 전송
         body = json.dumps(
             {
                 "commit_sha": commit_sha,
-                "image": Settings.DEFAULT_IMAGE,
+                "image": self.image,
                 "replicas": Settings.DEFAULT_REPLICAS,
                 "workspace_id": self.workspace_id,
                 "repository_id": self.repository_id,
@@ -176,6 +180,10 @@ class GitHubPoller:
             headers=self._webhook_headers(body),
         )
         response.raise_for_status()
+
+    def require_poll_config(self) -> None:
+        if not self.repo or "/" not in self.repo:
+            raise ValueError(f"{Settings.GITHUB_REPO_ENV} must be set to owner/repo")
 
     def _webhook_headers(self, body: bytes) -> dict[str, str]:
         headers = {"content-type": "application/json"}

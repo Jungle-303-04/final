@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-service:local}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_SLUG="${PROJECT_SLUG:-kubeheal}"
+IMAGE_NAME="${IMAGE_NAME:-${PROJECT_SLUG}:local}"
 
 docker build -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"

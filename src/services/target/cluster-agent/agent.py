@@ -133,7 +133,7 @@ class KubernetesManifestResource:
 class AgentConfig:
     TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
-    DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
+    DEFAULT_MANAGEMENT_BASE_URL = ""
     MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
     TARGET_CLUSTER_ID_ENV = "TARGET_CLUSTER_ID"
     WORKSPACE_ID_ENV = "WORKSPACE_ID"
@@ -361,6 +361,8 @@ class TargetClusterAgent:
         self.base_url = env(
             AgentConfig.MANAGEMENT_BASE_URL_ENV, AgentConfig.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
+        if not self.base_url:
+            raise RuntimeError(f"{AgentConfig.MANAGEMENT_BASE_URL_ENV} is required")
         self.cluster_id = env(AgentConfig.TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID)
         self.workspace_id = env(AgentConfig.WORKSPACE_ID_ENV, DEFAULT_WORKSPACE_ID)
         self.agent_id = env(AgentConfig.HOSTNAME_ENV, AgentConfig.DEFAULT_AGENT_ID)

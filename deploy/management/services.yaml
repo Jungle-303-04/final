@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gateway
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -93,7 +93,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -147,7 +147,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -201,7 +201,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -255,7 +255,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -309,7 +309,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -363,7 +363,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -417,7 +417,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -471,7 +471,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -525,7 +525,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -579,7 +579,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -633,7 +633,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -687,7 +687,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -741,7 +741,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -795,7 +795,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -851,7 +851,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gateway
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

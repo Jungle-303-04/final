@@ -93,8 +93,8 @@ def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
 def test_llm_client_defaults_to_openai_and_boots_without_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # 기본 provider 는 openai — 자격 증명 없이도 게이트웨이 생성(부팅)은 성공하고,
-    # API 키 부재는 요청 시점 ValueError 로 실패함(합성 응답 없음).
+    # provider 미설정이어도 게이트웨이 생성(부팅)은 성공하고,
+    # provider 부재는 요청 시점 ValueError 로 실패함(합성 응답 없음).
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -102,8 +102,8 @@ def test_llm_client_defaults_to_openai_and_boots_without_credentials(
     client = llm.build_llm_client()
 
     assert isinstance(client, LlmGateway)
-    assert client.default_provider == "openai"
-    with pytest.raises(ValueError, match="API_KEY"):
+    assert client.default_provider == "unconfigured"
+    with pytest.raises(ValueError, match="LLM_PROVIDER"):
         asyncio.run(client.complete("hello"))
 
 

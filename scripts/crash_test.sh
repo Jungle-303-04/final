@@ -9,12 +9,18 @@
 # 사용: bash scripts/crash_test.sh   (N 기본값 6, env로 override)
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:18080}"
+GATEWAY_PORT="${GATEWAY_PORT:-18080}"
+BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CTX="${MGMT_CONTEXT:-kind-management}"
 NS="${MGMT_NS:-management}"
 N="${N:-6}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-300}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
+GITHUB_REPO="${GITHUB_REPO:-$(git -C "${ROOT_DIR}" config --get remote.origin.url 2>/dev/null | sed -E 's#^git@github.com:##; s#^https?://github.com/##; s#\\.git$##' || true)}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-$(git -C "${ROOT_DIR}" branch --show-current 2>/dev/null || true)}"
+MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
+CRASH_TEST_IMAGE="${CRASH_TEST_IMAGE:-}"
 POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-service}"
@@ -78,11 +84,38 @@ fi
 if [ -z "$GITHUB_WEBHOOK_SECRET" ]; then
   GITHUB_WEBHOOK_SECRET="$(load_webhook_secret)"
 fi
+if [ -z "$GITHUB_REPO" ]; then
+  echo "GITHUB_REPO is required for crash test webhooks" >&2
+  exit 1
+fi
+if [ -z "$CRASH_TEST_IMAGE" ]; then
+  echo "CRASH_TEST_IMAGE is required for crash test webhooks" >&2
+  exit 1
+fi
 
 log "starting crash test: ${N} signed webhooks, kill targets ${KILL_APPS[*]}"
 corr_ids=()
 for i in $(seq 1 "$N"); do
-  body="{\"commit_sha\":\"crash${i}\",\"image\":\"ghcr.io/project/checkout-api:crash${i}\",\"replicas\":2}"
+  body="$(
+    CRASH_COMMIT_SHA="crash${i}" \
+    CRASH_TEST_IMAGE="${CRASH_TEST_IMAGE}" \
+    GITHUB_REPO="${GITHUB_REPO}" \
+    GITHUB_BRANCH="${GITHUB_BRANCH}" \
+    MANIFEST_PATH="${MANIFEST_PATH}" \
+    python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "commit_sha": os.environ["CRASH_COMMIT_SHA"],
+    "image": os.environ["CRASH_TEST_IMAGE"],
+    "replicas": 2,
+    "repo_ref": os.environ["GITHUB_REPO"],
+    "branch": os.environ["GITHUB_BRANCH"],
+    "manifest_path": os.environ["MANIFEST_PATH"],
+}))
+PY
+  )"
   signature="$(sign_body "$body")"
   resp="$(curl -fsS -X POST "${BASE_URL}/github/webhook" \
     -H "content-type: application/json" \

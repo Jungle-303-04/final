@@ -21,7 +21,7 @@ def test_render_emits_manifest_invalid_when_no_source_is_available() -> None:
     assert subjects_of(outs) == ["manifest.invalid"]
     assert outs[0].reason == "manifest source unavailable"
     assert outs[0].workspace_id == "default"
-    assert outs[0].binding_id == "binding-default"
+    assert outs[0].binding_id == ""
     assert db.called("record_manifest_artifact")
     assert not db.called("save_repo_change")
     assert not db.called("mark_watch_observed")
@@ -253,7 +253,12 @@ def test_render_prefers_remote_manifest_when_remote_is_enabled(monkeypatch, tmp_
 
     outs = run_handler(
         render.on_git_changed,
-        GitChangedBody(commit_sha="abc123", image="ignored", replicas=1),
+        GitChangedBody(
+            commit_sha="abc123",
+            image="ignored",
+            replicas=1,
+            repo_ref="example/repo",
+        ),
         db=SpyDb(),
     )
 
@@ -315,7 +320,12 @@ def test_render_does_not_fall_back_to_local_when_remote_is_required(monkeypatch,
 
     outs = run_handler(
         render.on_git_changed,
-        GitChangedBody(commit_sha="abc123", image="ignored", replicas=1),
+        GitChangedBody(
+            commit_sha="abc123",
+            image="ignored",
+            replicas=1,
+            repo_ref="example/repo",
+        ),
         db=SpyDb(),
     )
 

@@ -56,7 +56,6 @@ from packages.runtime.app import App, EventContext
 
 app = App("workflow-controller")
 
-DEFAULT_APP_NAME = "checkout-api"
 SYSTEM_POLICY_APPROVER = "system-policy"
 MANUAL_APPROVAL_ROLE = AccessRole.DEPLOYER.value
 POLICY_DECISION_REF_PREFIX = "policy-decision"
@@ -89,9 +88,24 @@ def normalize_payload(payload: JsonObject) -> JsonObject:
     return enriched
 
 
+def application_name_hint(payload: JsonObject) -> str:
+    explicit = payload.get("name") or payload.get("app_name")
+    if explicit:
+        return str(explicit)
+    resource = str(payload.get("resource", ""))
+    if "/" in resource:
+        return resource.split("/", 1)[1]
+    repo_ref = str(payload.get("repo_ref", ""))
+    if "/" in repo_ref:
+        return repo_ref.rsplit("/", 1)[1]
+    return ""
+
+
 def gitops_payload(evt: EventBody, app_name: str | None = None) -> JsonObject:
     payload = evt.to_body()
-    payload["name"] = app_name or payload.get("name") or DEFAULT_APP_NAME
+    name = app_name or application_name_hint(payload)
+    if name:
+        payload["name"] = name
     return normalize_payload(payload)
 
 
@@ -99,7 +113,8 @@ def diff_payload(evt: DesiredDesiredDiffDetectedBody | DiffAnalyzedBody) -> Json
     diff = evt.diff
     resource_name = diff.resource.split("/", 1)[-1] if "/" in diff.resource else diff.resource
     payload = diff.to_body()
-    payload["name"] = resource_name or DEFAULT_APP_NAME
+    if resource_name:
+        payload["name"] = resource_name
     return normalize_payload(payload)
 
 
@@ -107,7 +122,7 @@ def rendered_application_name(evt: ManifestRenderedBody) -> str | None:
     """Application 이름 후보는 workload manifest에서만 가져옴.
 
     한 파일에 Service/ConfigMap이 같이 렌더될 때 부속 리소스 이름이 Application.name을
-    덮으면 콘솔에서 앱이 checkout-api-config 같은 이름으로 보인다.
+    덮으면 콘솔에서 앱이 부속 ConfigMap 이름으로 보인다.
     """
     if evt.rendered_manifest.kind == "Deployment":
         return evt.rendered_manifest.metadata.name
@@ -126,7 +141,7 @@ async def ensure_run(
     await ctx.db.upsert_application(
         {
             **run,
-            "name": str(run.get("name") or DEFAULT_APP_NAME),
+            "name": str(run.get("name") or run.get("application_id")),
             "metadata": {
                 "repository_id": run.get("repository_id"),
                 "manifest_path": run.get("manifest_path"),

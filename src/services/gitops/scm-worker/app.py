@@ -8,9 +8,16 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 
 from github_provider import GithubScmProvider
 
+from domains.gitops.repository import (
+    derive_application_id,
+    derive_deployment_binding_id,
+    derive_repository_id,
+    derive_workflow_run_id,
+)
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
@@ -54,6 +61,30 @@ ACTIVE_SCM_PROVIDER = (
 SCM_PROVIDER: ScmProvider = build_scm_provider()
 
 
+def normalize_safe_pr_request(evt: SafePrRequestedBody) -> SafePrRequestedBody:
+    payload = evt.to_body()
+    repository_id = derive_repository_id(payload)
+    binding_id = derive_deployment_binding_id({**payload, "repository_id": repository_id})
+    application_id = derive_application_id(
+        {**payload, "repository_id": repository_id, "binding_id": binding_id}
+    )
+    workflow_run_id = derive_workflow_run_id(
+        {
+            **payload,
+            "repository_id": repository_id,
+            "binding_id": binding_id,
+            "application_id": application_id,
+        }
+    )
+    return replace(
+        evt,
+        repository_id=repository_id,
+        binding_id=binding_id,
+        application_id=application_id,
+        workflow_run_id=workflow_run_id,
+    )
+
+
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
     """기존 호출자 호환용 — SCM 전략 인스턴스로 위임함."""
     if evt.provider != ACTIVE_SCM_PROVIDER:
@@ -71,42 +102,44 @@ def safe_pr_failure_reason(exc: Exception) -> str:
 async def on_safe_pr_requested(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:
+    request = normalize_safe_pr_request(evt)
+
     # repo-gateway는 외부 PR 생성 경계다. 핸들러는 호출과 결과 이벤트만 선언하고
     # provider 예외 처리는 deliver가 공통으로 맡는다.
     async def create_pr() -> str:
-        return await create_safe_pr(evt, ctx)
+        return await create_safe_pr(request, ctx)
 
     def created_body(pr_url: str) -> SafePrCreatedBody:
         return SafePrCreatedBody(
             pr_url=pr_url,
-            provider=evt.provider,
+            provider=request.provider,
             mode=PR_MODE,
-            workspace_id=evt.workspace_id,
-            repository_id=evt.repository_id,
-            binding_id=evt.binding_id,
-            application_id=evt.application_id,
-            workflow_run_id=evt.workflow_run_id,
-            environment=evt.environment,
+            workspace_id=request.workspace_id,
+            repository_id=request.repository_id,
+            binding_id=request.binding_id,
+            application_id=request.application_id,
+            workflow_run_id=request.workflow_run_id,
+            environment=request.environment,
         )
 
     async for out in deliver(
         call=create_pr,
         ok=created_body,
         fail=lambda exc: SafePrFailedBody(
-            provider=evt.provider,
-            title=evt.title,
+            provider=request.provider,
+            title=request.title,
             reason=safe_pr_failure_reason(exc),
-            workspace_id=evt.workspace_id,
-            repository_id=evt.repository_id,
-            binding_id=evt.binding_id,
-            application_id=evt.application_id,
-            workflow_run_id=evt.workflow_run_id,
-            environment=evt.environment,
+            workspace_id=request.workspace_id,
+            repository_id=request.repository_id,
+            binding_id=request.binding_id,
+            application_id=request.application_id,
+            workflow_run_id=request.workflow_run_id,
+            environment=request.environment,
         ),
     ):
         yield out
-        if isinstance(out, SafePrCreatedBody) and evt.next_alert is not None:
-            yield evt.next_alert
+        if isinstance(out, SafePrCreatedBody) and request.next_alert is not None:
+            yield request.next_alert
 
 
 if __name__ == "__main__":

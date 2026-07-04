@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:18080}"
+GATEWAY_PORT="${GATEWAY_PORT:-18080}"
+BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -19,7 +20,8 @@ default_github_repo() {
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-kind-management}"
 MGMT_NS="${MGMT_NS:-management}"
-SMOKE_IMAGE="${SMOKE_IMAGE:-service:local}"
+SMOKE_IMAGE="${SMOKE_IMAGE:-}"
+SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE:-}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
@@ -113,6 +115,10 @@ if [ -z "${SMOKE_COMMIT_SHA}" ]; then
   echo "==> resolving latest Git commit for ${GITHUB_REPO}@${GITHUB_BRANCH}"
   SMOKE_COMMIT_SHA="$(latest_commit_sha)"
 fi
+if [ -z "${SMOKE_IMAGE}" ]; then
+  echo "SMOKE_IMAGE is required for the signed webhook payload" >&2
+  exit 1
+fi
 
 echo "==> sending signed GitHub webhook"
 webhook_body="$(
@@ -155,12 +161,32 @@ with open(os.environ["WEBHOOK_RESPONSE"], encoding="utf-8") as handle:
 PY
 )"
 
-echo "==> sending manual UI command"
-curl -fsS -X POST "${BASE_URL}/commands" \
-  -b "${COOKIE_JAR}" \
-  -H "content-type: application/json" \
-  -d '{"cluster_id":"target-cluster-01","action":"rollout_restart","namespace":"sandbox","reason":"manual smoke command","diff":{"resource":"deployment/checkout-api","namespace":"sandbox","desired_image":"","actual_image":"","risk":"sandbox-only"}}'
-echo
+if [ -n "${SMOKE_COMMAND_RESOURCE}" ]; then
+  echo "==> sending manual UI command"
+  SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE}" python3 - <<'PY' > "${WEBHOOK_RESPONSE}.command.json"
+import json
+import os
+
+print(json.dumps({
+    "cluster_id": "target-cluster-01",
+    "action": "rollout_restart",
+    "namespace": "sandbox",
+    "reason": "manual smoke command",
+    "diff": {
+        "resource": os.environ["SMOKE_COMMAND_RESOURCE"],
+        "namespace": "sandbox",
+        "desired_image": "",
+        "actual_image": "",
+        "risk": "sandbox-only",
+    },
+}))
+PY
+  curl -fsS -X POST "${BASE_URL}/commands" \
+    -b "${COOKIE_JAR}" \
+    -H "content-type: application/json" \
+    -d @"${WEBHOOK_RESPONSE}.command.json"
+  echo
+fi
 
 echo "==> waiting for async workers"
 sleep 18
