@@ -304,6 +304,8 @@ async def on_event(evt: EventEnvelope, ctx):
 
 예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
 
+`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch로 변환하고, `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서와 patch file을 같은 PR branch에 커밋한다. rollback patch, approval evidence, diff basis/ref 강제는 아직 P0 하드닝 잔여 작업이다.
+
 ## Repo / Cluster 매핑 상태
 
 Git repo와 target cluster는 직접 1:1로 묶지 않는다. `deployment_bindings`를

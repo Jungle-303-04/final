@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import base64
+from pathlib import PurePosixPath
+from urllib.parse import quote
 
 import httpx
 
@@ -33,6 +35,7 @@ BRANCH_PREFIX = "gitops"
 CHANGE_DOCUMENT_DIR = ".gitops/safe-pr"
 CONFLICT_STATUS = 422
 OK_STATUS = 200
+PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
 
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
@@ -54,15 +57,41 @@ def change_document_path(request: SafePrRequestedBody) -> str:
 
 
 def change_document(request: SafePrRequestedBody) -> str:
-    # SafePrRequestedBody 는 렌더된 manifest 원문을 싣지 않으므로, 요청된 변경의
-    # 검토용 기록(제목/본문/대상 manifest 경로)을 커밋함 — head 와 base 의 diff 를 만듦.
+    patch_rows = "\n".join(
+        f"- `{patch.path}`: {patch.description or 'manifest patch'}" for patch in request.patches
+    )
+    patch_section = patch_rows if patch_rows else "- proposal-only: manifest patch 없음"
     return (
         f"# {request.title}\n\n"
         f"{request.body}\n\n"
         f"- manifest_path: `{request.manifest_path}`\n"
         f"- workflow_run_id: `{request.workflow_run_id}`\n"
-        f"- environment: `{request.environment}`\n"
+        f"- environment: `{request.environment}`\n\n"
+        "## Files\n\n"
+        f"{patch_section}\n"
     )
+
+
+def normalize_repo_path(path: str) -> str:
+    raw = path.strip()
+    if raw.startswith("/") or "\\" in raw:
+        raise ValueError(f"unsafe repository path: {path}")
+    normalized = str(PurePosixPath(raw))
+    parts = PurePosixPath(normalized).parts
+    if not normalized or normalized == "." or any(part in {"", ".", ".."} for part in parts):
+        raise ValueError(f"unsafe repository path: {path}")
+    return normalized
+
+
+def contents_api_path(repo: str, path: str) -> str:
+    return f"/repos/{repo}/contents/{quote(normalize_repo_path(path), safe='/')}"
+
+
+def validate_request_paths(request: SafePrRequestedBody) -> None:
+    normalize_repo_path(change_document_path(request))
+    normalize_repo_path(request.manifest_path)
+    for patch in request.patches:
+        normalize_repo_path(patch.path)
 
 
 class GithubScmProvider:
@@ -82,11 +111,13 @@ class GithubScmProvider:
             DEFAULT_SCM_BASE_BRANCH
         )
         branch = branch_name(request)
+        validate_request_paths(request)
 
         async with self.client(token) as client:
             base_sha = await self.base_branch_sha(client, repo, base_branch)
             await self.ensure_branch(client, repo, branch, base_sha)
             await self.put_change_document(client, repo, branch, request)
+            await self.put_manifest_patches(client, repo, branch, request)
             pr_url = await self.create_or_reuse_pr(client, repo, branch, base_branch, request)
 
         await ctx.db.save_pull_request(
@@ -128,10 +159,46 @@ class GithubScmProvider:
         branch: str,
         request: SafePrRequestedBody,
     ) -> None:
-        url = f"/repos/{repo}/contents/{change_document_path(request)}"
+        await self.put_content_file(
+            client,
+            repo,
+            branch,
+            path=change_document_path(request),
+            message=request.title,
+            content=change_document(request),
+        )
+
+    async def put_manifest_patches(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        branch: str,
+        request: SafePrRequestedBody,
+    ) -> None:
+        for patch in request.patches:
+            await self.put_content_file(
+                client,
+                repo,
+                branch,
+                path=patch.path,
+                message=f"{PATCH_COMMIT_MESSAGE_PREFIX}: {patch.path}",
+                content=patch.content,
+            )
+
+    async def put_content_file(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        branch: str,
+        *,
+        path: str,
+        message: str,
+        content: str,
+    ) -> None:
+        url = contents_api_path(repo, path)
         payload = {
-            "message": request.title,
-            "content": base64.b64encode(change_document(request).encode()).decode(),
+            "message": message,
+            "content": base64.b64encode(content.encode()).decode(),
             "branch": branch,
         }
         response = await client.put(url, json=payload)
