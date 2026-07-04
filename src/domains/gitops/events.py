@@ -64,6 +64,7 @@ class RenderedManifest(EventBody):
     managed_fields: list[str] = field(default_factory=list)
     ignored_fields: list[str] = field(default_factory=list)
     last_approved_snapshot: JsonObject = field(default_factory=dict)
+    artifact_digest: str = ""
 
 
 @dataclass(frozen=True)
