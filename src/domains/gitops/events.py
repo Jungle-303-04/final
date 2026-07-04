@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from packages.config.constants import Target
+from packages.config.constants import RiskLevel, Target
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
@@ -74,7 +74,7 @@ class Diff(EventBody):
     namespace: str
     desired_image: str
     actual_image: str
-    risk: str
+    risk: RiskLevel
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     watch_target_id: str = DEFAULT_WATCH_TARGET_ID
@@ -90,6 +90,11 @@ class Diff(EventBody):
     has_changes: bool = True
     changes: list[dict[str, object]] = field(default_factory=list)
     basis: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # wire 호환: 재구성(from_body) 시 str 로 들어온 위험도를 RiskLevel 로 강제함
+        if not isinstance(self.risk, RiskLevel):
+            object.__setattr__(self, "risk", RiskLevel(self.risk))
 
     def is_image_only_noop(self) -> bool:
         """이미지 비교만으로 no-op 판정이 가능한 legacy diff인지 확인."""
