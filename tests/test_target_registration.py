@@ -142,8 +142,8 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert "kind: DaemonSet" not in manifest
     assert "cluster-agent-target-manage" in manifest
     assert 'MANAGEMENT_BASE_URL\n              value: "http://management.local:30080"' in manifest
-    assert 'PROMETHEUS_BASE_URL: "http://fake-prometheus:8000"' in manifest
-    assert 'LOKI_BASE_URL: "http://fake-loki:8000"' in manifest
+    assert 'PROMETHEUS_BASE_URL: "http://prometheus.target.svc:9090"' in manifest
+    assert 'LOKI_BASE_URL: "http://loki-gateway.target.svc"' in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
     assert 'NODE_COLLECTOR_IMAGE: "service:local"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
@@ -173,7 +173,6 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert db.registered[0]["workspace_id"] == "default"
     assert {item["component"] for item in db.desired_states} == {
         "cluster-agent",
-        "fake-telemetry",
         "node-collector",
     }
     assert len(events.accepted) == 1

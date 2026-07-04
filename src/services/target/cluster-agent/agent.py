@@ -17,7 +17,6 @@ from commands import (
 )
 from control import AgentControlStore, AgentPolicySync, DesiredStateReconciler
 from evidence import EvidenceCollector, EvidenceJobScheduler
-from fastapi import FastAPI
 from kubernetes_api import (
     kubernetes_api_base_url,
     kubernetes_client,
@@ -38,7 +37,6 @@ from queries import (
 )
 from span import configure_tracing
 from telemetry_registry import telemetry
-from uvicorn import Config, Server
 
 import config as agent_config
 from config import (
@@ -85,7 +83,6 @@ from packages.contracts.gateway.requests import (
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
 )
-from packages.contracts.gateway.responses import FakeTelemetryResponse, HealthResponse
 from packages.contracts.gitops import supported_kubernetes_resource
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
@@ -125,13 +122,6 @@ class KubernetesManifestResource:
 
 class AgentConfig:
     TARGET_AGENT_SERVICE_NAME = "cluster-agent"
-    FAKE_PROMETHEUS_SERVICE_NAME = "fake-prometheus"
-    FAKE_LOKI_SERVICE_NAME = "fake-loki"
-    FAKE_OTEL_SERVICE_NAME = "fake-otel"
-
-    PROMETHEUS_TELEMETRY_KIND = "prometheus"
-    LOKI_TELEMETRY_KIND = "loki"
-    OTEL_TELEMETRY_KIND = "otel"
 
     DEFAULT_MANAGEMENT_BASE_URL = "http://localhost:18080"
     MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
@@ -142,52 +132,19 @@ class AgentConfig:
     AGENT_TOKEN_HEADER = "x-agent-token"
     # 타이밍 튜닝값은 config 모듈이 단일 원천(env 오버라이드 가능) — 중복 리터럴 금지
     HTTP_TIMEOUT_SECONDS = agent_config.HTTP_TIMEOUT_SECONDS
-    TELEMETRY_TIMEOUT_SECONDS = 10
     COMMAND_POLL_TIMEOUT_SECONDS = agent_config.COMMAND_POLL_TIMEOUT_SECONDS
     COMMAND_HEARTBEAT_INTERVAL_SECONDS = agent_config.COMMAND_HEARTBEAT_INTERVAL_SECONDS
     COMMAND_EXECUTION_DELAY_SECONDS = agent_config.COMMAND_EXECUTION_DELAY_SECONDS
     REGISTER_RETRY_DELAY_SECONDS = agent_config.REGISTER_RETRY_DELAY_SECONDS
     COMMAND_RETRY_DELAY_SECONDS = agent_config.COMMAND_RETRY_DELAY_SECONDS
 
-    SERVICE_HOST = "0.0.0.0"
-    SERVICE_PORT_ENV = "PORT"
     HOSTNAME_ENV = "HOSTNAME"
-    LOG_LEVEL = "info"
-    DEFAULT_SERVICE_PORT = "8000"
     DEFAULT_AGENT_ID = "target-agent"
     AGENT_CAPABILITIES = ["collector", "command_receiver"]
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
     NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = (
         agent_config.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS
     )
-
-    CHECKOUT_APP_NAME = "checkout-api"
-    CRASHING_POD_NAME = "checkout-api-7f8d"
-    CRASHING_POD_STATUS = "CrashLoopBackOff"
-    CRASHING_POD_RESTARTS = 4
-    K8S_READINESS_FAILED_EVENT = "readiness probe failed"
-    K8S_BACKOFF_EVENT = "back-off restarting failed container"
-
-    FAKE_PROMETHEUS_SOURCE = "fake-prometheus"
-    FAKE_LOKI_SOURCE = "fake-loki"
-    FAKE_OTEL_SOURCE = "fake-otel"
-    FAKE_NODE_CPU = 0.83
-    FAKE_NODE_MEMORY_MB = 512
-    FAKE_HTTP_5XX_RATE = 0.19
-    PROMETHEUS_VECTOR_VALUE = "0.19"
-    PROMETHEUS_BASE_URL_ENV = "PROMETHEUS_BASE_URL"
-    DEFAULT_PROMETHEUS_BASE_URL = "http://fake-prometheus:8000"
-    PROMETHEUS_METRIC_NAMES_PATH = "/api/v1/label/__name__/values"
-    PROMETHEUS_QUERY_PATH = "/api/v1/query"
-    PROMETHEUS_MAX_METRICS = 25
-    PROMETHEUS_FALLBACK_QUERIES = ("up",)
-    LOKI_BASE_URL_ENV = "LOKI_BASE_URL"
-    DEFAULT_LOKI_BASE_URL = "http://fake-loki:8000"
-    LOKI_LABELS_PATH = "/loki/api/v1/labels"
-    LOKI_QUERY_RANGE_PATH = "/loki/api/v1/query_range"
-    LOKI_QUERY_ENV = "LOKI_QUERY"
-    DEFAULT_LOKI_QUERY = '{pod=~".+"}'
-    LOKI_QUERY_LIMIT = 100
 
     COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
     COMMAND_FAILED_STATUS = CommandStatus.FAILED
@@ -197,9 +154,6 @@ class AgentConfig:
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
     MANIFEST_PATCHED_MESSAGE = "Kubernetes manifest patched in sandbox namespace"
     WRITE_NAMESPACE_DENIED_MESSAGE = "only sandbox namespace writes are allowed"
-    LOKI_ERROR_LINE = "ERROR readiness check failed: downstream timeout"
-    LOKI_WARNING_LINE = "WARN rollback candidate detected"
-    OTEL_SLOW_SPAN = "GET /checkout"
 
 
 class HttpManagementPlaneClient:
@@ -1003,69 +957,6 @@ class TargetClusterAgent:
         return True, AgentConfig.COMMAND_RESULT_MESSAGE
 
 
-def create_fake_telemetry_app(kind: str) -> FastAPI:
-    app = FastAPI(title=f"fake-{kind}")
-
-    @app.get(gateway_routes.HEALTHZ_PATH, response_model=HealthResponse)
-    async def healthz() -> HealthResponse:
-        return HealthResponse(status=Gateway.STATUS_OK, service=f"fake-{kind}")
-
-    @app.get(
-        gateway_routes.FAKE_TELEMETRY_CATCH_ALL_PATH,
-        response_model=FakeTelemetryResponse,
-        response_model_exclude_none=True,
-    )
-    async def catch_all(path: str) -> FakeTelemetryResponse:
-        if kind == "prometheus":
-            if path == "api/v1/label/__name__/values":
-                return FakeTelemetryResponse(status="success", data=["up", "http_5xx_rate"])
-            return FakeTelemetryResponse(
-                status="success",
-                data={
-                    "resultType": "vector",
-                    "result": [
-                        {
-                            "metric": {"pod": AgentConfig.CHECKOUT_APP_NAME},
-                            "value": [time.time(), AgentConfig.PROMETHEUS_VECTOR_VALUE],
-                        }
-                    ],
-                },
-            )
-        if kind == "loki":
-            if path == "loki/api/v1/labels":
-                return FakeTelemetryResponse(status="success", data=["pod", "namespace"])
-            return FakeTelemetryResponse(
-                status="success",
-                data={
-                    "result": [
-                        {
-                            "stream": {"pod": AgentConfig.CHECKOUT_APP_NAME},
-                            "values": [
-                                [
-                                    str(int(time.time() * 1e9)),
-                                    AgentConfig.K8S_READINESS_FAILED_EVENT,
-                                ]
-                            ],
-                        }
-                    ]
-                },
-            )
-        return FakeTelemetryResponse(status="ok", telemetry="fake-otel", path=path)
-
-    return app
-
-
-async def run_fake_telemetry(kind: str) -> None:
-    await Server(
-        Config(
-            create_fake_telemetry_app(kind),
-            host=AgentConfig.SERVICE_HOST,
-            port=int(env(AgentConfig.SERVICE_PORT_ENV, AgentConfig.DEFAULT_SERVICE_PORT)),
-            log_level=AgentConfig.LOG_LEVEL,
-        )
-    ).serve()
-
-
 def deployment_name_from_resource(resource: str) -> str:
     if resource.startswith("deployment/"):
         return resource.split("/", 1)[1]
@@ -1137,42 +1028,3 @@ def kubernetes_manifest_resource(
 def kubernetes_resource_api(kind: str, api_version: str) -> tuple[str, str]:
     contract = supported_kubernetes_resource(api_version, kind)
     return contract.api_prefix, contract.plural
-
-
-async def prometheus_metric_names(client: httpx.AsyncClient, base_url: str) -> list[str]:
-    response = await client.get(f"{base_url}{AgentConfig.PROMETHEUS_METRIC_NAMES_PATH}")
-    response.raise_for_status()
-    payload = response.json()
-    data = payload.get("data", [])
-    if not isinstance(data, list):
-        return []
-    return sorted(str(item) for item in data)
-
-
-async def prometheus_query(
-    client: httpx.AsyncClient, base_url: str, metric_name: str
-) -> JsonObject:
-    response = await client.get(
-        f"{base_url}{AgentConfig.PROMETHEUS_QUERY_PATH}", params={"query": metric_name}
-    )
-    response.raise_for_status()
-    return {"query": metric_name, "response": response.json()}
-
-
-async def loki_labels(client: httpx.AsyncClient, base_url: str) -> list[str]:
-    response = await client.get(f"{base_url}{AgentConfig.LOKI_LABELS_PATH}")
-    response.raise_for_status()
-    payload = response.json()
-    data = payload.get("data", [])
-    if not isinstance(data, list):
-        return []
-    return sorted(str(item) for item in data)
-
-
-async def loki_query_range(client: httpx.AsyncClient, base_url: str, query: str) -> JsonObject:
-    response = await client.get(
-        f"{base_url}{AgentConfig.LOKI_QUERY_RANGE_PATH}",
-        params={"query": query, "limit": AgentConfig.LOKI_QUERY_LIMIT},
-    )
-    response.raise_for_status()
-    return response.json()

@@ -84,13 +84,6 @@ class EvidenceJobResultResponse(StrictModel):
     correlation_id: str | None = None
 
 
-class FakeTelemetryResponse(StrictModel):
-    status: str
-    data: Any | None = None
-    telemetry: str | None = None
-    path: str | None = None
-
-
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str

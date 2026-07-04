@@ -6,7 +6,6 @@ from enum import StrEnum
 class TargetComponent(StrEnum):
     CLUSTER_AGENT = "cluster-agent"
     NODE_COLLECTOR = "node-collector"
-    FAKE_TELEMETRY = "fake-telemetry"
 
 
 class TargetDesiredStateStatus(StrEnum):
