@@ -7,8 +7,9 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import AsyncIterator
+
+from github_provider import GithubScmProvider
 
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
@@ -20,48 +21,29 @@ from packages.runtime.outbound import deliver
 
 app = App("scm-worker")
 
-SCM_PR_URL_PREFIX_ENV = "SCM_PR_URL_PREFIX"
-PR_MODE = "stub_pr_adapter"
-PR_STATUS_CREATED = "created"
-PR_NUMBER_MODULO_ENV = "PR_NUMBER_MODULO"  # 스텁 PR 번호 합성용 모듈로(기본 100000)
-PR_NUMBER_MODULO = int(env(PR_NUMBER_MODULO_ENV, "100000"))
-MISSING_PR_ADAPTER_MESSAGE = (
-    f"{SCM_PR_URL_PREFIX_ENV} 미설정 — PR 어댑터 없이 기동하면 자동 승인 배포(safe PR)가 "
-    "런타임에 전부 실패함. deploy env 에 PR URL prefix 설정 필요"
-)
+SCM_PROVIDER_ENV = "SCM_PROVIDER"  # PR 생성 provider 선택(현재 github 만 지원)
+DEFAULT_SCM_PROVIDER = "github"
+PR_MODE = "github_rest"
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
+UNSUPPORTED_SCM_PROVIDER_MESSAGE = (
+    f"{SCM_PROVIDER_ENV} 값이 지원 목록에 없음 — 지원: {DEFAULT_SCM_PROVIDER}"
+)
 
 
-def validate_pr_url_prefix(raw: str) -> str:
-    """PR URL prefix 검증(순수 함수) — 비어 있으면 명확한 한국어 메시지로 실패함."""
-    prefix = raw.strip().rstrip("/")
-    if not prefix:
-        raise RuntimeError(MISSING_PR_ADAPTER_MESSAGE)
-    return prefix
+def build_scm_provider(name: str | None = None) -> ScmProvider:
+    """SCM_PROVIDER env 로 provider 를 선택함.
+
+    자격 증명(GITHUB_TOKEN/SCM_REPO) 부재는 부팅 실패가 아니라 요청 시점의
+    safe_pr.failed 로 처리함 — provider 이름 오설정만 부팅 fail-fast.
+    """
+    provider = (name or env(SCM_PROVIDER_ENV, DEFAULT_SCM_PROVIDER)).strip().lower()
+    if provider == DEFAULT_SCM_PROVIDER:
+        return GithubScmProvider()
+    raise RuntimeError(f"{UNSUPPORTED_SCM_PROVIDER_MESSAGE} (got: {provider})")
 
 
-def resolve_pr_url_prefix() -> str:
-    # TODO(scm): stub URL prefix를 실제 GitHub App adapter response URL로 교체
-    return validate_pr_url_prefix(env(SCM_PR_URL_PREFIX_ENV, ""))
-
-
-class StubScmProvider:
-    """ScmProvider 구현 — 실제 SCM 호출 없이 PR URL 을 합성하는 스텁."""
-
-    async def create_pull_request(
-        self, request: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
-    ) -> str:
-        # TODO(scm): branch 생성, patch commit, PR 생성, provider response 원자 저장
-        # TODO(scm): write 전 repo allowlist, branch naming, rollback metadata 검증
-        pr_url = f"{resolve_pr_url_prefix()}/{int(time.time()) % PR_NUMBER_MODULO}"
-        await ctx.db.save_pull_request(
-            ctx.correlation_id, pr_url, request.title, request.body, PR_STATUS_CREATED
-        )
-        return pr_url
-
-
-# PR 생성 전략 주입 지점 — 지금은 스텁 provider 하나만 씀.
-SCM_PROVIDER: ScmProvider = StubScmProvider()
+# PR 생성 전략 주입 지점 — 테스트는 transport 를 주입한 provider 로 교체함.
+SCM_PROVIDER: ScmProvider = build_scm_provider()
 
 
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
@@ -116,6 +98,4 @@ async def on_safe_pr_requested(
 
 
 if __name__ == "__main__":
-    # 부팅 fail-fast — 설정 없이 떠서 이벤트마다 실패하는 대신 기동 시점에 즉시 종료함
-    resolve_pr_url_prefix()
     app.run()

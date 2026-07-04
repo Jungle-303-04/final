@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from conftest import SpyDb, load_service, run_handler, subjects_of
+from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
 
 from domains.command.events import CommandCompletedBody
 from domains.rca.events import (
@@ -16,6 +16,7 @@ from domains.rca.events import (
 )
 
 PR_URL_PREFIX = "https://github.test.local/project/repo/pull"
+PR_HTML_URL = f"{PR_URL_PREFIX}/7"
 
 
 def crashloop_payload(
@@ -311,7 +312,8 @@ def test_unknown_symptom_creates_backlog_and_manual_selection_flow() -> None:
 
 
 def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> None:
-    monkeypatch.setenv("SCM_PR_URL_PREFIX", PR_URL_PREFIX)
+    monkeypatch.setenv("GITHUB_TOKEN", "token-1")
+    monkeypatch.setenv("SCM_REPO", "project/repo")
     db = SpyDb()
     recovery_worker = load_service("ai/recovery-worker")
     select_worker = load_service("ai/select-worker")
@@ -320,6 +322,11 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
     safe_pr_worker = load_service("ai/safe-pr-worker")
     diff_worker = load_service("ai/diff-worker")
     scm_worker = load_service("gitops/scm-worker")
+    monkeypatch.setattr(
+        scm_worker,
+        "SCM_PROVIDER",
+        scm_worker.GithubScmProvider(transport=github_scm_transport(PR_HTML_URL)),
+    )
 
     recovery_outs = run_handler(
         recovery_worker.on_rca_completed,
@@ -376,7 +383,7 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
     assert patch_outs[0].patch["provider"] == "github"
     assert diff_outs[0].risk == "review_required"
     assert subjects_of(scm_outs) == ["safe_pr.created"]
-    assert scm_outs[0].pr_url.startswith(PR_URL_PREFIX)
+    assert scm_outs[0].pr_url == PR_HTML_URL
     assert db.called("save_pull_request")
 
 
