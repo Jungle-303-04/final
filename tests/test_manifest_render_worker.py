@@ -9,7 +9,8 @@ from conftest import SpyDb, load_service, run_handler, subjects_of
 from domains.gitops.events import GitChangedBody
 
 
-def test_render_emits_manifest_rendered() -> None:
+def test_render_emits_manifest_invalid_when_no_source_is_available() -> None:
+    # manifest 소스가 없으면 Deployment 를 합성하지 않고 정직하게 실패해야 함.
     render = load_service("gitops/manifest-render-worker")
     db = SpyDb()
     outs = run_handler(
@@ -17,18 +18,13 @@ def test_render_emits_manifest_rendered() -> None:
         GitChangedBody(commit_sha="abc123", image="img:new", replicas=2),
         db=db,
     )
-    assert subjects_of(outs) == ["manifest.rendered"]
-    assert outs[0].rendered_manifest.spec.image == "img:new"
-    assert outs[0].rendered_manifest.api_version == "apps/v1"
-    assert outs[0].rendered_manifest.declared_fields == [
-        "spec.replicas",
-        "spec.template.spec.containers[name=checkout-api].image",
-    ]
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert outs[0].reason == "manifest source unavailable"
     assert outs[0].workspace_id == "default"
     assert outs[0].binding_id == "binding-default"
-    assert db.called("save_repo_change")
     assert db.called("record_manifest_artifact")
-    assert db.called("mark_watch_observed")
+    assert not db.called("save_repo_change")
+    assert not db.called("mark_watch_observed")
 
 
 def test_render_reads_manifest_from_git_commit(monkeypatch, tmp_path) -> None:
