@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
+
 import pytest
 
 from packages.contracts.security import SecretRef
 from packages.security import (
     AwsSecretsManagerSecretVault,
     EnvSecretVault,
+    KubernetesSecretVault,
     RoutingSecretVault,
     SecretNotFound,
     build_secret_vault,
@@ -42,17 +45,17 @@ def test_aws_secret_vault_reads_json_field_and_version_stage() -> None:
     client = FakeSecretsManagerClient({"SecretString": '{"token": "ghs_123", "nested": {"x": 7}}'})
     vault = AwsSecretsManagerSecretVault(client=client)
 
-    value = vault.read_secret(SecretRef("aws-sm:/kubeheal/prod/github?stage=AWSPREVIOUS#token"))
+    value = vault.read_secret(SecretRef("aws-sm:/my-app/prod/github?stage=AWSPREVIOUS#token"))
 
     assert value == "ghs_123"
-    assert client.calls == [{"SecretId": "/kubeheal/prod/github", "VersionStage": "AWSPREVIOUS"}]
+    assert client.calls == [{"SecretId": "/my-app/prod/github", "VersionStage": "AWSPREVIOUS"}]
 
 
 def test_aws_secret_vault_returns_serialized_json_for_non_string_field() -> None:
     client = FakeSecretsManagerClient({"SecretString": '{"nested": {"x": 7}}'})
     vault = AwsSecretsManagerSecretVault(client=client)
 
-    assert vault.read_secret(SecretRef("aws-sm:/kubeheal/prod/github#nested")) == '{"x": 7}'
+    assert vault.read_secret(SecretRef("aws-sm:/my-app/prod/github#nested")) == '{"x": 7}'
 
 
 def test_aws_secret_vault_rejects_missing_field() -> None:
@@ -60,7 +63,38 @@ def test_aws_secret_vault_rejects_missing_field() -> None:
     vault = AwsSecretsManagerSecretVault(client=client)
 
     with pytest.raises(SecretNotFound, match="secret field not found"):
-        vault.read_secret(SecretRef("aws-sm:/kubeheal/prod/github#missing"))
+        vault.read_secret(SecretRef("aws-sm:/my-app/prod/github#missing"))
+
+
+def test_kubernetes_secret_vault_reads_base64_data_key() -> None:
+    def reader(namespace: str, name: str) -> dict[str, object]:
+        assert (namespace, name) == ("management", "github-app")
+        return {"data": {"token": base64.b64encode(b"ghs_k8s").decode()}}
+
+    vault = KubernetesSecretVault(secret_reader=reader)
+
+    assert vault.read_secret(SecretRef("k8s-secret:management/github-app#token")) == "ghs_k8s"
+
+
+def test_kubernetes_secret_vault_requires_explicit_key() -> None:
+    vault = KubernetesSecretVault(
+        secret_reader=lambda _namespace, _name: {"data": {"token": "eA=="}}
+    )
+
+    with pytest.raises(SecretNotFound, match="requires a key"):
+        vault.read_secret(SecretRef("k8s-secret:management/github-app"))
+
+
+def test_routing_secret_vault_supports_kubernetes_secret_refs() -> None:
+    vault = RoutingSecretVault(
+        kubernetes_vault=KubernetesSecretVault(
+            secret_reader=lambda _namespace, _name: {
+                "data": {"token": base64.b64encode(b"routed").decode()}
+            }
+        )
+    )
+
+    assert vault.read_secret(SecretRef("k8s-secret:management/github-app#token")) == "routed"
 
 
 def test_build_vault_auto_routes_env_refs_without_aws_dependency(monkeypatch) -> None:
