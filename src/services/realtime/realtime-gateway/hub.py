@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 
 from packages.contracts.realtime import (
     BROWSER_QUEUE_MAX,
+    STATE_CLUSTERS_KEY,
+    STATE_RESOURCES_KEY,
     LiveSummary,
     LiveSummaryMessage,
     ResourceDelta,
@@ -22,10 +24,6 @@ from packages.contracts.realtime import (
     Subscription,
     delta_key_parts,
 )
-
-# snapshot state 구조 키 — browser 가 최초 렌더링에 쓰는 read model.
-STATE_CLUSTERS_KEY = "clusters"
-STATE_RESOURCES_KEY = "resources"
 
 
 def _new_queue() -> asyncio.Queue:

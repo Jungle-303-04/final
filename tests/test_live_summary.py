@@ -7,6 +7,7 @@ import json
 from contextlib import suppress
 from typing import Any
 
+import yaml
 from conftest import ROOT, load_file
 
 from packages.contracts.realtime import MAX_HOT_PODS, LiveSummary
@@ -192,6 +193,22 @@ def test_publisher_without_gateway_url_is_noop() -> None:
 
 def test_derive_gateway_url_from_management_base_url() -> None:
     module = load_live_summary_module()
-    assert module.derive_gateway_url("http://192.168.0.10:30080") == "ws://192.168.0.10:30090"
-    assert module.derive_gateway_url("https://mgmt.example.com") == "wss://mgmt.example.com:30090"
+    port = module.agent_config.DEFAULT_REALTIME_GATEWAY_NODEPORT
+    assert module.derive_gateway_url("http://192.168.0.10:30080") == f"ws://192.168.0.10:{port}"
+    assert module.derive_gateway_url("https://mgmt.example.com") == f"wss://mgmt.example.com:{port}"
     assert module.derive_gateway_url("") == ""
+
+
+def test_default_nodeport_aligned_with_management_manifest() -> None:
+    """agent 기본 NodePort ↔ deploy manifest 정렬 — 한쪽만 바뀌는 drift 를 차단."""
+    module = load_live_summary_module()
+    manifest = (ROOT / "deploy" / "management" / "services.yaml").read_text(encoding="utf-8")
+    service = next(
+        doc
+        for doc in yaml.safe_load_all(manifest)
+        if doc
+        and doc.get("kind") == "Service"
+        and doc.get("metadata", {}).get("name") == "realtime-gateway"
+    )
+    node_ports = [port["nodePort"] for port in service["spec"]["ports"]]
+    assert node_ports == [module.agent_config.DEFAULT_REALTIME_GATEWAY_NODEPORT]
