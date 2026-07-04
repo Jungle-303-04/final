@@ -935,10 +935,8 @@ main() {
   else
     log "using existing EKS clusters"
     configure_existing_cluster_context "${MGMT_CLUSTER}"
-    if [[ "${REGISTER_TARGETS}" == "1" ]]; then
-      configure_existing_cluster_context "${TARGET_CLUSTER_1}"
-      configure_existing_cluster_context "${TARGET_CLUSTER_2}"
-    fi
+    configure_existing_cluster_context "${TARGET_CLUSTER_1}"
+    configure_existing_cluster_context "${TARGET_CLUSTER_2}"
   fi
 
   if [[ "${ENSURE_EBS_CSI}" == "1" ]]; then
