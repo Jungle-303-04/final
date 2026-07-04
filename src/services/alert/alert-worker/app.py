@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
 from packages.config.logs import get_logger
+from packages.contracts.alert.provider import AlertProvider
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
 
@@ -27,20 +28,27 @@ def allow_after_alarm_gate(evt: AlertRequestedBody) -> bool:
     return True
 
 
-def build_dispatched_body(evt: AlertRequestedBody) -> AlertDispatchedBody:
-    # TODO(alert): Slack/Email/PagerDuty 알림 전송과 provider delivery id 저장
-    return AlertDispatchedBody(
-        cluster_id=evt.cluster_id,
-        namespace=evt.namespace,
-        severity=evt.severity,
-        channel=DEFAULT_ALERT_CHANNEL,
-        mode=STUB_ALERT_MODE,
-        workspace_id=evt.workspace_id,
-        application_id=evt.application_id,
-        workflow_run_id=evt.workflow_run_id,
-        binding_id=evt.binding_id,
-        environment=evt.environment,
-    )
+class StubAlertProvider:
+    """AlertProvider 구현 — 외부 전송 없이 dispatched body 만 구성하는 스텁."""
+
+    async def dispatch(self, alert: AlertRequestedBody) -> AlertDispatchedBody:
+        # TODO(alert): Slack/Email/PagerDuty 알림 전송과 provider delivery id 저장
+        return AlertDispatchedBody(
+            cluster_id=alert.cluster_id,
+            namespace=alert.namespace,
+            severity=alert.severity,
+            channel=DEFAULT_ALERT_CHANNEL,
+            mode=STUB_ALERT_MODE,
+            workspace_id=alert.workspace_id,
+            application_id=alert.application_id,
+            workflow_run_id=alert.workflow_run_id,
+            binding_id=alert.binding_id,
+            environment=alert.environment,
+        )
+
+
+# 전송 전략 주입 지점 — 지금은 스텁 provider 하나만 씀.
+ALERT_PROVIDER: AlertProvider = StubAlertProvider()
 
 
 @app.on(AlertRequestedBody)
@@ -51,7 +59,7 @@ async def on_alert_requested(
         yield AlertRejectedBody(reason=ALERT_GATE_BLOCKED_REASON, requested=evt.to_body())
         return
 
-    yield build_dispatched_body(evt)
+    yield await ALERT_PROVIDER.dispatch(evt)
     if evt.next_command is not None:
         yield evt.next_command
 

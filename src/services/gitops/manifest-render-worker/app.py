@@ -36,6 +36,7 @@ from packages.contracts.gitops import (
     ManifestArtifactStatus,
     supported_kubernetes_resource,
 )
+from packages.contracts.gitops.renderer import ManifestRenderer
 from packages.contracts.stores import RepoChangeStore
 from packages.runtime.app import App, EventContext
 
@@ -239,38 +240,50 @@ def build_rendered_manifests_from_git_change(evt: GitChangedBody) -> list[Render
     source = read_manifest_source(evt)
     if source is not None:
         return parse_rendered_manifest_source(source)
-    return [render_deployment_manifest(build_manifest_from_git_change(evt))]
+    return [RENDERER.render(build_manifest_from_git_change(evt))]
+
+
+class DeploymentRenderer:
+    """ManifestRenderer 구현 — Deployment 전용 stub shape 를 렌더함."""
+
+    def render(self, manifest: Manifest) -> RenderedManifest:
+        # TODO(gitops): Deployment 전용 shape를 Kustomize/Helm renderer 출력으로 교체
+        # TODO(gitops): raw exception 대신 구조화된 render 오류 반환
+        raw = {
+            "apiVersion": MANIFEST_API_VERSION,
+            "kind": MANIFEST_KIND,
+            "metadata": {"name": manifest.app, "namespace": manifest.namespace},
+            "spec": {
+                "replicas": manifest.replicas,
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": manifest.app,
+                                "image": manifest.image,
+                            }
+                        ]
+                    }
+                },
+            },
+        }
+        return RenderedManifest(
+            api_version=MANIFEST_API_VERSION,
+            kind=MANIFEST_KIND,
+            metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
+            spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
+            manifest=raw,
+            declared_fields=extract_declared_field_paths(raw),
+        )
+
+
+# 렌더 전략 주입 지점 — 지금은 Deployment stub 렌더러 하나만 씀.
+RENDERER: ManifestRenderer = DeploymentRenderer()
 
 
 def render_deployment_manifest(manifest: Manifest) -> RenderedManifest:
-    # TODO(gitops): Deployment 전용 shape를 Kustomize/Helm renderer 출력으로 교체
-    # TODO(gitops): raw exception 대신 구조화된 render 오류 반환
-    raw = {
-        "apiVersion": MANIFEST_API_VERSION,
-        "kind": MANIFEST_KIND,
-        "metadata": {"name": manifest.app, "namespace": manifest.namespace},
-        "spec": {
-            "replicas": manifest.replicas,
-            "template": {
-                "spec": {
-                    "containers": [
-                        {
-                            "name": manifest.app,
-                            "image": manifest.image,
-                        }
-                    ]
-                }
-            },
-        },
-    }
-    return RenderedManifest(
-        api_version=MANIFEST_API_VERSION,
-        kind=MANIFEST_KIND,
-        metadata=RenderedMetadata(name=manifest.app, namespace=manifest.namespace),
-        spec=RenderedSpec(replicas=manifest.replicas, image=manifest.image),
-        manifest=raw,
-        declared_fields=extract_declared_field_paths(raw),
-    )
+    """기존 호출자 호환용 — 렌더 전략 인스턴스로 위임함."""
+    return RENDERER.render(manifest)
 
 
 def rendered_resource_suffix(rendered: RenderedManifest) -> str:
