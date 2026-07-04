@@ -11,6 +11,17 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.target import TargetReconcileStatus
 
 
+@event(EventSubject.AGENT_CONNECTED)
+@dataclass(frozen=True)
+class AgentConnectedBody(EventBody):
+    """agent.connected — target cluster agent가 management plane에 등록됨."""
+
+    cluster_id: str
+    agent_id: str
+    capabilities: list[str] = field(default_factory=list)
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
 @dataclass(frozen=True)
 class TargetDesiredComponent(EventBody):
     """Target cluster에 유지해야 하는 컴포넌트 목표 상태."""

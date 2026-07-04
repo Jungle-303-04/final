@@ -21,13 +21,13 @@ from domains.identity.dependencies import (
 from domains.identity.router import router as identity_router
 from domains.providers.router import router as providers_router
 from domains.rca.router import router as rca_router
+from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
-from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gateway.requests import AgentConnectRequest
@@ -158,12 +158,13 @@ class ApiGateway:
             identity: ClusterAgentIdentity = Depends(require_cluster_agent),
         ) -> AcceptedResponse:
             # cluster_id/workspace_id 는 토큰 identity 에서 — body 의 cluster_id 는 신뢰 안 함.
-            body = {
-                **payload.model_dump(),
-                "cluster_id": identity.cluster_id,
-                "workspace_id": identity.workspace_id,
-            }
-            accepted = await self.events.accept(EventSubject.AGENT_CONNECTED, body)
+            accepted = await self.events.accept_body(
+                AgentConnectedBody(
+                    **payload.model_dump(),
+                    cluster_id=identity.cluster_id,
+                    workspace_id=identity.workspace_id,
+                )
+            )
             return AcceptedResponse(
                 accepted=True,
                 event_id=accepted.event.event_id,

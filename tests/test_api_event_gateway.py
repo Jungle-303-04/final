@@ -4,6 +4,7 @@ import asyncio
 from contextlib import contextmanager
 from typing import Any
 
+from domains.target.events import AgentConnectedBody
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.subjects import EventSubject
@@ -76,7 +77,7 @@ def test_api_event_gateway_stages_supported_recorder_without_direct_publish() ->
         recorder = DurableRecorder()
         gateway = ApiEventGateway(publisher, recorder, "api-gateway")
 
-        accepted = await gateway.accept(EventSubject.AGENT_CONNECTED, {"cluster_id": "c1"})
+        accepted = await gateway.accept_body(AgentConnectedBody(cluster_id="c1", agent_id="a1"))
 
         assert publisher.events == []
         assert recorder.events == [accepted.event]
