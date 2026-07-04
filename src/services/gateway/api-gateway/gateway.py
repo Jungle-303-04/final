@@ -19,6 +19,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
+from domains.providers.router import router as providers_router
 from domains.rca.router import router as rca_router
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
@@ -123,6 +124,7 @@ class ApiGateway:
         app = self.app
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(providers_router)  # provider catalog/validation for product install UI
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
