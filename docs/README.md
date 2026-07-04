@@ -42,7 +42,7 @@ force push하지 않는다.
 | 실행/운영 | [operations-deployment](operations-deployment.md), [production-readiness](production-readiness.md), [hardening-roadmap](hardening-roadmap.md), [secrets](secrets.md) |
 | 설계 참고 | [service-split-plan](service-split-plan.md), [domain-architecture-plan](domain-architecture-plan.md), [outbox-design](outbox-design.md), [GitOps Fleet Control Plane 전환안](gitops-fleet-control-plane.md), [Plural Console 기술 챌린지](team/plural-console-technical-challenge.md) |
 | 팀 운영 | [work-allocation](team/work-allocation.md), [implementation-todo](team/implementation-todo.md), [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md), [contract-vs-demo-boundary](team/contract-vs-demo-boundary.md), [codex-automation](team/codex-automation.md) |
-| Target 상세 | `docs/team/member-guides/target-telemetry-*.md` |
+| Target 상세 | [Target Agent Command / Evidence 구현 가이드](team/member-guides/target-agent-command-evidence-flow.md), `docs/team/member-guides/target-telemetry-*.md` |
 
 ## WIKI와 source repo 기준
 

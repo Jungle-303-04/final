@@ -108,6 +108,7 @@ make kill-pod DEPLOYMENT=rca-worker
 - [docs/README.md](docs/README.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/events.md](docs/events.md)
+- [docs/team/member-guides/target-agent-command-evidence-flow.md](docs/team/member-guides/target-agent-command-evidence-flow.md)
 - [docs/gitops-fleet-control-plane.md](docs/gitops-fleet-control-plane.md)
 - [docs/operations-deployment.md](docs/operations-deployment.md)
 - [docs/service-split-plan.md](docs/service-split-plan.md)
