@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+import httpx
+
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
 from packages.config.logs import get_logger
 from packages.config.settings import env
@@ -19,11 +21,20 @@ from packages.runtime.app import App, EventContext
 app = App("alert-worker")
 LOGGER = get_logger(__name__)
 
-DEFAULT_ALERT_CHANNEL = "ops"
-STUB_ALERT_MODE = "stub_alarm_adapter"
 ALERT_GATE_BLOCKED_REASON = "pre-deploy alert gate blocked"
+ALERT_DISPATCH_FAILED_REASON = "alert dispatch failed"
 ALERT_PROVIDER_ENV = "ALERT_PROVIDER"
-STUB_PROVIDER_NAME = "stub"
+LOG_PROVIDER_NAME = "log"
+WEBHOOK_PROVIDER_NAME = "webhook"
+ALERT_WEBHOOK_URL_ENV = "ALERT_WEBHOOK_URL"
+ALERT_HTTP_TIMEOUT_SECONDS_ENV = "ALERT_HTTP_TIMEOUT_SECONDS"  # 웹훅 타임아웃 초(기본 10)
+DEFAULT_ALERT_HTTP_TIMEOUT_SECONDS = "10"
+# 웹훅 URL 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
+# 각 alert.requested 는 alert.rejected 경로로 흐름.
+MISSING_WEBHOOK_URL_MESSAGE = (
+    f"{ALERT_WEBHOOK_URL_ENV} 미설정 — webhook provider 는 전송 대상 URL 없이 "
+    "알림을 전송할 수 없음. deploy env 에 웹훅 URL 을 설정해야 함"
+)
 
 
 def allow_after_alarm_gate(evt: AlertRequestedBody) -> bool:
@@ -48,35 +59,72 @@ def check_alert_policy(evt: AlertRequestedBody) -> AlertPolicyDecision:
     return AlertPolicyDecision(allowed=True)
 
 
-class StubAlertProvider:
-    """AlertProvider 구현 — 외부 전송 없이 dispatched body 만 구성하는 스텁."""
+def dispatched_body(alert: AlertRequestedBody, channel: str, mode: str) -> AlertDispatchedBody:
+    return AlertDispatchedBody(
+        cluster_id=alert.cluster_id,
+        namespace=alert.namespace,
+        severity=alert.severity,
+        channel=channel,
+        mode=mode,
+        workspace_id=alert.workspace_id,
+        application_id=alert.application_id,
+        workflow_run_id=alert.workflow_run_id,
+        binding_id=alert.binding_id,
+        environment=alert.environment,
+    )
+
+
+class LogAlertProvider:
+    """AlertProvider 구현 — 구조화 로그를 최소한의 정직한 싱크로 쓰는 기본 provider."""
 
     async def dispatch(self, alert: AlertRequestedBody) -> AlertDispatchedBody:
-        # TODO(alert): Slack/Email/PagerDuty 알림 전송과 provider delivery id 저장
-        return AlertDispatchedBody(
-            cluster_id=alert.cluster_id,
-            namespace=alert.namespace,
-            severity=alert.severity,
-            channel=DEFAULT_ALERT_CHANNEL,
-            mode=STUB_ALERT_MODE,
-            workspace_id=alert.workspace_id,
-            application_id=alert.application_id,
-            workflow_run_id=alert.workflow_run_id,
-            binding_id=alert.binding_id,
-            environment=alert.environment,
+        LOGGER.info(
+            "alert delivered to log sink",
+            extra={
+                "context": {
+                    "cluster_id": alert.cluster_id,
+                    "namespace": alert.namespace,
+                    "severity": alert.severity,
+                    "message": alert.message,
+                    "reason": alert.reason,
+                    "workspace_id": alert.workspace_id,
+                }
+            },
         )
+        return dispatched_body(alert, channel=LOG_PROVIDER_NAME, mode=LOG_PROVIDER_NAME)
 
 
-def build_alert_provider() -> AlertProvider:
-    """전송 전략 팩토리 — ALERT_PROVIDER env 로 선택(기본 stub), 미지 값은 fail-fast."""
-    name = env(ALERT_PROVIDER_ENV, STUB_PROVIDER_NAME).strip().lower()
-    if name == STUB_PROVIDER_NAME:
-        return StubAlertProvider()
-    # TODO(alert): slack/email/pagerduty provider 등록
-    raise RuntimeError(f"{ALERT_PROVIDER_ENV} 값이 지원되지 않음: {name}")
+class WebhookAlertProvider:
+    """AlertProvider 구현 — alert JSON 을 ALERT_WEBHOOK_URL 로 POST 함."""
+
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self.transport = transport
+
+    async def dispatch(self, alert: AlertRequestedBody) -> AlertDispatchedBody:
+        url = env(ALERT_WEBHOOK_URL_ENV, "").strip()
+        if not url:
+            raise RuntimeError(MISSING_WEBHOOK_URL_MESSAGE)
+        timeout = float(env(ALERT_HTTP_TIMEOUT_SECONDS_ENV, DEFAULT_ALERT_HTTP_TIMEOUT_SECONDS))
+        async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as client:
+            response = await client.post(url, json=alert.to_body())
+            response.raise_for_status()
+        return dispatched_body(alert, channel=WEBHOOK_PROVIDER_NAME, mode=WEBHOOK_PROVIDER_NAME)
 
 
-# 전송 전략 주입 지점 — env 로 선택(지금은 스텁 provider 하나만 등록됨).
+def build_alert_provider(name: str | None = None) -> AlertProvider:
+    """전송 전략 팩토리 — ALERT_PROVIDER env 로 선택(기본 log), 미지 값은 fail-fast.
+
+    webhook 의 URL 부재는 부팅 실패가 아니라 요청 시점 alert.rejected 로 처리함.
+    """
+    provider = (name or env(ALERT_PROVIDER_ENV, LOG_PROVIDER_NAME)).strip().lower()
+    if provider == LOG_PROVIDER_NAME:
+        return LogAlertProvider()
+    if provider == WEBHOOK_PROVIDER_NAME:
+        return WebhookAlertProvider()
+    raise RuntimeError(f"{ALERT_PROVIDER_ENV} 값이 지원되지 않음: {provider}")
+
+
+# 전송 전략 주입 지점 — env 로 선택(log 기본, webhook 선택 가능).
 ALERT_PROVIDER: AlertProvider = build_alert_provider()
 
 
@@ -89,7 +137,25 @@ async def on_alert_requested(
         yield AlertRejectedBody(reason=decision.reason, requested=evt.to_body())
         return
 
-    yield await ALERT_PROVIDER.dispatch(evt)
+    try:
+        dispatched = await ALERT_PROVIDER.dispatch(evt)
+    except Exception as exc:  # noqa: BLE001 - 외부 전송은 무엇이든 실패 가능
+        # 전송 확인 없이는 next_command 를 이어주지 않음(fail-closed).
+        LOGGER.warning(
+            "alert dispatch failed",
+            extra={
+                "context": {
+                    "cluster_id": evt.cluster_id,
+                    "severity": evt.severity,
+                    "exception_type": type(exc).__name__,
+                    "detail": str(exc),
+                }
+            },
+        )
+        yield AlertRejectedBody(reason=ALERT_DISPATCH_FAILED_REASON, requested=evt.to_body())
+        return
+
+    yield dispatched
     if evt.next_command is not None:
         yield evt.next_command
 
