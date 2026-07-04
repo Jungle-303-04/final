@@ -83,7 +83,7 @@ async def on_ai_message_received(
             agent=evt.agent,
             workspace_id=evt.workspace_id,
             metadata={
-                "llm": describe_llm_client(llm_client),
+                "llm": describe_llm_client(engine.llm),
                 "raw_length": result.raw_length,
                 "tool_trace": result.tool_trace,
                 "request_event_id": ctx.event_id,

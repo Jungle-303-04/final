@@ -40,7 +40,7 @@ GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
 GEMINI_BASE_URL_ENV = "GEMINI_BASE_URL"
 GEMINI_MODEL_ENV = "GEMINI_MODEL"
 
-DEFAULT_LLM_PROVIDER = "fake"
+DEFAULT_LLM_PROVIDER = "openai"
 DEFAULT_LLM_TIMEOUT_SECONDS = "30"
 DEFAULT_LLM_MAX_RETRIES = "2"
 DEFAULT_LLM_MAX_TOKENS = "1024"
@@ -56,14 +56,13 @@ DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
 RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
 
-PROVIDER_FAKE = "fake"
 PROVIDER_OPENAI = "openai"
 PROVIDER_OPENAI_COMPATIBLE = "openai-compatible"
 PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_GEMINI = "gemini"
 
 _PROVIDER_ALIASES = {
-    "": PROVIDER_FAKE,
+    "": PROVIDER_OPENAI,  # env 미설정 시 기본 provider — 자격 증명 검증은 요청 시점에 함
     "http": PROVIDER_OPENAI_COMPATIBLE,
     "openai_compatible": PROVIDER_OPENAI_COMPATIBLE,
     "openai-compatible": PROVIDER_OPENAI_COMPATIBLE,
@@ -72,7 +71,6 @@ _PROVIDER_ALIASES = {
     "anthropic": PROVIDER_ANTHROPIC,
     "google": PROVIDER_GEMINI,
     "gemini": PROVIDER_GEMINI,
-    "fake": PROVIDER_FAKE,
     "openai": PROVIDER_OPENAI,
 }
 
@@ -112,22 +110,6 @@ class LlmProviderSettings:
     max_retries: int
     default_max_tokens: int
     anthropic_version: str = DEFAULT_ANTHROPIC_VERSION
-
-
-class FakeLlmClient:
-    """Deterministic fake adapter for local development and tests."""
-
-    def __init__(self, canned_text: str = "fake-llm-response") -> None:
-        self.canned_text = canned_text
-        self.prompts: list[str] = []
-
-    async def complete(self, prompt: str, **options: Any) -> str:
-        self.prompts.append(prompt)
-        return self.canned_text
-
-    async def complete_json(self, prompt: str, schema: dict[str, Any], **options: Any) -> Any:
-        self.prompts.append(prompt)
-        return {key: None for key in schema.get("properties", {})}
 
 
 class LlmGateway:
@@ -188,9 +170,6 @@ class LlmGateway:
             "timeout_seconds": settings.timeout_seconds,
             "max_retries": settings.max_retries,
         }
-
-    def prepare_default(self) -> None:
-        self._provider_adapter(self.default_provider)
 
     def _provider_settings(self, provider: str) -> LlmProviderSettings:
         if provider not in self._settings:
@@ -331,14 +310,12 @@ class GeminiGenerateContentAdapter:
 
 
 def build_llm_client() -> LlmClient:
-    gateway = LlmGateway(default_provider=env(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER))
-    gateway.prepare_default()
-    return gateway
+    # provider 이름 오설정은 여기(부팅)에서 즉시 실패, API 키 부재는 요청 시점에
+    # ValueError 로 실패해 워커의 실패 이벤트(ai.message.failed 등) 경로로 수렴함.
+    return LlmGateway(default_provider=env(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER))
 
 
 def build_provider_adapter(settings: LlmProviderSettings) -> LlmProviderAdapter:
-    if settings.provider == PROVIDER_FAKE:
-        return FakeLlmClient()
     if settings.provider in {PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE}:
         return OpenAiChatCompletionsAdapter(settings)
     if settings.provider == PROVIDER_ANTHROPIC:
@@ -354,17 +331,6 @@ def load_provider_settings(provider: str) -> LlmProviderSettings:
     max_retries = int(env(LLM_MAX_RETRIES_ENV, DEFAULT_LLM_MAX_RETRIES))
     default_max_tokens = int(env(LLM_MAX_TOKENS_ENV, DEFAULT_LLM_MAX_TOKENS))
 
-    if normalized == PROVIDER_FAKE:
-        return LlmProviderSettings(
-            provider=normalized,
-            base_url="",
-            api_key="",
-            api_key_env=None,
-            model="fake",
-            timeout_seconds=timeout_seconds,
-            max_retries=max_retries,
-            default_max_tokens=default_max_tokens,
-        )
     if normalized == PROVIDER_OPENAI:
         return _http_settings(
             provider=normalized,
