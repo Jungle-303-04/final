@@ -15,8 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from domains.gitops.diffing import rendered_manifest_to_object
+from packages.config.settings import env
 
 JsonObject = dict[str, Any]
+
+# dry-run kubectl 호출 타임아웃 초 — env 미설정 시 기존 기본값(10) 유지(배포 호환)
+DRY_RUN_TIMEOUT_SECONDS_ENV = "GITOPS_DRY_RUN_TIMEOUT_SECONDS"
+DRY_RUN_TIMEOUT_SECONDS = int(env(DRY_RUN_TIMEOUT_SECONDS_ENV, "10"))
 
 
 @dataclass(frozen=True)
@@ -31,7 +36,7 @@ def load_dry_run_objects(
     *,
     kubectl: str = "kubectl",
     field_manager: str = "myjob-gitops",
-    timeout_seconds: int = 10,
+    timeout_seconds: int = DRY_RUN_TIMEOUT_SECONDS,
 ) -> DryRunObjects:
     desired = rendered_manifest_to_object(rendered)
     with tempfile.TemporaryDirectory(prefix="myjob-gitops-dryrun-") as tmp:
