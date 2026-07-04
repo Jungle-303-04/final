@@ -66,7 +66,7 @@ class EventSubject(StrEnum):
     APPROVAL_RECOMMENDED = "approval.recommended"  # 승인/거절 보조 판단
     RCA_ACTION_REQUIRED = "rca.action_required"  # 자동 진행 불가, 사람 조치 필요
     ALERT_REQUESTED = "alert.requested"  # 알람 전송/사전 배포 게이트 요청
-    ALERT_DISPATCHED = "alert.dispatched"  # 알람 전송 완료(또는 stub 통과)
+    ALERT_DISPATCHED = "alert.dispatched"  # 알람 전송 완료(log/webhook provider)
     ALERT_REJECTED = "alert.rejected"  # 알람/정책 게이트 차단
     EMAIL_VERIFICATION_REQUESTED = "mail.email_verification.requested"  # 이메일 인증 요청
     EMAIL_VERIFICATION_SENT = "mail.email_verification.sent"  # 이메일 인증 발송 완료
