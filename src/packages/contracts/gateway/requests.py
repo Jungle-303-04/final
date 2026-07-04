@@ -192,6 +192,10 @@ class CommandResultRequest(StrictModel):
     lease_id: str
     applied: bool = False
     message: str = EMPTY_COMMAND_MESSAGE
+    retryable: bool = False
+    resources: list[dict[str, Any]] = Field(default_factory=list)
+    stdout: str = ""
+    stderr: str = ""
 
 
 class EvidenceJobScheduleRequest(StrictModel):

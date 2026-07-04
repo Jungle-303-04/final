@@ -308,6 +308,8 @@ async def on_event(evt: EventEnvelope, ctx):
 
 `command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 거부하고, `Plan`과 `command.queued_for_agent`에도 같은 ref를 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다. ref의 만료/권한 검증과 TokenVault 연동은 아직 다음 P0 작업이다.
 
+`command.completed.result`는 agent 결과 보고 기준으로 `applied`, `retryable`, `resources`, `stdout`, `stderr`를 포함할 수 있다. target `cluster-agent`는 write command 결과에 resource별 status를 채우고 stdout/stderr를 제한 길이와 민감 문자열 redaction으로 정리한다.
+
 ## Repo / Cluster 매핑 상태
 
 Git repo와 target cluster는 직접 1:1로 묶지 않는다. `deployment_bindings`를

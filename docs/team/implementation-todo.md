@@ -37,7 +37,7 @@
 | Policy route | GitOps / Command, Gateway / Auth, Target / Agent | operation, namespace, resource class, environment, approval state로 route를 결정하고 audit에 남긴다. |
 | Token boundary | Gateway / Auth, Platform | TokenVault/SecretVault port, credential_ref, rotation, non-leak 테스트가 있다. |
 | Approval evidence | Gateway / Auth, GitOps / Command, Target / Agent | write command에 approval_ref/policy_decision_ref가 있고 agent가 이를 검증한다. 누락 거부와 payload 전달은 구현됐고, ref 만료/권한 검증은 남은 P0다. |
-| Agent partial failure | Target / Agent, Platform | sanitized stdout/stderr, per-resource status, retryable flag, applied flag가 command result에 남는다. |
+| Agent partial failure | Target / Agent, Platform | sanitized stdout/stderr, per-resource status, retryable flag, applied flag가 command result에 남는다. 기본 result schema는 구현됐고, 단계별 partial apply와 retryable 분류 고도화는 남았다. |
 | AI tool guardrail | RCA / Safe PR, Platform, Gateway / Auth | tool schema, tool authorization, cost/timeout guardrail, malformed reply 테스트가 있다. |
 | Control-plane observability | Platform, Target / Telemetry | worker latency, NATS lag, outbox age, DLQ율, command queue age, trace correlation metric이 있다. |
 
@@ -172,7 +172,7 @@ TODO:
 - TODO(telemetry): fake Prometheus/Loki/OTel adapter는 fallback으로 남기되 실제 adapter와 같은 interface를 구현한다.
 - TODO(target): Target Agent는 command/result를 telemetry/evidence보다 우선 처리하도록 bounded queue와 local durable outbound spool 설계를 적용한다. 세부 기준은 `docs/team/member-guides/target-agent-local-queue.md`를 따른다.
 - TODO(target): agent action allowlist를 workspace/repo/cluster/environment 정책과 approval evidence까지 확장한다. approval evidence 누락 거부는 구현됐고 workspace/repo/cluster 정책 동기화가 남았다.
-- TODO(target): command result에 sanitized stdout/stderr, resource별 status, retryable flag, applied flag를 포함한다.
+- TODO(target): command result에 sanitized stdout/stderr, resource별 status, retryable flag, applied flag를 포함한다. 기본 필드는 구현됐고, 다중 resource partial apply와 retryable 분류 고도화가 남았다.
 - TODO(telemetry): evidence provider failure/fallback, source freshness, payload size를 control-plane metric/audit metadata로 남긴다.
 
 완료 기준:
