@@ -152,6 +152,8 @@ class CommandRequest(StrictModel):
     namespace: str = Sandbox.NAMESPACE
     reason: str | None = None
     diff: dict[str, Any] | None = None
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
 
 
 class AiConversationCreateRequest(StrictModel):

@@ -155,6 +155,9 @@ class AgentConfig:
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
     MANIFEST_PATCHED_MESSAGE = "Kubernetes manifest patched in sandbox namespace"
     WRITE_NAMESPACE_DENIED_MESSAGE = "only sandbox namespace writes are allowed"
+    MISSING_APPROVAL_EVIDENCE_MESSAGE = (
+        "write command requires approval_ref and policy_decision_ref"
+    )
 
 
 class HttpManagementPlaneClient:
@@ -737,18 +740,47 @@ class TargetClusterAgent:
             )
 
     async def execute_command(self, command: CommandRecord) -> JsonObject:
-        # TODO(target): action 허용 목록을 workspace/repo/cluster 정책과 승인 증거로 확장
         # TODO(target): stdout/stderr/status 수집과 원본 secret 없는 부분 실패 보고
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
+        if self.write_action_requires_approval(action) and not self.has_approval_evidence(command):
+            return self.command_result(False, AgentConfig.MISSING_APPROVAL_EVIDENCE_MESSAGE)
         try:
             return await self.command_registry.execute(
                 action,
                 payload,
-                metadata={Gateway.COMMAND_ID: command.get(Gateway.COMMAND_ID, "")},
+                metadata={
+                    Gateway.COMMAND_ID: command.get(Gateway.COMMAND_ID, ""),
+                    Gateway.APPROVAL_REF: self.command_metadata_value(
+                        command, Gateway.APPROVAL_REF
+                    ),
+                    Gateway.POLICY_DECISION_REF: self.command_metadata_value(
+                        command, Gateway.POLICY_DECISION_REF
+                    ),
+                },
             )
         except Exception as exc:
             return self.command_result(False, str(exc))
+
+    def write_action_requires_approval(self, action: str) -> bool:
+        return action in {AgentConfig.APPLY_MANIFEST_ACTION, AgentConfig.ROLLOUT_RESTART_ACTION}
+
+    def command_metadata_value(self, command: CommandRecord, field: str) -> str:
+        value = command.get(field)
+        if isinstance(value, str) and value:
+            return value
+        payload = command.get(Gateway.PAYLOAD)
+        if isinstance(payload, dict):
+            nested = payload.get(field)
+            if isinstance(nested, str) and nested:
+                return nested
+        return ""
+
+    def has_approval_evidence(self, command: CommandRecord) -> bool:
+        return bool(
+            self.command_metadata_value(command, Gateway.APPROVAL_REF)
+            and self.command_metadata_value(command, Gateway.POLICY_DECISION_REF)
+        )
 
     @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
     async def run_query_command(

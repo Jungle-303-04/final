@@ -34,6 +34,8 @@ class CommandRequestedBody(EventBody):
     environment: str = DEFAULT_ENVIRONMENT
     requested_by: str | None = None
     actor: JsonObject | None = None
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,8 @@ class Plan(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,8 @@ class CommandQueuedForAgentBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
 
 
 @event(EventSubject.COMMAND_REJECTED)

@@ -122,6 +122,8 @@ async def commands(
             diff=command_diff(payload, workspace_id),
             workspace_id=workspace_id,
             requested_by=current.user_id,
+            approval_ref=payload.approval_ref,
+            policy_decision_ref=payload.policy_decision_ref,
         ),
         actor=Actor(current.user_id, tuple(current.roles)),
     )

@@ -36,7 +36,7 @@
 | 실제 manifest patch PR | GitOps / Command, RCA / Safe PR | Safe PR이 검토 문서만이 아니라 실제 manifest patch 또는 rollback patch를 커밋한다. rendered manifest patch 커밋 경로는 구현됐고, rollback/diff basis/approval evidence는 남은 P0다. |
 | Policy route | GitOps / Command, Gateway / Auth, Target / Agent | operation, namespace, resource class, environment, approval state로 route를 결정하고 audit에 남긴다. |
 | Token boundary | Gateway / Auth, Platform | TokenVault/SecretVault port, credential_ref, rotation, non-leak 테스트가 있다. |
-| Approval evidence | Gateway / Auth, GitOps / Command, Target / Agent | write command에 approval_ref/policy_decision_ref가 있고 agent가 이를 검증한다. |
+| Approval evidence | Gateway / Auth, GitOps / Command, Target / Agent | write command에 approval_ref/policy_decision_ref가 있고 agent가 이를 검증한다. 누락 거부와 payload 전달은 구현됐고, ref 만료/권한 검증은 남은 P0다. |
 | Agent partial failure | Target / Agent, Platform | sanitized stdout/stderr, per-resource status, retryable flag, applied flag가 command result에 남는다. |
 | AI tool guardrail | RCA / Safe PR, Platform, Gateway / Auth | tool schema, tool authorization, cost/timeout guardrail, malformed reply 테스트가 있다. |
 | Control-plane observability | Platform, Target / Telemetry | worker latency, NATS lag, outbox age, DLQ율, command queue age, trace correlation metric이 있다. |
@@ -88,7 +88,7 @@ TODO:
 - TODO(gateway): agent registry/status, command poll/result API가 Target/Telemetry와 같은 DTO를 쓰도록 계약을 고정한다.
 - TODO(gateway): Git watch target 등록/조회/manual poll API는 Gateway가 설정과 권한만 관리하고 polling 실행은 worker가 맡게 한다.
 - TODO(gateway): `TokenVaultPort`/`SecretVault` port를 만들고 provider token은 event/log/DLQ에 직접 남지 않게 한다.
-- TODO(gateway): approval_ref, policy_decision_ref, approver, expiry를 command/write API와 audit에 연결한다.
+- TODO(gateway): approval_ref, policy_decision_ref, approver, expiry를 command/write API와 audit에 연결한다. command API 전달은 구현됐고 approver/expiry 검증은 남았다.
 - TODO(gateway): AI tool 실행 전 user/session/workspace/action scope를 확인할 policy port를 제공한다.
 
 완료 기준:
@@ -115,7 +115,7 @@ TODO:
 - TODO(gitops): diff route는 risk string이 아니라 operation, namespace, resource class, environment, approval state로 `safe_pr`/`approval_required`/`forbidden`/`command_requested`를 반환한다.
 - TODO(gitops): Safe PR 요청 body에 rollback patch ref, reviewer checklist, diff basis를 포함한다. rendered manifest patch는 `SafePrFilePatch`로 전달한다.
 - TODO(command): `command.requested`는 namespace/action 정책을 범용 rule로 검사하고 production write를 fail-closed한다.
-- TODO(command): write command는 approval_ref/policy_decision_ref가 없으면 fail-closed하고, agent queue payload에도 같은 근거를 싣는다.
+- TODO(command): write command는 approval_ref/policy_decision_ref가 없으면 fail-closed하고, agent queue payload에도 같은 근거를 싣는다. 누락 거부와 queue 전달은 구현됐고 ref 검증 store 연결은 남았다.
 - TODO(command): dispatch/queue 단계는 Target Agent를 직접 호출하지 않고 agent command queue 계약만 사용한다.
 - TODO(command): queue 저장 실패와 event 발행 불일치가 생기지 않도록 outbox/UoW 경계를 Platform과 맞춘다.
 
@@ -171,7 +171,7 @@ TODO:
 - TODO(telemetry): Kubernetes pod/event/node reader는 최소 RBAC와 sandbox write 제한을 테스트로 증명한다.
 - TODO(telemetry): fake Prometheus/Loki/OTel adapter는 fallback으로 남기되 실제 adapter와 같은 interface를 구현한다.
 - TODO(target): Target Agent는 command/result를 telemetry/evidence보다 우선 처리하도록 bounded queue와 local durable outbound spool 설계를 적용한다. 세부 기준은 `docs/team/member-guides/target-agent-local-queue.md`를 따른다.
-- TODO(target): agent action allowlist를 workspace/repo/cluster/environment 정책과 approval evidence까지 확장한다.
+- TODO(target): agent action allowlist를 workspace/repo/cluster/environment 정책과 approval evidence까지 확장한다. approval evidence 누락 거부는 구현됐고 workspace/repo/cluster 정책 동기화가 남았다.
 - TODO(target): command result에 sanitized stdout/stderr, resource별 status, retryable flag, applied flag를 포함한다.
 - TODO(telemetry): evidence provider failure/fallback, source freshness, payload size를 control-plane metric/audit metadata로 남긴다.
 
