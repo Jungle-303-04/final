@@ -23,12 +23,13 @@ def _diff(risk: str) -> Diff:
 def test_safe_diff_requests_pr() -> None:
     analyze = load_service("gitops/diff-analyze-worker")
     db = SpyDb()
+    diff = _diff("sandbox-only")
     safe = run_handler(
         analyze.on_desired_diff,
-        DesiredDesiredDiffDetectedBody(diff=_diff("sandbox-only")),
+        DesiredDesiredDiffDetectedBody(diff=diff),
         db=db,
     )
-    approval_ref = derive_approval_id("workflow-default")
+    approval_ref = derive_approval_id(diff.workflow_run_id)
     policy_decision_ref = f"policy-decision:{approval_ref}:safe_pr"
     assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested"]
     assert safe[0].safe is True

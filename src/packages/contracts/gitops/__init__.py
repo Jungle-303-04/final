@@ -119,13 +119,13 @@ def supported_kubernetes_resource(api_version: str, kind: str) -> KubernetesReso
         raise ValueError(f"unsupported manifest kind: {api_version}/{kind}") from None
 
 
-DEFAULT_REPOSITORY_ID = "repo-default"
-DEFAULT_WATCH_TARGET_ID = "watch-default"
-DEFAULT_DEPLOYMENT_BINDING_ID = "binding-default"
-DEFAULT_APPLICATION_ID = "app-checkout-api"
-DEFAULT_WORKFLOW_RUN_ID = "workflow-default"
+DEFAULT_REPOSITORY_ID = ""
+DEFAULT_WATCH_TARGET_ID = ""
+DEFAULT_DEPLOYMENT_BINDING_ID = ""
+DEFAULT_APPLICATION_ID = ""
+DEFAULT_WORKFLOW_RUN_ID = ""
 DEFAULT_ENVIRONMENT = "sandbox"
-DEFAULT_REPO_REF = "octocat/Hello-World"
+DEFAULT_REPO_REF = ""
 DEFAULT_REPO_BRANCH = "main"
 DEFAULT_MANIFEST_PATH = "deploy.yaml"
 GITHUB_TOKEN_ENV = "GITHUB_TOKEN"

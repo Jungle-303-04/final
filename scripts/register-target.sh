@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:18080}"
+GATEWAY_PORT="${GATEWAY_PORT:-18080}"
+BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-kind-target}"
 TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-target-cluster-01}"
 TARGET_NAME="${TARGET_NAME:-target-cluster}"
@@ -11,8 +12,11 @@ MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"
 PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://prometheus.target.svc:9090}"
 LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
-IMAGE_NAME="${IMAGE_NAME:-service:local}"
+IMAGE_NAME="${IMAGE_NAME:-}"
 INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
+INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}"
+SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}"
+SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}"
 COOKIE_JAR="$(mktemp)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
@@ -53,6 +57,14 @@ if [ -z "${MANAGEMENT_BASE_URL}" ]; then
   echo "MANAGEMENT_BASE_URL is required" >&2
   exit 1
 fi
+if [ -z "${IMAGE_NAME}" ]; then
+  echo "IMAGE_NAME is required for cluster-agent and node-collector manifests" >&2
+  exit 1
+fi
+if is_true "${INSTALL_SAMPLE_WORKLOAD}" && { [ -z "${SAMPLE_WORKLOAD_NAME}" ] || [ -z "${SAMPLE_WORKLOAD_IMAGE}" ]; }; then
+  echo "SAMPLE_WORKLOAD_NAME and SAMPLE_WORKLOAD_IMAGE are required when INSTALL_SAMPLE_WORKLOAD is true" >&2
+  exit 1
+fi
 
 echo "==> logging in operator for target registration"
 login_with_password "${BASE_URL}" "${COOKIE_JAR}"
@@ -68,18 +80,22 @@ registration_body="$(
   EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS}" \
   IMAGE_NAME="${IMAGE_NAME}" \
   INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR}" \
+  INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD}" \
+  SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME}" \
+  SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE}" \
   python3 - <<'PY'
 import json
 import os
 
-install_node_collector = os.environ["INSTALL_NODE_COLLECTOR"].lower() in {
+truthy = {
     "1",
     "true",
     "yes",
     "on",
 }
-
-print(json.dumps({
+install_node_collector = os.environ["INSTALL_NODE_COLLECTOR"].lower() in truthy
+install_sample_workload = os.environ["INSTALL_SAMPLE_WORKLOAD"].lower() in truthy
+body = {
     "cluster_id": os.environ["TARGET_CLUSTER_ID"],
     "name": os.environ["TARGET_NAME"],
     "environment": os.environ["TARGET_ENVIRONMENT"],
@@ -90,8 +106,14 @@ print(json.dumps({
     "evidence_interval_seconds": int(os.environ["EVIDENCE_INTERVAL_SECONDS"]),
     "image": os.environ["IMAGE_NAME"],
     "install_node_collector": install_node_collector,
+    "install_sample_workload": install_sample_workload,
     "apply": False,
-}))
+}
+if install_sample_workload:
+    body["sample_workload_name"] = os.environ["SAMPLE_WORKLOAD_NAME"]
+    body["sample_workload_image"] = os.environ["SAMPLE_WORKLOAD_IMAGE"]
+
+print(json.dumps(body))
 PY
 )"
 
@@ -109,7 +131,9 @@ printf "%s" "${registration_response}" \
   | python3 -c 'import json, sys; print(json.load(sys.stdin)["install_manifest"])' \
   | kubectl --context "${TARGET_CONTEXT}" apply -f -
 
-kubectl --context "${TARGET_CONTEXT}" -n sandbox rollout status deploy/checkout-api --timeout=120s
+if is_true "${INSTALL_SAMPLE_WORKLOAD}"; then
+  kubectl --context "${TARGET_CONTEXT}" -n sandbox rollout status "deploy/${SAMPLE_WORKLOAD_NAME}" --timeout=120s
+fi
 kubectl --context "${TARGET_CONTEXT}" -n target rollout restart deploy/cluster-agent
 kubectl --context "${TARGET_CONTEXT}" -n target rollout status deploy/cluster-agent --timeout=180s
 if is_true "${INSTALL_NODE_COLLECTOR}"; then

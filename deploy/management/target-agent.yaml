@@ -84,7 +84,7 @@ spec:
       serviceAccountName: cluster-agent
       containers:
         - name: agent
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/target/cluster-agent/app.py"]
           env:

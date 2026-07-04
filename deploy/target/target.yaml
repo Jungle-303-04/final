@@ -163,7 +163,7 @@ spec:
       serviceAccountName: cluster-agent
       containers:
         - name: cluster-agent
-          image: service:local
+          image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/target/cluster-agent/app.py"]
           envFrom:
@@ -177,7 +177,7 @@ spec:
             - name: NODE_COLLECTOR_ENABLED
               value: "true"
             - name: NODE_COLLECTOR_IMAGE
-              value: service:local
+              value: kubeheal-service:latest
             - name: NODE_COLLECTOR_NAMESPACE
               value: target
             - name: AGENT_CONTROL_DB_PATH

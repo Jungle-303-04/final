@@ -48,7 +48,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             sandbox_rbac_manifest(),
             runtime_config_manifest(payload),
             runtime_secret_manifest(agent_token),
-            checkout_api_manifest(payload.image),
+            sample_workload_manifest(payload),
             cluster_agent_manifest(payload),
         ]
         if block.strip()
@@ -223,25 +223,33 @@ stringData:
 """
 
 
-def checkout_api_manifest(image: str) -> str:
+def sample_workload_manifest(payload: TargetRegisterRequest) -> str:
+    if not payload.install_sample_workload:
+        return ""
+    if not payload.sample_workload_name or not payload.sample_workload_image:
+        raise ValueError("sample workload install requires name and image")
+    return workload_manifest(payload.sample_workload_name, payload.sample_workload_image)
+
+
+def workload_manifest(name: str, image: str) -> str:
     return f"""
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: checkout-api
+  name: {yaml_string(name)}
   namespace: sandbox
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: checkout-api
+      app: {yaml_string(name)}
   template:
     metadata:
       labels:
-        app: checkout-api
+        app: {yaml_string(name)}
     spec:
       containers:
-        - name: checkout-api
+        - name: {yaml_string(name)}
           image: {yaml_string(image)}
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "http.server", "8080"]
