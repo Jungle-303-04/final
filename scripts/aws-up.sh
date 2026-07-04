@@ -187,7 +187,7 @@ valid_github_token() {
   local token="$1"
   [[ -n "${token}" ]] || return 1
   [[ "${token}" != *"<"* && "${token}" != *">"* ]] || return 1
-  [[ "${token}" != ghp_여기* ]] || return 1
+  [[ "${token}" != *PLACEHOLDER* && "${token}" != *TOKEN_HERE* ]] || return 1
   LC_ALL=C grep -q '^[[:print:]]\+$' <<<"${token}"
 }
 

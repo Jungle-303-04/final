@@ -7,11 +7,9 @@ cluster-agent와 같은 timer producer 형태: 주기마다 외부 호출 후
 api-gateway의 /github/webhook으로 POST. 이후 경로는 webhook과 동일
 (outbox → NATS → git-pull-worker → pipeline).
 
-TODO(handoff): 실제 조회 최소 흐름(매번 최신 commit 1건)
-  production optimization:
-    - cursor/ETag(If-None-Match)로 incremental 조회 → 변경 없으면 304, rate limit 절약
-    - X-RateLimit-Remaining 기반 throttle + 실패 시 exponential backoff
-  같은 commit 반복 조회도 기존 ledger dedup(정확히 한 번)으로 흡수
+현재 구현은 최신 commit 1건을 조회하고, 같은 commit 반복은 메모리 가드와
+ledger dedup으로 흡수한다. ETag/cursor 기반 incremental 조회는 provider
+adapter 내부 최적화로 추가할 수 있다.
 """
 
 from __future__ import annotations

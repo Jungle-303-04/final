@@ -38,7 +38,6 @@ HTTP_CONFLICT = 409
 
 
 def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody:
-    # TODO(gitops): branch, repository, installation, delivery id field 정규화
     return GitWebhookReceivedBody(**payload.model_dump())
 
 

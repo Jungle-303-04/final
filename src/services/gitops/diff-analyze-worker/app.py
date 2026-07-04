@@ -186,7 +186,6 @@ def build_pre_deploy_alert_request_body(
     diff: Diff, decision: PolicyDecision | None = None
 ) -> AlertRequestedBody:
     decision = decision or evaluate_safe_pr_policy(diff)
-    # TODO(alert): deployment window, blast radius, approver list, rollback metadata 포함
     return AlertRequestedBody(
         cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
         namespace=diff.namespace,
