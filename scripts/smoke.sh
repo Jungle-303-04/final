@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
+BASE_URL="${BASE_URL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${SCRIPT_DIR}/lib/env.sh"
 
 default_github_repo() {
   local url
@@ -17,7 +18,7 @@ default_github_repo() {
 }
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
-MGMT_CONTEXT="${MGMT_CONTEXT:-kubernetes-ops}"
+MGMT_CONTEXT="${MGMT_CONTEXT:-}"
 MGMT_NS="${MGMT_NS:-management}"
 SMOKE_IMAGE="${SMOKE_IMAGE:-}"
 SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE:-}"
@@ -27,8 +28,9 @@ MANIFEST_PATH="${MANIFEST_PATH:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 SMOKE_COMMIT_SHA="${SMOKE_COMMIT_SHA:-}"
-AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
-AUTH_PASSWORD="${AUTH_PASSWORD:-local-admin-password}"
+AUTH_EMAIL="${AUTH_EMAIL:-}"
+AUTH_PASSWORD="${AUTH_PASSWORD:-}"
+SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID:-}}"
 COOKIE_JAR="$(mktemp)"
 WEBHOOK_RESPONSE="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}" "${WEBHOOK_RESPONSE}"' EXIT
@@ -44,6 +46,10 @@ need() {
 
 need curl
 need python3
+require_env BASE_URL
+require_env AUTH_EMAIL
+require_env AUTH_PASSWORD
+require_env SMOKE_CLUSTER_ID
 
 load_management_config_value() {
   local key="$1"
@@ -101,6 +107,7 @@ load_webhook_secret() {
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ] || [ -z "${GITHUB_TOKEN}" ] \
   || [ -z "${SMOKE_IMAGE}" ] || [ -z "${MANIFEST_PATH}" ]; then
   need kubectl
+  require_env MGMT_CONTEXT
 fi
 
 if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
@@ -165,6 +172,7 @@ webhook_body="$(
   GITHUB_REPO="${GITHUB_REPO}" \
   GITHUB_BRANCH="${GITHUB_BRANCH}" \
   MANIFEST_PATH="${MANIFEST_PATH}" \
+  SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID}" \
   python3 - <<'PY'
 import json
 import os
@@ -178,7 +186,7 @@ print(
             "repo_ref": os.environ["GITHUB_REPO"],
             "branch": os.environ["GITHUB_BRANCH"],
             "manifest_path": os.environ["MANIFEST_PATH"],
-            "cluster_id": "target-cluster-01",
+            "cluster_id": os.environ["SMOKE_CLUSTER_ID"],
         }
     )
 )
@@ -201,12 +209,12 @@ PY
 
 if [ -n "${SMOKE_COMMAND_RESOURCE}" ]; then
   echo "==> sending manual UI command"
-  SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE}" python3 - <<'PY' > "${WEBHOOK_RESPONSE}.command.json"
+  SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE}" SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID}" python3 - <<'PY' > "${WEBHOOK_RESPONSE}.command.json"
 import json
 import os
 
 print(json.dumps({
-    "cluster_id": "target-cluster-01",
+    "cluster_id": os.environ["SMOKE_CLUSTER_ID"],
     "action": "rollout_restart",
     "namespace": "sandbox",
     "reason": "manual smoke command",

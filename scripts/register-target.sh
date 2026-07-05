@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
-TARGET_CONTEXT="${TARGET_CONTEXT:-cluster-1}"
-TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-cluster-1}"
-TARGET_NAME="${TARGET_NAME:-cluster-1}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/env.sh"
+
+BASE_URL="${BASE_URL:-}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-}"
+TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-}"
+TARGET_NAME="${TARGET_NAME:-${TARGET_CLUSTER_ID}}"
 TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-sandbox}"
 WORKSPACE_ID="${WORKSPACE_ID:-default}"
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"
@@ -16,10 +19,9 @@ INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
 INSTALL_SAMPLE_WORKLOAD="${INSTALL_SAMPLE_WORKLOAD:-false}"
 SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}"
 SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}"
-AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
-AUTH_PASSWORD="${AUTH_PASSWORD:-local-admin-password}"
+AUTH_EMAIL="${AUTH_EMAIL:-}"
+AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 COOKIE_JAR="$(mktemp)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 trap 'rm -f "${COOKIE_JAR}"' EXIT
 
 source "${SCRIPT_DIR}/lib/auth.sh"
@@ -34,6 +36,10 @@ need() {
 need curl
 need kubectl
 need python3
+require_env BASE_URL
+require_env TARGET_CONTEXT
+require_env TARGET_CLUSTER_ID
+require_env TARGET_NAME
 
 is_true() {
   normalized="$(printf "%s" "$1" | tr "[:upper:]" "[:lower:]")"

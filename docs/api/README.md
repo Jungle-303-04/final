@@ -24,15 +24,199 @@ docs/api
 
 먼저 Environment 값을 채운다.
 
-`base_url`은 Gateway 주소다. AWS 테스트는 `https://k8s.woonyong.org`를 쓴다.
+`base_url`은 Gateway 주소다. AWS 테스트는 `https://k8s.woonyong.org/`를 쓴다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
 
-`cluster_id`는 AWS target cluster 기준으로 `cluster-1`을 쓴다.
+`cluster_id`는 target 등록 시 사용한 실제 cluster id를 넣는다.
 
 `agent_token`은 `02-target-admin/01-register-target-dry-run.bru` 응답에서 받거나, 이미 등록된 target agent token reference를 운영자가 넣는다.
 
 `github_webhook_signature`는 webhook body와 secret으로 다시 계산해야 한다. body를 바꾸면 signature도 반드시 다시 바꾼다.
+
+## API 의미 사전
+
+여기서는 Bruno 왼쪽 요청 파일 이름을 기준으로 API 의미를 정리한다.
+처음 보는 사람은 이 부분을 먼저 읽고, 그다음 아래 실행 단계를 따라가면 된다.
+
+권한 기준은 세 가지로 보면 된다.
+인증 없이 보는 상태 확인 API, 로그인 세션이 필요한 운영자/사용자 API, `x-agent-token`이 필요한 target agent API다.
+로그인 세션 API는 Bruno가 `service_session` cookie를 자동으로 들고 간다.
+target agent API는 Environment의 `agent_token`이 맞아야 한다.
+
+### 00-health-auth
+
+`01-healthz`는 Gateway 프로세스가 살아 있는지 보는 API다.
+DB나 내부 워커 상태까지 깊게 보지 않고, 배포 주소와 라우팅이 맞는지 가장 먼저 확인한다.
+이게 실패하면 `base_url`, DNS, Ingress, 배포 상태부터 본다.
+
+`02-readyz`는 Gateway가 요청을 받을 준비가 되었는지 보는 API다.
+코드 기준으로 DB readiness를 가볍게 확인한다.
+이게 실패하면 API 문법 문제가 아니라 서버가 아직 의존성 준비를 끝내지 못한 상태로 보면 된다.
+
+`03-openapi-json`은 현재 배포된 Gateway가 들고 있는 실제 HTTP 계약을 확인하는 API다.
+문서와 코드가 헷갈릴 때는 이 응답의 `paths`를 먼저 본다.
+Bruno collection을 수정할 때도 이 API로 route가 실제 배포에 있는지 확인한다.
+
+`04-signup`은 새 사용자를 등록하고 이메일 검증 이벤트를 만드는 API다.
+바로 로그인 가능한 계정을 만드는 것이 아니라, 이메일 검증과 운영자 승인 흐름으로 들어가게 한다.
+온보딩 중 새 테스트 계정을 만들 때 사용한다.
+
+`05-resend-verification`은 이메일 검증 메일을 다시 보내는 API다.
+가입은 되었지만 검증 토큰을 놓쳤거나 만료된 경우에만 사용한다.
+이미 검증이 끝난 계정이면 다시 검증할 필요가 없다는 형태로 응답할 수 있다.
+
+`06-login`은 운영자 또는 팀원 계정으로 로그인하고 `service_session` cookie를 받는 API다.
+이 요청이 성공해야 dashboard, command, approval, AI conversation 같은 세션 API를 이어서 테스트할 수 있다.
+Bruno는 응답 cookie를 보관하므로, 같은 Environment에서 다음 요청을 그대로 보내면 된다.
+
+`07-session`은 현재 cookie가 어떤 사용자, workspace, roles로 인식되는지 확인하는 API다.
+권한 문제를 디버깅할 때 제일 먼저 본다.
+로그인은 성공했는데 dashboard나 command가 막히면 이 응답의 `roles`와 `workspace_id`를 확인한다.
+
+`08-approve-user`는 운영자가 새 사용자를 승인하는 API다.
+일반 사용자가 자기 자신을 승인할 수 없고, admin session이 필요하다.
+회원가입과 이메일 검증은 끝났는데 로그인이 막히는 팀원이 있으면 이 API로 상태를 풀어준다.
+
+`09-verify-email`은 이메일 검증 토큰을 처리하는 API다.
+브라우저 redirect 흐름을 쓰는 endpoint라 Bruno에서는 성공 응답이 JSON이 아닐 수 있다.
+계정 검증 흐름 자체를 확인하거나 토큰이 맞는지 볼 때 사용한다.
+
+`10-logout`은 현재 session을 종료하고 cookie를 지우는 API다.
+권한이 다른 계정으로 다시 테스트할 때 먼저 로그아웃해서 이전 cookie가 남지 않게 한다.
+
+### 01-providers
+
+`01-provider-catalog`는 현재 Gateway가 알고 있는 provider 선택지를 보여주는 API다.
+target 등록 전에 어떤 source, deploy, cloud, secret provider 조합을 쓸 수 있는지 확인한다.
+민정이 target/provider 쪽을 바꾸면 이 응답도 같이 확인해야 한다.
+
+`02-validate-provider-selection`은 선택한 provider 조합이 실제로 허용되는지 검사하는 API다.
+credential reference가 필요한 조합인데 값이 빠졌는지, 요청한 capability가 provider와 맞는지 확인한다.
+target 등록 전에 이 요청이 통과해야 이후 manifest와 agent 설정이 덜 흔들린다.
+
+### 02-target-admin
+
+`01-register-target-dry-run`은 target cluster를 등록하고 agent 설치 manifest와 agent token을 받는 API다.
+파일 이름에 dry-run이 있지만 코드 기준으로는 `apply: false`라서 manifest를 Kubernetes에 직접 적용하지 않을 뿐이다.
+target registry 저장, 기본 agent policy 저장, desired state 저장, agent token 발급은 실제로 수행된다.
+응답의 `agent_token`은 이후 `x-agent-token`이 필요한 agent 요청에 그대로 쓴다.
+
+`02-update-cluster-policy`는 특정 cluster의 agent policy를 바꾸는 API다.
+provider job 주기, evidence provider 사용 여부, 실패 정책 같은 target 내부 동작을 바꿀 때 사용한다.
+이 값을 바꾸면 agent는 `get-agent-policy`로 새 generation을 받아가고, provider job scheduling 기준도 같이 바뀐다.
+
+### 03-agent-runtime
+
+`01-agent-connect`는 target agent가 Gateway에 자기 상태를 알리는 API다.
+body의 cluster 값보다 token identity를 신뢰하므로, agent token이 어느 cluster용인지가 중요하다.
+성공하면 agent connected event가 event bus로 들어간다.
+
+`02-get-agent-policy`는 target agent가 자기 cluster policy를 가져가는 API다.
+agent가 알고 있는 generation보다 서버 generation이 높을 때만 새 policy를 받을 수 있다.
+응답의 `policy`가 `null`이면 지금 agent가 더 받아갈 변경이 없다는 뜻이다.
+
+`03-policy-status`는 agent가 policy 적용 상태를 Gateway에 저장하는 API다.
+정책을 받았는지, 몇 generation까지 적용했는지, 적용 실패가 있었는지 같은 값을 남긴다.
+찬빈이 dashboard에서 agent 상태를 보여주려면 이 저장값을 기준으로 화면을 만든다.
+
+`04-reconcile-status`는 agent가 desired state reconcile 상태를 Gateway에 저장하는 API다.
+target 등록이나 정책 변경 후 실제 cluster에 맞춰진 상태를 기록한다.
+운영자는 이 값으로 "설정은 했는데 agent가 실제로 적용했는지"를 확인한다.
+
+`05-schedule-evidence-jobs`는 agent가 evidence window 하나를 기준으로 provider job을 큐에 넣는 API다.
+요청의 `provider_keys`와 저장된 policy를 합쳐 kubernetes, metrics, logs, traces 중 실제 실행할 job을 만든다.
+성공하면 `evidence_key`와 `job_ids`가 생기고, provider별 worker가 poll해서 가져갈 수 있다.
+
+`06-poll-evidence-job`은 provider worker가 자기 provider의 다음 job을 lease하는 API다.
+예를 들어 `provider_key=kubernetes`면 Kubernetes snapshot job만 가져간다.
+`job: null`이면 오류가 아니라 지금 가져갈 일이 없다는 뜻이다.
+
+`07-complete-evidence-job`은 provider worker가 job 결과를 저장하는 API다.
+각 provider 결과가 모이면 Gateway가 하나의 evidence payload로 묶고 `ClusterEvidenceReceived` event를 발행한다.
+아직 다른 provider 결과를 기다려야 하면 `accepted: true`만 오고 `event_id`가 없을 수 있다.
+
+`08-direct-agent-evidence`는 job 큐를 거치지 않고 agent가 완성된 evidence를 직접 보내는 API다.
+수동 테스트나 단순한 end-to-end 확인에 유용하다.
+정식 provider 흐름은 `schedule -> poll -> complete` 순서로 확인하는 것이 기준이다.
+
+### 04-command
+
+`01-manual-command`는 사람이 특정 cluster에 실행할 command를 요청하는 API다.
+요청은 바로 agent에게 전달되지 않고 `CommandRequested` event로 들어간다.
+command worker가 정책과 승인 조건을 확인한 뒤 agent command queue에 넣는다.
+
+`02-debug-query`는 사람이 Prometheus query 하나를 agent command queue에 직접 넣는 API다.
+RCA 중 "이 metric을 지금 cluster agent가 직접 조회할 수 있는지" 확인할 때 쓴다.
+성공하면 `command_id`가 나오고, 이 값을 다음 poll/start/heartbeat/result 요청에서 사용한다.
+
+`03-agent-command-poll`은 agent가 자기 cluster에 대기 중인 command를 가져가는 API다.
+command가 있으면 lease가 걸린 상태로 내려오고, 없으면 `command: null`이 올 수 있다.
+agent는 외부에서 inbound로 호출되는 대신 이 API로 outbound polling을 한다.
+
+`04-agent-command-start`는 agent가 lease한 command 실행을 시작했다고 표시하는 API다.
+`lease_id`와 `agent_id`가 맞아야 하며, 이 값은 이후 heartbeat와 result에도 이어진다.
+이 요청 뒤 command 상태는 running으로 바뀐다.
+
+`05-agent-command-heartbeat`는 실행 중인 command lease를 연장하는 API다.
+오래 걸리는 작업에서 이 요청을 주기적으로 보내지 않으면 lease가 만료되어 재시도 대상이 될 수 있다.
+agent는 command 실행 중 끊기지 않았다는 신호로 이 API를 사용한다.
+
+`06-agent-command-result`는 agent가 command 실행 결과를 Gateway에 제출하는 API다.
+성공하면 command completed event가 stage되고, 이후 RCA rollout 진단이나 workflow-controller가 이 결과를 사용한다.
+실패 결과도 이 API로 보내며, 실패는 숨기지 않고 결과 payload에 남긴다.
+
+### 05-rca-dashboard
+
+`01-dashboard-timeline`은 현재 사용자가 볼 수 있는 RCA timeline을 조회하는 API다.
+`cluster_id`를 넣으면 해당 cluster에 대해 `RCA_READ` 권한을 검사한다.
+`cluster_id`를 빼면 사용자가 접근 가능한 cluster만 필터링해서 보여준다.
+
+`02-dashboard-incident`는 특정 incident 하나의 상세 내용을 조회하는 API다.
+timeline에서 받은 `incident_id`로 이어서 호출한다.
+권한이 없거나 해당 incident가 없으면 `404` 또는 접근 거부가 날 수 있다.
+
+### 06-gitops-approval
+
+`01-github-webhook`은 외부 Git webhook을 받아 workflow event로 바꾸는 API다.
+HMAC signature가 맞아야만 통과한다.
+body를 수정하면 `github_webhook_signature`도 반드시 다시 계산해야 한다.
+
+`02-grant-approval`은 열린 approval을 승인하고, 승인된 diff를 실제 command 요청으로 이어주는 API다.
+deploy 권한이 있는 사용자만 호출할 수 있다.
+성공하면 approval granted event와 command requested event가 같은 흐름에서 만들어진다.
+
+`03-reject-approval`은 열린 approval을 거절하는 API다.
+거절하면 실제 deploy command로 이어지지 않고 approval rejected event만 남는다.
+잘못된 diff거나 아직 운영자가 승인하면 안 되는 변경일 때 사용한다.
+
+### 07-ai
+
+`01-create-conversation`은 운영 대화방을 만들고 첫 사용자 메시지를 event로 넣는 API다.
+대화 record, 첫 message, `AiMessageReceived` event가 한 트랜잭션으로 생성된다.
+성공하면 `conversation_id`를 Environment에 저장해서 다음 요청에 쓴다.
+
+`02-get-conversation`은 대화와 메시지 목록을 조회하는 API다.
+AI worker가 아직 응답하지 않았더라도 사용자가 보낸 메시지는 여기서 확인할 수 있다.
+대화가 없거나 다른 workspace의 대화면 찾을 수 없다.
+
+`03-append-message`는 기존 대화에 새 사용자 메시지를 추가하는 API다.
+대화 상태를 waiting으로 바꾸고, 새 `AiMessageReceived` event를 발행한다.
+운영자가 같은 RCA 맥락에서 질문을 이어갈 때 사용한다.
+
+### 08-ops-dlq
+
+`01-dead-letters`는 처리 실패로 dead letter에 남은 event를 조회하는 API다.
+전 tenant 실패 이벤트가 보일 수 있으므로 admin session만 허용한다.
+worker 오류를 확인할 때 먼저 이 목록을 본다.
+
+`02-replay-dead-letter`는 특정 dead letter event를 다시 event bus로 넣는 API다.
+이미 replay된 항목은 다시 replay하지 못하게 막는다.
+원인을 고친 뒤 같은 event를 재처리해도 되는지 판단하고 사용한다.
+
+`03-metrics`는 Gateway 운영 metric을 Prometheus text 형식으로 보는 API다.
+`METRICS_TOKEN`이 설정되어 있으면 `authorization: Bearer {{metrics_token}}`이 필요하다.
+dead letter, outbox pending, command status 같은 운영 지표를 확인한다.
 
 ## 3단계. 서버 상태 확인
 
@@ -153,6 +337,8 @@ result 정상 출력에는 `accepted: true`와 `event_id`가 있다.
 `06-gitops-approval/01-github-webhook.bru`는 signature가 맞아야 성공한다.
 
 body는 `docs/api/06-gitops-approval/github-webhook-body.json`과 같은 값으로 둔다.
+이 파일의 `{{cluster_id}}`는 Bruno가 요청을 보낼 때 Environment의 `cluster_id`로 치환한다.
+그래서 signature도 치환된 body 기준으로 계산해야 한다.
 
 signature는 아래 명령으로 만든다.
 
@@ -160,14 +346,19 @@ signature는 아래 명령으로 만든다.
 python - <<'PY'
 import hashlib
 import hmac
+import os
 from pathlib import Path
 
 secret = "replace-with-GITHUB_WEBHOOK_SECRET"
-body = Path("docs/api/06-gitops-approval/github-webhook-body.json").read_bytes()
+cluster_id = os.environ.get("BRUNO_CLUSTER_ID", "replace-with-aws-target-cluster-id")
+body = Path("docs/api/06-gitops-approval/github-webhook-body.json").read_text(
+    encoding="utf-8"
+).replace("{{cluster_id}}", cluster_id).encode()
 print("sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest())
 PY
 ```
 
+`BRUNO_CLUSTER_ID`에는 Bruno Environment의 `cluster_id`와 같은 값을 넣는다.
 출력값을 `github_webhook_signature`에 넣는다.
 
 approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `03-reject-approval.bru`를 보낸다.

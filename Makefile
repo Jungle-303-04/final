@@ -3,8 +3,8 @@ SHELL := bash
 .DEFAULT_GOAL := help
 
 IMAGE_NAME ?= service:local
-MGMT_CLUSTER ?= kubernetes-ops
-TARGET_CLUSTER ?= cluster-1
+MGMT_CLUSTER ?=
+TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
 
 export IMAGE_NAME
