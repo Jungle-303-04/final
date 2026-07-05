@@ -24,9 +24,9 @@
 | RCA/Safe PR | `src/services/ai/rca-worker`, `src/services/gitops/scm-worker`, `src/services/projection/audit-worker` | `docs/team/member-guides/rca-safe-pr.md` |
 | Target/Telemetry | `src/services/target/cluster-agent`, `src/services/target/node-collector`, `deploy/target` | `docs/team/member-guides/target-telemetry.md` |
 
-dashboard 관련 문서는 현재 planned 영역으로 둔다. 이 repository에는 아직
-`src/services/projection/dashboard-worker`가 없으며, UI/read model을 실제로 추가할 때
-별도 담당을 다시 만든다.
+dashboard backend는 현재 `src/services/projection/dashboard-worker`와
+`src/domains/dashboard/*` 기준으로 구현되어 있다. UI/read model 확장은 기존 dashboard
+도메인을 기준으로 추가한다.
 파일 단위 관리/인지 범위는 `docs/team/file-ownership-convention.md`를 따른다.
 
 ## 브랜치 규칙

@@ -17,7 +17,7 @@
 | 공통 런타임 | 모든 서비스가 공유하는 실행 방식, retry, DLQ, app handler 규칙 | 신중히 변경. 회귀 테스트 필수 | `src/packages/runtime/**` |
 | 실제 어댑터 | PostgreSQL, NATS, HTTP client처럼 실제 외부 시스템에 붙는 구현 | 같은 port를 지키면 교체 가능 | `src/packages/events/**`, `src/packages/storage/**` |
 | 서비스 로직 | 각 worker가 자기 업무를 처리하는 흐름 | 담당 서비스 범위 안에서 변경 가능 | `src/services/**/app.py` |
-| 데모 구현 | 아직 실제 외부 시스템이 없어서 흐름만 검증하는 fake 구현 | 언제든 교체 가능해야 함 | `fake_*`, hardcoded sample |
+| 데모 구현 | 아직 실제 외부 시스템이 없어서 흐름만 검증하는 테스트 더블/샘플 구현 | 언제든 교체 가능해야 함 | test double, hardcoded sample |
 | 테스트 fixture | 테스트를 위해 만든 입력/기대값 | 제품 동작 기준으로 삼지 않음 | `tests/**` |
 
 ## 2. 진짜 계약
@@ -36,8 +36,9 @@
 | `src/packages/contracts/stores.py` | worker별 DB 능력 port | handler가 어떤 저장 기능만 사용할 수 있는지 제한한다. |
 | `src/packages/contracts/interfaces.py` | session, OAuth, DLQ, outbox port | Gateway/runtime이 구현체가 아니라 port에 의존하게 한다. |
 
-Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작할 때
-`src/packages/contracts` 아래에 계약과 테스트를 함께 추가한다.
+Dashboard projection/read model 계약은 현재 있다. 기준 파일은 `src/domains/dashboard/*`,
+`src/services/projection/dashboard-worker/app.py`, `src/packages/contracts/gateway/responses.py`,
+`src/packages/contracts/gateway/routes.py`다.
 
 계약 파일을 바꿀 때는 아래를 같이 바꿔야 한다.
 
@@ -72,10 +73,10 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 
 | 항목 | 상태 | 현재 동작 | 실제 구현 완료 기준 |
 | --- | --- | --- | --- |
-| Prometheus telemetry | fake fallback | `fake_telemetry.py`가 고정 HTTP 응답을 제공하고 agent가 fallback source로 읽는다. | 실제 Prometheus/AMP/Mimir query adapter, label/window 제한, secret 마스킹, 실패 테스트 |
-| Loki telemetry | fake fallback | `fake_telemetry.py`가 Loki처럼 생긴 고정 응답을 제공한다. | 실제 Loki/OpenSearch/CloudWatch Logs adapter, selector 제한, payload 축약 테스트 |
-| OTel/trace telemetry | fake fallback | `fake_telemetry.py`가 trace backend 대신 고정 응답을 준다. | 실제 Tempo/OTel collector/query adapter, service/operation/window 기준 요약 테스트 |
-| Kubernetes evidence collector | partial demo | agent가 일부 Kubernetes/fallback sample evidence를 만든다. | 최소 RBAC으로 pods/events/nodes 조회, object metadata 마스킹, EvidenceDraft/summary 계약 테스트 |
+| Prometheus telemetry | provider adapter | `PrometheusMetricsProvider`가 instant/range query 값 객체를 실행하고 `metrics` bucket을 채운다. | 운영 Prometheus/AMP/Mimir endpoint, label/window 제한, secret 마스킹, 실패 테스트 |
+| Loki telemetry | provider adapter | `LokiLogsProvider`가 `LokiLogQuery`를 실행하고 `logs` bucket을 채운다. | 운영 Loki/OpenSearch/CloudWatch Logs adapter, selector 제한, payload 축약 테스트 |
+| OTel/trace telemetry | provider adapter | `TempoTracesProvider`가 trace query를 실행하고 `traces` bucket을 채운다. | 운영 Tempo/OTel collector/query adapter, service/operation/window 기준 요약 테스트 |
+| Kubernetes evidence collector | provider adapter | `KubernetesSnapshotProvider`가 pods/events/nodes/workloads/services/endpoints snapshot을 `kubernetes` bucket으로 채운다. | 최소 RBAC 검증, object metadata 마스킹, summary 계약 테스트 |
 | Node collector install manifest | inline demo | cluster-agent가 inline DaemonSet YAML을 만든다. | Helm/Kustomize render 또는 typed manifest builder, upgrade/rollback 기준, RBAC 테스트 |
 | Git manifest source | demo/dev fallback | `checkout-api` 기본값과 local-file/remote file 경로로 manifest를 만든다. | Git repo checkout/cache, commit provenance, Kustomize/Helm/raw YAML renderer, 구조화된 render error |
 | Desired diff | partial demo | 이전 snapshot이 없으면 demo fallback을 사용하고 risk string 중심으로 판단한다. | cluster-aware desired/live/last-approved 비교, create/update/delete 구조화, policy reason 테스트 |
@@ -84,10 +85,10 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 | RCA analyzer | rule/playbook baseline | CrashLoopBackOff 중심 rule과 evidence source 매칭으로 후보를 평가한다. AI fallback worker는 아직 분석 pipeline에 연결되지 않았다. | `RcaAnalyzerPort` 뒤의 rule/LLM adapter, insufficient evidence 상태, evidence ref 기반 근거, fault-injection eval |
 | LLM client | gateway + adapters | `LLM_PROVIDER`로 OpenAI/OpenAI 호환/Anthropic/Gemini adapter를 선택한다. 현재 tool loop는 JSON-only prompt protocol 기반이다. | provider별 live smoke, function-calling 수준 schema, 비용/쿼터 guardrail, tool authorization, 통합 회귀 테스트 |
 | Safe PR creation | partial real adapter | `scm-worker`는 GitHub branch/commit/PR REST provider를 가진다. `safe_pr.requested.patches`가 있으면 검토 문서와 함께 실제 repository file patch를 커밋하고, unsafe path는 GitHub write 전에 실패시킨다. | feature flag, token/ref 검증, repo allowlist, rollback patch commit, diff basis/ref, approval evidence, failure event/audit |
-| Alert delivery | stub adapter | `alert-worker`가 Slack/Email/PagerDuty 전송 없이 `alert.dispatched`를 만든다. | provider delivery id 저장, 조용한 시간/승인 정책, production 자동 배포 fail-closed |
+| Alert delivery | provider boundary | `alert-worker`가 알림 요청과 dispatch 결과 event를 분리한다. | provider delivery id 저장, 조용한 시간/승인 정책, production 자동 배포 fail-closed |
 | Credential/Token Broker | partial port | GitHub provider는 `TokenVaultPort`와 env 기반 `GITHUB_TOKEN_REF`를 지원한다. identity repository credential placeholder와 외부 vault adapter는 아직 남아 있다. | SecretVault/TokenBroker port, provider token 저장/회전/감사, event/log non-leak 테스트 |
-| Dashboard projection worker | planned | 현재 repository에 `src/services/projection/dashboard-worker`가 없다. | App 기반 `@app.on_any` worker, read model schema, query/stream route, smoke assertion |
-| Dashboard UI/API | planned | auth redirect 문자열 외에 dashboard route가 없다. | 운영 workflow console UI, session guard, read model query, E2E smoke에서 결과 검증 |
+| Dashboard projection worker | implemented | `src/services/projection/dashboard-worker`, `src/domains/dashboard/*`, `/dashboard/rca/*` route가 있다. | 운영 workflow console UI, dashboard stream route, E2E smoke에서 결과 검증 |
+| Dashboard UI | planned | backend read model/API는 있고, 실제 frontend app은 아직 없다. | 운영 workflow console UI, session guard, read model query, E2E smoke에서 결과 검증 |
 | Tests fixtures | fixture only | 테스트 입력/기대값으로 sample 값이 존재한다. | 계약 변경 시 fixture 갱신. fixture 값을 제품 계약으로 문서화하지 않음 |
 
 ## 5. 현재 가장 헷갈리는 지점
@@ -135,10 +136,10 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 1. 새 이벤트는 반드시 `src/packages/contracts/event_bus/subjects.py`와 `bodies/`에 먼저 추가한다.
 2. worker끼리는 서로의 `src/services/**` 파일을 import하지 않는다.
 3. 다른 서비스가 써야 하는 값은 `src/services/**/app.py` 상수가 아니라 `src/packages/contracts/**` 또는 `src/packages/config/constants.py`로 올린다.
-4. fake 구현은 이름에 `Fake`, `fake_`, `demo` 중 하나를 명확히 넣는다.
-5. fake 구현이 실제 subject를 발행해도 body shape은 진짜 계약을 지켜야 한다.
+4. 테스트 더블은 제품 구현과 파일/클래스 이름으로 분리한다.
+5. 테스트 더블이 실제 subject를 발행해도 body shape은 진짜 계약을 지켜야 한다.
 6. secret, token, kubeconfig는 event body에 넣지 않는다. ref만 전달한다.
-7. 실제 외부 도구가 붙을 가능성이 있으면 먼저 `Protocol` port를 만들고 fake adapter와 real adapter를 분리한다.
+7. 실제 외부 도구가 붙을 가능성이 있으면 먼저 `Protocol` port를 만들고 test double과 real adapter를 분리한다.
 8. hardcoded sample 값은 제품 계약으로 설명하지 않는다. 문서에 demo/sample이라고 적는다.
 
 ## 7. 정리 우선순위
@@ -150,11 +151,11 @@ Dashboard projection/read model 계약은 아직 없다. 실제 UI/API를 시작
 | 3 | Git polling subject 정리 | webhook을 쓰지 않는 방향과 코드 이름을 맞춘다. |
 | 4 | command namespace 정책 위치 결정 | Gateway와 command-worker의 중복 정책을 제거한다. |
 | 5 | `Gateway` key/value 분리 | field와 status를 헷갈리지 않게 한다. |
-| 6 | fake adapter 분리 | 실제 GitHub/Prometheus/RCA로 교체하기 쉽게 만든다. |
+| 6 | test double/real adapter 분리 | 실제 GitHub/Prometheus/RCA로 교체하기 쉽게 만든다. |
 | 7 | `Database` repository 구체 구현 분리 | port는 나뉘었지만 concrete 구현도 나누기 위해 필요하다. |
 
 ## 8. 한 문장 기준
 
 팀원이 헷갈리면 이렇게 판단한다.
 
-> `src/packages/contracts/**`는 맞춰야 하는 약속이고, `src/services/**` 안의 fake/demo/hardcoded 값은 교체 가능한 현재 구현이다.
+> `src/packages/contracts/**`는 맞춰야 하는 약속이고, `src/services/**` 안의 demo/hardcoded 값은 교체 가능한 현재 구현이다.

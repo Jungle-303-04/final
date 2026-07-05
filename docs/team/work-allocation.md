@@ -2,8 +2,9 @@
 
 이 문서는 프로젝트를 5개의 명확한 담당 영역으로 나눈다. 각 팀원은 `docs/team/codex-automation.md`의 공통 프롬프트와 자신의 영역에 맞는 member guide를 Codex 지시 문서로 사용할 수 있다.
 
-대시보드는 이번 5인 분배에서 제외한다. 현재 repository에는 구현/배포된
-`dashboard-worker`가 없으며, 실제 UI와 dashboard projection을 시작할 때 별도 담당을 다시 정한다.
+대시보드 backend는 현재 `dashboard-worker`, `RcaTimeline` read model, `/dashboard/rca/*`
+query API까지 구현되어 있다. 이번 분배에서 남은 대시보드 작업은 실제 frontend UI와
+운영용 cluster/workflow summary 확장이다.
 
 ## 역할 요약
 

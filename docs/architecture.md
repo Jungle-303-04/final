@@ -12,7 +12,7 @@
 - 대상 클러스터 Agent는 관리 영역으로 outbound 연결만 맺는다.
 - 외부 provider credential은 UI 상태가 아니라 credential_ref/Token Broker 경계로 관리한다.
 - command API는 Gateway 내부 로그인(email/password)이 발급한 Redis session을 요구한다.
-- dashboard UI/API와 dashboard projection worker는 현재 backend 계약을 기준으로 추가할 실행 단위다.
+- dashboard query API와 dashboard projection worker는 현재 backend 계약을 기준으로 구현되어 있다. UI는 이 query API를 읽는다.
 
 ## 운영 배포 기준
 
@@ -40,7 +40,8 @@ services
   + target/reconcile-worker      target desired state -> reconcile result
   + ai split workers             evidence -> incident -> plan -> analyze -> RCA -> recovery -> dispatch
   + projection/audit-worker       변경 불가능한 audit timeline
-  + alert-worker                  알림 boundary(stub adapter)
+  + projection/dashboard-worker   RCA/command/Safe PR event -> dashboard read model
+  + alert-worker                  알림 provider boundary
   + mail-worker                   이메일 인증 발송/log boundary
   + target/cluster-agent             Target Cluster Agent와 telemetry adapter
   + target/node-collector                   선택형 DaemonSet node/runtime metrics source
@@ -89,6 +90,7 @@ safe-pr-worker                -> python src/services/ai/safe-pr-worker/app.py
 backlog-worker                -> python src/services/ai/backlog-worker/app.py
 rca-fallback-worker           -> python src/services/ai/rca-fallback-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
+dashboard-worker    -> python src/services/projection/dashboard-worker/app.py
 alert-worker        -> python src/services/alert/alert-worker/app.py
 mail-worker         -> python src/services/mail/mail-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
@@ -150,14 +152,17 @@ if __name__ == "__main__":
 - `WorkerService`: JetStream subject 구독 worker process(내부용)
 - `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
 
-audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
-본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker도 같은 패턴으로 추가한다.
+audit/dashboard 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
+본문 대신 전체 `EventEnvelope`를 받는다.
 
 ```python
 @app.on_any
 async def on_event(evt: EventEnvelope, ctx):
     ctx.db.append_audit_log(evt)
 ```
+
+dashboard projector는 같은 패턴으로 `timeline_update_from_event(evt)`를 호출하고,
+필요한 event만 `rca_timeline` read model에 upsert한다.
 
 서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둔다. 더 이상 `WorkerSubscription` 모델을 선언하거나 `WorkerService.from_subscription(...)`을 직접 호출하지 않는다. 팀원이 자기 담당 서비스를 수정할 때는 해당 `app.py`를 확인한다. 구독 subject는 각 worker `app.py`의 `@app.on(...)`에서 확인한다. 여러 서비스가 공유하는 event subject, body, stream 계약은 `src/packages/contracts/event_bus`에 둔다.
 
@@ -186,6 +191,7 @@ async def on_event(evt: EventEnvelope, ctx):
 - `dispatch-worker`
 - `safe-pr-worker`
 - `audit-worker`
+- `dashboard-worker`
 - `alert-worker`
 - `mail-worker`
 - `nats`
@@ -242,9 +248,10 @@ Target 등록 / desired-state
 -> Audit Worker
 -> audit log
 
-Dashboard Projection Service / dashboard query/stream
--> dashboard 확장 시 `src/services/projection/dashboard-worker`와
-   dashboard route를 같은 계약으로 추가
+RCA/command/Safe PR event
+-> Dashboard Worker
+-> rca_timeline read model
+-> Gateway /dashboard/rca/timeline, /dashboard/rca/incidents/{incident_id}
 ```
 
 실패한 event 처리:

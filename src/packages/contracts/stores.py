@@ -101,6 +101,10 @@ class AuditStore(Protocol):
     async def append_audit_logs(self, rows: list[JsonObject]) -> None: ...
 
 
+class DashboardStore(Protocol):
+    async def upsert_rca_timeline(self, row: JsonObject) -> None: ...
+
+
 class AiConversationStore(Protocol):
     async def record_ai_response(self, payload: JsonObject) -> None: ...
 

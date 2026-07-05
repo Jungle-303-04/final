@@ -91,7 +91,8 @@ src/services/projection/audit-worker
   app.py: @app.on_any (모든 이벤트 >)
 
 src/services/projection/dashboard-worker
-  dashboard read model/UI를 시작할 때 App 기반 @app.on_any 서비스로 추가한다.
+  Dashboard read model projection
+  app.py: @app.on_any, RCA/command/Safe PR event -> rca_timeline upsert
 
 src/services/target/cluster-agent
   Target Cluster Agent
@@ -121,7 +122,8 @@ src/packages/contracts/event_bus
   publish/consume port
 
 dashboard projection/read model
-  공유 계약이 필요해지는 시점에 src/packages/contracts 아래에 계약과 테스트를 함께 추가
+  src/domains/dashboard/models.py, repository.py, router.py
+  src/packages/contracts/gateway/routes.py, responses.py
 
 src/packages/events
   NATS JetStream adapter
@@ -171,6 +173,7 @@ safe-pr-worker                -> python src/services/ai/safe-pr-worker/app.py
 backlog-worker                -> python src/services/ai/backlog-worker/app.py
 rca-fallback-worker           -> python src/services/ai/rca-fallback-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
+dashboard-worker    -> python src/services/projection/dashboard-worker/app.py
 alert-worker        -> python src/services/alert/alert-worker/app.py
 mail-worker         -> python src/services/mail/mail-worker/app.py
 cluster-agent          -> python src/services/target/cluster-agent/app.py
@@ -186,7 +189,7 @@ target-tempo                  -> deploy/target/tempo.yaml
 1. `src/services/gateway/api-gateway` 내부 route를 `auth`, `agent`, `commands`, `dashboard`, `github`으로 나눈다.
 2. `workflow-controller`가 만든 `applications`, `workflow_runs`, `workflow_run_steps`, `approvals`를 Gateway query API와 콘솔 UI의 1급 객체로 노출한다.
 3. 각 service의 DB query를 repository 객체로 분리한다.
-4. dashboard 트래픽이 커지면 `Dashboard Query API`와 `Realtime Gateway`를 별도 service folder로 분리한다.
+4. dashboard 트래픽이 커지면 현재 `src/domains/dashboard/router.py`를 별도 `Dashboard Query API` service folder로 분리한다.
 5. 실제 GitHub PR 생성은 먼저 `src/services/gitops/scm-worker`의 guarded adapter로 두고, 책임이 커지면 별도 Safe PR service로 분리한다.
 6. 실제 Prometheus/Loki/OTel 연동이 들어가면 `src/services/target/cluster-agent` adapter를 provider별 파일로 분리하고, node-level 수집은 `src/services/target/node-collector`에서 확장한다.
 7. 배포 운영이 무거워지면 현재 entrypoint를 유지한 채 공통 base layer 위에서 서비스별 image로 나눈다.
