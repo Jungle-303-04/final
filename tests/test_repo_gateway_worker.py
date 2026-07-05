@@ -5,7 +5,7 @@ import base64
 from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
 
 from domains.alert.events import AlertRequestedBody
-from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from domains.scm.events import SafePrFilePatch, SafePrReadyForCreationBody
 
 PR_HTML_URL = "https://github.test.local/project/repo/pull/7"
 
@@ -171,7 +171,6 @@ def test_repo_gateway_rejects_space_prefixed_absolute_patch_path(monkeypatch) ->
 
 
 def test_repo_gateway_is_idempotent_on_redelivery(monkeypatch) -> None:
-    # 브랜치/파일/PR 이 이미 있어도(422) 기존 open PR URL 로 safe_pr.created 를 냄
     _github_env(monkeypatch)
     repo = _load_with_transport(monkeypatch, branch_exists=True, file_exists=True, pr_exists=True)
     db = SpyDb()
@@ -199,18 +198,17 @@ def test_repo_gateway_emits_next_alert_after_pr_creation(monkeypatch) -> None:
 
 
 def test_repo_gateway_fails_per_request_without_github_credentials(monkeypatch) -> None:
-    # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 safe_pr.failed — 워커는 뜸
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("SCM_REPO", raising=False)
     repo = load_service("gitops/scm-worker")
     db = SpyDb()
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        SafePrRequestedBody(title="t", body="b", provider="github"),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(SafePrRequestedBody(title="t", body="b", provider="github")),
         db=db,
     )
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
-    assert outs[1].reason == "safe pr creation failed"
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason == "safe pr creation failed"
     assert not db.called("save_pull_request")
 
 
@@ -220,11 +218,11 @@ def test_repo_gateway_does_not_emit_next_alert_when_pr_fails(monkeypatch) -> Non
     repo = load_service("gitops/scm-worker")
     db = SpyDb()
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        SafePrRequestedBody(title="t", body="b", provider="github", next_alert=_alert()),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(SafePrRequestedBody(title="t", body="b", provider="github", next_alert=_alert())),
         db=db,
     )
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
+    assert subjects_of(outs) == ["safe_pr.failed"]
     assert not db.called("save_pull_request")
 
 
@@ -233,12 +231,12 @@ def test_repo_gateway_emits_failed_event_on_github_error(monkeypatch) -> None:
     repo = _load_with_transport(monkeypatch, fail_pr_status=500)
     db = SpyDb()
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        SafePrRequestedBody(title="t", body="b", provider="github"),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(SafePrRequestedBody(title="t", body="b", provider="github")),
         db=db,
     )
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
-    assert outs[1].reason == "safe pr creation failed"
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason == "safe pr creation failed"
     assert not db.called("save_pull_request")
 
 
@@ -249,8 +247,8 @@ def test_repo_gateway_rejects_event_provider_mismatch(monkeypatch) -> None:
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        SafePrRequestedBody(title="t", body="b", provider="gitlab"),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(SafePrRequestedBody(title="t", body="b", provider="gitlab")),
         db=db,
     )
 
@@ -260,7 +258,6 @@ def test_repo_gateway_rejects_event_provider_mismatch(monkeypatch) -> None:
 
 
 def test_build_scm_provider_rejects_unknown_provider() -> None:
-    # provider 이름 오설정만 부팅 fail-fast(자격 증명은 요청 시점 실패)
     repo = load_service("gitops/scm-worker")
 
     assert isinstance(repo.build_scm_provider("github"), repo.GithubScmProvider)
