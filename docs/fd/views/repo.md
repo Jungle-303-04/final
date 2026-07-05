@@ -2,7 +2,7 @@
 
 [← 지도](../README.md) · 요구사항 [R7](../01-requirements.md#r7-레포뷰) · 생성은 [resources § 레포 연결](resources.md#레포-연결-위저드)
 
-application = 레포+워치타깃+바인딩의 사용자 단위. 참조: Plural CD>Repositories/Services.
+application = 레포+워치타깃+바인딩의 사용자 단위. 참조: 외부 기준 콘솔의 CD>Repositories/Services.
 
 ## 목록 — RepoListView (/repos)
 

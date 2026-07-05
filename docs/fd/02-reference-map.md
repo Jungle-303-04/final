@@ -1,17 +1,17 @@
-# 02. 참조 지도 — Plural Console 와 대안
+# 02. 참조 지도 — 외부 기준 콘솔과 대안
 
 [← 문서 지도](README.md) · [요구사항](01-requirements.md)
 
-## Plural 저장소 실사 결과 (2026-07-06 확인)
+## 외부 기준 저장소 실사 결과 (2026-07-06 확인)
 
 | 저장소 | 스택 | 라이선스 | 재사용 판단 |
 |---|---|---|---|
-| pluralsh/console | 서버 Elixir(GraphQL) + 프론트 React 19/Vite/TS (`assets/`) | **소스는 AGPL v3** (컴파일 산출물만 MIT) | **코드 복사 금지**. IA/UX/화면 구성/네이밍 참조만 |
-| pluralsh/plural (CLI 등) | Go | Apache 2.0 | 참조 자유. 프론트 관련성 낮음 |
-| pluralsh/design-system | React 컴포넌트 (Radix + react-aria + styled-components + honorable) | LICENSE 파일 확인 불가 | npm 의존 **보류**. 컴포넌트 목록·API 형태만 참조 |
-| docs.plural.sh | 문서 | — | UX 흐름·용어 참조 |
+| 외부 기준 콘솔 저장소 | 서버 Elixir(GraphQL) + 프론트 React 19/Vite/TS (`assets/`) | **소스는 AGPL v3** (컴파일 산출물만 MIT) | **코드 복사 금지**. IA/UX/화면 구성/네이밍 참조만 |
+| 외부 기준 CLI 저장소 | Go | Apache 2.0 | 참조 자유. 프론트 관련성 낮음 |
+| 외부 기준 design-system 저장소 | React 컴포넌트 (Radix + react-aria + styled-components + honorable) | LICENSE 파일 확인 불가 | npm 의존 **보류**. 컴포넌트 목록·API 형태만 참조 |
+| 외부 기준 문서 사이트 | 문서 | — | UX 흐름·용어 참조 |
 
-**라이선스 결론(D3)**: 우리 프론트는 Plural 의 *구조와 패턴*을 가져오고 *코드*는 가져오지 않는다.
+**라이선스 결론(D3)**: 우리 프론트는 외부 기준 콘솔의 *구조와 패턴*을 가져오고 *코드*는 가져오지 않는다.
 아래 매핑은 "무엇을 보고 무엇을 만들지"의 지도다.
 
 ## console 프론트 스택 → 우리 스택 대응 (D2 근거)
@@ -43,7 +43,7 @@ console 의 실제 IA(사이드바: Home / CD / Stacks / Kubernetes / AI / PR / 
 | CD > Services | 서비스 상태 뱃지·sync 상태 표현 | [cluster-detail § 서비스 탭](views/cluster-detail.md) |
 | CD > Repositories | 레포 카드·헬스 표시 | [repo](views/repo.md) |
 | Pipelines | 단계 노드 그래프(gate 승인 UI) | [workflow](views/workflow.md) |
-| AI (Plural AI) | 채팅 + insight 카드 + "Fix" 실행 버튼 | [ai-chat](views/ai-chat.md) |
+| AI | 채팅 + insight 카드 + "Fix" 실행 버튼 | [ai-chat](views/ai-chat.md) |
 | Notifications | 벨 아이콘 + 읽음 처리 패턴 | [notifications](views/notifications.md) |
 | Settings > User Management | 사용자/그룹/역할 테이블 | [org-admin](views/org-admin.md) |
 | Cost/Security | — | 범위 외 |
