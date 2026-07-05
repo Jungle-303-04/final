@@ -40,6 +40,7 @@
 | `CUSTOM_DOMAIN` | repository variable, 기본 없음 | DNS 연결을 켤 때 사용할 도메인 |
 | `CONFIGURE_ROUTE53` | `0` | Route53 변경 기본 비활성 |
 | `CONFIGURE_CLOUDFLARE` | `0` | Cloudflare 변경 기본 비활성 |
+| `CLOUDFLARE_PROXIED` | `1` | Cloudflare가 HTTPS를 받고 origin LoadBalancer로 프록시하도록 기본 활성화 |
 | `AWS_ROLE_ARN` | GitHub environment secret `aws-test` | GitHub OIDC가 assume할 AWS role |
 | `AUTH_EMAIL` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 계정 |
 | `AUTH_PASSWORD` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 비밀번호 |
