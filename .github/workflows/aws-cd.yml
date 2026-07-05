@@ -37,6 +37,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: aws-cd-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test before deploy

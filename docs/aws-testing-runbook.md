@@ -94,6 +94,11 @@ gh secret list --repo Jungle-303-04/final --env aws-test
 그래도 token 형태가 아니면 AWS CD log에 실제 토큰 값은 숨기고
 `raw_length`, `normalized_length`, `allowed_bearer_charset`만 출력한다.
 이 메시지가 나오면 GitHub secret에 Cloudflare 화면의 raw API token만 다시 넣는다.
+잘못된 토큰 때문에 Cloudflare DNS를 갱신할 수 없어도 AWS/EKS 배포 자체는 실패시키지 않는다.
+이 경우 log에 `skipping Cloudflare DNS ... AWS LoadBalancer remains available`가 남고,
+smoke와 상태 확인은 AWS LoadBalancer URL로 계속 진행한다.
+단, `https://k8s.woonyong.org/healthz`는 올바른 Cloudflare token으로 DNS record가 만들어지기 전까지
+`error code: 1016`이 계속 날 수 있다.
 
 4. secret을 넣은 뒤 AWS CD를 다시 실행한다.
 
