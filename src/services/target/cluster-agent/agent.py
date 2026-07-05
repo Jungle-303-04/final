@@ -324,6 +324,15 @@ class HttpManagementPlaneClient:
         response.raise_for_status()
         return response.json()
 
+    async def record_inventory_snapshot(self, payload: JsonObject) -> JsonObject:
+        response = await self.client.post(
+            f"{self.base_url}{gateway_routes.AGENT_INVENTORY_SNAPSHOTS_PATH}",
+            json=payload,
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def fetch_policy(self, cluster_id: str, generation: int) -> JsonObject | None:
         response = await self.client.get(
             f"{self.base_url}{gateway_routes.AGENT_POLICY_PATH}",

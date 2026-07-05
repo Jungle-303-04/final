@@ -32,6 +32,9 @@ class EventSubject(StrEnum):
     # --- 대상 클러스터/에이전트(cluster-agent) ---
     AGENT_CONNECTED = "agent.connected"  # 에이전트 등록
     CLUSTER_EVIDENCE_RECEIVED = "cluster.evidence.received"  # 증거 수신(입구)
+    CLUSTER_INVENTORY_SNAPSHOT_RECORDED = (
+        "cluster.inventory.snapshot.recorded"  # inventory snapshot 저장
+    )
     CLUSTER_DESIRED_STATE_CHANGED = "cluster.desired_state.changed"  # 목표 상태 등록/변경
     CLUSTER_RECONCILE_REQUESTED = "cluster.reconcile.requested"  # 상태 동기화 요청
     CLUSTER_RECONCILE_STARTED = "cluster.reconcile.started"  # 상태 동기화 시작

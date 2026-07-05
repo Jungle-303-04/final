@@ -45,6 +45,7 @@ MAX_AI_MESSAGE_LENGTH = 16_000
 MAX_EVIDENCE_LOG_ENTRIES = 2000
 MAX_EVIDENCE_PAYLOAD_BYTES = 1_048_576  # 직렬화 1MiB 상한(초과 시 422)
 EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE = "evidence payload exceeds size limit"
+MAX_INVENTORY_RESOURCES = 5000
 
 
 class LoginRequest(StrictModel):
@@ -123,6 +124,36 @@ class AgentEvidenceRequest(StrictModel):
         if size > MAX_EVIDENCE_PAYLOAD_BYTES:
             raise ValueError(EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE)
         return self
+
+
+class InventoryResource(StrictModel):
+    resource_type: str = Field(min_length=1, max_length=80)
+    api_version: str = Field(default="", max_length=120)
+    kind: str = Field(default="", max_length=120)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+    uid: str | None = Field(default=None, max_length=253)
+    resource_version: str | None = Field(default=None, max_length=253)
+    status: str = Field(default="unknown", max_length=80)
+    health: str = Field(default="unknown", max_length=80)
+    labels: dict[str, str] = Field(default_factory=dict)
+    annotations: dict[str, str] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class InventorySnapshotRequest(StrictModel):
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    agent_id: str
+    source: str = Field(default="cluster-agent", min_length=1, max_length=120)
+    collected_at: str | None = None
+    replace: bool = False
+    resources: list[InventoryResource] = Field(
+        default_factory=list, max_length=MAX_INVENTORY_RESOURCES
+    )
+    summary: dict[str, Any] = Field(default_factory=dict)
+    health: dict[str, Any] = Field(default_factory=dict)
+    usage: dict[str, Any] = Field(default_factory=dict)
 
 
 class TargetRegisterRequest(StrictModel):
