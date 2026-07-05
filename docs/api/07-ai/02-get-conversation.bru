@@ -12,7 +12,7 @@ get {
   url: {{base_url}}/ai/conversations/{{conversation_id}}
 }
 
-test {
+tests {
   test("conversation is returned or missing data is explicit", function () {
     expect([200, 401, 403, 404]).to.include(res.status);
   });

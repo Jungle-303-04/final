@@ -16,14 +16,14 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "email": "{{signup_email}}",
     "password": "{{signup_password}}"
   }
 }
 
-test {
+tests {
   test("response is explicit", function () {
     expect([200, 400, 401, 404, 422, 429]).to.include(res.status);
   });

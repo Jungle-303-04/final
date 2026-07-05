@@ -13,7 +13,7 @@ post {
   url: {{base_url}}/dead-letters/{{dead_letter_id}}/replay
 }
 
-test {
+tests {
   test("replay is accepted or dead letter state is explicit", function () {
     expect([200, 401, 403, 404, 409]).to.include(res.status);
   });

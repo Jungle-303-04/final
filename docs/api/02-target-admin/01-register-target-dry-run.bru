@@ -17,7 +17,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "cluster_id": "{{cluster_id}}",
     "name": "{{target_name}}",
@@ -38,11 +38,11 @@ body {
 script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.agent_token) {
-    bru.setEnvVar("agent_token", body.agent_token);
+    bru.setVar("agent_token", body.agent_token);
   }
 }
 
-test {
+tests {
   test("admin success or explicit auth failure", function () {
     expect([200, 401, 403, 422]).to.include(res.status);
   });

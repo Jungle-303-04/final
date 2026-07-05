@@ -13,7 +13,7 @@ get {
   url: {{base_url}}/dashboard/rca/timeline?cluster_id={{cluster_id}}&limit=20
 }
 
-test {
+tests {
   test("200 with rows or explicit auth/access failure", function () {
     expect([200, 401, 403, 422]).to.include(res.status);
   });
