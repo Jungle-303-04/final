@@ -1,6 +1,6 @@
 // 앱 쉘 — 사이드바/탑바/아웃렛. WS 연결은 여기서 1회(D6)
 import { useEffect } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { liveStore, startLive } from '@/shared/lib/live';
 import { uiStore } from '@/shared/lib/ui-store';
 import { useIsAdmin, useLogout, useSession } from '@/features/auth/api';
@@ -29,6 +29,7 @@ export function AppShell() {
   const logout = useLogout();
   const { unread } = useNotices();
   const loc = useLocation();
+  const nav = useNavigate();
 
   return (
     <div className={`shell ${open ? '' : 'shell--collapsed'}`}>
@@ -58,7 +59,7 @@ export function AppShell() {
               🔔{unread > 0 && <span className="topbar__count">{unread}</span>}
             </Link>
             {session?.email && <Avatar name={session.email} />}
-            <Button variant="ghost" size="sm" onClick={() => logout.mutate()}>로그아웃</Button>
+            <Button variant="ghost" size="sm" onClick={() => logout.mutate(undefined, { onSuccess: () => nav('/login', { replace: true }) })}>로그아웃</Button>
           </div>
         </header>
         <main className="content"><Outlet /></main>
