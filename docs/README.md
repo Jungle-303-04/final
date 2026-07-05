@@ -70,11 +70,12 @@
 1. [찬빈 온보딩](onboarding/chanbin-frontend.md)
 2. [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md)
 3. [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md)
-4. [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
-5. [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)
-6. [이벤트 흐름](events.md)
-7. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
-8. [Bruno API 테스트](api/README.md)
+4. [Frontend Framework Design Plan](frontend-framework-design.md)
+5. [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
+6. [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)
+7. [이벤트 흐름](events.md)
+8. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
+9. [Bruno API 테스트](api/README.md)
 
 찬빈은 먼저 `/dashboard/rca/*` response DTO와 권한 필터를 익힌다.
 그다음 realtime은 보조 갱신 경로로 붙인다.
@@ -117,6 +118,8 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `dashboard`를 찾을 때는 [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md), [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md)을 본다.
 
+`frontend`를 찾을 때는 [Frontend Framework Design Plan](frontend-framework-design.md), [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md)을 본다.
+
 `permission`을 찾을 때는 [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md), [찬빈 권한 모델 상세](team/member-guides/chanbin-permission-model.md), [Secrets](secrets.md)를 본다.
 
 `Bruno`를 찾을 때는 [Bruno API 테스트](api/README.md)를 본다.
@@ -143,6 +146,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [events](events.md)
+- [frontend-framework-design](frontend-framework-design.md)
 - [operations-deployment](operations-deployment.md)
 - [production-readiness](production-readiness.md)
 - [secrets](secrets.md)
