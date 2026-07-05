@@ -9,19 +9,29 @@ from domains.identity.dependencies import ResourceAccessFilterChain, require_res
 from packages.contracts.identity import AccessResourceType, Permission, ResourceAccessRequest
 
 
-def test_require_resource_access_prefers_structured_access_request() -> None:
+def test_require_resource_access_uses_chanbin_can_access_signature() -> None:
     class StructuredDb:
         request: ResourceAccessRequest | None = None
 
-        def can_access_request(self, request: ResourceAccessRequest) -> bool:
-            self.request = request
+        def can_access(
+            self,
+            user_id: str,
+            organization_id: str,
+            resource_type: str,
+            resource_id: str,
+            permission: str,
+        ) -> bool:
+            self.request = ResourceAccessRequest(
+                user_id=user_id,
+                organization_id=organization_id,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                permission=permission,
+            )
             return True
 
-        def can_access(self, *_args: object) -> bool:
-            raise AssertionError("can_access should not run before can_access_request")
-
         def user_has_resource_access(self, *_args: object) -> bool:
-            raise AssertionError("legacy access API should not run before structured API")
+            raise AssertionError("legacy access API should not run before can_access")
 
     db = StructuredDb()
     current = SimpleNamespace(user_id="user-1")

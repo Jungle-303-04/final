@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from packages.contracts.event_bus.interfaces import EventEnvelope, EventRecorder, JsonObject
-from packages.contracts.identity import ResourceAccessRequest
 
 CommandRecord = dict[str, Any]
 
@@ -79,8 +78,6 @@ class UserStore(Protocol):
         resource_id: str,
         permission: str,
     ) -> bool: ...
-
-    def can_access_request(self, request: ResourceAccessRequest) -> bool: ...
 
     def user_has_resource_access(
         self,
