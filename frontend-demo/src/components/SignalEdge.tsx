@@ -36,7 +36,7 @@ export function SignalEdge({
   const color = edgeColors[data?.accent ?? 'blue'];
   const status = data?.status ?? 'idle';
   const seed = hashId(id);
-  const packetCount = status === 'running' ? 3 : status === 'done' ? 1 : 0;
+  const packetCount = status === 'running' ? 1 : status === 'done' ? 1 : 0;
   const baseCadence = data?.cadenceMs ?? 1000;
 
   return (
@@ -44,15 +44,15 @@ export function SignalEdge({
       <path
         id={id}
         d={edgePath}
+        fill="none"
         className={`signal-edge signal-${status}`}
         style={{
           stroke: color,
           strokeWidth: status === 'running' ? 3 : 2.25,
           strokeDasharray: status === 'done' ? '7 8' : '12 12',
-          filter: status === 'running' ? `drop-shadow(0 0 6px ${color})` : undefined,
         }}
       />
-      <path className="signal-edge-glow" d={edgePath} style={{ stroke: color }} />
+      <path className="signal-edge-glow" d={edgePath} fill="none" style={{ stroke: color }} />
       {Array.from({ length: packetCount }, (_, index) => {
         const duration = Math.max(0.9, (baseCadence + ((seed + index * 137) % 520)) / 820);
         const begin = -(((seed % 11) + index * 2.7) / 4);

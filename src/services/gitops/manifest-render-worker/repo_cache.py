@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import os
 import re
 import shutil
 import stat
 import subprocess
+import tarfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -46,6 +48,19 @@ class GitRepoCache:
             self._touch_repo()
             self._evict_cache()
             return output
+
+    def export_path(self, commit_sha: str, manifest_path: str, destination: Path) -> Path:
+        with self._repo_lock():
+            self._evict_cache()
+            self._ensure_repo()
+            if not self._has_commit(commit_sha):
+                self._fetch()
+            if not self._has_commit(commit_sha):
+                raise GitRepoCacheError(f"git cache does not contain commit: {commit_sha}")
+            archive = self._git_bytes("archive", "--format=tar", commit_sha, manifest_path)
+            self._touch_repo()
+            self._evict_cache()
+        return extract_git_archive(archive, destination, manifest_path)
 
     @contextmanager
     def _repo_lock(self) -> Iterator[None]:
@@ -209,6 +224,18 @@ class GitRepoCache:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise GitRepoCacheError(str(exc)) from exc
 
+    def _git_bytes(self, *args: str) -> bytes:
+        try:
+            return subprocess.run(
+                ["git", f"--git-dir={self.repo_dir}", *args],
+                check=True,
+                capture_output=True,
+                timeout=self.timeout_seconds,
+                env=self._git_env(),
+            ).stdout
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            raise GitRepoCacheError(str(exc)) from exc
+
     def _git_env(self) -> dict[str, str] | None:
         if not self.http_extra_header:
             return None
@@ -233,3 +260,21 @@ def dir_size(path: Path) -> int:
         except OSError:
             continue
     return total
+
+
+def extract_git_archive(archive: bytes, destination: Path, manifest_path: str) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    destination_root = destination.resolve()
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as tar:
+        for member in tar.getmembers():
+            if member.issym() or member.islnk():
+                raise GitRepoCacheError(f"git archive contains unsupported link: {member.name}")
+            target = (destination / member.name).resolve()
+            if destination_root != target and destination_root not in target.parents:
+                raise GitRepoCacheError(f"git archive escapes destination: {member.name}")
+        tar.extractall(destination, filter="data")
+    normalized = manifest_path.strip("/\\").replace("\\", "/")
+    exported = destination / normalized
+    if not exported.exists():
+        raise GitRepoCacheError(f"git archive did not contain path: {manifest_path}")
+    return exported

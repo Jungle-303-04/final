@@ -39,13 +39,14 @@ class Outbound(Protocol):
 class HttpOutbound:
     """기본 어댑터 — base_url + path 로 JSON POST(stdlib)."""
 
-    BASE_URL_ENV = "DEMO_CALLBACK_BASE_URL"
+    BASE_URL_ENV = "OUTBOUND_CALLBACK_BASE_URL"
+    LEGACY_BASE_URL_ENV = "DEMO_CALLBACK_BASE_URL"
     DEFAULT_BASE_URL = "http://api-gateway:8000"
     TIMEOUT_SECONDS_ENV = "OUTBOUND_HTTP_TIMEOUT_SECONDS"  # 아웃바운드 POST 타임아웃 초(기본 5)
     TIMEOUT_SECONDS = int(env(TIMEOUT_SECONDS_ENV, "5"))
 
     def __init__(self, base_url: str | None = None) -> None:
-        default = env(self.BASE_URL_ENV, self.DEFAULT_BASE_URL)
+        default = env(self.BASE_URL_ENV, env(self.LEGACY_BASE_URL_ENV, self.DEFAULT_BASE_URL))
         self.base_url = base_url or default
 
     async def post(self, path: str, body: dict[str, Any]) -> int:

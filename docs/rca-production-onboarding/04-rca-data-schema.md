@@ -345,7 +345,7 @@ consumer:
 producer:
 
 - `dispatch-worker`
-- `safe-pr-worker`
+- `scm-worker`
 
 consumer:
 

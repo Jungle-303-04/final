@@ -49,7 +49,8 @@ management rollout 대상 목록 조회와 각 rollout status를 3번 재시도�
 | `TARGET_CLUSTER_ID_1` | repository variable, 기본 `TARGET_CLUSTER_1` | target 등록과 smoke에서 쓰는 첫 번째 cluster id |
 | `TARGET_CLUSTER_ID_2` | repository variable, 기본 `TARGET_CLUSTER_2` | target 등록에서 쓰는 두 번째 cluster id |
 | `SMOKE_CLUSTER_ID` | repository variable, 기본 `TARGET_CLUSTER_ID_1` | smoke가 GitHub webhook/command body에 넣는 cluster id |
-| `MANIFEST_PATH` | repository variable, 기본 `src/samples/smoke/deploy.yaml` | smoke가 GitHub webhook에 넣고 `manifest-render-worker`가 원격 repository에서 읽는 앱 배포 manifest |
+| `MANIFEST_PATH` | repository variable, 운영 배포 필수 | GitHub webhook에 넣고 `manifest-render-worker`가 원격 repository에서 읽는 앱 배포 manifest |
+| `SMOKE_MANIFEST_PATH` | repository variable, 기본 `src/samples/smoke/deploy.yaml` | `run_smoke=true`인데 `MANIFEST_PATH`가 비어 있을 때만 쓰는 smoke 전용 manifest |
 | `SMOKE_GATEWAY_ATTEMPTS` | env, 기본 `60` | LoadBalancer DNS/health가 준비될 때까지 smoke가 `/healthz`를 확인하는 횟수 |
 | `SMOKE_GATEWAY_INTERVAL_SECONDS` | env, 기본 `5` | smoke gateway health 재시도 간격 |
 | `MGMT_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Management` | dashboard/API 표시 이름 |
@@ -183,7 +184,7 @@ AWS LoadBalancer hostname은 service에 붙은 직후 몇 분 동안 runner DNS�
 최대 5분까지 기다린 뒤 로그인, webhook, event flow 검증으로 넘어간다.
 
 `manifest-render-worker`는 `git.changed`를 처리하면서 원격 repository에서 `MANIFEST_PATH` manifest를 읽는다.
-AWS smoke 기본값은 `src/samples/smoke/deploy.yaml`이다. 이 파일은 `apps/v1 Deployment`라서
+AWS smoke 전용 기본값은 `SMOKE_MANIFEST_PATH=src/samples/smoke/deploy.yaml`이다. 이 파일은 `apps/v1 Deployment`라서
 `manifest.rendered -> desired.diff.detected -> diff.analyzed`까지 이어지는 앱 배포 흐름을 검증한다.
 `deploy/target/target.yaml`은 target agent 설치 참고본이고 `Namespace`, RBAC 같은 플랫폼 리소스를 포함하므로
 GitOps smoke 입력으로 쓰지 않는다.

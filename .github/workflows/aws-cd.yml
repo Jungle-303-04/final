@@ -86,7 +86,8 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
       GITHUB_REPO: ${{ vars.GITHUB_REPO || github.repository }}
       GITHUB_BRANCH: ${{ vars.GITHUB_BRANCH || github.ref_name }}
-      MANIFEST_PATH: ${{ vars.MANIFEST_PATH || 'src/samples/smoke/deploy.yaml' }}
+      MANIFEST_PATH: ${{ vars.MANIFEST_PATH }}
+      SMOKE_MANIFEST_PATH: ${{ vars.SMOKE_MANIFEST_PATH || 'src/samples/smoke/deploy.yaml' }}
       GIT_MANIFEST_SOURCE_MODE: ${{ vars.GIT_MANIFEST_SOURCE_MODE || 'remote' }}
       GIT_LOCAL_MANIFEST_ENABLED: ${{ vars.GIT_LOCAL_MANIFEST_ENABLED || '0' }}
       GIT_CHECKOUT_CACHE_ENABLED: ${{ vars.GIT_CHECKOUT_CACHE_ENABLED || '1' }}

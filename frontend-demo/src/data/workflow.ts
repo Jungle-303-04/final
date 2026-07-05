@@ -7,6 +7,7 @@ export const initialNodes: WorkflowNode[] = [
   {
     id: 'copilot',
     type: 'workflow',
+    selected: true,
     position: { x: 20, y: 270 },
     data: {
       accent: 'purple',

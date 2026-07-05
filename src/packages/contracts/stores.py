@@ -46,6 +46,15 @@ class RepoChangeStore(Protocol):
 
     async def record_manifest_artifact(self, payload: JsonObject) -> JsonObject: ...
 
+    async def find_rendered_manifest_artifacts(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        commit_sha: str,
+        manifest_path: str,
+        renderer_version: str,
+    ) -> list[JsonObject]: ...
+
 
 class WorkflowStore(Protocol):
     async def upsert_application(self, payload: JsonObject) -> JsonObject: ...
@@ -80,6 +89,10 @@ class PullRequestStore(Protocol):
 
 
 class AgentCommandStore(Protocol):
+    async def get_workflow_approval(
+        self, approval_id: str, workspace_id: str = "default"
+    ) -> JsonObject | None: ...
+
     async def queue_agent_command(
         self, correlation_id: str, plan: JsonObject, status: str
     ) -> None: ...

@@ -48,6 +48,8 @@ class SafePrRequestedBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     environment: str = DEFAULT_ENVIRONMENT
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
     next_alert: AlertRequestedBody | None = None
 
 
