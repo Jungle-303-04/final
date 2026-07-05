@@ -105,6 +105,10 @@ gh secret list --repo Jungle-303-04/final --env aws-test
 또는 `creating Cloudflare record ...`가 보여야 한다.
 그 로그가 보이지 않으면 도메인 연결은 아직 끝난 것이 아니다.
 
+`CLOUDFLARE_PROXIED=1`일 때 Cloudflare DNS record TTL은 자동값으로 보낸다.
+Cloudflare API에서 자동 TTL은 `1`이고, 프록시를 끈 경우에만 일반 TTL `60`을 쓴다.
+Cloudflare가 record 생성을 거절하면 AWS CD log에 Cloudflare error code와 message가 같이 출력되어야 한다.
+
 ## AWS smoke를 직접 실행하는 법
 
 로컬에서 GitHub CLI가 로그인되어 있으면 아래 한 줄로 실행한다.

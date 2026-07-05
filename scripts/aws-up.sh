@@ -713,6 +713,7 @@ configure_cloudflare_record() {
   local record_id
   local body_file="${RUNTIME_DIR}/cloudflare-record.json"
   local proxied
+  local ttl
 
   require_domain_config "Cloudflare" "${CUSTOM_DOMAIN}" "${CLOUDFLARE_ZONE_NAME}"
 
@@ -753,13 +754,14 @@ print(records[0]["id"] if records else "")
 PY
   )"
   proxied="$(cloudflare_proxied_json)"
+  ttl="$(cloudflare_ttl_json)"
 
   cat >"${body_file}" <<JSON
 {
   "type": "CNAME",
   "name": "${CUSTOM_DOMAIN}",
   "content": "${lb_host}",
-  "ttl": 60,
+  "ttl": ${ttl},
   "proxied": ${proxied},
   "comment": "${PROJECT_SLUG} api-gateway"
 }
@@ -767,20 +769,69 @@ JSON
 
   if [[ -n "${record_id}" ]]; then
     log "updating Cloudflare record ${CUSTOM_DOMAIN} -> ${lb_host}"
-    curl -fsS -X PUT \
-      -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-      -H "Content-Type: application/json" \
-      --data @"${body_file}" \
-      "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" >/dev/null
+    cloudflare_dns_record_request \
+      "PUT" \
+      "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
+      "${body_file}"
   else
     log "creating Cloudflare record ${CUSTOM_DOMAIN} -> ${lb_host}"
-    curl -fsS -X POST \
+    cloudflare_dns_record_request \
+      "POST" \
+      "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+      "${body_file}"
+  fi
+  CUSTOM_DOMAIN_CONFIGURED="1"
+}
+
+cloudflare_dns_record_request() {
+  local method="$1"
+  local url="$2"
+  local body_file="$3"
+  local response_file="${RUNTIME_DIR}/cloudflare-response.json"
+  local http_code
+
+  http_code="$(
+    curl -sS \
+      -o "${response_file}" \
+      -w "%{http_code}" \
+      -X "${method}" \
       -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
       -H "Content-Type: application/json" \
       --data @"${body_file}" \
-      "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" >/dev/null
+      "${url}"
+  )"
+
+  if [[ "${http_code}" -lt 200 || "${http_code}" -ge 300 ]]; then
+    echo "Cloudflare API ${method} failed with HTTP ${http_code}" >&2
+    python3 - "${response_file}" <<'PY' >&2
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print(path.read_text(encoding="utf-8", errors="replace"))
+    raise SystemExit(0)
+
+errors = payload.get("errors") or []
+messages = payload.get("messages") or []
+if errors:
+    for error in errors:
+        code = error.get("code", "unknown")
+        message = error.get("message", "")
+        print(f"- Cloudflare error {code}: {message}")
+if messages:
+    for message in messages:
+        print(f"- Cloudflare message: {message}")
+if not errors and not messages:
+    print(json.dumps(payload, ensure_ascii=False))
+PY
+    return 1
   fi
-  CUSTOM_DOMAIN_CONFIGURED="1"
 }
 
 cloudflare_is_proxied() {
@@ -799,6 +850,15 @@ cloudflare_proxied_json() {
     printf 'true'
   else
     printf 'false'
+  fi
+}
+
+cloudflare_ttl_json() {
+  if cloudflare_is_proxied; then
+    # Cloudflare proxied records use "Auto" TTL. API value 1 means automatic.
+    printf '1'
+  else
+    printf '60'
   fi
 }
 
