@@ -9,8 +9,8 @@ export const statusLabels: Record<NodeStatus, string> = {
 
 export const uiText = {
   sidebar: {
-    kicker: 'RCA 제어',
-    title: '장애 대응 작업실',
+    kicker: 'AI Ops Studio',
+    title: 'AI 운영 스튜디오',
     live: '실시간',
     paused: '일시정지',
     navLabel: '데모 페이지',
@@ -43,7 +43,7 @@ export const uiText = {
     darkMode: '다크 모드',
   },
   canvas: {
-    subtitle: '워크플로우 캔버스 + 실시간 대시보드',
+    subtitle: 'AI 채팅 + 노드 캔버스 + 실시간 차트',
     toastTitle: '동적 UI 매니페스트를 React 컴포넌트로 렌더링',
     toastSubtitle: '브라우저에는 토큰을 저장하지 않음',
     fallbackStep: '워크플로우 단계',
