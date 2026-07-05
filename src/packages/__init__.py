@@ -1,1 +1,1 @@
-"""Shared Python packages for service processes."""
+"""서비스 프로세스가 공유하는 공용 Python 패키지"""

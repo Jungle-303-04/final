@@ -5,7 +5,7 @@ from typing import Any, Self
 
 from telemetry_registry import ensure_sources_loaded, telemetry
 
-# 소스 목록은 @telemetry.source 로 등록된 provider 가 단일 출처다.
+# 소스 목록은 @telemetry.source 로 등록된 provider 가 단일 출처.
 TelemetrySource = str
 
 
@@ -34,7 +34,7 @@ class TelemetryQueryDefinition:
         )
 
     def to_provider_query(self) -> Any:
-        """등록된 소스 계약(query_type)으로 provider 쿼리 값 객체를 만든다."""
+        """등록된 소스 계약(query_type)으로 provider 쿼리 값 객체 생성."""
         ensure_sources_loaded()
         if self.range_seconds is not None:
             range_query_type = telemetry.range_query_type_for(self.source)

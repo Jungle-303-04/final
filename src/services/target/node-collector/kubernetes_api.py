@@ -16,14 +16,12 @@ KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH = f"{KUBERNETES_SERVICEACCOUNT_DIR}/ca.cr
 KUBERNETES_API_TIMEOUT_SECONDS_ENV = "KUBERNETES_API_TIMEOUT_SECONDS"  # k8s API 타임아웃 초(기본 5)
 KUBERNETES_API_TIMEOUT_SECONDS = int(env(KUBERNETES_API_TIMEOUT_SECONDS_ENV, "5"))
 
-# Kubernetes API responses are JSON objects with nested dict/list values.
-# Keeping this alias local makes helper signatures shorter while we are still
-# shaping the collector-specific payload model.
+# collector 전용 payload 모델이 굳기 전까지 helper 시그니처를 짧게 유지하려는 로컬 alias.
 JsonObject = dict[str, object]
 
 
 class KubernetesApiClient:
-    # Builds and calls the in-cluster Kubernetes API using the Pod's ServiceAccount.
+    # Pod ServiceAccount 로 in-cluster Kubernetes API 호출.
     def base_url(self) -> str:
         host = env(KUBERNETES_SERVICE_HOST_ENV, DEFAULT_KUBERNETES_SERVICE_HOST)
         port = env(KUBERNETES_SERVICE_PORT_ENV, DEFAULT_KUBERNETES_SERVICE_PORT)
@@ -34,7 +32,7 @@ class KubernetesApiClient:
         return {"Authorization": f"Bearer {token}"}
 
     async def list_pods(self) -> JsonObject:
-        # /api/v1/pods returns a PodList for the whole cluster.
+        # /api/v1/pods 는 cluster 전체 PodList 반환.
         async with httpx.AsyncClient(
             timeout=KUBERNETES_API_TIMEOUT_SECONDS,
             verify=KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
@@ -48,8 +46,7 @@ class KubernetesApiClient:
 
 
 def pods_on_node(pods_payload: JsonObject, node_name: str) -> list[JsonObject]:
-    # Kubernetes returns Pods under the top-level "items" field:
-    # {"kind": "PodList", "items": [{...pod...}, ...]}
+    # Pod 목록은 최상위 "items" 필드에 담김: {"kind": "PodList", "items": [{...pod...}, ...]}
     items = pods_payload.get("items", [])
     if not isinstance(items, list):
         return []
@@ -63,7 +60,7 @@ def pods_on_node(pods_payload: JsonObject, node_name: str) -> list[JsonObject]:
         if not isinstance(spec, dict):
             continue
 
-        # spec.nodeName is filled after the scheduler assigns a Pod to a node.
+        # spec.nodeName 은 scheduler 가 노드를 배정한 뒤에 채워짐.
         if spec.get("nodeName") == node_name:
             node_pods.append(pod)
 
@@ -71,8 +68,8 @@ def pods_on_node(pods_payload: JsonObject, node_name: str) -> list[JsonObject]:
 
 
 def is_pod_ready(pod: JsonObject) -> bool:
-    # Pod readiness lives in status.conditions, not in spec.
-    # A Pod is Ready only when {"type": "Ready", "status": "True"} exists.
+    # readiness 는 spec 이 아닌 status.conditions 에 있음.
+    # {"type": "Ready", "status": "True"} 가 있어야 Ready.
     status = pod.get("status", {})
     if not isinstance(status, dict):
         return False
@@ -88,7 +85,7 @@ def is_pod_ready(pod: JsonObject) -> bool:
         if condition.get("type") == "Ready":
             return condition.get("status") == "True"
 
-    # Missing or malformed Ready condition is treated as not ready.
+    # Ready condition 이 없거나 손상되면 not ready 로 간주.
     return False
 
 

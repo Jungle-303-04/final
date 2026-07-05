@@ -33,7 +33,7 @@ class Subscription:
 
 
 class EventRegistry:
-    """전역 이벤트 카탈로그(주소록). @event 로 이벤트 타입이 적힌다."""
+    """전역 이벤트 카탈로그(주소록). @event 로 이벤트 타입 등록"""
 
     def __init__(self) -> None:
         self._defs: dict[EventSubject, type[EventBodyContract]] = {}
@@ -51,14 +51,14 @@ class EventRegistry:
         return decorator
 
     def note_handler(self, service: str, sub: Subscription) -> None:
-        """App 이 자기 핸들러를 카탈로그에 알린다(make events 표시용)."""
+        """App 이 자기 핸들러를 카탈로그에 알림(make events 표시용)"""
         binding = (service, sub.fn.__name__)
         handlers = self._handlers.setdefault(sub.subject, [])
         if binding not in handlers:
             handlers.append(binding)
 
     def note_raw_handler(self, service: str, handler: str) -> None:
-        """전체(>) 구독 프로젝터를 카탈로그에 알린다."""
+        """전체(>) 구독 프로젝터를 카탈로그에 알림"""
         binding = (service, handler)
         if binding not in self._raw_handlers:
             self._raw_handlers.append(binding)

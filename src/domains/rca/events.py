@@ -1,4 +1,4 @@
-"""RCA/agent event bodies."""
+"""RCA/agent event body 정의."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class IncidentDetectedBody(EventBody):
 @event(EventSubject.EVIDENCE_BUILT)
 @dataclass(frozen=True)
 class EvidenceBuiltBody(EventBody):
-    """evidence.built — 원본 증거를 Evidence로 정규화했다."""
+    """evidence.built — 원본 증거를 Evidence로 정규화."""
 
     evidence: Evidence
 
@@ -136,7 +136,7 @@ class EvidenceBundle(EventBody):
 @event(EventSubject.EVIDENCE_BUNDLE_BUILT)
 @dataclass(frozen=True)
 class EvidenceBundleBuiltBody(EventBody):
-    """evidence.bundle.built — IncidentRecord 기준 RCA 판단 근거를 묶었다."""
+    """evidence.bundle.built — IncidentRecord 기준 RCA 판단 근거 묶음."""
 
     evidence: Evidence
     incident: IncidentRecord
@@ -216,7 +216,7 @@ class RcaRuleMissingBody(EventBody):
 @event(EventSubject.RCA_BACKLOG_ITEM_CREATED)
 @dataclass(frozen=True)
 class RcaBacklogItemCreatedBody(EventBody):
-    """rca.backlog.created — RCA rule 개선 backlog를 만든다."""
+    """rca.backlog.created — RCA rule 개선 backlog 생성."""
 
     backlog_id: str
     title: str
@@ -418,7 +418,7 @@ class RecoverySelectionRequestedBody(EventBody):
 @event(EventSubject.RECOVERY_ACTION_SELECTED)
 @dataclass(frozen=True)
 class RecoveryActionSelectedBody(EventBody):
-    """recovery.action_selected — 복구 후보 하나가 선택됐다."""
+    """recovery.action_selected — 복구 후보 하나 선택됨."""
 
     plan: RecoveryPlan
     selected: RecoveryActionCandidate

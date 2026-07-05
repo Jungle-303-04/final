@@ -1,8 +1,7 @@
-"""Managed-field GitOps diff helpers.
+"""managed-field GitOps diff 헬퍼.
 
-This module keeps the "what should we compare?" policy separate from the
-worker. The worker can feed it raw rendered manifests, SSA dry-run output, and
-live objects; the helpers only keep the fields this service intends to manage.
+"무엇을 비교할지" 정책을 워커와 분리 — 워커가 rendered manifest, SSA dry-run 출력,
+live 객체를 넣으면 이 서비스가 관리하기로 한 필드만 남김.
 """
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ def resource_ref(kind: str, name: str) -> str:
 
 
 def rendered_manifest_to_object(rendered: Any) -> JsonObject:
-    """Adapt the current RenderedManifest value object to a Kubernetes-like object."""
+    """RenderedManifest 값 객체를 Kubernetes 객체 형태로 변환."""
     manifest = getattr(rendered, "manifest", None)
     if isinstance(manifest, Mapping) and manifest:
         return deepcopy(dict(manifest))
@@ -68,7 +67,7 @@ def snapshot_from_rendered_manifest(
 
 
 def extract_declared_field_paths(obj: Mapping[str, Any]) -> list[str]:
-    """Return policy candidate paths that were explicitly present in the rendered YAML."""
+    """렌더된 YAML에 명시적으로 존재한 정책 후보 경로 반환."""
     return sorted(extract_managed_fields(obj))
 
 

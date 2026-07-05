@@ -1,6 +1,6 @@
-"""gitops 보안 회귀 — GitHub webhook 은 HMAC 서명을 검증한다. [P1]
+"""gitops 보안 회귀 — GitHub webhook HMAC 서명 검증. [P1]
 
-서명 없는/위조된 webhook 으로 배포 파이프라인을 트리거하던 구멍을 막는다.
+서명 없는/위조된 webhook 으로 배포 파이프라인을 트리거하던 구멍을 막음.
 시크릿 미설정이면 무인증으로 열지 않고 거부(fail-closed).
 """
 

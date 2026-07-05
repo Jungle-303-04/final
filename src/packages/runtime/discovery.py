@@ -1,7 +1,7 @@
 """서비스 명부 자동 발견 — src/services/**/app.py 스캔이 단일 출처.
 
 기존에는 같은 서비스 목록이 scripts/events.py(SERVICES), 테스트(SERVICE_ENTRYPOINTS),
-deploy manifest, 문서 표에 각각 수동으로 존재했다. 이 모듈이 그 목록들을 대체함:
+deploy manifest, 문서 표에 각각 수동으로 존재했음. 이 모듈이 그 목록들을 대체함:
 명부가 필요한 곳은 discover_services() 를 읽음. 서비스 추가 = app.py 생성으로 끝.
 
 정적 스캔(import 없음)이라 부작용이 없고, 이름 중복은 즉시 예외(fail-fast).

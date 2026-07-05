@@ -41,7 +41,7 @@ def test_kind_classification() -> None:
 
 
 def test_duplicate_directory_names_resolved_by_app_literal() -> None:
-    """ai/diff-worker 와 gitops/diff-worker — App 리터럴 이름으로 구분된다."""
+    """ai/diff-worker 와 gitops/diff-worker — App 리터럴 이름으로 구분됨."""
     by_name = {svc.name: svc for svc in discover_services(ROOT_DIR)}
 
     assert by_name["diff-worker"].group == "gitops"

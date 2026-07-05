@@ -1,8 +1,4 @@
-"""Safe PR preflight and risk policy.
-
-The policy is shared by the preparation, explanation, and SCM workers so that
-PR creation cannot bypass the same gate through a different consumer.
-"""
+"""Safe PR preflight·위험 정책 — 준비/설명/SCM worker가 공유해 다른 consumer 경유 게이트 우회 차단."""
 
 from __future__ import annotations
 
@@ -71,7 +67,7 @@ class SafePrDiffPolicy(Protocol):
 
 
 class DefaultSafePrPreflightPolicy:
-    """Reject requests that cannot produce a concrete repository change."""
+    """구체적인 저장소 변경을 만들 수 없는 요청 거부."""
 
     def evaluate(self, request: SafePrRequestedBody) -> SafePrPolicyResult:
         if not request.patches:
@@ -100,7 +96,7 @@ class DefaultSafePrPreflightPolicy:
 
 
 class DefaultSafePrDiffPolicy:
-    """Explain and gate a prepared Safe PR request."""
+    """준비된 Safe PR 요청 설명·게이트."""
 
     def __init__(self, preflight: SafePrPreflightPolicy | None = None) -> None:
         self.preflight = preflight or DefaultSafePrPreflightPolicy()

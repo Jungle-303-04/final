@@ -2,7 +2,7 @@
 
 기존에는 "prometheus=metrics, loki=logs, tempo=traces" 지식이 4곳(Literal 타입,
 SOURCE_EVIDENCE_KEYS dict, to_provider_query if-elif, agent 의 역방향 dict)에
-흩어져 있었다. 이제 provider 클래스 위 데코레이터 선언이 단일 출처다:
+흩어져 있었음. 이제 provider 클래스 위 데코레이터 선언이 단일 출처:
 
     @telemetry.source(source="prometheus", evidence_key="metrics",
                       query_type=PrometheusInstantQuery)
@@ -10,7 +10,7 @@ SOURCE_EVIDENCE_KEYS dict, to_provider_query if-elif, agent 의 역방향 dict)�
 
 새 소스 추가 = providers/ 아래 파일 1개. collector/queries/agent 는
 소스 목록을 모른 채 telemetry.spec()/sources() 만 읽음.
-중복 등록은 즉시 예외(fail-fast). 이 모듈은 의존 없는 leaf 다(순환 import 방지).
+중복 등록은 즉시 예외(fail-fast). 이 모듈은 의존 없는 leaf(순환 import 방지).
 """
 
 from __future__ import annotations

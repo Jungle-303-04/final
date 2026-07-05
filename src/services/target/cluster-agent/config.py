@@ -8,7 +8,7 @@ from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
 DEFAULT_MANAGEMENT_BASE_URL = ""
-# 관측 스택 기본 주소는 contracts 가 유일한 정의 지점 — 여기서는 re-export 만 한다.
+# 관측 스택 기본 주소는 contracts 가 유일한 정의 지점 — 여기서는 re-export 만 함.
 DEFAULT_PROMETHEUS_BASE_URL = gateway_requests.DEFAULT_PROMETHEUS_BASE_URL
 DEFAULT_LOKI_BASE_URL = gateway_requests.DEFAULT_LOKI_BASE_URL
 DEFAULT_TEMPO_BASE_URL = gateway_requests.DEFAULT_TEMPO_BASE_URL

@@ -8,9 +8,7 @@ from prometheus_metrics import MetricSample
 
 
 class MetricCollector(Protocol):
-    # This is not a real collector object. It is a type contract.
-    # A concrete class like PodMetricCollector matches this contract
-    # when it defines collector_name and this same async collect(labels) method.
+    # 실제 collector 가 아닌 타입 계약 — collector_name 과 collect(labels) 를 갖추면 충족.
     collector_name: str
 
     async def collect(self, labels: dict[str, str]) -> list[MetricSample]: ...
@@ -18,7 +16,7 @@ class MetricCollector(Protocol):
 
 @dataclass(frozen=True)
 class PodSummary:
-    # Kubernetes Pod data reduced to the node-scoped values this collector owns.
+    # Kubernetes Pod 데이터를 이 collector 담당 노드 범위 값으로 축약한 것.
     pod_count: int
     not_ready_pod_count: int
 
@@ -28,7 +26,7 @@ def collector_status_metric_sample(
     collector_name: str,
     has_error: bool,
 ) -> MetricSample:
-    # Always emit collector health so Prometheus can see partial collection failures.
+    # 부분 수집 실패를 Prometheus 에서 볼 수 있도록 collector health 를 항상 노출.
     return MetricSample(
         name="node_collector_scrape_error",
         help="Whether node collector failed to read Kubernetes API data.",
@@ -38,7 +36,7 @@ def collector_status_metric_sample(
 
 
 class PodMetricCollector:
-    # Owns Pod-related Kubernetes API reads and converts them directly to MetricSample values.
+    # Pod 관련 Kubernetes API 읽기를 담당하고 MetricSample 값으로 바로 변환함.
     collector_name = "pod"
 
     def __init__(self, kubernetes: KubernetesApiClient, node_name: str) -> None:
@@ -46,7 +44,7 @@ class PodMetricCollector:
         self.node_name = node_name
 
     async def collect_pod_summary(self) -> PodSummary:
-        # Fetch all Pods, then reduce them to values for this collector's node.
+        # 전체 Pod 조회 후 이 collector 노드 값으로 축약.
         pods_payload = await self.kubernetes.list_pods()
         node_pods = pods_on_node(pods_payload, self.node_name)
         return PodSummary(

@@ -1,4 +1,4 @@
-"""Inventory read model tables for multi-cluster Kubernetes resources."""
+"""inventory 도메인 테이블 — 멀티 클러스터 Kubernetes 리소스 read model."""
 
 from __future__ import annotations
 

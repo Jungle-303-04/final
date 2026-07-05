@@ -44,7 +44,7 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 
 
 class IdentityAccessRepository(DatabaseConnection):
-    """Identity, organization, group, and resource access repository."""
+    """identity·조직·그룹·리소스 접근 저장소."""
 
     user_table = UserAccount.__table__
     workspace_table = Workspace.__table__
