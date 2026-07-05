@@ -294,9 +294,9 @@ audit-worker 는 `entry = audit_entry(envelope.body); if entry: save(entry)` 뿐
 
 **등록 모듈 로딩:** `_domain_modules("projection")` 로 자동 발견 (제안 1의 로더와 동일 규약). 도메인이 감사 표현을 소유하므로 audit 도메인 ← 형제 도메인 의존도 생기지 않는다.
 
-### (보류 권고) H5 — Database 타입 스텁
+### (보류 권고) H5 — Database 타입 선언 생성
 
-`scripts/gen_database_stub.py` 로 `_discovered_repositories()` 결과에서 TYPE_CHECKING 블록을 생성하고 CI 에서 drift 검증하는 방법이 있으나, 비용 대비 효과가 낮다. `# pending` 주석 6개를 실제 클래스로 채우는 1회성 수정 + PR 체크리스트로 충분.
+`_discovered_repositories()` 결과에서 TYPE_CHECKING 블록을 생성하고 CI 에서 drift 검증하는 방법이 있으나, 비용 대비 효과가 낮다. `# pending` 주석 6개를 실제 클래스로 채우는 1회성 수정 + PR 체크리스트로 충분.
 
 ---
 

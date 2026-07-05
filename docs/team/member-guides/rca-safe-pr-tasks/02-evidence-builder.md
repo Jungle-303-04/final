@@ -71,4 +71,4 @@ uv run ruff check src tests
 
 ## 다음 작업
 
-[03. RCA Result와 Fake Analyzer](03-rca-result-fake-analyzer.md)
+[03. RCA Result와 Deterministic Analyzer](03-rca-result-deterministic-analyzer.md)

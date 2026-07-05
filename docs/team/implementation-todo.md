@@ -21,7 +21,7 @@
 - TODO는 GitHub Project WBS 또는 담당 issue의 체크리스트로 옮긴 뒤 구현한다.
 - PR 하나는 하나의 담당 영역 또는 하나의 vertical slice만 바꾼다.
 - 새 API, event, DB table, Kubernetes 권한은 코드, 테스트, source docs, WIKI를 함께 갱신한다.
-- fake adapter는 데모 fallback으로 남길 수 있지만 UI/API/문서에서 실제 구현처럼 표현하지 않는다.
+- UI/API/문서는 실제 provider adapter 기준으로만 설명한다. 테스트 격리는 주입 가능한 transport나 in-memory store로 처리한다.
 - production namespace write는 금지하고 `sandbox` namespace write만 정책/승인 경계 안에서 허용한다.
 - 역할 간 입력/출력, 테스트 선택, 모순 점검은 `docs/team/cross-role-implementation-test-guide.md`를 기준으로 한다.
 - 실운영 자동 변경, 실제 provider write, AI tool 실행 하드닝은 `docs/hardening-roadmap.md`의 P0/P1 gate를 따른다.
@@ -60,7 +60,7 @@ TODO:
 - TODO(platform): 새 event subject/body가 `src/packages/contracts/event_bus`, `docs/events.md`, 테스트에 동시에 반영되는 contract gate를 보강한다.
 - TODO(platform): outbox relay가 provider side effect 전 crash injection 시나리오를 통과하도록 운영 검증을 유지한다.
 - TODO(platform): dashboard read model 확장 시 `dashboard.updated`, query API, SSE stream이 같은 correlation 기준을 쓰는지 검증한다.
-- TODO(platform): 데모 전 E2E runbook을 command 입력, evidence, RCA, Safe PR fake, dashboard, DLQ/replay까지 한 줄로 실행 가능하게 유지한다.
+- TODO(platform): 데모 전 E2E runbook을 command 입력, evidence, RCA, Safe PR, dashboard, DLQ/replay까지 한 줄로 실행 가능하게 유지한다.
 - TODO(platform): worker 처리 시간, attempts, retry, DLQ율, outbox pending age, NATS consumer lag, command queue age metric을 노출한다.
 - TODO(platform): Gateway/event emit/worker/DB/outbox/outbound call 사이에 `correlation_id`와 `causation_id` trace attribute를 연결한다.
 - TODO(platform): event schema version과 DB migration 도입 전까지 계약 변경 PR에 golden event compatibility test를 요구한다.
@@ -151,7 +151,7 @@ TODO:
 완료 기준:
 
 - RCA output은 evidence reference와 root-cause/action 근거를 가진다.
-- Safe PR 실제 write 테스트는 fake client와 feature-flag-off fail-closed 케이스를 포함한다.
+- Safe PR 실제 write 테스트는 injected HTTP transport와 fail-closed 케이스를 포함한다.
 - repo write 실패는 `safe_pr.failed`와 audit timeline에 남는다.
 
 ## Target / Agent / Telemetry
@@ -169,7 +169,7 @@ TODO:
 - TODO(target): command polling/result 보고는 Gateway가 내려준 correlation을 유지하고 DB/NATS를 직접 알지 않게 한다.
 - TODO(telemetry): Prometheus, Loki, OpenTelemetry adapter는 raw telemetry 전체가 아니라 EvidenceDraft/summary evidence로 축약한다.
 - TODO(telemetry): Kubernetes pod/event/node reader는 최소 RBAC와 sandbox write 제한을 테스트로 증명한다.
-- TODO(telemetry): fake Prometheus/Loki/OTel adapter는 fallback으로 남기되 실제 adapter와 같은 interface를 구현한다.
+- TODO(telemetry): Prometheus/Loki/Tempo/Kubernetes provider failure와 source freshness를 evidence metadata로 남긴다.
 - TODO(target): Target Agent는 command/result를 telemetry/evidence보다 우선 처리하도록 bounded queue와 local durable outbound spool 설계를 적용한다. 세부 기준은 `docs/team/member-guides/target-agent-local-queue.md`를 따른다.
 - TODO(target): agent action allowlist를 workspace/repo/cluster/environment 정책과 approval evidence까지 확장한다. approval evidence 누락 거부는 구현됐고 workspace/repo/cluster 정책 동기화가 남았다.
 - TODO(target): command result에 sanitized stdout/stderr, resource별 status, retryable flag, applied flag를 포함한다. 기본 필드는 구현됐고, 다중 resource partial apply와 retryable 분류 고도화가 남았다.

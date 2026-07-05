@@ -81,8 +81,10 @@ EvidenceDraft 예시:
 
 ```text
 src/services/target/cluster-agent/agent.py
-src/services/target/cluster-agent/fake_telemetry.py
 src/services/target/cluster-agent/config.py
+src/services/target/cluster-agent/evidence/collector.py
+src/services/target/cluster-agent/providers/
+src/services/target/cluster-agent/queries/registry.py
 ```
 
 추후 분리 후보:
@@ -164,7 +166,7 @@ def evidence_draft_to_gateway_payload(
 | Task | 목표 | 확인 |
 | --- | --- | --- |
 | 1 | 현재 Target 파일 위치 확인 | `find src/services/target -maxdepth 3 -type f` |
-| 2 | fake Prometheus 응답 확인 | `FAKE_TELEMETRY_KIND=prometheus` 흐름 이해 |
+| 2 | Prometheus provider 응답 확인 | `PrometheusMetricsProvider.normalize_payload()` 흐름 이해 |
 | 3 | Prometheus raw JSON fixture 작성 | vector response fixture 하나 |
 | 4 | `latest_from_prometheus_vector` 테스트 | latest 값 하나가 나온다 |
 | 5 | EvidenceDraft 변환 테스트 | summary, signals, source_ref가 작게 나온다 |

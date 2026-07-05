@@ -152,7 +152,7 @@ domains/telemetry/
   evidence.py               # EvidenceDraft — agent 내부 중간 요약 모델(raw → 압축, 최종 event 계약 아님)
   executor.py               # 명령 실행기 — k8s adapter + RBAC(sandbox namespace 한정)
   adapters/
-    prometheus.py           # metrics 수집(실제 + fake fallback)
+    prometheus.py           # metrics 수집(provider adapter)
     loki.py                 # logs 수집
     otel.py                 # traces 수집
   collector.py              # node-collector(DaemonSet) — node/runtime 메트릭
@@ -162,7 +162,7 @@ src/services/target/node-collector/app.py         # 선택형 DaemonSet
 
 특수 고려:
 - **RBAC**: agent 는 자기 클러스터 ServiceAccount 로 sandbox namespace 쓰기만(최소권한). `deploy/target` 의 Role/RoleBinding 로 범위 명시.
-- **adapter 교체**: 실제 Prometheus/Loki/OTel 과 fake adapter 를 같은 인터페이스로 두고 env 로 선택(fake = fallback).
+- **adapter 교체**: Prometheus/Loki/Tempo/Kubernetes provider는 같은 collector 인터페이스로 묶고 source registry로 선택한다.
 - **node-collector**: DaemonSet 이라 Fargate 배치 금지(노드별 1개).
 - **증거 스키마 계약**: evidence 모델은 rca 도메인과 공유 계약 → `src/packages/contracts/event_bus/bodies/` 의 `ClusterEvidenceReceivedBody` 와 정합 유지.
 
@@ -225,4 +225,4 @@ WIKI `projects/final/architecture.md` 의 포트 계약(Protocol)을 도메인 r
 - 도메인별 모듈: `WIKI:projects/final/member-guides/{gateway-auth, gitops-command, rca-safe-pr, target-telemetry-*}.md`
 - 분배/계약 규칙: `WIKI:projects/final/team-work-allocation.md`, `repo:docs/team/work-allocation.md`
 - RCA 지식: `WIKI:users/ummfieg/rca-scenarios/`(40 시나리오), `feedback/rca-*.md`
-- frontend/security: `WIKI:wiki/frontend/README.md`, `wiki/security/README.md` (현재 stub → 착수 시 정의 필요)
+- frontend/security: `WIKI:wiki/frontend/README.md`, `wiki/security/README.md` (현재 구현된 `/dashboard/rca/*`와 auth/session 계약 기준으로 확장)

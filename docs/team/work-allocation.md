@@ -53,7 +53,7 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 | 영역 | 현재 경로 |
 | --- | --- |
 | GitOps pipeline | `src/services/gitops/git-pull-worker`, `src/services/gitops/github-poll-worker`, `src/services/gitops/workflow-controller`, `src/services/gitops/manifest-render-worker`, `src/services/gitops/diff-worker`, `src/services/gitops/diff-analyze-worker`, `src/services/gitops/scm-worker` |
-| Projection | `src/services/projection/audit-worker`; dashboard projection은 planned |
+| Projection | `src/services/projection/audit-worker`, `src/services/projection/dashboard-worker` |
 | Target | `src/services/target/cluster-agent`, `src/services/target/node-collector` |
 
 ## 2026-06-30 기준 미흡한 부분
@@ -65,7 +65,7 @@ PR, branch, 이 문서, member guide를 매번 다시 읽어 자기 작업을 �
 | AI 기본 모듈 | RCA/Safe PR | 별도 AI service 분리 전까지 evidence/RCA 질의, command 승인, PR 설명/재생성 입력 경계를 정리 |
 | 실제 GitHub PR 생성 | RCA/Safe PR | Safe PR client는 feature flag로 보호 |
 | agent 관리 로직 | Target/Telemetry | agent registry/status와 command lease 상태 관리 |
-| Prometheus/Loki 실제 adapter | Target/Telemetry | fake adapter는 fallback으로 유지 |
+| Prometheus/Loki/Tempo/Kubernetes provider | Target/Telemetry | provider failure는 evidence `provider_status`와 command result에 남김 |
 | Outbox relay 운영 하드닝 | Platform/Integration | 실제 provider side effect 전 crash injection, relay source filter, 운영 runbook을 유지 |
 | 수요일 demo script | Platform/Integration + 각 담당자 | 매주 수요일은 실행 가능한 demo 필요 |
 
