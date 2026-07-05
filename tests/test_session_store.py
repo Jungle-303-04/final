@@ -30,7 +30,7 @@ def session_config() -> RedisSessionStoreConfig:
         ttl_seconds=60,
         key_prefix="session",
         token_bytes=32,
-        default_roles=("member",),
+        default_roles=("user",),
         default_workspace_id="default",
         rate_limit_key_prefix="rate",
         rate_limit=120,
