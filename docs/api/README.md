@@ -36,8 +36,10 @@ AWS 배포가 다른 `AUTH_EMAIL`, `AUTH_PASSWORD`로 bootstrap되어 있으면 
 
 `cluster_id`는 target 등록 시 사용한 실제 cluster id다. 기본값은 AWS target smoke 기준 `cluster-1`이다.
 
-로컬에서 처음 테스트하면 [로컬 테스트 실행 기준](../local-testing.md)을 따라 `make local-test-env`, `make local-up`, `make local-smoke` 순서로 실행한다.
-`local` Environment는 기본적으로 아래 값과 맞춰져 있다.
+팀 통합 테스트는 `aws-test` Environment가 기준이다.
+로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
+`local` Environment는 개인이 Gateway를 별도로 띄워 빠르게 확인할 때만 쓰는 보조 profile이다.
+기본값은 아래와 같다.
 
 ```text
 auth_email: admin.local@example.com
