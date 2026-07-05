@@ -685,10 +685,10 @@ from __future__ import annotations
 import os
 import re
 
-value = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip().strip("\"'")
-lower = value.lower()
+raw_value = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+value = raw_value.strip().strip("\"'")
 assignment = re.search(
-    r"(?:^|\s)(?:export\s+)?cloudflare_api_token\s*=\s*(.+)$",
+    r"(?:^|\s)(?:export\s+)?cloudflare_api_token\s*[:=]\s*(.+)$",
     value,
     flags=re.IGNORECASE | re.DOTALL,
 )
@@ -710,7 +710,38 @@ elif value.lower().startswith("bearer"):
     value = value[6:].strip().strip("\"'")
 
 value = "".join(ch for ch in value.strip().strip("\"'") if not ch.isspace())
+if not re.fullmatch(r"[A-Za-z0-9._~+/=-]{20,}", value):
+    candidate = re.search(r"[A-Za-z0-9._~+/=-]{20,}", raw_value)
+    if candidate:
+        value = candidate.group(0)
 print(value, end="")
+PY
+}
+
+cloudflare_validate_api_token() {
+  CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" \
+  CLOUDFLARE_NORMALIZED_API_TOKEN="$(cloudflare_api_token_value)" \
+  python3 - <<'PY'
+from __future__ import annotations
+
+import os
+import re
+import sys
+
+raw = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+token = os.environ.get("CLOUDFLARE_NORMALIZED_API_TOKEN", "")
+allowed = bool(re.fullmatch(r"[A-Za-z0-9._~+/=-]+", token))
+if token and allowed and len(token) >= 20:
+    raise SystemExit(0)
+
+print(
+    "Cloudflare API token is not a valid Bearer token after normalization "
+    f"(raw_length={len(raw)}, normalized_length={len(token)}, "
+    f"allowed_bearer_charset={str(allowed).lower()}). "
+    "Set the GitHub environment secret CLOUDFLARE_API_TOKEN to the raw Cloudflare API token only.",
+    file=sys.stderr,
+)
+raise SystemExit(1)
 PY
 }
 
@@ -777,6 +808,7 @@ configure_cloudflare_record() {
     echo "Cloudflare API token is blank after normalization; skipping ${CUSTOM_DOMAIN}" >&2
     return 0
   fi
+  cloudflare_validate_api_token
 
   zone_id="$(cloudflare_zone_id)"
   if [[ -z "${zone_id}" ]]; then
