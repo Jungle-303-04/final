@@ -19,12 +19,13 @@
 - `deploy/target/opentelemetry.yaml`
 - `deploy/target/tempo.yaml`
 - `deploy/target/target.yaml`
-- `docs/team/member-guides/target-telemetry-data-flows.md`
+- `docs/team/member-guides/target-agent-command-evidence-flow.md`
+- `docs/rca-production-onboarding/01-minjeong-command-target-evidence.md`
 
 ## 수정 후보
 
-- `docs/team/member-guides/target-telemetry-data-flows.md`
-- 필요하면 `docs/team/member-guides/target-telemetry.md`
+- `docs/team/member-guides/target-agent-command-evidence-flow.md`
+- `docs/team/target-telemetry-tasks/01-telemetry-provider-boundary.md`
 
 ## 선형 절차
 
@@ -70,7 +71,7 @@ target observability manifests:
 ```bash
 rg "KubernetesSnapshotProvider|PrometheusRangeQuery|LokiLogsProvider|TempoTracesProvider|@telemetry.source" src/services/target/cluster-agent
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_telemetry_registry.py tests/test_target_kubernetes_evidence.py tests/test_target_metric_evidence.py -q
-git diff --check -- docs/team/member-guides/target-telemetry-data-flows.md docs/team/target-telemetry-tasks/01-telemetry-provider-boundary.md
+git diff --check -- docs/team/member-guides/target-agent-command-evidence-flow.md docs/team/target-telemetry-tasks/01-telemetry-provider-boundary.md
 ```
 
 ## 완료 기준

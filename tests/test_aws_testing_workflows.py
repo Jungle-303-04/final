@@ -11,12 +11,15 @@ def read(path: str) -> str:
 
 def test_ci_manifest_checks_do_not_require_docker() -> None:
     workflow = read(".github/workflows/ci.yml")
+    script = read("scripts/manifest-check.sh")
 
     assert "bash scripts/manifest-check.sh" in workflow
     assert "docker run" not in workflow
     assert "docker build" not in workflow
     assert "kubeconform" not in workflow
     assert "service:ci" not in workflow
+    assert "kubectl create" not in script
+    assert "kubectl kustomize" in script
 
 
 def test_integration_smoke_dispatches_aws_cd_smoke() -> None:

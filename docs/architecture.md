@@ -56,11 +56,10 @@ packages
   + runtime                      FastAPI/worker/async service 실행 객체
 
 deploy
-  + kind                         legacy local debug 설정
   + management                   관리 클러스터 Kubernetes manifest
   + target                       대상 클러스터 Kubernetes manifest
 
-scripts/*.sh                    양쪽 클러스터 로컬 운영 스크립트
+scripts/*.sh                    AWS context 기준 운영/검증 스크립트
 secrets                         SOPS/age 기반 secret 공유 템플릿
 ```
 
