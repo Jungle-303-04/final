@@ -49,7 +49,7 @@ from packages.contracts.identity import (
     AccessResourceType,
     ResourceRole,
 )
-from packages.storage.engine import DatabaseConnection
+from packages.storage.engine import DatabaseConnection, iso_or_none
 
 # 원자 해결 대상으로 열림으로 간주하는 승인 상태 — 라우터의 open 판정과 동일해야 함
 OPEN_APPROVAL_STATUSES = (
@@ -280,18 +280,149 @@ class RepoChangeRepository(DatabaseConnection):
                 existing_application_id_statement
             ).scalar_one_or_none()
             if existing_application_id and str(existing_application_id) != application_id:
+                resolved_application_id = str(existing_application_id)
                 conn.execute(
                     table.update()
-                    .where(table.c.application_id == str(existing_application_id))
+                    .where(table.c.application_id == resolved_application_id)
                     .values(**update_values)
                 )
-                return {
-                    **payload,
-                    "workspace_id": workspace_id,
-                    "application_id": str(existing_application_id),
-                }
-            conn.execute(statement)
-        return {**payload, "workspace_id": workspace_id, "application_id": application_id}
+            else:
+                conn.execute(statement)
+                resolved_application_id = application_id
+        self._grant_owner_if_present(
+            workspace_id,
+            payload.get("user_id"),
+            AccessResourceType.APPLICATION.value,
+            resolved_application_id,
+        )
+        return {**payload, "workspace_id": workspace_id, "application_id": resolved_application_id}
+
+    def list_applications(
+        self,
+        workspace_id: str,
+        *,
+        application_ids: set[str] | None = None,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        if application_ids is not None and not application_ids:
+            return []
+        table = Application.__table__
+        statement = (
+            select(
+                table.c.application_id,
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.name,
+                table.c.manifest_path,
+                table.c.status,
+                table.c.metadata,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.name, table.c.application_id)
+            .limit(max(1, min(limit, 500)))
+        )
+        if application_ids is not None:
+            statement = statement.where(table.c.application_id.in_(application_ids))
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_application(row) for row in rows]
+
+    def get_application(self, workspace_id: str, application_id: str) -> JsonObject | None:
+        table = Application.__table__
+        statement = (
+            select(
+                table.c.application_id,
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.name,
+                table.c.manifest_path,
+                table.c.status,
+                table.c.metadata,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(table.c.workspace_id == workspace_id, table.c.application_id == application_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_application(row) if row else None
+
+    def list_application_deployment_bindings(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        application = self.get_application(workspace_id, application_id)
+        if application is None:
+            return []
+        table = DeploymentBinding.__table__
+        statement = (
+            select(
+                table.c.binding_id,
+                table.c.workspace_id,
+                table.c.repository_id,
+                table.c.watch_target_id,
+                table.c.cluster_id,
+                table.c.namespace,
+                table.c.app_name,
+                table.c.manifest_path,
+                table.c.environment,
+                table.c.resource_class,
+                table.c.status,
+                table.c.deploy_policy,
+                table.c.access_policy,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == application["repository_id"],
+                table.c.app_name == application["name"],
+            )
+            .order_by(table.c.environment, table.c.cluster_id, table.c.namespace)
+            .limit(max(1, min(limit, 500)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_deployment_binding(row) for row in rows]
+
+    def list_application_workflow_runs(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        table = WorkflowRun.__table__
+        statement = (
+            select(
+                table.c.workflow_run_id,
+                table.c.workspace_id,
+                table.c.application_id,
+                table.c.binding_id,
+                table.c.environment,
+                table.c.cluster_id,
+                table.c.commit_sha,
+                table.c.status,
+                table.c.current_step,
+                table.c.summary,
+                table.c.command_id,
+                table.c.metadata,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(table.c.workspace_id == workspace_id, table.c.application_id == application_id)
+            .order_by(table.c.created_at.desc())
+            .limit(max(1, min(limit, 500)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_workflow_run(row) for row in rows]
 
     def start_workflow_run(self, payload: JsonObject) -> JsonObject:
         workflow_run_id = derive_workflow_run_id(payload)
@@ -829,3 +960,28 @@ def derive_workflow_step_id(workflow_run_id: str, step_name: str) -> str:
 def derive_approval_id(workflow_run_id: str) -> str:
     raw = f"{workflow_run_id}|deploy-approval"
     return f"approval-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def serialize_application(row: Any) -> JsonObject:
+    item = dict(row)
+    item["metadata"] = dict(item.get("metadata") or {})
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
+def serialize_deployment_binding(row: Any) -> JsonObject:
+    item = dict(row)
+    item["deploy_policy"] = dict(item.get("deploy_policy") or {})
+    item["access_policy"] = dict(item.get("access_policy") or {})
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
+def serialize_workflow_run(row: Any) -> JsonObject:
+    item = dict(row)
+    item["metadata"] = dict(item.get("metadata") or {})
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
