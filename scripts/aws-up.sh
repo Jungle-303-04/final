@@ -678,15 +678,27 @@ JSON
   CUSTOM_DOMAIN_CONFIGURED="1"
 }
 
+cloudflare_api_token_value() {
+  CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" python3 - <<'PY'
+from __future__ import annotations
+
+import os
+
+value = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip().strip("\"'")
+lower = value.lower()
+if lower.startswith("authorization:"):
+    value = value.split(":", 1)[1].strip().strip("\"'")
+    lower = value.lower()
+if lower.startswith("bearer "):
+    value = value[7:].strip().strip("\"'")
+print(value, end="")
+PY
+}
+
 cloudflare_authorization_value() {
-  case "${CLOUDFLARE_API_TOKEN}" in
-    Bearer\ *|bearer\ *)
-      printf '%s\n' "${CLOUDFLARE_API_TOKEN}"
-      ;;
-    *)
-      printf 'Bearer %s\n' "${CLOUDFLARE_API_TOKEN}"
-      ;;
-  esac
+  local token
+  token="$(cloudflare_api_token_value)"
+  printf 'Bearer %s\n' "${token}"
 }
 
 cloudflare_zone_id() {
