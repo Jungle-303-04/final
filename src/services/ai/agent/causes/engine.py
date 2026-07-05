@@ -7,6 +7,7 @@ from domains.rca.events import (
     CauseEvaluation,
     EvidenceBundle,
     IncidentRecord,
+    MissingEvidenceCheck,
     RcaReportDetail,
     RcaRuleMissing,
 )
@@ -137,6 +138,18 @@ def evaluate_causes(
     return evaluations
 
 
+def missing_evidence_checks(missing_evidence: list[str]) -> list[MissingEvidenceCheck]:
+    return [
+        MissingEvidenceCheck(
+            check_id=f"missing:{source}",
+            source=source,
+            status="missing",
+            reason=f"{source} evidence is required before RCA can be completed.",
+        )
+        for source in missing_evidence
+    ]
+
+
 def build_root_cause_reason(selected: CauseEvaluation) -> str:
     if selected.candidate_id == UNKNOWN_EVALUATION_ID:
         return NO_MATCHING_RULE_MESSAGE
@@ -157,6 +170,9 @@ def unknown_root_cause(evaluation: CauseEvaluation) -> RcaReportDetail:
             [MATCHING_CAUSE_RULE_EVIDENCE, *evaluation.missing_evidence]
         ),
         reason=NO_MATCHING_RULE_MESSAGE,
+        missing_evidence_checks=missing_evidence_checks(
+            unique_ordered([MATCHING_CAUSE_RULE_EVIDENCE, *evaluation.missing_evidence])
+        ),
     )
 
 
@@ -172,6 +188,7 @@ def insufficient_evidence_root_cause(evaluations: list[CauseEvaluation]) -> RcaR
         supporting_evidence=[],
         missing_evidence=missing_evidence,
         reason="후보는 생성됐지만 매칭된 근거가 없어 최종 원인을 확정하지 않았습니다.",
+        missing_evidence_checks=missing_evidence_checks(missing_evidence),
     )
 
 
@@ -184,6 +201,7 @@ def analyze_root_cause(evaluations: list[CauseEvaluation]) -> RcaReportDetail:
             supporting_evidence=[],
             missing_evidence=[],
             reason="평가된 원인 후보가 없어 최종 원인을 선택할 수 없습니다.",
+            missing_evidence_checks=[],
         )
 
     if evaluations[0].candidate_id == UNKNOWN_EVALUATION_ID:
@@ -204,4 +222,5 @@ def analyze_root_cause(evaluations: list[CauseEvaluation]) -> RcaReportDetail:
         supporting_evidence=selected.supporting_evidence,
         missing_evidence=selected.missing_evidence,
         reason=build_root_cause_reason(selected),
+        missing_evidence_checks=missing_evidence_checks(selected.missing_evidence),
     )

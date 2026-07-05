@@ -33,8 +33,8 @@ def test_dead_letter_monitor_requests_operational_alert() -> None:
     assert outs[0].message == "dead letter captured for command.requested"
 
 
-def test_rca_fallback_requests_human_action() -> None:
-    worker = load_service("ai/rca-fallback-worker")
+def test_rca_fallback_requests_followup_action() -> None:
+    worker = load_service("ai/rca-feedback-worker")
     incident = IncidentRecord(
         incident_id="incident-1",
         cluster_id="target-cluster-01",
@@ -63,7 +63,8 @@ def test_rca_fallback_requests_human_action() -> None:
 
     outs = run_handler(worker.on_ai_fallback_requested, body)
 
-    assert subjects_of(outs) == ["rca.action_required"]
+    assert subjects_of(outs) == ["rca.followup.required"]
     assert outs[0].evidence_ref == "evidence-1"
     assert outs[0].workspace_id == "workspace-1"
-    assert "AI fallback required" in outs[0].reason
+    assert outs[0].reason_code == "ai_fallback_required"
+    assert "AI fallback required" in outs[0].summary

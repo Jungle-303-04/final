@@ -1196,7 +1196,8 @@ def deployment_rollout_status(body: JsonObject) -> JsonObject:
     spec_obj = spec if isinstance(spec, dict) else {}
     status_obj = status if isinstance(status, dict) else {}
     name = str(metadata_obj.get("name") or "")
-    desired = int(spec_obj.get("replicas") or 1)
+    replicas_value = spec_obj.get("replicas", 1)
+    desired = int(1 if replicas_value is None else replicas_value)
     generation = int(metadata_obj.get("generation") or 0)
     observed = int(status_obj.get("observedGeneration") or 0)
     updated = int(status_obj.get("updatedReplicas") or 0)

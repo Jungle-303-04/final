@@ -6,6 +6,7 @@ from domains.rca.events import (
     EvidenceBundleBuiltBody,
     RcaActionRequiredBody,
     RcaAiFallbackRequestedBody,
+    RcaAnalysisBlockedBody,
     RcaBacklogItemCreatedBody,
     RcaCandidatesEvaluatedBody,
     RcaCandidatesPlannedBody,
@@ -14,6 +15,7 @@ from domains.rca.events import (
     RcaRuleMissingBody,
 )
 from packages.contracts.event_bus.bodies import EventBody
+from packages.contracts.event_bus.bodies.platform import PipelineContractFailedBody
 from services.ai.agent.causes.engine import (
     NO_MATCHING_RULE_MESSAGE,
     analyze_root_cause,
@@ -62,10 +64,15 @@ class CauseEvaluator:
 
     def evaluate_body(self, evt: RcaCandidatesPlannedBody) -> EventBody:
         if evt.evidence_bundle is None:
-            return RcaActionRequiredBody(
+            return PipelineContractFailedBody(
+                contract="RcaCandidatesPlannedBody.evidence_bundle",
                 reason=self.messages.missing_analysis_context,
-                evidence_ref=evt.evidence_ref,
+                consumer="analyze-worker",
+                payload=evt.to_body(),
                 workspace_id=evt.workspace_id,
+                evidence_ref=evt.evidence_ref,
+                severity="warning",
+                diagnostics={"reason_code": "context_missing"},
             )
         evaluations = evaluate_causes(evt.candidates, evt.evidence_bundle, evt.rule_missing)
         return RcaCandidatesEvaluatedBody(
@@ -81,6 +88,18 @@ class CauseEvaluator:
         )
 
 
+def block_reason_code(evt: RcaCandidatesEvaluatedBody, detail) -> str | None:
+    if evt.rule_missing is not None or detail.root_cause == "unknown":
+        return "rule_missing"
+    if detail.root_cause == "insufficient_evidence":
+        return "insufficient_evidence"
+    if detail.selected_candidate_id == "none":
+        return "no_evaluation"
+    if detail.missing_evidence:
+        return "insufficient_evidence"
+    return None
+
+
 @dataclass(frozen=True)
 class RootCauseAnalyzer:
     defaults: RcaDefaults = field(default_factory=RcaDefaults)
@@ -94,6 +113,23 @@ class RootCauseAnalyzer:
                 workspace_id=evt.workspace_id,
             )
         rca_detail = analyze_root_cause(evt.evaluations)
+        reason_code = block_reason_code(evt, rca_detail)
+        if reason_code is not None:
+            return RcaAnalysisBlockedBody(
+                reason_code=reason_code,
+                reason=rca_detail.reason,
+                evidence_ref=evt.evidence_ref,
+                workspace_id=evt.workspace_id,
+                evidence=evt.evidence,
+                incident=evt.incident,
+                evidence_bundle=evt.evidence_bundle,
+                candidates=evt.candidates,
+                evaluations=evt.evaluations,
+                rca_detail=rca_detail,
+                rule_missing=evt.rule_missing,
+                missing_evidence=rca_detail.missing_evidence,
+                diagnostics={"root_cause": rca_detail.root_cause},
+            )
         return RcaCompletedBody(
             root_cause=rca_detail.root_cause,
             action=self.defaults.recommended_action,
