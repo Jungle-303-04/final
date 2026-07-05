@@ -25,8 +25,13 @@ body:json {
 
 script:post-response {
   const body = res.getBody();
-  if (res.status === 200 && body && body.workspace_id) {
-    bru.setVar("workspace_id", body.workspace_id);
+  if (res.status === 200 && body) {
+    if (body.workspace_id) {
+      bru.setVar("workspace_id", body.workspace_id);
+    }
+    if (body.user_id) {
+      bru.setVar("user_id", body.user_id);
+    }
   }
 }
 
