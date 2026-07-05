@@ -6,7 +6,7 @@
 
 - 처음부터 완전 분리된 마이크로서비스로 구현한다.
 - 단일 FastAPI 앱, role dispatcher, 모듈식 모놀리식 구조는 금지한다.
-- 관리 영역과 대상 Kubernetes는 별도 kind 클러스터로 실행한다.
+- 관리 영역과 대상 Kubernetes는 별도 Kubernetes cluster로 실행한다. 팀 통합 테스트 기준은 AWS EKS다.
 - 관리 영역의 서비스들은 NATS JetStream을 통해 비동기로 통신한다.
 - 저장소는 Kubernetes workload로 분리해 실행한다.
 - 대상 클러스터 Agent는 관리 영역으로 outbound 연결만 맺는다.
@@ -56,7 +56,7 @@ packages
   + runtime                      FastAPI/worker/async service 실행 객체
 
 deploy
-  + kind                         두 개의 kind cluster 설정
+  + kind                         legacy local debug 설정
   + management                   관리 클러스터 Kubernetes manifest
   + target                       대상 클러스터 Kubernetes manifest
 

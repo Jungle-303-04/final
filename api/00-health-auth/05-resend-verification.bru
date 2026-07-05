@@ -1,0 +1,36 @@
+meta {
+  name: 05 Resend Verification
+  type: http
+  seq: 5
+  tags: [
+    auth
+    write
+  ]
+}
+
+post {
+  url: {{base_url}}/auth/resend-verification
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "email": "{{signup_email}}",
+    "password": "{{signup_password}}"
+  }
+}
+
+test {
+  test("response is explicit", function () {
+    expect([200, 400, 401, 404, 422, 429]).to.include(res.status);
+  });
+
+  test("success response contains verification flag", function () {
+    if (res.status === 200) {
+      expect(res.getBody()).to.have.property("verification_required");
+    }
+  });
+}

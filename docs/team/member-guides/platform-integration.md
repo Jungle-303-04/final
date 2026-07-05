@@ -213,32 +213,32 @@ Phase 9 이후의 release gate는 [hardening-roadmap](../../hardening-roadmap.md
 테스트:
 
 - `make check`에 포함.
-- Docker build와 같은 dependency set에서도 import 가능.
+- AWS CD 배포 환경과 같은 dependency set에서도 import 가능.
 
 ## Phase 4. CI dependency/runtime gap 제거
 
 목표:
 
 ```text
-CI에서는 통과하지만 Docker 컨테이너가 부팅 실패하는 차이를 없앤다.
+CI에서는 통과하지만 AWS CD 배포 환경에서 부팅 실패하는 차이를 없앤다.
 ```
 
 왜 해야 하는가:
 
-- pyproject에는 있는데 `src/services/requirements.txt`에 없는 의존성은 컨테이너에서 죽는다.
+- pyproject에는 있는데 runtime image dependency set에 없는 의존성은 배포 후 죽는다.
 - import 이름 충돌 같은 문제는 실제 startup에서 드러난다.
 - 초보 팀원은 CI 초록불을 신뢰하므로 CI가 실제 실행에 가까워야 한다.
 
 구현할 것:
 
 - `src/services/requirements.txt`와 pyproject dependency 정합성 확인.
-- Gateway/worker container import smoke.
-- `make smoke`가 실제 app startup을 확인하도록 개선.
+- Gateway/worker startup smoke.
+- `make aws-smoke`가 실제 app startup을 확인하도록 개선.
 - Redis/Postgres/NATS dependency health wait 확인.
 
 생각할 것:
 
-- CI에서 docker compose/kind까지 매번 돌릴지, nightly로 둘지.
+- AWS smoke를 PR마다 돌릴지, nightly/manual로 둘지.
 - p0 PR에는 어떤 smoke를 required로 둘지.
 - secret 없는 test env를 어떻게 구성할지.
 
@@ -250,7 +250,7 @@ CI에서는 통과하지만 Docker 컨테이너가 부팅 실패하는 차이를
 테스트:
 
 - `make check`.
-- container import/startup smoke.
+- AWS startup smoke.
 - 최소 Gateway health check.
 
 ## Phase 5. Smoke test 강화
@@ -269,7 +269,7 @@ Gateway -> event -> worker -> DB/read model 중 최소 한 줄이 실제로 흐�
 
 구현할 것:
 
-- local smoke script.
+- AWS smoke script.
 - sample webhook 또는 sample evidence input.
 - expected event/read model 확인.
 - failure log 출력 개선.
@@ -287,7 +287,7 @@ Gateway -> event -> worker -> DB/read model 중 최소 한 줄이 실제로 흐�
 
 테스트:
 
-- `make smoke` 한 번으로 최소 경로 확인.
+- `make aws-smoke` 한 번으로 최소 경로 확인.
 - 실패 시 exit code non-zero.
 
 ## Phase 6. DLQ/replay 운영 가이드
@@ -399,7 +399,7 @@ DB 저장과 event publish가 동시에 필요한 흐름에서 불일치 위험�
 - 새 event body 계약이 `src/packages/contracts/event_bus/bodies/`와 테스트에 반영됨
 - architecture/runtime 변경이 문서에 설명됨
 - 다른 service owner 동작을 바꾼 경우 사전 조율 기록 존재
-- Docker runtime dependency와 CI dependency가 어긋나지 않음
+- AWS runtime dependency와 CI dependency가 어긋나지 않음
 - 새 멤버 가이드 변경은 source와 WIKI에 모두 반영됨
 
 ## 처음 읽을 파일

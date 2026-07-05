@@ -63,7 +63,7 @@ Audit Timeline Service
 
 ## 한 작업씩 따라가는 문서
 
-실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [RCA / Safe PR 선형 작업 가이드](rca-safe-pr-tasks/README.md)를 0번부터 순서대로 따른다.
+실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [RCA / Safe PR 선형 작업 가이드](../rca-safe-pr-tasks/README.md)를 0번부터 순서대로 따른다.
 
 처음 합류한 팀원은 먼저 [역할별 실습 가이드](../role-practice-guide.md)의 가인 섹션에서 현재 흐름과 테스트를 한 번 따라간 뒤, 이 문서와 선형 작업 가이드로 들어간다.
 

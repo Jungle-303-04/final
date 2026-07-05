@@ -1,0 +1,23 @@
+meta {
+  name: 01 Healthz
+  type: http
+  seq: 1
+  tags: [
+    smoke
+    public
+  ]
+}
+
+get {
+  url: {{base_url}}/healthz
+}
+
+test {
+  test("200 OK", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("status is ok", function () {
+    expect(res.getBody()).to.have.property("status", "ok");
+  });
+}

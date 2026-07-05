@@ -1,7 +1,9 @@
 # AWS CI/CD
 
-이 레포의 CI는 기존 `.github/workflows/ci.yml`이 담당하고, AWS 배포는
-`.github/workflows/aws-cd.yml`이 담당한다.
+이 레포의 기본 검증은 `.github/workflows/ci.yml`이 담당하고, 실제 서비스 통합 테스트와
+AWS 배포는 `.github/workflows/aws-cd.yml`이 담당한다.
+
+자세한 실행 순서는 [AWS 테스트 실행 기준](aws-testing-runbook.md)을 따른다.
 
 ## 인증
 
@@ -38,12 +40,12 @@ GitHub environment secret에 저장한다.
 GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 - app/resource prefix: `kubeheal`
-- AWS region: `us-east-1`
-- management EKS cluster: `kubeheal-mgmt`
-- target EKS cluster 1: `kubeheal-target-a`
-- target EKS cluster 2: `kubeheal-target-b`
-- ECR repository: `kubeheal-service`
-- display names: `KubeHeal Management`, `KubeHeal Target A`, `KubeHeal Target B`
+- AWS region: repository variable `AWS_REGION`, 현재 `ap-northeast-2`
+- management EKS cluster: repository variable `MGMT_CLUSTER`, 현재 `kubernetes-ops`
+- target EKS cluster 1: repository variable `TARGET_CLUSTER_1`, 현재 `cluster-1`
+- target EKS cluster 2: repository variable `TARGET_CLUSTER_2`, 현재 `cluster-2`
+- ECR repository: repository variable `ECR_REPO`, 현재 `kubernetes-ops-service`
+- display names: 현재 `kubernetes-ops`, `cluster-1`, `cluster-2`
 - dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
 
 기본 노드 스펙:
@@ -54,8 +56,8 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 ## 배포 방식
 
-`dev` push는 먼저 `Promote Dev To Main` workflow에서 테스트와 Docker build를 실행한다.
-통과하면 `dev`를 `main`에 merge하고, `main` push가 AWS CD를 실행한다.
+`dev` push는 먼저 `Promote Dev To Main` workflow에서 `scripts/test.sh`를 실행한다.
+통과하면 `dev`를 `main`에 merge하고, AWS CD를 `run_smoke=true`로 dispatch한다.
 
 실제 AWS 배포는 아래 둘 중 하나일 때 실행된다.
 
@@ -64,7 +66,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 배포 job의 기본값은 기존 EKS 클러스터가 있다고 가정한다.
 
-- Docker image build
+- container image build/push
 - ECR push
 - management runtime ConfigMap/Secret upsert
 - management manifests apply
@@ -99,16 +101,25 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 생성된 값은 기본적으로 출력하지 않는다. 로컬 디버그에서만
 `PRINT_GENERATED_ADMIN_PASSWORD=1 make aws-up`으로 확인한다.
 
-## 로컬 실행
+## AWS smoke 실행
 
-AWS credentials가 준비된 로컬에서는 같은 로직을 직접 실행할 수 있다.
-
-```bash
-make aws-up
-```
-
-정리:
+서비스 수준 테스트는 AWS CD에서 실행한다. GitHub CLI가 준비되어 있으면 아래를 실행한다.
 
 ```bash
-make aws-down
+make aws-smoke
 ```
+
+직접 workflow를 호출하려면 아래와 같이 실행한다.
+
+```bash
+gh workflow run aws-cd.yml \
+  --repo Jungle-303-04/final \
+  --ref main \
+  -f create_clusters=false \
+  -f ensure_ebs_csi=false \
+  -f bootstrap_admin=false \
+  -f register_targets=false \
+  -f run_smoke=true
+```
+
+로컬 클러스터 기반 smoke는 현재 팀 테스트 기준으로 사용하지 않는다.

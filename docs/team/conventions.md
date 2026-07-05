@@ -178,10 +178,8 @@ bash scripts/test.sh
 수요일 데모 전:
 
 ```bash
-make build-image
-make up
-make smoke
-make status
+make check
+make aws-smoke
 ```
 
 GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
@@ -193,7 +191,7 @@ GitHub Actions CI가 실패하면 PR은 merge하지 않는다.
 - status check 통과 필수
 - 필수 check:
   - `Python lint and tests`
-  - `Kubernetes manifest and image checks`
+  - `Kubernetes manifest checks`
 - conversation resolve 필수
 - force push 금지
 - branch deletion 금지

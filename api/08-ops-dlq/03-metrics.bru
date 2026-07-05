@@ -1,0 +1,32 @@
+meta {
+  name: 03 Gateway Metrics
+  type: http
+  seq: 3
+  tags: [
+    ops
+    metrics
+    read
+  ]
+}
+
+get {
+  url: {{base_url}}/metrics
+}
+
+headers {
+  authorization: Bearer {{metrics_token}}
+}
+
+test {
+  test("metrics are text or protected by metrics token", function () {
+    expect([200, 401]).to.include(res.status);
+  });
+
+  test("success body exposes operational metric names", function () {
+    if (res.status === 200) {
+      expect(res.getBody()).to.include("event_dead_letters_open_total");
+      expect(res.getBody()).to.include("outbox_pending_total");
+      expect(res.getBody()).to.include("command_status_total");
+    }
+  });
+}

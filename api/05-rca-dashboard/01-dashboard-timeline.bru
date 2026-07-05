@@ -1,0 +1,26 @@
+meta {
+  name: 01 Dashboard RCA Timeline
+  type: http
+  seq: 1
+  tags: [
+    dashboard
+    session
+    read
+  ]
+}
+
+get {
+  url: {{base_url}}/dashboard/rca/timeline?cluster_id={{cluster_id}}&limit=20
+}
+
+test {
+  test("200 with rows or explicit auth/access failure", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("success body has items array", function () {
+    if (res.status === 200) {
+      expect(res.getBody().items).to.be.an("array");
+    }
+  });
+}
