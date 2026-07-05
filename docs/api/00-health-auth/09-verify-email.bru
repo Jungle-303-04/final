@@ -12,7 +12,7 @@ get {
   url: {{base_url}}/auth/verify-email?token={{email_verification_token}}&redirect=/dashboard
 }
 
-test {
+tests {
   test("redirects when token is valid, otherwise explicit error", function () {
     expect([303, 400, 401, 404, 422]).to.include(res.status);
   });

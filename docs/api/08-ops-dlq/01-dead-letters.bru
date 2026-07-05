@@ -13,7 +13,7 @@ get {
   url: {{base_url}}/dead-letters?limit=20
 }
 
-test {
+tests {
   test("admin can list dead letters or auth blocks clearly", function () {
     expect([200, 401, 403]).to.include(res.status);
   });

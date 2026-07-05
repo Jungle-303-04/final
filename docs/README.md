@@ -1,28 +1,38 @@
 # 프로젝트 문서 루트
 
-여기가 문서 시작점이다. 문서는 팀원이 실제 코드 구현, API 확인, AWS 테스트까지 바로 이어갈 수 있는 것만 남긴다.
+여기가 문서 시작점이다.
+문서는 팀원이 실제 코드 구현, API 확인, AWS 테스트까지 바로 이어갈 수 있는 것만 남긴다.
 
 새 문서를 추가할 때는 세 가지를 지킨다.
 
-- repo root 기준 `docs/<문서>`, `docs/<분류>/<문서>`, `docs/<분류>/<하위분류>/<문서>`까지만 둔다.
-- 새 문서는 아래 `전체 문서 색인`에 링크한다.
-- 문서에 route, event, provider, test를 쓰면 실제 코드와 테스트가 있어야 한다.
+1. repo root 기준 `docs/<문서>`, `docs/<분류>/<문서>`, `docs/<분류>/<하위분류>/<문서>`까지만 둔다.
+2. 새 문서는 이 파일의 `전체 문서 색인`에 링크한다.
+3. 문서에 route, event, provider, test를 쓰면 실제 코드와 테스트가 있어야 한다.
 
 ## 먼저 읽는 순서
 
-| 순서 | 문서 | 이유 |
-| --- | --- | --- |
-| 1 | [repo README](../README.md) | 실행 기준, 서비스 목록, 검증 명령을 먼저 본다. |
-| 2 | [팀 온보딩 지도](onboarding/README.md) | 민정/가인/찬빈 역할 경계를 먼저 잡는다. |
-| 3 | [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md) | command, evidence, RCA, PR, dashboard 흐름을 한 번에 본다. |
-| 4 | [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md) | 외부 기준 기능 범위를 최소선으로 두고 우리 설계 기준으로 빠진 production scope가 없는지 본다. |
-| 5 | [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md) | route, event, worker, provider, test를 찾는 순서를 익힌다. |
-| 6 | [Bruno API 테스트](api/README.md) | Gateway API를 사람이 직접 눌러 확인한다. |
-| 7 | [AWS 테스트 기준](aws-testing-runbook.md) | 실제 서비스 smoke 기준을 확인한다. |
+1. [repo README](../README.md)를 먼저 본다.
+   실행 기준, 서비스 목록, 검증 명령을 확인한다.
 
-## 역할별 필독 문서
+2. [팀 온보딩 지도](onboarding/README.md)를 본다.
+   민정, 가인, 찬빈 역할 경계를 먼저 잡는다.
 
-### 민정
+3. [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)을 본다.
+   command, evidence, RCA, PR, dashboard 흐름을 한 번에 본다.
+
+4. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
+   외부 기준 기능 범위를 최소선으로 두고 우리 설계 기준으로 빠진 production scope가 없는지 본다.
+
+5. [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)을 본다.
+   route, event, worker, provider, test를 찾는 순서를 익힌다.
+
+6. [Bruno API 테스트](api/README.md)를 연다.
+   Gateway API를 사람이 직접 눌러 확인한다.
+
+7. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+   실제 서비스 smoke 기준을 확인한다.
+
+## 민정이 먼저 볼 문서
 
 민정은 Command + Target + Evidence를 맡는다.
 
@@ -35,7 +45,10 @@
 7. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 8. [Bruno API 테스트](api/README.md)
 
-### 가인
+민정은 먼저 `/agent/commands/*`, `/agent/evidence/jobs/*`, `@telemetry.source(...)`를 익힌다.
+그다음 Kubernetes, metrics, logs, traces provider를 같은 수준으로 다룬다.
+
+## 가인이 먼저 볼 문서
 
 가인은 Evidence + RCA + Safe PR을 맡는다.
 
@@ -47,7 +60,10 @@
 6. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 7. [Bruno API 테스트](api/README.md)
 
-### 찬빈
+가인은 먼저 `cluster.evidence.received`가 RCA worker chain을 어떻게 통과하는지 본다.
+그다음 `safe_pr.requested`와 `safe_pr.created`의 경계를 분리해서 익힌다.
+
+## 찬빈이 먼저 볼 문서
 
 찬빈은 Frontend + 권한 + Dashboard를 맡는다.
 
@@ -60,25 +76,36 @@
 7. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 8. [Bruno API 테스트](api/README.md)
 
-## 공통 문서
+찬빈은 먼저 `/dashboard/rca/*` response DTO와 권한 필터를 익힌다.
+그다음 realtime은 보조 갱신 경로로 붙인다.
 
-| 문서 | 언제 보는가 |
-| --- | --- |
-| [아키텍처](architecture.md) | 서비스 경계와 전체 구조를 확인할 때 |
-| [이벤트 흐름](events.md) | subject, body, worker 연결을 확인할 때 |
-| [팀 컨벤션](team/conventions.md) | 브랜치, 커밋, PR, 테스트 기준을 볼 때 |
-| [파일 소유권](team/file-ownership-convention.md) | 내 파일과 조율 파일을 나눌 때 |
-| [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md) | 서로 넘기는 값과 검증을 확인할 때 |
-| [역할별 실습 가이드](team/role-practice-guide.md) | 처음 손으로 따라 하며 연습할 때 |
-| [운영/배포](operations-deployment.md) | AWS와 운영 명령을 확인할 때 |
-| [AWS CI/CD](aws-cicd.md) | GitHub Actions와 AWS CD 흐름을 볼 때 |
-| [AWS 테스트 기준](aws-testing-runbook.md) | 실제 smoke 실행 기준을 볼 때 |
-| [운영 준비도](production-readiness.md) | production 전 위험과 점검 항목을 볼 때 |
-| [Secrets](secrets.md) | secret 이름과 주입 경계를 볼 때 |
+## 공통으로 보는 문서
+
+서비스 경계와 전체 구조가 필요하면 [아키텍처](architecture.md)를 본다.
+
+subject, body, worker 연결이 필요하면 [이벤트 흐름](events.md)을 본다.
+
+브랜치, 커밋, PR, 테스트 기준이 필요하면 [팀 컨벤션](team/conventions.md)을 본다.
+
+내 파일과 조율 파일을 나눌 때는 [파일 소유권](team/file-ownership-convention.md)을 본다.
+
+서로 넘기는 값과 검증을 확인할 때는 [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md)를 본다.
+
+처음 손으로 따라 하며 연습할 때는 [역할별 실습 가이드](team/role-practice-guide.md)를 본다.
+
+AWS와 운영 명령을 확인할 때는 [운영/배포](operations-deployment.md)를 본다.
+
+GitHub Actions와 AWS CD 흐름은 [AWS CI/CD](aws-cicd.md)를 본다.
+
+실제 smoke 실행 기준은 [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+
+production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)를 본다.
+
+secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 ## 전체 문서 색인
 
-### 루트
+루트 문서는 아래에 있다.
 
 - [architecture](architecture.md)
 - [aws-cicd](aws-cicd.md)
@@ -88,14 +115,14 @@
 - [production-readiness](production-readiness.md)
 - [secrets](secrets.md)
 
-### 온보딩
+온보딩 문서는 아래에 있다.
 
 - [onboarding/README](onboarding/README.md)
 - [onboarding/minjeong-command-target-evidence](onboarding/minjeong-command-target-evidence.md)
 - [onboarding/gain-evidence-rca](onboarding/gain-evidence-rca.md)
 - [onboarding/chanbin-frontend](onboarding/chanbin-frontend.md)
 
-### RCA 프로덕션 온보딩
+RCA 프로덕션 온보딩 문서는 아래에 있다.
 
 - [rca-production-onboarding/README](rca-production-onboarding/README.md)
 - [rca-production-onboarding/00-current-runtime-flow](rca-production-onboarding/00-current-runtime-flow.md)
@@ -107,19 +134,20 @@
 - [rca-production-onboarding/06-chanbin-permission-dashboard](rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [rca-production-onboarding/07-how-to-find-and-implement](rca-production-onboarding/07-how-to-find-and-implement.md)
 
-### 팀
+팀 문서는 아래에 있다.
 
 - [team/conventions](team/conventions.md)
 - [team/file-ownership-convention](team/file-ownership-convention.md)
 - [team/cross-role-implementation-test-guide](team/cross-role-implementation-test-guide.md)
 - [team/role-practice-guide](team/role-practice-guide.md)
 
-### 팀원별 상세
+팀원별 상세 문서는 아래에 있다.
 
 - [team/member-guides/target-agent-command-evidence-flow](team/member-guides/target-agent-command-evidence-flow.md)
 - [team/member-guides/rca-safe-pr](team/member-guides/rca-safe-pr.md)
+- [team/member-guides/chanbin-permission-model](team/member-guides/chanbin-permission-model.md)
 
-### RCA / Safe PR 선형 작업
+RCA / Safe PR 선형 작업 문서는 아래에 있다.
 
 - [team/rca-safe-pr-tasks/README](team/rca-safe-pr-tasks/README.md)
 - [team/rca-safe-pr-tasks/00-current-code-map](team/rca-safe-pr-tasks/00-current-code-map.md)
@@ -132,7 +160,7 @@
 - [team/rca-safe-pr-tasks/07-audit-timeline-projection](team/rca-safe-pr-tasks/07-audit-timeline-projection.md)
 - [team/rca-safe-pr-tasks/08-rca-safe-pr-chain-test](team/rca-safe-pr-tasks/08-rca-safe-pr-chain-test.md)
 
-### Target / Telemetry 선형 작업
+Target / Telemetry 선형 작업 문서는 아래에 있다.
 
 - [team/target-telemetry-tasks/README](team/target-telemetry-tasks/README.md)
 - [team/target-telemetry-tasks/00-current-code-map](team/target-telemetry-tasks/00-current-code-map.md)

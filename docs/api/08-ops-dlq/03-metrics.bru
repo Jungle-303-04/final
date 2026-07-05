@@ -17,7 +17,7 @@ headers {
   authorization: Bearer {{metrics_token}}
 }
 
-test {
+tests {
   test("metrics are text or protected by metrics token", function () {
     expect([200, 401]).to.include(res.status);
   });

@@ -12,7 +12,7 @@ get {
   url: {{base_url}}/providers/catalog
 }
 
-test {
+tests {
   test("200 OK", function () {
     expect(res.status).to.equal(200);
   });

@@ -17,13 +17,13 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "reason": "approved from Bruno"
   }
 }
 
-test {
+tests {
   test("accepted or explicit auth/not-found/conflict response", function () {
     expect([200, 401, 403, 404, 409, 422]).to.include(res.status);
   });
