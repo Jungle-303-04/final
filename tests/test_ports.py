@@ -41,6 +41,20 @@ class FakeAgentCommandQueue:
     def __init__(self) -> None:
         self.queued: list[tuple[str, dict[str, Any], str]] = []
 
+    async def get_workflow_approval(
+        self, approval_id: str, workspace_id: str = "default"
+    ) -> dict[str, Any] | None:
+        return {
+            "approval_id": approval_id,
+            "workflow_run_id": "",
+            "workspace_id": workspace_id,
+            "status": "granted",
+            "details": {
+                "approval_ref": approval_id,
+                "policy_decision_ref": "policy-decision-1",
+            },
+        }
+
     async def queue_agent_command(
         self, correlation_id: str, plan: dict[str, Any], status: str
     ) -> None:

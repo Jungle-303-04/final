@@ -1,8 +1,8 @@
 """SCM gateway event bodies.
 
-Safe PR creation is centralized in scm-worker:
-safe_pr.requested -> safe_pr.patch_prepared -> safe_pr.created/safe_pr.failed.
-diff.explained is emitted from the patch-prepared event as an AI sidecar signal.
+Safe PR creation is intentionally split:
+safe_pr.requested -> safe_pr.patch_prepared -> diff.explained -> safe_pr.ready_for_creation
+-> safe_pr.created/safe_pr.failed.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ class SafePrReadyForCreationBody(EventBody):
 @event(EventSubject.SAFE_PR_CREATED)
 @dataclass(frozen=True)
 class SafePrCreatedBody(EventBody):
-    """safe_pr.created — repo-gateway 가 PR 을 만들었다."""
+    """safe_pr.created — scm-worker가 PR 을 만들었다."""
 
     pr_url: str
     provider: str
@@ -97,7 +97,7 @@ class SafePrCreatedBody(EventBody):
 @event(EventSubject.SAFE_PR_FAILED)
 @dataclass(frozen=True)
 class SafePrFailedBody(EventBody):
-    """safe_pr.failed — repo-gateway 가 PR 생성을 완료하지 못했다."""
+    """safe_pr.failed — scm-worker가 PR 생성을 완료하지 못했다."""
 
     provider: str
     title: str

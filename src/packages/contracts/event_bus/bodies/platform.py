@@ -6,7 +6,7 @@ domains/*/events.py 대신 계약 계층에 둠.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
@@ -29,3 +29,18 @@ class DeadLetterCreatedBody(EventBody):
     correlation_id: str
     # 디코드 실패(raw) 경로에서만 원문이 실림.
     payload: JsonObject | None = None
+
+
+@event(EventSubject.PIPELINE_CONTRACT_FAILED)
+@dataclass(frozen=True)
+class PipelineContractFailedBody(EventBody):
+    """pipeline.contract_failed — consumer rejected an event contract."""
+
+    contract: str
+    reason: str
+    consumer: str
+    payload: JsonObject
+    workspace_id: str
+    evidence_ref: str | None = None
+    severity: str = "warning"
+    diagnostics: JsonObject = field(default_factory=dict)

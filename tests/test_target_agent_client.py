@@ -387,6 +387,15 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
     assert get_count == 2
 
 
+def test_deployment_rollout_status_allows_scale_to_zero() -> None:
+    agent_module = load_agent_module()
+
+    status = agent_module.deployment_rollout_status(ready_deployment(replicas=0))
+
+    assert status["desired_replicas"] == 0
+    assert status["ready"] is True
+
+
 def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
     agent_module = load_agent_module()
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
