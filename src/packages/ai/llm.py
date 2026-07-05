@@ -55,6 +55,8 @@ DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
 RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
+MAX_RETRY_AFTER_SECONDS = 30.0
+JSON_PARSE_ATTEMPTS = 2
 
 PROVIDER_OPENAI = "openai"
 PROVIDER_OPENAI_COMPATIBLE = "openai-compatible"
@@ -155,12 +157,19 @@ class LlmGateway:
             "Return only JSON that matches this JSON Schema:\n"
             f"{json.dumps(schema, ensure_ascii=False, sort_keys=True)}"
         )
-        raw = await self.complete(
-            json_prompt,
-            response_format={"type": "json_object"},
-            **options,
-        )
-        return json.loads(raw)
+        # LLM이 코드펜스로 감싸거나 잘린 JSON을 내는 경우가 있어 파싱 실패는 1회 재요청한다.
+        last_error: json.JSONDecodeError | None = None
+        for _ in range(JSON_PARSE_ATTEMPTS):
+            raw = await self.complete(
+                json_prompt,
+                response_format={"type": "json_object"},
+                **options,
+            )
+            try:
+                return json.loads(_strip_json_fences(raw))
+            except json.JSONDecodeError as exc:
+                last_error = exc
+        raise ValueError("LLM did not return valid JSON") from last_error
 
     def metadata(self, *, provider: str | None = None) -> dict[str, Any]:
         selected_provider = normalize_provider(provider or self.default_provider)
@@ -192,16 +201,20 @@ class LlmGateway:
     ) -> str:
         attempt = 0
         while True:
+            server_delay: float | None = None
             try:
                 return await action()
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code not in RETRYABLE_HTTP_STATUS or attempt >= max_retries:
                     raise
+                server_delay = _retry_after_seconds(exc.response)
             except (httpx.TimeoutException, httpx.TransportError):
                 if attempt >= max_retries:
                     raise
             attempt += 1
-            await asyncio.sleep(min(2 ** (attempt - 1), 8))
+            # 429/503의 Retry-After가 있으면 서버 지시를 따르고, 없으면 지수 백오프.
+            backoff = min(2 ** (attempt - 1), 8)
+            await asyncio.sleep(server_delay if server_delay is not None else backoff)
 
 
 @dataclass(slots=True)
@@ -464,6 +477,26 @@ def _first_env_value(names: tuple[str, ...]) -> tuple[str, str | None]:
         if value:
             return value, name
     return "", None
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    raw = response.headers.get("retry-after", "")
+    try:
+        seconds = float(raw)
+    except ValueError:
+        return None
+    if seconds <= 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+
+
+def _strip_json_fences(raw: str) -> str:
+    text = raw.strip()
+    if text.startswith("```") and text.endswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline + 1 : -3]
+    return text.strip()
 
 
 def _optional_int(value: Any) -> int | None:
