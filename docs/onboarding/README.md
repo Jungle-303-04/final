@@ -15,6 +15,7 @@
 공통으로 헷갈리면 [역할별 실습 가이드](../team/role-practice-guide.md)를 먼저 본다.
 
 RCA/권한/대시보드 구현을 실제 코드 기준으로 더 자세히 따라가려면 [RCA 프로덕션 온보딩 지도](../rca-production-onboarding/README.md)를 본다.
+구현을 어디서부터 찾아야 할지 막히면 [찾아보고 구현하는 방법](../rca-production-onboarding/07-how-to-find-and-implement.md)을 먼저 연다.
 
 ## 현재 구현 기준
 
@@ -70,6 +71,17 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 ```
 
 통과하면 command, target evidence, RCA 입력, projection/realtime 계약의 기본 연결은 살아 있다고 보면 된다.
+
+로컬 서비스를 실제로 띄워 볼 때는 아래를 실행한다.
+
+```bash
+make up
+make smoke
+```
+
+`make up`은 local admin `admin@example.com / local-admin-password`를 만들고 기본 `UP_WORKER_SET=smoke` worker만 켠다. RCA chain까지 보고 싶으면 `UP_WORKER_SET=rca make up`, 모든 worker와 GitHub poll CronJob까지 켤 때는 `UP_WORKER_SET=full ENABLE_GITHUB_POLL_CRON=1 make up`을 쓴다.
+
+`make smoke`는 샘플 manifest `src/samples/smoke/deploy.yaml`로 webhook, render, diff, analyze 이벤트가 실제 DB에 기록되는지 확인한다.
 
 ## 문서 고치는 기준
 

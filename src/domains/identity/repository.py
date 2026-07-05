@@ -147,6 +147,42 @@ class WorkspaceAccessRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
 
+    def upsert_admin_account(
+        self,
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> JsonObject:
+        """로컬/AWS bootstrap용 admin 계정 보장.
+
+        일반 가입 흐름은 email verification을 거치지만, 배포 bootstrap은 운영자가
+        target 등록을 바로 수행해야 하므로 활성 admin + workspace owner를 명시적으로 만든다.
+        """
+        with self.connection() as conn:
+            conn.execute(self._workspace_upsert(workspace_id, DEFAULT_WORKSPACE_NAME))
+            row = (
+                conn.execute(
+                    self._admin_user_upsert(
+                        user_id=user_id,
+                        email=email,
+                        password_hash=password_hash,
+                        display_name=display_name,
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            conn.execute(
+                self._member_upsert(
+                    workspace_id,
+                    str(row["user_id"]),
+                    WorkspaceRole.OWNER.value,
+                )
+            )
+        return dict(row)
+
     def complete_email_verification(self, user_id: str) -> JsonObject | None:
         table = UserAccount.__table__
         with self.connection() as conn:
@@ -358,6 +394,41 @@ class WorkspaceAccessRepository(DatabaseConnection):
         return insert.on_conflict_do_update(
             index_elements=[table.c.user_id],
             set_={"status": UserStatus.ACTIVE.value, "updated_at": func.now()},
+        )
+
+    @staticmethod
+    def _admin_user_upsert(
+        user_id: str,
+        email: str,
+        password_hash: str,
+        display_name: str,
+    ) -> Any:
+        table = UserAccount.__table__
+        insert = pg_insert(table).values(
+            user_id=user_id,
+            email=email,
+            password_hash=password_hash,
+            display_name=display_name,
+            status=UserStatus.ACTIVE.value,
+            role=AccountRole.ADMIN.value,
+            updated_at=func.now(),
+        )
+        return insert.on_conflict_do_update(
+            index_elements=[table.c.email],
+            set_={
+                "password_hash": insert.excluded.password_hash,
+                "display_name": insert.excluded.display_name,
+                "status": UserStatus.ACTIVE.value,
+                "role": AccountRole.ADMIN.value,
+                "updated_at": func.now(),
+            },
+        ).returning(
+            table.c.user_id,
+            table.c.email,
+            table.c.password_hash,
+            table.c.display_name,
+            table.c.status,
+            table.c.role,
         )
 
     @staticmethod

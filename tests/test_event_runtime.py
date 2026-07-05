@@ -95,6 +95,7 @@ def test_retry_policy_env_defaults_remain_unchanged() -> None:
     policy = EventRetryPolicy()
     assert policy.max_attempts == 3
     assert policy.fetch_batch_size == 1
+    assert policy.idle_sleep_seconds == 0.25
     assert policy.handler_timeout_seconds == 30
 
 

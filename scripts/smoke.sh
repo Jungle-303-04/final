@@ -24,10 +24,12 @@ SMOKE_IMAGE="${SMOKE_IMAGE:-}"
 SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE:-}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
+MANIFEST_PATH="${MANIFEST_PATH:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 SMOKE_COMMIT_SHA="${SMOKE_COMMIT_SHA:-}"
+AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
+AUTH_PASSWORD="${AUTH_PASSWORD:-local-admin-password}"
 COOKIE_JAR="$(mktemp)"
 WEBHOOK_RESPONSE="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}" "${WEBHOOK_RESPONSE}"' EXIT
@@ -44,6 +46,19 @@ need() {
 need curl
 need python3
 
+load_management_config_value() {
+  local key="$1"
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+    get configmap management-runtime-config -o "jsonpath={.data.${key}}" 2>/dev/null || true
+}
+
+load_management_secret_value() {
+  local key="$1"
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+    get secret management-runtime-secret -o "jsonpath={.data.${key}}" 2>/dev/null \
+    | python3 -c 'import base64, sys; data=sys.stdin.read().strip(); print(base64.b64decode(data).decode() if data else "")'
+}
+
 latest_commit_sha() {
   if [ -z "${GITHUB_REPO}" ]; then
     echo "GITHUB_REPO is required when the current git remote is not a GitHub repository." >&2
@@ -55,15 +70,13 @@ latest_commit_sha() {
   fi
   local response
   if [ "${#header_args[@]}" -gt 0 ]; then
-    response="$(
-      curl -fsS "${header_args[@]}" \
-        "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}"
-    )"
+    response="$(curl -fsS "${header_args[@]}" \
+      "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}")" \
+      || return 1
   else
-    response="$(
-      curl -fsS \
-        "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}"
-    )"
+    response="$(curl -fsS \
+      "${GITHUB_API_BASE%/}/repos/${GITHUB_REPO}/commits?per_page=1&sha=${GITHUB_BRANCH}")" \
+      || return 1
   fi
   GITHUB_COMMITS_JSON="${response}" python3 - <<'PY'
 import json
@@ -76,15 +89,38 @@ print(commits[0]["sha"])
 PY
 }
 
+local_commit_sha() {
+  git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || true
+}
+
 load_webhook_secret() {
   kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
     get secret management-runtime-secret -o jsonpath='{.data.GITHUB_WEBHOOK_SECRET}' \
     | python3 -c 'import base64, sys; print(base64.b64decode(sys.stdin.read()).decode())'
 }
 
-if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
+if [ -z "${GITHUB_WEBHOOK_SECRET}" ] || [ -z "${GITHUB_TOKEN}" ] \
+  || [ -z "${SMOKE_IMAGE}" ] || [ -z "${MANIFEST_PATH}" ]; then
   need kubectl
+fi
+
+if [ -z "${GITHUB_WEBHOOK_SECRET}" ]; then
   GITHUB_WEBHOOK_SECRET="$(load_webhook_secret)"
+fi
+if [ -z "${GITHUB_TOKEN}" ]; then
+  GITHUB_TOKEN="$(load_management_secret_value GITHUB_TOKEN)"
+fi
+if [ -z "${SMOKE_IMAGE}" ]; then
+  SMOKE_IMAGE="$(load_management_config_value GITOPS_WEBHOOK_IMAGE)"
+fi
+if [ -z "${SMOKE_IMAGE}" ]; then
+  SMOKE_IMAGE="${IMAGE_NAME:-kubeheal:local}"
+fi
+if [ -z "${MANIFEST_PATH}" ]; then
+  MANIFEST_PATH="$(load_management_config_value MANIFEST_PATH)"
+fi
+if [ -z "${MANIFEST_PATH}" ]; then
+  MANIFEST_PATH="src/samples/smoke/deploy.yaml"
 fi
 
 sign_body() {
@@ -113,11 +149,14 @@ login_with_password "${BASE_URL}" "${COOKIE_JAR}"
 
 if [ -z "${SMOKE_COMMIT_SHA}" ]; then
   echo "==> resolving latest Git commit for ${GITHUB_REPO}@${GITHUB_BRANCH}"
-  SMOKE_COMMIT_SHA="$(latest_commit_sha)"
-fi
-if [ -z "${SMOKE_IMAGE}" ]; then
-  echo "SMOKE_IMAGE is required for the signed webhook payload" >&2
-  exit 1
+  if ! SMOKE_COMMIT_SHA="$(latest_commit_sha)"; then
+    SMOKE_COMMIT_SHA="$(local_commit_sha)"
+    if [ -z "${SMOKE_COMMIT_SHA}" ]; then
+      echo "failed to resolve SMOKE_COMMIT_SHA from GitHub or local git" >&2
+      exit 1
+    fi
+    echo "    GitHub lookup unavailable; using local HEAD ${SMOKE_COMMIT_SHA}"
+  fi
 fi
 
 echo "==> sending signed GitHub webhook"
@@ -188,7 +227,33 @@ PY
   echo
 fi
 
+postgres_query() {
+  local sql="$1"
+  kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" exec statefulset/postgresql -- \
+    sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -tAc \"$sql\""
+}
+
 echo "==> waiting for async workers"
-sleep 18
+required_subjects_csv="git.webhook.received,git.changed,manifest.rendered,desired.diff.detected,diff.analyzed"
+subject_count=0
+for _ in $(seq 1 36); do
+  subject_count="$(
+    postgres_query \
+      "select count(distinct subject) from events where correlation_id='${webhook_correlation_id}' and subject = any(string_to_array('${required_subjects_csv}', ','));" \
+      2>/dev/null \
+      | tr -d '[:space:]' || true
+  )"
+  if [ "${subject_count}" = "5" ]; then
+    break
+  fi
+  sleep 2
+done
+
+if [ "${subject_count}" != "5" ]; then
+  echo "smoke correlation ${webhook_correlation_id} did not reach all required subjects" >&2
+  postgres_query \
+    "select subject from events where correlation_id='${webhook_correlation_id}' order by created_at;" >&2 || true
+  exit 1
+fi
 
 echo "Smoke test passed."
