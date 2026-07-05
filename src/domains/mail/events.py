@@ -20,3 +20,12 @@ class EmailVerificationRequestedBody(EventBody):
 class EmailVerificationSentBody(EventBody):
     email: str
     mode: str
+
+
+@event(EventSubject.EMAIL_VERIFICATION_FAILED)
+@dataclass(frozen=True)
+class EmailVerificationFailedBody(EventBody):
+    email: str
+    reason: str
+    reason_code: str
+    mode: str

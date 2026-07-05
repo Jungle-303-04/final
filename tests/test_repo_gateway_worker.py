@@ -5,7 +5,7 @@ import base64
 from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
 
 from domains.alert.events import AlertRequestedBody
-from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from domains.scm.events import SafePrFilePatch, SafePrReadyForCreationBody, SafePrRequestedBody
 
 PR_HTML_URL = "https://github.test.local/project/repo/pull/7"
 
@@ -25,9 +25,27 @@ def _request(**kwargs) -> SafePrRequestedBody:
         "title": "t",
         "body": "b",
         "provider": "github",
+        "manifest_path": "deploy/app.yaml",
+        "patches": [
+            SafePrFilePatch(
+                path="deploy/app.yaml",
+                content="apiVersion: apps/v1\nkind: Deployment\n",
+                description="rendered Kubernetes manifest",
+            )
+        ],
     }
     payload.update(kwargs)
     return SafePrRequestedBody(**payload)
+
+
+def _ready(**kwargs) -> SafePrReadyForCreationBody:
+    return SafePrReadyForCreationBody(
+        request=_request(**kwargs),
+        summary="safe pr ready",
+        risk="low",
+        details={"test": True},
+        workspace_id="default",
+    )
 
 
 def _github_env(monkeypatch) -> None:
@@ -54,21 +72,22 @@ def test_repo_gateway_creates_pr_from_requested_event(monkeypatch) -> None:
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        _request(approval_ref="approval-1", policy_decision_ref="policy-decision-1"),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(approval_ref="approval-1", policy_decision_ref="policy-decision-1"),
         db=db,
     )
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
-    assert outs[1].pr_url == PR_HTML_URL
-    assert outs[1].provider == "github"
-    assert outs[1].mode == "github_rest"
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert outs[0].pr_url == PR_HTML_URL
+    assert outs[0].provider == "github"
+    assert outs[0].mode == "github_rest"
     assert db.called("save_pull_request")
-    change_doc_path = f"/repos/project/repo/contents/.gitops/safe-pr/{outs[1].workflow_run_id}.md"
+    change_doc_path = f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("POST", "/repos/project/repo/git/refs"),
         ("PUT", change_doc_path),
+        ("PUT", "/repos/project/repo/contents/deploy/app.yaml"),
         ("POST", "/repos/project/repo/pulls"),
     ]
     change_doc = base64.b64decode(str(contents[0]["content"])).decode()
@@ -87,9 +106,9 @@ def test_repo_gateway_reads_github_token_from_token_ref(monkeypatch) -> None:
     repo = _load_with_transport(monkeypatch, calls=calls)
     db = SpyDb()
 
-    outs = run_handler(repo.on_safe_pr_requested, _request(), db=db)
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, _ready(), db=db)
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
+    assert subjects_of(outs) == ["safe_pr.created"]
     assert calls[0] == ("GET", "/repos/project/repo/git/ref/heads/main")
     assert db.called("save_pull_request")
 
@@ -101,22 +120,13 @@ def test_repo_gateway_commits_manifest_patches(monkeypatch) -> None:
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        _request(
-            manifest_path="deploy/app.yaml",
-            patches=[
-                SafePrFilePatch(
-                    path="deploy/app.yaml",
-                    content="apiVersion: apps/v1\nkind: Deployment\n",
-                    description="rendered Kubernetes manifest",
-                )
-            ],
-        ),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(),
         db=db,
     )
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
-    change_doc_path = f"/repos/project/repo/contents/.gitops/safe-pr/{outs[1].workflow_run_id}.md"
+    assert subjects_of(outs) == ["safe_pr.created"]
+    change_doc_path = f"/repos/project/repo/contents/.gitops/safe-pr/{outs[0].workflow_run_id}.md"
     assert calls == [
         ("GET", "/repos/project/repo/git/ref/heads/main"),
         ("POST", "/repos/project/repo/git/refs"),
@@ -134,15 +144,15 @@ def test_repo_gateway_rejects_unsafe_patch_path_before_github_write(monkeypatch)
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        _request(
+        repo.on_safe_pr_ready_for_creation,
+        _ready(
             manifest_path="deploy/app.yaml",
             patches=[SafePrFilePatch(path="../secret.yaml", content="x")],
         ),
         db=db,
     )
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
+    assert subjects_of(outs) == ["safe_pr.failed"]
     assert calls == []
     assert not db.called("save_pull_request")
 
@@ -154,15 +164,15 @@ def test_repo_gateway_rejects_space_prefixed_absolute_patch_path(monkeypatch) ->
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        _request(
+        repo.on_safe_pr_ready_for_creation,
+        _ready(
             manifest_path="deploy/app.yaml",
             patches=[SafePrFilePatch(path=" /secret.yaml", content="x")],
         ),
         db=db,
     )
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
+    assert subjects_of(outs) == ["safe_pr.failed"]
     assert calls == []
     assert not db.called("save_pull_request")
 
@@ -172,10 +182,10 @@ def test_repo_gateway_is_idempotent_on_redelivery(monkeypatch) -> None:
     repo = _load_with_transport(monkeypatch, branch_exists=True, file_exists=True, pr_exists=True)
     db = SpyDb()
 
-    outs = run_handler(repo.on_safe_pr_requested, _request(), db=db)
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, _ready(), db=db)
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
-    assert outs[1].pr_url == PR_HTML_URL
+    assert subjects_of(outs) == ["safe_pr.created"]
+    assert outs[0].pr_url == PR_HTML_URL
     assert db.called("save_pull_request")
 
 
@@ -185,12 +195,12 @@ def test_repo_gateway_emits_next_alert_after_pr_creation(monkeypatch) -> None:
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        _request(next_alert=_alert()),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(next_alert=_alert()),
         db=db,
     )
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.created", "alert.requested"]
+    assert subjects_of(outs) == ["safe_pr.created", "alert.requested"]
     assert db.called("save_pull_request")
 
 
@@ -200,10 +210,10 @@ def test_repo_gateway_fails_per_request_without_github_credentials(monkeypatch) 
     repo = load_service("gitops/scm-worker")
     db = SpyDb()
 
-    outs = run_handler(repo.on_safe_pr_requested, _request(), db=db)
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, _ready(), db=db)
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
-    assert outs[1].reason == "safe pr creation failed"
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason_code == "provider_error"
     assert not db.called("save_pull_request")
 
 
@@ -213,9 +223,9 @@ def test_repo_gateway_does_not_emit_next_alert_when_pr_fails(monkeypatch) -> Non
     repo = load_service("gitops/scm-worker")
     db = SpyDb()
 
-    outs = run_handler(repo.on_safe_pr_requested, _request(next_alert=_alert()), db=db)
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, _ready(next_alert=_alert()), db=db)
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
+    assert subjects_of(outs) == ["safe_pr.failed"]
     assert not db.called("save_pull_request")
 
 
@@ -224,10 +234,10 @@ def test_repo_gateway_emits_failed_event_on_github_error(monkeypatch) -> None:
     repo = _load_with_transport(monkeypatch, fail_pr_status=500)
     db = SpyDb()
 
-    outs = run_handler(repo.on_safe_pr_requested, _request(), db=db)
+    outs = run_handler(repo.on_safe_pr_ready_for_creation, _ready(), db=db)
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
-    assert outs[1].reason == "safe pr creation failed"
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason_code == "provider_error"
     assert not db.called("save_pull_request")
 
 
@@ -238,12 +248,12 @@ def test_repo_gateway_rejects_event_provider_mismatch(monkeypatch) -> None:
     db = SpyDb()
 
     outs = run_handler(
-        repo.on_safe_pr_requested,
-        _request(provider="gitlab"),
+        repo.on_safe_pr_ready_for_creation,
+        _ready(provider="gitlab"),
         db=db,
     )
 
-    assert subjects_of(outs) == ["safe_pr.patch_prepared", "safe_pr.failed"]
+    assert subjects_of(outs) == ["safe_pr.failed"]
     assert calls == []
     assert not db.called("save_pull_request")
 

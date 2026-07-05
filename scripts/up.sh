@@ -44,6 +44,14 @@ GITOPS_REQUIRE_APPROVED_SNAPSHOT="${GITOPS_REQUIRE_APPROVED_SNAPSHOT:-0}"
 GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS:-5}"
 COMMAND_JANITOR_INTERVAL_SECONDS="${COMMAND_JANITOR_INTERVAL_SECONDS:-15}"
 WORKER_IDLE_SLEEP_SECONDS="${WORKER_IDLE_SLEEP_SECONDS:-1.0}"
+MAIL_DELIVERY_MODE="${MAIL_DELIVERY_MODE:-log}"
+SMTP_HOST="${SMTP_HOST:-}"
+SMTP_PORT="${SMTP_PORT:-587}"
+SMTP_USERNAME="${SMTP_USERNAME:-}"
+SMTP_PASSWORD="${SMTP_PASSWORD:-}"
+SMTP_FROM="${SMTP_FROM:-}"
+SMTP_STARTTLS="${SMTP_STARTTLS:-1}"
+SMTP_TIMEOUT_SECONDS="${SMTP_TIMEOUT_SECONDS:-10}"
 SCM_PROVIDER="${SCM_PROVIDER:-github}"
 SCM_REPO="${SCM_REPO:-${GITHUB_REPO}}"
 SCM_BASE_BRANCH="${SCM_BASE_BRANCH:-${GITHUB_BRANCH}}"
@@ -85,6 +93,7 @@ APP_WORKER_DEPLOYMENTS=(
   manifest-render-worker
   diff-worker
   diff-analyze-worker
+  safe-pr-worker
   scm-worker
   workflow-controller
   alert-worker
@@ -116,6 +125,7 @@ SMOKE_WORKER_DEPLOYMENTS=(
   manifest-render-worker
   diff-worker
   diff-analyze-worker
+  safe-pr-worker
   workflow-controller
   audit-worker
   dashboard-worker
@@ -127,6 +137,7 @@ RCA_WORKER_DEPLOYMENTS=(
   manifest-render-worker
   diff-worker
   diff-analyze-worker
+  safe-pr-worker
   scm-worker
   workflow-controller
   alert-worker
@@ -413,6 +424,12 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS}" \
   --from-literal=COMMAND_JANITOR_INTERVAL_SECONDS="${COMMAND_JANITOR_INTERVAL_SECONDS}" \
   --from-literal=WORKER_IDLE_SLEEP_SECONDS="${WORKER_IDLE_SLEEP_SECONDS}" \
+  --from-literal=MAIL_DELIVERY_MODE="${MAIL_DELIVERY_MODE}" \
+  --from-literal=SMTP_HOST="${SMTP_HOST}" \
+  --from-literal=SMTP_PORT="${SMTP_PORT}" \
+  --from-literal=SMTP_FROM="${SMTP_FROM}" \
+  --from-literal=SMTP_STARTTLS="${SMTP_STARTTLS}" \
+  --from-literal=SMTP_TIMEOUT_SECONDS="${SMTP_TIMEOUT_SECONDS}" \
   --from-literal=SCM_PROVIDER="${SCM_PROVIDER}" \
   --from-literal=SCM_REPO="${SCM_REPO}" \
   --from-literal=SCM_BASE_BRANCH="${SCM_BASE_BRANCH}" \
@@ -446,6 +463,11 @@ for key in \
   ANTHROPIC_API_KEY \
   GEMINI_API_KEY \
   GOOGLE_API_KEY; do
+  if [ -n "${!key}" ]; then
+    SECRET_ARGS+=(--from-literal="${key}=${!key}")
+  fi
+done
+for key in SMTP_USERNAME SMTP_PASSWORD; do
   if [ -n "${!key}" ]; then
     SECRET_ARGS+=(--from-literal="${key}=${!key}")
   fi
@@ -511,7 +533,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_INFRA_OVERLAY}"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
   command-orchestrator command-dispatcher agent-connection-gateway \
-  evidence-builder ai-rca-service safe-pr-service safe-pr-worker rca-fallback-worker; do
+  evidence-builder ai-rca-service safe-pr-service rca-fallback-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
 done
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=600s
