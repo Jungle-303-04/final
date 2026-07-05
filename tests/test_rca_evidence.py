@@ -324,7 +324,7 @@ def test_unknown_symptom_creates_backlog_and_manual_selection_flow() -> None:
     assert evaluated.evaluations[0].candidate_id == "unknown"
     assert evaluated.evaluations[0].score == 0.0
     assert evaluated.evaluations[0].missing_evidence == ["matching_cause_rule"]
-    assert blocked.reason_code == "missing_evidence"
+    assert blocked.reason_code == "rule_missing"
     assert blocked.rca_detail.root_cause == "unknown"
     assert blocked.rca_detail.missing_evidence == ["matching_cause_rule"]
     assert blocked.missing_evidence == ["matching_cause_rule"]
@@ -358,7 +358,6 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
     select_worker = load_service("ai/select-worker")
     approval_worker = load_service("ai/approval-worker")
     dispatch_worker = load_service("ai/dispatch-worker")
-    safe_pr_worker = load_service("ai/safe-pr-worker")
     diff_worker = load_service("ai/diff-worker")
     scm_worker = load_service("gitops/scm-worker")
     monkeypatch.setattr(
@@ -393,19 +392,15 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
         dispatch_worker.on_recovery_action_selected,
         action_selected,
     )
-    safe_pr_outs = run_handler(
-        safe_pr_worker.on_safe_pr_requested,
+    scm_outs = run_handler(
+        scm_worker.on_safe_pr_requested,
         dispatch_outs[0],
+        db=db,
+        correlation_id="corr-safe-pr",
     )
     diff_outs = run_handler(
         diff_worker.on_safe_pr_patch_prepared,
-        safe_pr_outs[0],
-    )
-    scm_outs = run_handler(
-        scm_worker.on_safe_pr_ready_for_creation,
-        diff_outs[1],
-        db=db,
-        correlation_id="corr-safe-pr",
+        scm_outs[0],
     )
 
     assert subjects_of(
@@ -413,26 +408,23 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
         + select_outs
         + approval_outs
         + dispatch_outs
-        + safe_pr_outs
-        + diff_outs
         + scm_outs
+        + diff_outs
     ) == [
         "recovery.planned",
         "recovery.selection_requested",
         "approval.recommended",
         "safe_pr.requested",
         "safe_pr.patch_prepared",
-        "diff.explained",
-        "safe_pr.ready_for_creation",
         "safe_pr.created",
+        "diff.explained",
     ]
     assert dispatch_outs[0].provider == "github"
-    assert safe_pr_outs[0].patch["provider"] == "github"
+    assert scm_outs[0].patch["provider"] == "github"
     assert diff_outs[0].risk == "review_required"
-    assert subjects_of(safe_pr_outs) == ["safe_pr.patch_prepared"]
-    assert subjects_of(diff_outs) == ["diff.explained", "safe_pr.ready_for_creation"]
-    assert subjects_of(scm_outs) == ["safe_pr.created"]
-    assert scm_outs[0].pr_url == PR_HTML_URL
+    assert subjects_of(diff_outs) == ["diff.explained"]
+    assert subjects_of(scm_outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
+    assert scm_outs[1].pr_url == PR_HTML_URL
     assert db.called("save_pull_request")
 
 
