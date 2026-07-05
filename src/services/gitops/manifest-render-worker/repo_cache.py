@@ -236,11 +236,34 @@ class GitRepoCache:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise GitRepoCacheError(str(exc)) from exc
 
-    def _git_env(self) -> dict[str, str] | None:
+    # git subprocess 에 전달할 환경변수 화이트리스트.
+    # os.environ 전체를 상속하면 LLM/API 키 등 무관한 시크릿이 자식 프로세스에 노출되고,
+    # 실패 시 진단 덤프에 딸려 나갈 수 있다 → 필요한 것만 명시적으로 전달.
+    _GIT_ENV_ALLOWLIST = (
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "GIT_SSL_CAINFO",
+        "GIT_SSL_CAPATH",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+    )
+
+    def _git_env(self) -> dict[str, str]:
+        base = {key: os.environ[key] for key in self._GIT_ENV_ALLOWLIST if key in os.environ}
+        # 자격증명 미설정 시 프롬프트 대기로 hang 하지 않고 즉시 실패하도록 고정.
+        base["GIT_TERMINAL_PROMPT"] = "0"
         if not self.http_extra_header:
-            return None
+            return base
         return {
-            **os.environ,
+            **base,
             "GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "http.extraHeader",
             "GIT_CONFIG_VALUE_0": self.http_extra_header,
