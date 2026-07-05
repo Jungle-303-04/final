@@ -17,7 +17,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "cluster_id": "{{cluster_id}}",
     "action": "rollout_restart",
@@ -50,7 +50,7 @@ body {
   }
 }
 
-test {
+tests {
   test("accepted or explicit auth/access/validation failure", function () {
     expect([200, 401, 403, 422]).to.include(res.status);
   });

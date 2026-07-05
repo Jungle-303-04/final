@@ -2,110 +2,301 @@
 
 찬빈 파트는 RCA와 command 상태를 사람이 볼 수 있는 화면으로 만드는 역할이다.
 
-현재 source repo에는 dashboard backend 계약이 구현되어 있다. `dashboard-worker`가 event를 읽어 `rca_timeline` read model로 만들고, Gateway가 session과 cluster read 권한을 검사한 뒤 `/dashboard/rca/*` API로 내려준다. 프론트 앱은 이 API와 realtime 계약을 기준으로 붙이면 된다.
+현재 source repo에는 dashboard backend 계약이 구현되어 있다.
+`dashboard-worker`가 event를 읽어 `rca_timeline` read model로 만들고, Gateway가 session과 cluster read 권한을 검사한 뒤 `/dashboard/rca/*` API로 내려준다.
+frontend는 이 API와 realtime 계약을 기준으로 붙이면 된다.
 
-권한 기준은 [찬빈: 권한 시스템과 대시보드 적용](../rca-production-onboarding/06-chanbin-permission-dashboard.md)을 먼저 읽는다. 화면 구현을 시작할 때는 [찾아보고 구현하는 방법](../rca-production-onboarding/07-how-to-find-and-implement.md)도 같이 본다.
+권한 기준은 [찬빈: 권한 시스템과 대시보드 적용](../rca-production-onboarding/06-chanbin-permission-dashboard.md)을 먼저 읽는다.
 
-## 먼저 열 파일
+## 1단계. Route 상수를 확인한다
 
-| 순서 | 파일 | 이유 |
-| --- | --- | --- |
-| 1 | `src/packages/contracts/gateway/routes.py` | dashboard route 상수 |
-| 2 | `src/packages/contracts/gateway/responses.py` | frontend가 받을 response DTO |
-| 3 | `src/domains/dashboard/models.py` | `RcaTimeline` read model 컬럼 |
-| 4 | `src/domains/dashboard/repository.py` | event subject를 화면 status로 바꾸는 mapping |
-| 5 | `src/services/projection/dashboard-worker/app.py` | `@app.on_any` projection worker |
-| 6 | `src/domains/dashboard/router.py` | session, workspace, cluster read 권한 필터 |
-| 7 | `src/domains/identity/dependencies.py` | `require_session`, `require_cluster_access` |
-| 8 | `src/domains/identity/repository.py` | `accessible_resource_ids` 목록 필터 |
-| 9 | `src/packages/contracts/realtime` | 화면 realtime payload 크기와 type 제한 |
-| 10 | `src/services/realtime/realtime-gateway` | browser/agent realtime 연결 경계 |
-| 11 | `tests/test_dashboard_projection.py` | event -> timeline projection 테스트 |
-| 12 | `tests/test_dashboard_router.py` | 권한 필터와 response DTO 테스트 |
+이 파일을 연다.
 
-## 현재 구현 기준
+```text
+src/packages/contracts/gateway/routes.py
+```
 
-| 항목 | 현재 기준 |
-| --- | --- |
-| dashboard worker | `src/services/projection/dashboard-worker/app.py` |
-| dashboard read model | `src/domains/dashboard/models.py::RcaTimeline` |
-| dashboard repository | `src/domains/dashboard/repository.py::DashboardRepository` |
-| timeline API | `GET /dashboard/rca/timeline` |
-| incident API | `GET /dashboard/rca/incidents/{incident_id}` |
-| API 권한 | `require_session`, `accessible_resource_ids`, `require_cluster_access` |
-| realtime 경계 | `src/services/realtime/realtime-gateway` |
-| frontend 구현 기준 | backend DTO만 읽고 DB/NATS/agent queue 직접 접근 없음 |
+찾을 route는 아래다.
 
-## 화면이 읽어야 하는 event 상태
+```text
+GET /dashboard/rca/timeline
+GET /dashboard/rca/incidents/{incident_id}
+```
 
-| 상태 | 의미 |
-| --- | --- |
-| `cluster.evidence.received` | target evidence window가 들어옴 |
-| `evidence.built` | RCA가 읽을 수 있게 evidence가 정리됨 |
-| `incident.detected` | 증상/장애 후보가 생김 |
-| `evidence.bundle.built` | RCA 판단 근거 묶음이 생김 |
-| `rca.candidates.planned` | 원인 후보가 만들어짐 |
-| `rca.candidates.evaluated` | 후보별 근거와 점수가 계산됨 |
-| `rca.completed` | 근거가 충분한 RCA 결과 |
-| `rca.action_required` | 근거 부족 또는 수동 판단 필요 |
-| `recovery.planned` | 복구 후보가 만들어짐 |
-| `recovery.selection_requested` | 사람이 복구 후보를 골라야 함 |
-| `recovery.action_selected` | command 또는 PR route가 선택됨 |
-| `command.queued_for_agent` | agent가 가져갈 command가 queue에 있음 |
-| `command.completed` | agent 실행 결과가 돌아옴 |
-| `safe_pr.requested` | PR 생성 요청이 만들어짐 |
-| `safe_pr.patch_prepared` | PR patch와 설명 초안이 준비됨 |
-| `safe_pr.created` | 실제 PR reference가 생김 |
-| `safe_pr.failed` | PR 생성 실패 |
+frontend에서 URL 문자열을 따로 만들지 않는다.
+backend route가 바뀌면 contract와 테스트가 먼저 바뀌어야 한다.
 
-`safe_pr.requested`에는 PR URL이 있다고 보면 안 된다. URL은 `safe_pr.created`에서만 온다.
+바로 확인할 테스트:
 
-## 민정에게 확인할 값
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_router.py -q
+```
 
-- `cluster_id`
-- `evidence_key`
-- `window_start`
-- provider별 성공/실패 상태
-- `kubernetes` bucket의 pods/events/workloads 요약
-- `metrics` bucket의 result/series 요약
-- `logs` bucket의 line count와 stream 요약
-- `traces` bucket의 trace count와 service name
+## 2단계. Response DTO를 확인한다
 
-## 가인에게 확인할 값
+이 파일을 연다.
 
-- `incident_id`
-- `evidence_ref`
-- `root_cause`
-- `confidence`
-- `supporting_evidence`
-- `missing_evidence`
-- `action_route`
-- `command_id`
-- `pr_url`
-- 마지막 event subject
+```text
+src/packages/contracts/gateway/responses.py
+```
 
-## dashboard 계약을 확인하고 확장하는 순서
+찾을 DTO는 아래다.
 
-1. `src/packages/contracts/gateway/responses.py`의 `RcaTimelineItem`, `RcaTimelineResponse`, `RcaIncidentResponse`를 먼저 본다.
-2. `src/packages/contracts/gateway/routes.py`의 `/dashboard/rca/*` route 상수를 확인한다.
-3. `src/domains/dashboard/models.py`의 `RcaTimeline` 컬럼을 확인한다.
-4. `src/domains/dashboard/repository.py`의 event subject -> status mapping을 확인한다.
-5. `src/services/projection/dashboard-worker/app.py`가 `@app.on_any`로 event를 읽는지 확인한다.
-6. `src/domains/dashboard/router.py`가 session과 cluster read 권한을 적용하는지 확인한다.
-7. `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py`를 돌린다.
-8. 그 다음 frontend가 route를 소비한다.
+```text
+RcaTimelineItem
+RcaTimelineResponse
+RcaIncidentResponse
+```
 
-## 화면에서 헷갈리면 안 되는 것
+frontend는 DB 모델을 직접 보지 않는다.
+이 response DTO만 보고 화면 state를 만든다.
 
-- 데이터가 없는 상태와 realtime 연결이 끊긴 상태는 다르다.
-- provider 일부 실패와 전체 실패는 다르다.
-- `rca.completed`와 `rca.action_required`는 다르다.
-- `safe_pr.requested`와 `safe_pr.created`는 다르다.
-- command queue 상태와 command result 상태는 다르다.
-- frontend가 DB나 NATS를 직접 보면 안 된다.
-- `x-agent-token`은 browser에 절대 전달하지 않는다.
+필드가 부족하면 DTO와 router test를 먼저 바꾸고, 그다음 frontend를 바꾼다.
 
-## 바로 돌릴 테스트
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_router.py -q
+```
+
+## 3단계. Read model table을 확인한다
+
+이 파일을 연다.
+
+```text
+src/domains/dashboard/models.py
+```
+
+찾을 모델은 `RcaTimeline`이다.
+
+이 table은 `workspace_id`와 `correlation_id`를 기준으로 RCA 흐름을 한 row로 묶는다.
+event 하나를 card 하나로 만들면 전체 흐름을 보기 어렵다.
+같은 correlation 흐름 안에서 status가 갱신되는 구조로 이해한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_projection.py -q
+```
+
+## 4단계. Projection mapping을 확인한다
+
+이 파일을 연다.
+
+```text
+src/domains/dashboard/repository.py
+```
+
+여기서 event subject가 화면 status로 바뀐다.
+
+예를 들어 `cluster.evidence.received`는 evidence가 들어온 상태고, `safe_pr.created`는 실제 PR reference가 생긴 상태다.
+
+`safe_pr.requested`와 `safe_pr.created`를 같은 상태로 보여주면 안 된다.
+requested에는 PR URL이 없다.
+created 이후에만 PR URL이 있다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_projection.py -q
+```
+
+## 5단계. Dashboard worker를 확인한다
+
+이 파일을 연다.
+
+```text
+src/services/projection/dashboard-worker/app.py
+```
+
+여기서 `@app.on_any`를 찾는다.
+
+dashboard worker는 특정 event 하나만 보는 것이 아니라 RCA, command, Safe PR 흐름의 여러 event를 받아 read model로 투영한다.
+
+worker 안에서 UI용 문자열을 과하게 만들지 않는다.
+화면 문구는 frontend에서 만들고, backend는 상태와 근거 값을 정확하게 내려준다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_projection.py -q
+```
+
+## 6단계. Dashboard router 권한을 확인한다
+
+이 파일을 연다.
+
+```text
+src/domains/dashboard/router.py
+```
+
+여기서 session 확인과 cluster read 권한 확인을 찾는다.
+
+browser 요청은 `x-agent-token`을 쓰지 않는다.
+browser는 login session cookie를 사용한다.
+
+timeline list는 사용자가 볼 수 있는 cluster만 내려줘야 한다.
+incident detail도 같은 권한 필터를 통과해야 한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_router.py -q
+```
+
+## 7단계. Identity dependency를 확인한다
+
+이 파일을 연다.
+
+```text
+src/domains/identity/dependencies.py
+```
+
+찾을 함수는 아래다.
+
+```text
+require_session
+require_cluster_access
+```
+
+`require_session`은 로그인 사용자를 확인한다.
+
+`require_cluster_access`는 이 사용자가 해당 cluster를 볼 수 있는지 확인한다.
+
+frontend에서 “권한이 있겠지”라고 가정하지 않는다.
+backend가 항상 최종 필터를 한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_dashboard_router.py tests/test_identity_repository.py -q
+```
+
+## 8단계. 접근 가능한 resource 목록을 확인한다
+
+이 파일을 연다.
+
+```text
+src/domains/identity/repository.py
+```
+
+찾을 함수는 `accessible_resource_ids`다.
+
+이 함수는 사용자가 볼 수 있는 cluster 목록을 만든다.
+service admin, organization role, group role, resource role이 섞여도 결과는 resource id 목록으로 나와야 한다.
+
+frontend list 화면은 backend가 내려준 목록만 보여준다.
+숨김 처리는 UX일 뿐이고, 보안 필터는 backend가 한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_identity_repository.py tests/test_dashboard_router.py -q
+```
+
+## 9단계. 화면 상태를 event 기준으로 나눈다
+
+화면에서 최소로 구분해야 하는 상태는 아래다.
+
+```text
+cluster.evidence.received
+evidence.built
+incident.detected
+evidence.bundle.built
+rca.candidates.planned
+rca.candidates.evaluated
+rca.completed
+rca.action_required
+recovery.planned
+recovery.selection_requested
+recovery.action_selected
+command.queued_for_agent
+command.completed
+safe_pr.requested
+safe_pr.patch_prepared
+safe_pr.created
+safe_pr.failed
+```
+
+특히 아래 상태는 섞으면 안 된다.
+
+`rca.completed`는 근거가 충분한 RCA 결과다.
+
+`rca.action_required`는 근거가 부족하거나 사람이 봐야 하는 상태다.
+
+`safe_pr.requested`는 PR 요청만 생긴 상태다.
+
+`safe_pr.created`는 실제 PR reference가 생긴 상태다.
+
+`command.queued_for_agent`는 agent가 가져가기 전 상태다.
+
+`command.completed`는 agent 결과가 돌아온 상태다.
+
+## 10단계. 민정에게 확인할 값을 정한다
+
+민정에게 받아야 하는 값은 화면에서 evidence 상태를 보여주기 위한 값이다.
+
+```text
+cluster_id
+evidence_key
+window_start
+provider별 성공/실패 상태
+kubernetes bucket의 pods/events/workloads 요약
+metrics bucket의 result/series 요약
+logs bucket의 line count와 stream 요약
+traces bucket의 trace count와 service name
+```
+
+provider 일부 실패와 전체 실패를 다르게 보여줘야 한다.
+예를 들어 metrics는 실패했지만 Kubernetes snapshot이 있으면 “부분 evidence”로 보여줄 수 있다.
+
+## 11단계. 가인에게 확인할 값을 정한다
+
+가인에게 받아야 하는 값은 RCA 결과와 조치 상태다.
+
+```text
+incident_id
+evidence_ref
+root_cause
+confidence
+supporting_evidence
+missing_evidence
+action_route
+command_id
+pr_url
+마지막 event subject
+```
+
+`missing_evidence`는 숨기지 않는다.
+운영자는 왜 자동 결론을 못 냈는지 알아야 한다.
+
+## 12단계. Realtime 경계를 확인한다
+
+이 경로들을 본다.
+
+```text
+src/packages/contracts/realtime
+src/services/realtime/realtime-gateway
+```
+
+realtime은 화면을 빠르게 갱신하기 위한 경로다.
+권한 없는 데이터를 밀어주면 안 된다.
+
+payload는 너무 커지면 안 된다.
+provider raw payload 전체를 websocket으로 보내면 안 된다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_realtime_contracts.py \
+  tests/test_realtime_gateway.py \
+  -q
+```
+
+## 13단계. 전체 찬빈 흐름을 검증한다
+
+작은 테스트가 통과한 뒤 아래를 돌린다.
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -114,43 +305,69 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_projection.py \
   tests/test_realtime_contracts.py \
   tests/test_realtime_gateway.py \
+  tests/test_identity_repository.py \
   -q
 ```
 
-실제 서비스까지 확인할 때는 AWS smoke를 본다.
+## 14단계. Bruno에서 눈으로 확인한다
 
-```bash
-make aws-smoke
-```
+Bruno는 [Bruno API 테스트](../api/README.md)를 따라 `docs/api`를 collection으로 연다.
 
-찬빈은 smoke가 끝난 뒤 `/dashboard/rca/timeline`이 session과 cluster 권한을 기준으로 row를 필터링하는지 확인한다. 실행 방법은 [AWS 테스트 실행 기준](../aws-testing-runbook.md)을 따른다.
+찬빈은 이 순서로 보낸다.
+
+1. `00-health-auth/06-login.bru`
+2. `00-health-auth/07-session.bru`
+3. `05-rca-dashboard/01-dashboard-timeline.bru`
+4. `05-rca-dashboard/02-dashboard-incident.bru`
+5. `08-ops-dlq/01-dead-letters.bru`
+6. `08-ops-dlq/03-metrics.bru`
+
+## 화면에서 헷갈리면 안 되는 것
+
+데이터가 없는 상태와 realtime 연결이 끊긴 상태는 다르다.
+
+provider 일부 실패와 전체 실패는 다르다.
+
+`rca.completed`와 `rca.action_required`는 다르다.
+
+`safe_pr.requested`와 `safe_pr.created`는 다르다.
+
+command queue 상태와 command result 상태는 다르다.
+
+frontend가 DB나 NATS를 직접 보면 안 된다.
+
+`x-agent-token`은 browser에 절대 전달하지 않는다.
 
 ## 프로덕션 완료 기준
 
-찬빈 파트는 외부 기준 저장소에서 확인한 account, user, RBAC, OIDC, audit UI, marketplace UI, billing/license, realtime UI를 우리 dashboard와 권한 시스템으로 옮겨야 끝난다. 전체 범위는 [벤치마크 최소선 기준 프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md)를 따른다.
+찬빈 파트는 외부 기준 저장소에서 확인한 account, user, RBAC, OIDC, audit UI, marketplace UI, billing/license, realtime UI를 우리 dashboard와 권한 시스템으로 옮겨야 끝난다.
+전체 범위는 [벤치마크 최소선 기준 프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md)를 따른다.
 
-| 완료 항목 | 확인 방법 |
-| --- | --- |
-| signup/login/session/logout/email verification이 httpOnly cookie 기준으로 동작한다 | `tests/test_identity_auth_routes.py`, `tests/test_auth_security.py` |
-| user/group/role/service account/resource grant가 backend 권한 필터와 연결된다 | auth/RBAC router/repository test |
-| OIDC provider/trust relationship/auth proxy 설정을 backend API와 화면에서 관리한다 | OIDC/Auth proxy test와 Bruno auth 폴더 |
-| dashboard list/detail API가 workspace와 cluster 권한으로 필터링된다 | `tests/test_dashboard_router.py` |
-| frontend는 DB/NATS/agent token/provider token/kubeconfig를 직접 보지 않는다 | code review, browser payload check |
-| incident detail이 history/message/reaction/follower/postmortem을 표시할 수 있다 | dashboard DTO/projection/router test |
-| audit/login metrics/notification/read state 화면이 있다 | audit/notification API와 UI test |
-| marketplace/publisher/repository/artifact/chart/terraform/docker catalog 화면이 있다 | 벤치마크 최소선 체크리스트와 frontend/API test |
-| billing/license/plan/subscription/invoice 화면은 권한 있는 사용자만 본다 | RBAC test와 UI route guard |
-| realtime은 incident, notification, upgrade, rollout, test log를 분리해서 표시한다 | `tests/test_realtime_gateway.py`, `tests/test_realtime_contracts.py` |
-| Bruno에서 auth, dashboard, ops 폴더를 aws-test profile로 확인할 수 있다 | `docs/api/README.md` |
+완료 기준은 하나씩 확인한다.
 
-## 찬빈이 바꾸면 같이 봐야 하는 것
+1. signup, login, session, logout, email verification이 httpOnly cookie 기준으로 동작한다.
+2. user, group, role, service account, resource grant가 backend 권한 필터와 연결된다.
+3. OIDC provider, trust relationship, auth proxy 설정을 backend API와 화면에서 관리한다.
+4. dashboard list/detail API가 workspace와 cluster 권한으로 필터링된다.
+5. frontend는 DB, NATS, agent token, provider token, kubeconfig를 직접 보지 않는다.
+6. incident detail이 history, message, reaction, follower, postmortem을 표시할 수 있다.
+7. audit, login metrics, notification, read state 화면이 있다.
+8. marketplace, publisher, repository, artifact, chart, terraform, docker catalog 화면이 있다.
+9. billing, license, plan, subscription, invoice 화면은 권한 있는 사용자만 본다.
+10. realtime은 incident, notification, upgrade, rollout, test log를 분리해서 표시한다.
+11. Bruno에서 auth, dashboard, ops 폴더를 `aws-test` profile로 확인할 수 있다.
 
-| 바꾸는 것 | 같이 확인할 것 |
-| --- | --- |
-| response DTO | 가인 RCA output, 민정 evidence bucket |
-| route path | `routes.py`, Gateway router include, frontend fetch code |
-| projection table | idempotency test, audit/realtime 계약 |
-| realtime payload | payload 크기 제한, 연결 끊김 표시 |
-| 화면 상태명 | event subject와 실제 backend 상태 |
+## 찬빈이 바꾸면 같이 확인할 것
 
-화면은 마지막에 예쁘게 붙이는 것이 아니라, 팀 전체 계약을 사람이 이해할 수 있게 만드는 입구다. 그래서 DTO와 상태 이름을 작게라도 먼저 맞추는 게 중요하다.
+response DTO를 바꾸면 가인 RCA output과 민정 evidence bucket을 같이 본다.
+
+route path를 바꾸면 `routes.py`, Gateway router include, frontend fetch code, Bruno request를 같이 본다.
+
+projection table을 바꾸면 idempotency test와 audit/realtime 계약을 같이 본다.
+
+realtime payload를 바꾸면 payload 크기 제한과 연결 끊김 표시를 같이 본다.
+
+화면 상태명을 바꾸면 event subject와 실제 backend 상태를 같이 본다.
+
+화면은 마지막에 예쁘게 붙이는 것이 아니라, 팀 전체 계약을 사람이 이해할 수 있게 만드는 입구다.
+그래서 DTO와 상태 이름을 작게라도 먼저 맞추는 게 중요하다.
