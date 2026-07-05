@@ -22,7 +22,7 @@ GitHub environment secret에 저장한다.
 - `POSTGRES_PASSWORD`
 - `MINIO_ROOT_PASSWORD`
 - `GH_WEBHOOK_SECRET`
-- `GH_APP_TOKEN`
+- `GH_APP_TOKEN`: private repo manifest read와 Safe PR write용. 없으면 AWS CD smoke는 `github.token`으로 읽기만 임시 수행한다.
 - `CLOUDFLARE_API_TOKEN` if `CONFIGURE_CLOUDFLARE=1`
 
 선택 secret:
