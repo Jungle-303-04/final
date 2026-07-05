@@ -1,1 +1,1 @@
-"""Recovery planning knowledge base and routing."""
+"""복구 계획 지식 베이스와 라우팅."""

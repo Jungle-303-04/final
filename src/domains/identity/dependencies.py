@@ -1,8 +1,4 @@
-"""identity 인가 가드(필터) — Depends 로 라우터/라우트에 선언적으로 적용.
-
-클로저로 매 핸들러에서 검사하는 대신, 가드를 한 곳에 정의하고
-APIRouter(dependencies=[Depends(require_*)]) 또는 라우트 인자로 선언함.
-"""
+"""identity 인가 가드(필터) — Depends 로 라우터/라우트에 선언적으로 적용."""
 
 from __future__ import annotations
 
@@ -45,7 +41,7 @@ class ResourceAccessFilter(Protocol):
 
 
 class StructuredResourceAccessFilter:
-    """Evaluate resource authorization through Chanbin's can_access store API."""
+    """can_access 저장소 API 기반 리소스 인가 평가."""
 
     def authorize(self, context: ResourceAccessContext) -> bool:
         can_access = getattr(context.db, "can_access", None)
@@ -138,7 +134,7 @@ def require_cluster_access(
     *,
     detail: str = RESOURCE_ACCESS_DENIED_MESSAGE,
 ) -> None:
-    """cluster 리소스 권한 검사 shortcut. command/debug/approval/dashboard 에서 같은 기준을 쓴다."""
+    """cluster 리소스 권한 검사 shortcut — command/debug/approval/dashboard 공통 기준."""
     require_resource_access(
         db,
         current,
@@ -155,7 +151,7 @@ def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
 
     x-agent-token 을 해시해 등록 레지스트리에서 클러스터를 찾고, 그 클러스터의
     권위 (workspace_id, cluster_id) 를 돌려줌. agent 라우트는 이 값을 쓰고
-    요청 body 의 workspace_id/cluster_id 는 신뢰하지 않는다(크로스 테넌트 차단).
+    요청 body 의 workspace_id/cluster_id 는 신뢰하지 않음(크로스 테넌트 차단).
     토큰 없음/미등록/미인증(해시 불일치)은 모두 401.
     """
     token = request.headers.get(AGENT_TOKEN_HEADER, "")

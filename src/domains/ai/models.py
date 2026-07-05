@@ -1,4 +1,4 @@
-"""AI conversation read model tables."""
+"""AI 대화 read model 테이블."""
 
 from __future__ import annotations
 

@@ -16,7 +16,7 @@ JsonObject = dict[str, Any]
 
 
 class EventBodyDecodeError(ValueError):
-    """Raised when an event payload does not match its registered body contract."""
+    """payload 가 등록된 body 계약과 불일치할 때 발생"""
 
 
 @dataclass(frozen=True)

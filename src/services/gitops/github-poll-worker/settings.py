@@ -85,6 +85,6 @@ class Settings:
     ACCESS_ERROR_STATUS_CODES = {401, 404}
 
     WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
-    # webhook 바디 기본값은 두지 않는다. 배포 이미지는 repo manifest 또는 명시 env 로만 들어온다.
+    # webhook 바디 기본값 없음 — 배포 이미지는 repo manifest 또는 명시 env 로만 유입.
     DEFAULT_IMAGE = ""
     DEFAULT_REPLICAS = 2

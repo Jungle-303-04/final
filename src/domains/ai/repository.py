@@ -1,4 +1,4 @@
-"""AI conversation repository."""
+"""AI 대화 repository."""
 
 from __future__ import annotations
 

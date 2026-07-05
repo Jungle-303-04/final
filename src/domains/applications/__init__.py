@@ -1,1 +1,1 @@
-"""Application management domain."""
+"""애플리케이션 관리 도메인"""

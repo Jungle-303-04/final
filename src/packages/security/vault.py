@@ -67,7 +67,7 @@ class ParsedSecretRef:
 
 
 class EnvSecretVault(SecretVaultPort):
-    """개발/배포 공통 fallback: secret ref를 환경변수 이름으로 해석한다."""
+    """개발/배포 공통 fallback: secret ref를 환경변수 이름으로 해석"""
 
     def read_secret(self, ref: SecretRef) -> str:
         parsed = parse_secret_ref(ref, default_provider=PROVIDER_ENV)
@@ -83,7 +83,7 @@ class EnvSecretVault(SecretVaultPort):
 class AwsSecretsManagerSecretVault(SecretVaultPort):
     """AWS Secrets Manager adapter.
 
-    Ref examples:
+    Ref 예시:
     - aws-sm:/my-app/prod/github-token
     - aws-sm:/my-app/prod/github#token
     - aws-sm:/my-app/prod/github?stage=AWSPREVIOUS#token
@@ -127,9 +127,9 @@ class AwsSecretsManagerSecretVault(SecretVaultPort):
 
 
 class KubernetesSecretVault(SecretVaultPort):
-    """Kubernetes Secret adapter for in-cluster production deployments.
+    """클러스터 내 운영 배포용 Kubernetes Secret adapter.
 
-    Ref examples:
+    Ref 예시:
     - k8s-secret:management/github-app#token
     - k8s-secret:platform/llm-secrets#openai-api-key
     """
@@ -224,11 +224,10 @@ class KubernetesSecretVault(SecretVaultPort):
 
 
 class RoutingSecretVault(SecretVaultPort):
-    """Prefix based vault router.
+    """prefix 기반 vault 라우터.
 
-    Unprefixed refs and env: refs resolve through environment variables for backwards
-    compatibility. aws-sm: refs resolve through AWS Secrets Manager. k8s-secret:
-    refs resolve through the Kubernetes API using the service account identity.
+    무접두사·env: ref 는 하위 호환을 위해 환경변수로, aws-sm: 은 AWS Secrets Manager 로,
+    k8s-secret: 은 service account 신원의 Kubernetes API 로 해석
     """
 
     def __init__(

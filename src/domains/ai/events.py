@@ -1,4 +1,4 @@
-"""AI conversation event contracts."""
+"""AI 대화 이벤트 계약."""
 
 from __future__ import annotations
 

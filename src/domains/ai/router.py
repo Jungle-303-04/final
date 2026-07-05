@@ -1,4 +1,4 @@
-"""AI conversation HTTP router."""
+"""AI 대화 HTTP 라우터."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Service catalog repository and bootstrap catalog definitions."""
+"""서비스 카탈로그 repository와 부트스트랩 카탈로그 정의."""
 
 from __future__ import annotations
 

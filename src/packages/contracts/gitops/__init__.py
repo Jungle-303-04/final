@@ -133,6 +133,6 @@ GITHUB_TOKEN_REF_ENV = "GITHUB_TOKEN_REF"
 GITHUB_API_BASE_ENV = "GITHUB_API_BASE"
 DEFAULT_GITHUB_API_BASE = "https://api.github.com"
 # owner/name 축약 repo_ref 로 clone URL 을 만들 때의 웹 호스트.
-# GitHub Enterprise 등 자체 호스트는 이 env 로 교체한다(API 호스트와 별개).
+# GitHub Enterprise 등 자체 호스트는 이 env 로 교체(API 호스트와 별개)
 GITHUB_WEB_BASE_ENV = "GITHUB_WEB_BASE"
 DEFAULT_GITHUB_WEB_BASE = "https://github.com"

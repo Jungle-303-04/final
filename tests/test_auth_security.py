@@ -1,4 +1,4 @@
-"""identity 보안 회귀 — 세션 쿠키와 agent 가드는 fail-closed 로 동작한다."""
+"""identity 보안 회귀 — 세션 쿠키와 agent 가드의 fail-closed 동작 검증."""
 
 from __future__ import annotations
 

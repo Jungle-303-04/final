@@ -1,6 +1,6 @@
 """workflow-controller — GitOps 이벤트 흐름을 사용자 실행 객체로 투영.
 
-기존 git-pull/render/diff/command worker chain은 그대로 둔다. 이 worker는 같은
+기존 git-pull/render/diff/command worker chain은 그대로 유지. 이 worker는 같은
 이벤트를 관찰해 Application, WorkflowRun, WorkflowRunStep, Approval 상태를 기록하고
 콘솔이 읽을 수 있는 workflow.* / approval.* 이벤트를 발행함.
 """
@@ -121,7 +121,7 @@ def rendered_application_name(evt: ManifestRenderedBody) -> str | None:
     """Application 이름 후보는 workload manifest에서만 가져옴.
 
     한 파일에 Service/ConfigMap이 같이 렌더될 때 부속 리소스 이름이 Application.name을
-    덮으면 콘솔에서 앱이 부속 ConfigMap 이름으로 보인다.
+    덮으면 콘솔에서 앱이 부속 ConfigMap 이름으로 보이는 문제 방지.
     """
     if evt.rendered_manifest.kind == "Deployment":
         return evt.rendered_manifest.metadata.name

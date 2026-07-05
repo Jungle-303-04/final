@@ -1,1 +1,1 @@
-"""RCA cause knowledge base."""
+"""RCA 원인 지식 베이스."""

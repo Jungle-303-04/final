@@ -118,7 +118,7 @@ class FakeSessionStore:
         roles: list[str] | None = None,
         workspace_id: str | None = None,
     ) -> Any:
-        # Redis 대신 dict에 저장해서 PasswordAuthService 흐름만 검증한다.
+        # Redis 대신 dict에 저장해서 PasswordAuthService 흐름만 검증.
         token = f"token-{len(self.sessions) + 1}"
         session = self.auth_module.AuthSession(
             token,

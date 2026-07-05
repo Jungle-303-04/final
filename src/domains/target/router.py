@@ -272,7 +272,7 @@ def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None
     )
 
 
-# require_admin_session 이 세션을 검증 → base router 에 둔다.
+# require_admin_session 이 세션을 검증 → base router 에 둠.
 # (라우터 단위 require_session + require_admin_session = 이중 검증/레이트리밋 2배 회피)
 @router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(

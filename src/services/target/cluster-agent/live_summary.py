@@ -1,4 +1,4 @@
-"""Live summary producer — cluster-agent → management realtime-gateway outbound WS.
+"""live summary 생산자 — cluster-agent → management realtime-gateway outbound WS.
 
 경계 원칙:
 - agent 는 browser fan-out 을 모름. 클러스터당 outbound 연결 1개만 유지하고,
