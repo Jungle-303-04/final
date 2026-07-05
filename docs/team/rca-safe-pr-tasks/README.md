@@ -42,7 +42,7 @@ cluster.evidence.received
 
 ## 하드닝 후속 작업
 
-8번 이후에는 [하드닝 로드맵](../../hardening-roadmap.md)의 P0/P1 기준을 따른다.
+8번 이후에는 [production-readiness](../../production-readiness.md)의 release gate를 따른다.
 
 - Safe PR은 실제 manifest patch 또는 rollback patch를 포함해야 한다.
 - AI fallback은 실제 tool pipeline에 연결하거나 demo claim에서 제거한다.

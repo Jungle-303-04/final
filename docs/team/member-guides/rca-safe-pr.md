@@ -127,7 +127,7 @@ Audit Timeline Service
 
 ## 하드닝 Phase 기준
 
-Phase 9 이후는 `docs/hardening-roadmap.md`의 AI/RCA와 Safe PR 항목을 따른다.
+Phase 9 이후는 [production-readiness](../../production-readiness.md)의 AI/RCA와 Safe PR release gate를 따른다.
 
 완료 기준:
 
@@ -446,7 +446,7 @@ evidence input에서 RCA 결과와 Safe PR 요청/결과 이벤트까지 테스�
 5. `src/packages/contracts/event_bus/bodies/`
 6. `src/packages/runtime/worker.py`
 7. `docs/events.md`
-8. Gateway/Auth Token Broker 설계: `docs/team/member-guides/gateway-auth.md`
+8. 권한과 secret 경계: `docs/rca-production-onboarding/06-chanbin-permission-dashboard.md`, `docs/secrets.md`
 
 ## Codex 지시문
 

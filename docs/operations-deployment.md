@@ -124,7 +124,7 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 
 | 단계 | 목표 | 기준 |
 | --- | --- | --- |
-| local | 개발자 PC에서 end-to-end 확인 | kind management/target, in-cluster store |
+| developer check | 개발자 PC에서 코드 정합성 확인 | `make check`, `make manifest-check`, Bruno local profile |
 | dev EKS | 실제 Kubernetes 운영 제약 확인 | managed node group, ALB, private subnet 후보 |
 | staging | 장애/복구/권한 검증 | pod kill, retry, DLQ, replay, RBAC, sandbox |
 | production | 사용자/운영 안정성 | managed DB/cache/object store, audit, backup, alert |
@@ -147,7 +147,7 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | 항목 | 계획 | 이유 |
 | --- | --- | --- |
 | CI integration smoke | `.github/workflows/integration-smoke.yml`에서 nightly/manual AWS CD smoke를 실행한다. `run_smoke=true`로 실제 EKS management/target cluster에 배포한 뒤 event flow를 확인한다. | 로컬 클러스터 차이가 아니라 AWS EKS 운영 제약, NATS/PostgreSQL/Redis/Kubernetes 조합 부팅 실패를 조기에 발견한다. |
-| Secret provider 경계 | credential placeholder를 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문 또는 임시 구조로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
+| Secret provider 경계 | credential reference를 `TokenVaultPort`/provider adapter로 분리하고, 운영에서는 AWS Secrets Manager, SOPS, KMS envelope encryption 중 하나로 교체한다. | provider token이 DB/event/log에 평문으로 고착되는 것을 막고, 회전/감사/권한 분리를 가능하게 한다. |
 | GitOps source hardening | repo checkout/cache, rendered artifact digest, last-approved snapshot, policy decision ref를 GitOps pipeline에 연결한다. | Git을 source of truth로 말하려면 commit provenance와 승인된 비교 기준이 있어야 한다. |
 | Safe PR hardening | PR provider는 실제 manifest patch/rollback patch를 커밋하고, proposal-only 문서는 보조 자료로 둔다. | 검토 문서만 있는 PR은 배포 변경을 검증하거나 rollback할 수 없다. |
 | Control-plane metrics | worker 처리 시간, NATS lag, outbox age, DLQ율, command queue age, LLM latency/cost를 Prometheus metric으로 노출한다. | evidence provider 수집과 제품 runtime 신뢰성은 별도 문제다. 운영 장애를 잡으려면 control-plane 자체 계측이 필요하다. |
@@ -155,7 +155,8 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | Approval evidence | production write command는 approval_ref, policy_decision_ref, approver, expiry를 검증한 뒤에만 agent가 실행한다. | Gateway/command-worker가 통과시킨 요청도 target agent에서 다시 fail-closed해야 한다. |
 | Partial failure reporting | agent command result에 resource별 status, sanitized stdout/stderr, retryable flag, applied flag를 추가한다. | 자동 변경은 성공/실패 이분법만으로는 복구와 감사가 어렵다. |
 
-세부 실행 순서와 release gate는 [hardening-roadmap](hardening-roadmap.md)을 따른다.
+세부 실행 순서와 release gate는 [production-readiness](production-readiness.md)와
+[AWS 테스트 실행 기준](aws-testing-runbook.md)을 따른다.
 
 ## 참고 문서
 

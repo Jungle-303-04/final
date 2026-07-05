@@ -7,15 +7,17 @@ Prometheus, Loki, OTel 설치 YAML을 사용자 workload GitOps diff 대상과 �
 ## 먼저 읽을 파일
 
 - `deploy/target/target.yaml`
-- `docs/team/member-guides/target-telemetry-data-flows.md`
-- `docs/team/contract-vs-demo-boundary.md`
+- `deploy/target/prometheus.yaml`
+- `deploy/target/loki.yaml`
+- `deploy/target/opentelemetry.yaml`
+- `deploy/target/tempo.yaml`
 - [01. Telemetry Provider 경계](01-telemetry-provider-boundary.md)
 
 ## 수정 후보
 
 - `deploy/target/observability/README.md`
-- `docs/team/member-guides/target-telemetry-data-flows.md`
-- 필요하면 `docs/team/contract-vs-demo-boundary.md`
+- `docs/team/member-guides/target-agent-command-evidence-flow.md`
+- 필요하면 `docs/team/target-telemetry-tasks/README.md`
 
 ## 선형 절차
 
@@ -28,7 +30,7 @@ Prometheus, Loki, OTel 설치 YAML을 사용자 workload GitOps diff 대상과 �
    - `gitops_managed`
    - `risk_level`
 5. cluster-wide RBAC가 필요하면 이유와 최소 범위를 문서에 먼저 적는다.
-6. 아직 실제 apply나 install은 하지 않는다.
+6. 이 작업 카드에서는 실제 apply나 install을 하지 않는다.
 
 ## 예시 scope
 
@@ -44,7 +46,7 @@ metadata:
 ## 검증
 
 ```bash
-git diff --check -- deploy/target/observability docs/team/member-guides/target-telemetry-data-flows.md
+git diff --check -- deploy/target/observability docs/team/member-guides/target-agent-command-evidence-flow.md
 ```
 
 ## 완료 기준

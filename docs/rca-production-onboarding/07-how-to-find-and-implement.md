@@ -182,7 +182,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 | `rca.completed` | root cause, confidence, supporting evidence를 화면에 보여준다. |
 | `rca.action_required` | 자동 결론을 내리지 못한 이유를 화면에 보여준다. |
 | `recovery.action_selected` | command/PR/manual 중 어느 route로 갔는지 알려준다. |
-| `safe_pr.requested` | PR 생성 요청이 생긴 상태다. PR URL은 아직 없다. |
+| `safe_pr.requested` | PR 생성 요청이 생긴 상태다. 이 단계에는 PR URL이 없다. |
 | `safe_pr.created` 또는 `safe_pr.failed` | 실제 PR 결과를 화면에 보여준다. |
 
 바로 돌릴 테스트:
