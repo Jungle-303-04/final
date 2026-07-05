@@ -41,6 +41,9 @@ jobs:
       - name: README structure drift check
         run: bash scripts/readme-structure-check.sh
 
+      - name: FD docs link check
+        run: bash scripts/fd-link-check.sh
+
       - name: No tracked env/secret files
         run: |
           tracked=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.example$' || true)
