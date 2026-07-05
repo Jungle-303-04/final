@@ -140,3 +140,14 @@ def test_aws_image_and_workflow_support_remote_git_manifest_reads() -> None:
     assert "apt-get install -y --no-install-recommends git ca-certificates" in dockerfile
     assert "GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN || github.token }}" in workflow
     assert "`GH_APP_TOKEN`" in runbook
+
+
+def test_aws_smoke_uses_runnable_application_manifest() -> None:
+    workflow = read(".github/workflows/aws-cd.yml")
+    script = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "MANIFEST_PATH: ${{ vars.MANIFEST_PATH || 'src/samples/smoke/deploy.yaml' }}" in workflow
+    assert 'MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in script
+    assert "`MANIFEST_PATH`" in runbook
+    assert "deploy/target/target.yaml" not in script
