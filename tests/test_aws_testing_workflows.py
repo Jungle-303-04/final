@@ -51,6 +51,7 @@ def test_make_check_and_docs_point_to_aws_smoke() -> None:
     assert "TARGET_CLUSTER ?=" in makefile
     assert "AWS CD" in docs
     assert "run_smoke=true" in docs
+    assert "CLOUDFLARE_PROXIED" in docs
 
 
 def test_local_test_profile_wires_bootstrap_smoke_and_bruno() -> None:
@@ -93,3 +94,15 @@ def test_operator_scripts_require_explicit_runtime_context() -> None:
     assert "https://k8s.woonyong.org" not in scripts
     assert "kind-management" not in scripts
     assert "kind-target" not in scripts
+
+
+def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
+    workflow = read(".github/workflows/aws-cd.yml")
+    script = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "CLOUDFLARE_PROXIED: ${{ vars.CLOUDFLARE_PROXIED || '1' }}" in workflow
+    assert 'CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"' in script
+    assert '"proxied": ${proxied}' in script
+    assert 'scheme="https"' in script
+    assert "`CLOUDFLARE_PROXIED`" in runbook
