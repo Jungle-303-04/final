@@ -50,6 +50,19 @@ from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 LOGGER = get_logger(__name__)
 
 
+def agent_connected_body_from_request(
+    payload: AgentConnectRequest,
+    identity: ClusterAgentIdentity,
+) -> AgentConnectedBody:
+    """agent 연결 이벤트는 body cluster_id가 아니라 인증 identity를 권위값으로 쓴다."""
+    body = payload.model_dump(exclude={"cluster_id"})
+    return AgentConnectedBody(
+        **body,
+        cluster_id=identity.cluster_id,
+        workspace_id=identity.workspace_id,
+    )
+
+
 class ApiGateway:
     def __init__(self) -> None:
         self.db = Database()
@@ -161,11 +174,7 @@ class ApiGateway:
         ) -> AcceptedResponse:
             # cluster_id/workspace_id 는 토큰 identity 에서 — body 의 cluster_id 는 신뢰 안 함.
             accepted = await self.events.accept_body(
-                AgentConnectedBody(
-                    **payload.model_dump(),
-                    cluster_id=identity.cluster_id,
-                    workspace_id=identity.workspace_id,
-                )
+                agent_connected_body_from_request(payload, identity)
             )
             return AcceptedResponse(
                 accepted=True,

@@ -15,6 +15,7 @@
 | 5 | [RCA 데이터 스키마](04-rca-data-schema.md) | Google Sheet에 넣은 스키마와 같은 기준이다. 필드 단위로 왜 필요한지 적었다. |
 | 6 | [Plural 비교와 프로덕션 보강 항목](05-plural-production-comparison.md) | Plural 코드를 보고 우리 프로젝트에 필요한 운영 객체를 비교한 결과다. |
 | 7 | [찬빈: 권한 시스템과 대시보드 적용](06-chanbin-permission-dashboard.md) | frontend/dashboard가 실제 권한 시스템을 어떻게 써야 하는지 정리했다. |
+| 8 | [찾아보고 구현하는 방법](07-how-to-find-and-implement.md) | route, event, worker, provider, test를 어떤 순서로 찾고 고칠지 정리했다. |
 
 ## 역할 경계
 
@@ -105,3 +106,14 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 ```
 
 이 명령이 통과하면 지금 문서에서 설명하는 command, target evidence, RCA, Safe PR, audit/realtime 계약의 기본 흐름은 살아 있다고 보면 된다.
+
+로컬 서비스를 실제로 띄워 확인할 때는 아래 순서로 본다.
+
+```bash
+make up
+make smoke
+```
+
+현재 local 기본 계정은 `admin@example.com / local-admin-password`다. 기본 worker profile은 `UP_WORKER_SET=smoke`라 smoke에 필요한 worker만 켠다. RCA worker까지 같이 볼 때는 `UP_WORKER_SET=rca make up`, 모든 worker와 GitHub poll CronJob까지 켤 때는 `UP_WORKER_SET=full ENABLE_GITHUB_POLL_CRON=1 make up`을 쓴다.
+
+`make smoke`는 `src/samples/smoke/deploy.yaml` 샘플 manifest를 사용하고, 같은 `correlation_id`에서 `git.webhook.received`, `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed`가 실제 DB `events` 테이블에 남는지 확인한다.

@@ -235,12 +235,30 @@ class RepoChangeRepository(DatabaseConnection):
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         repository_id = derive_repository_id(payload)
         application_id = derive_application_id(payload)
+        name = derive_application_name(payload) or DEFAULT_APPLICATION_ID
         table = Application.__table__
+        existing_application_id_statement = (
+            select(table.c.application_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == repository_id,
+                table.c.name == name,
+            )
+            .limit(1)
+        )
+        update_values = {
+            "repository_id": repository_id,
+            "name": name,
+            "manifest_path": str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
+            "status": str(payload.get("status", ApplicationStatus.ACTIVE.value)),
+            "metadata": dict(payload.get("metadata", {})),
+            "updated_at": func.now(),
+        }
         insert = pg_insert(table).values(
             application_id=application_id,
             workspace_id=workspace_id,
             repository_id=repository_id,
-            name=str(payload.get("name") or payload.get("app_name") or DEFAULT_APPLICATION_ID),
+            name=name,
             manifest_path=str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
             status=str(payload.get("status", ApplicationStatus.ACTIVE.value)),
             metadata=dict(payload.get("metadata", {})),
@@ -258,6 +276,20 @@ class RepoChangeRepository(DatabaseConnection):
             },
         )
         with self.connection() as conn:
+            existing_application_id = conn.execute(
+                existing_application_id_statement
+            ).scalar_one_or_none()
+            if existing_application_id and str(existing_application_id) != application_id:
+                conn.execute(
+                    table.update()
+                    .where(table.c.application_id == str(existing_application_id))
+                    .values(**update_values)
+                )
+                return {
+                    **payload,
+                    "workspace_id": workspace_id,
+                    "application_id": str(existing_application_id),
+                }
             conn.execute(statement)
         return {**payload, "workspace_id": workspace_id, "application_id": application_id}
 
@@ -748,15 +780,29 @@ def derive_application_id(payload: JsonObject) -> str:
     explicit = payload.get("application_id")
     if explicit and explicit != DEFAULT_APPLICATION_ID:
         return str(explicit)
+    application_name = derive_application_name(payload) or DEFAULT_APPLICATION_ID
     raw = "|".join(
         [
             str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             derive_repository_id(payload),
             str(payload.get("manifest_path", DEFAULT_MANIFEST_PATH)),
-            str(payload.get("name") or payload.get("app_name") or DEFAULT_APPLICATION_ID),
+            application_name,
         ]
     )
     return f"app-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def derive_application_name(payload: JsonObject) -> str:
+    explicit = payload.get("name") or payload.get("app_name")
+    if explicit:
+        return str(explicit)
+    resource = str(payload.get("resource", ""))
+    if "/" in resource:
+        return resource.split("/", 1)[1]
+    repo_ref = str(payload.get("repo_ref", ""))
+    if "/" in repo_ref:
+        return repo_ref.rsplit("/", 1)[1]
+    return ""
 
 
 def derive_workflow_run_id(payload: JsonObject) -> str:

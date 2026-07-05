@@ -4,9 +4,11 @@ from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.gitops.events import GitWebhookReceivedBody
 from domains.gitops.repository import (
+    derive_application_id,
     derive_deployment_binding_id,
     derive_repository_id,
     derive_watch_target_id,
+    derive_workflow_run_id,
 )
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
@@ -62,6 +64,24 @@ def test_git_pull_normalizes_default_gitops_ids() -> None:
             "watch_target_id": expected_watch_target_id,
         }
     )
+    expected_application_id = derive_application_id(
+        {
+            **payload,
+            "repository_id": expected_repository_id,
+            "watch_target_id": expected_watch_target_id,
+            "binding_id": expected_binding_id,
+        }
+    )
+    expected_workflow_run_id = derive_workflow_run_id(
+        {
+            **payload,
+            "repository_id": expected_repository_id,
+            "watch_target_id": expected_watch_target_id,
+            "binding_id": expected_binding_id,
+            "application_id": expected_application_id,
+            "commit_sha": "abc123",
+        }
+    )
 
     outs = run_handler(
         git_pull.on_git_webhook,
@@ -80,6 +100,8 @@ def test_git_pull_normalizes_default_gitops_ids() -> None:
     assert changed.repository_id == expected_repository_id
     assert changed.watch_target_id == expected_watch_target_id
     assert changed.binding_id == expected_binding_id
+    assert changed.application_id == expected_application_id
+    assert changed.workflow_run_id == expected_workflow_run_id
     assert changed.repository_id != DEFAULT_REPOSITORY_ID
     assert changed.watch_target_id != DEFAULT_WATCH_TARGET_ID
     assert changed.binding_id != DEFAULT_DEPLOYMENT_BINDING_ID

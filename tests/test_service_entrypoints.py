@@ -123,10 +123,54 @@ def test_target_install_is_driven_by_registration_script() -> None:
     assert "kubectl --context" in register_script
 
 
-def test_up_script_restarts_new_management_workers() -> None:
+def test_up_script_starts_management_workers_after_gateway() -> None:
     up_script = read_project_file("scripts/up.sh")
-    assert (
-        "workflow-controller alert-worker mail-worker command-worker command-janitor" in up_script
-    )
-    assert "evidence-worker incident-worker plan-worker analyze-worker" in up_script
-    assert "safe-pr-worker ai-diff-worker rollout-worker approval-worker" in up_script
+    assert "APP_WORKER_DEPLOYMENTS=(" in up_script
+    assert "SMOKE_WORKER_DEPLOYMENTS=(" in up_script
+    assert "RCA_WORKER_DEPLOYMENTS=(" in up_script
+    assert 'UP_WORKER_SET="${UP_WORKER_SET:-smoke}"' in up_script
+    assert "WORKER_DEPLOYMENTS_TO_START" in up_script
+    assert "wait_management_pod_ready api-gateway" in up_script
+    assert 'scale "deploy/${deploy}" --replicas=1' in up_script
+    assert "--for=condition=ready pod" in up_script
+    assert "suspend: true" in up_script
+    assert 'ENABLE_GITHUB_POLL_CRON="${ENABLE_GITHUB_POLL_CRON:-0}"' in up_script
+    assert "leaving github-poll-worker CronJob suspended" in up_script
+    for deploy in (
+        "workflow-controller",
+        "alert-worker",
+        "command-janitor",
+        "evidence-worker",
+        "safe-pr-worker",
+        "ai-diff-worker",
+        "dashboard-worker",
+        "realtime-gateway",
+    ):
+        assert deploy in up_script
+
+
+def test_gateway_pool_capacity_covers_agent_long_poll_fanout() -> None:
+    services = read_project_file("deploy/management/services.yaml")
+
+    assert '- name: DB_POOL_SIZE\n              value: "8"' in services
+    assert '- name: DB_MAX_OVERFLOW\n              value: "8"' in services
+    assert '- name: DB_POOL_TIMEOUT_SECONDS\n              value: "20"' in services
+
+
+def test_local_up_and_smoke_use_runnable_sample_manifest_defaults() -> None:
+    up_script = read_project_file("scripts/up.sh")
+    smoke_script = read_project_file("scripts/smoke.sh")
+    sample_manifest = read_project_file("src/samples/smoke/deploy.yaml")
+
+    assert 'MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in up_script
+    assert 'GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED:-1}"' in up_script
+    assert 'GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-0}"' in up_script
+    assert 'EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-30}"' in up_script
+    assert 'WORKER_IDLE_SLEEP_SECONDS="${WORKER_IDLE_SLEEP_SECONDS:-1.0}"' in up_script
+    assert "load_management_config_value GITOPS_WEBHOOK_IMAGE" in smoke_script
+    assert "load_management_config_value MANIFEST_PATH" in smoke_script
+    assert "required_subjects_csv" in smoke_script
+    assert "manifest.rendered" in smoke_script
+    assert "desired.diff.detected" in smoke_script
+    assert "kind: Deployment" in sample_manifest
+    assert "namespace: sandbox" in sample_manifest

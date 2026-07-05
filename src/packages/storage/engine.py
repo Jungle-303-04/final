@@ -25,9 +25,19 @@ DB_STATEMENT_TIMEOUT_MS_ENV = "DB_STATEMENT_TIMEOUT_MS"  # 쿼리 실행 한도 
 DB_IDLE_IN_TRANSACTION_TIMEOUT_MS_ENV = (
     "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS"  # 유휴 트랜잭션 한도 ms(기본 30000)
 )
+DB_SCHEMA_INIT_LOCK_TIMEOUT_MS_ENV = (
+    "DB_SCHEMA_INIT_LOCK_TIMEOUT_MS"  # 스키마 초기화 잠금 대기 한도 ms(기본 60000)
+)
+DB_SCHEMA_INIT_STATEMENT_TIMEOUT_MS_ENV = (
+    "DB_SCHEMA_INIT_STATEMENT_TIMEOUT_MS"  # 스키마 초기화 DDL 실행 한도 ms(기본 120000)
+)
 DB_LOCK_TIMEOUT = f"{int(env(DB_LOCK_TIMEOUT_MS_ENV, '5000'))}ms"
 DB_STATEMENT_TIMEOUT = f"{int(env(DB_STATEMENT_TIMEOUT_MS_ENV, '30000'))}ms"
 DB_IDLE_IN_TRANSACTION_TIMEOUT = f"{int(env(DB_IDLE_IN_TRANSACTION_TIMEOUT_MS_ENV, '30000'))}ms"
+DB_SCHEMA_INIT_LOCK_TIMEOUT = f"{int(env(DB_SCHEMA_INIT_LOCK_TIMEOUT_MS_ENV, '60000'))}ms"
+DB_SCHEMA_INIT_STATEMENT_TIMEOUT = (
+    f"{int(env(DB_SCHEMA_INIT_STATEMENT_TIMEOUT_MS_ENV, '120000'))}ms"
+)
 # 스키마 초기화 advisory lock 식별자 — 여러 워커가 동시에 create_all/호환 마이그레이션을
 # 실행하지 못하게 전 배포가 같은 (namespace, key)로 pg_advisory_xact_lock 을 잡음.
 # 모든 프로세스가 동일 잠금을 공유해야 상호 배제가 성립하므로 env 오버라이드 없는 고정값임.
@@ -251,6 +261,8 @@ def configure_transaction(conn: Connection) -> None:
 
 
 def acquire_schema_init_lock(conn: Connection) -> None:
+    conn.execute(text(f"set local lock_timeout = '{DB_SCHEMA_INIT_LOCK_TIMEOUT}'"))
+    conn.execute(text(f"set local statement_timeout = '{DB_SCHEMA_INIT_STATEMENT_TIMEOUT}'"))
     conn.execute(
         text("select pg_advisory_xact_lock(:namespace, :key)"),
         {"namespace": SCHEMA_INIT_LOCK_NAMESPACE, "key": SCHEMA_INIT_LOCK_KEY},

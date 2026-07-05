@@ -10,6 +10,8 @@ from packages.contracts.identity import (
     DEPLOY_ACCESS,
     AccessResourceType,
     AccessRole,
+    AccountRole,
+    UserStatus,
     WorkspaceRole,
 )
 
@@ -27,6 +29,23 @@ def test_member_upsert_preserves_existing_owner_role() -> None:
     assert "excluded.role" in sql
     assert "workspace_members.role" in sql
     assert WorkspaceRole.OWNER.value in compiled.params.values()
+
+
+def test_admin_user_upsert_uses_email_conflict_and_active_admin_role() -> None:
+    statement = WorkspaceAccessRepository._admin_user_upsert(
+        "user-admin",
+        "admin@example.com",
+        "hashed-password",
+        "admin",
+    )
+    compiled = statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    params = compiled.params
+
+    assert "ON CONFLICT (email)" in sql
+    assert AccountRole.ADMIN.value in params.values()
+    assert UserStatus.ACTIVE.value in params.values()
+    assert "hashed-password" in params.values()
 
 
 class CapturingConnection:
