@@ -14,6 +14,8 @@ import httpx
 import pytest
 from conftest import ROOT, load_file
 
+from packages.config.constants import Target
+
 
 def _load_poller() -> Any:
     return load_file(
@@ -79,7 +81,7 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
             "branch": "main",
             "watch_target_id": "",
             "binding_id": "",
-            "cluster_id": "target-cluster-01",
+            "cluster_id": Target.DEFAULT_CLUSTER_ID,
             "manifest_path": "deploy.yaml",
         }
     ]
