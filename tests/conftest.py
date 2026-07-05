@@ -168,6 +168,36 @@ class SpyDb:
     def __init__(self, **returns: Any) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self._returns = returns
+        self._workflow_approvals: dict[tuple[str, str], dict[str, Any]] = {}
+
+    async def request_workflow_approval(self, payload: dict[str, Any]) -> Any:
+        self.calls.append(("request_workflow_approval", (payload,)))
+        approval_id = str(payload.get("approval_id", ""))
+        workspace_id = str(payload.get("workspace_id", "default"))
+        if approval_id:
+            self._workflow_approvals[(approval_id, workspace_id)] = dict(payload)
+        return self._returns.get("request_workflow_approval")
+
+    async def resolve_workflow_approval(self, payload: dict[str, Any]) -> Any:
+        self.calls.append(("resolve_workflow_approval", (payload,)))
+        approval_id = str(payload.get("approval_id", ""))
+        workspace_id = str(payload.get("workspace_id", "default"))
+        if approval_id:
+            previous = self._workflow_approvals.get((approval_id, workspace_id), {})
+            self._workflow_approvals[(approval_id, workspace_id)] = {
+                **previous,
+                **dict(payload),
+            }
+        return self._returns.get("resolve_workflow_approval")
+
+    async def get_workflow_approval(
+        self, approval_id: str, workspace_id: str = "default"
+    ) -> dict[str, Any] | None:
+        self.calls.append(("get_workflow_approval", (approval_id, workspace_id)))
+        configured = self._returns.get("get_workflow_approval")
+        if configured is not None:
+            return configured
+        return self._workflow_approvals.get((approval_id, workspace_id))
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
         async def method(*args: Any) -> Any:

@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID,
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_ENVIRONMENT,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_REPOSITORY_ID,
+    DEFAULT_WORKFLOW_RUN_ID,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 
@@ -133,6 +141,16 @@ class CauseEvaluation(EventBody):
 
 
 @dataclass(frozen=True)
+class MissingEvidenceCheck(EventBody):
+    """RCA 확정에 필요한 근거 수집 상태."""
+
+    check_id: str
+    source: str
+    status: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class RcaReportDetail(EventBody):
     """RCA 최종 분석 상세 결과."""
 
@@ -142,6 +160,7 @@ class RcaReportDetail(EventBody):
     supporting_evidence: list[str]
     missing_evidence: list[str]
     reason: str
+    missing_evidence_checks: list[MissingEvidenceCheck] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -226,6 +245,44 @@ class RcaCandidatesEvaluatedBody(EventBody):
     rule_missing: RcaRuleMissing | None = None
 
 
+@event(EventSubject.RCA_ANALYSIS_BLOCKED)
+@dataclass(frozen=True)
+class RcaAnalysisBlockedBody(EventBody):
+    """rca.analysis_blocked — 근거 부족/룰 부재로 RCA 자동 확정 불가."""
+
+    reason_code: str
+    reason: str
+    evidence_ref: str
+    rca_detail: RcaReportDetail
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    evidence: Evidence | None = None
+    incident: IncidentRecord | None = None
+    evidence_bundle: EvidenceBundle | None = None
+    candidates: list[CauseCandidate] = field(default_factory=list)
+    evaluations: list[CauseEvaluation] = field(default_factory=list)
+    rule_missing: RcaRuleMissing | None = None
+    missing_evidence: list[str] = field(default_factory=list)
+    next_actions: list[JsonObject] = field(default_factory=list)
+    diagnostics: JsonObject = field(default_factory=dict)
+    severity: str = "warning"
+
+
+@event(EventSubject.RCA_FOLLOWUP_REQUIRED)
+@dataclass(frozen=True)
+class RcaFollowupRequiredBody(EventBody):
+    """rca.followup.required — RCA blocked/action/fallback 후속 조치 요청."""
+
+    reason_code: str
+    summary: str
+    evidence_ref: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    severity: str = "warning"
+    incident: IncidentRecord | None = None
+    missing_evidence: list[str] = field(default_factory=list)
+    next_actions: list[JsonObject] = field(default_factory=list)
+    diagnostics: JsonObject = field(default_factory=dict)
+
+
 @event(EventSubject.RCA_COMPLETED)
 @dataclass(frozen=True)
 class RcaCompletedBody(EventBody):
@@ -252,6 +309,11 @@ class RcaActionRequiredBody(EventBody):
     reason: str
     evidence_ref: str
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    reason_code: str = "action_required"
+    severity: str = "warning"
+    missing_evidence: list[str] = field(default_factory=list)
+    next_actions: list[JsonObject] = field(default_factory=list)
+    diagnostics: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -347,6 +409,15 @@ class SafePrPatchPreparedBody(EventBody):
     patch: JsonObject
     provider: str
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    repository_id: str = DEFAULT_REPOSITORY_ID
+    binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
+    application_id: str = DEFAULT_APPLICATION_ID
+    workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
+    environment: str = DEFAULT_ENVIRONMENT
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
+    next_alert: JsonObject | None = None
 
 
 @event(EventSubject.DIFF_EXPLAINED)
