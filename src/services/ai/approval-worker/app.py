@@ -10,7 +10,8 @@ from domains.rca.events import (
     RolloutDiagnosedBody,
 )
 from packages.contracts.event_bus.bodies import EventBody
-from packages.runtime.app import App
+from packages.contracts.stores import RecoveryPlanStore
+from packages.runtime.app import App, EventContext
 
 app = App("approval-worker")
 
@@ -18,7 +19,14 @@ app = App("approval-worker")
 @app.on(RecoverySelectionRequestedBody)
 async def on_recovery_selection_requested(
     evt: RecoverySelectionRequestedBody,
+    ctx: EventContext[RecoveryPlanStore],
 ) -> AsyncIterator[EventBody]:
+    if ctx.db is not None:
+        await ctx.db.upsert_recovery_selection_request(
+            ctx.correlation_id,
+            evt.workspace_id,
+            evt.plan.to_body(),
+        )
     yield ApprovalRecommendedBody(
         recommendation="user_selection_required",
         reason=evt.reason,

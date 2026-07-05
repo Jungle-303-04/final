@@ -30,6 +30,7 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.RCA_CANDIDATES_PLANNED.value: "rca_planned",
     EventSubject.RCA_CANDIDATES_EVALUATED.value: "rca_evaluated",
     EventSubject.RCA_COMPLETED.value: "rca_completed",
+    EventSubject.RCA_FOLLOWUP_REQUIRED.value: "followup_required",
     EventSubject.RCA_ACTION_REQUIRED.value: "action_required",
     EventSubject.RECOVERY_PLANNED.value: "recovery_planned",
     EventSubject.RECOVERY_SELECTION_REQUESTED.value: "selection_required",
@@ -43,6 +44,7 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.SAFE_PR_REQUESTED.value: "pr_requested",
     EventSubject.SAFE_PR_PATCH_PREPARED.value: "pr_patch_prepared",
     EventSubject.DIFF_EXPLAINED.value: "pr_diff_explained",
+    EventSubject.SAFE_PR_READY_FOR_CREATION.value: "pr_ready_for_creation",
     EventSubject.SAFE_PR_CREATED.value: "pr_created",
     EventSubject.SAFE_PR_FAILED.value: "pr_failed",
 }
@@ -249,8 +251,11 @@ def _confidence(payload: JsonObject) -> float | None:
 
 
 def _supporting_evidence(payload: JsonObject) -> list[str] | None:
-    return _first_list(payload, ("rca_detail", "supporting_evidence")) or _evaluation_list(
-        payload, "supporting_evidence"
+    return (
+        _evidence_reference_list(payload, ("rca_detail", "supporting_evidence_refs"))
+        or _first_list(payload, ("rca_detail", "supporting_evidence"))
+        or _evaluation_reference_list(payload, "supporting_evidence_refs")
+        or _evaluation_list(payload, "supporting_evidence")
     )
 
 
@@ -336,6 +341,49 @@ def _evaluation_list(payload: JsonObject, field: str) -> list[str] | None:
         if isinstance(raw, list):
             values.extend(str(value) for value in raw if value not in (None, ""))
     return _dedupe(values) if values else None
+
+
+def _evidence_reference_list(payload: JsonObject, path: Path) -> list[str] | None:
+    raw = _value_at(payload, path)
+    if not isinstance(raw, list):
+        return None
+    values = [_format_evidence_reference(item) for item in raw if isinstance(item, dict)]
+    values = [value for value in values if value]
+    return _dedupe(values) if values else None
+
+
+def _evaluation_reference_list(payload: JsonObject, field: str) -> list[str] | None:
+    evaluations = payload.get("evaluations")
+    if not isinstance(evaluations, list):
+        return None
+    values: list[str] = []
+    for item in evaluations:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get(field)
+        if isinstance(raw, list):
+            values.extend(
+                value
+                for value in (
+                    _format_evidence_reference(ref) for ref in raw if isinstance(ref, dict)
+                )
+                if value
+            )
+    return _dedupe(values) if values else None
+
+
+def _format_evidence_reference(item: JsonObject) -> str | None:
+    evidence_ref = item.get("evidence_ref")
+    source = item.get("source")
+    name = item.get("name")
+    check_id = item.get("check_id")
+    if evidence_ref:
+        return str(evidence_ref)
+    if source and name:
+        return f"{source}:{name}"
+    if check_id:
+        return str(check_id)
+    return None
 
 
 def _value_at(payload: JsonObject, path: Path) -> Any | None:

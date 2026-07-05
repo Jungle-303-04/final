@@ -67,6 +67,7 @@ class EventSubject(StrEnum):
     RECOVERY_ACTION_SELECTED = "recovery.action_selected"  # 복구 후보 선택 완료
     SAFE_PR_PATCH_PREPARED = "safe_pr.patch_prepared"  # Safe PR 패치 초안 준비
     DIFF_EXPLAINED = "diff.explained"  # 패치 diff 와 위험 설명
+    SAFE_PR_READY_FOR_CREATION = "safe_pr.ready_for_creation"  # 검증된 Safe PR 생성 요청
     ROLLOUT_DIAGNOSED = "rollout.diagnosed"  # 롤아웃 상태 진단
     APPROVAL_RECOMMENDED = "approval.recommended"  # 승인/거절 보조 판단
     RCA_ACTION_REQUIRED = "rca.action_required"  # 자동 진행 불가, 사람 조치 필요
@@ -75,6 +76,7 @@ class EventSubject(StrEnum):
     ALERT_REJECTED = "alert.rejected"  # 알람/정책 게이트 차단
     EMAIL_VERIFICATION_REQUESTED = "mail.email_verification.requested"  # 이메일 인증 요청
     EMAIL_VERIFICATION_SENT = "mail.email_verification.sent"  # 이메일 인증 발송 완료
+    EMAIL_VERIFICATION_FAILED = "mail.email_verification.failed"  # 이메일 인증 발송 실패
     SAFE_PR_REQUESTED = "safe_pr.requested"  # PR 생성 요청(공통)
     SAFE_PR_CREATED = "safe_pr.created"  # repo-gateway 가 PR 생성 완료
     SAFE_PR_FAILED = "safe_pr.failed"  # repo-gateway 가 PR 생성 실패

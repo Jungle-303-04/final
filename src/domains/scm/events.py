@@ -1,8 +1,8 @@
 """SCM gateway event bodies.
 
-Safe PR creation is centralized in scm-worker:
-safe_pr.requested -> safe_pr.patch_prepared -> safe_pr.created/safe_pr.failed.
-diff.explained is emitted from the patch-prepared event as an AI sidecar signal.
+Safe PR creation is gated:
+safe_pr.requested -> safe_pr.patch_prepared -> diff.explained
+-> safe_pr.ready_for_creation -> safe_pr.created/safe_pr.failed.
 """
 
 from __future__ import annotations
@@ -70,6 +70,18 @@ class SafePrCreatedBody(EventBody):
     environment: str = DEFAULT_ENVIRONMENT
 
 
+@event(EventSubject.SAFE_PR_READY_FOR_CREATION)
+@dataclass(frozen=True)
+class SafePrReadyForCreationBody(EventBody):
+    """safe_pr.ready_for_creation — diff 검증을 통과해 PR 생성을 진행해도 된다."""
+
+    request: SafePrRequestedBody
+    summary: str
+    risk: str
+    details: dict[str, object] = field(default_factory=dict)
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
 @event(EventSubject.SAFE_PR_FAILED)
 @dataclass(frozen=True)
 class SafePrFailedBody(EventBody):
@@ -84,3 +96,6 @@ class SafePrFailedBody(EventBody):
     application_id: str = DEFAULT_APPLICATION_ID
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     environment: str = DEFAULT_ENVIRONMENT
+    reason_code: str = "safe_pr_failed"
+    stage: str = "scm"
+    details: dict[str, object] = field(default_factory=dict)

@@ -6,6 +6,7 @@ from domains.rca.events import (
     EvidenceBundle,
     EvidenceItem,
     IncidentRecord,
+    MissingEvidenceCheck,
 )
 from services.ai.agent.causes.engine import required_evidence_sources
 
@@ -38,7 +39,55 @@ def build_incident_evidence_bundle(
         items=items,
         missing_evidence=missing_evidence,
         complete=not missing_evidence,
+        missing_evidence_checks=missing_source_checks(missing_evidence),
     )
+
+
+def evidence_ref_for(evt: EvidenceSource, source: str, name: str) -> str:
+    if isinstance(evt, Evidence):
+        base_ref = evt.object_ref
+    else:
+        base_ref = evt.evidence_key or f"cluster:{evt.workspace_id}:{evt.cluster_id}"
+    return f"{base_ref}#{source}:{name}"
+
+
+def source_check_id(source: str, name: str) -> str:
+    return f"evidence:{source}:{name}"
+
+
+def source_query(source: str, name: str) -> str:
+    return f"{source}.{name}"
+
+
+def evidence_item(
+    evt: EvidenceSource,
+    *,
+    source: str,
+    name: str,
+    value: dict,
+    summary: str,
+) -> EvidenceItem:
+    return EvidenceItem(
+        source=source,
+        name=name,
+        value=value,
+        summary=summary,
+        evidence_ref=evidence_ref_for(evt, source, name),
+        check_id=source_check_id(source, name),
+        query=source_query(source, name),
+    )
+
+
+def missing_source_checks(missing_evidence: list[str]) -> list[MissingEvidenceCheck]:
+    return [
+        MissingEvidenceCheck(
+            check_id=f"evidence:{source}:required",
+            source=source,
+            status="missing",
+            reason=f"{source} evidence query/check must complete before RCA can be finalized.",
+        )
+        for source in missing_evidence
+    ]
 
 
 def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
@@ -52,7 +101,8 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
 
     if evt.kubernetes:
         items.append(
-            EvidenceItem(
+            evidence_item(
+                evt,
                 source="kubernetes",
                 name="cluster_resource_state",
                 value=evt.kubernetes,
@@ -61,7 +111,8 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
         )
     if evt.metrics:
         items.append(
-            EvidenceItem(
+            evidence_item(
+                evt,
                 source="metrics",
                 name="telemetry_metrics",
                 value=evt.metrics,
@@ -70,7 +121,8 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
         )
     if evt.logs:
         items.append(
-            EvidenceItem(
+            evidence_item(
+                evt,
                 source="logs",
                 name="related_logs",
                 value={"entries": evt.logs},
@@ -79,7 +131,8 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
         )
     if evt.traces:
         items.append(
-            EvidenceItem(
+            evidence_item(
+                evt,
                 source="traces",
                 name="related_traces",
                 value=evt.traces,
