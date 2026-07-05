@@ -82,6 +82,20 @@ export const copilotActions: CopilotAction[] = [
     accent: 'purple',
     value: 'chart',
   },
+  {
+    id: 'auto-layout',
+    title: '자동 레이아웃',
+    detail: '데이터 변화에 맞춰 노드 위치를 다시 정렬',
+    accent: 'amber',
+    value: 'layout',
+  },
+  {
+    id: 'toggle-collapse',
+    title: '노드 접기/펼치기',
+    detail: '복잡한 RCA 그래프를 단계별로 압축',
+    accent: 'slate',
+    value: 'fold',
+  },
 ];
 
 export const studioNotes: StudioNote[] = [
