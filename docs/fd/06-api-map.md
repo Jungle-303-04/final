@@ -1,0 +1,173 @@
+# 06. API 맵 — 인벤토리와 신규 계약 초안
+
+[← 문서 지도](README.md)
+
+정본: `src/packages/contracts/gateway/routes.py` + 각 `domains/*/router.py` (2026-07-06 실측 검증).
+스키마 타입은 `GET /openapi.json` 코드젠으로 생성([03 § API 클라이언트](03-architecture.md#api-클라이언트)) — 여기선 경로·용도·사용처만.
+
+인증 표기: 🔓공개 · 🍪세션 · 👑admin(service_admin) · 🤖agent 토큰(x-agent-token, 프론트 미사용)
+
+## 실존 API 인벤토리 (프론트 사용분)
+
+### 인증 (identity)
+
+| 메서드 경로 | 인증 | 사용 뷰 |
+|---|---|---|
+| GET /auth/session | 🍪 | 전역 부팅 [auth](views/auth.md#세션-수명-주기-전역--여기가-정본) |
+| POST /auth/signup · POST /auth/login · POST /auth/logout | 🔓/🍪 | [auth](views/auth.md) |
+| GET /auth/verify-email · POST /auth/resend-verification | 🔓 | [auth](views/auth.md) |
+| POST /auth/users/{user_id}/approve | 👑 | [org-admin 멤버](views/org-admin.md#멤버--membersview-g3) |
+
+### 클러스터/타깃 (target, inventory, command)
+
+| 메서드 경로 | 인증 | 사용 뷰 |
+|---|---|---|
+| POST /targets | 👑 | [resources 위저드](views/resources.md) |
+| GET /clusters · GET /clusters/{cluster_id} | 🍪 | [fleet](views/fleet-heatmap.md), [cluster](views/cluster-detail.md) |
+| GET /clusters/{id}/connection-status | 🍪 | 위저드 4단계 폴링 |
+| GET /clusters/{id}/inventory/summary·resources·workloads·services·events | 🍪 | [fleet](views/fleet-heatmap.md), [cluster](views/cluster-detail.md) |
+| PUT /clusters/{id}/policy | 👑 | cluster policy 탭 — **GET 없음(G11)**, AgentPolicy 전체 전송 |
+| POST /commands | 🍪 deploy | (팔레트 "명령 실행") |
+| POST /clusters/{id}/namespaces/{ns}/deployments/{name}/scale·restart | 🍪 deploy | [cluster workloads](views/cluster-detail.md#쓰기-액션-권한-release_operator-이상--requirepermission) |
+| POST /agent/debug/query | 🍪 read | [metrics](views/metrics.md#온디맨드-쿼리-비동기-ux--이-화면의-핵심-설계) |
+
+### 앱/레포/워크플로우 (applications, catalog, gitops)
+
+| 메서드 경로 | 인증 | 사용 뷰 |
+|---|---|---|
+| GET·POST /applications | 🍪 | [repo](views/repo.md), [resources](views/resources.md) |
+| GET /applications/{application_id} | 🍪 | [repo 상세](views/repo.md#상세--repodetailview-reposapplicationid) |
+| GET·POST /applications/{id}/deployments | 🍪 | repo deployments 탭 |
+| GET /applications/{id}/runs | 🍪 | repo runs, [workflow](views/workflow.md) |
+| GET /catalog/items · GET /catalog/items/{item_id} | 🍪 | /catalog |
+| POST /catalog/items/{item_id}/installs | 🍪 | 카탈로그 설치 |
+| POST /approvals/{approval_id}/grant · reject | 🍪 deploy | ApprovalCard (repo·workflow·chat·notifications 공유) |
+
+### AI / 대시보드 / RCA
+
+| 메서드 경로 | 인증 | 사용 뷰 |
+|---|---|---|
+| POST /ai/conversations | 🍪 | [ai-chat](views/ai-chat.md) |
+| GET /ai/conversations/{conversation_id} | 🍪 | ai-chat 폴링 |
+| POST /ai/conversations/{id}/messages | 🍪 | ai-chat 전송 |
+| GET /dashboard/rca/timeline | 🍪 | fleet 티커, [notifications](views/notifications.md), pod 원인분석 탭 |
+| GET /dashboard/rca/incidents/{incident_id} | 🍪 | 인시던트 상세 |
+| POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select | 🍪 deploy | [ai-chat ActionSelectCard](views/ai-chat.md#actionselectcard--선택하면-실행-카드) |
+
+### 운영 (admin)
+
+| 메서드 경로 | 인증 | 사용 뷰 |
+|---|---|---|
+| GET /dead-letters | 👑 | [notifications](views/notifications.md), /settings/ops |
+| POST /dead-letters/{dead_letter_id}/replay | 👑 | /settings/ops |
+| GET /providers/catalog · POST /providers/validate | 👑 | resources 위저드 1·2단계 |
+| GET /healthz · /readyz | 🔓 | (모니터링 전용) |
+
+### WebSocket
+
+| 경로 | 방향 | 내용 |
+|---|---|---|
+| WS {realtime-gateway}/live/browser | 서버→브라우저 | live summary 스냅샷: 네임스페이스별 팟 요약(hot pod, phase, rollout 진행). 스키마는 `src/services/realtime/realtime-gateway/app.py` 계약 — 코드젠 대상 아님, `shared/lib/live.ts` 에 수기 타입 + 런타임 가드(zod) |
+
+`/live/agent` 는 agent 전용 — 프론트 미사용.
+
+## 신규 API 계약 초안
+
+백엔드 팀 구현 대상. 프론트는 이 계약으로 mock 선행(D7).
+공통 규칙: 세션 인증, workspace 는 세션에서 유도(클라이언트 입력 금지 — 기존 보안 원칙),
+쓰기는 audit 이벤트 발행.
+
+### G1. 조직 CRUD
+
+```text
+GET    /orgs                      → { orgs: [{ org_id, name, description, member_count, group_count, created_at }] }
+POST   /orgs        {name, description?}                          👑
+PATCH  /orgs/{org_id}  {name?, description?}                      👑
+DELETE /orgs/{org_id}   — 소속 그룹 존재 시 422 {detail:"groups_exist"}  👑
+```
+
+### G2. 그룹 CRUD + 멤버십
+
+```text
+GET    /groups?org_id=            → { groups: [{ group_id, org_id, name, member_count }] }
+POST   /groups      {org_id, name, description?}                  👑
+PATCH  /groups/{group_id} · DELETE /groups/{group_id}             👑
+GET    /groups/{group_id}/members → { members: [{ user_id, email }] }
+PUT    /groups/{group_id}/members/{user_id}   (멱등 추가)          👑
+DELETE /groups/{group_id}/members/{user_id}                       👑
+```
+
+### G3. 사용자 목록
+
+```text
+GET /users?status=active|pending_verification|pending_approval&q=
+  → { users: [{ user_id, email, role, status, groups: [group_id], created_at }] }   👑
+```
+
+### G4. 레포지토리 목록
+
+```text
+GET /repositories → { repositories: [{ repository_id, repo_ref, default_branch, status,
+                       watch_targets: [{ watch_target_id, branch, manifest_path }] }] }  🍪
+```
+
+(초기 화면은 /applications 로 대체 가능 — P2)
+
+### G5. 리소스 접근 관리
+
+```text
+GET    /access?resource_type=cluster|repository|application&resource_id=
+  → { grants: [{ access_id, subject_type: user|group, subject_id, subject_label,
+                 resource_type, resource_id, role, granted_at }] }                🍪 read
+POST   /access  {subject_type, subject_id, resource_type, resource_id, role}     👑 또는 리소스 owner
+DELETE /access/{access_id}                                                        동일
+role ∈ ResourceRole (packages/contracts/identity 정본)
+```
+
+### G6. 노드 메트릭 요약 (P2)
+
+```text
+GET /clusters/{id}/nodes/summary → { nodes: [{ name, ready, cpu_ratio, mem_ratio, pod_count }] }
+```
+
+(node-collector 수집값의 read model 투영)
+
+### G7. 메트릭 프록시 (P2)
+
+```text
+POST /clusters/{id}/metrics/query  {promql, start?, end?, step?}
+  → { result_type: vector|matrix, series: [...] }   — agent 경유 동기화(타임아웃 10s)
+```
+
+### G8. AI 스트리밍 (P3 선택)
+
+`WS /ai/conversations/{id}/stream` — assistant 토큰 스트림. 폴링 대체.
+
+### G9. 알림 피드 (P2)
+
+```text
+GET  /notifications?after=          → { notices: [Notice] }   (Notice 는 notifications.md 타입)
+POST /notifications/read  {last_seen_at}
+```
+
+### G10. AI 대화 목록 (P1 — ai-chat 목록 화면 차단 해소)
+
+```text
+GET /ai/conversations → { conversations: [{ conversation_id, title, status, updated_at }] }  🍪
+```
+
+현재는 생성/단건조회만 존재(실측). mock 우선, 백엔드 추가 난도 낮음(기존 테이블 조회).
+
+### G11. 클러스터 정책 조회 (P2)
+
+```text
+GET /clusters/{cluster_id}/policy → AgentPolicy   👑
+```
+
+실측: PUT 만 존재해 편집 폼 프리필이 불가 — 도입 전까지 계약 기본값 프리필 + 경고 배너
+([cluster-detail § policy 탭](views/cluster-detail.md)).
+
+## 갭-뷰 정합성 규칙 재확인
+
+[01 § 갭 요약](01-requirements.md#갭-요약-백엔드-추가-필요-항목)의 표와 이 문서 초안 목록은 1:1 이어야 한다.
+G10 추가로 01 문서 표도 갱신됨 — 불일치 발견 시 이 문서가 정본.
