@@ -1,8 +1,8 @@
-"""DLQ 신뢰성 회귀 — 핸들러 실패가 반복되면 attempt 가 누적되어 결국 DLQ 에 도달한다.
+"""DLQ 신뢰성 회귀 — 핸들러 실패 반복 시 attempt 누적으로 결국 DLQ 도달 검증.
 
 claim(attempt 증가)을 핸들러 트랜잭션과 분리하지 않으면, 핸들러 예외가 attempt 증가까지
-롤백해 재시도 횟수가 누적되지 않고 영영 DLQ 에 못 간다. 인메모리 store 로 트랜잭션 롤백을
-흉내 내 그 회귀를 잠근다.
+롤백해 재시도 횟수가 누적되지 않고 영영 DLQ 에 못 감. 인메모리 store 로 트랜잭션 롤백을
+흉내 내 그 회귀를 잠금.
 """
 
 from __future__ import annotations

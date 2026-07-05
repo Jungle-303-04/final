@@ -1,7 +1,7 @@
 """storage 계층 단위 검증 — 실 DB 없이 가능한 부분(헬퍼·빌더·URL·schema 정의).
 
 repository 의 실제 SQL 실행은 Postgres 전용(jsonb·on_conflict)이라 실 DB smoke·크래시
-테스트가 검증한다. 여기서는 DB 연결 없이 결정적으로 확인 가능한 로직만 단위로 잠근다.
+테스트가 검증. 여기서는 DB 연결 없이 결정적으로 확인 가능한 로직만 단위로 잠금.
 """
 
 from __future__ import annotations

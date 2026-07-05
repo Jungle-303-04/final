@@ -34,7 +34,7 @@ class DeadLetterCreatedBody(EventBody):
 @event(EventSubject.PIPELINE_CONTRACT_FAILED)
 @dataclass(frozen=True)
 class PipelineContractFailedBody(EventBody):
-    """pipeline.contract_failed — consumer rejected an event contract."""
+    """pipeline.contract_failed — consumer 가 계약 위반 이벤트를 거부"""
 
     contract: str
     reason: str

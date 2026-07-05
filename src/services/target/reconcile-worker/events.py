@@ -1,4 +1,4 @@
-"""target reconcile worker event handlers."""
+"""target reconcile worker 이벤트 핸들러."""
 
 from __future__ import annotations
 

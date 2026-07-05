@@ -1,14 +1,4 @@
-"""명령 카탈로그 — @command.action 이 "존재하는 명령 + 정책 메타데이터"의 단일 출처.
-
-규칙: 등록은 @command.<단어>, 조회는 registered_*()/catalog 메서드.
-    @command.action("rollout_restart",
-                    recovery_aliases=("rollout_restart",),
-                    allowed_namespaces=(Sandbox.NAMESPACE,))
-    class RolloutRestartCommand: ...
-
-handler 는 action 목록/네임스페이스 기준을 직접 알지 않고 카탈로그를 읽음 —
-새 명령의 허용 조건은 데코레이터 인자로 선언한다(handler 수정 없음).
-"""
+"""명령 카탈로그 — @command.action 이 "존재하는 명령 + 정책 메타데이터"의 단일 출처(handler 수정 없이 선언)."""
 
 from __future__ import annotations
 

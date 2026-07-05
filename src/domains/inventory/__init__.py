@@ -1,1 +1,1 @@
-"""Cluster inventory domain."""
+"""inventory 도메인 — 클러스터 리소스 현황."""

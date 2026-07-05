@@ -110,7 +110,7 @@ class PrometheusMetricsProvider:
         result_type = data.get("resultType")  # vector, matrix, scalar, string
         result = data.get("result", [])
 
-        if result_type == "vector":  # time series values
+        if result_type == "vector":  # 시계열 값
             samples = []
             for item in result:
                 raw_value = item.get("value", [])
@@ -127,7 +127,7 @@ class PrometheusMetricsProvider:
                 "samples": samples,
             }
 
-        if result_type == "matrix":  # range query time series values
+        if result_type == "matrix":  # range query 시계열 값
             series = []
             for item in result:
                 values = []
@@ -151,7 +151,7 @@ class PrometheusMetricsProvider:
                 "point_count": sum(len(item["values"]) for item in series),
             }
 
-        return {  # other result type(not vector)
+        return {  # 그 외 result type(vector/matrix 아님)
             "result_type": result_type,
             "result": result,
         }

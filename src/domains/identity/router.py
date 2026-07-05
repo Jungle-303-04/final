@@ -38,7 +38,7 @@ EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT = "/login?verified=1&approval=pendi
 
 
 def _set_session_cookie(response: Response, session: Any) -> None:
-    # 토큰을 JSON 으로 돌려주지 않고 httpOnly 쿠키로 심는다 → JS 가 못 읽어 XSS 탈취 차단.
+    # 토큰을 JSON 으로 돌려주지 않고 httpOnly 쿠키로 심음 → JS 가 못 읽어 XSS 탈취 차단.
     secure = env(Auth.COOKIE_SECURE_ENV, "1") != "0"
     response.set_cookie(
         key=Auth.SESSION_COOKIE_NAME,

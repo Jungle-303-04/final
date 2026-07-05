@@ -1,4 +1,4 @@
-"""target reconcile worker app wiring."""
+"""target reconcile worker 앱 배선."""
 
 from __future__ import annotations
 

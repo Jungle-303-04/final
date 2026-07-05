@@ -1,4 +1,4 @@
-"""identity domain tables for service, organization, group, and resource access."""
+"""identity 도메인 테이블 — 서비스·조직·그룹·리소스 접근."""
 
 from __future__ import annotations
 

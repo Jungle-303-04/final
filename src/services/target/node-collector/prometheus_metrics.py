@@ -6,8 +6,8 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class MetricSample:
-    # One Prometheus sample plus the metadata needed to render HELP/TYPE lines.
-    # Adding a new metric mostly means appending another MetricSample.
+    # Prometheus 샘플 1개 + HELP/TYPE 렌더용 메타데이터.
+    # 새 metric 추가는 대부분 MetricSample 추가로 끝남.
     name: str
     help: str
     value: float | int
@@ -16,18 +16,18 @@ class MetricSample:
 
 
 def render_labels(labels: dict[str, str]) -> str:
-    # Prometheus labels are rendered after the metric name:
+    # label 은 metric 이름 뒤에 렌더됨:
     # metric_name{node="target-control-plane",runtime="containerd"} 1
     if not labels:
         return ""
 
     label_pairs = ",".join(f'{key}="{value}"' for key, value in labels.items())
-    # Double braces escape literal Prometheus label braces inside an f-string.
+    # 이중 중괄호는 f-string 안에서 Prometheus label 중괄호 리터럴 escape.
     return f"{{{label_pairs}}}"
 
 
 def render_metric_sample(sample: MetricSample) -> list[str]:
-    # Prometheus text exposition expects HELP/TYPE metadata lines before the sample.
+    # Prometheus text exposition 은 샘플 앞에 HELP/TYPE 메타데이터 줄을 요구함.
     labels = render_labels(sample.labels)
     return [
         f"# HELP {sample.name} {sample.help}",

@@ -19,7 +19,7 @@ def test_every_event_subject_is_covered_by_stream_wildcards() -> None:
 
 
 def test_stream_wildcards_have_no_orphans() -> None:
-    """모든 와일드카드는 발행 enum 프리픽스이거나 명시된 예약 프리픽스여야 한다."""
+    """모든 와일드카드는 발행 enum 프리픽스이거나 명시된 예약 프리픽스여야 함."""
     enum_prefixes = {value.split(".", 1)[0] + ".>" for value in EventSubject}
     allowed = enum_prefixes | set(RESERVED_STREAM_SUBJECTS)
 

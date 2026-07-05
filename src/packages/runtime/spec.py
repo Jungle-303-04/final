@@ -3,8 +3,8 @@
 서비스의 정체성(이름/그룹/종류/배포형태)을 entrypoint 안에서 한 번만 선언함.
     app = App(ServiceSpec(name="diff-worker", group="gitops"))
 
-이 선언(또는 App("이름") 축약형)이 서비스 명부의 단일 출처다.
-scripts/events.py·tests·manifest 검증은 discovery 가 이 선언을 읽어 명부를 만든다.
+이 선언(또는 App("이름") 축약형)이 서비스 명부의 단일 출처.
+scripts/events.py·tests·manifest 검증은 discovery 가 이 선언을 읽어 명부를 만듦.
 서비스 추가 = app.py 생성으로 끝. 별도 목록 파일 수정 없음.
 """
 

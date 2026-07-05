@@ -1,1 +1,1 @@
-"""Service catalog domain."""
+"""서비스 카탈로그 도메인."""

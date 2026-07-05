@@ -1,4 +1,4 @@
-"""Safe PR event pipeline helpers."""
+"""Safe PR 이벤트 파이프라인 헬퍼."""
 
 from __future__ import annotations
 

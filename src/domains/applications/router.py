@@ -1,4 +1,4 @@
-"""Application and deployment binding API routes."""
+"""애플리케이션·deployment binding API 라우트"""
 
 from __future__ import annotations
 

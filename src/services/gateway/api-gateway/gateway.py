@@ -57,7 +57,7 @@ def agent_connected_body_from_request(
     payload: AgentConnectRequest,
     identity: ClusterAgentIdentity,
 ) -> AgentConnectedBody:
-    """agent 연결 이벤트는 body cluster_id가 아니라 인증 identity를 권위값으로 쓴다."""
+    """agent 연결 이벤트는 body cluster_id가 아니라 인증 identity를 권위값으로 사용함."""
     body = payload.model_dump(exclude={"cluster_id"})
     return AgentConnectedBody(
         **body,
@@ -141,17 +141,17 @@ class ApiGateway:
         app = self.app
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
-        app.include_router(providers_router)  # provider catalog/validation for product install UI
-        app.include_router(catalog_router)  # service catalog recipes + install-run planning
+        app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
+        app.include_router(catalog_router)  # service catalog recipe + install-run 계획
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
-        app.include_router(applications_router)  # application/deployment binding API for web UI
+        app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
         app.include_router(
             inventory_router
-        )  # agent inventory snapshots -> multi-cluster read model
+        )  # agent inventory snapshot -> multi-cluster read model 투영
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
@@ -170,7 +170,7 @@ class ApiGateway:
             response_model_exclude_none=True,
         )
         async def readyz() -> HealthResponse:
-            # 가벼운 연결 확인만(스키마 보장은 시작 시 lifespan 에서 1회). DDL 안 돌린다.
+            # 가벼운 연결 확인만(스키마 보장은 시작 시 lifespan 에서 1회). DDL 실행 없음.
             self.db.check_ready()
             return HealthResponse(status=Gateway.STATUS_READY)
 

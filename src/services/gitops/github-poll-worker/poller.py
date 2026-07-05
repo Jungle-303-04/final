@@ -7,9 +7,9 @@ cluster-agent와 같은 timer producer 형태: 주기마다 외부 호출 후
 api-gateway의 /github/webhook으로 POST. 이후 경로는 webhook과 동일
 (outbox → NATS → git-pull-worker → pipeline).
 
-현재 구현은 최신 commit 1건을 조회하고, 같은 commit 반복은 메모리 가드와
-ledger dedup으로 흡수한다. ETag/cursor 기반 incremental 조회는 provider
-adapter 내부 최적화로 추가할 수 있다.
+현재 구현은 최신 commit 1건 조회, 같은 commit 반복은 메모리 가드와
+ledger dedup으로 흡수. ETag/cursor 기반 incremental 조회는 provider
+adapter 내부 최적화로 추가 가능.
 """
 
 from __future__ import annotations

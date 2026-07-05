@@ -1,4 +1,4 @@
-"""Inventory event contracts."""
+"""inventory event body 정의."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 @event(EventSubject.CLUSTER_INVENTORY_SNAPSHOT_RECORDED)
 @dataclass(frozen=True)
 class InventorySnapshotRecordedBody(EventBody):
-    """cluster.inventory.snapshot.recorded — agent inventory snapshot was persisted."""
+    """cluster.inventory.snapshot.recorded — agent inventory snapshot 영속됨."""
 
     cluster_id: str
     snapshot_id: str

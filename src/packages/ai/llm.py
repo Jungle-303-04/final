@@ -1,8 +1,7 @@
-"""LLM Gateway port and provider adapters.
+"""LLM Gateway port 와 provider adapter.
 
-Agents call one `LlmClient` port. The gateway selects a provider adapter from
-environment configuration, so OpenAI, Anthropic, Gemini, and OpenAI-compatible
-providers can be swapped without changing agent code.
+에이전트는 `LlmClient` port 하나만 호출 — gateway 가 env 설정으로 provider adapter 를
+선택하므로 에이전트 코드 수정 없이 OpenAI/Anthropic/Gemini/OpenAI 호환 교체 가능
 """
 
 from __future__ import annotations
@@ -80,7 +79,7 @@ _PROVIDER_ALIASES = {
 
 
 class LlmClient(Protocol):
-    """Abstract LLM port used by agents."""
+    """에이전트가 사용하는 추상 LLM port"""
 
     async def complete(self, prompt: str, **options: Any) -> str: ...
 
@@ -88,7 +87,7 @@ class LlmClient(Protocol):
 
 
 class LlmProviderAdapter(Protocol):
-    """Provider-specific adapter behind the LLM Gateway."""
+    """LLM Gateway 뒤의 provider 별 adapter"""
 
     async def complete(self, request: LlmRequest) -> str: ...
 
@@ -117,7 +116,7 @@ class LlmProviderSettings:
 
 
 class LlmGateway:
-    """Single entry point for all agent LLM calls."""
+    """모든 에이전트 LLM 호출의 단일 진입점"""
 
     def __init__(
         self,
@@ -157,7 +156,7 @@ class LlmGateway:
             "Return only JSON that matches this JSON Schema:\n"
             f"{json.dumps(schema, ensure_ascii=False, sort_keys=True)}"
         )
-        # LLM이 코드펜스로 감싸거나 잘린 JSON을 내는 경우가 있어 파싱 실패는 1회 재요청한다.
+        # LLM이 코드펜스로 감싸거나 잘린 JSON을 내는 경우가 있어 파싱 실패는 1회 재요청
         last_error: json.JSONDecodeError | None = None
         for _ in range(JSON_PARSE_ATTEMPTS):
             raw = await self.complete(

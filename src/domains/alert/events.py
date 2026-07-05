@@ -20,7 +20,7 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 @event(EventSubject.ALERT_REQUESTED)
 @dataclass(frozen=True)
 class AlertRequestedBody(EventBody):
-    """alert.requested — 알람을 보내고, 통과 시 다음 이벤트를 이어 달라."""
+    """alert.requested — 알람 발송, 통과 시 다음 이벤트 연결 요청"""
 
     cluster_id: str
     namespace: str
@@ -38,7 +38,7 @@ class AlertRequestedBody(EventBody):
 @event(EventSubject.ALERT_DISPATCHED)
 @dataclass(frozen=True)
 class AlertDispatchedBody(EventBody):
-    """alert.dispatched — 알람 전송 경계가 통과됐다."""
+    """alert.dispatched — 알람 전송 경계 통과"""
 
     cluster_id: str
     namespace: str
@@ -55,7 +55,7 @@ class AlertDispatchedBody(EventBody):
 @event(EventSubject.ALERT_REJECTED)
 @dataclass(frozen=True)
 class AlertRejectedBody(EventBody):
-    """alert.rejected — 알람/정책 게이트가 다음 실행을 막았다."""
+    """alert.rejected — 알람/정책 게이트의 다음 실행 차단"""
 
     reason: str
     requested: JsonObject

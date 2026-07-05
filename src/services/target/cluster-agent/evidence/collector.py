@@ -64,11 +64,11 @@ class EvidenceCollector:
             definitions = self.registry.for_source(provider.source)
             provider.queries = tuple(definition.to_provider_query() for definition in definitions)
 
-    # Build the telemetry evidence payload from every configured provider.
+    # 구성된 전체 provider 로 telemetry evidence payload 생성.
     async def collect_evidence(self) -> JsonObject:
         return await self.collect()
 
-    # Build an evidence payload for selected providers, or every registered provider.
+    # 지정 provider(미지정 시 전체)로 evidence payload 생성.
     async def collect(self, *evidence_keys: str) -> JsonObject:
         selected_keys = self._select_provider_keys(evidence_keys)
         with TRACER.start_payload_span(
@@ -108,7 +108,7 @@ class EvidenceCollector:
     def _provider_for_source(self, source: TelemetrySource) -> TelemetryProvider:
         return self.providers[telemetry.spec(source).evidence_key]
 
-    # Execute the common collect -> query -> normalize -> package flow through a provider.
+    # 공통 collect -> query -> normalize -> package 흐름을 provider 로 실행.
     async def _collect_with_provider(self, provider: TelemetryProvider) -> ProviderResult:
         return await self._collect_with_queries(provider, provider.queries)
 

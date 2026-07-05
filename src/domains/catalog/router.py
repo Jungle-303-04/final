@@ -1,4 +1,4 @@
-"""Service catalog API routes."""
+"""서비스 카탈로그 API 라우트."""
 
 from __future__ import annotations
 

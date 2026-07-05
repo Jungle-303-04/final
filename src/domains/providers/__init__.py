@@ -1,5 +1,1 @@
-"""Provider catalog domain.
-
-The product UI and control plane use this domain as the single source for
-which source/deploy/cloud/secret providers are actually usable.
-"""
+"""provider 카탈로그 도메인 — 사용 가능한 source/deploy/cloud/secret provider의 단일 출처"""

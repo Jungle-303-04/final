@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 class GitRepoCacheError(RuntimeError):
-    """Raised when the local git object cache cannot satisfy a commit/path read."""
+    """로컬 git object cache 가 commit/path 읽기를 처리하지 못할 때 발생."""
 
 
 class GitRepoCache:
