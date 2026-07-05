@@ -67,6 +67,7 @@ class EventSubject(StrEnum):
     RECOVERY_ACTION_SELECTED = "recovery.action_selected"  # 복구 후보 선택 완료
     SAFE_PR_PATCH_PREPARED = "safe_pr.patch_prepared"  # Safe PR 패치 초안 준비
     DIFF_EXPLAINED = "diff.explained"  # 패치 diff 와 위험 설명
+    SAFE_PR_READY_FOR_CREATION = "safe_pr.ready_for_creation"  # diff 설명 완료 후 PR 생성 가능
     ROLLOUT_DIAGNOSED = "rollout.diagnosed"  # 롤아웃 상태 진단
     APPROVAL_RECOMMENDED = "approval.recommended"  # 승인/거절 보조 판단
     RCA_ACTION_REQUIRED = "rca.action_required"  # 자동 진행 불가, 사람 조치 필요
