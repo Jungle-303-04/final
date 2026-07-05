@@ -22,22 +22,31 @@ script:pre-request {
   // body 조립과 HMAC 서명을 한 곳에서 처리 — 수동 signature 계산 불필요.
   // github_webhook_secret 이 비어 있으면 기존 github_webhook_signature 값 그대로 사용.
   const crypto = require("crypto");
-  const body = JSON.stringify({
-    commit_sha: "bruno-commit-001",
-    image: "ghcr.io/example/checkout-api:bruno",
-    replicas: 2,
-    workspace_id: bru.getEnvVar("workspace_id") || "default",
-    repository_id: "repo-bruno",
-    repo_ref: "Jungle-303-04/final",
-    branch: "main",
-    watch_target_id: "watch-bruno",
-    binding_id: "binding-bruno",
-    application_id: "app-bruno",
-    workflow_run_id: "wf-bruno",
-    environment: "sandbox",
-    cluster_id: bru.getEnvVar("cluster_id"),
-    manifest_path: "src/samples/smoke/deploy.yaml"
-  });
+  const payload = {
+    "commit_sha": "bruno-commit-001",
+    "image": "ghcr.io/example/checkout-api:bruno",
+    "replicas": 2,
+    "workspace_id": "default",
+    "repository_id": "repo-bruno",
+    "repo_ref": "Jungle-303-04/final",
+    "branch": "main",
+    "watch_target_id": "watch-bruno",
+    "binding_id": "binding-bruno",
+    "application_id": "app-bruno",
+    "workflow_run_id": "wf-bruno",
+    "environment": "sandbox",
+    "cluster_id": "{{cluster_id}}",
+    "manifest_path": "src/samples/smoke/deploy.yaml"
+  };
+  const workspaceId = bru.getEnvVar("workspace_id");
+  if (workspaceId) {
+    payload.workspace_id = workspaceId;
+  }
+  const clusterId = bru.getEnvVar("cluster_id");
+  if (clusterId) {
+    payload.cluster_id = clusterId;
+  }
+  const body = JSON.stringify(payload);
   bru.setVar("github_webhook_body", body);
   const secret = bru.getEnvVar("github_webhook_secret") || "";
   if (secret && !secret.startsWith("replace-with")) {

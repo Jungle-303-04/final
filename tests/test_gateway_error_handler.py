@@ -66,6 +66,45 @@ def test_gateway_readyz_checks_database_readiness(monkeypatch) -> None:
     assert app.state.db.ready_checks == 1
 
 
+def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    monkeypatch.setenv("METRICS_TOKEN", "metrics-secret")
+    gateway = load_gateway_module()
+
+    class MetricsDb:
+        def open_dead_letter_count(self) -> int:
+            return 0
+
+        def outbox_pending_count(self) -> int:
+            return 0
+
+        def oldest_command_age_seconds(self, _status: str) -> float:
+            return 0.0
+
+        def oldest_evidence_job_age_seconds(self, _status: str) -> float:
+            return 0.0
+
+        def event_processing_status_counts(self) -> dict[str, int]:
+            return {}
+
+        def command_status_counts(self) -> dict[str, int]:
+            return {}
+
+        def evidence_job_status_counts(self) -> dict[str, int]:
+            return {}
+
+    monkeypatch.setattr(gateway, "Database", MetricsDb)
+    app = gateway.create_app()
+    client = TestClient(app)
+
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"authorization": "Bearer wrong"}).status_code == 401
+    response = client.get("/metrics", headers={"authorization": "Bearer metrics-secret"})
+
+    assert response.status_code == 200
+    assert "event_dead_letters_open_total 0" in response.text
+
+
 def test_agent_connect_event_uses_identity_cluster_id() -> None:
     gateway = load_gateway_module()
 
