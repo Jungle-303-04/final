@@ -42,16 +42,55 @@ src/services/command/command-worker
   Command / Control
   app.py: command policy, queue status, @app.on(CommandRequestedBody)
 
+src/services/ai/evidence-worker
+  Raw evidence 정규화
+  app.py: @app.on(ClusterEvidenceReceivedBody) -> EvidenceBuiltBody
+
+src/services/ai/incident-worker
+  Evidence에서 incident/evidence bundle 생성
+  app.py: @app.on(EvidenceBuiltBody) -> IncidentDetectedBody / EvidenceBundleBuiltBody
+
+src/services/ai/plan-worker
+  Symptom 기준 RCA 후보 생성
+  app.py: @app.on(EvidenceBundleBuiltBody) -> RcaCandidatesPlannedBody
+
+src/services/ai/analyze-worker
+  후보별 evidence check와 score 계산
+  app.py: @app.on(RcaCandidatesPlannedBody) -> RcaCandidatesEvaluatedBody
+
 src/services/ai/rca-worker
-  RCA / Evidence (PR 생성은 repo-gateway 에 위임: safe_pr.requested)
-  app.py: RCA 기본 메시지, @app.on(ClusterEvidenceReceivedBody)
+  후보 평가 결과에서 최종 root cause/action 판단
+  app.py: @app.on(RcaCandidatesEvaluatedBody) -> RcaCompletedBody / RcaActionRequiredBody
+
+src/services/ai/recovery-worker
+  RCA 결과에서 복구 후보 계획 생성
+  app.py: @app.on(RcaCompletedBody) -> RecoveryPlannedBody
+
+src/services/ai/select-worker
+  복구 후보 자동 선택 또는 사람 선택 요청
+  app.py: @app.on(RecoveryPlannedBody) -> RecoveryActionSelectedBody / RecoverySelectionRequestedBody
+
+src/services/ai/dispatch-worker
+  선택된 복구 후보를 command 또는 Safe PR 요청으로 라우팅
+  app.py: @app.on(RecoveryActionSelectedBody) -> CommandRequestedBody / SafePrRequestedBody
+
+src/services/ai/safe-pr-worker
+  Safe PR patch 초안 준비
+  app.py: @app.on(SafePrRequestedBody) -> SafePrPatchPreparedBody
+
+src/services/ai/backlog-worker
+  RCA rule 보강 backlog 처리
+  app.py: @app.on(RcaBacklogItemCreatedBody)
+
+src/services/ai/rca-fallback-worker
+  rule 미매칭 RCA fallback 요청 처리
+  app.py: @app.on(RcaAiFallbackRequestedBody)
 
 src/services/projection/audit-worker
   Audit Timeline
   app.py: @app.on_any (모든 이벤트 >)
 
 src/services/projection/dashboard-worker
-  Planned. 현재 repository에는 구현/배포된 dashboard projection worker가 없다.
   dashboard read model/UI를 시작할 때 App 기반 @app.on_any 서비스로 추가한다.
 
 src/services/target/cluster-agent
@@ -82,7 +121,7 @@ src/packages/contracts/event_bus
   publish/consume port
 
 dashboard projection/read model
-  Planned. 공유 계약이 필요해지는 시점에 src/packages/contracts 아래에 계약과 테스트를 함께 추가
+  공유 계약이 필요해지는 시점에 src/packages/contracts 아래에 계약과 테스트를 함께 추가
 
 src/packages/events
   NATS JetStream adapter
@@ -120,7 +159,17 @@ diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/
 scm-worker           -> python src/services/gitops/scm-worker/app.py
 command-worker                -> python src/services/command/command-worker/app.py
 target-reconcile-worker       -> python src/services/target/reconcile-worker/app.py
+evidence-worker               -> python src/services/ai/evidence-worker/app.py
+incident-worker               -> python src/services/ai/incident-worker/app.py
+plan-worker                   -> python src/services/ai/plan-worker/app.py
+analyze-worker                -> python src/services/ai/analyze-worker/app.py
 rca-worker                    -> python src/services/ai/rca-worker/app.py
+recovery-worker               -> python src/services/ai/recovery-worker/app.py
+select-worker                 -> python src/services/ai/select-worker/app.py
+dispatch-worker               -> python src/services/ai/dispatch-worker/app.py
+safe-pr-worker                -> python src/services/ai/safe-pr-worker/app.py
+backlog-worker                -> python src/services/ai/backlog-worker/app.py
+rca-fallback-worker           -> python src/services/ai/rca-fallback-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
 alert-worker        -> python src/services/alert/alert-worker/app.py
 mail-worker         -> python src/services/mail/mail-worker/app.py

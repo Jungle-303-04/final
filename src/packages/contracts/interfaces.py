@@ -79,6 +79,14 @@ class UserStore(Protocol):
         action: str,
     ) -> bool: ...
 
+    def accessible_resource_ids(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        action: str,
+    ) -> set[str] | None: ...
+
 
 class SessionStore(Protocol):
     async def create_session(

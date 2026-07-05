@@ -265,6 +265,40 @@ class WorkspaceAccessRepository(DatabaseConnection):
             roles = conn.execute(statement).scalars().all()
         return any(access_role_allows_action(str(role), action) for role in roles)
 
+    def accessible_resource_ids(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        action: str,
+    ) -> set[str] | None:
+        """현재 사용자가 action 할 수 있는 resource_id 집합.
+
+        None 은 계정 관리자/워크스페이스 오너처럼 workspace 내부 전체 리소스를 볼 수 있다는 뜻이다.
+        대시보드 목록 API 는 None 이면 workspace_id 로만 필터링하고, set 이면 그 ID 안에서만 조회한다.
+        """
+        if self._is_account_admin(user_id):
+            return None
+        if self._is_workspace_owner(user_id, workspace_id):
+            return None
+
+        allowed_roles = [role for role, actions in ACCESS_ROLE_ACTIONS.items() if action in actions]
+        if not allowed_roles:
+            return set()
+
+        table = ResourceAccessGrant.__table__
+        statement = select(table.c.resource_id).where(
+            table.c.workspace_id == workspace_id,
+            table.c.subject_type == AccessSubjectType.USER.value,
+            table.c.subject_id == user_id,
+            table.c.resource_type == resource_type,
+            table.c.role.in_(allowed_roles),
+            table.c.status == AccessStatus.ACTIVE.value,
+        )
+        with self.connection() as conn:
+            resource_ids = conn.execute(statement).scalars().all()
+        return {str(resource_id) for resource_id in resource_ids}
+
     def get_default_workspace_id_for_user(self, user_id: str) -> str | None:
         table = WorkspaceMember.__table__
         statement = (

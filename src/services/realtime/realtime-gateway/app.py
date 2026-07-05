@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
@@ -18,8 +18,12 @@ from fastapi.responses import PlainTextResponse
 from hub import BrowserClient, RealtimeHub
 
 from domains.identity.dependencies import AGENT_TOKEN_HEADER, hash_agent_token
+from packages.config.constants import Auth
+from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
 from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     BROWSER_LIVE_PATH,
@@ -33,6 +37,7 @@ from packages.contracts.realtime import (
 )
 from packages.runtime.service import FastApiService
 from packages.storage.database import Database, wait_for_database
+from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 LOGGER = get_logger(__name__)
 
@@ -48,6 +53,20 @@ CLOSE_PROTOCOL_VIOLATION = 1008
 
 # authenticate: 원문 토큰 → {"workspace_id", "cluster_id"} | None (fail-closed)
 AgentAuthenticator = Callable[[str], Any]
+BrowserSessionAuthenticator = Callable[[str | None], Awaitable[Any]]
+
+REDIS_URL_ENV = "REDIS_URL"
+SESSION_KEY_PREFIX = "session"
+RATE_LIMIT_KEY_PREFIX = "rate"
+EMAIL_VERIFICATION_KEY_PREFIX = "email_verify"
+SESSION_TOKEN_BYTES = 32
+EMAIL_VERIFICATION_TOKEN_BYTES = 32
+DEFAULT_RATE_LIMIT = 120
+RATE_LIMIT_WINDOW_SECONDS = 60
+EMAIL_VERIFICATION_TTL_SECONDS = 60 * 60
+SESSION_TOKEN_HEADER = "x-session-token"
+AUTHORIZATION_HEADER = "authorization"
+BEARER_PREFIX = "bearer "
 
 
 def database_authenticator(db: Database) -> AgentAuthenticator:
@@ -61,13 +80,42 @@ def database_authenticator(db: Database) -> AgentAuthenticator:
     return authenticate
 
 
+def session_store_config() -> RedisSessionStoreConfig:
+    return RedisSessionStoreConfig(
+        url=env(REDIS_URL_ENV, RedisConfig.DEFAULT_URL),
+        ttl_seconds=int(env(Auth.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS)),
+        key_prefix=SESSION_KEY_PREFIX,
+        token_bytes=SESSION_TOKEN_BYTES,
+        default_roles=(AccountRole.MEMBER.value,),
+        default_workspace_id=DEFAULT_WORKSPACE_ID,
+        rate_limit_key_prefix=RATE_LIMIT_KEY_PREFIX,
+        rate_limit=DEFAULT_RATE_LIMIT,
+        rate_limit_window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+        email_verification_key_prefix=EMAIL_VERIFICATION_KEY_PREFIX,
+        email_verification_ttl_seconds=EMAIL_VERIFICATION_TTL_SECONDS,
+        email_verification_token_bytes=EMAIL_VERIFICATION_TOKEN_BYTES,
+    )
+
+
+def redis_session_authenticator(session_store: RedisSessionStore) -> BrowserSessionAuthenticator:
+    async def authenticate(token: str | None) -> Any:
+        return await session_store.get_session(token)
+
+    return authenticate
+
+
 def create_app(
     db: Database | None = None,
     authenticate_agent: AgentAuthenticator | None = None,
+    authenticate_browser: BrowserSessionAuthenticator | None = None,
 ) -> FastAPI:
     if authenticate_agent is None:
         db = db or Database()
         authenticate_agent = database_authenticator(db)
+    browser_session_store: RedisSessionStore | None = None
+    if authenticate_browser is None:
+        browser_session_store = RedisSessionStore(session_store_config())
+        authenticate_browser = redis_session_authenticator(browser_session_store)
 
     hub = RealtimeHub()
 
@@ -75,7 +123,13 @@ def create_app(
     async def lifespan(_app: FastAPI):
         if db is not None:
             await wait_for_database(db)
-        yield
+        if browser_session_store is not None:
+            await browser_session_store.connect()
+        try:
+            yield
+        finally:
+            if browser_session_store is not None:
+                await browser_session_store.close()
 
     app = FastAPI(title=GATEWAY_NAME, lifespan=lifespan)
     app.state.hub = hub
@@ -124,6 +178,11 @@ def create_app(
         if not params[Gateway.WORKSPACE_ID]:
             await websocket.close(code=CLOSE_BAD_REQUEST)
             return
+        session = await authenticate_browser(browser_session_token(websocket))
+        session_workspace = session_workspace_id(session)
+        if not session_workspace or params[Gateway.WORKSPACE_ID] != session_workspace:
+            await websocket.close(code=CLOSE_UNAUTHORIZED)
+            return
         subscription = Subscription(**params)
         client = hub.register_browser(subscription)
         sender = asyncio.create_task(_browser_send_loop(websocket, hub, client))
@@ -140,6 +199,23 @@ def create_app(
                 await sender
 
     return app
+
+
+def browser_session_token(websocket: WebSocket) -> str | None:
+    authorization = websocket.headers.get(AUTHORIZATION_HEADER, "")
+    if authorization.lower().startswith(BEARER_PREFIX):
+        return authorization.split(" ", 1)[1].strip()
+    if websocket.headers.get(SESSION_TOKEN_HEADER):
+        return websocket.headers[SESSION_TOKEN_HEADER]
+    return websocket.cookies.get(Auth.SESSION_COOKIE_NAME)
+
+
+def session_workspace_id(session: Any) -> str:
+    if session is None:
+        return ""
+    if isinstance(session, dict):
+        return str(session.get(Gateway.WORKSPACE_ID, ""))
+    return str(getattr(session, Gateway.WORKSPACE_ID, ""))
 
 
 def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> bool:
