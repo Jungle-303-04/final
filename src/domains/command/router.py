@@ -41,6 +41,8 @@ from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
+    DeploymentRestartRequest,
+    DeploymentScaleRequest,
 )
 from packages.contracts.gateway.responses import (
     AcceptedResponse,
@@ -67,6 +69,7 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
+CONTROL_NAMESPACE_NOT_ALLOWED = "only sandbox namespace control is currently supported"
 
 router = APIRouter()
 
@@ -76,6 +79,11 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
         raise HTTPException(status_code=UNPROCESSABLE_CODE, detail=MANUAL_DIFF_REQUIRED_MESSAGE)
     raw = {**payload.diff, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
     return cast(Diff, Diff.from_body(raw))
+
+
+def validate_control_namespace(namespace: str) -> None:
+    if namespace != Sandbox.NAMESPACE:
+        raise HTTPException(status_code=UNPROCESSABLE_CODE, detail=CONTROL_NAMESPACE_NOT_ALLOWED)
 
 
 def require_cluster_deploy_access(
@@ -88,6 +96,75 @@ def require_cluster_deploy_access(
         cluster_id,
         Permission.DEPLOY_RUN.value,
         detail=RESOURCE_ACCESS_DENIED,
+    )
+
+
+def deployment_control_diff(
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    namespace: str,
+    deployment: str,
+    action: str,
+    basis: JsonObject,
+) -> Diff:
+    return Diff(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource=f"deployment/{deployment}",
+        namespace=namespace,
+        desired_image="",
+        actual_image="resource-not-inspected",
+        risk=Sandbox.RISK_TAG,
+        status=action,
+        basis=basis,
+    )
+
+
+async def accept_deployment_control(
+    *,
+    cluster_id: str,
+    namespace: str,
+    deployment: str,
+    action: str,
+    reason: str,
+    payload: JsonObject,
+    approval_ref: str | None,
+    policy_decision_ref: str | None,
+    current: Any,
+    db: Any,
+    events: Any,
+) -> AcceptedResponse:
+    validate_control_namespace(namespace)
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_deploy_access(db, current, workspace_id, cluster_id)
+    diff = deployment_control_diff(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        deployment=deployment,
+        action=action,
+        basis=payload,
+    )
+    accepted = await events.accept_body(
+        CommandRequestedBody(
+            cluster_id=cluster_id,
+            action=action,
+            namespace=namespace,
+            reason=reason,
+            diff=diff,
+            payload=payload,
+            workspace_id=workspace_id,
+            requested_by=current.user_id,
+            approval_ref=approval_ref,
+            policy_decision_ref=policy_decision_ref,
+        ),
+        actor=Actor(current.user_id, tuple(current.roles)),
+    )
+    return AcceptedResponse(
+        accepted=True,
+        event_id=accepted.event.event_id,
+        correlation_id=accepted.event.correlation_id,
     )
 
 
@@ -199,6 +276,65 @@ async def commands(
         accepted=True,
         event_id=accepted.event.event_id,
         correlation_id=accepted.event.correlation_id,
+    )
+
+
+@router.post(gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH, response_model=AcceptedResponse)
+async def scale_deployment(
+    cluster_id: str,
+    namespace: str,
+    deployment: str,
+    payload: DeploymentScaleRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    command_payload = {
+        "namespace": namespace,
+        "name": deployment,
+        "replicas": payload.replicas,
+    }
+    return await accept_deployment_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        deployment=deployment,
+        action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        reason=payload.reason or f"scale deployment/{deployment}",
+        payload=command_payload,
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
+@router.post(gateway_routes.CLUSTER_DEPLOYMENT_RESTART_PATH, response_model=AcceptedResponse)
+async def restart_deployment(
+    cluster_id: str,
+    namespace: str,
+    deployment: str,
+    payload: DeploymentRestartRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    command_payload = {
+        "namespace": namespace,
+        "name": deployment,
+    }
+    return await accept_deployment_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        deployment=deployment,
+        action=Command.DEFAULT_ACTION,
+        reason=payload.reason or f"restart deployment/{deployment}",
+        payload=command_payload,
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+        current=current,
+        db=db,
+        events=events,
     )
 
 

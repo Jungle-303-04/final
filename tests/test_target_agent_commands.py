@@ -204,6 +204,8 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
         agent.execute_command(
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
                 "payload": {
                     "namespace": "target",
                     "name": "cluster-agent",
@@ -219,6 +221,32 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
     assert agent.kubernetes.patches[0]["body"] == {"spec": {"replicas": 3}}
 
 
+def test_kubernetes_scale_requires_approval_evidence() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = FakeKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "payload": {
+                    "namespace": "target",
+                    "name": "cluster-agent",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "requires approval_ref" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
 def test_kubernetes_command_rejects_non_agent_resource() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -231,6 +259,8 @@ def test_kubernetes_command_rejects_non_agent_resource() -> None:
         agent.execute_command(
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
                 "payload": {
                     "namespace": "target",
                     "name": "other-deployment",
