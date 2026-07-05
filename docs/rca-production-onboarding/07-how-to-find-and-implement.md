@@ -20,9 +20,9 @@ make aws-smoke
 | --- | --- |
 | workflow | `.github/workflows/aws-cd.yml` |
 | 실행 input | `run_smoke=true` |
-| management cluster | `kubernetes-ops` |
-| target cluster | `cluster-1`, `cluster-2` |
-| region | `ap-northeast-2` |
+| management cluster | repository variable `MGMT_CLUSTER` |
+| target cluster | repository variables `TARGET_CLUSTER_1`, `TARGET_CLUSTER_2` |
+| region | repository variable `AWS_REGION` |
 | smoke 확인 범위 | `git.webhook.received -> git.changed -> manifest.rendered -> desired.diff.detected -> diff.analyzed` |
 
 `make aws-smoke`는 GitHub CLI로 AWS CD를 dispatch한다. GitHub 화면에서는 `Integration Smoke` workflow를 수동 실행해도 같은 경로를 탄다.
