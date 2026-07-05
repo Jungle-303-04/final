@@ -19,7 +19,7 @@ from packages.contracts.gateway.responses import (
     RcaTimelineItem,
     RcaTimelineResponse,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, READ_ACCESS, AccessResourceType
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
 from packages.runtime.dependencies import get_db
 
 DEFAULT_TIMELINE_LIMIT = 50
@@ -86,7 +86,7 @@ async def _allowed_cluster_ids(
             current,
             workspace_id,
             cluster_id,
-            READ_ACCESS,
+            Permission.RCA_READ.value,
             detail=RESOURCE_ACCESS_DENIED_MESSAGE,
         )
         return {cluster_id}
@@ -95,7 +95,7 @@ async def _allowed_cluster_ids(
         current.user_id,
         workspace_id,
         AccessResourceType.CLUSTER.value,
-        READ_ACCESS,
+        Permission.RCA_READ.value,
     )
 
 

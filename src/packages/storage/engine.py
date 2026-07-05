@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from packages.config.constants import CommandStatus
 from packages.config.settings import env, required_env
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    GLOBAL_ROLE_POLICY_ORGANIZATION_ID,
+    ServiceRole,
+)
 from packages.storage.schema import (
     metadata,
 )
@@ -80,14 +84,14 @@ with ranked as (
 )
 update user_accounts as users
 set role = case
-    when ranked.row_number = 1 then '{AccountRole.ADMIN.value}'
-    else '{AccountRole.MEMBER.value}'
+    when ranked.row_number = 1 then '{ServiceRole.SERVICE_ADMIN.value}'
+    else '{ServiceRole.USER.value}'
 end
 from ranked
 where users.user_id = ranked.user_id
 """
 USER_ACCOUNT_ROLE_DEFAULT = (
-    f"alter table user_accounts alter column role set default '{AccountRole.MEMBER.value}'"
+    f"alter table user_accounts alter column role set default '{ServiceRole.USER.value}'"
 )
 USER_ACCOUNT_ROLE_NOT_NULL = "alter table user_accounts alter column role set not null"
 WORKSPACE_COMPAT_COLUMNS = {
@@ -176,6 +180,50 @@ end $$;
 MANIFEST_ARTIFACT_WORKSPACE_UNIQUE = """
 create unique index if not exists ux_manifest_artifacts_workspace_binding_commit_path
 on manifest_artifacts (workspace_id, binding_id, commit_sha, manifest_path)
+"""
+ROLE_PERMISSION_COMPAT_COLUMNS = {
+    "organization_id": "alter table role_permissions add column if not exists organization_id text",
+}
+ROLE_PERMISSION_SCOPE_BACKFILL = """
+update role_permissions
+set organization_id = :organization_id
+where organization_id is null
+"""
+ROLE_PERMISSION_SCOPE_DEFAULT = (
+    "alter table role_permissions alter column organization_id "
+    f"set default '{GLOBAL_ROLE_POLICY_ORGANIZATION_ID}'"
+)
+ROLE_PERMISSION_SCOPE_NOT_NULL = (
+    "alter table role_permissions alter column organization_id set not null"
+)
+ROLE_PERMISSION_DROP_LEGACY_UNIQUE = """
+do $$
+declare
+    old_constraint text;
+begin
+    select con.conname
+    into old_constraint
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = current_schema()
+      and rel.relname = 'role_permissions'
+      and con.contype = 'u'
+      and (
+          select array_agg(att.attname::text order by ord.ordinality)
+          from unnest(con.conkey) with ordinality as ord(attnum, ordinality)
+          join pg_attribute att on att.attrelid = rel.oid and att.attnum = ord.attnum
+      ) = array['resource_type', 'role', 'permission']::text[]
+    limit 1;
+
+    if old_constraint is not null then
+        execute format('alter table role_permissions drop constraint %I', old_constraint);
+    end if;
+end $$;
+"""
+ROLE_PERMISSION_SCOPED_UNIQUE = """
+create unique index if not exists ux_role_permissions_organization_resource_role_permission
+on role_permissions (organization_id, resource_type, role, permission)
 """
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
@@ -346,6 +394,16 @@ class DatabaseConnection:
                 ensure_default_workspace = getattr(self, "ensure_default_workspace", None)
                 if callable(ensure_default_workspace):
                     ensure_default_workspace()
+                ensure_default_organization = getattr(self, "ensure_default_organization", None)
+                if callable(ensure_default_organization):
+                    ensure_default_organization()
+                ensure_default_role_permissions = getattr(
+                    self,
+                    "ensure_default_role_permissions",
+                    None,
+                )
+                if callable(ensure_default_role_permissions):
+                    ensure_default_role_permissions()
             finally:
                 _ACTIVE_CONN.reset(token)
 
@@ -415,6 +473,15 @@ class DatabaseConnection:
         conn.execute(text("alter table manifest_artifacts alter column workspace_id set not null"))
         conn.execute(text(MANIFEST_ARTIFACT_DROP_LEGACY_UNIQUE))
         conn.execute(text(MANIFEST_ARTIFACT_WORKSPACE_UNIQUE))
+        self._add_missing_columns(conn, "role_permissions", ROLE_PERMISSION_COMPAT_COLUMNS)
+        conn.execute(
+            text(ROLE_PERMISSION_SCOPE_BACKFILL),
+            {"organization_id": GLOBAL_ROLE_POLICY_ORGANIZATION_ID},
+        )
+        conn.execute(text(ROLE_PERMISSION_SCOPE_DEFAULT))
+        conn.execute(text(ROLE_PERMISSION_SCOPE_NOT_NULL))
+        conn.execute(text(ROLE_PERMISSION_DROP_LEGACY_UNIQUE))
+        conn.execute(text(ROLE_PERMISSION_SCOPED_UNIQUE))
 
         for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
             self._add_missing_columns(conn, table_name, columns)

@@ -22,7 +22,7 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import ApprovalDecisionRequest, GitHubWebhookRequest
 from packages.contracts.gateway.responses import AcceptedEventResponse, AcceptedResponse
 from packages.contracts.gitops import ApprovalStatus
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, DEPLOY_ACCESS
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
 
@@ -76,7 +76,7 @@ def require_approval_deploy_access(db: Any, current: Any, workspace_id: str, dif
         current,
         workspace_id,
         diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
-        DEPLOY_ACCESS,
+        Permission.DEPLOY_RUN.value,
         detail=APPROVAL_ACCESS_DENIED,
     )
 
