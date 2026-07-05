@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { Activity, Layers3, Radio, ShieldCheck, TimerReset } from 'lucide-react';
 import { operationsSnapshot as ops } from '../data/operations';
 import type { RealtimeFrame, RuntimeMetrics, TimelineEvent } from '../types';
+import { AnimatedNumber } from './AnimatedNumber';
 import { AreaSparkline, SaturationBars } from './Charts';
 
 export function StudioHud({
@@ -19,7 +20,9 @@ export function StudioHud({
         <article>
           <ShieldCheck size={15} />
           <span>RCA 신뢰도</span>
-          <strong>{ops.rca.confidence.toFixed(2)}</strong>
+          <strong>
+            <AnimatedNumber value={metrics.confidence / 100} format={(value) => value.toFixed(2)} />
+          </strong>
         </article>
         <article>
           <Activity size={15} />
@@ -29,7 +32,9 @@ export function StudioHud({
         <article>
           <Layers3 size={15} />
           <span>증거</span>
-          <strong>{ops.evidenceJobs.completed}/{ops.evidenceJobs.queued}</strong>
+          <strong>
+            <AnimatedNumber value={metrics.evidenceCount} />/{ops.evidenceJobs.queued}
+          </strong>
         </article>
         <article>
           <TimerReset size={15} />
@@ -42,14 +47,18 @@ export function StudioHud({
         <div className="hud-chart">
           <header>
             <span>p95 지연</span>
-            <strong>{metrics.latency.at(-1)?.value ?? 0}ms</strong>
+            <strong>
+              <AnimatedNumber value={metrics.latency.at(-1)?.value ?? 0} />ms
+            </strong>
           </header>
           <AreaSparkline points={metrics.latency} accent="blue" height={74} />
         </div>
         <div className="hud-wave">
           <header>
             <span>실시간 이벤트</span>
-            <strong>{frame.throughput.toLocaleString()} evt/min</strong>
+            <strong>
+              <AnimatedNumber value={frame.throughput} format={(value) => Math.round(value).toLocaleString()} /> evt/min
+            </strong>
           </header>
           <div>
             {frame.bars.slice(0, 16).map((value, index) => (

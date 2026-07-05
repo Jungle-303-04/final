@@ -18,7 +18,10 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { copilotActions, copilotMessages, copilotTools, promptSuggestions, studioNotes } from '../data/copilot';
 import { statusLabels } from '../data/labels';
+import { resolveModuleContract } from '../data/moduleContracts';
 import type { CopilotTool, RuntimeMetrics, TimelineEvent, WorkflowNode } from '../types';
+import { MotionButton } from './MotionPrimitives';
+import { fadeRise, noteVariants, softSpring, staggerContainer, studioTransition } from '../motion/presets';
 
 const actionIcons = {
   'run-rca': Play,
@@ -61,6 +64,7 @@ export function CopilotPanel({
   const assistantText = copilotMessages.find((message) => message.role === 'assistant')?.text ?? '';
   const [visibleText, setVisibleText] = useState(live ? '' : assistantText);
   const latestEvent = events[0];
+  const moduleContract = resolveModuleContract(selectedNode?.id);
 
   useEffect(() => {
     if (!live) {
@@ -107,32 +111,49 @@ export function CopilotPanel({
       <section className="copilot-section node-settings-card">
         <header className="copilot-section-title">
           <Waypoints size={15} />
-          <span>선택 노드 설정</span>
+          <span>모듈 의미</span>
           <ChevronDown size={15} />
         </header>
-        {selectedNode ? (
-          <motion.div className="node-setting-body" key={selectedNode.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-            <div>
-              <span className={`accent-chip chip-${selectedNode.data.accent}`} />
-              <strong>{selectedNode.data.title}</strong>
-              <small>{statusLabels[selectedNode.data.status]}</small>
-            </div>
-            <label>
-              신뢰 임계값
-              <input type="range" min="0" max="100" value={Math.round(metrics.confidence)} readOnly />
-            </label>
-            <div className="setting-grid">
-              <span>행 {selectedNode.data.rows.length}</span>
-              <span>블록 {selectedNode.data.blocks?.length ?? 0}</span>
-              <span>포트 {selectedNode.data.ports?.length ?? 0}</span>
-            </div>
-          </motion.div>
-        ) : (
-          <div className="empty-setting">
-            <Settings2 size={16} />
-            <span>캔버스에서 노드를 선택하면 설정이 여기서 열립니다.</span>
+        <motion.div className="module-contract-card" key={moduleContract.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="module-contract-head">
+            <span className={`accent-chip chip-${moduleContract.accent}`} />
+            <strong>{moduleContract.title}</strong>
+            <small>{selectedNode ? statusLabels[selectedNode.data.status] : '전체'}</small>
           </div>
-        )}
+          <p>{moduleContract.purpose}</p>
+          <dl>
+            <div>
+              <dt>입력</dt>
+              <dd>{moduleContract.input}</dd>
+            </div>
+            <div>
+              <dt>출력</dt>
+              <dd>{moduleContract.output}</dd>
+            </div>
+            <div>
+              <dt>확인 수치</dt>
+              <dd>{moduleContract.metric}</dd>
+            </div>
+          </dl>
+          {selectedNode ? (
+            <>
+              <label>
+                신뢰 임계값
+                <input type="range" min="0" max="100" value={Math.round(metrics.confidence)} readOnly />
+              </label>
+              <div className="setting-grid">
+                <span>행 {selectedNode.data.rows.length}</span>
+                <span>블록 {selectedNode.data.blocks?.length ?? 0}</span>
+                <span>포트 {selectedNode.data.ports?.length ?? 0}</span>
+              </div>
+            </>
+          ) : (
+            <div className="empty-setting">
+              <Settings2 size={16} />
+              <span>노드를 선택하면 이 계약이 선택 모듈 기준으로 바뀝니다.</span>
+            </div>
+          )}
+        </motion.div>
       </section>
 
       <section className="copilot-section">
@@ -141,12 +162,13 @@ export function CopilotPanel({
           <span>도구 선택</span>
           <strong>{selectedToolCount}/{copilotTools.length}</strong>
         </header>
-        <div className="tool-token-grid">
+        <motion.div className="tool-token-grid" variants={staggerContainer} initial="hidden" animate="visible">
           {copilotTools.map((tool) => (
-            <button
+            <MotionButton
               type="button"
               key={tool.id}
               className={toolClass(tool, Boolean(enabledTools[tool.id]))}
+              variants={fadeRise}
               onClick={() => setEnabledTools((current) => ({ ...current, [tool.id]: !current[tool.id] }))}
             >
               <span>
@@ -155,9 +177,9 @@ export function CopilotPanel({
               </span>
               <small>{tool.description}</small>
               {enabledTools[tool.id] ? <Check size={13} /> : null}
-            </button>
+            </MotionButton>
           ))}
-        </div>
+        </motion.div>
       </section>
 
       <section className="copilot-section chat-card">
@@ -186,16 +208,16 @@ export function CopilotPanel({
         </div>
         <div className="prompt-suggestions">
           {promptSuggestions.map((suggestion) => (
-            <button type="button" key={suggestion}>{suggestion}</button>
+            <MotionButton type="button" key={suggestion}>{suggestion}</MotionButton>
           ))}
         </div>
         <label className="prompt-box">
           <span>AI에게 요청</span>
           <div>
             <textarea value="이 원인으로 안전한 PR과 사용자 보고 초안을 만들어줘." readOnly />
-            <button type="button" aria-label="전송">
+            <MotionButton type="button" aria-label="전송">
               <Send size={15} />
-            </button>
+            </MotionButton>
           </div>
         </label>
       </section>
@@ -213,9 +235,12 @@ export function CopilotPanel({
                 className={`studio-note note-${note.accent}`}
                 key={note.id}
                 layout
-                initial={{ opacity: 0, x: 18, rotate: 0.8 }}
-                animate={{ opacity: 1, x: 0, rotate: index % 2 ? -0.35 : 0.35 }}
-                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+                custom={index}
+                variants={noteVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                transition={softSpring}
               >
                 <span>{note.value}</span>
                 <strong>{note.title}</strong>
@@ -230,14 +255,19 @@ export function CopilotPanel({
         {copilotActions.map((action) => {
           const Icon = actionIcons[action.id as keyof typeof actionIcons];
           return (
-            <button type="button" className={`action-card action-${action.accent}`} key={action.id} onClick={() => runAction(action.id)}>
+            <MotionButton
+              className={`action-card action-${action.accent}`}
+              key={action.id}
+              onClick={() => runAction(action.id)}
+              transition={studioTransition}
+            >
               <Icon size={16} />
               <span>
                 <strong>{action.title}</strong>
                 <small>{action.detail}</small>
               </span>
               <em>{action.value}</em>
-            </button>
+            </MotionButton>
           );
         })}
       </section>

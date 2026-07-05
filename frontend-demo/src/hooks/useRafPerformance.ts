@@ -14,10 +14,18 @@ export function useRafPerformance(enabled: boolean) {
     const loop = (now: number) => {
       const delta = now - last;
       last = now;
+
+      if (document.visibilityState === 'hidden' || delta > 120) {
+        elapsed = 0;
+        frames = 0;
+        frameId = window.requestAnimationFrame(loop);
+        return;
+      }
+
       elapsed += delta;
       frames += 1;
 
-      if (elapsed >= 500) {
+      if (elapsed >= 800) {
         setFps(Math.min(60, Math.round((frames * 10000) / elapsed) / 10));
         elapsed = 0;
         frames = 0;

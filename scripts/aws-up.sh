@@ -54,7 +54,8 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
+SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
+MANIFEST_PATH="${MANIFEST_PATH:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE:-remote}"
@@ -118,6 +119,18 @@ LOKI_BASE_URL="${LOKI_BASE_URL:-http://loki-gateway.target.svc}"
 
 RUNTIME_DIR="$(mktemp -d "${ROOT_DIR}/.aws-up.XXXXXX")"
 PORT_FORWARD_PID=""
+
+case "${RUN_SMOKE}" in
+  1|true|TRUE|yes|YES|on|ON)
+    if [ -z "${MANIFEST_PATH}" ]; then
+      MANIFEST_PATH="${SMOKE_MANIFEST_PATH}"
+    fi
+    ;;
+esac
+if [ -z "${MANIFEST_PATH}" ]; then
+  echo "MANIFEST_PATH is required for AWS deployment; set SMOKE_MANIFEST_PATH only for smoke-only runs" >&2
+  exit 1
+fi
 GENERATED_AUTH_PASSWORD="0"
 CUSTOM_DOMAIN_CONFIGURED="0"
 

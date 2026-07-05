@@ -14,6 +14,8 @@ from domains.command.events import (
     Plan,
 )
 from domains.command.handler import (
+    APPROVAL_POLICY_DECISION_MISMATCH_REASON,
+    APPROVAL_RECORD_MISSING_REASON,
     COMMAND_CONFIG,
     MANIFEST_NAMESPACE_MISMATCH_REASON,
     MISSING_APPROVAL_REF_REASON,
@@ -28,14 +30,48 @@ from domains.gitops.events import Diff
 from packages.config.constants import Command, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.gitops import ApprovalStatus
+
+_DEFAULT_APPROVAL = object()
 
 
 class SpyAgentCommandStore:
-    def __init__(self) -> None:
+    def __init__(self, approval: JsonObject | None | object = _DEFAULT_APPROVAL) -> None:
         self.calls: list[tuple[str, JsonObject, str]] = []
+        self.approval = approval_record() if approval is _DEFAULT_APPROVAL else approval
+
+    async def get_workflow_approval(
+        self, approval_id: str, workspace_id: str = "default"
+    ) -> JsonObject | None:
+        if not isinstance(self.approval, dict):
+            return None
+        if (
+            self.approval.get("approval_id") == approval_id
+            and self.approval.get("workspace_id") == workspace_id
+        ):
+            return self.approval
+        return None
 
     async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
         self.calls.append((correlation_id, plan, status))
+
+
+def approval_record(
+    *,
+    approval_id: str = "approval-1",
+    policy_decision_ref: str = "policy-decision-1",
+    status: str = ApprovalStatus.GRANTED.value,
+) -> JsonObject:
+    return {
+        "approval_id": approval_id,
+        "workflow_run_id": "workflow-1",
+        "workspace_id": "workspace-1",
+        "status": status,
+        "details": {
+            "approval_ref": approval_id,
+            "policy_decision_ref": policy_decision_ref,
+        },
+    }
 
 
 def command_request(
@@ -56,8 +92,10 @@ def command_request(
             desired_image="checkout:new",
             actual_image="checkout:old",
             risk=Sandbox.RISK_TAG,
+            workflow_run_id="workflow-1",
         ),
         workspace_id="workspace-1",
+        workflow_run_id="workflow-1",
         requested_by="user-1",
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
@@ -77,6 +115,7 @@ def configmap_command_request() -> CommandRequestedBody:
             desired_image="",
             actual_image="resource-not-inspected",
             risk=Sandbox.RISK_TAG,
+            workflow_run_id="workflow-1",
             desired_manifest={
                 "apiVersion": "v1",
                 "kind": "ConfigMap",
@@ -85,6 +124,7 @@ def configmap_command_request() -> CommandRequestedBody:
             },
         ),
         workspace_id="workspace-1",
+        workflow_run_id="workflow-1",
         requested_by="user-1",
         approval_ref="approval-1",
         policy_decision_ref="policy-decision-1",
@@ -103,6 +143,7 @@ def manifest_command_request_with_same_image() -> CommandRequestedBody:
             desired_image="checkout:same",
             actual_image="checkout:same",
             risk=Sandbox.RISK_TAG,
+            workflow_run_id="workflow-1",
             desired_manifest={
                 "apiVersion": "apps/v1",
                 "kind": "Deployment",
@@ -111,6 +152,7 @@ def manifest_command_request_with_same_image() -> CommandRequestedBody:
             },
         ),
         workspace_id="workspace-1",
+        workflow_run_id="workflow-1",
         requested_by="user-1",
         approval_ref="approval-1",
         policy_decision_ref="policy-decision-1",
@@ -312,6 +354,38 @@ def test_command_handler_rejects_write_command_without_policy_decision_ref() -> 
     assert len(events) == 1
     assert isinstance(events[0], CommandRejectedBody)
     assert events[0].reason == MISSING_POLICY_DECISION_REF_REASON
+    assert store.calls == []
+
+
+def test_command_handler_rejects_write_command_without_recorded_approval() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(approval=None)
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(command_request(), ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == APPROVAL_RECORD_MISSING_REASON
+    assert store.calls == []
+
+
+def test_command_handler_rejects_policy_decision_ref_mismatch() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(
+            approval=approval_record(policy_decision_ref="policy-decision-other")
+        )
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(command_request(), ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == APPROVAL_POLICY_DECISION_MISMATCH_REASON
     assert store.calls == []
 
 

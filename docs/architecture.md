@@ -85,7 +85,6 @@ rca-worker                    -> python src/services/ai/rca-worker/app.py
 recovery-worker               -> python src/services/ai/recovery-worker/app.py
 select-worker                 -> python src/services/ai/select-worker/app.py
 dispatch-worker               -> python src/services/ai/dispatch-worker/app.py
-safe-pr-worker                -> python src/services/ai/safe-pr-worker/app.py
 backlog-worker                -> python src/services/ai/backlog-worker/app.py
 rca-fallback-worker           -> python src/services/ai/rca-fallback-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
@@ -188,7 +187,6 @@ dashboard projector는 같은 패턴으로 `timeline_update_from_event(evt)`를 
 - `recovery-worker`
 - `select-worker`
 - `dispatch-worker`
-- `safe-pr-worker`
 - `audit-worker`
 - `dashboard-worker`
 - `alert-worker`
@@ -232,7 +230,7 @@ Target Cluster Agent
 -> recovery-worker: recovery.planned
 -> select-worker: recovery.action_selected 또는 recovery.selection_requested
 -> dispatch-worker: command.requested 또는 safe_pr.requested
--> safe-pr-worker: safe_pr.patch_prepared
+-> scm-worker: safe_pr.patch_prepared
 -> scm-worker: safe_pr.created 또는 safe_pr.failed
 
 Target 등록 / desired-state

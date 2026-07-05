@@ -19,6 +19,7 @@ import { featurePages } from '../data/features';
 import { uiText } from '../data/labels';
 import { operationsSnapshot as ops } from '../data/operations';
 import type { FeaturePageId, RealtimeFrame, RuntimeMetrics, TimelineEvent } from '../types';
+import { AnimatedNumber } from './AnimatedNumber';
 import { AreaSparkline, BarStack, DonutGauge, SaturationBars } from './Charts';
 import { RealtimePanel } from './RealtimePanel';
 
@@ -86,7 +87,9 @@ export function DashboardPanel({
         <motion.div className="metric-card" layout>
           <ShieldCheck size={17} />
           <span>RCA 신뢰도</span>
-          <strong>{ops.rca.confidence.toFixed(2)}</strong>
+          <strong>
+            <AnimatedNumber value={metrics.confidence / 100} format={(value) => value.toFixed(2)} />
+          </strong>
         </motion.div>
         <motion.div className="metric-card" layout>
           <Activity size={17} />
@@ -96,12 +99,16 @@ export function DashboardPanel({
         <motion.div className="metric-card" layout>
           <GitBranch size={17} />
           <span>증거 작업</span>
-          <strong>{ops.evidenceJobs.completed}/{ops.evidenceJobs.queued}</strong>
+          <strong>
+            <AnimatedNumber value={metrics.evidenceCount} />/{ops.evidenceJobs.queued}
+          </strong>
         </motion.div>
         <motion.div className="metric-card" layout>
           <Zap size={17} />
           <span>Provider p95</span>
-          <strong>{ops.evidenceJobs.providerLatencyP95Ms}ms</strong>
+          <strong>
+            <AnimatedNumber value={metrics.latency.at(-1)?.value ?? ops.evidenceJobs.providerLatencyP95Ms} />ms
+          </strong>
         </motion.div>
       </section>
 
@@ -111,7 +118,9 @@ export function DashboardPanel({
         <div className="card-title-row">
           <div>
             <span>{uiText.metrics.latency}</span>
-            <strong>{metrics.latency.at(-1)?.value ?? 0}ms</strong>
+            <strong>
+              <AnimatedNumber value={metrics.latency.at(-1)?.value ?? 0} />ms
+            </strong>
           </div>
           <small>{uiText.metrics.recoveryTrend}</small>
         </div>

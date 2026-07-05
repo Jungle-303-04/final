@@ -45,6 +45,8 @@ def test_safe_diff_requests_pr() -> None:
     assert safe[1].next_alert.next_command.workspace_id == "workspace-1"
     assert safe[1].next_alert.next_command.approval_ref == approval_ref
     assert safe[1].next_alert.next_command.policy_decision_ref == policy_decision_ref
+    assert safe[1].approval_ref == approval_ref
+    assert safe[1].policy_decision_ref == policy_decision_ref
     assert db.called("request_workflow_approval")
     assert db.called("resolve_workflow_approval")
     approval_payload = db.calls[0][1][0]
@@ -97,14 +99,44 @@ def test_manifest_diff_with_same_image_is_not_treated_as_noop() -> None:
             "metadata": {"name": "checkout-api", "namespace": "sandbox"},
             "spec": {"replicas": 3},
         },
+        changes=[
+            {
+                "field_path": "spec.replicas",
+                "classification": "intended_change",
+                "before": 1,
+                "after": 3,
+            }
+        ],
     )
 
     outs = run_handler(analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=manifest_diff))
 
     assert subjects_of(outs) == ["diff.analyzed", "safe_pr.requested"]
     assert outs[0].safe is True
-    assert outs[1].body == "deployment/checkout-api: apply rendered manifest"
-    assert len(outs[1].patches) == 1
+    assert outs[1].body.startswith("deployment/checkout-api: apply rendered manifest")
+    assert len(outs[1].patches) == 2
     assert outs[1].patches[0].path == "deploy.yaml"
     assert "apiVersion: apps/v1" in outs[1].patches[0].content
     assert "replicas: 3" in outs[1].patches[0].content
+    assert outs[1].patches[1].path.startswith(".gitops/rollback/")
+    assert outs[1].patches[1].description == "rollback manifest generated from live/previous values"
+
+
+def test_manifest_diff_without_actionable_changes_skips_pr() -> None:
+    analyze = load_service("gitops/diff-analyze-worker")
+    diff = _diff("sandbox-only")
+    noop = Diff(
+        resource=diff.resource,
+        namespace=diff.namespace,
+        desired_image=diff.desired_image,
+        actual_image=diff.actual_image,
+        risk=diff.risk,
+        desired_manifest={"apiVersion": "v1", "kind": "ConfigMap"},
+        has_changes=False,
+    )
+
+    outs = run_handler(analyze.on_desired_diff, DesiredDesiredDiffDetectedBody(diff=noop))
+
+    assert subjects_of(outs) == ["diff.analyzed"]
+    assert outs[0].safe is False
+    assert outs[0].reason == "managed field 기준 적용할 변경 없음"

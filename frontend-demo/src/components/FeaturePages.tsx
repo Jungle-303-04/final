@@ -21,6 +21,7 @@ import { screenCatalog } from '../data/screenCatalog';
 import { GraphLab } from './GraphLab';
 import { ScreenCatalog } from './ScreenCatalog';
 import type { Accent, FeatureDemoContent, FeaturePage, FeaturePageId, RealtimeFrame, RuntimeMetrics, TimelineEvent } from '../types';
+import { fadeRise, quickSpring, staggerContainer } from '../motion/presets';
 
 const iconMap: Record<FeaturePageId, ElementType> = {
   'action-flow': GitPullRequest,
@@ -198,21 +199,24 @@ function DataTable({ table }: { table: FeatureDemoContent['table'] }) {
 
 function MotionLab({ samples }: { samples: FeatureDemoContent['motionSamples'] }) {
   return (
-    <section className="motion-lab-grid">
+    <motion.section className="motion-lab-grid" variants={staggerContainer} initial="hidden" animate="visible">
       {samples.map((sample, index) => (
         <motion.article
-          className="motion-sample"
+          className={`motion-sample motion-sample-${(index % 4) + 1}`}
           key={sample.id}
-          whileHover={{ y: -6, scale: 1.015 }}
-          animate={{ opacity: [0.82, 1, 0.82] }}
-          transition={{ duration: 2.4 + index * 0.12, repeat: Infinity }}
+          variants={fadeRise}
+          whileHover={{ y: 'var(--motion-hover-y)', scale: 1.015 }}
+          whileTap={{ scale: 0.985 }}
+          drag={index === 0 ? 'x' : false}
+          dragConstraints={{ left: -24, right: 24 }}
+          transition={quickSpring}
         >
           <span>{String(index + 1).padStart(2, '0')}</span>
           <strong>{sample.label}</strong>
           <i />
         </motion.article>
       ))}
-    </section>
+    </motion.section>
   );
 }
 

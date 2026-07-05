@@ -11,12 +11,15 @@ import hashlib
 import json
 import subprocess
 from collections.abc import AsyncIterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 from urllib import error, parse, request
 
 import yaml
-from repo_cache import GitRepoCache, GitRepoCacheError
+from repo_cache import GitRepoCache, GitRepoCacheError, extract_git_archive
 
 from domains.gitops.diffing import extract_declared_field_paths
 from domains.gitops.events import (
@@ -36,7 +39,6 @@ from packages.contracts.gitops import (
     GITHUB_TOKEN_ENV,
     GITHUB_TOKEN_REF_ENV,
     ManifestArtifactStatus,
-    supported_kubernetes_resource,
 )
 from packages.contracts.security import SecretRef
 from packages.contracts.stores import RepoChangeStore
@@ -50,8 +52,40 @@ METADATA_FIELD = "metadata"
 SPEC_FIELD = "spec"
 TEMPLATE_FIELD = "template"
 CONTAINERS_FIELD = "containers"
+DEFAULT_NAMESPACED_KINDS = {
+    "ConfigMap",
+    "CronJob",
+    "DaemonSet",
+    "Deployment",
+    "HorizontalPodAutoscaler",
+    "Ingress",
+    "Job",
+    "Pod",
+    "PersistentVolumeClaim",
+    "ReplicaSet",
+    "Role",
+    "RoleBinding",
+    "Secret",
+    "Service",
+    "ServiceAccount",
+    "StatefulSet",
+}
+RENDERER_VERSION = "manifest-render-v2"
+SOURCE_TYPE_RAW_YAML = "raw-yaml"
+SOURCE_TYPE_KUSTOMIZE = "kustomize"
+SOURCE_TYPE_HELM = "helm"
+SUPPORTED_SOURCE_TYPES = {
+    SOURCE_TYPE_RAW_YAML,
+    SOURCE_TYPE_KUSTOMIZE,
+    SOURCE_TYPE_HELM,
+}
+KUSTOMIZATION_FILES = ("kustomization.yaml", "kustomization.yml", "Kustomization")
+HELM_CHART_FILE = "Chart.yaml"
+MANIFEST_EXTENSIONS = (".yaml", ".yml", ".json")
+MAX_RENDER_ERROR_LENGTH = 2000
 GIT_REPO_PATH_ENV = "GIT_REPO_PATH"
 GIT_MANIFEST_PATH_ENV = "GIT_MANIFEST_PATH"
+GIT_MANIFEST_SOURCE_TYPE_ENV = "GIT_MANIFEST_SOURCE_TYPE"
 GIT_MANIFEST_SOURCE_MODE_ENV = "GIT_MANIFEST_SOURCE_MODE"
 GIT_LOCAL_MANIFEST_ENABLED_ENV = "GIT_LOCAL_MANIFEST_ENABLED"
 GIT_CHECKOUT_CACHE_ENABLED_ENV = "GIT_CHECKOUT_CACHE_ENABLED"
@@ -62,6 +96,13 @@ GIT_CACHE_MAX_BYTES_ENV = "GIT_CACHE_MAX_BYTES"
 GIT_CACHE_MAX_REPOS_ENV = "GIT_CACHE_MAX_REPOS"
 GIT_REMOTE_MANIFEST_ENABLED_ENV = "GIT_REMOTE_MANIFEST_ENABLED"
 GIT_REMOTE_MANIFEST_REQUIRED_ENV = "GIT_REMOTE_MANIFEST_REQUIRED"
+GITOPS_KUBECTL_BIN_ENV = "GITOPS_KUBECTL_BIN"
+GITOPS_HELM_BIN_ENV = "GITOPS_HELM_BIN"
+GITOPS_HELM_RELEASE_NAME_ENV = "GITOPS_HELM_RELEASE_NAME"
+GITOPS_HELM_NAMESPACE_ENV = "GITOPS_HELM_NAMESPACE"
+GITOPS_HELM_VALUES_FILES_ENV = "GITOPS_HELM_VALUES_FILES"
+GITOPS_HELM_INCLUDE_CRDS_ENV = "GITOPS_HELM_INCLUDE_CRDS"
+GITOPS_HELM_DEPENDENCY_BUILD_ENV = "GITOPS_HELM_DEPENDENCY_BUILD"
 GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV = "GITHUB_MANIFEST_TIMEOUT_SECONDS"
 GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS"
 DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
@@ -78,6 +119,28 @@ MANIFEST_SOURCE_UNAVAILABLE_REASON = "manifest source unavailable"
 
 class ManifestSourceError(Exception):
     """Manifest source exists conceptually but cannot be loaded."""
+
+
+@dataclass(frozen=True)
+class RenderSource:
+    source_type: str
+    manifest_path: str
+    origin: str
+    local_path: Path | None = None
+    source_text: str | None = None
+
+
+@dataclass(frozen=True)
+class RenderResult:
+    rendered_manifests: list[RenderedManifest]
+    source_type: str
+    source_origin: str
+
+
+@dataclass(frozen=True)
+class CachedRenderedManifest:
+    rendered: RenderedManifest
+    artifact_id: str
 
 
 def env_truthy(name: str, default: str = "") -> bool:
@@ -121,6 +184,19 @@ def env_int(name: str, default: str = "0") -> int:
         return max(0, int(default))
 
 
+def git_timeout_seconds() -> float:
+    return float(
+        env(
+            GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV,
+            DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS,
+        )
+    )
+
+
+def manifest_path_for(evt: GitChangedBody) -> str:
+    return env(GIT_MANIFEST_PATH_ENV, evt.manifest_path)
+
+
 def github_token() -> str:
     token_ref = env(GITHUB_TOKEN_REF_ENV, "").strip()
     if token_ref:
@@ -151,6 +227,62 @@ def repo_remote_url(repo_ref: str) -> str:
     return f"https://github.com/{normalized.strip('/')}.git"
 
 
+def source_type_override() -> str | None:
+    raw = env(GIT_MANIFEST_SOURCE_TYPE_ENV, "").strip().lower()
+    if not raw:
+        return None
+    if raw not in SUPPORTED_SOURCE_TYPES:
+        allowed = ", ".join(sorted(SUPPORTED_SOURCE_TYPES))
+        raise ManifestSourceError(f"unsupported manifest source type: {raw}; allowed={allowed}")
+    return raw
+
+
+def kubectl_bin() -> str:
+    return env(GITOPS_KUBECTL_BIN_ENV, "kubectl")
+
+
+def helm_bin() -> str:
+    return env(GITOPS_HELM_BIN_ENV, "helm")
+
+
+def render_namespace() -> str:
+    return env(GITOPS_HELM_NAMESPACE_ENV, Sandbox.NAMESPACE)
+
+
+def detect_source_type(path: Path, override: str | None) -> str:
+    if override:
+        return override
+    if path.is_dir():
+        if (path / HELM_CHART_FILE).is_file():
+            return SOURCE_TYPE_HELM
+        if any((path / name).is_file() for name in KUSTOMIZATION_FILES):
+            return SOURCE_TYPE_KUSTOMIZE
+    return SOURCE_TYPE_RAW_YAML
+
+
+def render_source_from_path(path: Path, manifest_path: str, origin: str) -> RenderSource:
+    return RenderSource(
+        source_type=detect_source_type(path, source_type_override()),
+        manifest_path=manifest_path,
+        origin=origin,
+        local_path=path,
+    )
+
+
+def render_source_from_text(source: str, manifest_path: str, origin: str) -> RenderSource:
+    override = source_type_override()
+    if override and override != SOURCE_TYPE_RAW_YAML:
+        raise ManifestSourceError(
+            f"{override} rendering requires a checked-out repo path, not a raw file response"
+        )
+    return RenderSource(
+        source_type=SOURCE_TYPE_RAW_YAML,
+        manifest_path=manifest_path,
+        origin=origin,
+        source_text=source,
+    )
+
+
 def read_checkout_cache_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None:
     if not checkout_cache_enabled():
         return None
@@ -172,6 +304,30 @@ def read_checkout_cache_manifest_source(evt: GitChangedBody, manifest_path: str)
     )
     try:
         return cache.read_file(evt.commit_sha, manifest_path)
+    except GitRepoCacheError:
+        if checkout_cache_required():
+            raise
+        return None
+
+
+def export_checkout_cache_manifest_path(
+    evt: GitChangedBody, manifest_path: str, destination: Path
+) -> Path | None:
+    if not checkout_cache_enabled():
+        return None
+    remote_url = repo_remote_url(evt.repo_ref)
+    if not remote_url:
+        return None
+    cache = GitRepoCache(
+        cache_dir=env(GIT_CACHE_DIR_ENV, DEFAULT_GIT_CACHE_DIR),
+        remote_url=remote_url,
+        timeout_seconds=git_timeout_seconds(),
+        max_bytes=env_int(GIT_CACHE_MAX_BYTES_ENV),
+        max_repos=env_int(GIT_CACHE_MAX_REPOS_ENV),
+        http_extra_header=github_auth_header(),
+    )
+    try:
+        return cache.export_path(evt.commit_sha, manifest_path, destination)
     except GitRepoCacheError:
         if checkout_cache_required():
             raise
@@ -235,6 +391,57 @@ def read_local_manifest_source(evt: GitChangedBody, manifest_path: str) -> str |
     return None
 
 
+def export_local_git_path(
+    repo_path: str, commit_sha: str, manifest_path: str, destination: Path
+) -> Path:
+    result = subprocess.run(
+        ["git", "-C", repo_path, "archive", "--format=tar", commit_sha, manifest_path],
+        check=True,
+        capture_output=True,
+        timeout=git_timeout_seconds(),
+    )
+    return extract_git_archive(result.stdout, destination, manifest_path)
+
+
+@contextmanager
+def manifest_render_source(evt: GitChangedBody) -> Any:
+    manifest_path = manifest_path_for(evt)
+    if not manifest_path:
+        yield None
+        return
+
+    mode = manifest_source_mode()
+
+    if mode != SOURCE_MODE_LOCAL:
+        with TemporaryDirectory(prefix="gitops-render-") as tmp:
+            cached_path = export_checkout_cache_manifest_path(evt, manifest_path, Path(tmp))
+            if cached_path is not None:
+                yield render_source_from_path(cached_path, manifest_path, "git_cache")
+                return
+
+        remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
+        if remote_source is not None:
+            yield render_source_from_text(remote_source, manifest_path, "github_contents")
+            return
+
+    if local_manifest_enabled(mode):
+        repo_path = env(GIT_REPO_PATH_ENV, "")
+        if repo_path:
+            with TemporaryDirectory(prefix="gitops-render-") as tmp:
+                local_path = export_local_git_path(
+                    repo_path, evt.commit_sha, manifest_path, Path(tmp)
+                )
+                yield render_source_from_path(local_path, manifest_path, "git_repo_path")
+            return
+
+        path = Path(manifest_path)
+        if path.exists():
+            yield render_source_from_path(path, manifest_path, "local_path")
+            return
+
+    yield None
+
+
 def read_manifest_source(evt: GitChangedBody) -> str | None:
     manifest_path = env(GIT_MANIFEST_PATH_ENV, evt.manifest_path)
     if not manifest_path:
@@ -256,14 +463,7 @@ def read_manifest_source(evt: GitChangedBody) -> str | None:
 
 def parse_rendered_manifest_source(source: str) -> list[RenderedManifest]:
     payloads = load_manifest_documents(source)
-    rendered = [
-        render_manifest_payload(payload)
-        for payload in payloads
-        if isinstance(payload, dict) and payload
-    ]
-    if not rendered:
-        raise ValueError("manifest source did not contain a Kubernetes object")
-    return rendered
+    return parse_rendered_manifest_payloads(payloads)
 
 
 def load_manifest_documents(source: str) -> list[Any]:
@@ -277,6 +477,141 @@ def load_manifest_documents(source: str) -> list[Any]:
             raise ValueError(f"invalid YAML manifest: {exc}") from exc
 
 
+def render_source_documents(source: RenderSource) -> list[Any]:
+    if source.source_type == SOURCE_TYPE_RAW_YAML:
+        return load_raw_yaml_documents(source)
+    if source.source_type == SOURCE_TYPE_KUSTOMIZE:
+        return load_manifest_documents(render_kustomize(source))
+    if source.source_type == SOURCE_TYPE_HELM:
+        return load_manifest_documents(render_helm(source))
+    raise ManifestSourceError(f"unsupported manifest source type: {source.source_type}")
+
+
+def load_raw_yaml_documents(source: RenderSource) -> list[Any]:
+    if source.source_text is not None:
+        return load_manifest_documents(source.source_text)
+    if source.local_path is None:
+        raise ManifestSourceError("raw YAML source has no local path")
+    if source.local_path.is_file():
+        return load_manifest_documents(source.local_path.read_text(encoding="utf-8"))
+    if not source.local_path.is_dir():
+        raise ManifestSourceError(f"manifest path does not exist: {source.manifest_path}")
+
+    docs: list[Any] = []
+    files = [
+        item
+        for item in sorted(source.local_path.rglob("*"))
+        if item.is_file() and item.suffix.lower() in MANIFEST_EXTENSIONS
+    ]
+    if not files:
+        raise ValueError("raw manifest directory did not contain YAML or JSON files")
+    for item in files:
+        docs.extend(load_manifest_documents(item.read_text(encoding="utf-8")))
+    return docs
+
+
+def render_kustomize(source: RenderSource) -> str:
+    if source.local_path is None or not source.local_path.is_dir():
+        raise ManifestSourceError("Kustomize rendering requires a directory source")
+    if not any((source.local_path / name).is_file() for name in KUSTOMIZATION_FILES):
+        raise ManifestSourceError("Kustomize source is missing kustomization.yaml")
+    return run_render_command(
+        [kubectl_bin(), "kustomize", str(source.local_path)],
+        "kustomize render failed",
+    )
+
+
+def render_helm(source: RenderSource) -> str:
+    if source.local_path is None or not source.local_path.is_dir():
+        raise ManifestSourceError("Helm rendering requires a chart directory source")
+    if not (source.local_path / HELM_CHART_FILE).is_file():
+        raise ManifestSourceError("Helm source is missing Chart.yaml")
+    if env_truthy(GITOPS_HELM_DEPENDENCY_BUILD_ENV):
+        run_render_command(
+            [helm_bin(), "dependency", "build", str(source.local_path)],
+            "helm dependency build failed",
+        )
+    command = [
+        helm_bin(),
+        "template",
+        helm_release_name(source),
+        str(source.local_path),
+        "--namespace",
+        render_namespace(),
+    ]
+    if env_truthy(GITOPS_HELM_INCLUDE_CRDS_ENV, "1"):
+        command.append("--include-crds")
+    command.extend(helm_values_args(source.local_path))
+    return run_render_command(command, "helm template failed")
+
+
+def helm_release_name(source: RenderSource) -> str:
+    configured = env(GITOPS_HELM_RELEASE_NAME_ENV, "").strip()
+    if configured:
+        return configured
+    stem = source.local_path.name if source.local_path is not None else "release"
+    cleaned = "".join(char.lower() if char.isalnum() else "-" for char in stem).strip("-")
+    return (cleaned or "release")[:53]
+
+
+def helm_values_args(chart_path: Path) -> list[str]:
+    raw = env(GITOPS_HELM_VALUES_FILES_ENV, "").strip()
+    if not raw:
+        return []
+    args: list[str] = []
+    for value in [item.strip() for item in raw.split(",") if item.strip()]:
+        values_path = safe_child_path(chart_path, value)
+        if not values_path.is_file():
+            raise ManifestSourceError(f"Helm values file does not exist: {value}")
+        args.extend(["--values", str(values_path)])
+    return args
+
+
+def safe_child_path(root: Path, raw_path: str) -> Path:
+    candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved_root = root.resolve()
+    resolved = candidate.resolve()
+    if resolved_root != resolved and resolved_root not in resolved.parents:
+        raise ManifestSourceError(f"path escapes Helm chart directory: {raw_path}")
+    return resolved
+
+
+def run_render_command(command: list[str], error_prefix: str) -> str:
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=git_timeout_seconds(),
+        )
+    except FileNotFoundError as exc:
+        raise ManifestSourceError(f"{error_prefix}: executable not found: {command[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ManifestSourceError(
+            f"{error_prefix}: timed out after {git_timeout_seconds()}s"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        message = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        raise ManifestSourceError(f"{error_prefix}: {compact_render_error(message)}") from exc
+    if not result.stdout.strip():
+        raise ManifestSourceError(f"{error_prefix}: renderer produced empty output")
+    return result.stdout
+
+
+def compact_render_error(message: str) -> str:
+    compact = " ".join(message.split())
+    try:
+        token = github_token()
+    except SecretNotFound:
+        token = ""
+    if token:
+        compact = compact.replace(token, "<redacted>")
+    return compact[:MAX_RENDER_ERROR_LENGTH]
+
+
 def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
     kind = str(payload.get("kind", ""))
     api_version = str(payload.get("apiVersion", ""))
@@ -287,9 +622,8 @@ def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
     if not kind or not api_version or not name:
         raise ValueError("manifest must include apiVersion, kind, and metadata.name")
 
-    contract = supported_kubernetes_resource(api_version, kind)
-    namespace = str(metadata.get("namespace") or Sandbox.NAMESPACE)
-    if contract.namespaced:
+    namespace = str(metadata.get("namespace") or default_namespace_for_kind(kind))
+    if namespace:
         payload = {
             **payload,
             METADATA_FIELD: {
@@ -307,6 +641,10 @@ def render_manifest_payload(payload: dict[str, Any]) -> RenderedManifest:
         artifact_digest=manifest_artifact_digest(payload),
         declared_fields=extract_declared_field_paths(payload),
     )
+
+
+def default_namespace_for_kind(kind: str) -> str:
+    return Sandbox.NAMESPACE if kind in DEFAULT_NAMESPACED_KINDS else ""
 
 
 def manifest_artifact_digest(payload: dict[str, Any]) -> str:
@@ -359,11 +697,34 @@ def deployment_image(spec: dict[str, Any]) -> str:
 
 
 def build_rendered_manifests_from_git_change(evt: GitChangedBody) -> list[RenderedManifest]:
-    source = read_manifest_source(evt)
-    if source is None:
-        # 소스 없이 Deployment 를 합성하지 않음 — 정직한 실패 경로(manifest.invalid)로 보냄.
-        raise ManifestSourceError(MANIFEST_SOURCE_UNAVAILABLE_REASON)
-    return parse_rendered_manifest_source(source)
+    return build_rendered_manifest_result(evt).rendered_manifests
+
+
+def build_rendered_manifest_result(evt: GitChangedBody) -> RenderResult:
+    with manifest_render_source(evt) as source:
+        if source is not None:
+            return RenderResult(
+                rendered_manifests=parse_rendered_manifest_source_documents(source),
+                source_type=source.source_type,
+                source_origin=source.origin,
+            )
+    # 소스 없이 Deployment 를 합성하지 않음 — 정직한 실패 경로(manifest.invalid)로 보냄.
+    raise ManifestSourceError(MANIFEST_SOURCE_UNAVAILABLE_REASON)
+
+
+def parse_rendered_manifest_source_documents(source: RenderSource) -> list[RenderedManifest]:
+    return parse_rendered_manifest_payloads(render_source_documents(source))
+
+
+def parse_rendered_manifest_payloads(payloads: list[Any]) -> list[RenderedManifest]:
+    rendered = [
+        render_manifest_payload(payload)
+        for payload in payloads
+        if isinstance(payload, dict) and payload
+    ]
+    if not rendered:
+        raise ValueError("manifest source did not contain a Kubernetes object")
+    return rendered
 
 
 def rendered_resource_suffix(rendered: RenderedManifest) -> str:
@@ -371,9 +732,10 @@ def rendered_resource_suffix(rendered: RenderedManifest) -> str:
 
 
 def artifact_manifest_path(evt: GitChangedBody, rendered: RenderedManifest | None) -> str:
+    manifest_path = manifest_path_for(evt)
     if rendered is None:
-        return evt.manifest_path
-    return f"{evt.manifest_path}#{rendered_resource_suffix(rendered)}"
+        return manifest_path
+    return f"{manifest_path}#{rendered_resource_suffix(rendered)}"
 
 
 def artifact_payload(
@@ -381,6 +743,7 @@ def artifact_payload(
     status: str,
     rendered: RenderedManifest | None = None,
     reason: str | None = None,
+    source: RenderResult | None = None,
 ) -> dict[str, object]:
     return {
         "workspace_id": evt.workspace_id,
@@ -396,8 +759,11 @@ def artifact_payload(
         "source_summary": {
             "repo_ref": evt.repo_ref,
             "branch": evt.branch,
-            "manifest_path": evt.manifest_path,
+            "manifest_path": manifest_path_for(evt),
             "resource": rendered_resource_suffix(rendered) if rendered is not None else None,
+            "source_type": source.source_type if source is not None else None,
+            "source_origin": source.source_origin if source is not None else None,
+            "renderer_version": RENDERER_VERSION,
             "cluster_id": evt.cluster_id,
             "application_id": evt.application_id,
             "workflow_run_id": evt.workflow_run_id,
@@ -406,14 +772,89 @@ def artifact_payload(
     }
 
 
+async def cached_rendered_manifests(
+    evt: GitChangedBody, db: RepoChangeStore, manifest_path: str
+) -> list[CachedRenderedManifest]:
+    finder = getattr(db, "find_rendered_manifest_artifacts", None)
+    if finder is None:
+        return []
+    artifacts = await finder(
+        evt.workspace_id,
+        evt.binding_id,
+        evt.commit_sha,
+        manifest_path,
+        RENDERER_VERSION,
+    )
+    rendered: list[CachedRenderedManifest] = []
+    prefix = f"{manifest_path}#"
+    for artifact in artifacts or []:
+        artifact_path = str(artifact.get("manifest_path", ""))
+        if artifact_path != manifest_path and not artifact_path.startswith(prefix):
+            continue
+        source_summary = artifact.get("source_summary", {})
+        if (
+            not isinstance(source_summary, dict)
+            or source_summary.get("renderer_version") != RENDERER_VERSION
+        ):
+            continue
+        raw = artifact.get("rendered_manifest")
+        if isinstance(raw, dict):
+            rendered.append(
+                CachedRenderedManifest(
+                    rendered=RenderedManifest.from_body(raw),
+                    artifact_id=str(artifact.get("artifact_id") or ""),
+                )
+            )
+    return rendered
+
+
 @app.on(GitChangedBody)
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[RepoChangeStore]
 ) -> AsyncIterator[EventBody]:
     # Git change를 Manifest/RenderedManifest 값 객체로 변환하고 render artifact를 저장함.
     # subject 발행은 yield된 이벤트를 런타임이 처리함.
+    source_manifest_path = manifest_path_for(evt)
+    event_manifest_path = evt.manifest_path
+    cached = await cached_rendered_manifests(evt, ctx.db, source_manifest_path)
+    if cached:
+        for item in cached:
+            rendered = item.rendered
+            await ctx.db.save_repo_change(
+                ctx.correlation_id,
+                evt.commit_sha,
+                rendered.manifest or rendered.to_body(),
+                evt.workspace_id,
+                evt.repository_id,
+                evt.watch_target_id,
+                evt.binding_id,
+                event_manifest_path,
+            )
+            yield ManifestRenderedBody(
+                rendered_manifest=rendered,
+                workspace_id=evt.workspace_id,
+                repository_id=evt.repository_id,
+                watch_target_id=evt.watch_target_id,
+                binding_id=evt.binding_id,
+                application_id=evt.application_id,
+                workflow_run_id=evt.workflow_run_id,
+                environment=evt.environment,
+                cluster_id=evt.cluster_id,
+                commit_sha=evt.commit_sha,
+                manifest_path=event_manifest_path,
+            )
+        await ctx.db.mark_watch_observed(
+            evt.watch_target_id,
+            evt.commit_sha,
+            evt.workspace_id,
+            evt.repository_id,
+            evt.branch,
+            event_manifest_path,
+        )
+        return
+
     try:
-        rendered_manifests = build_rendered_manifests_from_git_change(evt)
+        result = build_rendered_manifest_result(evt)
     except (
         subprocess.CalledProcessError,
         subprocess.TimeoutExpired,
@@ -440,7 +881,7 @@ async def on_git_changed(
             watch_target_id=evt.watch_target_id,
             binding_id=evt.binding_id,
             commit_sha=evt.commit_sha,
-            manifest_path=evt.manifest_path,
+            manifest_path=event_manifest_path,
             reason=reason,
             application_id=evt.application_id,
             workflow_run_id=evt.workflow_run_id,
@@ -449,7 +890,7 @@ async def on_git_changed(
         )
         return
 
-    for rendered in rendered_manifests:
+    for rendered in result.rendered_manifests:
         await ctx.db.save_repo_change(
             ctx.correlation_id,
             evt.commit_sha,
@@ -458,10 +899,15 @@ async def on_git_changed(
             evt.repository_id,
             evt.watch_target_id,
             evt.binding_id,
-            evt.manifest_path,
+            event_manifest_path,
         )
         await ctx.db.record_manifest_artifact(
-            artifact_payload(evt, ManifestArtifactStatus.RENDERED.value, rendered=rendered)
+            artifact_payload(
+                evt,
+                ManifestArtifactStatus.RENDERED.value,
+                rendered=rendered,
+                source=result,
+            )
         )
         yield ManifestRenderedBody(
             rendered_manifest=rendered,
@@ -474,7 +920,7 @@ async def on_git_changed(
             environment=evt.environment,
             cluster_id=evt.cluster_id,
             commit_sha=evt.commit_sha,
-            manifest_path=evt.manifest_path,
+            manifest_path=event_manifest_path,
         )
     await ctx.db.mark_watch_observed(
         evt.watch_target_id,
@@ -482,7 +928,7 @@ async def on_git_changed(
         evt.workspace_id,
         evt.repository_id,
         evt.branch,
-        evt.manifest_path,
+        event_manifest_path,
     )
 
 

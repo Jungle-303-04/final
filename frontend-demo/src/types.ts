@@ -250,3 +250,13 @@ export type StudioNote = {
   accent: Accent;
   value: string;
 };
+
+export type ModuleContract = {
+  id: string;
+  title: string;
+  purpose: string;
+  input: string;
+  output: string;
+  metric: string;
+  accent: Accent;
+};

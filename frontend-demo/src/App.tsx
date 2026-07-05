@@ -7,11 +7,14 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  addEdge,
   useEdgesState,
   useNodesState,
+  type Connection,
   type Node,
 } from '@xyflow/react';
 import { Activity, BarChart3, GitBranchPlus, Moon, Play, RotateCcw, ShieldPlus, Sun } from 'lucide-react';
+import { MotionConfig } from 'motion/react';
 import { uiText } from './data/labels';
 import { initialRealtimeFrame, nextRealtimeFrame } from './data/realtime';
 import {
@@ -61,7 +64,7 @@ function bounded(value: number, min: number, max: number) {
 }
 
 function mutateMetrics(metrics: RuntimeMetrics): RuntimeMetrics {
-  const latencyNext = bounded((metrics.latency.at(-1)?.value ?? 240) + Math.random() * 60 - 42, 160, 640);
+  const latencyNext = bounded((metrics.latency.at(-1)?.value ?? 1840) + Math.random() * 180 - 110, 420, 2200);
   const rotate = (points: RuntimeMetrics['latency']) => [
     ...points.slice(1),
     { label: now(), value: latencyNext },
@@ -70,7 +73,7 @@ function mutateMetrics(metrics: RuntimeMetrics): RuntimeMetrics {
   return {
     confidence: bounded(metrics.confidence + Math.random() * 7 - 2, 70, 96),
     blastRadius: bounded(metrics.blastRadius + Math.random() * 8 - 5, 12, 48),
-    evidenceCount: bounded(metrics.evidenceCount + (Math.random() > 0.62 ? 1 : 0), 8, 22),
+    evidenceCount: bounded(metrics.evidenceCount + (Math.random() > 0.68 ? 1 : Math.random() > 0.82 ? -1 : 0), 0, ops.evidenceJobs.queued),
     pendingActions: bounded(metrics.pendingActions + Math.random() * 3 - 1.4, 1, 6),
     latency: rotate(metrics.latency),
     saturation: metrics.saturation.map((point) => ({
@@ -206,9 +209,38 @@ function AppContent() {
     const evidenceEdge = createEvidenceEdge(evidenceNode);
     setNodes((current) => [...current, evidenceNode]);
     setEdges((current) => [...current, evidenceEdge]);
-    setMetrics((current) => ({ ...current, evidenceCount: current.evidenceCount + 1 }));
+    setMetrics((current) => ({ ...current, evidenceCount: Math.min(ops.evidenceJobs.queued, current.evidenceCount + 1) }));
     pushEvent(runtimeEvents.evidenceCreated(evidenceNode.data.accent));
   }, [nodes, pushEvent, setEdges, setNodes]);
+
+  const connectNodes = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      const sourceNode = nodes.find((node) => node.id === connection.source);
+      const targetNode = nodes.find((node) => node.id === connection.target);
+      const accent = sourceNode?.data.accent ?? targetNode?.data.accent ?? 'blue';
+      const edge: SignalEdgeType = {
+        ...connection,
+        id: `manual-${connection.source}-${connection.target}-${Date.now()}`,
+        type: 'signal',
+        animated: true,
+        data: {
+          accent,
+          status: 'running',
+          event: 'manual.connection',
+          cadenceMs: 980,
+        },
+      };
+
+      setEdges((current) => addEdge(edge, current));
+      pushEvent({
+        title: '수동 연결 생성',
+        detail: `${sourceNode?.data.title ?? connection.source} → ${targetNode?.data.title ?? connection.target}`,
+        tone: accent,
+      });
+    },
+    [nodes, pushEvent, setEdges],
+  );
 
   const addApprovalGate = useCallback(() => {
     const existing = nodes.some((node) => node.id === 'policy-gate');
@@ -312,8 +344,8 @@ function AppContent() {
             </div>
           </div>
           <div className="toolbar">
-            <span className="fps-chip" title={`측정 FPS ${fps.toFixed(1)}`}>
-              60 FPS · 16.7ms
+            <span className={`fps-chip ${fps < 50 ? 'is-low' : ''}`} title="requestAnimationFrame 기반 실측값">
+              {fps.toFixed(1)} FPS · {(1000 / Math.max(fps, 1)).toFixed(1)}ms
             </span>
             <span className="fps-chip">seq {ops.realtime.seq}</span>
             {activePage === 'action-flow' ? (
@@ -365,12 +397,19 @@ function AppContent() {
               edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
+              onConnect={connectNodes}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               minZoom={0.28}
               maxZoom={1.35}
-              defaultViewport={{ x: 14, y: 74, zoom: 0.56 }}
+              defaultViewport={{ x: 14, y: 82, zoom: 0.48 }}
               fitView={false}
+              onlyRenderVisibleElements
+              zoomOnScroll={false}
+              panOnScroll
+              panOnScrollSpeed={0.8}
+              connectionRadius={36}
+              connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2.5, strokeDasharray: '8 8' }}
               proOptions={proOptions}
             >
               <Background color="#2a2d38" gap={26} size={1.3} variant={BackgroundVariant.Dots} />
@@ -422,8 +461,10 @@ function AppContent() {
 
 export function App() {
   return (
-    <ReactFlowProvider>
-      <AppContent />
-    </ReactFlowProvider>
+    <MotionConfig reducedMotion="user">
+      <ReactFlowProvider>
+        <AppContent />
+      </ReactFlowProvider>
+    </MotionConfig>
   );
 }

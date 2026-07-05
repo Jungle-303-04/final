@@ -47,16 +47,9 @@ export function AreaSparkline({
           <stop offset="0%" stopColor={color} stopOpacity="0.42" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
-        <filter id={`glow-${accent}`} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
       </defs>
       <path d={areaPath} fill={`url(#area-${accent})`} />
-      <path d={shiftedLine} fill="none" stroke={color} strokeWidth="3" filter={`url(#glow-${accent})`} />
+      <path d={shiftedLine} fill="none" stroke={color} strokeWidth="3" />
       {points.map((point, index) => {
         const max = Math.max(...points.map((item) => item.value), 1);
         const min = Math.min(...points.map((item) => item.value), 0);

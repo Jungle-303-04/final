@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.models import AgentCommand
@@ -49,7 +49,7 @@ from packages.contracts.identity import (
     AccessResourceType,
     ResourceRole,
 )
-from packages.storage.engine import DatabaseConnection, iso_or_none
+from packages.storage.engine import DatabaseConnection, iso_or_none, row_dict
 
 # 원자 해결 대상으로 열림으로 간주하는 승인 상태 — 라우터의 open 판정과 동일해야 함
 OPEN_APPROVAL_STATUSES = (
@@ -781,6 +781,45 @@ class RepoChangeRepository(DatabaseConnection):
             "watch_target_id": watch_target_id,
             "binding_id": binding_id,
         }
+
+    def find_rendered_manifest_artifacts(
+        self,
+        workspace_id: str,
+        binding_id: str,
+        commit_sha: str,
+        manifest_path: str,
+        renderer_version: str,
+    ) -> list[JsonObject]:
+        table = ManifestArtifact.__table__
+        prefix = f"{manifest_path}#"
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.binding_id == binding_id,
+                table.c.commit_sha == commit_sha,
+                table.c.status == ManifestArtifactStatus.RENDERED.value,
+                table.c.rendered_manifest.is_not(None),
+                or_(
+                    table.c.manifest_path == manifest_path,
+                    table.c.manifest_path.like(f"{prefix}%"),
+                ),
+            )
+            .order_by(table.c.manifest_path.asc())
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+
+        artifacts: list[JsonObject] = []
+        for row in rows:
+            artifact = row_dict(row)
+            source_summary = artifact.get("source_summary", {})
+            if not isinstance(source_summary, dict):
+                continue
+            if source_summary.get("renderer_version") != renderer_version:
+                continue
+            artifacts.append(artifact)
+        return artifacts
 
     def mark_watch_observed(
         self,

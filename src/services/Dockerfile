@@ -1,3 +1,32 @@
+FROM python:3.13.13-slim AS tools
+
+ARG KUBECTL_VERSION=v1.36.2
+ARG HELM_VERSION=v3.21.2
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl tar \
+    && arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
+      amd64) tool_arch="amd64" ;; \
+      arm64) tool_arch="arm64" ;; \
+      *) echo "unsupported image architecture for kubectl/helm: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSLo /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${tool_arch}/kubectl" \
+    && curl -fsSLo /tmp/kubectl.sha256 \
+      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${tool_arch}/kubectl.sha256" \
+    && echo "$(cat /tmp/kubectl.sha256)  /usr/local/bin/kubectl" | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/kubectl \
+    && helm_archive="helm-${HELM_VERSION}-linux-${tool_arch}.tar.gz" \
+    && curl -fsSLo "/tmp/${helm_archive}" \
+      "https://get.helm.sh/${helm_archive}" \
+    && curl -fsSLo "/tmp/${helm_archive}.sha256sum" \
+      "https://get.helm.sh/${helm_archive}.sha256sum" \
+    && cd /tmp \
+    && sha256sum -c "${helm_archive}.sha256sum" \
+    && tar -xzf "${helm_archive}" \
+    && install -m 0755 "/tmp/linux-${tool_arch}/helm" /usr/local/bin/helm
+
 FROM python:3.13.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,6 +40,11 @@ RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=tools /usr/local/bin/kubectl /usr/local/bin/kubectl
+COPY --from=tools /usr/local/bin/helm /usr/local/bin/helm
+RUN kubectl version --client=true \
+    && helm version --short
 
 COPY src/services/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt

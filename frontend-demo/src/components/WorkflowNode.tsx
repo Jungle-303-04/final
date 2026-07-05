@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Check, ChevronDown, ChevronRight, Loader2, Pause, Square, Trash2 } from 'lucide-react';
 import type { PointerEvent } from 'react';
 import { statusLabels, uiText } from '../data/labels';
+import { resolveModuleContract } from '../data/moduleContracts';
 import type { NodeBlock, NodeField, SignalEdge, WorkflowNode as WorkflowNodeType } from '../types';
 
 function StatusIcon({ status }: { status: WorkflowNodeType['data']['status'] }) {
@@ -158,6 +159,7 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
   const outputs = data.ports?.filter((port) => port.direction === 'output') ?? [];
   const metric = metricValue(data);
   const expanded = !data.collapsed;
+  const moduleContract = resolveModuleContract(id);
 
   const updateField = (fieldId: string, value: string) => {
     setNodes((current) =>
@@ -216,10 +218,8 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
   };
 
   return (
-    <motion.article
+    <article
       className={`workflow-node node-${data.accent} status-${data.status} ${selected ? 'is-selected' : ''} ${expanded ? '' : 'is-collapsed'}`}
-      layout
-      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
     >
       {inputs.length ? (
         inputs.map((port, index) => (
@@ -286,6 +286,24 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
           >
+            <div className="node-contract">
+              <p>{moduleContract.purpose}</p>
+              <dl>
+                <div>
+                  <dt>입력</dt>
+                  <dd title={moduleContract.input}>{moduleContract.input}</dd>
+                </div>
+                <div>
+                  <dt>출력</dt>
+                  <dd title={moduleContract.output}>{moduleContract.output}</dd>
+                </div>
+                <div>
+                  <dt>수치</dt>
+                  <dd title={moduleContract.metric}>{moduleContract.metric}</dd>
+                </div>
+              </dl>
+            </div>
+
             {data.ports?.length ? (
               <div className="node-port-list">
                 {data.ports.map((port) => (
@@ -324,6 +342,6 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       </footer>
-    </motion.article>
+    </article>
   );
 }

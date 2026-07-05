@@ -52,6 +52,25 @@ def approval_evidence() -> dict[str, str]:
     }
 
 
+def ready_deployment(name: str = "checkout-api", replicas: int = 1) -> dict[str, object]:
+    return {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {"name": name, "namespace": "sandbox", "generation": 2},
+        "spec": {"replicas": replicas},
+        "status": {
+            "observedGeneration": 2,
+            "updatedReplicas": replicas,
+            "readyReplicas": replicas,
+            "availableReplicas": replicas,
+            "conditions": [
+                {"type": "Progressing", "status": "True"},
+                {"type": "Available", "status": "True"},
+            ],
+        },
+    }
+
+
 async def close_client(client: Any) -> None:
     await client.close()
 
@@ -311,9 +330,15 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
     monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
 
+    get_count = 0
+
     def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal get_count
         body = json.loads(request.content) if request.content else None
         calls.append((request.method, request.url.path, body))
+        if request.method == "GET":
+            get_count += 1
+            return httpx.Response(200, json=ready_deployment(replicas=5), request=request)
         return httpx.Response(200, json={"ok": True}, request=request)
 
     agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
@@ -352,12 +377,14 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
     )
 
     assert result["applied"] is True
+    assert result["rollout"]["ready"] is True
     assert result["resources"][0]["resource"] == "deployment/checkout-api"
     assert result["resources"][0]["status"] == "completed"
-    assert [call[0] for call in calls] == ["GET", "PATCH"]
+    assert [call[0] for call in calls] == ["GET", "PATCH", "GET"]
     assert calls[1][1] == "/apis/apps/v1/namespaces/sandbox/deployments/checkout-api"
     assert calls[1][2]["spec"]["replicas"] == 5
     assert calls[1][2]["spec"]["template"]["spec"]["containers"][0]["image"].endswith(":v2")
+    assert get_count == 2
 
 
 def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:

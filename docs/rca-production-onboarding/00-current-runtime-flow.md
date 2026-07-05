@@ -104,12 +104,12 @@ cluster.evidence.received
 
 ```text
 safe_pr.requested
-  -> safe-pr-worker: safe_pr.patch_prepared
+  -> scm-worker: safe_pr.patch_prepared
   -> scm-worker: GithubScmProvider.create_pull_request()
   -> safe_pr.created 또는 safe_pr.failed
 ```
 
-현재 실제 외부 PR 생성 책임은 `src/services/gitops/scm-worker/app.py`와 `src/services/gitops/scm-worker/github_provider.py`에 있다. RCA worker는 GitHub에 직접 쓰지 않는다. 이 경계를 지키는 이유는 credential, repo allowlist, branch/commit/PR side effect를 한 서비스에서 통제하기 위해서다.
+현재 실제 외부 PR 생성 책임과 PR 패치 준비 이벤트 발행은 `src/services/gitops/scm-worker/app.py`와 `src/services/gitops/scm-worker/github_provider.py`에 있다. RCA worker는 GitHub에 직접 쓰지 않는다. 이 경계를 지키는 이유는 credential, repo allowlist, branch/commit/PR side effect를 한 서비스에서 통제하기 위해서다.
 
 ## 6. Audit / Realtime 흐름
 
