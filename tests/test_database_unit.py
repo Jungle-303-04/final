@@ -103,8 +103,6 @@ def test_schema_defines_expected_tables() -> None:
         "audit_log",
         "user_accounts",
         "workspaces",
-        "workspace_members",
-        "resource_access_grants",
         "organizations",
         "organization_members",
         "groups",
@@ -919,8 +917,6 @@ def test_workspace_access_repository_declares_management_tables() -> None:
     expected = {
         "user_accounts",
         "workspaces",
-        "workspace_members",
-        "resource_access_grants",
         "organizations",
         "organization_members",
         "groups",
