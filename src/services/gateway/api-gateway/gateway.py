@@ -11,6 +11,7 @@ from settings import Settings
 
 from domains.ai.router import router as ai_router
 from domains.applications.router import router as applications_router
+from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
 from domains.dashboard.router import router as dashboard_router
 from domains.gitops.router import approval_router
@@ -141,6 +142,7 @@ class ApiGateway:
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         app.include_router(providers_router)  # provider catalog/validation for product install UI
+        app.include_router(catalog_router)  # service catalog recipes + install-run planning
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
         app.include_router(applications_router)  # application/deployment binding API for web UI
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
