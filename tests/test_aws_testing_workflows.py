@@ -107,8 +107,11 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert '"ttl": ${ttl}' in script
     assert "cloudflare_api_token_value" in script
     assert "cloudflare_authorization_value" in script
-    assert 'lower.startswith("authorization:")' in script
-    assert 'lower.startswith("bearer ")' in script
+    assert "cloudflare_api_token\\s*=\\s*" in script
+    assert "authorization\\s*:\\s*" in script
+    assert "bearer\\s+([^\\s\\\"']+)" in script
+    assert 'value.lower().startswith("bearer")' in script
+    assert "if not ch.isspace()" in script
     assert "printf 'Bearer %s\\n'" in script
     assert "cloudflare_ttl_json" in script
     assert "Cloudflare zone lookup failed with HTTP" in script
