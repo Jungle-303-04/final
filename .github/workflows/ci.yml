@@ -38,6 +38,17 @@ jobs:
       - name: Python compile
         run: python -m compileall -q src scripts
 
+      - name: README structure drift check
+        run: bash scripts/readme-structure-check.sh
+
+      - name: No tracked env/secret files
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "추적 중인 env 파일 발견(시크릿 커밋 금지): $tracked"
+            exit 1
+          fi
+
       - name: Unit tests
         run: uv run pytest -q
 
