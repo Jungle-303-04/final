@@ -173,9 +173,17 @@ class ApiGateway:
             identity: ClusterAgentIdentity = Depends(require_cluster_agent),
         ) -> AcceptedResponse:
             # cluster_id/workspace_id 는 토큰 identity 에서 — body 의 cluster_id 는 신뢰 안 함.
-            accepted = await self.events.accept_body(
-                agent_connected_body_from_request(payload, identity)
-            )
+            with unit_of_work_or_null(self.db):
+                self.db.save_cluster_agent_status(
+                    workspace_id=identity.workspace_id,
+                    cluster_id=identity.cluster_id,
+                    agent_id=payload.agent_id,
+                    capabilities=payload.capabilities,
+                    details={},
+                )
+                accepted = await self.events.accept_body(
+                    agent_connected_body_from_request(payload, identity)
+                )
             return AcceptedResponse(
                 accepted=True,
                 event_id=accepted.event.event_id,
