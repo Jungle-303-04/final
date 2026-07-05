@@ -556,6 +556,7 @@ class RepoChangeRepository(DatabaseConnection):
                 "expires_at": insert.excluded.expires_at,
                 "updated_at": func.now(),
             },
+            where=table.c.status.in_(OPEN_APPROVAL_STATUSES),
         )
         with self.connection() as conn:
             conn.execute(statement)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import RcaTimeline
@@ -73,13 +73,26 @@ class DashboardRepository(DatabaseConnection):
             key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
             for key in preserve_when_missing
         }
+        newer_or_equal_event = insert.excluded.last_event_at >= table.c.last_event_at
         updates.update(
-            current_subject=insert.excluded.current_subject,
-            status=insert.excluded.status,
-            error_reason=insert.excluded.error_reason,
-            last_event_id=insert.excluded.last_event_id,
-            last_event_at=insert.excluded.last_event_at,
-            payload=insert.excluded.payload,
+            current_subject=case(
+                (newer_or_equal_event, insert.excluded.current_subject),
+                else_=table.c.current_subject,
+            ),
+            status=case((newer_or_equal_event, insert.excluded.status), else_=table.c.status),
+            error_reason=case(
+                (newer_or_equal_event, insert.excluded.error_reason),
+                else_=table.c.error_reason,
+            ),
+            last_event_id=case(
+                (newer_or_equal_event, insert.excluded.last_event_id),
+                else_=table.c.last_event_id,
+            ),
+            last_event_at=case(
+                (newer_or_equal_event, insert.excluded.last_event_at),
+                else_=table.c.last_event_at,
+            ),
+            payload=case((newer_or_equal_event, insert.excluded.payload), else_=table.c.payload),
             updated_at=func.now(),
         )
         statement = insert.on_conflict_do_update(
