@@ -305,7 +305,7 @@ async def on_event(evt: EventEnvelope, ctx):
 
 예: `safe_pr.requested -> scm-worker -> safe_pr.patch_prepared + safe_pr.created`, 그리고 `safe_pr.patch_prepared -> ai-diff-worker -> diff.explained`. PR 생성은 `scm-worker`가 단일 repo write boundary로 수행하고, diff 설명은 AI sidecar 이벤트로 분리된다.
 
-`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch와 `.gitops/rollback/<workflow_run_id>/...` rollback patch로 변환한다. `safe-pr-worker`는 이 요청을 `safe_pr.patch_prepared`로 정규화하고, `ai-diff-worker`는 patch payload와 후속 alert 계약을 검증한다. `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서, apply patch, rollback patch를 같은 PR branch에 커밋한다.
+`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch와 `.gitops/rollback/<workflow_run_id>/...` rollback patch로 변환한다. `scm-worker`는 이 요청을 `safe_pr.patch_prepared`로 정규화한 뒤 안전한 repository-relative path만 허용해 검토 문서, apply patch, rollback patch를 같은 PR branch에 커밋한다. `ai-diff-worker`는 `safe_pr.patch_prepared`를 소비해 `diff.explained` sidecar 이벤트만 발행한다.
 
 `command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 검증하고, DB의 approval record가 없거나 granted/not_required 상태가 아니거나 policy decision ref가 다르면 fail-closed한다. 통과한 ref는 `Plan`과 `command.queued_for_agent`에도 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다.
 
