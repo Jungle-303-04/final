@@ -678,28 +678,49 @@ JSON
   CUSTOM_DOMAIN_CONFIGURED="1"
 }
 
+cloudflare_authorization_value() {
+  case "${CLOUDFLARE_API_TOKEN}" in
+    Bearer\ *|bearer\ *)
+      printf '%s\n' "${CLOUDFLARE_API_TOKEN}"
+      ;;
+    *)
+      printf 'Bearer %s\n' "${CLOUDFLARE_API_TOKEN}"
+      ;;
+  esac
+}
+
 cloudflare_zone_id() {
   if [[ -n "${CLOUDFLARE_ZONE_ID}" ]]; then
     printf '%s\n' "${CLOUDFLARE_ZONE_ID}"
     return
   fi
   CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" \
+  CLOUDFLARE_AUTHORIZATION="$(cloudflare_authorization_value)" \
   CLOUDFLARE_ZONE_NAME="${CLOUDFLARE_ZONE_NAME}" \
   python3 - <<'PY'
 from __future__ import annotations
 
 import json
 import os
+import sys
+import urllib.error
+import urllib.parse
 import urllib.request
 
-token = os.environ["CLOUDFLARE_API_TOKEN"]
+authorization = os.environ["CLOUDFLARE_AUTHORIZATION"]
 zone_name = os.environ["CLOUDFLARE_ZONE_NAME"]
+query = urllib.parse.urlencode({"name": zone_name})
 request = urllib.request.Request(
-    f"https://api.cloudflare.com/client/v4/zones?name={zone_name}",
-    headers={"Authorization": f"Bearer {token}"},
+    f"https://api.cloudflare.com/client/v4/zones?{query}",
+    headers={"Authorization": authorization},
 )
-with urllib.request.urlopen(request, timeout=20) as response:
-    payload = json.load(response)
+try:
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.load(response)
+except urllib.error.HTTPError as exc:
+    print(f"Cloudflare zone lookup failed with HTTP {exc.code}", file=sys.stderr)
+    print(exc.read().decode("utf-8", errors="replace"), file=sys.stderr)
+    raise SystemExit(1) from None
 for zone in payload.get("result", []):
     if zone.get("name") == zone_name:
         print(zone["id"])
@@ -730,6 +751,7 @@ configure_cloudflare_record() {
 
   record_id="$(
     CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" \
+    CLOUDFLARE_AUTHORIZATION="$(cloudflare_authorization_value)" \
     CUSTOM_DOMAIN="${CUSTOM_DOMAIN}" \
     CF_ZONE_ID="${zone_id}" \
     python3 - <<'PY'
@@ -737,18 +759,25 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
-token = os.environ["CLOUDFLARE_API_TOKEN"]
+authorization = os.environ["CLOUDFLARE_AUTHORIZATION"]
 zone_id = os.environ["CF_ZONE_ID"]
-name = urllib.parse.quote(os.environ["CUSTOM_DOMAIN"])
+query = urllib.parse.urlencode({"type": "CNAME", "name": os.environ["CUSTOM_DOMAIN"]})
 request = urllib.request.Request(
-    f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?type=CNAME&name={name}",
-    headers={"Authorization": f"Bearer {token}"},
+    f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?{query}",
+    headers={"Authorization": authorization},
 )
-with urllib.request.urlopen(request, timeout=20) as response:
-    payload = json.load(response)
+try:
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.load(response)
+except urllib.error.HTTPError as exc:
+    print(f"Cloudflare DNS record lookup failed with HTTP {exc.code}", file=sys.stderr)
+    print(exc.read().decode("utf-8", errors="replace"), file=sys.stderr)
+    raise SystemExit(1) from None
 records = payload.get("result", [])
 print(records[0]["id"] if records else "")
 PY
@@ -795,7 +824,7 @@ cloudflare_dns_record_request() {
       -o "${response_file}" \
       -w "%{http_code}" \
       -X "${method}" \
-      -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+      -H "Authorization: $(cloudflare_authorization_value)" \
       -H "Content-Type: application/json" \
       --data @"${body_file}" \
       "${url}"
