@@ -32,7 +32,8 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
     assert "base_url: http://localhost:18080/" in local
-    assert "base_url: https://k8s.woonyong.org/" in aws
+    assert "base_url: replace-with-aws-gateway-base-url/" in aws
+    assert "https://k8s.woonyong.org/" not in aws
 
     for env_text in (local, aws):
         assert "base_url:" in env_text
@@ -134,7 +135,7 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "08-ops-dlq",
         "정상 출력",
         "GitHub webhook signature",
-        "https://k8s.woonyong.org/",
+        "고정 도메인을 기본값으로 두지 않고",
         "BRUNO_CLUSTER_ID",
     ]
 

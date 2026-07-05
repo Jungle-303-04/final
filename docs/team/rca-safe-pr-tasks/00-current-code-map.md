@@ -46,7 +46,7 @@ safe_pr.requested
 
 ```python
 ClusterEvidenceReceivedBody(
-    cluster_id="target-cluster-01",
+    cluster_id="replace-with-target-cluster-id",
     workspace_id="workspace-1",
     kubernetes={
         "resource": {

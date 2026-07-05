@@ -382,8 +382,8 @@ scripts/smoke.sh
 
 구현 순서:
 
-1. management cluster context가 `kubernetes-ops`인지 확인한다.
-2. target cluster context가 `cluster-1`인지 확인한다.
+1. management cluster context가 repository variable `MGMT_CLUSTER` 값과 일치하는지 확인한다.
+2. target cluster context가 repository variable `TARGET_CLUSTER_1` 또는 `TARGET_CLUSTER_2` 값과 일치하는지 확인한다.
 3. smoke가 Docker 없이 AWS CD workflow로 실행되는지 확인한다.
 4. health, ready, target agent, evidence, command를 smoke 기준에 넣는다.
 5. 실패 로그는 GitHub Actions artifact나 audit event로 남긴다.

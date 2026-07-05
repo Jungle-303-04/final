@@ -114,7 +114,7 @@ x-agent-token: <per-cluster-agent-token>
     "command_id": "cmd-...",
     "workspace_id": "workspace-1",
     "correlation_id": "...",
-    "cluster_id": "target-cluster-01",
+    "cluster_id": "replace-with-target-cluster-id",
     "action": "apply_manifest",
     "payload": {
       "command_id": "cmd-...",
@@ -141,7 +141,7 @@ Agent는 실행 전에 start를 보고한다.
 ```json
 POST /agent/commands/{command_id}/start
 {
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "workspace_id": "workspace-1",
   "agent_id": "target-agent",
   "lease_id": "uuid"
@@ -155,7 +155,7 @@ POST /agent/commands/{command_id}/start
 ```json
 POST /agent/commands/{command_id}/heartbeat
 {
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "workspace_id": "workspace-1",
   "agent_id": "target-agent",
   "lease_id": "uuid"
@@ -184,7 +184,7 @@ class CommandResultRequest(StrictModel):
 ```json
 {
   "status": "completed",
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "workspace_id": "workspace-1",
   "agent_id": "target-agent-0",
   "lease_id": "uuid",
@@ -234,7 +234,7 @@ class AgentDebugQueryResponse(StrictModel):
 
 ```json
 {
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "reason": "RCA 확인용",
   "query": {
     "source": "prometheus",
@@ -569,12 +569,12 @@ class EvidenceJobScheduleRequest(StrictModel):
 ```json
 {
   "accepted": true,
-  "evidence_key": "workspace-1:target-cluster-01:cluster-snapshot:2026-07-05T10:00:00+00:00",
+  "evidence_key": "workspace-1:replace-with-target-cluster-id:cluster-snapshot:2026-07-05T10:00:00+00:00",
   "queued": 3,
   "job_ids": [
-    "workspace-1:target-cluster-01:cluster-snapshot:2026-07-05T10:00:00+00:00:metrics",
-    "workspace-1:target-cluster-01:cluster-snapshot:2026-07-05T10:00:00+00:00:logs",
-    "workspace-1:target-cluster-01:cluster-snapshot:2026-07-05T10:00:00+00:00:traces"
+    "workspace-1:replace-with-target-cluster-id:cluster-snapshot:2026-07-05T10:00:00+00:00:metrics",
+    "workspace-1:replace-with-target-cluster-id:cluster-snapshot:2026-07-05T10:00:00+00:00:logs",
+    "workspace-1:replace-with-target-cluster-id:cluster-snapshot:2026-07-05T10:00:00+00:00:traces"
   ]
 }
 ```
@@ -594,9 +594,9 @@ x-agent-token: <per-cluster-agent-token>
 {
   "job": {
     "job_id": "...:metrics",
-    "evidence_key": "workspace-1:target-cluster-01:cluster-snapshot:...",
+    "evidence_key": "workspace-1:replace-with-target-cluster-id:cluster-snapshot:...",
     "workspace_id": "workspace-1",
-    "cluster_id": "target-cluster-01",
+    "cluster_id": "replace-with-target-cluster-id",
     "source_id": "cluster-snapshot",
     "provider_key": "metrics",
     "window_start": "2026-07-05T10:00:00+00:00",
@@ -699,14 +699,14 @@ Aggregate 결과 shape:
 ```json
 {
   "workspace_id": "workspace-1",
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "source_id": "cluster-snapshot",
   "window_start": "2026-07-05T10:00:00+00:00",
-  "evidence_key": "workspace-1:target-cluster-01:cluster-snapshot:2026-07-05T10:00:00+00:00",
+  "evidence_key": "workspace-1:replace-with-target-cluster-id:cluster-snapshot:2026-07-05T10:00:00+00:00",
   "agent_id": "target-agent-0",
   "kubernetes": {
     "cluster": {
-      "cluster_id": "target-cluster-01",
+      "cluster_id": "replace-with-target-cluster-id",
       "namespace": "target"
     },
     "pods": [],
@@ -863,7 +863,7 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES["metrics"].append(
 
 ```json
 {
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "generation": 2,
   "cluster_role": "target",
   "evidence": {
