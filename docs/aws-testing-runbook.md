@@ -66,13 +66,13 @@ management rollout 대상 목록 조회와 각 rollout status를 3번 재시도�
 | `SKIP_LB_HEALTH_WAIT` | `1` | 현재 테스트 환경에서 LoadBalancer wait를 짧게 운용한다. |
 | `CUSTOM_DOMAIN` | repository variable, 기본 없음 | DNS 연결을 켤 때 사용할 도메인 |
 | `CONFIGURE_ROUTE53` | `0` | Route53 변경 기본 비활성 |
-| `CONFIGURE_CLOUDFLARE` | `0` | Cloudflare 변경 기본 비활성 |
+| `CONFIGURE_CLOUDFLARE` | repository variable, 현재 테스트 환경 `1` | Cloudflare CNAME을 AWS LoadBalancer로 갱신할지 정한다. `1`이면 `CUSTOM_DOMAIN`, `CLOUDFLARE_ZONE_NAME`, `CLOUDFLARE_API_TOKEN`이 필요하다. |
 | `CLOUDFLARE_PROXIED` | `1` | Cloudflare가 HTTPS를 받고 origin LoadBalancer로 프록시하도록 기본 활성화 |
 | `AWS_ROLE_ARN` | GitHub environment secret `aws-test` | GitHub OIDC가 assume할 AWS role |
 | `AUTH_EMAIL` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 계정 |
 | `AUTH_PASSWORD` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 비밀번호 |
 | `GH_APP_TOKEN` | GitHub environment secret `aws-test` | private repo manifest read, Safe PR 같은 GitHub write 작업. 없으면 AWS CD smoke 중에는 `github.token`을 임시 read token으로 쓴다. |
-| `CLOUDFLARE_API_TOKEN` | GitHub environment secret `aws-test` | `CONFIGURE_CLOUDFLARE=1`일 때 `k8s.woonyong.org` CNAME을 AWS LoadBalancer로 갱신 |
+| `CLOUDFLARE_API_TOKEN` | GitHub environment secret `aws-test` | `CONFIGURE_CLOUDFLARE=1`일 때 `k8s.woonyong.org` CNAME을 AWS LoadBalancer로 갱신. 같은 이름의 repository secret을 fallback으로 둘 수 있지만, `environment: aws-test` job에서는 environment secret이 우선이다. |
 
 ## Cloudflare DNS가 1016이면 먼저 볼 것
 
@@ -94,6 +94,9 @@ curl -i "http://${LB_HOST}/healthz"
 gh secret list --repo Jungle-303-04/final --env aws-test
 ```
 
+목록에 이름이 있어도 값이 빈 값이면 AWS CD log에는 `Cloudflare API token is not set`이 나온다.
+그 경우에는 "secret이 있다"고 보고 넘어가면 안 된다. 아래처럼 실제 token 값을 다시 넣는다.
+
 3. 1Password shell plugin 때문에 `gh secret set`이 아래처럼 실패하면 GitHub CLI 절대 경로를 사용한다.
 
 ```text
@@ -105,6 +108,28 @@ gh secret list --repo Jungle-303-04/final --env aws-test
   --repo Jungle-303-04/final \
   --env aws-test
 ```
+
+프롬프트 입력이 꼬였거나 빈 값으로 들어간 것 같으면 아래처럼 `--body`로 다시 넣는다.
+토큰은 화면에 남기지 않기 위해 `read -s`로 받는다.
+
+```bash
+stty -echo
+printf 'Cloudflare token: ' >&2
+IFS= read -r CF_TOKEN
+stty echo
+printf '\n' >&2
+
+/opt/homebrew/bin/gh secret set CLOUDFLARE_API_TOKEN \
+  --repo Jungle-303-04/final \
+  --env aws-test \
+  --body "$CF_TOKEN"
+
+unset CF_TOKEN
+```
+
+필요하면 repository secret에도 같은 이름을 fallback으로 둘 수 있다.
+그래도 `aws-test` environment secret이 비어 있으면 environment 값이 우선이라 repo fallback이 대신 쓰이지 않는다.
+그래서 정상화 기준은 반드시 `aws-test` environment secret을 다시 넣은 뒤 AWS CD log에서 Cloudflare upsert 문구를 보는 것이다.
 
 토큰은 채팅이나 문서에 쓰지 않는다. Cloudflare에서 `woonyong.org` zone에 대해
 `Zone:Read`, `DNS:Edit` 권한이 있는 API token을 만든 뒤 위 명령 프롬프트에 붙여 넣는다.
@@ -137,6 +162,18 @@ smoke와 상태 확인은 AWS LoadBalancer URL로 계속 진행한다.
 이 실행에서 deploy log에 `updating Cloudflare record k8s.woonyong.org -> ...elb.amazonaws.com`
 또는 `creating Cloudflare record ...`가 보여야 한다.
 그 로그가 보이지 않으면 도메인 연결은 아직 끝난 것이 아니다.
+
+정상 연결은 아래처럼 직접 확인한다.
+
+```bash
+curl -i https://k8s.woonyong.org/healthz
+```
+
+정상 응답 기준은 `HTTP/2 200`과 아래 JSON이다.
+
+```json
+{"status":"ok","service":"api-gateway"}
+```
 
 `CLOUDFLARE_PROXIED=1`일 때 Cloudflare DNS record TTL은 자동값으로 보낸다.
 Cloudflare API에서 자동 TTL은 `1`이고, 프록시를 끈 경우에만 일반 TTL `60`을 쓴다.

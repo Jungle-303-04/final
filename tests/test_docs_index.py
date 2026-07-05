@@ -69,8 +69,6 @@ def test_docs_and_api_do_not_use_retired_scope_or_stale_language() -> None:
 
     offenders = []
     for path in sorted(checked_paths):
-        if path.relative_to(ROOT_DIR).as_posix() == "docs/local-testing.md":
-            continue
         text = path.read_text(encoding="utf-8")
         found = [term for term in blocked_terms if term in text]
         if found:
