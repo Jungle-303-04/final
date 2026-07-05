@@ -972,8 +972,8 @@ POST /agent/connect
 POST /agent/evidence
 GET  /agent/commands/poll
 POST /agent/commands/{command_id}/result
-GET  /dashboard/query
-GET  /dashboard/stream
+GET  /dashboard/rca/timeline
+GET  /dashboard/rca/incidents/{incident_id}
 ```
 
 하지만 현재 endpoint는 MVP 수준이다. 최종 구조에서는 project, agent identity, target, action, credential_ref를 모두 고려해야 한다.
@@ -2477,7 +2477,7 @@ organization role과 project role을 분리한다.
 6. `require_organization_role(session, organization_id, action)` helper 추가.
 7. `require_project_role(session, project_id, action)` helper 추가.
 8. `/projects`, `/projects/{project_id}` 최소 route 추가.
-9. 보호 API 중 하나에 project 권한 검사를 붙인다. 첫 대상은 `/dashboard/query` 또는 `/commands` 중 하나만 선택한다.
+9. 보호 API 중 하나에 project 권한 검사를 붙인다. 첫 대상은 `/dashboard/rca/timeline` 또는 `/commands` 중 하나만 선택한다.
 
 역할 초기값:
 

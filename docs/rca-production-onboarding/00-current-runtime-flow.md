@@ -116,7 +116,9 @@ safe_pr.requested
 | 항목 | 현재 코드 | 왜 필요한가 | 어디에 쓰이는가 |
 | --- | --- | --- | --- |
 | audit projector | `src/services/projection/audit-worker/app.py` | 모든 event envelope를 `audit_log`에 남긴다. | 나중에 timeline, RCA 설명, 운영 감사에 쓴다. |
+| dashboard projector | `src/services/projection/dashboard-worker/app.py` | RCA/command/Safe PR event를 `RcaTimeline` read model로 바꾼다. | `/dashboard/rca/timeline`, incident detail API가 쓴다. |
+| dashboard query API | `src/domains/dashboard/router.py` | session과 cluster read 권한을 적용한다. | 찬빈 frontend가 읽는 API다. |
 | realtime contract | `src/packages/contracts/realtime` | 화면에 보낼 payload 크기와 type을 제한한다. | frontend websocket/SSE 구현의 기준이 된다. |
 | realtime gateway | `src/services/realtime/realtime-gateway` | live summary와 resource delta를 fan-out한다. | 찬빈 dashboard가 사용할 수 있는 backend 경계다. |
 
-찬빈은 현재 동작하는 audit/realtime/gateway 계약을 기준으로 read model/API 계약을 먼저 만들고, 그 다음 UI를 붙인다.
+찬빈은 현재 동작하는 dashboard read model/API/realtime 계약을 기준으로 UI를 붙인다.

@@ -35,6 +35,8 @@ AGENT_DEBUG_QUERY_PATH = "/agent/debug/query"
 CLUSTER_POLICY_PATH = "/clusters/{cluster_id}/policy"
 PROVIDERS_CATALOG_PATH = "/providers/catalog"
 PROVIDERS_VALIDATE_PATH = "/providers/validate"
+DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
+DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
 
 
 def agent_command_result_path(command_id: str) -> str:
@@ -51,3 +53,7 @@ def agent_command_heartbeat_path(command_id: str) -> str:
 
 def agent_evidence_job_result_path(job_id: str) -> str:
     return AGENT_EVIDENCE_JOB_RESULT_PATH.format(job_id=job_id)
+
+
+def dashboard_rca_incident_path(incident_id: str) -> str:
+    return DASHBOARD_RCA_INCIDENT_PATH.format(incident_id=incident_id)
