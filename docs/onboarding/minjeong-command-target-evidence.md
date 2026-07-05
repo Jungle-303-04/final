@@ -107,7 +107,7 @@ RCA를 만들기 전에 “이 query가 target에서 실제로 실행되는지�
 
 ```json
 {
-  "cluster_id": "cluster-1",
+  "cluster_id": "replace-with-target-cluster-id",
   "reason": "RCA 확인용",
   "query": {
     "source": "prometheus",
