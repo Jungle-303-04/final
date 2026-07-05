@@ -24,7 +24,9 @@ export default function ClusterDetailView() {
   const summaryQ = useClusterSummary(clusterId);
   const workloadsQ = useWorkloads(clusterId);
   const cluster = clustersQ.data?.find(c => c.cluster_id === clusterId);
-  const hotPods = liveStore(s => new Set(s.snapshot?.namespaces.flatMap(n => n.pods.filter(p => p.hot).map(p => p.name)) ?? []));
+  const snapshot = liveStore(s => s.snapshot);
+  // selector 에서 새 객체 생성 금지(무한 리렌더) — 파생은 useMemo
+  const hotPods = useMemo(() => new Set(snapshot?.namespaces.flatMap(n => n.pods.filter(p => p.hot).map(p => p.name)) ?? []), [snapshot]);
   const admin = useIsAdmin();
   const scale = useScale(clusterId);
   const restart = useRestart(clusterId);
