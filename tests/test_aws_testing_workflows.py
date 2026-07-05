@@ -188,7 +188,12 @@ def test_aws_image_and_workflow_support_remote_git_manifest_reads() -> None:
     workflow = read(".github/workflows/aws-cd.yml")
     runbook = read("docs/aws-testing-runbook.md")
 
-    assert "apt-get install -y --no-install-recommends git ca-certificates" in dockerfile
+    assert "KUBECTL_VERSION=v1.36.2" in dockerfile
+    assert "HELM_VERSION=v3.21.2" in dockerfile
+    assert "COPY --from=tools /usr/local/bin/kubectl" in dockerfile
+    assert "COPY --from=tools /usr/local/bin/helm" in dockerfile
+    assert "kubectl version --client=true" in dockerfile
+    assert "helm version --short" in dockerfile
     assert "GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN || github.token }}" in workflow
     assert "`GH_APP_TOKEN`" in runbook
 
@@ -198,7 +203,10 @@ def test_aws_smoke_uses_runnable_application_manifest() -> None:
     script = read("scripts/aws-up.sh")
     runbook = read("docs/aws-testing-runbook.md")
 
-    assert "MANIFEST_PATH: ${{ vars.MANIFEST_PATH || 'src/samples/smoke/deploy.yaml' }}" in workflow
-    assert 'MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in script
+    assert "MANIFEST_PATH: ${{ vars.MANIFEST_PATH }}" in workflow
+    assert "SMOKE_MANIFEST_PATH:" in workflow
+    assert 'MANIFEST_PATH="${MANIFEST_PATH:-}"' in script
+    assert 'SMOKE_MANIFEST_PATH="${SMOKE_MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"' in script
+    assert "MANIFEST_PATH is required for AWS deployment" in script
     assert "`MANIFEST_PATH`" in runbook
     assert "deploy/target/target.yaml" not in script

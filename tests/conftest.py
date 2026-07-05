@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import inspect
+import json
 import sys
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -125,6 +126,7 @@ def github_scm_transport(
     pr_exists: bool = False,
     fail_pr_status: int | None = None,
     calls: list[tuple[str, str]] | None = None,
+    contents: list[dict[str, object]] | None = None,
 ) -> Any:
     """GithubScmProvider 용 GitHub REST 흐름(base ref → branch → contents → pulls) mock."""
     import httpx
@@ -133,6 +135,8 @@ def github_scm_transport(
         path = request.url.path
         if calls is not None:
             calls.append((request.method, path))
+        if contents is not None and request.method == "PUT" and request.content:
+            contents.append(json.loads(request.content))
         if request.method == "GET" and "/git/ref/heads/" in path:
             return httpx.Response(200, json={"object": {"sha": "base-sha"}})
         if request.method == "POST" and path.endswith("/git/refs"):

@@ -56,7 +56,6 @@ from packages.runtime.app import App, EventContext
 
 app = App("workflow-controller")
 
-SYSTEM_POLICY_APPROVER = "system-policy"
 MANUAL_APPROVAL_ROLE = ResourceRole.RELEASE_OPERATOR.value
 POLICY_DECISION_REF_PREFIX = "policy-decision"
 POLICY_ROUTE_SAFE_PR = "safe_pr"
@@ -241,7 +240,19 @@ def policy_decision_ref(approval_id: str, route: str) -> str:
 
 
 def command_result_succeeded(result: JsonObject) -> bool:
-    return result.get("status") == CommandStatus.COMPLETED and result.get("applied") is not False
+    if result.get("status") != CommandStatus.COMPLETED or result.get("applied") is False:
+        return False
+    resources = result.get("resources")
+    if isinstance(resources, list):
+        for item in resources:
+            if not isinstance(item, Mapping):
+                continue
+            if item.get("applied") is False or str(item.get("status", "")).lower() == "failed":
+                return False
+    rollout = result.get("rollout")
+    if isinstance(rollout, Mapping) and rollout.get("ready") is False:
+        return False
+    return True
 
 
 @app.on(GitWebhookReceivedBody)
@@ -435,17 +446,6 @@ async def on_diff_analyzed(
             "approval_ref": approval_ref,
             "diff": evt.diff.to_body(),
         }
-        approval = {**approval, "details": details}
-        await ctx.db.request_workflow_approval(approval)
-        await ctx.db.resolve_workflow_approval(
-            {
-                **approval,
-                "status": ApprovalStatus.GRANTED.value,
-                "decided_by": SYSTEM_POLICY_APPROVER,
-                "decision": "auto-approved",
-                "details": details,
-            }
-        )
         await transition_run(
             ctx,
             run,
@@ -460,19 +460,27 @@ async def on_diff_analyzed(
             WorkflowStepName.APPROVAL.value,
             WorkflowStepStatus.SKIPPED.value,
             "approval not required by sandbox policy",
-            {"safe": True},
+            details,
         )
         return
 
     approval = approval_payload(run, evt.reason, ApprovalStatus.REQUESTED.value)
-    saved = await ctx.db.request_workflow_approval(approval)
+    approval_ref = str(approval["approval_id"])
+    details = {
+        "safe": False,
+        "risk": evt.risk,
+        "policy_route": "approval_required",
+        "policy_decision_ref": policy_decision_ref(approval_ref, "approval_required"),
+        "approval_ref": approval_ref,
+        "diff": evt.diff.to_body(),
+    }
     await transition_run(
         ctx,
         run,
         WorkflowRunStatus.WAITING_FOR_APPROVAL.value,
         WorkflowStepName.APPROVAL.value,
         "approval required before write",
-        {"risk": evt.risk},
+        details,
     )
     yield await record_step(
         ctx,
@@ -480,10 +488,10 @@ async def on_diff_analyzed(
         WorkflowStepName.APPROVAL.value,
         WorkflowStepStatus.PENDING.value,
         evt.reason,
-        {"safe": False, "risk": evt.risk},
+        details,
     )
     yield ApprovalRequestedBody(
-        approval_id=str(saved["approval_id"]),
+        approval_id=approval_ref,
         workflow_run_id=str(run["workflow_run_id"]),
         application_id=str(run["application_id"]),
         reason=evt.reason,
@@ -491,7 +499,7 @@ async def on_diff_analyzed(
         binding_id=str(run["binding_id"]),
         environment=str(run["environment"]),
         requested_role=MANUAL_APPROVAL_ROLE,
-        details={"risk": evt.risk, "diff": evt.diff.to_body()},
+        details=details,
     )
 
 
@@ -625,7 +633,7 @@ async def on_command_queued(
     run = await ensure_run(
         ctx,
         gitops_payload(evt),
-        WorkflowRunStatus.APPLYING.value,
+        WorkflowRunStatus.ROLLOUT_WAITING.value,
         WorkflowStepName.APPLY.value,
         "command queued for outbound agent",
         {"command_id": evt.command_id},
@@ -687,6 +695,7 @@ async def on_command_completed(
         WorkflowStepStatus.SUCCEEDED.value if succeeded else WorkflowStepStatus.FAILED.value
     )
     message = str(evt.result.get("message") or evt.result.get("status") or "")
+    rollout_details = rollout_result_details(evt.command_id, evt.result)
     await ctx.db.attach_workflow_command(str(run["workflow_run_id"]), evt.command_id)
     await ctx.db.update_workflow_run_for_command(
         {
@@ -695,7 +704,7 @@ async def on_command_completed(
             "status": run_status,
             "current_step": WorkflowStepName.HEALTH.value,
             "summary": message or run_status,
-            "metadata": evt.result,
+            "metadata": rollout_details,
         }
     )
     yield await record_step(
@@ -704,7 +713,7 @@ async def on_command_completed(
         WorkflowStepName.APPLY.value,
         step_status,
         message or run_status,
-        {"command_id": evt.command_id, "result": evt.result},
+        rollout_details,
     )
     if succeeded:
         yield await record_step(
@@ -713,7 +722,7 @@ async def on_command_completed(
             WorkflowStepName.HEALTH.value,
             WorkflowStepStatus.SUCCEEDED.value,
             "rollout health completed",
-            {"command_id": evt.command_id},
+            rollout_details,
         )
         yield WorkflowRunCompletedBody(
             workflow_run_id=str(run["workflow_run_id"]),
@@ -722,7 +731,7 @@ async def on_command_completed(
             binding_id=str(run["binding_id"]),
             environment=str(run["environment"]),
             summary=message or "workflow succeeded",
-            details={"command_id": evt.command_id, "result": evt.result},
+            details=rollout_details,
         )
         return
     yield WorkflowRunFailedBody(
@@ -732,8 +741,28 @@ async def on_command_completed(
         workspace_id=str(run["workspace_id"]),
         binding_id=str(run["binding_id"]),
         environment=str(run["environment"]),
-        details={"command_id": evt.command_id, "result": evt.result},
+        details=rollout_details,
     )
+
+
+def rollout_result_details(command_id: str, result: JsonObject) -> JsonObject:
+    resources = result.get("resources")
+    resource_list = resources if isinstance(resources, list) else []
+    failed = [
+        item
+        for item in resource_list
+        if isinstance(item, Mapping)
+        and (item.get("applied") is False or str(item.get("status", "")).lower() == "failed")
+    ]
+    rollout = result.get("rollout")
+    details: JsonObject = {
+        "command_id": command_id,
+        "result": result,
+        "resources": resource_list,
+        "failed_resources": failed,
+        "rollout": rollout if isinstance(rollout, Mapping) else {},
+    }
+    return details
 
 
 def workflow_created_fields(payload: JsonObject) -> JsonObject:

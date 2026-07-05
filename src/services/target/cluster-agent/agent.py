@@ -71,6 +71,12 @@ from config import (
     QUERY_RUN_ACTION,
     RECONCILE_INTERVAL_ENV,
 )
+from config import (
+    KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS as CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS,
+)
+from config import (
+    KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
+)
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
@@ -164,10 +170,13 @@ class AgentConfig:
     COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
     MANIFEST_PATCHED_MESSAGE = "Kubernetes manifest patched in sandbox namespace"
+    DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE = "Kubernetes deployment rollout completed"
     WRITE_NAMESPACE_DENIED_MESSAGE = "only sandbox namespace writes are allowed"
     MISSING_APPROVAL_EVIDENCE_MESSAGE = (
         "write command requires approval_ref and policy_decision_ref"
     )
+    KUBERNETES_ROLLOUT_TIMEOUT_SECONDS = CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS
+    KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS = CONFIG_KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS
 
 
 class HttpManagementPlaneClient:
@@ -934,11 +943,16 @@ class TargetClusterAgent:
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
         desired_manifest = diff.get("desired_manifest")
         if isinstance(desired_manifest, dict) and desired_manifest:
-            applied, message = await self.apply_kubernetes_manifest(
+            applied, message, rollout = await self.apply_kubernetes_manifest(
                 desired_manifest,
                 namespace,
             )
-            return self.command_result(applied, message, resource=str(diff.get("resource", "")))
+            return self.command_result(
+                applied,
+                message,
+                resource=str(diff.get("resource", "")),
+                rollout=rollout,
+            )
 
         deployment = deployment_name_from_resource(str(diff.get("resource", "")))
         image = str(diff.get("desired_image", ""))
@@ -955,8 +969,13 @@ class TargetClusterAgent:
                 resource=str(diff.get("resource", "")),
             )
         patch = build_apply_manifest_patch(deployment, image)
-        applied, message = await self.patch_deployment(namespace, deployment, patch)
-        return self.command_result(applied, message, resource=str(diff.get("resource", "")))
+        applied, message, rollout = await self.patch_deployment(namespace, deployment, patch)
+        return self.command_result(
+            applied,
+            message,
+            resource=str(diff.get("resource", "")),
+            rollout=rollout,
+        )
 
     @command.handler(AgentConfig.ROLLOUT_RESTART_ACTION)
     async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
@@ -976,23 +995,28 @@ class TargetClusterAgent:
                 resource=str(diff.get("resource", "")),
             )
         patch = build_rollout_restart_patch()
-        applied, message = await self.patch_deployment(namespace, deployment, patch)
-        return self.command_result(applied, message, resource=str(diff.get("resource", "")))
+        applied, message, rollout = await self.patch_deployment(namespace, deployment, patch)
+        return self.command_result(
+            applied,
+            message,
+            resource=str(diff.get("resource", "")),
+            rollout=rollout,
+        )
 
     async def apply_kubernetes_manifest(
         self, manifest: JsonObject, fallback_namespace: str
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool, str, JsonObject]:
         base_url = kubernetes_api_base_url()
         token = service_account_token()
         if not base_url or not token:
-            return False, "kubernetes api not configured; dry-run only"
+            return False, "kubernetes api not configured; dry-run only", {}
 
         try:
             resource = kubernetes_manifest_resource(manifest, fallback_namespace)
         except ValueError as exc:
-            return False, str(exc)
+            return False, str(exc), {}
         if resource.namespace != Sandbox.NAMESPACE:
-            return False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE
+            return False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE, {}
 
         async with kubernetes_client(self.kubernetes_transport) as client:
             current = await client.get(
@@ -1005,19 +1029,35 @@ class TargetClusterAgent:
                     headers=kubernetes_headers(token, "application/json"),
                 )
                 if created.is_error:
-                    return False, kubernetes_failure_message("create", created)
-                return True, AgentConfig.MANIFEST_CREATED_MESSAGE
+                    return False, kubernetes_failure_message("create", created), {}
+                if resource.kind == "Deployment":
+                    return await self.wait_for_deployment_rollout(
+                        client,
+                        base_url,
+                        token,
+                        resource.namespace,
+                        resource.name,
+                    )
+                return True, AgentConfig.MANIFEST_CREATED_MESSAGE, {}
 
             if current.is_error:
-                return False, kubernetes_failure_message("get", current)
+                return False, kubernetes_failure_message("get", current), {}
             patched = await client.patch(
                 resource.resource_url(base_url),
                 json=resource.manifest,
                 headers=kubernetes_headers(token, "application/merge-patch+json"),
             )
             if patched.is_error:
-                return False, kubernetes_failure_message("patch", patched)
-        return True, AgentConfig.MANIFEST_PATCHED_MESSAGE
+                return False, kubernetes_failure_message("patch", patched), {}
+            if resource.kind == "Deployment":
+                return await self.wait_for_deployment_rollout(
+                    client,
+                    base_url,
+                    token,
+                    resource.namespace,
+                    resource.name,
+                )
+        return True, AgentConfig.MANIFEST_PATCHED_MESSAGE, {}
 
     def command_result(
         self,
@@ -1028,6 +1068,7 @@ class TargetClusterAgent:
         retryable: bool = False,
         stdout: str = "",
         stderr: str = "",
+        rollout: JsonObject | None = None,
     ) -> JsonObject:
         status = (
             AgentConfig.COMMAND_COMPLETED_STATUS if applied else AgentConfig.COMMAND_FAILED_STATUS
@@ -1051,22 +1092,73 @@ class TargetClusterAgent:
             Gateway.RESOURCES: resource_status,
             Gateway.STDOUT: sanitize_command_output(stdout or (message if applied else "")),
             Gateway.STDERR: sanitize_command_output(stderr or ("" if applied else message)),
+            "rollout": rollout or {},
         }
 
     async def patch_deployment(
         self, namespace: str, deployment: str, patch: JsonObject
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool, str, JsonObject]:
         base_url = kubernetes_api_base_url()
         token = service_account_token()
         if not base_url or not token:
-            return False, "kubernetes api not configured; dry-run only"
+            return False, "kubernetes api not configured; dry-run only", {}
         url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment}"
         headers = kubernetes_headers(token, "application/strategic-merge-patch+json")
         async with kubernetes_client(self.kubernetes_transport) as client:
             response = await client.patch(url, json=patch, headers=headers)
             if response.is_error:
-                return False, kubernetes_failure_message("patch", response)
-        return True, AgentConfig.COMMAND_RESULT_MESSAGE
+                return False, kubernetes_failure_message("patch", response), {}
+            return await self.wait_for_deployment_rollout(
+                client,
+                base_url,
+                token,
+                namespace,
+                deployment,
+            )
+
+    async def wait_for_deployment_rollout(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        token: str,
+        namespace: str,
+        deployment: str,
+    ) -> tuple[bool, str, JsonObject]:
+        timeout = AgentConfig.KUBERNETES_ROLLOUT_TIMEOUT_SECONDS
+        url = f"{base_url}/apis/apps/v1/namespaces/{namespace}/deployments/{deployment}"
+        if timeout <= 0:
+            return (
+                True,
+                AgentConfig.COMMAND_RESULT_MESSAGE,
+                {"resource": f"deployment/{deployment}", "ready": None, "waited": False},
+            )
+        deadline = time.monotonic() + timeout
+        last_status: JsonObject = {}
+        while True:
+            response = await client.get(url, headers=kubernetes_headers(token))
+            if not response.is_error:
+                body = response.json()
+                if isinstance(body, dict):
+                    last_status = deployment_rollout_status(body)
+                    if last_status.get("ready") is True:
+                        return (
+                            True,
+                            AgentConfig.DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE,
+                            last_status,
+                        )
+            else:
+                last_status = {
+                    "resource": f"deployment/{deployment}",
+                    "ready": False,
+                    "error": kubernetes_failure_message("rollout status", response),
+                }
+            if time.monotonic() >= deadline:
+                return (
+                    False,
+                    f"deployment rollout not ready before timeout: {deployment}",
+                    last_status,
+                )
+            await asyncio.sleep(AgentConfig.KUBERNETES_ROLLOUT_POLL_INTERVAL_SECONDS)
 
 
 def deployment_name_from_resource(resource: str) -> str:
@@ -1094,6 +1186,56 @@ def build_rollout_restart_patch() -> JsonObject:
             }
         }
     }
+
+
+def deployment_rollout_status(body: JsonObject) -> JsonObject:
+    metadata = body.get("metadata")
+    spec = body.get("spec")
+    status = body.get("status")
+    metadata_obj = metadata if isinstance(metadata, dict) else {}
+    spec_obj = spec if isinstance(spec, dict) else {}
+    status_obj = status if isinstance(status, dict) else {}
+    name = str(metadata_obj.get("name") or "")
+    desired = int(spec_obj.get("replicas") or 1)
+    generation = int(metadata_obj.get("generation") or 0)
+    observed = int(status_obj.get("observedGeneration") or 0)
+    updated = int(status_obj.get("updatedReplicas") or 0)
+    ready_replicas = int(status_obj.get("readyReplicas") or 0)
+    available = int(status_obj.get("availableReplicas") or 0)
+    conditions = status_obj.get("conditions")
+    condition_list = conditions if isinstance(conditions, list) else []
+    progressing = deployment_condition(condition_list, "Progressing")
+    available_condition = deployment_condition(condition_list, "Available")
+    ready = desired == 0 or (
+        observed >= generation
+        and updated >= desired
+        and ready_replicas >= desired
+        and available >= desired
+        and condition_status(progressing) != "False"
+        and condition_status(available_condition) != "False"
+    )
+    return {
+        "resource": f"deployment/{name}" if name else "deployment",
+        "ready": ready,
+        "desired_replicas": desired,
+        "updated_replicas": updated,
+        "ready_replicas": ready_replicas,
+        "available_replicas": available,
+        "observed_generation": observed,
+        "generation": generation,
+        "conditions": condition_list,
+    }
+
+
+def deployment_condition(conditions: list[object], condition_type: str) -> JsonObject:
+    for condition in conditions:
+        if isinstance(condition, dict) and condition.get("type") == condition_type:
+            return dict(condition)
+    return {}
+
+
+def condition_status(condition: JsonObject) -> str:
+    return str(condition.get("status") or "")
 
 
 def kubernetes_failure_message(action: str, response: httpx.Response) -> str:

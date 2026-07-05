@@ -8,13 +8,16 @@ safe_pr.requested로 넘겨 repo-gateway가 PR 생성을 맡게 분리.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 import yaml
 
 from domains.alert.events import AlertRequestedBody
 from domains.command.events import CommandRequestedBody
+from domains.gitops.diffing import MISSING
 from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff, DiffAnalyzedBody
 from domains.gitops.repository import derive_approval_id
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
@@ -29,9 +32,12 @@ app = App("diff-analyze-worker")
 
 SAFE_REASON = "sandbox 한정 변경이라 안전"
 UNSAFE_REASON = "프로덕션 영향 가능 — 검토 필요"
+NO_ACTIONABLE_CHANGE_REASON = "managed field 기준 적용할 변경 없음"
 PR_TITLE = "Apply sandbox manifest"
 PRE_DEPLOY_ALERT_SEVERITY = "info"
 MANIFEST_PATCH_DESCRIPTION = "rendered Kubernetes manifest"
+ROLLBACK_PATCH_DESCRIPTION = "rollback manifest generated from live/previous values"
+ROLLBACK_PATCH_DIR = ".gitops/rollback"
 POLICY_ROUTE_NOOP = "noop"
 POLICY_ROUTE_SAFE_PR = "safe_pr"
 POLICY_ROUTE_APPROVAL_REQUIRED = "approval_required"
@@ -55,12 +61,19 @@ class PolicyDecision:
             "safe": self.safe,
             "risk": str(diff.risk),
             "diff": diff.to_body(),
+            "rollback_patches": [patch.to_body() for patch in build_rollback_patches(diff)],
         }
 
 
 def evaluate_safe_pr_policy(diff: Diff) -> PolicyDecision:
     if diff.is_image_only_noop():
         return PolicyDecision(route=POLICY_ROUTE_NOOP, safe=False, reason=Sandbox.NO_DIFF_REASON)
+    if not diff.has_changes:
+        return PolicyDecision(
+            route=POLICY_ROUTE_NOOP,
+            safe=False,
+            reason=NO_ACTIONABLE_CHANGE_REASON,
+        )
     approval_ref = derive_approval_id(diff.workflow_run_id)
     if diff.risk == RiskLevel.SANDBOX_ONLY:
         return PolicyDecision(
@@ -132,7 +145,7 @@ def build_safe_pr_request_body(
     )
     return SafePrRequestedBody(
         title=PR_TITLE,
-        body=summary,
+        body=safe_pr_body(summary, diff, decision),
         provider=GitHub.PROVIDER,
         workspace_id=diff.workspace_id,
         repository_id=diff.repository_id,
@@ -142,14 +155,33 @@ def build_safe_pr_request_body(
         environment=diff.environment,
         manifest_path=diff.manifest_path,
         patches=build_manifest_patches(diff),
+        approval_ref=decision.approval_ref,
+        policy_decision_ref=decision.policy_decision_ref,
         next_alert=build_pre_deploy_alert_request_body(diff, decision),
+    )
+
+
+def safe_pr_body(summary: str, diff: Diff, decision: PolicyDecision) -> str:
+    rollback_paths = [patch.path for patch in build_rollback_patches(diff)]
+    rollback_line = ", ".join(f"`{path}`" for path in rollback_paths) or "없음"
+    artifact_digest = str(diff.basis.get("artifact_digest") or "")
+    digest_line = f"\n- artifact_digest: `{artifact_digest}`" if artifact_digest else ""
+    return (
+        f"{summary}\n\n"
+        "## GitOps Basis\n\n"
+        f"- approval_ref: `{decision.approval_ref or ''}`\n"
+        f"- policy_decision_ref: `{decision.policy_decision_ref or ''}`\n"
+        f"- diff_status: `{diff.status}`\n"
+        f"- diff_basis: `{diff.basis.get('comparison', 'unknown')}`"
+        f"{digest_line}\n"
+        f"- rollback_patch: {rollback_line}\n"
     )
 
 
 def build_manifest_patches(diff: Diff) -> list[SafePrFilePatch]:
     if not diff.desired_manifest:
         return []
-    return [
+    patches = [
         SafePrFilePatch(
             path=diff.manifest_path,
             content=yaml.safe_dump(
@@ -160,6 +192,128 @@ def build_manifest_patches(diff: Diff) -> list[SafePrFilePatch]:
             description=MANIFEST_PATCH_DESCRIPTION,
         )
     ]
+    patches.extend(build_rollback_patches(diff))
+    return patches
+
+
+def build_rollback_patches(diff: Diff) -> list[SafePrFilePatch]:
+    rollback = build_rollback_manifest(diff)
+    if not rollback:
+        return []
+    return [
+        SafePrFilePatch(
+            path=rollback_patch_path(diff),
+            content=yaml.safe_dump(rollback, sort_keys=False, allow_unicode=True),
+            description=ROLLBACK_PATCH_DESCRIPTION,
+        )
+    ]
+
+
+def rollback_patch_path(diff: Diff) -> str:
+    manifest_name = PurePosixPath(diff.manifest_path).name or "manifest.yaml"
+    if "." not in manifest_name:
+        manifest_name = f"{manifest_name}.yaml"
+    resource = diff.resource.replace("/", "-") or "resource"
+    return f"{ROLLBACK_PATCH_DIR}/{diff.workflow_run_id}/{resource}-{manifest_name}"
+
+
+def build_rollback_manifest(diff: Diff) -> dict[str, Any]:
+    if not diff.desired_manifest or not diff.changes:
+        return {}
+    rollback = deepcopy(diff.desired_manifest)
+    applied = False
+    for change in diff.changes:
+        classification = str(change.get("classification", ""))
+        if classification == "already_converged":
+            continue
+        field_path = str(change.get("field_path", ""))
+        if not field_path:
+            continue
+        before = change.get("before", change.get("live", MISSING))
+        if apply_rollback_value(rollback, field_path, before):
+            applied = True
+    return rollback if applied else {}
+
+
+def apply_rollback_value(manifest: dict[str, Any], field_path: str, value: Any) -> bool:
+    parts = split_field_path(field_path)
+    if not parts:
+        return False
+    parent: Any = manifest
+    for part in parts[:-1]:
+        parent = descend_manifest_path(parent, part)
+        if parent is None:
+            return False
+    return set_manifest_value(parent, parts[-1], value)
+
+
+def split_field_path(field_path: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    bracket_depth = 0
+    for char in field_path:
+        if char == "[":
+            bracket_depth += 1
+        elif char == "]" and bracket_depth:
+            bracket_depth -= 1
+        if char == "." and bracket_depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
+def descend_manifest_path(parent: Any, part: str) -> Any:
+    list_name, selector = parse_list_selector(part)
+    if list_name is None:
+        if not isinstance(parent, dict):
+            return None
+        child = parent.get(part)
+        if not isinstance(child, dict | list):
+            return None
+        return child
+    if not isinstance(parent, dict):
+        return None
+    items = parent.get(list_name)
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if isinstance(item, dict) and str(item.get(selector[0], "")) == selector[1]:
+            return item
+    return None
+
+
+def set_manifest_value(parent: Any, part: str, value: Any) -> bool:
+    list_name, selector = parse_list_selector(part)
+    if list_name is not None:
+        target = descend_manifest_path(parent, part)
+        if not isinstance(target, dict):
+            return False
+        if value == MISSING:
+            target.pop(selector[0], None)
+        else:
+            target[selector[0]] = value
+        return True
+    if not isinstance(parent, dict):
+        return False
+    if value == MISSING:
+        parent.pop(part, None)
+    else:
+        parent[part] = value
+    return True
+
+
+def parse_list_selector(part: str) -> tuple[str | None, tuple[str, str]]:
+    if "[" not in part or not part.endswith("]"):
+        return None, ("", "")
+    name, raw_selector = part.split("[", 1)
+    key, separator, value = raw_selector[:-1].partition("=")
+    if not name or not separator or not key:
+        return None, ("", "")
+    return name, (key, value)
 
 
 def build_auto_command_request_body(
@@ -192,7 +346,7 @@ def build_pre_deploy_alert_request_body(
         severity=PRE_DEPLOY_ALERT_SEVERITY,
         message=f"pre-deploy check passed for {diff.resource}",
         reason="safe sandbox deploy will continue after alert gate",
-        next_command=build_auto_command_request_body(diff),
+        next_command=build_auto_command_request_body(diff, decision),
         workspace_id=diff.workspace_id,
         application_id=diff.application_id,
         workflow_run_id=diff.workflow_run_id,

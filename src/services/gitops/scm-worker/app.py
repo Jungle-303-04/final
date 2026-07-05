@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from dataclasses import replace
 
-from github_provider import GithubScmProvider
+from github_provider import GithubScmProvider, validate_request_paths
 
 from domains.gitops.repository import (
     derive_application_id,
@@ -19,6 +19,7 @@ from domains.gitops.repository import (
     derive_workflow_run_id,
 )
 from domains.providers.catalog import ProviderCategory, require_available_provider
+from domains.rca.events import SafePrPatchPreparedBody
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
@@ -98,11 +99,63 @@ def safe_pr_failure_reason(exc: Exception) -> str:
     return SAFE_PR_CREATION_FAILED_MESSAGE
 
 
+def preflight_failure_body(request: SafePrRequestedBody) -> SafePrFailedBody | None:
+    if request.provider != ACTIVE_SCM_PROVIDER:
+        return SafePrFailedBody(
+            provider=request.provider,
+            title=request.title,
+            reason=SAFE_PR_CREATION_FAILED_MESSAGE,
+            workspace_id=request.workspace_id,
+            repository_id=request.repository_id,
+            binding_id=request.binding_id,
+            application_id=request.application_id,
+            workflow_run_id=request.workflow_run_id,
+            environment=request.environment,
+        )
+    try:
+        validate_request_paths(request)
+    except Exception:
+        return SafePrFailedBody(
+            provider=request.provider,
+            title=request.title,
+            reason=SAFE_PR_CREATION_FAILED_MESSAGE,
+            workspace_id=request.workspace_id,
+            repository_id=request.repository_id,
+            binding_id=request.binding_id,
+            application_id=request.application_id,
+            workflow_run_id=request.workflow_run_id,
+            environment=request.environment,
+        )
+    return None
+
+
+def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody:
+    return SafePrPatchPreparedBody(
+        title=request.title,
+        body=request.body,
+        patch={
+            "provider": request.provider,
+            "repository_id": request.repository_id,
+            "manifest_path": request.manifest_path,
+            "approval_ref": request.approval_ref,
+            "policy_decision_ref": request.policy_decision_ref,
+            "patches": [patch.to_body() for patch in request.patches],
+        },
+        provider=request.provider,
+        workspace_id=request.workspace_id,
+    )
+
+
 @app.on(SafePrRequestedBody)
 async def on_safe_pr_requested(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:
     request = normalize_safe_pr_request(evt)
+    preflight_failed = preflight_failure_body(request)
+    if preflight_failed is not None:
+        yield preflight_failed
+        return
+    yield patch_prepared_body(request)
 
     # repo-gateway는 외부 PR 생성 경계다. 핸들러는 호출과 결과 이벤트만 선언하고
     # provider 예외 처리는 deliver가 공통으로 맡는다.

@@ -102,7 +102,6 @@ APP_WORKER_DEPLOYMENTS=(
   select-worker
   dispatch-worker
   backlog-worker
-  safe-pr-worker
   ai-diff-worker
   rollout-worker
   approval-worker
@@ -143,7 +142,6 @@ RCA_WORKER_DEPLOYMENTS=(
   select-worker
   dispatch-worker
   backlog-worker
-  safe-pr-worker
   audit-worker
   dashboard-worker
   dead-letter-monitor
@@ -513,7 +511,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_INFRA_OVERLAY}"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
   command-orchestrator command-dispatcher agent-connection-gateway \
-  evidence-builder ai-rca-service safe-pr-service; do
+  evidence-builder ai-rca-service safe-pr-service safe-pr-worker; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
 done
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=600s

@@ -161,11 +161,10 @@ async def on_command_requested(
 | GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed` |
 | Agent/Target | `agent.connected`, `cluster.evidence.received`, `cluster.desired_state.changed`, `cluster.reconcile.requested`, `cluster.reconcile.started`, `cluster.drift.detected`, `cluster.reconcile.completed`, `cluster.reconcile.failed` |
 | Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
-| RCA/Safe PR | `evidence.built`, `rca.completed`, `safe_pr.requested`, `safe_pr.created`, `safe_pr.failed` |
+| RCA/Safe PR | `evidence.built`, `rca.completed`, `safe_pr.requested`, `safe_pr.patch_prepared`, `safe_pr.created`, `safe_pr.failed` |
 | Workflow/Approval | `workflow.created`, `workflow.run.started`, `workflow.step.recorded`, `workflow.run.completed`, `workflow.run.failed`, `approval.requested`, `approval.granted`, `approval.rejected` |
 | Dashboard | `dashboard.updated` |
 | DLQ | `dead_letter.created` |
-| Demo (골든패스) | `demo.ping.requested`, `demo.pong.requested`, `demo.pong.delivered`, `demo.pong.failed` |
 
 새 subject는 아래 내용을 결정한 뒤 추가한다.
 
@@ -303,13 +302,13 @@ async def on_event(evt: EventEnvelope, ctx):
 
 이 표준 모양은 `src/packages/runtime/outbound.py`의 helper `deliver(call, ok, fail)`로 구현한다. 외부 호출 1회를 받아 성공이면 `ok(결과)` body를, 실패면 `fail(예외)` body를 yield한다.
 
-예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
+예: `safe_pr.requested -> scm-worker -> safe_pr.patch_prepared -> safe_pr.created`. PR 생성과 patch-prepared 발행은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
 
-`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch로 변환하고, `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서와 patch file을 같은 PR branch에 커밋한다. 다음 P0 하드닝 작업은 rollback patch, approval evidence, diff basis/ref 강제다.
+`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch와 `.gitops/rollback/<workflow_run_id>/...` rollback patch로 변환한다. `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서, apply patch, rollback patch를 같은 PR branch에 커밋한다. PR body와 `safe_pr.patch_prepared`에는 `approval_ref`, `policy_decision_ref`, diff basis, artifact digest가 남는다.
 
-`command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 거부하고, `Plan`과 `command.queued_for_agent`에도 같은 ref를 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다. ref의 만료/권한 검증과 TokenVault 연동은 다음 P0 작업이다.
+`command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 검증하고, DB의 approval record가 없거나 granted/not_required 상태가 아니거나 policy decision ref가 다르면 fail-closed한다. 통과한 ref는 `Plan`과 `command.queued_for_agent`에도 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다.
 
-`command.completed.result`는 agent 결과 보고 기준으로 `applied`, `retryable`, `resources`, `stdout`, `stderr`를 포함할 수 있다. target `cluster-agent`는 write command 결과에 resource별 status를 채우고 stdout/stderr를 제한 길이와 민감 문자열 redaction으로 정리한다.
+`command.completed.result`는 agent 결과 보고 기준으로 `applied`, `retryable`, `resources`, `rollout`, `stdout`, `stderr`를 포함할 수 있다. target `cluster-agent`는 write command 결과에 resource별 status를 채우고, Deployment 변경은 Kubernetes API의 rollout status를 구조화해 `rollout.ready`, replica count, condition 목록으로 보고한다. stdout/stderr는 제한 길이와 민감 문자열 redaction으로 정리한다.
 
 ## Repo / Cluster 매핑 상태
 
