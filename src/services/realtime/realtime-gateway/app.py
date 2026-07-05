@@ -23,7 +23,7 @@ from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
 from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     BROWSER_LIVE_PATH,
@@ -86,7 +86,7 @@ def session_store_config() -> RedisSessionStoreConfig:
         ttl_seconds=int(env(Auth.SESSION_TTL_ENV, Auth.DEFAULT_SESSION_TTL_SECONDS)),
         key_prefix=SESSION_KEY_PREFIX,
         token_bytes=SESSION_TOKEN_BYTES,
-        default_roles=(AccountRole.MEMBER.value,),
+        default_roles=(ServiceRole.USER.value,),
         default_workspace_id=DEFAULT_WORKSPACE_ID,
         rate_limit_key_prefix=RATE_LIMIT_KEY_PREFIX,
         rate_limit=DEFAULT_RATE_LIMIT,
