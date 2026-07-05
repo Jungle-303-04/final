@@ -15,6 +15,26 @@
 
 로컬 cluster context 기반 확인은 현재 팀 테스트 기준에서 사용하지 않는다. 서비스 수준 검증은 AWS EKS에 올라간 management/target cluster를 기준으로 한다.
 
+## EKS가 활성인데도 URL이 안 열리는 이유
+
+AWS Console의 EKS cluster 상태가 `활성`이면 Kubernetes control plane이 살아 있다는 뜻이다.
+그 상태만으로 `https://k8s.woonyong.org/healthz`가 열린다는 뜻은 아니다.
+서비스 URL이 열리려면 아래 단계가 모두 끝나야 한다.
+
+1. `scripts/aws-up.sh`가 management manifest를 적용한다.
+2. `api-gateway`, worker, `nats`, `postgresql` rollout이 끝난다.
+3. `api-gateway` Service가 `LoadBalancer`로 patch된다.
+4. AWS LoadBalancer hostname이 생긴다.
+5. Cloudflare DNS record가 그 LoadBalancer hostname을 origin으로 가리킨다.
+6. Bruno나 `curl`이 custom domain 또는 LoadBalancer URL로 `/healthz`를 호출한다.
+
+이번에 본 `TLS handshake timeout`은 2번 단계에서 GitHub Actions runner가 EKS API에
+상태 조회를 하던 중 네트워크가 한 번 끊긴 상황이다. cluster가 죽은 것이 아니라
+`kubectl rollout status` 조회가 실패한 것이다. 그래서 `scripts/aws-up.sh`는
+management rollout 대상 목록 조회와 각 rollout status를 3번 재시도한다.
+3번 모두 실패하면 해당 resource의 `get -o wide`와 `describe`를 로그에 남겨
+실제 Pod/Replica 문제인지, API 연결 문제인지 바로 구분한다.
+
 ## 현재 AWS/GitHub 설정값
 
 비밀값 원문은 문서에 쓰지 않는다. 팀원이 확인해야 하는 것은 이름과 쓰임이다.
@@ -91,6 +111,14 @@ gh secret list --repo Jungle-303-04/final --env aws-test
 `Authorization: Bearer ...`, `CLOUDFLARE_API_TOKEN=...`처럼 붙여 넣어도
 `scripts/aws-up.sh`가 배포 중 순수 토큰만 뽑아서
 `Authorization: Bearer <token>` 형태로 정규화한다.
+그래도 token 형태가 아니면 AWS CD log에 실제 토큰 값은 숨기고
+`raw_length`, `normalized_length`, `allowed_bearer_charset`만 출력한다.
+이 메시지가 나오면 GitHub secret에 Cloudflare 화면의 raw API token만 다시 넣는다.
+잘못된 토큰 때문에 Cloudflare DNS를 갱신할 수 없어도 AWS/EKS 배포 자체는 실패시키지 않는다.
+이 경우 log에 `skipping Cloudflare DNS ... AWS LoadBalancer remains available`가 남고,
+smoke와 상태 확인은 AWS LoadBalancer URL로 계속 진행한다.
+단, `https://k8s.woonyong.org/healthz`는 올바른 Cloudflare token으로 DNS record가 만들어지기 전까지
+`error code: 1016`이 계속 날 수 있다.
 
 4. secret을 넣은 뒤 AWS CD를 다시 실행한다.
 
