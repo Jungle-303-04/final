@@ -276,32 +276,9 @@ DEFAULT_ROLE_PERMISSION_ROWS: tuple[tuple[str, str, str, str, str], ...] = tuple
     for permission in sorted(permissions)
 )
 
-LEGACY_RESOURCE_ROLE_MAP: dict[str, str] = {
-    "owner": ResourceRole.CLUSTER_STEWARD.value,
-    "maintainer": ResourceRole.INCIDENT_OPERATOR.value,
-    "deployer": ResourceRole.RELEASE_OPERATOR.value,
-    "viewer": ResourceRole.OBSERVER.value,
-    "admin": ResourceRole.CLUSTER_STEWARD.value,
-    "developer": ResourceRole.RELEASE_OPERATOR.value,
-}
-LEGACY_PERMISSION_ALIASES: dict[str, str] = {
-    "read": Permission.CLUSTER_READ.value,
-    "write": Permission.CONFIG_UPDATE.value,
-    "deploy": Permission.DEPLOY_RUN.value,
-    "admin": Permission.CLUSTER_ROLE_MANAGE.value,
-}
-
-READ_ACCESS = Permission.CLUSTER_READ.value
-WRITE_ACCESS = Permission.CONFIG_UPDATE.value
-DEPLOY_ACCESS = Permission.DEPLOY_RUN.value
-ADMIN_ACCESS = Permission.CLUSTER_ROLE_MANAGE.value
-
 
 def resource_role_allows_permission(role: str, permission: str) -> bool:
-    normalized_role = normalize_resource_role(role)
-    normalized_permission = LEGACY_PERMISSION_ALIASES.get(permission, permission)
-    return normalized_permission in RESOURCE_ROLE_PERMISSIONS.get(normalized_role, frozenset())
-
-
-def normalize_resource_role(role: str) -> str:
-    return LEGACY_RESOURCE_ROLE_MAP.get(role, role)
+    return Permission(permission).value in RESOURCE_ROLE_PERMISSIONS.get(
+        ResourceRole(role).value,
+        frozenset(),
+    )

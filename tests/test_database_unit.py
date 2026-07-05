@@ -30,6 +30,7 @@ from packages.contracts.gitops import (
     DEFAULT_REPOSITORY_ID,
     DEFAULT_WATCH_TARGET_ID,
 )
+from packages.contracts.identity import Permission, ResourceRole
 from packages.events.envelope import event
 from packages.storage import database as db
 from packages.storage import engine as storage_engine
@@ -69,6 +70,24 @@ def test_serialize_command_isoformats_lease() -> None:
 def test_manifest_artifact_compat_migration_adds_workspace_id() -> None:
     statement = storage_engine.MANIFEST_ARTIFACT_COMPAT_COLUMNS["workspace_id"]
     assert "alter table manifest_artifacts add column if not exists workspace_id text" == statement
+
+
+def test_role_permission_compat_migration_removes_legacy_aliases() -> None:
+    role_statement = storage_engine.MEMBER_RESOURCE_ROLE_MIGRATE_LEGACY_ROLES
+    permission_delete = storage_engine.ROLE_PERMISSION_DELETE_LEGACY_ALIAS_DUPLICATES
+    permission_update = storage_engine.ROLE_PERMISSION_MIGRATE_LEGACY_ALIASES
+
+    assert ResourceRole.OBSERVER.value in role_statement
+    assert ResourceRole.RELEASE_OPERATOR.value in role_statement
+    assert ResourceRole.INCIDENT_OPERATOR.value in role_statement
+    assert ResourceRole.CLUSTER_STEWARD.value in role_statement
+    assert "viewer" in role_statement
+    assert "developer" in role_statement
+    assert "duplicates" in permission_delete
+    assert Permission.CLUSTER_READ.value in permission_update
+    assert Permission.CONFIG_UPDATE.value in permission_update
+    assert Permission.DEPLOY_RUN.value in permission_update
+    assert Permission.CLUSTER_ROLE_MANAGE.value in permission_update
 
 
 def test_row_dict_copies_mapping() -> None:

@@ -15,11 +15,8 @@ from packages.contracts.gateway.requests import (
 from packages.contracts.gateway.responses import EmailVerificationResponse
 from packages.contracts.identity import (
     CLUSTER_STEWARD_PERMISSIONS,
-    DEPLOY_ACCESS,
-    READ_ACCESS,
     Permission,
     ResourceRole,
-    normalize_resource_role,
     resource_role_allows_permission,
 )
 from packages.events.envelope import event
@@ -189,17 +186,18 @@ def test_event_body_rejects_invalid_list_item_type() -> None:
 
 
 def test_resource_access_roles_are_action_scoped() -> None:
-    assert resource_role_allows_permission(ResourceRole.OBSERVER.value, READ_ACCESS)
-    assert not resource_role_allows_permission(ResourceRole.OBSERVER.value, DEPLOY_ACCESS)
-    assert resource_role_allows_permission(ResourceRole.RELEASE_OPERATOR.value, DEPLOY_ACCESS)
+    assert resource_role_allows_permission(
+        ResourceRole.OBSERVER.value, Permission.CLUSTER_READ.value
+    )
+    assert not resource_role_allows_permission(
+        ResourceRole.OBSERVER.value, Permission.DEPLOY_RUN.value
+    )
+    assert resource_role_allows_permission(
+        ResourceRole.RELEASE_OPERATOR.value, Permission.DEPLOY_RUN.value
+    )
 
 
-def test_resource_permission_profiles_keep_legacy_roles_compatible() -> None:
-    assert normalize_resource_role("viewer") == ResourceRole.OBSERVER.value
-    assert normalize_resource_role("deployer") == ResourceRole.RELEASE_OPERATOR.value
-    assert normalize_resource_role("maintainer") == ResourceRole.INCIDENT_OPERATOR.value
-    assert normalize_resource_role("owner") == ResourceRole.CLUSTER_STEWARD.value
-
+def test_resource_permission_profiles_require_canonical_roles() -> None:
     assert resource_role_allows_permission(
         ResourceRole.OBSERVER.value, Permission.CLUSTER_READ.value
     )
@@ -207,3 +205,6 @@ def test_resource_permission_profiles_keep_legacy_roles_compatible() -> None:
         ResourceRole.OBSERVER.value, Permission.DEPLOY_RUN.value
     )
     assert Permission.DANGEROUS_ACTION_APPROVE.value in CLUSTER_STEWARD_PERMISSIONS
+
+    with pytest.raises(ValueError):
+        resource_role_allows_permission("viewer", Permission.CLUSTER_READ.value)
