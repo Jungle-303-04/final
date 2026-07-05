@@ -118,3 +118,14 @@ def test_aws_smoke_uses_first_target_cluster_id_by_default() -> None:
     assert "SMOKE_CLUSTER_ID:" in workflow
     assert 'SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID_1}}"' in script
     assert "`SMOKE_CLUSTER_ID`" in runbook
+
+
+def test_smoke_retries_gateway_health_before_api_flow() -> None:
+    script = read("scripts/smoke.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert 'SMOKE_GATEWAY_ATTEMPTS="${SMOKE_GATEWAY_ATTEMPTS:-60}"' in script
+    assert 'SMOKE_GATEWAY_INTERVAL_SECONDS="${SMOKE_GATEWAY_INTERVAL_SECONDS:-5}"' in script
+    assert "wait_for_gateway" in script
+    assert 'curl -fsS "${BASE_URL}/healthz"' in script
+    assert "`SMOKE_GATEWAY_ATTEMPTS`" in runbook

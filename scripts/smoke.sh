@@ -31,6 +31,8 @@ SMOKE_COMMIT_SHA="${SMOKE_COMMIT_SHA:-}"
 AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID:-}}"
+SMOKE_GATEWAY_ATTEMPTS="${SMOKE_GATEWAY_ATTEMPTS:-60}"
+SMOKE_GATEWAY_INTERVAL_SECONDS="${SMOKE_GATEWAY_INTERVAL_SECONDS:-5}"
 COOKIE_JAR="$(mktemp)"
 WEBHOOK_RESPONSE="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}" "${WEBHOOK_RESPONSE}"' EXIT
@@ -50,6 +52,23 @@ require_env BASE_URL
 require_env AUTH_EMAIL
 require_env AUTH_PASSWORD
 require_env SMOKE_CLUSTER_ID
+
+wait_for_gateway() {
+  local attempt
+  local output=""
+  for attempt in $(seq 1 "${SMOKE_GATEWAY_ATTEMPTS}"); do
+    if output="$(curl -fsS "${BASE_URL}/healthz" 2>&1)"; then
+      printf '%s\n' "${output}"
+      return 0
+    fi
+    if [ "${attempt}" != "${SMOKE_GATEWAY_ATTEMPTS}" ]; then
+      sleep "${SMOKE_GATEWAY_INTERVAL_SECONDS}"
+    fi
+  done
+  echo "gateway did not become reachable at ${BASE_URL}/healthz" >&2
+  printf '%s\n' "${output}" >&2
+  return 1
+}
 
 load_management_config_value() {
   local key="$1"
@@ -147,8 +166,7 @@ PY
 }
 
 echo "==> checking gateway"
-curl -fsS "${BASE_URL}/healthz"
-echo
+wait_for_gateway
 
 echo "==> logging in operator"
 login_with_password "${BASE_URL}" "${COOKIE_JAR}"
