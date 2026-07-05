@@ -334,8 +334,8 @@ consumer:
 
 권한:
 
-- `/commands`: cluster `deploy` 필요
-- `/agent/debug/query`: cluster `read` 필요
+- `/commands`: cluster `deploy.run` 필요
+- `/agent/debug/query`: cluster `evidence.read` 필요
 - agent poll/start/heartbeat/result: `x-agent-token` 필요
 
 ## Safe PR schema
@@ -386,20 +386,18 @@ consumer:
 | `AuthSession` | `user_id` | 권한 검사 subject다. |
 | `AuthSession` | `roles` | account admin 여부를 판단한다. |
 | `AuthSession` | `workspace_id` | query/API 기본 tenant다. |
-| `ResourceAccessGrant` | `workspace_id` | 권한도 tenant 내부에서만 유효하다. |
-| `ResourceAccessGrant` | `subject_type` | 현재 구현은 user grant를 기준으로 평가한다. |
-| `ResourceAccessGrant` | `subject_id` | 사용자 ID다. |
-| `ResourceAccessGrant` | `resource_type` | `cluster`, `repository`, `deployment_binding` 등을 구분한다. |
-| `ResourceAccessGrant` | `resource_id` | 개별 resource ID다. |
-| `ResourceAccessGrant` | `role` | `owner`, `maintainer`, `deployer`, `viewer` 중 하나다. |
-| `ResourceAccessGrant` | `status` | active grant만 인정한다. |
+| `OrganizationMember` | `organization_id`, `user_id`, `role` | 사용자가 어느 조직의 소유자/관리자/구성원인지 나타낸다. |
+| `GroupMember` | `group_id`, `user_id`, `role` | 그룹 관리자/구성원 여부를 나타낸다. |
+| `ResourceAssignment` | `organization_id`, `group_id`, `resource_type`, `resource_id` | 특정 리소스를 조직의 특정 그룹에 배정한다. |
+| `MemberResourceRole` | `resource_assignment_id`, `user_id`, `role` | 사용자가 그 리소스에서 어떤 작업 책임을 가지는지 나타낸다. |
+| `RolePermission` | `organization_id`, `resource_type`, `role`, `permission` | 전역 기본 또는 조직별 리소스 역할 정책이다. |
 
 권한 함수:
 
 | 함수 | 어디에 쓰는가 | 왜 필요한가 |
 | --- | --- | --- |
 | `require_session` | 일반 사용자 API | 로그인 없이 접근하지 못하게 한다. |
-| `require_admin_session` | 사용자 승인, cluster policy 변경 | 계정 admin만 가능한 작업을 분리한다. |
+| `require_admin_session` | 사용자 승인, cluster policy 변경 | 서비스 최고 관리자만 가능한 작업을 분리한다. |
 | `require_cluster_agent` | agent route | body가 아니라 token registry 기준으로 cluster/workspace를 확정한다. |
 | `require_resource_access` | 새 dashboard/query API | backend 단건 권한 차단 기준이다. |
 | `require_cluster_access` | command/debug/approval/dashboard cluster API | cluster 권한 shortcut이다. |
@@ -482,8 +480,8 @@ status mapping은 `src/domains/dashboard/repository.py`의 `RCA_TIMELINE_STATUS_
 지킬 기준:
 
 - table query는 항상 `workspace_id`로 먼저 좁힌다.
-- cluster 목록은 `accessible_resource_ids(user_id, workspace_id, "cluster", "read")` 결과로 한 번 더 좁힌다.
-- `None`이 반환되면 workspace owner/admin이라 workspace 전체를 볼 수 있다는 뜻이다.
+- cluster 목록은 `accessible_resource_ids(user_id, workspace_id, "cluster", "rca.read")` 결과로 한 번 더 좁힌다.
+- `None`이 반환되면 서비스 최고 관리자라 전체 리소스를 볼 수 있다는 뜻이다.
 - set이 반환되면 그 resource ID만 조회한다.
 - frontend는 숨김/비활성화로 사용성을 개선할 뿐, 권한 차단은 backend가 한다.
 

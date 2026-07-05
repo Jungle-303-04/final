@@ -53,7 +53,7 @@ def test_session_cookie_is_httponly(monkeypatch: pytest.MonkeyPatch) -> None:
     router = load_file(ROOT / "src" / "domains" / "identity" / "router.py", "id_router")
     response = Response()
     session = SimpleNamespace(
-        token="secret-tok", user_id="u", roles=["admin"], workspace_id="default"
+        token="secret-tok", user_id="u", roles=["service_admin"], workspace_id="default"
     )
     router._set_session_cookie(response, session)
     cookie = response.headers["set-cookie"].lower()
