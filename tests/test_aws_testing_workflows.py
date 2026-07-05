@@ -134,6 +134,31 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert "`CLOUDFLARE_PROXIED`" in runbook
 
 
+def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> None:
+    script = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "management_rollout_resources()" in script
+    assert "management_rollout_status()" in script
+    assert "management rollout resource list failed (attempt ${attempt}/3); retrying" in script
+    assert (
+        "management rollout status failed for ${resource} (attempt ${attempt}/3); retrying"
+        in script
+    )
+    assert "management rollout status failed after 3 attempts: ${resource}" in script
+    assert (
+        'kubectl --context "${MGMT_CLUSTER}" -n management get "${resource}" -o wide || true'
+        in script
+    )
+    assert (
+        'kubectl --context "${MGMT_CLUSTER}" -n management describe "${resource}" || true' in script
+    )
+    assert 'management_rollout_status "${resource}"' in script
+    assert "done < <(management_rollout_resources)" in script
+    assert "TLS handshake timeout" in runbook
+    assert "3번 재시도" in runbook
+
+
 def test_aws_smoke_uses_first_target_cluster_id_by_default() -> None:
     workflow = read(".github/workflows/aws-cd.yml")
     script = read("scripts/aws-up.sh")

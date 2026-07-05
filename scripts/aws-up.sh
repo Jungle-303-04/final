@@ -570,6 +570,40 @@ EOF
     --dry-run=client -o yaml | kubectl --context "${context}" apply -f -
 }
 
+management_rollout_resources() {
+  local attempt
+  for attempt in 1 2 3; do
+    if kubectl --context "${MGMT_CLUSTER}" -n management get statefulset,deploy -o name; then
+      return 0
+    fi
+    if [[ "${attempt}" != "3" ]]; then
+      echo "management rollout resource list failed (attempt ${attempt}/3); retrying" >&2
+      sleep $((attempt * 10))
+    fi
+  done
+  echo "management rollout resource list failed after 3 attempts" >&2
+  kubectl --context "${MGMT_CLUSTER}" -n management get statefulset,deploy -o wide || true
+  return 1
+}
+
+management_rollout_status() {
+  local resource="$1"
+  local attempt
+  for attempt in 1 2 3; do
+    if kubectl --context "${MGMT_CLUSTER}" -n management rollout status "${resource}" --timeout=300s; then
+      return 0
+    fi
+    if [[ "${attempt}" != "3" ]]; then
+      echo "management rollout status failed for ${resource} (attempt ${attempt}/3); retrying" >&2
+      sleep $((attempt * 10))
+    fi
+  done
+  echo "management rollout status failed after 3 attempts: ${resource}" >&2
+  kubectl --context "${MGMT_CLUSTER}" -n management get "${resource}" -o wide || true
+  kubectl --context "${MGMT_CLUSTER}" -n management describe "${resource}" || true
+  return 1
+}
+
 apply_management_plane() {
   local overlay="${RUNTIME_DIR}/management-kustomization"
   local image_repo="${IMAGE_NAME%:*}"
@@ -596,8 +630,8 @@ EOF
   log "waiting for management rollouts"
   while IFS= read -r resource; do
     [[ -n "${resource}" ]] || continue
-    kubectl --context "${MGMT_CLUSTER}" -n management rollout status "${resource}" --timeout=300s
-  done < <(kubectl --context "${MGMT_CLUSTER}" -n management get statefulset,deploy -o name)
+    management_rollout_status "${resource}"
+  done < <(management_rollout_resources)
 
   log "exposing api-gateway with LoadBalancer"
   kubectl --context "${MGMT_CLUSTER}" -n management patch svc api-gateway --type merge \
