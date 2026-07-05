@@ -119,6 +119,15 @@ class EvidenceJobResultResponse(StrictModel):
     correlation_id: str | None = None
 
 
+class InventorySnapshotResponse(StrictModel):
+    accepted: bool
+    snapshot_id: str
+    cluster_id: str
+    resource_count: int
+    marked_deleted: int = 0
+    resource_types: list[str] = Field(default_factory=list)
+
+
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str

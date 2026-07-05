@@ -1,0 +1,90 @@
+"""Inventory read model tables for multi-cluster Kubernetes resources."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import BigInteger, Index, Integer, Text
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
+from sqlalchemy.orm import Mapped, mapped_column
+
+from packages.storage.base import (
+    Base,
+    created_at_column,
+    jsonb_column,
+    text_column,
+    updated_at_column,
+)
+
+
+class ClusterInventorySnapshotRecord(Base):
+    __tablename__ = "cluster_inventory_snapshots"
+    __table_args__ = (
+        Index("ix_inventory_snapshots_scope", "workspace_id", "cluster_id", "created_at"),
+    )
+
+    snapshot_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    agent_id: Mapped[str] = text_column()
+    source: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    collected_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    resource_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    summary: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+
+
+class ClusterInventoryResourceRecord(Base):
+    __tablename__ = "cluster_inventory_resources"
+    __table_args__ = (
+        Index(
+            "ix_inventory_resources_scope",
+            "workspace_id",
+            "cluster_id",
+            "resource_type",
+            "namespace",
+            "name",
+        ),
+        Index("ix_inventory_resources_health", "workspace_id", "cluster_id", "health"),
+        Index("ix_inventory_resources_deleted", "workspace_id", "cluster_id", "deleted_at"),
+    )
+
+    inventory_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    snapshot_id: Mapped[str] = text_column()
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    resource_type: Mapped[str] = text_column()
+    api_version: Mapped[str] = text_column()
+    kind: Mapped[str] = text_column()
+    namespace: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name: Mapped[str] = text_column()
+    uid: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resource_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = text_column()
+    health: Mapped[str] = text_column()
+    labels: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    annotations: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    summary: Mapped[dict[str, Any]] = jsonb_column()
+    raw: Mapped[dict[str, Any]] = jsonb_column()
+    observed_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    first_seen_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    last_seen_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    deleted_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class ClusterUsageSampleRecord(Base):
+    __tablename__ = "cluster_usage_samples"
+    __table_args__ = (
+        Index("ix_cluster_usage_samples_scope", "workspace_id", "cluster_id", "sampled_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[str] = text_column()
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    sampled_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    usage: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
