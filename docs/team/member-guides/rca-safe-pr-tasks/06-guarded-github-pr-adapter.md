@@ -2,7 +2,9 @@
 
 ## 목표
 
-Fake GitHub adapter를 먼저 만들고, 실제 PR 생성은 feature flag와 token reference 검증 뒤에서만 실행한다.
+`scm-worker`가 `safe_pr.requested`를 받아 `GithubScmProvider`로 실제 GitHub branch,
+commit, PR 생성을 처리하게 한다. 외부 호출은 token reference, repo allowlist,
+provider 설정 검증 뒤에만 실행한다.
 
 ## 먼저 읽을 파일
 
@@ -23,14 +25,15 @@ Fake GitHub adapter를 먼저 만들고, 실제 PR 생성은 feature flag와 tok
 ## 선형 절차
 
 1. `PullRequestClient` Protocol을 정의한다.
-2. `FakePullRequestClient`를 먼저 구현한다.
-3. 실제 client skeleton은 만들 수 있지만 기본 실행 경로에 넣지 않는다.
-4. `SAFE_PR_WRITE_ENABLED` feature flag를 둔다.
-5. feature flag off에서는 provider write 없이 skipped/proposal-only 결과를 남긴다.
-6. 실제 write 경로는 token 원문이 아니라 credential/token reference를 받게 한다.
-7. PR 생성 결과 event에는 PR URL, branch, commit SHA 같은 reference만 남긴다.
-8. 같은 proposal 재처리 시 중복 PR이 생기지 않도록 idempotency key를 둔다.
-9. feature-flag-off, fake write success, 권한 실패 테스트를 추가한다.
+2. 현재 구현 기준에서는 `packages.contracts.scm.provider.ScmProvider`와
+   `GithubScmProvider.create_pull_request()`를 먼저 확인한다.
+3. `SCM_PROVIDER=github`, `SCM_REPO`, `GITHUB_TOKEN_REF` 또는 `GITHUB_TOKEN` 설정을 정한다.
+4. provider 이름이 registry에 없으면 worker가 fail-fast해야 한다.
+5. token/repo가 없으면 worker 부팅 실패가 아니라 요청별 `safe_pr.failed`로 남긴다.
+6. 실제 write 경로는 token 원문이 아니라 `TokenVaultPort`/`SecretRef`를 통해 읽는다.
+7. PR 생성 결과 event에는 PR URL, provider, mode 같은 reference만 남긴다.
+8. 같은 proposal 재처리 시 branch/contents/PR 422를 멱등 성공으로 처리한다.
+9. missing credential, unsafe path, provider mismatch, injected transport success 테스트를 추가한다.
 
 ## 예시 인터페이스
 
@@ -42,8 +45,8 @@ class PullRequestClient(Protocol):
 ## 검증
 
 ```bash
-uv run pytest tests/test_repo_gateway_worker.py
-uv run ruff check src tests
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_repo_gateway_worker.py -q
+PYTHONPATH=src .venv/bin/ruff check src tests
 ```
 
 테스트 파일명이 다르면 SCM worker의 safe PR 생성 테스트를 실행한다.
@@ -51,8 +54,8 @@ uv run ruff check src tests
 ## 완료 기준
 
 - 기본 설정에서 실제 GitHub write가 일어나지 않는다.
-- fake adapter로 `safe_pr.created` 흐름을 테스트할 수 있다.
-- feature flag off가 fail-closed로 검증된다.
+- `GithubScmProvider`는 주입 가능한 HTTP transport로 `safe_pr.created` 흐름을 검증할 수 있다.
+- 자격 증명 누락, provider mismatch, 안전하지 않은 path가 `safe_pr.failed`로 검증된다.
 - PAT, provider token, kubeconfig가 event/log/audit에 남지 않는다.
 
 ## 다음 작업

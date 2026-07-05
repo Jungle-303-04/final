@@ -197,7 +197,7 @@ class AccessPolicy:
    - 같은 repo/branch/commit은 중복 `git.changed`를 발행하지 않는다.
 
 2. `feat/jeonwoohyun-hydromel/manifest-render-port`
-   - renderer를 Protocol로 두고 fake renderer와 real renderer를 분리한다.
+   - renderer를 Protocol로 두고 deterministic test renderer와 production renderer를 분리한다.
 
 3. `feat/jeonwoohyun-hydromel/desired-diff-structure`
    - diff body에 `action`, `resource`, `namespace`, `risk_reason`을 구조화한다.
@@ -213,7 +213,7 @@ class ManifestRenderer(Protocol):
     async def render(self, repo_ref: str, commit_sha: str, path: str) -> RenderedManifest: ...
 
 
-class FakeManifestRenderer:
+class DeterministicManifestRenderer:
     async def render(self, repo_ref: str, commit_sha: str, path: str) -> RenderedManifest:
         return RenderedManifest(
             repo_ref=repo_ref,
@@ -351,7 +351,7 @@ async def decide_safe_pr(body: RcaCompletedBody, ctx: EventContext[RcaStore]):
    - raw payload 전체가 아니라 bounded summary evidence로 축약.
 
 5. `feat/minmings111/telemetry-install-adapter`
-   - fake telemetry 제거 전 실제 Prometheus/Loki/OTel adapter 설치 경계 문서화.
+   - Prometheus/Loki/Tempo/Kubernetes provider 설치 경계 문서화.
    - cluster-agent가 node collector를 관리한다는 현재 구조는 유지.
 
 예시: node collector metric port.

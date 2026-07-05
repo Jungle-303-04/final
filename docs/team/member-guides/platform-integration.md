@@ -90,7 +90,7 @@ Infrastructure
 | Phase | PR 목표 | 왜 이 단위인가 |
 | --- | --- | --- |
 | 1 | 이벤트 계약 문서/예제 정비 | 팀원이 subject/body를 보고 구현할 수 있게 한다. |
-| 2 | Worker template/fake runtime test helper | 새 worker 테스트를 쉽게 만든다. |
+| 2 | Worker template/runtime test helper | 새 worker 테스트를 쉽게 만든다. |
 | 3 | Contract test 추가 | subject/body 변경 회귀를 잡는다. |
 | 4 | CI dependency/runtime gap 제거 | 로컬/CI/Docker 차이로 부팅 실패를 막는다. |
 | 5 | Smoke test 강화 | import만이 아니라 최소 event path를 검증한다. |
@@ -141,7 +141,7 @@ Phase 9 이후의 release gate는 [hardening-roadmap](../../hardening-roadmap.md
 - body DTO `to_body()`/`from_body()` round-trip smoke.
 - docs 링크 깨짐 없음.
 
-## Phase 2. Worker template/fake runtime test helper
+## Phase 2. Worker template/runtime test helper
 
 목표:
 
@@ -160,19 +160,19 @@ Phase 9 이후의 release gate는 [hardening-roadmap](../../hardening-roadmap.md
 - `load_service` — `app.py`를 로드해 `App`을 꺼낸다.
 - `run_handler` — 핸들러를 envelope로 호출하고 yield된 body를 모은다.
 - `subjects_of` — yield된 body들의 subject 목록을 뽑는다.
-- `SpyDb` — DB 호출을 기록하는 fake.
+- `SpyDb` — DB 호출을 기록하는 test double.
 - worker test 예제 하나.
 
 생각할 것:
 
 - helper가 production 코드에 섞이지 않는가?
 - correlation_id/causation_id 기본값이 테스트에서 예측 가능한가?
-- fake가 너무 많은 behavior를 숨기지 않는가?
+- test double이 너무 많은 behavior를 숨기지 않는가?
 
 하지 말 것:
 
 - 단위 테스트에서 실제 NATS/Postgres를 기본으로 요구하지 않는다.
-- fake를 실제 런타임 adapter처럼 복잡하게 만들지 않는다.
+- test double을 실제 런타임 adapter처럼 복잡하게 만들지 않는다.
 
 테스트:
 
@@ -270,7 +270,7 @@ Gateway -> event -> worker -> DB/read model 중 최소 한 줄이 실제로 흐�
 구현할 것:
 
 - local smoke script.
-- fake webhook 또는 fake evidence input.
+- sample webhook 또는 sample evidence input.
 - expected event/read model 확인.
 - failure log 출력 개선.
 
@@ -325,7 +325,7 @@ Gateway -> event -> worker -> DB/read model 중 최소 한 줄이 실제로 흐�
 테스트:
 
 - handler failure -> retry -> DLQ.
-- replay API fake path.
+- replay API test path.
 
 ## Phase 7. Outbox 도입 판단 문서
 

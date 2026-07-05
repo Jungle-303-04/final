@@ -588,7 +588,7 @@ Frontend
 | frontend app | 현재 이 repo에는 없다 |
 | realtime-gateway | 있다. target live summary 같은 실시간 경계는 참고할 수 있다 |
 
-그래서 문서나 화면에서 `/dashboard/query` 같은 오래된 가상 route를 쓰면 안 된다.
+그래서 문서나 화면은 현재 구현된 `/dashboard/rca/*` route만 기준으로 잡는다.
 찬빈 작업은 현재 구현된 `/dashboard/rca/*` API를 기준으로 UI를 붙이고, 필요한 summary/stream만 작게 확장하는 작업이다.
 
 ### 찬빈이 바로 열어볼 파일
@@ -656,7 +656,7 @@ Frontend
 
 - frontend에서 DB를 직접 조회하지 않는다.
 - frontend에서 NATS subject를 직접 구독하지 않는다.
-- 오래된 `/dashboard/query`를 쓰지 않고 `/dashboard/rca/*` API를 기준으로 한다.
+- 현재 구현된 `/dashboard/rca/*` API를 기준으로 한다.
 - `safe_pr.requested`에 PR URL이 있다고 가정하지 않는다.
 - RCA body에 화면 전용 임시 필드를 몰래 추가하지 않는다.
 - 임시 데이터를 제품 경로의 성공처럼 보여주지 않는다.

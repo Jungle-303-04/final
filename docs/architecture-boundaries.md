@@ -67,7 +67,7 @@ command   ◀── alert
 
 3계층에 그대로 매핑한다:
 - `services/ai/<agent>-worker/` — 에이전트 프로세스 entrypoint(예: `ai/rca-worker`).
-- `packages/ai/` — 공유 LLM 인프라(`LlmClient` 포트 + `FakeLlmClient` 어댑터 + `AiAgent` 베이스). 모든 에이전트가 재사용.
+- `packages/ai/` — 공유 LLM 인프라(`LlmClient` 포트 + provider adapter + `AiAgent` 베이스). 모든 에이전트가 재사용.
 - `domains/<capability>/` — 각 능력의 로직(events·정책). 예: `domains/rca`.
 
 ## 6. 검사 실행

@@ -33,7 +33,7 @@
 | 정책 갱신 | `PUT /clusters/{cluster_id}/policy`; 기존 정책과 부분 merge한다. |
 | agent reconcile 확인 | agent status/reconcile endpoint와 dashboard projection을 연결한다. |
 | GitOps 앱 연결 | repository/watch target/deployment binding 등록 후 Git webhook 또는 poller가 흐름을 시작한다. |
-| provider 선택 | `GET /providers/catalog`로 선택지를 그리고, 저장/실행 전 `POST /providers/validate`로 미구현 provider와 credential ref 오류를 막는다. |
+| provider 선택 | `GET /providers/catalog`로 선택지를 그리고, 저장/실행 전 `POST /providers/validate`로 지원하지 않는 provider와 credential ref 오류를 막는다. |
 
 ## Provider registry
 
@@ -46,7 +46,7 @@
 | cloud | `existing-k8s`, `local`, `aws` | `gcp`, `azure` |
 | secret | `env`, `k8s-secret`, `aws-sm` | `vault`, `gcp-sm` |
 
-미구현 항목은 UI에 "준비 중"으로 보여줄 수는 있지만, `POST /providers/validate`와 런타임
+지원하지 않는 항목은 UI에 "준비 중"으로 보여줄 수는 있지만, `POST /providers/validate`와 런타임
 검증에서는 실패한다. 더미 성공 경로를 만들지 않는다.
 
 ## 클라우드 선택성

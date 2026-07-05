@@ -1,4 +1,4 @@
-# 03. RCA Result와 Fake Analyzer
+# 03. RCA Result와 Deterministic Analyzer
 
 ## 목표
 
@@ -24,7 +24,7 @@
 
 1. `RcaAnalyzer` Protocol을 둔다.
 2. `RcaResult` DTO를 만든다.
-3. `FakeRcaAnalyzer` 또는 deterministic analyzer를 만든다.
+3. 동일 입력에 항상 같은 결과를 내는 deterministic analyzer를 만든다.
 4. `RcaResult`에는 최소한 아래 필드를 둔다.
    - `status`
    - `summary`
@@ -34,7 +34,7 @@
    - `recommended_fix`
 5. evidence signal이 부족하면 `completed`가 아니라 `insufficient`를 반환한다.
 6. `evidence_refs`가 비어 있으면 confidence를 높게 주지 않는다.
-7. fake analyzer가 같은 입력에 항상 같은 결과를 반환하는 테스트를 추가한다.
+7. deterministic analyzer가 같은 입력에 항상 같은 결과를 반환하는 테스트를 추가한다.
 
 ## 예시 코드 모양
 
@@ -43,7 +43,7 @@ class RcaAnalyzer(Protocol):
     async def analyze(self, evidence: Evidence) -> RcaResult: ...
 
 
-class FakeRcaAnalyzer:
+class DeterministicRcaAnalyzer:
     async def analyze(self, evidence: Evidence) -> RcaResult:
         if not evidence.symptoms:
             return RcaResult.insufficient("incident signal not found")

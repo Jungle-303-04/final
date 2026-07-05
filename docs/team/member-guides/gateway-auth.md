@@ -392,7 +392,7 @@ worker/service가 vault나 credential 저장소를 직접 읽지 못하게 한�
 - `TokenBroker` Protocol.
 - `IssuedCredential`.
 - `DefaultTokenBroker.issue(request)`.
-- fake/in-memory vault.
+- in-memory vault test double.
 - secret access audit hook 또는 최소 log.
 
 생각할 것:
@@ -929,7 +929,7 @@ updated_at timestamptz not null
 
 - 실제 secret은 `credentials.secret_ref`가 가리키는 vault에만 둔다.
 - `credentials` 테이블에 raw token, password, kubeconfig, connection string을 넣지 않는다.
-- 현재 `token_vault`는 fake vault로 유지할 수 있지만, 새 설계에서는 `SecretVault` adapter 뒤로 숨긴다.
+- 현재 `token_vault`는 `SecretVault` adapter 뒤로 숨겨서 worker가 저장소 구현을 직접 알지 않게 한다.
 
 ## 10. API 설계
 
@@ -2277,7 +2277,7 @@ RCA worker
 -> GitHub adapter 호출
 ```
 
-처음 구현은 Gateway/Auth 담당이 fake TokenBroker까지 만든다.
+처음 구현은 Gateway/Auth 담당이 in-memory TokenBroker test double까지 만든다.
 
 `InMemorySecretVault`
 
@@ -2365,7 +2365,7 @@ OAuth와 별개로 우리 서비스 자체 로그인을 받을 준비를 한다.
 3. `src/packages/contracts/gateway/requests.py`에 `LoginRequest` 추가.
 4. `src/packages/contracts/gateway/fields.py`에 필요한 response field가 없으면 추가.
 5. `src/services/gateway/api-gateway/gateway.py`에 route skeleton 추가.
-6. route skeleton은 아직 `501 not implemented` 또는 fake success가 아니라, 다음 PR에서 구현한다고 명확히 테스트한다.
+6. route skeleton은 임시 성공 응답이 아니라, 다음 PR에서 구현한다고 명확히 테스트한다.
 
 LoginRequest:
 
@@ -2524,7 +2524,7 @@ project role:
 7. `/integrations/targets` route 추가.
 8. `/credentials` route 추가.
 9. `/credential-bindings` route 추가.
-10. credential 등록 시 secret은 fake vault 또는 `token_vault` 뒤에 저장하고 response에는 내보내지 않는다.
+10. credential 등록 시 secret은 `SecretVault` 또는 `token_vault` 뒤에 저장하고 response에는 내보내지 않는다.
 
 완료 조건:
 

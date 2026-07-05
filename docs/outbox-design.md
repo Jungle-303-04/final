@@ -132,7 +132,7 @@ async def on_git_changed(evt, ctx: EventContext[RepoChangeStore]):
 ## 단계별 도입 (이 순서로 머지, 각 단계 스모크)
 
 1. **[이 커밋] 골격**: outbox 테이블 · Outbox 포트 · OutboxRelay ·
-   `publish_envelope` · fake 테스트. 임계경로 미변경(기존 직접 발행 유지).
+   `publish_envelope` · in-memory 테스트. 임계경로 미변경(기존 직접 발행 유지).
 2. **async write path**: 워커-쓰기 DB 메서드 async 버전 + `async_connection` 이
    contextvar 커넥션 사용. `make up` 스모크.
 3. **UoW + EventProcessor flip**: 수집-적재-완료 한 트랜잭션. `make up` 스모크.
@@ -140,5 +140,5 @@ async def on_git_changed(evt, ctx: EventContext[RepoChangeStore]):
 
 ## 검증
 
-- 1단계: fake(in-memory outbox + FakeBus)로 relay 동작 단위 테스트.
+- 1단계: in-memory outbox와 test bus로 relay 동작 단위 테스트.
 - 2~4단계: 실DB/NATS 필요 → `make up && make smoke`(크래시 주입 시 효과 1회 확인).
