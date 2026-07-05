@@ -109,6 +109,7 @@ def test_event_uses_standard_envelope_fields() -> None:
         "causation_id",
         "created_at",
         "payload",
+        "schema_version",
     }
     assert created.correlation_id == "corr-2"
     assert created.causation_id == "parent-event-1"

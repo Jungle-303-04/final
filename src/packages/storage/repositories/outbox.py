@@ -33,6 +33,7 @@ class OutboxRepository(DatabaseConnection):
                     causation_id=evt.causation_id,
                     occurred_at=evt.created_at,
                     payload=evt.payload,
+                    schema_version=evt.schema_version,
                     lease_id=None,
                     leased_until=None,
                 )
@@ -70,6 +71,7 @@ class OutboxRepository(DatabaseConnection):
                     "causation_id": r["causation_id"],
                     "created_at": r["occurred_at"],
                     "payload": r["payload"],
+                    "schema_version": r["schema_version"],
                 }
             )
             for r in rows
