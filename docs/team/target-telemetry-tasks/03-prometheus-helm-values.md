@@ -7,7 +7,8 @@ real Prometheus 설치 준비를 위해 secret 없는 Helm values 초안을 만�
 ## 먼저 읽을 파일
 
 - [02. Observability 설치 경계](02-observability-stack-boundary.md)
-- `docs/team/member-guides/target-telemetry-prometheus-runbook.md`
+- `deploy/target/prometheus.yaml`
+- `scripts/install-telemetry.sh`
 
 ## 수정 후보
 

@@ -11,7 +11,8 @@ provider 설정 검증 뒤에만 실행한다.
 - `src/services/gitops/scm-worker/app.py`
 - `src/domains/scm`
 - `src/packages/contracts/auth.py`
-- `docs/team/member-guides/gateway-auth.md`의 Token Broker 관련 부분
+- `docs/secrets.md`
+- `docs/rca-production-onboarding/06-chanbin-permission-dashboard.md`
 - [05. Safe PR Proposal](05-safe-pr-proposal.md)
 
 ## 수정 후보
