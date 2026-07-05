@@ -102,14 +102,27 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     runbook = read("docs/aws-testing-runbook.md")
 
     assert "CLOUDFLARE_PROXIED: ${{ vars.CLOUDFLARE_PROXIED || '1' }}" in workflow
+    assert "concurrency:" in workflow
+    assert "group: aws-cd-${{ github.ref_name }}" in workflow
+    assert "cancel-in-progress: true" in workflow
     assert 'CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"' in script
     assert '"proxied": ${proxied}' in script
     assert '"ttl": ${ttl}' in script
     assert "cloudflare_api_token_value" in script
     assert "cloudflare_authorization_value" in script
-    assert "cloudflare_api_token\\s*=\\s*" in script
+    assert "cloudflare_api_token\\s*[:=]\\s*" in script
     assert "authorization\\s*:\\s*" in script
     assert "bearer\\s+([^\\s\\\"']+)" in script
+    assert "[A-Za-z0-9._~+/=-]{20,}" in script
+    assert "cloudflare_validate_api_token" in script
+    assert "raw_length=" in script
+    assert "normalized_length=" in script
+    assert "allowed_bearer_charset=" in script
+    assert (
+        "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; AWS LoadBalancer remains available" in script
+    )
+    assert "zone lookup failed" in script
+    assert "DNS record lookup failed" in script
     assert 'value.lower().startswith("bearer")' in script
     assert "if not ch.isspace()" in script
     assert "printf 'Bearer %s\\n'" in script
@@ -119,6 +132,31 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert "Cloudflare API ${method} failed with HTTP ${http_code}" in script
     assert 'scheme="https"' in script
     assert "`CLOUDFLARE_PROXIED`" in runbook
+
+
+def test_aws_management_rollout_status_retries_transient_eks_api_errors() -> None:
+    script = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "management_rollout_resources()" in script
+    assert "management_rollout_status()" in script
+    assert "management rollout resource list failed (attempt ${attempt}/3); retrying" in script
+    assert (
+        "management rollout status failed for ${resource} (attempt ${attempt}/3); retrying"
+        in script
+    )
+    assert "management rollout status failed after 3 attempts: ${resource}" in script
+    assert (
+        'kubectl --context "${MGMT_CLUSTER}" -n management get "${resource}" -o wide || true'
+        in script
+    )
+    assert (
+        'kubectl --context "${MGMT_CLUSTER}" -n management describe "${resource}" || true' in script
+    )
+    assert 'management_rollout_status "${resource}"' in script
+    assert "done < <(management_rollout_resources)" in script
+    assert "TLS handshake timeout" in runbook
+    assert "3번 재시도" in runbook
 
 
 def test_aws_smoke_uses_first_target_cluster_id_by_default() -> None:
