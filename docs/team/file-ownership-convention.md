@@ -145,7 +145,7 @@
 담당자: `ummfieg`
 
 목표: evidence 기반 incident/RCA 흐름, Safe PR 요청, audit timeline을 관리한다.
-dashboard projection은 아직 구현되지 않은 planned 영역이다.
+dashboard projection은 현재 구현되어 있고, RCA/Safe PR event가 화면 read model로 이어지는지 같이 확인한다.
 
 직접 관리 파일:
 
@@ -153,13 +153,13 @@ dashboard projection은 아직 구현되지 않은 planned 영역이다.
 | --- | --- |
 | RCA domain | `src/domains/rca/*.py` |
 | SCM domain | `src/domains/scm/*.py` |
-| projection domain | `src/domains/audit/*.py`; dashboard projection domain은 planned |
+| projection domain | `src/domains/audit/*.py`, `src/domains/dashboard/*.py` |
 | alert event | `src/domains/alert/events.py` |
 | RCA worker | `src/services/ai/rca-worker/app.py` |
 | SCM worker | `src/services/gitops/scm-worker/app.py` |
-| projection workers | `src/services/projection/audit-worker/app.py`; dashboard worker는 planned |
+| projection workers | `src/services/projection/audit-worker/app.py`, `src/services/projection/dashboard-worker/app.py` |
 | alert worker | `src/services/alert/alert-worker/app.py` |
-| RCA/projection tests | `tests/test_rca_evidence.py`, `tests/test_projection.py`, `tests/test_alert_worker.py`, `tests/test_metrics.py`, `tests/test_multi_subscription.py` |
+| RCA/projection tests | `tests/test_rca_evidence.py`, `tests/test_projection.py`, `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py`, `tests/test_alert_worker.py`, `tests/test_metrics.py`, `tests/test_multi_subscription.py` |
 | 문서 | `docs/team/member-guides/rca-safe-pr.md` |
 
 반드시 알아야 하는 파일:

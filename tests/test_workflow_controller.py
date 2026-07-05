@@ -14,6 +14,7 @@ from domains.gitops.events import (
     DesiredDesiredDiffDetectedBody,
     Diff,
     DiffAnalyzedBody,
+    GitChangedBody,
     GitWebhookReceivedBody,
     ManifestRenderedBody,
     RenderedManifest,
@@ -24,6 +25,7 @@ from domains.gitops.repository import (
     derive_deployment_binding_id,
     derive_repository_id,
     derive_watch_target_id,
+    derive_workflow_run_id,
 )
 from domains.scm.events import SafePrFailedBody
 from packages.config.constants import CommandStatus, Sandbox, Target
@@ -324,6 +326,47 @@ def test_workflow_controller_does_not_upsert_application_from_resource_diff() ->
     assert not db.called("upsert_application")
     assert not db.called("start_workflow_run")
     assert db.called("update_workflow_run")
+
+
+def test_workflow_controller_uses_canonical_application_from_repository() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(upsert_application={"application_id": "app-canonical"})
+
+    outs = run_handler(
+        workflow.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            repo_ref="org/checkout",
+            watch_target_id="watch-1",
+            binding_id="binding-1",
+            application_id="app-stale",
+            workflow_run_id="workflow-stale",
+            manifest_path="deploy/app.yaml",
+        ),
+        db,
+    )
+    start_calls = [args[0] for name, args in db.calls if name == "start_workflow_run"]
+    expected_workflow_run_id = derive_workflow_run_id(
+        {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "repo_ref": "org/checkout",
+            "watch_target_id": "watch-1",
+            "binding_id": "binding-1",
+            "application_id": "app-canonical",
+            "manifest_path": "deploy/app.yaml",
+            "commit_sha": "abc123",
+        }
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded"]
+    assert start_calls[0]["application_id"] == "app-canonical"
+    assert start_calls[0]["workflow_run_id"] == expected_workflow_run_id
+    assert outs[0].application_id == "app-canonical"
 
 
 def test_workflow_controller_links_command_lifecycle_to_run() -> None:

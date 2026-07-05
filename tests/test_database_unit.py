@@ -18,6 +18,7 @@ from sqlalchemy.dialects import postgresql
 from domains import registry
 from domains.gitops.repository import (
     RepoChangeRepository,
+    derive_application_id,
     derive_deployment_binding_id,
     derive_repository_id,
     derive_watch_target_id,
@@ -449,6 +450,98 @@ def _capture_workflow_statements() -> tuple[Any, list[Any]]:
     repository = object.__new__(RepoChangeRepository)
     repository.connection = fake_connection  # type: ignore[method-assign]
     return repository, recorded
+
+
+def _capture_application_statements(
+    existing_application_id: str | None = None,
+) -> tuple[Any, list[Any]]:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def __init__(self, value: str | None = None) -> None:
+            self.value = value
+
+        def scalar_one_or_none(self) -> str | None:
+            return self.value
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            if len(recorded) == 1:
+                return FakeResult(existing_application_id)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+    return repository, recorded
+
+
+def test_application_id_uses_repo_name_hint_when_name_is_absent() -> None:
+    app_id = derive_application_id(
+        {
+            "workspace_id": "workspace-1",
+            "repo_ref": "org/checkout",
+            "manifest_path": "deploy/app.yaml",
+        }
+    )
+    same_id = derive_application_id(
+        {
+            "workspace_id": "workspace-1",
+            "repo_ref": "org/checkout",
+            "manifest_path": "deploy/app.yaml",
+            "name": "checkout",
+        }
+    )
+
+    assert app_id == same_id
+
+
+def test_upsert_application_reuses_existing_product_identity() -> None:
+    repository, recorded = _capture_application_statements(existing_application_id="app-existing")
+
+    result = repository.upsert_application(
+        {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "application_id": "app-new",
+            "name": "checkout-api",
+            "manifest_path": "deploy/app.yaml",
+        }
+    )
+
+    select_sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+    update_sql = str(recorded[1].compile(dialect=postgresql.dialect()))
+
+    assert result["application_id"] == "app-existing"
+    assert len(recorded) == 2
+    assert "FROM applications" in select_sql
+    assert "applications.workspace_id" in select_sql
+    assert "applications.repository_id" in select_sql
+    assert "applications.name" in select_sql
+    assert "UPDATE applications" in update_sql
+    assert "ON CONFLICT" not in update_sql
+
+
+def test_upsert_application_keeps_application_id_conflict_for_renames() -> None:
+    repository, recorded = _capture_application_statements()
+
+    repository.upsert_application(
+        {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "application_id": "app-1",
+            "name": "checkout-api",
+            "manifest_path": "deploy/app.yaml",
+        }
+    )
+
+    sql = str(recorded[1].compile(dialect=postgresql.dialect()))
+
+    assert "ON CONFLICT (application_id) DO UPDATE" in sql
 
 
 def test_start_workflow_run_upsert_guards_status_transition() -> None:
