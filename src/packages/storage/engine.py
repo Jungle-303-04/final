@@ -14,6 +14,8 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     GLOBAL_ROLE_POLICY_ORGANIZATION_ID,
+    Permission,
+    ResourceRole,
     ServiceRole,
 )
 from packages.storage.schema import (
@@ -224,6 +226,94 @@ end $$;
 ROLE_PERMISSION_SCOPED_UNIQUE = """
 create unique index if not exists ux_role_permissions_organization_resource_role_permission
 on role_permissions (organization_id, resource_type, role, permission)
+"""
+MEMBER_RESOURCE_ROLE_MIGRATE_LEGACY_ROLES = f"""
+update member_resource_roles
+set role = case role
+    when 'owner' then '{ResourceRole.CLUSTER_STEWARD.value}'
+    when 'admin' then '{ResourceRole.CLUSTER_STEWARD.value}'
+    when 'maintainer' then '{ResourceRole.INCIDENT_OPERATOR.value}'
+    when 'deployer' then '{ResourceRole.RELEASE_OPERATOR.value}'
+    when 'developer' then '{ResourceRole.RELEASE_OPERATOR.value}'
+    when 'viewer' then '{ResourceRole.OBSERVER.value}'
+    else role
+end,
+updated_at = now()
+where role in ('owner', 'admin', 'maintainer', 'deployer', 'developer', 'viewer')
+"""
+ROLE_PERMISSION_DELETE_LEGACY_ALIAS_DUPLICATES = f"""
+with mapped as (
+    select
+        id,
+        organization_id,
+        resource_type,
+        case role
+            when 'owner' then '{ResourceRole.CLUSTER_STEWARD.value}'
+            when 'admin' then '{ResourceRole.CLUSTER_STEWARD.value}'
+            when 'maintainer' then '{ResourceRole.INCIDENT_OPERATOR.value}'
+            when 'deployer' then '{ResourceRole.RELEASE_OPERATOR.value}'
+            when 'developer' then '{ResourceRole.RELEASE_OPERATOR.value}'
+            when 'viewer' then '{ResourceRole.OBSERVER.value}'
+            else role
+        end as migrated_role,
+        case permission
+            when 'read' then '{Permission.CLUSTER_READ.value}'
+            when 'write' then '{Permission.CONFIG_UPDATE.value}'
+            when 'deploy' then '{Permission.DEPLOY_RUN.value}'
+            when 'admin' then '{Permission.CLUSTER_ROLE_MANAGE.value}'
+            else permission
+        end as migrated_permission
+    from role_permissions
+    where role in ('owner', 'admin', 'maintainer', 'deployer', 'developer', 'viewer')
+       or permission in ('read', 'write', 'deploy', 'admin')
+),
+ranked as (
+    select
+        id,
+        row_number() over (
+            partition by organization_id, resource_type, migrated_role, migrated_permission
+            order by id
+        ) as duplicate_rank
+    from mapped
+),
+duplicates as (
+    select id from ranked where duplicate_rank > 1
+    union
+    select mapped.id
+    from mapped
+    join role_permissions existing
+      on existing.id <> mapped.id
+     and existing.organization_id = mapped.organization_id
+     and existing.resource_type = mapped.resource_type
+     and existing.role = mapped.migrated_role
+     and existing.permission = mapped.migrated_permission
+    where existing.role not in ('owner', 'admin', 'maintainer', 'deployer', 'developer', 'viewer')
+      and existing.permission not in ('read', 'write', 'deploy', 'admin')
+)
+delete from role_permissions
+where id in (select id from duplicates);
+"""
+ROLE_PERMISSION_MIGRATE_LEGACY_ALIASES = f"""
+update role_permissions
+set role = case role
+    when 'owner' then '{ResourceRole.CLUSTER_STEWARD.value}'
+    when 'admin' then '{ResourceRole.CLUSTER_STEWARD.value}'
+    when 'maintainer' then '{ResourceRole.INCIDENT_OPERATOR.value}'
+    when 'deployer' then '{ResourceRole.RELEASE_OPERATOR.value}'
+    when 'developer' then '{ResourceRole.RELEASE_OPERATOR.value}'
+    when 'viewer' then '{ResourceRole.OBSERVER.value}'
+    else role
+end,
+permission = case permission
+    when 'read' then '{Permission.CLUSTER_READ.value}'
+    when 'write' then '{Permission.CONFIG_UPDATE.value}'
+    when 'deploy' then '{Permission.DEPLOY_RUN.value}'
+    when 'admin' then '{Permission.CLUSTER_ROLE_MANAGE.value}'
+    else permission
+end,
+updated_at = now()
+where role in ('owner', 'admin', 'maintainer', 'deployer', 'developer', 'viewer')
+   or permission in ('read', 'write', 'deploy', 'admin')
 """
 
 # 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
@@ -482,6 +572,9 @@ class DatabaseConnection:
         conn.execute(text(ROLE_PERMISSION_SCOPE_NOT_NULL))
         conn.execute(text(ROLE_PERMISSION_DROP_LEGACY_UNIQUE))
         conn.execute(text(ROLE_PERMISSION_SCOPED_UNIQUE))
+        conn.execute(text(MEMBER_RESOURCE_ROLE_MIGRATE_LEGACY_ROLES))
+        conn.execute(text(ROLE_PERMISSION_DELETE_LEGACY_ALIAS_DUPLICATES))
+        conn.execute(text(ROLE_PERMISSION_MIGRATE_LEGACY_ALIASES))
 
         for table_name, columns in WORKSPACE_COMPAT_COLUMNS.items():
             self._add_missing_columns(conn, table_name, columns)

@@ -186,9 +186,9 @@ GET /dashboard/rca/incidents/{incident_id}
 GET /dashboard/rca/incidents/{incident_id}?cluster_id=<cluster_id>
 ```
 
-`cluster_id` query가 없으면 `accessible_resource_ids(..., "cluster", "read")` 결과로 목록을 필터링한다.
+`cluster_id` query가 없으면 `accessible_resource_ids(..., "cluster", "rca.read")` 결과로 목록을 필터링한다.
 
-`cluster_id` query가 있으면 `require_cluster_access(..., READ_ACCESS)`를 먼저 통과해야 한다.
+`cluster_id` query가 있으면 `require_cluster_access(..., Permission.RCA_READ.value)`를 먼저 통과해야 한다.
 
 session의 `workspace_id`만 사용한다.
 브라우저가 보낸 workspace 값으로 tenant를 바꾸지 않는다.
