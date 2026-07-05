@@ -512,7 +512,7 @@ PR 설명이나 문서를 쓰기 전에 아래 질문에 모두 답한다.
 | raw telemetry 전체를 event로 보내는가? | 아니다. bounded summary evidence만 보낸다. |
 | PR 생성과 PR 제안을 같은 event로 섞었는가? | 아니다. requested/created/failed를 구분한다. |
 | 실제 provider token이 event/log/audit에 들어가는가? | 아니다. credential ref 또는 Token Broker 경계만 쓴다. |
-| production namespace write가 가능한가? | 아니다. sandbox/demo namespace 정책으로 fail-closed한다. |
+| production namespace write가 가능한가? | 아니다. sandbox/validation namespace 정책으로 fail-closed한다. |
 | 새 event를 docs만 바꾸고 테스트를 안 바꿨는가? | 아니다. registry/catalog/producer/consumer 테스트가 있다. |
 
 ## 쉬운 문서 작성 기준
