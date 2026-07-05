@@ -10,6 +10,7 @@ from domains.gitops.repository import (
     derive_watch_target_id,
     derive_workflow_run_id,
 )
+from packages.config.constants import Target
 from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID,
     DEFAULT_REPOSITORY_ID,
@@ -50,7 +51,7 @@ def test_git_pull_normalizes_default_gitops_ids() -> None:
     payload = {
         "workspace_id": "workspace-b",
         "repo_ref": "org/checkout",
-        "cluster_id": "target-cluster-01",
+        "cluster_id": Target.DEFAULT_CLUSTER_ID,
         "manifest_path": "deploy/app.yaml",
     }
     expected_repository_id = derive_repository_id(payload)
