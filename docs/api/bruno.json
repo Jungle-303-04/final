@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "name": "Kubernetes Ops RCA API",
+  "name": "운영 RCA API 테스트",
   "type": "collection",
   "ignore": [
     "node_modules",
