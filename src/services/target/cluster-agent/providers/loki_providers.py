@@ -98,5 +98,4 @@ class LokiLogsProvider:
             "result_type": result_type,
             "streams": streams,
             "line_count": sum(len(stream["values"]) for stream in streams),
-            "raw": payload,
         }
