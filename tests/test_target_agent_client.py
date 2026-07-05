@@ -85,6 +85,13 @@ async def close_client(client: Any) -> None:
             {"metrics": {}},
             "",
         ),
+        lambda client: client.record_inventory_snapshot(
+            {
+                "cluster_id": "cluster-1",
+                "agent_id": "agent-1",
+                "resources": [],
+            }
+        ),
     ],
 )
 def test_management_client_write_calls_raise_on_gateway_error(
