@@ -31,7 +31,7 @@
 | 가인 | evidence를 event/DB에 보존하고 RCA, recovery, command, Safe PR 분기로 이어준다 | evidence ingest, RCA rule/pipeline, action route, Safe PR 요청 |
 | 찬빈 | RCA 부산물을 dashboard read model, API, frontend 화면으로 연결한다 | frontend가 읽을 계약, dashboard 목표, realtime/read model 소비 |
 
-위키에는 최종 목표까지 적힌 문서가 섞여 있다. 이 레포 문서는 "현재 source repo 기준으로 되는 것"과 "아직 목표인 것"을 나눠 적는다.
+위키에는 최종 목표까지 적힌 문서가 섞여 있다. 이 레포 문서는 "현재 source repo 기준으로 실제 작동하는 것"과 "프로덕션 완성 작업"을 나눠 적는다.
 
 ## 전체 흐름
 
@@ -303,7 +303,7 @@ command.requested
 
 - agent는 target cluster 안에서 management Gateway로 outbound 요청만 한다.
 - command 결과는 바로 날려버리지 않고 local outbox에 넣은 뒤 전송한다.
-- heartbeat는 "아직 실행 중"이라는 lease 유지 신호다.
+- heartbeat는 "계속 실행 중"이라는 lease 유지 신호다.
 - command action은 agent command registry에 등록되어 있어야 한다.
 - sandbox namespace 밖 write는 정책으로 막아야 한다.
 
@@ -553,8 +553,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 
 찬빈 파트의 목표는 "운영자가 지금 무슨 문제가 있고, 왜 그렇게 판단했고, 다음 조치가 어디까지 갔는지 볼 수 있게 만드는 것"이다.
 
-다만 현재 source repo 기준으로는 frontend 앱과 dashboard projection이 아직 없다.
-그래서 찬빈은 먼저 계약을 잡고, read model/API가 생기면 frontend가 그것만 소비하게 만드는 순서로 가야 한다.
+현재 source repo 기준으로 dashboard projection과 `/dashboard/rca/*` API는 backend에 구현되어 있다.
+찬빈은 이 계약을 먼저 소비하고, frontend 앱과 화면 상태를 그 API 기준으로 붙이는 순서로 간다.
 
 찬빈이 직접 worker 내부 로직을 만지는 구조로 가면 안 된다.
 
@@ -751,7 +751,7 @@ npm run build
 
 - 위키의 오래된 `src/services/rca-worker` 경로 대신 `src/services/ai/rca-worker`를 쓴다.
 - 위키의 오래된 `src/services/api-gateway/gateway.py` 경로 대신 `src/services/gateway/api-gateway/gateway.py`를 쓴다.
-- dashboard worker와 dashboard route는 아직 목표다.
+- dashboard worker와 dashboard route는 구현되어 있다. frontend는 이 계약을 먼저 소비한다.
 
 ## 전체 연습 시나리오
 

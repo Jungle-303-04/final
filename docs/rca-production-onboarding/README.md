@@ -4,6 +4,8 @@
 
 기준은 아이디어가 아니라 지금 repository에서 실제로 돌아가는 코드다. 문서에 적은 route, event, handler, provider, table, test는 먼저 코드에서 확인했다. 대시보드는 현재 `dashboard-worker`, `RcaTimeline` read model, Gateway query API까지 구현되어 있고, frontend는 이 API를 기준으로 붙이면 된다.
 
+프로덕션 완료의 최소 범위는 외부 기준 저장소에서 확인한 기능 도메인 전체다. 즉 account/RBAC/OIDC, fleet cluster, GitOps, IaC, upgrade/rollout/test, incident/AI/Safe PR, notification, DNS, shell, marketplace, billing/license, realtime 기능을 우리 구조에서 담당자/스키마/API/event/test로 설명하지 못하면 완료가 아니다. 전체 기준은 [벤치마크 최소선 기준 프로덕션 완성 설계](05-production-completion-scope.md)를 따른다.
+
 ## 읽는 순서
 
 | 순서 | 문서 | 왜 먼저 보는가 |
@@ -13,7 +15,7 @@
 | 3 | [가인: Evidence + RCA + Safe PR](02-gain-evidence-rca-safe-pr.md) | evidence를 incident, 후보, 원인, 복구 후보, PR 요청으로 바꾸는 순서다. |
 | 4 | [찬빈: Frontend + Projection](03-chanbin-frontend-projection.md) | 지금 있는 backend 계약을 기준으로 read model, API, UI를 붙이는 순서다. |
 | 5 | [RCA 데이터 스키마](04-rca-data-schema.md) | Google Sheet에 넣은 스키마와 같은 기준이다. 필드 단위로 왜 필요한지 적었다. |
-| 6 | [Plural 비교와 프로덕션 보강 항목](05-plural-production-comparison.md) | Plural 코드를 보고 우리 프로젝트에 필요한 운영 객체를 비교한 결과다. |
+| 6 | [벤치마크 최소선 기준 프로덕션 완성 설계](05-production-completion-scope.md) | 외부 기준 기능을 최소 production scope로 잡고 역할별 구현 항목으로 나눈다. |
 | 7 | [찬빈: 권한 시스템과 대시보드 적용](06-chanbin-permission-dashboard.md) | frontend/dashboard가 실제 권한 시스템을 어떻게 써야 하는지 정리했다. |
 | 8 | [찾아보고 구현하는 방법](07-how-to-find-and-implement.md) | route, event, worker, provider, test를 어떤 순서로 찾고 고칠지 정리했다. |
 
