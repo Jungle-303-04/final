@@ -131,6 +131,49 @@ class TargetInstallResponse(StrictModel):
     agent_token: str
 
 
+class ClusterAgentStatus(StrictModel):
+    workspace_id: str
+    cluster_id: str
+    agent_id: str
+    status: str
+    capabilities: list[str] = Field(default_factory=list)
+    details: JsonMap = Field(default_factory=dict)
+    last_seen_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ClusterSummary(StrictModel):
+    workspace_id: str
+    cluster_id: str
+    name: str
+    environment: str
+    status: str
+    settings: JsonMap = Field(default_factory=dict)
+    connection_status: str
+    last_agent_id: str | None = None
+    last_agent_seen_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ClusterListResponse(StrictModel):
+    clusters: list[ClusterSummary]
+
+
+class ClusterResponse(StrictModel):
+    cluster: ClusterSummary
+    agents: list[ClusterAgentStatus] = Field(default_factory=list)
+
+
+class ClusterConnectionStatusResponse(StrictModel):
+    cluster_id: str
+    connection_status: str
+    last_agent_id: str | None = None
+    last_seen_at: str | None = None
+    agents: list[ClusterAgentStatus] = Field(default_factory=list)
+
+
 class DeadLettersResponse(StrictModel):
     dead_letters: list[JsonMap]
 

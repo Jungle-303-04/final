@@ -7,6 +7,7 @@ import secrets
 import shutil
 import subprocess
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,7 +16,9 @@ from domains.identity.dependencies import (
     ClusterAgentIdentity,
     hash_agent_token,
     require_admin_session,
+    require_cluster_access,
     require_cluster_agent,
+    require_session,
 )
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody
@@ -46,12 +49,21 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import (
+    ClusterConnectionStatusResponse,
+    ClusterListResponse,
+    ClusterResponse,
+    ClusterSummary,
     EvidenceJobPollResponse,
     EvidenceJobResultResponse,
     EvidenceJobScheduleResponse,
     TargetInstallResponse,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    AccessResourceType,
+    ClusterRegistrationStatus,
+    Permission,
+)
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
 from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
@@ -83,6 +95,11 @@ EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV = (
 EVIDENCE_JOB_POLL_SLEEP_SECONDS = int(env(EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV, "1"))
 NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
+AGENT_ONLINE_WINDOW_SECONDS_ENV = "AGENT_ONLINE_WINDOW_SECONDS"
+DEFAULT_AGENT_ONLINE_WINDOW_SECONDS = 120
+AGENT_STATUS_NEVER_CONNECTED = "never_connected"
+AGENT_STATUS_ONLINE = "online"
+AGENT_STATUS_STALE = "stale"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -204,6 +221,55 @@ def install_response(
     )
 
 
+def agent_online_window_seconds() -> int:
+    return max(
+        1,
+        int(env(AGENT_ONLINE_WINDOW_SECONDS_ENV, str(DEFAULT_AGENT_ONLINE_WINDOW_SECONDS))),
+    )
+
+
+def parse_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def cluster_connection_status(agent: dict[str, Any] | None) -> str:
+    if agent is None:
+        return AGENT_STATUS_NEVER_CONNECTED
+    last_seen_at = parse_timestamp(agent.get("last_seen_at"))
+    if last_seen_at is None:
+        return AGENT_STATUS_STALE
+    online_window = timedelta(seconds=agent_online_window_seconds())
+    return (
+        AGENT_STATUS_ONLINE
+        if datetime.now(UTC) - last_seen_at <= online_window
+        else AGENT_STATUS_STALE
+    )
+
+
+def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None) -> ClusterSummary:
+    return ClusterSummary(
+        workspace_id=cluster["workspace_id"],
+        cluster_id=cluster["cluster_id"],
+        name=cluster["name"],
+        environment=cluster["environment"],
+        status=cluster["status"],
+        settings=cluster.get("settings") or {},
+        connection_status=cluster_connection_status(latest_agent),
+        last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
+        last_agent_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
+        created_at=cluster.get("created_at"),
+        updated_at=cluster.get("updated_at"),
+    )
+
+
 # require_admin_session 이 세션을 검증 → base router 에 둔다.
 # (라우터 단위 require_session + require_admin_session = 이중 검증/레이트리밋 2배 회피)
 @router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
@@ -270,6 +336,86 @@ async def register_target(
             )
         )
     return install_response(scoped_payload, manifest, apply_output, agent_token)
+
+
+@router.get(gateway_routes.CLUSTERS_PATH, response_model=ClusterListResponse)
+async def list_clusters(
+    limit: int = 100,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ClusterListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    accessible_cluster_ids = db.accessible_resource_ids(
+        current.user_id,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        Permission.CLUSTER_READ.value,
+    )
+    clusters = db.list_cluster_registrations(
+        workspace_id,
+        cluster_ids=accessible_cluster_ids,
+        limit=limit,
+    )
+    latest_agents = db.latest_cluster_agent_statuses(
+        workspace_id,
+        {cluster["cluster_id"] for cluster in clusters},
+    )
+    return ClusterListResponse(
+        clusters=[
+            cluster_summary(cluster, latest_agents.get(cluster["cluster_id"]))
+            for cluster in clusters
+        ]
+    )
+
+
+@router.get(gateway_routes.CLUSTER_PATH, response_model=ClusterResponse)
+async def get_cluster(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ClusterResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.CLUSTER_READ.value,
+    )
+    cluster = db.get_cluster_registration(workspace_id, cluster_id)
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="cluster not found")
+    agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    latest_agent = agents[0] if agents else None
+    return ClusterResponse(cluster=cluster_summary(cluster, latest_agent), agents=agents)
+
+
+@router.get(
+    gateway_routes.CLUSTER_CONNECTION_STATUS_PATH,
+    response_model=ClusterConnectionStatusResponse,
+)
+async def get_cluster_connection_status(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ClusterConnectionStatusResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.CLUSTER_READ.value,
+    )
+    agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    latest_agent = agents[0] if agents else None
+    return ClusterConnectionStatusResponse(
+        cluster_id=cluster_id,
+        connection_status=cluster_connection_status(latest_agent),
+        last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
+        last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
+        agents=agents,
+    )
 
 
 @router.put(gateway_routes.CLUSTER_POLICY_PATH)

@@ -40,7 +40,7 @@ from packages.contracts.identity import (
     UserStatus,
     WorkspaceStatus,
 )
-from packages.storage.engine import DatabaseConnection
+from packages.storage.engine import DatabaseConnection, iso_or_none
 
 
 class IdentityAccessRepository(DatabaseConnection):
@@ -728,6 +728,64 @@ class IdentityAccessRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
+
+    def list_cluster_registrations(
+        self,
+        workspace_id: str,
+        *,
+        cluster_ids: set[str] | None = None,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        if cluster_ids is not None and not cluster_ids:
+            return []
+        table = ClusterRegistration.__table__
+        statement = (
+            select(
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.name,
+                table.c.environment,
+                table.c.status,
+                table.c.settings,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.environment, table.c.name, table.c.cluster_id)
+            .limit(max(1, min(limit, 500)))
+        )
+        if cluster_ids is not None:
+            statement = statement.where(table.c.cluster_id.in_(cluster_ids))
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self._serialize_cluster_registration(row) for row in rows]
+
+    def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
+        table = ClusterRegistration.__table__
+        statement = (
+            select(
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.name,
+                table.c.environment,
+                table.c.status,
+                table.c.settings,
+                table.c.created_at,
+                table.c.updated_at,
+            )
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self._serialize_cluster_registration(row) if row else None
+
+    @staticmethod
+    def _serialize_cluster_registration(row: JsonObject) -> JsonObject:
+        item = dict(row)
+        item["created_at"] = iso_or_none(item.get("created_at"))
+        item["updated_at"] = iso_or_none(item.get("updated_at"))
+        return item
 
     @staticmethod
     def _user_upsert(user_id: str) -> Any:
