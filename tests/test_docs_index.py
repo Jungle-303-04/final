@@ -169,3 +169,28 @@ def test_step_by_step_onboarding_docs_avoid_markdown_tables() -> None:
                 offenders.append(f"{path}:{line_number}")
 
     assert offenders == []
+
+
+def test_docs_root_keeps_keyword_wiki_entrypoints() -> None:
+    index = read("docs/README.md")
+    required_keywords = [
+        "`command`",
+        "`target`",
+        "`evidence`",
+        "`RCA`",
+        "`Safe PR`",
+        "`dashboard`",
+        "`permission`",
+        "`Bruno`",
+        "`AWS`",
+        "`event`",
+        "`provider`",
+        "`worker`",
+        "`test`",
+        "`GitOps`",
+        "`realtime`",
+    ]
+
+    missing = [keyword for keyword in required_keywords if keyword not in index]
+
+    assert missing == []
