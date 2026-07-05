@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,9 @@ from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
 from domains.target.router import (
     KUBE_CONTEXT_NOT_ALLOWED,
     apply_manifest_with_kubectl,
+    cluster_connection_status,
+    get_cluster_connection_status,
+    list_clusters,
     register_target,
     schedule_evidence_jobs,
     target_install_manifest,
@@ -117,6 +121,80 @@ class FakePolicyDb:
         self.current = policy
         self.saved.append(policy)
         return policy
+
+
+class FakeClusterDb:
+    def __init__(self) -> None:
+        self.access_filter: set[str] | None = None
+        self.agent = {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "agent_id": "agent-1",
+            "status": "connected",
+            "capabilities": ["inventory", "commands"],
+            "details": {},
+            "last_seen_at": datetime.now(UTC).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+
+    def accessible_resource_ids(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        _resource_type: str,
+        _permission: str,
+    ) -> set[str]:
+        return {"cluster-1"}
+
+    def list_cluster_registrations(
+        self,
+        workspace_id: str,
+        *,
+        cluster_ids: set[str] | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        self.access_filter = cluster_ids
+        assert workspace_id == "default"
+        assert limit == 50
+        return [
+            {
+                "workspace_id": "default",
+                "cluster_id": "cluster-1",
+                "name": "prod",
+                "environment": "production",
+                "status": "registered",
+                "settings": {"cloud_provider": "existing-k8s"},
+                "created_at": "2026-07-05T00:00:00+00:00",
+                "updated_at": "2026-07-05T00:00:00+00:00",
+            }
+        ]
+
+    def latest_cluster_agent_statuses(
+        self,
+        _workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        assert cluster_ids == {"cluster-1"}
+        return {"cluster-1": self.agent}
+
+    def can_access(
+        self,
+        _user_id: str,
+        _workspace_id: str,
+        _resource_type: str,
+        resource_id: str,
+        _permission: str,
+    ) -> bool:
+        return resource_id == "cluster-1"
+
+    def list_cluster_agent_statuses(
+        self,
+        _workspace_id: str,
+        cluster_id: str,
+    ) -> list[dict[str, object]]:
+        assert cluster_id == "cluster-1"
+        return [self.agent]
 
 
 def target_request() -> TargetRegisterRequest:
@@ -306,6 +384,54 @@ def test_evidence_job_schedule_route_delegates_to_management_store() -> None:
     assert response.evidence_key.startswith("trusted-workspace:trusted-cluster:")
     assert response.queued == 2
     assert response.job_ids == ["job-metrics", "job-logs"]
+
+
+def test_cluster_connection_status_uses_last_seen_window(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_ONLINE_WINDOW_SECONDS", "120")
+
+    assert cluster_connection_status(None) == "never_connected"
+    assert cluster_connection_status({"last_seen_at": datetime.now(UTC).isoformat()}) == "online"
+    assert (
+        cluster_connection_status(
+            {"last_seen_at": (datetime.now(UTC) - timedelta(seconds=300)).isoformat()}
+        )
+        == "stale"
+    )
+
+
+def test_cluster_list_uses_access_filter_and_agent_status() -> None:
+    db = FakeClusterDb()
+
+    async def run():
+        return await list_clusters(
+            limit=50,
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert db.access_filter == {"cluster-1"}
+    assert len(response.clusters) == 1
+    assert response.clusters[0].cluster_id == "cluster-1"
+    assert response.clusters[0].connection_status == "online"
+    assert response.clusters[0].last_agent_id == "agent-1"
+
+
+def test_cluster_connection_status_route_returns_agent_details() -> None:
+    async def run():
+        return await get_cluster_connection_status(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakeClusterDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.cluster_id == "cluster-1"
+    assert response.connection_status == "online"
+    assert response.last_agent_id == "agent-1"
+    assert response.agents[0].capabilities == ["inventory", "commands"]
 
 
 def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
