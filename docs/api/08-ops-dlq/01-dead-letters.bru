@@ -13,6 +13,14 @@ get {
   url: {{base_url}}dead-letters?limit=20
 }
 
+script:post-response {
+  // 첫 dead letter id 자동 저장 — 02-replay 요청에서 바로 사용 가능
+  const body = res.getBody();
+  if (res.status === 200 && body && Array.isArray(body.dead_letters) && body.dead_letters.length) {
+    bru.setVar("dead_letter_id", body.dead_letters[0].id);
+  }
+}
+
 tests {
   test("admin can list dead letters or auth blocks clearly", function () {
     expect([200, 401, 403]).to.include(res.status);
