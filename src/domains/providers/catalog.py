@@ -92,7 +92,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         capabilities=("manifest_read",),
         unavailable_reason=(
             "checkout cache can mirror repos internally, but per-repository credential "
-            "binding and allowlist are not implemented yet"
+            "binding and allowlist are unavailable in this build"
         ),
     ),
     ProviderDefinition(
@@ -101,7 +101,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="GitLab",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="GitLab webhook, contents, and merge request adapters are not implemented",
+        unavailable_reason="GitLab webhook, contents, and merge request adapters are unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.SOURCE,
@@ -109,7 +109,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="Bitbucket",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="Bitbucket webhook, contents, and pull request adapters are not implemented",
+        unavailable_reason="Bitbucket webhook, contents, and pull request adapters are unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.DEPLOY,
@@ -151,7 +151,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="Argo CD",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="Argo CD Application/ApplicationSet adapter is not implemented",
+        unavailable_reason="Argo CD Application/ApplicationSet adapter is unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.DEPLOY,
@@ -159,7 +159,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="Jenkins",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="Jenkins job trigger/status adapter is not implemented",
+        unavailable_reason="Jenkins job trigger/status adapter is unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.CLOUD,
@@ -201,7 +201,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="Google Cloud",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="GKE, Artifact Registry, and workload identity adapters are not implemented",
+        unavailable_reason="GKE, Artifact Registry, and workload identity adapters are unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.CLOUD,
@@ -209,7 +209,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="Azure",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="AKS, ACR, and workload identity adapters are not implemented",
+        unavailable_reason="AKS, ACR, and workload identity adapters are unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.SECRET,
@@ -244,7 +244,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="HashiCorp Vault",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="HashiCorp Vault adapter is not implemented",
+        unavailable_reason="HashiCorp Vault adapter is unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.SECRET,
@@ -252,7 +252,7 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         label="Google Secret Manager",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="Google Secret Manager adapter is not implemented",
+        unavailable_reason="Google Secret Manager adapter is unavailable",
     ),
 )
 

@@ -1,4 +1,4 @@
-"""env 오버라이드 기본값 가드 — env 미설정 시 기존 하드코딩 값과 동일해야 함(배포 호환).
+"""env 오버라이드 기본값 가드 — env 미설정 시 기존 기본값과 동일해야 함(배포 호환).
 
 test_database_unit.py::test_pool_options_env_defaults_remain_unchanged 와 같은 목적의
 가드를 이번에 env 화한 핵심 튜닝값에도 적용함(전수 아님 — 동작 영향이 큰 값 위주).

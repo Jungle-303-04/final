@@ -90,8 +90,8 @@ def test_unit_of_work_joins_active_transaction(monkeypatch) -> None:
     sentinel = _Conn()
     token = engine_module._ACTIVE_CONN.set(sentinel)
     try:
-        dummy = object.__new__(engine_module.DatabaseConnection)
-        with engine_module.DatabaseConnection.unit_of_work(dummy) as conn:
+        database_connection = object.__new__(engine_module.DatabaseConnection)
+        with engine_module.DatabaseConnection.unit_of_work(database_connection) as conn:
             assert conn is sentinel
     finally:
         engine_module._ACTIVE_CONN.reset(token)

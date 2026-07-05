@@ -154,7 +154,7 @@ def test_outbox_compat_migration_adds_relay_lease_columns() -> None:
 
 
 def test_pool_options_env_defaults_remain_unchanged() -> None:
-    # env 미설정 시 기존 하드코딩 값과 동일해야 함(배포 호환)
+    # env 미설정 시 기존 기본값과 동일해야 함(배포 호환)
     assert storage_engine.POOL_OPTIONS["pool_size"] == 2
     assert storage_engine.POOL_OPTIONS["max_overflow"] == 2
     assert storage_engine.POOL_OPTIONS["pool_timeout"] == 10
@@ -164,7 +164,7 @@ def test_pool_options_env_defaults_remain_unchanged() -> None:
 
 
 def test_transaction_timeout_env_defaults_remain_unchanged() -> None:
-    # env 미설정 시 기존 하드코딩 값(5s/30s/30s)과 같은 의미의 ms 값이어야 함(배포 호환)
+    # env 미설정 시 기존 기본값(5s/30s/30s)과 같은 의미의 ms 값이어야 함(배포 호환)
     assert storage_engine.DB_LOCK_TIMEOUT == "5000ms"
     assert storage_engine.DB_STATEMENT_TIMEOUT == "30000ms"
     assert storage_engine.DB_IDLE_IN_TRANSACTION_TIMEOUT == "30000ms"
