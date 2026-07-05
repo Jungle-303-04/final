@@ -9,7 +9,7 @@ from packages.config.errors import fail
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 
-# 기동 대기 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+# 기동 대기 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEPENDENCY_RETRY_LIMIT_ENV = "DEPENDENCY_RETRY_LIMIT"  # 의존성 대기 재시도 횟수(기본 60)
 DEPENDENCY_RETRY_LIMIT = int(env(DEPENDENCY_RETRY_LIMIT_ENV, "60"))
 DEPENDENCY_RETRY_DELAY_SECONDS_ENV = (

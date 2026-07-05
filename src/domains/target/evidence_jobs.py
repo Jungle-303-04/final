@@ -3,7 +3,7 @@ from __future__ import annotations
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 
-# evidence job 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+# evidence job 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_EVIDENCE_JOB_LEASE_SECONDS_ENV = "EVIDENCE_JOB_LEASE_SECONDS"  # 잡 리스 유지 초(기본 60)
 DEFAULT_EVIDENCE_JOB_LEASE_SECONDS = int(env(DEFAULT_EVIDENCE_JOB_LEASE_SECONDS_ENV, "60"))
 DEFAULT_EVIDENCE_SOURCE_ID = "cluster-snapshot"

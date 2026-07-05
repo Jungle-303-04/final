@@ -233,11 +233,215 @@ Frontend 기준:
 - TanStack Query
 - React Router
 - generated OpenAPI types
+- Motion for React
+- Recharts
+- React Flow
+- Nivo 또는 visx는 고급 시각화가 필요할 때 후보로 검토
 - Playwright 또는 Vitest + Testing Library
 
 GraphQL client는 기본 선택이 아니다.
 우리 backend 계약은 FastAPI REST/Pydantic DTO와 WebSocket 계약으로 이미 나뉘어 있다.
 따라서 `/openapi.json`에서 TypeScript 타입을 생성하고, REST wrapper를 얇게 유지한다.
+
+## Dynamic UI 방향
+
+우리는 정적인 table 중심 console보다, 상태와 데이터에 따라 UI가 생성되고 바뀌는 느낌의 운영 화면을 지향한다.
+단, dynamic UI는 임의 코드를 실행한다는 뜻이 아니다.
+Backend가 JSX, script, raw HTML, CSS 문자열을 내려주고 frontend가 실행하는 방식은 금지한다.
+
+허용되는 dynamic UI:
+
+- frontend에 미리 등록된 안전한 React component를 데이터로 선택한다.
+- backend DTO와 read model을 frontend view model로 변환한다.
+- layout, chart type, severity, status, enabled action 같은 제한된 값으로 화면을 조립한다.
+- realtime message가 들어오면 card, chart, timeline, node graph가 부드럽게 변경된다.
+- 사용자의 filter, sort, grouping, saved view가 화면 구성을 바꾼다.
+
+금지되는 dynamic UI:
+
+- backend가 보낸 JSX 실행
+- `eval`, `new Function`, remote script 실행
+- backend가 보낸 임의 CSS를 style tag로 삽입
+- chart config에 함수를 문자열로 넣고 실행
+- permission 우회용 hidden action을 client manifest에 심기
+
+권장 구조:
+
+```text
+backend DTO
+  -> feature api wrapper
+  -> view model mapper
+  -> component registry
+  -> animated layout / chart / graph component
+```
+
+예시:
+
+```ts
+type WidgetKind = "status-card" | "timeline" | "line-chart" | "bar-chart" | "flow-map"
+
+type WidgetManifest = {
+  id: string
+  kind: WidgetKind
+  title: string
+  dataRef: string
+  status?: "ok" | "warning" | "critical" | "unknown"
+}
+
+const registry = {
+  "status-card": StatusCardWidget,
+  timeline: TimelineWidget,
+  "line-chart": LineChartWidget,
+  "bar-chart": BarChartWidget,
+  "flow-map": FlowMapWidget,
+} satisfies Record<WidgetKind, React.ComponentType<WidgetProps>>
+```
+
+이 manifest는 frontend 내부 view model이어야 한다.
+초기 버전에서는 backend가 manifest를 내려주지 말고, frontend가 `RcaTimelineResponse`, realtime snapshot, command/approval response를 보고 manifest를 만든다.
+나중에 backend가 화면 hint를 내려주더라도 `WidgetKind` enum처럼 제한된 schema만 허용한다.
+
+## Dynamic Component Palette
+
+초기 frontend는 아래 컴포넌트를 우선 만든다.
+
+상태 카드:
+
+- cluster health card
+- RCA status card
+- evidence completeness card
+- command queue card
+- Safe PR status card
+- realtime connection card
+
+차트:
+
+- pod ready/total trend line chart
+- restart delta bar chart
+- evidence provider success/failure stacked bar
+- RCA status distribution donut or bar chart
+- command latency histogram
+- approval grant/reject count chart
+
+인터랙션:
+
+- RCA timeline scrubber
+- incident detail expandable evidence drawer
+- command action confirmation sheet
+- PR diff summary reveal
+- cluster filter combobox
+- saved dashboard view switcher
+
+그래프/맵:
+
+- cluster -> namespace -> workload flow map
+- evidence -> RCA -> action -> command/PR pipeline graph
+- approval dependency graph
+- realtime resource delta map
+
+애니메이션:
+
+- card enter/exit
+- status transition
+- count-up number
+- chart series transition
+- timeline item expansion
+- realtime pulse for recently updated rows
+- drag/reorder for dashboard widgets
+
+이 palette는 운영 console답게 정보 밀도를 유지한다.
+큰 marketing hero, 장식 중심 배경, 의미 없는 효과는 만들지 않는다.
+움직임은 상태 변화, attention, continuity를 설명할 때만 쓴다.
+
+## Chart And Motion Library 기준
+
+기본 선택:
+
+- `Recharts`: 일반 dashboard chart를 빠르게 만든다.
+- `Motion for React`: layout transition, enter/exit, gesture, status animation을 담당한다.
+- `React Flow`: pipeline graph, resource dependency map, workflow graph에 사용한다.
+
+검토 후보:
+
+- `Nivo`: 더 완성도 높은 dataviz와 다양한 chart family가 필요할 때 검토한다.
+- `visx`: chart를 낮은 수준에서 직접 구성해야 할 때 검토한다.
+
+선택 기준:
+
+- TypeScript와 React 18/19 호환성
+- tree shaking과 bundle size
+- accessibility 지원
+- responsive layout 안정성
+- server/client rendering 제약
+- chart tooltip과 keyboard navigation 확장성
+- theme token 적용 가능성
+- 테스트에서 deterministic rendering이 가능한지
+
+초기 구현은 Recharts + Motion + React Flow 조합으로 충분하다.
+Nivo나 visx는 특정 chart 요구가 생긴 뒤 추가한다.
+
+## Dynamic UI 상태 모델
+
+동적 화면은 backend 상태를 과장하지 않는다.
+화면이 화려해도 상태 이름은 실제 DTO와 event subject를 따른다.
+
+권장 상태:
+
+```ts
+type VisualStatus =
+  | "loading"
+  | "empty"
+  | "ready"
+  | "partial"
+  | "action-required"
+  | "updating"
+  | "stream-disconnected"
+  | "forbidden"
+  | "error"
+```
+
+Mapping 기준:
+
+- `loading`: query가 아직 끝나지 않았다.
+- `empty`: 권한이 적용된 결과가 비어 있다.
+- `ready`: 정상 데이터가 있다.
+- `partial`: 일부 provider/evidence가 실패했지만 표시 가능한 데이터가 있다.
+- `action-required`: `rca.action_required`처럼 사람 판단이 필요하다.
+- `updating`: realtime update 또는 refetch가 진행 중이다.
+- `stream-disconnected`: 마지막 snapshot은 있지만 live connection이 끊겼다.
+- `forbidden`: backend가 403을 반환했다.
+- `error`: 복구 가능한 일반 오류다.
+
+Animation은 이 상태 전이에 붙인다.
+상태를 새로 invent하지 않고, DTO와 event subject에서 파생한다.
+
+## Generated UI 안전장치
+
+UI가 동적으로 생성되는 느낌을 주려면 manifest와 registry를 쓴다.
+하지만 registry 밖 component는 렌더링하지 않는다.
+
+안전장치:
+
+- manifest schema는 Zod 같은 runtime validator로 검증한다.
+- 알 수 없는 `kind`는 렌더링하지 않고 fallback card를 보여준다.
+- action manifest는 backend 권한을 대체하지 않는다.
+- destructive action은 confirmation과 backend permission check를 모두 통과해야 한다.
+- saved dashboard layout은 user preference로만 취급한다.
+- layout preference에는 credential, token, raw payload를 저장하지 않는다.
+
+예시:
+
+```ts
+const widgetSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["status-card", "timeline", "line-chart", "bar-chart", "flow-map"]),
+  title: z.string().min(1).max(80),
+  dataRef: z.string().min(1),
+  status: z.enum(["ok", "warning", "critical", "unknown"]).optional(),
+})
+```
+
+이 구조를 쓰면 화면은 데이터에 따라 계속 바뀌지만, 실행 가능한 코드는 frontend bundle 안의 검토된 component로 제한된다.
 
 ## 폴더 구조
 
@@ -265,6 +469,17 @@ frontend/
         csrf.ts
       realtime/
         socket.ts
+      charts/
+        ChartShell.tsx
+        LineChartWidget.tsx
+        BarChartWidget.tsx
+      dynamic-ui/
+        registry.ts
+        manifest.ts
+        viewModel.ts
+      motion/
+        transitions.ts
+        ReducedMotionProvider.tsx
       ui/
         EmptyState.tsx
         ErrorState.tsx
@@ -286,6 +501,9 @@ frontend/
         ApprovalActions.tsx
       realtime/
         useRealtime.ts
+      operations-map/
+        FlowMapWidget.tsx
+        pipeline.ts
 ```
 
 역할:
@@ -295,6 +513,10 @@ frontend/
 - `shared/auth/csrf.ts`: CSRF token memory 관리
 - `features/dashboard/api.ts`: `/dashboard/rca/*`만 감싼다
 - `features/realtime/useRealtime.ts`: `/live/browser` 연결과 reconnect 처리
+- `shared/dynamic-ui/registry.ts`: 안전한 dynamic component allowlist
+- `shared/dynamic-ui/viewModel.ts`: DTO를 widget manifest로 변환
+- `shared/charts/*`: 공통 chart shell과 theme adapter
+- `shared/motion/*`: 공통 transition과 reduced motion 처리
 - feature component는 backend URL 문자열을 직접 만들지 않는다
 
 ## API 계약 생성

@@ -25,7 +25,7 @@ class NodeCollectorManagerConfig:
     NODE_COLLECTOR_PORT_ENV = "NODE_COLLECTOR_PORT"
     NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV = "NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS"
     # 수집기 포트/수집 주기 — 클러스터 사정에 맞춰 env 로 오버라이드 가능함.
-    # env 미설정 시 기존 하드코딩 값(9100/15초)과 동일함(배포 호환).
+    # env 미설정 시 기존 기본값(9100/15초)과 동일함(배포 호환).
     NODE_COLLECTOR_PORT = int(env(NODE_COLLECTOR_PORT_ENV, "9100"))
     NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS = int(
         env(NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS_ENV, "15")

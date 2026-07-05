@@ -7,7 +7,7 @@ from typing import Any, Protocol, cast
 from packages.config.errors import require
 from packages.config.settings import env
 
-# 명령 리스/재시도 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+# 명령 리스/재시도 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_COMMAND_LEASE_SECONDS_ENV = "COMMAND_LEASE_SECONDS"  # 명령 리스 유지 초(기본 60)
 DEFAULT_COMMAND_LEASE_SECONDS = int(env(DEFAULT_COMMAND_LEASE_SECONDS_ENV, "60"))
 DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS_ENV = (

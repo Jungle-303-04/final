@@ -241,13 +241,13 @@
     <header>
       <div>
         <h1>Debug Lab</h1>
-        <div class="sub">실제 kind-management / kind-target 관측 및 더미 워크로드 장애 주입</div>
+        <div class="sub">실제 kind-management / kind-target 관측 및 샘플 워크로드 장애 주입</div>
       </div>
       <div class="toolbar">
         <span id="gateway-pill" class="pill"><span class="dot"></span>Gateway 확인 중</span>
         <span id="updated" class="sub">-</span>
         <button id="refresh">새로고침</button>
-        <button id="bootstrap" class="primary">더미 설치/갱신</button>
+        <button id="bootstrap" class="primary">샘플 설치/갱신</button>
       </div>
     </header>
 
@@ -547,7 +547,7 @@
         busy = true
         document.querySelectorAll('button').forEach((button) => button.disabled = true)
         try {
-          log('더미 workload 설치/갱신')
+          log('샘플 workload 설치/갱신')
           const result = await api('/api/bootstrap', { method: 'POST', body: JSON.stringify({}) })
           log(`bootstrap 완료: ${JSON.stringify(result.results).slice(0, 600)}`)
           await refresh(true)
