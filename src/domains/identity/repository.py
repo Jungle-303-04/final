@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from sqlalchemy import case, func, select
@@ -12,17 +13,13 @@ from domains.identity.models import (
     MemberResourceRole,
     Organization,
     OrganizationMember,
-    ResourceAccessGrant,
     ResourceAssignment,
     RolePermission,
     UserAccount,
     Workspace,
-    WorkspaceMember,
 )
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import (
-    ACCESS_ROLE_ACTIONS,
-    ACTION_PERMISSION_ALIASES,
     DEFAULT_GROUP_ID,
     DEFAULT_GROUP_NAME,
     DEFAULT_ORGANIZATION_ID,
@@ -31,21 +28,17 @@ from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     DEFAULT_WORKSPACE_NAME,
     GLOBAL_ROLE_POLICY_ORGANIZATION_ID,
+    LEGACY_PERMISSION_ALIASES,
     RESOURCE_ROLE_PERMISSIONS,
     AccessResourceType,
-    AccessRole,
     AccessStatus,
-    AccessSubjectType,
-    AccountRole,
     ClusterRegistrationStatus,
     GroupRole,
     OrganizationRole,
     ResourceRole,
     ServiceRole,
     UserStatus,
-    WorkspaceRole,
     WorkspaceStatus,
-    access_role_allows_action,
     normalize_resource_role,
 )
 from packages.storage.engine import DatabaseConnection
@@ -56,8 +49,6 @@ class IdentityAccessRepository(DatabaseConnection):
 
     user_table = UserAccount.__table__
     workspace_table = Workspace.__table__
-    member_table = WorkspaceMember.__table__
-    access_table = ResourceAccessGrant.__table__
     organization_table = Organization.__table__
     organization_member_table = OrganizationMember.__table__
     group_table = Group.__table__
@@ -72,8 +63,6 @@ class IdentityAccessRepository(DatabaseConnection):
         return {
             UserAccount.__tablename__,
             Workspace.__tablename__,
-            WorkspaceMember.__tablename__,
-            ResourceAccessGrant.__tablename__,
             Organization.__tablename__,
             OrganizationMember.__tablename__,
             Group.__tablename__,
@@ -135,11 +124,11 @@ class IdentityAccessRepository(DatabaseConnection):
     def ensure_default_role_permissions(self) -> list[JsonObject]:
         table = RolePermission.__table__
         rows: list[JsonObject] = []
-        new_roles = set(RESOURCE_ROLE_PERMISSIONS)
         managed_resource_types = {
             resource_type
             for _scope, resource_type, _role, _permission, _status in DEFAULT_ROLE_PERMISSION_ROWS
         }
+        new_roles = set(RESOURCE_ROLE_PERMISSIONS)
         with self.connection() as conn:
             if managed_resource_types:
                 conn.execute(
@@ -178,7 +167,7 @@ class IdentityAccessRepository(DatabaseConnection):
 
     def register_target_cluster(self, payload: JsonObject) -> JsonObject:
         user_id = str(payload["user_id"])
-        workspace_id = str(payload["workspace_id"])
+        workspace_id = str(payload.get("workspace_id") or DEFAULT_WORKSPACE_ID)
         organization_id = str(payload.get("organization_id") or workspace_id)
         group_id = self._default_group_id(organization_id)
         cluster_id = str(payload["cluster_id"])
@@ -190,7 +179,6 @@ class IdentityAccessRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(self._user_upsert(user_id))
             conn.execute(self._workspace_upsert(workspace_id, workspace_id))
-            conn.execute(self._member_upsert(workspace_id, user_id, WorkspaceRole.OWNER.value))
             conn.execute(self._organization_upsert(organization_id, organization_id))
             conn.execute(
                 self._organization_member_upsert(
@@ -215,15 +203,6 @@ class IdentityAccessRepository(DatabaseConnection):
                     assignment_id,
                     user_id,
                     ResourceRole.CLUSTER_STEWARD.value,
-                )
-            )
-            conn.execute(
-                self._access_grant_upsert(
-                    workspace_id=workspace_id,
-                    subject_id=user_id,
-                    resource_type=AccessResourceType.CLUSTER.value,
-                    resource_id=cluster_id,
-                    role=AccessRole.MAINTAINER.value,
                 )
             )
             conn.execute(self._cluster_upsert(payload))
@@ -257,6 +236,11 @@ class IdentityAccessRepository(DatabaseConnection):
         role: str,
     ) -> JsonObject | None:
         table = UserAccount.__table__
+        service_role = (
+            ServiceRole.SERVICE_ADMIN.value
+            if role == ServiceRole.SERVICE_ADMIN.value
+            else ServiceRole.USER.value
+        )
         statement = (
             pg_insert(table)
             .values(
@@ -265,8 +249,7 @@ class IdentityAccessRepository(DatabaseConnection):
                 password_hash=password_hash,
                 display_name=display_name,
                 status=status,
-                role=role,
-                updated_at=func.now(),
+                role=service_role,
             )
             .on_conflict_do_nothing(index_elements=[table.c.email])
             .returning(
@@ -288,83 +271,85 @@ class IdentityAccessRepository(DatabaseConnection):
         email: str,
         password_hash: str,
         display_name: str,
-        workspace_id: str = DEFAULT_WORKSPACE_ID,
-    ) -> JsonObject:
-        organization_id = workspace_id
-        group_id = self._default_group_id(organization_id)
-        with self.connection() as conn:
-            conn.execute(self._workspace_upsert(workspace_id, DEFAULT_WORKSPACE_NAME))
-            conn.execute(self._organization_upsert(organization_id, DEFAULT_ORGANIZATION_NAME))
-            conn.execute(self._group_upsert(group_id, organization_id, DEFAULT_GROUP_NAME))
-            row = (
-                conn.execute(
-                    self._admin_user_upsert(
-                        user_id=user_id,
-                        email=email,
-                        password_hash=password_hash,
-                        display_name=display_name,
-                    )
-                )
-                .mappings()
-                .one()
-            )
-            conn.execute(
-                self._member_upsert(
-                    workspace_id,
-                    str(row["user_id"]),
-                    WorkspaceRole.OWNER.value,
-                )
-            )
-            conn.execute(
-                self._organization_member_upsert(
-                    organization_id,
-                    str(row["user_id"]),
-                    OrganizationRole.OWNER.value,
-                )
-            )
-            conn.execute(
-                self._group_member_upsert(group_id, str(row["user_id"]), GroupRole.MANAGER.value)
-            )
-        return dict(row)
-
-    def complete_email_verification(self, user_id: str) -> JsonObject | None:
+    ) -> JsonObject | None:
         table = UserAccount.__table__
-        group_id = self._default_group_id(DEFAULT_ORGANIZATION_ID)
+        statement = self._admin_user_upsert(
+            user_id,
+            email,
+            password_hash,
+            display_name,
+        ).returning(
+            table.c.user_id,
+            table.c.email,
+            table.c.password_hash,
+            table.c.display_name,
+            table.c.status,
+            table.c.role,
+        )
         with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
             conn.execute(self._workspace_upsert(DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME))
             conn.execute(
                 self._organization_upsert(DEFAULT_ORGANIZATION_ID, DEFAULT_ORGANIZATION_NAME)
             )
-            conn.execute(self._group_upsert(group_id, DEFAULT_ORGANIZATION_ID, DEFAULT_GROUP_NAME))
-            is_first_admin = not self._has_service_admin(conn)
-            status = (
-                UserStatus.ACTIVE.value if is_first_admin else UserStatus.PENDING_APPROVAL.value
-            )
-            role = AccountRole.ADMIN.value if is_first_admin else AccountRole.MEMBER.value
-            statement = (
-                table.update()
-                .where(
-                    table.c.user_id == user_id,
-                    table.c.status == UserStatus.PENDING_EMAIL_VERIFICATION.value,
-                )
-                .values(status=status, role=role, updated_at=func.now())
-                .returning(
-                    table.c.user_id,
-                    table.c.email,
-                    table.c.password_hash,
-                    table.c.display_name,
-                    table.c.status,
-                    table.c.role,
+            conn.execute(
+                self._organization_member_upsert(
+                    DEFAULT_ORGANIZATION_ID,
+                    user_id,
+                    OrganizationRole.OWNER.value,
                 )
             )
-            row = conn.execute(statement).mappings().first()
-            if row is not None and is_first_admin:
+            conn.execute(
+                self._group_upsert(
+                    DEFAULT_GROUP_ID,
+                    DEFAULT_ORGANIZATION_ID,
+                    DEFAULT_GROUP_NAME,
+                )
+            )
+            conn.execute(
+                self._group_member_upsert(DEFAULT_GROUP_ID, user_id, GroupRole.MANAGER.value)
+            )
+        return dict(row) if row is not None else None
+
+    def complete_email_verification(self, user_id: str) -> JsonObject | None:
+        table = UserAccount.__table__
+        with self.connection() as conn:
+            user = (
+                conn.execute(select(table).where(table.c.user_id == user_id).limit(1))
+                .mappings()
+                .first()
+            )
+            if user is None:
+                return None
+            if user["status"] != UserStatus.PENDING_EMAIL_VERIFICATION.value:
+                return dict(user)
+            if self._has_service_admin(conn):
+                status = UserStatus.PENDING_APPROVAL.value
+                role = ServiceRole.USER.value
+            else:
+                status = UserStatus.ACTIVE.value
+                role = ServiceRole.SERVICE_ADMIN.value
+            row = (
                 conn.execute(
-                    self._member_upsert(
-                        DEFAULT_WORKSPACE_ID,
-                        user_id,
-                        WorkspaceRole.OWNER.value,
+                    table.update()
+                    .where(table.c.user_id == user_id)
+                    .values(status=status, role=role, updated_at=func.now())
+                    .returning(
+                        table.c.user_id,
+                        table.c.email,
+                        table.c.password_hash,
+                        table.c.display_name,
+                        table.c.status,
+                        table.c.role,
                     )
+                )
+                .mappings()
+                .first()
+            )
+            if status == UserStatus.ACTIVE.value:
+                conn.execute(self._workspace_upsert(DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME))
+                conn.execute(
+                    self._organization_upsert(DEFAULT_ORGANIZATION_ID, DEFAULT_ORGANIZATION_NAME)
                 )
                 conn.execute(
                     self._organization_member_upsert(
@@ -373,96 +358,110 @@ class IdentityAccessRepository(DatabaseConnection):
                         OrganizationRole.OWNER.value,
                     )
                 )
-                conn.execute(self._group_member_upsert(group_id, user_id, GroupRole.MANAGER.value))
-        return dict(row) if row is not None else None
-
-    def approve_user(self, user_id: str, workspace_id: str) -> JsonObject | None:
-        table = UserAccount.__table__
-        statement = (
-            table.update()
-            .where(
-                table.c.user_id == user_id,
-                table.c.status == UserStatus.PENDING_APPROVAL.value,
-            )
-            .values(
-                status=UserStatus.ACTIVE.value,
-                role=AccountRole.MEMBER.value,
-                updated_at=func.now(),
-            )
-            .returning(
-                table.c.user_id,
-                table.c.email,
-                table.c.password_hash,
-                table.c.display_name,
-                table.c.status,
-                table.c.role,
-            )
-        )
-        organization_id = workspace_id
-        with self.connection() as conn:
-            conn.execute(self._workspace_upsert(workspace_id, workspace_id))
-            conn.execute(self._organization_upsert(organization_id, organization_id))
-            row = conn.execute(statement).mappings().first()
-            if row is not None:
-                conn.execute(self._member_upsert(workspace_id, user_id, WorkspaceRole.MEMBER.value))
                 conn.execute(
-                    self._organization_member_upsert(
-                        organization_id,
-                        user_id,
-                        OrganizationRole.MEMBER.value,
+                    self._group_upsert(
+                        DEFAULT_GROUP_ID,
+                        DEFAULT_ORGANIZATION_ID,
+                        DEFAULT_GROUP_NAME,
                     )
+                )
+                conn.execute(
+                    self._group_member_upsert(DEFAULT_GROUP_ID, user_id, GroupRole.MANAGER.value)
                 )
         if row is None:
             return None
-        data = dict(row)
-        data["workspace_id"] = workspace_id
-        return data
+        result = dict(row)
+        result["workspace_id"] = DEFAULT_WORKSPACE_ID
+        return result
+
+    def approve_user(self, user_id: str, workspace_id: str) -> JsonObject | None:
+        table = UserAccount.__table__
+        organization_id = workspace_id or DEFAULT_ORGANIZATION_ID
+        group_id = self._default_group_id(organization_id)
+        with self.connection() as conn:
+            user = (
+                conn.execute(select(table).where(table.c.user_id == user_id).limit(1))
+                .mappings()
+                .first()
+            )
+            if user is None or user["status"] != UserStatus.PENDING_APPROVAL.value:
+                return None
+            row = (
+                conn.execute(
+                    table.update()
+                    .where(table.c.user_id == user_id)
+                    .values(
+                        status=UserStatus.ACTIVE.value,
+                        role=ServiceRole.USER.value,
+                        updated_at=func.now(),
+                    )
+                    .returning(
+                        table.c.user_id,
+                        table.c.email,
+                        table.c.password_hash,
+                        table.c.display_name,
+                        table.c.status,
+                        table.c.role,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            conn.execute(self._workspace_upsert(organization_id, organization_id))
+            conn.execute(self._organization_upsert(organization_id, organization_id))
+            conn.execute(
+                self._organization_member_upsert(
+                    organization_id,
+                    user_id,
+                    OrganizationRole.MEMBER.value,
+                )
+            )
+            conn.execute(self._group_upsert(group_id, organization_id, DEFAULT_GROUP_NAME))
+            conn.execute(self._group_member_upsert(group_id, user_id, GroupRole.MEMBER.value))
+        if row is None:
+            return None
+        result = dict(row)
+        result["workspace_id"] = organization_id
+        return result
 
     def get_default_workspace_id_for_user(self, user_id: str) -> str | None:
-        if self.is_service_admin(user_id):
-            return DEFAULT_WORKSPACE_ID
         organization_member = OrganizationMember.__table__
-        statement = (
-            select(organization_member.c.organization_id)
-            .where(
-                organization_member.c.user_id == user_id,
-                organization_member.c.status == AccessStatus.ACTIVE.value,
-            )
-            .order_by(organization_member.c.created_at)
-            .limit(1)
-        )
+        user_table = UserAccount.__table__
         with self.connection() as conn:
-            value = conn.execute(statement).scalar_one_or_none()
-        if value is not None:
-            return str(value)
-
-        workspace_member = WorkspaceMember.__table__
-        fallback = (
-            select(workspace_member.c.workspace_id)
-            .where(
-                workspace_member.c.user_id == user_id,
-                workspace_member.c.status == AccessStatus.ACTIVE.value,
-            )
-            .order_by(workspace_member.c.created_at)
-            .limit(1)
-        )
-        with self.connection() as conn:
-            fallback_value = conn.execute(fallback).scalar_one_or_none()
-        return str(fallback_value) if fallback_value is not None else None
+            service_role = conn.execute(
+                select(user_table.c.role)
+                .where(
+                    user_table.c.user_id == user_id,
+                    user_table.c.status == UserStatus.ACTIVE.value,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if service_role == ServiceRole.SERVICE_ADMIN.value:
+                return DEFAULT_WORKSPACE_ID
+            value = conn.execute(
+                select(organization_member.c.organization_id)
+                .where(
+                    organization_member.c.user_id == user_id,
+                    organization_member.c.status == AccessStatus.ACTIVE.value,
+                )
+                .order_by(organization_member.c.created_at)
+                .limit(1)
+            ).scalar_one_or_none()
+        return str(value) if value is not None else None
 
     def grant_resource_access(self, payload: JsonObject) -> JsonObject:
-        organization_id = str(payload["workspace_id"])
-        user_id = str(payload["subject_id"])
+        user_id = str(payload.get("subject_id") or payload.get("user_id"))
+        organization_id = str(
+            payload.get("organization_id") or payload.get("workspace_id") or DEFAULT_ORGANIZATION_ID
+        )
         resource_type = str(payload["resource_type"])
         resource_id = str(payload["resource_id"])
-        requested_role = str(payload["role"])
-        role = normalize_resource_role(requested_role)
-        legacy_role = self._legacy_access_role_for(role, requested_role)
+        role = normalize_resource_role(str(payload.get("role") or ResourceRole.OBSERVER.value))
         group_id = str(payload.get("group_id") or self._default_group_id(organization_id))
         assignment_id = self._resource_assignment_id(organization_id, resource_type, resource_id)
         with self.connection() as conn:
+            conn.execute(self._user_upsert(user_id))
             conn.execute(self._workspace_upsert(organization_id, organization_id))
-            conn.execute(self._member_upsert(organization_id, user_id, WorkspaceRole.MEMBER.value))
             conn.execute(self._organization_upsert(organization_id, organization_id))
             conn.execute(
                 self._organization_member_upsert(
@@ -482,42 +481,33 @@ class IdentityAccessRepository(DatabaseConnection):
                     resource_id,
                 )
             )
-            row = (
-                conn.execute(
-                    self._member_resource_role_upsert(
-                        assignment_id,
-                        user_id,
-                        role,
-                    ).returning(MemberResourceRole.__table__)
-                )
-                .mappings()
-                .first()
-            )
-            conn.execute(
-                self._access_grant_upsert(
-                    workspace_id=organization_id,
-                    subject_id=user_id,
-                    resource_type=resource_type,
-                    resource_id=resource_id,
-                    role=legacy_role,
-                )
-            )
-        return dict(row) if row is not None else {**payload, "role": role}
+            conn.execute(self._member_resource_role_upsert(assignment_id, user_id, role))
+        return {
+            **payload,
+            "organization_id": organization_id,
+            "workspace_id": organization_id,
+            "subject_id": user_id,
+            "role": role,
+        }
 
     def is_service_admin(self, user_id: str) -> bool:
         table = UserAccount.__table__
-        statement = select(func.count()).where(
-            table.c.user_id == user_id,
-            table.c.role.in_([ServiceRole.SERVICE_ADMIN.value, AccountRole.ADMIN.value]),
-            table.c.status == UserStatus.ACTIVE.value,
+        statement = (
+            select(table.c.user_id)
+            .where(
+                table.c.user_id == user_id,
+                table.c.role == ServiceRole.SERVICE_ADMIN.value,
+                table.c.status == UserStatus.ACTIVE.value,
+            )
+            .limit(1)
         )
         with self.connection() as conn:
-            return int(conn.execute(statement).scalar_one()) > 0
+            return conn.execute(statement).first() is not None
 
     def get_organization_member(self, organization_id: str, user_id: str) -> JsonObject | None:
         table = OrganizationMember.__table__
         statement = (
-            select(table.c.organization_id, table.c.user_id, table.c.role, table.c.status)
+            select(table)
             .where(
                 table.c.organization_id == organization_id,
                 table.c.user_id == user_id,
@@ -532,7 +522,7 @@ class IdentityAccessRepository(DatabaseConnection):
     def get_group_member(self, group_id: str, user_id: str) -> JsonObject | None:
         table = GroupMember.__table__
         statement = (
-            select(table.c.group_id, table.c.user_id, table.c.role, table.c.status)
+            select(table)
             .where(
                 table.c.group_id == group_id,
                 table.c.user_id == user_id,
@@ -550,25 +540,14 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         resource_id: str,
     ) -> JsonObject | None:
-        assignment = ResourceAssignment.__table__
-        group = Group.__table__
+        table = ResourceAssignment.__table__
         statement = (
-            select(
-                assignment.c.resource_assignment_id,
-                assignment.c.organization_id,
-                assignment.c.group_id,
-                assignment.c.resource_type,
-                assignment.c.resource_id,
-                assignment.c.status,
-            )
-            .select_from(assignment.join(group, assignment.c.group_id == group.c.group_id))
+            select(table)
             .where(
-                assignment.c.organization_id == organization_id,
-                group.c.organization_id == organization_id,
-                group.c.status == AccessStatus.ACTIVE.value,
-                assignment.c.resource_type == resource_type,
-                assignment.c.resource_id == resource_id,
-                assignment.c.status == AccessStatus.ACTIVE.value,
+                table.c.organization_id == organization_id,
+                table.c.resource_type == resource_type,
+                table.c.resource_id == resource_id,
+                table.c.status == AccessStatus.ACTIVE.value,
             )
             .limit(1)
         )
@@ -583,7 +562,7 @@ class IdentityAccessRepository(DatabaseConnection):
     ) -> JsonObject | None:
         table = MemberResourceRole.__table__
         statement = (
-            select(table.c.resource_assignment_id, table.c.user_id, table.c.role, table.c.status)
+            select(table)
             .where(
                 table.c.resource_assignment_id == resource_assignment_id,
                 table.c.user_id == user_id,
@@ -600,22 +579,34 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         role: str,
         organization_id: str | None = None,
-    ) -> list[str]:
+    ) -> set[str]:
+        role = normalize_resource_role(role)
+        organization_scope = self._role_policy_scope(
+            organization_id or GLOBAL_ROLE_POLICY_ORGANIZATION_ID
+        )
         table = RolePermission.__table__
         with self.connection() as conn:
-            scope = self._role_policy_scope(conn, organization_id, resource_type, role)
-            statement = (
-                select(table.c.permission)
+            scope = organization_scope
+            scoped_rows_exist = conn.execute(
+                select(table.c.id)
                 .where(
+                    table.c.organization_id == organization_scope,
+                    table.c.resource_type == resource_type,
+                    table.c.role == role,
+                )
+                .limit(1)
+            ).first()
+            if scoped_rows_exist is None:
+                scope = GLOBAL_ROLE_POLICY_ORGANIZATION_ID
+            rows = conn.execute(
+                select(table.c.permission).where(
                     table.c.organization_id == scope,
                     table.c.resource_type == resource_type,
                     table.c.role == role,
                     table.c.status == AccessStatus.ACTIVE.value,
                 )
-                .order_by(table.c.permission)
-            )
-            permissions = conn.execute(statement).scalars().all()
-        return [str(permission) for permission in permissions]
+            ).scalars()
+            return {str(row) for row in rows}
 
     def role_has_permission(
         self,
@@ -624,17 +615,12 @@ class IdentityAccessRepository(DatabaseConnection):
         permission: str,
         organization_id: str | None = None,
     ) -> bool:
-        table = RolePermission.__table__
-        with self.connection() as conn:
-            scope = self._role_policy_scope(conn, organization_id, resource_type, role)
-            statement = select(func.count()).where(
-                table.c.organization_id == scope,
-                table.c.resource_type == resource_type,
-                table.c.role == role,
-                table.c.permission == permission,
-                table.c.status == AccessStatus.ACTIVE.value,
-            )
-            return int(conn.execute(statement).scalar_one()) > 0
+        normalized_permission = LEGACY_PERMISSION_ALIASES.get(permission, permission)
+        return normalized_permission in self.get_role_permissions(
+            resource_type,
+            role,
+            organization_id,
+        )
 
     def can_access(
         self,
@@ -657,15 +643,15 @@ class IdentityAccessRepository(DatabaseConnection):
             return False
         if self.get_group_member(str(assignment["group_id"]), user_id) is None:
             return False
-        member_resource_role = self.get_member_resource_role(
+        member_role = self.get_member_resource_role(
             str(assignment["resource_assignment_id"]),
             user_id,
         )
-        if member_resource_role is None:
+        if member_role is None:
             return False
         return self.role_has_permission(
             resource_type,
-            str(member_resource_role["role"]),
+            str(member_role["role"]),
             permission,
             organization_id,
         )
@@ -678,30 +664,7 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_id: str,
         action: str,
     ) -> bool:
-        if self._is_account_admin(user_id) or self._is_workspace_owner(user_id, workspace_id):
-            return True
-
-        legacy_allowed_roles = [
-            role for role, actions in ACCESS_ROLE_ACTIONS.items() if action in actions
-        ]
-        if legacy_allowed_roles:
-            table = ResourceAccessGrant.__table__
-            statement = select(table.c.role).where(
-                table.c.workspace_id == workspace_id,
-                table.c.subject_type == AccessSubjectType.USER.value,
-                table.c.subject_id == user_id,
-                table.c.resource_type == resource_type,
-                table.c.resource_id == resource_id,
-                table.c.role.in_(legacy_allowed_roles),
-                table.c.status == AccessStatus.ACTIVE.value,
-            )
-            with self.connection() as conn:
-                legacy_roles = conn.execute(statement).scalars().all()
-            if any(access_role_allows_action(str(role), action) for role in legacy_roles):
-                return True
-
-        permission = ACTION_PERMISSION_ALIASES.get(action, action)
-        return self.can_access(user_id, workspace_id, resource_type, resource_id, permission)
+        return self.can_access(user_id, workspace_id, resource_type, resource_id, action)
 
     def accessible_resource_ids(
         self,
@@ -710,155 +673,76 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         action: str,
     ) -> set[str] | None:
-        if self._is_account_admin(user_id) or self._is_workspace_owner(user_id, workspace_id):
+        if self.is_service_admin(user_id):
             return None
-
-        legacy_allowed_roles = [
-            role for role, actions in ACCESS_ROLE_ACTIONS.items() if action in actions
-        ]
-        if legacy_allowed_roles:
-            table = ResourceAccessGrant.__table__
-            statement = (
-                select(table.c.resource_id)
-                .where(
-                    table.c.workspace_id == workspace_id,
-                    table.c.subject_type == AccessSubjectType.USER.value,
-                    table.c.subject_id == user_id,
-                    table.c.resource_type == resource_type,
-                    table.c.role.in_(legacy_allowed_roles),
-                    table.c.status == AccessStatus.ACTIVE.value,
-                )
-                .order_by(table.c.resource_id)
-            )
-            with self.connection() as conn:
-                legacy_ids = conn.execute(statement).scalars().all()
-            if legacy_ids:
-                return {str(resource_id) for resource_id in legacy_ids}
-
-        permission = ACTION_PERMISSION_ALIASES.get(action, action)
-        if self.get_organization_member(workspace_id, user_id) is None:
-            return set()
-        allowed_roles = [
-            role
-            for role in RESOURCE_ROLE_PERMISSIONS
-            if self.role_has_permission(resource_type, role, permission, workspace_id)
-        ]
-        if not allowed_roles:
-            return set()
-
+        permission = LEGACY_PERMISSION_ALIASES.get(action, action)
         assignment = ResourceAssignment.__table__
-        group = Group.__table__
         group_member = GroupMember.__table__
         member_role = MemberResourceRole.__table__
+        role_permission = RolePermission.__table__
         statement = (
             select(assignment.c.resource_id)
             .select_from(
-                assignment.join(group, assignment.c.group_id == group.c.group_id)
-                .join(group_member, group.c.group_id == group_member.c.group_id)
+                assignment.join(
+                    group_member,
+                    (group_member.c.group_id == assignment.c.group_id)
+                    & (group_member.c.user_id == user_id)
+                    & (group_member.c.status == AccessStatus.ACTIVE.value),
+                )
                 .join(
                     member_role,
-                    assignment.c.resource_assignment_id == member_role.c.resource_assignment_id,
+                    (member_role.c.resource_assignment_id == assignment.c.resource_assignment_id)
+                    & (member_role.c.user_id == user_id)
+                    & (member_role.c.status == AccessStatus.ACTIVE.value),
+                )
+                .join(
+                    role_permission,
+                    (role_permission.c.organization_id == GLOBAL_ROLE_POLICY_ORGANIZATION_ID)
+                    & (role_permission.c.resource_type == assignment.c.resource_type)
+                    & (role_permission.c.role == member_role.c.role)
+                    & (role_permission.c.permission == permission)
+                    & (role_permission.c.status == AccessStatus.ACTIVE.value),
                 )
             )
             .where(
                 assignment.c.organization_id == workspace_id,
                 assignment.c.resource_type == resource_type,
                 assignment.c.status == AccessStatus.ACTIVE.value,
-                group.c.organization_id == workspace_id,
-                group.c.status == AccessStatus.ACTIVE.value,
-                group_member.c.user_id == user_id,
-                group_member.c.status == AccessStatus.ACTIVE.value,
-                member_role.c.user_id == user_id,
-                member_role.c.role.in_(allowed_roles),
-                member_role.c.status == AccessStatus.ACTIVE.value,
             )
         )
         with self.connection() as conn:
-            resource_ids = conn.execute(statement).scalars().all()
-        return {str(resource_id) for resource_id in resource_ids}
+            return {str(value) for value in conn.execute(statement).scalars()}
 
-    @staticmethod
-    def _has_service_admin(conn: Any) -> bool:
-        table = UserAccount.__table__
-        statement = select(func.count()).where(
-            table.c.role.in_([ServiceRole.SERVICE_ADMIN.value, AccountRole.ADMIN.value]),
-            table.c.status == UserStatus.ACTIVE.value,
-        )
-        return int(conn.execute(statement).scalar_one()) > 0
-
-    def _is_account_admin(self, user_id: str) -> bool:
-        return self.is_service_admin(user_id)
-
-    def _is_workspace_owner(self, user_id: str, workspace_id: str) -> bool:
-        table = WorkspaceMember.__table__
-        statement = select(func.count()).where(
-            table.c.workspace_id == workspace_id,
-            table.c.user_id == user_id,
-            table.c.role == WorkspaceRole.OWNER.value,
-            table.c.status == AccessStatus.ACTIVE.value,
+    def authenticate_cluster_agent(self, token_hash: str) -> JsonObject | None:
+        if not token_hash:
+            return None
+        table = ClusterRegistration.__table__
+        statement = (
+            select(table.c.workspace_id, table.c.cluster_id)
+            .where(
+                table.c.agent_token_hash == token_hash,
+                table.c.status == ClusterRegistrationStatus.REGISTERED.value,
+            )
+            .limit(1)
         )
         with self.connection() as conn:
-            return int(conn.execute(statement).scalar_one()) > 0
-
-    @staticmethod
-    def _role_policy_scope(
-        conn: Any,
-        organization_id: str | None,
-        resource_type: str,
-        role: str,
-    ) -> str:
-        if organization_id is None:
-            return GLOBAL_ROLE_POLICY_ORGANIZATION_ID
-        table = RolePermission.__table__
-        statement = select(func.count()).where(
-            table.c.organization_id == organization_id,
-            table.c.resource_type == resource_type,
-            table.c.role == role,
-        )
-        if int(conn.execute(statement).scalar_one()) > 0:
-            return organization_id
-        return GLOBAL_ROLE_POLICY_ORGANIZATION_ID
-
-    @staticmethod
-    def _default_group_id(organization_id: str) -> str:
-        return (
-            DEFAULT_GROUP_ID
-            if organization_id == DEFAULT_ORGANIZATION_ID
-            else f"{organization_id}:ops"
-        )
-
-    @staticmethod
-    def _resource_assignment_id(
-        organization_id: str,
-        resource_type: str,
-        resource_id: str,
-    ) -> str:
-        return f"ra:{organization_id}:{resource_type}:{resource_id}"
-
-    @staticmethod
-    def _legacy_access_role_for(resource_role: str, requested_role: str) -> str:
-        if requested_role in ACCESS_ROLE_ACTIONS:
-            return requested_role
-        return {
-            ResourceRole.OBSERVER.value: AccessRole.VIEWER.value,
-            ResourceRole.RELEASE_OPERATOR.value: AccessRole.DEPLOYER.value,
-            ResourceRole.INCIDENT_OPERATOR.value: AccessRole.MAINTAINER.value,
-            ResourceRole.CLUSTER_STEWARD.value: AccessRole.OWNER.value,
-        }.get(resource_role, AccessRole.VIEWER.value)
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
 
     @staticmethod
     def _user_upsert(user_id: str) -> Any:
         table = UserAccount.__table__
         insert = pg_insert(table).values(
             user_id=user_id,
+            email=None,
+            password_hash=None,
             display_name=user_id,
             status=UserStatus.ACTIVE.value,
-            role=AccountRole.MEMBER.value,
-            updated_at=func.now(),
+            role=ServiceRole.USER.value,
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.user_id],
-            set_={"status": UserStatus.ACTIVE.value, "updated_at": func.now()},
+            set_={"updated_at": func.now()},
         )
 
     @staticmethod
@@ -876,7 +760,6 @@ class IdentityAccessRepository(DatabaseConnection):
             display_name=display_name,
             status=UserStatus.ACTIVE.value,
             role=ServiceRole.SERVICE_ADMIN.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.email],
@@ -887,13 +770,6 @@ class IdentityAccessRepository(DatabaseConnection):
                 "role": ServiceRole.SERVICE_ADMIN.value,
                 "updated_at": func.now(),
             },
-        ).returning(
-            table.c.user_id,
-            table.c.email,
-            table.c.password_hash,
-            table.c.display_name,
-            table.c.status,
-            table.c.role,
         )
 
     @staticmethod
@@ -904,41 +780,12 @@ class IdentityAccessRepository(DatabaseConnection):
             name=name,
             slug=workspace_id,
             status=WorkspaceStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.workspace_id],
-            set_={"status": WorkspaceStatus.ACTIVE.value, "updated_at": func.now()},
-        )
-
-    @staticmethod
-    def _member_upsert(workspace_id: str, user_id: str, role: str) -> Any:
-        table = WorkspaceMember.__table__
-        insert = pg_insert(table).values(
-            workspace_id=workspace_id,
-            user_id=user_id,
-            role=role,
-            permissions={"target": ["register", "install"]},
-            status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
-        )
-        return insert.on_conflict_do_update(
-            index_elements=[table.c.workspace_id, table.c.user_id],
             set_={
-                "role": case(
-                    (insert.excluded.role == WorkspaceRole.OWNER.value, insert.excluded.role),
-                    (table.c.role == WorkspaceRole.OWNER.value, table.c.role),
-                    else_=insert.excluded.role,
-                ),
-                "permissions": case(
-                    (
-                        insert.excluded.role == WorkspaceRole.OWNER.value,
-                        insert.excluded.permissions,
-                    ),
-                    (table.c.role == WorkspaceRole.OWNER.value, table.c.permissions),
-                    else_=insert.excluded.permissions,
-                ),
-                "status": AccessStatus.ACTIVE.value,
+                "name": insert.excluded.name,
+                "status": WorkspaceStatus.ACTIVE.value,
                 "updated_at": func.now(),
             },
         )
@@ -951,11 +798,14 @@ class IdentityAccessRepository(DatabaseConnection):
             name=name,
             slug=organization_id,
             status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.organization_id],
-            set_={"status": AccessStatus.ACTIVE.value, "updated_at": func.now()},
+            set_={
+                "name": insert.excluded.name,
+                "status": AccessStatus.ACTIVE.value,
+                "updated_at": func.now(),
+            },
         )
 
     @staticmethod
@@ -966,14 +816,13 @@ class IdentityAccessRepository(DatabaseConnection):
             user_id=user_id,
             role=role,
             status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.organization_id, table.c.user_id],
             set_={
                 "role": case(
-                    (insert.excluded.role == OrganizationRole.OWNER.value, insert.excluded.role),
                     (table.c.role == OrganizationRole.OWNER.value, table.c.role),
+                    (insert.excluded.role == OrganizationRole.OWNER.value, insert.excluded.role),
                     else_=insert.excluded.role,
                 ),
                 "status": AccessStatus.ACTIVE.value,
@@ -990,11 +839,14 @@ class IdentityAccessRepository(DatabaseConnection):
             name=name,
             slug=group_id,
             status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.group_id],
-            set_={"status": AccessStatus.ACTIVE.value, "updated_at": func.now()},
+            set_={
+                "name": insert.excluded.name,
+                "status": AccessStatus.ACTIVE.value,
+                "updated_at": func.now(),
+            },
         )
 
     @staticmethod
@@ -1005,14 +857,13 @@ class IdentityAccessRepository(DatabaseConnection):
             user_id=user_id,
             role=role,
             status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.group_id, table.c.user_id],
             set_={
                 "role": case(
-                    (insert.excluded.role == GroupRole.MANAGER.value, insert.excluded.role),
                     (table.c.role == GroupRole.MANAGER.value, table.c.role),
+                    (insert.excluded.role == GroupRole.MANAGER.value, insert.excluded.role),
                     else_=insert.excluded.role,
                 ),
                 "status": AccessStatus.ACTIVE.value,
@@ -1036,7 +887,6 @@ class IdentityAccessRepository(DatabaseConnection):
             resource_type=resource_type,
             resource_id=resource_id,
             status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.resource_assignment_id],
@@ -1057,14 +907,20 @@ class IdentityAccessRepository(DatabaseConnection):
         insert = pg_insert(table).values(
             resource_assignment_id=resource_assignment_id,
             user_id=user_id,
-            role=role,
+            role=normalize_resource_role(role),
             status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.resource_assignment_id, table.c.user_id],
             set_={
-                "role": insert.excluded.role,
+                "role": case(
+                    (table.c.role == ResourceRole.CLUSTER_STEWARD.value, table.c.role),
+                    (
+                        insert.excluded.role == ResourceRole.CLUSTER_STEWARD.value,
+                        insert.excluded.role,
+                    ),
+                    else_=insert.excluded.role,
+                ),
                 "status": AccessStatus.ACTIVE.value,
                 "updated_at": func.now(),
             },
@@ -1082,10 +938,9 @@ class IdentityAccessRepository(DatabaseConnection):
         insert = pg_insert(table).values(
             organization_id=organization_id,
             resource_type=resource_type,
-            role=role,
-            permission=permission,
+            role=normalize_resource_role(role),
+            permission=LEGACY_PERMISSION_ALIASES.get(permission, permission),
             status=status,
-            updated_at=func.now(),
         )
         return insert.on_conflict_do_update(
             index_elements=[
@@ -1101,54 +956,17 @@ class IdentityAccessRepository(DatabaseConnection):
         )
 
     @staticmethod
-    def _access_grant_upsert(
-        workspace_id: str,
-        subject_id: str,
-        resource_type: str,
-        resource_id: str,
-        role: str,
-    ) -> Any:
-        table = ResourceAccessGrant.__table__
-        permissions = {"actions": sorted(ACCESS_ROLE_ACTIONS.get(role, set()))}
-        insert = pg_insert(table).values(
-            workspace_id=workspace_id,
-            subject_type=AccessSubjectType.USER.value,
-            subject_id=subject_id,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            role=role,
-            permissions=permissions,
-            status=AccessStatus.ACTIVE.value,
-            updated_at=func.now(),
-        )
-        return insert.on_conflict_do_update(
-            index_elements=[
-                table.c.workspace_id,
-                table.c.subject_type,
-                table.c.subject_id,
-                table.c.resource_type,
-                table.c.resource_id,
-            ],
-            set_={
-                "role": insert.excluded.role,
-                "permissions": insert.excluded.permissions,
-                "status": AccessStatus.ACTIVE.value,
-                "updated_at": func.now(),
-            },
-        )
-
-    @staticmethod
     def _cluster_upsert(payload: JsonObject) -> Any:
         table = ClusterRegistration.__table__
+        workspace_id = str(payload.get("workspace_id") or DEFAULT_WORKSPACE_ID)
         insert = pg_insert(table).values(
-            workspace_id=payload["workspace_id"],
-            cluster_id=payload["cluster_id"],
-            name=payload["name"],
-            environment=payload["environment"],
+            workspace_id=workspace_id,
+            cluster_id=str(payload["cluster_id"]),
+            name=str(payload.get("name") or payload["cluster_id"]),
+            environment=str(payload.get("environment") or "default"),
             status=ClusterRegistrationStatus.REGISTERED.value,
-            agent_token_hash=payload["agent_token_hash"],
-            settings=payload["settings"],
-            updated_at=func.now(),
+            agent_token_hash=payload.get("agent_token_hash"),
+            settings=payload.get("settings") or {},
         )
         return insert.on_conflict_do_update(
             index_elements=[table.c.workspace_id, table.c.cluster_id],
@@ -1162,16 +980,39 @@ class IdentityAccessRepository(DatabaseConnection):
             },
         )
 
-    def authenticate_cluster_agent(self, token_hash: str) -> JsonObject | None:
-        if not token_hash:
-            return None
-        table = ClusterRegistration.__table__
-        statement = select(table.c.workspace_id, table.c.cluster_id).where(
-            table.c.agent_token_hash == token_hash
+    @staticmethod
+    def _role_policy_scope(organization_id: str) -> str:
+        return organization_id or GLOBAL_ROLE_POLICY_ORGANIZATION_ID
+
+    @staticmethod
+    def _default_group_id(organization_id: str) -> str:
+        if organization_id == DEFAULT_ORGANIZATION_ID:
+            return DEFAULT_GROUP_ID
+        digest = hashlib.sha256(organization_id.encode()).hexdigest()[:24]
+        return f"group-{digest}"
+
+    @staticmethod
+    def _resource_assignment_id(
+        organization_id: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> str:
+        raw = "|".join([organization_id, resource_type, resource_id])
+        digest = hashlib.sha256(raw.encode()).hexdigest()[:32]
+        return f"resource-assignment-{digest}"
+
+    @staticmethod
+    def _has_service_admin(conn: Any) -> bool:
+        table = UserAccount.__table__
+        statement = (
+            select(table.c.user_id)
+            .where(
+                table.c.role == ServiceRole.SERVICE_ADMIN.value,
+                table.c.status == UserStatus.ACTIVE.value,
+            )
+            .limit(1)
         )
-        with self.connection() as conn:
-            row = conn.execute(statement).mappings().first()
-        return dict(row) if row is not None else None
+        return conn.execute(statement).first() is not None
 
 
 WorkspaceAccessRepository = IdentityAccessRepository

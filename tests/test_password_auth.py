@@ -35,7 +35,7 @@ def load_auth_module():
 class FakeUserStore:
     def __init__(self, users: dict[str, dict[str, Any]]) -> None:
         self.users = users
-        self.workspace_members: dict[str, dict[str, str]] = {}
+        self.organization_members: dict[str, dict[str, str]] = {}
 
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         return self.users.get(email)
@@ -66,14 +66,14 @@ class FakeUserStore:
         user = self._find_user(user_id)
         if user is None:
             return None
-        if self._has_workspace_owner():
+        if self._has_organization_owner():
             user["status"] = "pending_approval"
-            user["role"] = "member"
+            user["role"] = "user"
             return user
         user["status"] = "active"
-        user["role"] = "admin"
+        user["role"] = "service_admin"
         user["workspace_id"] = "default"
-        self.workspace_members[user_id] = {"workspace_id": "default", "role": "owner"}
+        self.organization_members[user_id] = {"workspace_id": "default", "role": "owner"}
         return user
 
     def approve_user(self, user_id: str, workspace_id: str) -> dict[str, Any] | None:
@@ -81,14 +81,14 @@ class FakeUserStore:
         if user is None or user.get("status") != "pending_approval":
             return None
         user["status"] = "active"
-        user["role"] = "member"
+        user["role"] = "user"
         user["workspace_id"] = workspace_id
-        self.workspace_members[user_id] = {"workspace_id": workspace_id, "role": "member"}
+        self.organization_members[user_id] = {"workspace_id": workspace_id, "role": "member"}
         return user
 
     def get_default_workspace_id_for_user(self, user_id: str) -> str | None:
-        if user_id in self.workspace_members:
-            return self.workspace_members[user_id]["workspace_id"]
+        if user_id in self.organization_members:
+            return self.organization_members[user_id]["workspace_id"]
         user = self._find_user(user_id)
         if user is not None and user.get("workspace_id"):
             return str(user["workspace_id"])
@@ -100,8 +100,8 @@ class FakeUserStore:
                 return user
         return None
 
-    def _has_workspace_owner(self) -> bool:
-        return any(member["role"] == "owner" for member in self.workspace_members.values())
+    def _has_organization_owner(self) -> bool:
+        return any(member["role"] == "owner" for member in self.organization_members.values())
 
 
 class FakeSessionStore:
@@ -191,7 +191,7 @@ def test_password_login_creates_session() -> None:
                     "password_hash": password_hash,
                     "display_name": "Local User",
                     "status": "active",
-                    "role": "member",
+                    "role": "user",
                 }
             }
         )
@@ -201,7 +201,7 @@ def test_password_login_creates_session() -> None:
         session = await service.login("local@example.com", "local-password")
 
         assert session.user_id == "local-user"
-        assert session.roles == ["member"]
+        assert session.roles == ["user"]
         assert await sessions.get_session(session.token) == session
 
     asyncio.run(run())
@@ -222,7 +222,7 @@ def test_password_signup_creates_pending_user_and_verification_token() -> None:
         assert user is not None
         assert user["display_name"] == "local"
         assert user["status"] == "pending_email_verification"
-        assert user["role"] == "member"
+        assert user["role"] == "user"
         assert user["password_hash"] != "local-password"
         assert auth.verify_password("local-password", user["password_hash"])
         assert challenge.user_id == user["user_id"]
@@ -244,7 +244,7 @@ def test_password_signup_assigns_member_even_after_bootstrap_admin() -> None:
                     "password_hash": auth.hash_password("admin-password"),
                     "display_name": "Admin",
                     "status": "active",
-                    "role": "admin",
+                    "role": "service_admin",
                 }
             }
         )
@@ -255,7 +255,7 @@ def test_password_signup_assigns_member_even_after_bootstrap_admin() -> None:
 
         member = users.get_user_by_email("member@example.com")
         assert member is not None
-        assert member["role"] == "member"
+        assert member["role"] == "user"
 
     asyncio.run(run())
 
@@ -286,7 +286,7 @@ def test_password_signup_rejects_duplicate_email() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Local User",
                     "status": "active",
-                    "role": "admin",
+                    "role": "service_admin",
                 }
             }
         )
@@ -331,7 +331,7 @@ def test_resend_verification_requires_pending_password_and_issues_new_token() ->
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Local User",
                     "status": "pending_email_verification",
-                    "role": "admin",
+                    "role": "service_admin",
                 }
             }
         )
@@ -360,7 +360,7 @@ def test_password_login_rejects_pending_email_verification() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Local User",
                     "status": "pending_email_verification",
-                    "role": "admin",
+                    "role": "service_admin",
                 }
             }
         )
@@ -385,7 +385,7 @@ def test_verify_email_activates_user_and_creates_session() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Local User",
                     "status": "pending_email_verification",
-                    "role": "member",
+                    "role": "user",
                 }
             }
         )
@@ -402,7 +402,7 @@ def test_verify_email_activates_user_and_creates_session() -> None:
         assert result.session is not None
         session = result.session
         assert session.user_id == "local-user"
-        assert session.roles == ["admin"]
+        assert session.roles == ["service_admin"]
         assert session.workspace_id == "default"
         assert result.workspace_id == "default"
         assert await sessions.get_session(session.token) == session
@@ -422,11 +422,11 @@ def test_verify_email_after_bootstrap_requires_admin_approval() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Member",
                     "status": "pending_email_verification",
-                    "role": "member",
+                    "role": "user",
                 }
             }
         )
-        users.workspace_members["admin-user"] = {"workspace_id": "default", "role": "owner"}
+        users.organization_members["admin-user"] = {"workspace_id": "default", "role": "owner"}
         sessions = FakeSessionStore(auth)
         sessions.email_tokens["email-token-1"] = {
             "user_id": "member-user",
@@ -439,7 +439,7 @@ def test_verify_email_after_bootstrap_requires_admin_approval() -> None:
         user = users.get_user_by_email("member@example.com")
         assert user is not None
         assert user["status"] == "pending_approval"
-        assert user["role"] == "member"
+        assert user["role"] == "user"
         assert result.session is None
         assert result.workspace_id == "default"
         assert sessions.sessions == {}
@@ -458,7 +458,7 @@ def test_password_login_rejects_pending_approval() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Local User",
                     "status": "pending_approval",
-                    "role": "member",
+                    "role": "user",
                 }
             }
         )
@@ -483,7 +483,7 @@ def test_admin_approval_activates_member_in_workspace() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Member",
                     "status": "pending_approval",
-                    "role": "member",
+                    "role": "user",
                 }
             }
         )
@@ -492,7 +492,7 @@ def test_admin_approval_activates_member_in_workspace() -> None:
         user = await service.approve_user("member-user", "default")
 
         assert user["status"] == "active"
-        assert user["role"] == "member"
+        assert user["role"] == "user"
         assert users.get_default_workspace_id_for_user("member-user") == "default"
 
     asyncio.run(run())
@@ -509,7 +509,7 @@ def test_password_login_rejects_wrong_password() -> None:
                     "password_hash": auth.hash_password("local-password"),
                     "display_name": "Local User",
                     "status": "active",
-                    "role": "member",
+                    "role": "user",
                 }
             }
         )
@@ -528,7 +528,7 @@ def test_password_logout_deletes_session() -> None:
         auth = load_auth_module()
         sessions = FakeSessionStore(auth)
         service = auth.PasswordAuthService(FakeUserStore({}), sessions)
-        session = await sessions.create_session("local-user", ["admin"])
+        session = await sessions.create_session("local-user", ["service_admin"])
 
         await service.logout(session.token)
 

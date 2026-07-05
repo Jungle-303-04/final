@@ -13,7 +13,7 @@ from rate_limits import (
 from settings import Settings
 
 from packages.config.constants import Auth
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccountRole, UserStatus
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole, UserStatus
 from packages.contracts.interfaces import SessionStore, UserStore
 from packages.storage.sessions import AuthSession, RateLimitExceeded
 
@@ -87,7 +87,7 @@ class PasswordAuthService:
             password_hash=hash_password(password),
             display_name=default_display_name(normalized_email),
             status=UserStatus.PENDING_EMAIL_VERIFICATION.value,
-            role=AccountRole.MEMBER.value,
+            role=ServiceRole.USER.value,
         )
         if user is None:
             raise HTTPException(status_code=409, detail=Settings.USER_ALREADY_EXISTS_MESSAGE)
@@ -187,8 +187,8 @@ def user_id_from_record(user: dict[str, object]) -> str:
 
 
 def roles_from_record(user: dict[str, object]) -> list[str]:
-    role = user.get("role") or AccountRole.MEMBER.value
-    if isinstance(role, AccountRole):
+    role = user.get("role") or ServiceRole.USER.value
+    if isinstance(role, ServiceRole):
         return [role.value]
     return [str(role)]
 
