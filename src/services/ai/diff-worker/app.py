@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 from domains.rca.events import DiffExplainedBody, SafePrPatchPreparedBody
 from domains.scm.events import SafePrReadyForCreationBody, SafePrRequestedBody
-from domains.scm.policy import DefaultSafePrDiffPolicy
+from domains.scm.policy import STAGE_DIFF, DefaultSafePrDiffPolicy, safe_pr_failed_body
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App
 
@@ -65,6 +65,8 @@ async def on_safe_pr_patch_prepared(evt: SafePrPatchPreparedBody) -> AsyncIterat
             details=assessment.details,
             workspace_id=evt.workspace_id,
         )
+        return
+    yield safe_pr_failed_body(request, assessment, stage=STAGE_DIFF)
 
 
 if __name__ == "__main__":
