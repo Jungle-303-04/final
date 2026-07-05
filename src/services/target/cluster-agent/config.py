@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from packages.config.constants import Command
 from packages.config.settings import env
+
+# 관측 스택 기본 주소는 contracts 가 유일한 정의 지점 — 여기서는 re-export 만 한다.
+from packages.contracts.gateway.requests import (
+    DEFAULT_LOKI_BASE_URL as DEFAULT_LOKI_BASE_URL,
+)
+from packages.contracts.gateway.requests import (
+    DEFAULT_PROMETHEUS_BASE_URL as DEFAULT_PROMETHEUS_BASE_URL,
+)
+from packages.contracts.gateway.requests import (
+    DEFAULT_TEMPO_BASE_URL as DEFAULT_TEMPO_BASE_URL,
+)
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
 DEFAULT_MANAGEMENT_BASE_URL = ""
-DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
-DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
-DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
 DEFAULT_OTEL_SERVICE_NAME = "target-cluster-agent"
 DEFAULT_OTEL_TRACES_ENDPOINT = ""
 
