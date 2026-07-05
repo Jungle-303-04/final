@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MGMT_CLUSTER="${MGMT_CLUSTER:-kubernetes-ops}"
-TARGET_CLUSTER="${TARGET_CLUSTER:-cluster-1}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/env.sh"
+
+MGMT_CLUSTER="${MGMT_CLUSTER:-}"
+TARGET_CLUSTER="${TARGET_CLUSTER:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-${MGMT_CLUSTER}}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-${TARGET_CLUSTER}}"
-BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
+BASE_URL="${BASE_URL:-}"
+
+require_env MGMT_CONTEXT
+require_env TARGET_CONTEXT
 
 echo "==> management pods"
 kubectl --context "${MGMT_CONTEXT}" -n management get pods -o wide
@@ -16,5 +22,9 @@ kubectl --context "${TARGET_CONTEXT}" -n target get pods -o wide
 
 echo
 echo "==> gateway health"
-curl -fsS "${BASE_URL}/healthz" || true
+if [ -n "${BASE_URL}" ]; then
+  curl -fsS "${BASE_URL}/healthz" || true
+else
+  echo "BASE_URL not set; skipping gateway health"
+fi
 echo

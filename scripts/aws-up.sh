@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/lib/env.sh"
 
 default_github_repo() {
   local url
@@ -19,6 +20,8 @@ AWS_REGION="${AWS_REGION:-us-east-1}"
 MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
 TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
 TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-${PROJECT_SLUG}-target-b}"
+TARGET_CLUSTER_ID_1="${TARGET_CLUSTER_ID_1:-${TARGET_CLUSTER_1}}"
+TARGET_CLUSTER_ID_2="${TARGET_CLUSTER_ID_2:-${TARGET_CLUSTER_2}}"
 
 if [[ "${MGMT_CLUSTER}" == "management" ]]; then
   MGMT_CLUSTER="${AWS_MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
@@ -91,7 +94,7 @@ GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
 GEMINI_BASE_URL="${GEMINI_BASE_URL:-}"
 GEMINI_MODEL="${GEMINI_MODEL:-}"
 
-AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
+AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
 RUN_SMOKE="${RUN_SMOKE:-0}"
@@ -159,8 +162,12 @@ if [[ "${BOOTSTRAP_ADMIN}" == "1" ]]; then
   need uv
 fi
 
-if [[ -z "${AUTH_PASSWORD}" ]]; then
-  AUTH_PASSWORD="$(openssl rand -base64 24 | tr -d '=+/[:space:]' | cut -c1-24)"
+if [[ "${BOOTSTRAP_ADMIN}" == "1" || "${REGISTER_TARGETS}" == "1" || "${RUN_SMOKE}" == "1" ]]; then
+  require_env AUTH_EMAIL
+fi
+
+if [[ -z "${AUTH_PASSWORD}" && ( "${BOOTSTRAP_ADMIN}" == "1" || "${REGISTER_TARGETS}" == "1" || "${RUN_SMOKE}" == "1" ) ]]; then
+  AUTH_PASSWORD="$(generate_password)"
   GENERATED_AUTH_PASSWORD="1"
 fi
 
@@ -993,8 +1000,8 @@ main() {
   fi
 
   if [[ "${REGISTER_TARGETS}" == "1" ]]; then
-    register_target "${TARGET_CLUSTER_1}" "target-cluster-01" "${TARGET_1_DISPLAY_NAME}" "${base_url}"
-    register_target "${TARGET_CLUSTER_2}" "target-cluster-02" "${TARGET_2_DISPLAY_NAME}" "${base_url}"
+    register_target "${TARGET_CLUSTER_1}" "${TARGET_CLUSTER_ID_1}" "${TARGET_1_DISPLAY_NAME}" "${base_url}"
+    register_target "${TARGET_CLUSTER_2}" "${TARGET_CLUSTER_ID_2}" "${TARGET_2_DISPLAY_NAME}" "${base_url}"
   else
     log "skipping target registration"
   fi
