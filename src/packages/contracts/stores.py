@@ -31,6 +31,15 @@ class RcaBacklogStore(Protocol):
     async def upsert_rca_backlog_item(self, body: JsonObject) -> None: ...
 
 
+class RecoveryPlanStore(Protocol):
+    async def upsert_recovery_selection_request(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        plan: JsonObject,
+    ) -> None: ...
+
+
 class RepoChangeStore(Protocol):
     async def save_repo_change(
         self,

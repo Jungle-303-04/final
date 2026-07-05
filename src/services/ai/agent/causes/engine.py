@@ -6,6 +6,7 @@ from domains.rca.events import (
     CauseCandidate,
     CauseEvaluation,
     EvidenceBundle,
+    EvidenceReference,
     IncidentRecord,
     MissingEvidenceCheck,
     RcaReportDetail,
@@ -133,21 +134,40 @@ def evaluate_causes(
                 supporting_evidence=supporting,
                 missing_evidence=missing,
                 reason=f"필요한 근거 {len(expected)}개 중 {len(supporting)}개가 수집되었습니다.",
+                supporting_evidence_refs=evidence_refs_for_sources(evidence_bundle, supporting),
+                missing_evidence_checks=missing_evidence_checks(missing, candidate.checks),
             )
         )
     return evaluations
 
 
-def missing_evidence_checks(missing_evidence: list[str]) -> list[MissingEvidenceCheck]:
+def evidence_refs_for_sources(
+    evidence_bundle: EvidenceBundle, sources: list[str]
+) -> list[EvidenceReference]:
+    source_set = set(sources)
+    return [item.reference() for item in evidence_bundle.items if item.source in source_set]
+
+
+def missing_evidence_checks(
+    missing_evidence: list[str], candidate_checks: list[str] | None = None
+) -> list[MissingEvidenceCheck]:
+    checks = candidate_checks or []
     return [
         MissingEvidenceCheck(
-            check_id=f"missing:{source}",
+            check_id=f"evidence:{source}:required",
             source=source,
             status="missing",
-            reason=f"{source} evidence is required before RCA can be completed.",
+            reason=missing_evidence_reason(source, checks),
         )
         for source in missing_evidence
     ]
+
+
+def missing_evidence_reason(source: str, candidate_checks: list[str]) -> str:
+    if not candidate_checks:
+        return f"{source} evidence query/check must complete before RCA can be finalized."
+    checks = ", ".join(candidate_checks)
+    return f"{source} evidence is required to evaluate checks: {checks}"
 
 
 def build_root_cause_reason(selected: CauseEvaluation) -> str:
@@ -173,6 +193,7 @@ def unknown_root_cause(evaluation: CauseEvaluation) -> RcaReportDetail:
         missing_evidence_checks=missing_evidence_checks(
             unique_ordered([MATCHING_CAUSE_RULE_EVIDENCE, *evaluation.missing_evidence])
         ),
+        supporting_evidence_refs=evaluation.supporting_evidence_refs,
     )
 
 
@@ -189,6 +210,7 @@ def insufficient_evidence_root_cause(evaluations: list[CauseEvaluation]) -> RcaR
         missing_evidence=missing_evidence,
         reason="후보는 생성됐지만 매칭된 근거가 없어 최종 원인을 확정하지 않았습니다.",
         missing_evidence_checks=missing_evidence_checks(missing_evidence),
+        supporting_evidence_refs=[],
     )
 
 
@@ -202,6 +224,7 @@ def analyze_root_cause(evaluations: list[CauseEvaluation]) -> RcaReportDetail:
             missing_evidence=[],
             reason="평가된 원인 후보가 없어 최종 원인을 선택할 수 없습니다.",
             missing_evidence_checks=[],
+            supporting_evidence_refs=[],
         )
 
     if evaluations[0].candidate_id == UNKNOWN_EVALUATION_ID:
@@ -222,5 +245,6 @@ def analyze_root_cause(evaluations: list[CauseEvaluation]) -> RcaReportDetail:
         supporting_evidence=selected.supporting_evidence,
         missing_evidence=selected.missing_evidence,
         reason=build_root_cause_reason(selected),
-        missing_evidence_checks=missing_evidence_checks(selected.missing_evidence),
+        missing_evidence_checks=selected.missing_evidence_checks,
+        supporting_evidence_refs=selected.supporting_evidence_refs,
     )

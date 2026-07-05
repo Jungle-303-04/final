@@ -11,13 +11,14 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
-from domains.scm.events import SafePrRequestedBody
+from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from packages.config.constants import GitHub, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from services.ai.agent.defaults import ActionRoutes
 
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."
 UNSUPPORTED_AUTO_ACTION_REASON = "자동 실행 대상 command action으로 변환할 수 없습니다."
+MISSING_SAFE_PR_PATCH_REASON = "Safe PR에 적용할 구체적인 파일 패치가 없습니다."
 
 
 @dataclass(frozen=True)
@@ -65,8 +66,29 @@ def build_safe_pr_request_body(
     plan: RecoveryPlan,
     selected: RecoveryActionCandidate,
     workspace_id: str,
-) -> SafePrRequestedBody:
+) -> SafePrRequestedBody | RcaActionRequiredBody:
     draft = selected.draft
+    patches = safe_pr_patches(selected)
+    if not patches:
+        return RcaActionRequiredBody(
+            reason=f"{MISSING_SAFE_PR_PATCH_REASON}: {selected.title}",
+            evidence_ref=plan.evidence_ref,
+            workspace_id=workspace_id,
+            reason_code="safe_pr_patch_missing",
+            missing_evidence=["manifest_patch"],
+            next_actions=[
+                {
+                    "action_type": "collect_manifest_context",
+                    "reason": "Recovery Safe PR requires concrete file patches before PR creation.",
+                    "target": draft.params,
+                }
+            ],
+            diagnostics={
+                "plan_id": plan.plan_id,
+                "action_id": selected.action_id,
+                "route": selected.route,
+            },
+        )
     body = (
         f"{plan.summary}\n\n"
         f"선택 조치: {selected.title}\n"
@@ -83,6 +105,7 @@ def build_safe_pr_request_body(
         title=f"{selected.title}: {draft.resource_name}",
         body=body,
         provider=GitHub.PROVIDER,
+        patches=patches,
         workspace_id=workspace_id,
     )
 
@@ -108,15 +131,27 @@ def build_command_request_body(
         diff=Diff(
             resource=f"{draft.resource_kind}/{draft.resource_name}",
             namespace=namespace,
-            desired_image=f"{action}:{draft.resource_name}",
-            actual_image="current",
+            desired_image="",
+            actual_image="",
             risk=Sandbox.RISK_TAG,
             workspace_id=workspace_id,
+            status="recovery_action",
+            has_changes=True,
+            basis={
+                "source": "rca_recovery",
+                "plan_id": plan.plan_id,
+                "action_id": selected.action_id,
+                "root_cause": draft.params.get("root_cause"),
+            },
         ),
         workspace_id=workspace_id,
+        application_id=str(draft.params.get("application_id") or ""),
+        workflow_run_id=str(draft.params.get("workflow_run_id") or ""),
+        binding_id=str(draft.params.get("binding_id") or ""),
+        environment=str(draft.params.get("environment") or "sandbox"),
         requested_by=selected_by,
-        approval_ref=str(selected.draft.params.get("approval_ref") or ""),
-        policy_decision_ref=str(selected.draft.params.get("policy_decision_ref") or ""),
+        approval_ref=as_optional_str(selected.draft.params.get("approval_ref")),
+        policy_decision_ref=as_optional_str(selected.draft.params.get("policy_decision_ref")),
         actor={
             "plan_id": plan.plan_id,
             "action_id": selected.action_id,
@@ -128,3 +163,31 @@ def build_command_request_body(
 def command_action_for(selected: RecoveryActionCandidate) -> str | None:
     requested = str(selected.draft.params.get("command") or selected.draft.action_type)
     return command_action_for_recovery(requested)
+
+
+def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
+    raw = selected.draft.params.get("patches")
+    if not isinstance(raw, list):
+        return []
+    patches: list[SafePrFilePatch] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        content = item.get("content")
+        if not isinstance(path, str) or not isinstance(content, str):
+            continue
+        patches.append(
+            SafePrFilePatch(
+                path=path,
+                content=content,
+                description=str(item.get("description") or selected.title),
+            )
+        )
+    return patches
+
+
+def as_optional_str(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    return str(value)

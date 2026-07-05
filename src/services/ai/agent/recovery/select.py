@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from domains.command.actions import command_action_for_recovery, command_action_spec
 from domains.rca.events import (
     RcaActionRequiredBody,
     RecoveryActionSelectedBody,
@@ -13,6 +14,7 @@ from packages.contracts.event_bus.bodies import EventBody
 NO_PLAN_REASON = "복구 계획이 없습니다."
 SELECTION_REQUIRED_REASON = "사용자 복구 조치 선택이 필요합니다."
 AUTO_SELECTED_BY = "agent-select"
+APPROVAL_REQUIRED_COMMAND_REASON = "선택 후보가 승인 필요한 command action입니다."
 
 
 @dataclass(frozen=True)
@@ -35,7 +37,11 @@ class RecoverySelector:
                 reason=SELECTION_REQUIRED_REASON,
                 workspace_id=evt.workspace_id,
             )
-        if selected.route == "auto" and not selected.approval_required:
+        if (
+            selected.route == "auto"
+            and not selected.approval_required
+            and not requires_approval(selected)
+        ):
             return RecoveryActionSelectedBody(
                 plan=evt.plan,
                 selected=selected,
@@ -46,6 +52,21 @@ class RecoverySelector:
             )
         return RecoverySelectionRequestedBody(
             plan=evt.plan,
-            reason=SELECTION_REQUIRED_REASON,
+            reason=selection_reason(selected),
             workspace_id=evt.workspace_id,
         )
+
+
+def requires_approval(candidate: object) -> bool:
+    action_type = getattr(getattr(candidate, "draft", None), "action_type", "")
+    params = getattr(getattr(candidate, "draft", None), "params", {}) or {}
+    requested = str(params.get("command") or action_type)
+    action = command_action_for_recovery(requested)
+    spec = command_action_spec(action) if action else None
+    return bool(spec is not None and spec.requires_approval)
+
+
+def selection_reason(candidate: object) -> str:
+    if requires_approval(candidate):
+        return APPROVAL_REQUIRED_COMMAND_REASON
+    return SELECTION_REQUIRED_REASON

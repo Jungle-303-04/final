@@ -9,12 +9,17 @@
 from __future__ import annotations
 
 import base64
-from pathlib import PurePosixPath
 from urllib.parse import quote
 
 import httpx
 
 from domains.scm.events import SafePrRequestedBody
+from domains.scm.policy import (
+    CHANGE_DOCUMENT_DIR,
+    DefaultSafePrPreflightPolicy,
+    normalize_repo_path,
+    validate_request_paths,
+)
 from packages.config.settings import env
 from packages.contracts.gitops import (
     DEFAULT_GITHUB_API_BASE,
@@ -35,7 +40,6 @@ DEFAULT_SCM_HTTP_TIMEOUT_SECONDS = "10"
 
 PR_STATUS_CREATED = "created"
 BRANCH_PREFIX = "gitops"
-CHANGE_DOCUMENT_DIR = ".gitops/safe-pr"
 CONFLICT_STATUS = 422
 OK_STATUS = 200
 PATCH_COMMIT_MESSAGE_PREFIX = "Apply manifest patch"
@@ -63,7 +67,7 @@ def change_document(request: SafePrRequestedBody) -> str:
     patch_rows = "\n".join(
         f"- `{patch.path}`: {patch.description or 'manifest patch'}" for patch in request.patches
     )
-    patch_section = patch_rows if patch_rows else "- proposal-only: manifest patch 없음"
+    patch_section = patch_rows if patch_rows else "- no file patches supplied"
     approval_rows = []
     if request.approval_ref:
         approval_rows.append(f"- approval_ref: `{request.approval_ref}`")
@@ -83,26 +87,8 @@ def change_document(request: SafePrRequestedBody) -> str:
     )
 
 
-def normalize_repo_path(path: str) -> str:
-    raw = path.strip()
-    if raw.startswith("/") or "\\" in raw:
-        raise ValueError(f"unsafe repository path: {path}")
-    normalized = str(PurePosixPath(raw))
-    parts = PurePosixPath(normalized).parts
-    if not normalized or normalized == "." or any(part in {"", ".", ".."} for part in parts):
-        raise ValueError(f"unsafe repository path: {path}")
-    return normalized
-
-
 def contents_api_path(repo: str, path: str) -> str:
     return f"/repos/{repo}/contents/{quote(normalize_repo_path(path), safe='/')}"
-
-
-def validate_request_paths(request: SafePrRequestedBody) -> None:
-    normalize_repo_path(change_document_path(request))
-    normalize_repo_path(request.manifest_path)
-    for patch in request.patches:
-        normalize_repo_path(patch.path)
 
 
 class GithubScmProvider:
@@ -119,6 +105,9 @@ class GithubScmProvider:
     async def create_pull_request(
         self, request: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
     ) -> str:
+        preflight = DefaultSafePrPreflightPolicy().evaluate(request)
+        if not preflight.allowed:
+            raise ValueError(preflight.message)
         repo = env(SCM_REPO_ENV, "").strip()
         if not repo:
             raise RuntimeError(MISSING_GITHUB_CONFIG_MESSAGE)
