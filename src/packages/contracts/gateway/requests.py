@@ -258,6 +258,14 @@ class DeploymentBindingUpsertRequest(StrictModel):
     access_policy: dict[str, Any] = Field(default_factory=dict)
 
 
+class CatalogInstallRequest(StrictModel):
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    namespace: str = Sandbox.NAMESPACE
+    application_name: str = Field(min_length=1, max_length=120)
+    version: str | None = Field(default=None, max_length=80)
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
 class ApprovalDecisionRequest(StrictModel):
     reason: str | None = None
 
