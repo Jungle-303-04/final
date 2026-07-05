@@ -46,6 +46,19 @@ def test_git_pull_skips_already_seen_commit() -> None:
     assert not db.called("mark_watch_observed")
 
 
+def test_git_pull_force_replays_already_seen_commit_for_smoke() -> None:
+    git_pull = load_service("gitops/git-pull-worker")
+    db = SpyDb(get_watch_last_seen_commit_sha="abc123")
+    outs = run_handler(
+        git_pull.on_git_webhook,
+        GitWebhookReceivedBody(commit_sha="abc123", image="img:new", replicas=2, force=True),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["git.changed"]
+    assert outs[0].commit_sha == "abc123"
+
+
 def test_git_pull_normalizes_default_gitops_ids() -> None:
     git_pull = load_service("gitops/git-pull-worker")
     payload = {

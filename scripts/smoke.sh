@@ -205,6 +205,7 @@ print(
             "branch": os.environ["GITHUB_BRANCH"],
             "manifest_path": os.environ["MANIFEST_PATH"],
             "cluster_id": os.environ["SMOKE_CLUSTER_ID"],
+            "force": True,
         }
     )
 )
