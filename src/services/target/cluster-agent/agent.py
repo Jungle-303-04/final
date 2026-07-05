@@ -795,7 +795,11 @@ class TargetClusterAgent:
             return self.command_result(False, str(exc))
 
     def write_action_requires_approval(self, action: str) -> bool:
-        return action in {AgentConfig.APPLY_MANIFEST_ACTION, AgentConfig.ROLLOUT_RESTART_ACTION}
+        return action in {
+            AgentConfig.APPLY_MANIFEST_ACTION,
+            AgentConfig.ROLLOUT_RESTART_ACTION,
+            KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        }
 
     def command_metadata_value(self, command: CommandRecord, field: str) -> str:
         value = command.get(field)

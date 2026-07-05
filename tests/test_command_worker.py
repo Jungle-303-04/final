@@ -43,6 +43,7 @@ def command_request(
     *,
     approval_ref: str | None = "approval-1",
     policy_decision_ref: str | None = "policy-decision-1",
+    payload: JsonObject | None = None,
 ) -> CommandRequestedBody:
     return CommandRequestedBody(
         cluster_id=Target.DEFAULT_CLUSTER_ID,
@@ -60,6 +61,7 @@ def command_request(
         requested_by="user-1",
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
+        payload=payload or {},
     )
 
 
@@ -136,6 +138,18 @@ def test_build_plan_includes_agent_execution_metadata() -> None:
     assert body["routing_constraint"]["workspace_id"] == "workspace-1"
     assert body["approval_ref"] == "approval-1"
     assert body["policy_decision_ref"] == "policy-decision-1"
+    assert body["payload"] == {}
+
+
+def test_build_plan_preserves_typed_agent_payload() -> None:
+    payload = {"namespace": Sandbox.NAMESPACE, "name": "checkout-api", "replicas": 3}
+    plan = build_plan(
+        command_request(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION, payload=payload),
+        "corr-1",
+    )
+
+    assert plan.payload == payload
+    assert plan.to_body()["payload"] == payload
 
 
 def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from domains.gitops.events import Diff
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
@@ -36,6 +36,7 @@ class CommandRequestedBody(EventBody):
     actor: JsonObject | None = None
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    payload: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class Plan(EventBody):
     action: str
     namespace: str
     diff: JsonObject
+    payload: JsonObject
     steps: list[str]
     lease: LeaseMetadata
     retry_policy: RetryPolicy
