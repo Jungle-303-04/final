@@ -1,105 +1,113 @@
-# 프로덕션 준비 점검
+# 프로덕션 완료 기준
 
-이벤트 프레임워크의 설계·추상화는 프로덕션급(멱등 ledger·DLQ·retry·graceful
-shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규모"에서 보강이 필요한
-운영 항목과 결정 사항이다. 우선순위는 P0(차단)→P2(편의).
+이 문서는 “이 프로젝트를 production runnable 상태로 끝냈다”고 말하기 위한 완료 기준이다.
 
-## 구현 상태
+기준은 세 가지다.
 
-- [x] P0 워커 liveness 하트비트 + exec probe(9개 워커).
-- [x] P0 async DB(워커 핸들러 경로): `AsyncDb` 프록시로 sync 메서드를 스레드풀에
-  보내고, 핸들러는 `await ctx.db.x(...)`로 통일. 남은 sync 경로(ledger·api-gateway
-  라우트)는 AWS smoke(`make aws-smoke`) 후 단계적으로.
-- [ ] P0 실운영 자동 변경 하드닝: repo checkout/cache, 승인 스냅샷, rollback
-  patch PR, approval evidence 만료/권한 검증, 외부 SecretVault. rendered artifact digest,
-  rendered manifest patch PR, write command approval_ref/policy_decision_ref 전달/누락 거부,
-  GitHub token_ref env vault는 1차 구현됨. 상세 기준은
-  [hardening-roadmap](hardening-roadmap.md)을 따른다.
-- [ ] P1 AI/tool guardrail과 control-plane observability: function-calling 수준 schema,
-  tool 권한, 비용 한도, DLQ/lag/outbox/trace metrics.
-- [ ] P1 KEDA · P2 타입 db · 나중(마이그레이션·스키마버전·메트릭).
+1. 코드가 실제로 있다.
+2. 테스트와 Bruno/API 확인 방법이 있다.
+3. AWS EKS smoke에서 서비스 흐름이 확인된다.
 
-## P0 — 실운영 자동 변경 차단 조건
+추가로 프로덕션 완성 범위는 [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 따른다. 외부 기준에서 확인한 기능 도메인은 최소선이고, 우리 프로젝트는 그 기능을 `Gateway -> event -> worker -> target agent -> evidence -> RCA -> Safe PR -> dashboard` 구조로 옮겨서 완성한다.
 
-현재 코드는 event runtime과 GitHub PR 생성 경계를 갖고 있지만, production 자동 변경을
-말하려면 아래 항목이 모두 닫혀야 한다.
+문서에 적힌 항목이 구현되지 않았으면 완료가 아니다. 반대로 구현이 바뀌면 이 문서와 역할별 온보딩을 같이 바꾼다.
 
-| 항목 | 현재 위험 | 차단 해제 기준 |
+## 전체 완료 정의
+
+| 영역 | 완료 조건 | 검증 |
 | --- | --- | --- |
-| 실제 repo source | rendered artifact digest는 기록된다. local-file/dev fallback과 GitHub contents 경로가 아직 섞여 있다. | production route는 commit_sha, repo_ref, artifact digest가 있는 source만 허용한다. |
-| 승인 스냅샷 | diff-worker가 previous-approved snapshot demo fallback을 쓴다. | approval_id/policy_id/commit_sha와 연결된 last-approved managed-field snapshot을 저장한다. |
-| 정책 route | risk string과 namespace 중심이다. | operation, namespace, resource class, environment, approval state로 `safe_pr`/`approval_required`/`forbidden`/`command`를 결정한다. |
-| Safe PR 내용 | GitHub PR 경계와 rendered manifest patch 커밋 경로는 있다. rollback patch, diff basis, approval evidence는 아직 약하다. | PR diff에 실제 manifest patch 또는 rollback patch가 포함되고, PR body가 diff basis와 approval evidence를 연결한다. |
-| Agent 실행 | command-worker와 agent가 write command의 approval_ref/policy_decision_ref 누락을 거부한다. ref 만료, 권한, workspace/repo/cluster 정책 연결은 아직 약하다. | command와 agent가 같은 action catalog, approval_ref, policy_decision_ref를 검증한다. |
-| Credential | GitHub provider는 `TokenVaultPort`와 env 기반 `GITHUB_TOKEN_REF`를 지원한다. 외부 vault, token rotation, scope 검증은 아직 약하다. | TokenVault/SecretVault port, token rotation, missing scope, non-leak 테스트가 있다. |
-| 부분 실패 | agent command result에 sanitized stdout/stderr, retryable flag, applied flag, resource별 result가 남는다. 더 깊은 단계별 partial apply와 retry 분류는 아직 약하다. | sanitized stdout/stderr, retryable flag, applied flag, resource별 result가 command result에 남는다. |
+| 코드 정합성 | lint, format, import boundary, compile, 전체 pytest 통과 | `make check` |
+| Manifest | management/target manifest가 렌더되고 object 목록이 나온다 | `make manifest-check` |
+| API 수동 확인 | Bruno collection이 Gateway route를 모두 포함하고 예상 응답을 검사한다 | [Bruno API 테스트](api/README.md), `tests/test_bruno_collection.py` |
+| AWS smoke | GitHub Actions `AWS CD`가 `run_smoke=true`로 통과한다 | `make aws-smoke` |
+| 문서 | `docs/README.md`에서 모든 문서가 연결되고 3레벨 깊이를 넘지 않는다 | `tests/test_docs_index.py` |
+| 벤치마크 최소선 | account/RBAC/OIDC, fleet, GitOps, IaC, rollout/test, incident/AI/Safe PR, notification, DNS, shell, catalog, billing, realtime이 역할/스키마/API/event/test로 설명된다 | [프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md), `tests/test_docs_index.py` |
+| Secret | token/password/kubeconfig 원문이 event, log, response, 문서에 없다 | `docs/secrets.md`, 관련 보안 테스트 |
+| 권한 | backend가 session, role, workspace, cluster 권한을 최종 판단한다 | `tests/test_auth_security.py`, `tests/test_dashboard_router.py` |
+| 장애 복구 | retry, DLQ, outbox, idempotency가 깨지지 않는다 | `tests/test_event_runtime.py`, `tests/test_dlq_reliability.py`, `tests/test_outbox.py` |
 
-## P0 — 워커 liveness probe (exec 하트비트)
+## 민정 완료 기준
 
-문제: 워커는 HTTP 없는 NATS pull consumer라 k8s가 상태를 물어볼 곳이 없다.
-멈춰도(NATS 연결 끊김·데드락·fetch 정지) 감지·재시작이 안 되고 이벤트만 쌓인다.
+민정은 Command + Target + Evidence를 production 수준으로 닫는다.
 
-결정: **HTTP `/healthz`를 워커에 열지 않는다**(게이트웨이 단일 원칙 유지 +
-포트/보안 표면 최소화). 대신 **하트비트 파일 + `exec` probe**를 쓴다.
+| 항목 | 왜 필요한가 | 코드 기준 | 테스트/확인 |
+| --- | --- | --- | --- |
+| agent outbound 경계 | target cluster가 management DB/NATS를 몰라도 동작해야 한다 | `src/services/target/cluster-agent` | `tests/test_target_agent_client.py` |
+| command poll/start/heartbeat/result | command가 유실 없이 실행 상태를 남겨야 한다 | `src/domains/command/router.py`, `src/services/target/cluster-agent/commands` | `tests/test_command_router.py`, `tests/test_target_agent_commands.py` |
+| write command approval guard | 자동 변경이 권한/승인 없이 실행되면 안 된다 | `src/domains/command/handler.py`, agent command guard | `tests/test_command_worker.py`, `tests/test_target_agent_commands.py` |
+| evidence job schedule/poll/result | provider별 수집을 같은 queue 수준으로 처리해야 한다 | `src/domains/target/router.py`, `evidence/jobs.py` | `tests/test_target_evidence_jobs.py` |
+| Kubernetes snapshot provider | pod/event/node/workload/service 상태가 RCA 입력에 필요하다 | `providers/kubernetes_providers.py` | `tests/test_target_kubernetes_evidence.py` |
+| Prometheus instant/range query | metric 순간값과 추세를 RCA가 같이 봐야 한다 | `providers/prometheus_providers.py`, `queries/payloads.py` | `tests/test_target_metric_evidence.py` |
+| Loki/Tempo provider | logs/traces가 RCA 근거가 된다 | `providers/loki_providers.py`, `providers/tempo_providers.py` | `tests/test_target_log_evidence.py`, `tests/test_target_trace_evidence.py` |
+| provider registry | 새 provider가 scheduler/collector와 느슨하게 연결되어야 한다 | `telemetry_registry.py` | `tests/test_telemetry_registry.py` |
+| RBAC 최소 권한 | target agent 권한이 불필요하게 넓으면 안 된다 | `deploy/target/target.yaml` | `make manifest-check`, AWS smoke |
+| Bruno agent/API 확인 | 팀원이 직접 눌러 흐름을 확인해야 한다 | `docs/api/03-agent-runtime`, `docs/api/04-command` | Bruno `aws-test` profile |
 
-- 워커는 처리 루프마다 `/tmp/heartbeat`의 mtime을 갱신한다.
-- liveness는 `exec`로 파일 신선도만 검사한다(예: 30초 내 갱신 없으면 실패).
+민정 문서 경로:
 
-```yaml
-livenessProbe:
-  exec:
-    command:
-      - python
-      - -c
-      - "import sys,time,os; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
-  periodSeconds: 10
-  failureThreshold: 3
-```
+- [민정 온보딩](onboarding/minjeong-command-target-evidence.md)
+- [민정 프로덕션 구현 흐름](rca-production-onboarding/01-minjeong-command-target-evidence.md)
+- [Target Agent Command / Evidence 구현 가이드](team/member-guides/target-agent-command-evidence-flow.md)
+- [Target / Telemetry 선형 작업](team/target-telemetry-tasks/README.md)
+- [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 
-보안: probe는 kubelet→pod 내부 점검이다. Service/Ingress에 노출되지 않으므로
-인터서비스 API 표면이 아니다. exec 방식은 포트 자체가 없어 노출이 0이다.
-워커는 트래픽을 받지 않으므로 readiness보다 liveness가 핵심.
+## 가인 완료 기준
 
-## P0 — async 루프 속 sync DB
+가인은 Evidence + RCA + Safe PR을 production 수준으로 닫는다.
 
-문제: 핸들러는 async인데 대부분 `ctx.db.save_*`가 sync(`create_engine`)로
-이벤트 루프에서 바로 호출 → 부하 시 루프 블로킹. command-worker만 `await`라
-일관성도 깨진다.
+| 항목 | 왜 필요한가 | 코드 기준 | 테스트/확인 |
+| --- | --- | --- | --- |
+| evidence 정규화 | raw provider 결과를 RCA가 먹을 수 있는 구조로 줄인다 | `src/services/ai/evidence-worker` | `tests/test_rca_evidence.py` |
+| incident 생성 | symptom과 evidence window를 incident 단위로 묶는다 | `incident-worker` | `tests/test_rca_evidence.py` |
+| RCA 후보/평가 | 확정 원인과 근거 부족을 구분해야 한다 | `plan-worker`, `analyze-worker`, `rca-worker` | `tests/test_rca_evidence.py` |
+| insufficient evidence path | 근거 부족을 확정 원인처럼 보여주면 안 된다 | `RcaActionRequiredBody` | `tests/test_rca_evidence.py` |
+| recovery route 선택 | command와 Safe PR 경계를 분리해야 한다 | `recovery-worker`, `select-worker`, `dispatch-worker` | `tests/test_event_golden_path.py` |
+| Safe PR request | RCA worker가 GitHub에 직접 쓰지 않아야 한다 | `safe_pr.requested`, `scm-worker` | `tests/test_repo_gateway_worker.py` |
+| GithubScmProvider non-leak | token 원문이 event/log/response에 남으면 안 된다 | `src/domains/scm`, `scm-worker` | `tests/test_repo_gateway_worker.py`, `docs/secrets.md` |
+| dashboard/audit 연결 | RCA 결과를 사람이 추적할 수 있어야 한다 | `audit-worker`, `dashboard-worker` | `tests/test_projection.py`, `tests/test_dashboard_projection.py` |
+| Bruno RCA/API 확인 | timeline과 Safe PR 흐름을 직접 확인해야 한다 | `docs/api/05-rca-dashboard`, `docs/api/06-gitops-approval` | Bruno `aws-test` profile |
 
-결정: **대량 처리 기준이면 async 일원화**(`async_engine`은 이미 있음 →
-`ctx.db` 메서드를 async로). `to_thread` 감싸기는 "당장 루프 안 막기" 임시방편.
+가인 문서 경로:
 
-| | `to_thread` | async 일원화 |
-| --- | --- | --- |
-| 작업량 | 작음 | 큼 |
-| 동시성 | 스레드 수(~40) | 루프에서 수천 동시 I/O |
-| 비용 | 스레드 오버헤드 | 없음 |
+- [가인 온보딩](onboarding/gain-evidence-rca.md)
+- [가인 프로덕션 구현 흐름](rca-production-onboarding/02-gain-evidence-rca-safe-pr.md)
+- [RCA / Safe PR 멤버 가이드](team/member-guides/rca-safe-pr.md)
+- [RCA / Safe PR 선형 작업](team/rca-safe-pr-tasks/README.md)
+- [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
+- [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 
-진짜 처리량은 async DB + fetch 배치 확대 + 워커 수평 확장(아래 KEDA)이 함께 가야
-산다.
+## 찬빈 완료 기준
 
-## P1 — KEDA 오토스케일 (배포 시점, 계획)
+찬빈은 Frontend + 권한 + Dashboard를 production 수준으로 닫는다.
 
-문제: `durable=service_name`으로 복제본이 일을 나눠 갖지만, 복제본 수를 부하에
-따라 자동 조절하는 장치가 없다(수동).
+| 항목 | 왜 필요한가 | 코드 기준 | 테스트/확인 |
+| --- | --- | --- | --- |
+| session/httpOnly cookie | browser가 token 원문을 직접 들고 있지 않아야 한다 | `src/domains/identity/router.py` | `tests/test_identity_auth_routes.py`, `tests/test_auth_security.py` |
+| role/workspace/cluster 권한 | 목록과 단건 조회 모두 backend에서 걸러야 한다 | `identity/dependencies.py`, `identity/repository.py` | `tests/test_dashboard_router.py` |
+| dashboard read model | event payload 전체를 frontend가 직접 파싱하지 않게 한다 | `src/domains/dashboard/models.py` | `tests/test_dashboard_projection.py` |
+| dashboard query API | session과 cluster read 권한으로 timeline을 필터링한다 | `src/domains/dashboard/router.py` | `tests/test_dashboard_router.py` |
+| realtime 경계 | browser와 agent realtime 채널을 분리한다 | `src/services/realtime/realtime-gateway` | `tests/test_realtime_gateway.py` |
+| 상태 표현 | requested/created/failed, queued/completed를 섞지 않는다 | `RcaTimelineItem` | `tests/test_dashboard_projection.py` |
+| action 버튼 권한 | frontend 비활성화는 보조이고 backend 권한이 최종이다 | command/approval/dashboard router | `tests/test_gitops_approval_router.py`, `tests/test_dashboard_router.py` |
+| Bruno auth/dashboard 확인 | 로그인, 권한, dashboard 결과를 직접 확인해야 한다 | `docs/api/00-health-auth`, `docs/api/05-rca-dashboard` | Bruno `aws-test` profile |
 
-결정: **KEDA로 NATS 스트림 적체(pending) 기반 오토스케일**(ScaledObject).
-이벤트 워커의 부하 신호는 CPU가 아니라 대기 이벤트 수다. 적체가 쌓이면 pod를
-늘리고, 빠지면 줄인다(놀면 0까지). 코드가 아닌 deploy 영역이라 배포 시 추가한다.
+찬빈 문서 경로:
 
-## P2 — 타입 있는 `ctx.db`
+- [찬빈 온보딩](onboarding/chanbin-frontend.md)
+- [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md)
+- [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md)
+- [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)
+- [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)
 
-문제: `ctx.db: Any` → 워커가 타입 없는 DB 전체를 받는다. 오타를 타입체커가 못
-잡고, 자동완성이 없고, 서비스별 능력 경계가 없다(rca 워커가 DLQ 조회도 호출 가능).
+## 마지막 release gate
 
-결정: 서비스별 `Protocol` port(예: rca는 `RcaStore`)로 `ctx.db`를 좁히거나
-`EventContext[DbT]`로 제네릭화. 자동완성·오타 차단·책임 경계 확보.
+production 완료 선언 전에는 아래 순서를 그대로 돈다.
 
-## 나중 (마이그레이션과 함께)
+1. `make check`
+2. Bruno `aws-test` profile로 auth, target, agent runtime, command, RCA dashboard, GitOps approval, AI, DLQ/metrics 폴더 확인
+3. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)의 기능 도메인이 담당자/스키마/API/event/test/Bruno 요청으로 모두 쪼개졌는지 확인
+4. `make aws-smoke`
+5. GitHub Actions `CI`, `Promote Dev To Main`, `AWS CD`가 모두 성공인지 확인
+6. `docs/README.md`의 민정/가인/찬빈 필독 목록이 현재 코드와 맞는지 확인
 
-- **DB 마이그레이션**: 현재 `db.init()`이 테이블을 직접 생성. Alembic 도입 시
-  스키마 진화를 버전 관리.
-- **이벤트 스키마 버전**: `EventEnvelope`에 `version` 필드 없음. 계약 진화
-  (필드 추가/삭제)에 버전 + 호환 정책 필요. 위 마이그레이션과 함께 추가.
-- **메트릭·트레이싱**: 현재 구조적 로그만. Prometheus(처리량·DLQ율·지연·lag) +
-  OTel 트레이싱(`correlation_id` 연결)은 추후.
+이 여섯 개가 모두 통과해야 production runnable 완료라고 말한다.

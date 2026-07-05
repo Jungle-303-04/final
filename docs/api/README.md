@@ -1,7 +1,7 @@
 # Bruno API 테스트 가이드
 
 이 폴더는 실제 Gateway API를 팀원이 직접 눌러보는 Bruno collection이다.
-Bruno에서 `api/` 폴더를 Open Collection으로 열고, 오른쪽 위 Environment에서
+Bruno에서 `docs/api/` 폴더를 Open Collection으로 열고, 오른쪽 위 Environment에서
 `local` 또는 `aws-test`를 선택한다.
 
 ## 먼저 알아야 하는 것
@@ -34,12 +34,12 @@ Bruno에서 `api/` 폴더를 Open Collection으로 열고, 오른쪽 위 Environ
 | `/targets`가 `agent_token`을 반환 | 정상 | 이 값을 `agent_token` environment에 넣고 agent 폴더 요청을 보낸다. |
 | `/agent/commands/poll`이 `{"command": null}` | 현재 queue에 명령이 없음 | `04-command/01-manual-command.bru` 또는 `02-debug-query.bru`를 먼저 보낸다. |
 | `/agent/evidence/jobs/poll`이 `{"job": null}` | 해당 provider queue에 job이 없음 | `03-agent-runtime/05-schedule-evidence-jobs.bru`를 먼저 보낸다. |
-| dashboard `items: []` | read model에 아직 event가 없음 또는 권한 필터로 제외됨 | evidence/RCA event가 들어갔는지, 로그인 사용자가 cluster read 권한이 있는지 본다. |
+| dashboard `items: []` | read model에 event가 들어오지 않았거나 권한 필터로 제외됨 | evidence/RCA event가 들어갔는지, 로그인 사용자가 cluster read 권한이 있는지 본다. |
 | GitHub webhook `401` | signature 불일치 | body와 `github_webhook_signature`를 같은 secret으로 다시 계산한다. |
 
 ## GitHub webhook signature 만들기
 
-`api/06-gitops-approval/github-webhook-body.json`과 `01-github-webhook.bru`의 body는 같은 값이다. body를 바꾸면 아래 명령을 다시 돌린다.
+`docs/api/06-gitops-approval/github-webhook-body.json`과 `01-github-webhook.bru`의 body는 같은 값이다. body를 바꾸면 아래 명령을 다시 돌린다.
 
 ```bash
 python - <<'PY'
@@ -48,7 +48,7 @@ import hmac
 from pathlib import Path
 
 secret = "replace-with-GITHUB_WEBHOOK_SECRET"
-body = Path("api/06-gitops-approval/github-webhook-body.json").read_bytes()
+body = Path("docs/api/06-gitops-approval/github-webhook-body.json").read_bytes()
 print("sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest())
 PY
 ```

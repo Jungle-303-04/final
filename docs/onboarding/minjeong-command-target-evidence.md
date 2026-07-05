@@ -166,6 +166,24 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
+## 프로덕션 완료 기준
+
+민정 파트는 외부 기준 저장소에서 확인한 fleet, GitOps, IaC, cluster, upgrade, rollout, test, DNS 실행 경계를 우리 구조로 옮겨야 끝난다. 전체 범위는 [벤치마크 최소선 기준 프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md)를 따른다.
+
+| 완료 항목 | 확인 방법 |
+| --- | --- |
+| command poll/start/heartbeat/result가 agent token identity 기준으로 동작한다 | `tests/test_command_router.py`, `tests/test_target_agent_commands.py` |
+| write command가 approval_ref/policy_decision_ref 없이 실행되지 않는다 | `tests/test_command_worker.py`, `tests/test_target_agent_commands.py` |
+| evidence job schedule/poll/result가 provider별로 같은 수준에서 동작한다 | `tests/test_target_evidence_jobs.py` |
+| Kubernetes/metrics/logs/traces provider가 모두 실제 provider로 등록되어 있다 | `tests/test_telemetry_registry.py` |
+| Prometheus instant/range query가 값 객체와 provider 경계로 처리된다 | `tests/test_target_metric_evidence.py` |
+| Kubernetes snapshot이 RCA 입력 bucket에 들어간다 | `tests/test_target_kubernetes_evidence.py` |
+| repository/install/lock/artifact digest가 command source와 연결된다 | `tests/test_gitops_diffing.py`, `tests/test_workflow_controller.py` |
+| upgrade queue, deferred update, rollout, test log 개념이 event/read model로 이어진다 | 벤치마크 최소선 체크리스트와 신규 테스트 |
+| agent result와 evidence payload에 secret/token/kubeconfig 원문이 없다 | code review, `docs/secrets.md` |
+| Bruno에서 target, agent runtime, command, ops 폴더를 aws-test profile로 확인할 수 있다 | `docs/api/README.md` |
+| AWS smoke에서 target cluster 2개 이상이 등록되고 evidence/command가 한 세트로 돈다 | `make aws-smoke` |
+
 ## 민정이 바꾸면 같이 봐야 하는 것
 
 | 바꾸는 것 | 같이 확인할 것 |
