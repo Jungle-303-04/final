@@ -24,7 +24,7 @@ class Settings:
     EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
     DEFAULT_DEAD_LETTER_LIMIT = 50
     MAX_DEAD_LETTER_LIMIT = 100
-    # 튜닝 가능값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+    # 튜닝 가능값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
     OUTBOX_RELAY_INTERVAL_SECONDS_ENV = (
         "OUTBOX_RELAY_INTERVAL_SECONDS"  # outbox relay 유휴 간격 초(기본 1)
     )

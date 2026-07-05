@@ -1,7 +1,7 @@
 """텔레메트리 소스 레지스트리(@telemetry.source) 검증.
 
 소스 계약(prometheus/loki/tempo)이 provider 데코레이터 선언에서 자동 등록되고,
-queries/collector/agent 가 하드코딩 없이 레지스트리를 읽는지 확인한다.
+queries/collector/agent 가 registry 기반으로 레지스트리를 읽는지 확인한다.
 """
 
 from __future__ import annotations
