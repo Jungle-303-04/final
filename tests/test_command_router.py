@@ -11,6 +11,7 @@ from domains.command.router import (
     command_heartbeat,
     command_start,
     commands,
+    scale_deployment,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from packages.contracts.gateway.requests import (
@@ -18,6 +19,7 @@ from packages.contracts.gateway.requests import (
     CommandHeartbeatRequest,
     CommandRequest,
     CommandStartRequest,
+    DeploymentScaleRequest,
 )
 
 AGENT_IDENTITY = ClusterAgentIdentity(
@@ -235,6 +237,65 @@ def test_agent_debug_query_requires_cluster_read_access_and_queues_agent_command
             "workspace_id": "workspace-1",
             "required_capability": "collector",
         }
+
+    asyncio.run(run())
+
+
+def test_scale_deployment_wrapper_emits_typed_command_payload() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        events = SpyEvents()
+        response = await scale_deployment(
+            "cluster-1",
+            "sandbox",
+            "checkout-api",
+            DeploymentScaleRequest(
+                replicas=3,
+                approval_ref="approval-1",
+                policy_decision_ref="policy-decision-1",
+            ),
+            current_session(),
+            db,
+            events,
+        )
+
+        assert response.accepted is True
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy.run")]
+        assert events.body is not None
+        assert events.body.action == "k8s.apps.v1.deployments.scale"
+        assert events.body.namespace == "sandbox"
+        assert events.body.diff.resource == "deployment/checkout-api"
+        assert events.body.payload == {
+            "namespace": "sandbox",
+            "name": "checkout-api",
+            "replicas": 3,
+        }
+        assert events.body.approval_ref == "approval-1"
+        assert events.body.policy_decision_ref == "policy-decision-1"
+
+    asyncio.run(run())
+
+
+def test_scale_deployment_wrapper_rejects_namespace_outside_current_policy() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        try:
+            await scale_deployment(
+                "cluster-1",
+                "kube-system",
+                "checkout-api",
+                DeploymentScaleRequest(replicas=3),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert "sandbox namespace" in exc.detail
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert events.body is None
 
     asyncio.run(run())
 

@@ -103,7 +103,7 @@ COMMAND_RESULT_MESSAGE = "Kubernetes action applied in sandbox namespace"
 QUERY_RUN_ACTION = Command.TELEMETRY_QUERY_RUN_ACTION
 
 KUBERNETES_DEPLOYMENT_PATCH_ACTION = "k8s.apps.v1.deployments.patch"
-KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"
+KUBERNETES_DEPLOYMENT_SCALE_ACTION = Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION
 KUBERNETES_CONFIGMAP_PATCH_ACTION = "k8s.core.v1.configmaps.patch"
 
 # realtime live summary — management realtime-gateway 로 bounded 요약을 outbound push.

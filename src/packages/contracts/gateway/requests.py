@@ -46,6 +46,7 @@ MAX_EVIDENCE_LOG_ENTRIES = 2000
 MAX_EVIDENCE_PAYLOAD_BYTES = 1_048_576  # 직렬화 1MiB 상한(초과 시 422)
 EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE = "evidence payload exceeds size limit"
 MAX_INVENTORY_RESOURCES = 5000
+MAX_DEPLOYMENT_REPLICAS = 100
 
 
 class LoginRequest(StrictModel):
@@ -202,6 +203,19 @@ class CommandRequest(StrictModel):
     namespace: str = Sandbox.NAMESPACE
     reason: str | None = None
     diff: dict[str, Any] | None = None
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
+
+
+class DeploymentScaleRequest(StrictModel):
+    replicas: int = Field(ge=0, le=MAX_DEPLOYMENT_REPLICAS)
+    reason: str | None = Field(default=None, max_length=500)
+    approval_ref: str | None = None
+    policy_decision_ref: str | None = None
+
+
+class DeploymentRestartRequest(StrictModel):
+    reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
 
