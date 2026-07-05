@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
@@ -254,10 +255,11 @@ class ApiGateway:
         async def metrics(request: Request) -> PlainTextResponse:
             # METRICS_TOKEN 설정 시에만 Bearer 강제(설정 안 하면 클러스터 내부 스크레이핑 허용 —
             # 외부 노출은 NetworkPolicy/별도 포트로 막아야 함). 토큰 불일치는 거부.
+            # 비교는 timing-safe(compare_digest)로 수행.
             metrics_token = env(Settings.METRICS_TOKEN_ENV, "")
             if metrics_token:
                 header = request.headers.get(Settings.AUTHORIZATION_HEADER, "")
-                if header != f"Bearer {metrics_token}":
+                if not secrets.compare_digest(header, f"Bearer {metrics_token}"):
                     raise HTTPException(status_code=401, detail="metrics token required")
             scalar_metrics = {
                 "event_dead_letters_open_total": self.db.open_dead_letter_count(),

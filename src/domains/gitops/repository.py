@@ -21,6 +21,7 @@ from domains.gitops.models import (
     WorkflowRunStep,
 )
 from packages.config.constants import Target
+from packages.config.logs import get_logger
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
     DEFAULT_APPLICATION_ID,
@@ -50,6 +51,8 @@ from packages.contracts.identity import (
     ResourceRole,
 )
 from packages.storage.engine import DatabaseConnection, iso_or_none, row_dict
+
+LOGGER = get_logger(__name__)
 
 # 원자 해결 대상으로 열림으로 간주하는 승인 상태 — 라우터의 open 판정과 동일해야 함
 OPEN_APPROVAL_STATUSES = (
@@ -280,7 +283,21 @@ class RepoChangeRepository(DatabaseConnection):
                 existing_application_id_statement
             ).scalar_one_or_none()
             if existing_application_id and str(existing_application_id) != application_id:
+                # 같은 workspace+repo+name 은 같은 application 으로 흡수(dedup).
+                # 서로 다른 앱이 동명일 가능성이 있어 silent merge 대신 경고를 남김.
                 resolved_application_id = str(existing_application_id)
+                LOGGER.warning(
+                    "application_id_merged_by_name",
+                    extra={
+                        "context": {
+                            "workspace_id": workspace_id,
+                            "repository_id": repository_id,
+                            "name": name,
+                            "incoming_application_id": application_id,
+                            "resolved_application_id": resolved_application_id,
+                        }
+                    },
+                )
                 conn.execute(
                     table.update()
                     .where(table.c.application_id == resolved_application_id)
