@@ -13,6 +13,8 @@
 - `src/domains/scm/events.py`
 - `src/domains/rca/models.py`
 - `src/domains/identity/models.py`
+- `src/domains/dashboard/models.py`
+- `src/domains/dashboard/repository.py`
 - `src/packages/contracts/identity.py`
 - `src/services/target/cluster-agent/queries/registry.py`
 - `src/services/target/cluster-agent/providers/*_providers.py`
@@ -416,14 +418,23 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 
 ## Dashboard read model schema
 
-이 부분은 frontend를 시작할 때 추가할 계약이다. 구현 기준은 현재 event body와 permission helper다.
+파일:
+
+- `src/domains/dashboard/models.py`
+- `src/domains/dashboard/repository.py`
+- `src/domains/dashboard/router.py`
+- `src/services/projection/dashboard-worker/app.py`
+- `src/packages/contracts/gateway/responses.py`
+
+이 read model은 이미 구현되어 있다. 목적은 frontend가 event payload 전체를 직접 파싱하지 않고, 권한이 적용된 `RcaTimelineResponse`만 읽게 하는 것이다.
 
 | 필드 | 타입 | 왜 필요한가 | producer | consumer |
 | --- | --- | --- | --- | --- |
 | `workspace_id` | `str` | 모든 dashboard query의 첫 번째 filter다. | event body | router |
 | `correlation_id` | `str` | command/evidence/RCA/PR timeline을 묶는다. | event envelope | UI |
-| `cluster_id` | `str` | cluster filter와 권한 검사 기준이다. | event body | router/UI |
+| `cluster_id` | `str | None` | cluster filter와 권한 검사 기준이다. event에 없으면 기존 row 값을 보존한다. | event body | router/UI |
 | `incident_id` | `str | None` | incident detail page route다. | `IncidentRecord` | UI |
+| `evidence_ref` | `str | None` | 어떤 evidence window에서 나온 RCA인지 추적한다. | `Evidence.object_ref`, RCA body | UI |
 | `current_subject` | `str` | 지금 어느 단계인지 표시한다. | event envelope | UI |
 | `status` | `str` | badge와 filter에 쓴다. | projection rule | UI |
 | `root_cause` | `str | None` | RCA 결과 요약이다. | `RcaCompletedBody` | UI |
@@ -434,11 +445,53 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 | `command_id` | `str | None` | command result detail과 연결한다. | `CommandQueuedForAgentBody` | UI |
 | `pr_url` | `str | None` | PR 버튼이다. | `SafePrCreatedBody` | UI |
 | `error_reason` | `str | None` | 실패를 사람이 고칠 수 있게 보여준다. | failure/action-required event | UI |
+| `last_event_id` | `str` | 마지막 반영 event를 추적한다. | event envelope | 운영 디버깅 |
+| `last_event_at` | `str` | 최신 상태 시각을 표시한다. | event envelope | UI |
+| `payload` | `dict` | 마지막 event payload를 보관한다. | event payload | 운영 디버깅 |
 
-추가할 때 지킬 기준:
+status mapping은 `src/domains/dashboard/repository.py`의 `RCA_TIMELINE_STATUS_BY_SUBJECT`가 단일 출처다.
+
+| event subject | dashboard status | 왜 필요한가 |
+| --- | --- | --- |
+| `cluster.evidence.received` | `evidence_received` | target agent가 증거 window를 보낸 상태다. |
+| `evidence.built` | `evidence_built` | RCA 공통 evidence 객체가 생긴 상태다. |
+| `incident.detected` | `incident_detected` | 장애로 판단된 상태다. |
+| `evidence.bundle.built` | `evidence_bundled` | incident별 판단 근거가 묶인 상태다. |
+| `rca.rule_missing` | `rule_missing` | 현재 symptom에 맞는 RCA rule이 없는 상태다. |
+| `rca.backlog.created` | `backlog_created` | rule 보강 backlog가 만들어진 상태다. |
+| `rca.ai_fallback.requested` | `ai_fallback_requested` | rule 미매칭 보조 분석이 요청된 상태다. |
+| `rca.candidates.planned` | `rca_planned` | 원인 후보가 만들어진 상태다. |
+| `rca.candidates.evaluated` | `rca_evaluated` | 후보별 점수와 근거가 계산된 상태다. |
+| `rca.completed` | `rca_completed` | 최종 원인과 조치 방향이 나온 상태다. |
+| `rca.action_required` | `action_required` | 자동 진행이 막혀 사람이 봐야 하는 상태다. |
+| `recovery.planned` | `recovery_planned` | 복구 후보 묶음이 만들어진 상태다. |
+| `recovery.selection_requested` | `selection_required` | 사람이 복구 후보를 골라야 하는 상태다. |
+| `recovery.action_selected` | `recovery_selected` | 선택된 복구 route가 정해진 상태다. |
+| `command.requested` | `command_requested` | command 실행 요청이 들어간 상태다. |
+| `command.dispatch.ready` | `command_dispatch_ready` | agent 실행 plan이 준비된 상태다. |
+| `command.dispatched` | `command_dispatched` | command route가 정해진 상태다. |
+| `command.queued_for_agent` | `command_queued` | target agent poll queue에 들어간 상태다. |
+| `command.completed` | `command_completed` | target agent 실행이 끝난 상태다. |
+| `command.rejected` | `command_rejected` | 정책 위반으로 command가 거절된 상태다. |
+| `safe_pr.requested` | `pr_requested` | PR 생성을 요청한 상태다. |
+| `safe_pr.patch_prepared` | `pr_patch_prepared` | PR patch 초안이 준비된 상태다. |
+| `diff.explained` | `pr_diff_explained` | patch diff와 위험 설명이 준비된 상태다. |
+| `safe_pr.created` | `pr_created` | 실제 PR URL이 만들어진 상태다. |
+| `safe_pr.failed` | `pr_failed` | PR 생성이 실패한 상태다. |
+
+지킬 기준:
 
 - table query는 항상 `workspace_id`로 먼저 좁힌다.
 - cluster 목록은 `accessible_resource_ids(user_id, workspace_id, "cluster", "read")` 결과로 한 번 더 좁힌다.
 - `None`이 반환되면 workspace owner/admin이라 workspace 전체를 볼 수 있다는 뜻이다.
 - set이 반환되면 그 resource ID만 조회한다.
 - frontend는 숨김/비활성화로 사용성을 개선할 뿐, 권한 차단은 backend가 한다.
+
+검증:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_dashboard_projection.py \
+  tests/test_dashboard_router.py \
+  -q
+```

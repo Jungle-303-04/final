@@ -211,11 +211,11 @@ UI의 첫 화면은 "상태를 보는 dashboard"가 아니라 "운영 workflow c
 - NATS JetStream 기반 event spine.
 - outbox, retry, DLQ, event processing ledger.
 - `@app.on(...)` 기반 worker chaining.
-- `audit-worker`의 전체 이벤트 projection. `dashboard-worker`는 planned 항목이다.
+- `audit-worker`의 전체 이벤트 projection과 `dashboard-worker`의 RCA timeline projection.
 - per-cluster agent token과 outbound long-poll command 경계.
 - target desired state와 reconcile record의 초기 모델.
 - GitHub webhook, split GitOps worker, manifest artifact 저장 모델.
-- dashboard React/Vite UI skeleton은 repository 밖/후속 UI 작업 기준이며, 현재 backend repository에는 dashboard route와 projection worker가 없다.
+- dashboard React/Vite UI는 후속 UI 작업 기준이며, 현재 backend repository에는 dashboard route와 projection worker가 있다.
 
 ### 현재 주요 흐름
 
@@ -306,7 +306,7 @@ flowchart TD
 | Helm/Kustomize | simple YAML/Deployment 중심 | real renderer 아님 |
 | diff | image 중심 placeholder | multi-resource diff, server-side dry-run 부족 |
 | workflow | Application/WorkflowRun/Step/Approval + workflow-controller 초기 구조 추가 | Gateway query API와 풍부한 UI, 재시도/수동승인 API 필요 |
-| PR adapter | stub URL 기반 | 실제 GitHub App PR 생성 필요 |
+| PR adapter | `scm-worker` + `GithubScmProvider` REST PR 생성 | GitHub App installation token, GitLab provider 확장 필요 |
 | target apply | command queue/agent 구조 있음 | server-side apply, rollout watch, field manager 부족 |
 | UI | 운영 데모 콘솔 | application/workflow/approval 중심 UX 필요 |
 | auth/RBAC | session/resource access 기초 | OIDC, project role, cluster role 강화 필요 |
@@ -657,11 +657,12 @@ workflow-controller는 이벤트를 받아 `workflow_runs`를 갱신하고
 `workflow.*`, `approval.*` projection event를 발행한다. apply 실행 자체는
 기존 `command-worker`와 target-agent 경계를 계속 사용한다.
 
-### 6. PR automation은 stub에서 실제 GitHub App adapter로 바뀐다
+### 6. PR automation은 scm-worker provider 경계로 관리한다
 
 현재:
 
-- `scm-worker`가 `SCM_PR_URL_PREFIX`로 stub URL을 만든다.
+- `scm-worker`가 `safe_pr.requested`를 받고 `GithubScmProvider`가 GitHub REST로 branch, file patch, PR 생성을 처리한다.
+- credential/provider/repo 문제가 나면 `safe_pr.failed`로 끝난다.
 
 목표:
 
@@ -820,7 +821,7 @@ helm install releasegraph-agent ./charts/agent \
 | `approval-worker` | approval timeout, required approver, gate event | alert/command 사이에 일부 |
 | `rollout-observer` | apply 후 rollout/health watch | target-agent 일부 |
 | `notification-worker` | Slack/Email/Webhook routing | `alert-worker` 확장 |
-| `scm-worker` 확장 | 실제 GitHub/GitLab PR adapter | 현재 stub |
+| `scm-worker` 확장 | GitHub App/GitLab provider, token lifecycle | 현재 `GithubScmProvider` REST adapter |
 
 서비스 수를 무작정 늘리지 않는다. 먼저 현재 worker를 확장하고, 책임이 커질 때 분리한다.
 
@@ -1010,7 +1011,7 @@ Plural과 경쟁하지 않을 항목:
 | 렌더링 | simple YAML/Deployment | Helm/Kustomize/raw YAML real renderer |
 | diff | placeholder image 비교 | cluster-aware resource diff |
 | 적용 | command queue + agent | 승인된 GitOps executor + rollout observer |
-| PR | stub adapter | real GitHub/GitLab PR automation |
+| PR | `GithubScmProvider` REST adapter | GitHub App/GitLab PR automation |
 | UI | 데모 운영 대시보드 | workflow management console |
 | 권한 | session/resource access 기초 | OIDC + app/cluster/environment RBAC |
 | secret | credential_ref 개념 | vault-backed secret lifecycle |
