@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from typing import Any
+
 from sqlalchemy.dialects import postgresql
 
 from domains.identity.repository import WorkspaceAccessRepository
@@ -123,3 +126,57 @@ def test_service_admin_can_access_every_resource_action() -> None:
         "cluster-1",
         Permission.DANGEROUS_ACTION_APPROVE.value,
     )
+
+
+def test_accessible_resource_ids_reuses_organization_scoped_role_policy() -> None:
+    class FakeResult:
+        def mappings(self) -> list[dict[str, str]]:
+            return [
+                {"resource_id": "cluster-1", "role": ResourceRole.OBSERVER.value},
+                {"resource_id": "cluster-2", "role": ResourceRole.RELEASE_OPERATOR.value},
+            ]
+
+    class FakeConnection:
+        def execute(self, _statement: Any) -> FakeResult:
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(WorkspaceAccessRepository)
+    repository.is_service_admin = lambda _user_id: False  # type: ignore[method-assign]
+    repository.connection = fake_connection  # type: ignore[method-assign]
+    calls: list[tuple[str, str, str, str]] = []
+
+    def role_has_permission(
+        resource_type: str,
+        role: str,
+        permission: str,
+        organization_id: str | None = None,
+    ) -> bool:
+        calls.append((resource_type, role, permission, str(organization_id)))
+        return role == ResourceRole.RELEASE_OPERATOR.value
+
+    repository.role_has_permission = role_has_permission  # type: ignore[method-assign]
+
+    assert repository.accessible_resource_ids(
+        "user-1",
+        "org-a",
+        AccessResourceType.CLUSTER.value,
+        Permission.DEPLOY_RUN.value,
+    ) == {"cluster-2"}
+    assert set(calls) == {
+        (
+            AccessResourceType.CLUSTER.value,
+            ResourceRole.OBSERVER.value,
+            Permission.DEPLOY_RUN.value,
+            "org-a",
+        ),
+        (
+            AccessResourceType.CLUSTER.value,
+            ResourceRole.RELEASE_OPERATOR.value,
+            Permission.DEPLOY_RUN.value,
+            "org-a",
+        ),
+    }
