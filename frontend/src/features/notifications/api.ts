@@ -1,0 +1,55 @@
+// 알림 합성 피드 — 3개 실존 소스 정규화(G9 도입 시 이 파일만 교체)
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useSyncExternalStore } from 'react';
+import { get, post } from '@/shared/lib/api';
+import type { DeadLetter, Incident, Notice, WorkflowRun } from '@/shared/lib/types';
+import { useApplications, useRunsAll } from '@/features/repo/api';
+import { useIsAdmin } from '@/features/auth/api';
+import { timeAgo } from '@/shared/lib/format';
+
+export const useTimeline = () =>
+  useQuery({ queryKey: ['timeline'], queryFn: () => get<{ items: Incident[] }>('/dashboard/rca/timeline?limit=20'), refetchInterval: 60_000, select: d => d.items });
+export const useDeadLetters = (enabled: boolean) =>
+  useQuery({ queryKey: ['dead-letters'], queryFn: () => get<{ dead_letters: DeadLetter[] }>('/dead-letters?limit=20'), refetchInterval: 60_000, enabled, select: d => d.dead_letters });
+export const useReplayDeadLetter = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: number) => post(`/dead-letters/${id}/replay`), onSuccess: () => qc.invalidateQueries({ queryKey: ['dead-letters'] }) });
+};
+
+const seenKey = (kind: string) => `notice:lastSeen:${kind}`;
+const listeners = new Set<() => void>();
+function markSeen(kind: string, at: string) { localStorage.setItem(seenKey(kind), at); listeners.forEach(l => l()); }
+function subscribe(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
+
+export function useNotices(): { notices: Notice[]; unread: number; markAllSeen: (kind?: string) => void } {
+  const admin = useIsAdmin();
+  const timeline = useTimeline();
+  const dlq = useDeadLetters(admin);
+  const apps = useApplications();
+  const runs = useRunsAll(apps.data ?? []);
+  useSyncExternalStore(subscribe, () => localStorage.getItem(seenKey('any')) ?? '');
+
+  const notices = useMemo<Notice[]>(() => {
+    const out: Notice[] = [];
+    runs.forEach(({ appId, runs: rs }) => rs.filter((r: WorkflowRun) => r.status === 'WAITING_FOR_APPROVAL').forEach((r: WorkflowRun) => out.push({
+      id: `apr-${r.run_id}`, kind: 'approval', tone: 'warn',
+      title: `배포 승인 필요: ${appId} ${r.commit_sha.slice(0, 7)}`, at: r.started_at, link: `/workflows/${r.run_id}`, read: false,
+    })));
+    (timeline.data ?? []).forEach(i => out.push({ id: `inc-${i.incident_id}`, kind: 'incident', tone: 'danger', title: `인시던트: ${i.summary}`, at: i.at, link: `/ai?prefill=${encodeURIComponent(`인시던트 ${i.incident_id} 분석해줘`)}`, read: false }));
+    (dlq.data ?? []).filter(d => d.status === 'open').forEach(d => out.push({ id: `dlq-${d.id}`, kind: 'dlq', tone: 'danger', title: `처리 실패 이벤트: ${d.original_subject} (${d.consumer})`, at: d.created_at, link: '/settings/ops', read: false }));
+    return out
+      .map(n => ({ ...n, read: (localStorage.getItem(seenKey(n.kind)) ?? '') >= n.at }))
+      .sort((a, b) => b.at.localeCompare(a.at));
+  }, [runs, timeline.data, dlq.data]);
+
+  return {
+    notices,
+    unread: notices.filter(n => !n.read).length,
+    markAllSeen: (kind) => {
+      const now = new Date().toISOString();
+      (kind ? [kind] : ['approval', 'incident', 'dlq', 'cluster']).forEach(k => markSeen(k, now));
+      markSeen('any', now);
+    },
+  };
+}
+export { timeAgo };
