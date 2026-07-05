@@ -102,6 +102,9 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     runbook = read("docs/aws-testing-runbook.md")
 
     assert "CLOUDFLARE_PROXIED: ${{ vars.CLOUDFLARE_PROXIED || '1' }}" in workflow
+    assert "concurrency:" in workflow
+    assert "group: aws-cd-${{ github.ref_name }}" in workflow
+    assert "cancel-in-progress: true" in workflow
     assert 'CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"' in script
     assert '"proxied": ${proxied}' in script
     assert '"ttl": ${ttl}' in script
@@ -115,6 +118,11 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert "raw_length=" in script
     assert "normalized_length=" in script
     assert "allowed_bearer_charset=" in script
+    assert (
+        "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; AWS LoadBalancer remains available" in script
+    )
+    assert "zone lookup failed" in script
+    assert "DNS record lookup failed" in script
     assert 'value.lower().startswith("bearer")' in script
     assert "if not ch.isspace()" in script
     assert "printf 'Bearer %s\\n'" in script
