@@ -1,9 +1,7 @@
-"""Published event body contracts.
+"""이벤트 body 계약의 공개 import 표면.
 
-This module keeps the historical `packages.contracts.event_bus.bodies` import
-surface, but loads domain body classes lazily. Domain `events.py` modules import
-`bodies.base`, so eager re-export imports here create circular imports whenever a
-domain imports another domain event directly.
+기존 `packages.contracts.event_bus.bodies` import 경로를 유지하되 도메인 body 는 lazy 로딩.
+도메인 `events.py` 가 `bodies.base` 를 import 하므로 여기서 eager re-export 하면 순환 import 발생.
 """
 
 from __future__ import annotations

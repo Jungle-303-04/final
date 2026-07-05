@@ -1,8 +1,8 @@
 """서비스 entrypoint 규약 검증 — 명부는 discovery(자동 발견)가 단일 출처.
 
-수동 SERVICE_ENTRYPOINTS 목록을 유지하지 않는다. 서비스 추가/삭제는
+수동 SERVICE_ENTRYPOINTS 목록을 유지하지 않음. 서비스 추가/삭제는
 src/services/**/app.py 생성/삭제로 끝나고, 이 테스트는 규약과
-deploy manifest 정합(양방향 drift)만 검증한다.
+deploy manifest 정합(양방향 drift)만 검증.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ _COMMAND_PATTERN = re.compile(r'command: \["python", "(src/services/[^"]+)"\]')
 
 
 def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
-    """정방향 drift: 발견된 모든 서비스는 manifest 에 command 로 존재해야 한다."""
+    """정방향 drift: 발견된 모든 서비스는 manifest 에 command 로 존재해야 함."""
     manifests = "\n".join(read_project_file(path) for path in MANIFEST_FILES)
 
     for svc in SERVICES:
@@ -104,7 +104,7 @@ def test_kubernetes_workloads_run_service_entrypoints_directly() -> None:
 
 
 def test_manifest_commands_point_to_existing_entrypoints() -> None:
-    """역방향 drift: manifest 의 모든 command 경로는 발견된 서비스여야 한다."""
+    """역방향 drift: manifest 의 모든 command 경로는 발견된 서비스여야 함."""
     known = {svc.command for svc in SERVICES}
 
     for manifest in MANIFEST_FILES:

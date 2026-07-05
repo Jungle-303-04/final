@@ -1,8 +1,8 @@
-"""kubectl-backed Server-Side Apply dry-run adapter.
+"""kubectl 기반 Server-Side Apply dry-run adapter.
 
-The diff worker can run without this adapter in local tests. In a target
-cluster, set GITOPS_ENABLE_SSA_DRY_RUN=true to ask the API server for the
-predicted object before field-level diffing.
+로컬 테스트에서는 이 adapter 없이 동작 가능. target cluster 에서는
+GITOPS_ENABLE_SSA_DRY_RUN=true 로 켜면 field-level diff 전에
+API server 의 predicted object 를 조회함.
 """
 
 from __future__ import annotations

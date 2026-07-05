@@ -1,4 +1,4 @@
-"""Inventory repository for cluster resource snapshots and read models."""
+"""inventory 도메인 repository — 클러스터 리소스 스냅샷·read model 영속."""
 
 from __future__ import annotations
 

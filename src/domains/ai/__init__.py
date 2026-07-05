@@ -1,1 +1,1 @@
-"""AI conversation domain."""
+"""AI 대화 도메인."""

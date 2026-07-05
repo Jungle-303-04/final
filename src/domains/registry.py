@@ -1,6 +1,6 @@
 """도메인 합성 루트 — 코어 repo + 자동 발견된 도메인 repo 로 Database 구성.
 
-팀원이 domains/<새도메인>/{tables,repo}.py 를 추가하면 자동 포함된다(packages/ 0 수정).
+팀원이 domains/<새도메인>/{tables,repo}.py 를 추가하면 자동 포함됨(packages/ 0 수정).
 아직 domains/ 로 이전 전인 도메인(rca·command·auth·projection)은 임시로 명시 —
 이전되면 _PENDING 에서 빠지고 자동 발견으로 흡수됨.
 """

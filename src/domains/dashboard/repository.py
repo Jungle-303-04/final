@@ -1,7 +1,7 @@
 """dashboard read model repository.
 
-이 도메인은 이벤트를 새로 발행하지 않는다. 이미 흐른 RCA/command/safe_pr 이벤트를
-화면에서 바로 읽기 좋은 timeline row로 투영한다.
+이 도메인은 이벤트를 새로 발행하지 않음. 이미 흐른 RCA/command/safe_pr 이벤트를
+화면에서 바로 읽기 좋은 timeline row로 투영.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
 
     def upsert_rca_timeline(self, row: JsonObject) -> None:
-        """correlation_id 단위로 최신 RCA 흐름 상태를 갱신한다."""
+        """correlation_id 단위로 최신 RCA 흐름 상태 갱신."""
         table = RcaTimeline.__table__
         insert = pg_insert(table).values(**row, updated_at=func.now())
         preserve_when_missing = (

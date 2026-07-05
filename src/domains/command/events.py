@@ -20,7 +20,7 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 @event(EventSubject.COMMAND_REQUESTED)
 @dataclass(frozen=True)
 class CommandRequestedBody(EventBody):
-    """command.requested — 이 diff를 sandbox에 적용해 달라."""
+    """command.requested — 이 diff의 sandbox 적용 요청."""
 
     cluster_id: str
     action: str

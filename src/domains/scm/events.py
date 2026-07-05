@@ -1,9 +1,4 @@
-"""SCM gateway event bodies.
-
-Safe PR creation is gated:
-safe_pr.requested -> safe_pr.patch_prepared -> diff.explained
--> safe_pr.ready_for_creation -> safe_pr.created/safe_pr.failed.
-"""
+"""SCM gateway event body — Safe PR 생성 게이트: patch_prepared→diff.explained→ready_for_creation."""
 
 from __future__ import annotations
 
@@ -36,7 +31,7 @@ class SafePrFilePatch(EventBody):
 @event(EventSubject.SAFE_PR_REQUESTED)
 @dataclass(frozen=True)
 class SafePrRequestedBody(EventBody):
-    """safe_pr.requested — PR 을 만들어 달라(제목/본문/공급자)."""
+    """safe_pr.requested — PR 생성 요청(제목/본문/공급자)."""
 
     title: str
     body: str
@@ -57,7 +52,7 @@ class SafePrRequestedBody(EventBody):
 @event(EventSubject.SAFE_PR_CREATED)
 @dataclass(frozen=True)
 class SafePrCreatedBody(EventBody):
-    """safe_pr.created — scm-worker가 PR 을 만들었다."""
+    """safe_pr.created — scm-worker의 PR 생성 완료."""
 
     pr_url: str
     provider: str
@@ -73,7 +68,7 @@ class SafePrCreatedBody(EventBody):
 @event(EventSubject.SAFE_PR_READY_FOR_CREATION)
 @dataclass(frozen=True)
 class SafePrReadyForCreationBody(EventBody):
-    """safe_pr.ready_for_creation — diff 검증을 통과해 PR 생성을 진행해도 된다."""
+    """safe_pr.ready_for_creation — diff 검증 통과, PR 생성 진행 가능."""
 
     request: SafePrRequestedBody
     summary: str
@@ -85,7 +80,7 @@ class SafePrReadyForCreationBody(EventBody):
 @event(EventSubject.SAFE_PR_FAILED)
 @dataclass(frozen=True)
 class SafePrFailedBody(EventBody):
-    """safe_pr.failed — scm-worker가 PR 생성을 완료하지 못했다."""
+    """safe_pr.failed — scm-worker의 PR 생성 실패."""
 
     provider: str
     title: str

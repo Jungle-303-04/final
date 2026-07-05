@@ -1,7 +1,7 @@
 """텔레메트리 소스 레지스트리(@telemetry.source) 검증.
 
 소스 계약(prometheus/loki/tempo)이 provider 데코레이터 선언에서 자동 등록되고,
-queries/collector/agent 가 registry 기반으로 레지스트리를 읽는지 확인한다.
+queries/collector/agent 가 registry 기반으로 레지스트리를 읽는지 확인.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def test_conflicting_source_registration_fails_fast(telemetry_module) -> None:
 
 
 def test_identical_redeclaration_is_idempotent(telemetry_module) -> None:
-    """모듈 재로딩(테스트 로더 등)에서 동일 계약 재선언은 허용된다."""
+    """모듈 재로딩(테스트 로더 등)에서 동일 계약 재선언은 허용됨."""
     registry = telemetry_module.TelemetryRegistry()
 
     @registry.source(source="x", evidence_key="xs", query_type=dict)

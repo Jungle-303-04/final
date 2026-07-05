@@ -1,4 +1,4 @@
-"""Inventory HTTP routes for agent ingestion."""
+"""inventory 도메인 HTTP 라우터 — agent 수집 데이터 수신."""
 
 from __future__ import annotations
 

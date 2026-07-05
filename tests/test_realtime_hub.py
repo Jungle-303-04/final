@@ -111,7 +111,7 @@ def test_slow_browser_recovers_with_latest_snapshot_instead_of_unbounded_queue()
     for index in range(total):
         hub.publish_summary(summary(pods_ready=index))
 
-    # overflow 시 밀린 메시지는 전부 버려지고 최신 snapshot 1개로 복구된다.
+    # overflow 시 밀린 메시지는 전부 버려지고 최신 snapshot 1개로 복구됨.
     assert client.queue.qsize() == 1
     assert client.dropped_messages == BROWSER_QUEUE_MAX
     recovery = client.queue.get_nowait()

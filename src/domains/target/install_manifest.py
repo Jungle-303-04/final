@@ -1,8 +1,7 @@
-"""Target cluster install manifest renderer.
+"""target cluster 설치 manifest 렌더러.
 
-The API router owns request/auth/application flow. This module owns the install
-artifact shape so CLI, web UI, Helm, and Kustomize renderers can share one
-boundary instead of copying YAML strings inside route handlers.
+라우터는 요청/인증/apply 흐름을, 이 모듈은 install artifact 형태를 담당 —
+CLI/웹 UI/Helm/Kustomize 렌더러가 라우트 핸들러의 YAML 복사 없이 한 경계를 공유.
 """
 
 from __future__ import annotations
@@ -35,9 +34,9 @@ def yaml_string(value: str) -> str:
 
 
 def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) -> str:
-    # native와 kustomize는 지금 같은 manifest contract를 반환한다. 차이는 호출 경계다:
-    # native는 API가 즉시 apply 가능한 YAML을 만들고, kustomize는 같은 산출물을 향후
-    # renderer adapter/웹앱 preview/install 단계에서 교체할 수 있게 선택값으로 노출한다.
+    # native와 kustomize는 지금 같은 manifest contract를 반환함. 차이는 호출 경계:
+    # native는 API가 즉시 apply 가능한 YAML을 생성, kustomize는 같은 산출물을 향후
+    # renderer adapter/웹앱 preview/install 단계에서 교체할 수 있게 선택값으로 노출.
     target_install_renderer()
     return "\n---\n".join(
         block.strip()

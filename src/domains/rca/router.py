@@ -51,10 +51,9 @@ HTTP_CONFLICT = 409
 def scoped_evidence_key(identity: ClusterAgentIdentity, evidence_key: str | None) -> str | None:
     """agent 가 만든 evidence_key 를 신뢰된 identity 로 네임스페이스.
 
-    evidence_windows 의 PK 는 evidence_key 단일이라, 네임스페이스가 없으면 워크스페이스 B 의
-    agent 가 워크스페이스 A 의 키를 선점/충돌시켜 A 의 증거를 중복으로 묻거나(증거 억제)
-    A 의 event_id/correlation_id 를 돌려받을 수 있다(테넌트 누수). 접두사를 토큰 identity 에서
-    뽑아 키 공간을 워크스페이스/클러스터로 분리한다(body 의 문자열 신뢰 X).
+    evidence_windows 의 PK 가 evidence_key 단일이라, 접두사 없이는 다른 워크스페이스 agent 가
+    키를 선점/충돌시켜 증거 억제·event_id/correlation_id 테넌트 누수 가능. 토큰 identity 로
+    키 공간을 워크스페이스/클러스터로 분리(body 의 문자열 신뢰 X).
     """
     if not evidence_key:
         return None
@@ -64,7 +63,7 @@ def scoped_evidence_key(identity: ClusterAgentIdentity, evidence_key: str | None
 def build_cluster_evidence_body(
     payload: AgentEvidenceRequest, identity: ClusterAgentIdentity
 ) -> ClusterEvidenceReceivedBody:
-    # body 의 workspace_id/cluster_id 는 무시하고 토큰 identity 로 덮어쓴다(테넌트 위조 차단).
+    # body 의 workspace_id/cluster_id 는 무시하고 토큰 identity 로 덮어씀(테넌트 위조 차단).
     data = payload.model_dump(exclude={"correlation_id"})
     data["workspace_id"] = identity.workspace_id
     data["cluster_id"] = identity.cluster_id

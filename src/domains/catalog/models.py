@@ -1,4 +1,4 @@
-"""Service catalog tables."""
+"""서비스 카탈로그 테이블."""
 
 from __future__ import annotations
 

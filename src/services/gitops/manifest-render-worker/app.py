@@ -120,7 +120,7 @@ MANIFEST_SOURCE_UNAVAILABLE_REASON = "manifest source unavailable"
 
 
 class ManifestSourceError(Exception):
-    """Manifest source exists conceptually but cannot be loaded."""
+    """manifest 소스가 개념상 존재하지만 로드 불가한 경우."""
 
 
 @dataclass(frozen=True)

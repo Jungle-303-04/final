@@ -322,7 +322,7 @@ where role in ('owner', 'admin', 'maintainer', 'deployer', 'developer', 'viewer'
    or permission in ('read', 'write', 'deploy', 'admin')
 """
 
-# 풀 제어: 앱은 PgBouncer 로 연결(싸다). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
+# 풀 제어: 앱은 PgBouncer 로 연결(저렴). pre_ping 으로 죽은 연결은 쓰기 전에 폐기,
 # timeout 으로 하트비트 창(30s) 안에 빨리 실패.
 # 게이트웨이(전 트래픽 + long-poll)와 워커(배치)의 트래픽 특성이 달라
 # 풀 크기·대기 한도는 서비스별 deploy env 로 오버라이드 가능(기본값 불변).
@@ -504,7 +504,7 @@ class DatabaseConnection:
                 _ACTIVE_CONN.reset(token)
 
     def ensure_compatible_schema(self, existing_conn: Connection | None = None) -> None:
-        """Keep local development DBs usable until a real migration tool is introduced."""
+        """실제 마이그레이션 도구 도입 전까지 로컬 개발 DB 를 호환 상태로 유지"""
         if existing_conn is not None:
             self._apply_compatible_schema(existing_conn)
             return
