@@ -58,12 +58,15 @@ src/packages
   runtime                FastAPI/worker/async service 실행 객체
   ai                     LLM provider 클라이언트 (OpenAI/Anthropic/Gemini)
   security               시크릿 vault (SOPS/age, AWS)
+src/samples  smoke 테스트용 샘플 manifest (Bruno webhook·smoke script 가 참조)
 deploy       management/target Kubernetes manifest
 docs/api     Bruno API 수동 테스트 collection
 scripts      검증, AWS 배포, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
 config/env   로컬 env 템플릿
 tests        단위 테스트
+debug-lab    kind/Gateway 관측용 내부 디버그 도구 (src/ 미사용, 제품과 분리)
+examples     격리된 데모 (telemetry evidence Docker Compose)
 ```
 
 ## 처음 실행
