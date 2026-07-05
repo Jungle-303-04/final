@@ -14,6 +14,7 @@ from queries import KubernetesSnapshotQuery
 from telemetry_registry import telemetry
 
 from config import KUBERNETES_API_TIMEOUT_SECONDS, TARGET_CLUSTER_ID_ENV
+from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
@@ -43,7 +44,7 @@ class KubernetesSnapshotProvider:
 
     @classmethod
     def from_config(cls, read_config: ConfigReader) -> KubernetesSnapshotProvider:
-        return cls(cluster_id=read_config(TARGET_CLUSTER_ID_ENV, "target-cluster-01"))
+        return cls(cluster_id=read_config(TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID))
 
     async def query(
         self,

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MGMT_CLUSTER="${MGMT_CLUSTER:-kubernetes-ops}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/env.sh"
+
+MGMT_CLUSTER="${MGMT_CLUSTER:-}"
 MGMT_CONTEXT="${MGMT_CONTEXT:-${MGMT_CLUSTER}}"
 DEPLOYMENT="${1:-}"
+require_env MGMT_CONTEXT
 
 if [[ -z "${DEPLOYMENT}" ]]; then
   echo "usage: $0 <management-deployment>" >&2

@@ -9,9 +9,11 @@
 # 사용: bash scripts/crash_test.sh   (N 기본값 6, env로 override)
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CTX="${MGMT_CONTEXT:-kubernetes-ops}"
+source "${ROOT_DIR}/scripts/lib/env.sh"
+
+BASE_URL="${BASE_URL:-}"
+CTX="${MGMT_CONTEXT:-}"
 NS="${MGMT_NS:-management}"
 N="${N:-6}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-300}"
@@ -23,6 +25,8 @@ CRASH_TEST_IMAGE="${CRASH_TEST_IMAGE:-}"
 POSTGRES_USER="${POSTGRES_USER:-service}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-service}"
+require_env BASE_URL
+require_env CTX
 KILL_APPS=(manifest-render-worker scm-worker)
 
 log() { printf '%s [crash-test] %s\n' "$(date +%T)" "$*"; }

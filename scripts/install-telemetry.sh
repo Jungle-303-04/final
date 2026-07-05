@@ -2,9 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET_CLUSTER="${TARGET_CLUSTER:-cluster-1}"
+source "${ROOT_DIR}/scripts/lib/env.sh"
+
+TARGET_CLUSTER="${TARGET_CLUSTER:-}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-${TARGET_CLUSTER}}"
 TARGET_NAMESPACE="${TARGET_NAMESPACE:-target}"
+require_env TARGET_CONTEXT
 
 PROMETHEUS_RELEASE="${PROMETHEUS_RELEASE:-prometheus}"
 LOKI_RELEASE="${LOKI_RELEASE:-loki}"
