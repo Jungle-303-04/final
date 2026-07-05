@@ -252,7 +252,18 @@ def test_crashloop_flow_requires_approval_evidence_before_command_queue() -> Non
     assert approved_command.approval_ref == "approval-1"
     assert approved_command.policy_decision_ref == "policy-decision-1"
 
-    queue_db = SpyDb()
+    queue_db = SpyDb(
+        get_workflow_approval={
+            "approval_id": "approval-1",
+            "workflow_run_id": approved_command.workflow_run_id,
+            "workspace_id": approved_command.workspace_id,
+            "status": "granted",
+            "details": {
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
+            },
+        }
+    )
     command_outs = run_handler(
         command_worker.on_command_requested,
         approved_command,
@@ -358,7 +369,6 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
     select_worker = load_service("ai/select-worker")
     approval_worker = load_service("ai/approval-worker")
     dispatch_worker = load_service("ai/dispatch-worker")
-    safe_pr_worker = load_service("ai/safe-pr-worker")
     diff_worker = load_service("ai/diff-worker")
     scm_worker = load_service("gitops/scm-worker")
     monkeypatch.setattr(
@@ -393,23 +403,19 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
         dispatch_worker.on_recovery_action_selected,
         action_selected,
     )
-    patch_outs = run_handler(
-        safe_pr_worker.on_safe_pr_requested,
-        dispatch_outs[0],
-    )
-    diff_outs = run_handler(
-        diff_worker.on_safe_pr_patch_prepared,
-        patch_outs[0],
-    )
     scm_outs = run_handler(
         scm_worker.on_safe_pr_requested,
         dispatch_outs[0],
         db=db,
         correlation_id="corr-safe-pr",
     )
+    diff_outs = run_handler(
+        diff_worker.on_safe_pr_patch_prepared,
+        scm_outs[0],
+    )
 
     assert subjects_of(
-        recovery_outs + select_outs + approval_outs + dispatch_outs + patch_outs + diff_outs
+        recovery_outs + select_outs + approval_outs + dispatch_outs + [scm_outs[0]] + diff_outs
     ) == [
         "recovery.planned",
         "recovery.selection_requested",
@@ -419,10 +425,10 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
         "diff.explained",
     ]
     assert dispatch_outs[0].provider == "github"
-    assert patch_outs[0].patch["provider"] == "github"
+    assert scm_outs[0].patch["provider"] == "github"
     assert diff_outs[0].risk == "review_required"
-    assert subjects_of(scm_outs) == ["safe_pr.created"]
-    assert scm_outs[0].pr_url == PR_HTML_URL
+    assert subjects_of(scm_outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
+    assert scm_outs[1].pr_url == PR_HTML_URL
     assert db.called("save_pull_request")
 
 
@@ -453,3 +459,4 @@ def test_rollout_completion_flows_to_approval_recommendation() -> None:
         "approval.recommended",
     ]
     assert approval_outs[0].recommendation == "manual_review"
+    assert rollout_outs[0].diagnosis == "kubernetes api not configured; dry-run only"

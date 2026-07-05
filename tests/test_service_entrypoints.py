@@ -141,7 +141,6 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
         "alert-worker",
         "command-janitor",
         "evidence-worker",
-        "safe-pr-worker",
         "ai-diff-worker",
         "dashboard-worker",
         "realtime-gateway",

@@ -6,7 +6,7 @@ from urllib import error
 import pytest
 from conftest import SpyDb, load_service, run_handler, subjects_of
 
-from domains.gitops.events import GitChangedBody
+from domains.gitops.events import GitChangedBody, RenderedManifest, RenderedMetadata, RenderedSpec
 
 
 def test_render_emits_manifest_invalid_when_no_source_is_available() -> None:
@@ -492,55 +492,137 @@ def test_render_records_invalid_manifest_without_retry(monkeypatch, tmp_path) ->
     assert not db.called("save_repo_change")
 
 
-@pytest.mark.parametrize(
-    ("manifest_lines", "reason"),
-    [
-        (
+def test_render_preserves_crd_and_custom_resource_manifests(monkeypatch, tmp_path) -> None:
+    manifest = tmp_path / "custom-resources.yaml"
+    manifest.write_text(
+        "\n---\n".join(
             [
-                "apiVersion: rbac.authorization.k8s.io/v1",
-                "kind: ClusterRole",
-                "metadata:",
-                "  name: forbidden-role",
-                "rules: []",
-            ],
-            "unsupported manifest kind: rbac.authorization.k8s.io/v1/ClusterRole",
+                "\n".join(
+                    [
+                        "apiVersion: apiextensions.k8s.io/v1",
+                        "kind: CustomResourceDefinition",
+                        "metadata:",
+                        "  name: widgets.example.com",
+                        "spec:",
+                        "  group: example.com",
+                        "  names:",
+                        "    kind: Widget",
+                        "    plural: widgets",
+                        "  scope: Namespaced",
+                    ]
+                ),
+                "\n".join(
+                    [
+                        "apiVersion: example.com/v1",
+                        "kind: Widget",
+                        "metadata:",
+                        "  name: checkout-widget",
+                        "  namespace: sandbox",
+                        "spec:",
+                        "  size: small",
+                    ]
+                ),
+            ]
         ),
-        (
-            [
-                "apiVersion: extensions/v1beta1",
-                "kind: Deployment",
-                "metadata:",
-                "  name: legacy-api",
-                "spec:",
-                "  template:",
-                "    spec:",
-                "      containers:",
-                "        - name: legacy-api",
-                "          image: ghcr.io/project/legacy-api:v1",
-            ],
-            "unsupported manifest kind: extensions/v1beta1/Deployment",
-        ),
-    ],
-)
-def test_render_rejects_unsupported_kubernetes_resource_contract(
-    monkeypatch, tmp_path, manifest_lines: list[str], reason: str
-) -> None:
-    manifest = tmp_path / "unsupported.yaml"
-    manifest.write_text("\n".join(manifest_lines), encoding="utf-8")
+        encoding="utf-8",
+    )
     monkeypatch.setenv("GIT_MANIFEST_PATH", str(manifest))
 
     render = load_service("gitops/manifest-render-worker")
     db = SpyDb()
     outs = run_handler(
         render.on_git_changed,
-        GitChangedBody(commit_sha="bad123", image="ignored", replicas=1),
+        GitChangedBody(commit_sha="crd123", image="ignored", replicas=1),
         db=db,
     )
 
-    assert subjects_of(outs) == ["manifest.invalid"]
-    assert outs[0].reason == reason
-    assert db.called("record_manifest_artifact")
-    assert not db.called("save_repo_change")
+    assert subjects_of(outs) == ["manifest.rendered", "manifest.rendered"]
+    assert outs[0].rendered_manifest.kind == "CustomResourceDefinition"
+    assert outs[0].rendered_manifest.metadata.namespace == ""
+    assert outs[1].rendered_manifest.kind == "Widget"
+    assert outs[1].rendered_manifest.metadata.namespace == "sandbox"
+    assert outs[1].rendered_manifest.manifest["spec"]["size"] == "small"
+    assert sum(1 for call in db.calls if call[0] == "record_manifest_artifact") == 2
+
+
+def test_render_reads_raw_manifest_directory(monkeypatch, tmp_path) -> None:
+    directory = tmp_path / "manifests"
+    directory.mkdir()
+    (directory / "config.json").write_text(
+        '{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"from-json"},"data":{"A":"B"}}',
+        encoding="utf-8",
+    )
+    (directory / "service.yaml").write_text(
+        "\n".join(
+            [
+                "apiVersion: v1",
+                "kind: Service",
+                "metadata:",
+                "  name: from-yaml",
+                "spec:",
+                "  ports:",
+                "    - port: 80",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(directory))
+
+    render = load_service("gitops/manifest-render-worker")
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="dir123", image="ignored", replicas=1),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["manifest.rendered", "manifest.rendered"]
+    assert [out.rendered_manifest.kind for out in outs] == ["ConfigMap", "Service"]
+
+
+def test_render_reuses_cached_manifest_artifact_without_rerendering() -> None:
+    render = load_service("gitops/manifest-render-worker")
+    rendered = RenderedManifest(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=RenderedMetadata(name="cached-api", namespace="sandbox"),
+        spec=RenderedSpec(replicas=2, image="cached:image"),
+        manifest={
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": "cached-api", "namespace": "sandbox"},
+            "spec": {},
+        },
+        artifact_digest="sha256:" + "a" * 64,
+    )
+    db = SpyDb(
+        find_rendered_manifest_artifacts=[
+            {
+                "artifact_id": "artifact-1",
+                "manifest_path": "deploy.yaml#deployment/cached-api",
+                "rendered_manifest": rendered.to_body(),
+                "source_summary": {"renderer_version": render.RENDERER_VERSION},
+            }
+        ]
+    )
+
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="cached123",
+            image="ignored",
+            replicas=1,
+            binding_id="binding-1",
+            manifest_path="deploy.yaml",
+        ),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["manifest.rendered"]
+    assert outs[0].rendered_manifest.metadata.name == "cached-api"
+    assert db.called("find_rendered_manifest_artifacts")
+    assert db.called("save_repo_change")
+    assert db.called("mark_watch_observed")
+    assert not db.called("record_manifest_artifact")
 
 
 def test_render_rejects_boolean_deployment_replicas(monkeypatch, tmp_path) -> None:

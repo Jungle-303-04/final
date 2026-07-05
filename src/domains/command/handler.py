@@ -32,6 +32,7 @@ from domains.command.policy import Result as PolicyResult
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gateway.fields import Gateway
+from packages.contracts.gitops import ApprovalStatus
 from packages.contracts.stores import AgentCommandStore
 from packages.runtime.app import EventContext
 
@@ -71,6 +72,10 @@ MANIFEST_NAMESPACE_MISMATCH_REASON = "manifest namespace must match command name
 ACTION_NAMESPACE_REASON = "namespace not allowed for this command action"
 MISSING_APPROVAL_REF_REASON = "write command requires approval_ref"
 MISSING_POLICY_DECISION_REF_REASON = "write command requires policy_decision_ref"
+APPROVAL_RECORD_MISSING_REASON = "write command approval_ref is not recorded"
+APPROVAL_NOT_GRANTED_REASON = "write command approval_ref is not granted"
+APPROVAL_POLICY_DECISION_MISMATCH_REASON = "write command policy_decision_ref mismatch"
+APPROVAL_WORKFLOW_MISMATCH_REASON = "write command approval workflow mismatch"
 
 
 def desired_manifest_namespace(command: CommandRequestedBody) -> str | None:
@@ -104,6 +109,47 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
         if not command.policy_decision_ref:
             return PolicyResult.reject(MISSING_POLICY_DECISION_REF_REASON)
     return result
+
+
+def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
+    spec = command_action_spec(command.action)
+    return bool(spec is not None and spec.requires_approval)
+
+
+async def evaluate_recorded_approval(
+    command: CommandRequestedBody, db: AgentCommandStore
+) -> PolicyResult:
+    if not command_requires_recorded_approval(command):
+        return PolicyResult.allow()
+    if not command.approval_ref:
+        return PolicyResult.reject(MISSING_APPROVAL_REF_REASON)
+    if not command.policy_decision_ref:
+        return PolicyResult.reject(MISSING_POLICY_DECISION_REF_REASON)
+
+    getter = getattr(db, "get_workflow_approval", None)
+    if getter is None:
+        return PolicyResult.reject(APPROVAL_RECORD_MISSING_REASON)
+    record = await getter(command.approval_ref, command.workspace_id)
+    if not isinstance(record, dict):
+        return PolicyResult.reject(APPROVAL_RECORD_MISSING_REASON)
+
+    if str(record.get("workflow_run_id", "")) != command.workflow_run_id:
+        return PolicyResult.reject(APPROVAL_WORKFLOW_MISMATCH_REASON)
+    if str(record.get("status", "")) not in {
+        ApprovalStatus.GRANTED.value,
+        ApprovalStatus.NOT_REQUIRED.value,
+    }:
+        return PolicyResult.reject(APPROVAL_NOT_GRANTED_REASON)
+
+    details = record.get("details")
+    if isinstance(details, dict):
+        recorded_ref = details.get("policy_decision_ref")
+        if recorded_ref and str(recorded_ref) != command.policy_decision_ref:
+            return PolicyResult.reject(APPROVAL_POLICY_DECISION_MISMATCH_REASON)
+        recorded_approval = details.get("approval_ref")
+        if recorded_approval and str(recorded_approval) != command.approval_ref:
+            return PolicyResult.reject(APPROVAL_POLICY_DECISION_MISMATCH_REASON)
+    return PolicyResult.allow()
 
 
 def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
@@ -192,6 +238,10 @@ async def handle_command_requested(
     result = evaluate_command_policy(evt)
     if not result.allowed:
         yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
+        return
+    approval_result = await evaluate_recorded_approval(evt, ctx.db)
+    if not approval_result.allowed:
+        yield CommandRejectedBody(reason=approval_result.require_reason(), requested=evt.to_body())
         return
 
     plan = build_plan(evt, ctx.correlation_id)

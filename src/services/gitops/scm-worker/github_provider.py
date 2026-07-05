@@ -64,12 +64,20 @@ def change_document(request: SafePrRequestedBody) -> str:
         f"- `{patch.path}`: {patch.description or 'manifest patch'}" for patch in request.patches
     )
     patch_section = patch_rows if patch_rows else "- proposal-only: manifest patch 없음"
+    approval_rows = []
+    if request.approval_ref:
+        approval_rows.append(f"- approval_ref: `{request.approval_ref}`")
+    if request.policy_decision_ref:
+        approval_rows.append(f"- policy_decision_ref: `{request.policy_decision_ref}`")
+    approval_section = "\n".join(approval_rows) if approval_rows else "- approval_ref: 없음"
     return (
         f"# {request.title}\n\n"
         f"{request.body}\n\n"
         f"- manifest_path: `{request.manifest_path}`\n"
         f"- workflow_run_id: `{request.workflow_run_id}`\n"
         f"- environment: `{request.environment}`\n\n"
+        "## Approval\n\n"
+        f"{approval_section}\n\n"
         "## Files\n\n"
         f"{patch_section}\n"
     )

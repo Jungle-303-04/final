@@ -99,8 +99,9 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
         analyzed_events = await run_worker(analyze, desired_diff, db)
         safe_pr_requested = analyzed_events[1]
         repo_events = await run_worker(repo, safe_pr_requested, db)
-        safe_pr_created = repo_events[0]
-        alert_requested = repo_events[1]
+        safe_pr_patch_prepared = repo_events[0]
+        safe_pr_created = repo_events[1]
+        alert_requested = repo_events[2]
         alert_events = await run_worker(alert, alert_requested, db)
         command_requested = alert_events[1]
         command_events = await run_worker(command, command_requested, db)
@@ -111,6 +112,7 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
             rendered,
             desired_diff,
             *analyzed_events,
+            safe_pr_patch_prepared,
             safe_pr_created,
             alert_requested,
             *alert_events,
@@ -123,6 +125,7 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
             EventSubject.DESIRED_DIFF_DETECTED,
             EventSubject.DIFF_ANALYZED,
             EventSubject.SAFE_PR_REQUESTED,
+            EventSubject.SAFE_PR_PATCH_PREPARED,
             EventSubject.SAFE_PR_CREATED,
             EventSubject.ALERT_REQUESTED,
             EventSubject.ALERT_DISPATCHED,
@@ -137,6 +140,7 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
         assert desired_diff.causation_id == rendered.event_id
         assert analyzed_events[0].causation_id == desired_diff.event_id
         assert safe_pr_requested.causation_id == desired_diff.event_id
+        assert safe_pr_patch_prepared.causation_id == safe_pr_requested.event_id
         assert safe_pr_created.causation_id == safe_pr_requested.event_id
         assert alert_requested.causation_id == safe_pr_requested.event_id
         assert alert_events[0].causation_id == alert_requested.event_id

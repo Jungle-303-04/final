@@ -162,10 +162,11 @@ def test_workflow_controller_requests_approval_for_unsafe_diff() -> None:
         "workflow.step.recorded",
         "approval.requested",
     ]
-    assert db.called("request_workflow_approval")
+    assert not db.called("request_workflow_approval")
     assert db.called("update_workflow_run")
-    assert outs[-1].approval_id == "approval-1"
+    assert outs[-1].approval_id.startswith("approval-")
     assert outs[-1].workflow_run_id == "workflow-1"
+    assert outs[-1].details["policy_decision_ref"]
 
 
 def test_workflow_controller_auto_approves_safe_diff() -> None:
@@ -186,8 +187,8 @@ def test_workflow_controller_auto_approves_safe_diff() -> None:
         "workflow.step.recorded",
         "workflow.step.recorded",
     ]
-    assert db.called("request_workflow_approval")
-    assert db.called("resolve_workflow_approval")
+    assert not db.called("request_workflow_approval")
+    assert not db.called("resolve_workflow_approval")
 
 
 def test_workflow_controller_does_not_complete_manifest_diff_only_by_same_image() -> None:
@@ -220,7 +221,7 @@ def test_workflow_controller_does_not_complete_manifest_diff_only_by_same_image(
         "workflow.step.recorded",
         "workflow.step.recorded",
     ]
-    assert db.called("resolve_workflow_approval")
+    assert not db.called("resolve_workflow_approval")
 
 
 def test_workflow_controller_fails_run_when_safe_pr_fails() -> None:
