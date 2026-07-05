@@ -3,8 +3,13 @@ import * as fx from '@/shared/lib/mock/fixtures';
 import { ApiError } from '@/shared/lib/api';
 import type { ChatMessage, Session } from '@/shared/lib/types';
 
+// mock 세션은 localStorage 지속 — 새로고침/딥링크에서도 로그인 유지(데모 목적)
+const SESSION_KEY = 'mock:session';
+function loadSession(): Session | null {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null'); } catch { return null; }
+}
 const state = {
-  session: null as Session | null,
+  session: loadSession(),
   conversations: structuredClone(fx.conversations),
   users: structuredClone(fx.users),
   orgs: structuredClone(fx.orgs),
@@ -24,9 +29,10 @@ const routes: [string, string, Handler][] = [
     if (b.email === 'teammate@example.com') throw new ApiError(403, 'account approval required');
     if (b.password?.length < 8) throw new ApiError(401, 'invalid credentials');
     state.session = { authenticated: true, user_id: 'u-1', email: b.email, workspace_id: 'default', roles: b.email.startsWith('admin') ? ['service_admin'] : ['user'] };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(state.session));
     return state.session;
   }],
-  ['POST', '/auth/logout', () => { state.session = null; return { accepted: true }; }],
+  ['POST', '/auth/logout', () => { state.session = null; localStorage.removeItem(SESSION_KEY); return { accepted: true }; }],
   ['POST', '/auth/signup', () => ({ accepted: true, verification_required: true })],
   ['POST', '/auth/resend-verification', () => ({ accepted: true, verification_required: true })],
   ['POST', '/auth/users/:userId/approve', (p) => {
@@ -132,7 +138,6 @@ function resolveApproval(id: string, result: 'granted' | 'rejected') {
   return { accepted: true, event_id: uid(), correlation_id: uid() };
 }
 
-export async function mockRequest<T>(method: string, pathWithQuery: string): Promise<T>;
 export async function mockRequest<T>(method: string, pathWithQuery: string, body?: unknown): Promise<T> {
   await delay();
   const [path, queryStr] = pathWithQuery.split('?');
@@ -146,7 +151,9 @@ export async function mockRequest<T>(method: string, pathWithQuery: string, body
     let ok = true;
     pSegs.forEach((ps, i) => { if (ps.startsWith(':')) params[ps.slice(1)] = decodeURIComponent(segs[i]); else if (ps !== segs[i]) ok = false; });
     if (!ok) continue;
-    return handler(params, body, query) as T;
+    const result = handler(params, body, query);
+    // GET 은 state 참조 그대로 주면 React Query 가 변경 미감지 → 깊은 복사(실백엔드 직렬화와 동형)
+    return (method === 'GET' && result && typeof result === 'object' ? structuredClone(result) : result) as T;
   }
   throw new ApiError(404, `mock 경로 없음: ${method} ${path}`);
 }
