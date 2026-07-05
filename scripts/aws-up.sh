@@ -808,15 +808,21 @@ configure_cloudflare_record() {
     echo "Cloudflare API token is blank after normalization; skipping ${CUSTOM_DOMAIN}" >&2
     return 0
   fi
-  cloudflare_validate_api_token
+  if ! cloudflare_validate_api_token; then
+    log "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; AWS LoadBalancer remains available"
+    return 0
+  fi
 
-  zone_id="$(cloudflare_zone_id)"
+  if ! zone_id="$(cloudflare_zone_id)"; then
+    log "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; zone lookup failed"
+    return 0
+  fi
   if [[ -z "${zone_id}" ]]; then
     echo "Cloudflare zone not found for ${CLOUDFLARE_ZONE_NAME}; skipping ${CUSTOM_DOMAIN}" >&2
     return 0
   fi
 
-  record_id="$(
+  if ! record_id="$(
     CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" \
     CLOUDFLARE_AUTHORIZATION="$(cloudflare_authorization_value)" \
     CUSTOM_DOMAIN="${CUSTOM_DOMAIN}" \
@@ -848,7 +854,10 @@ except urllib.error.HTTPError as exc:
 records = payload.get("result", [])
 print(records[0]["id"] if records else "")
 PY
-  )"
+  )"; then
+    log "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; DNS record lookup failed"
+    return 0
+  fi
   proxied="$(cloudflare_proxied_json)"
   ttl="$(cloudflare_ttl_json)"
 
