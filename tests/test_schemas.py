@@ -28,48 +28,55 @@ def test_command_request_leaves_namespace_policy_to_command_worker() -> None:
     assert request.namespace == "production"
 
 
-def test_command_request_rejects_unknown_fields() -> None:
+@pytest.mark.parametrize(
+    ("model", "payload"),
+    [
+        pytest.param(
+            CommandRequest,
+            {"command_type": "legacy"},
+            id="command-request-unknown-field",
+        ),
+        pytest.param(
+            LoginRequest,
+            {"email": "local@example.com", "password": "local-password", "role": "owner"},
+            id="login-unknown-field",
+        ),
+        pytest.param(
+            SignupRequest,
+            {"email": "local@example.com", "password": "short", "password_confirm": "short"},
+            id="signup-short-password",
+        ),
+        pytest.param(
+            ResendEmailVerificationRequest,
+            {"email": "not-email", "password": "local-password"},
+            id="resend-verification-invalid-email",
+        ),
+        pytest.param(
+            EmailVerificationResponse,
+            {
+                "accepted": True,
+                "verification_required": True,
+                "email": "local@example.com",
+                "token": "secret",  # 응답에 토큰 노출 금지
+            },
+            id="email-verification-response-token-field",
+        ),
+        pytest.param(
+            GitHubWebhookRequest,
+            {"commit_sha": "abc123", "replicas": 0},
+            id="webhook-invalid-replica-count",
+        ),
+        pytest.param(
+            TargetRegisterRequest,
+            {"management_base_url": ""},
+            id="target-register-empty-management-url",
+        ),
+    ],
+)
+def test_gateway_schema_rejects_invalid_payload(model: type, payload: dict) -> None:
+    # 스키마 계약 드리프트 방지 — 제약(unknown 필드 거부·길이·형식) 완화 시 실패해야 함.
     with pytest.raises(ValidationError):
-        CommandRequest(command_type="legacy")
-
-
-def test_login_request_rejects_unknown_fields() -> None:
-    with pytest.raises(ValidationError):
-        LoginRequest(email="local@example.com", password="local-password", role="owner")
-
-
-def test_signup_request_rejects_short_password() -> None:
-    with pytest.raises(ValidationError):
-        SignupRequest(
-            email="local@example.com",
-            password="short",
-            password_confirm="short",
-        )
-
-
-def test_resend_verification_request_rejects_invalid_email() -> None:
-    with pytest.raises(ValidationError):
-        ResendEmailVerificationRequest(email="not-email", password="local-password")
-
-
-def test_email_verification_response_rejects_token_field() -> None:
-    with pytest.raises(ValidationError):
-        EmailVerificationResponse(
-            accepted=True,
-            verification_required=True,
-            email="local@example.com",
-            token="secret",
-        )
-
-
-def test_github_webhook_schema_rejects_invalid_replica_count() -> None:
-    with pytest.raises(ValidationError):
-        GitHubWebhookRequest(commit_sha="abc123", replicas=0)
-
-
-def test_target_register_schema_rejects_empty_management_url() -> None:
-    with pytest.raises(ValidationError):
-        TargetRegisterRequest(management_base_url="")
+        model(**payload)
 
 
 def test_event_uses_payload_correlation_id() -> None:
@@ -186,7 +193,7 @@ def test_event_body_rejects_invalid_list_item_type() -> None:
         )
 
 
-def test_resource_access_roles_are_action_scoped() -> None:
+def test_resource_permission_profiles_require_canonical_roles() -> None:
     assert resource_role_allows_permission(
         ResourceRole.OBSERVER.value, Permission.CLUSTER_READ.value
     )
@@ -195,15 +202,6 @@ def test_resource_access_roles_are_action_scoped() -> None:
     )
     assert resource_role_allows_permission(
         ResourceRole.RELEASE_OPERATOR.value, Permission.DEPLOY_RUN.value
-    )
-
-
-def test_resource_permission_profiles_require_canonical_roles() -> None:
-    assert resource_role_allows_permission(
-        ResourceRole.OBSERVER.value, Permission.CLUSTER_READ.value
-    )
-    assert not resource_role_allows_permission(
-        ResourceRole.OBSERVER.value, Permission.DEPLOY_RUN.value
     )
     assert Permission.DANGEROUS_ACTION_APPROVE.value in CLUSTER_STEWARD_PERMISSIONS
 
