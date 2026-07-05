@@ -30,6 +30,15 @@ docs/api
 
 `cluster_id`는 target 등록 시 사용한 실제 cluster id를 넣는다.
 
+로컬에서 처음 테스트하면 [로컬 테스트 실행 기준](../local-testing.md)을 따라 `make local-test-env`, `make local-up`, `make local-smoke` 순서로 실행한다.
+`local` Environment는 기본적으로 아래 값과 맞춰져 있다.
+
+```text
+auth_email: admin.local@example.com
+auth_password: local-test-password-1234
+cluster_id: target
+```
+
 `agent_token`은 `02-target-admin/01-register-target-dry-run.bru` 응답에서 받거나, 이미 등록된 target agent token reference를 운영자가 넣는다.
 
 `github_webhook_signature`는 webhook body와 secret으로 다시 계산해야 한다. body를 바꾸면 signature도 반드시 다시 바꾼다.

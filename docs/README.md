@@ -29,7 +29,10 @@
 6. [Bruno API 테스트](api/README.md)를 연다.
    Gateway API를 사람이 직접 눌러 확인한다.
 
-7. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+7. [로컬 테스트 실행 기준](local-testing.md)을 본다.
+   로컬 계정 bootstrap, smoke, Bruno 값을 확인한다.
+
+8. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
    실제 서비스 smoke 기준을 확인한다.
 
 ## 민정이 먼저 볼 문서
@@ -98,7 +101,9 @@ AWS와 운영 명령을 확인할 때는 [운영/배포](operations-deployment.m
 
 GitHub Actions와 AWS CD 흐름은 [AWS CI/CD](aws-cicd.md)를 본다.
 
-실제 smoke 실행 기준은 [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+로컬 smoke 실행 기준은 [로컬 테스트 실행 기준](local-testing.md)을 본다.
+
+실제 서비스 smoke 실행 기준은 [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
 
 production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)를 본다.
 
@@ -122,7 +127,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `permission`을 찾을 때는 [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md), [찬빈 권한 모델 상세](team/member-guides/chanbin-permission-model.md), [Secrets](secrets.md)를 본다.
 
-`Bruno`를 찾을 때는 [Bruno API 테스트](api/README.md)를 본다.
+`Bruno`를 찾을 때는 [Bruno API 테스트](api/README.md), [로컬 테스트 실행 기준](local-testing.md)을 본다.
 
 `AWS`를 찾을 때는 [AWS CI/CD](aws-cicd.md), [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
 
@@ -132,7 +137,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `worker`를 찾을 때는 [이벤트 흐름](events.md), [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md), [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)을 본다.
 
-`test`를 찾을 때는 [역할별 실습 가이드](team/role-practice-guide.md), [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md), [Bruno API 테스트](api/README.md)를 본다.
+`test`를 찾을 때는 [로컬 테스트 실행 기준](local-testing.md), [역할별 실습 가이드](team/role-practice-guide.md), [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md), [Bruno API 테스트](api/README.md)를 본다.
 
 `GitOps`를 찾을 때는 [가인 프로덕션 구현 흐름](rca-production-onboarding/02-gain-evidence-rca-safe-pr.md), [RCA / Safe PR 선형 작업](team/rca-safe-pr-tasks/README.md), [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
 
@@ -147,6 +152,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [events](events.md)
 - [frontend-framework-design](frontend-framework-design.md)
+- [local-testing](local-testing.md)
 - [operations-deployment](operations-deployment.md)
 - [production-readiness](production-readiness.md)
 - [secrets](secrets.md)
