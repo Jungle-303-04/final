@@ -1007,7 +1007,7 @@ src/domains/identity/dependencies.py
 3. 허용 command 목록을 action catalog로 제한한다.
 4. raw shell output은 bounded sample이나 object reference로 남긴다.
 5. browser에는 agent token이나 kubeconfig를 절대 내려주지 않는다.
-6. demo project lifecycle도 같은 audit 흐름을 탄다.
+6. sample project lifecycle도 같은 audit 흐름을 탄다.
 
 넘겨야 하는 값:
 
@@ -1204,7 +1204,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 `plan`, `platform_plan`, `platform_subscription`, `subscription`, `license`, `license_token`, `address`는 billing/license/subscription으로 옮긴다.
 담당은 찬빈이다.
 
-`cloud_shell`, `shell`, `demo_project`, `database`, `file`, `dashboard`, `publisher`, `contributor`, `misc`는 shell/demo/catalog/read model/shared metadata로 옮긴다.
+`cloud_shell`, `shell`, `sample_project`, `database`, `file`, `dashboard`, `publisher`, `contributor`, `misc`는 shell/project/catalog/read model/shared metadata로 옮긴다.
 담당은 도메인별로 나눈다.
 
 서비스 묶음은 아래처럼 옮긴다.

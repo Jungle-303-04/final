@@ -21,7 +21,7 @@ real Prometheus 설치 준비를 위해 secret 없는 Helm values 초안을 만�
 2. chart repository와 chart version을 README에 적는다.
 3. namespace는 예시로 `observability-system`을 사용한다.
 4. `values.yaml`에는 secret, token, password를 넣지 않는다.
-5. persistent volume은 demo 단계에서 끌지 켤지 명시한다.
+5. persistent volume은 validation 단계에서 끌지 켤지 명시한다.
 6. node-collector scrape 설정 후보를 README에 적는다.
 7. chart README와 `helm show values`를 확인한 뒤 values key를 확정한다.
 
