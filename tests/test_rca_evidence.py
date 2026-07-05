@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
+from conftest import SpyDb, load_service, run_handler, subjects_of
 
 from domains.command.events import CommandCompletedBody
 from domains.rca.events import (
@@ -199,56 +199,42 @@ def test_crashloop_flow_requires_approval_evidence_before_command_queue() -> Non
         select_worker.on_recovery_planned,
         recovery_outs[0],
     )
-    dispatch_outs = run_handler(
-        dispatch_worker.on_recovery_action_selected,
-        select_outs[0],
-    )
 
-    assert subjects_of(recovery_outs + select_outs + dispatch_outs) == [
+    assert subjects_of(recovery_outs + select_outs) == [
         "recovery.planned",
-        "recovery.action_selected",
-        "command.requested",
+        "recovery.selection_requested",
     ]
-    command = dispatch_outs[0]
-    assert command.action == "rollout_restart"
-    assert command.namespace == "sandbox"
-    assert command.workspace_id == "workspace-1"
+    assert select_outs[0].reason == "선택 후보가 승인 필요한 command action입니다."
 
-    queue_db = SpyDb()
-    command_outs = run_handler(
-        command_worker.on_command_requested,
-        command,
-        db=queue_db,
-        correlation_id="corr-auto",
-    )
-    assert subjects_of(command_outs) == ["command.rejected"]
-    assert command_outs[0].reason == "write command requires approval_ref"
-    assert not queue_db.called("queue_agent_command")
-
-    selected = dispatch_outs[0].actor
-    assert isinstance(selected, dict)
+    selected = select_outs[0].plan.candidates[0]
     approved_candidate = replace(
-        select_outs[0].selected,
+        selected,
         draft=replace(
-            select_outs[0].selected.draft,
+            selected.draft,
             params={
-                **select_outs[0].selected.draft.params,
+                **selected.draft.params,
                 "approval_ref": "approval-1",
                 "policy_decision_ref": "policy-decision-1",
             },
         ),
     )
-    approved_selection = replace(
-        select_outs[0],
+    approved_selection = RecoveryActionSelectedBody(
+        plan=select_outs[0].plan,
         selected=approved_candidate,
         selected_by="operator",
         auto_selected=False,
+        reason="operator approved restart",
+        workspace_id="workspace-1",
     )
     approved_dispatch_outs = run_handler(
         dispatch_worker.on_recovery_action_selected,
         approved_selection,
     )
+    assert subjects_of(approved_dispatch_outs) == ["command.requested"]
     approved_command = approved_dispatch_outs[0]
+    assert approved_command.action == "rollout_restart"
+    assert approved_command.namespace == "sandbox"
+    assert approved_command.workspace_id == "workspace-1"
     assert approved_command.approval_ref == "approval-1"
     assert approved_command.policy_decision_ref == "policy-decision-1"
 
@@ -350,7 +336,7 @@ def test_unknown_symptom_creates_backlog_and_manual_selection_flow() -> None:
     assert feedback_outs[0].next_actions[0]["action_type"] == "collect_evidence"
 
 
-def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> None:
+def test_user_selected_safe_pr_flow_requires_concrete_patch(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.setenv("SCM_REPO", "project/repo")
     db = SpyDb()
@@ -358,13 +344,6 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
     select_worker = load_service("ai/select-worker")
     approval_worker = load_service("ai/approval-worker")
     dispatch_worker = load_service("ai/dispatch-worker")
-    diff_worker = load_service("ai/diff-worker")
-    scm_worker = load_service("gitops/scm-worker")
-    monkeypatch.setattr(
-        scm_worker,
-        "SCM_PROVIDER",
-        scm_worker.GithubScmProvider(transport=github_scm_transport(PR_HTML_URL)),
-    )
 
     recovery_outs = run_handler(
         recovery_worker.on_rca_completed,
@@ -392,36 +371,15 @@ def test_user_selected_safe_pr_flow_reaches_patch_diff_and_scm(monkeypatch) -> N
         dispatch_worker.on_recovery_action_selected,
         action_selected,
     )
-    scm_outs = run_handler(
-        scm_worker.on_safe_pr_requested,
-        dispatch_outs[0],
-        db=db,
-        correlation_id="corr-safe-pr",
-    )
-    diff_outs = run_handler(
-        diff_worker.on_safe_pr_patch_prepared,
-        scm_outs[0],
-        correlation_id="corr-safe-pr",
-    )
 
-    assert subjects_of(
-        recovery_outs + select_outs + approval_outs + dispatch_outs + scm_outs + diff_outs
-    ) == [
+    assert subjects_of(recovery_outs + select_outs + approval_outs + dispatch_outs) == [
         "recovery.planned",
         "recovery.selection_requested",
         "approval.recommended",
-        "safe_pr.requested",
-        "safe_pr.patch_prepared",
-        "safe_pr.created",
-        "diff.explained",
+        "rca.action_required",
     ]
-    assert dispatch_outs[0].provider == "github"
-    assert scm_outs[0].patch["provider"] == "github"
-    assert diff_outs[0].risk == "review_required"
-    assert subjects_of(diff_outs) == ["diff.explained"]
-    assert subjects_of(scm_outs) == ["safe_pr.patch_prepared", "safe_pr.created"]
-    assert scm_outs[1].pr_url == PR_HTML_URL
-    assert db.called("save_pull_request")
+    assert dispatch_outs[0].reason_code == "safe_pr_patch_missing"
+    assert not db.called("save_pull_request")
 
 
 def test_rollout_completion_flows_to_approval_recommendation() -> None:

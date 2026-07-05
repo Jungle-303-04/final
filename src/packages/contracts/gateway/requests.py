@@ -127,6 +127,10 @@ class AgentEvidenceRequest(StrictModel):
         return self
 
 
+class RecoveryActionSelectRequest(StrictModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class InventoryResource(StrictModel):
     resource_type: str = Field(min_length=1, max_length=80)
     api_version: str = Field(default="", max_length=120)

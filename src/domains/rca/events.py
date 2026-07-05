@@ -88,6 +88,18 @@ class EvidenceBuiltBody(EventBody):
 
 
 @dataclass(frozen=True)
+class EvidenceReference(EventBody):
+    """RCA 판단에 사용된 세부 근거 참조."""
+
+    evidence_ref: str
+    source: str
+    name: str
+    check_id: str
+    summary: str
+    query: str | None = None
+
+
+@dataclass(frozen=True)
 class EvidenceItem(EventBody):
     """RCA 판단에 사용할 근거 하나."""
 
@@ -95,6 +107,19 @@ class EvidenceItem(EventBody):
     name: str
     value: JsonObject
     summary: str
+    evidence_ref: str = ""
+    check_id: str = ""
+    query: str | None = None
+
+    def reference(self) -> EvidenceReference:
+        return EvidenceReference(
+            evidence_ref=self.evidence_ref,
+            source=self.source,
+            name=self.name,
+            check_id=self.check_id,
+            summary=self.summary,
+            query=self.query,
+        )
 
 
 @dataclass(frozen=True)
@@ -105,6 +130,7 @@ class EvidenceBundle(EventBody):
     items: list[EvidenceItem]
     missing_evidence: list[str]
     complete: bool
+    missing_evidence_checks: list[MissingEvidenceCheck] = field(default_factory=list)
 
 
 @event(EventSubject.EVIDENCE_BUNDLE_BUILT)
@@ -138,6 +164,8 @@ class CauseEvaluation(EventBody):
     supporting_evidence: list[str]
     missing_evidence: list[str]
     reason: str
+    supporting_evidence_refs: list[EvidenceReference] = field(default_factory=list)
+    missing_evidence_checks: list[MissingEvidenceCheck] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -161,6 +189,7 @@ class RcaReportDetail(EventBody):
     missing_evidence: list[str]
     reason: str
     missing_evidence_checks: list[MissingEvidenceCheck] = field(default_factory=list)
+    supporting_evidence_refs: list[EvidenceReference] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -408,6 +437,7 @@ class SafePrPatchPreparedBody(EventBody):
     body: str
     patch: JsonObject
     provider: str
+    request: JsonObject = field(default_factory=dict)
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
@@ -429,6 +459,8 @@ class DiffExplainedBody(EventBody):
     risk: str
     details: JsonObject
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    ready_for_creation: bool = False
+    reason: str = ""
 
 
 @event(EventSubject.ROLLOUT_DIAGNOSED)

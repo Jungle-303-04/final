@@ -59,6 +59,7 @@ PROVIDERS_CATALOG_PATH = "/providers/catalog"
 PROVIDERS_VALIDATE_PATH = "/providers/validate"
 DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
 DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
+RCA_RECOVERY_ACTION_SELECT_PATH = "/rca/recovery-plans/{plan_id}/actions/{action_id}/select"
 
 
 def agent_command_result_path(command_id: str) -> str:

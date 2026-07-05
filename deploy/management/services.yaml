@@ -781,6 +781,60 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: safe-pr-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: safe-pr-worker
+  template:
+    metadata:
+      labels:
+        app: safe-pr-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: kubeheal-service:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gitops/safe-pr-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: scm-worker
   namespace: management
 spec:
