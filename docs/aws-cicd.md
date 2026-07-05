@@ -23,7 +23,7 @@ GitHub environment secret에 저장한다.
 - `MINIO_ROOT_PASSWORD`
 - `GH_WEBHOOK_SECRET`
 - `GH_APP_TOKEN`: private repo manifest read와 Safe PR write용. 없으면 AWS CD smoke는 `github.token`으로 읽기만 임시 수행한다.
-- `CLOUDFLARE_API_TOKEN` if `CONFIGURE_CLOUDFLARE=1`
+- `CLOUDFLARE_API_TOKEN` if `CONFIGURE_CLOUDFLARE=1`. AWS CD는 `environment: aws-test`에서 실행되므로 이 secret은 `aws-test` environment secret에 넣는 것이 기준이다.
 
 선택 secret:
 
@@ -100,6 +100,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - `MANIFEST_PATH`: 운영 배포에서는 필수 repository variable. AWS smoke 전용 기본 manifest는 `SMOKE_MANIFEST_PATH`가 없을 때만 `src/samples/smoke/deploy.yaml`를 사용한다.
 - `COMMAND_JANITOR_INTERVAL_SECONDS`: 기본 `15`
 - `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
+- `CONFIGURE_CLOUDFLARE`: 현재 AWS 테스트 도메인 `https://k8s.woonyong.org/`를 쓰려면 `1`로 둔다.
 - `CLOUDFLARE_PROXIED`: 기본 `1`. `https://k8s.woonyong.org/`처럼 Cloudflare가 HTTPS를 받게 하려면 켜 둔다.
 - `TARGET_CLUSTER_ID_1`, `TARGET_CLUSTER_ID_2`, `SMOKE_CLUSTER_ID`: target 등록과 smoke body에 들어가는 cluster id. 비워 두면 첫 번째 target 이름을 smoke 기본값으로 쓴다.
 
