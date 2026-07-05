@@ -35,7 +35,6 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     GroupRole,
     OrganizationRole,
-    ResourceAccessRequest,
     ResourceRole,
     ServiceRole,
     UserStatus,
@@ -655,15 +654,6 @@ class IdentityAccessRepository(DatabaseConnection):
             str(member_role["role"]),
             permission,
             organization_id,
-        )
-
-    def can_access_request(self, request: ResourceAccessRequest) -> bool:
-        return self.can_access(
-            request.user_id,
-            request.organization_id,
-            request.resource_type,
-            request.resource_id,
-            request.permission,
         )
 
     def user_has_resource_access(
