@@ -28,18 +28,17 @@ from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     DEFAULT_WORKSPACE_NAME,
     GLOBAL_ROLE_POLICY_ORGANIZATION_ID,
-    LEGACY_PERMISSION_ALIASES,
     RESOURCE_ROLE_PERMISSIONS,
     AccessResourceType,
     AccessStatus,
     ClusterRegistrationStatus,
     GroupRole,
     OrganizationRole,
+    Permission,
     ResourceRole,
     ServiceRole,
     UserStatus,
     WorkspaceStatus,
-    normalize_resource_role,
 )
 from packages.storage.engine import DatabaseConnection
 
@@ -456,7 +455,7 @@ class IdentityAccessRepository(DatabaseConnection):
         )
         resource_type = str(payload["resource_type"])
         resource_id = str(payload["resource_id"])
-        role = normalize_resource_role(str(payload.get("role") or ResourceRole.OBSERVER.value))
+        role = ResourceRole(str(payload.get("role") or ResourceRole.OBSERVER.value)).value
         group_id = str(payload.get("group_id") or self._default_group_id(organization_id))
         assignment_id = self._resource_assignment_id(organization_id, resource_type, resource_id)
         with self.connection() as conn:
@@ -580,7 +579,7 @@ class IdentityAccessRepository(DatabaseConnection):
         role: str,
         organization_id: str | None = None,
     ) -> set[str]:
-        role = normalize_resource_role(role)
+        role = ResourceRole(role).value
         organization_scope = self._role_policy_scope(
             organization_id or GLOBAL_ROLE_POLICY_ORGANIZATION_ID
         )
@@ -615,8 +614,7 @@ class IdentityAccessRepository(DatabaseConnection):
         permission: str,
         organization_id: str | None = None,
     ) -> bool:
-        normalized_permission = LEGACY_PERMISSION_ALIASES.get(permission, permission)
-        return normalized_permission in self.get_role_permissions(
+        return Permission(permission).value in self.get_role_permissions(
             resource_type,
             role,
             organization_id,
@@ -675,7 +673,7 @@ class IdentityAccessRepository(DatabaseConnection):
     ) -> set[str] | None:
         if self.is_service_admin(user_id):
             return None
-        permission = LEGACY_PERMISSION_ALIASES.get(action, action)
+        permission = Permission(action).value
         assignment = ResourceAssignment.__table__
         group_member = GroupMember.__table__
         member_role = MemberResourceRole.__table__
@@ -909,7 +907,7 @@ class IdentityAccessRepository(DatabaseConnection):
         insert = pg_insert(table).values(
             resource_assignment_id=resource_assignment_id,
             user_id=user_id,
-            role=normalize_resource_role(role),
+            role=ResourceRole(role).value,
             status=AccessStatus.ACTIVE.value,
         )
         return insert.on_conflict_do_update(
@@ -940,8 +938,8 @@ class IdentityAccessRepository(DatabaseConnection):
         insert = pg_insert(table).values(
             organization_id=organization_id,
             resource_type=resource_type,
-            role=normalize_resource_role(role),
-            permission=LEGACY_PERMISSION_ALIASES.get(permission, permission),
+            role=ResourceRole(role).value,
+            permission=Permission(permission).value,
             status=status,
         )
         return insert.on_conflict_do_update(
