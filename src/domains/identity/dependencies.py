@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
-from packages.contracts.identity import AccessResourceType, ServiceRole
+from packages.contracts.identity import AccessResourceType, ResourceAccessRequest, ServiceRole
 
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
-ADMIN_AUTH_REQUIRED_MESSAGE = "admin role required"
+ADMIN_AUTH_REQUIRED_MESSAGE = "service admin role required"
 RESOURCE_ACCESS_DENIED_MESSAGE = "resource access denied"
 
 
@@ -31,6 +31,64 @@ class ClusterAgentIdentity:
 
     workspace_id: str
     cluster_id: str
+
+
+@dataclass(frozen=True)
+class ResourceAccessContext:
+    db: Any
+    current: Any
+    request: ResourceAccessRequest
+
+
+class ResourceAccessFilter(Protocol):
+    def authorize(self, context: ResourceAccessContext) -> bool: ...
+
+
+class StructuredResourceAccessFilter:
+    """Evaluate resource authorization through the structured access store API."""
+
+    def authorize(self, context: ResourceAccessContext) -> bool:
+        can_access_request = getattr(context.db, "can_access_request", None)
+        if callable(can_access_request):
+            return bool(can_access_request(context.request))
+        can_access = getattr(context.db, "can_access", None)
+        if callable(can_access):
+            return bool(
+                can_access(
+                    context.request.user_id,
+                    context.request.organization_id,
+                    context.request.resource_type,
+                    context.request.resource_id,
+                    context.request.permission,
+                )
+            )
+        user_has_resource_access = getattr(context.db, "user_has_resource_access", None)
+        if callable(user_has_resource_access):
+            return bool(
+                user_has_resource_access(
+                    context.request.user_id,
+                    context.request.organization_id,
+                    context.request.resource_type,
+                    context.request.resource_id,
+                    context.request.permission,
+                )
+            )
+        return False
+
+
+@dataclass(frozen=True)
+class ResourceAccessFilterChain:
+    filters: tuple[ResourceAccessFilter, ...]
+
+    def authorize(self, context: ResourceAccessContext) -> bool:
+        return bool(self.filters) and all(
+            access_filter.authorize(context) for access_filter in self.filters
+        )
+
+
+DEFAULT_RESOURCE_ACCESS_FILTER_CHAIN = ResourceAccessFilterChain(
+    filters=(StructuredResourceAccessFilter(),)
+)
 
 
 def get_password_auth(request: Request) -> Any:
@@ -59,20 +117,18 @@ def require_resource_access(
     action: str,
     *,
     detail: str = RESOURCE_ACCESS_DENIED_MESSAGE,
+    filter_chain: ResourceAccessFilterChain = DEFAULT_RESOURCE_ACCESS_FILTER_CHAIN,
 ) -> None:
-    """사용자 세션이 특정 워크스페이스 리소스에 action 권한을 가지는지 검사."""
-    user_has_resource_access = getattr(db, "user_has_resource_access", None)
-    if callable(user_has_resource_access):
-        allowed = db.user_has_resource_access(
-            current.user_id,
-            workspace_id,
-            resource_type,
-            resource_id,
-            action,
-        )
-    else:
-        allowed = db.can_access(current.user_id, workspace_id, resource_type, resource_id, action)
-    if not allowed:
+    """사용자 세션이 특정 워크스페이스 리소스에 permission 권한을 가지는지 검사."""
+    access_request = ResourceAccessRequest(
+        user_id=current.user_id,
+        organization_id=workspace_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        permission=action,
+    )
+    context = ResourceAccessContext(db=db, current=current, request=access_request)
+    if not filter_chain.authorize(context):
         raise HTTPException(status_code=403, detail=detail)
 
 
