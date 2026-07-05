@@ -86,7 +86,10 @@ API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/RE
 
 각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python src/services/<service-name>/app.py`처럼 서비스별 entrypoint로 분리한다.
 
-한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용합니다. `@app.on(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
+실행 조립 패턴은 두 가지로 고정합니다(그 외 방식 금지).
+
+1. **worker 서비스** — `src/packages/runtime/app.py`의 `App` 사용. `@app.on(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 worker 서비스 폴더에서 직접 조립하지 않습니다.
+2. **HTTP 서비스** (api-gateway, realtime-gateway) — FastAPI lifespan에서 Database/NatsEventBus/OutboxRelay 를 조립합니다. 요청-응답 경계와 이벤트 소비 루프가 달라 `App`을 쓰지 않는 것이 의도된 설계입니다.
 서비스 설정(상수)은 기본적으로 `app.py` 안에 둡니다. 설정 항목이 많아 파일 분리가 필요한 서비스(api-gateway, github-poll-worker)만 예외적으로 같은 폴더의 `settings.py`를 사용합니다. 여러 서비스가 공유하는 이벤트 subject, envelope, body, stream 계약은 `src/packages/contracts/event_bus`에 둡니다.
 
 ```text
