@@ -6,6 +6,8 @@
 `dashboard-worker`가 event를 읽어 `rca_timeline` read model로 만들고, Gateway가 session과 cluster read 권한을 검사한 뒤 `/dashboard/rca/*` API로 내려준다.
 frontend는 이 API와 realtime 계약을 기준으로 붙이면 된다.
 
+Frontend app을 새로 만들 때의 보안/프레임워크 기준은 [Frontend Framework Design Plan](../frontend-framework-design.md)을 따른다.
+
 권한 기준은 [찬빈: 권한 시스템과 대시보드 적용](../rca-production-onboarding/06-chanbin-permission-dashboard.md)을 먼저 읽는다.
 
 ## 1단계. Route 상수를 확인한다
