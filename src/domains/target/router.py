@@ -70,7 +70,7 @@ KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
 DIRECT_APPLY_DEPLOY_PROVIDER = "kube-context"
 MANUAL_MANIFEST_DEPLOY_PROVIDER = "manual-manifest"
 TARGET_PROVIDER_INVALID = "target install provider selection is invalid"
-# evidence job 롱폴 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+# evidence job 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_EVIDENCE_JOB_POLL_SECONDS_ENV = (
     "EVIDENCE_JOB_POLL_DEFAULT_SECONDS"  # 롱폴 기본 대기 초(기본 10)
 )

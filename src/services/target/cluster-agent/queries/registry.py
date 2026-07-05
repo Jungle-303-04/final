@@ -5,7 +5,7 @@ from typing import Any, Self
 
 from telemetry_registry import ensure_sources_loaded, telemetry
 
-# 소스 목록은 하드코딩하지 않음 — @telemetry.source 로 등록된 provider 가 단일 출처.
+# 소스 목록은 @telemetry.source 로 등록된 provider 가 단일 출처다.
 TelemetrySource = str
 
 

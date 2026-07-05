@@ -242,7 +242,7 @@ class PrometheusMetricsProvider:
     ...
 ```
 
-이렇게 등록하면 collector와 scheduler는 provider 목록을 하드코딩하지 않는다.
+이렇게 등록하면 collector와 scheduler는 provider 목록을 직접 나열하지 않는다.
 새 provider를 붙일 때 scheduler에 `if source == ...`를 늘리는 방식으로 가지 않는다.
 
 ## 민정: 커맨드 + 타깃 + 에비던스
@@ -279,7 +279,7 @@ RCA 결론을 내리거나 PR 본문을 쓰는 일은 민정 책임이 아니다
 | 2 | `src/services/target/cluster-agent/evidence/jobs.py` | evidence scheduler와 provider worker pool을 본다 |
 | 3 | `src/domains/target/router.py` | `/agent/evidence/jobs/*`, `/agent/commands/*` Gateway route를 본다 |
 | 4 | `src/domains/target/evidence_jobs.py` | `evidence_key`, aggregate, failure policy를 본다 |
-| 5 | `src/services/target/cluster-agent/telemetry_registry.py` | provider 등록 방식이 하드코딩이 아닌지 본다 |
+| 5 | `src/services/target/cluster-agent/telemetry_registry.py` | provider 등록 방식이 registry 기준인지 본다 |
 | 6 | `src/services/target/cluster-agent/providers/*.py` | Kubernetes, Prometheus, Loki, Tempo provider 구현을 본다 |
 | 7 | `src/domains/target/evidence_policy.py` | default provider query와 policy를 본다 |
 | 8 | `src/services/command/command-worker/app.py` | command event가 agent queue로 가는 입구를 본다 |
@@ -358,7 +358,7 @@ body에 새 필드로 억지로 넣지 않는다.
 - raw kubeconfig, bearer token, secret 값을 evidence에 넣지 않는다.
 - Prometheus/Loki/Tempo raw response 전체를 무제한으로 넣지 않는다.
 - provider 실패를 성공 데이터처럼 꾸미지 않는다.
-- provider 목록을 scheduler 곳곳에 하드코딩하지 않는다.
+- provider 목록을 scheduler 곳곳에 직접 나열하지 않는다.
 
 ### 민정 연습 순서
 
@@ -522,7 +522,7 @@ RCA worker가 직접 GitHub API를 호출하면 역할이 섞인다.
 - evidence가 부족한데 root cause를 확정처럼 말하지 않는다.
 - Safe PR이 필요하다고 RCA worker에서 직접 GitHub API를 호출하지 않는다.
 - provider token이나 secret을 event body에 넣지 않는다.
-- frontend 전용 표시 문자열을 RCA 내부 rule에 하드코딩하지 않는다.
+- frontend 전용 표시 문자열을 RCA 내부 rule에 직접 나열하지 않는다.
 - `correlation_id`를 잃어버리지 않는다.
 
 ### 가인 연습 순서
@@ -745,7 +745,7 @@ npm run build
 | route 상수는 있는데 Gateway에 include가 없다 | router include와 API test를 같이 본다 |
 | payload field가 한쪽에는 있고 다른 쪽에는 없다 | body contract와 consumer test를 같이 고친다 |
 | 테스트 대역이 제품 성공처럼 적혀 있다 | 테스트 전용인지 명시하거나 실제 구현 기준으로 고친다 |
-| 하드코딩된 provider 목록이 있다 | registry나 policy 단일 출처로 옮긴다 |
+| provider 목록이 여러 곳에 흩어져 있다 | registry나 policy 단일 출처로 옮긴다 |
 
 현재 source repo 기준으로 특히 조심할 것:
 

@@ -53,7 +53,7 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.dependencies import get_db, get_events
 
-# 롱폴 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+# 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_POLL_SECONDS_ENV = "COMMAND_POLL_DEFAULT_SECONDS"  # 롱폴 기본 대기 초(기본 10)
 DEFAULT_POLL_SECONDS = int(env(DEFAULT_POLL_SECONDS_ENV, "10"))
 MAX_POLL_SECONDS_ENV = "COMMAND_POLL_MAX_SECONDS"  # 롱폴 최대 대기 초(기본 30)

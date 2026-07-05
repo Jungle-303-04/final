@@ -481,7 +481,7 @@ def test_node_collector_manager_creates_or_patches_daemonset(monkeypatch) -> Non
 
 
 def test_node_collector_manager_env_defaults_remain_unchanged() -> None:
-    # env 미설정 시 기존 하드코딩 값(9100/15초)과 동일해야 함(배포 호환)
+    # env 미설정 시 기존 기본값(9100/15초)과 동일해야 함(배포 호환)
     config = load_node_collector_manager_module().NodeCollectorManagerConfig
     assert config.NODE_COLLECTOR_PORT == 9100
     assert config.NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS == 15

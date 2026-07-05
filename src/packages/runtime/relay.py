@@ -12,7 +12,7 @@ from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
 
-# relay 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+# relay 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_BATCH_ENV = "OUTBOX_RELAY_BATCH"  # 한 번에 발행할 outbox 행 수(기본 1000)
 DEFAULT_BATCH = int(env(DEFAULT_BATCH_ENV, "1000"))
 DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV = (
