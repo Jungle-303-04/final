@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 
 from conftest import SpyDb, github_scm_transport, load_service, run_handler, subjects_of
@@ -226,6 +227,30 @@ def test_repo_gateway_does_not_emit_next_alert_when_pr_fails(monkeypatch) -> Non
     outs = run_handler(repo.on_safe_pr_ready_for_creation, _ready(next_alert=_alert()), db=db)
 
     assert subjects_of(outs) == ["safe_pr.failed"]
+    assert not db.called("save_pull_request")
+
+
+def test_repo_gateway_total_deadline_fails_through_safe_pr_failed(monkeypatch) -> None:
+    class SlowProvider:
+        async def create_pull_request(self, request, ctx):  # noqa: ANN001
+            await asyncio.sleep(0.05)
+            return PR_HTML_URL
+
+    _github_env(monkeypatch)
+    monkeypatch.setenv("SCM_CREATE_PR_DEADLINE_SECONDS", "0.001")
+    repo = load_service("gitops/scm-worker")
+    monkeypatch.setattr(repo, "SCM_PROVIDER", SlowProvider())
+    db = SpyDb()
+
+    outs = run_handler(
+        repo.on_safe_pr_ready_for_creation,
+        _ready(next_alert=_alert()),
+        db=db,
+    )
+
+    assert subjects_of(outs) == ["safe_pr.failed"]
+    assert outs[0].reason_code == "provider_error"
+    assert outs[0].details["exception_type"] == "TimeoutError"
     assert not db.called("save_pull_request")
 
 

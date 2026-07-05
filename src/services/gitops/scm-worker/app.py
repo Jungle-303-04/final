@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
 from github_provider import GithubScmProvider
@@ -35,6 +36,8 @@ app = App("scm-worker")
 
 SCM_PROVIDER_ENV = "SCM_PROVIDER"
 DEFAULT_SCM_PROVIDER = "github"
+SCM_CREATE_PR_DEADLINE_SECONDS_ENV = "SCM_CREATE_PR_DEADLINE_SECONDS"
+DEFAULT_SCM_CREATE_PR_DEADLINE_SECONDS = "20"
 PR_MODE = "github_rest"
 UNSUPPORTED_SCM_PROVIDER_MESSAGE = f"{SCM_PROVIDER_ENV} 값이 provider registry 지원 목록에 없음"
 
@@ -67,6 +70,11 @@ async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequest
             f"safe_pr provider mismatch: event={evt.provider}, worker={ACTIVE_SCM_PROVIDER}"
         )
     return await SCM_PROVIDER.create_pull_request(evt, ctx)
+
+
+def create_pr_deadline_seconds() -> float:
+    """SCM 외부 호출 전체 데드라인 — worker handler timeout 보다 짧게 유지함."""
+    return float(env(SCM_CREATE_PR_DEADLINE_SECONDS_ENV, DEFAULT_SCM_CREATE_PR_DEADLINE_SECONDS))
 
 
 def preflight_failure_body(request: SafePrRequestedBody) -> SafePrFailedBody | None:
@@ -113,7 +121,7 @@ async def on_safe_pr_ready_for_creation(
         return
 
     async def create_pr() -> str:
-        return await create_safe_pr(request, ctx)
+        return await asyncio.wait_for(create_safe_pr(request, ctx), create_pr_deadline_seconds())
 
     def created_body(pr_url: str) -> SafePrCreatedBody:
         return SafePrCreatedBody(
