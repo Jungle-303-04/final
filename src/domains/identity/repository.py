@@ -35,6 +35,7 @@ from packages.contracts.identity import (
     ClusterRegistrationStatus,
     GroupRole,
     OrganizationRole,
+    ResourceAccessRequest,
     ResourceRole,
     ServiceRole,
     UserStatus,
@@ -656,6 +657,15 @@ class IdentityAccessRepository(DatabaseConnection):
             organization_id,
         )
 
+    def can_access_request(self, request: ResourceAccessRequest) -> bool:
+        return self.can_access(
+            request.user_id,
+            request.organization_id,
+            request.resource_type,
+            request.resource_id,
+            request.permission,
+        )
+
     def user_has_resource_access(
         self,
         user_id: str,
@@ -679,29 +689,22 @@ class IdentityAccessRepository(DatabaseConnection):
         assignment = ResourceAssignment.__table__
         group_member = GroupMember.__table__
         member_role = MemberResourceRole.__table__
-        role_permission = RolePermission.__table__
         statement = (
-            select(assignment.c.resource_id)
+            select(
+                assignment.c.resource_id,
+                member_role.c.role,
+            )
             .select_from(
                 assignment.join(
                     group_member,
                     (group_member.c.group_id == assignment.c.group_id)
                     & (group_member.c.user_id == user_id)
                     & (group_member.c.status == AccessStatus.ACTIVE.value),
-                )
-                .join(
+                ).join(
                     member_role,
                     (member_role.c.resource_assignment_id == assignment.c.resource_assignment_id)
                     & (member_role.c.user_id == user_id)
                     & (member_role.c.status == AccessStatus.ACTIVE.value),
-                )
-                .join(
-                    role_permission,
-                    (role_permission.c.organization_id == GLOBAL_ROLE_POLICY_ORGANIZATION_ID)
-                    & (role_permission.c.resource_type == assignment.c.resource_type)
-                    & (role_permission.c.role == member_role.c.role)
-                    & (role_permission.c.permission == permission)
-                    & (role_permission.c.status == AccessStatus.ACTIVE.value),
                 )
             )
             .where(
@@ -711,7 +714,16 @@ class IdentityAccessRepository(DatabaseConnection):
             )
         )
         with self.connection() as conn:
-            return {str(value) for value in conn.execute(statement).scalars()}
+            candidates = list(conn.execute(statement).mappings())
+        role_permissions = {
+            str(role): self.role_has_permission(resource_type, str(role), permission, workspace_id)
+            for role in {row["role"] for row in candidates}
+        }
+        return {
+            str(row["resource_id"])
+            for row in candidates
+            if role_permissions.get(str(row["role"]), False)
+        }
 
     def authenticate_cluster_agent(self, token_hash: str) -> JsonObject | None:
         if not token_hash:
