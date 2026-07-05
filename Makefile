@@ -6,12 +6,13 @@ IMAGE_NAME ?= service:local
 MGMT_CLUSTER ?=
 TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
+LOCAL_TEST_ENV ?= .env.local-test
 
 export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod aws-smoke aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod aws-smoke aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -24,6 +25,14 @@ env: ## .env 파일 생성
 	else \
 		cp "$(ENV_TEMPLATE)" .env; \
 		echo "created .env"; \
+	fi
+
+local-test-env: ## 로컬 smoke/Bruno 테스트용 .env.local-test 생성
+	@if [[ -f "$(LOCAL_TEST_ENV)" ]]; then \
+		echo "$(LOCAL_TEST_ENV) already exists"; \
+	else \
+		cp config/env/local-test.env.example "$(LOCAL_TEST_ENV)"; \
+		echo "created $(LOCAL_TEST_ENV)"; \
 	fi
 
 sync: ## Python 의존성 설치/동기화
@@ -61,6 +70,10 @@ build-image: ## 로컬 container image 빌드(수동 디버그용)
 up: ## legacy local management/target cluster 실행(기본 테스트 아님)
 	MGMT_CLUSTER="$${LOCAL_MGMT_CLUSTER:-management}" TARGET_CLUSTER="$${LOCAL_TARGET_CLUSTER:-target}" bash scripts/up.sh
 
+local-up: ## .env.local-test를 source해서 로컬 management/target cluster 실행
+	@test -f "$(LOCAL_TEST_ENV)" || { echo "missing $(LOCAL_TEST_ENV); run make local-test-env"; exit 1; }
+	set -a; source "$(LOCAL_TEST_ENV)"; set +a; bash scripts/up.sh
+
 install-telemetry: ## target 클러스터에 telemetry Helm charts 설치
 	bash scripts/install-telemetry.sh
 
@@ -71,6 +84,10 @@ status: ## AWS management/target 리소스 상태 확인
 	bash scripts/status.sh
 
 smoke: aws-smoke ## AWS smoke 별칭
+
+local-smoke: ## .env.local-test를 source해서 로컬 smoke 실행
+	@test -f "$(LOCAL_TEST_ENV)" || { echo "missing $(LOCAL_TEST_ENV); run make local-test-env"; exit 1; }
+	set -a; source "$(LOCAL_TEST_ENV)"; set +a; bash scripts/smoke.sh
 
 crash-test: ## AWS management에서 아웃박스 정확히 한 번 크래시 테스트
 	bash scripts/crash_test.sh

@@ -32,6 +32,9 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
     assert "base_url: http://localhost:18080/" in local
+    assert "auth_email: admin.local@example.com" in local
+    assert "auth_password: local-test-password-1234" in local
+    assert "cluster_id: target" in local
     assert "base_url: replace-with-aws-gateway-base-url/" in aws
     assert "https://k8s.woonyong.org/" not in aws
 
