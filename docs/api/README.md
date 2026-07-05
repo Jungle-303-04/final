@@ -124,6 +124,10 @@ target registry 저장, 기본 agent policy 저장, desired state 저장, agent 
 provider job 주기, evidence provider 사용 여부, 실패 정책 같은 target 내부 동작을 바꿀 때 사용한다.
 이 값을 바꾸면 agent는 `get-agent-policy`로 새 generation을 받아가고, provider job scheduling 기준도 같이 바뀐다.
 
+Target 등록 요청의 `prometheus_base_url`, `loki_base_url`, `tempo_base_url`은 target cluster 안에서 agent가 실제로 호출할 관측 스택 주소다.
+이 세 값은 설치 manifest의 `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`로 그대로 들어가고, metrics/logs/traces provider의 기본 접속 주소가 된다.
+`otel_traces_endpoint`는 provider 조회 주소가 아니라 cluster-agent 자신의 span을 OpenTelemetry collector로 내보낼 endpoint다.
+
 ### 03-agent-runtime
 
 `01-agent-connect`는 target agent가 Gateway에 자기 상태를 알리는 API다.
