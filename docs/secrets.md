@@ -121,6 +121,20 @@ AI worker는 `packages.ai.llm.LlmGateway`를 통해 provider adapter를 선택�
 - Anthropic: `ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_VERSION`
 - Gemini: `GEMINI_MODEL`, `GEMINI_BASE_URL`
 
+## 세션 보안 정책
+
+로그인 세션은 Redis 에 저장되고 `SESSION_TTL_SECONDS` 만료로 관리된다.
+현재 경계와 전제:
+
+- 세션 토큰은 httpOnly cookie(`service_session`)로만 전달. JS 접근 불가
+- 토큰 탈취 시 TTL 만료 전까지 재사용 가능 — rotation/디바이스 고정은 없음
+- 이 전제는 Gateway 가 프라이빗 클러스터/Ingress 뒤(TLS 종단)에 있다는 가정에 기반
+- 공개 인터넷에 직접 노출하는 배포라면 세션 rotation, IP/UA 검증, 재사용 감지를
+  추가하기 전까지 노출 금지
+- 로그인 시도는 Redis 기반 rate limit(strike/lock)으로 제한됨
+- metrics endpoint 는 `METRICS_TOKEN` 설정 시 Bearer 필수(timing-safe 비교),
+  미설정 시 클러스터 내부 스크레이핑 전용 — NetworkPolicy 로 외부 차단 필수
+
 ## 팀 공유가 필요할 때
 
 초반에는 `config/env/app.env.example`에 키 이름만 공유하고 실제 값은 메신저에 붙이지 않습니다. 값 공유가 잦아지면 1Password, Doppler 같은 팀용 시크릿 도구를 검토합니다.
