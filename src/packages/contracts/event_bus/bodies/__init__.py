@@ -92,7 +92,6 @@ _MODULE_BY_NAME = {
     "SafePrFailedBody": "domains.scm.events",
     "SafePrFilePatch": "domains.scm.events",
     "SafePrPatchPreparedBody": "domains.rca.events",
-    "SafePrReadyForCreationBody": "domains.scm.events",
     "SafePrRequestedBody": "domains.scm.events",
     "TargetDesiredComponent": "domains.target.events",
     "TargetDrift": "domains.target.events",

@@ -1,4 +1,4 @@
-"""scm-worker - safe_pr.ready_for_creation -> GitHub PR -> safe_pr.created."""
+"""scm-worker - safe_pr.requested -> GitHub PR -> safe_pr.created."""
 
 from __future__ import annotations
 
@@ -15,12 +15,7 @@ from domains.gitops.repository import (
 )
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import SafePrPatchPreparedBody
-from domains.scm.events import (
-    SafePrCreatedBody,
-    SafePrFailedBody,
-    SafePrReadyForCreationBody,
-    SafePrRequestedBody,
-)
+from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.scm.provider import ScmProvider
@@ -82,30 +77,6 @@ def normalize_safe_pr_request(evt: SafePrRequestedBody) -> SafePrRequestedBody:
     )
 
 
-def request_from_ready(evt: SafePrReadyForCreationBody) -> SafePrRequestedBody:
-    diff_section = (
-        f"\n\n## Diff explanation\n- risk: `{evt.diff_risk}`\n- summary: {evt.diff_summary}\n"
-    )
-    return normalize_safe_pr_request(
-        SafePrRequestedBody(
-            title=evt.title,
-            body=f"{evt.body}{diff_section}",
-            provider=evt.provider,
-            patches=evt.patches,
-            workspace_id=evt.workspace_id,
-            repository_id=evt.repository_id,
-            binding_id=evt.binding_id,
-            application_id=evt.application_id,
-            workflow_run_id=evt.workflow_run_id,
-            environment=evt.environment,
-            manifest_path=evt.manifest_path,
-            approval_ref=evt.approval_ref,
-            policy_decision_ref=evt.policy_decision_ref,
-            next_alert=evt.next_alert,
-        )
-    )
-
-
 def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody:
     return SafePrPatchPreparedBody(
         title=request.title,
@@ -129,28 +100,6 @@ def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody
         approval_ref=request.approval_ref,
         policy_decision_ref=request.policy_decision_ref,
         next_alert=request.next_alert.to_body() if request.next_alert is not None else None,
-    )
-
-
-def ready_from_request(request: SafePrRequestedBody) -> SafePrReadyForCreationBody:
-    return SafePrReadyForCreationBody(
-        title=request.title,
-        body=request.body,
-        provider=request.provider,
-        diff_summary="safe patch prepared",
-        diff_risk="review_required",
-        diff_details={"source": "legacy_safe_pr_requested"},
-        patches=request.patches,
-        workspace_id=request.workspace_id,
-        repository_id=request.repository_id,
-        binding_id=request.binding_id,
-        application_id=request.application_id,
-        workflow_run_id=request.workflow_run_id,
-        environment=request.environment,
-        manifest_path=request.manifest_path,
-        approval_ref=request.approval_ref,
-        policy_decision_ref=request.policy_decision_ref,
-        next_alert=request.next_alert,
     )
 
 
@@ -196,26 +145,13 @@ def preflight_failure_body(request: SafePrRequestedBody) -> SafePrFailedBody | N
     return None
 
 
+@app.on(SafePrRequestedBody)
 async def on_safe_pr_requested(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:
-    """Backward-compatible direct call path; production subscription is ready-only."""
-
     request = normalize_safe_pr_request(evt)
-    preflight_failed = preflight_failure_body(request)
-    if preflight_failed is not None:
-        yield preflight_failed
-        return
     yield patch_prepared_body(request)
-    async for out in on_safe_pr_ready_for_creation(ready_from_request(request), ctx):
-        yield out
 
-
-@app.on(SafePrReadyForCreationBody)
-async def on_safe_pr_ready_for_creation(
-    evt: SafePrReadyForCreationBody, ctx: EventContext[PullRequestStore]
-) -> AsyncIterator[EventBody]:
-    request = request_from_ready(evt)
     preflight_failed = preflight_failure_body(request)
     if preflight_failed is not None:
         yield preflight_failed

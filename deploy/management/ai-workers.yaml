@@ -235,32 +235,6 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: safe-pr-worker
-  namespace: management
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: safe-pr-worker
-  template:
-    metadata:
-      labels:
-        app: safe-pr-worker
-    spec:
-      containers:
-        - name: worker
-          image: kubeheal-service:latest
-          imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/ai/safe-pr-worker/app.py"]
-          envFrom:
-            - configMapRef:
-                name: management-runtime-config
-            - secretRef:
-                name: management-runtime-secret
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: ai-diff-worker
   namespace: management
 spec:
