@@ -105,7 +105,10 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert 'CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"' in script
     assert '"proxied": ${proxied}' in script
     assert '"ttl": ${ttl}' in script
+    assert "cloudflare_authorization_value" in script
     assert "cloudflare_ttl_json" in script
+    assert "Cloudflare zone lookup failed with HTTP" in script
+    assert "Cloudflare DNS record lookup failed with HTTP" in script
     assert "Cloudflare API ${method} failed with HTTP ${http_code}" in script
     assert 'scheme="https"' in script
     assert "`CLOUDFLARE_PROXIED`" in runbook
