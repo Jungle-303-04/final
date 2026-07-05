@@ -20,7 +20,7 @@
 - Worker는 HTTP request를 직접 받지 않는다. event body를 받아 다음 event body를 `yield`한다.
 - `correlation_id`는 대부분 body 필드가 아니라 `EventEnvelope` 메타데이터다.
 - body에 새 필드를 넣는 일은 계약 변경이다. `docs/events.md`, 테스트, producer/consumer를 같이 바꾼다.
-- fake adapter는 fallback이다. 문서와 UI에서 실제 구현처럼 표현하지 않는다.
+- provider adapter는 실제 구현 기준으로 설명한다. 테스트에서는 주입 가능한 transport나 in-memory store를 쓴다.
 - production write, 실제 provider write, AI tool 실행은 [하드닝 로드맵](../hardening-roadmap.md)의 P0/P1 release gate를 통과해야 한다.
 
 ## 하드닝 연결 게이트
@@ -271,7 +271,7 @@ uv run pytest tests/test_rca_evidence.py tests/test_repo_gateway_worker.py
 팀 연결:
 
 - RCA/Safe PR은 직접 GitHub write를 하지 않고 request/proposal event를 만든다.
-- GitOps/SCM worker는 `safe_pr.requested`를 받아 provider write 또는 fake adapter를 처리한다.
+- GitOps/SCM worker는 `safe_pr.requested`를 받아 `GithubScmProvider` provider write를 처리한다.
 - Gateway/Auth는 실제 provider token을 Token Broker/credential ref 뒤에 둔다.
 
 ### 흐름 D. Audit Timeline
@@ -382,7 +382,7 @@ uv run pytest tests/test_projection.py
 
 - evidence 부족은 성공 RCA처럼 보이지 않는다.
 - root cause는 evidence reference와 함께 남는다.
-- 실제 GitHub write는 feature flag와 fake client 테스트를 포함한다.
+- 실제 GitHub write는 token/reference 검증과 주입 가능한 HTTP transport 테스트를 포함한다.
 
 ### Target / Telemetry
 
@@ -478,7 +478,7 @@ uv run pytest tests/test_projection.py
 
 - insufficient evidence
 - rule missing
-- fake adapter
+- injected provider transport
 - feature flag off
 - audit timeline
 
@@ -506,7 +506,7 @@ PR 설명이나 문서를 쓰기 전에 아래 질문에 모두 답한다.
 | 질문 | 맞는 답 |
 | --- | --- |
 | 이 필드는 body에 있는가, envelope에 있는가? | body dataclass와 `EventEnvelope`를 직접 확인했다. |
-| fake adapter를 실제 구현처럼 설명했는가? | fake는 fallback/demo라고 명시했다. |
+| provider adapter를 실제 코드 기준으로 설명했는가? | `GithubScmProvider`, `PrometheusMetricsProvider`, `KubernetesSnapshotProvider` 등 실제 class 이름을 썼다. |
 | Target Agent가 NATS나 DB를 직접 쓰는가? | 아니다. Gateway HTTP API만 쓴다. |
 | Gateway가 worker 내부 로직을 직접 실행하는가? | 아니다. request 검증 후 event/outbox로 넘긴다. |
 | raw telemetry 전체를 event로 보내는가? | 아니다. bounded summary evidence만 보낸다. |
@@ -566,7 +566,7 @@ insufficient evidence는 RcaActionRequiredBody로 끝낸다.
 
 ## 모순 점검
 - body/envelope 필드 확인:
-- fake/real 경계 확인:
+- provider/test-double 경계 확인:
 - secret non-leak 확인:
 - direct NATS/DB import 확인:
 ```

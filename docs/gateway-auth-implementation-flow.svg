@@ -99,7 +99,7 @@
   <circle cx="730" cy="285" r="18" fill="#b15a00"/>
   <text x="724" y="292" class="num">5</text>
   <text x="760" y="288" class="box-title">보호 API 진입</text>
-  <text x="760" y="320" class="box-text">/commands, /dashboard/query</text>
+  <text x="760" y="320" class="box-text">/commands, /dashboard/rca/*</text>
   <text x="760" y="345" class="small">1. request schema 검증</text>
   <text x="760" y="368" class="small">2. require_session → project role 검사</text>
 
