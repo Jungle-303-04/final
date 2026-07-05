@@ -12,11 +12,12 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
-from packages.contracts.identity import AccountRole
+from packages.contracts.identity import AccessResourceType, AccountRole
 
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
 ADMIN_AUTH_REQUIRED_MESSAGE = "admin role required"
+RESOURCE_ACCESS_DENIED_MESSAGE = "resource access denied"
 
 
 def hash_agent_token(token: str) -> str:
@@ -47,6 +48,48 @@ async def require_admin_session(request: Request) -> Any:
     if AccountRole.ADMIN.value not in current.roles:
         raise HTTPException(status_code=403, detail=ADMIN_AUTH_REQUIRED_MESSAGE)
     return current
+
+
+def require_resource_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    resource_type: str,
+    resource_id: str,
+    action: str,
+    *,
+    detail: str = RESOURCE_ACCESS_DENIED_MESSAGE,
+) -> None:
+    """사용자 세션이 특정 워크스페이스 리소스에 action 권한을 가지는지 검사."""
+    if not db.user_has_resource_access(
+        current.user_id,
+        workspace_id,
+        resource_type,
+        resource_id,
+        action,
+    ):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def require_cluster_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    action: str,
+    *,
+    detail: str = RESOURCE_ACCESS_DENIED_MESSAGE,
+) -> None:
+    """cluster 리소스 권한 검사 shortcut. command/debug/approval/dashboard 에서 같은 기준을 쓴다."""
+    require_resource_access(
+        db,
+        current,
+        workspace_id,
+        AccessResourceType.CLUSTER.value,
+        cluster_id,
+        action,
+        detail=detail,
+    )
 
 
 def require_cluster_agent(request: Request) -> ClusterAgentIdentity:
