@@ -43,6 +43,7 @@ WORKER_FETCH_BATCH_SIZE_ENV = "WORKER_FETCH_BATCH_SIZE"  # 루프당 subject 별
 WORKER_HANDLER_TIMEOUT_ENV = "WORKER_HANDLER_TIMEOUT_SECONDS"  # 핸들러 hang 상한 초
 WORKER_RETRY_DELAY_ENV = "WORKER_RETRY_DELAY_SECONDS"  # nak 재확인 지연 초(기본 2)
 WORKER_FETCH_TIMEOUT_ENV = "WORKER_FETCH_TIMEOUT_SECONDS"  # fetch 대기 한도 초(기본 1)
+WORKER_IDLE_SLEEP_ENV = "WORKER_IDLE_SLEEP_SECONDS"  # 메시지/outbox 모두 없을 때 유휴 sleep 초
 WORKER_DEAD_LETTER_TIMEOUT_ENV = (
     "WORKER_DEAD_LETTER_TIMEOUT_SECONDS"  # DLQ 기록 대기 한도 초(기본 10)
 )
@@ -51,6 +52,7 @@ DEFAULT_MAX_ATTEMPTS = int(env(WORKER_MAX_ATTEMPTS_ENV, "3"))
 DEFAULT_RETRY_DELAY_SECONDS = int(env(WORKER_RETRY_DELAY_ENV, "2"))
 DEFAULT_FETCH_BATCH_SIZE = int(env(WORKER_FETCH_BATCH_SIZE_ENV, "1"))
 DEFAULT_FETCH_TIMEOUT_SECONDS = int(env(WORKER_FETCH_TIMEOUT_ENV, "1"))
+DEFAULT_IDLE_SLEEP_SECONDS = float(env(WORKER_IDLE_SLEEP_ENV, "0.25"))
 # 핸들러 hang 상한(안전망). 정상 최악 처리시간보다 넉넉히
 DEFAULT_HANDLER_TIMEOUT_SECONDS = int(env(WORKER_HANDLER_TIMEOUT_ENV, "30"))
 DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS = int(env(WORKER_DEAD_LETTER_TIMEOUT_ENV, "10"))
@@ -64,6 +66,7 @@ class EventRetryPolicy:
     retry_delay_seconds: int = DEFAULT_RETRY_DELAY_SECONDS
     fetch_batch_size: int = DEFAULT_FETCH_BATCH_SIZE
     fetch_timeout_seconds: int = DEFAULT_FETCH_TIMEOUT_SECONDS
+    idle_sleep_seconds: float = DEFAULT_IDLE_SLEEP_SECONDS
     handler_timeout_seconds: int = DEFAULT_HANDLER_TIMEOUT_SECONDS
     dead_letter_timeout_seconds: int = DEFAULT_DEAD_LETTER_TIMEOUT_SECONDS
 
@@ -254,8 +257,10 @@ class WorkerRuntime:
 
         while not stopping.is_set():
             Path(HEARTBEAT_PATH).touch()  # liveness 하트비트(루프 생존 신호)
+            idle = True
             try:
-                await relay.run_once()  # outbox → NATS 발행
+                relayed = await relay.run_once()  # outbox → NATS 발행
+                idle = idle and relayed == 0
             except Exception as exc:
                 LOGGER.warning("relay_error", extra={"context": lifecycle}, exc_info=exc)
             for _subject, sub in subs:
@@ -271,12 +276,16 @@ class WorkerRuntime:
                     await asyncio.sleep(1)
                     continue
 
+                if messages:
+                    idle = False
                 for message in messages:
                     try:
                         await processor.process(message)
                     except Exception as exc:
                         LOGGER.error("processor_error", extra={"context": lifecycle}, exc_info=exc)
                         await message.nak(delay=self.spec.retry_policy.retry_delay_seconds)
+            if idle:
+                await asyncio.sleep(self.spec.retry_policy.idle_sleep_seconds)
 
         await self.bus.close()
         dispose_async = getattr(self.db, "dispose_async", None)

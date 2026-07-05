@@ -10,10 +10,11 @@
 | 1 | [README](../README.md) | 실행 방법과 서비스 목록 |
 | 2 | [팀 온보딩 문서 지도](onboarding/README.md) | 민정/가인/찬빈 역할별 시작점 |
 | 3 | [RCA 프로덕션 온보딩 지도](rca-production-onboarding/README.md) | 실제 코드 기준 RCA/권한/대시보드 구현 순서 |
-| 4 | [아키텍처](architecture.md) | 전체 구조와 서비스 경계 |
-| 5 | [이벤트 흐름](events.md) | event subject와 end-to-end flow |
-| 6 | [팀 컨벤션](team/conventions.md) | 브랜치, PR, 리뷰, 테스트 규칙 |
-| 7 | [파일 소유권](team/file-ownership-convention.md) | 내가 관리할 파일과 조율할 파일 |
+| 4 | [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md) | route, event, worker, provider, test를 찾는 순서 |
+| 5 | [아키텍처](architecture.md) | 전체 구조와 서비스 경계 |
+| 6 | [이벤트 흐름](events.md) | event subject와 end-to-end flow |
+| 7 | [팀 컨벤션](team/conventions.md) | 브랜치, PR, 리뷰, 테스트 규칙 |
+| 8 | [파일 소유권](team/file-ownership-convention.md) | 내가 관리할 파일과 조율할 파일 |
 
 ## 팀원별로 추가로 볼 문서
 
@@ -29,6 +30,7 @@
 
 - 공통: [팀 온보딩 문서 지도](onboarding/README.md)
 - 공통: [RCA 프로덕션 온보딩 지도](rca-production-onboarding/README.md)
+- 공통: [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)
 - 민정: [Command / Target / Evidence 온보딩](onboarding/minjeong-command-target-evidence.md)
 - 가인: [Evidence / RCA 온보딩](onboarding/gain-evidence-rca.md)
 - 찬빈: [Frontend 온보딩](onboarding/chanbin-frontend.md)

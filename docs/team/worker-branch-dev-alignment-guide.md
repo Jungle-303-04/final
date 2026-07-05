@@ -78,7 +78,7 @@ PR 하나의 크기는 “한 도메인 안에서 한 가지 기능”으로 제
 | login/logout route | `src/domains/identity/router.py` |
 | organization/cluster policy | `src/domains/identity/policy.py` 또는 `src/packages/contracts/interfaces.py` Protocol + `src/domains/identity/repository.py` |
 | DB 테이블 | `src/domains/identity/models.py`에 SQLAlchemy model로 추가 |
-| 권한 테스트 | `tests/test_auth_security.py`, 새 `tests/test_identity_access_policy.py` |
+| 권한 테스트 | `tests/test_auth_security.py`, `tests/test_identity_repository.py`, `tests/test_dashboard_router.py` |
 
 작은 PR 순서:
 
@@ -446,7 +446,7 @@ class TelemetryCollector:
 - root `services/` 경로 충돌을 피하고 `src/domains/identity` 책임 유지
 
 ## 테스트
-- `uv run pytest tests/test_auth_security.py tests/test_identity_login.py`
+- `uv run pytest tests/test_auth_security.py tests/test_identity_auth_routes.py tests/test_password_auth.py`
 - `uv run ruff check src tests`
 
 ## 위험과 rollback

@@ -56,7 +56,7 @@ consumer: `src/domains/rca/router.py` -> `ClusterEvidenceReceivedBody`
 검증:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_router.py -q
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_agent_evidence_ingest.py -q
 ```
 
 ## ClusterEvidenceReceivedBody

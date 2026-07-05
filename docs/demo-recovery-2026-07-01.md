@@ -556,14 +556,16 @@ Key (workspace_id, repository_id, name)=(default, ..., checkout-api) already exi
 
 원인:
 
-- Application upsert가 `application_id` conflict만 처리한다.
-- 실제 unique constraint는 `(workspace_id, repository_id, name)`에도 걸려 있다.
-- 같은 앱 이름/레포를 다른 `application_id`로 insert하려 할 때 중복 오류가 난다.
+- 과거 GitOps 시작 이벤트들이 같은 앱 이름/레포를 서로 다른 `application_id`로 만들 수 있었다.
+- 실제 unique constraint는 `(workspace_id, repository_id, name)`에 걸려 있다.
+- 같은 앱 이름/레포를 다른 `application_id`로 insert하려 할 때 중복 오류가 났다.
 
-조치 필요:
+현재 조치:
 
-- Application upsert 기준을 `application_id`만 보지 말고 `(workspace_id, repository_id, name)` 충돌도 처리해야 한다.
-- 데모 seed/poller가 매번 새 ID를 만들지 않게 고정 ID를 써야 한다.
+- `derive_application_id()`는 `name/app_name`이 없을 때 `repo_ref`의 repo 이름을 app 이름으로 사용한다.
+- `RepoChangeRepository.upsert_application()`은 `(workspace_id, repository_id, name)`으로 기존 앱을 먼저 찾고, 기존 `application_id`를 canonical 값으로 반환한다.
+- workflow-controller는 canonical `application_id`를 받은 뒤 `workflow_run_id`도 같은 기준으로 다시 계산한다.
+- 회귀 테스트는 `tests/test_database_unit.py`, `tests/test_git_pull_worker.py`, `tests/test_workflow_controller.py`에서 확인한다.
 
 ### 19. UI/제품 요구사항 불일치
 
@@ -657,7 +659,7 @@ kubectl --context kind-management -n management delete job \
 ## 장기 수정 TODO
 
 1. DB migration을 runtime service startup에서 제거하고 단일 migration Job으로 분리.
-2. Application upsert conflict 기준 수정.
+2. Application identity/upsert 멱등성 회귀 테스트 유지.
 3. `github-poll-worker` 실패 원인/결과를 UI에서 과거 기록과 현재 장애로 분리.
 4. Gateway `/fleet-console/state` 응답을 더 가볍게 만들고 timeout fallback 추가.
 5. SSE는 이벤트 기반/1초 state push로 낮추고, UI animation은 client에서 처리.
