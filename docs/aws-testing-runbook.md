@@ -91,6 +91,9 @@ gh secret list --repo Jungle-303-04/final --env aws-test
 `Authorization: Bearer ...`, `CLOUDFLARE_API_TOKEN=...`처럼 붙여 넣어도
 `scripts/aws-up.sh`가 배포 중 순수 토큰만 뽑아서
 `Authorization: Bearer <token>` 형태로 정규화한다.
+그래도 token 형태가 아니면 AWS CD log에 실제 토큰 값은 숨기고
+`raw_length`, `normalized_length`, `allowed_bearer_charset`만 출력한다.
+이 메시지가 나오면 GitHub secret에 Cloudflare 화면의 raw API token만 다시 넣는다.
 
 4. secret을 넣은 뒤 AWS CD를 다시 실행한다.
 
