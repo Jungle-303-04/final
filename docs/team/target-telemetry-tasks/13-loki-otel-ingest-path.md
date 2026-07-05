@@ -22,7 +22,7 @@ Prometheus 흐름이 안정된 뒤, log 또는 trace ingest 경로 하나를 작
 
 ## 선형 절차
 
-1. demo에서 Loki 또는 OTel 중 하나만 먼저 선택한다.
+1. validation 환경에서 Loki 또는 OTel 중 하나만 먼저 선택한다.
 2. ingest path와 query path를 분리해서 문서화한다.
 3. log를 선택하면 redaction filter를 먼저 둔다.
 4. trace를 선택하면 span id, service name, duration summary만 evidence로 만든다.
