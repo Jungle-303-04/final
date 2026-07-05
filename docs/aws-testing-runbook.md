@@ -87,8 +87,9 @@ gh secret list --repo Jungle-303-04/final --env aws-test
 
 토큰은 채팅이나 문서에 쓰지 않는다. Cloudflare에서 `woonyong.org` zone에 대해
 `Zone:Read`, `DNS:Edit` 권한이 있는 API token을 만든 뒤 위 명령 프롬프트에 붙여 넣는다.
-가장 좋은 값은 순수 API token 문자열이다. 실수로 `Bearer ...` 또는
-`Authorization: Bearer ...` 전체를 붙여 넣어도 `scripts/aws-up.sh`가 배포 중
+가장 좋은 값은 순수 API token 문자열이다. 실수로 `Bearer ...`,
+`Authorization: Bearer ...`, `CLOUDFLARE_API_TOKEN=...`처럼 붙여 넣어도
+`scripts/aws-up.sh`가 배포 중 순수 토큰만 뽑아서
 `Authorization: Bearer <token>` 형태로 정규화한다.
 
 4. secret을 넣은 뒤 AWS CD를 다시 실행한다.
