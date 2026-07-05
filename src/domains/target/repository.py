@@ -25,6 +25,7 @@ from domains.target.models import (
     AgentPolicyRecord,
     AgentPolicyStatusRecord,
     AgentReconcileStatusRecord,
+    ClusterAgentStatusRecord,
     EvidenceJob,
     EvidenceWindow,
     TargetDesiredState,
@@ -37,6 +38,82 @@ from packages.storage.schema import EventModel, OutboxModel
 
 
 class TargetAgentRepository(DatabaseConnection):
+    def save_cluster_agent_status(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        agent_id: str,
+        capabilities: list[str],
+        status: str = "connected",
+        details: JsonObject | None = None,
+    ) -> JsonObject:
+        table = ClusterAgentStatusRecord.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                agent_id=agent_id,
+                status=status,
+                capabilities=list(dict.fromkeys(capabilities)),
+                details=details or {},
+                last_seen_at=func.now(),
+                updated_at=func.now(),
+            )
+            .on_conflict_do_update(
+                index_elements=[table.c.workspace_id, table.c.cluster_id, table.c.agent_id],
+                set_={
+                    "status": status,
+                    "capabilities": list(dict.fromkeys(capabilities)),
+                    "details": details or {},
+                    "last_seen_at": func.now(),
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(table)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return self.serialize_cluster_agent_status(dict(row))
+
+    def list_cluster_agent_statuses(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> list[JsonObject]:
+        table = ClusterAgentStatusRecord.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .order_by(table.c.last_seen_at.desc(), table.c.agent_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self.serialize_cluster_agent_status(dict(row)) for row in rows]
+
+    def latest_cluster_agent_statuses(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str] | None,
+    ) -> dict[str, JsonObject]:
+        if cluster_ids is not None and not cluster_ids:
+            return {}
+
+        table = ClusterAgentStatusRecord.__table__
+        statement = select(table).where(table.c.workspace_id == workspace_id)
+        if cluster_ids is not None:
+            statement = statement.where(table.c.cluster_id.in_(cluster_ids))
+        statement = statement.order_by(table.c.cluster_id, table.c.last_seen_at.desc())
+
+        latest: dict[str, JsonObject] = {}
+        with self.connection() as conn:
+            for row in conn.execute(statement).mappings():
+                cluster_id = str(row["cluster_id"])
+                if cluster_id not in latest:
+                    latest[cluster_id] = self.serialize_cluster_agent_status(dict(row))
+        return latest
+
     def upsert_cluster_policy(
         self,
         workspace_id: str,
@@ -486,6 +563,13 @@ class TargetAgentRepository(DatabaseConnection):
     def serialize_evidence_job(self, row: JsonObject) -> JsonObject:
         item = dict(row)
         item["leased_until"] = iso_or_none(item.get("leased_until"))
+        return item
+
+    def serialize_cluster_agent_status(self, row: JsonObject) -> JsonObject:
+        item = dict(row)
+        item["last_seen_at"] = iso_or_none(item.get("last_seen_at"))
+        item["created_at"] = iso_or_none(item.get("created_at"))
+        item["updated_at"] = iso_or_none(item.get("updated_at"))
         return item
 
     def get_evidence_window(self, evidence_key: str) -> JsonObject | None:

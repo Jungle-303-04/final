@@ -126,6 +126,24 @@ class AgentPolicyStatusRecord(Base):
     created_at: Mapped[Any] = created_at_column()
 
 
+class ClusterAgentStatusRecord(Base):
+    __tablename__ = "cluster_agent_status"
+    __table_args__ = (
+        PrimaryKeyConstraint("workspace_id", "cluster_id", "agent_id"),
+        Index("ix_cluster_agent_status_last_seen", "workspace_id", "cluster_id", "last_seen_at"),
+    )
+
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    agent_id: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    capabilities: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    details: Mapped[dict[str, Any]] = jsonb_column()
+    last_seen_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
 class AgentReconcileStatusRecord(Base):
     __tablename__ = "agent_reconcile_status"
 
