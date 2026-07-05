@@ -154,6 +154,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [frontend-framework-design](frontend-framework-design.md)
 - [local-testing](local-testing.md)
 - [operations-deployment](operations-deployment.md)
+- [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
 - [secrets](secrets.md)
 
