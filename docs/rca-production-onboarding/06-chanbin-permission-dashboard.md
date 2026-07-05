@@ -78,6 +78,8 @@ if allowed_cluster_ids is not None:
 | `POST /approvals/{approval_id}/grant` | `gitops/router.py` | cluster `deploy` | 승인하면 command로 이어진다. |
 | `POST /approvals/{approval_id}/reject` | `gitops/router.py` | cluster `deploy` | 배포 결정권이 있어야 거절도 할 수 있다. |
 | `PUT /clusters/{cluster_id}/policy` | `target/router.py` | account admin | agent policy 변경은 전체 수집/제어 동작에 영향을 준다. |
+| `GET /dashboard/rca/timeline` | `dashboard/router.py` | session + cluster `read` 목록 필터 | 사용자가 볼 수 있는 cluster의 RCA 흐름만 내려준다. |
+| `GET /dashboard/rca/incidents/{incident_id}` | `dashboard/router.py` | session + cluster `read` 목록 필터 | incident 상세도 허용된 cluster 안에서만 찾는다. |
 | `/agent/*` command/evidence/policy | 여러 router | `x-agent-token` | agent 전용이며 session이 아니라 per-cluster token으로 인증한다. |
 | `/live/browser` | `realtime-gateway/app.py` | browser session + workspace match | realtime도 workspace 밖 데이터를 받으면 안 된다. |
 | `/live/agent` | `realtime-gateway/app.py` | `x-agent-token` | agent가 자기 cluster 외 데이터를 publish하지 못하게 한다. |
@@ -105,70 +107,74 @@ if allowed_cluster_ids is not None:
 - `x-agent-token`을 browser에 전달하지 않는다.
 - agent route를 사용자 session으로 호출하지 않는다.
 
-## Dashboard API를 만들 때 코드 흐름
+## 현재 Dashboard API 코드 흐름
 
-### 1. DTO부터 만든다
+### 1. DTO
 
 파일:
 
 - `src/packages/contracts/gateway/responses.py`
 
-예상 DTO:
+현재 DTO:
 
 - `RcaTimelineItem`
 - `RcaTimelineResponse`
-- `ClusterDashboardSummary`
-- `EvidenceProviderStatus`
+- `RcaIncidentResponse`
 
 왜 먼저 하는가:
 
 - 프론트와 백엔드가 같은 response shape를 보고 작업한다.
 - UI가 event 내부 구조에 묶이지 않는다.
 
-### 2. route 상수를 만든다
+### 2. route 상수
 
 파일:
 
 - `src/packages/contracts/gateway/routes.py`
 
-예상 route:
+현재 route:
 
 ```python
-RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
-RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
-CLUSTER_DASHBOARD_PATH = "/dashboard/clusters"
+DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
+DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
 ```
 
 ### 3. repository query에서 권한 필터를 적용한다
 
 구현 위치:
 
-- 신규 `src/domains/dashboard/repository.py`
-- 또는 RCA router 안에서 시작 후 dashboard domain으로 분리
+- `src/domains/dashboard/repository.py`
 
 기준:
 
 - 모든 query는 `workspace_id == current.workspace_id`가 먼저다.
 - cluster 데이터는 `accessible_resource_ids(..., READ_ACCESS)`로 좁힌다.
 - 단건 cluster detail은 `require_cluster_access(..., READ_ACCESS)`를 통과해야 한다.
+- `allowed_cluster_ids`가 빈 set이면 빈 목록을 반환한다.
+- `allowed_cluster_ids`가 `None`이면 workspace owner/admin이라 workspace 안 전체 row를 볼 수 있다는 뜻이다.
 
 ### 4. router에서 session을 요구한다
 
 예시:
 
 ```python
-@router.get(RCA_TIMELINE_PATH, response_model=RcaTimelineResponse)
+@router.get(DASHBOARD_RCA_TIMELINE_PATH, response_model=RcaTimelineResponse)
 async def rca_timeline(
+    cluster_id: str | None = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> RcaTimelineResponse:
     workspace_id = current.workspace_id
-    allowed_cluster_ids = db.accessible_resource_ids(
-        current.user_id,
-        workspace_id,
-        AccessResourceType.CLUSTER.value,
-        READ_ACCESS,
-    )
+    if cluster_id is None:
+        allowed_cluster_ids = db.accessible_resource_ids(
+            current.user_id,
+            workspace_id,
+            AccessResourceType.CLUSTER.value,
+            READ_ACCESS,
+        )
+    else:
+        require_cluster_access(db, current, workspace_id, cluster_id, READ_ACCESS)
+        allowed_cluster_ids = {cluster_id}
     rows = db.list_rca_timeline(workspace_id, allowed_cluster_ids)
     return RcaTimelineResponse(items=[RcaTimelineItem(**row) for row in rows])
 ```
@@ -227,15 +233,28 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
-dashboard API를 추가하면 아래 테스트를 새로 만든다.
+dashboard API 테스트는 현재 추가되어 있다.
 
 | 테스트 | 확인할 것 |
 | --- | --- |
-| `tests/test_dashboard_router.py` | session 없으면 401 |
-| `tests/test_dashboard_router.py` | cluster read 권한 없으면 row 제외 |
-| `tests/test_dashboard_router.py` | owner/admin은 workspace 전체 row 조회 |
-| `tests/test_dashboard_projection.py` | event 재처리 시 timeline row upsert |
+| `tests/test_dashboard_router.py` | list query가 `accessible_resource_ids`를 사용한다. |
+| `tests/test_dashboard_router.py` | `cluster_id` query는 `require_cluster_access(..., read)`를 통과해야 한다. |
+| `tests/test_dashboard_router.py` | incident detail은 허용된 cluster 안에서만 row를 찾는다. |
+| `tests/test_dashboard_projection.py` | `rca.completed`가 timeline row로 변환된다. |
+| `tests/test_dashboard_projection.py` | event 재처리 시 timeline row upsert SQL을 사용한다. |
 | `tests/test_dashboard_projection.py` | `safe_pr.requested`와 `safe_pr.created` 상태 분리 |
+
+바로 확인:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_dashboard_projection.py \
+  tests/test_dashboard_router.py \
+  tests/test_identity_repository.py \
+  tests/test_command_router.py \
+  tests/test_realtime_gateway.py \
+  -q
+```
 
 ## 구현 완료 기준
 

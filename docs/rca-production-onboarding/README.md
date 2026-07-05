@@ -2,7 +2,7 @@
 
 이 문서는 팀원이 내게 다시 묻지 않고도 현재 코드 기준으로 흐름을 따라가며 구현하고 테스트할 수 있게 만든 온보딩 지도다.
 
-기준은 아이디어가 아니라 지금 repository에서 실제로 돌아가는 코드다. 문서에 적은 route, event, handler, provider, table, test는 먼저 코드에서 확인했다. 화면/대시보드 확장 영역은 현재 동작하는 backend 계약을 출발점으로 두고, 어떤 파일을 추가해야 하는지 순서대로 적었다.
+기준은 아이디어가 아니라 지금 repository에서 실제로 돌아가는 코드다. 문서에 적은 route, event, handler, provider, table, test는 먼저 코드에서 확인했다. 대시보드는 현재 `dashboard-worker`, `RcaTimeline` read model, Gateway query API까지 구현되어 있고, frontend는 이 API를 기준으로 붙이면 된다.
 
 ## 읽는 순서
 
@@ -40,6 +40,8 @@ Target Agent
   -> dispatch-worker
   -> command.requested 또는 safe_pr.requested
   -> command-worker 또는 scm-worker
+  -> dashboard-worker
+  -> /dashboard/rca/timeline 조회 API
 ```
 
 ## 데코레이터는 이렇게 이해하면 된다
@@ -54,6 +56,17 @@ Target Agent
 | `@command.k8s(...)` | target agent Kubernetes write command | action, Kubernetes resource, verb, payload model, policy 검증을 함께 묶는다. |
 | `@rca.cause(...)` | RCA cause profile | symptom, 필요한 evidence source, 원인 후보를 rule catalog에 등록한다. |
 | `@rca.recovery(...)` | recovery action profile | root cause별 복구 후보와 route를 등록한다. |
+
+## 대시보드 현재 구현
+
+| 구분 | 파일 | 왜 중요한가 |
+| --- | --- | --- |
+| read model table | `src/domains/dashboard/models.py` | `workspace_id + correlation_id` 기준으로 RCA 흐름을 한 row로 묶는다. |
+| projection repository | `src/domains/dashboard/repository.py` | event subject를 dashboard status로 바꾸고 upsert/query를 책임진다. |
+| projection worker | `src/services/projection/dashboard-worker/app.py` | `@app.on_any`로 RCA/command/PR event를 읽는다. |
+| query router | `src/domains/dashboard/router.py` | session과 cluster read 권한을 적용한다. |
+| response DTO | `src/packages/contracts/gateway/responses.py` | `RcaTimelineItem`, `RcaTimelineResponse`, `RcaIncidentResponse`가 frontend 계약이다. |
+| tests | `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py` | event mapping, upsert, 권한 필터를 검증한다. |
 
 ## 반드시 지킬 기준
 
@@ -84,6 +97,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_rca_evidence.py \
   tests/test_event_golden_path.py \
   tests/test_repo_gateway_worker.py \
+  tests/test_dashboard_projection.py \
+  tests/test_dashboard_router.py \
   tests/test_projection.py \
   tests/test_realtime_contracts.py \
   -q

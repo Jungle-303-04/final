@@ -11,6 +11,7 @@ from settings import Settings
 
 from domains.ai.router import router as ai_router
 from domains.command.router import router as command_router
+from domains.dashboard.router import router as dashboard_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.identity.dependencies import (
@@ -132,6 +133,7 @@ class ApiGateway:
         self._register_ingest_routes(app)
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
+        app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         self._register_dead_letter_routes(app)
         self._register_metrics_routes(app)
         self._register_error_handler(app)

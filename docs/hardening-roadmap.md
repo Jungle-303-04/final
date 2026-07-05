@@ -80,7 +80,7 @@ Alert 기준:
 
 | 축 | 작업 | 완료 기준 |
 | --- | --- | --- |
-| Dashboard projection | `dashboard-worker`와 read model schema를 추가한다. | workflow, approval, command, RCA, safe PR, DLQ가 같은 timeline에서 보인다. |
+| Dashboard projection | `dashboard-worker`와 `RcaTimeline` read model을 운영 화면 요구에 맞게 확장한다. | workflow, approval, command, RCA, safe PR, DLQ가 같은 timeline에서 보인다. |
 | Schema migration | Alembic 또는 동등한 migration 도구를 도입한다. | `db.init()` 직접 생성과 migration path가 분리되고 schema version이 기록된다. |
 | Event versioning | `EventEnvelope`에 version/compat policy를 둔다. | 새 필드 추가/삭제가 golden event compatibility test를 통과한다. |
 | Autoscaling | KEDA 또는 equivalent로 NATS lag 기반 worker scale을 정의한다. | backlog 증가 시 replica 증가, backlog 해소 시 축소가 staging에서 검증된다. |

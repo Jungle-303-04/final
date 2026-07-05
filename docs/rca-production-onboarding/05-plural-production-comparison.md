@@ -17,8 +17,8 @@ Plural은 “이벤트가 한 번 지나갔다”에서 끝나지 않고, 사용
 
 | 운영 객체 | 왜 필요한가 | 우리 현재 기준 |
 | --- | --- | --- |
-| Incident | RCA 결과를 사람이 다시 열어볼 수 있어야 한다. | `IncidentRecord`, `RcaCompletedBody`는 있지만 dashboard read model은 추가해야 한다. |
-| Timeline / History | 장애 발생부터 PR/command 결과까지 한 화면에서 추적해야 한다. | `audit-worker`는 모든 event를 저장한다. dashboard용 projection table은 추가해야 한다. |
+| Incident | RCA 결과를 사람이 다시 열어볼 수 있어야 한다. | `IncidentRecord`, `RcaCompletedBody`, `RcaTimeline` read model이 있다. incident message/comment는 별도 보강 대상이다. |
+| Timeline / History | 장애 발생부터 PR/command 결과까지 한 화면에서 추적해야 한다. | `audit-worker`는 원장을 저장하고, `dashboard-worker`는 화면용 `RcaTimeline`을 만든다. |
 | Permission Filter | UI 숨김이 아니라 backend query에서 걸러야 한다. | `require_cluster_access`, `accessible_resource_ids`를 사용한다. |
 | Cluster Summary | cluster 상태, agent 상태, evidence provider 상태를 한 번에 봐야 한다. | target registration, policy, evidence job은 있다. dashboard summary projection을 추가한다. |
 | Rollout / Run Step | 긴 작업은 step, lock, heartbeat, retry 상태를 보여야 한다. | command queue는 lease가 있다. RCA run step read model은 추가한다. |
@@ -29,11 +29,11 @@ Plural은 “이벤트가 한 번 지나갔다”에서 끝나지 않고, 사용
 
 | 영역 | Plural 파일 | 우리 프로젝트에서 대응되는 파일 |
 | --- | --- | --- |
-| Incident | `apps/core/lib/core/schema/incident.ex` | `src/domains/rca/events.py` |
+| Incident | `apps/core/lib/core/schema/incident.ex` | `src/domains/rca/events.py`, `src/domains/dashboard/models.py` |
 | Incident message | `apps/core/lib/core/schema/incident_message.ex` | dashboard detail comment/message 추가 대상 |
-| Incident history | `apps/core/lib/core/schema/incident_history.ex` | dashboard timeline projection 추가 대상 |
-| Incident service | `apps/core/lib/core/services/incidents.ex` | RCA worker chain + dashboard query router 추가 대상 |
-| Incident GraphQL | `apps/graphql/lib/graphql/schema/incidents.ex`, `resolvers/incidents.ex` | gateway response DTO + dashboard route 추가 대상 |
+| Incident history | `apps/core/lib/core/schema/incident_history.ex` | `dashboard-worker`, `RcaTimeline` |
+| Incident service | `apps/core/lib/core/services/incidents.ex` | RCA worker chain + `src/domains/dashboard/router.py` |
+| Incident GraphQL | `apps/graphql/lib/graphql/schema/incidents.ex`, `resolvers/incidents.ex` | gateway response DTO + dashboard route |
 | Audit | `apps/core/lib/core/schema/audit.ex`, `services/audits.ex` | `src/domains/audit/*`, `src/services/projection/audit-worker/app.py` |
 | Audit pubsub | `apps/core/lib/core/pubsub/consumers/audits.ex`, `protocols/auditable.ex` | `@app.on_any` projector |
 | Cluster | `apps/core/lib/core/schema/cluster.ex`, `services/clusters.ex` | `src/domains/target/*`, `cluster-agent` |
@@ -62,6 +62,9 @@ Plural 패턴:
 - `RcaCompletedBody`
 - `RcaActionRequiredBody`
 - `RcaReport` table
+- `RcaTimeline` dashboard read model
+- `RcaTimelineItem`, `RcaTimelineResponse`, `RcaIncidentResponse`
+- `dashboard-worker` projection
 
 프로덕션 보강:
 
@@ -69,15 +72,15 @@ Plural 패턴:
 | --- | --- | --- | --- |
 | 가인 | `RcaRun`, `RcaRunStep` 값 객체와 저장소 | RCA가 여러 worker를 지나가므로 중간 상태를 다시 볼 수 있어야 한다. | `src/domains/rca/models.py` |
 | 가인 | incident message/history event | action_required, AI fallback, 사람이 남긴 메모를 RCA와 연결한다. | `src/domains/rca/events.py` |
-| 찬빈 | RCA timeline response DTO | frontend가 event payload를 직접 파싱하지 않게 한다. | `src/packages/contracts/gateway/responses.py` |
-| 찬빈 | RCA timeline query API | dashboard가 DB/event bus를 직접 읽지 않게 한다. | `src/domains/rca/router.py` 또는 신규 dashboard router |
+| 찬빈 | frontend timeline 화면 | 이미 구현된 response DTO를 화면에 연결한다. | `src/packages/contracts/gateway/responses.py` |
+| 찬빈 | incident detail 화면 | dashboard가 DB/event bus를 직접 읽지 않게 한다. | `src/domains/dashboard/router.py` |
 
-구현 순서:
+현재 구현된 순서:
 
-1. `RcaTimelineItem`, `RcaTimelineResponse` DTO를 만든다.
-2. `rca_timeline` projection table을 만든다.
+1. `RcaTimelineItem`, `RcaTimelineResponse`, `RcaIncidentResponse` DTO가 있다.
+2. `RcaTimeline` projection table이 있다.
 3. `dashboard-worker`가 `@app.on_any`로 event를 받아 upsert한다.
-4. query router에서 `workspace_id`와 cluster 권한으로 필터링한다.
+4. `src/domains/dashboard/router.py`가 `workspace_id`와 cluster 권한으로 필터링한다.
 5. frontend는 query response만 렌더링한다.
 
 ## Audit / Timeline
@@ -92,13 +95,17 @@ Plural 패턴:
 - `src/services/projection/audit-worker/app.py`
 - `src/domains/audit/models.py`
 - 모든 event를 `@app.on_any`로 받아 audit log에 저장한다.
+- `src/services/projection/dashboard-worker/app.py`
+- `src/domains/dashboard/models.py`
+- `src/domains/dashboard/repository.py`
+- RCA/command/Safe PR event를 `RcaTimeline` row로 upsert한다.
 
 프로덕션 보강:
 
 | 담당 | 무엇을 구현하는가 | 왜 필요한가 |
 | --- | --- | --- |
-| 찬빈 | dashboard 전용 timeline projection | audit log는 원장이고 화면은 사람이 읽는 상태 모델이 필요하다. |
-| 찬빈 | event subject별 status mapping | `safe_pr.requested`와 `safe_pr.created`를 같은 상태처럼 보이면 안 된다. |
+| 찬빈 | dashboard timeline UI | audit log는 원장이고 화면은 사람이 읽는 상태 모델을 보여줘야 한다. |
+| 찬빈 | status별 badge/CTA mapping | `safe_pr.requested`와 `safe_pr.created`를 같은 상태처럼 보이면 안 된다. |
 | 가인 | RCA event에 `incident_id`, `evidence_ref`, `reason` 누락 금지 | projection이 연결할 키가 없으면 timeline이 끊긴다. |
 
 ## Cluster / Target
@@ -188,13 +195,14 @@ Plural 패턴:
 - `WorkspaceAccessRepository.accessible_resource_ids()`
 - `require_resource_access()`
 - `require_cluster_access()`
+- `src/domains/dashboard/router.py`
 - `realtime-gateway` browser WebSocket session/workspace 검사
 
 프로덕션 보강:
 
 | 담당 | 무엇을 구현하는가 | 왜 필요한가 |
 | --- | --- | --- |
-| 찬빈 | dashboard query에서 `accessible_resource_ids` 사용 | 목록 조회에서 권한 없는 cluster가 보이면 안 된다. |
+| 찬빈 | frontend가 dashboard API만 사용 | 목록 조회에서 권한 없는 cluster가 보이면 안 된다. |
 | 찬빈 | frontend action gating | 버튼 숨김/비활성화로 사용자가 실패 요청을 덜 보내게 한다. |
 | 민정 | agent route는 계속 token identity만 신뢰 | body workspace/cluster를 믿으면 cross-tenant 문제가 생긴다. |
 | 가인 | Safe PR/command로 이어지는 action은 backend deploy 권한 확인 | RCA가 만든 추천이라도 실행 권한은 따로 봐야 한다. |

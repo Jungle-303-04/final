@@ -69,15 +69,15 @@
 - `action_route`
 - command 또는 Safe PR로 이어졌는지
 
-## dashboard 계약을 추가하는 순서
+## dashboard 계약을 확인하고 확장하는 순서
 
-1. 화면에서 필요한 최소 DTO를 적는다.
-2. `responses.py`에 response model을 추가한다.
-3. `routes.py`에 route 상수를 추가한다.
-4. projection table이 필요하면 `src/domains/projection/`에 model/repository를 만든다.
-5. `src/services/projection/dashboard-worker/app.py`를 만들고 `@app.on_any`로 event를 읽는다.
-6. 같은 event를 두 번 처리해도 같은 row로 유지되는 테스트를 쓴다.
-7. Gateway router를 붙이고 response test를 쓴다.
+1. `src/packages/contracts/gateway/responses.py`의 `RcaTimelineItem`, `RcaTimelineResponse`, `RcaIncidentResponse`를 먼저 본다.
+2. `src/packages/contracts/gateway/routes.py`의 `/dashboard/rca/*` route 상수를 확인한다.
+3. `src/domains/dashboard/models.py`의 `RcaTimeline` 컬럼을 확인한다.
+4. `src/domains/dashboard/repository.py`의 event subject -> status mapping을 확인한다.
+5. `src/services/projection/dashboard-worker/app.py`가 `@app.on_any`로 event를 읽는지 확인한다.
+6. `src/domains/dashboard/router.py`가 session과 cluster read 권한을 적용하는지 확인한다.
+7. `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py`를 돌린다.
 8. 그 다음 frontend가 route를 소비한다.
 
 ## 화면에서 헷갈리면 안 되는 것
