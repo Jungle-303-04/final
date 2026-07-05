@@ -20,6 +20,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
 )
 from domains.identity.router import router as identity_router
+from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
 from domains.rca.router import router as rca_router
 from domains.target.events import AgentConnectedBody
@@ -144,6 +145,9 @@ class ApiGateway:
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
+        app.include_router(
+            inventory_router
+        )  # agent inventory snapshots -> multi-cluster read model
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
