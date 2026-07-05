@@ -132,6 +132,16 @@ def test_render_reads_manifest_from_checkout_cache(monkeypatch, tmp_path) -> Non
     assert any(cache.glob("*.git"))
 
 
+def test_repo_remote_url_uses_configured_github_web_base(monkeypatch) -> None:
+    render = load_service("gitops/manifest-render-worker")
+    monkeypatch.setenv("GITHUB_WEB_BASE", "https://github.enterprise.local")
+
+    assert (
+        render.repo_remote_url("platform/service")
+        == "https://github.enterprise.local/platform/service.git"
+    )
+
+
 def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
     render = load_service("gitops/manifest-render-worker")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
