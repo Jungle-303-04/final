@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 from packages.config.settings import env
-from packages.contracts.gateway.requests import TargetRegisterRequest
+from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
 TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
@@ -201,13 +201,14 @@ data:
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
+  TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(TARGET_NAMESPACE)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
   COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"
-  OTEL_SERVICE_NAME: "target-cluster-agent"
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://opentelemetry-collector.target.svc:4318/v1/traces"
+  OTEL_SERVICE_NAME: {yaml_string(DEFAULT_OTEL_SERVICE_NAME)}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {yaml_string(payload.otel_traces_endpoint)}
 """
 
 

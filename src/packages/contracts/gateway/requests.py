@@ -18,6 +18,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.target import TARGET_NAMESPACE
 
 DEFAULT_WEBHOOK_REPLICAS = 2
 MIN_WEBHOOK_REPLICAS = 1
@@ -31,6 +32,10 @@ DEFAULT_TARGET_ENVIRONMENT = "sandbox"
 DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
 DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
+DEFAULT_OTEL_SERVICE_NAME = "target-cluster-agent"
+DEFAULT_OTEL_TRACES_ENDPOINT = (
+    f"http://opentelemetry-collector.{TARGET_NAMESPACE}.svc:4318/v1/traces"
+)
 MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
 DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS = 3
@@ -172,6 +177,8 @@ class TargetRegisterRequest(StrictModel):
     image: str = Field(min_length=1)
     prometheus_base_url: str = DEFAULT_PROMETHEUS_BASE_URL
     loki_base_url: str = DEFAULT_LOKI_BASE_URL
+    tempo_base_url: str = DEFAULT_TEMPO_BASE_URL
+    otel_traces_endpoint: str = DEFAULT_OTEL_TRACES_ENDPOINT
     evidence_interval_seconds: int = Field(
         default=int(Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS),
         ge=MIN_EVIDENCE_INTERVAL_SECONDS,
