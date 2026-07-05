@@ -6,6 +6,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DOCS_DIR = ROOT_DIR / "docs"
 
 
+def read(path: str) -> str:
+    return (ROOT_DIR / path).read_text(encoding="utf-8")
+
+
 def test_docs_do_not_exceed_three_levels_from_repo_root() -> None:
     too_deep = [
         str(path.relative_to(ROOT_DIR))
@@ -43,3 +47,100 @@ def test_docs_do_not_reference_removed_local_kind_recovery_logs() -> None:
             offenders.append(path.relative_to(ROOT_DIR).as_posix())
 
     assert offenders == []
+
+
+def test_docs_and_api_do_not_use_retired_scope_or_stale_language() -> None:
+    blocked_terms = (
+        "Plu" + "ral",
+        "plu" + "ral",
+        "05-" + "plu" + "ral" + "-production-comparison",
+        "아" + "직 없음",
+        "미" + "구현",
+        "stale" + " fake",
+        "fake" + " telemetry",
+        "kind" + "-management",
+        "kind" + "-target",
+    )
+
+    checked_paths = [ROOT_DIR / "README.md"]
+    checked_paths.extend(DOCS_DIR.rglob("*.md"))
+    checked_paths.extend((DOCS_DIR / "api").rglob("*.bru"))
+    checked_paths.extend((DOCS_DIR / "api").rglob("*.json"))
+
+    offenders = []
+    for path in sorted(checked_paths):
+        text = path.read_text(encoding="utf-8")
+        found = [term for term in blocked_terms if term in text]
+        if found:
+            offenders.append(f"{path.relative_to(ROOT_DIR).as_posix()}: {', '.join(found)}")
+
+    assert offenders == []
+
+
+def test_onboarding_declares_benchmark_minimum_as_production_scope() -> None:
+    docs = {
+        "docs/README.md": read("docs/README.md"),
+        "docs/onboarding/README.md": read("docs/onboarding/README.md"),
+        "docs/production-readiness.md": read("docs/production-readiness.md"),
+        "docs/rca-production-onboarding/README.md": read(
+            "docs/rca-production-onboarding/README.md"
+        ),
+        "docs/rca-production-onboarding/05-production-completion-scope.md": read(
+            "docs/rca-production-onboarding/05-production-completion-scope.md"
+        ),
+    }
+
+    for path, text in docs.items():
+        assert "벤치마크" in text, path
+        assert "프로덕션" in text, path
+
+
+def test_completion_scope_mentions_every_required_feature_domain_and_owner() -> None:
+    text = read("docs/rca-production-onboarding/05-production-completion-scope.md")
+    required_terms = [
+        "Account/User/Auth",
+        "Group/Role/RBAC",
+        "OIDC/OAuth/Auth Proxy",
+        "Fleet Cluster",
+        "GitOps Repository",
+        "Helm/Kustomize/YAML Deploy",
+        "Terraform/IaC",
+        "Upgrade Queue / Deferred Update",
+        "Rollout",
+        "Test / Test Logs",
+        "Dependency / Scan / Vulnerability",
+        "Incident / Message / Postmortem",
+        "AI Insight / Chat / Help",
+        "Automated PR Generation",
+        "Notification / Email / Digest",
+        "DNS",
+        "Shell / Demo Project",
+        "Billing/License/Plan",
+        "Marketplace/Publisher",
+        "Realtime Subscription",
+        "민정",
+        "가인",
+        "찬빈",
+    ]
+
+    missing = [term for term in required_terms if term not in text]
+
+    assert missing == []
+
+
+def test_each_member_onboarding_has_production_completion_section() -> None:
+    member_docs = [
+        "docs/onboarding/minjeong-command-target-evidence.md",
+        "docs/onboarding/gain-evidence-rca.md",
+        "docs/onboarding/chanbin-frontend.md",
+    ]
+
+    missing = []
+    for path in member_docs:
+        text = read(path)
+        if "## 프로덕션 완료 기준" not in text:
+            missing.append(path)
+        if "벤치마크 최소선 기준 프로덕션 완성 설계" not in text:
+            missing.append(f"{path}: completion-scope-link")
+
+    assert missing == []

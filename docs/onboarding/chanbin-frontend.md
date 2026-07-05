@@ -125,6 +125,24 @@ make aws-smoke
 
 찬빈은 smoke가 끝난 뒤 `/dashboard/rca/timeline`이 session과 cluster 권한을 기준으로 row를 필터링하는지 확인한다. 실행 방법은 [AWS 테스트 실행 기준](../aws-testing-runbook.md)을 따른다.
 
+## 프로덕션 완료 기준
+
+찬빈 파트는 외부 기준 저장소에서 확인한 account, user, RBAC, OIDC, audit UI, marketplace UI, billing/license, realtime UI를 우리 dashboard와 권한 시스템으로 옮겨야 끝난다. 전체 범위는 [벤치마크 최소선 기준 프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md)를 따른다.
+
+| 완료 항목 | 확인 방법 |
+| --- | --- |
+| signup/login/session/logout/email verification이 httpOnly cookie 기준으로 동작한다 | `tests/test_identity_auth_routes.py`, `tests/test_auth_security.py` |
+| user/group/role/service account/resource grant가 backend 권한 필터와 연결된다 | auth/RBAC router/repository test |
+| OIDC provider/trust relationship/auth proxy 설정을 backend API와 화면에서 관리한다 | OIDC/Auth proxy test와 Bruno auth 폴더 |
+| dashboard list/detail API가 workspace와 cluster 권한으로 필터링된다 | `tests/test_dashboard_router.py` |
+| frontend는 DB/NATS/agent token/provider token/kubeconfig를 직접 보지 않는다 | code review, browser payload check |
+| incident detail이 history/message/reaction/follower/postmortem을 표시할 수 있다 | dashboard DTO/projection/router test |
+| audit/login metrics/notification/read state 화면이 있다 | audit/notification API와 UI test |
+| marketplace/publisher/repository/artifact/chart/terraform/docker catalog 화면이 있다 | 벤치마크 최소선 체크리스트와 frontend/API test |
+| billing/license/plan/subscription/invoice 화면은 권한 있는 사용자만 본다 | RBAC test와 UI route guard |
+| realtime은 incident, notification, upgrade, rollout, test log를 분리해서 표시한다 | `tests/test_realtime_gateway.py`, `tests/test_realtime_contracts.py` |
+| Bruno에서 auth, dashboard, ops 폴더를 aws-test profile로 확인할 수 있다 | `docs/api/README.md` |
+
 ## 찬빈이 바꾸면 같이 봐야 하는 것
 
 | 바꾸는 것 | 같이 확인할 것 |
