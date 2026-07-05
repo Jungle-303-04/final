@@ -166,3 +166,5 @@ def test_upsert_rca_timeline_uses_correlation_conflict_and_preserves_known_field
     assert "workspace_id" in sql
     assert "correlation_id" in sql
     assert "coalesce" in sql.lower()
+    assert "CASE" in sql
+    assert "last_event_at" in sql
