@@ -19,11 +19,11 @@ headers {
 script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.command && body.command.command_id) {
-    bru.setEnvVar("command_id", body.command.command_id);
+    bru.setVar("command_id", body.command.command_id);
   }
 }
 
-test {
+tests {
   test("200 with command/null or explicit auth failure", function () {
     expect([200, 401, 403]).to.include(res.status);
   });

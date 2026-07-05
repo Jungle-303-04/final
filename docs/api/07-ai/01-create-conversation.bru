@@ -16,7 +16,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "title": "Bruno RCA practice",
     "agent": "operations-chat",
@@ -32,11 +32,11 @@ body {
 script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.conversation_id) {
-    bru.setEnvVar("conversation_id", body.conversation_id);
+    bru.setVar("conversation_id", body.conversation_id);
   }
 }
 
-test {
+tests {
   test("accepted or explicit auth/validation failure", function () {
     expect([200, 401, 403, 422, 503]).to.include(res.status);
   });

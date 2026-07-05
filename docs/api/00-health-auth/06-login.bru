@@ -16,7 +16,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "email": "{{auth_email}}",
     "password": "{{auth_password}}"
@@ -26,11 +26,11 @@ body {
 script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.workspace_id) {
-    bru.setEnvVar("workspace_id", body.workspace_id);
+    bru.setVar("workspace_id", body.workspace_id);
   }
 }
 
-test {
+tests {
   test("200 OK", function () {
     expect(res.status).to.equal(200);
   });

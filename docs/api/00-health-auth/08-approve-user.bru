@@ -12,7 +12,7 @@ post {
   url: {{base_url}}/auth/users/{{user_id}}/approve
 }
 
-test {
+tests {
   test("admin success or explicit access/not-found response", function () {
     expect([200, 401, 403, 404, 409, 422]).to.include(res.status);
   });

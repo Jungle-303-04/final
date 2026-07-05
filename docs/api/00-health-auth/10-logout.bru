@@ -12,7 +12,7 @@ post {
   url: {{base_url}}/auth/logout
 }
 
-test {
+tests {
   test("200 after login, otherwise auth failure", function () {
     expect([200, 401, 403]).to.include(res.status);
   });
