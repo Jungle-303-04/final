@@ -97,6 +97,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - `AWS_AUTO_DEPLOY`: `0`이면 main push 자동 AWS 배포 비활성화
 - `GIT_CHECKOUT_CACHE_ENABLED`: 기본 AWS CD `1`
 - `GIT_CHECKOUT_CACHE_REQUIRED`: 기본 `0`. cache 실패 시 GitHub Contents API fallback 허용
+- `MANIFEST_PATH`: 기본 `src/samples/smoke/deploy.yaml`. AWS smoke가 원격 repository에서 읽는 앱 배포 manifest
 - `COMMAND_JANITOR_INTERVAL_SECONDS`: 기본 `15`
 - `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
 - `CLOUDFLARE_PROXIED`: 기본 `1`. `https://k8s.woonyong.org/`처럼 Cloudflare가 HTTPS를 받게 하려면 켜 둔다.

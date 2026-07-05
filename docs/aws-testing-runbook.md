@@ -29,6 +29,7 @@
 | `TARGET_CLUSTER_ID_1` | repository variable, 기본 `TARGET_CLUSTER_1` | target 등록과 smoke에서 쓰는 첫 번째 cluster id |
 | `TARGET_CLUSTER_ID_2` | repository variable, 기본 `TARGET_CLUSTER_2` | target 등록에서 쓰는 두 번째 cluster id |
 | `SMOKE_CLUSTER_ID` | repository variable, 기본 `TARGET_CLUSTER_ID_1` | smoke가 GitHub webhook/command body에 넣는 cluster id |
+| `MANIFEST_PATH` | repository variable, 기본 `src/samples/smoke/deploy.yaml` | smoke가 GitHub webhook에 넣고 `manifest-render-worker`가 원격 repository에서 읽는 앱 배포 manifest |
 | `SMOKE_GATEWAY_ATTEMPTS` | env, 기본 `60` | LoadBalancer DNS/health가 준비될 때까지 smoke가 `/healthz`를 확인하는 횟수 |
 | `SMOKE_GATEWAY_INTERVAL_SECONDS` | env, 기본 `5` | smoke gateway health 재시도 간격 |
 | `MGMT_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Management` | dashboard/API 표시 이름 |
@@ -145,8 +146,14 @@ AWS LoadBalancer hostname은 service에 붙은 직후 몇 분 동안 runner DNS�
 그래서 smoke는 기본적으로 `SMOKE_GATEWAY_ATTEMPTS=60`, `SMOKE_GATEWAY_INTERVAL_SECONDS=5` 기준으로
 최대 5분까지 기다린 뒤 로그인, webhook, event flow 검증으로 넘어간다.
 
-`manifest-render-worker`는 `git.changed`를 처리하면서 원격 repository에서 manifest를 읽는다.
-그래서 runtime image 안에는 `git`이 들어 있어야 하고, private repo라면 `GITHUB_TOKEN`도 필요하다.
+`manifest-render-worker`는 `git.changed`를 처리하면서 원격 repository에서 `MANIFEST_PATH` manifest를 읽는다.
+AWS smoke 기본값은 `src/samples/smoke/deploy.yaml`이다. 이 파일은 `apps/v1 Deployment`라서
+`manifest.rendered -> desired.diff.detected -> diff.analyzed`까지 이어지는 앱 배포 흐름을 검증한다.
+`deploy/target/target.yaml`은 target agent 설치 참고본이고 `Namespace`, RBAC 같은 플랫폼 리소스를 포함하므로
+GitOps smoke 입력으로 쓰지 않는다.
+
+이 원격 read 경로 때문에 runtime image 안에는 `git`이 들어 있어야 하고,
+private repo라면 `GITHUB_TOKEN`도 필요하다.
 AWS CD workflow는 `GH_APP_TOKEN` secret이 있으면 그 값을 쓰고, 없으면 해당 workflow run 안에서만 유효한
 `github.token`을 read token으로 넘긴다. 실제 운영에서 Safe PR까지 이어가려면 `GH_APP_TOKEN`을 별도 secret으로 넣는다.
 
