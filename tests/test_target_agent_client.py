@@ -21,6 +21,17 @@ def management_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MANAGEMENT_BASE_URL", "http://management.local")
 
 
+@pytest.fixture(autouse=True)
+def isolated_agent_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """전역 고정 경로(/tmp/target-agent) 공유 금지 — 테스트마다 격리된 sqlite 경로 사용.
+
+    고정 경로를 그대로 쓰면 같은 호스트의 다른 사용자/CI 실행과 충돌하고,
+    이전 실행이 남긴 파일 권한에 따라 테스트가 깨진다.
+    """
+    monkeypatch.setenv("AGENT_CONTROL_DB_PATH", str(tmp_path / "agent-control.db"))
+    monkeypatch.setenv("COMMAND_OUTBOX_DB_PATH", str(tmp_path / "command-outbox.db"))
+
+
 def load_agent_module() -> Any:
     return load_file(
         ROOT / "src" / "services" / "target" / "cluster-agent" / "agent.py",
