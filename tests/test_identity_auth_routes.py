@@ -43,7 +43,7 @@ class FakePasswordAuth:
         return SimpleNamespace(
             token="login-token",
             user_id="user-1",
-            roles=["admin"],
+            roles=["service_admin"],
             workspace_id="default",
         )
 
@@ -64,12 +64,12 @@ class FakePasswordAuth:
         return SimpleNamespace(
             user_id="user-1",
             status="active",
-            roles=["admin"],
+            roles=["service_admin"],
             workspace_id="default",
             session=SimpleNamespace(
                 token="verified-session-token",
                 user_id="user-1",
-                roles=["admin"],
+                roles=["service_admin"],
                 workspace_id="default",
             ),
         )
@@ -79,7 +79,7 @@ class FakePasswordAuth:
         return {
             "user_id": user_id,
             "status": "active",
-            "role": "member",
+            "role": "user",
             "workspace_id": workspace_id,
         }
 
@@ -206,7 +206,7 @@ def test_verify_email_pending_approval_redirects_without_cookie(monkeypatch) -> 
         return SimpleNamespace(
             user_id="user-2",
             status="pending_approval",
-            roles=["member"],
+            roles=["user"],
             workspace_id="default",
             session=None,
         )
@@ -236,7 +236,7 @@ def test_admin_can_approve_pending_user() -> None:
             current=SimpleNamespace(
                 token="login-token",
                 user_id="admin-user",
-                roles=["admin"],
+                roles=["service_admin"],
                 workspace_id="default",
             ),
             password_auth=password_auth,
@@ -261,7 +261,7 @@ def test_logout_deletes_session_and_cookie(monkeypatch) -> None:
             current=SimpleNamespace(
                 token="login-token",
                 user_id="user-1",
-                roles=["admin"],
+                roles=["service_admin"],
                 workspace_id="default",
             ),
             password_auth=password_auth,

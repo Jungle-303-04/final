@@ -27,7 +27,7 @@ class ApprovalDb:
             "environment": "prod",
             "status": "requested",
             "reason": "approval required",
-            "requested_role": "deployer",
+            "requested_role": "release_operator",
             "details": {
                 "diff": {
                     "resource": "deployment/checkout-api",
@@ -81,7 +81,7 @@ class ApprovalEvents:
 
 
 def current_session() -> SimpleNamespace:
-    return SimpleNamespace(user_id="user-1", roles=("member",), workspace_id="workspace-1")
+    return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="workspace-1")
 
 
 def test_grant_approval_emits_granted_event_with_command_request() -> None:

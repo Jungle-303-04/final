@@ -11,7 +11,7 @@ from domains.dashboard.router import rca_incident, rca_timeline
 
 
 def _current_session() -> SimpleNamespace:
-    return SimpleNamespace(user_id="user-1", roles=("member",), workspace_id="workspace-1")
+    return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="workspace-1")
 
 
 def _timeline_row(cluster_id: str = "cluster-1") -> dict[str, object]:
