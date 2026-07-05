@@ -7,12 +7,13 @@ Prometheus가 scrape한 node-collector metric을 HTTP query API로 다시 읽는
 ## 먼저 읽을 파일
 
 - [05. Node Collector Scrape Target](05-node-collector-scrape-target.md)
-- `deploy/target/observability/prometheus/README.md`
+- `deploy/target/prometheus.yaml`
+- `scripts/install-telemetry.sh`
 
 ## 수정 후보
 
 - `deploy/target/observability/prometheus/README.md`
-- `docs/team/member-guides/target-telemetry-prometheus-runbook.md`
+- `docs/team/target-telemetry-tasks/06-prometheus-query-verification.md`
 
 ## 선형 절차
 

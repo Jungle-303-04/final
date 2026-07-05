@@ -289,7 +289,7 @@ async def on_event(evt: EventEnvelope, ctx):
 | Target Reconcile Worker (App) | `src/services/target/reconcile-worker/app.py` | `cluster.desired_state.changed`, `cluster.reconcile.requested` |
 | RCA Worker (App) | `src/services/ai/rca-worker/app.py` | `cluster.evidence.received` |
 | Audit Timeline Service (`@app.on_any`) | `src/services/projection/audit-worker/app.py` | `>` |
-| Dashboard Projection Service | planned | `>` |
+| Dashboard Projection Service (`@app.on_any`) | `src/services/projection/dashboard-worker/app.py` | `>` |
 
 ## Outbound Gateway 패턴
 
@@ -305,9 +305,9 @@ async def on_event(evt: EventEnvelope, ctx):
 
 예: `safe_pr.requested -> scm-worker -> safe_pr.created`. PR 생성은 `scm-worker` 한 곳으로 모았다. `rca-worker`와 (안전한 diff일 때) `diff-analyze-worker` 둘 다 `safe_pr.requested`를 발행하고, `scm-worker`가 이를 소비해 `safe_pr.created`(또는 `safe_pr.failed`)를 발행한다.
 
-`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch로 변환하고, `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서와 patch file을 같은 PR branch에 커밋한다. rollback patch, approval evidence, diff basis/ref 강제는 아직 P0 하드닝 잔여 작업이다.
+`safe_pr.requested`는 검토 문서만이 아니라 `patches: list[SafePrFilePatch]`를 함께 실을 수 있다. `diff-analyze-worker`는 `desired_manifest`가 있는 안전 diff를 `manifest_path`에 대한 rendered manifest patch로 변환하고, `scm-worker` GitHub provider는 안전한 repository-relative path만 허용한 뒤 검토 문서와 patch file을 같은 PR branch에 커밋한다. 다음 P0 하드닝 작업은 rollback patch, approval evidence, diff basis/ref 강제다.
 
-`command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 거부하고, `Plan`과 `command.queued_for_agent`에도 같은 ref를 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다. ref의 만료/권한 검증과 TokenVault 연동은 아직 다음 P0 작업이다.
+`command.requested` 계열 write command는 `approval_ref`와 `policy_decision_ref`를 계약에 포함한다. `command-worker`는 write action catalog에서 approval이 필요한 action을 queue 전에 거부하고, `Plan`과 `command.queued_for_agent`에도 같은 ref를 복사한다. target `cluster-agent`도 실행 직전 같은 ref가 없으면 fail-closed한다. ref의 만료/권한 검증과 TokenVault 연동은 다음 P0 작업이다.
 
 `command.completed.result`는 agent 결과 보고 기준으로 `applied`, `retryable`, `resources`, `stdout`, `stderr`를 포함할 수 있다. target `cluster-agent`는 write command 결과에 resource별 status를 채우고 stdout/stderr를 제한 길이와 민감 문자열 redaction으로 정리한다.
 

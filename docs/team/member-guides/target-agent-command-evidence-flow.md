@@ -689,7 +689,7 @@ Management는 job result가 들어올 때마다 `emit_evidence_if_ready()`를 �
 1. `evidence_windows`에 이미 발행된 window가 있으면 기존 `event_id`, `correlation_id`를 반환한다.
 2. pending window가 오래 남아 있으면 `release_stale_pending_evidence_window()`로 회수할 수 있다.
 3. `evidence_payload_if_ready(evidence_key)`로 같은 window의 모든 provider job을 읽는다.
-4. 아직 `queued` 또는 `leased` 상태가 하나라도 있으면 아직 event를 만들지 않는다.
+4. `queued` 또는 `leased` 상태가 하나라도 있으면 event를 만들지 않는다.
 5. `failure_policy=strict`이고 failed job이 하나라도 있으면 event를 만들지 않는다.
 6. `failure_policy=allow_partial`이면 failed provider는 빈 payload로 채우고 event를 만든다.
 7. `ClusterEvidenceReceivedBody`를 만들고 `record_evidence_event_once()`로 event/outbox를 stage한다.
@@ -975,7 +975,7 @@ class MyBackendProvider:
 
 ## Direct evidence push 경로
 
-`POST /agent/evidence`는 아직 존재한다. 기준 파일은 `src/domains/rca/router.py`다.
+`POST /agent/evidence`는 호환용 direct push 경로로 존재한다. 기준 파일은 `src/domains/rca/router.py`다.
 
 ```python
 class AgentEvidenceRequest(StrictModel):

@@ -2,11 +2,11 @@
 
 이 디렉터리는 `minmings111` 작업자가 Target/Telemetry 작업을 한 페이지씩 따라 할 수 있게 나눈 작업 목록이다.
 
-원본 설계 문서:
+같이 보는 문서:
 
-- [Target / Telemetry 멤버 가이드](../member-guides/target-telemetry.md)
-- [Target / Telemetry 구현 Phase 계획](../member-guides/target-telemetry-implementation-plan.md)
-- [Prometheus 실전 Runbook](../member-guides/target-telemetry-prometheus-runbook.md)
+- [민정 온보딩](../../onboarding/minjeong-command-target-evidence.md)
+- [민정 프로덕션 구현 흐름](../../rca-production-onboarding/01-minjeong-command-target-evidence.md)
+- [Target Agent Command / Evidence 구현 가이드](../member-guides/target-agent-command-evidence-flow.md)
 - [팀 간 구현 연결과 테스트 가이드](../cross-role-implementation-test-guide.md)
 
 ## 사용 방법
@@ -50,7 +50,7 @@ node-collector /metrics
 
 ## 하드닝 후속 작업
 
-13번 이후에는 [하드닝 로드맵](../../hardening-roadmap.md)의 Target/Agent와 control-plane observability 기준을 따른다.
+13번 이후에는 [production-readiness](../../production-readiness.md)의 Target/Agent와 control-plane observability 기준을 따른다.
 
 - write command는 approval_ref와 policy_decision_ref 없이는 실행하지 않는다.
 - action allowlist는 workspace/repo/cluster/environment/namespace/resource class를 함께 본다.
