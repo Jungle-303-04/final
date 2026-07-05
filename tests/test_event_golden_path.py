@@ -84,7 +84,6 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
         manifest = load_service("gitops/manifest-render-worker")
         diff = load_service("gitops/diff-worker")
         analyze = load_service("gitops/diff-analyze-worker")
-        safe_pr = load_service("ai/safe-pr-worker")
         ai_diff = load_service("ai/diff-worker")
         alert = load_service("alert/alert-worker")
         command = load_service("command/command-worker")
@@ -100,14 +99,12 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
         desired_diff = (await run_worker(diff, rendered, db))[0]
         analyzed_events = await run_worker(analyze, desired_diff, db)
         safe_pr_requested = analyzed_events[1]
-        safe_pr_events = await run_worker(safe_pr, safe_pr_requested, db)
-        safe_pr_patch_prepared = safe_pr_events[0]
+        repo_events = await run_worker(repo, safe_pr_requested, db)
+        safe_pr_patch_prepared = repo_events[0]
+        safe_pr_created = repo_events[1]
+        alert_requested = repo_events[2]
         ai_diff_events = await run_worker(ai_diff, safe_pr_patch_prepared, db)
         diff_explained = ai_diff_events[0]
-        safe_pr_ready = ai_diff_events[1]
-        repo_events = await run_worker(repo, safe_pr_ready, db)
-        safe_pr_created = repo_events[0]
-        alert_requested = repo_events[1]
         alert_events = await run_worker(alert, alert_requested, db)
         command_requested = alert_events[1]
         command_events = await run_worker(command, command_requested, db)
@@ -120,7 +117,6 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
             *analyzed_events,
             safe_pr_patch_prepared,
             diff_explained,
-            safe_pr_ready,
             safe_pr_created,
             alert_requested,
             *alert_events,
@@ -135,7 +131,6 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
             EventSubject.SAFE_PR_REQUESTED,
             EventSubject.SAFE_PR_PATCH_PREPARED,
             EventSubject.DIFF_EXPLAINED,
-            EventSubject.SAFE_PR_READY_FOR_CREATION,
             EventSubject.SAFE_PR_CREATED,
             EventSubject.ALERT_REQUESTED,
             EventSubject.ALERT_DISPATCHED,
@@ -152,9 +147,8 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
         assert safe_pr_requested.causation_id == desired_diff.event_id
         assert safe_pr_patch_prepared.causation_id == safe_pr_requested.event_id
         assert diff_explained.causation_id == safe_pr_patch_prepared.event_id
-        assert safe_pr_ready.causation_id == safe_pr_patch_prepared.event_id
-        assert safe_pr_created.causation_id == safe_pr_ready.event_id
-        assert alert_requested.causation_id == safe_pr_ready.event_id
+        assert safe_pr_created.causation_id == safe_pr_requested.event_id
+        assert alert_requested.causation_id == safe_pr_requested.event_id
         assert alert_events[0].causation_id == alert_requested.event_id
         assert command_requested.causation_id == alert_requested.event_id
         assert command_events[0].causation_id == command_requested.event_id
