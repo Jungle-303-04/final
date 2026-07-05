@@ -239,6 +239,25 @@ class AiMessageCreateRequest(StrictModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class ApplicationUpsertRequest(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    repo_ref: str = Field(default="", max_length=240)
+    repository_id: str = ""
+    default_branch: str = DEFAULT_REPO_BRANCH
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DeploymentBindingUpsertRequest(StrictModel):
+    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    namespace: str = Sandbox.NAMESPACE
+    environment: str = DEFAULT_ENVIRONMENT
+    manifest_path: str = DEFAULT_MANIFEST_PATH
+    resource_class: str = "application"
+    deploy_policy: dict[str, Any] = Field(default_factory=dict)
+    access_policy: dict[str, Any] = Field(default_factory=dict)
+
+
 class ApprovalDecisionRequest(StrictModel):
     reason: str | None = None
 

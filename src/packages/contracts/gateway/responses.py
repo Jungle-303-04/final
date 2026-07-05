@@ -244,6 +244,26 @@ class AiConversationResponse(StrictModel):
     messages: list[JsonMap]
 
 
+class ApplicationResponse(StrictModel):
+    application: JsonMap
+
+
+class ApplicationListResponse(StrictModel):
+    applications: list[JsonMap]
+
+
+class DeploymentBindingResponse(StrictModel):
+    deployment: JsonMap
+
+
+class DeploymentBindingListResponse(StrictModel):
+    deployments: list[JsonMap]
+
+
+class WorkflowRunListResponse(StrictModel):
+    runs: list[JsonMap]
+
+
 class ProviderCatalogResponse(StrictModel):
     providers: dict[str, list[JsonMap]]
 
