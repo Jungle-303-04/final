@@ -95,6 +95,15 @@ class PermissionProfile:
     cannot_do: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ResourceAccessRequest:
+    user_id: str
+    organization_id: str
+    resource_type: str
+    resource_id: str
+    permission: str
+
+
 DEFAULT_WORKSPACE_ID = "default"
 DEFAULT_WORKSPACE_NAME = "Default Workspace"
 DEFAULT_ORGANIZATION_ID = "default"
