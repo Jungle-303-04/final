@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GATEWAY_PORT="${GATEWAY_PORT:-18080}"
-BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
+BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -18,7 +17,7 @@ default_github_repo() {
 }
 
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
-MGMT_CONTEXT="${MGMT_CONTEXT:-kind-management}"
+MGMT_CONTEXT="${MGMT_CONTEXT:-kubernetes-ops}"
 MGMT_NS="${MGMT_NS:-management}"
 SMOKE_IMAGE="${SMOKE_IMAGE:-}"
 SMOKE_COMMAND_RESOURCE="${SMOKE_COMMAND_RESOURCE:-}"

@@ -1,0 +1,23 @@
+meta {
+  name: 02 Readyz
+  type: http
+  seq: 2
+  tags: [
+    smoke
+    public
+  ]
+}
+
+get {
+  url: {{base_url}}/readyz
+}
+
+test {
+  test("200 OK", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("status is ready", function () {
+    expect(res.getBody()).to.have.property("status", "ready");
+  });
+}

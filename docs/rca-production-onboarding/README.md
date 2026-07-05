@@ -107,13 +107,10 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 
 이 명령이 통과하면 지금 문서에서 설명하는 command, target evidence, RCA, Safe PR, audit/realtime 계약의 기본 흐름은 살아 있다고 보면 된다.
 
-로컬 서비스를 실제로 띄워 확인할 때는 아래 순서로 본다.
+서비스를 실제로 띄워 확인할 때는 AWS EKS smoke를 본다.
 
 ```bash
-make up
-make smoke
+make aws-smoke
 ```
 
-현재 local 기본 계정은 `admin@example.com / local-admin-password`다. 기본 worker profile은 `UP_WORKER_SET=smoke`라 smoke에 필요한 worker만 켠다. RCA worker까지 같이 볼 때는 `UP_WORKER_SET=rca make up`, 모든 worker와 GitHub poll CronJob까지 켤 때는 `UP_WORKER_SET=full ENABLE_GITHUB_POLL_CRON=1 make up`을 쓴다.
-
-`make smoke`는 `src/samples/smoke/deploy.yaml` 샘플 manifest를 사용하고, 같은 `correlation_id`에서 `git.webhook.received`, `git.changed`, `manifest.rendered`, `desired.diff.detected`, `diff.analyzed`가 실제 DB `events` 테이블에 남는지 확인한다.
+이 명령은 GitHub Actions의 `AWS CD` workflow를 `run_smoke=true`로 실행한다. 통과 기준과 AWS 변수는 [AWS 테스트 실행 기준](../aws-testing-runbook.md)을 본다.

@@ -127,7 +127,7 @@ uv run pytest tests/test_projection.py
 - insufficient evidence는 `rca.completed` 성공처럼 만들지 않는다.
 - Safe PR request에 patch/file change를 직접 넣는다고 쓰지 않는다. 현재 patch 초안은 `safe_pr.patch_prepared` 흐름이다.
 - 실제 GitHub token은 event body, response, log, audit 어디에도 넣지 않는다.
-- 작업 후에는 [팀 간 구현 연결과 테스트 가이드](../../cross-role-implementation-test-guide.md)의 RCA/Safe PR 섹션과 맞는지 확인한다.
+- 작업 후에는 [팀 간 구현 연결과 테스트 가이드](../cross-role-implementation-test-guide.md)의 RCA/Safe PR 섹션과 맞는지 확인한다.
 
 ## 다음 작업
 

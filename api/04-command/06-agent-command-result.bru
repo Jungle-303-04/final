@@ -1,0 +1,55 @@
+meta {
+  name: 06 Agent Command Result
+  type: http
+  seq: 6
+  tags: [
+    command
+    agent
+  ]
+}
+
+post {
+  url: {{base_url}}/agent/commands/{{command_id}}/result
+}
+
+headers {
+  content-type: application/json
+  x-agent-token: {{agent_token}}
+}
+
+body {
+  {
+    "status": "completed",
+    "cluster_id": "{{cluster_id}}",
+    "workspace_id": "{{workspace_id}}",
+    "agent_id": "{{agent_id}}",
+    "lease_id": "{{lease_id}}",
+    "applied": false,
+    "message": "Bruno command result sample",
+    "retryable": false,
+    "resources": [
+      {
+        "kind": "Deployment",
+        "namespace": "sandbox",
+        "name": "checkout-api",
+        "status": "observed"
+      }
+    ],
+    "stdout": "sample stdout",
+    "stderr": ""
+  }
+}
+
+test {
+  test("accepted or explicit command/auth failure", function () {
+    expect([200, 401, 403, 404, 422]).to.include(res.status);
+  });
+
+  test("success body has event id", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("accepted", true);
+      expect(body).to.have.property("event_id");
+    }
+  });
+}

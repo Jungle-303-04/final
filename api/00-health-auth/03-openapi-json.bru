@@ -1,0 +1,25 @@
+meta {
+  name: 03 OpenAPI JSON
+  type: http
+  seq: 3
+  tags: [
+    discovery
+    public
+  ]
+}
+
+get {
+  url: {{base_url}}/openapi.json
+}
+
+test {
+  test("200 OK", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("OpenAPI document has paths", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("openapi");
+    expect(body).to.have.property("paths");
+  });
+}

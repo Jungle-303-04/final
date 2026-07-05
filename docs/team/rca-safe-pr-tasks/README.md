@@ -4,8 +4,8 @@
 
 원본 설계 문서:
 
-- [RCA / Safe PR 멤버 가이드](../rca-safe-pr.md)
-- [팀 간 구현 연결과 테스트 가이드](../../cross-role-implementation-test-guide.md)
+- [RCA / Safe PR 멤버 가이드](../member-guides/rca-safe-pr.md)
+- [팀 간 구현 연결과 테스트 가이드](../cross-role-implementation-test-guide.md)
 
 ## 사용 방법
 
@@ -42,7 +42,7 @@ cluster.evidence.received
 
 ## 하드닝 후속 작업
 
-8번 이후에는 [하드닝 로드맵](../../../hardening-roadmap.md)의 P0/P1 기준을 따른다.
+8번 이후에는 [하드닝 로드맵](../../hardening-roadmap.md)의 P0/P1 기준을 따른다.
 
 - Safe PR은 실제 manifest patch 또는 rollback patch를 포함해야 한다.
 - AI fallback은 실제 tool pipeline에 연결하거나 demo claim에서 제거한다.

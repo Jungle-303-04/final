@@ -5,14 +5,13 @@
 # transactional outbox + ledger dedup 기준, crash 중에도 각 webhook
 # (correlation_id)마다 pull request 정확히 1개
 #
-# 필요: make up 실행 상태(cluster + gateway on 18080)
+# 필요: AWS management cluster 접근 권한과 Gateway BASE_URL
 # 사용: bash scripts/crash_test.sh   (N 기본값 6, env로 override)
 set -euo pipefail
 
-GATEWAY_PORT="${GATEWAY_PORT:-18080}"
-BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
+BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CTX="${MGMT_CONTEXT:-kind-management}"
+CTX="${MGMT_CONTEXT:-kubernetes-ops}"
 NS="${MGMT_NS:-management}"
 N="${N:-6}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-300}"

@@ -32,7 +32,7 @@ Kubernetes 클러스터의 이벤트, 로그, 메트릭을 수집해 장애 근�
 
 | 기준 | 확인 방법 |
 | --- | --- |
-| 전체 흐름 연결 | `make up && make smoke`로 webhook/evidence부터 dashboard까지 확인 |
+| 전체 흐름 연결 | `make aws-smoke`로 AWS EKS에서 webhook/evidence부터 dashboard까지 확인 |
 | 장애 격리 | worker pod 삭제 후 재기동, event retry 또는 DLQ 확인 |
 | 승인 경계 | command 실행 전 session/policy/sandbox guard 확인 |
 | 근거 보존 | evidence, RCA, PR, command result, audit log가 같은 correlation_id로 조회됨 |
