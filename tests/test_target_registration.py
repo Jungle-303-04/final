@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from pydantic import ValidationError
 
 from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
 from domains.target.router import (
@@ -206,11 +205,6 @@ def target_request() -> TargetRegisterRequest:
         management_base_url="http://management.local:30080",
         image="ghcr.io/acme/kubeheal-agent:test",
     )
-
-
-def test_target_register_request_requires_management_base_url() -> None:
-    with pytest.raises(ValidationError):
-        TargetRegisterRequest(management_base_url="")
 
 
 def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:

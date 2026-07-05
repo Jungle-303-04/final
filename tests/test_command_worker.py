@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 
+import pytest
+
 from domains.command.events import (
     CommandCompletedBody,
     CommandDispatchedBody,
@@ -302,90 +304,57 @@ def test_sweep_expired_commands_is_quiet_when_nothing_expired() -> None:
     assert asyncio.run(run()) == []
 
 
-def test_command_handler_rejects_unsupported_action_before_queue() -> None:
+@pytest.mark.parametrize(
+    ("request_body", "approval", "expected_reason"),
+    [
+        pytest.param(
+            command_request("delete"),
+            _DEFAULT_APPROVAL,
+            "unsupported command action",
+            id="unsupported-action",
+        ),
+        pytest.param(
+            command_request(approval_ref=None, policy_decision_ref="policy-decision-1"),
+            _DEFAULT_APPROVAL,
+            MISSING_APPROVAL_REF_REASON,
+            id="missing-approval-ref",
+        ),
+        pytest.param(
+            command_request(approval_ref="approval-1", policy_decision_ref=None),
+            _DEFAULT_APPROVAL,
+            MISSING_POLICY_DECISION_REF_REASON,
+            id="missing-policy-decision-ref",
+        ),
+        pytest.param(
+            command_request(),
+            None,
+            APPROVAL_RECORD_MISSING_REASON,
+            id="missing-recorded-approval",
+        ),
+        pytest.param(
+            command_request(),
+            approval_record(policy_decision_ref="policy-decision-other"),
+            APPROVAL_POLICY_DECISION_MISMATCH_REASON,
+            id="policy-decision-ref-mismatch",
+        ),
+    ],
+)
+def test_command_handler_rejects_invalid_command_before_queue(
+    request_body: CommandRequestedBody,
+    approval: JsonObject | None | object,
+    expected_reason: str,
+) -> None:
     async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
-        store = SpyAgentCommandStore()
+        store = SpyAgentCommandStore(approval=approval)
         ctx = SimpleNamespace(correlation_id="corr-1", db=store)
-        events = await collect_events(handle_command_requested(command_request("delete"), ctx))
+        events = await collect_events(handle_command_requested(request_body, ctx))
         return events, store
 
     events, store = asyncio.run(run())
 
     assert len(events) == 1
     assert isinstance(events[0], CommandRejectedBody)
-    assert events[0].reason == "unsupported command action"
-    assert store.calls == []
-
-
-def test_command_handler_rejects_write_command_without_approval_ref() -> None:
-    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
-        store = SpyAgentCommandStore()
-        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
-        events = await collect_events(
-            handle_command_requested(
-                command_request(approval_ref=None, policy_decision_ref="policy-decision-1"),
-                ctx,
-            )
-        )
-        return events, store
-
-    events, store = asyncio.run(run())
-
-    assert len(events) == 1
-    assert isinstance(events[0], CommandRejectedBody)
-    assert events[0].reason == MISSING_APPROVAL_REF_REASON
-    assert store.calls == []
-
-
-def test_command_handler_rejects_write_command_without_policy_decision_ref() -> None:
-    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
-        store = SpyAgentCommandStore()
-        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
-        events = await collect_events(
-            handle_command_requested(
-                command_request(approval_ref="approval-1", policy_decision_ref=None),
-                ctx,
-            )
-        )
-        return events, store
-
-    events, store = asyncio.run(run())
-
-    assert len(events) == 1
-    assert isinstance(events[0], CommandRejectedBody)
-    assert events[0].reason == MISSING_POLICY_DECISION_REF_REASON
-    assert store.calls == []
-
-
-def test_command_handler_rejects_write_command_without_recorded_approval() -> None:
-    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
-        store = SpyAgentCommandStore(approval=None)
-        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
-        events = await collect_events(handle_command_requested(command_request(), ctx))
-        return events, store
-
-    events, store = asyncio.run(run())
-
-    assert len(events) == 1
-    assert isinstance(events[0], CommandRejectedBody)
-    assert events[0].reason == APPROVAL_RECORD_MISSING_REASON
-    assert store.calls == []
-
-
-def test_command_handler_rejects_policy_decision_ref_mismatch() -> None:
-    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
-        store = SpyAgentCommandStore(
-            approval=approval_record(policy_decision_ref="policy-decision-other")
-        )
-        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
-        events = await collect_events(handle_command_requested(command_request(), ctx))
-        return events, store
-
-    events, store = asyncio.run(run())
-
-    assert len(events) == 1
-    assert isinstance(events[0], CommandRejectedBody)
-    assert events[0].reason == APPROVAL_POLICY_DECISION_MISMATCH_REASON
+    assert events[0].reason == expected_reason
     assert store.calls == []
 
 
