@@ -10,7 +10,7 @@ meta {
 }
 
 post {
-  url: {{base_url}}/github/webhook
+  url: {{base_url}}github/webhook
 }
 
 headers {
@@ -32,7 +32,7 @@ body:json {
     "application_id": "app-bruno",
     "workflow_run_id": "wf-bruno",
     "environment": "sandbox",
-    "cluster_id": "target-cluster-01",
+    "cluster_id": "{{cluster_id}}",
     "manifest_path": "src/samples/smoke/deploy.yaml"
   }
 }

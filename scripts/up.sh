@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/lib/env.sh"
 
 default_github_repo() {
   local url
@@ -48,7 +49,7 @@ SCM_REPO="${SCM_REPO:-${GITHUB_REPO}}"
 SCM_BASE_BRANCH="${SCM_BASE_BRANCH:-${GITHUB_BRANCH}}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
-TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-target-cluster-01}"
+TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-${TARGET_CLUSTER}}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-30}"
 UP_WORKER_SET="${UP_WORKER_SET:-smoke}"
 ENABLE_GITHUB_POLL_CRON="${ENABLE_GITHUB_POLL_CRON:-0}"
@@ -74,8 +75,9 @@ GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
 GEMINI_BASE_URL="${GEMINI_BASE_URL:-}"
 GEMINI_MODEL="${GEMINI_MODEL:-}"
-AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
-AUTH_PASSWORD="${AUTH_PASSWORD:-local-admin-password}"
+AUTH_EMAIL="${AUTH_EMAIL:-}"
+AUTH_PASSWORD="${AUTH_PASSWORD:-}"
+PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
 
 APP_WORKER_DEPLOYMENTS=(
   ai-chat-worker
@@ -176,6 +178,13 @@ need kubectl
 need curl
 need openssl
 need python3
+require_env AUTH_EMAIL
+if [[ -z "${AUTH_PASSWORD}" ]]; then
+  AUTH_PASSWORD="$(generate_password)"
+  GENERATED_AUTH_PASSWORD="1"
+else
+  GENERATED_AUTH_PASSWORD="0"
+fi
 
 kubectl_retry() {
   local attempt
@@ -655,8 +664,12 @@ echo "service is ready."
 echo "Gateway:      ${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
 echo "Health:       ${BASE_URL:-http://localhost:${GATEWAY_PORT}}/healthz"
 echo "Admin email:  ${AUTH_EMAIL}"
-if [ "${AUTH_PASSWORD}" = "local-admin-password" ]; then
-  echo "Admin pass:   ${AUTH_PASSWORD}"
+if [ "${GENERATED_AUTH_PASSWORD}" = "1" ]; then
+  if [ "${PRINT_GENERATED_ADMIN_PASSWORD}" = "1" ]; then
+    echo "Generated admin pass: ${AUTH_PASSWORD}"
+  else
+    echo "Admin pass:   generated; set PRINT_GENERATED_ADMIN_PASSWORD=1 to print it"
+  fi
 else
   echo "Admin pass:   provided through AUTH_PASSWORD"
 fi

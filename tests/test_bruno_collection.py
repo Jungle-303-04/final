@@ -31,6 +31,9 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     local = (API_DIR / "environments" / "local.bru").read_text(encoding="utf-8")
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
+    assert "base_url: http://localhost:18080/" in local
+    assert "base_url: https://k8s.woonyong.org/" in aws
+
     for env_text in (local, aws):
         assert "base_url:" in env_text
         assert "auth_email:" in env_text
@@ -40,7 +43,7 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
 
 
 def test_every_gateway_route_has_a_bruno_request() -> None:
-    collection = bruno_text()
+    collection = bruno_text().replace("{{base_url}}", "{{base_url}}/")
     expected_paths = [
         routes.HEALTHZ_PATH,
         routes.READYZ_PATH,
@@ -110,6 +113,8 @@ def test_bruno_files_use_importable_v3_syntax() -> None:
             offenders.append(f"{rel}: use typed body block")
         if "bru.setEnvVar(" in text:
             offenders.append(f"{rel}: use runtime variable setter")
+        if "{{base_url}}/" in text:
+            offenders.append(f"{rel}: base_url already includes trailing slash")
 
     assert offenders == []
 
@@ -117,6 +122,7 @@ def test_bruno_files_use_importable_v3_syntax() -> None:
 def test_bruno_readme_explains_each_work_type() -> None:
     readme = (API_DIR / "README.md").read_text(encoding="utf-8")
     expected_sections = [
+        "API 의미 사전",
         "00-health-auth",
         "01-providers",
         "02-target-admin",
@@ -128,6 +134,8 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "08-ops-dlq",
         "정상 출력",
         "GitHub webhook signature",
+        "https://k8s.woonyong.org/",
+        "BRUNO_CLUSTER_ID",
     ]
 
     missing = [section for section in expected_sections if section not in readme]
@@ -143,5 +151,5 @@ def test_github_webhook_signature_fixture_matches_bruno_body() -> None:
 
     assert '"workspace_id": "default"' in body_fixture
     assert '"workspace_id": "default"' in request
-    assert '"cluster_id": "target-cluster-01"' in body_fixture
-    assert '"cluster_id": "target-cluster-01"' in request
+    assert '"cluster_id": "{{cluster_id}}"' in body_fixture
+    assert '"cluster_id": "{{cluster_id}}"' in request

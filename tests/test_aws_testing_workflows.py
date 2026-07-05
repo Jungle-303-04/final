@@ -47,13 +47,13 @@ def test_make_check_and_docs_point_to_aws_smoke() -> None:
 
     assert "check: test manifest-check" in makefile
     assert "aws-smoke:" in makefile
-    assert "MGMT_CLUSTER ?= kubernetes-ops" in makefile
-    assert "TARGET_CLUSTER ?= cluster-1" in makefile
+    assert "MGMT_CLUSTER ?=" in makefile
+    assert "TARGET_CLUSTER ?=" in makefile
     assert "AWS CD" in docs
     assert "run_smoke=true" in docs
 
 
-def test_operator_scripts_default_to_aws_contexts() -> None:
+def test_operator_scripts_require_explicit_runtime_context() -> None:
     scripts = "\n".join(
         [
             read("scripts/status.sh"),
@@ -66,8 +66,9 @@ def test_operator_scripts_default_to_aws_contexts() -> None:
         ]
     )
 
-    assert "kubernetes-ops" in scripts
-    assert "cluster-1" in scripts
-    assert "https://k8s.woonyong.org" in scripts
+    assert "require_env" in scripts
+    assert "kubernetes-ops" not in scripts
+    assert "cluster-1" not in scripts
+    assert "https://k8s.woonyong.org" not in scripts
     assert "kind-management" not in scripts
     assert "kind-target" not in scripts

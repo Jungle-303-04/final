@@ -11,6 +11,7 @@ import json
 
 from packages.config.settings import env
 from packages.contracts.gateway.requests import TargetRegisterRequest
+from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
 TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
 TARGET_INSTALL_RENDERER_NATIVE = "native"
@@ -41,8 +42,8 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
     return "\n---\n".join(
         block.strip()
         for block in [
-            namespace_manifest("target"),
-            namespace_manifest("sandbox"),
+            namespace_manifest(TARGET_NAMESPACE),
+            namespace_manifest(SANDBOX_NAMESPACE),
             service_account_manifest(),
             target_rbac_manifest(),
             sandbox_rbac_manifest(),
@@ -65,17 +66,17 @@ metadata:
 
 
 def service_account_manifest() -> str:
-    return """
+    return f"""
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: cluster-agent
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 """
 
 
 def target_rbac_manifest() -> str:
-    return """
+    return f"""
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -92,7 +93,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cluster-agent-self-manage
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -107,7 +108,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: cluster-agent-self-manage
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -115,7 +116,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: target
+    namespace: {TARGET_NAMESPACE}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -128,13 +129,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: target
+    namespace: {TARGET_NAMESPACE}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cluster-agent-target-manage
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 rules:
   - apiGroups: ["apps"]
     resources: ["daemonsets"]
@@ -144,7 +145,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: cluster-agent-target-manage
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -152,17 +153,17 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: target
+    namespace: {TARGET_NAMESPACE}
 """
 
 
 def sandbox_rbac_manifest() -> str:
-    return """
+    return f"""
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cluster-agent-sandbox-write
-  namespace: sandbox
+  namespace: {SANDBOX_NAMESPACE}
 rules:
   - apiGroups: [""]
     resources: ["services", "configmaps"]
@@ -175,7 +176,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: cluster-agent-sandbox-write
-  namespace: sandbox
+  namespace: {SANDBOX_NAMESPACE}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -183,7 +184,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: target
+    namespace: {TARGET_NAMESPACE}
 """
 
 
@@ -193,7 +194,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: target-runtime-config
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 data:
   TARGET_CLUSTER_ID: {yaml_string(payload.cluster_id)}
   WORKSPACE_ID: {yaml_string(payload.workspace_id)}
@@ -202,7 +203,7 @@ data:
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
-  NODE_COLLECTOR_NAMESPACE: "target"
+  NODE_COLLECTOR_NAMESPACE: {yaml_string(TARGET_NAMESPACE)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
   COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"
   OTEL_SERVICE_NAME: "target-cluster-agent"
@@ -216,7 +217,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: target-runtime-secret
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 type: Opaque
 stringData:
   AGENT_TOKEN: {yaml_string(agent_token)}
@@ -237,7 +238,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {yaml_string(name)}
-  namespace: sandbox
+  namespace: {SANDBOX_NAMESPACE}
 spec:
   replicas: 1
   selector:
@@ -264,7 +265,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cluster-agent
-  namespace: target
+  namespace: {TARGET_NAMESPACE}
 spec:
   replicas: 1
   selector:
