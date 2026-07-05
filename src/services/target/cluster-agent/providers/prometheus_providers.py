@@ -125,7 +125,6 @@ class PrometheusMetricsProvider:
             return {
                 "result_type": result_type,
                 "samples": samples,
-                "raw": payload,
             }
 
         if result_type == "matrix":  # range query time series values
@@ -150,13 +149,11 @@ class PrometheusMetricsProvider:
                 "result_type": result_type,
                 "series": series,
                 "point_count": sum(len(item["values"]) for item in series),
-                "raw": payload,
             }
 
         return {  # other result type(not vector)
             "result_type": result_type,
             "result": result,
-            "raw": payload,
         }
 
     def query_metadata(
