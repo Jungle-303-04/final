@@ -7,6 +7,8 @@ from sqlalchemy.dialects import postgresql
 
 from domains.identity.repository import WorkspaceAccessRepository
 from packages.contracts.identity import (
+    DEFAULT_ROLE_PERMISSION_ROWS,
+    PLATFORM_RESOURCE_TYPES,
     AccessResourceType,
     AccessStatus,
     OrganizationRole,
@@ -63,6 +65,41 @@ def test_role_permission_upsert_is_organization_scoped() -> None:
     assert "permission" in sql
     assert "ON CONFLICT" in sql
     assert "org-a" in compiled.params.values()
+
+
+def test_default_role_permissions_cover_platform_resource_types() -> None:
+    resource_types = {row[1] for row in DEFAULT_ROLE_PERMISSION_ROWS}
+
+    assert resource_types == set(PLATFORM_RESOURCE_TYPES)
+    assert AccessResourceType.CLUSTER.value in resource_types
+    assert AccessResourceType.WORKLOAD.value in resource_types
+    assert AccessResourceType.APPLICATION.value in resource_types
+    assert AccessResourceType.CATALOG_ITEM.value in resource_types
+    assert AccessResourceType.STACK.value in resource_types
+
+
+def test_release_operator_policy_supports_application_and_catalog_actions() -> None:
+    rows = {
+        (resource_type, role, permission)
+        for _organization_id, resource_type, role, permission, status in DEFAULT_ROLE_PERMISSION_ROWS
+        if status == AccessStatus.ACTIVE.value
+    }
+
+    assert (
+        AccessResourceType.APPLICATION.value,
+        ResourceRole.RELEASE_OPERATOR.value,
+        Permission.APPLICATION_MANAGE.value,
+    ) in rows
+    assert (
+        AccessResourceType.CATALOG_ITEM.value,
+        ResourceRole.RELEASE_OPERATOR.value,
+        Permission.CATALOG_INSTALL.value,
+    ) in rows
+    assert (
+        AccessResourceType.STACK.value,
+        ResourceRole.RELEASE_OPERATOR.value,
+        Permission.STACK_PLAN.value,
+    ) in rows
 
 
 def repository_for_can_access(*, service_admin: bool = False, member_role: str | None = None):

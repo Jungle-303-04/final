@@ -42,10 +42,14 @@ class Permission(StrEnum):
     RESOURCE_ROLE_GRANT = "resource.role.grant"
     PROFILE_READ = "profile.read"
     CLUSTER_READ = "cluster.read"
+    INVENTORY_READ = "inventory.read"
     DASHBOARD_READ = "dashboard.read"
     EVIDENCE_READ = "evidence.read"
     RCA_READ = "rca.read"
     MANIFEST_READ = "manifest.read"
+    APPLICATION_READ = "application.read"
+    APPLICATION_MANAGE = "application.manage"
+    DEPLOYMENT_READ = "deployment.read"
     DEPLOY_RUN = "deploy.run"
     WORKLOAD_SCALE = "workload.scale"
     IMAGE_UPDATE = "image.update"
@@ -53,6 +57,13 @@ class Permission(StrEnum):
     RESTART_RUN = "restart.run"
     ROLLBACK_RUN = "rollback.run"
     INCIDENT_RESPOND = "incident.respond"
+    CATALOG_READ = "catalog.read"
+    CATALOG_INSTALL = "catalog.install"
+    STACK_READ = "stack.read"
+    STACK_PLAN = "stack.plan"
+    STACK_APPLY = "stack.apply"
+    RUNNER_JOB_READ = "runner_job.read"
+    RUNNER_JOB_CANCEL = "runner_job.cancel"
     CLUSTER_POLICY_MANAGE = "cluster.policy.manage"
     CLUSTER_ROLE_MANAGE = "cluster.role.manage"
     DANGEROUS_ACTION_APPROVE = "dangerous_action.approve"
@@ -71,8 +82,17 @@ class WorkspaceStatus(StrEnum):
 class AccessResourceType(StrEnum):
     REPOSITORY = "repository"
     CLUSTER = "cluster"
+    NAMESPACE = "namespace"
+    WORKLOAD = "workload"
+    APPLICATION = "application"
+    ENVIRONMENT = "environment"
+    DEPLOYMENT = "deployment"
     DEPLOYMENT_BINDING = "deployment_binding"
     MANIFEST_PATH = "manifest_path"
+    CATALOG_ITEM = "catalog_item"
+    STACK = "stack"
+    RUNNER_JOB = "runner_job"
+    INCIDENT = "incident"
     SYSTEM_RESOURCE = "system_resource"
 
 
@@ -115,18 +135,27 @@ GLOBAL_ROLE_POLICY_ORGANIZATION_ID = "__global__"
 OBSERVABILITY_PERMISSIONS: frozenset[str] = frozenset(
     {
         Permission.CLUSTER_READ.value,
+        Permission.INVENTORY_READ.value,
         Permission.DASHBOARD_READ.value,
         Permission.EVIDENCE_READ.value,
         Permission.RCA_READ.value,
         Permission.MANIFEST_READ.value,
+        Permission.APPLICATION_READ.value,
+        Permission.DEPLOYMENT_READ.value,
+        Permission.CATALOG_READ.value,
+        Permission.STACK_READ.value,
+        Permission.RUNNER_JOB_READ.value,
     }
 )
 RELEASE_PERMISSIONS: frozenset[str] = OBSERVABILITY_PERMISSIONS | frozenset(
     {
+        Permission.APPLICATION_MANAGE.value,
         Permission.DEPLOY_RUN.value,
         Permission.WORKLOAD_SCALE.value,
         Permission.IMAGE_UPDATE.value,
         Permission.CONFIG_UPDATE.value,
+        Permission.CATALOG_INSTALL.value,
+        Permission.STACK_PLAN.value,
     }
 )
 INCIDENT_PERMISSIONS: frozenset[str] = RELEASE_PERMISSIONS | frozenset(
@@ -134,10 +163,12 @@ INCIDENT_PERMISSIONS: frozenset[str] = RELEASE_PERMISSIONS | frozenset(
         Permission.RESTART_RUN.value,
         Permission.ROLLBACK_RUN.value,
         Permission.INCIDENT_RESPOND.value,
+        Permission.RUNNER_JOB_CANCEL.value,
     }
 )
 CLUSTER_STEWARD_PERMISSIONS: frozenset[str] = INCIDENT_PERMISSIONS | frozenset(
     {
+        Permission.STACK_APPLY.value,
         Permission.CLUSTER_POLICY_MANAGE.value,
         Permission.CLUSTER_ROLE_MANAGE.value,
         Permission.DANGEROUS_ACTION_APPROVE.value,
@@ -184,6 +215,21 @@ SERVICE_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     ServiceRole.SERVICE_ADMIN.value: frozenset(permission.value for permission in Permission),
     ServiceRole.USER.value: frozenset({Permission.PROFILE_READ.value}),
 }
+
+PLATFORM_RESOURCE_TYPES: tuple[str, ...] = (
+    AccessResourceType.CLUSTER.value,
+    AccessResourceType.NAMESPACE.value,
+    AccessResourceType.WORKLOAD.value,
+    AccessResourceType.APPLICATION.value,
+    AccessResourceType.ENVIRONMENT.value,
+    AccessResourceType.DEPLOYMENT.value,
+    AccessResourceType.DEPLOYMENT_BINDING.value,
+    AccessResourceType.MANIFEST_PATH.value,
+    AccessResourceType.CATALOG_ITEM.value,
+    AccessResourceType.STACK.value,
+    AccessResourceType.RUNNER_JOB.value,
+    AccessResourceType.INCIDENT.value,
+)
 
 ROLE_PROFILES: tuple[PermissionProfile, ...] = (
     PermissionProfile(
@@ -268,10 +314,7 @@ DEFAULT_ROLE_PERMISSION_ROWS: tuple[tuple[str, str, str, str, str], ...] = tuple
         permission,
         AccessStatus.ACTIVE.value,
     )
-    for resource_type in (
-        AccessResourceType.CLUSTER.value,
-        AccessResourceType.MANIFEST_PATH.value,
-    )
+    for resource_type in PLATFORM_RESOURCE_TYPES
     for role, permissions in RESOURCE_ROLE_PERMISSIONS.items()
     for permission in sorted(permissions)
 )
