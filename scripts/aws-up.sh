@@ -683,14 +683,33 @@ cloudflare_api_token_value() {
 from __future__ import annotations
 
 import os
+import re
 
 value = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip().strip("\"'")
 lower = value.lower()
-if lower.startswith("authorization:"):
-    value = value.split(":", 1)[1].strip().strip("\"'")
-    lower = value.lower()
-if lower.startswith("bearer "):
-    value = value[7:].strip().strip("\"'")
+assignment = re.search(
+    r"(?:^|\s)(?:export\s+)?cloudflare_api_token\s*=\s*(.+)$",
+    value,
+    flags=re.IGNORECASE | re.DOTALL,
+)
+if assignment:
+    value = assignment.group(1).strip().strip("\"'")
+
+authorization = re.search(
+    r"authorization\s*:\s*(.+)$",
+    value,
+    flags=re.IGNORECASE | re.DOTALL,
+)
+if authorization:
+    value = authorization.group(1).strip().strip("\"'")
+
+bearer = re.search(r"bearer\s+([^\s\"']+)", value, flags=re.IGNORECASE)
+if bearer:
+    value = bearer.group(1)
+elif value.lower().startswith("bearer"):
+    value = value[6:].strip().strip("\"'")
+
+value = "".join(ch for ch in value.strip().strip("\"'") if not ch.isspace())
 print(value, end="")
 PY
 }
@@ -752,6 +771,10 @@ configure_cloudflare_record() {
 
   if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
     log "Cloudflare API token is not set; skipping ${CUSTOM_DOMAIN}"
+    return 0
+  fi
+  if [[ -z "$(cloudflare_api_token_value)" ]]; then
+    echo "Cloudflare API token is blank after normalization; skipping ${CUSTOM_DOMAIN}" >&2
     return 0
   fi
 
