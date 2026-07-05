@@ -7,6 +7,13 @@ from typing import Any, Protocol, TypedDict, cast
 JsonObject = dict[str, Any]
 
 
+# envelope 현재 스키마 버전. 호환 규칙:
+# - 필드 추가는 기본값과 함께만 허용(구버전 소비자는 모르는 필드를 무시).
+# - 필드 제거/의미 변경은 금지 — 필요하면 새 subject 로 분리하고 버전을 올린다.
+# - 버전 없는(구버전) 메시지는 1 로 간주한다.
+ENVELOPE_SCHEMA_VERSION = 1
+
+
 class Event(TypedDict):
     event_id: str
     subject: str
@@ -15,6 +22,7 @@ class Event(TypedDict):
     causation_id: str | None
     created_at: str
     payload: JsonObject
+    schema_version: int
 
 
 @dataclass(frozen=True)
@@ -28,6 +36,7 @@ class EventEnvelope:
     causation_id: str | None  # 나를 유발한 직전 이벤트 ID(없으면 흐름 시작점)
     created_at: str  # 생성 시각(ISO 문자열)
     payload: JsonObject  # 본문 데이터(dict)
+    schema_version: int = ENVELOPE_SCHEMA_VERSION  # 봉투 스키마 버전(구버전 메시지=1)
 
     # 필드 이름 단일 출처 = 이 dataclass. 직렬화도 여기서 파생.
     @classmethod

@@ -24,6 +24,7 @@ class EventModel(Base):
     correlation_id: Mapped[str] = text_column()
     causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload: Mapped[dict[str, Any]] = jsonb_column()
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     created_at: Mapped[Any] = created_at_column()
 
 
@@ -71,6 +72,7 @@ class OutboxModel(Base):
     causation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     occurred_at: Mapped[str] = text_column()
     payload: Mapped[dict[str, Any]] = jsonb_column()
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     lease_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     leased_until: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     sent_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
