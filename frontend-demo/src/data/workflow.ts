@@ -398,7 +398,7 @@ export function createEvidenceNode(id: string, offset: number): WorkflowNode {
   return {
     id,
     type: 'workflow',
-    position: { x: 860 + offset * 54, y: 665 + offset * 58 },
+    position: { x: 850 + offset * 64, y: 820 + offset * 62 },
     data: {
       accent,
       title: '동적 증거 노드',

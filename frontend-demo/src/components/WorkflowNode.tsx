@@ -1,5 +1,6 @@
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react';
-import { Check, ChevronRight, Loader2, Pause, Square, Trash2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Check, ChevronDown, ChevronRight, Loader2, Pause, Square, Trash2 } from 'lucide-react';
 import type { PointerEvent } from 'react';
 import { statusLabels, uiText } from '../data/labels';
 import type { NodeBlock, NodeField, SignalEdge, WorkflowNode as WorkflowNodeType } from '../types';
@@ -156,6 +157,7 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
   const inputs = data.ports?.filter((port) => port.direction === 'input') ?? [];
   const outputs = data.ports?.filter((port) => port.direction === 'output') ?? [];
   const metric = metricValue(data);
+  const expanded = !data.collapsed;
 
   const updateField = (fieldId: string, value: string) => {
     setNodes((current) =>
@@ -196,8 +198,29 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
     );
   };
 
+  const toggleNodeCollapsed = (event: PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setNodes((current) =>
+      current.map((node) =>
+        node.id === id
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                collapsed: !node.data.collapsed,
+              },
+            }
+          : node,
+      ),
+    );
+  };
+
   return (
-    <article className={`workflow-node node-${data.accent} status-${data.status} ${selected ? 'is-selected' : ''}`}>
+    <motion.article
+      className={`workflow-node node-${data.accent} status-${data.status} ${selected ? 'is-selected' : ''} ${expanded ? '' : 'is-collapsed'}`}
+      layout
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+    >
       {inputs.length ? (
         inputs.map((port, index) => (
           <Handle
@@ -251,41 +274,56 @@ export function WorkflowNode({ id, data, selected }: NodeProps<WorkflowNodeType>
         ) : null}
       </div>
 
-      {data.ports?.length ? (
-        <div className="node-port-list">
-          {data.ports.map((port) => (
-            <div className={`node-port-row port-${port.direction}`} key={port.id}>
-              <span>
-                <i className={`row-port tone-${port.tone ?? data.accent}`} />
-                {port.label}
-              </span>
-              <strong>
-                {port.event}
-                {typeof port.count === 'number' ? <em>{port.count}</em> : null}
-              </strong>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <NodeRows rows={data.rows} accent={data.accent} limit={expanded ? 3 : 2} />
 
-      <NodeRows rows={data.rows} accent={data.accent} limit={3} />
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            className="node-expandable"
+            key="expanded"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {data.ports?.length ? (
+              <div className="node-port-list">
+                {data.ports.map((port) => (
+                  <div className={`node-port-row port-${port.direction}`} key={port.id}>
+                    <span>
+                      <i className={`row-port tone-${port.tone ?? data.accent}`} />
+                      {port.label}
+                    </span>
+                    <strong>
+                      {port.event}
+                      {typeof port.count === 'number' ? <em>{port.count}</em> : null}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
-      {data.fields?.length ? (
-        <NodeFields fields={data.fields} onFieldChange={updateField} />
-      ) : null}
+            {data.fields?.length ? (
+              <NodeFields fields={data.fields} onFieldChange={updateField} />
+            ) : null}
 
-      {data.blocks?.length ? (
-        <div className="node-blocks">
-          {data.blocks.map((block) => (
-            <NestedBlock block={block} key={block.id} onFieldChange={updateBlockField} />
-          ))}
-        </div>
-      ) : null}
+            {data.blocks?.length ? (
+              <div className="node-blocks">
+                {data.blocks.map((block) => (
+                  <NestedBlock block={block} key={block.id} onFieldChange={updateBlockField} />
+                ))}
+              </div>
+            ) : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <footer className="node-footer">
-        <span>{uiText.canvas.advanced}</span>
-        <ChevronRight size={14} />
+        <button type="button" className="node-collapse-button nodrag" onClick={toggleNodeCollapsed}>
+          <span>{expanded ? uiText.canvas.advanced : '설정 펼치기'}</span>
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
       </footer>
-    </article>
+    </motion.article>
   );
 }

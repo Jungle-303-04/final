@@ -6,7 +6,9 @@ import {
   Cpu,
   FileText,
   GitBranchPlus,
+  LayoutGrid,
   LineChart,
+  Minimize2,
   Play,
   Send,
   Settings2,
@@ -22,6 +24,8 @@ const actionIcons = {
   'run-rca': Play,
   'add-evidence': GitBranchPlus,
   'chart-node': LineChart,
+  'auto-layout': LayoutGrid,
+  'toggle-collapse': Minimize2,
 };
 
 function toolClass(tool: CopilotTool, enabled: boolean) {
@@ -37,6 +41,8 @@ export function CopilotPanel({
   onRunFlow,
   onAddEvidence,
   onToggleChartNode,
+  onAutoLayout,
+  onToggleCollapse,
 }: {
   selectedNode?: WorkflowNode;
   metrics: RuntimeMetrics;
@@ -46,6 +52,8 @@ export function CopilotPanel({
   onRunFlow: () => void;
   onAddEvidence: () => void;
   onToggleChartNode: () => void;
+  onAutoLayout: () => void;
+  onToggleCollapse: () => void;
 }) {
   const [enabledTools, setEnabledTools] = useState(() =>
     copilotTools.reduce<Record<string, boolean>>((map, tool) => ({ ...map, [tool.id]: tool.selected }), {}),
@@ -79,6 +87,8 @@ export function CopilotPanel({
     if (actionId === 'run-rca') onRunFlow();
     if (actionId === 'add-evidence') onAddEvidence();
     if (actionId === 'chart-node') onToggleChartNode();
+    if (actionId === 'auto-layout') onAutoLayout();
+    if (actionId === 'toggle-collapse') onToggleCollapse();
   };
 
   return (
