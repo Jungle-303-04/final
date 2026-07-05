@@ -150,6 +150,11 @@ AWS LoadBalancer hostname은 service에 붙은 직후 몇 분 동안 runner DNS�
 AWS CD workflow는 `GH_APP_TOKEN` secret이 있으면 그 값을 쓰고, 없으면 해당 workflow run 안에서만 유효한
 `github.token`을 read token으로 넘긴다. 실제 운영에서 Safe PR까지 이어가려면 `GH_APP_TOKEN`을 별도 secret으로 넣는다.
 
+AWS smoke webhook body에는 `force: true`를 넣는다.
+일반 webhook은 같은 watch target의 같은 commit이면 `git-pull-worker`가 중복으로 보고 조용히 skip한다.
+그런데 smoke는 이미 poller가 최신 commit을 처리한 직후에도 같은 흐름을 다시 검증해야 하므로,
+`force: true`일 때만 같은 commit이어도 `git.changed`를 다시 발행한다.
+
 ## AWS CD가 실제로 넘기는 값
 
 | 단계 | 넘기는 값 | 받는 곳 | 왜 필요한가 |

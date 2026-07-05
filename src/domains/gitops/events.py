@@ -126,6 +126,7 @@ class GitWebhookReceivedBody(EventBody):
     environment: str = DEFAULT_ENVIRONMENT
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    force: bool = False
 
 
 @event(EventSubject.GIT_CHANGED)

@@ -56,7 +56,7 @@ async def on_git_webhook(
     last_seen = await ctx.db.get_watch_last_seen_commit_sha(
         str(identity["watch_target_id"]), str(identity["workspace_id"])
     )
-    if last_seen == commit_sha:
+    if last_seen == commit_sha and not evt.force:
         return
     yield GitChangedBody(
         commit_sha=commit_sha,
