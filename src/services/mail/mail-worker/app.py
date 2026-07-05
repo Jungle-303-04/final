@@ -31,12 +31,13 @@ MAIL_DELIVERY_MODE_ENV = "MAIL_DELIVERY_MODE"
 SMTP_TIMEOUT_SECONDS_ENV = "SMTP_TIMEOUT_SECONDS"  # SMTP 연결/전송 타임아웃 초(기본 10)
 
 DEFAULT_SMTP_PORT = "587"
-DEFAULT_SMTP_FROM = "noreply@localhost"
 DEFAULT_SMTP_TIMEOUT_SECONDS = "10"
 SMTP_MODE = "smtp"
 LOG_MODE = "log"
 SMTP_CONFIG_MISSING_REASON = "SMTP_HOST is required when MAIL_DELIVERY_MODE=smtp"
 SMTP_CONFIG_MISSING_CODE = "smtp_config_missing"
+SMTP_FROM_MISSING_REASON = "SMTP_FROM is required when MAIL_DELIVERY_MODE=smtp"
+SMTP_FROM_MISSING_CODE = "smtp_from_missing"
 
 
 @dataclass(frozen=True)
@@ -47,9 +48,9 @@ class MailDeliveryResult:
     reason_code: str = ""
 
 
-def build_email_message(evt: EmailVerificationRequestedBody) -> EmailMessage:
+def build_email_message(evt: EmailVerificationRequestedBody, sender: str) -> EmailMessage:
     message = EmailMessage()
-    message["From"] = env(SMTP_FROM_ENV, DEFAULT_SMTP_FROM)
+    message["From"] = sender
     message["To"] = evt.email
     message["Subject"] = "Verify your email"
     message.set_content(
@@ -88,7 +89,20 @@ def send_email_verification(evt: EmailVerificationRequestedBody) -> MailDelivery
             reason_code=SMTP_CONFIG_MISSING_CODE,
         )
 
-    message = build_email_message(evt)
+    sender = env(SMTP_FROM_ENV, "").strip()
+    if not sender:
+        LOGGER.error(
+            "email verification smtp sender missing",
+            extra={"context": {"email": evt.email, "mode": SMTP_MODE}},
+        )
+        return MailDeliveryResult(
+            sent=False,
+            mode=SMTP_MODE,
+            reason=SMTP_FROM_MISSING_REASON,
+            reason_code=SMTP_FROM_MISSING_CODE,
+        )
+
+    message = build_email_message(evt, sender)
     port = int(env(SMTP_PORT_ENV, DEFAULT_SMTP_PORT))
     username = env(SMTP_USERNAME_ENV, "")
     password = env(SMTP_PASSWORD_ENV, "")
