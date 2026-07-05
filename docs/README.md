@@ -1,7 +1,7 @@
 # 프로젝트 문서 읽는 순서
 
 이 문서는 팀원이 문서를 너무 많이 열지 않도록 만든 source repo 문서 진입점이다.
-처음에는 [팀 온보딩 문서 지도](onboarding/README.md)를 먼저 열고, 아래 "필수 5개"만 이어서 본다.
+처음에는 [팀 온보딩 문서 지도](onboarding/README.md)를 먼저 열고, RCA/권한/대시보드 구현은 [RCA 프로덕션 온보딩 지도](rca-production-onboarding/README.md)를 이어서 본다.
 
 ## 필수 5개
 
@@ -9,10 +9,11 @@
 | --- | --- | --- |
 | 1 | [README](../README.md) | 실행 방법과 서비스 목록 |
 | 2 | [팀 온보딩 문서 지도](onboarding/README.md) | 민정/가인/찬빈 역할별 시작점 |
-| 3 | [아키텍처](architecture.md) | 전체 구조와 서비스 경계 |
-| 4 | [이벤트 흐름](events.md) | event subject와 end-to-end flow |
-| 5 | [팀 컨벤션](team/conventions.md) | 브랜치, PR, 리뷰, 테스트 규칙 |
-| 6 | [파일 소유권](team/file-ownership-convention.md) | 내가 관리할 파일과 조율할 파일 |
+| 3 | [RCA 프로덕션 온보딩 지도](rca-production-onboarding/README.md) | 실제 코드 기준 RCA/권한/대시보드 구현 순서 |
+| 4 | [아키텍처](architecture.md) | 전체 구조와 서비스 경계 |
+| 5 | [이벤트 흐름](events.md) | event subject와 end-to-end flow |
+| 6 | [팀 컨벤션](team/conventions.md) | 브랜치, PR, 리뷰, 테스트 규칙 |
+| 7 | [파일 소유권](team/file-ownership-convention.md) | 내가 관리할 파일과 조율할 파일 |
 
 ## 팀원별로 추가로 볼 문서
 
@@ -27,9 +28,11 @@
 작업을 바로 시작할 때는 큰 역할 문서보다 아래 선형 작업 페이지를 우선 본다.
 
 - 공통: [팀 온보딩 문서 지도](onboarding/README.md)
+- 공통: [RCA 프로덕션 온보딩 지도](rca-production-onboarding/README.md)
 - 민정: [Command / Target / Evidence 온보딩](onboarding/minjeong-command-target-evidence.md)
 - 가인: [Evidence / RCA 온보딩](onboarding/gain-evidence-rca.md)
 - 찬빈: [Frontend 온보딩](onboarding/chanbin-frontend.md)
+- 찬빈: [권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - 공통: [역할별 실습 가이드](team/role-practice-guide.md)
 - `ummfieg`: [RCA / Safe PR 선형 작업 가이드](team/member-guides/rca-safe-pr-tasks/README.md)
 - `minmings111`: [Target / Telemetry 선형 작업 가이드](team/member-guides/target-telemetry-tasks/README.md)
@@ -46,7 +49,7 @@ force push하지 않는다.
 | 종류 | 문서 |
 | --- | --- |
 | 실행/운영 | [operations-deployment](operations-deployment.md), [production-readiness](production-readiness.md), [hardening-roadmap](hardening-roadmap.md), [secrets](secrets.md) |
-| 설계 참고 | [service-split-plan](service-split-plan.md), [domain-architecture-plan](domain-architecture-plan.md), [outbox-design](outbox-design.md), [GitOps Fleet Control Plane 전환안](gitops-fleet-control-plane.md), [Plural Console 기술 챌린지](team/plural-console-technical-challenge.md) |
+| 설계 참고 | [RCA 프로덕션 온보딩 지도](rca-production-onboarding/README.md), [service-split-plan](service-split-plan.md), [domain-architecture-plan](domain-architecture-plan.md), [outbox-design](outbox-design.md), [GitOps Fleet Control Plane 전환안](gitops-fleet-control-plane.md), [Plural Console 기술 챌린지](team/plural-console-technical-challenge.md) |
 | 팀 운영 | [팀 온보딩 문서 지도](onboarding/README.md), [역할별 실습 가이드](team/role-practice-guide.md), [work-allocation](team/work-allocation.md), [implementation-todo](team/implementation-todo.md), [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md), [contract-vs-demo-boundary](team/contract-vs-demo-boundary.md), [codex-automation](team/codex-automation.md) |
 | Target 상세 | [Target Agent Command / Evidence 구현 가이드](team/member-guides/target-agent-command-evidence-flow.md), `docs/team/member-guides/target-telemetry-*.md` |
 

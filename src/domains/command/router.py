@@ -24,7 +24,9 @@ from domains.command.policy import (
 )
 from domains.gitops.events import Diff
 from domains.identity.dependencies import (
+    RESOURCE_ACCESS_DENIED_MESSAGE,
     ClusterAgentIdentity,
+    require_cluster_access,
     require_cluster_agent,
     require_session,
 )
@@ -52,7 +54,6 @@ from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     DEPLOY_ACCESS,
     READ_ACCESS,
-    AccessResourceType,
 )
 from packages.runtime.dependencies import get_db, get_events
 
@@ -66,8 +67,7 @@ POLL_SLEEP_SECONDS = int(env(POLL_SLEEP_SECONDS_ENV, "1"))
 LEASE_SECONDS = DEFAULT_COMMAND_LEASE_SECONDS
 NOT_FOUND_CODE = 404
 NOT_FOUND_MESSAGE = "command not found"
-ACCESS_DENIED_CODE = 403
-RESOURCE_ACCESS_DENIED = "resource access denied"
+RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
@@ -85,25 +85,25 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
 def require_cluster_deploy_access(
     db: Any, current: Any, workspace_id: str, cluster_id: str
 ) -> None:
-    if not db.user_has_resource_access(
-        current.user_id,
+    require_cluster_access(
+        db,
+        current,
         workspace_id,
-        AccessResourceType.CLUSTER.value,
         cluster_id,
         DEPLOY_ACCESS,
-    ):
-        raise HTTPException(status_code=ACCESS_DENIED_CODE, detail=RESOURCE_ACCESS_DENIED)
+        detail=RESOURCE_ACCESS_DENIED,
+    )
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
-    if not db.user_has_resource_access(
-        current.user_id,
+    require_cluster_access(
+        db,
+        current,
         workspace_id,
-        AccessResourceType.CLUSTER.value,
         cluster_id,
         READ_ACCESS,
-    ):
-        raise HTTPException(status_code=ACCESS_DENIED_CODE, detail=RESOURCE_ACCESS_DENIED)
+        detail=RESOURCE_ACCESS_DENIED,
+    )
 
 
 def debug_query_plan(

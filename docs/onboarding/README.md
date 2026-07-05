@@ -14,6 +14,8 @@
 
 공통으로 헷갈리면 [역할별 실습 가이드](../team/role-practice-guide.md)를 먼저 본다.
 
+RCA/권한/대시보드 구현을 실제 코드 기준으로 더 자세히 따라가려면 [RCA 프로덕션 온보딩 지도](../rca-production-onboarding/README.md)를 본다.
+
 ## 현재 구현 기준
 
 지금 source repo 기준으로 실제 구현되어 있는 target/evidence 핵심은 아래다.
@@ -39,6 +41,8 @@
 - [Target Agent Command / Evidence 구현 가이드](../team/member-guides/target-agent-command-evidence-flow.md)
 - [Target / Telemetry 데이터 흐름](../team/member-guides/target-telemetry-data-flows.md)
 - [RCA / Safe PR 멤버 가이드](../team/member-guides/rca-safe-pr.md)
+- [RCA 프로덕션 온보딩 지도](../rca-production-onboarding/README.md)
+- [찬빈 권한 시스템과 대시보드 적용](../rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [팀 간 구현 연결과 테스트 가이드](../team/cross-role-implementation-test-guide.md)
 - [아키텍처](../architecture.md)
 - [서비스 분리 계획](../service-split-plan.md)
