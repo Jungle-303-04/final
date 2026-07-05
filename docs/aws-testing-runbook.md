@@ -26,6 +26,9 @@
 | `MGMT_CLUSTER` | repository variable, workflow 기본 `kubeheal-mgmt` | management EKS cluster context/name |
 | `TARGET_CLUSTER_1` | repository variable, workflow 기본 `kubeheal-target-a` | 첫 번째 target EKS cluster |
 | `TARGET_CLUSTER_2` | repository variable, workflow 기본 `kubeheal-target-b` | 두 번째 target EKS cluster |
+| `TARGET_CLUSTER_ID_1` | repository variable, 기본 `TARGET_CLUSTER_1` | target 등록과 smoke에서 쓰는 첫 번째 cluster id |
+| `TARGET_CLUSTER_ID_2` | repository variable, 기본 `TARGET_CLUSTER_2` | target 등록에서 쓰는 두 번째 cluster id |
+| `SMOKE_CLUSTER_ID` | repository variable, 기본 `TARGET_CLUSTER_ID_1` | smoke가 GitHub webhook/command body에 넣는 cluster id |
 | `MGMT_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Management` | dashboard/API 표시 이름 |
 | `TARGET_1_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target A` | target 1 표시 이름 |
 | `TARGET_2_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target B` | target 2 표시 이름 |
@@ -44,6 +47,59 @@
 | `AWS_ROLE_ARN` | GitHub environment secret `aws-test` | GitHub OIDC가 assume할 AWS role |
 | `AUTH_EMAIL` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 계정 |
 | `AUTH_PASSWORD` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 비밀번호 |
+| `CLOUDFLARE_API_TOKEN` | GitHub environment secret `aws-test` | `CONFIGURE_CLOUDFLARE=1`일 때 `k8s.woonyong.org` CNAME을 AWS LoadBalancer로 갱신 |
+
+## Cloudflare DNS가 1016이면 먼저 볼 것
+
+`curl -i https://k8s.woonyong.org/healthz`가 `HTTP/2 530`과 `error code: 1016`을 반환하면
+Bruno나 Gateway 문제가 아니라 Cloudflare가 origin DNS record를 찾지 못하는 상태다.
+
+1. AWS LoadBalancer가 살아 있는지 먼저 확인한다.
+
+```bash
+LB_HOST="$(kubectl --context kubernetes-ops -n management get svc api-gateway \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+
+curl -i "http://${LB_HOST}/healthz"
+```
+
+2. GitHub environment `aws-test`에 `CLOUDFLARE_API_TOKEN` secret이 있는지 확인한다.
+
+```bash
+gh secret list --repo Jungle-303-04/final --env aws-test
+```
+
+3. 1Password shell plugin 때문에 `gh secret set`이 아래처럼 실패하면 GitHub CLI 절대 경로를 사용한다.
+
+```text
+"... isn't an item in the ... vault. To no longer use this item, run 'op plugin clear gh'"
+```
+
+```bash
+/opt/homebrew/bin/gh secret set CLOUDFLARE_API_TOKEN \
+  --repo Jungle-303-04/final \
+  --env aws-test
+```
+
+토큰은 채팅이나 문서에 쓰지 않는다. Cloudflare에서 `woonyong.org` zone에 대해
+`Zone:Read`, `DNS:Edit` 권한이 있는 API token을 만든 뒤 위 명령 프롬프트에 붙여 넣는다.
+
+4. secret을 넣은 뒤 AWS CD를 다시 실행한다.
+
+```bash
+/opt/homebrew/bin/gh workflow run aws-cd.yml \
+  --repo Jungle-303-04/final \
+  --ref main \
+  -f create_clusters=false \
+  -f ensure_ebs_csi=false \
+  -f bootstrap_admin=false \
+  -f register_targets=false \
+  -f run_smoke=true
+```
+
+이 실행에서 deploy log에 `updating Cloudflare record k8s.woonyong.org -> ...elb.amazonaws.com`
+또는 `creating Cloudflare record ...`가 보여야 한다.
+그 로그가 보이지 않으면 도메인 연결은 아직 끝난 것이 아니다.
 
 ## AWS smoke를 직접 실행하는 법
 
