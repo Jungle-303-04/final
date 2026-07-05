@@ -23,7 +23,32 @@ docs/api
 
 ## 2단계. 변수 채우기
 
-먼저 Environment 값을 채운다.
+대부분의 변수는 요청 응답에서 자동으로 채워지므로 직접 넣을 값은 몇 개 없다.
+
+직접 채워야 하는 값 (처음 한 번):
+
+| 변수 | 값 |
+| --- | --- |
+| `base_url` | Gateway 주소. local은 `http://localhost:18080/`, aws-test는 `https://k8s.woonyong.org/` (이미 채워져 있음) |
+| `auth_email` / `auth_password` | 로그인 계정 (기본값 이미 채워져 있음) |
+| `github_webhook_secret` | 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값. 채우면 webhook signature 자동 계산 |
+| `metrics_token` | `METRICS_TOKEN`이 켜진 배포에서만 |
+| `service_image` (aws-test) | ECR image URI |
+
+자동으로 채워지는 값 (요청 순서대로 실행하면 손댈 필요 없음):
+
+| 변수 | 채워지는 시점 |
+| --- | --- |
+| `workspace_id`, `user_id` | `06-login` 성공 시 |
+| `agent_token` | `02-target-admin/01-register-target-dry-run` 성공 시 |
+| `command_id` | `04-command/02-debug-query` 또는 `03-agent-command-poll` 성공 시 |
+| `evidence_key`, `evidence_job_id` | `03-agent-runtime/05-schedule`, `06-poll` 성공 시 |
+| `conversation_id` | `07-ai/01-create-conversation` 성공 시 |
+| `incident_id` | `05-rca-dashboard/01-dashboard-timeline`에 incident row가 있을 때 |
+| `dead_letter_id` | `08-ops-dlq/01-dead-letters`에 항목이 있을 때 |
+| `github_webhook_signature` | `github_webhook_secret`이 채워져 있으면 요청 직전 자동 계산 |
+
+아래는 각 값의 의미 설명이다.
 
 `base_url`은 Gateway 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/`를 쓴다.
 
@@ -358,30 +383,12 @@ result 정상 출력에는 `accepted: true`와 `event_id`가 있다.
 
 `06-gitops-approval/01-github-webhook.bru`는 signature가 맞아야 성공한다.
 
-body는 `docs/api/06-gitops-approval/github-webhook-body.json`과 같은 값으로 둔다.
-이 파일의 `{{cluster_id}}`는 Bruno가 요청을 보낼 때 Environment의 `cluster_id`로 치환한다.
-그래서 signature도 치환된 body 기준으로 계산해야 한다.
+Environment의 `github_webhook_secret`에 배포의 `GITHUB_WEBHOOK_SECRET` 값을 넣으면
+pre-request script가 body 조립과 HMAC signature 계산을 자동으로 한다. 수동 계산이 필요 없다.
+body 내용을 바꾸려면 `01-github-webhook.bru`의 `script:pre-request` 안 JSON을 수정한다
+(script가 서명하는 body와 실제 전송 body가 항상 같으므로 signature가 깨지지 않는다).
 
-signature는 아래 명령으로 만든다.
-
-```bash
-python - <<'PY'
-import hashlib
-import hmac
-import os
-from pathlib import Path
-
-secret = "replace-with-GITHUB_WEBHOOK_SECRET"
-cluster_id = os.environ.get("BRUNO_CLUSTER_ID", "replace-with-aws-target-cluster-id")
-body = Path("docs/api/06-gitops-approval/github-webhook-body.json").read_text(
-    encoding="utf-8"
-).replace("{{cluster_id}}", cluster_id).encode()
-print("sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest())
-PY
-```
-
-`BRUNO_CLUSTER_ID`에는 Bruno Environment의 `cluster_id`와 같은 값을 넣는다.
-출력값을 `github_webhook_signature`에 넣는다.
+secret을 채울 수 없으면 `github_webhook_signature`에 수동 계산값을 직접 넣어도 된다.
 
 approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `03-reject-approval.bru`를 보낸다.
 정상 출력에는 `accepted: true`, `event_id`, `correlation_id`가 있다.
