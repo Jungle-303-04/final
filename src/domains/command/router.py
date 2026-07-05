@@ -50,11 +50,7 @@ from packages.contracts.gateway.responses import (
     CommandStartedResponse,
     EventIdAcceptedResponse,
 )
-from packages.contracts.identity import (
-    DEFAULT_WORKSPACE_ID,
-    DEPLOY_ACCESS,
-    READ_ACCESS,
-)
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.dependencies import get_db, get_events
 
 # 롱폴 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
@@ -90,7 +86,7 @@ def require_cluster_deploy_access(
         current,
         workspace_id,
         cluster_id,
-        DEPLOY_ACCESS,
+        Permission.DEPLOY_RUN.value,
         detail=RESOURCE_ACCESS_DENIED,
     )
 
@@ -101,7 +97,7 @@ def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluste
         current,
         workspace_id,
         cluster_id,
-        READ_ACCESS,
+        Permission.EVIDENCE_READ.value,
         detail=RESOURCE_ACCESS_DENIED,
     )
 
