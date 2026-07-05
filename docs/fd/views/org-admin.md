@@ -3,7 +3,7 @@
 [← 지도](../README.md) · 요구사항 [R2·R3](../01-requirements.md#r2-조직-생성--r3-조직원그룹-생성) · 갭 [G1·G2·G3](../06-api-map.md#신규-api-계약-초안)
 
 `/settings/*` 하위, RequireAdmin. **전 API 가 갭(G1~G3)** — mock adapter 로 선행 개발(D7).
-참조 UX: Plural Settings > User Management, Backstage 조직 모델([02](../02-reference-map.md)).
+참조 UX: 외부 기준 콘솔 Settings > User Management, Backstage 조직 모델([02](../02-reference-map.md)).
 
 ## 공통 패턴
 
