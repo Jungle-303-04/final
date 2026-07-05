@@ -9,7 +9,7 @@ shutdown·구조적 로깅·수평 확장). 아래는 "진짜 프로덕션 규�
 - [x] P0 워커 liveness 하트비트 + exec probe(9개 워커).
 - [x] P0 async DB(워커 핸들러 경로): `AsyncDb` 프록시로 sync 메서드를 스레드풀에
   보내고, 핸들러는 `await ctx.db.x(...)`로 통일. 남은 sync 경로(ledger·api-gateway
-  라우트)는 실DB smoke 테스트(`make up`) 후 단계적으로.
+  라우트)는 AWS smoke(`make aws-smoke`) 후 단계적으로.
 - [ ] P0 실운영 자동 변경 하드닝: repo checkout/cache, 승인 스냅샷, rollback
   patch PR, approval evidence 만료/권한 검증, 외부 SecretVault. rendered artifact digest,
   rendered manifest patch PR, write command approval_ref/policy_decision_ref 전달/누락 거부,

@@ -94,4 +94,4 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
-전체 영향까지 보려면 마지막에 `make check`, 서비스 smoke는 `make up && make smoke`로 확인한다.
+전체 영향까지 보려면 마지막에 `make check`, 서비스 smoke는 `make aws-smoke`로 확인한다.

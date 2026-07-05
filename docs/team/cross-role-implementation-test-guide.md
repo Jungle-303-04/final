@@ -577,8 +577,8 @@ insufficient evidence는 RcaActionRequiredBody로 끝낸다.
 
 ```bash
 make test
-make smoke
-make status
+make manifest-check
+make aws-smoke
 python scripts/events.py
 ```
 

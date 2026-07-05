@@ -51,7 +51,7 @@ Target/Telemetry는 Kubernetes, Prometheus, Loki, OpenTelemetry, Gateway API, co
 
 ## 한 작업씩 따라가는 문서
 
-실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [Target / Telemetry 선형 작업 가이드](target-telemetry-tasks/README.md)를 0번부터 순서대로 따른다.
+실제 구현을 시작할 때는 이 큰 문서를 다시 해석하지 말고, [Target / Telemetry 선형 작업 가이드](../target-telemetry-tasks/README.md)를 0번부터 순서대로 따른다.
 
 각 페이지는 한 PR 또는 한 작업 단위로 끝나도록 작성되어 있으며, `완료 기준`을 만족해야 다음 페이지로 넘어간다. 첫 엔드 기준은 `node-collector /metrics -> real Prometheus scrape -> Prometheus query API -> MetricEvidence summary` 폐쇄 루프다.
 
@@ -151,7 +151,7 @@ Target/Telemetry 담당자가 알아야 할 것은 내부 이벤트 구현이 �
 
 - target manifest dry-run 통과
 - PR에 RBAC 범위 설명 포함
-- demo 전 `make up`, `make smoke`, `make status` 확인
+- demo 전 `make check`, `make aws-smoke` 확인
 - telemetry evidence schema 변경 시 RCA/Safe PR 담당자와 조율
 - kubeconfig나 token commit 없음
 - Agent 코드에 raw NATS import 없음

@@ -1,0 +1,25 @@
+meta {
+  name: 10 Logout
+  type: http
+  seq: 10
+  tags: [
+    auth
+    session
+  ]
+}
+
+post {
+  url: {{base_url}}/auth/logout
+}
+
+test {
+  test("200 after login, otherwise auth failure", function () {
+    expect([200, 401, 403]).to.include(res.status);
+  });
+
+  test("success body clears authentication", function () {
+    if (res.status === 200) {
+      expect(res.getBody()).to.have.property("authenticated", false);
+    }
+  });
+}

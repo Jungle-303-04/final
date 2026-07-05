@@ -117,14 +117,13 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
-실제 로컬 서비스까지 확인할 때는 아래 순서로 본다.
+실제 서비스까지 확인할 때는 AWS smoke를 본다.
 
 ```bash
-make up
-make smoke
+make aws-smoke
 ```
 
-`make up`은 local 기본 계정 `admin@example.com / local-admin-password`를 만들고 기본 `UP_WORKER_SET=smoke` worker만 켠다. `make smoke`는 샘플 manifest `src/samples/smoke/deploy.yaml`로 webhook -> render -> diff -> analyze 이벤트가 실제 DB에 남는지 확인한다.
+찬빈은 smoke가 끝난 뒤 `/dashboard/rca/timeline`이 session과 cluster 권한을 기준으로 row를 필터링하는지 확인한다. 실행 방법은 [AWS 테스트 실행 기준](../aws-testing-runbook.md)을 따른다.
 
 ## 찬빈이 바꾸면 같이 봐야 하는 것
 

@@ -1,0 +1,45 @@
+meta {
+  name: 06 Login
+  type: http
+  seq: 6
+  tags: [
+    auth
+    session
+  ]
+}
+
+post {
+  url: {{base_url}}/auth/login
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "email": "{{auth_email}}",
+    "password": "{{auth_password}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.status === 200 && body && body.workspace_id) {
+    bru.setEnvVar("workspace_id", body.workspace_id);
+  }
+}
+
+test {
+  test("200 OK", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("authenticated session body", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("authenticated", true);
+    expect(body).to.have.property("user_id");
+    expect(body).to.have.property("workspace_id");
+    expect(body.roles).to.be.an("array");
+  });
+}

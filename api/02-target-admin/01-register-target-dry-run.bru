@@ -1,0 +1,59 @@
+meta {
+  name: 01 Register Target Dry Run
+  type: http
+  seq: 1
+  tags: [
+    target
+    admin
+    write
+  ]
+}
+
+post {
+  url: {{base_url}}/targets
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "cluster_id": "{{cluster_id}}",
+    "name": "{{target_name}}",
+    "environment": "sandbox",
+    "management_base_url": "{{management_base_url}}",
+    "image": "{{service_image}}",
+    "prometheus_base_url": "http://prometheus.target.svc:9090",
+    "loki_base_url": "http://loki-gateway.target.svc",
+    "evidence_interval_seconds": 30,
+    "install_node_collector": true,
+    "install_sample_workload": false,
+    "apply": false,
+    "cloud_provider": "existing-k8s",
+    "deploy_provider": "manual-manifest"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.status === 200 && body && body.agent_token) {
+    bru.setEnvVar("agent_token", body.agent_token);
+  }
+}
+
+test {
+  test("admin success or explicit auth failure", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("success response returns manifest and agent token", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("registered", true);
+      expect(body).to.have.property("install_manifest");
+      expect(body).to.have.property("agent_token");
+      expect(body).to.have.property("applied", false);
+    }
+  });
+}

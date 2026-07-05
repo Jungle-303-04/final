@@ -1,0 +1,39 @@
+meta {
+  name: 03 Reject Approval
+  type: http
+  seq: 3
+  tags: [
+    approval
+    session
+    write
+  ]
+}
+
+post {
+  url: {{base_url}}/approvals/{{approval_id}}/reject
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "reason": "rejected from Bruno"
+  }
+}
+
+test {
+  test("accepted or explicit auth/not-found/conflict response", function () {
+    expect([200, 401, 403, 404, 409, 422]).to.include(res.status);
+  });
+
+  test("success body has event id", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("accepted", true);
+      expect(body).to.have.property("event_id");
+      expect(body).to.have.property("correlation_id");
+    }
+  });
+}
