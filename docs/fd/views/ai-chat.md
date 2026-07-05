@@ -1,6 +1,6 @@
 # 뷰: AI 채팅
 
-[← 지도](../README.md) · 요구사항 [R10](../01-requirements.md#r10-ai-채팅) · 참조: Plural AI, Claude/Codex 승인 UX
+[← 지도](../README.md) · 요구사항 [R10](../01-requirements.md#r10-ai-채팅) · 참조: 외부 기준 AI, Claude/Codex 승인 UX
 
 요구 흐름: "채팅 주고받고 → 권한/선택 창 → 선택하면 실행".
 백엔드 실체 매핑(정합성 핵심):

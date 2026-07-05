@@ -3,7 +3,7 @@
 [← 지도](../README.md) · 요구사항 [R6](../01-requirements.md#r6-클러스터-모음--클러스터--노드--팟-히트맵-드릴다운) · 상세 화면은 [cluster-detail.md](cluster-detail.md)
 
 기본 랜딩(/overview). "주식 히트맵" 컨셉 채택 — **면적=규모, 색=건강도**.
-참조: Finviz 색 매핑, Plural Home, kube-ops-view 아이디어([02](../02-reference-map.md)).
+참조: Finviz 색 매핑, 외부 기준 콘솔 Home, kube-ops-view 아이디어([02](../02-reference-map.md)).
 
 ## 레이아웃
 
