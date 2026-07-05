@@ -10,22 +10,44 @@ Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 
 
 ```text
 src/services
-  api-gateway
-  alert-worker
+  gateway/api-gateway
+  realtime/realtime-gateway
   gitops/git-pull-worker
   gitops/github-poll-worker
   gitops/workflow-controller
   gitops/manifest-render-worker
   gitops/diff-worker
   gitops/diff-analyze-worker
+  gitops/safe-pr-worker
   gitops/scm-worker
-  command-worker
-  rca-worker
+  ai/evidence-worker
+  ai/incident-worker
+  ai/plan-worker
+  ai/analyze-worker
+  ai/rca-worker
+  ai/rca-feedback-worker
+  ai/recovery-worker
+  ai/select-worker
+  ai/dispatch-worker
+  ai/approval-worker
+  ai/rollout-worker
+  ai/backlog-worker
+  ai/diff-worker
+  ai/chat-worker
+  ai/agent                 (라이브러리: 대화 엔진/플레이북, entrypoint 없음)
+  command/command-worker
+  command/command-janitor
   projection/audit-worker
+  projection/dashboard-worker
+  projection/dead-letter-monitor
+  alert/alert-worker
+  mail/mail-worker
   target/cluster-agent
   target/node-collector
+  target/reconcile-worker
 src/domains
-  identity, gitops, command, rca, scm, audit, alert, target
+  identity, gitops, command, rca, scm, audit, alert, target,
+  ai, applications, catalog, dashboard, inventory, mail, providers
 src/packages
   config                 env, runtime 기본값, 시간 helper
   contracts              gateway/event_bus/auth/store 계약과 Protocol port
@@ -34,6 +56,8 @@ src/packages
   events                 event envelope, NATS JetStream, DLQ event sink
   storage                PostgreSQL 저장소와 schema 초기화
   runtime                FastAPI/worker/async service 실행 객체
+  ai                     LLM provider 클라이언트 (OpenAI/Anthropic/Gemini)
+  security               시크릿 vault (SOPS/age, AWS)
 deploy       management/target Kubernetes manifest
 docs/api     Bruno API 수동 테스트 collection
 scripts      검증, AWS 배포, 상태 확인, smoke, scale, pod 복구 script
@@ -60,22 +84,57 @@ API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/RE
 각 서비스는 독립 실행 프로세스와 Kubernetes workload를 가진다. 개발 편의를 위해 base layer를 공유할 수는 있지만, 실행 경계는 항상 `python src/services/<service-name>/app.py`처럼 서비스별 entrypoint로 분리한다.
 
 한 서비스는 한 파일 `app.py`입니다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용합니다. `@app.on(BodyType)`으로 한 body 타입을 구독하고, 다음 이벤트는 `yield`로 흘려보냅니다(체이닝). audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고 전체 `EventEnvelope`를 받습니다. `App.run()`이 내부적으로 `WorkerService`/`WorkerRuntime`, NATS client, PostgreSQL connection을 조립하므로 서비스 폴더에서 직접 조립하지 않습니다.
-서비스 설정(상수)은 별도 `settings.py`가 아니라 `app.py` 안에 둡니다. 여러 서비스가 공유하는 이벤트 subject, envelope, body, stream 계약은 `src/packages/contracts/event_bus`에 둡니다.
+서비스 설정(상수)은 기본적으로 `app.py` 안에 둡니다. 설정 항목이 많아 파일 분리가 필요한 서비스(api-gateway, github-poll-worker)만 예외적으로 같은 폴더의 `settings.py`를 사용합니다. 여러 서비스가 공유하는 이벤트 subject, envelope, body, stream 계약은 `src/packages/contracts/event_bus`에 둡니다.
 
 ```text
-api-gateway                  관리 API Gateway
+[gateway]
+api-gateway                  관리 API Gateway (인증, REST, agent 연결)
+realtime-gateway             cluster-agent live stream -> browser WS fan-out
+
+[gitops]
 git-pull-worker              Git webhook/polling -> git.changed
+github-poll-worker           GitHub API polling -> api-gateway 전달
 workflow-controller          GitOps/approval/command 이벤트 -> workflow_runs/approvals
 manifest-render-worker       git.changed -> manifest.rendered
 diff-worker                  manifest.rendered -> desired.diff.detected
 diff-analyze-worker          desired.diff.detected -> diff.analyzed (안전 시 safe_pr.requested)
-scm-worker                   safe_pr.requested -> safe_pr.created/safe_pr.failed (유일한 PR 생성자)
+safe-pr-worker               safe_pr.requested -> safe_pr.patch_prepared/safe_pr.failed
+scm-worker                   safe_pr.ready -> safe_pr.created/safe_pr.failed (유일한 PR 생성자)
+
+[ai — evidence/RCA/recovery 파이프라인]
+evidence-worker              cluster.evidence.received -> evidence.built
+incident-worker              evidence.built -> incident.detected -> evidence.bundle.built
+plan-worker                  evidence.bundle.built -> rca.candidates.planned
+analyze-worker               rca.candidates.planned -> rca.candidates.evaluated
+rca-worker                   rca.candidates.evaluated -> rca.completed
+rca-feedback-worker          RCA blocked/action/fallback -> 후속 조치 이벤트 정규화
+recovery-worker              rca.completed -> recovery.planned
+select-worker                recovery.planned -> recovery.action_selected
+dispatch-worker              recovery.action_selected -> command 또는 PR 요청
+approval-worker              selection/rollout 이벤트 -> 승인 추천
+rollout-worker               command.completed -> rollout.diagnosed
+backlog-worker               rca.backlog.created -> RCA backlog read model
+ai-diff-worker               safe_pr.patch_prepared -> diff.explained -> safe_pr.ready
+chat-worker                  ai.message.received -> 대화 엔진(도구 호출 루프) 응답
+agent                        대화 엔진/원인 분석/플레이북 라이브러리 (entrypoint 없음)
+
+[command]
 command-worker               command policy/dispatch/agent queue
-rca-worker                   evidence -> RCA -> safe_pr.requested
-audit-worker                 audit log
+command-janitor              만료 command 정리
+
+[projection]
+audit-worker                 audit log projector (@on_any)
+dashboard-worker             이벤트 흐름 -> 프론트 RCA timeline read model
+dead-letter-monitor          dead_letter.created -> 운영 alert 연결
+
+[alert / mail]
 alert-worker                 alarm/notification event boundary
+mail-worker                  mail.email_verification.requested -> 인증 메일 전송
+
+[target]
 cluster-agent                대상 클러스터 outbound agent, command receiver, evidence job scheduler
 node-collector               선택형 DaemonSet collector
+reconcile-worker             target 상태 reconcile
 ```
 
 ## 검증
