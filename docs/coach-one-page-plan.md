@@ -23,9 +23,9 @@ Kubernetes 클러스터의 이벤트, 로그, 메트릭을 수집해 장애 근�
 | Management API Gateway | 완성형 UI |
 | NATS JetStream 기반 event flow | production namespace write |
 | Target Cluster Agent outbound 연결 | 다중 클러스터 고도화 |
-| fake 포함 E2E smoke | 고성능 대용량 튜닝 |
+| 실제 provider 계약 기반 E2E smoke | 고성능 대용량 튜닝 |
 | OAuth/session 기본 흐름 | 복잡한 조직 권한 모델 |
-| RCA baseline과 Safe PR dry-run | 완전 자동 복구 |
+| RCA baseline과 Safe PR 제안/생성 흐름 | 완전 자동 복구 |
 | DLQ/replay 기본 운영 | AI 답변 품질 평가 자동화 |
 
 ## 성공 기준
@@ -42,8 +42,8 @@ Kubernetes 클러스터의 이벤트, 로그, 메트릭을 수집해 장애 근�
 
 | 기간 | 목표 | 데모 기준 |
 | --- | --- | --- |
-| 1주차, 2026-06-27 ~ 2026-07-01 | 전체 End-to-End 흐름 연결 | Git webhook 또는 agent evidence 입력부터 RCA, Safe PR dry-run, command queue까지 끊기지 않게 동작. dashboard read model은 planned |
-| 2주차, 2026-07-04 ~ 2026-07-10 | fake 제거와 AI 기본 모듈 | 실제 GitHub OAuth/PR, Prometheus/Loki adapter 일부, AI chat, 복구안 추천, 승인 guard 기본 구현 |
+| 1주차, 2026-06-27 ~ 2026-07-01 | 전체 End-to-End 흐름 연결 | Git webhook 또는 agent evidence 입력부터 RCA, Safe PR, command queue까지 끊기지 않게 동작 |
+| 2주차, 2026-07-04 ~ 2026-07-10 | 실제 provider와 AI 기본 모듈 | GitHub PR, Prometheus/Loki/Tempo/Kubernetes provider, AI chat, 복구안 추천, 승인 guard 기본 구현 |
 | 3주차 | MVP 완성 | 장애 주입부터 근거 조회, RCA, 복구안 승인, command 실행, PR 제안까지 통합 데모 |
 | 4~5주차 | 고도화와 발표 안정화 | multi-cluster, agent policy, AI eval, backpressure 중 선택 고도화 |
 
@@ -97,7 +97,7 @@ flowchart LR
 | GitOps split workers | Git 변경을 manifest render, desired diff, command.requested event로 변환 |
 | Command Worker | command policy를 검사하고 sandbox command만 target agent queue로 보냄 |
 | RCA Worker | cluster evidence를 묶어 RCA를 만들고 Safe PR 또는 복구 제안 event를 생성 |
-| Dashboard Projection Service | planned. 화면용 read model과 query/stream은 후속 UI/API 작업에서 추가 |
+| Dashboard Projection Service | RCA/command/Safe PR event를 `RcaTimeline` read model로 투영하고 `/dashboard/rca/*` API가 읽음 |
 | Audit Timeline Service | 누가 어떤 event와 명령을 만들었는지 감사 로그로 보존 |
 | Target Cluster Agent | 대상 클러스터 안에서 Kubernetes API와 telemetry를 읽고, 승인된 command만 실행 |
 | Node Collector | DaemonSet으로 노드/runtime 지표와 로그 샘플을 제공하는 선택형 수집기 |
@@ -114,7 +114,7 @@ flowchart LR
 
 ## 코치님께 확인받고 싶은 것
 
-- 1주차에 전체 E2E를 fake 포함으로 먼저 연결하는 우선순위가 맞는지
+- 1주차에 전체 E2E를 실제 provider 계약 기준으로 먼저 연결하는 우선순위가 맞는지
 - 2주차에 AI chat, recovery planner, approval guard를 넣어 L2 MVP로 가는 범위가 적절한지
 - Target Agent가 outbound 방식으로 붙고 sandbox write만 허용하는 보안 방향이 실무적으로 안전한지
 - NATS JetStream 기반 event-driven 구조가 MVP 규모에서 과하지 않은지

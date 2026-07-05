@@ -205,7 +205,7 @@ Meaning:
 uv run pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_trace_evidence.py tests/test_target_pod_evidence.py tests/test_node_collector.py
 ```
 
-These tests do not call the real cluster. They use fake Prometheus, Loki, Tempo, and Kubernetes API responses to verify evidence shaping logic.
+These tests do not call the real cluster. They use test payloads and injected query functions to verify evidence shaping logic.
 
 ## OpenTelemetry And Tempo State
 

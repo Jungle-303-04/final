@@ -91,7 +91,7 @@ Worker 담당자가 꼭 알아야 할 것:
 | --- | --- | --- |
 | 1 | GitOps worker 입력/출력 계약 정리 | event 흐름의 첫 단추를 고정한다. |
 | 2 | Git polling observation -> GitChanged 변환 | polling 결과를 내부 표준 event로 바꾼다. |
-| 3 | Manifest render DTO와 fake renderer | 실제 Git/Kustomize 없이 다음 담당자가 작업 가능하다. |
+| 3 | Manifest render DTO와 deterministic renderer | 실제 Git/Kustomize 없이 다음 담당자가 작업 가능하다. |
 | 4 | Desired diff DTO와 diff detector | PR 제안 또는 command 판단 전에 변경 내용을 구조화한다. |
 | 5 | Safe PR request 생성 | 안전한 diff를 바로 실행하지 않고 PR 제안으로 넘긴다. |
 | 6 | Command policy rule 구조 | namespace/action 제한을 범용 rule로 검사한다. |
@@ -190,7 +190,7 @@ Git Poller가 관찰한 repo 상태를 내부 GitChanged event로 변환한다.
 - 같은 commit 재관찰 -> event 없음.
 - 필수 field 누락 -> 실패.
 
-## Phase 3. Manifest render DTO와 fake renderer
+## Phase 3. Manifest render DTO와 deterministic renderer
 
 목표:
 
@@ -201,13 +201,13 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 왜 해야 하는가:
 
 - 실제 Kustomize/Helm/Git checkout 없이도 command 흐름을 먼저 연결할 수 있다.
-- renderer를 interface로 두면 fake -> real renderer 교체가 쉽다.
+- renderer를 interface로 두면 deterministic test renderer와 production renderer를 분리하기 쉽다.
 - manifest render 결과는 diff의 입력이므로 구조가 명확해야 한다.
 
 구현할 것:
 
 - `ManifestRenderer` Protocol.
-- `FakeManifestRenderer`.
+- `DeterministicManifestRenderer`.
 - `RenderedManifest` DTO.
 - `manifest.rendered` 발행.
 
@@ -224,7 +224,7 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 
 테스트:
 
-- fake renderer 결과가 `manifest.rendered` payload로 변환된다.
+- deterministic renderer 결과가 `manifest.rendered` payload로 변환된다.
 - render 실패 시 handler 예외가 runtime retry로 이어질 수 있다.
 
 ## Phase 4. Desired diff DTO와 diff detector
@@ -244,7 +244,7 @@ Git 변경을 Kubernetes manifest 형태로 렌더링한 결과를 event로 만�
 구현할 것:
 
 - `DiffDetector` Protocol.
-- fake diff detector.
+- deterministic diff detector.
 - diff item schema: kind, namespace, name, action, before, after.
 - `desired.diff.detected` 발행.
 
@@ -389,7 +389,7 @@ Command Worker가 command.requested를 받아 범용 policy rule로 허용/거�
 목표:
 
 ```text
-polling으로 감지한 git.changed에서 command queued까지 fake bus/fake db로 한 줄 흐름을 검증한다.
+polling으로 감지한 git.changed에서 command queued까지 in-memory bus/store로 한 줄 흐름을 검증한다.
 ```
 
 왜 해야 하는가:
@@ -400,8 +400,8 @@ polling으로 감지한 git.changed에서 command queued까지 fake bus/fake db�
 
 구현할 것:
 
-- fake EventClient.
-- fake command queue.
+- in-memory EventClient.
+- in-memory command queue.
 - git.repo.observed 또는 git.changed input fixture.
 - expected subjects list.
 
@@ -599,7 +599,7 @@ src/services/gitops/diff-analyze-worker
   안전하면 safe_pr.requested 발행
 
 src/services/gitops/scm-worker
-  safe_pr.requested를 받아 guarded repo write 또는 fake PR event 발행
+  safe_pr.requested를 받아 `GithubScmProvider` repo write 결과 event 발행
 ```
 
 하지만 handler 책임은 분리한다.
