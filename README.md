@@ -35,10 +35,10 @@ src/packages
   storage                PostgreSQL 저장소와 schema 초기화
   runtime                FastAPI/worker/async service 실행 객체
 deploy       management/target Kubernetes manifest
+docs/api     Bruno API 수동 테스트 collection
 scripts      검증, AWS 배포, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
 config/env   로컬 env 템플릿
-api          Bruno API 수동 테스트 collection
 tests        단위 테스트
 ```
 
@@ -53,7 +53,7 @@ make aws-smoke
 
 로컬에서는 코드/manifest 검증까지만 하고, 실제 서비스 smoke는 AWS EKS에서 확인한다.
 자세한 기준은 [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)를 본다.
-API를 사람이 직접 눌러 확인할 때는 [api/README.md](api/README.md)를 열고 Bruno collection을 사용한다.
+API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/README.md)를 열고 Bruno collection을 사용한다.
 
 ## 서비스 역할
 
@@ -106,11 +106,8 @@ make kill-pod DEPLOYMENT=rca-worker
 - [docs/architecture.md](docs/architecture.md)
 - [docs/events.md](docs/events.md)
 - [docs/team/member-guides/target-agent-command-evidence-flow.md](docs/team/member-guides/target-agent-command-evidence-flow.md)
-- [docs/gitops-fleet-control-plane.md](docs/gitops-fleet-control-plane.md)
 - [docs/operations-deployment.md](docs/operations-deployment.md)
 - [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)
-- [api/README.md](api/README.md)
-- [docs/service-split-plan.md](docs/service-split-plan.md)
+- [docs/api/README.md](docs/api/README.md)
 - [docs/secrets.md](docs/secrets.md)
 - [docs/team/conventions.md](docs/team/conventions.md)
-- [docs/team/work-allocation.md](docs/team/work-allocation.md)

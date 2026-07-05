@@ -146,6 +146,23 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
+## 프로덕션 완료 기준
+
+가인 파트는 외부 기준 저장소에서 확인한 incident, AI insight, scan/vulnerability, notification, automated PR generation을 우리 RCA 흐름으로 옮겨야 끝난다. 전체 범위는 [벤치마크 최소선 기준 프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md)를 따른다.
+
+| 완료 항목 | 확인 방법 |
+| --- | --- |
+| evidence가 incident, bundle, RCA candidate, RCA result로 끊기지 않고 흐른다 | `tests/test_rca_evidence.py`, `tests/test_event_golden_path.py` |
+| 근거가 부족하면 확정 원인이 아니라 `rca.action_required`로 멈춘다 | `tests/test_rca_evidence.py` |
+| incident history/message/reaction/follower/postmortem 개념이 dashboard에 표시 가능한 schema로 정리된다 | 벤치마크 최소선 체크리스트와 신규 projection/router test |
+| scan, vulnerability, dependency 결과가 RCA supporting evidence로 들어간다 | 신규 scan/RCA evidence test |
+| Safe PR은 `scm-worker`와 `GithubScmProvider`만 생성한다 | `tests/test_repo_gateway_worker.py` |
+| PR body에는 evidence basis, manifest patch, rollback patch, risk, approval 근거가 들어간다 | `tests/test_repo_gateway_worker.py`와 PR body snapshot |
+| AI chat/help/tool은 schema, authorization, budget, malformed output guard를 가진다 | `tests/test_ai_*` |
+| notification/email/digest가 incident, approval, PR, rollout 실패에 연결된다 | notification/email worker test |
+| token 원문은 event/log/PR body/dashboard response에 없다 | `docs/secrets.md`, non-leak test |
+| Bruno에서 RCA dashboard, GitOps approval, AI 폴더를 aws-test profile로 확인할 수 있다 | `docs/api/README.md` |
+
 ## 가인이 바꾸면 같이 봐야 하는 것
 
 | 바꾸는 것 | 같이 확인할 것 |
