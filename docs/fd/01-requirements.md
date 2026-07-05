@@ -46,7 +46,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/fleet-heatmap.md](views/fleet-heatmap.md) (모음·드릴), [views/cluster-detail.md](views/cluster-detail.md) (상세) |
-| 판단 | "주식 히트맵" 직관 판단은 **타당** — treemap(면적=규모, 색=건강도)은 fleet 규모 파악에 최적. Plural 콘솔도 @nivo/treemap 사용. 채택 |
+| 판단 | "주식 히트맵" 직관 판단은 **타당** — treemap(면적=규모, 색=건강도)은 fleet 규모 파악에 최적. 외부 기준 콘솔도 @nivo/treemap 사용. 채택 |
 | API | `GET /clusters`, `GET /clusters/{id}/inventory/summary`, `.../workloads`, `.../resources`, `WS /live/browser`(실시간 색 갱신) |
 | 갭 | 노드 단위 상세는 inventory 스냅샷의 node 리소스로 표현 가능. 노드별 실시간 메트릭은 live summary 범위 확인 — 부족 시 **G6**(node metrics 요약) |
 

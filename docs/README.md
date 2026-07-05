@@ -158,6 +158,27 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [production-readiness](production-readiness.md)
 - [secrets](secrets.md)
 
+프론트 상세 설계 문서는 아래에 있다.
+
+- [fd/README](fd/README.md)
+- [fd/01-requirements](fd/01-requirements.md)
+- [fd/02-reference-map](fd/02-reference-map.md)
+- [fd/03-architecture](fd/03-architecture.md)
+- [fd/04-design-system](fd/04-design-system.md)
+- [fd/05-routes-ia](fd/05-routes-ia.md)
+- [fd/06-api-map](fd/06-api-map.md)
+- [fd/07-build-plan](fd/07-build-plan.md)
+- [fd/views/auth](fd/views/auth.md)
+- [fd/views/org-admin](fd/views/org-admin.md)
+- [fd/views/resources](fd/views/resources.md)
+- [fd/views/fleet-heatmap](fd/views/fleet-heatmap.md)
+- [fd/views/cluster-detail](fd/views/cluster-detail.md)
+- [fd/views/repo](fd/views/repo.md)
+- [fd/views/metrics](fd/views/metrics.md)
+- [fd/views/workflow](fd/views/workflow.md)
+- [fd/views/ai-chat](fd/views/ai-chat.md)
+- [fd/views/notifications](fd/views/notifications.md)
+
 온보딩 문서는 아래에 있다.
 
 - [onboarding/README](onboarding/README.md)
