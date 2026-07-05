@@ -53,6 +53,27 @@ def test_make_check_and_docs_point_to_aws_smoke() -> None:
     assert "run_smoke=true" in docs
 
 
+def test_local_test_profile_wires_bootstrap_smoke_and_bruno() -> None:
+    makefile = read("Makefile")
+    local_env = read("config/env/local-test.env.example")
+    local_docs = read("docs/local-testing.md")
+    bruno_local = read("docs/api/environments/local.bru")
+
+    assert "local-test-env:" in makefile
+    assert "local-up:" in makefile
+    assert "local-smoke:" in makefile
+    assert 'source "$(LOCAL_TEST_ENV)"' in makefile
+    assert ".env.local-test" in read(".gitignore")
+    assert "AUTH_EMAIL=admin.local@example.com" in local_env
+    assert "AUTH_PASSWORD=local-test-password-1234" in local_env
+    assert "SMOKE_CLUSTER_ID=target" in local_env
+    assert "make local-up" in local_docs
+    assert "make local-smoke" in local_docs
+    assert "auth_email: admin.local@example.com" in bruno_local
+    assert "auth_password: local-test-password-1234" in bruno_local
+    assert "cluster_id: target" in bruno_local
+
+
 def test_operator_scripts_require_explicit_runtime_context() -> None:
     scripts = "\n".join(
         [
