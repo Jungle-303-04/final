@@ -64,10 +64,16 @@ AGENT_COMMAND_COMPAT_COLUMNS = {
 }
 EVENT_COMPAT_COLUMNS = {
     "causation_id": "alter table events add column if not exists causation_id text",
+    "schema_version": (
+        "alter table events add column if not exists schema_version integer not null default 1"
+    ),
 }
 OUTBOX_COMPAT_COLUMNS = {
     "lease_id": "alter table outbox add column if not exists lease_id text",
     "leased_until": "alter table outbox add column if not exists leased_until timestamptz",
+    "schema_version": (
+        "alter table outbox add column if not exists schema_version integer not null default 1"
+    ),
 }
 OUTBOX_CLAIM_INDEX = (
     "create index if not exists ix_outbox_claim on outbox (source, sent_at, leased_until, id)"
