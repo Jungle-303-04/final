@@ -123,7 +123,7 @@ class FakeSessionStore:
         session = self.auth_module.AuthSession(
             token,
             user_id,
-            roles or [self.auth_module.AccountRole.MEMBER.value],
+            roles or [self.auth_module.ServiceRole.USER.value],
             workspace_id or "default",
         )
         self.sessions[token] = session
