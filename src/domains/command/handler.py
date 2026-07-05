@@ -120,6 +120,7 @@ def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
         "approval_ref": command.approval_ref,
         "policy_decision_ref": command.policy_decision_ref,
         "diff": command.diff.to_body(),
+        "payload": command.payload,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode()).hexdigest()
@@ -136,6 +137,7 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         action=command.action or COMMAND_CONFIG.default_command_action,
         namespace=command.namespace or COMMAND_CONFIG.default_namespace,
         diff=command.diff.to_body(),
+        payload=command.payload,
         steps=list(COMMAND_CONFIG.policy_steps),
         lease=LeaseMetadata(
             lease_seconds=COMMAND_CONFIG.lease_seconds,

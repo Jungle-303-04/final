@@ -22,3 +22,13 @@ class RolloutRestartCommand:
 )
 class ApplyManifestCommand:
     pass
+
+
+@command.action(
+    Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+    recovery_aliases=("deployment_scale",),
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=True,
+)
+class ScaleDeploymentCommand:
+    pass

@@ -41,6 +41,12 @@ CLUSTER_INVENTORY_SUMMARY_PATH = "/clusters/{cluster_id}/inventory/summary"
 CLUSTER_INVENTORY_WORKLOADS_PATH = "/clusters/{cluster_id}/inventory/workloads"
 CLUSTER_INVENTORY_SERVICES_PATH = "/clusters/{cluster_id}/inventory/services"
 CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
+CLUSTER_DEPLOYMENT_SCALE_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale"
+)
+CLUSTER_DEPLOYMENT_RESTART_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart"
+)
 CLUSTER_POLICY_PATH = "/clusters/{cluster_id}/policy"
 PROVIDERS_CATALOG_PATH = "/providers/catalog"
 PROVIDERS_VALIDATE_PATH = "/providers/validate"

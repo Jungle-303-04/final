@@ -20,6 +20,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     assert {spec.action for spec in actions} >= {
         Command.DEFAULT_ACTION,
         Command.APPLY_MANIFEST_ACTION,
+        Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     }
     for spec in actions:
         assert spec.allowed_namespaces == (Sandbox.NAMESPACE,)
@@ -32,6 +33,9 @@ def test_spec_lookup_and_namespace_policy() -> None:
     assert spec.allows_namespace(Sandbox.NAMESPACE)
     assert not spec.allows_namespace("kube-system")
     assert command_action_spec("nope") is None
+    scale = command_action_spec(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION)
+    assert scale is not None
+    assert scale.requires_approval is True
 
 
 def test_recovery_alias_resolution() -> None:
