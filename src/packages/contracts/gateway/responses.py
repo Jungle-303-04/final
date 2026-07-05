@@ -128,6 +128,44 @@ class InventorySnapshotResponse(StrictModel):
     resource_types: list[str] = Field(default_factory=list)
 
 
+class InventoryResourceResponse(StrictModel):
+    inventory_key: str
+    snapshot_id: str
+    workspace_id: str
+    cluster_id: str
+    resource_type: str
+    api_version: str
+    kind: str
+    namespace: str | None = None
+    name: str
+    uid: str | None = None
+    resource_version: str | None = None
+    status: str
+    health: str
+    labels: JsonMap = Field(default_factory=dict)
+    annotations: JsonMap = Field(default_factory=dict)
+    summary: JsonMap = Field(default_factory=dict)
+    raw: JsonMap = Field(default_factory=dict)
+    observed_at: str | None = None
+    first_seen_at: str | None = None
+    last_seen_at: str | None = None
+    deleted_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class InventoryResourceListResponse(StrictModel):
+    cluster_id: str
+    resource_type: str | None = None
+    resources: list[InventoryResourceResponse]
+
+
+class InventorySummaryResponse(StrictModel):
+    cluster_id: str
+    latest_snapshot: JsonMap | None = None
+    counts: list[JsonMap] = Field(default_factory=list)
+
+
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str

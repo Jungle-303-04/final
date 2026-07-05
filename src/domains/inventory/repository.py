@@ -275,6 +275,62 @@ class InventoryRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [self.serialize_inventory_resource(dict(row)) for row in rows]
 
+    def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(
+                table.c.snapshot_id,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.agent_id,
+                table.c.source,
+                table.c.status,
+                table.c.collected_at,
+                table.c.resource_count,
+                table.c.summary,
+                table.c.created_at,
+            )
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .order_by(table.c.created_at.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self.serialize_inventory_snapshot(dict(row)) if row else None
+
+    def inventory_resource_counts(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(
+                table.c.resource_type,
+                table.c.health,
+                func.count().label("count"),
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.deleted_at.is_(None),
+            )
+            .group_by(table.c.resource_type, table.c.health)
+            .order_by(table.c.resource_type, table.c.health)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [
+            {
+                "resource_type": row["resource_type"],
+                "health": row["health"],
+                "count": int(row["count"]),
+            }
+            for row in rows
+        ]
+
+    def serialize_inventory_snapshot(self, row: JsonObject) -> JsonObject:
+        item = dict(row)
+        item["collected_at"] = iso_or_none(item.get("collected_at"))
+        item["created_at"] = iso_or_none(item.get("created_at"))
+        return item
+
     def serialize_inventory_resource(self, row: JsonObject) -> JsonObject:
         item = dict(row)
         item["observed_at"] = iso_or_none(item.get("observed_at"))
