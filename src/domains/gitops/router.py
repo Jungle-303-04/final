@@ -15,14 +15,14 @@ from domains.gitops.events import (
     Diff,
     GitWebhookReceivedBody,
 )
-from domains.identity.dependencies import require_session
+from domains.identity.dependencies import require_cluster_access, require_session
 from packages.config.constants import Command, Sandbox, Target
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import ApprovalDecisionRequest, GitHubWebhookRequest
 from packages.contracts.gateway.responses import AcceptedEventResponse, AcceptedResponse
 from packages.contracts.gitops import ApprovalStatus
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, DEPLOY_ACCESS, AccessResourceType
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, DEPLOY_ACCESS
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
 
@@ -33,7 +33,6 @@ APPROVAL_DIFF_MISSING = "approval diff is missing"
 APPROVAL_ACCESS_DENIED = "approval access denied"
 APPROVAL_CONFLICT = "approval already resolved"
 HTTP_NOT_FOUND = 404
-HTTP_FORBIDDEN = 403
 HTTP_CONFLICT = 409
 
 
@@ -72,14 +71,14 @@ def ensure_approval_is_open(record: Mapping[str, Any]) -> None:
 
 
 def require_approval_deploy_access(db: Any, current: Any, workspace_id: str, diff: Diff) -> None:
-    if not db.user_has_resource_access(
-        current.user_id,
+    require_cluster_access(
+        db,
+        current,
         workspace_id,
-        AccessResourceType.CLUSTER.value,
         diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
         DEPLOY_ACCESS,
-    ):
-        raise HTTPException(status_code=HTTP_FORBIDDEN, detail=APPROVAL_ACCESS_DENIED)
+        detail=APPROVAL_ACCESS_DENIED,
+    )
 
 
 def approval_command_request(

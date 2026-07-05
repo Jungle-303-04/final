@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 CLUSTER = "target-cluster-01"
 WORKSPACE = "ws-1"
 GOOD_TOKEN = "good-token"
+GOOD_SESSION = "session-token"
 
 
 def load_gateway_module() -> Any:
@@ -27,9 +28,22 @@ def fake_authenticator(token: str) -> dict[str, str] | None:
     return None
 
 
+async def fake_browser_session(token: str | None) -> dict[str, str] | None:
+    if token == GOOD_SESSION:
+        return {"workspace_id": WORKSPACE, "user_id": "user-1"}
+    return None
+
+
+def browser_headers() -> dict[str, str]:
+    return {"x-session-token": GOOD_SESSION}
+
+
 def make_client() -> tuple[Any, TestClient]:
     module = load_gateway_module()
-    app = module.create_app(authenticate_agent=fake_authenticator)
+    app = module.create_app(
+        authenticate_agent=fake_authenticator,
+        authenticate_browser=fake_browser_session,
+    )
     return module, TestClient(app)
 
 
@@ -57,7 +71,9 @@ def test_health_endpoints() -> None:
 
 def test_browser_receives_hello_then_snapshot() -> None:
     _, client = make_client()
-    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as browser:
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+    ) as browser:
         hello = browser.receive_json()
         snapshot = browser.receive_json()
     assert hello == {"type": "hello", "protocol": "realtime.v1"}
@@ -67,7 +83,9 @@ def test_browser_receives_hello_then_snapshot() -> None:
 
 def test_agent_summary_fans_out_to_browser() -> None:
     _, client = make_client()
-    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as browser:
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+    ) as browser:
         browser.receive_json()  # hello
         browser.receive_json()  # snapshot
         with client.websocket_connect(
@@ -85,7 +103,9 @@ def test_agent_summary_fans_out_to_browser() -> None:
 
 def test_late_browser_gets_state_via_snapshot() -> None:
     _, client = make_client()
-    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as first_browser:
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
+    ) as first_browser:
         first_browser.receive_json()  # hello
         first_browser.receive_json()  # snapshot(빈 상태)
         with client.websocket_connect(
@@ -105,7 +125,7 @@ def test_late_browser_gets_state_via_snapshot() -> None:
             assert first_browser.receive_json()["type"] == "live.summary"
             assert first_browser.receive_json()["type"] == "resource.delta"
             with client.websocket_connect(
-                f"/live/browser?workspace_id={WORKSPACE}"
+                f"/live/browser?workspace_id={WORKSPACE}", headers=browser_headers()
             ) as late_browser:
                 late_browser.receive_json()  # hello
                 snapshot = late_browser.receive_json()
@@ -170,3 +190,21 @@ def test_browser_requires_workspace_id() -> None:
         with pytest.raises(WebSocketDisconnect) as excinfo:
             browser.receive_json()
     assert excinfo.value.code == 4400
+
+
+def test_browser_requires_session() -> None:
+    _, client = make_client()
+    with client.websocket_connect(f"/live/browser?workspace_id={WORKSPACE}") as browser:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 4401
+
+
+def test_browser_cannot_subscribe_to_foreign_workspace() -> None:
+    _, client = make_client()
+    with client.websocket_connect(
+        "/live/browser?workspace_id=other-workspace", headers=browser_headers()
+    ) as browser:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 4401
