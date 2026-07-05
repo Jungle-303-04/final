@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
-from packages.contracts.identity import AccessResourceType, AccountRole
+from packages.contracts.identity import AccessResourceType, ServiceRole
 
 AGENT_TOKEN_HEADER = "x-agent-token"
 AGENT_AUTH_REQUIRED_MESSAGE = "agent authentication required"
@@ -43,9 +43,9 @@ async def require_session(request: Request) -> Any:
 
 
 async def require_admin_session(request: Request) -> Any:
-    """관리자 세션 가드 — account role admin 필요."""
+    """서비스 최고 관리자 세션 가드."""
     current = await require_session(request)
-    if AccountRole.ADMIN.value not in current.roles:
+    if ServiceRole.SERVICE_ADMIN.value not in current.roles:
         raise HTTPException(status_code=403, detail=ADMIN_AUTH_REQUIRED_MESSAGE)
     return current
 
@@ -61,13 +61,18 @@ def require_resource_access(
     detail: str = RESOURCE_ACCESS_DENIED_MESSAGE,
 ) -> None:
     """사용자 세션이 특정 워크스페이스 리소스에 action 권한을 가지는지 검사."""
-    if not db.user_has_resource_access(
-        current.user_id,
-        workspace_id,
-        resource_type,
-        resource_id,
-        action,
-    ):
+    user_has_resource_access = getattr(db, "user_has_resource_access", None)
+    if callable(user_has_resource_access):
+        allowed = db.user_has_resource_access(
+            current.user_id,
+            workspace_id,
+            resource_type,
+            resource_id,
+            action,
+        )
+    else:
+        allowed = db.can_access(current.user_id, workspace_id, resource_type, resource_id, action)
+    if not allowed:
         raise HTTPException(status_code=403, detail=detail)
 
 
