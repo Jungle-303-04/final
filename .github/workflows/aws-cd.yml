@@ -110,7 +110,7 @@ jobs:
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
       GITHUB_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
-      GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GH_APP_TOKEN || github.token }}
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
