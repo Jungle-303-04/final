@@ -17,7 +17,7 @@ headers {
   x-agent-token: {{agent_token}}
 }
 
-body {
+body:json {
   {
     "agent_id": "{{agent_id}}",
     "lease_id": "{{lease_id}}",
@@ -47,7 +47,7 @@ body {
   }
 }
 
-test {
+tests {
   test("accepted or explicit job/auth failure", function () {
     expect([200, 401, 403, 404, 422]).to.include(res.status);
   });

@@ -16,7 +16,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "message": "위 대화 기준으로 민정, 가인, 찬빈이 각각 다음에 확인해야 할 값을 나눠줘.",
     "agent": "operations-chat",
@@ -28,7 +28,7 @@ body {
   }
 }
 
-test {
+tests {
   test("message is accepted or missing conversation/auth is explicit", function () {
     expect([200, 401, 403, 404, 422, 503]).to.include(res.status);
   });

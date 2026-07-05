@@ -92,10 +92,26 @@ def test_every_bruno_request_has_expected_output_assertions() -> None:
     without_tests = [
         path.relative_to(ROOT_DIR).as_posix()
         for path in request_files()
-        if "test {" not in path.read_text(encoding="utf-8")
+        if "tests {" not in path.read_text(encoding="utf-8")
     ]
 
     assert without_tests == []
+
+
+def test_bruno_files_use_importable_v3_syntax() -> None:
+    offenders: list[str] = []
+
+    for path in request_files():
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(ROOT_DIR).as_posix()
+        if "\ntest {\n" in text:
+            offenders.append(f"{rel}: use tests block")
+        if "\nbody {\n" in text:
+            offenders.append(f"{rel}: use typed body block")
+        if "bru.setEnvVar(" in text:
+            offenders.append(f"{rel}: use runtime variable setter")
+
+    assert offenders == []
 
 
 def test_bruno_readme_explains_each_work_type() -> None:

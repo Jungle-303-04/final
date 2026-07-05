@@ -17,7 +17,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "cluster_id": "{{cluster_id}}",
     "generation": 2,
@@ -74,7 +74,7 @@ body {
   }
 }
 
-test {
+tests {
   test("admin success or explicit auth/conflict response", function () {
     expect([200, 401, 403, 409, 422]).to.include(res.status);
   });

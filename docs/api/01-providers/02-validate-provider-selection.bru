@@ -16,7 +16,7 @@ headers {
   content-type: application/json
 }
 
-body {
+body:json {
   {
     "source_provider": "github",
     "deploy_provider": "manual-manifest",
@@ -31,7 +31,7 @@ body {
   }
 }
 
-test {
+tests {
   test("200 OK", function () {
     expect(res.status).to.equal(200);
   });

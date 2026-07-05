@@ -18,7 +18,7 @@ headers {
   x-hub-signature-256: {{github_webhook_signature}}
 }
 
-body {
+body:json {
   {
     "commit_sha": "bruno-commit-001",
     "image": "ghcr.io/example/checkout-api:bruno",
@@ -37,7 +37,7 @@ body {
   }
 }
 
-test {
+tests {
   test("accepted only with valid signature", function () {
     expect([200, 401, 422, 503]).to.include(res.status);
   });

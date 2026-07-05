@@ -16,7 +16,7 @@ headers {
   x-agent-token: {{agent_token}}
 }
 
-test {
+tests {
   test("200 with policy/null or explicit auth failure", function () {
     expect([200, 401, 403]).to.include(res.status);
   });

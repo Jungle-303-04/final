@@ -1,30 +1,71 @@
-# 민정: Command + Target + Evidence
+# 민정: Command + Target + Evidence 프로덕션 흐름
 
 민정 파트의 목표는 target cluster 내부에서 실제 상태를 읽고, management plane이 내려준 command를 안전하게 처리한 뒤, 가인이 RCA에 쓸 수 있는 evidence window를 넘기는 것이다.
 
 끝에서 넘기는 값은 두 가지다.
 
-- command 실행 결과: `command.completed`
-- RCA 입력 증거: `cluster.evidence.received`
+1. command 실행 결과인 `command.completed`
+2. RCA 입력 증거인 `cluster.evidence.received`
 
-## 먼저 열 파일 순서
+이 문서는 [민정 온보딩](../onboarding/minjeong-command-target-evidence.md)을 더 production 흐름에 맞춰 풀어 쓴 문서다.
 
-| 순서 | 파일 | 무엇을 봐야 하는가 | 왜 먼저 보는가 |
-| --- | --- | --- | --- |
-| 1 | `src/services/target/cluster-agent/agent.py` | `TargetClusterAgent.run_with_client`, `poll_commands`, `execute_command`, `run_query_command` | agent가 command, policy, evidence, reconcile loop를 동시에 돌리는 중심이다. |
-| 2 | `src/services/target/cluster-agent/commands/registry.py` | `@command.handler`, `@command.k8s`, `AgentCommandRegistry.execute` | agent 내부 command handler 등록 방식을 알아야 새 command를 안전하게 추가할 수 있다. |
-| 3 | `src/domains/command/router.py` | `commands`, `agent_debug_query`, `poll_command`, `command_result` | management plane과 target agent가 어떤 HTTP 계약으로 연결되는지 본다. |
-| 4 | `src/domains/command/handler.py` | `evaluate_command_policy`, `build_plan`, `handle_command_requested` | command가 바로 agent로 가지 않고 정책/plan/queue를 거치는 이유를 본다. |
-| 5 | `src/services/target/cluster-agent/evidence/jobs.py` | `EvidenceJobScheduler.schedule_once`, `work_once`, `collect_job` | evidence가 provider별 job으로 나뉘어 schedule/poll/result 되는 구조다. |
-| 6 | `src/services/target/cluster-agent/evidence/collector.py` | `collect`, `run_query`, `_collect_with_queries` | provider query 실행과 결과 package 흐름이다. |
-| 7 | `src/services/target/cluster-agent/telemetry_registry.py` | `@telemetry.source`, `TelemetrySourceSpec` | provider source와 evidence bucket을 한 곳에서 연결한다. |
-| 8 | `src/services/target/cluster-agent/providers/` | Kubernetes, Prometheus, Loki, Tempo provider | 실제 수집 구현을 provider별로 확인한다. |
-| 9 | `src/services/target/cluster-agent/queries/registry.py` | `TelemetryQueryDefinition`, query value object | debug query와 policy query가 provider query 객체로 바뀌는 지점이다. |
-| 10 | `src/domains/target/router.py` | evidence job schedule/poll/result route | provider별 결과가 모여 `cluster.evidence.received`로 발행되는 지점이다. |
+## 1단계. Agent 중심 파일을 연다
 
-## Command를 왜 이렇게 나누는가
+먼저 이 파일을 연다.
 
-target agent가 직접 모든 요청을 받으면 cluster inbound port와 credential 문제가 생긴다. 현재 구조는 agent가 management plane으로 outbound HTTP만 연결한다. 그래서 command는 아래 순서를 지킨다.
+```text
+src/services/target/cluster-agent/agent.py
+```
+
+확인할 함수는 `TargetClusterAgent.run_with_client`, `poll_commands`, `execute_command`, `run_query_command`다.
+
+이 단계에서는 command, policy, evidence, reconcile loop가 agent 안에서 어떻게 같이 도는지만 본다.
+target cluster는 inbound API를 열지 않는다.
+agent가 management Gateway로 outbound 요청을 보내는 구조가 기준이다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_commands.py -q
+```
+
+## 2단계. Command handler registry를 연다
+
+이 파일을 연다.
+
+```text
+src/services/target/cluster-agent/commands/registry.py
+```
+
+찾을 것은 `@command.handler`, `@command.k8s`, `AgentCommandRegistry.execute`다.
+
+일반 command는 `@command.handler(...)`로 등록한다.
+
+Kubernetes API를 건드리는 command는 `@command.k8s(...)`로 등록한다.
+
+왜 나누는가:
+Kubernetes write는 resource, verb, namespace, payload model, policy guard가 필요하다.
+단순 action 문자열만 보고 실행하면 운영 사고가 난다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_commands.py -q
+```
+
+## 3단계. Management command route를 연다
+
+이 파일을 연다.
+
+```text
+src/domains/command/router.py
+```
+
+찾을 것은 `commands`, `agent_debug_query`, `poll_command`, `command_result`다.
+
+사용자가 누르는 `POST /commands`는 바로 target에서 실행되지 않는다.
+
+흐름은 아래와 같다.
 
 ```text
 사용자 또는 RCA
@@ -36,68 +77,93 @@ target agent가 직접 모든 요청을 받으면 cluster inbound port와 creden
   -> command.completed
 ```
 
-| 값 | 어디에서 만들어지는가 | 왜 필요한가 | 어디에서 쓰이는가 |
-| --- | --- | --- | --- |
-| `command_id` | `build_plan()` | 재시도/중복 실행을 구분한다. | agent poll, start, heartbeat, result route |
-| `idempotency_key` | `idempotency_key()` | 같은 요청이 중복 queue되는 것을 막는다. | `agent_commands.command_id` 산출 기준 |
-| `lease` | `Plan.lease` | agent가 가져간 command가 멈췄을 때 회수할 기준이다. | poll/start/heartbeat/result |
-| `retry_policy` | `Plan.retry_policy` | 실패 command를 어디까지 재시도할지 정한다. | command janitor, queue 상태 관리 |
-| `routing_constraint` | `Plan.routing_constraint` | 어떤 cluster/agent가 실행할 수 있는지 제한한다. | `poll_command()`에서 identity와 함께 검증된다. |
-| `approval_ref` | API 또는 RCA dispatch | 쓰기 command가 승인 근거 없이 실행되지 않게 한다. | `evaluate_command_policy`, target agent write guard |
-| `policy_decision_ref` | API 또는 RCA dispatch | 어떤 정책 판단으로 허용됐는지 남긴다. | command plan, audit, target agent write guard |
+`command_id`는 재시도와 중복 실행 구분에 필요하다.
 
-## Command handler 추가 방법
+`idempotency_key`는 같은 요청이 중복 queue되는 것을 막는다.
 
-### 일반 command
+`lease`는 agent가 가져간 command가 멈췄을 때 회수 기준이다.
 
-일반 command는 Kubernetes API 권한 검증이 필요하지 않은 경우에 쓴다.
+`retry_policy`는 실패 command 재시도 기준이다.
 
-```python
-@command.handler("telemetry.query.run", payload_model=TelemetryQueryCommandPayload)
-async def run_query_command(self, ctx: CommandContext[TelemetryQueryCommandPayload]):
-    definition = self.query_definition_from_payload(ctx.payload.definition_payload())
-    result = await self.evidence_collector.run_query(definition)
-    return ctx.ok("telemetry query executed", query=definition.__dict__, result=result)
+`routing_constraint`는 어느 cluster/agent가 실행할 수 있는지 제한한다.
+
+`approval_ref`와 `policy_decision_ref`는 write command가 승인 근거 없이 실행되지 않게 한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_router.py tests/test_command_worker.py -q
 ```
 
-왜 필요한가:
+## 4단계. Command policy와 plan을 확인한다
 
-- debug query처럼 agent 내부 기능만 실행하면 된다.
-- payload model을 붙이면 잘못된 입력을 handler 앞에서 걸러낼 수 있다.
-- 결과는 항상 `ctx.ok()` 또는 `ctx.fail()` 형태로 정리해야 command result가 일정해진다.
+이 파일을 연다.
 
-### Kubernetes write command
-
-Kubernetes write command는 `@command.k8s(...)`를 쓴다.
-
-```python
-@command.k8s(
-    "kubernetes.deployment.patch",
-    api_group="apps",
-    version="v1",
-    resource="deployments",
-    verb="patch",
-    payload_model=KubernetesPatchPayload,
-)
-async def patch_deployment_command(self, ctx: CommandContext[KubernetesPatchPayload]):
-    ...
+```text
+src/domains/command/handler.py
 ```
 
-왜 필요한가:
+찾을 것은 `evaluate_command_policy`, `build_plan`, `handle_command_requested`다.
 
-- action 이름만 보고 실행하지 않고, 어떤 API group/resource/verb인지 같이 검증한다.
-- `KubernetesCommandPolicy`가 cluster role과 scope를 확인한다.
-- payload model이 namespace/name/patch 구조를 검증한다.
+command가 바로 agent queue로 가지 않는 이유는 policy와 plan이 먼저 필요하기 때문이다.
+write action이면 approval과 policy decision이 있어야 한다.
+read/debug action이면 cluster read 권한이 있어야 한다.
 
-주의할 점:
+policy를 통과하면 plan이 생기고, plan이 agent command queue로 들어간다.
 
-- write command는 approval 근거가 없으면 target agent에서도 막힌다.
-- sandbox namespace 밖 write는 정책 확장 전까지 조심해서 다룬다.
-- result에 token, kubeconfig, secret 원문을 넣지 않는다.
+바로 확인할 테스트:
 
-## Evidence provider를 왜 job으로 나누는가
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_worker.py -q
+```
 
-RCA는 Kubernetes, metrics, logs, traces를 한 번에 필요로 하지만 네 provider의 실패 원인은 다르다. 그래서 agent는 provider별 job을 poll하고, management plane은 같은 `evidence_key`의 결과가 모이면 하나의 `cluster.evidence.received`를 만든다.
+## 5단계. Debug query 흐름을 확인한다
+
+`src/domains/command/router.py`에서 `agent_debug_query`를 다시 본다.
+
+Debug query는 provider query 하나를 agent command로 보내 실제 target에서 실행되는지 확인하는 기능이다.
+
+요청 예시는 아래다.
+
+```json
+{
+  "cluster_id": "cluster-1",
+  "reason": "RCA 확인용",
+  "query": {
+    "source": "prometheus",
+    "name": "restart_rate",
+    "query": "increase(kube_pod_container_status_restarts_total{namespace=\"sandbox\"}[15m])",
+    "range_seconds": 900,
+    "step_seconds": 30
+  }
+}
+```
+
+`range_seconds`가 있으면 Prometheus range query다.
+이 값은 `PrometheusRangeQuery`로 바뀌고 `/api/v1/query_range`로 실행된다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_command_router.py -q
+```
+
+Bruno에서는 `04-command/02-debug-query.bru`를 보낸다.
+
+## 6단계. Evidence job scheduler를 연다
+
+이 파일을 연다.
+
+```text
+src/services/target/cluster-agent/evidence/jobs.py
+```
+
+찾을 것은 `EvidenceJobScheduler.schedule_once`, `work_once`, `collect_job`다.
+
+evidence는 provider별 job으로 나뉜다.
+Kubernetes, metrics, logs, traces는 같은 수준으로 schedule, poll, result 되어야 한다.
+
+흐름은 아래다.
 
 ```text
 schedule_once()
@@ -110,16 +176,47 @@ work_once("metrics")
   -> POST /agent/evidence/jobs/{job_id}/result
 ```
 
-| provider key | 현재 provider | 왜 필요한가 | 가인에게 넘어가는 bucket |
-| --- | --- | --- | --- |
-| `kubernetes` | `KubernetesSnapshotProvider` | pod/event/node/workload/service/endpoint 상태가 RCA의 기본 증거다. | `kubernetes` |
-| `metrics` | `PrometheusMetricsProvider` | restart, memory, latency, error rate처럼 시간 흐름이 필요한 증거다. | `metrics` |
-| `logs` | `LokiLogsProvider` | app error, probe failure, dependency error 같은 문장 증거다. | `logs` |
-| `traces` | `TempoTracesProvider` | dependency timeout, span error, service path를 확인한다. | `traces` |
+바로 확인할 테스트:
 
-## Provider 등록 데코레이터
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_evidence_jobs.py -q
+```
 
-provider class 위에는 `@telemetry.source(...)`를 붙인다.
+## 7단계. Evidence collector를 연다
+
+이 파일을 연다.
+
+```text
+src/services/target/cluster-agent/evidence/collector.py
+```
+
+찾을 것은 `collect`, `run_query`, `_collect_with_queries`다.
+
+collector는 provider query를 실행하고 결과 package를 만든다.
+provider 결과가 너무 커지면 RCA와 dashboard가 느려진다.
+raw response 전체를 그대로 넣지 않고 필요한 summary와 supporting data만 넣는다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_target_metric_evidence.py \
+  tests/test_target_log_evidence.py \
+  tests/test_target_trace_evidence.py \
+  -q
+```
+
+## 8단계. Provider decorator를 확인한다
+
+이 파일을 연다.
+
+```text
+src/services/target/cluster-agent/telemetry_registry.py
+```
+
+provider는 `@telemetry.source(...)`로 등록한다.
+
+예시는 아래다.
 
 ```python
 @telemetry.source(
@@ -132,29 +229,65 @@ class PrometheusMetricsProvider:
     ...
 ```
 
-| 인자 | 왜 필요한가 | 어디에서 쓰이는가 |
-| --- | --- | --- |
-| `source` | query definition이 provider를 찾을 이름이다. | `TelemetryQueryDefinition.source` |
-| `evidence_key` | 최종 evidence payload bucket 이름이다. | evidence job provider key, `ClusterEvidenceReceivedBody` |
-| `query_type` | 일반 query를 provider 값 객체로 만든다. | `TelemetryQueryDefinition.to_provider_query()` |
-| `range_query_type` | range query 지원 여부를 명시한다. | Prometheus `/api/v1/query_range` |
+`source`는 query definition이 provider를 찾을 이름이다.
 
-## Prometheus range query 흐름
+`evidence_key`는 최종 evidence payload bucket 이름이다.
 
-range query는 `range_seconds`가 있을 때 만들어진다.
+`query_type`은 일반 query를 provider 값 객체로 만든다.
 
-```json
-{
-  "source": "prometheus",
-  "name": "restart_rate",
-  "description": "Pod restart trend",
-  "query": "increase(kube_pod_container_status_restarts_total{namespace=\"sandbox\"}[15m])",
-  "range_seconds": 900,
-  "step_seconds": 30
-}
+`range_query_type`은 range query 지원 여부를 명시한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_telemetry_registry.py -q
 ```
 
-코드 흐름:
+## 9단계. Provider별 bucket을 확인한다
+
+provider 구현은 이 폴더에 있다.
+
+```text
+src/services/target/cluster-agent/providers/
+```
+
+`KubernetesSnapshotProvider`는 `kubernetes` bucket을 채운다.
+pods, events, nodes, deployments, statefulsets, daemonsets, replicasets, services, endpoint slices가 RCA의 기본 증거다.
+
+`PrometheusMetricsProvider`는 `metrics` bucket을 채운다.
+restart, memory, latency, error rate처럼 시간 흐름이 필요한 증거를 담당한다.
+
+`LokiLogsProvider`는 `logs` bucket을 채운다.
+app error, probe failure, dependency error 같은 문장 증거를 담당한다.
+
+`TempoTracesProvider`는 `traces` bucket을 채운다.
+dependency timeout, span error, service path를 확인한다.
+
+바로 확인할 테스트:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_target_kubernetes_evidence.py \
+  tests/test_target_metric_evidence.py \
+  tests/test_target_log_evidence.py \
+  tests/test_target_trace_evidence.py \
+  -q
+```
+
+## 10단계. Query value object를 확인한다
+
+이 파일을 연다.
+
+```text
+src/services/target/cluster-agent/queries/registry.py
+```
+
+찾을 것은 `TelemetryQueryDefinition`과 provider별 query value object다.
+
+Debug query와 policy query는 모두 provider query 객체로 바뀌어야 한다.
+dict를 provider에 그대로 넘기면 validation과 source별 분기가 약해진다.
+
+Prometheus range query는 아래 흐름으로 처리한다.
 
 ```text
 TelemetryQueryDefinition.from_mapping()
@@ -165,52 +298,65 @@ TelemetryQueryDefinition.from_mapping()
   -> normalize_payload(result_type="matrix")
 ```
 
-왜 필요한가:
+바로 확인할 테스트:
 
-- 순간값만 보면 restart 증가 추세나 latency spike를 판단하기 어렵다.
-- RCA rule은 “같은 window 안에서 증가했는가”를 봐야 한다.
-- 가인은 `metrics.results.<name>.query_mode == "range"`와 `series`를 보고 근거로 쓴다.
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py -q
+```
 
-## Kubernetes snapshot provider 흐름
+## 11단계. Evidence job management route를 확인한다
 
-`KubernetesSnapshotProvider`는 service account token과 Kubernetes API base URL이 있을 때 실제 Kubernetes API를 읽는다.
+이 파일을 연다.
 
-수집 대상:
+```text
+src/domains/target/router.py
+```
 
-- pods
-- events
-- nodes
-- deployments
-- statefulsets
-- daemonsets
-- replicasets
-- services
-- endpoint slices
+찾을 route는 아래다.
 
-왜 필요한가:
+```text
+POST /agent/evidence/jobs
+GET /agent/evidence/jobs/poll
+POST /agent/evidence/jobs/{job_id}/result
+```
 
-- RCA의 첫 판단은 대부분 Kubernetes status/event에서 시작한다.
-- `containerStatuses.state.waiting.reason`, `lastState.terminated.reason`, workload replica count, EndpointSlice ready 상태가 symptom 분류에 쓰인다.
-- Prometheus/log/trace가 잠깐 비어 있어도 Kubernetes snapshot은 최소 근거가 된다.
+management는 같은 `evidence_key`의 provider job이 terminal 상태가 되었는지 본다.
+모이면 `cluster.evidence.received`를 발행한다.
 
-## 민정이 넘기는 최종 evidence payload
+가인에게 넘길 body에는 아래 값이 있어야 한다.
 
-`ClusterEvidenceReceivedBody` 기준 필드:
+```text
+workspace_id
+cluster_id
+agent_id
+source_id
+window_start
+evidence_key
+kubernetes
+metrics
+logs
+traces
+```
 
-| 필드 | 왜 필요한가 | 다음에 쓰는 곳 |
-| --- | --- | --- |
-| `workspace_id` | tenant 경계다. | RCA 저장, audit, frontend filter |
-| `cluster_id` | 어느 target cluster 증거인지 구분한다. | incident, command route, dashboard |
-| `agent_id` | 어떤 agent가 수집했는지 남긴다. | 운영 추적, provider 문제 분석 |
-| `source_id` | evidence source를 구분한다. | evidence window dedupe |
-| `window_start` | 같은 시간 창의 provider 결과를 묶는다. | RCA evidence_ref, chart 기준 |
-| `evidence_key` | window dedupe key다. | `evidence_windows`, RCA `evidence_ref` |
-| `kubernetes` | Kubernetes 상태 요약이다. | incident classifier, cause rule |
-| `metrics` | Prometheus 결과다. | cause evaluation |
-| `logs` | log evidence다. | cause evaluation, RCA 설명 |
-| `traces` | trace evidence다. | dependency/network RCA |
+바로 확인할 테스트:
 
-## 바로 돌릴 테스트
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_evidence_jobs.py -q
+```
+
+## 12단계. 변경할 때 같이 고칠 곳을 확인한다
+
+새 provider를 추가하면 `providers/*.py`, `telemetry_registry.py`, query value object, provider test를 같이 고친다.
+
+새 query 정책을 추가하면 `src/domains/target/evidence_policy.py`와 scheduler test를 같이 고친다.
+
+새 command action을 추가하면 `src/domains/command/actions.py`, action catalog, target agent handler, command test를 같이 고친다.
+
+debug query를 확장하면 `src/domains/command/router.py`와 `queries/registry.py`를 같이 고친다.
+
+evidence payload shape를 바꾸면 가인의 `tests/test_rca_evidence.py`와 찬빈의 projection test를 같이 본다.
+
+## 13단계. 민정 전체 검증을 돌린다
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -218,6 +364,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_command_worker.py \
   tests/test_target_agent_commands.py \
   tests/test_target_agent_client.py \
+  tests/test_target_registration.py \
   tests/test_target_evidence_jobs.py \
   tests/test_target_kubernetes_evidence.py \
   tests/test_target_metric_evidence.py \
@@ -227,12 +374,14 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
-## 구현 체크리스트
+## 14단계. Bruno와 AWS로 확인한다
 
-| 작업 | 파일 | 완료 기준 |
-| --- | --- | --- |
-| 새 provider 추가 | `providers/*.py`, `telemetry_registry.py` | `@telemetry.source` 등록, query value object, provider test 추가 |
-| 새 query 정책 추가 | `domains/target/evidence_policy.py` | provider policy에 query가 들어가고 scheduler가 job에 싣는다 |
-| 새 command action 추가 | `domains/command/actions.py`, `agent.py` | action catalog, policy, handler, command test가 모두 통과 |
-| debug query 확장 | `domains/command/router.py`, `queries/registry.py` | `POST /agent/debug/query`가 queue plan을 만들고 agent가 실행 |
-| evidence payload shape 변경 | provider test, `tests/test_rca_evidence.py` | 가인의 `EvidenceBundle`이 깨지지 않는다 |
+Bruno는 `docs/api`를 collection root로 연다.
+
+민정은 `02-target-admin`, `03-agent-runtime`, `04-command`를 순서대로 보낸다.
+
+AWS smoke는 Docker 없이 아래 명령으로 확인한다.
+
+```bash
+make aws-smoke
+```

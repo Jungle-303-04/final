@@ -144,3 +144,28 @@ def test_each_member_onboarding_has_production_completion_section() -> None:
             missing.append(f"{path}: completion-scope-link")
 
     assert missing == []
+
+
+def test_step_by_step_onboarding_docs_avoid_markdown_tables() -> None:
+    checked_docs = [
+        "docs/README.md",
+        "docs/api/README.md",
+        "docs/onboarding/README.md",
+        "docs/onboarding/minjeong-command-target-evidence.md",
+        "docs/onboarding/gain-evidence-rca.md",
+        "docs/onboarding/chanbin-frontend.md",
+        "docs/rca-production-onboarding/README.md",
+        "docs/rca-production-onboarding/01-minjeong-command-target-evidence.md",
+        "docs/rca-production-onboarding/02-gain-evidence-rca-safe-pr.md",
+        "docs/rca-production-onboarding/03-chanbin-frontend-projection.md",
+        "docs/rca-production-onboarding/05-production-completion-scope.md",
+    ]
+
+    offenders: list[str] = []
+    for path in checked_docs:
+        for line_number, line in enumerate(read(path).splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("|") and stripped.endswith("|"):
+                offenders.append(f"{path}:{line_number}")
+
+    assert offenders == []
