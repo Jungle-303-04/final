@@ -1,0 +1,39 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useApplications } from '@/features/repo/api';
+import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
+import { Badge, Button, Card, EmptyState, QueryBoundary, ResourceTable } from '@/shared/ui';
+import { timeAgo } from '@/shared/lib/format';
+import { FadeSlideIn } from '@/shared/motion';
+import type { Application } from '@/shared/lib/types';
+
+export default function RepoListView() {
+  const q = useApplications();
+  const nav = useNavigate();
+  const [wizard, setWizard] = useState(false);
+  return (
+    <FadeSlideIn>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>레포</h1>
+        <Button variant="primary" onClick={() => setWizard(true)}>+ 레포 연결</Button>
+      </div>
+      <Card>
+        <QueryBoundary query={q}>{apps => (
+          <ResourceTable<Application>
+            rows={apps} rowKey={a => a.application_id}
+            onRowClick={a => nav(`/repos/${a.application_id}`)}
+            empty={<EmptyState icon="⑂" title="연결된 레포가 없습니다" action={<Button variant="primary" onClick={() => setWizard(true)}>레포 연결</Button>} />}
+            columns={[
+              { key: 'name', label: '앱', render: a => <b>{a.name}</b> },
+              { key: 'repo', label: '레포', render: a => <code>{a.repo_ref}@{a.branch}</code> },
+              { key: 'cluster', label: '클러스터', render: a => a.cluster_id },
+              { key: 'status', label: '최근 run', render: a => a.last_run_status ? <Badge status={a.last_run_status} /> : '—' },
+              { key: 'at', label: '마지막 배포', render: a => a.last_deployed_at ? timeAgo(a.last_deployed_at) : '—' },
+            ]}
+          />
+        )}</QueryBoundary>
+      </Card>
+      <ConnectRepoWizard open={wizard} onClose={() => setWizard(false)} />
+    </FadeSlideIn>
+  );
+}

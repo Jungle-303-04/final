@@ -1,0 +1,189 @@
+// 공용 프리미티브 — docs/fd/04 인벤토리. 뷰는 이 모듈과 motion 만 사용
+import type { UseQueryResult } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ApiError } from '@/shared/lib/api';
+import type { Tone } from '@/shared/lib/types';
+import { toneColor, toneOf } from '@/shared/ui/status';
+import { CountUp } from '@/shared/motion';
+import { uiStore } from '@/shared/lib/ui-store';
+
+export function Button({ variant = 'secondary', size, loading, children, ...rest }:
+  { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; size?: 'sm'; loading?: boolean } &
+  React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button className={`btn btn--${variant} ${size ? `btn--${size}` : ''}`} disabled={loading || rest.disabled} {...rest}>
+      {loading ? '…' : children}
+    </button>
+  );
+}
+
+export function Badge({ status, tone, children }: { status?: string; tone?: Tone; children?: ReactNode }) {
+  const t = tone ?? toneOf(status ?? '');
+  return <span className="badge" style={{ color: toneColor(t) }}><span className="dot" />{children ?? status}</span>;
+}
+
+export function Card({ title, actions, children, style }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div className="card" style={style}>
+      {(title || actions) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-3)' }}>
+          <strong style={{ fontSize: 'var(--fs-md)' }}>{title}</strong><div>{actions}</div>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+export function StatBox({ label, value, tone }: { label: string; value: number; tone?: Tone }) {
+  return <div className="statbox"><b style={tone ? { color: toneColor(tone) } : undefined}><CountUp value={value} /></b><span>{label}</span></div>;
+}
+
+export interface Column<T> { key: string; label: string; render: (row: T) => ReactNode; width?: string }
+export function ResourceTable<T>({ columns, rows, rowKey, onRowClick, empty }:
+  { columns: Column<T>[]; rows: T[]; rowKey: (r: T) => string; onRowClick?: (r: T) => void; empty?: ReactNode }) {
+  if (rows.length === 0) return <>{empty ?? <EmptyState icon="📄" title="데이터가 없습니다" />}</>;
+  return (
+    <table className="table">
+      <thead><tr>{columns.map(c => <th key={c.key} style={{ width: c.width }}>{c.label}</th>)}</tr></thead>
+      <tbody>
+        {rows.map(r => (
+          <tr key={rowKey(r)} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick?.(r)}>
+            {columns.map(c => <td key={c.key}>{c.render(r)}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+export function Tabs({ items, current, onChange }: { items: { key: string; label: string; badge?: number }[]; current: string; onChange: (k: string) => void }) {
+  return (
+    <div className="tabs" role="tablist">
+      {items.map(i => (
+        <button key={i.key} role="tab" aria-selected={current === i.key} className={current === i.key ? 'active' : ''} onClick={() => onChange(i.key)}>
+          {i.label}{i.badge ? ` (${i.badge})` : ''}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Modal({ open, title, onClose, children, size }: { open: boolean; title: string; onClose: () => void; children: ReactNode; size?: 'lg' }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (open) window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className={`modal ${size ? `modal--${size}` : ''}`} role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
+          <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function Drawer({ open, title, onClose, children }: { open: boolean; title: ReactNode; onClose: () => void; children: ReactNode }) {
+  if (!open) return null;
+  return (
+    <>
+      <div className="modal-backdrop" style={{ justifyContent: 'flex-end', background: 'rgb(0 0 0 / .35)' }} onClick={onClose} />
+      <aside className="drawer" aria-label="상세">
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
+          <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
+        </div>
+        {children}
+      </aside>
+    </>
+  );
+}
+
+export function EmptyState({ icon, title, description, action }: { icon: string; title: string; description?: string; action?: ReactNode }) {
+  return <div className="empty"><span className="ico">{icon}</span><strong>{title}</strong>{description && <span style={{ fontSize: 'var(--fs-sm)' }}>{description}</span>}{action}</div>;
+}
+
+export function Skeleton({ lines = 3 }: { lines?: number }) {
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{Array.from({ length: lines }, (_, i) => <div key={i} className="skeleton" style={{ width: `${90 - i * 12}%` }} />)}</div>;
+}
+
+export function QueryBoundary<T>({ query, children, skeletonLines }: { query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }) {
+  if (query.isPending) return <Skeleton lines={skeletonLines ?? 4} />;
+  if (query.isError) {
+    const e = query.error as unknown as ApiError;
+    const msg = e.kind === 'forbidden' ? '접근 권한이 없습니다' : e.kind === 'unauthorized' ? '다시 로그인해주세요' : e.kind === 'network' ? '네트워크 오류' : e.detail || '오류가 발생했습니다';
+    return <EmptyState icon="⚠️" title={msg} action={<Button size="sm" onClick={() => query.refetch()}>다시 시도</Button>} />;
+  }
+  return <>{children(query.data)}</>;
+}
+
+export function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
+  return <div className="field"><label>{label}</label>{children}{error && <span className="err" role="alert">{error}</span>}</div>;
+}
+
+export function KeyValue({ pairs }: { pairs: [string, ReactNode][] }) {
+  return <dl className="kv">{pairs.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>;
+}
+
+export function CodeBlock({ code }: { code: string }) {
+  return (
+    <div className="code">
+      <Button size="sm" variant="ghost" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => navigator.clipboard.writeText(code)}>복사</Button>
+      {code}
+    </div>
+  );
+}
+
+export function Avatar({ name }: { name: string }) {
+  const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  return <span className="avatar" title={name} style={{ background: `oklch(75% 0.14 ${hue})` }}>{name.slice(0, 2).toUpperCase()}</span>;
+}
+
+export function Breadcrumbs({ items }: { items: { label: string; to?: string }[] }) {
+  return (
+    <nav className="crumbs" aria-label="breadcrumb">
+      {items.map((i, n) => (
+        <span key={n} style={{ display: 'flex', gap: 6 }}>
+          {n > 0 && <span>/</span>}
+          {i.to ? <Link to={i.to}>{i.label}</Link> : <span style={{ color: 'var(--text-1)' }}>{i.label}</span>}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+export function Stepper({ steps, current }: { steps: string[]; current: number }) {
+  return <div className="stepper">{steps.map((s, i) => <div key={s} className={`step ${i < current ? 'done' : i === current ? 'now' : ''}`}>{i + 1}. {s}</div>)}</div>;
+}
+
+export function Toasts() {
+  const toasts = uiStore(s => s.toasts);
+  return (
+    <div className="toasts" aria-live="polite">
+      {toasts.map(t => <div key={t.id} className="toast" style={{ borderLeftColor: toneColor(t.tone as Tone) }}>{t.title}</div>)}
+    </div>
+  );
+}
+
+export function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === '/' && document.activeElement === document.body) { e.preventDefault(); ref.current?.focus(); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+  return <input ref={ref} className="input" style={{ maxWidth: 320 }} value={value} placeholder={placeholder ?? '검색 ( / )'} onChange={e => onChange(e.target.value)} />;
+}
+
+export function useSearchFilter<T>(rows: T[], pick: (r: T) => string): [T[], string, (v: string) => void] {
+  const [q, setQ] = useState('');
+  const filtered = q ? rows.filter(r => pick(r).toLowerCase().includes(q.toLowerCase())) : rows;
+  return [filtered, q, setQ];
+}
