@@ -1,79 +1,129 @@
-# 로컬 테스트 실행 기준
+# 로컬 검증 실행 기준
 
-이 문서는 하드코딩 계정 없이 로컬에서 Gateway, smoke, Bruno를 확인하는 기준이다.
-운영 계정은 코드에 박지 않고 `.env.local-test`로 명시해서 주입한다.
+이 문서는 개발자 PC에서 어디까지 확인하고, 어디부터 AWS에서 확인해야 하는지 정리한다.
+현재 팀 기준은 단순하다.
 
-## 1단계. 로컬 테스트 env 만들기
+로컬에서는 코드 정합성만 확인한다.
+Gateway, worker, target agent, DNS, Bruno API 흐름은 AWS `aws-test` 환경에서 확인한다.
+
+## 1단계. 빠른 코드 검증
+
+작업 중 가장 자주 쓰는 명령은 아래다.
 
 ```bash
-make local-test-env
+bash scripts/test.sh
 ```
 
-생성되는 파일:
+이 명령은 Python import, compile, unit test를 빠르게 확인한다.
+서비스를 로컬 클러스터에 올리지 않는다.
+API가 실제로 붙는지는 이 단계에서 판단하지 않는다.
 
-```text
-.env.local-test
+## 2단계. 문서와 Bruno 검증
+
+문서나 Bruno collection을 수정했으면 아래를 먼저 돌린다.
+
+```bash
+uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q
 ```
 
-기본 로컬 테스트 값:
+이 테스트가 보는 것:
 
-```text
-AUTH_EMAIL=admin.local@example.com
-AUTH_PASSWORD=local-test-password-1234
-BASE_URL=http://localhost:18080
-MGMT_CONTEXT=kind-management
-SMOKE_CLUSTER_ID=target
+1. `docs/README.md`가 모든 문서를 링크하는지 확인한다.
+2. 문서가 3레벨 이하 구조를 지키는지 확인한다.
+3. Bruno `docs/api` collection이 import 가능한 문법을 쓰는지 확인한다.
+4. 모든 Gateway route가 Bruno request로 연결되어 있는지 확인한다.
+5. Bruno 표시명이 한글로 보이는지 확인한다.
+
+이 테스트가 실패하면 AWS로 올리기 전에 문서나 Bruno 파일을 먼저 고친다.
+
+## 3단계. Manifest 검증
+
+Kubernetes manifest를 수정했으면 아래를 실행한다.
+
+```bash
+make manifest-check
 ```
 
-이 값은 로컬 전용이다.
-AWS, preview, production에는 쓰지 않는다.
+이 명령은 management/target manifest가 렌더링되고 Kubernetes client dry-run으로 파싱되는지 확인한다.
+실제 EKS에 적용하지는 않는다.
 
-## 2단계. 로컬 서비스 올리기
+## 4단계. PR 전 기본 검증
+
+PR 또는 main 반영 전에는 아래를 기준으로 본다.
+
+```bash
+make check
+```
+
+`make check`는 코드 테스트와 manifest 검증을 함께 실행한다.
+여기까지는 개발자 PC에서 확인하는 최소 기준이다.
+
+## 5단계. 로컬 보조 profile
+
+로컬 클러스터로 빠르게 부팅 상태를 볼 때만 아래 보조 profile을 쓴다.
 
 ```bash
 make local-up
-```
-
-내부적으로 `.env.local-test`를 source한 뒤 `scripts/up.sh`를 실행한다.
-`scripts/up.sh`는 schema bootstrap 과정에서 `AUTH_EMAIL` 계정을 `service_admin`으로 생성하거나 업데이트한다.
-
-직접 실행해야 하면 아래와 같다.
-
-```bash
-set -a
-source .env.local-test
-set +a
-bash scripts/up.sh
-```
-
-## 3단계. 로컬 smoke 실행
-
-```bash
 make local-smoke
 ```
 
-직접 실행해야 하면 아래와 같다.
+이 경로는 팀 통합 테스트 기준이 아니다. 실제 배포 반영과 Gateway/worker/target agent 연결 검증은 AWS smoke를 기준으로 한다.
+
+## 6단계. 실제 서비스 검증은 AWS에서 한다
+
+서비스가 진짜로 붙는지는 AWS CD smoke로 확인한다.
 
 ```bash
-BASE_URL="http://localhost:18080" \
-AUTH_EMAIL="admin.local@example.com" \
-AUTH_PASSWORD="local-test-password-1234" \
-MGMT_CONTEXT="kind-management" \
-SMOKE_CLUSTER_ID="target" \
-bash scripts/smoke.sh
+make aws-smoke
 ```
 
-## 4단계. Bruno로 확인
+직접 GitHub Actions를 호출해야 하면 아래를 쓴다.
 
-Bruno에서 `docs/api`를 Open Collection으로 열고 Environment를 `local`로 고른다.
-`docs/api/environments/local.bru`는 `.env.local-test`와 같은 기본값을 사용한다.
+```bash
+/opt/homebrew/bin/gh workflow run aws-cd.yml \
+  --repo Jungle-303-04/final \
+  --ref main \
+  -f create_clusters=false \
+  -f ensure_ebs_csi=false \
+  -f bootstrap_admin=false \
+  -f register_targets=false \
+  -f run_smoke=true
+```
+
+실행 결과는 아래처럼 본다.
+
+```bash
+/opt/homebrew/bin/gh run list \
+  --repo Jungle-303-04/final \
+  --workflow aws-cd.yml \
+  --limit 5
+```
+
+새 run id를 확인한 뒤 아래처럼 기다린다.
+
+```bash
+/opt/homebrew/bin/gh run watch <run_id> \
+  --repo Jungle-303-04/final \
+  --exit-status
+```
+
+정상 기준은 `AWS CD / Test before deploy`, `AWS CD / Deploy to AWS EKS`, `Smoke test passed`가 모두 통과하는 것이다.
+
+## 7단계. Bruno는 AWS profile을 기본으로 쓴다
+
+Bruno에서 `docs/api`를 Open Collection으로 열고 Environment를 `aws-test`로 고른다.
+
+`aws-test` 기본값:
 
 ```text
-base_url: http://localhost:18080/
+base_url: https://k8s.woonyong.org/
 auth_email: admin.local@example.com
 auth_password: local-test-password-1234
-cluster_id: target
+cluster_id: cluster-1
 ```
+
+운영자가 AWS bootstrap 계정을 다른 값으로 설정했다면 Bruno Environment의 `auth_email`, `auth_password`만 그 값으로 바꾼다.
+문서나 collection 파일에는 실제 비밀번호를 쓰지 않는다.
 
 먼저 보낼 요청:
 
@@ -83,23 +133,29 @@ cluster_id: target
 4. `00-health-auth/07-session`
 5. `05-rca-dashboard/01-dashboard-timeline`
 
-`user_id`가 필요한 요청은 signup 또는 session 응답에서 받은 값을 사용한다.
+`user_id`, `agent_token`, `command_id`, `incident_id`처럼 실행 중 생기는 값은 이전 응답에서 받은 값을 사용한다.
 직접 외워서 넣는 값이 아니다.
 
-## 비밀번호를 생성해서 쓰는 경우
+## 8단계. URL이 안 열릴 때
 
-고정 로컬 비밀번호를 쓰지 않으려면 `.env.local-test`에서 `AUTH_PASSWORD`를 비워두고 아래처럼 실행한다.
+먼저 Gateway health를 확인한다.
 
 ```bash
-AUTH_EMAIL="admin.local@example.com" \
-PRINT_GENERATED_ADMIN_PASSWORD=1 \
-bash scripts/up.sh
+curl -i https://k8s.woonyong.org/healthz
 ```
 
-출력된 임시 비밀번호를 이후 smoke와 Bruno의 `auth_password`에 넣는다.
+정상 기준:
 
-## AWS 테스트와 차이
+```json
+{"status":"ok","service":"api-gateway"}
+```
 
-AWS에서는 로컬 profile을 쓰지 않는다.
-GitHub Environment secret에 `AUTH_EMAIL`, `AUTH_PASSWORD`를 넣고, 처음 환경이면 `bootstrap_admin=true`로 배포한다.
-서비스 수준 smoke는 `make aws-smoke`를 기준으로 확인한다.
+`HTTP/2 530`과 `error code: 1016`이 나오면 Bruno 문제가 아니라 Cloudflare DNS origin 연결 문제다.
+이때는 [AWS 테스트 실행 기준](aws-testing-runbook.md)의 Cloudflare 1016 절차를 따른다.
+
+## 로컬 profile은 언제 쓰는가
+
+Bruno `local` profile은 개인이 Gateway를 별도로 띄워서 빠르게 확인할 때만 남겨 둔 보조 profile이다.
+팀 통합 테스트 기준은 아니다.
+
+팀원에게 재현을 요청할 때는 `aws-test` profile과 AWS CD run id를 기준으로 말한다.

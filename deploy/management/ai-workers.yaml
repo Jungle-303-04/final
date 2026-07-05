@@ -313,23 +313,23 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rca-fallback-worker
+  name: rca-feedback-worker
   namespace: management
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: rca-fallback-worker
+      app: rca-feedback-worker
   template:
     metadata:
       labels:
-        app: rca-fallback-worker
+        app: rca-feedback-worker
     spec:
       containers:
         - name: worker
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
-          command: ["python", "src/services/ai/rca-fallback-worker/app.py"]
+          command: ["python", "src/services/ai/rca-feedback-worker/app.py"]
           envFrom:
             - configMapRef:
                 name: management-runtime-config

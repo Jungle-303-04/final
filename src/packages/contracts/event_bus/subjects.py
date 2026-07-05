@@ -57,6 +57,8 @@ class EventSubject(StrEnum):
     RCA_CANDIDATES_PLANNED = "rca.candidates.planned"  # RCA 원인 후보 생성
     RCA_CANDIDATES_EVALUATED = "rca.candidates.evaluated"  # RCA 원인 후보 평가
     RCA_COMPLETED = "rca.completed"  # 근본 원인 분석 완료
+    RCA_ANALYSIS_BLOCKED = "rca.analysis_blocked"  # RCA 자동 확정 불가
+    RCA_FOLLOWUP_REQUIRED = "rca.followup.required"  # RCA 후속 조치 필요
     RCA_RULE_MISSING = "rca.rule_missing"  # RCA rule 매칭 실패
     RCA_BACKLOG_ITEM_CREATED = "rca.backlog.created"  # RCA 개선 backlog 적재
     RCA_AI_FALLBACK_REQUESTED = "rca.ai_fallback.requested"  # AI fallback 분석 요청
@@ -94,6 +96,7 @@ class EventSubject(StrEnum):
 
     # --- 신뢰성(공통): 재시도 소진 시 DLQ ---
     DEAD_LETTER_CREATED = "dead_letter.created"  # 죽은 편지(DLQ) 적재
+    PIPELINE_CONTRACT_FAILED = "pipeline.contract_failed"  # 워커 간 이벤트 계약 위반
 
 
 # 발행 enum 없이 구독자만 있는 예약 프리픽스(예: audit 프로젝터 산출물용).
