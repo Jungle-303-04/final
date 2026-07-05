@@ -56,7 +56,7 @@
 
 TODO:
 
-- TODO(platform): `make check`, `make smoke`, `make status`가 같은 runtime dependency 집합을 보도록 CI와 로컬 명령을 맞춘다.
+- TODO(platform): `make check`, `make manifest-check`, `make aws-smoke`가 같은 AWS 테스트 기준을 보도록 CI와 문서를 맞춘다.
 - TODO(platform): 새 event subject/body가 `src/packages/contracts/event_bus`, `docs/events.md`, 테스트에 동시에 반영되는 contract gate를 보강한다.
 - TODO(platform): outbox relay가 provider side effect 전 crash injection 시나리오를 통과하도록 운영 검증을 유지한다.
 - TODO(platform): dashboard read model 확장 시 `dashboard.updated`, query API, SSE stream이 같은 correlation 기준을 쓰는지 검증한다.

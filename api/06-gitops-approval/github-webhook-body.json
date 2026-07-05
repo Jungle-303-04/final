@@ -1,0 +1,16 @@
+{
+  "commit_sha": "bruno-commit-001",
+  "image": "ghcr.io/example/checkout-api:bruno",
+  "replicas": 2,
+  "workspace_id": "default",
+  "repository_id": "repo-bruno",
+  "repo_ref": "Jungle-303-04/final",
+  "branch": "main",
+  "watch_target_id": "watch-bruno",
+  "binding_id": "binding-bruno",
+  "application_id": "app-bruno",
+  "workflow_run_id": "wf-bruno",
+  "environment": "sandbox",
+  "cluster_id": "target-cluster-01",
+  "manifest_path": "src/samples/smoke/deploy.yaml"
+}

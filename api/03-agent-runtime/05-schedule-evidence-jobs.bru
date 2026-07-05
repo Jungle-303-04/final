@@ -1,0 +1,53 @@
+meta {
+  name: 05 Schedule Evidence Jobs
+  type: http
+  seq: 5
+  tags: [
+    agent
+    evidence
+  ]
+}
+
+post {
+  url: {{base_url}}/agent/evidence/jobs
+}
+
+headers {
+  content-type: application/json
+  x-agent-token: {{agent_token}}
+}
+
+body {
+  {
+    "source_id": "bruno-manual",
+    "window_start": "2026-07-05T00:00:00Z",
+    "provider_keys": [
+      "kubernetes",
+      "metrics",
+      "logs",
+      "traces"
+    ]
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.status === 200 && body && body.evidence_key) {
+    bru.setEnvVar("evidence_key", body.evidence_key);
+  }
+}
+
+test {
+  test("accepted or explicit auth/validation failure", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("success body has evidence key and jobs", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("accepted", true);
+      expect(body).to.have.property("evidence_key");
+      expect(body.job_ids).to.be.an("array");
+    }
+  });
+}

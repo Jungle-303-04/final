@@ -1,0 +1,29 @@
+meta {
+  name: 02 Get Agent Policy
+  type: http
+  seq: 2
+  tags: [
+    agent
+    policy
+  ]
+}
+
+get {
+  url: {{base_url}}/agent/policy?cluster_id={{cluster_id}}&generation=0
+}
+
+headers {
+  x-agent-token: {{agent_token}}
+}
+
+test {
+  test("200 with policy/null or explicit auth failure", function () {
+    expect([200, 401, 403]).to.include(res.status);
+  });
+
+  test("success body contains policy key", function () {
+    if (res.status === 200) {
+      expect(res.getBody()).to.have.property("policy");
+    }
+  });
+}

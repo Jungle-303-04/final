@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GATEWAY_PORT="${GATEWAY_PORT:-18080}"
-BASE_URL="${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
-TARGET_CONTEXT="${TARGET_CONTEXT:-kind-target}"
-TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-target-cluster-01}"
-TARGET_NAME="${TARGET_NAME:-target-cluster}"
+BASE_URL="${BASE_URL:-https://k8s.woonyong.org}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-cluster-1}"
+TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-cluster-1}"
+TARGET_NAME="${TARGET_NAME:-cluster-1}"
 TARGET_ENVIRONMENT="${TARGET_ENVIRONMENT:-sandbox}"
 WORKSPACE_ID="${WORKSPACE_ID:-default}"
 MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL:-}"

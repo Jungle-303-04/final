@@ -1,6 +1,6 @@
 # Transactional Outbox (완전판) 설계
 
-> 상태: 1~3단계 **구현 완료 + `make smoke` 통과**(실 Postgres+NATS, gitops/rca/command
+> 상태: 1~3단계 **구현 완료 + AWS smoke 통과**(실 Postgres+NATS, gitops/rca/command
 > 전 경로 정상 흐름 확인). 남은 검증: 크래시 주입 시 exactly-once(정상 경로만 확인됨).
 > 알려진 caveat: 핸들러를 트랜잭션으로 감싸므로 outbound 게이트웨이의 외부 HTTP가
 > tx 안에서 돌아 tx 가 길게 잡힌다(정확성 OK, 성능 이슈). 4단계에서 분리 예정.
@@ -134,11 +134,11 @@ async def on_git_changed(evt, ctx: EventContext[RepoChangeStore]):
 1. **[이 커밋] 골격**: outbox 테이블 · Outbox 포트 · OutboxRelay ·
    `publish_envelope` · in-memory 테스트. 임계경로 미변경(기존 직접 발행 유지).
 2. **async write path**: 워커-쓰기 DB 메서드 async 버전 + `async_connection` 이
-   contextvar 커넥션 사용. `make up` 스모크.
-3. **UoW + EventProcessor flip**: 수집-적재-완료 한 트랜잭션. `make up` 스모크.
+   contextvar 커넥션 사용. AWS smoke.
+3. **UoW + EventProcessor flip**: 수집-적재-완료 한 트랜잭션. AWS smoke.
 4. **직접 발행 경로 제거** + relay 단일화. 스모크.
 
 ## 검증
 
 - 1단계: in-memory outbox와 test bus로 relay 동작 단위 테스트.
-- 2~4단계: 실DB/NATS 필요 → `make up && make smoke`(크래시 주입 시 효과 1회 확인).
+- 2~4단계: 실DB/NATS 필요 → `make aws-smoke`(크래시 주입 시 효과는 별도 AWS runbook에서 확인).

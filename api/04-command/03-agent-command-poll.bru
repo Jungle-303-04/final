@@ -1,0 +1,36 @@
+meta {
+  name: 03 Agent Command Poll
+  type: http
+  seq: 3
+  tags: [
+    command
+    agent
+  ]
+}
+
+get {
+  url: {{base_url}}/agent/commands/poll?agent_id={{agent_id}}&timeout=1
+}
+
+headers {
+  x-agent-token: {{agent_token}}
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.status === 200 && body && body.command && body.command.command_id) {
+    bru.setEnvVar("command_id", body.command.command_id);
+  }
+}
+
+test {
+  test("200 with command/null or explicit auth failure", function () {
+    expect([200, 401, 403]).to.include(res.status);
+  });
+
+  test("success body has command key", function () {
+    if (res.status === 200) {
+      expect(res.getBody()).to.have.property("command");
+    }
+  });
+}

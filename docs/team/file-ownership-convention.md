@@ -22,8 +22,8 @@
 
 | 파일 | 알아야 하는 이유 |
 | --- | --- |
-| `README.md` | 로컬 실행, smoke, 전체 서비스 목적 |
-| `Makefile` | `make check`, `make up`, `make smoke` 진입점 |
+| `README.md` | AWS smoke, 검증 기준, 전체 서비스 목적 |
+| `Makefile` | `make check`, `make manifest-check`, `make aws-smoke` 진입점 |
 | `pyproject.toml` | ruff, pytest, Python import 경로 기준 |
 | `.github/workflows/ci.yml` | PR 필수 검증 기준 |
 | `docs/architecture.md` | 전체 서비스 분리와 데이터 흐름 |
@@ -41,8 +41,8 @@
 | `src/packages/runtime/app.py` | worker/gateway 앱 조립 방식 |
 | `src/packages/runtime/worker.py` | ack/nak/DLQ, retry 처리 방식 |
 | `src/packages/storage/schema.py` | DB table 구조 기준 |
-| `scripts/up.sh` | management/target 클러스터 전체 배포 |
-| `scripts/smoke.sh` | E2E smoke 검증 |
+| `scripts/aws-up.sh` | AWS EKS management/target 배포 |
+| `scripts/smoke.sh` | AWS CD에서 실행되는 E2E smoke 검증 |
 | `scripts/register-target.sh` | target cluster 등록과 agent 설치 |
 
 ## Platform / Integration

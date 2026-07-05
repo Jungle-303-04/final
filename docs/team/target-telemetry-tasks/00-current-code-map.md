@@ -104,7 +104,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_agent_commands.py te
 - Prometheus query path와 scrape path를 섞지 않는다.
 - command result body에 없는 `correlation_id`를 agent가 되돌려야 한다고 쓰지 않는다. 현재는 `command_id`와 `lease_id`가 핵심이다.
 - raw telemetry 전체를 Gateway로 보내지 않는다. summary evidence로 줄인다.
-- 작업 후에는 [팀 간 구현 연결과 테스트 가이드](../../cross-role-implementation-test-guide.md)의 Target/Telemetry 섹션과 맞는지 확인한다.
+- 작업 후에는 [팀 간 구현 연결과 테스트 가이드](../cross-role-implementation-test-guide.md)의 Target/Telemetry 섹션과 맞는지 확인한다.
 
 ## 다음 작업
 

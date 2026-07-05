@@ -6,35 +6,27 @@
 
 ## 먼저 실행 상태를 확인한다
 
-코드를 읽기 전에 로컬 서비스가 같은 기준으로 뜨는지 먼저 본다.
+코드를 읽기 전에 두 가지를 나눠서 본다. 로컬에서는 코드와 manifest가 깨지지 않았는지 확인하고, 실제 서비스 연결은 AWS EKS smoke로 확인한다.
 
 ```bash
-make up
-make smoke
+bash scripts/test.sh
+make manifest-check
+make aws-smoke
 ```
 
-현재 로컬 기본값:
+현재 AWS smoke 기본값:
 
 | 값 | 기준 |
 | --- | --- |
-| Gateway | `http://localhost:18080` |
-| local admin | `admin@example.com / local-admin-password` |
-| smoke manifest | `src/samples/smoke/deploy.yaml` |
-| worker set | 기본 `UP_WORKER_SET=smoke` |
-| poll CronJob | 기본 `ENABLE_GITHUB_POLL_CRON=0` |
+| workflow | `.github/workflows/aws-cd.yml` |
+| 실행 input | `run_smoke=true` |
+| management cluster | `kubernetes-ops` |
+| target cluster | `cluster-1`, `cluster-2` |
+| region | `ap-northeast-2` |
 | smoke 확인 범위 | `git.webhook.received -> git.changed -> manifest.rendered -> desired.diff.detected -> diff.analyzed` |
 
-`make up`은 management/target kind 클러스터를 만든다. 먼저 Postgres/NATS/Redis/MinIO를 올리고, schema/admin bootstrap Job을 실행한 뒤, Gateway를 띄우고 worker를 하나씩 켠다. 기존 클러스터에 worker가 남아 있어도 `up.sh`가 먼저 app workload를 조용히 내린 뒤 재적용한다.
-
-기본 로컬 profile은 `smoke`다. kind 단일 control-plane에서 모든 worker와 CronJob을 오래 켜 두면 Kubernetes controller-manager가 lease를 잃을 수 있어서, 기본값은 smoke에 필요한 worker만 켠다.
-
-| profile | 실행 | 용도 |
-| --- | --- | --- |
-| smoke | `make up` | GitOps webhook/render/diff/analyze smoke를 안정적으로 확인한다. |
-| rca | `UP_WORKER_SET=rca make up` | evidence -> RCA -> command/Safe PR 요청 흐름까지 본다. |
-| full | `UP_WORKER_SET=full ENABLE_GITHUB_POLL_CRON=1 make up` | 모든 worker와 GitHub poll CronJob을 켠다. 로컬 PC 자원이 부족하면 control-plane이 흔들릴 수 있다. |
-
-`make smoke`는 GitHub 토큰이 없어도 로컬 HEAD와 샘플 manifest로 실제 event 경로를 검증한다. 단순히 webhook 응답만 보는 것이 아니라 DB `events` 테이블에서 같은 `correlation_id`의 필수 subject가 남았는지 기다린다.
+`make aws-smoke`는 GitHub CLI로 AWS CD를 dispatch한다. GitHub 화면에서는 `Integration Smoke` workflow를 수동 실행해도 같은 경로를 탄다.
+세부 값은 [AWS 테스트 실행 기준](../aws-testing-runbook.md)에 모아 둔다.
 
 ## 코드를 찾는 기본 순서
 
@@ -282,5 +274,5 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 - 외부 write는 provider/adapter 경계에서 처리한다.
 - event payload에 token, kubeconfig, secret 원문을 넣지 않는다.
 - role별 테스트가 통과한다.
-- `make up`과 `make smoke`가 통과한다.
+- `make check`와 `make aws-smoke`가 통과한다.
 - 문서에 쓴 테스트 이름이 실제로 존재한다.
