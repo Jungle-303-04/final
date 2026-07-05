@@ -244,7 +244,7 @@ def _settings(*, provider: str, api_key: str, base_url: str) -> LlmProviderSetti
 @dataclass(frozen=True)
 class CurrentUser:
     user_id: str = "user-1"
-    roles: tuple[str, ...] = ("admin",)
+    roles: tuple[str, ...] = ("service_admin",)
     workspace_id: str = "default"
 
 

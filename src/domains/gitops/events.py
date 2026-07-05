@@ -20,7 +20,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
     ResourceClass,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ResourceRole
 
 
 @dataclass(frozen=True)
@@ -268,7 +268,7 @@ class ApprovalRequestedBody(EventBody):
     workspace_id: str = DEFAULT_WORKSPACE_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
-    requested_role: str = "deployer"
+    requested_role: str = ResourceRole.RELEASE_OPERATOR.value
     details: dict[str, object] = field(default_factory=dict)
 
 
