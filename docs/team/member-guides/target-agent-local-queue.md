@@ -94,12 +94,6 @@ uv run pytest tests/test_target_agent_client.py tests/test_agent_evidence_ingest
 uv run ruff check src tests
 ```
 
-local spool 구현이 추가되면 별도 테스트를 둔다.
-
-```bash
-uv run pytest tests/test_target_agent_local_spool.py
-```
-
 ## 완료 기준
 
 - command result가 telemetry evidence보다 먼저 처리된다.

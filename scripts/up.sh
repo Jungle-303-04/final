@@ -28,27 +28,30 @@ REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
 GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_REPO="${GITHUB_REPO:-$(default_github_repo)}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-MANIFEST_PATH="${MANIFEST_PATH:-deploy/target/target.yaml}"
+MANIFEST_PATH="${MANIFEST_PATH:-src/samples/smoke/deploy.yaml}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 GITHUB_API_BASE="${GITHUB_API_BASE:-https://api.github.com}"
 GIT_MANIFEST_SOURCE_MODE="${GIT_MANIFEST_SOURCE_MODE:-auto}"
-GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED:-0}"
+GIT_LOCAL_MANIFEST_ENABLED="${GIT_LOCAL_MANIFEST_ENABLED:-1}"
 GIT_CHECKOUT_CACHE_ENABLED="${GIT_CHECKOUT_CACHE_ENABLED:-0}"
 GIT_CHECKOUT_CACHE_REQUIRED="${GIT_CHECKOUT_CACHE_REQUIRED:-0}"
 GIT_CACHE_MAX_REPOS="${GIT_CACHE_MAX_REPOS:-8}"
 GIT_CACHE_MAX_BYTES="${GIT_CACHE_MAX_BYTES:-1073741824}"
 GIT_REMOTE_MANIFEST_ENABLED="${GIT_REMOTE_MANIFEST_ENABLED:-1}"
-GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-1}"
+GIT_REMOTE_MANIFEST_REQUIRED="${GIT_REMOTE_MANIFEST_REQUIRED:-0}"
 GITOPS_REQUIRE_APPROVED_SNAPSHOT="${GITOPS_REQUIRE_APPROVED_SNAPSHOT:-0}"
 GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS:-5}"
 COMMAND_JANITOR_INTERVAL_SECONDS="${COMMAND_JANITOR_INTERVAL_SECONDS:-15}"
+WORKER_IDLE_SLEEP_SECONDS="${WORKER_IDLE_SLEEP_SECONDS:-1.0}"
 SCM_PROVIDER="${SCM_PROVIDER:-github}"
 SCM_REPO="${SCM_REPO:-${GITHUB_REPO}}"
 SCM_BASE_BRANCH="${SCM_BASE_BRANCH:-${GITHUB_BRANCH}}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-target-cluster-01}"
-EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-8}"
+EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-30}"
+UP_WORKER_SET="${UP_WORKER_SET:-smoke}"
+ENABLE_GITHUB_POLL_CRON="${ENABLE_GITHUB_POLL_CRON:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 LLM_PROVIDER="${LLM_PROVIDER:-}"
 LLM_MODEL="${LLM_MODEL:-}"
@@ -71,6 +74,94 @@ GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
 GEMINI_BASE_URL="${GEMINI_BASE_URL:-}"
 GEMINI_MODEL="${GEMINI_MODEL:-}"
+AUTH_EMAIL="${AUTH_EMAIL:-admin@example.com}"
+AUTH_PASSWORD="${AUTH_PASSWORD:-local-admin-password}"
+
+APP_WORKER_DEPLOYMENTS=(
+  ai-chat-worker
+  git-pull-worker
+  manifest-render-worker
+  diff-worker
+  diff-analyze-worker
+  scm-worker
+  workflow-controller
+  alert-worker
+  mail-worker
+  command-worker
+  command-janitor
+  target-reconcile-worker
+  rca-worker
+  rca-fallback-worker
+  evidence-worker
+  incident-worker
+  plan-worker
+  analyze-worker
+  recovery-worker
+  select-worker
+  dispatch-worker
+  backlog-worker
+  safe-pr-worker
+  ai-diff-worker
+  rollout-worker
+  approval-worker
+  audit-worker
+  dashboard-worker
+  realtime-gateway
+  dead-letter-monitor
+)
+
+SMOKE_WORKER_DEPLOYMENTS=(
+  git-pull-worker
+  manifest-render-worker
+  diff-worker
+  diff-analyze-worker
+  workflow-controller
+  audit-worker
+  dashboard-worker
+  dead-letter-monitor
+)
+
+RCA_WORKER_DEPLOYMENTS=(
+  git-pull-worker
+  manifest-render-worker
+  diff-worker
+  diff-analyze-worker
+  scm-worker
+  workflow-controller
+  alert-worker
+  command-worker
+  command-janitor
+  evidence-worker
+  incident-worker
+  plan-worker
+  analyze-worker
+  rca-worker
+  rca-fallback-worker
+  recovery-worker
+  select-worker
+  dispatch-worker
+  backlog-worker
+  safe-pr-worker
+  audit-worker
+  dashboard-worker
+  dead-letter-monitor
+)
+
+case "${UP_WORKER_SET}" in
+  smoke)
+    WORKER_DEPLOYMENTS_TO_START=("${SMOKE_WORKER_DEPLOYMENTS[@]}")
+    ;;
+  rca)
+    WORKER_DEPLOYMENTS_TO_START=("${RCA_WORKER_DEPLOYMENTS[@]}")
+    ;;
+  full)
+    WORKER_DEPLOYMENTS_TO_START=("${APP_WORKER_DEPLOYMENTS[@]}")
+    ;;
+  *)
+    echo "UP_WORKER_SET must be one of: smoke, rca, full" >&2
+    exit 1
+    ;;
+esac
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -85,6 +176,69 @@ need kubectl
 need curl
 need openssl
 need python3
+
+kubectl_retry() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if kubectl "$@"; then
+      return 0
+    fi
+    echo "kubectl retry ${attempt}/5: $*" >&2
+    sleep "$((attempt * 3))"
+  done
+  kubectl "$@"
+}
+
+quiesce_existing_management_apps() {
+  echo "==> quiescing existing management app workloads"
+  kubectl --context "kind-${MGMT_CLUSTER}" -n management patch cronjob/github-poll-worker \
+    --type=merge \
+    -p '{"spec":{"suspend":true}}' >/dev/null 2>&1 || true
+
+  for job in $(
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management get job -o name 2>/dev/null \
+      | grep '^job.batch/github-poll-worker-' || true
+  ); do
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "${job}" \
+      --cascade=background --wait=false >/dev/null 2>&1 || true
+  done
+
+  for pod in $(
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management get pod -o name 2>/dev/null \
+      | grep '^pod/github-poll-worker-' || true
+  ); do
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "${pod}" \
+      --wait=false >/dev/null 2>&1 || true
+  done
+
+  for deploy in "${APP_WORKER_DEPLOYMENTS[@]}"; do
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management scale "deploy/${deploy}" \
+      --replicas=0 >/dev/null 2>&1 || true
+    kubectl --context "kind-${MGMT_CLUSTER}" -n management delete pod \
+      -l "app=${deploy}" --wait=false >/dev/null 2>&1 || true
+  done
+}
+
+wait_management_pod_ready() {
+  local app_name="$1"
+  local timeout="${2:-300s}"
+  local pod_name
+  for _ in $(seq 1 60); do
+    pod_name="$(
+      kubectl --context "kind-${MGMT_CLUSTER}" -n management get pod \
+        -l "app=${app_name}" \
+        -o name 2>/dev/null | head -1
+    )"
+    if [ -n "${pod_name}" ]; then
+      break
+    fi
+    sleep 2
+  done
+  kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management wait \
+    --for=condition=ready pod \
+    -l "app=${app_name}" \
+    --timeout="${timeout}"
+}
 
 valid_github_token() {
   local token="$1"
@@ -195,6 +349,7 @@ kind load docker-image "${IMAGE_NAME}" --name "${TARGET_CLUSTER}"
 
 echo "==> deploying management plane"
 kubectl --context "kind-${MGMT_CLUSTER}" apply -f "${ROOT_DIR}/deploy/management/namespace.yaml"
+quiesce_existing_management_apps
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic postgresql-secret \
   --from-literal=POSTGRES_USER="${POSTGRES_USER}" \
   --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
@@ -250,6 +405,7 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management create configmap manageme
   --from-literal=GITOPS_REQUIRE_APPROVED_SNAPSHOT="${GITOPS_REQUIRE_APPROVED_SNAPSHOT}" \
   --from-literal=GITHUB_MANIFEST_TIMEOUT_SECONDS="${GITHUB_MANIFEST_TIMEOUT_SECONDS}" \
   --from-literal=COMMAND_JANITOR_INTERVAL_SECONDS="${COMMAND_JANITOR_INTERVAL_SECONDS}" \
+  --from-literal=WORKER_IDLE_SLEEP_SECONDS="${WORKER_IDLE_SLEEP_SECONDS}" \
   --from-literal=SCM_PROVIDER="${SCM_PROVIDER}" \
   --from-literal=SCM_REPO="${SCM_REPO}" \
   --from-literal=SCM_BASE_BRANCH="${SCM_BASE_BRANCH}" \
@@ -290,57 +446,192 @@ done
 kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic management-runtime-secret \
   "${SECRET_ARGS[@]}" \
   --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
+kubectl --context "kind-${MGMT_CLUSTER}" -n management create secret generic management-admin-bootstrap \
+  --from-literal=AUTH_EMAIL="${AUTH_EMAIL}" \
+  --from-literal=AUTH_PASSWORD="${AUTH_PASSWORD}" \
+  --dry-run=client -o yaml | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
 kubectl --context "kind-${MGMT_CLUSTER}" -n management delete \
   deploy/management-api-gateway \
   svc/management-api-gateway \
   deploy/api-gateway \
   svc/api-gateway \
   --ignore-not-found
-MANAGEMENT_OVERLAY="${RUNTIME_DIR}/management-kustomization"
-mkdir -p "${MANAGEMENT_OVERLAY}"
-mapfile -t IMAGE_PARTS < <(image_repo_and_tag "${IMAGE_NAME}")
-cat >"${MANAGEMENT_OVERLAY}/kustomization.yaml" <<EOF
+MANAGEMENT_INFRA_OVERLAY="${RUNTIME_DIR}/management-infra-kustomization"
+MANAGEMENT_APP_OVERLAY="${RUNTIME_DIR}/management-app-kustomization"
+mkdir -p "${MANAGEMENT_INFRA_OVERLAY}" "${MANAGEMENT_APP_OVERLAY}"
+cp \
+  "${ROOT_DIR}/deploy/management/namespace.yaml" \
+  "${ROOT_DIR}/deploy/management/storage.yaml" \
+  "${ROOT_DIR}/deploy/management/pgbouncer.yaml" \
+  "${ROOT_DIR}/deploy/management/nats.yaml" \
+  "${ROOT_DIR}/deploy/management/rbac.yaml" \
+  "${MANAGEMENT_INFRA_OVERLAY}/"
+cp \
+  "${ROOT_DIR}/deploy/management/services.yaml" \
+  "${ROOT_DIR}/deploy/management/ai-workers.yaml" \
+  "${ROOT_DIR}/deploy/management/github-poll-worker.yaml" \
+  "${MANAGEMENT_APP_OVERLAY}/"
+IMAGE_REPO_TAG="$(image_repo_and_tag "${IMAGE_NAME}")"
+IMAGE_REPO="$(printf '%s\n' "${IMAGE_REPO_TAG}" | sed -n '1p')"
+IMAGE_TAG="$(printf '%s\n' "${IMAGE_REPO_TAG}" | sed -n '2p')"
+cat >"${MANAGEMENT_INFRA_OVERLAY}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../deploy/management
+  - namespace.yaml
+  - storage.yaml
+  - pgbouncer.yaml
+  - nats.yaml
+  - rbac.yaml
 images:
   - name: kubeheal-service
-    newName: ${IMAGE_PARTS[0]}
-    newTag: ${IMAGE_PARTS[1]}
+    newName: ${IMAGE_REPO}
+    newTag: ${IMAGE_TAG}
 EOF
-kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_OVERLAY}"
+cat >"${MANAGEMENT_APP_OVERLAY}/kustomization.yaml" <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - services.yaml
+  - ai-workers.yaml
+  - github-poll-worker.yaml
+images:
+  - name: kubeheal-service
+    newName: ${IMAGE_REPO}
+    newTag: ${IMAGE_TAG}
+EOF
+kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_INFRA_OVERLAY}"
 for old_deploy in \
   oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
   command-orchestrator command-dispatcher agent-connection-gateway \
   evidence-builder ai-rca-service safe-pr-service; do
   kubectl --context "kind-${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
 done
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=300s
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/pgbouncer --timeout=120s
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/nats --timeout=180s
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
-kubectl --context "kind-${MGMT_CLUSTER}" -n management get cronjob/github-poll-worker >/dev/null
-for deploy in \
-  api-gateway \
-  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
-  workflow-controller alert-worker mail-worker command-worker command-janitor target-reconcile-worker rca-worker \
-  evidence-worker incident-worker plan-worker analyze-worker recovery-worker select-worker \
-  dispatch-worker backlog-worker safe-pr-worker ai-diff-worker rollout-worker approval-worker \
-  audit-worker dashboard-worker; do
-  kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout restart "deploy/${deploy}"
-done
-kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/api-gateway --timeout=180s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/postgresql --timeout=600s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/pgbouncer --timeout=120s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status statefulset/nats --timeout=300s
 
-for deploy in \
-  git-pull-worker manifest-render-worker diff-worker diff-analyze-worker scm-worker \
-  workflow-controller alert-worker mail-worker command-worker command-janitor target-reconcile-worker rca-worker \
-  evidence-worker incident-worker plan-worker analyze-worker recovery-worker select-worker \
-  dispatch-worker backlog-worker safe-pr-worker ai-diff-worker rollout-worker approval-worker \
-  audit-worker dashboard-worker; do
-  kubectl --context "kind-${MGMT_CLUSTER}" -n management rollout status "deploy/${deploy}" --timeout=180s
+echo "==> bootstrapping management database schema and local admin"
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management delete job/management-schema-bootstrap --ignore-not-found --wait=true
+cat <<EOF | kubectl --context "kind-${MGMT_CLUSTER}" apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: management-schema-bootstrap
+  namespace: management
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: schema
+          image: ${IMAGE_NAME}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command:
+            - python
+            - -c
+            - |
+              import os
+              import sys
+              import uuid
+
+              sys.path.insert(0, "/app/src/services/gateway/api-gateway")
+
+              from packages.storage.database import Database
+              from passwords import default_display_name, hash_password, normalize_email
+
+              db = Database()
+              db.init()
+              email = normalize_email(os.environ["AUTH_EMAIL"])
+              user_id = "user-" + str(
+                  uuid.uuid5(uuid.NAMESPACE_URL, f"{os.environ['PROJECT_SLUG']}:{email}")
+              )
+              db.upsert_admin_account(
+                  user_id=user_id,
+                  email=email,
+                  password_hash=hash_password(os.environ["AUTH_PASSWORD"]),
+                  display_name=default_display_name(email),
+              )
+          env:
+            - name: PROJECT_SLUG
+              value: "${PROJECT_SLUG}"
+          envFrom:
+            - secretRef:
+                name: management-admin-bootstrap
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+EOF
+if ! kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management wait --for=condition=complete job/management-schema-bootstrap --timeout=240s; then
+  kubectl --context "kind-${MGMT_CLUSTER}" -n management describe job/management-schema-bootstrap || true
+  kubectl --context "kind-${MGMT_CLUSTER}" -n management logs job/management-schema-bootstrap --tail=120 || true
+  exit 1
+fi
+
+python3 - "${MANAGEMENT_APP_OVERLAY}" "${APP_WORKER_DEPLOYMENTS[@]}" <<'PY'
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+deployments = sys.argv[2:]
+for file_name in ("services.yaml", "ai-workers.yaml"):
+    path = root / file_name
+    text = path.read_text()
+    for deployment in deployments:
+        pattern = (
+            r"(kind: Deployment\nmetadata:\n  name: "
+            + re.escape(deployment)
+            + r"\n  namespace: management\nspec:\n  )replicas: \d+"
+        )
+        text = re.sub(pattern, r"\g<1>replicas: 0", text)
+    path.write_text(text)
+
+cronjob_path = root / "github-poll-worker.yaml"
+cronjob = cronjob_path.read_text()
+cronjob = cronjob.replace("spec:\n  schedule:", "spec:\n  suspend: true\n  schedule:", 1)
+cronjob_path.write_text(cronjob)
+PY
+kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_APP_OVERLAY}"
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management get cronjob/github-poll-worker >/dev/null
+wait_management_pod_ready api-gateway 300s
+
+for deploy in "${WORKER_DEPLOYMENTS_TO_START[@]}"; do
+  kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management scale "deploy/${deploy}" --replicas=1
+  wait_management_pod_ready "${deploy}" 300s
 done
+if [ "${ENABLE_GITHUB_POLL_CRON}" = "1" ]; then
+  kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management patch cronjob/github-poll-worker \
+    --type=merge \
+    -p '{"spec":{"suspend":false}}'
+else
+  echo "==> leaving github-poll-worker CronJob suspended (set ENABLE_GITHUB_POLL_CRON=1 to enable)"
+fi
 
 MGMT_NODE="${MGMT_CLUSTER}-control-plane"
 MGMT_NODE_IP="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${MGMT_NODE}")"
@@ -363,6 +654,15 @@ echo
 echo "service is ready."
 echo "Gateway:      ${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
 echo "Health:       ${BASE_URL:-http://localhost:${GATEWAY_PORT}}/healthz"
+echo "Admin email:  ${AUTH_EMAIL}"
+if [ "${AUTH_PASSWORD}" = "local-admin-password" ]; then
+  echo "Admin pass:   ${AUTH_PASSWORD}"
+else
+  echo "Admin pass:   provided through AUTH_PASSWORD"
+fi
+echo
+echo "Worker set:   ${UP_WORKER_SET}"
+echo "Poll cron:    ${ENABLE_GITHUB_POLL_CRON}"
 echo
 echo "Run smoke test:"
 echo "  bash ${ROOT_DIR}/scripts/smoke.sh"

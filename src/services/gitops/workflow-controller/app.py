@@ -138,7 +138,7 @@ async def ensure_run(
     metadata: JsonObject | None = None,
 ) -> JsonObject:
     run = normalize_payload(payload)
-    await ctx.db.upsert_application(
+    saved_application = await ctx.db.upsert_application(
         {
             **run,
             "name": str(run.get("name") or run.get("application_id")),
@@ -148,6 +148,18 @@ async def ensure_run(
             },
         }
     )
+    if isinstance(saved_application, dict):
+        canonical_application_id = str(
+            saved_application.get("application_id") or run["application_id"]
+        )
+        if canonical_application_id != str(run["application_id"]):
+            workflow_seed = {**run, "application_id": canonical_application_id}
+            workflow_seed.pop("workflow_run_id", None)
+            run = {
+                **run,
+                "application_id": canonical_application_id,
+                "workflow_run_id": derive_workflow_run_id(workflow_seed),
+            }
     await ctx.db.start_workflow_run(
         {
             **run,

@@ -157,24 +157,32 @@
 
 ## P1 - 데모 품질과 안정성을 깨는 오류
 
-### 6. Application upsert conflict target이 실제 unique constraint와 다르다
+### 6. Application upsert conflict target과 event identity가 충돌했다
 
 증거:
 
 - `applications` 테이블 unique constraint는 `(workspace_id, repository_id, name)`이다.
-- `upsert_application()`은 conflict target을 `application_id` 하나로 잡는다.
-- 문서에는 `(workspace_id, repository_id, name)` duplicate key 오류가 기록되어 있다.
+- 과거 `git.webhook.received`와 `git.changed`가 같은 repo/app 이름을 서로 다른
+  `application_id`로 만들 수 있었다.
+- 그 상태에서 `upsert_application()`이 `application_id` conflict만 처리하면
+  `(workspace_id, repository_id, name)` duplicate key 오류가 났다.
 
 영향:
 
-- 같은 repo/app 이름이 다른 경로에서 다른 `application_id`로 들어오면 upsert가 아니라
-  unique violation이 난다.
-- `payments-api` 미등록/중복 등록 문제와 이어질 수 있다.
+- 같은 repo/app 이름이 반복 이벤트로 들어올 때 workflow-controller가 DLQ로 빠졌다.
+- dashboard/read model에는 같은 앱 흐름이 끊긴 것처럼 보일 수 있었다.
 
-우선 조치:
+현재 조치:
 
-- upsert 기준을 실제 product identity인 `(workspace_id, repository_id, name)`으로
-  맞추거나, application_id derive 규칙이 항상 이 unique key와 동일하도록 보장한다.
+- `derive_application_id()`가 `name/app_name`이 없으면 `repo_ref`의 repo 이름을 app 이름
+  힌트로 사용한다.
+- `RepoChangeRepository.upsert_application()`은 먼저
+  `(workspace_id, repository_id, name)`으로 기존 앱을 찾고, 있으면 그
+  `application_id`를 canonical 값으로 반환한다.
+- workflow-controller는 `upsert_application()`이 반환한 canonical `application_id`로
+  `workflow_run_id`를 다시 계산한다.
+- 관련 검증은 `tests/test_database_unit.py`, `tests/test_git_pull_worker.py`,
+  `tests/test_workflow_controller.py`에 있다.
 
 ### 7. demo repo/application 기본값이 여러 곳에서 불일치한다
 

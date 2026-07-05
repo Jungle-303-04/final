@@ -615,7 +615,7 @@ GitOps Sync
 ## polling 테스트 목록
 
 ```text
-tests/test_git_polling.py
+tests/test_github_poller.py
   - first observation stores commit but does not create command by default
   - new commit emits git.changed
   - same commit emits no duplicate git.changed
