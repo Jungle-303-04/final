@@ -98,7 +98,7 @@ examples/telemetry-evidence-demo/
     /metrics endpoint를 제공하는 작은 Python 서버
 
   app/write_logs.py
-    Loki에 더미 로그를 보내고 shared log file에도 기록
+    Loki에 샘플 로그를 보내고 shared log file에도 기록
 
   app/evidence_demo.py
     Prometheus/Loki를 query하고 EvidenceDraft 형태로 줄임

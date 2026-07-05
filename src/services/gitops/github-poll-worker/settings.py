@@ -66,7 +66,7 @@ class Settings:
     SIGNATURE_HEADER = "x-hub-signature-256"
     SIGNATURE_PREFIX = "sha256="
 
-    # 폴링 튜닝값 — env 미설정 시 기존 하드코딩 값과 동일한 기본값이 적용됨(배포 호환)
+    # 폴링 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
     HTTP_TIMEOUT_SECONDS_ENV = "HTTP_TIMEOUT_SECONDS"  # GitHub/webhook HTTP 타임아웃 초(기본 20)
     HTTP_TIMEOUT_SECONDS = int(env(HTTP_TIMEOUT_SECONDS_ENV, "20"))
     POLL_RETRY_DELAY_SECONDS_ENV = "POLL_RETRY_DELAY_SECONDS"  # 실패 재시도 기본 간격 초(기본 5)
