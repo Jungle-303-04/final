@@ -103,7 +103,7 @@ def test_rca_timeline_filters_by_accessible_clusters() -> None:
         assert response.items[0].cluster_id == "cluster-1"
         assert response.items[0].status == "rca_completed"
         assert ("list", "workspace-1", {"cluster-1"}, 25) in db.calls
-        assert db.calls[0] == ("accessible", "user-1", "workspace-1", "cluster", "read")
+        assert db.calls[0] == ("accessible", "user-1", "workspace-1", "cluster", "rca.read")
 
     asyncio.run(run())
 
@@ -125,7 +125,7 @@ def test_rca_timeline_with_cluster_query_requires_read_access() -> None:
             "workspace-1",
             "cluster",
             "cluster-2",
-            "read",
+            "rca.read",
         )
         assert ("list", "workspace-1", {"cluster-2"}, 10) in db.calls
 

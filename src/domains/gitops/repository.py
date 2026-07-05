@@ -47,7 +47,7 @@ from packages.contracts.gitops import (
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     AccessResourceType,
-    AccessRole,
+    ResourceRole,
 )
 from packages.storage.engine import DatabaseConnection
 
@@ -404,7 +404,7 @@ class RepoChangeRepository(DatabaseConnection):
             environment=str(payload.get("environment", DEFAULT_ENVIRONMENT)),
             status=str(payload.get("status", ApprovalStatus.REQUESTED.value)),
             reason=str(payload.get("reason", "")),
-            requested_role=str(payload.get("requested_role", AccessRole.DEPLOYER.value)),
+            requested_role=str(payload.get("requested_role", ResourceRole.RELEASE_OPERATOR.value)),
             requested_by=payload.get("requested_by"),
             decided_by=payload.get("decided_by"),
             decision=payload.get("decision"),
@@ -715,7 +715,7 @@ class RepoChangeRepository(DatabaseConnection):
                     "subject_id": str(user_id),
                     "resource_type": resource_type,
                     "resource_id": resource_id,
-                    "role": AccessRole.OWNER.value,
+                    "role": ResourceRole.CLUSTER_STEWARD.value,
                 }
             )
 
