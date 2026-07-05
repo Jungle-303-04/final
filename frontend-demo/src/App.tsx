@@ -91,6 +91,7 @@ function AppContent() {
   const [events, setEvents] = useState<TimelineEvent[]>(initialEvents);
   const [live, setLive] = useState(true);
   const [chartNodeVisible, setChartNodeVisible] = useState(false);
+  const [collapsedView, setCollapsedView] = useState(false);
   const [activePage, setActivePage] = useState<FeaturePageId>('action-flow');
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [realtimeFrame, setRealtimeFrame] = useState(initialRealtimeFrame);
@@ -175,6 +176,7 @@ function AppContent() {
     setEvents(initialEvents);
     setRealtimeFrame(initialRealtimeFrame);
     setChartNodeVisible(false);
+    setCollapsedView(false);
   }, [setEdges, setNodes]);
 
   const runFlow = useCallback(() => {
@@ -219,6 +221,58 @@ function AppContent() {
     setEdges((current) => [...current, ...createPolicyGateEdges()]);
     pushEvent(runtimeEvents.approvalGateCreated);
   }, [nodes, pushEvent, setEdges, setNodes]);
+
+  const autoLayout = useCallback(() => {
+    const layoutMap: Record<string, { x: number; y: number }> = {
+      copilot: { x: 20, y: 270 },
+      session: { x: 420, y: 80 },
+      observe: { x: 420, y: 430 },
+      evidence: { x: 820, y: 250 },
+      rca: { x: 1220, y: 115 },
+      plan: { x: 1220, y: 485 },
+      review: { x: 1605, y: 300 },
+      'policy-gate': { x: 1585, y: 650 },
+      'canvas-chart': { x: 1560, y: 55 },
+    };
+
+    setActivePage('action-flow');
+    setNodes((current) =>
+      current.map((node, index) => ({
+        ...node,
+        position: layoutMap[node.id] ?? { x: 840 + (index % 3) * 210, y: 820 + Math.floor(index / 3) * 128 },
+        data: {
+          ...node.data,
+          collapsed: false,
+        },
+      })),
+    );
+    setCollapsedView(false);
+    pushEvent({
+      title: '자동 레이아웃 적용',
+      detail: '노드가 데이터 흐름 기준으로 다시 배치됨',
+      tone: 'amber',
+    });
+  }, [pushEvent, setNodes]);
+
+  const toggleCollapsedView = useCallback(() => {
+    const next = !collapsedView;
+    setActivePage('action-flow');
+    setCollapsedView(next);
+    setNodes((nodeList) =>
+      nodeList.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          collapsed: next,
+        },
+      })),
+    );
+    pushEvent({
+      title: next ? '노드 압축 보기' : '노드 상세 보기',
+      detail: next ? '복잡한 블록과 설정을 접었습니다' : '설정, 포트, 중첩 블록을 다시 펼쳤습니다',
+      tone: next ? 'slate' : 'blue',
+    });
+  }, [collapsedView, pushEvent, setNodes]);
 
   const toggleChartNode = useCallback(() => {
     if (chartNodeVisible) {
@@ -359,6 +413,8 @@ function AppContent() {
         onRunFlow={runFlow}
         onAddEvidence={addEvidenceNode}
         onToggleChartNode={toggleChartNode}
+        onAutoLayout={autoLayout}
+        onToggleCollapse={toggleCollapsedView}
       />
     </main>
   );

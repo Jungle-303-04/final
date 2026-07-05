@@ -85,22 +85,22 @@ export function DashboardPanel({
       <section className="metric-grid">
         <motion.div className="metric-card" layout>
           <ShieldCheck size={17} />
-          <span>RCA confidence</span>
+          <span>RCA 신뢰도</span>
           <strong>{ops.rca.confidence.toFixed(2)}</strong>
         </motion.div>
         <motion.div className="metric-card" layout>
           <Activity size={17} />
-          <span>pods ready</span>
+          <span>Pod 준비</span>
           <strong>{ops.realtime.podsReady}/{ops.realtime.podsTotal}</strong>
         </motion.div>
         <motion.div className="metric-card" layout>
           <GitBranch size={17} />
-          <span>evidence jobs</span>
+          <span>증거 작업</span>
           <strong>{ops.evidenceJobs.completed}/{ops.evidenceJobs.queued}</strong>
         </motion.div>
         <motion.div className="metric-card" layout>
           <Zap size={17} />
-          <span>provider p95</span>
+          <span>Provider p95</span>
           <strong>{ops.evidenceJobs.providerLatencyP95Ms}ms</strong>
         </motion.div>
       </section>
