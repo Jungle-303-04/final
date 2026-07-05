@@ -332,10 +332,12 @@ YAML이 없거나 파싱할 수 없으면 `manifest.invalid` 이벤트와
 `manifest_artifacts.status=invalid_config`으로 남긴다. 이 실패는 재시도/DLQ보다
 사용자가 고쳐야 할 설정 상태에 가깝다.
 
-사용자 접근권한은 `resource_access_grants`가 담당한다. workspace owner/admin은
-전체 접근권을 갖고, 일반 사용자는 repository, cluster, deployment_binding 단위로
-viewer/deployer/maintainer/owner 권한을 받는다. token은 이벤트에 넣지 않고
-`credential_ref`만 저장한다.
+사용자 접근권한은 조직/그룹/리소스 역할을 분리해 판단한다. 기본 조직 구성원은
+클러스터를 제어할 수 없고, `resource_assignments`로 그룹에 배정된 리소스에 대해
+`member_resource_roles`의 `observer`, `release_operator`, `incident_operator`,
+`cluster_steward` 중 하나를 받아야 한다. 실제 permission matrix는
+`role_permissions(organization_id, resource_type, role, permission)`가 담당한다.
+token은 이벤트에 넣지 않고 `credential_ref`만 저장한다.
 
 외부 provider 호출 실패는 가능한 한 worker 예외로 터뜨려 DLQ로 보내기보다
 `safe_pr.failed` 같은 도메인 실패 이벤트로 발행한다. 이렇게 하면 dashboard,
