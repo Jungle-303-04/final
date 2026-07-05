@@ -35,7 +35,7 @@ Management Gateway에서 provider query 하나를 `telemetry.query.run` command�
 
 ```json
 {
-  "cluster_id": "target-cluster-01",
+  "cluster_id": "replace-with-target-cluster-id",
   "reason": "RCA 확인용",
   "query": {
     "source": "prometheus",
