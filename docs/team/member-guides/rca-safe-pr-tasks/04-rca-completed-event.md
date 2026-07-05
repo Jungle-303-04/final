@@ -10,7 +10,7 @@ RCA 결과를 event body로 발행해서 audit, dashboard, Safe PR 단계가 같
 - `src/packages/contracts/event_bus/bodies/`
 - `src/services/ai/rca-worker/app.py`
 - `docs/events.md`
-- [03. RCA Result와 Fake Analyzer](03-rca-result-fake-analyzer.md)
+- [03. RCA Result와 Deterministic Analyzer](03-rca-result-deterministic-analyzer.md)
 
 ## 수정 후보
 

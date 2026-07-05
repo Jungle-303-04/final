@@ -103,7 +103,7 @@ AWS adapter는 Secrets Manager의 KMS 암호화, IAM 권한, version stage 기�
 ## LLM Gateway 키
 
 AI worker는 `packages.ai.llm.LlmGateway`를 통해 provider adapter를 선택한다.
-기본값은 `LLM_PROVIDER=fake`라서 키 없이 로컬/CI가 돈다. 실제 provider를 쓰려면
+기본값은 `LLM_PROVIDER=unconfigured`라서 실제 호출은 fail-fast한다. 실제 provider를 쓰려면
 아래 값 중 하나를 Kubernetes Secret 또는 실행 환경변수로 주입한다.
 
 | provider | 선택 값 | 필요한 Secret |
