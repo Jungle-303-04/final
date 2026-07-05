@@ -96,6 +96,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - `GIT_CHECKOUT_CACHE_REQUIRED`: 기본 `0`. cache 실패 시 GitHub Contents API fallback 허용
 - `COMMAND_JANITOR_INTERVAL_SECONDS`: 기본 `15`
 - `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
+- `CLOUDFLARE_PROXIED`: 기본 `1`. `https://k8s.woonyong.org/`처럼 Cloudflare가 HTTPS를 받게 하려면 켜 둔다.
 
 `AUTH_PASSWORD`가 비어 있으면 배포 스크립트가 임시 비밀번호를 생성한다. CI 로그 유출을 막기 위해
 생성된 값은 기본적으로 출력하지 않는다. 로컬 디버그에서만

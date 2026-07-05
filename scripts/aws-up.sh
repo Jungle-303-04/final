@@ -110,6 +110,7 @@ ROUTE53_ZONE_NAME="${ROUTE53_ZONE_NAME:-}"
 CLOUDFLARE_ZONE_NAME="${CLOUDFLARE_ZONE_NAME:-}"
 CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+CLOUDFLARE_PROXIED="${CLOUDFLARE_PROXIED:-1}"
 INSTALL_NODE_COLLECTOR="${INSTALL_NODE_COLLECTOR:-true}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-15}"
 PROMETHEUS_BASE_URL="${PROMETHEUS_BASE_URL:-http://prometheus.target.svc:9090}"
@@ -711,6 +712,7 @@ configure_cloudflare_record() {
   local zone_id
   local record_id
   local body_file="${RUNTIME_DIR}/cloudflare-record.json"
+  local proxied
 
   require_domain_config "Cloudflare" "${CUSTOM_DOMAIN}" "${CLOUDFLARE_ZONE_NAME}"
 
@@ -750,6 +752,7 @@ records = payload.get("result", [])
 print(records[0]["id"] if records else "")
 PY
   )"
+  proxied="$(cloudflare_proxied_json)"
 
   cat >"${body_file}" <<JSON
 {
@@ -757,7 +760,7 @@ PY
   "name": "${CUSTOM_DOMAIN}",
   "content": "${lb_host}",
   "ttl": 60,
-  "proxied": false,
+  "proxied": ${proxied},
   "comment": "${PROJECT_SLUG} api-gateway"
 }
 JSON
@@ -780,13 +783,36 @@ JSON
   CUSTOM_DOMAIN_CONFIGURED="1"
 }
 
+cloudflare_is_proxied() {
+  case "${CLOUDFLARE_PROXIED}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+cloudflare_proxied_json() {
+  if cloudflare_is_proxied; then
+    printf 'true'
+  else
+    printf 'false'
+  fi
+}
+
 custom_domain_base_url() {
+  local scheme="http"
   if [[ "${CONFIGURE_ROUTE53}" != "1" && "${CONFIGURE_CLOUDFLARE}" != "1" ]]; then
     return 1
   fi
+  if [[ "${CONFIGURE_CLOUDFLARE}" == "1" ]] && cloudflare_is_proxied; then
+    scheme="https"
+  fi
   for _ in $(seq 1 30); do
-    if curl -fsS "http://${CUSTOM_DOMAIN}/healthz" >/dev/null 2>&1; then
-      printf 'http://%s\n' "${CUSTOM_DOMAIN}"
+    if curl -fsS "${scheme}://${CUSTOM_DOMAIN}/healthz" >/dev/null 2>&1; then
+      printf '%s://%s\n' "${scheme}" "${CUSTOM_DOMAIN}"
       return
     fi
     sleep 10
