@@ -25,28 +25,24 @@ docs/api
 
 대부분의 변수는 요청 응답에서 자동으로 채워지므로 직접 넣을 값은 몇 개 없다.
 
-직접 채워야 하는 값 (처음 한 번):
+직접 채워야 하는 값은 처음 한 번만 본다.
 
-| 변수 | 값 |
-| --- | --- |
-| `base_url` | Gateway 주소. local은 `http://localhost:18080/`, aws-test는 `https://k8s.woonyong.org/` (이미 채워져 있음) |
-| `auth_email` / `auth_password` | 로그인 계정 (기본값 이미 채워져 있음) |
-| `github_webhook_secret` | 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값. 채우면 webhook signature 자동 계산 |
-| `metrics_token` | `METRICS_TOKEN`이 켜진 배포에서만 |
-| `service_image` (aws-test) | ECR image URI |
+1. `base_url`은 Gateway 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/`이고 이미 채워져 있다.
+2. `auth_email`과 `auth_password`는 로그인 계정이다. 기본값은 테스트용 `admin.local@example.com` 계정으로 채워져 있다.
+3. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
+4. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
+5. `service_image`는 `aws-test`에서 target manifest를 발급할 때 쓸 ECR image URI다.
 
-자동으로 채워지는 값 (요청 순서대로 실행하면 손댈 필요 없음):
+요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
-| 변수 | 채워지는 시점 |
-| --- | --- |
-| `workspace_id`, `user_id` | `06-login` 성공 시 |
-| `agent_token` | `02-target-admin/01-register-target-dry-run` 성공 시 |
-| `command_id` | `04-command/02-debug-query` 또는 `03-agent-command-poll` 성공 시 |
-| `evidence_key`, `evidence_job_id` | `03-agent-runtime/05-schedule`, `06-poll` 성공 시 |
-| `conversation_id` | `07-ai/01-create-conversation` 성공 시 |
-| `incident_id` | `05-rca-dashboard/01-dashboard-timeline`에 incident row가 있을 때 |
-| `dead_letter_id` | `08-ops-dlq/01-dead-letters`에 항목이 있을 때 |
-| `github_webhook_signature` | `github_webhook_secret`이 채워져 있으면 요청 직전 자동 계산 |
+1. `workspace_id`, `user_id`는 `06-login` 성공 후 저장된다.
+2. `agent_token`은 `02-target-admin/01-register-target-dry-run` 성공 후 저장된다.
+3. `command_id`는 `04-command/02-debug-query` 또는 `03-agent-command-poll` 성공 후 저장된다.
+4. `evidence_key`, `evidence_job_id`는 `03-agent-runtime/05-schedule`, `06-poll` 성공 후 저장된다.
+5. `conversation_id`는 `07-ai/01-create-conversation` 성공 후 저장된다.
+6. `incident_id`는 `05-rca-dashboard/01-dashboard-timeline`에 incident row가 있을 때 저장된다.
+7. `dead_letter_id`는 `08-ops-dlq/01-dead-letters`에 항목이 있을 때 저장된다.
+8. `github_webhook_signature`는 `github_webhook_secret`이 채워져 있으면 요청 직전에 자동 계산된다.
 
 아래는 각 값의 의미 설명이다.
 
@@ -389,6 +385,7 @@ body 내용을 바꾸려면 `01-github-webhook.bru`의 `script:pre-request` 안 
 (script가 서명하는 body와 실제 전송 body가 항상 같으므로 signature가 깨지지 않는다).
 
 secret을 채울 수 없으면 `github_webhook_signature`에 수동 계산값을 직접 넣어도 된다.
+수동 계산을 할 때는 예전처럼 `BRUNO_CLUSTER_ID`를 Bruno Environment의 `cluster_id`와 같은 값으로 두면 된다.
 
 approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `03-reject-approval.bru`를 보낸다.
 정상 출력에는 `accepted: true`, `event_id`, `correlation_id`가 있다.
