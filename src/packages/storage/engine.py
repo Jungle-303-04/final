@@ -498,7 +498,7 @@ class DatabaseConnection:
                 _ACTIVE_CONN.reset(token)
 
     def ensure_compatible_schema(self, existing_conn: Connection | None = None) -> None:
-        """Keep local demo DBs usable until a real migration tool is introduced."""
+        """Keep local development DBs usable until a real migration tool is introduced."""
         if existing_conn is not None:
             self._apply_compatible_schema(existing_conn)
             return

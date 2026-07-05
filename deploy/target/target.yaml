@@ -92,7 +92,7 @@ data:
   owner: cluster-agent
 ---
 # Write permissions are scoped to sandbox only.
-# The agent can patch demo workloads/configmaps there without mutating target telemetry.
+# The agent can patch sandbox workloads/configmaps there without mutating target telemetry.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
