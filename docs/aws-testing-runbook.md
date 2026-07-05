@@ -49,6 +49,7 @@
 | `AWS_ROLE_ARN` | GitHub environment secret `aws-test` | GitHub OIDC가 assume할 AWS role |
 | `AUTH_EMAIL` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 계정 |
 | `AUTH_PASSWORD` | GitHub environment secret `aws-test` | admin bootstrap/smoke login 비밀번호 |
+| `GH_APP_TOKEN` | GitHub environment secret `aws-test` | private repo manifest read, Safe PR 같은 GitHub write 작업. 없으면 AWS CD smoke 중에는 `github.token`을 임시 read token으로 쓴다. |
 | `CLOUDFLARE_API_TOKEN` | GitHub environment secret `aws-test` | `CONFIGURE_CLOUDFLARE=1`일 때 `k8s.woonyong.org` CNAME을 AWS LoadBalancer로 갱신 |
 
 ## Cloudflare DNS가 1016이면 먼저 볼 것
@@ -143,6 +144,11 @@ gh run watch "$RUN_ID" --repo Jungle-303-04/final --exit-status
 AWS LoadBalancer hostname은 service에 붙은 직후 몇 분 동안 runner DNS에서 아직 resolve되지 않을 수 있다.
 그래서 smoke는 기본적으로 `SMOKE_GATEWAY_ATTEMPTS=60`, `SMOKE_GATEWAY_INTERVAL_SECONDS=5` 기준으로
 최대 5분까지 기다린 뒤 로그인, webhook, event flow 검증으로 넘어간다.
+
+`manifest-render-worker`는 `git.changed`를 처리하면서 원격 repository에서 manifest를 읽는다.
+그래서 runtime image 안에는 `git`이 들어 있어야 하고, private repo라면 `GITHUB_TOKEN`도 필요하다.
+AWS CD workflow는 `GH_APP_TOKEN` secret이 있으면 그 값을 쓰고, 없으면 해당 workflow run 안에서만 유효한
+`github.token`을 read token으로 넘긴다. 실제 운영에서 Safe PR까지 이어가려면 `GH_APP_TOKEN`을 별도 secret으로 넣는다.
 
 ## AWS CD가 실제로 넘기는 값
 

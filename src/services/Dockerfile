@@ -8,6 +8,10 @@ WORKDIR /app
 
 RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin appuser
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY src/services/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
