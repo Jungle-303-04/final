@@ -1,9 +1,4 @@
-"""scm-worker — safe_pr.requested → GitHub PR → safe_pr.created.
-
-우현 원본에는 없던 새 outbound 경계. 원본은 diff 후 command를 직접
-요청했지만, 현 구조는 안전한 GitOps 복구를 위해 PR 생성 책임을 이
-게이트웨이로 중앙화. PR 생성 성공 뒤에만 후속 alert/apply 흐름을 연다.
-"""
+"""scm-worker - safe_pr.ready_for_creation -> GitHub PR -> safe_pr.created."""
 
 from __future__ import annotations
 
@@ -20,7 +15,12 @@ from domains.gitops.repository import (
 )
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import SafePrPatchPreparedBody
-from domains.scm.events import SafePrCreatedBody, SafePrFailedBody, SafePrRequestedBody
+from domains.scm.events import (
+    SafePrCreatedBody,
+    SafePrFailedBody,
+    SafePrReadyForCreationBody,
+    SafePrRequestedBody,
+)
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.scm.provider import ScmProvider
@@ -30,7 +30,7 @@ from packages.runtime.outbound import deliver
 
 app = App("scm-worker")
 
-SCM_PROVIDER_ENV = "SCM_PROVIDER"  # PR 생성 provider 선택(현재 github 만 지원)
+SCM_PROVIDER_ENV = "SCM_PROVIDER"
 DEFAULT_SCM_PROVIDER = "github"
 PR_MODE = "github_rest"
 SAFE_PR_CREATION_FAILED_MESSAGE = "safe pr creation failed"
@@ -38,11 +38,8 @@ UNSUPPORTED_SCM_PROVIDER_MESSAGE = f"{SCM_PROVIDER_ENV} 값이 provider registry
 
 
 def build_scm_provider(name: str | None = None) -> ScmProvider:
-    """SCM_PROVIDER env 로 provider 를 선택함.
+    """SCM_PROVIDER env 로 provider 를 선택함."""
 
-    자격 증명(GITHUB_TOKEN/SCM_REPO) 부재는 부팅 실패가 아니라 요청 시점의
-    safe_pr.failed 로 처리함 — provider 이름 오설정만 부팅 fail-fast.
-    """
     provider = (name or env(SCM_PROVIDER_ENV, DEFAULT_SCM_PROVIDER)).strip().lower()
     try:
         definition = require_available_provider(ProviderCategory.SOURCE, provider)
@@ -55,7 +52,6 @@ def build_scm_provider(name: str | None = None) -> ScmProvider:
     )
 
 
-# PR 생성 전략 주입 지점 — 테스트는 transport 를 주입한 provider 로 교체함.
 ACTIVE_SCM_PROVIDER = (
     env(SCM_PROVIDER_ENV, DEFAULT_SCM_PROVIDER).strip().lower() or DEFAULT_SCM_PROVIDER
 )
@@ -86,8 +82,79 @@ def normalize_safe_pr_request(evt: SafePrRequestedBody) -> SafePrRequestedBody:
     )
 
 
+def request_from_ready(evt: SafePrReadyForCreationBody) -> SafePrRequestedBody:
+    diff_section = (
+        f"\n\n## Diff explanation\n- risk: `{evt.diff_risk}`\n- summary: {evt.diff_summary}\n"
+    )
+    return normalize_safe_pr_request(
+        SafePrRequestedBody(
+            title=evt.title,
+            body=f"{evt.body}{diff_section}",
+            provider=evt.provider,
+            patches=evt.patches,
+            workspace_id=evt.workspace_id,
+            repository_id=evt.repository_id,
+            binding_id=evt.binding_id,
+            application_id=evt.application_id,
+            workflow_run_id=evt.workflow_run_id,
+            environment=evt.environment,
+            manifest_path=evt.manifest_path,
+            approval_ref=evt.approval_ref,
+            policy_decision_ref=evt.policy_decision_ref,
+            next_alert=evt.next_alert,
+        )
+    )
+
+
+def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody:
+    return SafePrPatchPreparedBody(
+        title=request.title,
+        body=request.body,
+        patch={
+            "provider": request.provider,
+            "repository_id": request.repository_id,
+            "manifest_path": request.manifest_path,
+            "approval_ref": request.approval_ref,
+            "policy_decision_ref": request.policy_decision_ref,
+            "patches": [patch.to_body() for patch in request.patches],
+        },
+        provider=request.provider,
+        workspace_id=request.workspace_id,
+        repository_id=request.repository_id,
+        binding_id=request.binding_id,
+        application_id=request.application_id,
+        workflow_run_id=request.workflow_run_id,
+        environment=request.environment,
+        manifest_path=request.manifest_path,
+        approval_ref=request.approval_ref,
+        policy_decision_ref=request.policy_decision_ref,
+        next_alert=request.next_alert.to_body() if request.next_alert is not None else None,
+    )
+
+
+def ready_from_request(request: SafePrRequestedBody) -> SafePrReadyForCreationBody:
+    return SafePrReadyForCreationBody(
+        title=request.title,
+        body=request.body,
+        provider=request.provider,
+        diff_summary="safe patch prepared",
+        diff_risk="review_required",
+        diff_details={"source": "legacy_safe_pr_requested"},
+        patches=request.patches,
+        workspace_id=request.workspace_id,
+        repository_id=request.repository_id,
+        binding_id=request.binding_id,
+        application_id=request.application_id,
+        workflow_run_id=request.workflow_run_id,
+        environment=request.environment,
+        manifest_path=request.manifest_path,
+        approval_ref=request.approval_ref,
+        policy_decision_ref=request.policy_decision_ref,
+        next_alert=request.next_alert,
+    )
+
+
 async def create_safe_pr(evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]) -> str:
-    """기존 호출자 호환용 — SCM 전략 인스턴스로 위임함."""
     if evt.provider != ACTIVE_SCM_PROVIDER:
         raise RuntimeError(
             f"safe_pr provider mismatch: event={evt.provider}, worker={ACTIVE_SCM_PROVIDER}"
@@ -129,36 +196,31 @@ def preflight_failure_body(request: SafePrRequestedBody) -> SafePrFailedBody | N
     return None
 
 
-def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody:
-    return SafePrPatchPreparedBody(
-        title=request.title,
-        body=request.body,
-        patch={
-            "provider": request.provider,
-            "repository_id": request.repository_id,
-            "manifest_path": request.manifest_path,
-            "approval_ref": request.approval_ref,
-            "policy_decision_ref": request.policy_decision_ref,
-            "patches": [patch.to_body() for patch in request.patches],
-        },
-        provider=request.provider,
-        workspace_id=request.workspace_id,
-    )
-
-
-@app.on(SafePrRequestedBody)
 async def on_safe_pr_requested(
     evt: SafePrRequestedBody, ctx: EventContext[PullRequestStore]
 ) -> AsyncIterator[EventBody]:
+    """Backward-compatible direct call path; production subscription is ready-only."""
+
     request = normalize_safe_pr_request(evt)
     preflight_failed = preflight_failure_body(request)
     if preflight_failed is not None:
         yield preflight_failed
         return
     yield patch_prepared_body(request)
+    async for out in on_safe_pr_ready_for_creation(ready_from_request(request), ctx):
+        yield out
 
-    # repo-gateway는 외부 PR 생성 경계다. 핸들러는 호출과 결과 이벤트만 선언하고
-    # provider 예외 처리는 deliver가 공통으로 맡는다.
+
+@app.on(SafePrReadyForCreationBody)
+async def on_safe_pr_ready_for_creation(
+    evt: SafePrReadyForCreationBody, ctx: EventContext[PullRequestStore]
+) -> AsyncIterator[EventBody]:
+    request = request_from_ready(evt)
+    preflight_failed = preflight_failure_body(request)
+    if preflight_failed is not None:
+        yield preflight_failed
+        return
+
     async def create_pr() -> str:
         return await create_safe_pr(request, ctx)
 

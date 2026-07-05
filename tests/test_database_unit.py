@@ -434,6 +434,67 @@ def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
     assert compiled.params["workspace_id"] == "workspace-b"
 
 
+def test_find_rendered_manifest_artifacts_scopes_cache_lookup_by_renderer_version() -> None:
+    recorded: list[Any] = []
+    rows = [
+        {
+            "artifact_id": "artifact-current",
+            "workspace_id": "workspace-a",
+            "binding_id": "binding-1",
+            "commit_sha": "abc123",
+            "manifest_path": "deploy/app.yaml#deployment/api",
+            "status": "rendered",
+            "rendered_manifest": {"kind": "Deployment"},
+            "source_summary": {"renderer_version": "manifest-render-v2"},
+        },
+        {
+            "artifact_id": "artifact-old",
+            "workspace_id": "workspace-a",
+            "binding_id": "binding-1",
+            "commit_sha": "abc123",
+            "manifest_path": "deploy/app.yaml#service/api",
+            "status": "rendered",
+            "rendered_manifest": {"kind": "Service"},
+            "source_summary": {"renderer_version": "manifest-render-v1"},
+        },
+    ]
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return rows
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    result = repository.find_rendered_manifest_artifacts(
+        workspace_id="workspace-a",
+        binding_id="binding-1",
+        commit_sha="abc123",
+        manifest_path="deploy/app.yaml",
+        renderer_version="manifest-render-v2",
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "manifest_artifacts.workspace_id" in sql
+    assert "manifest_artifacts.binding_id" in sql
+    assert "manifest_artifacts.commit_sha" in sql
+    assert "manifest_artifacts.manifest_path LIKE" in sql
+    assert [artifact["artifact_id"] for artifact in result] == ["artifact-current"]
+
+
 def test_workflow_status_ranks_never_allow_terminal_regression() -> None:
     from domains.gitops.repository import TERMINAL_WORKFLOW_STATUSES, WORKFLOW_STATUS_RANKS
 
