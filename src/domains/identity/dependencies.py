@@ -45,12 +45,9 @@ class ResourceAccessFilter(Protocol):
 
 
 class StructuredResourceAccessFilter:
-    """Evaluate resource authorization through the structured access store API."""
+    """Evaluate resource authorization through Chanbin's can_access store API."""
 
     def authorize(self, context: ResourceAccessContext) -> bool:
-        can_access_request = getattr(context.db, "can_access_request", None)
-        if callable(can_access_request):
-            return bool(can_access_request(context.request))
         can_access = getattr(context.db, "can_access", None)
         if callable(can_access):
             return bool(
