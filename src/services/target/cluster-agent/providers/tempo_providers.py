@@ -77,5 +77,4 @@ class TempoTracesProvider:
         return {
             "traces": traces,
             "trace_count": len(traces),
-            "raw": payload,
         }
