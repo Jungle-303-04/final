@@ -35,9 +35,11 @@ from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gitops import (
     DEFAULT_GITHUB_API_BASE,
+    DEFAULT_GITHUB_WEB_BASE,
     GITHUB_API_BASE_ENV,
     GITHUB_TOKEN_ENV,
     GITHUB_TOKEN_REF_ENV,
+    GITHUB_WEB_BASE_ENV,
     ManifestArtifactStatus,
 )
 from packages.contracts.security import SecretRef
@@ -224,7 +226,8 @@ def repo_remote_url(repo_ref: str) -> str:
         return ""
     if "://" in normalized or normalized.startswith("git@"):
         return normalized
-    return f"https://github.com/{normalized.strip('/')}.git"
+    web_base = env(GITHUB_WEB_BASE_ENV, DEFAULT_GITHUB_WEB_BASE).rstrip("/")
+    return f"{web_base}/{normalized.strip('/')}.git"
 
 
 def source_type_override() -> str | None:
