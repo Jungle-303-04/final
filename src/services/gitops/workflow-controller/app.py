@@ -50,14 +50,14 @@ from packages.contracts.gitops import (
     WorkflowStepName,
     WorkflowStepStatus,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ResourceRole
 from packages.contracts.stores import WorkflowStore
 from packages.runtime.app import App, EventContext
 
 app = App("workflow-controller")
 
 SYSTEM_POLICY_APPROVER = "system-policy"
-MANUAL_APPROVAL_ROLE = AccessRole.DEPLOYER.value
+MANUAL_APPROVAL_ROLE = ResourceRole.RELEASE_OPERATOR.value
 POLICY_DECISION_REF_PREFIX = "policy-decision"
 POLICY_ROUTE_SAFE_PR = "safe_pr"
 

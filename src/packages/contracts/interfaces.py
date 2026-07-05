@@ -70,6 +70,15 @@ class UserStore(Protocol):
 
     def grant_resource_access(self, payload: JsonObject) -> JsonObject: ...
 
+    def can_access(
+        self,
+        user_id: str,
+        organization_id: str,
+        resource_type: str,
+        resource_id: str,
+        permission: str,
+    ) -> bool: ...
+
     def user_has_resource_access(
         self,
         user_id: str,

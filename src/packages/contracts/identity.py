@@ -9,6 +9,11 @@ class ServiceRole(StrEnum):
     USER = "user"
 
 
+class AccountRole(StrEnum):
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
 class OrganizationRole(StrEnum):
     OWNER = "owner"
     ADMIN = "admin"
@@ -64,8 +69,19 @@ class UserStatus(StrEnum):
     PENDING_APPROVAL = "pending_approval"
 
 
+class WorkspaceRole(StrEnum):
+    OWNER = "owner"
+    MEMBER = "member"
+
+
 class WorkspaceStatus(StrEnum):
     ACTIVE = "active"
+
+
+class AccessSubjectType(StrEnum):
+    USER = "user"
+    TEAM = "team"
+    WORKSPACE_ROLE = "workspace_role"
 
 
 class AccessResourceType(StrEnum):
@@ -74,6 +90,13 @@ class AccessResourceType(StrEnum):
     DEPLOYMENT_BINDING = "deployment_binding"
     MANIFEST_PATH = "manifest_path"
     SYSTEM_RESOURCE = "system_resource"
+
+
+class AccessRole(StrEnum):
+    OWNER = "owner"
+    MAINTAINER = "maintainer"
+    DEPLOYER = "deployer"
+    VIEWER = "viewer"
 
 
 class AccessStatus(StrEnum):
@@ -282,10 +305,28 @@ LEGACY_PERMISSION_ALIASES: dict[str, str] = {
     "admin": Permission.CLUSTER_ROLE_MANAGE.value,
 }
 
-READ_ACCESS = Permission.CLUSTER_READ.value
-WRITE_ACCESS = Permission.CONFIG_UPDATE.value
-DEPLOY_ACCESS = Permission.DEPLOY_RUN.value
-ADMIN_ACCESS = Permission.CLUSTER_ROLE_MANAGE.value
+READ_ACCESS = "read"
+WRITE_ACCESS = "write"
+DEPLOY_ACCESS = "deploy"
+ADMIN_ACCESS = "admin"
+
+ACCESS_ROLE_ACTIONS: dict[str, set[str]] = {
+    AccessRole.OWNER.value: {READ_ACCESS, WRITE_ACCESS, DEPLOY_ACCESS, ADMIN_ACCESS},
+    AccessRole.MAINTAINER.value: {READ_ACCESS, WRITE_ACCESS, DEPLOY_ACCESS},
+    AccessRole.DEPLOYER.value: {READ_ACCESS, DEPLOY_ACCESS},
+    AccessRole.VIEWER.value: {READ_ACCESS},
+}
+
+ACTION_PERMISSION_ALIASES: dict[str, str] = {
+    READ_ACCESS: Permission.CLUSTER_READ.value,
+    WRITE_ACCESS: Permission.CONFIG_UPDATE.value,
+    DEPLOY_ACCESS: Permission.DEPLOY_RUN.value,
+    ADMIN_ACCESS: Permission.CLUSTER_ROLE_MANAGE.value,
+}
+
+
+def access_role_allows_action(role: str, action: str) -> bool:
+    return action in ACCESS_ROLE_ACTIONS.get(role, set())
 
 
 def resource_role_allows_permission(role: str, permission: str) -> bool:

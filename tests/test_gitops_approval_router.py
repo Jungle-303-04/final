@@ -100,7 +100,7 @@ def test_grant_approval_emits_granted_event_with_command_request() -> None:
     response, db, events = asyncio.run(run())
 
     assert response.accepted is True
-    assert db.access_calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy")]
+    assert db.access_calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy.run")]
     assert db.resolutions == [("approval-1", "workspace-1", "granted", "user-1", "granted")]
     assert events.body is not None
     assert events.body.__subject__ == "approval.granted"

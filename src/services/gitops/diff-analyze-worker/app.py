@@ -21,7 +21,7 @@ from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from packages.config.constants import Command, GitHub, RiskLevel, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gitops import ApprovalStatus
-from packages.contracts.identity import AccessRole
+from packages.contracts.identity import ResourceRole
 from packages.contracts.stores import PolicyDecisionStore
 from packages.runtime.app import App, EventContext
 
@@ -106,7 +106,7 @@ async def persist_policy_decision(
             else ApprovalStatus.REQUESTED.value
         ),
         "reason": decision.reason,
-        "requested_role": AccessRole.DEPLOYER.value,
+        "requested_role": ResourceRole.RELEASE_OPERATOR.value,
         "details": decision.details(diff),
     }
     await request(approval_payload)
