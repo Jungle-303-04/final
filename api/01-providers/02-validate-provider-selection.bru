@@ -1,0 +1,46 @@
+meta {
+  name: 02 Validate Provider Selection
+  type: http
+  seq: 2
+  tags: [
+    providers
+    public
+  ]
+}
+
+post {
+  url: {{base_url}}/providers/validate
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "source_provider": "github",
+    "deploy_provider": "manual-manifest",
+    "cloud_provider": "existing-k8s",
+    "secret_provider": "env",
+    "capabilities": [
+      "gitops",
+      "target-agent",
+      "evidence"
+    ],
+    "credential_refs": {}
+  }
+}
+
+test {
+  test("200 OK", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("validation response shape", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("valid");
+    expect(body.errors).to.be.an("array");
+    expect(body.warnings).to.be.an("array");
+    expect(body).to.have.property("selected");
+  });
+}

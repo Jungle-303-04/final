@@ -1,0 +1,23 @@
+meta {
+  name: 01 Provider Catalog
+  type: http
+  seq: 1
+  tags: [
+    providers
+    public
+  ]
+}
+
+get {
+  url: {{base_url}}/providers/catalog
+}
+
+test {
+  test("200 OK", function () {
+    expect(res.status).to.equal(200);
+  });
+
+  test("catalog contains providers", function () {
+    expect(res.getBody()).to.have.property("providers");
+  });
+}

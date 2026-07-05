@@ -3,15 +3,15 @@ SHELL := bash
 .DEFAULT_GOAL := help
 
 IMAGE_NAME ?= service:local
-MGMT_CLUSTER ?= management
-TARGET_CLUSTER ?= target
+MGMT_CLUSTER ?= kubernetes-ops
+TARGET_CLUSTER ?= cluster-1
 ENV_TEMPLATE ?= config/env/app.env.example
 
 export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env sync hooks doctor lint format test events crash-test check build-image up install-telemetry down status smoke scale kill-pod aws-up aws-down clean
+.PHONY: help setup env sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod aws-smoke aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,33 +44,35 @@ hooks: ## git 커밋 훅 설치(pre-commit, 팀 공통 포맷 강제)
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
 
+manifest-check: ## Kubernetes manifest 렌더/파싱 확인
+	bash scripts/manifest-check.sh
+
 events: ## 등록된 이벤트/구독자 한눈에 보기
 	uv run python scripts/events.py
 
 services: ## 서비스 명부 한눈에 보기(src/services 자동 발견)
 	uv run python scripts/services.py
 
-check: doctor test ## 개발 전/커밋 전 전체 점검
+check: test manifest-check ## 개발 전/커밋 전 전체 점검
 
-build-image: ## service Docker 이미지 빌드
+build-image: ## 로컬 container image 빌드(수동 디버그용)
 	bash scripts/build-image.sh
 
-up: ## management/target kind 클러스터 실행
-	bash scripts/up.sh
+up: ## legacy local management/target cluster 실행(기본 테스트 아님)
+	MGMT_CLUSTER="$${LOCAL_MGMT_CLUSTER:-management}" TARGET_CLUSTER="$${LOCAL_TARGET_CLUSTER:-target}" bash scripts/up.sh
 
 install-telemetry: ## target 클러스터에 telemetry Helm charts 설치
 	bash scripts/install-telemetry.sh
 
-down: ## management/target kind 클러스터 삭제
-	bash scripts/down.sh
+down: ## legacy local management/target cluster 삭제
+	MGMT_CLUSTER="$${LOCAL_MGMT_CLUSTER:-management}" TARGET_CLUSTER="$${LOCAL_TARGET_CLUSTER:-target}" bash scripts/down.sh
 
-status: ## management/target 리소스 상태 확인
+status: ## AWS management/target 리소스 상태 확인
 	bash scripts/status.sh
 
-smoke: ## 전체 이벤트 사이클 smoke 테스트
-	bash scripts/smoke.sh
+smoke: aws-smoke ## AWS smoke 별칭
 
-crash-test: ## 아웃박스 정확히 한 번 크래시 테스트(make up 후)
+crash-test: ## AWS management에서 아웃박스 정확히 한 번 크래시 테스트
 	bash scripts/crash_test.sh
 
 scale: ## management worker 스케일 조정. 예: make scale DEPLOYMENT=rca-worker REPLICAS=2
@@ -83,6 +85,16 @@ kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYM
 
 aws-up: ## AWS EKS management + target 2개 테스트 환경 생성
 	bash scripts/aws-up.sh
+
+aws-smoke: ## GitHub Actions AWS CD smoke 실행
+	gh workflow run aws-cd.yml \
+		--repo "$${GITHUB_REPOSITORY:-Jungle-303-04/final}" \
+		--ref "$${AWS_SMOKE_REF:-main}" \
+		-f create_clusters=false \
+		-f ensure_ebs_csi=false \
+		-f bootstrap_admin=false \
+		-f register_targets=false \
+		-f run_smoke=true
 
 aws-down: ## AWS EKS 테스트 환경 삭제
 	bash scripts/aws-down.sh

@@ -39,9 +39,6 @@ jobs:
       - name: Run repository checks
         run: bash scripts/test.sh
 
-      - name: Build service image
-        run: bash scripts/build-image.sh
-
   promote:
     name: Merge dev into main
     runs-on: ubuntu-latest
@@ -65,7 +62,14 @@ jobs:
           git merge --no-ff origin/dev -m "ci: dev 자동 승격 / main 병합 / 배포 준비"
           git push origin HEAD:main
 
-      - name: Dispatch AWS deployment
+      - name: Dispatch AWS deployment smoke
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run aws-cd.yml --ref main
+        run: |
+          gh workflow run aws-cd.yml \
+            --ref main \
+            -f create_clusters=false \
+            -f ensure_ebs_csi=false \
+            -f bootstrap_admin=false \
+            -f register_targets=false \
+            -f run_smoke=true

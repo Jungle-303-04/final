@@ -1,0 +1,29 @@
+meta {
+  name: 08 Approve User
+  type: http
+  seq: 8
+  tags: [
+    auth
+    admin
+  ]
+}
+
+post {
+  url: {{base_url}}/auth/users/{{user_id}}/approve
+}
+
+test {
+  test("admin success or explicit access/not-found response", function () {
+    expect([200, 401, 403, 404, 409, 422]).to.include(res.status);
+  });
+
+  test("success body has approved user", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("accepted", true);
+      expect(body).to.have.property("user_id");
+      expect(body).to.have.property("status");
+      expect(body).to.have.property("role");
+    }
+  });
+}

@@ -1,0 +1,25 @@
+meta {
+  name: 07 Session
+  type: http
+  seq: 7
+  tags: [
+    auth
+    session
+  ]
+}
+
+get {
+  url: {{base_url}}/auth/session
+}
+
+test {
+  test("200 after login, otherwise auth failure", function () {
+    expect([200, 401, 403]).to.include(res.status);
+  });
+
+  test("success body is authenticated", function () {
+    if (res.status === 200) {
+      expect(res.getBody()).to.have.property("authenticated", true);
+    }
+  });
+}

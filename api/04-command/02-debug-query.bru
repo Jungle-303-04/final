@@ -1,0 +1,54 @@
+meta {
+  name: 02 Agent Debug Query
+  type: http
+  seq: 2
+  tags: [
+    command
+    telemetry
+    read
+  ]
+}
+
+post {
+  url: {{base_url}}/agent/debug/query
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "cluster_id": "{{cluster_id}}",
+    "reason": "manual Bruno telemetry query",
+    "query": {
+      "source": "prometheus",
+      "name": "pod_restart_rate",
+      "query": "sum(rate(kube_pod_container_status_restarts_total[5m]))",
+      "range_seconds": 300,
+      "step_seconds": 30
+    }
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.status === 200 && body && body.command_id) {
+    bru.setEnvVar("command_id", body.command_id);
+  }
+}
+
+test {
+  test("accepted or explicit auth/access/validation failure", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("success body has command id", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("accepted", true);
+      expect(body).to.have.property("command_id");
+      expect(body).to.have.property("correlation_id");
+    }
+  });
+}

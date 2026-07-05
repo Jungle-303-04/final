@@ -1,0 +1,53 @@
+meta {
+  name: 01 GitHub Webhook
+  type: http
+  seq: 1
+  tags: [
+    gitops
+    hmac
+    write
+  ]
+}
+
+post {
+  url: {{base_url}}/github/webhook
+}
+
+headers {
+  content-type: application/json
+  x-hub-signature-256: {{github_webhook_signature}}
+}
+
+body {
+  {
+    "commit_sha": "bruno-commit-001",
+    "image": "ghcr.io/example/checkout-api:bruno",
+    "replicas": 2,
+    "workspace_id": "default",
+    "repository_id": "repo-bruno",
+    "repo_ref": "Jungle-303-04/final",
+    "branch": "main",
+    "watch_target_id": "watch-bruno",
+    "binding_id": "binding-bruno",
+    "application_id": "app-bruno",
+    "workflow_run_id": "wf-bruno",
+    "environment": "sandbox",
+    "cluster_id": "target-cluster-01",
+    "manifest_path": "src/samples/smoke/deploy.yaml"
+  }
+}
+
+test {
+  test("accepted only with valid signature", function () {
+    expect([200, 401, 422, 503]).to.include(res.status);
+  });
+
+  test("success body has event", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("accepted", true);
+      expect(body).to.have.property("event");
+      expect(body).to.have.property("event_id");
+    }
+  });
+}

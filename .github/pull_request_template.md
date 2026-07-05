@@ -24,7 +24,7 @@
 
 - [ ] `make check`
 - [ ] `bash scripts/test.sh`
-- [ ] runtime/deploy/event 흐름이 바뀐 경우 `make smoke`
+- [ ] runtime/deploy/event 흐름이 바뀐 경우 `make aws-smoke` 또는 `Integration Smoke` workflow
 - [ ] WIKI를 바꾼 경우 WIKI `make check`
 
 ## 계약 체크리스트

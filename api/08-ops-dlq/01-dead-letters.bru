@@ -1,0 +1,27 @@
+meta {
+  name: 01 Dead Letters
+  type: http
+  seq: 1
+  tags: [
+    ops
+    dlq
+    read
+  ]
+}
+
+get {
+  url: {{base_url}}/dead-letters?limit=20
+}
+
+test {
+  test("admin can list dead letters or auth blocks clearly", function () {
+    expect([200, 401, 403]).to.include(res.status);
+  });
+
+  test("success body has dead letter list", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body.dead_letters).to.be.an("array");
+    }
+  });
+}
