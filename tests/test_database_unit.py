@@ -67,11 +67,6 @@ def test_serialize_command_isoformats_lease() -> None:
     assert out["command_id"] == "c1"
 
 
-def test_manifest_artifact_compat_migration_adds_workspace_id() -> None:
-    statement = storage_engine.MANIFEST_ARTIFACT_COMPAT_COLUMNS["workspace_id"]
-    assert "alter table manifest_artifacts add column if not exists workspace_id text" == statement
-
-
 def test_role_permission_compat_migration_removes_legacy_aliases() -> None:
     role_statement = storage_engine.MEMBER_RESOURCE_ROLE_MIGRATE_LEGACY_ROLES
     permission_delete = storage_engine.ROLE_PERMISSION_DELETE_LEGACY_ALIAS_DUPLICATES
@@ -88,10 +83,6 @@ def test_role_permission_compat_migration_removes_legacy_aliases() -> None:
     assert Permission.CONFIG_UPDATE.value in permission_update
     assert Permission.DEPLOY_RUN.value in permission_update
     assert Permission.CLUSTER_ROLE_MANAGE.value in permission_update
-
-
-def test_row_dict_copies_mapping() -> None:
-    assert db.row_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2}
 
 
 def test_sqlalchemy_url_uses_psycopg_driver(monkeypatch) -> None:

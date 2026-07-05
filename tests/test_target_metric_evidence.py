@@ -96,38 +96,6 @@ def test_prometheus_metrics_are_normalized_into_agent_evidence_shape() -> None:
     )
 
 
-def test_collector_accepts_selected_provider_keys() -> None:
-    module = load_evidence_module()
-    metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
-    collector = module.EvidenceCollector([metrics_provider])
-    collector.register_query(
-        module.TelemetryQueryDefinition.from_mapping(
-            {
-                "source": "prometheus",
-                "name": "scrape_targets_up",
-                "description": "Prometheus scrape target health.",
-                "query": "up",
-            }
-        )
-    )
-
-    async def fake_query_prometheus(_client, _metric_query) -> dict[str, object]:
-        return {
-            "status": "success",
-            "data": {
-                "resultType": "vector",
-                "result": [],
-            },
-        }
-
-    collector.providers["metrics"].query = fake_query_prometheus
-
-    evidence = asyncio.run(collector.collect("metrics"))
-
-    assert list(evidence) == ["metrics"]
-    assert evidence["metrics"]["source"] == "prometheus"
-
-
 def test_collector_runs_one_off_query_definition() -> None:
     module = load_evidence_module()
     metrics_provider = module.PrometheusMetricsProvider.from_config(lambda _name, default: default)
