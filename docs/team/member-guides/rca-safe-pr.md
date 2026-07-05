@@ -10,13 +10,32 @@ Target Agent가 보낸 evidence를 사람이 이해할 수 있는 원인 분석�
 Gateway
   -> cluster.evidence.received
 
-RCA Worker
+evidence-worker
   -> evidence.built
-  -> rca.completed
-  -> safe_pr.requested
 
-Repo Gateway Worker
-  -> safe_pr.created
+incident-worker
+  -> incident.detected
+  -> evidence.bundle.built
+
+plan-worker
+  -> rca.candidates.planned
+
+analyze-worker
+  -> rca.candidates.evaluated
+
+rca-worker
+  -> rca.completed 또는 rca.action_required
+
+recovery-worker / select-worker / dispatch-worker
+  -> recovery.planned
+  -> recovery.action_selected
+  -> command.requested 또는 safe_pr.requested
+
+safe-pr-worker
+  -> safe_pr.patch_prepared
+
+scm-worker / GithubScmProvider
+  -> safe_pr.created 또는 safe_pr.failed
 
 Audit Timeline Service
   -> 모든 event 관찰
@@ -25,7 +44,15 @@ Audit Timeline Service
 
 ## 담당 영역
 
+- `src/services/ai/evidence-worker`
+- `src/services/ai/incident-worker`
+- `src/services/ai/plan-worker`
+- `src/services/ai/analyze-worker`
 - `src/services/ai/rca-worker`
+- `src/services/ai/recovery-worker`
+- `src/services/ai/select-worker`
+- `src/services/ai/dispatch-worker`
+- `src/services/ai/safe-pr-worker`
 - `src/services/gitops/scm-worker`
 - `src/services/projection/audit-worker`
 - Evidence Builder logic
@@ -46,8 +73,8 @@ Audit Timeline Service
 
 ## 현재 책임
 
-- RCA Worker는 직접 PR을 생성하지 않고 `safe_pr.requested`를 만든다.
-- `scm-worker`가 `safe_pr.requested`를 받아 GitHub branch/commit/PR client로 처리하고, 자격 증명/설정 누락은 `safe_pr.failed`로 남긴다.
+- RCA 계열 worker는 직접 PR을 생성하지 않고 `safe_pr.requested` 또는 `safe_pr.patch_prepared`까지만 만든다.
+- `scm-worker`가 `safe_pr.requested`를 받아 `GithubScmProvider`로 GitHub branch/commit/PR을 처리하고, 자격 증명/설정 누락은 `safe_pr.failed`로 남긴다.
 - RCA 결과는 evidence 기반으로만 생성한다.
 - Safe PR side effect는 token/ref 확인과 feature flag로 보호한다.
 - audit timeline이 command, RCA, PR 상태를 추적하게 한다.
@@ -55,7 +82,8 @@ Audit Timeline Service
 
 ## 이벤트 시스템을 몰라도 되는 작업 규칙
 
-- RCA Worker는 `@app.on(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
+- `evidence-worker`는 `@app.on(ClusterEvidenceReceivedBody)`로 `cluster.evidence.received`를 구독한다.
+- 이후 worker는 `EvidenceBuiltBody`, `EvidenceBundleBuiltBody`, `RcaCandidatesPlannedBody`, `RcaCandidatesEvaluatedBody`, `RcaCompletedBody`, `RecoveryPlannedBody`, `RecoveryActionSelectedBody`, `SafePrRequestedBody`를 순서대로 소비한다.
 - handler 입력은 타입이 있는 body 객체이며, 원본 envelope의 transport 필드는 `EventEnvelope.payload`다.
 - 새로운 사실을 만들면 body DTO로 감싸서 `yield`로 발행한다.
 - GitHub PR을 실제로 만들 때도 event에는 PR URL, branch, commit SHA, credential_ref 같은 reference만 남긴다.
@@ -114,7 +142,7 @@ Phase 9 이후는 `docs/hardening-roadmap.md`의 AI/RCA와 Safe PR 항목을 따
 목표:
 
 ```text
-RCA Worker가 어떤 evidence를 입력으로 받는지 명확히 한다.
+evidence/RCA worker 체인이 어떤 evidence를 입력으로 받는지 명확히 한다.
 ```
 
 왜 해야 하는가:
@@ -254,7 +282,7 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 
 테스트:
 
-- evidence.built -> rca.completed.
+- evidence.built -> evidence.bundle.built -> rca.candidates.planned -> rca.candidates.evaluated -> rca.completed.
 - insufficient evidence result.
 - correlation_id 유지.
 

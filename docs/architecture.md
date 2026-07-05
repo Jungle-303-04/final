@@ -12,7 +12,7 @@
 - 대상 클러스터 Agent는 관리 영역으로 outbound 연결만 맺는다.
 - 외부 provider credential은 UI 상태가 아니라 credential_ref/Token Broker 경계로 관리한다.
 - command API는 Gateway 내부 로그인(email/password)이 발급한 Redis session을 요구한다.
-- dashboard UI/API와 dashboard projection worker는 아직 이 repository의 실행 단위가 아니다.
+- dashboard UI/API와 dashboard projection worker는 현재 backend 계약을 기준으로 추가할 실행 단위다.
 
 ## 운영 배포 기준
 
@@ -38,7 +38,7 @@ services
   + gitops            Git 변경 -> workflow state -> manifest/diff/analyze/repo write split workers
   + command-worker               command policy -> target agent queue
   + target/reconcile-worker      target desired state -> reconcile result
-  + rca-worker                   evidence -> RCA -> safe PR event
+  + ai split workers             evidence -> incident -> plan -> analyze -> RCA -> recovery -> dispatch
   + projection/audit-worker       변경 불가능한 audit timeline
   + alert-worker                  알림 boundary(stub adapter)
   + mail-worker                   이메일 인증 발송/log boundary
@@ -77,7 +77,17 @@ diff-analyze-worker           -> python src/services/gitops/diff-analyze-worker/
 scm-worker           -> python src/services/gitops/scm-worker/app.py
 command-worker                -> python src/services/command/command-worker/app.py
 target-reconcile-worker       -> python src/services/target/reconcile-worker/app.py
+evidence-worker               -> python src/services/ai/evidence-worker/app.py
+incident-worker               -> python src/services/ai/incident-worker/app.py
+plan-worker                   -> python src/services/ai/plan-worker/app.py
+analyze-worker                -> python src/services/ai/analyze-worker/app.py
 rca-worker                    -> python src/services/ai/rca-worker/app.py
+recovery-worker               -> python src/services/ai/recovery-worker/app.py
+select-worker                 -> python src/services/ai/select-worker/app.py
+dispatch-worker               -> python src/services/ai/dispatch-worker/app.py
+safe-pr-worker                -> python src/services/ai/safe-pr-worker/app.py
+backlog-worker                -> python src/services/ai/backlog-worker/app.py
+rca-fallback-worker           -> python src/services/ai/rca-fallback-worker/app.py
 audit-worker        -> python src/services/projection/audit-worker/app.py
 alert-worker        -> python src/services/alert/alert-worker/app.py
 mail-worker         -> python src/services/mail/mail-worker/app.py
@@ -124,7 +134,7 @@ target-tempo                  -> deploy/target/tempo.yaml
 한 서비스는 한 파일 `app.py`다. worker 서비스는 `src/packages/runtime/app.py`의 `App`을 사용한다.
 
 ```python
-app = App("rca-worker")
+app = App("evidence-worker")
 
 @app.on(ClusterEvidenceReceivedBody)  # 한 body 타입 구독
 async def on_evidence(evt, ctx):
@@ -141,7 +151,7 @@ if __name__ == "__main__":
 - `AsyncService`: agent, collector처럼 직접 async loop를 가진 process
 
 audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
-본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker는 planned 항목이다.
+본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker도 같은 패턴으로 추가한다.
 
 ```python
 @app.on_any
@@ -166,7 +176,15 @@ async def on_event(evt: EventEnvelope, ctx):
 - `scm-worker`
 - `command-worker`
 - `target-reconcile-worker`
+- `evidence-worker`
+- `incident-worker`
+- `plan-worker`
+- `analyze-worker`
 - `rca-worker`
+- `recovery-worker`
+- `select-worker`
+- `dispatch-worker`
+- `safe-pr-worker`
 - `audit-worker`
 - `alert-worker`
 - `mail-worker`
@@ -201,10 +219,16 @@ GitHub webhook
 Target Cluster Agent
 -> API Gateway /agent/evidence
 -> NATS cluster.evidence.received
--> RCA Worker
--> evidence.built -> rca.completed -> safe_pr.requested
--> Repo Gateway Worker
--> safe_pr.created
+-> evidence-worker: evidence.built
+-> incident-worker: incident.detected / evidence.bundle.built
+-> plan-worker: rca.candidates.planned
+-> analyze-worker: rca.candidates.evaluated
+-> rca-worker: rca.completed 또는 rca.action_required
+-> recovery-worker: recovery.planned
+-> select-worker: recovery.action_selected 또는 recovery.selection_requested
+-> dispatch-worker: command.requested 또는 safe_pr.requested
+-> safe-pr-worker: safe_pr.patch_prepared
+-> scm-worker: safe_pr.created 또는 safe_pr.failed
 
 Target 등록 / desired-state
 -> API Gateway /targets
@@ -219,8 +243,8 @@ Target 등록 / desired-state
 -> audit log
 
 Dashboard Projection Service / dashboard query/stream
--> planned. 현재 이 repository에는 `src/services/projection/dashboard-worker`와
-   dashboard route가 없다.
+-> dashboard 확장 시 `src/services/projection/dashboard-worker`와
+   dashboard route를 같은 계약으로 추가
 ```
 
 실패한 event 처리:

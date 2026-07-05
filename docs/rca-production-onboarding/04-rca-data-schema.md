@@ -1,0 +1,444 @@
+# RCA 데이터 스키마
+
+이 문서는 RCA 구현에 필요한 데이터 스키마를 코드 기준으로 정리한 것이다.
+목표는 단순히 필드 이름을 외우는 것이 아니라, 각 값이 왜 필요하고 어느 작업자가 어디서 생산/소비하는지 이해하는 것이다.
+
+기준 파일:
+
+- `src/packages/contracts/gateway/requests.py`
+- `src/packages/contracts/gateway/responses.py`
+- `src/packages/contracts/event_bus/subjects.py`
+- `src/domains/rca/events.py`
+- `src/domains/command/events.py`
+- `src/domains/scm/events.py`
+- `src/domains/rca/models.py`
+- `src/domains/identity/models.py`
+- `src/packages/contracts/identity.py`
+- `src/services/target/cluster-agent/queries/registry.py`
+- `src/services/target/cluster-agent/providers/*_providers.py`
+
+## 스키마를 나누는 기준
+
+| 구분 | 담당 | 왜 따로 두는가 |
+| --- | --- | --- |
+| Gateway request/response | 민정, 찬빈 | HTTP와 frontend가 직접 보는 계약이다. event 내부 구조를 화면이 직접 읽지 않게 한다. |
+| Event body | 민정, 가인, 찬빈 | worker 사이의 비동기 계약이다. 이벤트가 바뀌면 다음 worker와 projection이 같이 바뀐다. |
+| Provider query value object | 민정 | Prometheus/Loki/Tempo/Kubernetes마다 query 실행 방식이 다르다. 문자열 dict를 직접 넘기지 않는다. |
+| RCA value object | 가인 | 증거, 사고, 후보, 평가, 보고서를 단계별로 분리한다. |
+| Storage model | 가인, 찬빈 | 재시작/재처리/대시보드 조회를 위해 event 결과를 DB에 남긴다. |
+| Permission model | 찬빈 | 화면 표시와 backend 차단 기준이 달라지면 보안 사고가 난다. |
+
+## AgentEvidenceRequest
+
+파일: `src/packages/contracts/gateway/requests.py`
+
+HTTP route: `POST /agent/evidence`
+
+producer: target agent  
+consumer: `src/domains/rca/router.py` -> `ClusterEvidenceReceivedBody`
+
+| 필드 | 타입 | 필수 | 왜 필요한가 | 주의 |
+| --- | --- | --- | --- | --- |
+| `cluster_id` | `str` | 입력 가능 | agent가 말하는 cluster 식별자 | router에서 신뢰하지 않고 토큰 identity로 덮어쓴다. |
+| `workspace_id` | `str` | 입력 가능 | agent가 말하는 workspace 식별자 | router에서 신뢰하지 않고 토큰 identity로 덮어쓴다. |
+| `correlation_id` | `str | None` | 선택 | 수동 수집/디버그 흐름과 같은 timeline으로 묶을 때 쓴다. | 없으면 event 생성 시 새 correlation이 붙는다. |
+| `agent_id` | `str | None` | 선택 | 어떤 agent가 수집했는지 추적한다. | 운영 장애 조사에서 필요하다. |
+| `source_id` | `str | None` | 선택 | 같은 agent 안에서도 수집 source를 구분한다. | 기본값은 router의 `cluster-snapshot`이다. |
+| `window_start` | `str | None` | 선택 | evidence window 시작 시각 또는 키 기준이다. | 중복 방지 키와 같이 쓰인다. |
+| `evidence_key` | `str | None` | 선택 | 같은 수집 window 중복 발행을 막는다. | router가 `workspace_id:cluster_id:` prefix를 붙인다. |
+| `kubernetes` | `dict` | 기본 `{}` | pod/event/node/workload/service/endpoints snapshot | `KubernetesSnapshotProvider`가 채운다. |
+| `metrics` | `dict` | 기본 `{}` | Prometheus 결과 | instant/range query 결과가 정규화되어 들어간다. |
+| `logs` | `list[dict]` | 기본 `[]` | Loki 로그 snippet | 길이 제한이 있다. |
+| `traces` | `dict` | 기본 `{}` | Tempo/OTel trace 요약 | 전체 trace raw를 무제한 저장하지 않는다. |
+
+검증:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_router.py -q
+```
+
+## ClusterEvidenceReceivedBody
+
+파일: `src/domains/rca/events.py`
+
+event subject: `cluster.evidence.received`
+
+producer:
+
+- `src/domains/rca/router.py`
+- `src/domains/target/router.py`의 evidence job result aggregation
+
+consumer:
+
+- `src/services/ai/evidence-worker/app.py`
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `workspace_id` | RCA, audit, dashboard가 반드시 workspace로 분리되어야 한다. |
+| `cluster_id` | target cluster별 RCA와 command route를 구분한다. |
+| `kubernetes` | pod 상태, event reason, workload replica, endpoint 상태를 RCA rule에 제공한다. |
+| `metrics` | CPU, memory, restart, latency 같은 수치 기반 판단에 쓴다. |
+| `logs` | 애플리케이션 오류, dependency 오류, 인증/권한 오류 판단에 쓴다. |
+| `traces` | timeout, upstream/downstream 병목 판단에 쓴다. |
+| `agent_id` | 같은 cluster에 agent가 여러 개일 때 수집자를 구분한다. |
+| `source_id` | 수집 source를 표시한다. |
+| `window_start` | 수집 window 표시와 중복 방지에 쓴다. |
+| `evidence_key` | idempotency 기준이다. |
+
+## TelemetryQueryDefinition
+
+파일: `src/services/target/cluster-agent/queries/registry.py`
+
+producer:
+
+- agent policy의 provider query
+- `POST /agent/debug/query`
+
+consumer:
+
+- `TelemetryQueryDefinition.to_provider_query()`
+- `EvidenceCollector.run_query()`
+
+| 필드 | 타입 | 왜 필요한가 |
+| --- | --- | --- |
+| `source` | `str` | provider registry에서 어떤 provider를 호출할지 찾는다. |
+| `name` | `str` | 결과 map의 key가 된다. RCA rule은 이 이름을 기준으로 evidence를 찾는다. |
+| `description` | `str` | 사람이 읽는 query 의도다. dashboard와 문서에 표시할 수 있다. |
+| `query` | `str` | PromQL, LogQL, TraceQL 또는 provider query 문자열이다. |
+| `range_seconds` | `int | None` | Prometheus range query가 필요한 window 길이다. |
+| `step_seconds` | `int | None` | range query sample 간격이다. 없으면 provider가 기본값을 계산한다. |
+
+## Provider query value object
+
+파일: `src/services/target/cluster-agent/queries/registry.py`
+
+| 값 객체 | source | provider | 왜 필요한가 |
+| --- | --- | --- | --- |
+| `PrometheusInstantQuery` | `prometheus` | `PrometheusMetricsProvider.query_instant()` | 지금 한 시점의 값을 볼 때 쓴다. |
+| `PrometheusRangeQuery` | `prometheus` | `PrometheusMetricsProvider.query_range()` | 일정 window의 변화량, 추세, rate를 볼 때 쓴다. |
+| `LokiLogQuery` | `loki` | `LokiLogsProvider` | 오류 로그 snippet을 가져온다. |
+| `OpenTelemetrySpanQuery` | `tempo` | `TempoTracesProvider` | trace/span 기반 병목을 본다. |
+| `KubernetesSnapshotQuery` | `kubernetes` | `KubernetesSnapshotProvider` | Kubernetes API snapshot을 가져온다. |
+
+Prometheus range query는 현재 구현되어 있다.
+
+- 등록 위치: `PrometheusMetricsProvider`의 `@telemetry.source(..., range_query_type=PrometheusRangeQuery)`
+- 실행 위치: `PrometheusMetricsProvider.query_range()`
+- normalize 결과: `result_type="matrix"`, `series`, `point_count`
+- 테스트: `tests/test_target_metric_evidence.py`
+
+## Kubernetes snapshot payload
+
+파일: `src/services/target/cluster-agent/providers/kubernetes_providers.py`
+
+`KubernetesSnapshotProvider`는 metrics/logs/traces provider와 같은 evidence job 흐름으로 실행된다.
+
+| bucket | 내용 | 왜 필요한가 |
+| --- | --- | --- |
+| `cluster` | `cluster_id`, `namespace`, `collected_at` | 어느 cluster/namespace snapshot인지 고정한다. |
+| `pods` | pod name, namespace, phase, readiness, restart, owner | CrashLoop, OOMKilled, Pending, probe failure 판단에 쓴다. |
+| `events` | event reason/message/count/type | scheduling failure, image pull, admission deny 판단에 쓴다. |
+| `nodes` | node condition, capacity/allocatable 요약 | CPU/memory/disk/PID pressure 판단에 쓴다. |
+| `workloads` | deployment/statefulset/daemonset/replicaset replica 상태 | rollout/progress/replica unavailable 판단에 쓴다. |
+| `services` | service selector/type/ports | service discovery와 endpoint 문제를 연결한다. |
+| `endpoints` | endpoint slice address/condition | service has no ready endpoints 판단에 쓴다. |
+| `provider_status` | query별 status/count/reason | 수집 자체가 성공했는지 dashboard와 RCA가 구분한다. |
+
+검증:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py -q
+```
+
+## Evidence
+
+파일: `src/domains/rca/events.py`
+
+producer: `evidence-worker`  
+consumer: `incident-worker`, `rca_reports` 저장, dashboard projection
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `workspace_id` | tenant 분리 기준이다. |
+| `cluster_id` | 분석 대상 cluster다. |
+| `object_ref` | evidence 저장/조회/PR body 연결 기준이다. |
+| `kubernetes` | Kubernetes rule이 읽는다. |
+| `metrics` | metric rule이 읽는다. |
+| `logs` | log rule이 읽는다. |
+| `traces` | trace rule이 읽는다. |
+
+저장 table: `evidence`
+
+| 컬럼 | 왜 필요한가 |
+| --- | --- |
+| `workspace_id` | query filter와 권한 필터 기준이다. |
+| `correlation_id` | timeline grouping 기준이다. |
+| `kind` | evidence 종류 구분이다. |
+| `payload` | 정규화된 evidence body를 보관한다. |
+| `created_at` | 최신 evidence와 과거 evidence를 구분한다. |
+
+## IncidentRecord
+
+producer: `incident-worker`  
+consumer: `plan-worker`, dashboard detail
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `incident_id` | RCA 전체의 기준 ID다. |
+| `workspace_id` | tenant 분리다. |
+| `cluster_id` | command/recovery route와 연결한다. |
+| `resource_kind` | Pod/Deployment/Service 등 어떤 객체인지 표시한다. |
+| `resource_name` | 사람이 찾을 수 있는 리소스 이름이다. |
+| `namespace` | Kubernetes 명령과 화면 필터에 필요하다. |
+| `symptom` | RCA rule catalog의 매칭 키다. |
+| `severity` | alert/UI 우선순위에 필요하다. |
+| `first_seen_at` | incident timeline 시작점이다. |
+| `summary` | 대시보드 카드와 PR body에 표시한다. |
+
+## EvidenceBundle
+
+producer: `incident-worker`  
+consumer: `plan-worker`, `analyze-worker`, `rca-worker`
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `incident_id` | 어떤 incident의 판단 근거인지 묶는다. |
+| `items` | 실제 판단에 쓴 evidence 목록이다. |
+| `missing_evidence` | 수집 부족으로 결론을 멈춰야 하는지 판단한다. |
+| `complete` | downstream worker가 확정/보류를 결정할 수 있다. |
+
+`EvidenceItem`:
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `source` | `kubernetes`, `metrics`, `logs`, `traces` 중 어디서 왔는지 구분한다. |
+| `name` | rule이 찾는 evidence key다. |
+| `value` | 판단에 필요한 구조화 값이다. |
+| `summary` | 사람이 읽는 근거 설명이다. |
+
+## CauseCandidate와 CauseEvaluation
+
+producer:
+
+- `plan-worker`: `CauseCandidate`
+- `analyze-worker`: `CauseEvaluation`
+
+consumer:
+
+- `rca-worker`
+- dashboard root cause detail
+
+| 객체 | 필드 | 왜 필요한가 |
+| --- | --- | --- |
+| `CauseCandidate` | `candidate_id` | 평가 결과와 후보를 연결한다. |
+| `CauseCandidate` | `title` | 사람이 보는 원인 후보 이름이다. |
+| `CauseCandidate` | `description` | 후보가 무엇을 의미하는지 설명한다. |
+| `CauseCandidate` | `expected_evidence` | 이 후보를 판단하려면 어떤 근거가 필요한지 적는다. |
+| `CauseCandidate` | `checks` | evaluator가 수행해야 할 체크 목록이다. |
+| `CauseEvaluation` | `candidate_id` | 후보와 평가를 join한다. |
+| `CauseEvaluation` | `score` | 후보 우선순위다. |
+| `CauseEvaluation` | `checks` | 어떤 check가 실행됐는지 표시한다. |
+| `CauseEvaluation` | `supporting_evidence` | 결론을 지지하는 evidence key다. |
+| `CauseEvaluation` | `missing_evidence` | 확신을 낮추거나 action_required로 보내는 근거다. |
+| `CauseEvaluation` | `reason` | 왜 이 점수인지 사람이 읽는 설명이다. |
+
+## RcaCompletedBody와 RcaActionRequiredBody
+
+producer: `rca-worker`  
+consumer: `recovery-worker`, dashboard projection, audit
+
+| event | 필드 | 왜 필요한가 |
+| --- | --- | --- |
+| `rca.completed` | `root_cause` | 최종 원인이다. |
+| `rca.completed` | `action` | 다음 조치의 큰 방향이다. |
+| `rca.completed` | `evidence_ref` | 근거 없이 결론만 떠도는 일을 막는다. |
+| `rca.completed` | `rca_detail` | confidence, candidate, supporting/missing evidence를 담는다. |
+| `rca.completed` | `incident` | 화면과 recovery target을 연결한다. |
+| `rca.completed` | `evidence_bundle` | PR body와 dashboard 근거 표시에 쓴다. |
+| `rca.action_required` | `reason` | 자동 진행을 멈춘 이유다. |
+| `rca.action_required` | `evidence_ref` | 어떤 증거에서 멈췄는지 추적한다. |
+
+저장 table: `rca_reports`
+
+| 컬럼 | 왜 필요한가 |
+| --- | --- |
+| `workspace_id` | tenant 분리다. |
+| `correlation_id` | timeline grouping이다. |
+| `root_cause` | 검색/요약용 컬럼이다. |
+| `action` | 추천 조치 요약이다. |
+| `payload` | 상세 결과 전체다. |
+| `created_at` | 최신 보고서 판단 기준이다. |
+
+## RecoveryPlan
+
+producer: `recovery-worker`, `select-worker`  
+consumer: `dispatch-worker`, dashboard
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `plan_id` | 복구 후보 묶음 ID다. |
+| `incident_id` | 어떤 장애에서 나온 계획인지 연결한다. |
+| `evidence_ref` | 근거 연결이다. |
+| `summary` | 화면 카드 제목이다. |
+| `target` | namespace/resource_kind/resource_name 같은 조치 대상이다. |
+| `recommended_action_id` | 기본 추천 후보다. |
+| `execution_route` | `command`, `safe_pr`, `manual` 중 어디로 보낼지 결정한다. |
+| `selection_required` | 자동 선택 가능한지 사람이 골라야 하는지 구분한다. |
+| `candidates` | 선택 가능한 복구 후보 목록이다. |
+
+`RecoveryActionCandidate`는 action의 안전 기준을 담는다.
+
+| 필드 | 왜 필요한가 |
+| --- | --- |
+| `risk_level` | 승인/차단 기준이다. |
+| `blast_radius` | 영향 범위 설명이다. |
+| `approval_required` | 바로 실행할지 승인 요청으로 보낼지 결정한다. |
+| `prerequisites` | 실행 전 확인 조건이다. |
+| `validation_checks` | 실행 후 검증 조건이다. |
+| `rollback_plan` | 실패 시 되돌리는 방법이다. |
+| `evidence_refs` | 이 후보가 어떤 근거에서 나왔는지 연결한다. |
+
+## Command schema
+
+producer:
+
+- `POST /commands`
+- `dispatch-worker`
+- approval grant route
+- debug query route
+
+consumer:
+
+- `command-worker`
+- target agent command poll
+
+| 객체 | 필드 | 왜 필요한가 |
+| --- | --- | --- |
+| `CommandRequestedBody` | `workspace_id` | tenant 분리다. |
+| `CommandRequestedBody` | `cluster_id` | target agent route다. |
+| `CommandRequestedBody` | `action` | agent handler 선택 기준이다. |
+| `CommandRequestedBody` | `namespace` | Kubernetes write boundary다. |
+| `CommandRequestedBody` | `reason` | 감사 로그와 화면 설명이다. |
+| `CommandRequestedBody` | `diff` | 어떤 리소스를 왜 바꾸는지 담는다. |
+| `CommandRequestedBody` | `approval_ref` | 승인 근거다. |
+| `CommandRequestedBody` | `policy_decision_ref` | 정책 판단 근거다. |
+| `Plan` | `command_id` | agent queue와 result 연결 ID다. |
+| `Plan` | `idempotency_key` | 같은 요청 중복 실행을 줄인다. |
+| `Plan` | `lease` | agent가 명령을 오래 쥐고 있을 수 없게 한다. |
+| `Plan` | `retry_policy` | 실패 재시도 기준이다. |
+| `Plan` | `routing_constraint` | 어떤 cluster agent가 가져가야 하는지 고정한다. |
+| `CommandCompletedBody` | `command_id` | 실행 결과를 queue row와 연결한다. |
+| `CommandCompletedBody` | `result` | stdout/stderr/resources/status를 담는다. |
+
+권한:
+
+- `/commands`: cluster `deploy` 필요
+- `/agent/debug/query`: cluster `read` 필요
+- agent poll/start/heartbeat/result: `x-agent-token` 필요
+
+## Safe PR schema
+
+파일: `src/domains/scm/events.py`
+
+producer:
+
+- `dispatch-worker`
+- `safe-pr-worker`
+
+consumer:
+
+- `src/services/gitops/scm-worker/app.py`
+
+| 객체 | 필드 | 왜 필요한가 |
+| --- | --- | --- |
+| `SafePrFilePatch` | `path` | branch에 커밋할 파일 경로다. |
+| `SafePrFilePatch` | `content` | 커밋할 최종 파일 내용이다. |
+| `SafePrFilePatch` | `description` | PR body에서 변경 이유를 설명한다. |
+| `SafePrRequestedBody` | `title` | PR 제목이다. |
+| `SafePrRequestedBody` | `body` | RCA 근거, 변경 이유, 검증 방법을 담는다. |
+| `SafePrRequestedBody` | `provider` | 현재 실제 처리자는 `github` provider다. |
+| `SafePrRequestedBody` | `patches` | 실제 커밋할 파일 변경 목록이다. |
+| `SafePrRequestedBody` | `repository_id` | 어느 repository에 PR을 만들지 찾는다. |
+| `SafePrRequestedBody` | `binding_id` | 배포 binding과 연결한다. |
+| `SafePrRequestedBody` | `next_alert` | PR 이후 알림을 이어붙일 때 쓴다. |
+| `SafePrCreatedBody` | `pr_url` | dashboard 버튼과 audit 기록에 쓴다. |
+| `SafePrFailedBody` | `reason` | credential/provider/repo 설정 문제를 사람이 고칠 수 있게 한다. |
+
+현재 실제 PR 생성 경계:
+
+- `src/services/gitops/scm-worker/app.py`
+- `GithubScmProvider`
+
+## Permission schema
+
+파일:
+
+- `src/packages/contracts/identity.py`
+- `src/domains/identity/models.py`
+- `src/domains/identity/repository.py`
+- `src/domains/identity/dependencies.py`
+
+| 객체/테이블 | 필드 | 왜 필요한가 |
+| --- | --- | --- |
+| `AuthSession` | `token` | httpOnly cookie 또는 header로 들어오는 세션 ID다. |
+| `AuthSession` | `user_id` | 권한 검사 subject다. |
+| `AuthSession` | `roles` | account admin 여부를 판단한다. |
+| `AuthSession` | `workspace_id` | query/API 기본 tenant다. |
+| `ResourceAccessGrant` | `workspace_id` | 권한도 tenant 내부에서만 유효하다. |
+| `ResourceAccessGrant` | `subject_type` | 현재 구현은 user grant를 기준으로 평가한다. |
+| `ResourceAccessGrant` | `subject_id` | 사용자 ID다. |
+| `ResourceAccessGrant` | `resource_type` | `cluster`, `repository`, `deployment_binding` 등을 구분한다. |
+| `ResourceAccessGrant` | `resource_id` | 개별 resource ID다. |
+| `ResourceAccessGrant` | `role` | `owner`, `maintainer`, `deployer`, `viewer` 중 하나다. |
+| `ResourceAccessGrant` | `status` | active grant만 인정한다. |
+
+권한 함수:
+
+| 함수 | 어디에 쓰는가 | 왜 필요한가 |
+| --- | --- | --- |
+| `require_session` | 일반 사용자 API | 로그인 없이 접근하지 못하게 한다. |
+| `require_admin_session` | 사용자 승인, cluster policy 변경 | 계정 admin만 가능한 작업을 분리한다. |
+| `require_cluster_agent` | agent route | body가 아니라 token registry 기준으로 cluster/workspace를 확정한다. |
+| `require_resource_access` | 새 dashboard/query API | backend 단건 권한 차단 기준이다. |
+| `require_cluster_access` | command/debug/approval/dashboard cluster API | cluster 권한 shortcut이다. |
+| `accessible_resource_ids` | dashboard list query | 목록 조회에서 허용된 resource만 남긴다. |
+
+검증:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_identity_repository.py \
+  tests/test_command_router.py \
+  tests/test_gitops_approval_router.py \
+  tests/test_realtime_gateway.py \
+  -q
+```
+
+## Dashboard read model schema
+
+이 부분은 frontend를 시작할 때 추가할 계약이다. 구현 기준은 현재 event body와 permission helper다.
+
+| 필드 | 타입 | 왜 필요한가 | producer | consumer |
+| --- | --- | --- | --- | --- |
+| `workspace_id` | `str` | 모든 dashboard query의 첫 번째 filter다. | event body | router |
+| `correlation_id` | `str` | command/evidence/RCA/PR timeline을 묶는다. | event envelope | UI |
+| `cluster_id` | `str` | cluster filter와 권한 검사 기준이다. | event body | router/UI |
+| `incident_id` | `str | None` | incident detail page route다. | `IncidentRecord` | UI |
+| `current_subject` | `str` | 지금 어느 단계인지 표시한다. | event envelope | UI |
+| `status` | `str` | badge와 filter에 쓴다. | projection rule | UI |
+| `root_cause` | `str | None` | RCA 결과 요약이다. | `RcaCompletedBody` | UI |
+| `confidence` | `float | None` | 결론 신뢰도를 표시한다. | `RcaReportDetail` | UI |
+| `supporting_evidence` | `list[str]` | 결론 근거다. | `RcaReportDetail` | UI |
+| `missing_evidence` | `list[str]` | 추가 수집이 필요한 항목이다. | `EvidenceBundle`, `RcaReportDetail` | UI |
+| `action_route` | `str | None` | command/PR/manual 상태 전환 기준이다. | `RecoveryPlan` | UI |
+| `command_id` | `str | None` | command result detail과 연결한다. | `CommandQueuedForAgentBody` | UI |
+| `pr_url` | `str | None` | PR 버튼이다. | `SafePrCreatedBody` | UI |
+| `error_reason` | `str | None` | 실패를 사람이 고칠 수 있게 보여준다. | failure/action-required event | UI |
+
+추가할 때 지킬 기준:
+
+- table query는 항상 `workspace_id`로 먼저 좁힌다.
+- cluster 목록은 `accessible_resource_ids(user_id, workspace_id, "cluster", "read")` 결과로 한 번 더 좁힌다.
+- `None`이 반환되면 workspace owner/admin이라 workspace 전체를 볼 수 있다는 뜻이다.
+- set이 반환되면 그 resource ID만 조회한다.
+- frontend는 숨김/비활성화로 사용성을 개선할 뿐, 권한 차단은 backend가 한다.
