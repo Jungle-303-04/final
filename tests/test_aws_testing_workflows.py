@@ -107,9 +107,14 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert '"ttl": ${ttl}' in script
     assert "cloudflare_api_token_value" in script
     assert "cloudflare_authorization_value" in script
-    assert "cloudflare_api_token\\s*=\\s*" in script
+    assert "cloudflare_api_token\\s*[:=]\\s*" in script
     assert "authorization\\s*:\\s*" in script
     assert "bearer\\s+([^\\s\\\"']+)" in script
+    assert "[A-Za-z0-9._~+/=-]{20,}" in script
+    assert "cloudflare_validate_api_token" in script
+    assert "raw_length=" in script
+    assert "normalized_length=" in script
+    assert "allowed_bearer_charset=" in script
     assert 'value.lower().startswith("bearer")' in script
     assert "if not ch.isspace()" in script
     assert "printf 'Bearer %s\\n'" in script
