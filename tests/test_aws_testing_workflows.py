@@ -129,6 +129,7 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert "wait_for_gateway" in script
     assert 'curl -fsS "${BASE_URL}/healthz"' in script
     assert "`SMOKE_GATEWAY_ATTEMPTS`" in runbook
+    assert '"force": True' in script
 
 
 def test_aws_image_and_workflow_support_remote_git_manifest_reads() -> None:
