@@ -27,8 +27,10 @@ EMPTY_COMMAND_MESSAGE = ""
 DEFAULT_TARGET_NAME = "target-cluster"
 DEFAULT_TARGET_ENVIRONMENT = "sandbox"
 # target cluster 실제 관측 스택 Service 주소(deploy/target/*.yaml Helm values와 정렬됨)
+# 관측 스택 기본 주소의 유일한 정의 지점 — 서비스 쪽에서는 여기서 import 한다(중복 정의 금지).
 DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
+DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
 MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
 DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS = 3
