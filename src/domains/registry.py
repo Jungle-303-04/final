@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import domains
 from domains.audit.repository import AuditLogRepository
 from domains.command.repository import AgentCommandRepository
-from domains.identity.repository import WorkspaceAccessRepository
+from domains.identity.repository import IdentityAccessRepository
 from domains.rca.repository import RcaRepository
 from domains.scm.repository import PullRequestRepository
 from domains.target.repository import TargetAgentRepository
@@ -72,6 +72,7 @@ def _discovered_repositories() -> tuple[type, ...]:
                 isinstance(obj, type)
                 and issubclass(obj, DatabaseConnection)
                 and obj.__module__ == mod.__name__
+                and obj not in found
             ):
                 found.append(obj)
     return tuple(found)
@@ -87,7 +88,7 @@ if TYPE_CHECKING:
         EventRepository,
         DeadLetterRepository,
         OutboxRepository,
-        WorkspaceAccessRepository,
+        IdentityAccessRepository,
         AgentCommandRepository,
         RcaRepository,
         PullRequestRepository,

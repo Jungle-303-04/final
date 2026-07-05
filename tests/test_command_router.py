@@ -132,7 +132,7 @@ def test_command_request_requires_cluster_deploy_access() -> None:
         )
 
         assert response.accepted is True
-        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy")]
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "deploy.run")]
         assert events.body is not None
         assert events.body.workspace_id == "workspace-1"
         assert events.body.diff.cluster_id == "cluster-1"
@@ -210,7 +210,7 @@ def test_agent_debug_query_requires_cluster_read_access_and_queues_agent_command
         assert response.accepted is True
         assert response.command_id.startswith("cmd-debug-")
         assert response.correlation_id.startswith("corr-debug-")
-        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "read")]
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "evidence.read")]
         assert len(db.queued) == 1
 
         correlation_id, plan, status = db.queued[0]
@@ -257,7 +257,7 @@ def test_agent_debug_query_denies_without_cluster_read_access() -> None:
         else:
             raise AssertionError("expected HTTPException")
 
-        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "read")]
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "evidence.read")]
         assert db.queued == []
 
     asyncio.run(run())
