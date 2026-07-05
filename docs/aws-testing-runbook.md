@@ -19,17 +19,17 @@
 
 비밀값 원문은 문서에 쓰지 않는다. 팀원이 확인해야 하는 것은 이름과 쓰임이다.
 
-| 이름 | 현재 값 또는 위치 | 어디에 쓰는가 |
+| 이름 | 값 또는 위치 | 어디에 쓰는가 |
 | --- | --- | --- |
-| `AWS_REGION` | `ap-northeast-2` | AWS CD가 EKS/ECR/API를 호출할 region |
-| `PROJECT_SLUG` | `kubernetes-ops` | AWS resource prefix |
-| `MGMT_CLUSTER` | `kubernetes-ops` | management EKS cluster context/name |
-| `TARGET_CLUSTER_1` | `cluster-1` | 첫 번째 target EKS cluster |
-| `TARGET_CLUSTER_2` | `cluster-2` | 두 번째 target EKS cluster |
-| `MGMT_DISPLAY_NAME` | `kubernetes-ops` | dashboard/API 표시 이름 |
-| `TARGET_1_DISPLAY_NAME` | `cluster-1` | target 1 표시 이름 |
-| `TARGET_2_DISPLAY_NAME` | `cluster-2` | target 2 표시 이름 |
-| `ECR_REPO` | `kubernetes-ops-service` | 서비스 container image repository |
+| `AWS_REGION` | repository variable, workflow 기본 `us-east-1` | AWS CD가 EKS/ECR/API를 호출할 region |
+| `PROJECT_SLUG` | repository variable, workflow 기본 `kubeheal` | AWS resource prefix |
+| `MGMT_CLUSTER` | repository variable, workflow 기본 `kubeheal-mgmt` | management EKS cluster context/name |
+| `TARGET_CLUSTER_1` | repository variable, workflow 기본 `kubeheal-target-a` | 첫 번째 target EKS cluster |
+| `TARGET_CLUSTER_2` | repository variable, workflow 기본 `kubeheal-target-b` | 두 번째 target EKS cluster |
+| `MGMT_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Management` | dashboard/API 표시 이름 |
+| `TARGET_1_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target A` | target 1 표시 이름 |
+| `TARGET_2_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target B` | target 2 표시 이름 |
+| `ECR_REPO` | repository variable, workflow 기본 `kubeheal-service` | 서비스 container image repository |
 | `AWS_AUTO_DEPLOY` | `1` | `main` push 때 AWS CD 배포 허용 |
 | `AWS_CREATE_CLUSTERS` | `0` | 기본은 기존 EKS cluster 사용 |
 | `AWS_ENSURE_EBS_CSI` | `0` | 기본은 기존 EBS CSI 설정 사용 |
@@ -37,7 +37,7 @@
 | `AWS_REGISTER_TARGETS` | `0` | 기본은 기존 target 등록 유지 |
 | `AWS_RUN_SMOKE` | `0` | 자동 main 배포는 smoke를 기본 실행하지 않는다. smoke가 필요하면 workflow input으로 켠다. |
 | `SKIP_LB_HEALTH_WAIT` | `1` | 현재 테스트 환경에서 LoadBalancer wait를 짧게 운용한다. |
-| `CUSTOM_DOMAIN` | `k8s.woonyong.org` | DNS 연결을 켤 때 사용할 도메인 |
+| `CUSTOM_DOMAIN` | repository variable, 기본 없음 | DNS 연결을 켤 때 사용할 도메인 |
 | `CONFIGURE_ROUTE53` | `0` | Route53 변경 기본 비활성 |
 | `CONFIGURE_CLOUDFLARE` | `0` | Cloudflare 변경 기본 비활성 |
 | `AWS_ROLE_ARN` | GitHub environment secret `aws-test` | GitHub OIDC가 assume할 AWS role |

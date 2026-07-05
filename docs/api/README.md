@@ -24,7 +24,7 @@ docs/api
 
 먼저 Environment 값을 채운다.
 
-`base_url`은 Gateway 주소다. AWS 테스트는 `https://k8s.woonyong.org/`를 쓴다.
+`base_url`은 Gateway 주소다. `aws-test` Environment에는 고정 도메인을 기본값으로 두지 않고, 운영자가 배포별 Gateway URL을 채운다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
 

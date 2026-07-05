@@ -127,7 +127,7 @@ Debug query는 provider query 하나를 agent command로 보내 실제 target에
 
 ```json
 {
-  "cluster_id": "cluster-1",
+  "cluster_id": "replace-with-target-cluster-id",
   "reason": "RCA 확인용",
   "query": {
     "source": "prometheus",

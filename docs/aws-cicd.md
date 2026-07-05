@@ -40,12 +40,12 @@ GitHub environment secret에 저장한다.
 GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 - app/resource prefix: `kubeheal`
-- AWS region: repository variable `AWS_REGION`, 현재 `ap-northeast-2`
-- management EKS cluster: repository variable `MGMT_CLUSTER`, 현재 `kubernetes-ops`
-- target EKS cluster 1: repository variable `TARGET_CLUSTER_1`, 현재 `cluster-1`
-- target EKS cluster 2: repository variable `TARGET_CLUSTER_2`, 현재 `cluster-2`
-- ECR repository: repository variable `ECR_REPO`, 현재 `kubernetes-ops-service`
-- display names: 현재 `kubernetes-ops`, `cluster-1`, `cluster-2`
+- AWS region: repository variable `AWS_REGION`, 기본 `us-east-1`
+- management EKS cluster: repository variable `MGMT_CLUSTER`, 기본 `kubeheal-mgmt`
+- target EKS cluster 1: repository variable `TARGET_CLUSTER_1`, 기본 `kubeheal-target-a`
+- target EKS cluster 2: repository variable `TARGET_CLUSTER_2`, 기본 `kubeheal-target-b`
+- ECR repository: repository variable `ECR_REPO`, 기본 `kubeheal-service`
+- display names: repository variables `MGMT_DISPLAY_NAME`, `TARGET_1_DISPLAY_NAME`, `TARGET_2_DISPLAY_NAME`
 - dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
 
 기본 노드 스펙:

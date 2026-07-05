@@ -53,7 +53,7 @@
 
 대시보드 list API는 단건 권한 검사만으로는 부족하다.
 
-예를 들어 사용자가 `cluster-1`만 볼 수 있는데, API가 workspace 전체 timeline을 내려주면 UI가 숨겨도 이미 데이터가 나간 것이다.
+예를 들어 사용자가 `replace-with-target-cluster-id`만 볼 수 있는데, API가 workspace 전체 timeline을 내려주면 UI가 숨겨도 이미 데이터가 나간 것이다.
 
 구현 기준:
 
