@@ -14,7 +14,7 @@
 .badge .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
 .statbox { display:flex; flex-direction:column; gap:2px; padding:var(--sp-3) var(--sp-4); background:var(--surface-1);
   border:1px solid var(--border); border-radius:var(--radius-md); min-width:120px; }
-.statbox b { font-size:var(--fs-xl); }
+.statbox b { font-size:var(--fs-xl); font-variant-numeric:tabular-nums; }
 .statbox span { color:var(--text-2); font-size:var(--fs-xs); }
 .table { width:100%; border-collapse:collapse; font-size:var(--fs-sm); }
 .table th { text-align:left; color:var(--text-3); font-size:var(--fs-xs); font-weight:600; padding:8px 12px;

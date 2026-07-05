@@ -41,9 +41,10 @@ export function useToggleMembership(groupId: string) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['users'] }); },
   });
 }
+export interface GrantPayload { subject_type: 'user' | 'group'; subject_id: string; subject_label?: string; resource_type: string; resource_id: string; role: string }
 export function useGrantAccess() {
   const inv = invalidator([['access']]);
-  return useMutation({ mutationFn: (b: Partial<AccessGrant>) => post('/access', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 부여했습니다'); } });
+  return useMutation({ mutationFn: (b: GrantPayload) => post('/access', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 부여했습니다'); } });
 }
 export function useRevokeAccess() {
   const inv = invalidator([['access']]);
