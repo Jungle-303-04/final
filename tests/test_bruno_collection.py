@@ -5,7 +5,7 @@ from pathlib import Path
 from packages.contracts.gateway import routes
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-API_DIR = ROOT_DIR / "api"
+API_DIR = ROOT_DIR / "docs" / "api"
 
 
 def bruno_text() -> str:

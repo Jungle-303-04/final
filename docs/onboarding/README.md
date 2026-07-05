@@ -16,6 +16,18 @@
 
 RCA/권한/대시보드 구현을 실제 코드 기준으로 더 자세히 따라가려면 [RCA 프로덕션 온보딩 지도](../rca-production-onboarding/README.md)를 본다.
 구현을 어디서부터 찾아야 할지 막히면 [찾아보고 구현하는 방법](../rca-production-onboarding/07-how-to-find-and-implement.md)을 먼저 연다.
+프로덕션 완료 기준은 [프로덕션 완료 기준](../production-readiness.md)과 [벤치마크 최소선 기준 프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md)를 따른다.
+
+## 프로덕션 완료까지 보는 순서
+
+| 단계 | 민정 | 가인 | 찬빈 |
+| --- | --- | --- | --- |
+| 역할 이해 | [민정 가이드](minjeong-command-target-evidence.md) | [가인 가이드](gain-evidence-rca.md) | [찬빈 가이드](chanbin-frontend.md) |
+| 실제 구현 흐름 | [민정 프로덕션 흐름](../rca-production-onboarding/01-minjeong-command-target-evidence.md) | [가인 프로덕션 흐름](../rca-production-onboarding/02-gain-evidence-rca-safe-pr.md) | [찬빈 프로덕션 흐름](../rca-production-onboarding/03-chanbin-frontend-projection.md) |
+| 선형 작업 | [Target / Telemetry 작업](../team/target-telemetry-tasks/README.md) | [RCA / Safe PR 작업](../team/rca-safe-pr-tasks/README.md) | [권한/대시보드](../rca-production-onboarding/06-chanbin-permission-dashboard.md) |
+| 벤치마크 최소선 | [프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md) | [프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md) | [프로덕션 완성 설계](../rca-production-onboarding/05-production-completion-scope.md) |
+| 직접 확인 | [Bruno API 테스트](../api/README.md) | [Bruno API 테스트](../api/README.md) | [Bruno API 테스트](../api/README.md) |
+| 완료 선언 | [프로덕션 완료 기준](../production-readiness.md) | [프로덕션 완료 기준](../production-readiness.md) | [프로덕션 완료 기준](../production-readiness.md) |
 
 ## 현재 구현 기준
 
@@ -40,13 +52,13 @@ RCA/권한/대시보드 구현을 실제 코드 기준으로 더 자세히 따�
 ## 같이 봐야 하는 상세 문서
 
 - [Target Agent Command / Evidence 구현 가이드](../team/member-guides/target-agent-command-evidence-flow.md)
-- [Target / Telemetry 데이터 흐름](../team/member-guides/target-telemetry-data-flows.md)
+- [Target / Telemetry 선형 작업](../team/target-telemetry-tasks/README.md)
 - [RCA / Safe PR 멤버 가이드](../team/member-guides/rca-safe-pr.md)
+- [RCA / Safe PR 선형 작업](../team/rca-safe-pr-tasks/README.md)
 - [RCA 프로덕션 온보딩 지도](../rca-production-onboarding/README.md)
 - [찬빈 권한 시스템과 대시보드 적용](../rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [팀 간 구현 연결과 테스트 가이드](../team/cross-role-implementation-test-guide.md)
 - [아키텍처](../architecture.md)
-- [서비스 분리 계획](../service-split-plan.md)
 - [이벤트 흐름](../events.md)
 
 ## 바로 돌릴 검증
