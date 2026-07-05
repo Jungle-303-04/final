@@ -570,6 +570,40 @@ EOF
     --dry-run=client -o yaml | kubectl --context "${context}" apply -f -
 }
 
+management_rollout_resources() {
+  local attempt
+  for attempt in 1 2 3; do
+    if kubectl --context "${MGMT_CLUSTER}" -n management get statefulset,deploy -o name; then
+      return 0
+    fi
+    if [[ "${attempt}" != "3" ]]; then
+      echo "management rollout resource list failed (attempt ${attempt}/3); retrying" >&2
+      sleep $((attempt * 10))
+    fi
+  done
+  echo "management rollout resource list failed after 3 attempts" >&2
+  kubectl --context "${MGMT_CLUSTER}" -n management get statefulset,deploy -o wide || true
+  return 1
+}
+
+management_rollout_status() {
+  local resource="$1"
+  local attempt
+  for attempt in 1 2 3; do
+    if kubectl --context "${MGMT_CLUSTER}" -n management rollout status "${resource}" --timeout=300s; then
+      return 0
+    fi
+    if [[ "${attempt}" != "3" ]]; then
+      echo "management rollout status failed for ${resource} (attempt ${attempt}/3); retrying" >&2
+      sleep $((attempt * 10))
+    fi
+  done
+  echo "management rollout status failed after 3 attempts: ${resource}" >&2
+  kubectl --context "${MGMT_CLUSTER}" -n management get "${resource}" -o wide || true
+  kubectl --context "${MGMT_CLUSTER}" -n management describe "${resource}" || true
+  return 1
+}
+
 apply_management_plane() {
   local overlay="${RUNTIME_DIR}/management-kustomization"
   local image_repo="${IMAGE_NAME%:*}"
@@ -596,8 +630,8 @@ EOF
   log "waiting for management rollouts"
   while IFS= read -r resource; do
     [[ -n "${resource}" ]] || continue
-    kubectl --context "${MGMT_CLUSTER}" -n management rollout status "${resource}" --timeout=300s
-  done < <(kubectl --context "${MGMT_CLUSTER}" -n management get statefulset,deploy -o name)
+    management_rollout_status "${resource}"
+  done < <(management_rollout_resources)
 
   log "exposing api-gateway with LoadBalancer"
   kubectl --context "${MGMT_CLUSTER}" -n management patch svc api-gateway --type merge \
@@ -685,10 +719,10 @@ from __future__ import annotations
 import os
 import re
 
-value = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip().strip("\"'")
-lower = value.lower()
+raw_value = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+value = raw_value.strip().strip("\"'")
 assignment = re.search(
-    r"(?:^|\s)(?:export\s+)?cloudflare_api_token\s*=\s*(.+)$",
+    r"(?:^|\s)(?:export\s+)?cloudflare_api_token\s*[:=]\s*(.+)$",
     value,
     flags=re.IGNORECASE | re.DOTALL,
 )
@@ -710,7 +744,38 @@ elif value.lower().startswith("bearer"):
     value = value[6:].strip().strip("\"'")
 
 value = "".join(ch for ch in value.strip().strip("\"'") if not ch.isspace())
+if not re.fullmatch(r"[A-Za-z0-9._~+/=-]{20,}", value):
+    candidate = re.search(r"[A-Za-z0-9._~+/=-]{20,}", raw_value)
+    if candidate:
+        value = candidate.group(0)
 print(value, end="")
+PY
+}
+
+cloudflare_validate_api_token() {
+  CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" \
+  CLOUDFLARE_NORMALIZED_API_TOKEN="$(cloudflare_api_token_value)" \
+  python3 - <<'PY'
+from __future__ import annotations
+
+import os
+import re
+import sys
+
+raw = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+token = os.environ.get("CLOUDFLARE_NORMALIZED_API_TOKEN", "")
+allowed = bool(re.fullmatch(r"[A-Za-z0-9._~+/=-]+", token))
+if token and allowed and len(token) >= 20:
+    raise SystemExit(0)
+
+print(
+    "Cloudflare API token is not a valid Bearer token after normalization "
+    f"(raw_length={len(raw)}, normalized_length={len(token)}, "
+    f"allowed_bearer_charset={str(allowed).lower()}). "
+    "Set the GitHub environment secret CLOUDFLARE_API_TOKEN to the raw Cloudflare API token only.",
+    file=sys.stderr,
+)
+raise SystemExit(1)
 PY
 }
 
@@ -777,14 +842,21 @@ configure_cloudflare_record() {
     echo "Cloudflare API token is blank after normalization; skipping ${CUSTOM_DOMAIN}" >&2
     return 0
   fi
+  if ! cloudflare_validate_api_token; then
+    log "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; AWS LoadBalancer remains available"
+    return 0
+  fi
 
-  zone_id="$(cloudflare_zone_id)"
+  if ! zone_id="$(cloudflare_zone_id)"; then
+    log "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; zone lookup failed"
+    return 0
+  fi
   if [[ -z "${zone_id}" ]]; then
     echo "Cloudflare zone not found for ${CLOUDFLARE_ZONE_NAME}; skipping ${CUSTOM_DOMAIN}" >&2
     return 0
   fi
 
-  record_id="$(
+  if ! record_id="$(
     CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN}" \
     CLOUDFLARE_AUTHORIZATION="$(cloudflare_authorization_value)" \
     CUSTOM_DOMAIN="${CUSTOM_DOMAIN}" \
@@ -816,7 +888,10 @@ except urllib.error.HTTPError as exc:
 records = payload.get("result", [])
 print(records[0]["id"] if records else "")
 PY
-  )"
+  )"; then
+    log "skipping Cloudflare DNS for ${CUSTOM_DOMAIN}; DNS record lookup failed"
+    return 0
+  fi
   proxied="$(cloudflare_proxied_json)"
   ttl="$(cloudflare_ttl_json)"
 
