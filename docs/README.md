@@ -103,6 +103,38 @@ production 전 위험과 점검 항목은 [운영 준비도](production-readines
 
 secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
+## 키워드로 찾기
+
+`command`를 찾을 때는 [민정 온보딩](onboarding/minjeong-command-target-evidence.md), [민정 프로덕션 구현 흐름](rca-production-onboarding/01-minjeong-command-target-evidence.md), [Target Agent Command / Evidence 구현 가이드](team/member-guides/target-agent-command-evidence-flow.md)를 본다.
+
+`target`을 찾을 때는 [민정 온보딩](onboarding/minjeong-command-target-evidence.md), [Target / Telemetry 선형 작업](team/target-telemetry-tasks/README.md), [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+
+`evidence`를 찾을 때는 [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md), [민정 온보딩](onboarding/minjeong-command-target-evidence.md), [가인 온보딩](onboarding/gain-evidence-rca.md)을 본다.
+
+`RCA`를 찾을 때는 [가인 온보딩](onboarding/gain-evidence-rca.md), [가인 프로덕션 구현 흐름](rca-production-onboarding/02-gain-evidence-rca-safe-pr.md), [RCA 데이터 스키마](rca-production-onboarding/04-rca-data-schema.md)를 본다.
+
+`Safe PR`을 찾을 때는 [RCA / Safe PR 멤버 가이드](team/member-guides/rca-safe-pr.md), [RCA / Safe PR 선형 작업](team/rca-safe-pr-tasks/README.md), [가인 프로덕션 구현 흐름](rca-production-onboarding/02-gain-evidence-rca-safe-pr.md)를 본다.
+
+`dashboard`를 찾을 때는 [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md), [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md)을 본다.
+
+`permission`을 찾을 때는 [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md), [찬빈 권한 모델 상세](team/member-guides/chanbin-permission-model.md), [Secrets](secrets.md)를 본다.
+
+`Bruno`를 찾을 때는 [Bruno API 테스트](api/README.md)를 본다.
+
+`AWS`를 찾을 때는 [AWS CI/CD](aws-cicd.md), [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
+
+`event`를 찾을 때는 [이벤트 흐름](events.md), [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md), [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)을 본다.
+
+`provider`를 찾을 때는 [민정 온보딩](onboarding/minjeong-command-target-evidence.md), [Target / Telemetry 선형 작업](team/target-telemetry-tasks/README.md), [Target Agent Command / Evidence 구현 가이드](team/member-guides/target-agent-command-evidence-flow.md)를 본다.
+
+`worker`를 찾을 때는 [이벤트 흐름](events.md), [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md), [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)을 본다.
+
+`test`를 찾을 때는 [역할별 실습 가이드](team/role-practice-guide.md), [팀 간 구현 연결과 테스트](team/cross-role-implementation-test-guide.md), [Bruno API 테스트](api/README.md)를 본다.
+
+`GitOps`를 찾을 때는 [가인 프로덕션 구현 흐름](rca-production-onboarding/02-gain-evidence-rca-safe-pr.md), [RCA / Safe PR 선형 작업](team/rca-safe-pr-tasks/README.md), [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
+
+`realtime`을 찾을 때는 [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md), [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
+
 ## 전체 문서 색인
 
 루트 문서는 아래에 있다.
