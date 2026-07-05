@@ -103,10 +103,10 @@ flowchart LR
 
 | 구분 | 현재 기준 |
 | --- | --- |
-| dashboard-worker | 현재 `src/services/projection/dashboard-worker`는 없다 |
-| `/dashboard/query`, `/dashboard/stream` | 현재 `src/packages/contracts/gateway/routes.py`에 route 상수가 없다 |
+| dashboard-worker | `src/services/projection/dashboard-worker`가 있고 `RcaTimeline`을 upsert한다 |
+| `/dashboard/rca/timeline`, `/dashboard/rca/incidents/{incident_id}` | `src/packages/contracts/gateway/routes.py`에 route 상수가 있다 |
 | frontend app | 현재 이 source repo에는 `dashboard/`, `frontend/`, `package.json` 기반 프론트 앱이 없다 |
-| `dashboard.updated` | 현재 `EventSubject`에 없다 |
+| `dashboard.updated` | 현재 `EventSubject`에 없다. 우선 query API 기준으로 화면을 붙인다 |
 
 그래서 찬빈 파트는 "이미 있는 화면을 고친다"가 아니라, 먼저 backend 계약과 read model 목표를 고정하고, 그 다음 frontend가 실제 API를 소비하게 만드는 순서로 봐야 한다.
 
@@ -580,15 +580,16 @@ Frontend
 | 항목 | 현재 상태 |
 | --- | --- |
 | `src/services/projection/audit-worker` | 있다. 모든 event를 audit log로 남긴다 |
-| `src/services/projection/dashboard-worker` | 없다. 새로 만들어야 하는 목표다 |
-| `src/domains/projection/*.py` | 현재 tracked source 파일이 없다 |
-| `/dashboard/query` | 없다. route 상수도 아직 없다 |
-| `/dashboard/stream` | 없다. dashboard용 SSE 목표다 |
+| `src/services/projection/dashboard-worker` | 있다. `@app.on_any`로 RCA/command/Safe PR event를 읽는다 |
+| `src/domains/dashboard/*.py` | 있다. model/repository/router가 read model과 query API를 맡는다 |
+| `/dashboard/rca/timeline` | 있다. RCA timeline list API다 |
+| `/dashboard/rca/incidents/{incident_id}` | 있다. incident detail API다 |
+| `/dashboard/stream` | 없다. dashboard용 SSE는 후속 목표다 |
 | frontend app | 현재 이 repo에는 없다 |
 | realtime-gateway | 있다. target live summary 같은 실시간 경계는 참고할 수 있다 |
 
-그래서 문서나 화면에서 `/dashboard/query`가 이미 완성된 것처럼 쓰면 안 된다.
-찬빈 작업은 "없는 것을 있는 척"이 아니라, 필요한 계약을 작게 만들어 붙이는 작업이다.
+그래서 문서나 화면에서 `/dashboard/query` 같은 오래된 가상 route를 쓰면 안 된다.
+찬빈 작업은 현재 구현된 `/dashboard/rca/*` API를 기준으로 UI를 붙이고, 필요한 summary/stream만 작게 확장하는 작업이다.
 
 ### 찬빈이 바로 열어볼 파일
 
@@ -597,10 +598,13 @@ Frontend
 | 1 | `src/packages/contracts/gateway/routes.py` | 현재 Gateway route 상수를 본다 |
 | 2 | `src/packages/contracts/gateway/responses.py` | frontend가 받을 response DTO 패턴을 본다 |
 | 3 | `src/packages/contracts/event_bus/subjects.py` | 화면에 필요한 event subject 목록을 본다 |
-| 4 | `src/services/projection/audit-worker/app.py` | `@app.on_any` projection 패턴을 본다 |
-| 5 | `tests/test_projection.py` | projection 테스트 패턴을 본다 |
-| 6 | `src/services/realtime/realtime-gateway` | realtime 연결 방식을 본다 |
-| 7 | `tests/test_realtime_contracts.py` | realtime payload 경계를 본다 |
+| 4 | `src/services/projection/dashboard-worker/app.py` | 실제 dashboard projection worker를 본다 |
+| 5 | `src/domains/dashboard/repository.py` | event subject와 dashboard status mapping을 본다 |
+| 6 | `src/domains/dashboard/router.py` | session/cluster read 권한 필터를 본다 |
+| 7 | `tests/test_dashboard_projection.py` | projection 테스트 패턴을 본다 |
+| 8 | `tests/test_dashboard_router.py` | API 권한 필터 테스트를 본다 |
+| 9 | `src/services/realtime/realtime-gateway` | realtime 연결 방식을 본다 |
+| 10 | `tests/test_realtime_contracts.py` | realtime payload 경계를 본다 |
 
 ### 찬빈이 민정에게 알아야 하는 것
 
@@ -621,16 +625,15 @@ Frontend
 
 ### dashboard를 붙일 때 순서
 
-찬빈이 dashboard를 실제로 추가한다면 순서는 이렇게 잡는다.
+찬빈이 dashboard를 실제로 붙일 때 순서는 이렇게 잡는다.
 
-1. `DashboardQueryResponse` 같은 response DTO를 먼저 정한다.
-2. 필요한 route 상수를 `src/packages/contracts/gateway/routes.py`에 추가한다.
-3. `src/domains/projection/models.py`에 read model table을 만든다.
-4. `src/domains/projection/repository.py`에 idempotent upsert/query를 만든다.
-5. `src/services/projection/dashboard-worker/app.py`를 `@app.on_any` 패턴으로 만든다.
-6. `dashboard.updated` 같은 event가 필요하면 `EventSubject`와 body를 추가한다.
-7. Gateway에 projection router를 include한다.
-8. 그 다음 frontend가 API를 소비한다.
+1. `RcaTimelineResponse`를 그대로 렌더링하는 timeline 화면을 만든다.
+2. `GET /dashboard/rca/timeline`과 `GET /dashboard/rca/incidents/{incident_id}`를 먼저 붙인다.
+3. cluster filter는 API query의 `cluster_id`를 쓰고, backend 403/404 상태를 화면 상태로 분리한다.
+4. 필요한 summary가 생기면 `src/domains/dashboard/models.py`와 `repository.py`에 컬럼/쿼리를 작게 추가한다.
+5. 새 event status가 필요하면 `RCA_TIMELINE_STATUS_BY_SUBJECT`와 테스트를 같이 바꾼다.
+6. realtime stream이 필요하면 기존 realtime gateway 계약을 먼저 확장한다.
+7. 그 다음 frontend가 새 route를 소비한다.
 
 처음부터 임시 화면 데이터만 크게 만들면 backend와 붙을 때 다시 뜯게 된다.
 반대로 read model과 DTO가 먼저 작게 있으면 화면은 훨씬 편하게 붙는다.
@@ -653,18 +656,18 @@ Frontend
 
 - frontend에서 DB를 직접 조회하지 않는다.
 - frontend에서 NATS subject를 직접 구독하지 않는다.
-- 없는 `/dashboard/query`를 있다고 가정하지 않는다.
+- 오래된 `/dashboard/query`를 쓰지 않고 `/dashboard/rca/*` API를 기준으로 한다.
 - `safe_pr.requested`에 PR URL이 있다고 가정하지 않는다.
 - RCA body에 화면 전용 임시 필드를 몰래 추가하지 않는다.
 - 임시 데이터를 제품 경로의 성공처럼 보여주지 않는다.
 
 ### 찬빈 연습 순서
 
-1. `tests/test_projection.py`를 읽고 `@app.on_any` projection 패턴을 이해한다.
-2. `tests/test_realtime_contracts.py`에서 frontend로 보내도 되는 bounded payload를 본다.
+1. `tests/test_dashboard_projection.py`를 읽고 `@app.on_any` projection 패턴을 이해한다.
+2. `tests/test_dashboard_router.py`에서 권한 필터와 response shape를 본다.
 3. `EventSubject` 목록에서 화면 timeline에 필요한 subject를 체크한다.
-4. `DashboardQueryResponse` 초안을 작성한다면, 먼저 tests에서 DTO import와 shape부터 검증한다.
-5. read model을 추가한다면 같은 event를 두 번 처리해도 row count가 늘지 않는 테스트를 먼저 둔다.
+4. frontend는 `RcaTimelineResponse`를 먼저 렌더링한다.
+5. read model을 확장한다면 같은 event를 두 번 처리해도 row count가 늘지 않는 테스트를 먼저 둔다.
 
 찬빈 파트에서 지금 바로 돌릴 테스트:
 
@@ -821,7 +824,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 
 - audit projection이 전체 event를 받을 수 있는지
 - realtime payload가 화면에 보낼 만큼 bounded인지
-- dashboard route는 아직 없다는 사실을 문서와 테스트에서 숨기지 않는지
+- dashboard route는 `/dashboard/rca/*` 기준으로 문서와 테스트에 맞는지
 
 ## PR을 작게 나누는 기준
 

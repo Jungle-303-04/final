@@ -199,8 +199,8 @@ return accepted.response()
 `accept_body`는 타입이 있는 body 하나를 받아 subject를 자동으로 유도하고 envelope로 발행한다.
 
 `ApiEventGateway`는 API 요청을 event envelope로 만들고, event bus 발행과
-event table 기록을 함께 처리한다. 로그인/권한 구현이 아직 fake여도 내부
-표현은 `src/packages/contracts/auth.py`의 `Actor`로 맞춘다.
+event table 기록을 함께 처리한다. 로그인/권한은 session과 resource access repository
+기준으로 검사하고, 내부 표현은 `src/packages/contracts/auth.py`의 `Actor`로 맞춘다.
 
 Worker handler 안에서는 직접 `publish(...)`를 호출하지 않고 다음 body를 `yield`한다.
 
@@ -260,9 +260,10 @@ if __name__ == "__main__":
 
 `@app.on(BodyType)`이 구독할 subject를 body 타입에서 자동으로 유도한다. 핸들러는 다음 이벤트를 `yield`로 흘려보낸다(체이닝). 테스트나 카탈로그가 필요하면 `app.subscriptions`로 등록된 구독 계약을 확인한다.
 
-audit 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
-본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker는 planned 항목이며
-현재 repository에는 구현/배포된 `src/services/projection/dashboard-worker`가 없다.
+audit/dashboard 같은 cross-cutting projector는 `@app.on_any`로 모든 이벤트(`>`)를 구독하고,
+본문 대신 전체 `EventEnvelope`를 받는다. dashboard projection worker는
+`src/services/projection/dashboard-worker`에 구현되어 있고, RCA/command/Safe PR 이벤트를
+`RcaTimeline` read model로 투영한다.
 
 ```python
 @app.on_any

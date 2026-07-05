@@ -2,7 +2,7 @@
 
 찬빈 파트의 목표는 command, evidence, RCA, PR 상태를 사람이 이해할 수 있는 화면으로 만드는 것이다.
 
-바로 화면부터 만들면 backend 상태와 이름이 어긋난다. 먼저 현재 동작하는 event, audit, realtime, gateway DTO를 기준으로 read model과 query API를 만든 뒤 UI를 붙인다.
+바로 화면부터 만들면 backend 상태와 이름이 어긋난다. 그래서 지금은 먼저 실제 event를 `dashboard-worker`가 읽고, `rca_timeline` read model에 저장하고, Gateway가 권한 필터를 적용해 `/dashboard/rca/...` API로 내려주는 구조까지 구현했다.
 
 권한 시스템은 별도 문서로 더 자세히 정리했다. 화면 작업을 시작하기 전에 [찬빈: 권한 시스템과 대시보드 적용](06-chanbin-permission-dashboard.md)을 먼저 읽는다.
 
@@ -22,6 +22,12 @@
 | 10 | `src/packages/contracts/gateway/responses.py` | response DTO 추가 위치 | frontend가 받을 shape를 고정한다. |
 | 11 | `src/domains/identity/dependencies.py` | `require_session`, `require_cluster_access` | dashboard API에서 backend 권한 차단을 적용한다. |
 | 12 | `src/domains/identity/repository.py` | `accessible_resource_ids` | 목록 query에서 권한 없는 cluster row를 제외한다. |
+| 13 | `src/domains/dashboard/models.py` | `RcaTimeline` table | 화면용 read model 컬럼을 확인한다. |
+| 14 | `src/domains/dashboard/repository.py` | event -> timeline row mapping, upsert, query | projection과 API가 같은 저장소를 쓴다. |
+| 15 | `src/services/projection/dashboard-worker/app.py` | `@app.on_any` dashboard projector | 모든 관련 event를 받아 timeline으로 투영한다. |
+| 16 | `src/domains/dashboard/router.py` | dashboard query API | session과 cluster read 권한 필터가 실제 적용되는 곳이다. |
+| 17 | `tests/test_dashboard_projection.py` | event mapping/upsert 테스트 | 상태 mapping이 깨지면 바로 잡는다. |
+| 18 | `tests/test_dashboard_router.py` | 권한 필터/API DTO 테스트 | 권한 없는 cluster row가 노출되지 않는지 본다. |
 
 ## 화면에서 꼭 구분해야 하는 상태
 
@@ -36,10 +42,16 @@
 | RCA 완료 | `rca.completed` | root cause와 action을 보여준다. |
 | 사람 조치 필요 | `rca.action_required` | 자동 결론/자동 조치가 막힌 이유를 보여준다. |
 | recovery 계획 | `recovery.planned` | 사람이 고를 수 있는 조치 후보 목록이다. |
+| 선택 필요 | `recovery.selection_requested` | 자동 선택이 안 되어 사람이 골라야 하는 상태다. |
 | 조치 선택 | `recovery.action_selected` | 어떤 route로 넘어갔는지 보여준다. |
+| command 요청 | `command.requested` | 복구 후보가 실제 command 요청으로 넘어간 상태다. |
+| command 계획 | `command.dispatch.ready` | command-worker가 agent 실행 계획을 만든 상태다. |
+| command 라우팅 | `command.dispatched` | 어떤 agent route로 보낼지 결정한 상태다. |
 | command queue | `command.queued_for_agent` | agent가 가져가기 전 queue 적재 상태다. |
 | command 완료 | `command.completed` | target agent 실행 결과다. |
 | PR 요청 | `safe_pr.requested` | PR을 만들라는 요청이다. URL은 `safe_pr.created`에서 생긴다. |
+| PR patch 준비 | `safe_pr.patch_prepared` | PR에 들어갈 patch/body 초안이 준비된 상태다. |
+| PR diff 설명 | `diff.explained` | patch diff와 위험 설명이 만들어진 상태다. |
 | PR 생성 | `safe_pr.created` | 실제 PR URL이 생긴 상태다. |
 | PR 실패 | `safe_pr.failed` | provider 설정, token, repo 문제 등으로 PR 생성이 끝나지 않은 상태다. |
 
@@ -59,7 +71,19 @@ async def on_event(evt: EventEnvelope, ctx: EventContext[AuditStore]) -> None:
     await ctx.db.append_audit_logs([audit_log_row(evt)])
 ```
 
-dashboard projection worker도 이 방식으로 시작한다.
+dashboard projection worker도 같은 방식으로 구현되어 있다.
+
+파일: `src/services/projection/dashboard-worker/app.py`
+
+```python
+app = App("dashboard-worker")
+
+@app.on_any
+async def on_event(evt: EventEnvelope, ctx: EventContext[DashboardStore]) -> None:
+    row = timeline_update_from_event(evt)
+    if row is not None:
+        await ctx.db.upsert_rca_timeline(row)
+```
 
 ## dashboard read model에 필요한 최소 필드
 
@@ -80,10 +104,13 @@ dashboard projection worker도 이 방식으로 시작한다.
 | `command_id` | command 상세 조회/상태 표시 | `CommandQueuedForAgentBody` |
 | `pr_url` | PR 버튼 링크 | `SafePrCreatedBody` |
 | `error_reason` | 실패 이유 | `RcaActionRequiredBody`, `SafePrFailedBody` |
+| `last_event_id` | 마지막으로 반영한 event 추적 | event envelope |
+| `last_event_at` | 최신 상태 시각 표시 | event envelope |
+| `payload` | 디버깅용 마지막 event payload | event payload |
 
-## 구현 순서
+## 현재 구현된 코드 흐름
 
-### 0. 권한 기준을 먼저 잡는다
+### 0. 권한 기준
 
 파일:
 
@@ -100,36 +127,35 @@ dashboard projection worker도 이 방식으로 시작한다.
 
 자세한 기준은 [찬빈: 권한 시스템과 대시보드 적용](06-chanbin-permission-dashboard.md)을 따른다.
 
-### 1. Response DTO부터 만든다
+### 1. Response DTO
 
 파일:
 
 - `src/packages/contracts/gateway/responses.py`
 
-왜 먼저 하는가:
-
-- frontend와 backend가 같은 shape를 보고 작업할 수 있다.
-- DTO가 없으면 화면이 event payload 내부 구조에 직접 의존하게 된다.
-
-권장 DTO:
+현재 구현된 DTO:
 
 - `RcaTimelineItem`
 - `RcaTimelineResponse`
-- `RcaIncidentSummary`
-- `RcaEvidenceProviderStatus`
-- `RcaActionStatus`
+- `RcaIncidentResponse`
 
-### 2. Route 상수를 만든다
+왜 필요한가:
+
+- frontend와 backend가 같은 shape를 보고 작업할 수 있다.
+- 화면은 raw event payload가 아니라 DTO만 렌더링한다.
+- `supporting_evidence`, `missing_evidence`는 항상 list로 내려간다.
+
+### 2. Route 상수
 
 파일:
 
 - `src/packages/contracts/gateway/routes.py`
 
-예상 route:
+현재 route:
 
 ```python
-RCA_TIMELINE_PATH = "/rca/timeline"
-RCA_INCIDENT_PATH = "/rca/incidents/{incident_id}"
+DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
+DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
 ```
 
 왜 필요한가:
@@ -137,25 +163,26 @@ RCA_INCIDENT_PATH = "/rca/incidents/{incident_id}"
 - frontend fetch path와 backend route가 문자열로 흩어지지 않는다.
 - 테스트가 route 상수를 기준으로 고정된다.
 
-### 3. Projection table을 만든다
+### 3. Projection table
 
 파일:
 
-- `src/domains/projection/models.py`
-- `src/domains/projection/repository.py`
+- `src/domains/dashboard/models.py`
+- `src/domains/dashboard/repository.py`
 
 왜 필요한가:
 
 - `audit_log`는 전체 event 원장이고, 화면은 정리된 read model이 필요하다.
 - 같은 event가 재처리되어도 같은 row가 갱신되어야 한다.
 
-필수 기준:
+현재 기준:
 
-- primary key는 `workspace_id + correlation_id` 또는 `incident_id` 기준으로 잡는다.
-- event 재처리 시 insert 중복이 아니라 upsert가 되어야 한다.
-- raw provider payload 전체를 저장하지 않고 summary만 저장한다.
+- `RcaTimeline`은 `workspace_id + correlation_id` unique 제약으로 같은 흐름을 한 row로 묶는다.
+- `DashboardRepository.upsert_rca_timeline()`은 PostgreSQL `ON CONFLICT`로 재처리 중복을 갱신 처리한다.
+- 새 event에 없는 `cluster_id`, `incident_id`, `root_cause`, `command_id`, `pr_url` 같은 값은 기존 row 값을 보존한다.
+- query는 `workspace_id`를 먼저 필터링하고, 필요하면 `cluster_id in allowed_cluster_ids`를 추가한다.
 
-### 4. Dashboard projection worker를 만든다
+### 4. Dashboard projection worker
 
 파일:
 
@@ -166,7 +193,7 @@ RCA_INCIDENT_PATH = "/rca/incidents/{incident_id}"
 - event 흐름과 화면 read model을 분리한다.
 - worker가 죽어도 event retry로 다시 만들 수 있다.
 
-패턴:
+실제 패턴:
 
 ```python
 app = App("dashboard-worker")
@@ -178,11 +205,11 @@ async def on_event(evt: EventEnvelope, ctx: EventContext[DashboardStore]) -> Non
         await ctx.db.upsert_rca_timeline(update)
 ```
 
-### 5. Gateway query router를 붙인다
+### 5. Gateway query router
 
 파일:
 
-- `src/domains/rca/router.py` 또는 신규 `src/domains/dashboard/router.py`
+- `src/domains/dashboard/router.py`
 - `src/services/gateway/api-gateway/gateway.py`
 
 왜 필요한가:
@@ -190,9 +217,24 @@ async def on_event(evt: EventEnvelope, ctx: EventContext[DashboardStore]) -> Non
 - frontend는 DB를 직접 읽지 않는다.
 - session/workspace 권한을 Gateway에서 확인한다.
 
-### 6. Frontend app을 붙인다
+현재 API:
 
-frontend 작업은 backend DTO가 먼저 통과한 다음 아래 화면부터 붙인다.
+```text
+GET /dashboard/rca/timeline
+GET /dashboard/rca/timeline?cluster_id=<cluster_id>
+GET /dashboard/rca/incidents/{incident_id}
+GET /dashboard/rca/incidents/{incident_id}?cluster_id=<cluster_id>
+```
+
+동작:
+
+- `cluster_id` query가 없으면 `accessible_resource_ids(..., "cluster", "read")` 결과로 목록을 필터링한다.
+- `cluster_id` query가 있으면 `require_cluster_access(..., READ_ACCESS)`를 먼저 통과해야 한다.
+- session의 `workspace_id`만 사용한다. 브라우저가 보낸 workspace 값으로 tenant를 바꾸지 않는다.
+
+### 6. Frontend app
+
+frontend 작업은 backend DTO와 query API가 통과한 다음 아래 화면부터 붙인다.
 
 화면 순서:
 
@@ -211,6 +253,8 @@ frontend 작업은 backend DTO가 먼저 통과한 다음 아래 화면부터 �
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
+  tests/test_dashboard_projection.py \
+  tests/test_dashboard_router.py \
   tests/test_projection.py \
   tests/test_realtime_contracts.py \
   tests/test_realtime_gateway.py \
@@ -218,21 +262,21 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
-dashboard 구현을 시작하면 추가해야 하는 테스트:
+frontend가 생기면 추가할 테스트:
 
-- `tests/test_dashboard_projection.py`
-- `tests/test_dashboard_router.py`
-- frontend가 생기면 route contract 또는 browser test
+- route contract 또는 browser test
+- 화면이 raw event payload가 아니라 `RcaTimelineResponse`만 렌더링하는지 확인
 - 권한 회귀 확인: `tests/test_identity_repository.py`, `tests/test_realtime_gateway.py`
 
 ## 구현 체크리스트
 
 | 작업 | 파일 | 완료 기준 |
 | --- | --- | --- |
-| timeline response DTO | `contracts/gateway/responses.py` | pydantic validation test 통과 |
-| dashboard route | `contracts/gateway/routes.py`, router | session/workspace 권한 test 통과 |
-| read model table | `domains/projection/models.py` | idempotent upsert test 통과 |
+| timeline response DTO | `contracts/gateway/responses.py` | `RcaTimelineItem`, `RcaTimelineResponse`, `RcaIncidentResponse` 존재 |
+| dashboard route | `contracts/gateway/routes.py`, `domains/dashboard/router.py` | session/workspace 권한 test 통과 |
+| read model table | `domains/dashboard/models.py` | `workspace_id + correlation_id` unique 기준 |
+| repository | `domains/dashboard/repository.py` | idempotent upsert/query 권한 필터 test 통과 |
 | projector | `services/projection/dashboard-worker/app.py` | `@app.on_any` event별 update test 통과 |
 | realtime 표시 | `contracts/realtime`, realtime gateway | bounded payload test 통과 |
-| frontend UI | 신규 frontend app | backend DTO만 읽고 DB/NATS 직접 접근 없음 |
+| frontend UI | frontend app | backend DTO만 읽고 DB/NATS 직접 접근 없음 |
 | 권한 필터 | `identity/repository.py`, dashboard router | 권한 없는 cluster row가 응답에서 제외됨 |

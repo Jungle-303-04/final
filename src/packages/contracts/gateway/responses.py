@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import Field
+
 from packages.contracts.gateway.base import StrictModel
 
 JsonMap = dict[str, Any]
@@ -70,6 +72,33 @@ class AgentDebugQueryResponse(StrictModel):
     accepted: bool
     command_id: str
     correlation_id: str
+
+
+class RcaTimelineItem(StrictModel):
+    workspace_id: str
+    correlation_id: str
+    cluster_id: str | None = None
+    incident_id: str | None = None
+    evidence_ref: str | None = None
+    current_subject: str
+    status: str
+    root_cause: str | None = None
+    confidence: float | None = None
+    supporting_evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    action_route: str | None = None
+    command_id: str | None = None
+    pr_url: str | None = None
+    error_reason: str | None = None
+    updated_at: str | None = None
+
+
+class RcaTimelineResponse(StrictModel):
+    items: list[RcaTimelineItem]
+
+
+class RcaIncidentResponse(StrictModel):
+    item: RcaTimelineItem
 
 
 class EvidenceJobScheduleResponse(StrictModel):

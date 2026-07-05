@@ -46,7 +46,7 @@ PR 하나의 크기는 “한 도메인 안에서 한 가지 기능”으로 제
 | 우현 | `origin/feat/jeonwoohyun-hydromel/command-worker` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`의 `src/services/command/command-worker`를 기준으로 작은 PR 작성. |
 | 찬빈 | `origin/feat/jcbbbbbb/api-gateway` | `services/`, `packages/` 루트에 Gateway/Auth 구현 1600줄이 있다. 현재 경로와 충돌 가능성이 높다. | 코드 전체 merge 금지. password auth, access policy, schema, 테스트 아이디어만 현재 `src/` 구조로 이식. |
 | 가인 | `origin/feat/ummfieg/rca-worker` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`의 RCA event flow에서 새 PR을 시작한다. |
-| 가인 | `origin/feat/ummfieg/dashboard-projection-service` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 repository에는 dashboard worker가 없으므로, 새 `src/services/projection/dashboard-worker/app.py`와 read model 계약을 작은 PR로 추가. |
+| 가인 | `origin/feat/ummfieg/dashboard-projection-service` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `dev`에는 dashboard worker/read model/API가 있으므로, UI나 summary 확장은 `src/domains/dashboard/*` 기준으로 작은 PR 작성. |
 | 가인 | `origin/feat/ummfieg/audit-timeline-service` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `src/services/projection/audit-worker` 기준으로 audit timeline 확장. |
 | minmings111 | `origin/feat/minmings111/node-collector` | 고유 변경은 merge/init 성격이고 파일 diff는 없다. | 현재 `src/services/target/node-collector`에서 새 PR 시작. |
 | minmings111 | `origin/feat/minmings111/target-cluster-agent` | target telemetry/collector 구현 1200줄이 오래된 루트 경로에 있다. | telemetry query, Kubernetes pod metric, install script 아이디어만 현재 `src/services/target/*`로 이식. |
