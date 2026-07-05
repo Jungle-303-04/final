@@ -14,21 +14,27 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00-health-auth`부터 `08-ops-dlq`까지 폴더가 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `08 운영과 DLQ`까지 한글 폴더명이 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
 
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
+파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
 
 ## 2단계. 변수 채우기
 
 먼저 Environment 값을 채운다.
 
-`base_url`은 Gateway 주소다. `aws-test` Environment에는 고정 도메인을 기본값으로 두지 않고, 운영자가 배포별 Gateway URL을 채운다.
+`base_url`은 Gateway 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/`를 쓴다.
+
+Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/`로 풀린다.
+그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test`를 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
+기본 Bruno 값은 로컬/공용 테스트용 admin 계정인 `admin.local@example.com` / `local-test-password-1234`다.
+AWS 배포가 다른 `AUTH_EMAIL`, `AUTH_PASSWORD`로 bootstrap되어 있으면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
 
-`cluster_id`는 target 등록 시 사용한 실제 cluster id를 넣는다.
+`cluster_id`는 target 등록 시 사용한 실제 cluster id다. 기본값은 AWS target smoke 기준 `cluster-1`이다.
 
 로컬에서 처음 테스트하면 [로컬 테스트 실행 기준](../local-testing.md)을 따라 `make local-test-env`, `make local-up`, `make local-smoke` 순서로 실행한다.
 `local` Environment는 기본적으로 아래 값과 맞춰져 있다.
@@ -47,6 +53,7 @@ cluster_id: target
 
 여기서는 Bruno 왼쪽 요청 파일 이름을 기준으로 API 의미를 정리한다.
 처음 보는 사람은 이 부분을 먼저 읽고, 그다음 아래 실행 단계를 따라가면 된다.
+각 요청의 실제 파일명은 영어 slug지만, Bruno 화면의 `name`은 한글로 표시된다.
 
 권한 기준은 세 가지로 보면 된다.
 인증 없이 보는 상태 확인 API, 로그인 세션이 필요한 운영자/사용자 API, `x-agent-token`이 필요한 target agent API다.

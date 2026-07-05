@@ -20,23 +20,32 @@ def request_files() -> list[Path]:
     return [
         path
         for path in sorted(API_DIR.rglob("*.bru"))
-        if path.name != "folder.bru" and "environments" not in path.parts
+        if path.name not in {"folder.bru", "collection.bru"} and "environments" not in path.parts
     ]
 
 
 def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert (API_DIR / "bruno.json").is_file()
     assert (API_DIR / "README.md").is_file()
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
 
     local = (API_DIR / "environments" / "local.bru").read_text(encoding="utf-8")
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
+
+    assert "base_url: https://k8s.woonyong.org/" in collection
+    assert "auth_email: admin.local@example.com" in collection
+    assert "auth_password: local-test-password-1234" in collection
+    assert "cluster_id: cluster-1" in collection
 
     assert "base_url: http://localhost:18080/" in local
     assert "auth_email: admin.local@example.com" in local
     assert "auth_password: local-test-password-1234" in local
     assert "cluster_id: target" in local
-    assert "base_url: replace-with-aws-gateway-base-url/" in aws
-    assert "https://k8s.woonyong.org/" not in aws
+    assert "base_url: https://k8s.woonyong.org/" in aws
+    assert "management_base_url: https://k8s.woonyong.org/" in aws
+    assert "auth_email: admin.local@example.com" in aws
+    assert "auth_password: local-test-password-1234" in aws
+    assert "cluster_id: cluster-1" in aws
 
     for env_text in (local, aws):
         assert "base_url:" in env_text
@@ -138,7 +147,8 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "08-ops-dlq",
         "정상 출력",
         "GitHub webhook signature",
-        "고정 도메인을 기본값으로 두지 않고",
+        "https://k8s.woonyong.org/",
+        "admin.local@example.com",
         "BRUNO_CLUSTER_ID",
     ]
 
@@ -157,3 +167,61 @@ def test_github_webhook_signature_fixture_matches_bruno_body() -> None:
     assert '"workspace_id": "default"' in request
     assert '"cluster_id": "{{cluster_id}}"' in body_fixture
     assert '"cluster_id": "{{cluster_id}}"' in request
+
+
+def test_bruno_display_names_are_korean() -> None:
+    collection = bruno_text()
+    expected_names = [
+        "name: 00 상태와 인증",
+        "name: 01 Provider 선택",
+        "name: 02 Target 등록과 정책",
+        "name: 03 Agent Runtime",
+        "name: 04 Command 실행",
+        "name: 05 RCA Dashboard",
+        "name: 06 GitOps와 승인",
+        "name: 07 AI 대화",
+        "name: 08 운영과 DLQ",
+        "name: 01 상태 확인 healthz",
+        "name: 02 준비 상태 readyz",
+        "name: 03 OpenAPI 계약 확인",
+        "name: 04 사용자 가입 요청",
+        "name: 05 이메일 검증 재전송",
+        "name: 06 로그인",
+        "name: 07 세션 확인",
+        "name: 08 사용자 승인",
+        "name: 09 이메일 검증",
+        "name: 10 로그아웃",
+        "name: 01 Provider 목록 조회",
+        "name: 02 Provider 선택 검증",
+        "name: 01 Target 등록과 Manifest 발급",
+        "name: 02 Cluster 정책 수정",
+        "name: 01 Agent 연결 보고",
+        "name: 02 Agent 정책 조회",
+        "name: 03 정책 적용 상태 보고",
+        "name: 04 Reconcile 상태 보고",
+        "name: 05 Evidence Job 예약",
+        "name: 06 Evidence Job 가져가기",
+        "name: 07 Evidence Job 결과 제출",
+        "name: 08 Evidence 직접 제출",
+        "name: 01 수동 Command 요청",
+        "name: 02 Agent Debug Query 요청",
+        "name: 03 Agent Command 가져가기",
+        "name: 04 Command 시작 보고",
+        "name: 05 Command Heartbeat",
+        "name: 06 Command 결과 제출",
+        "name: 01 RCA Timeline 조회",
+        "name: 02 RCA Incident 상세 조회",
+        "name: 01 GitHub Webhook 수신",
+        "name: 02 Approval 승인",
+        "name: 03 Approval 거절",
+        "name: 01 AI 대화 생성",
+        "name: 02 AI 대화 조회",
+        "name: 03 AI 메시지 추가",
+        "name: 01 Dead Letter 목록 조회",
+        "name: 02 Dead Letter 재처리",
+        "name: 03 Gateway Metrics 조회",
+    ]
+    missing = [name for name in expected_names if name not in collection]
+
+    assert missing == []
+    assert "name: 02 Validate Provider Selection" not in collection
