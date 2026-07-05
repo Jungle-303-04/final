@@ -72,6 +72,9 @@ jobs:
       MGMT_CLUSTER: ${{ vars.MGMT_CLUSTER || 'kubeheal-mgmt' }}
       TARGET_CLUSTER_1: ${{ vars.TARGET_CLUSTER_1 || 'kubeheal-target-a' }}
       TARGET_CLUSTER_2: ${{ vars.TARGET_CLUSTER_2 || 'kubeheal-target-b' }}
+      TARGET_CLUSTER_ID_1: ${{ vars.TARGET_CLUSTER_ID_1 || vars.TARGET_CLUSTER_1 || 'kubeheal-target-a' }}
+      TARGET_CLUSTER_ID_2: ${{ vars.TARGET_CLUSTER_ID_2 || vars.TARGET_CLUSTER_2 || 'kubeheal-target-b' }}
+      SMOKE_CLUSTER_ID: ${{ vars.SMOKE_CLUSTER_ID || vars.TARGET_CLUSTER_ID_1 || vars.TARGET_CLUSTER_1 || 'kubeheal-target-a' }}
       MGMT_DISPLAY_NAME: ${{ vars.MGMT_DISPLAY_NAME || vars.MGMT_CLUSTER || 'KubeHeal Management' }}
       TARGET_1_DISPLAY_NAME: ${{ vars.TARGET_1_DISPLAY_NAME || vars.TARGET_CLUSTER_1 || 'KubeHeal Target A' }}
       TARGET_2_DISPLAY_NAME: ${{ vars.TARGET_2_DISPLAY_NAME || vars.TARGET_CLUSTER_2 || 'KubeHeal Target B' }}

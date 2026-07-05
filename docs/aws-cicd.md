@@ -44,6 +44,9 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - management EKS cluster: repository variable `MGMT_CLUSTER`, 기본 `kubeheal-mgmt`
 - target EKS cluster 1: repository variable `TARGET_CLUSTER_1`, 기본 `kubeheal-target-a`
 - target EKS cluster 2: repository variable `TARGET_CLUSTER_2`, 기본 `kubeheal-target-b`
+- target id 1: repository variable `TARGET_CLUSTER_ID_1`, 기본 `TARGET_CLUSTER_1`
+- target id 2: repository variable `TARGET_CLUSTER_ID_2`, 기본 `TARGET_CLUSTER_2`
+- smoke target id: repository variable `SMOKE_CLUSTER_ID`, 기본 `TARGET_CLUSTER_ID_1`
 - ECR repository: repository variable `ECR_REPO`, 기본 `kubeheal-service`
 - display names: repository variables `MGMT_DISPLAY_NAME`, `TARGET_1_DISPLAY_NAME`, `TARGET_2_DISPLAY_NAME`
 - dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
@@ -97,6 +100,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - `COMMAND_JANITOR_INTERVAL_SECONDS`: 기본 `15`
 - `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME`, `CLOUDFLARE_ZONE_NAME`: DNS를 쓸 때만 설정
 - `CLOUDFLARE_PROXIED`: 기본 `1`. `https://k8s.woonyong.org/`처럼 Cloudflare가 HTTPS를 받게 하려면 켜 둔다.
+- `TARGET_CLUSTER_ID_1`, `TARGET_CLUSTER_ID_2`, `SMOKE_CLUSTER_ID`: target 등록과 smoke body에 들어가는 cluster id. 비워 두면 첫 번째 target 이름을 smoke 기본값으로 쓴다.
 
 `AUTH_PASSWORD`가 비어 있으면 배포 스크립트가 임시 비밀번호를 생성한다. CI 로그 유출을 막기 위해
 생성된 값은 기본적으로 출력하지 않는다. 로컬 디버그에서만

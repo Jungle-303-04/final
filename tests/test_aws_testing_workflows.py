@@ -106,3 +106,15 @@ def test_cloudflare_custom_domain_defaults_to_proxied_https() -> None:
     assert '"proxied": ${proxied}' in script
     assert 'scheme="https"' in script
     assert "`CLOUDFLARE_PROXIED`" in runbook
+
+
+def test_aws_smoke_uses_first_target_cluster_id_by_default() -> None:
+    workflow = read(".github/workflows/aws-cd.yml")
+    script = read("scripts/aws-up.sh")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "TARGET_CLUSTER_ID_1:" in workflow
+    assert "TARGET_CLUSTER_ID_2:" in workflow
+    assert "SMOKE_CLUSTER_ID:" in workflow
+    assert 'SMOKE_CLUSTER_ID="${SMOKE_CLUSTER_ID:-${TARGET_CLUSTER_ID_1}}"' in script
+    assert "`SMOKE_CLUSTER_ID`" in runbook
