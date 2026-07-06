@@ -63,6 +63,17 @@ jobs:
       - name: Run checks
         run: bash scripts/test.sh
 
+      - name: Set up Node
+        uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # 배포 직전 최종 게이트 — 프론트 타입·린트·빌드 실패 시 deploy job 이 시작되지 않는다.
+      - name: Frontend gate (tsc + eslint + build)
+        run: bash scripts/frontend-check.sh
+
   deploy:
     name: Deploy to AWS EKS
     runs-on: ubuntu-latest
@@ -104,6 +115,7 @@ jobs:
       RUN_SMOKE: ${{ github.event.inputs.run_smoke == 'true' && '1' || vars.AWS_RUN_SMOKE || '0' }}
       SKIP_LB_HEALTH_WAIT: ${{ vars.SKIP_LB_HEALTH_WAIT || '0' }}
       DOCKER_PLATFORM: ${{ vars.DOCKER_PLATFORM || 'linux/amd64' }}
+      DOCKER_BUILD_CACHE: gha
       CONFIGURE_ROUTE53: ${{ vars.CONFIGURE_ROUTE53 || '0' }}
       CONFIGURE_CLOUDFLARE: ${{ vars.CONFIGURE_CLOUDFLARE || '0' }}
       CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
@@ -139,6 +151,13 @@ jobs:
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v5.1.0
+
+      # buildx + GHA 캐시 — 의존성 레이어 재사용으로 이미지 빌드를 수십 초 수준으로 단축.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.8.0
+
+      - name: Expose GitHub runtime for buildx gha cache
+        uses: crazy-max/ghaction-github-runtime@v3.1.0
 
       - name: Install eksctl when cluster management is enabled
         if: env.CREATE_CLUSTERS == '1' || env.ENSURE_EBS_CSI == '1'

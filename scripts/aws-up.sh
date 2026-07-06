@@ -386,6 +386,21 @@ build_and_push_image() {
     printf -v "${image_var_name}" "%s" "${image_name}"
   fi
 
+  if [[ "${DOCKER_BUILD_CACHE:-}" == "gha" ]]; then
+    # CI 전용 고속 경로 — buildx + GitHub Actions 레이어 캐시.
+    # 의존성 레이어(pip/npm)가 캐시에 있으면 코드만 바뀐 빌드는 수십 초로 줄어든다.
+    log "building+pushing with buildx GHA cache (${label}): ${image_name}"
+    docker buildx build \
+      --platform "${DOCKER_PLATFORM}" \
+      -f "${dockerfile}" \
+      -t "${image_name}" \
+      --cache-from "type=gha,scope=${repo}" \
+      --cache-to "type=gha,scope=${repo},mode=max" \
+      --push \
+      "${context_dir}"
+    return
+  fi
+
   log "building Docker image (${label}): ${image_name}"
   docker build --platform "${DOCKER_PLATFORM}" -f "${dockerfile}" -t "${image_name}" "${context_dir}"
 
