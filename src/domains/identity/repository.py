@@ -1004,6 +1004,7 @@ class IdentityAccessRepository(DatabaseConnection):
         return [
             {
                 "access_id": str(r["id"]),
+                "subject_id": str(r["user_id"]),
                 "subject_type": "user",
                 "subject_label": r["email"] or r["user_id"],
                 "resource_type": r["resource_type"],
