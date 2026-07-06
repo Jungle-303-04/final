@@ -1,0 +1,138 @@
+/* 위젯 보드 — 4열 그리드 (스팬 1~4칸) */
+.wb-board { margin-bottom: 20px; }
+.wb-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.wb-board-title { font-weight: 600; font-size: 14px; color: var(--color-text); }
+
+.wb-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 1100px) {
+  .wb-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.wb-card {
+  background: var(--color-fill-one);
+  border: 1px solid var(--color-border);
+  border-radius: var(--rad-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 128px;
+  min-width: 0;
+}
+.wb-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.wb-card-title {
+  font-size: 12px;
+  color: var(--color-text-light);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 호버 액션: 공간을 항상 확보(visibility)해야 헤더 높이가 변하지 않는다 — 덜컹거림 방지 */
+.wb-card-actions { visibility: hidden; display: inline-flex; gap: 2px; flex: none; }
+.wb-card:hover .wb-card-actions,
+.wb-card:focus-within .wb-card-actions { visibility: visible; }
+.wb-card-body { flex: 1; display: flex; align-items: center; min-height: 0; }
+/* 맵 위젯: 카드 폭 전체 사용, 자체 여백 제거 */
+.wb-card-body > .co-map { width: 100%; margin-bottom: 0; }
+.wb-card-note { font-size: 11px; color: var(--color-text-xlight); margin-top: 6px; }
+
+/* 스탯 */
+.wb-stat { display: flex; flex-direction: column; gap: 6px; }
+.wb-stat-value {
+  font-size: 28px;
+  font-weight: 600;
+  font-family: var(--font-semi);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* 게이지 */
+.wb-gauge { width: 100%; display: flex; justify-content: center; }
+
+/* 라인 */
+.wb-line { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+.wb-line-svg { width: 100%; height: 56px; display: block; }
+.wb-line-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text); }
+
+/* 바 */
+.wb-bars { width: 100%; display: flex; flex-direction: column; gap: 7px; }
+.wb-bar-row { display: grid; grid-template-columns: 110px 1fr 64px; align-items: center; gap: 8px; }
+.wb-bar-name {
+  font-size: 11px;
+  color: var(--color-text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-bar-track { height: 8px; background: var(--color-fill-two); border-radius: 4px; overflow: hidden; }
+.wb-bar-fill {
+  height: 100%;
+  background: var(--color-border-selected, #7075f0);
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+.wb-bar-value { font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; color: var(--color-text); }
+
+/* 도넛 */
+.wb-donut { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
+.wb-donut-legend { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.wb-legend-row { display: flex; align-items: center; gap: 6px; font-size: 11px; min-width: 0; }
+.wb-legend-row .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.wb-legend-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-text-light); }
+
+/* 테이블 */
+.wb-table { width: 100%; display: flex; flex-direction: column; }
+.wb-table-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 44px 80px;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+}
+.wb-table-row:last-child { border-bottom: none; }
+.wb-table-row .rank { color: var(--color-text-xlight); font-size: 11px; }
+.wb-table-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-text); }
+.wb-table-row .share { text-align: right; font-size: 11px; }
+.wb-table-row .value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--color-text); }
+
+/* 결측 (I11) */
+.wb-nodata { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.wb-nodata-title { font-weight: 600; color: var(--color-text-xlight); }
+
+/* 폼 갤러리 */
+.wb-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.wb-gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  background: var(--color-fill-one);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--rad-lg);
+  cursor: pointer;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+.wb-gallery-card:hover { border-color: var(--color-border-outline-focused); }
+.wb-gallery-card.on { border-color: var(--color-border-selected, #7075f0); background: var(--color-fill-two); }
+.wb-gallery-label { font-weight: 600; font-size: 13px; }
