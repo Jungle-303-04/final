@@ -41,21 +41,23 @@ STARTED → RENDERING → DIFFING → POLICY_CHECKING → WAITING_FOR_APPROVAL
 |---|---|
 | RENDERING/DIFFING | manifest/diff 산출물 — DiffView, CodeBlock |
 | POLICY_CHECKING | 정책 판정 결과 KeyValue |
-| WAITING_FOR_APPROVAL | 승인 카드: diff 요약 + grant/reject (`POST /approvals/{approval_id}/grant\|reject`, deploy 권한) — [repo runs 탭](repo.md#runs-탭)과 동일 카드 컴포넌트 `ApprovalCard` 공유 |
+| WAITING_FOR_APPROVAL | 승인 카드: diff 요약 + grant/reject (`POST /approvals/{approval_id}/grant\|reject`, deploy 권한) — [repo runs 탭](repo.md#runs-탭)과 동일 카드 컴포넌트 `ApprovalCard` 공유. DIFFING step 에 `changes[]`가 있으면 필드 단위 변경 미리보기를 함께 보여준다 |
 | APPLYING/ROLLOUT_WAITING | command 상태, 대상 클러스터 링크 |
 | FAILED | 오류 payload CodeBlock + [AI 분석] → [ai-chat](ai-chat.md) 프리필 |
 
 ## 데이터·갱신
 
-run 데이터: `GET /applications/{id}/runs` 중 해당 run (5s 폴링 — 종결 상태면 중지).
+run 데이터: `GET /applications/{id}/runs` 중 해당 run.
+`useRunsAll`은 활성 run 이 있으면 10s, 없으면 30s 간격으로 갱신한다.
 단계 데이터는 run 응답의 steps(WorkflowRunStep). runId → applicationId 역참조는
 목록 진입 시 캐시, 직접 딥링크 시 앱 전체 runs 검색 1회.
+`steps[].details.changes[]`는 diff-worker의 3-way 비교 결과이고, 프론트는 `field_path`, `classification`, `before`, `after`만 읽어 미리보기를 그린다.
 
 상태 회귀 없음이 보장됨(백엔드 rank 가드) — 프론트는 단조 진행 가정 가능.
 
 ## AC
 
-- [ ] 종결(SUCCEEDED/FAILED) run 은 폴링 중지
+- [ ] 활성 run 이 있으면 10s, 없으면 30s 저빈도 폴링으로 전환
 - [ ] 승인 노드 버튼과 repo 탭 승인 카드가 같은 컴포넌트(중복 구현 금지)
 - [ ] 그래프가 창 크기 변화에 fitView 유지
 - [ ] 실패 run 딥링크 진입 시 실패 노드 자동 포커스
