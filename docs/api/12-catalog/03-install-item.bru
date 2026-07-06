@@ -1,0 +1,28 @@
+meta {
+  name: 03 카탈로그 설치
+  type: http
+  seq: 3
+  tags: [catalog, write]
+}
+
+post {
+  url: {{base_url}}catalog/items/{{catalog_item_id}}/installs
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "cluster_id": "{{cluster_id}}",
+    "namespace": "{{namespace}}",
+    "application_name": "demo-catalog-app"
+  }
+}
+
+tests {
+  test("200 or auth/validation/not-found", function () {
+    expect([200, 401, 403, 404, 422]).to.include(res.status);
+  });
+}

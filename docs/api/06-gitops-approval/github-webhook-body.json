@@ -4,7 +4,7 @@
   "replicas": 2,
   "workspace_id": "default",
   "repository_id": "repo-bruno",
-  "repo_ref": "Jungle-303-04/final",
+  "repo_ref": "Jungle-303-04/gitops-demo",
   "branch": "main",
   "watch_target_id": "watch-bruno",
   "binding_id": "binding-bruno",
@@ -12,5 +12,5 @@
   "workflow_run_id": "wf-bruno",
   "environment": "sandbox",
   "cluster_id": "{{cluster_id}}",
-  "manifest_path": "src/samples/smoke/deploy.yaml"
+  "manifest_path": "deploy.yaml"
 }

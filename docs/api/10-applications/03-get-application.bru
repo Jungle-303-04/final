@@ -1,0 +1,16 @@
+meta {
+  name: 03 애플리케이션 상세
+  type: http
+  seq: 3
+  tags: [applications, read]
+}
+
+get {
+  url: {{base_url}}applications/{{application_id}}
+}
+
+tests {
+  test("200 or auth/not-found", function () {
+    expect([200, 401, 403, 404]).to.include(res.status);
+  });
+}
