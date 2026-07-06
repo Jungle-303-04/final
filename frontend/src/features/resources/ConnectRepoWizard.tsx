@@ -28,7 +28,11 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
             <input className="input" value={repoRef} onChange={e => setRepoRef(e.target.value)} placeholder="Jungle-303-04/final" />
           </Field>
           <Field label="브랜치"><input className="input" value={branch} onChange={e => setBranch(e.target.value)} /></Field>
-          <Field label="manifest 경로"><input className="input" value={manifestPath} onChange={e => setManifestPath(e.target.value)} /></Field>
+          <Field label="manifest 경로"><input className="input" value={manifestPath} onChange={e => setManifestPath(e.target.value)} placeholder="deploy.yaml · k8s/ · kustomization.yaml" /></Field>
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginTop: -6 }}>
+            단일 YAML(문서 여러 개 <code>---</code> 구분 지원), 디렉터리(하위 .yaml/.yml/.json 전부),
+            <code>kustomization.yaml</code>, Helm <code>Chart.yaml</code> 경로를 모두 지원합니다.
+          </p>
           <div style={{ textAlign: 'right' }}><Button variant="primary" disabled={!refOk} onClick={() => { setClusterId(clustersQ.data?.[0]?.cluster_id ?? ''); setStep(1); }}>다음</Button></div>
         </>
       )}
