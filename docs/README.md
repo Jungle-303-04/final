@@ -351,7 +351,6 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/services/ai-rca-worker](spec/services/ai-rca-worker.md)
 - [spec/services/ai-recovery-worker](spec/services/ai-recovery-worker.md)
 - [spec/services/ai-rollout-worker](spec/services/ai-rollout-worker.md)
-- [spec/services/ai-safe-pr-worker](spec/services/ai-safe-pr-worker.md)
 - [spec/services/ai-select-worker](spec/services/ai-select-worker.md)
 - [spec/services/alert-alert-worker](spec/services/alert-alert-worker.md)
 - [spec/services/command-command-janitor](spec/services/command-command-janitor.md)

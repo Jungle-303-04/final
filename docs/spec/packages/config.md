@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -9,8 +9,8 @@ status: synced
 
 ## 책임 (Responsibility)
 
-- 전 서비스 공용의 **최하층 유틸**: env 조회, ISO 시각, 서비스 공유 상수(브로커 URL·인증 쿠키·명령 액션·위험도 태그), 구조적(JSON) 로깅, `require`/`fail` 에러 가드, 의존성 기동 대기.
-- 다른 `packages/*` 를 import 하지 않는다(단, `retry.py` 는 같은 패키지 내 `errors`/`logs`/`settings` 만 사용). 도메인 지식 없음.
+- 전 서비스 공용의 **최하층 유틸**: env 조회, ISO 시각, 서비스 공유 상수(브로커 URL·인증 쿠키·명령 액션·위험도 태그), 제어(쓰기) 명령 허용 네임스페이스 정책, 구조적(JSON) 로깅, `require`/`fail` 에러 가드, 의존성 기동 대기.
+- 다른 `packages/*` 를 import 하지 않는다(단, `retry.py`/`control.py` 는 같은 패키지 내 `errors`/`logs`/`settings`/`constants` 만 사용). 도메인 지식 없음.
 
 ## 의존성 (Dependencies)
 
@@ -51,6 +51,20 @@ def now_iso() -> str                             # datetime.now(UTC).isoformat()
 | `REVIEW_REQUIRED` | `"review-required"` | 렌더 상태상 사람 검토 필요 |
 
 - `Sandbox` — `NAMESPACE = "sandbox"`, `RISK_TAG: Final[RiskLevel] = RiskLevel.SANDBOX_ONLY`(호환 별칭), `UNSAFE_NAMESPACE_RISK_TAG: Final[RiskLevel] = RiskLevel.NON_SANDBOX_NAMESPACE`(호환 별칭), `NO_DIFF_REASON = "desired and actual images already match"`(변경 없음 판정 사유 — 생산자/소비자 공유, 중복 정의 금지).
+
+### `control.py` — 제어(쓰기) 명령 허용 네임스페이스 정책
+
+기존에 게이트웨이 검증·command-worker 정책 룰·cluster-agent 쓰기 가드 3곳에 각각 하드코딩돼 있던 "sandbox 만 허용"의 **단일 기준**. 매 호출 시 env 를 읽으므로 재기동 없이 반영된다(호출 빈도 대비 비용 무시 가능).
+
+- `src/packages/config/control.py :: CONTROL_ALLOWED_NAMESPACES_ENV` — `"CONTROL_ALLOWED_NAMESPACES"` (CSV; 기본은 `Sandbox.NAMESPACE` 하나 — env 미설정 시 기존 동작과 동일).
+- `src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE` — `"namespace is not allowed by control policy"` (3계층 공통 거부 사유 문구).
+```python
+def control_allowed_namespaces() -> tuple[str, ...]   # CSV 파싱(trim·순서 보존 중복 제거), 비면 ("sandbox",)
+def control_namespace_allowed(namespace: str) -> bool # namespace in control_allowed_namespaces()
+```
+앵커: `src/packages/config/control.py :: control_allowed_namespaces`, `src/packages/config/control.py :: control_namespace_allowed`.
+
+소비자: api-gateway command 라우터의 `validate_control_namespace`, command-worker 정책 룰 `NamespaceAllowlistRule`(`src/domains/command/policy.py`), cluster-agent 쓰기 가드. 관리 플레인은 프로세스 env, 대상 클러스터 agent 는 설치 manifest ConfigMap 의 `CONTROL_ALLOWED_NAMESPACES` 로 주입받는다(클러스터별로 다르게 설정 가능).
 
 ### `errors.py`
 
@@ -98,7 +112,7 @@ async def retry_dependency(attempt: Callable[[], Awaitable[None]], *, label: str
 
 1. `required_env` 는 빈 문자열도 미설정으로 취급한다.
 2. 시스템 오류 메시지는 항상 `[event-system]` 프리픽스(`fail`/`require` 경유)로 통일한다.
-3. `RiskLevel`/`Sandbox.NO_DIFF_REASON` 등 wire 공유 리터럴은 이 모듈이 유일한 정의 지점 — 서비스 쪽 중복 정의 금지.
+3. `RiskLevel`/`Sandbox.NO_DIFF_REASON`/`CONTROL_NAMESPACE_DENIED_MESSAGE` 등 wire·계층 공유 리터럴은 이 모듈이 유일한 정의 지점 — 서비스 쪽 중복 정의 금지.
 4. `configure_logging` 은 루트 핸들러를 **교체**한다(누적 아님) — 중복 로그 방지.
 
 ## 설정 (Settings)
@@ -109,4 +123,5 @@ async def retry_dependency(attempt: Callable[[], Awaitable[None]], *, label: str
 | `DEPENDENCY_RETRY_DELAY_SECONDS` | int | `2` | 재시도 간격 초 |
 | `SERVICE_NAME` | str | `service` | 서비스 이름(이름만 정의; 소비는 runtime/events) |
 | `SESSION_TTL_SECONDS` | int | `86400` | 세션 TTL(이름만 정의; 소비는 api-gateway) |
+| `CONTROL_ALLOWED_NAMESPACES` | csv | `sandbox` | 제어(쓰기) 명령 허용 네임스페이스 — 게이트웨이·command-worker·cluster-agent 공유 단일 기준 |
 | `COOKIE_SECURE` | bool-ish | 운영 on | 세션 쿠키 Secure(이름만 정의) |

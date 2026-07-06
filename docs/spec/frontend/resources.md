@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -36,7 +36,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 ```
 
 - `Modal(size 'lg', title '클러스터 등록')` + `Stepper(STEPS = ['프로바이더','검증','설정','발급'], current=step)`.
-- state: `step`(0~3), `provider`(기본 'existing-k8s'), `clusterId`, `name`, `issued: {agent_token; install_manifest} | null`, `connected: boolean`.
+- state: `step`(0~3), `provider`(기본 'existing-k8s'), `clusterId`, `name`, `issued: {agent_token; install_manifest; install_command?} | null`. (연결 여부는 state 가 아니라 아래 폴링 쿼리에서 파생.)
 - API 순서:
   1. **프로바이더**: `useQuery(['providers'], GET /providers/catalog, enabled: open)` — 실백엔드는 category 별 객체 `{providers: {cloud: [...], deploy: [...]}}`; `cloudProviders = providers.cloud ?? []` 중 `status === 'available'` 만 카드 그리드로 표시(선택 시 보더 `--brand`).
   2. **검증**: `useMutation(POST /providers/validate, body {cloud_provider: provider, deploy_provider: 'manual-manifest'})` — `valid` 면 다음 단계, 아니면 errors 를 danger 로 나열. 표시 문구: `선택한 조합: <provider> + manual-manifest`.
@@ -45,10 +45,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
      ```json
      { "cluster_id", "name": name || clusterId, "environment": "sandbox", "apply": false,
        "cloud_provider": provider, "deploy_provider": "manual-manifest",
-       "management_base_url": location.origin, "image": "service:local" }
+       "management_base_url": "<location.origin>/api" }
      ```
-     성공 시 `issued` 저장 + `queryClient.invalidateQueries(['clusters'])`.
-  4. **발급**: `Badge ok '등록 완료'` + 경고 "agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다." + agent token readonly input(mono, `data-testid="agent-token"`, 복사 버튼) + install manifest `CodeBlock`("kubectl apply -f 로 적용") + "연결 확인" 버튼(`useMutation(GET /clusters/${clusterId}/connection-status)` — `connection_status === 'connected'` 면 `Badge ok connected`) + "완료"(reset).
+     성공 시 `issued` 저장 + `queryClient.invalidateQueries(['clusters'])`. 실패 시 에러 메시지를 danger 로 표시.
+  4. **발급**: `Badge ok '등록 완료'` + 경고 "agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다." + agent token readonly input(mono, `data-testid="agent-token"`, 복사 버튼).
+     - 응답에 `install_command`(원라인 인스톨러 — `curl -fsSL …/api/install/<token> | kubectl apply -f -`)가 있으면 "원라인 설치" readonly input(`data-testid="install-command"`, 복사 버튼)을 먼저 보여주고, install manifest `CodeBlock` 은 "수동 적용 대안" 라벨로 강등. 없으면 기존처럼 manifest 가 주 경로.
+     - **연결 상태 자동 폴링**: `useQuery(['cluster-conn', clusterId], GET /clusters/${clusterId}/connection-status, enabled: step===3 && !!issued, refetchInterval: connected 면 false, 아니면 5000)`. `connected` 파생값이 true 면 `Badge ok 'connected — 에이전트 연결 완료'`, 아니면 `Badge warn '연결 대기 중… (<status>)'` + "지금 확인" 수동 refetch 버튼 + 안내문(kubectl apply 후 보통 30초~1분 내 connected, 5초 간격 자동 확인).
+     - "완료"(reset).
 - `reset()`: 모든 state 초기화 후 `onClose()`. 내부 `Footer` 서브컴포넌트(`{onPrev?; onNext; nextLabel?='다음'; nextDisabled?; loading?}`, `data-testid="wizard-next"`).
 
 ### `frontend/src/features/resources/ConnectRepoWizard.tsx :: ConnectRepoWizard`
@@ -61,9 +64,9 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 - state: `step`, `repoRef`, `branch`(기본 'main'), `manifestPath`(기본 'deploy.yaml'), `clusterId`.
 - 검증: `refOk = /^[\w.-]+\/[\w.-]+$/.test(repoRef)`(실패 시 error `'owner/name 형식이어야 합니다'`, 다음 disabled). 앱 이름은 `repoRef.split('/')[1]`.
 - 단계:
-  1. repo_ref/브랜치/manifest 경로 입력 → 다음(첫 클러스터로 `clusterId` 초기화).
+  1. repo_ref/브랜치/manifest 경로 입력(placeholder `deploy.yaml · k8s/ · kustomization.yaml`) + 지원 형식 안내문(단일 YAML `---` 다중 문서, 디렉터리 하위 .yaml/.yml/.json, `kustomization.yaml`, Helm `Chart.yaml`) → 다음(첫 클러스터로 `clusterId` 초기화).
   2. 대상 클러스터 select(`useClusters`).
-  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, cluster_id})` — 성공 시 `onClose()` 후 `nav('/repos/${application_id}')`.
+  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, cluster_id})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 앱 생성 + 배포 대상 등록 2단계) — 성공 시 `onClose()` 후 `nav('/repos/${application_id}')`, 실패 시 에러 메시지를 danger 로 표시.
 
 ## 라우트
 
@@ -75,7 +78,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 
 ## 불변식·오류 (Invariants & Errors)
 
-- 클러스터 등록 API 호출 순서는 catalog → validate → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일).
-- agent token 은 발급 응답에서만 표시하고 어디에도 저장하지 않는다(위저드 닫으면 소실).
+- 클러스터 등록 API 호출 순서는 catalog → validate → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일). connection-status 는 수동 버튼이 아니라 발급 단계 진입 시 5초 간격 자동 폴링(connected 되면 중단).
+- agent token 과 `install_command` 는 발급 응답에서만 표시하고 어디에도 저장하지 않는다(위저드 닫으면 소실).
 - `cluster_id` 는 소문자 slug, `repo_ref` 는 `owner/name` 형식을 클라이언트에서 선검증한다.
 - 등록 성공 시 `['clusters']` invalidate — 목록 화면이 즉시 갱신된다.

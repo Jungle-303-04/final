@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -10,13 +10,13 @@ status: synced
 ## 책임 (Responsibility)
 
 - 클러스터 목록/인벤토리(워크로드·팟·노드·서비스·리소스·이벤트) 조회 훅과 화면, 비동기 스케일/재시작 명령을 제공한다.
-- `useClusters`/`useClusterSummary`/`useWorkloads` 는 [fleet](./fleet.md)·[metrics](./metrics.md)·[org/AccessView](./org.md)·[resources](./resources.md) 도 소비하는 공용 데이터 훅이다.
+- `useClusters`/`useClusterSummary`/`useWorkloads`/`useClusterUsage` 는 [fleet](./fleet.md)·[metrics](./metrics.md)·[org/AccessView](./org.md)·[resources](./resources.md) 도 소비하는 공용 데이터 훅이다.
 
 ## 의존성 (Dependencies)
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptCluster`), `@/shared/lib/live`(`liveStore`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·실시간·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptCluster`, `adaptInventorySummary`, `adaptWorkloadResource`, `adaptServiceResource`, `adaptK8sEventResource`, `adaptInventoryResource`), `@/shared/lib/live`(`liveStore`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·실시간·UI (인벤토리 응답은 전부 adapt 경유) |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 스케일/재시작 버튼 활성 |
 | import | `@/features/notifications/api`(`useTimeline`) | [notifications](./notifications.md) | 캐시 공유용 참조(`void useTimeline`) |
 | import | `@/features/resources/RegisterClusterWizard` | [resources](./resources.md) | 목록 화면의 등록 위저드 |
@@ -29,13 +29,17 @@ status: synced
 |---|---|---|---|
 | `clusterKeys` | `frontend/src/features/cluster/api.ts :: clusterKeys` | — | `list() = ['clusters']`, `summary(id) = ['clusters', id, 'summary']`, `inv(id, kind) = ['clusters', id, 'inv', kind]` |
 | `useClusters` | `frontend/src/features/cluster/api.ts :: useClusters` | GET `/clusters` → `{clusters: raw[]}` | 30s 폴링, `select: d.clusters.map(adaptCluster)` |
-| `useClusterSummary` | `frontend/src/features/cluster/api.ts :: useClusterSummary` | GET `/clusters/${id}/inventory/summary` → `ClusterSummary` | `(id: string \| undefined)`, `enabled: !!id`, 30s |
-| `useWorkloads` | `frontend/src/features/cluster/api.ts :: useWorkloads` | GET `/clusters/${id}/inventory/workloads` | 30s, select `.workloads` |
-| `useResources` | `frontend/src/features/cluster/api.ts :: useResources` | GET `/clusters/${id}/inventory/resources[?kind=]` | `(id, kind?)`, 쿼리키 kind ?? 'all', select `.resources` |
-| `useServices` | `frontend/src/features/cluster/api.ts :: useServices` | GET `/clusters/${id}/inventory/services` | select `.services` |
-| `useClusterEvents` | `frontend/src/features/cluster/api.ts :: useClusterEvents` | GET `/clusters/${id}/inventory/events` | select `.events` |
-| `useScale` | `frontend/src/features/cluster/api.ts :: useScale` | POST `/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/scale` body `{replicas}` | `(clusterId)` → mutation `({ns, name, replicas})`. 성공: toast info `'스케일 명령을 큐에 등록했습니다'` + `clusterKeys.list()` invalidate |
-| `useRestart` | `frontend/src/features/cluster/api.ts :: useRestart` | POST `/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart` | 성공: toast info `'재시작 명령을 큐에 등록했습니다'` |
+| `useClusterSummary` | `frontend/src/features/cluster/api.ts :: useClusterSummary` | GET `/clusters/${id}/inventory/summary` → raw envelope(`latest_snapshot.summary`) | `(id: string \| undefined)`, `enabled: !!id`, 30s, `select: adaptInventorySummary` → `ClusterSummary` |
+| `useWorkloads` | `frontend/src/features/cluster/api.ts :: useWorkloads` | GET `/clusters/${id}/inventory/resources?resource_type=pod` → `{resources: raw[]}` | 쿼리키 `inv(id,'pods')`, `enabled: !!id`, 30s, select `d.resources.map(adaptWorkloadResource)` |
+| `useResources` | `frontend/src/features/cluster/api.ts :: useResources` | GET `/clusters/${id}/inventory/resources[?resource_type=]` | `(id, kind?)`, 쿼리키 kind ?? 'all', `enabled: !!id`, select `d.resources.map(adaptInventoryResource)` |
+| `useServices` | `frontend/src/features/cluster/api.ts :: useServices` | GET `/clusters/${id}/inventory/services` → `{resources: raw[]}` | `enabled: !!id`, select `d.resources.map(adaptServiceResource)` |
+| `UsageSample` | `frontend/src/features/cluster/api.ts :: UsageSample` | — | `{ sampled_at: string \| null; usage: Record<string, number> }` |
+| `useClusterUsage` | `frontend/src/features/cluster/api.ts :: useClusterUsage` | GET `/clusters/${id}/usage?limit=288` → `{samples: UsageSample[]}` | `(id: string \| undefined)`, 쿼리키 `['clusters', id, 'usage']`, `enabled: !!id`, 60s, select `.samples`. 스냅샷마다 적재되는 실측 usage 롤업 시계열(인벤토리 기반 장기 추이 — LIVE 스트림과 별개). [metrics](./metrics.md) 가 소비 |
+| `useClusterEvents` | `frontend/src/features/cluster/api.ts :: useClusterEvents` | GET `/clusters/${id}/inventory/events` → `{resources: raw[]}` | `enabled: !!id`, select `d.resources.map(adaptK8sEventResource)` |
+| `useScale` | `frontend/src/features/cluster/api.ts :: useScale` | POST `/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/scale` body `{replicas}` | `(clusterId)` → mutation `({ns, name, replicas})`. 성공: toast info `'스케일 명령을 큐에 등록했습니다'` + `clusterKeys.list()` invalidate. 실패: toast danger(`commandFailureMessage`) |
+| `useRestart` | `frontend/src/features/cluster/api.ts :: useRestart` | POST `/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart` | 성공: toast info `'재시작 명령을 큐에 등록했습니다'`. 실패: toast danger(`commandFailureMessage`) |
+
+내부 헬퍼 `commandFailureMessage(action, err)`(비공개) — 제어 명령 실패를 조용히 삼키지 않는다: `kind==='forbidden'` → `'<action> 거부됨 — 권한 또는 정책(policy)이 허용하지 않습니다'`, `'invalid'` → `'<action> 실패 — <detail ?? 정책 조건 불일치 안내>'`, 그 외 → `'<action> 실패 — <detail ?? 재시도 안내>'`.
 
 ## 컴포넌트
 
@@ -71,10 +75,10 @@ status: synced
 
 내부(비공개) 서브컴포넌트:
 
-- `WorkloadsTab { clusterId; admin; onScale: (w) => void; onRestart: (w) => void }` — workloads 를 `${namespace}/${name.replace(/-pod-.*/,'')}` 키로 그룹핑해 deployment 행 생성. 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
+- `WorkloadsTab { clusterId; admin; onScale: (w) => void; onRestart: (w) => void }` — workloads 를 `${namespace}/${workload_name || name}` 키로 그룹핑해 deployment 행 생성(`workload_name` 은 인벤토리 summary 의 owner_name — [shared/adapt](shared.md#어댑터-libadaptts) `adaptWorkloadResource` 가 채움). 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
 - `ServicesTab` — 이름/네임스페이스/타입/ClusterIP(code)/포트.
 - `ResourcesTab` — Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
-- `EventsTab` — 비면 EmptyState('이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
+- `EventsTab` — 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
 
 ## 라우트
 
@@ -88,5 +92,6 @@ status: synced
 
 - 팟 hot 강조는 폴링을 기다리지 않고 WS 스냅샷 이름 매칭으로 즉시 반영한다.
 - 스케일/재시작은 비동기 수락(202 성격) — 성공 토스트는 "큐 등록"을 의미하며 완료를 뜻하지 않는다.
-- 스케일/재시작 버튼 노출 자체는 항상, 활성화만 `useIsAdmin()` — 서버가 최종 검증.
+- 스케일/재시작 버튼 노출 자체는 항상, 활성화만 `useIsAdmin()` — 서버가 최종 검증. 서버 거부(403 policy/422 검증)는 `commandFailureMessage` 로 사유를 danger 토스트에 그대로 노출한다.
+- 인벤토리 응답(`resources[]` + `summary` envelope)은 반드시 shared/adapt 의 `adapt*Resource` 계열로 정규화해서 사용한다 — 뷰에서 raw 필드 직접 접근 금지.
 - 파일 말미의 `void useTimeline;` 참조는 의도적(캐시 공유 주석) — 제거하지 않는다.

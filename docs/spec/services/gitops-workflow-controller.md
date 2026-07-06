@@ -1,5 +1,5 @@
 ---
-source_commit: 20945a70
+source_commit: 664925a6
 status: synced
 ---
 
@@ -9,9 +9,11 @@ status: synced
 
 ## 책임 (Responsibility)
 
-- 기존 git-pull → render → diff → command 워커 체인이 발행하는 이벤트 12종을 **관찰만** 하고, 그 흐름을 콘솔이 읽을 수 있는 사용자 실행 객체(Application, WorkflowRun, WorkflowRunStep, Approval)로 기록한다.
+- 기존 git-pull → render → diff → command 워커 체인이 발행하는 이벤트 12종을 **관찰**해, 그 흐름을 콘솔이 읽을 수 있는 사용자 실행 객체(Application, WorkflowRun, WorkflowRunStep, Approval)로 기록한다. (추가로 자기 발행 `workflow.run.completed`와 target 도메인의 `cluster.desired_state.changed`를 구독 — 아래 승격/글로벌 룰.)
 - 워크플로 상태 전이에 대응하는 `workflow.*` / `approval.*` 이벤트를 발행한다.
 - 승인 승인(`approval.granted`) 시 details에 실린 `command_requested` payload를 `command.requested`로 재발행해 적용 체인을 재개한다.
+- **승격 파이프라인**: 바인딩 `deploy_policy`의 `{"promotes_to_binding_id": ...}` 룰 — run 성공 종결(`workflow.run.completed`) 시 같은 commit으로 대상 바인딩의 표준 파이프라인을 `git.webhook.received` 재발행으로 연다.
+- **글로벌 서비스**: 바인딩 `deploy_policy`의 `{"global": true}` 룰 — (a) 웹훅을 같은 repo의 global 바인딩들로 fan-out, (b) 신규 클러스터 등록(`cluster.desired_state.changed`, reason=`"target registered"`) 시 글로벌 그룹 바인딩을 자동 생성하고 템플릿 바인딩의 최근 성공 run으로 초기 배포를 연다.
 - 하지 않는 것: manifest 렌더, diff 계산, PR 생성, 클러스터 명령 실행 — 기존 워커 체인은 그대로 유지되고 이 워커는 같은 이벤트를 병렬 구독한다.
 
 ## 의존성 (Dependencies)
@@ -22,20 +24,23 @@ status: synced
 | import | `domains.gitops.events` | [gitops 도메인](../domains/gitops.md) | 구독/발행 이벤트 body 전부 (아래 표) |
 | import | `domains.gitops.repository` | [gitops 도메인](../domains/gitops.md) | `derive_application_id`, `derive_approval_id`, `derive_deployment_binding_id`, `derive_repository_id`, `derive_watch_target_id`, `derive_workflow_run_id` |
 | import | `domains.scm.events` | [scm 도메인](../domains/scm.md) | `SafePrCreatedBody`, `SafePrFailedBody` |
+| import | `domains.target.events` | [target 도메인](../domains/target.md) | `ClusterDesiredStateChangedBody` — 신규 클러스터 등록 감지(글로벌 바인딩 자동 attach) |
 | import | `packages.config.constants` | [config 패키지](../packages/config.md) | `CommandStatus`, `Sandbox`, `Target` |
+| import | `packages.config.logs` | [config 패키지](../packages/config.md) | `get_logger` — 승격/fan-out 관찰 로그 |
 | import | `packages.contracts.event_bus` | [contracts 패키지](../packages/contracts.md) | `EventBody`, `JsonObject` |
 | import | `packages.contracts.gitops` | [contracts 패키지](../packages/contracts.md) | `DEFAULT_ENVIRONMENT`, `ApprovalStatus`, `WorkflowRunStatus`, `WorkflowStepName`, `WorkflowStepStatus` |
 | import | `packages.contracts.identity` | [contracts 패키지](../packages/contracts.md) | `DEFAULT_WORKSPACE_ID`, `ResourceRole` |
 | import | `packages.contracts.stores` | [contracts 패키지](../packages/contracts.md) | `WorkflowStore` (ctx.db 능력) |
 | import | `packages.runtime.app` | [runtime 패키지](../packages/runtime.md) | `App`, `EventContext` |
-| 구독 | gitops/scm/command 이벤트 12종 | [manifest-render-worker](gitops-manifest-render-worker.md), [scm-worker](gitops-scm-worker.md) 등 발행 | 입력 |
-| 발행 | `workflow.*`, `approval.requested`, `command.requested` | 콘솔/게이트웨이·command 계열 소비 | 출력 |
+| 구독 | gitops/scm/command 이벤트 12종 + `workflow.run.completed`(자기 발행 재구독) + `cluster.desired_state.changed` | [manifest-render-worker](gitops-manifest-render-worker.md), [scm-worker](gitops-scm-worker.md) 등 발행 | 입력 |
+| 발행 | `workflow.*`, `approval.requested`, `command.requested`, (조건부) `git.webhook.received` | 콘솔/게이트웨이·command 계열·[git-pull-worker](gitops-git-pull-worker.md) 소비 | 출력 |
 
 ## 공개 인터페이스 (Public API)
 
 | 심볼 | 시그니처/값 | 앵커 |
 |---|---|---|
 | `app` | `App("workflow-controller")` | `src/services/gitops/workflow-controller/app.py :: app` |
+| `LOGGER` | `get_logger(__name__)` | `src/services/gitops/workflow-controller/app.py :: LOGGER` |
 | `MANUAL_APPROVAL_ROLE` | `ResourceRole.RELEASE_OPERATOR.value` = `"release_operator"` | `src/services/gitops/workflow-controller/app.py :: MANUAL_APPROVAL_ROLE` |
 | `POLICY_DECISION_REF_PREFIX` | `"policy-decision"` | `src/services/gitops/workflow-controller/app.py :: POLICY_DECISION_REF_PREFIX` |
 | `POLICY_ROUTE_SAFE_PR` | `"safe_pr"` | `src/services/gitops/workflow-controller/app.py :: POLICY_ROUTE_SAFE_PR` |
@@ -52,6 +57,15 @@ status: synced
 | `command_result_succeeded` | `def command_result_succeeded(result: JsonObject) -> bool` | `src/services/gitops/workflow-controller/app.py :: command_result_succeeded` |
 | `rollout_result_details` | `def rollout_result_details(command_id: str, result: JsonObject) -> JsonObject` | `src/services/gitops/workflow-controller/app.py :: rollout_result_details` |
 | `workflow_created_fields` | `def workflow_created_fields(payload: JsonObject) -> JsonObject` | `src/services/gitops/workflow-controller/app.py :: workflow_created_fields` |
+| `PROMOTES_TO_KEY` | `"promotes_to_binding_id"` — deploy_policy 승격 룰 키 | `src/services/gitops/workflow-controller/app.py :: PROMOTES_TO_KEY` |
+| `GLOBAL_BINDING_KEY` | `"global"` — deploy_policy 글로벌 룰 키 | `src/services/gitops/workflow-controller/app.py :: GLOBAL_BINDING_KEY` |
+| `DEFAULT_PROMOTION_REPLICAS` | `2` — diff 상세에 replicas가 없을 때 fallback | `src/services/gitops/workflow-controller/app.py :: DEFAULT_PROMOTION_REPLICAS` |
+| `CLUSTER_REGISTERED_REASON` | `"target registered"` — 반응 대상 `cluster.desired_state.changed` reason | `src/services/gitops/workflow-controller/app.py :: CLUSTER_REGISTERED_REASON` |
+| `binding_policy` | `def binding_policy(binding: JsonObject) -> JsonObject` — `binding["deploy_policy"]`를 dict로 (없으면 `{}`) | `src/services/gitops/workflow-controller/app.py :: binding_policy` |
+| `promoted_image_and_replicas` | `async def promoted_image_and_replicas(ctx: EventContext[WorkflowStore], workflow_run_id: str) -> tuple[str, int]` — 소스 run의 `diff` 스텝 details에서 `desired_image`·`basis.replicas`(파싱 실패·부재 시 2)를 읽음(합성 금지) | `src/services/gitops/workflow-controller/app.py :: promoted_image_and_replicas` |
+| `entry_webhook_for_binding` | `def entry_webhook_for_binding(*, workspace_id, application_id, binding, commit_sha, image, replicas, repo_ref, branch) -> GitWebhookReceivedBody` — 대상 바인딩으로 표준 파이프라인을 재진입시키는 입구 이벤트 생성 | `src/services/gitops/workflow-controller/app.py :: entry_webhook_for_binding` |
+| `run_exists_for` | `async def run_exists_for(ctx, *, workspace_id, application_id, binding, commit_sha) -> bool` — `derive_workflow_run_id`로 결정적 run_id를 파생해 `get_workflow_run` 존재 확인 | `src/services/gitops/workflow-controller/app.py :: run_exists_for` |
+| `fanout_global_bindings` | `async def fanout_global_bindings(evt: GitWebhookReceivedBody, ctx) -> AsyncIterator[EventBody]` — `on_git_webhook`이 호출하는 글로벌 fan-out 생성기 | `src/services/gitops/workflow-controller/app.py :: fanout_global_bindings` |
 
 이벤트 핸들러 (모두 `@app.on(...)`, `async def ...(evt, ctx: EventContext[WorkflowStore]) -> AsyncIterator[EventBody]`):
 
@@ -70,6 +84,8 @@ status: synced
 | `on_command_queued` | `CommandQueuedForAgentBody` | `src/services/gitops/workflow-controller/app.py :: on_command_queued` |
 | `on_command_rejected` | `CommandRejectedBody` | `src/services/gitops/workflow-controller/app.py :: on_command_rejected` |
 | `on_command_completed` | `CommandCompletedBody` | `src/services/gitops/workflow-controller/app.py :: on_command_completed` |
+| `on_run_completed_promote` | `WorkflowRunCompletedBody` (자기 발행 재구독 — 승격 룰) | `src/services/gitops/workflow-controller/app.py :: on_run_completed_promote` |
+| `on_cluster_registered_attach_globals` | `ClusterDesiredStateChangedBody` (글로벌 바인딩 자동 attach) | `src/services/gitops/workflow-controller/app.py :: on_cluster_registered_attach_globals` |
 
 ### 헬퍼 의미
 
@@ -87,7 +103,8 @@ status: synced
 
 `ctx.db`는 `WorkflowStore`(`src/packages/contracts/stores.py :: WorkflowStore`). 사용 메서드:
 `upsert_application`, `start_workflow_run`, `update_workflow_run`, `record_workflow_step`, `resolve_workflow_approval`, `attach_workflow_command`, `update_workflow_run_for_command`, `get_workflow_identity_for_command`.
-실제 테이블(Application, WorkflowRun, WorkflowRunStep, Approval)과 upsert 규칙은 [gitops 도메인](../domains/gitops.md)(`src/domains/gitops/repository.py :: RepoChangeRepository`) 참조.
+승격/글로벌 경로는 Protocol 밖의 리포지토리 조회 메서드를 추가로 사용한다(실 구현 `RepoChangeRepository`가 제공): `get_deployment_binding`, `list_repository_deployment_bindings`, `list_workspace_deployment_bindings`, `get_workflow_run`, `get_workflow_step_details`, `latest_succeeded_run_for_binding`, `get_application`, `register_deployment_binding` — 앵커 `src/domains/gitops/repository.py :: RepoChangeRepository.get_deployment_binding` 등(각 메서드명 동일).
+실제 테이블(Application, WorkflowRun, WorkflowRunStep, Approval, DeploymentBinding)과 upsert 규칙은 [gitops 도메인](../domains/gitops.md)(`src/domains/gitops/repository.py :: RepoChangeRepository`) 참조.
 
 **DB 레벨 전이 가드** (`src/domains/gitops/repository.py :: WORKFLOW_STATUS_RANKS`, `:: workflow_transition_guard`): 상태에 순위를 부여해 재배달·지연 이벤트가 뒤 단계 상태를 앞 단계로 되돌리는 회귀를 차단한다.
 
@@ -123,6 +140,8 @@ status: synced
 | `CommandQueuedForAgentBody` | `command.queued_for_agent` | `command_id`, `cluster_id`, 식별자 필드들, `approval_ref`, `policy_decision_ref` | `src/domains/command/events.py :: CommandQueuedForAgentBody` |
 | `CommandRejectedBody` | `command.rejected` | `reason`, `requested: JsonObject` | `src/domains/command/events.py :: CommandRejectedBody` |
 | `CommandCompletedBody` | `command.completed` | `command_id`, `result: JsonObject` | `src/domains/command/events.py :: CommandCompletedBody` |
+| `WorkflowRunCompletedBody` | `workflow.run.completed` | (발행 표와 동일 — 자기 발행 재구독, 승격 룰 트리거) | `src/domains/gitops/events.py :: WorkflowRunCompletedBody` |
+| `ClusterDesiredStateChangedBody` | `cluster.desired_state.changed` | `cluster_id`, `desired_state_version`, `components`, `reason`, `workspace_id`, `requested_by` — `reason == "target registered"`일 때만 반응 | `src/domains/target/events.py :: ClusterDesiredStateChangedBody` |
 
 ### 발행 (Publishes)
 
@@ -135,6 +154,7 @@ status: synced
 | `WorkflowRunFailedBody` | `workflow.run.failed` | `workflow_run_id`, `application_id`, `reason`, `workspace_id`, `binding_id`, `environment`, `details` | `src/domains/gitops/events.py :: WorkflowRunFailedBody` |
 | `ApprovalRequestedBody` | `approval.requested` | `approval_id`, `workflow_run_id`, `application_id`, `reason`, `workspace_id`, `binding_id`, `environment`, `requested_role = "release_operator"`, `details` | `src/domains/gitops/events.py :: ApprovalRequestedBody` |
 | `CommandRequestedBody` (조건부) | `command.requested` | `approval.granted.details["command_requested"]`를 `CommandRequestedBody.from_body`로 복원 | `src/domains/command/events.py :: CommandRequestedBody` |
+| `GitWebhookReceivedBody` (조건부) | `git.webhook.received` | `entry_webhook_for_binding`이 대상 바인딩 좌표(binding_id/environment/cluster_id/manifest_path 등)와 commit_sha·image·replicas로 구성 — 승격/글로벌 fan-out/신규 클러스터 초기 배포의 파이프라인 재진입 입구 | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
 
 ## 동작 (Behavior)
 
@@ -148,7 +168,7 @@ status: synced
 
 | # | 트리거(조건) | run 전이 (status / current_step / summary) | 스텝 기록 (step=status) | 발행 이벤트 |
 |---|---|---|---|---|
-| 1 | `git.webhook.received` | ensure_run: `started` / `git` / "git webhook received" (metadata: commit_sha, repo_ref) | `git`=`running` ("webhook accepted", details: commit_sha, branch) | `workflow.created`, `workflow.run.started`, `workflow.step.recorded` |
+| 1 | `git.webhook.received` | ensure_run: `started` / `git` / "git webhook received" (metadata: commit_sha, repo_ref) | `git`=`running` ("webhook accepted", details: commit_sha, branch) | `workflow.created`, `workflow.run.started`, `workflow.step.recorded` (+ 글로벌 fan-out 대상이 있으면 바인딩별 `git.webhook.received` — `fanout_global_bindings`) |
 | 2 | `git.changed` | ensure_run: `rendering` / `render` / "git change confirmed; rendering manifest" | `git`=`succeeded` ("git change confirmed") | `workflow.step.recorded` |
 | 3 | `manifest.rendered` | kind가 `Deployment`면 ensure_run(앱 이름 = metadata.name), 아니면 transition_run: `diffing` / `diff` / "manifest rendered; calculating desired diff" (metadata: kind, resource) | `render`=`succeeded` ("manifest rendered", details: rendered_manifest.to_body()) | `workflow.step.recorded` |
 | 4 | `manifest.invalid` | ensure_run: `failed` / `render` / "manifest render failed" (metadata: reason) | `render`=`failed` (message=evt.reason, details: manifest_path) | `workflow.step.recorded`, `workflow.run.failed` |
@@ -178,9 +198,35 @@ status: synced
 - `on_approval_granted`/`on_approval_rejected`/`on_command_rejected`는 `normalize_payload(evt.to_body())`/`normalize_payload(evt.requested)`를 직접 사용.
 - `on_command_completed`는 DB에서 `command_id`로 워크플로 identity를 역조회(`get_workflow_identity_for_command`; WorkflowRun에 없으면 AgentCommand payload에서 복원)한다.
 
+### 승격 파이프라인 / 글로벌 서비스
+
+두 룰 모두 바인딩의 `deploy_policy` JSONB에 선언된다 — 스키마·이벤트 계약 변경 없음. 재진입은 항상 `entry_webhook_for_binding`이 만든 `git.webhook.received`로 표준 파이프라인(렌더→디프→정책→승인→적용)을 그대로 탄다.
+
+**승격 (`on_run_completed_promote`)** — `workflow.run.completed` 구독:
+1. 소스 바인딩 조회(`get_deployment_binding`) → `deploy_policy["promotes_to_binding_id"]`가 없거나 자기 자신이면 종료.
+2. 대상 바인딩 조회 — 없으면 `promotion_target_missing` 경고 후 종료.
+3. 소스 run에서 `commit_sha` 조회(`get_workflow_run`) — 없으면 종료.
+4. **순환/재전달 가드**: `run_exists_for` — 대상 바인딩+같은 commit의 결정적 run_id가 이미 존재하면 no-op.
+5. Application 조회(`get_application`; `repo_ref`/`default_branch` 포함) 후 `promoted_image_and_replicas`로 소스 run의 `diff` 스텝 details에서 image·replicas를 읽음 — image가 비면 `promotion_skipped_no_image` 경고 후 종료(합성 금지).
+6. `promotion_triggered` 로그 후 대상 바인딩용 `git.webhook.received` yield.
+
+**글로벌 fan-out (`fanout_global_bindings`)** — `on_git_webhook` 마지막에 호출:
+1. 소스 바인딩이 이미 global이면 종료 — 자식 웹훅은 재확장하지 않아 증폭이 1단으로 끝난다.
+2. `repository_id`(소스 바인딩 → evt 순 fallback)로 `list_repository_deployment_bindings` 조회.
+3. 형제 바인딩 중 자기 자신 제외 + `deploy_policy["global"]` truthy + 같은 commit run 미존재(`run_exists_for`)인 것마다 `global_binding_fanout` 로그 후 evt의 image/replicas/repo_ref/branch를 그대로 실은 `git.webhook.received` yield.
+
+**신규 클러스터 자동 attach (`on_cluster_registered_attach_globals`)** — `cluster.desired_state.changed` 구독, `reason == "target registered"`일 때만:
+1. `list_workspace_deployment_bindings`에서 global 바인딩만 골라 `(repository_id, app_name, namespace)` 그룹으로 묶는다.
+2. 그룹에 새 클러스터의 바인딩이 이미 있으면 skip. 없으면 템플릿(그룹 첫 바인딩)을 복제해 `register_deployment_binding`으로 새 클러스터 바인딩 생성(`global_binding_attached` 로그).
+3. 템플릿 바인딩의 `latest_succeeded_run_for_binding`이 있으면 그 run의 commit·image(`promoted_image_and_replicas`)로 새 바인딩에 초기 배포 `git.webhook.received` yield. 배포 이력이 없으면 skip — 다음 git 변경 때 fan-out으로 합류.
+
+관련: `POST /applications/{id}/deployments`가 `cluster_id="*"`를 받아 모든 등록 클러스터에 대해 `DEPLOY_RUN` 권한을 사전 검증한 뒤 클러스터별로 전개하는 글로벌 배포 입구는 게이트웨이/도메인 라우터 담당(`src/domains/applications/router.py`) — 이 워커의 범위 밖.
+
 ## 불변식·오류 (Invariants & Errors)
 
-- **관찰자 원칙**: 이 워커는 기존 처리 체인의 이벤트를 재발행하거나 대체하지 않는다. 유일한 예외는 `approval.granted` 시 details에 실려 온 `command_requested`를 `command.requested`로 발행하는 재개 경로.
+- **관찰자 원칙**: 이 워커는 기존 처리 체인의 이벤트를 재발행하거나 대체하지 않는다. 예외는 두 가지 — (1) `approval.granted` 시 details에 실려 온 `command_requested`를 `command.requested`로 발행하는 재개 경로, (2) 승격/글로벌 룰이 새 (binding, commit) 좌표로 발행하는 `git.webhook.received` 파이프라인 재진입 경로.
+- **승격/fan-out 수렴**: 재진입 run_id는 `derive_workflow_run_id`로 결정적이라 `run_exists_for` 가드가 승격 순환·재전달·중복 fan-out을 no-op으로 수렴시킨다. 글로벌 fan-out은 소스 바인딩이 global이면 실행되지 않아(자식 재확장 금지) 증폭이 1단으로 끝난다.
+- **승격은 합성하지 않는다**: 승격/초기 배포의 image·replicas는 소스 run의 `diff` 스텝 details(`desired_image`, `basis.replicas`)에서만 읽는다. image가 없으면 경고 후 skip.
 - **상태 회귀 차단**: run 상태 갱신은 DB 레벨 가드(`workflow_transition_guard`)로 보호 — 종결 상태(`succeeded`/`failed`) 이후 갱신 불가, 낮은 순위로의 역행 불가. 핸들러는 재배달에 대해 멱등(스텝은 `(workflow_run_id, name)` upsert).
 - **application dedup**: `upsert_application`이 같은 (workspace, repository, name)의 기존 앱으로 병합하면 `ensure_run`이 canonical `application_id` 기준으로 `workflow_run_id`를 재파생한다.
 - `on_command_completed`에서 identity를 찾지 못하면(`None`) 아무 이벤트도 발행하지 않고 조용히 종료한다.
