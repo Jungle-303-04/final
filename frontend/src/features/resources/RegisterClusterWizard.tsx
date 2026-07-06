@@ -13,7 +13,6 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const [clusterId, setClusterId] = useState('');
   const [name, setName] = useState('');
   const [issued, setIssued] = useState<{ agent_token: string; install_manifest: string } | null>(null);
-  const [connected, setConnected] = useState(false);
 
   // 실백엔드 catalog 는 category 별 객체: { providers: { cloud: [...], deploy: [...], ... } }
   const catalog = useQuery({
@@ -31,11 +30,15 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     }),
     onSuccess: d => { setIssued(d); queryClient.invalidateQueries({ queryKey: ['clusters'] }); },
   });
-  const checkConn = useMutation({
-    mutationFn: () => get<{ connection_status: string }>(`/clusters/${clusterId}/connection-status`),
-    onSuccess: d => setConnected(d.connection_status === 'connected'),
+  // 발급 후 5초 간격 자동 폴링 — 에이전트가 붙는 순간 connected 로 전환된다.
+  const connQ = useQuery({
+    queryKey: ['cluster-conn', clusterId],
+    queryFn: () => get<{ connection_status: string }>(`/clusters/${clusterId}/connection-status`),
+    enabled: step === 3 && !!issued,
+    refetchInterval: q => (q.state.data?.connection_status === 'connected' ? false : 5000),
   });
-  const reset = () => { setStep(0); setIssued(null); setConnected(false); setClusterId(''); setName(''); onClose(); };
+  const connected = connQ.data?.connection_status === 'connected';
+  const reset = () => { setStep(0); setIssued(null); setClusterId(''); setName(''); onClose(); };
   const slugOk = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(clusterId);
 
   return (
@@ -89,10 +92,18 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
             <CodeBlock code={issued.install_manifest} />
           </Field>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Button onClick={() => checkConn.mutate()} loading={checkConn.isPending}>연결 확인</Button>
-            {connected && <Badge tone="ok">connected</Badge>}
+            {connected
+              ? <Badge tone="ok">connected — 에이전트 연결 완료</Badge>
+              : <Badge tone="warn">연결 대기 중… ({connQ.data?.connection_status ?? '확인 중'})</Badge>}
+            {!connected && <Button onClick={() => connQ.refetch()} loading={connQ.isFetching}>지금 확인</Button>}
             <span style={{ marginLeft: 'auto' }}><Button variant="primary" onClick={reset}>완료</Button></span>
           </div>
+          {!connected && (
+            <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginTop: 8 }}>
+              위 install manifest 를 대상 클러스터에 <code>kubectl apply -f</code> 하면 에이전트가 관리
+              플레인으로 접속합니다. 적용 후 보통 30초~1분 안에 자동으로 connected 로 바뀝니다 (5초 간격 자동 확인).
+            </p>
+          )}
         </>
       )}
     </Modal>
