@@ -213,6 +213,27 @@ class ApiEventGateway:
 - `accept_via_outbox_if_supported`: recorder 가 `unit_of_work`+`stage_events` 를 제공하면 봉투를 만들고 `asyncio.to_thread` 안에서 `unit_of_work()` 트랜잭션으로 `record_event` + `stage_events` (record+outbox 원자 적재; 발행은 relay 몫). 미지원이면 `None`.
 - `accept_body`: `body.__subject__` 필수(없으면 TypeError). actor 주입은 body 필드에 `requested_by`/`actor` 키가 **존재하는 경우만**(dataclass 면 `payload_name` 메타 포함 필드 키 집합으로 판정).
 
+### `command_wakeup.py` — command long-poll LISTEN/NOTIFY 보조
+
+명령 전달의 source of truth는 항상 `agent_commands` 테이블이다.
+이 모듈은 정확성 경로가 아니라 지연과 유휴 DB 폴링을 줄이기 위한 wakeup 경로다.
+리스너가 없거나 끊겨도 agent poll은 기존 timeout 기반으로 계속 동작해야 한다.
+
+| 심볼 | 내용 |
+|---|---|
+| `AGENT_COMMAND_CHANNEL` | `"agent_command_queued"` — `queue_agent_command`가 `pg_notify`로 쓰는 채널 |
+| `COMMAND_NOTIFY_DATABASE_URL_ENV` | `"COMMAND_NOTIFY_DATABASE_URL"` — gateway lifespan이 listener를 시작할 때 읽는 직결 DB URL env |
+| `RECONNECT_DELAY_SECONDS` | listener 예외 후 재접속 대기 5초 |
+| `wakeup_key(workspace_id, cluster_id)` | payload 문자열 `"<workspace_id>/<cluster_id>"` 생성 |
+| `CommandWakeup.wait(workspace_id, cluster_id, timeout)` | 같은 key의 `asyncio.Event`를 등록하고 알림 또는 timeout까지 대기. 알림이 없으면 sleep과 같은 의미 |
+| `CommandWakeup.notify_local(payload)` | payload key에 해당하는 모든 waiter를 깨우고 깨운 수를 반환 |
+| `CommandWakeup.start(notify_url)` | 중복 실행이면 no-op, 아니면 background task로 Postgres `LISTEN agent_command_queued` 시작 |
+| `CommandWakeup.stop()` | background listener task 취소 |
+| `WAKEUP` | gateway/command router가 공유하는 프로세스 전역 인스턴스 |
+
+운영 주의: PgBouncer transaction pooling 연결에서는 `LISTEN`이 안정적으로 동작하지 않으므로 `COMMAND_NOTIFY_DATABASE_URL`은 Postgres 직결 URL을 넣는다.
+미설정이면 listener를 시작하지 않고, command router의 `WAKEUP.wait()`는 timeout까지 기다린 뒤 다시 DB lease를 시도한다.
+
 ### `dependencies.py` — FastAPI DI
 
 ```python
@@ -328,5 +349,6 @@ async def deliver(call: Callable[[], Awaitable[Any]], ok: Callable[[Any], Any],
 | `OUTBOX_PUBLISH_TIMEOUT_SECONDS` | int | `10` | 건당 발행 대기 한도 |
 | `OUTBOUND_CALLBACK_BASE_URL` | str | `http://api-gateway:8000` | HttpOutbound 기본 base URL |
 | `OUTBOUND_HTTP_TIMEOUT_SECONDS` | int | `5` | outbound POST 타임아웃 |
+| `COMMAND_NOTIFY_DATABASE_URL` | str | 미설정 | 설정 시 api-gateway가 command long-poll wakeup용 Postgres LISTEN 연결을 연다. 미설정이면 기존 주기 폴링만 사용 |
 | `PORT` | int | `8000` (`Runtime.DEFAULT_HTTP_PORT`) | FastApiService 포트 |
 | `SERVICE_NAME` | str | 서비스 이름으로 setdefault | 프로세스 정체성 |

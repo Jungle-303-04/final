@@ -49,6 +49,9 @@ POST /agent/commands/{command_id}/result
 
 이 route들은 browser session이 아니라 `x-agent-token`으로 agent identity를 확인한다.
 agent token에서 workspace와 cluster를 결정해야 하므로, body에서 임의로 받은 workspace를 믿으면 안 된다.
+poll은 DB의 `agent_commands`를 lease하는 것이 정본이다.
+`COMMAND_NOTIFY_DATABASE_URL`이 설정된 gateway는 Postgres `LISTEN/NOTIFY`로 새 command가 queue되는 순간 poll 대기를 깨우지만, 이건 지연을 줄이는 보조 경로다.
+리스너가 꺼져도 `timeout`까지 기다렸다가 다시 DB lease를 시도하므로 기능 자체는 기존 long-poll과 동일하게 동작해야 한다.
 
 이 단계의 완료 기준은 poll부터 result까지 어떤 repository를 쓰는지 설명할 수 있는 것이다.
 
