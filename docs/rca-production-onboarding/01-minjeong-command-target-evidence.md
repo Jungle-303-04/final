@@ -201,8 +201,8 @@ raw response 전체를 그대로 넣지 않고 필요한 summary와 supporting d
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_target_metric_evidence.py \
-  tests/test_target_log_evidence.py \
-  tests/test_target_trace_evidence.py \
+  tests/test_target_telemetry_evidence.py \
+  tests/test_target_telemetry_evidence.py \
   -q
 ```
 
@@ -269,8 +269,8 @@ dependency timeout, span error, service path를 확인한다.
 PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_target_kubernetes_evidence.py \
   tests/test_target_metric_evidence.py \
-  tests/test_target_log_evidence.py \
-  tests/test_target_trace_evidence.py \
+  tests/test_target_telemetry_evidence.py \
+  tests/test_target_telemetry_evidence.py \
   -q
 ```
 
@@ -368,8 +368,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_target_evidence_jobs.py \
   tests/test_target_kubernetes_evidence.py \
   tests/test_target_metric_evidence.py \
-  tests/test_target_log_evidence.py \
-  tests/test_target_trace_evidence.py \
+  tests/test_target_telemetry_evidence.py \
+  tests/test_target_telemetry_evidence.py \
   tests/test_telemetry_registry.py \
   -q
 ```
