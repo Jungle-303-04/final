@@ -10,6 +10,8 @@ AUTH_VERIFY_EMAIL_PATH = "/auth/verify-email"
 AUTH_RESEND_VERIFICATION_PATH = "/auth/resend-verification"
 AUTH_APPROVE_USER_PATH = "/auth/users/{user_id}/approve"
 GITHUB_WEBHOOK_PATH = "/github/webhook"
+# 외부 모니터링(Alertmanager/Grafana) 알림 수신 — 인시던트 파이프라인 트리거.
+ALERTMANAGER_WEBHOOK_PATH = "/webhooks/alertmanager"
 AGENT_CONNECT_PATH = "/agent/connect"
 AGENT_EVIDENCE_PATH = "/agent/evidence"
 TARGETS_PATH = "/targets"
