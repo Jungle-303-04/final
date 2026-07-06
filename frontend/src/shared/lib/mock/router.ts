@@ -55,6 +55,28 @@ const routes: [string, string, Handler][] = [
     latest_snapshot: { snapshot_id: `snap-${p.id}`, cluster_id: p.id, status: 'completed', summary: fx.summaryOf(p.id) },
     counts: {},
   })],
+  ['GET', '/clusters/:id/usage', (p) => {
+    // 실 계약과 동형 — 스냅샷 주기(30s)로 쌓인 usage rollup 시계열을 흉내낸다
+    const pods = (fx.workloadsByCluster[p.id] ?? []);
+    const running = pods.filter(w => w.phase === 'Running').length;
+    const restarts = pods.reduce((a, w) => a + w.restarts, 0);
+    const now = Date.now();
+    return {
+      cluster_id: p.id,
+      samples: Array.from({ length: 24 }, (_, i) => ({
+        sampled_at: new Date(now - (23 - i) * 30_000).toISOString(),
+        usage: {
+          pod_total: pods.length,
+          pod_running: Math.max(0, running - (i % 5 === 3 ? 1 : 0)),
+          pod_pending: i % 5 === 3 ? 1 : 0,
+          pod_failed: 0,
+          restart_total: restarts + Math.floor(i / 6),
+          node_total: 3,
+          node_ready: 3,
+        },
+      })),
+    };
+  }],
   ['GET', '/clusters/:id/inventory/workloads', (p) => ({ workloads: fx.workloadsByCluster[p.id] ?? [] })],
   ['GET', '/clusters/:id/inventory/resources', (p, _b, q) => {
     const rt = q.get('resource_type');

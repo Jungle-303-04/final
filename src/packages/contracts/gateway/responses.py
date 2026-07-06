@@ -172,6 +172,16 @@ class InventoryResourceListResponse(StrictModel):
     resources: list[InventoryResourceResponse]
 
 
+class ClusterUsageSample(StrictModel):
+    sampled_at: str | None = None
+    usage: JsonMap = Field(default_factory=dict)
+
+
+class ClusterUsageResponse(StrictModel):
+    cluster_id: str
+    samples: list[ClusterUsageSample] = Field(default_factory=list)
+
+
 class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None

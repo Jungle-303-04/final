@@ -36,7 +36,29 @@ def kubernetes_evidence_to_inventory_snapshot(
             "status": "healthy" if resources else "empty",
             "provider_status": _mapping(kubernetes.get("provider_status")),
         },
-        "usage": {},
+        "usage": _usage_rollup(kubernetes),
+    }
+
+
+def _usage_rollup(kubernetes: JsonObject) -> JsonObject:
+    """스냅샷 시점의 실측 활용 롤업 — cluster_usage_samples 시계열의 데이터 원천.
+
+    agent 가 실제로 관측한 pod phase·재시작 수·node ready 만 집계한다(합성 값 금지).
+    관측 대상이 하나도 없으면 빈 dict — 저장소가 usage 행을 만들지 않는다(기존 동작).
+    """
+    pods = _items(kubernetes, "pods")
+    nodes = _items(kubernetes, "nodes")
+    if not pods and not nodes:
+        return {}
+    phases = Counter(_text(pod.get("phase"), "Unknown") for pod in pods)
+    return {
+        "pod_total": len(pods),
+        "pod_running": phases.get("Running", 0),
+        "pod_pending": phases.get("Pending", 0),
+        "pod_failed": phases.get("Failed", 0),
+        "restart_total": sum(int(pod.get("restart_total") or 0) for pod in pods),
+        "node_total": len(nodes),
+        "node_ready": sum(1 for node in nodes if bool(node.get("ready"))),
     }
 
 

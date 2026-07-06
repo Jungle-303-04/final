@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
-import { useClusters, useClusterSummary, useWorkloads } from '@/features/cluster/api';
+import { useClusters, useClusterSummary, useClusterUsage, useWorkloads } from '@/features/cluster/api';
 import { commandResultMessage, isTerminal, summarizeTelemetryResult, useCommandStatus } from '@/features/metrics/api';
 import { Badge, Button, Card, StatBox } from '@/shared/ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
@@ -25,6 +25,7 @@ export default function MetricsView() {
   const [promql, setPromql] = useState(PRESETS[0].promql);
   const [cards, setCards] = useState<QueryCard[]>([]);
   const summaryQ = useClusterSummary(clusterId);
+  const usageQ = useClusterUsage(clusterId);
   const workloadsQ = useWorkloads(clusterId);
   const history = liveStore(s => s.history);
   const status = liveStore(s => s.status);
@@ -67,6 +68,17 @@ export default function MetricsView() {
     ];
   }, [paused, frozen, history, clusterId, inventoryRestarts, inventoryRunning]);
 
+  // 스냅샷 기반 실측 추이 — cluster_usage_samples 시계열(빈 데이터면 카드 자체를 숨김)
+  const usageSeries: Series[] = useMemo(() => {
+    const samples = usageQ.data ?? [];
+    if (!samples.length) return [];
+    return [
+      { id: '실행 팟', data: samples.map((s, i) => ({ x: i, y: s.usage.pod_running ?? 0 })) },
+      { id: '재시작 누적', data: samples.map((s, i) => ({ x: i, y: s.usage.restart_total ?? 0 })) },
+      { id: '준비 노드', data: samples.map((s, i) => ({ x: i, y: s.usage.node_ready ?? 0 })) },
+    ];
+  }, [usageQ.data]);
+
   const run = useMutation({
     mutationFn: (q: string) => post<{ command_id: string }>('/agent/debug/query', {
       cluster_id: clusterId,
@@ -108,6 +120,11 @@ export default function MetricsView() {
       <Card title="실시간 — 재시작 추이 / 실행 팟" style={{ marginBottom: 16 }}>
         <TimeSeriesChart series={series} />
       </Card>
+      {usageSeries.length > 0 && (
+        <Card title="스냅샷 추이 — 인벤토리 실측 (usage rollup)" style={{ marginBottom: 16 }}>
+          <TimeSeriesChart series={usageSeries} />
+        </Card>
+      )}
       <Card title="온디맨드 PromQL (비동기 — agent 경유)">
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <select className="input" style={{ width: 200 }} onChange={e => setPromql(e.target.value)}>
