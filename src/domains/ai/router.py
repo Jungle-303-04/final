@@ -18,6 +18,7 @@ from packages.contracts.gateway.requests import (
 )
 from packages.contracts.gateway.responses import (
     AiConversationAcceptedResponse,
+    AiConversationListResponse,
     AiConversationResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
@@ -151,6 +152,15 @@ async def append_message(
         event_id=accepted.event.event_id,
         correlation_id=accepted.event.correlation_id,
     )
+
+
+@router.get(gateway_routes.AI_CONVERSATIONS_PATH, response_model=AiConversationListResponse)
+async def list_conversations(
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> AiConversationListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    return AiConversationListResponse(conversations=db.list_ai_conversations(workspace_id))
 
 
 @router.get(

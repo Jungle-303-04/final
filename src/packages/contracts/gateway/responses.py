@@ -244,6 +244,10 @@ class AiConversationResponse(StrictModel):
     messages: list[JsonMap]
 
 
+class AiConversationListResponse(StrictModel):
+    conversations: list[JsonMap]
+
+
 class ApplicationResponse(StrictModel):
     application: JsonMap
 

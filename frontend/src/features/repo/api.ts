@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { get, post } from '@/shared/lib/api';
 import type { Application, Deployment, WorkflowRun } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
+import { adaptApplication } from '@/shared/lib/adapt';
 
 export const repoKeys = {
   apps: () => ['applications'] as const,
@@ -9,7 +10,7 @@ export const repoKeys = {
   deployments: (id: string) => ['applications', id, 'deployments'] as const,
 };
 export const useApplications = () =>
-  useQuery({ queryKey: repoKeys.apps(), queryFn: () => get<{ applications: Application[] }>('/applications'), refetchInterval: 30_000, select: d => d.applications });
+  useQuery({ queryKey: repoKeys.apps(), queryFn: () => get<{ applications: Record<string, unknown>[] }>('/applications'), refetchInterval: 30_000, select: d => d.applications.map(adaptApplication) });
 export const useApplication = (id: string) =>
   useQuery({ queryKey: ['applications', id], queryFn: () => get<Application>(`/applications/${id}`) });
 const ACTIVE = new Set(['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING']);

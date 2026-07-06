@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from typing import Any
 
 from sqlalchemy import case, func, select
@@ -786,6 +787,245 @@ class IdentityAccessRepository(DatabaseConnection):
         item["created_at"] = iso_or_none(item.get("created_at"))
         item["updated_at"] = iso_or_none(item.get("updated_at"))
         return item
+
+    # --- 관리 콘솔 조회/편집 API (조직·그룹·멤버·권한) ---
+
+    def list_organizations(self) -> list[JsonObject]:
+        org = self.organization_table
+        member = self.organization_member_table
+        group = self.group_table
+        member_count = (
+            select(func.count())
+            .where(
+                member.c.organization_id == org.c.organization_id,
+                member.c.status == AccessStatus.ACTIVE.value,
+            )
+            .scalar_subquery()
+        )
+        group_count = (
+            select(func.count())
+            .where(
+                group.c.organization_id == org.c.organization_id,
+                group.c.status == AccessStatus.ACTIVE.value,
+            )
+            .scalar_subquery()
+        )
+        statement = (
+            select(
+                org.c.organization_id,
+                org.c.name,
+                org.c.slug,
+                org.c.created_at,
+                member_count.label("member_count"),
+                group_count.label("group_count"),
+            )
+            .where(org.c.status == AccessStatus.ACTIVE.value)
+            .order_by(org.c.created_at)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [
+            {
+                "org_id": r["organization_id"],
+                "name": r["name"],
+                "description": r["slug"],
+                "member_count": int(r["member_count"]),
+                "group_count": int(r["group_count"]),
+                "created_at": iso_or_none(r["created_at"]),
+            }
+            for r in rows
+        ]
+
+    def create_organization(self, name: str, description: str) -> JsonObject:
+        organization_id = f"org-{uuid.uuid4().hex[:12]}"
+        with self.connection() as conn:
+            conn.execute(self._organization_upsert(organization_id, name))
+        return {
+            "org_id": organization_id,
+            "name": name,
+            "description": description,
+            "member_count": 0,
+            "group_count": 0,
+            "created_at": None,
+        }
+
+    def delete_organization(self, organization_id: str) -> bool:
+        group = self.group_table
+        org = self.organization_table
+        has_group = (
+            select(group.c.group_id)
+            .where(
+                group.c.organization_id == organization_id,
+                group.c.status == AccessStatus.ACTIVE.value,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            if conn.execute(has_group).first() is not None:
+                return False
+            conn.execute(
+                org.update()
+                .where(org.c.organization_id == organization_id)
+                .values(status=AccessStatus.DISABLED.value, updated_at=func.now())
+            )
+        return True
+
+    def list_groups(self, organization_id: str | None = None) -> list[JsonObject]:
+        group = self.group_table
+        member = self.group_member_table
+        member_count = (
+            select(func.count())
+            .where(
+                member.c.group_id == group.c.group_id,
+                member.c.status == AccessStatus.ACTIVE.value,
+            )
+            .scalar_subquery()
+        )
+        statement = (
+            select(
+                group.c.group_id,
+                group.c.organization_id,
+                group.c.name,
+                member_count.label("member_count"),
+            )
+            .where(group.c.status == AccessStatus.ACTIVE.value)
+            .order_by(group.c.name)
+        )
+        if organization_id:
+            statement = statement.where(group.c.organization_id == organization_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [
+            {
+                "group_id": r["group_id"],
+                "org_id": r["organization_id"],
+                "name": r["name"],
+                "member_count": int(r["member_count"]),
+            }
+            for r in rows
+        ]
+
+    def create_group(self, organization_id: str, name: str) -> JsonObject:
+        group_id = f"grp-{uuid.uuid4().hex[:12]}"
+        with self.connection() as conn:
+            conn.execute(self._group_upsert(group_id, organization_id, name))
+        return {"group_id": group_id, "org_id": organization_id, "name": name, "member_count": 0}
+
+    def list_group_members(self, group_id: str) -> list[JsonObject]:
+        member = self.group_member_table
+        user = self.user_table
+        statement = (
+            select(user.c.user_id, user.c.email)
+            .select_from(member.join(user, member.c.user_id == user.c.user_id))
+            .where(
+                member.c.group_id == group_id,
+                member.c.status == AccessStatus.ACTIVE.value,
+            )
+            .order_by(user.c.email)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [{"user_id": r["user_id"], "email": r["email"] or r["user_id"]} for r in rows]
+
+    def add_group_member(self, group_id: str, user_id: str) -> None:
+        with self.connection() as conn:
+            conn.execute(self._group_member_upsert(group_id, user_id, GroupRole.MEMBER.value))
+
+    def remove_group_member(self, group_id: str, user_id: str) -> None:
+        member = self.group_member_table
+        with self.connection() as conn:
+            conn.execute(
+                member.update()
+                .where(member.c.group_id == group_id, member.c.user_id == user_id)
+                .values(status=AccessStatus.DISABLED.value, updated_at=func.now())
+            )
+
+    def list_users(self, status: str | None = None) -> list[JsonObject]:
+        user = self.user_table
+        member = self.group_member_table
+        statement = select(
+            user.c.user_id, user.c.email, user.c.role, user.c.status, user.c.created_at
+        ).order_by(user.c.created_at)
+        if status:
+            statement = statement.where(user.c.status == status)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+            group_rows = (
+                conn.execute(
+                    select(member.c.user_id, member.c.group_id).where(
+                        member.c.status == AccessStatus.ACTIVE.value
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        groups_by_user: dict[str, list[str]] = {}
+        for g in group_rows:
+            groups_by_user.setdefault(g["user_id"], []).append(g["group_id"])
+        return [
+            {
+                "user_id": r["user_id"],
+                "email": r["email"] or r["user_id"],
+                "role": r["role"],
+                "status": r["status"],
+                "groups": groups_by_user.get(r["user_id"], []),
+                "created_at": iso_or_none(r["created_at"]),
+            }
+            for r in rows
+        ]
+
+    def list_access_grants(self, resource_id: str | None = None) -> list[JsonObject]:
+        assignment = self.resource_assignment_table
+        role = self.member_resource_role_table
+        user = self.user_table
+        statement = (
+            select(
+                role.c.id,
+                role.c.user_id,
+                role.c.role,
+                role.c.created_at,
+                assignment.c.resource_type,
+                assignment.c.resource_id,
+                user.c.email,
+            )
+            .select_from(
+                role.join(
+                    assignment,
+                    role.c.resource_assignment_id == assignment.c.resource_assignment_id,
+                ).join(user, role.c.user_id == user.c.user_id, isouter=True)
+            )
+            .where(role.c.status == AccessStatus.ACTIVE.value)
+            .order_by(role.c.created_at)
+        )
+        if resource_id:
+            statement = statement.where(assignment.c.resource_id == resource_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [
+            {
+                "access_id": str(r["id"]),
+                "subject_type": "user",
+                "subject_label": r["email"] or r["user_id"],
+                "resource_type": r["resource_type"],
+                "resource_id": r["resource_id"],
+                "role": r["role"],
+                "granted_at": iso_or_none(r["created_at"]),
+            }
+            for r in rows
+        ]
+
+    def revoke_access(self, access_id: str) -> None:
+        role = self.member_resource_role_table
+        try:
+            row_id = int(access_id)
+        except ValueError:
+            return
+        with self.connection() as conn:
+            conn.execute(
+                role.update()
+                .where(role.c.id == row_id)
+                .values(status=AccessStatus.DISABLED.value, updated_at=func.now())
+            )
 
     @staticmethod
     def _user_upsert(user_id: str) -> Any:
