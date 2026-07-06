@@ -644,6 +644,10 @@ cronjob = cronjob_path.read_text()
 cronjob = cronjob.replace("spec:\n  schedule:", "spec:\n  suspend: true\n  schedule:", 1)
 cronjob_path.write_text(cronjob)
 PY
+# ── local overrides: HTTP-only cookie, log-based mail ──
+kubectl --context "kind-${MGMT_CLUSTER}" -n management patch configmap management-runtime-config \
+  --type merge -p '{"data":{"COOKIE_SECURE":"0","MAIL_DELIVERY_MODE":"log"}}'
+
 kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_APP_OVERLAY}"
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
