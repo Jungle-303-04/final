@@ -37,9 +37,20 @@ EMAIL_VERIFICATION_SUCCESS_REDIRECT = "/login?verified=1"
 EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT = "/login?verified=1&approval=pending"
 
 
+FALSE_COOKIE_SECURE_VALUES = {"0", "false", "no", "off"}
+
+
+def _cookie_secure() -> bool:
+    """COOKIE_SECURE 판정 — http 배포에서 Secure 쿠키는 브라우저가 버려 로그인 직후 세션이 사라진다.
+
+    "0" 외에 false/no/off 도 비보안(http) 신호로 인정해 설정 실수를 줄인다. 기본은 Secure.
+    """
+    return env(Auth.COOKIE_SECURE_ENV, "1").strip().lower() not in FALSE_COOKIE_SECURE_VALUES
+
+
 def _set_session_cookie(response: Response, session: Any) -> None:
     # 토큰을 JSON 으로 돌려주지 않고 httpOnly 쿠키로 심음 → JS 가 못 읽어 XSS 탈취 차단.
-    secure = env(Auth.COOKIE_SECURE_ENV, "1") != "0"
+    secure = _cookie_secure()
     response.set_cookie(
         key=Auth.SESSION_COOKIE_NAME,
         value=session.token,
@@ -51,7 +62,7 @@ def _set_session_cookie(response: Response, session: Any) -> None:
 
 
 def _clear_session_cookie(response: Response) -> None:
-    secure = env(Auth.COOKIE_SECURE_ENV, "1") != "0"
+    secure = _cookie_secure()
     response.delete_cookie(
         key=Auth.SESSION_COOKIE_NAME,
         httponly=True,
