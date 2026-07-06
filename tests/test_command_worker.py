@@ -9,7 +9,6 @@ import pytest
 from domains.command.events import (
     CommandCompletedBody,
     CommandDispatchedBody,
-    CommandDispatchReadyBody,
     CommandQueuedForAgentBody,
     CommandRejectedBody,
     CommandRequestedBody,
@@ -206,7 +205,6 @@ def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:
     events, store = asyncio.run(run())
 
     assert [type(event) for event in events] == [
-        CommandDispatchReadyBody,
         CommandDispatchedBody,
         CommandQueuedForAgentBody,
     ]
@@ -232,7 +230,6 @@ def test_command_handler_allows_non_image_manifest_diff() -> None:
     events, store = asyncio.run(run())
 
     assert [type(event) for event in events] == [
-        CommandDispatchReadyBody,
         CommandDispatchedBody,
         CommandQueuedForAgentBody,
     ]
@@ -251,7 +248,6 @@ def test_command_handler_queues_manifest_diff_even_when_image_matches() -> None:
     events, store = asyncio.run(run())
 
     assert [type(event) for event in events] == [
-        CommandDispatchReadyBody,
         CommandDispatchedBody,
         CommandQueuedForAgentBody,
     ]

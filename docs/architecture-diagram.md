@@ -31,7 +31,7 @@ flowchart TB
         end
 
         subgraph CMDG["Command"]
-            CW["command-worker<br/>command.requested → 정책 검사 →<br/>dispatch.ready/dispatched/queued_for_agent/rejected"]
+            CW["command-worker<br/>command.requested → 정책 검사 →<br/>dispatched/queued_for_agent/rejected"]
             CJ["command-janitor<br/>(AsyncService) 만료 command 정리 → command.completed"]
         end
 

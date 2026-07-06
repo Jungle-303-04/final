@@ -8,7 +8,6 @@ from domains.command.actions import allowed_command_actions, command_action_spec
 from domains.command.events import (
     CommandCompletedBody,
     CommandDispatchedBody,
-    CommandDispatchReadyBody,
     CommandQueuedForAgentBody,
     CommandRejectedBody,
     CommandRequestedBody,
@@ -245,7 +244,6 @@ async def handle_command_requested(
         return
 
     plan = build_plan(evt, ctx.correlation_id)
-    yield CommandDispatchReadyBody(plan=plan)
     yield CommandDispatchedBody(plan=plan, route=route_for_plan(plan))
     await queue_plan_for_agent(ctx, plan)
     yield CommandQueuedForAgentBody(

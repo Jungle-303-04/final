@@ -33,7 +33,6 @@ _MODULE_BY_NAME = {
     "ClusterReconcileRequestedBody": "domains.target.events",
     "ClusterReconcileStartedBody": "domains.target.events",
     "CommandCompletedBody": "domains.command.events",
-    "CommandDispatchReadyBody": "domains.command.events",
     "CommandDispatchedBody": "domains.command.events",
     "CommandQueuedForAgentBody": "domains.command.events",
     "CommandRejectedBody": "domains.command.events",
