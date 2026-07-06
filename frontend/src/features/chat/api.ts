@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import type { Conversation } from '@/shared/lib/types';
+import { adaptConversationSummary } from '@/shared/lib/adapt';
 
 export const chatKeys = {
   list: () => ['ai', 'conversations'] as const,
@@ -8,7 +9,7 @@ export const chatKeys = {
 };
 // G10 — 목록 API 는 mock 계약(실백엔드 도입 전까지 mock 전용)
 export const useConversations = () =>
-  useQuery({ queryKey: chatKeys.list(), queryFn: () => get<{ conversations: Omit<Conversation, 'messages'>[] }>('/ai/conversations'), select: d => d.conversations, refetchInterval: 15_000 });
+  useQuery({ queryKey: chatKeys.list(), queryFn: () => get<{ conversations: Record<string, unknown>[] }>('/ai/conversations'), select: d => d.conversations.map(adaptConversationSummary), refetchInterval: 15_000 });
 export const useConversation = (id: string | undefined) =>
   useQuery({
     queryKey: chatKeys.one(id ?? ''), enabled: !!id,

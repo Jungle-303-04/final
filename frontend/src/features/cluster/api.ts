@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import type { Cluster, ClusterSummary, InventoryResource, K8sEvent, ServiceInfo, Workload } from '@/shared/lib/types';
+import type { ClusterSummary, InventoryResource, K8sEvent, ServiceInfo, Workload } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
+import { adaptCluster } from '@/shared/lib/adapt';
 
 export const clusterKeys = {
   list: () => ['clusters'] as const,
@@ -9,7 +10,7 @@ export const clusterKeys = {
   inv: (id: string, kind: string) => ['clusters', id, 'inv', kind] as const,
 };
 export const useClusters = () =>
-  useQuery({ queryKey: clusterKeys.list(), queryFn: () => get<{ clusters: Cluster[] }>('/clusters'), refetchInterval: 30_000, select: d => d.clusters });
+  useQuery({ queryKey: clusterKeys.list(), queryFn: () => get<{ clusters: Record<string, unknown>[] }>('/clusters'), refetchInterval: 30_000, select: d => d.clusters.map(adaptCluster) });
 export const useClusterSummary = (id: string | undefined) =>
   useQuery({ queryKey: clusterKeys.summary(id ?? ''), queryFn: () => get<ClusterSummary>(`/clusters/${id}/inventory/summary`), enabled: !!id, refetchInterval: 30_000 });
 export const useWorkloads = (id: string) =>
