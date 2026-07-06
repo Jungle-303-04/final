@@ -68,7 +68,7 @@ REST Gateway, typed event, target agent, read model 구조로 옮긴다.
    확인 테스트는 `tests/test_target_kubernetes_evidence.py`다.
 
 9. metrics, logs, traces, evidence 결합은 `EvidenceCollector.collect()`를 기준으로 한다.
-   확인 테스트는 `tests/test_target_metric_evidence.py`, `tests/test_target_log_evidence.py`, `tests/test_target_trace_evidence.py`다.
+   확인 테스트는 `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`, `tests/test_target_telemetry_evidence.py`다.
 
 10. RCA chain은 `src/services/ai/agent/pipeline/*`와 `src/services/**/rca*`를 기준으로 한다.
     확인 테스트는 `tests/test_rca_evidence.py`와 `tests/test_event_golden_path.py`다.

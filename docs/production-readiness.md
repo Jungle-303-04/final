@@ -38,7 +38,7 @@
 | evidence job schedule/poll/result | provider별 수집을 같은 queue 수준으로 처리해야 한다 | `src/domains/target/router.py`, `evidence/jobs.py` | `tests/test_target_evidence_jobs.py` |
 | Kubernetes snapshot provider | pod/event/node/workload/service 상태가 RCA 입력에 필요하다 | `providers/kubernetes_providers.py` | `tests/test_target_kubernetes_evidence.py` |
 | Prometheus instant/range query | metric 순간값과 추세를 RCA가 같이 봐야 한다 | `providers/prometheus_providers.py`, `queries/payloads.py` | `tests/test_target_metric_evidence.py` |
-| Loki/Tempo provider | logs/traces가 RCA 근거가 된다 | `providers/loki_providers.py`, `providers/tempo_providers.py` | `tests/test_target_log_evidence.py`, `tests/test_target_trace_evidence.py` |
+| Loki/Tempo provider | logs/traces가 RCA 근거가 된다 | `providers/loki_providers.py`, `providers/tempo_providers.py` | `tests/test_target_telemetry_evidence.py` |
 | provider registry | 새 provider가 scheduler/collector와 느슨하게 연결되어야 한다 | `telemetry_registry.py` | `tests/test_telemetry_registry.py` |
 | RBAC 최소 권한 | target agent 권한이 불필요하게 넓으면 안 된다 | `deploy/target/target.yaml` | `make manifest-check`, AWS smoke |
 | Bruno agent/API 확인 | 팀원이 직접 눌러 흐름을 확인해야 한다 | `docs/api/03-agent-runtime`, `docs/api/04-command` | Bruno `aws-test` profile |

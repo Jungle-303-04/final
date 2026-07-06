@@ -79,7 +79,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_node_collector.py -q
 Evidence provider나 summary를 바꾸면 실행한다.
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_trace_evidence.py -q
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py tests/test_target_telemetry_evidence.py -q
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py tests/test_agent_evidence_ingest.py -q
 ```
 
