@@ -26,3 +26,5 @@ export function useIsAdmin(): boolean {
   const { data } = useSession();
   return data?.roles?.includes('service_admin') ?? false;
 }
+export const useResendVerification = () =>
+  useMutation({ mutationFn: (b: { email: string }) => post('/auth/resend-verification', b) });
