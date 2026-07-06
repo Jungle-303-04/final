@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
-import { useClusters } from '@/features/cluster/api';
+import { useClusters, useClusterSummary, useWorkloads } from '@/features/cluster/api';
 import { Badge, Button, Card, StatBox } from '@/shared/ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
 import { FadeSlideIn } from '@/shared/motion';
@@ -18,25 +18,65 @@ interface QueryCard { id: string; promql: string; state: 'queued' | 'running' | 
 export default function MetricsView() {
   const [sp] = useSearchParams();
   const clustersQ = useClusters();
-  const [clusterId, setClusterId] = useState(sp.get('cluster') ?? 'target');
+  const clusters = clustersQ.data ?? [];
+  const [clusterId, setClusterId] = useState(sp.get('cluster') ?? '');
   const [paused, setPaused] = useState(false);
   const [promql, setPromql] = useState(PRESETS[0].promql);
   const [cards, setCards] = useState<QueryCard[]>([]);
+  const summaryQ = useClusterSummary(clusterId);
+  const workloadsQ = useWorkloads(clusterId);
   const history = liveStore(s => s.history);
   const status = liveStore(s => s.status);
   const snapshot = liveStore(s => s.snapshot);
-  const frozen = useMemo(() => (paused ? history : history), [paused ? null : history]); // ⏸: 수집 유지, 렌더 고정
+  const [frozen, setFrozen] = useState(history);
+
+  useEffect(() => {
+    if (!clusters.length) return;
+    if (!clusterId || !clusters.some(c => c.cluster_id === clusterId)) {
+      setClusterId(clusters[0].cluster_id);
+    }
+  }, [clusterId, clusters]);
+
+  useEffect(() => {
+    if (!paused) setFrozen(history);
+  }, [history, paused]);
+
+  const summary = summaryQ.data;
+  const workloads = workloadsQ.data ?? [];
+  const inventoryPhases = summary?.pod_phases ?? {};
+  const workloadPhases = workloads.reduce<Record<string, number>>((acc, pod) => {
+    acc[pod.phase] = (acc[pod.phase] ?? 0) + 1;
+    return acc;
+  }, {});
+  const livePhases = snapshot
+    ? snapshot.namespaces.flatMap(n => n.pods).reduce<Record<string, number>>((a, p) => ({ ...a, [p.phase]: (a[p.phase] ?? 0) + 1 }), {})
+    : {};
+  const phases = Object.keys(livePhases).length ? livePhases : Object.keys(inventoryPhases).length ? inventoryPhases : workloadPhases;
+  const inventoryRunning = phases.Running ?? 0;
+  const inventoryRestarts = workloads.reduce((sum, pod) => sum + pod.restarts, 0);
+  const chartPoints = (paused ? frozen : history).length
+    ? (paused ? frozen : history)
+    : clusterId ? [{ at: Date.now(), restarts: inventoryRestarts, running: inventoryRunning }] : [];
 
   const series: Series[] = useMemo(() => {
-    const pts = frozen.slice(-120);
+    const pts = chartPoints.slice(-120);
     return [
       { id: '재시작 합', data: pts.map((p, i) => ({ x: i, y: p.restarts })) },
       { id: '실행 팟', data: pts.map((p, i) => ({ x: i, y: p.running })) },
     ];
-  }, [frozen]);
+  }, [chartPoints]);
 
   const run = useMutation({
-    mutationFn: (q: string) => post<{ command_id: string }>('/agent/debug/query', { cluster_id: clusterId, promql: q }),
+    mutationFn: (q: string) => post<{ command_id: string }>('/agent/debug/query', {
+      cluster_id: clusterId,
+      query: {
+        source: 'prometheus',
+        name: 'console_promql',
+        description: 'Console PromQL query',
+        query: q,
+        range_seconds: 300,
+      },
+    }),
   });
   const execute = () => {
     const id = Math.random().toString(36).slice(2, 8);
@@ -49,22 +89,22 @@ export default function MetricsView() {
       onError: () => setCards(cs => cs.map(c => c.id === id ? { ...c, state: 'failed' } : c)),
     });
   };
-  const phases = snapshot ? snapshot.namespaces.flatMap(n => n.pods).reduce<Record<string, number>>((a, p) => ({ ...a, [p.phase]: (a[p.phase] ?? 0) + 1 }), {}) : {};
 
   return (
     <FadeSlideIn>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', flex: 1 }}>메트릭</h1>
         <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => setClusterId(e.target.value)}>
-          {(clustersQ.data ?? []).map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
+          {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
         </select>
         <Button onClick={() => setPaused(p => !p)}>{paused ? '▶ 재개' : '⏸ 일시정지'}</Button>
       </div>
-      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>⚠ 실시간 스트림 끊김 — 재연결 중 (데이터는 유지됩니다)</div>}
+      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-        <StatBox label="Running" value={phases['Running'] ?? 0} tone="ok" />
-        <StatBox label="Pending" value={phases['Pending'] ?? 0} tone="warn" />
-        <StatBox label="CrashLoop" value={phases['CrashLoopBackOff'] ?? 0} tone={(phases['CrashLoopBackOff'] ?? 0) > 0 ? 'danger' : 'neutral'} />
+        <StatBox label="Running" value={phases.Running ?? 0} tone="ok" />
+        <StatBox label="Pending" value={phases.Pending ?? 0} tone="warn" />
+        <StatBox label="CrashLoop" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} />
+        <StatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" />
         {snapshot?.rollout && <StatBox label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
       </div>
       <Card title="실시간 — 재시작 추이 / 실행 팟" style={{ marginBottom: 16 }}>

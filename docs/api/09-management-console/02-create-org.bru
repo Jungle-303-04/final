@@ -12,6 +12,7 @@ meta {
 
 post {
   url: {{base_url}}orgs
+  body: json
 }
 
 headers {
@@ -28,7 +29,7 @@ body:json {
 script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.org_id) {
-    bru.setVar("org_id", body.org_id);
+    bru.setVar("created_org_id", body.org_id);
   }
 }
 
