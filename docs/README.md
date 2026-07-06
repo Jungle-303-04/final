@@ -86,6 +86,7 @@
 ## 공통으로 보는 문서
 
 서비스 경계와 전체 구조가 필요하면 [아키텍처](architecture.md)를 본다.
+그림으로 한 번에 보고 싶으면 [아키텍처 다이어그램](architecture-diagram.md)을 본다.
 
 subject, body, worker 연결이 필요하면 [이벤트 흐름](events.md)을 본다.
 
@@ -148,6 +149,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 루트 문서는 아래에 있다.
 
 - [architecture](architecture.md)
+- [architecture-diagram](architecture-diagram.md)
 - [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [events](events.md)
