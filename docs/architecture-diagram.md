@@ -152,7 +152,7 @@ flowchart LR
 | 이름 변경 | Alert + Notification Worker (Slack/Email/Webhook) | **alert-worker** (provider: log/webhook) + **mail-worker** (이메일 인증)로 분리. Slack provider는 현재 코드에 없음 |
 | 이름 변경 | Evidence Builder/Incident Detector/RCA Analyzer/Recovery Planner/Safe PR Agent/Diff Explanation/Rollout Diagnosis/Approval Assistant Worker | evidence / incident / plan / analyze / rca / recovery / select / approval / dispatch / ai-diff / rollout / safe-pr worker로 세분화·개명 |
 | 변경 | PostgreSQL 3개 분리 (Event Runtime / GitOps State / Read·Audit) | **단일 PostgreSQL 17 + PgBouncer** 경유. 테이블 수준 분리 (events, outbox, event_processing, event_dead_letters, 도메인 테이블) |
-| 변경 | Object / Secret Stores | **MinIO** 명시 배포 (`deploy/management/storage.yaml`) + SOPS/age 암호화 secret (`secrets/*.enc.yaml`) |
+| 변경 | Object / Secret Stores | **MinIO** 배포됨 (`deploy/management/storage.yaml`, 코드 사용처는 연결 전). Secret은 **SecretVault** port (env / aws-secrets-manager / kubernetes-secret provider, `src/packages/security/vault.py`) + SOPS/age 암호화 (`secrets/*.enc.yaml`) |
 | 변경 | Workflow Console Target "planned UI" | **console-frontend 구현 완료**: React 18 + Vite, nginx 컨테이너 (`deploy/management/console.yaml`) |
 | 변경 | Telemetry "take Prometheus/Loki/OTel now; real adapters planned" | Prometheus·Loki·OTel Collector·**Tempo** 배포 존재 (`deploy/target/`), agent evidence provider adapter 구현됨 |
 | 변경 | Gateway 경로 | `/clusters/*` inventory·policy API, `/applications`, `/approvals`, `/ai/conversations`, `/catalog`, `/providers`, identity admin(`/orgs`,`/groups`,`/users`,`/access`), `/readyz` 추가 |
