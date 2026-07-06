@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 20945a70
 status: synced
 ---
 
@@ -58,7 +58,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 ### 내장 액션 — `src/domains/command/builtin_actions.py`
 
-빈 marker 클래스 3개에 `@command.action` 부착. 모두 `allowed_namespaces=(Sandbox.NAMESPACE,)`(= `("sandbox",)`), `requires_approval=True`.
+빈 marker 클래스 3개에 `@command.action` 부착. 모두 `allowed_namespaces=(Sandbox.NAMESPACE,)`(= `("sandbox",)`). `requires_approval` 은 `rollout_restart`=False(비파괴 자동 실행 허용), `apply_manifest`/`deployment_scale`=True.
 
 | marker 클래스(앵커) | action | recovery_aliases |
 |---|---|---|
