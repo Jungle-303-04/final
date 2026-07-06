@@ -145,6 +145,37 @@ export function adaptDeployment(raw: Record<string, unknown>): Deployment {
   };
 }
 
+// 실백엔드 step 이름(git/render/diff/...) → 콘솔 파이프라인 표기.
+const STEP_NAME_MAP: Record<string, string> = {
+  git: 'STARTED',
+  render: 'RENDERING',
+  diff: 'DIFFING',
+  policy: 'POLICY_CHECKING',
+  approval: 'WAITING_FOR_APPROVAL',
+  safe_pr: 'WAITING_FOR_APPROVAL',
+  apply: 'APPLYING',
+  health: 'ROLLOUT_WAITING',
+};
+
+function adaptRunStep(raw: Record<string, unknown>): RunStep {
+  // mock 은 이미 프론트 형태({name:'DIFFING', detail}) — 그대로 통과.
+  if (typeof raw.detail === 'string' || raw.message === undefined && raw.details === undefined) {
+    return raw as unknown as RunStep;
+  }
+  const details = (raw.details ?? {}) as Record<string, unknown>;
+  const changes = Array.isArray(details.changes) ? (details.changes as RunStep['changes']) : undefined;
+  const resource = typeof details.resource === 'string'
+    ? `${details.resource}${details.namespace ? ` · ${details.namespace}` : ''}`
+    : undefined;
+  return {
+    name: STEP_NAME_MAP[String(raw.name ?? '')] ?? String(raw.name ?? '').toUpperCase(),
+    status: String(raw.status ?? 'pending').toUpperCase(),
+    detail: typeof raw.message === 'string' && raw.message ? raw.message : undefined,
+    resource,
+    changes,
+  };
+}
+
 export function adaptRun(raw: Record<string, unknown>): WorkflowRun {
   // 실백엔드: workflow_run_id / created_at / 소문자 status → 프론트 계약으로 정규화.
   const metadata = (raw.metadata ?? {}) as Record<string, unknown>;
@@ -155,7 +186,7 @@ export function adaptRun(raw: Record<string, unknown>): WorkflowRun {
     status: String(raw.status ?? 'unknown').toUpperCase(),
     current_step: String(raw.current_step ?? ''),
     started_at: String(raw.started_at ?? raw.created_at ?? ''),
-    steps: Array.isArray(raw.steps) ? (raw.steps as RunStep[]) : [],
+    steps: Array.isArray(raw.steps) ? (raw.steps as Record<string, unknown>[]).map(adaptRunStep) : [],
     approval_id: (raw.approval_id ?? metadata.approval_id) as string | undefined,
     safe_pr: raw.safe_pr as WorkflowRun['safe_pr'],
   };

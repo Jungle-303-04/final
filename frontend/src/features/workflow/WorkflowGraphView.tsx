@@ -4,6 +4,7 @@ import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { Badge, Breadcrumbs, Card, CodeBlock, KeyValue, Skeleton } from '@/shared/ui';
+import { PlanDiff } from '@/shared/ui/plan-diff';
 import { IconCheck } from '@/shared/ui/icons';
 import { toneColor, toneOf } from '@/shared/ui/status';
 import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
@@ -81,9 +82,20 @@ export default function WorkflowGraphView() {
         <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>{found.appId}</h1>
         <code>{shortSha(found.commit_sha)}</code><Badge status={found.status} />
       </div>
-      {found.status === 'WAITING_FOR_APPROVAL' && found.approval_id && (
-        <div style={{ marginBottom: 12 }}><ApprovalCard approvalId={found.approval_id} summary={`${shortSha(found.commit_sha)} 배포 승인 — diff: ${found.steps.find(s => s.name === 'DIFFING')?.detail ?? ''}`} /></div>
-      )}
+      {found.status === 'WAITING_FOR_APPROVAL' && found.approval_id && (() => {
+        const diffStep = found.steps.find(s => s.name === 'DIFFING');
+        return (
+          <div style={{ marginBottom: 12 }}>
+            <ApprovalCard approvalId={found.approval_id} summary={`${shortSha(found.commit_sha)} 배포 승인${diffStep?.detail ? ` — diff: ${diffStep.detail}` : ''}`} />
+            {diffStep?.changes && diffStep.changes.length > 0 && (
+              <div className="card" style={{ marginTop: 8, padding: 12 }}>
+                <b style={{ fontSize: 'var(--fs-sm)' }}>적용될 변경 (plan)</b>
+                <div style={{ marginTop: 8 }}><PlanDiff changes={diffStep.changes} resource={diffStep.resource} /></div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
         <Card style={{ height: 340, padding: 0 }}>
           <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={setSelected} />
@@ -92,7 +104,9 @@ export default function WorkflowGraphView() {
           {selectedStep
             ? <KeyValue pairs={[['상태', <Badge key="b" status={selectedStep.status === 'PENDING' ? 'unknown' : selectedStep.status} />], ['상세', selectedStep.detail ?? '—']]} />
             : <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>노드를 클릭하면 산출물이 표시됩니다.</p>}
-          {selectedStep?.name === 'DIFFING' && selectedStep.detail && <CodeBlock code={selectedStep.detail} />}
+          {selectedStep?.changes && selectedStep.changes.length > 0
+            ? <div style={{ marginTop: 8 }}><PlanDiff changes={selectedStep.changes} resource={selectedStep.resource} /></div>
+            : selectedStep?.name === 'DIFFING' && selectedStep.detail && <CodeBlock code={selectedStep.detail} />}
         </Card>
       </div>
     </FadeSlideIn>
