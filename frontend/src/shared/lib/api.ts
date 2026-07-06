@@ -12,7 +12,8 @@ export class ApiError extends Error {
   }
 }
 
-export const API_MODE = (import.meta.env.VITE_API_MODE ?? 'mock') as 'mock' | 'real';
+// 기본은 real — 데모 목데이터는 VITE_API_MODE=mock 을 명시한 빌드에서만 동작한다(우발적 페이크 차단).
+export const API_MODE = (import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'real') as 'mock' | 'real';
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
 let onUnauthorized: (() => void) | null = null;
