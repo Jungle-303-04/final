@@ -74,6 +74,18 @@ class AgentDebugQueryResponse(StrictModel):
     correlation_id: str
 
 
+class CommandStatusResponse(StrictModel):
+    """브라우저 콘솔이 명령 진행 상태·실제 결과를 조회하는 응답 — 가짜 완료 표시 금지 계약."""
+
+    command_id: str
+    cluster_id: str
+    correlation_id: str
+    action: str
+    status: str
+    result: dict[str, Any] = Field(default_factory=dict)
+    completed_at: str | None = None
+
+
 class RcaTimelineItem(StrictModel):
     workspace_id: str
     correlation_id: str

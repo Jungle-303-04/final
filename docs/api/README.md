@@ -232,6 +232,11 @@ agent는 command 실행 중 끊기지 않았다는 신호로 이 API를 사용�
 성공하면 command completed event가 stage되고, 이후 RCA rollout 진단이나 workflow-controller가 이 결과를 사용한다.
 실패 결과도 이 API로 보내며, 실패는 숨기지 않고 결과 payload에 남긴다.
 
+`07-command-status`는 운영자가 특정 command의 현재 상태와 agent가 제출한 실제 결과를 조회하는 API다.
+`02-debug-query` 또는 `03-agent-command-poll`에서 저장된 `command_id`를 넣어 확인한다.
+성공하면 `command_id`, `cluster_id`, `correlation_id`, `action`, `status`, `result`, `completed_at`이 온다.
+권한이 없거나 command가 없으면 401/403/404로 명확하게 실패한다.
+
 ### 05-rca-dashboard
 
 `01-dashboard-timeline`은 현재 사용자가 볼 수 있는 RCA timeline을 조회하는 API다.
@@ -434,11 +439,13 @@ Bruno는 `service_session` httpOnly cookie를 cookie jar에 보관하고 다음 
 2. `04-command/04-agent-command-start.bru`
 3. `04-command/05-agent-command-heartbeat.bru`
 4. `04-command/06-agent-command-result.bru`
+5. `04-command/07-command-status.bru`
 
 poll 결과가 `command: null`이면 queue에 command가 없는 상태다.
 먼저 manual command 또는 debug query를 다시 보낸다.
 
 result 정상 출력에는 `accepted: true`와 `event_id`가 있다.
+status 정상 출력에는 `command_id`, `cluster_id`, `status`, `result`가 있다.
 
 ## 9단계. RCA dashboard 확인
 

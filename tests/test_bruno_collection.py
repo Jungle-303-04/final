@@ -73,6 +73,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.AGENT_EVIDENCE_PATH,
         routes.TARGETS_PATH,
         routes.COMMANDS_PATH,
+        "/commands/{{command_id}}",
         "/approvals/{{approval_id}}/grant",
         "/approvals/{{approval_id}}/reject",
         routes.DEAD_LETTERS_PATH,

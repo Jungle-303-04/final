@@ -58,6 +58,27 @@ class AgentCommandRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    async def get_agent_command(
+        self, command_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID
+    ) -> JsonObject | None:
+        """워크스페이스 범위 명령 단건 조회 — 콘솔이 상태·실제 결과를 폴링하는 용도."""
+        table = AgentCommand.__table__
+        statement = select(
+            table.c.command_id,
+            table.c.cluster_id,
+            table.c.correlation_id,
+            table.c.action,
+            table.c.status,
+            table.c.result,
+            table.c.completed_at,
+        ).where(
+            table.c.command_id == command_id,
+            table.c.workspace_id == workspace_id,
+        )
+        async with self.async_connection() as conn:
+            row = (await conn.execute(statement)).mappings().first()
+        return row_dict(row) if row else None
+
     async def lease_agent_command(
         self,
         cluster_id: str,
