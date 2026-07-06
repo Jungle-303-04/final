@@ -98,3 +98,66 @@ def test_node_collector_exposes_prometheus_metrics() -> None:
     ) in metrics
     assert 'node="target-control-plane"' in metrics
     assert 'runtime="containerd"' in metrics
+
+
+def test_node_runtime_sampler_reads_real_proc_sources(tmp_path) -> None:
+    """고정 샘플값 금지 — /proc 형식 파일에서 실측 계산을 검증."""
+    module = load_node_collector_module()
+    stat = tmp_path / "stat"
+    meminfo = tmp_path / "meminfo"
+    # cpu user nice system idle iowait irq softirq steal
+    stat.write_text("cpu  100 0 100 700 100 0 0 0\n")
+    meminfo.write_text("MemTotal: 1000 kB\nMemFree: 300 kB\nMemAvailable: 400 kB\n")
+
+    sampler = module.NodeRuntimeSampler(
+        proc_stat_path=str(stat),
+        proc_meminfo_path=str(meminfo),
+        filesystem_path=str(tmp_path),
+    )
+
+    # 첫 호출: 부팅 이후 평균 = busy(200)/total(1000)
+    assert sampler.cpu_usage_ratio() == 0.2
+    # 두 번째 호출: 델타 구간 — busy +80, total +100 → 0.8
+    stat.write_text("cpu  160 0 120 710 110 0 0 0\n")
+    assert sampler.cpu_usage_ratio() == 0.8
+
+    # 메모리: MemTotal - MemAvailable = 600kB = 614400 bytes
+    assert sampler.memory_working_set_bytes() == 600 * 1024
+
+    # 파일시스템: 실제 statvfs 값 — 0~1 범위의 실수
+    ratio = sampler.filesystem_usage_ratio()
+    assert 0.0 <= ratio <= 1.0
+
+
+def test_node_runtime_sampler_reports_zero_on_unreadable_sources(tmp_path) -> None:
+    module = load_node_collector_module()
+    sampler = module.NodeRuntimeSampler(
+        proc_stat_path=str(tmp_path / "missing-stat"),
+        proc_meminfo_path=str(tmp_path / "missing-meminfo"),
+        filesystem_path=str(tmp_path / "missing-dir"),
+    )
+    assert sampler.cpu_usage_ratio() == 0.0
+    assert sampler.memory_working_set_bytes() == 0
+    assert sampler.filesystem_usage_ratio() == 0.0
+
+
+def test_node_collector_snapshot_uses_sampler_measurements(tmp_path) -> None:
+    module = load_node_collector_module()
+    stat = tmp_path / "stat"
+    meminfo = tmp_path / "meminfo"
+    stat.write_text("cpu  100 0 100 700 100 0 0 0\n")
+    meminfo.write_text("MemTotal: 2000 kB\nMemAvailable: 500 kB\n")
+    collector = module.NodeCollector(
+        node_name="n1",
+        pod_name="p1",
+        namespace="target",
+        interval_seconds=15,
+        sampler=module.NodeRuntimeSampler(
+            proc_stat_path=str(stat),
+            proc_meminfo_path=str(meminfo),
+            filesystem_path=str(tmp_path),
+        ),
+    )
+    payload = collector.snapshot().to_body()
+    assert payload["cpu_usage_ratio"] == 0.2
+    assert payload["memory_working_set_bytes"] == 1500 * 1024
