@@ -41,6 +41,9 @@ def load_evidence_module():
                 sys.modules[name] = previous_modules[name]
 
 
+# ── Loki 로그 증거 ──────────────────────────────────────────
+
+
 def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     module = load_evidence_module()
     logs_provider = module.LokiLogsProvider.from_config(lambda _name, default: default)
@@ -91,3 +94,52 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
     assert validated.logs[0]["line_count"] == 1
     assert validated.logs[0]["streams"][0]["stream"]["namespace"] == "target"
     assert validated.logs[0]["streams"][0]["values"][0]["line"] == "node_runtime_sample"
+
+
+# ── Tempo 트레이스 증거 ─────────────────────────────────────
+
+
+def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
+    module = load_evidence_module()
+    traces_provider = module.TempoTracesProvider.from_config(lambda _name, default: default)
+    collector = module.EvidenceCollector([traces_provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "tempo",
+                "name": "checkout_slow_spans",
+                "description": "Slow checkout spans.",
+                "query": '{ resource.service.name = "checkout-api" }',
+            }
+        )
+    )
+
+    async def fake_query_tempo(_client, span_query) -> dict[str, object]:
+        return {
+            "traces": [
+                {
+                    "traceID": "trace-123",
+                    "rootServiceName": "checkout-api",
+                    "rootTraceName": "GET /checkout",
+                    "durationMs": 842,
+                    "query": span_query.traceql,
+                }
+            ]
+        }
+
+    collector.providers["traces"].query = fake_query_tempo
+
+    traces = asyncio.run(collector.collect("traces"))["traces"]
+    payload = {
+        "cluster_id": "target-cluster-01",
+        "kubernetes": {},
+        "traces": traces,
+    }
+
+    validated = AgentEvidenceRequest.model_validate(payload)
+    results = validated.traces["results"]
+
+    assert validated.traces["source"] == "tempo"
+    assert "checkout_slow_spans" in results
+    assert results["checkout_slow_spans"]["trace_count"] == 1
+    assert results["checkout_slow_spans"]["traces"][0]["traceID"] == "trace-123"
