@@ -647,7 +647,7 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 ## 불변식·오류 (Invariants & Errors)
 
 1. **sandbox 쓰기 제한**: `apply_manifest`/`rollout_restart` 계열의 워크로드 쓰기는 namespace가 `sandbox`가 아니면 `"only sandbox namespace writes are allowed"`로 거부한다.
-2. **승인 증적 필수**: `apply_manifest`, `rollout_restart`, `k8s.apps.v1.deployments.scale`은 `approval_ref`와 `policy_decision_ref`가 모두 있어야 실행된다(`write_action_requires_approval` + `has_approval_evidence`). `k8s.*.patch` 2종은 이 승인 게이트 집합에 포함되지 않는 대신 아래 3의 name-scoped 정책으로 제한된다.
+2. **승인 증적 필수**: `apply_manifest`, `k8s.apps.v1.deployments.scale`은 `approval_ref`와 `policy_decision_ref`가 모두 있어야 실행된다(`write_action_requires_approval` + `has_approval_evidence`). `rollout_restart` 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용되며, namespace 정책 가드는 동일하게 적용된다. `k8s.*.patch` 2종은 이 승인 게이트 집합에 포함되지 않는 대신 아래 3의 name-scoped 정책으로 제한된다.
 3. **k8s 커맨드 정책(name-scoped 자기 제어)**: scope는 `target-agent`만, verb는 `get/patch/apply`만, 리소스는 `deployments`/`configmaps`만. namespace는 role 고정(target→`target`, management→`management`), 이름은 `cluster-agent`(Deployment) / `target-agent-policy`(ConfigMap)만. 위반은 `PermissionError`.
 4. **reconcile 정책**: `user-workload` scope 금지, `system` scope의 Deployment 금지, namespace는 role 고정, ConfigMap은 `target-agent-policy`·target-agent Deployment는 `cluster-agent`만 (`DesiredStateReconciler.ensure_allowed`, `PermissionError`).
 5. **정책 정합성**: `apply_policy`는 정책의 `cluster_id`/`cluster_role`이 에이전트와 다르면 `ValueError`. `AgentPolicy` 등 요청 모델은 전부 `StrictModel(extra="forbid")` — 계약 밖 필드는 검증 실패.

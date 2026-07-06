@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 20945a70
 status: synced
 ---
 
@@ -71,6 +71,7 @@ status: synced
 | `recovery.planned` | `recovery_planned` |
 | `recovery.selection_requested` | `selection_required` |
 | `recovery.action_selected` | `recovery_selected` |
+| `approval.recommended` | `approval_recommended` |
 | `command.requested` | `command_requested` |
 | `command.dispatched` | `command_dispatched` |
 | `command.queued_for_agent` | `command_queued` |
