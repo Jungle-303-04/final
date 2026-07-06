@@ -136,3 +136,32 @@ def test_rate_limited_poll_exits_without_webhook_or_failure() -> None:
 
     asyncio.run(go())
     assert posted == []
+
+
+def test_etag_conditional_request_skips_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """첫 응답의 ETag 를 저장하고 다음 폴에 If-None-Match 로 보내 304 면 webhook 을 쏘지 않는다."""
+    module = _load_poller()
+    posted: list[dict[str, Any]] = []
+    etags_seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            etag = request.headers.get("if-none-match")
+            etags_seen.append(etag)
+            if etag == 'W/"etag-1"':
+                return httpx.Response(304)
+            return httpx.Response(
+                200, json=[{"sha": "abc123def456"}], headers={"etag": 'W/"etag-1"'}
+            )
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            poller = module.GitHubPoller(client=client)
+            await poller.poll_once(client)  # 200 + ETag 저장 → webhook 1회
+            await poller.poll_once(client)  # If-None-Match → 304 → webhook 없음
+
+    asyncio.run(go())
+    assert etags_seen == [None, 'W/"etag-1"']
+    assert len(posted) == 1
