@@ -14,7 +14,7 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `12 카탈로그`까지 한글 폴더명이 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `13 알림 채널`까지 한글 폴더명이 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
 
@@ -34,7 +34,7 @@ bash scripts/run-bruno-aws.sh
 ```
 
 같은 순서를 Bruno 앱에서 실행할 때도 `00-health-auth/01`부터 `00-health-auth/07`까지 먼저 실행하고,
-그 다음 `01`부터 `12` 폴더를 실행한 뒤 `00-health-auth/10 로그아웃`을 마지막에 실행한다.
+그 다음 `01`부터 `13` 폴더를 실행한 뒤 `00-health-auth/10 로그아웃`을 마지막에 실행한다.
 `00-health-auth/10 로그아웃`을 중간에 실행하면 이후 보호 API는 다시 로그인 전까지 401을 반환한다.
 
 ## 2단계. 변수 채우기
@@ -47,8 +47,9 @@ bash scripts/run-bruno-aws.sh
 2. `auth_email`/`auth_password`는 로그인할 계정이다. collection 기본값은 로컬 bootstrap 계정인 `admin.local@example.com` / `local-test-password-1234`다. AWS에 다른 admin 계정으로 bootstrap되어 있으면 `aws-test` Environment에서 두 값을 그 계정으로 바꾼다.
 3. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 4. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
-5. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
-6. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
+5. `alertmanager_token`은 외부 Alertmanager webhook 입구가 켜진 배포에서만 넣는다. 배포의 `ALERTMANAGER_WEBHOOK_TOKEN`과 같아야 한다.
+6. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
+7. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
@@ -60,7 +61,8 @@ bash scripts/run-bruno-aws.sh
 6. `incident_id`는 `05-rca-dashboard/01-dashboard-timeline`에 incident row가 있을 때 저장된다.
 7. `dead_letter_id`는 `08-ops-dlq/01-dead-letters`에 항목이 있을 때 저장된다.
 8. `org_id`, `group_id`, `access_id`는 `09-management-console` 목록/생성/부여 요청에서 저장된다.
-9. `github_webhook_signature`는 `github_webhook_secret`이 채워져 있으면 요청 직전에 자동 계산된다.
+9. `alert_channel_id`는 `13-alert-channels/01-list-alert-channels`나 `02-upsert-alert-channel` 성공 후 저장된다.
+10. `github_webhook_signature`는 `github_webhook_secret`이 채워져 있으면 요청 직전에 자동 계산된다.
 
 아래는 각 값의 의미 설명이다.
 
@@ -92,8 +94,16 @@ cluster_id: target
 ```
 
 `agent_token`은 `02-target-admin/01-register-target-dry-run.bru` 응답에서 받거나, 이미 등록된 target agent token reference를 운영자가 넣는다.
+이 값이 있으면 `02-target-admin/03-install-manifest-by-token.bru`로 원라인 설치 링크가 실제 YAML을 반환하는지도 확인할 수 있다.
+
+`alert_webhook_url`은 알림 채널이 실제로 POST할 대상이다.
+collection 기본 생성 요청은 `enabled: false`로 보내므로 기본값 `https://example.invalid/service-alerts`가 있어도 실제 알림 발송에는 쓰이지 않는다.
+실제 운영 채널을 켤 때만 팀이 쓰는 webhook URL로 바꾸고 `enabled`를 `true`로 수정한다.
 
 `github_webhook_signature`는 webhook body와 secret으로 다시 계산해야 한다. body를 바꾸면 signature도 반드시 다시 바꾼다.
+
+`alertmanager_token`은 `05-rca-dashboard/04-alertmanager-webhook.bru`에서만 쓴다.
+배포에 `ALERTMANAGER_WEBHOOK_TOKEN`이 설정되어 있지 않으면 이 요청은 `503`이 정상이고, 토큰이 틀리면 `401`이 정상이다.
 
 ## API 의미 사전
 
@@ -167,6 +177,10 @@ target registry 저장, 기본 agent policy 저장, desired state 저장, agent 
 `02-update-cluster-policy`는 특정 cluster의 agent policy를 바꾸는 API다.
 provider job 주기, evidence provider 사용 여부, 실패 정책 같은 target 내부 동작을 바꿀 때 사용한다.
 이 값을 바꾸면 agent는 `get-agent-policy`로 새 generation을 받아가고, provider job scheduling 기준도 같이 바뀐다.
+
+`03-install-manifest-by-token`은 `agent_token`으로 설치 manifest YAML을 다시 받아오는 API다.
+`01-register-target-dry-run` 응답의 `install_command`가 내부적으로 호출하는 경로와 같다.
+토큰이 맞으면 `apiVersion`과 `kind`가 들어 있는 Kubernetes YAML이 오고, 토큰이 틀리면 404가 온다.
 
 Target 등록 요청의 `prometheus_base_url`, `loki_base_url`, `tempo_base_url`은 target cluster 안에서 agent가 실제로 호출할 관측 스택 주소다.
 이 세 값은 설치 manifest의 `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`로 그대로 들어가고, metrics/logs/traces provider의 기본 접속 주소가 된다.
@@ -246,6 +260,10 @@ agent는 command 실행 중 끊기지 않았다는 신호로 이 API를 사용�
 `02-dashboard-incident`는 특정 incident 하나의 상세 내용을 조회하는 API다.
 timeline에서 받은 `incident_id`로 이어서 호출한다.
 권한이 없거나 해당 incident가 없으면 `404` 또는 접근 거부가 날 수 있다.
+
+`04-alertmanager-webhook`은 외부 Alertmanager가 firing 알림을 보내는 입구다.
+토큰이 맞고 cluster가 등록되어 있으면 `ClusterEvidenceReceived` 흐름으로 들어간다.
+resolved 알림만 들어오면 이벤트를 새로 만들지 않고 `accepted: true`와 빈 `event_id`로 끝날 수 있다.
 
 ### 06-gitops-approval
 
@@ -343,11 +361,26 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 
 `01-list-clusters`는 등록된 클러스터 목록(대시보드 플릿). `02-get-cluster`는 상세, `03-connection-status`는 agent online 여부다.
 `04~08 inventory-*`는 summary/resources/workloads/services/events — 팟·노드·워크로드 실데이터의 원천이다(agent 연결 후 채워짐).
+`11-usage-series`는 inventory snapshot마다 적재된 CPU/메모리 같은 usage rollup 시계열이다.
 `09-scale-deployment`/`10-restart-deployment`는 sandbox 네임스페이스의 디플로이먼트에 스케일/재시작 명령을 보낸다(deploy 권한 필요).
 
 ### 12-catalog
 
 `01-list-items`는 설치형 카탈로그 항목 목록(첫 `item_id` 자동 저장), `02-get-item`은 상세, `03-install-item`은 `cluster_id`/`namespace`에 설치를 요청한다.
+
+### 13-alert-channels
+
+`01-list-alert-channels`는 현재 workspace에 등록된 알림 채널 목록을 조회한다.
+alert-worker가 `alert.requested`를 받았을 때 이 목록을 기준으로 보낼 채널을 고른다.
+응답에 채널이 있으면 첫 `channel_id`를 자동 저장한다.
+
+`02-upsert-alert-channel`은 admin이 webhook 채널을 만들거나 수정하는 API다.
+기본 Bruno body에는 `channel_id`를 넣지 않으므로 새 채널을 만든다.
+실수로 운영 알림이 나가지 않도록 기본값은 `enabled: false`다.
+실제 채널로 쓰려면 `url`을 팀 webhook으로 바꾸고 `enabled`를 `true`로 바꾼다.
+
+`03-delete-alert-channel`은 `alert_channel_id` 채널을 삭제한다.
+삭제는 admin session이 필요하고, 다른 workspace 채널이거나 없는 ID면 404가 정상 보호 응답이다.
 
 ## 3단계. 서버 상태 확인
 
@@ -402,6 +435,9 @@ Bruno는 `service_session` httpOnly cookie를 cookie jar에 보관하고 다음 
 
 `02-target-admin/02-update-cluster-policy.bru`는 provider job 정책을 바꿀 때 보낸다.
 정상 출력에는 `accepted: true`와 `policy`가 있다.
+
+`02-target-admin/03-install-manifest-by-token.bru`는 `agent_token`이 있을 때 보낸다.
+정상 출력은 JSON이 아니라 Kubernetes YAML이고, `apiVersion:`과 `kind:`가 보여야 한다.
 
 ## 7단계. Agent runtime 확인
 
@@ -464,6 +500,10 @@ status 정상 출력에는 `command_id`, `cluster_id`, `status`, `result`가 있
 
 `05-rca-dashboard/02-dashboard-incident.bru`는 `incident_id`가 있을 때만 보낸다.
 정상 출력은 `item`이다. 없는 incident면 `404`가 정상이다.
+
+`05-rca-dashboard/04-alertmanager-webhook.bru`는 외부 모니터링 알림이 RCA evidence로 들어오는지 보는 요청이다.
+정상 출력은 `accepted: true`, `event_id`, `correlation_id`다.
+토큰이 설정되지 않은 배포에서는 `503`, 토큰이 틀리면 `401`이 정상 보호 응답이다.
 
 ## 10단계. GitHub webhook signature와 approval 확인
 
@@ -538,12 +578,35 @@ approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `
 2. `09-management-console/11-grant-access.bru`는 `access_id`, `resource_id`, `role`을 반환한다.
 3. `09-management-console/12-revoke-access.bru`는 `204`를 반환한다.
 
-## 14단계. 애플리케이션·클러스터·카탈로그 확인 (레포/배포 실플로우)
+## 14단계. 알림 채널 라우팅 확인
+
+이 단계는 admin 계정으로 로그인한 뒤 보낸다.
+민정/가인이 alert-worker 흐름을 확인할 때, 찬빈이 알림 설정 화면을 붙일 때 같은 API를 본다.
+
+먼저 `13-alert-channels/01-list-alert-channels.bru`를 보낸다.
+정상 출력에는 `channels` 배열이 있다.
+
+테스트 채널을 만들 때는 `13-alert-channels/02-upsert-alert-channel.bru`를 보낸다.
+정상 출력에는 `channel_id`, `workspace_id`, `name`, `kind`, `url`, `min_severity`, `enabled`가 있다.
+Bruno 기본 body는 `enabled: false`라서 테스트 생성만 하고 실제 알림 발송에는 참여하지 않는다.
+
+방금 만든 테스트 채널을 지울 때는 `13-alert-channels/03-delete-alert-channel.bru`를 보낸다.
+정상 삭제는 `204`다.
+
+실제 운영 채널을 켤 때는 이 순서를 따른다.
+
+1. `alert_webhook_url`을 팀 webhook URL로 바꾼다.
+2. `02-upsert-alert-channel.bru`의 `enabled`를 `true`로 바꾼다.
+3. `min_severity`를 `info`, `warning`, `critical` 중 하나로 정한다.
+4. 저장 후 `01-list-alert-channels`로 값이 남았는지 확인한다.
+5. alert-worker는 `alert.requested.workspace_id`의 enabled 채널 중 severity가 맞는 채널만 호출한다.
+
+## 15단계. 애플리케이션·클러스터·카탈로그 확인 (레포/배포 실플로우)
 
 레포 등록부터 배포 반영까지의 실제 흐름은 아래 순서로 본다.
 
 1. `11-clusters/01-list-clusters` → 등록된 클러스터를 확인한다. 비어 있으면 `02-target-admin/01`로 매니페스트를 받아 대상 클러스터에 apply부터 한다.
-2. `11-clusters/03-connection-status` → `cluster-1` agent가 online인지 본다. online이면 `04-inventory-summary`로 팟/워크로드 실데이터가 오는지 확인한다.
+2. `11-clusters/03-connection-status` → `cluster-1` agent가 online인지 본다. online이면 `04-inventory-summary`와 `11-usage-series`로 팟/워크로드 실데이터와 usage 시계열이 오는지 확인한다.
 3. `10-applications/02-create-application` → 데모 레포를 등록(`application_id` 자동 저장)한다.
 4. `10-applications/05-create-deployment` → `cluster-1` sandbox에 배포를 묶는다.
 5. GitHub 웹훅(`GITHUB_WEBHOOK_SECRET`)을 설정한 뒤 레포에 push하거나, `06-gitops-approval/01-github-webhook`으로 push 이벤트를 모사한다.
