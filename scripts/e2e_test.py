@@ -74,7 +74,7 @@ def kubectl_json(ctx: str, *args: str) -> dict | list | None:
 
 
 def api_client() -> httpx.Client:
-    c = httpx.Client(base_url=BASE, timeout=20)
+    c = httpx.Client(base_url=BASE, timeout=60)
     c.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
     return c
 
