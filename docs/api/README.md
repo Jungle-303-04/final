@@ -14,7 +14,7 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `09 관리 콘솔`까지 한글 폴더명이 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `12 카탈로그`까지 한글 폴더명이 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
 
@@ -27,11 +27,12 @@ docs/api
 
 직접 채워야 하는 값은 처음 한 번만 본다.
 
-1. `base_url`은 Gateway 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/`이고 이미 채워져 있다.
-2. `auth_email`과 `auth_password`는 로그인 계정이다. 기본값은 테스트용 `admin.local@example.com` 계정으로 채워져 있다.
+1. `base_url`은 Gateway 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/api/`로 이미 채워져 있다. **라이브는 console(nginx)이 앞단이라 API가 `/api` 프리픽스 아래에 있다** — 그래서 `/api/`로 끝나야 한다(루트로 두면 전부 404).
+2. `auth_password`만 직접 넣으면 된다. `auth_email`은 `woonyong-kr@gmail.com`(라이브 active service_admin)으로 채워져 있고, `auth_password`에 **가입 때 정한 비밀번호**를 넣는다. 다른 계정으로 볼거면 두 값을 바꾼다.
 3. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 4. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
-5. `service_image`는 `aws-test`에서 target manifest를 발급할 때 쓸 ECR image URI다.
+5. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
+6. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
@@ -47,16 +48,19 @@ docs/api
 
 아래는 각 값의 의미 설명이다.
 
-`base_url`은 Gateway 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/`를 쓴다.
+`base_url`은 Gateway 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/api/`를 쓴다.
+라이브는 console(nginx)이 정적 프론트를 서빙하며 `/api/*`를 내부 api-gateway로 프록시하므로, API는 반드시 `/api` 아래에서 호출한다.
 
-Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/`로 풀린다.
+Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
 그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test`를 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
-기본 Bruno 값은 로컬/공용 테스트용 admin 계정인 `admin.local@example.com` / `local-test-password-1234`다.
-AWS 배포가 다른 `AUTH_EMAIL`, `AUTH_PASSWORD`로 bootstrap되어 있으면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
+라이브 기본값은 `woonyong-kr@gmail.com`(active service_admin)이고, `auth_password`에 가입 때 정한 비밀번호를 넣는다.
+다른 계정으로 bootstrap되어 있으면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
 
-`cluster_id`는 target 등록 시 사용한 실제 cluster id다. 기본값은 AWS target smoke 기준 `cluster-1`이다.
+`cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 id다. 기본값은 `cluster-1`/`cluster-2`다.
+단, 두 클러스터에 cluster-agent가 아직 배포되지 않았다면 `clusters` 목록/인벤토리는 비어 있을 수 있다 —
+먼저 `02-target-admin/01`로 매니페스트를 받아 각 대상 클러스터에 apply해야 데이터가 흐른다.
 
 팀 통합 테스트는 `aws-test` Environment가 기준이다.
 로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
@@ -301,6 +305,23 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 `12-revoke-access`는 `access_id` 권한을 회수한다.
 실제 권한을 지우는 요청이므로 테스트용 grant를 만든 뒤 이어서 보내는 흐름을 권장한다.
 
+### 10-applications
+
+`01-list-applications`는 등록된 애플리케이션(레포+워치+배포 바인딩) 목록이다. 첫 항목의 `application_id`를 자동 저장한다.
+`02-create-application`은 데모 레포(`repo_ref`, `default_branch`, `manifest_path`)를 애플리케이션으로 등록한다. 응답의 `application.application_id`를 자동 저장한다.
+`03-get-application`은 상세, `04-list-deployments`는 배포 바인딩 목록, `05-create-deployment`는 `cluster_id`/`namespace`에 배포를 묶는다.
+`06-list-runs`는 그 애플리케이션의 워크플로우 run 목록이다(웹훅 push 후 run이 생긴다).
+
+### 11-clusters
+
+`01-list-clusters`는 등록된 클러스터 목록(대시보드 플릿). `02-get-cluster`는 상세, `03-connection-status`는 agent online 여부다.
+`04~08 inventory-*`는 summary/resources/workloads/services/events — 팟·노드·워크로드 실데이터의 원천이다(agent 연결 후 채워짐).
+`09-scale-deployment`/`10-restart-deployment`는 sandbox 네임스페이스의 디플로이먼트에 스케일/재시작 명령을 보낸다(deploy 권한 필요).
+
+### 12-catalog
+
+`01-list-items`는 설치형 카탈로그 항목 목록(첫 `item_id` 자동 저장), `02-get-item`은 상세, `03-install-item`은 `cluster_id`/`namespace`에 설치를 요청한다.
+
 ## 3단계. 서버 상태 확인
 
 먼저 `00-health-auth/01-healthz.bru`를 보낸다.
@@ -487,6 +508,20 @@ approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `
 1. `09-management-console/10-list-access.bru`는 `grants` 배열을 반환한다.
 2. `09-management-console/11-grant-access.bru`는 `access_id`, `resource_id`, `role`을 반환한다.
 3. `09-management-console/12-revoke-access.bru`는 `204`를 반환한다.
+
+## 14단계. 애플리케이션·클러스터·카탈로그 확인 (레포/배포 실플로우)
+
+레포 등록부터 배포 반영까지의 실제 흐름은 아래 순서로 본다.
+
+1. `11-clusters/01-list-clusters` → 등록된 클러스터를 확인한다. 비어 있으면 `02-target-admin/01`로 매니페스트를 받아 대상 클러스터에 apply부터 한다.
+2. `11-clusters/03-connection-status` → `cluster-1` agent가 online인지 본다. online이면 `04-inventory-summary`로 팟/워크로드 실데이터가 오는지 확인한다.
+3. `10-applications/02-create-application` → 데모 레포를 등록(`application_id` 자동 저장)한다.
+4. `10-applications/05-create-deployment` → `cluster-1` sandbox에 배포를 묶는다.
+5. GitHub 웹훅(`GITHUB_WEBHOOK_SECRET`)을 설정한 뒤 레포에 push하거나, `06-gitops-approval/01-github-webhook`으로 push 이벤트를 모사한다.
+6. `10-applications/06-list-runs` → run이 생겼는지 본다. 승인 대기면 `06-gitops-approval/02-grant-approval`로 승인한다.
+7. `11-clusters/09-scale-deployment` / `10-restart-deployment` → sandbox 워크로드에 직접 액션을 보내고, 다시 `04-inventory-*`로 반영을 확인한다.
+
+정상 응답은 대부분 `200`이며, 권한/데이터 부재 시 `401/403/404`가 정상 보호 동작이다.
 
 ## Bruno CLI로 import 문법만 확인하기
 

@@ -1,0 +1,16 @@
+meta {
+  name: 06 워크플로우 run 목록
+  type: http
+  seq: 6
+  tags: [applications, runs, read]
+}
+
+get {
+  url: {{base_url}}applications/{{application_id}}/runs
+}
+
+tests {
+  test("200 or auth/not-found", function () {
+    expect([200, 401, 403, 404]).to.include(res.status);
+  });
+}
