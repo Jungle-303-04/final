@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
+from packages.config.control import control_namespace_allowed
 from packages.config.errors import require
 from packages.config.settings import env
 
@@ -113,6 +114,21 @@ class AllowedValuesRule:
             reason=config.reason,
             default=config.default,
         )
+
+
+@dataclass(frozen=True)
+class NamespaceAllowlistRule:
+    """제어 허용 네임스페이스 룰 — 기준은 packages.config.control 단일 소스.
+
+    env 를 평가 시점마다 읽으므로 재기동 없이 정책이 반영되고 테스트가 쉽다.
+    """
+
+    field: str
+    default_namespace: str
+    reason: str
+
+    def allows(self, target: Lookup) -> bool:
+        return control_namespace_allowed(str(target.value(self.field, self.default_namespace)))
 
 
 @dataclass(frozen=True)

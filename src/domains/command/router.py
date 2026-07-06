@@ -26,6 +26,10 @@ from domains.identity.dependencies import (
     require_session,
 )
 from packages.config.constants import Command, CommandStatus, Sandbox
+from packages.config.control import (
+    CONTROL_NAMESPACE_DENIED_MESSAGE,
+    control_namespace_allowed,
+)
 from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -66,7 +70,8 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
-CONTROL_NAMESPACE_NOT_ALLOWED = "only sandbox namespace control is currently supported"
+# 제어 허용 네임스페이스는 packages.config.control 단일 기준(기본 sandbox 만).
+CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 
 router = APIRouter()
 
@@ -79,7 +84,7 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
 
 
 def validate_control_namespace(namespace: str) -> None:
-    if namespace != Sandbox.NAMESPACE:
+    if not control_namespace_allowed(namespace):
         raise HTTPException(status_code=UNPROCESSABLE_CODE, detail=CONTROL_NAMESPACE_NOT_ALLOWED)
 
 

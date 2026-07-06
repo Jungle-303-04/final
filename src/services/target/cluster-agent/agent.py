@@ -78,6 +78,10 @@ from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.config.control import (
+    CONTROL_NAMESPACE_DENIED_MESSAGE,
+    control_namespace_allowed,
+)
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -171,7 +175,8 @@ class AgentConfig:
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
     MANIFEST_PATCHED_MESSAGE = "Kubernetes manifest patched in sandbox namespace"
     DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE = "Kubernetes deployment rollout completed"
-    WRITE_NAMESPACE_DENIED_MESSAGE = "only sandbox namespace writes are allowed"
+    # 제어 허용 네임스페이스는 packages.config.control 단일 기준(CONTROL_ALLOWED_NAMESPACES).
+    WRITE_NAMESPACE_DENIED_MESSAGE = CONTROL_NAMESPACE_DENIED_MESSAGE
     MISSING_APPROVAL_EVIDENCE_MESSAGE = (
         "write command requires approval_ref and policy_decision_ref"
     )
@@ -988,7 +993,7 @@ class TargetClusterAgent:
                 "apply_manifest requires deployment resource and image",
                 resource=str(diff.get("resource", "")),
             )
-        if namespace != Sandbox.NAMESPACE:
+        if not control_namespace_allowed(namespace):
             return self.command_result(
                 False,
                 AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE,
@@ -1007,7 +1012,7 @@ class TargetClusterAgent:
     async def rollout_restart_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
-        if namespace != Sandbox.NAMESPACE:
+        if not control_namespace_allowed(namespace):
             return self.command_result(
                 False,
                 AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE,
@@ -1041,7 +1046,7 @@ class TargetClusterAgent:
             resource = kubernetes_manifest_resource(manifest, fallback_namespace)
         except ValueError as exc:
             return False, str(exc), {}
-        if resource.namespace != Sandbox.NAMESPACE:
+        if not control_namespace_allowed(resource.namespace):
             return False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE, {}
 
         async with kubernetes_client(self.kubernetes_transport) as client:
