@@ -71,6 +71,14 @@ function mkRun(id: string, appId: string, sha: string, status: string, minAgo: n
       name,
       status: status === 'FAILED' && i === 3 ? 'FAILED' : i < idx ? 'SUCCEEDED' : i === idx ? status : 'PENDING',
       detail: name === 'DIFFING' ? 'image: v1.4.1 → v1.4.2 · replicas: 2' : undefined,
+      // 실백엔드 diff-worker 의 3-way plan 산출물과 동형 — 승인 화면 +/~/- 미리보기용
+      resource: name === 'DIFFING' ? 'deployment/checkout-api · sandbox' : undefined,
+      changes: name === 'DIFFING' ? [
+        { field_path: 'image', classification: 'intended_change', before: 'v1.4.1', after: 'v1.4.2' },
+        { field_path: 'replicas', classification: 'adoption_required', before: '__missing__', after: 2 },
+        { field_path: 'resources.limits.memory', classification: 'drift', before: '256Mi', after: '512Mi' },
+        { field_path: 'labels.app', classification: 'already_converged', before: 'checkout-api', after: 'checkout-api' },
+      ] : undefined,
     })),
     approval_id: status === 'WAITING_FOR_APPROVAL' ? 'apr-1' : undefined,
     safe_pr: id === 'run-3' ? { status: 'created', pr_url: 'https://github.com/Jungle-303-04/final/pull/42', explanation: 'CrashLoopBackOff 원인인 메모리 상한을 256Mi→512Mi 로 상향', diff_before: 'memory: 256Mi', diff_after: 'memory: 512Mi' } : undefined,
