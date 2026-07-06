@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from domains.identity.dependencies import ClusterAgentIdentity
+from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.inventory.repository import (
     HEALTH_RESOURCE_TYPE,
     USAGE_RESOURCE_TYPE,
@@ -254,3 +255,39 @@ def test_first_container_image_extracts_workload_pod_then_summary() -> None:
     assert first_container_image({}, {"image": "img:sum"}) == "img:sum"
     assert first_container_image({}, {}) is None
     assert first_container_image({"spec": {"containers": [{}]}}, {}) is None
+
+
+def test_kubernetes_evidence_snapshot_fills_measured_usage_rollup() -> None:
+    """usage 는 agent 가 관측한 값의 집계 — 항상 빈 dict 이던 죽은 경로를 실측으로."""
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {
+            "pods": [
+                {"name": "a", "phase": "Running", "restart_total": 2},
+                {"name": "b", "phase": "Pending", "restart_total": 0},
+                {"name": "c", "phase": "Running", "restart_total": 5},
+            ],
+            "nodes": [
+                {"name": "n1", "ready": True},
+                {"name": "n2", "ready": False},
+            ],
+        },
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    assert snapshot["usage"] == {
+        "pod_total": 3,
+        "pod_running": 2,
+        "pod_pending": 1,
+        "pod_failed": 0,
+        "restart_total": 7,
+        "node_total": 2,
+        "node_ready": 1,
+    }
+
+
+def test_kubernetes_evidence_snapshot_usage_empty_when_nothing_observed() -> None:
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {}, cluster_id="cluster-1", agent_id="agent-1"
+    )
+    assert snapshot["usage"] == {}

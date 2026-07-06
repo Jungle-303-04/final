@@ -341,6 +341,30 @@ class InventoryRepository(DatabaseConnection):
             dict(row["summary"] or {}),
         )
 
+    def list_cluster_usage_samples(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 288,
+    ) -> list[JsonObject]:
+        """실측 usage 롤업 시계열 — 최신 limit 개를 시간 오름차순으로 반환(차트용)."""
+        table = ClusterUsageSampleRecord.__table__
+        newest_first = (
+            select(table.c.sampled_at, table.c.usage)
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .order_by(table.c.sampled_at.desc())
+            .limit(max(1, min(limit, 2000)))
+            .subquery()
+        )
+        statement = select(newest_first).order_by(newest_first.c.sampled_at.asc())
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [
+            {"sampled_at": iso_or_none(row["sampled_at"]), "usage": dict(row["usage"] or {})}
+            for row in rows
+        ]
+
     def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
         table = ClusterInventorySnapshotRecord.__table__
         statement = (

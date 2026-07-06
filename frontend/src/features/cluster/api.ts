@@ -18,6 +18,16 @@ export const useResources = (id: string, kind?: string) =>
   useQuery({ queryKey: clusterKeys.inv(id, kind ?? 'all'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources${kind ? `?resource_type=${kind}` : ''}`), enabled: !!id, select: d => d.resources.map(adaptInventoryResource) });
 export const useServices = (id: string) =>
   useQuery({ queryKey: clusterKeys.inv(id, 'services'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/services`), enabled: !!id, select: d => d.resources.map(adaptServiceResource) });
+export interface UsageSample { sampled_at: string | null; usage: Record<string, number> }
+// 스냅샷마다 적재되는 실측 usage 롤업 시계열 — 인벤토리 기반 장기 추이(LIVE 스트림과 별개)
+export const useClusterUsage = (id: string | undefined) =>
+  useQuery({
+    queryKey: ['clusters', id ?? '', 'usage'],
+    queryFn: () => get<{ samples: UsageSample[] }>(`/clusters/${id}/usage?limit=288`),
+    enabled: !!id,
+    refetchInterval: 60_000,
+    select: d => d.samples,
+  });
 export const useClusterEvents = (id: string) =>
   useQuery({ queryKey: clusterKeys.inv(id, 'events'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/events`), enabled: !!id, select: d => d.resources.map(adaptK8sEventResource) });
 
