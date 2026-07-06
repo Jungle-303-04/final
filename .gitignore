@@ -1,6 +1,8 @@
 .DS_Store
 .env
 .env.local-test
+.env.external-console
+.env.*cloud
 .data/
 .idea/
 .vscode/
