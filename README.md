@@ -144,6 +144,16 @@ node-collector               선택형 DaemonSet collector
 reconcile-worker             target 상태 reconcile
 ```
 
+## 핵심 기능
+
+- **클러스터 연결(원라인 설치)**: 콘솔 위저드에서 등록 → `curl -fsSL <게이트웨이>/api/install/<토큰> | kubectl apply -f -` 한 줄로 agent 설치. agent가 아웃바운드 롱폴로 접속하는 pull 모델이라 kubeconfig·인바운드 개방이 필요 없고, 연결되면 콘솔 배지가 자동으로 connected 로 바뀐다.
+- **GitOps 배포 파이프라인**: git 변경 → 렌더(kustomize/native/helm) → 리소스 필드 단위 3-way 디프(plan 미리보기 `+/~/-`) → 정책 검사 → 승인 → 적용 → 롤아웃 헬스. 승인 화면에서 "정확히 뭐가 바뀌는지"를 terraform plan 스타일로 확인하고 누른다.
+- **승격 파이프라인·글로벌 서비스**: 바인딩 `deploy_policy` 에 `promotes_to_binding_id` 를 선언하면 staging 성공 시 같은 commit 으로 prod 파이프라인이 자동 재진입(승인 게이트 유지). `cluster_id: "*"` 로 배포를 만들면 전 클러스터로 확장되고 신규 클러스터도 자동 합류한다.
+- **인시던트 → RCA → 복구**: agent 증거 수집(k8s/Prometheus/Loki/Tempo) 또는 외부 Alertmanager 웹훅(`POST /webhooks/alertmanager`)이 인시던트를 열고, RCA 플레이북이 원인 후보·복구 액션을 제안한다. 복구 실행은 제어 허용 네임스페이스 정책(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox)이 3계층(게이트웨이·워커·agent)에서 막는다.
+- **알림 라우팅**: 워크스페이스별 채널(`/alert-channels`)에 min_severity(info<warning<critical) 룰로 발송. 채널이 없으면 전역 provider 폴백.
+- **메트릭**: 실시간 LIVE 스트림 차트, 스냅샷 기반 실측 usage 시계열(`/clusters/{id}/usage`), 온디맨드 PromQL(agent 경유, 실측 결과 폴링). 시스템 자체 지표는 게이트웨이 `/metrics`(Prometheus 포맷)로 노출.
+- **성능**: 명령 전달은 Postgres LISTEN/NOTIFY 웨이크업(ms 단위, 미설정 시 폴링 폴백), 인벤토리 스냅샷은 다중 VALUES 배치 업서트, DB 는 pgbouncer transaction pooling.
+
 ## 검증
 
 ```bash
