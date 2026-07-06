@@ -140,7 +140,6 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
             EventSubject.ALERT_REQUESTED,
             EventSubject.ALERT_DISPATCHED,
             EventSubject.COMMAND_REQUESTED,
-            EventSubject.COMMAND_DISPATCH_READY,
             EventSubject.COMMAND_DISPATCHED,
             EventSubject.COMMAND_QUEUED_FOR_AGENT,
         ]
