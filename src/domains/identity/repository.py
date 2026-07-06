@@ -950,11 +950,15 @@ class IdentityAccessRepository(DatabaseConnection):
             statement = statement.where(user.c.status == status)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-            group_rows = conn.execute(
-                select(member.c.user_id, member.c.group_id).where(
-                    member.c.status == AccessStatus.ACTIVE.value
+            group_rows = (
+                conn.execute(
+                    select(member.c.user_id, member.c.group_id).where(
+                        member.c.status == AccessStatus.ACTIVE.value
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         groups_by_user: dict[str, list[str]] = {}
         for g in group_rows:
             groups_by_user.setdefault(g["user_id"], []).append(g["group_id"])
