@@ -17,8 +17,7 @@ Prometheus 흐름이 안정된 뒤, log 또는 trace ingest 경로 하나를 작
 - `src/services/target/cluster-agent/providers/loki_providers.py`
 - `src/services/target/cluster-agent/providers/tempo_providers.py`
 - `src/services/target/cluster-agent/evidence/collector.py`
-- `tests/test_target_log_evidence.py`
-- `tests/test_target_trace_evidence.py`
+- `tests/test_target_telemetry_evidence.py`
 
 ## 선형 절차
 
@@ -58,7 +57,7 @@ Prometheus 흐름이 안정된 뒤, log 또는 trace ingest 경로 하나를 작
 ## 검증
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_log_evidence.py tests/test_target_trace_evidence.py -q
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_telemetry_evidence.py -q
 uv run ruff check src tests
 ```
 

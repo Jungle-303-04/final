@@ -1062,8 +1062,8 @@ Evidence job/scheduler/provider:
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_evidence_jobs.py
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_agent_evidence_ingest.py
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_metric_evidence.py
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_log_evidence.py
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_trace_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_telemetry_evidence.py
+PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_telemetry_evidence.py
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_telemetry_registry.py
 ```

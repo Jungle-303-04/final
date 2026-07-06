@@ -396,7 +396,7 @@ uv run pytest tests/test_projection.py
 ```bash
 uv run pytest tests/test_node_collector.py
 uv run pytest tests/test_target_agent_client.py tests/test_target_agent_commands.py
-uv run pytest tests/test_target_metric_evidence.py tests/test_target_log_evidence.py tests/test_target_trace_evidence.py
+uv run pytest tests/test_target_metric_evidence.py tests/test_target_telemetry_evidence.py
 uv run pytest tests/test_target_pod_evidence.py tests/test_agent_evidence_ingest.py
 ```
 

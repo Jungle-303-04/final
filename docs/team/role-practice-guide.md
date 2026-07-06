@@ -377,9 +377,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_target_agent_commands.py \
   tests/test_target_evidence_jobs.py \
   tests/test_target_metric_evidence.py \
+  tests/test_target_telemetry_evidence.py \
   tests/test_target_kubernetes_evidence.py \
-  tests/test_target_log_evidence.py \
-  tests/test_target_trace_evidence.py \
   tests/test_target_pod_evidence.py \
   tests/test_telemetry_registry.py \
   -q
@@ -778,9 +777,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_target_evidence_jobs.py \
   tests/test_target_metric_evidence.py \
   tests/test_target_kubernetes_evidence.py \
-  tests/test_target_log_evidence.py \
-  tests/test_target_trace_evidence.py \
-  -q
+      -q
 ```
 
 확인할 것:
