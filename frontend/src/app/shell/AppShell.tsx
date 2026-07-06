@@ -6,6 +6,8 @@ import { uiStore } from '@/shared/lib/ui-store';
 import { useIsAdmin, useLogout, useSession } from '@/features/auth/api';
 import { useNotices } from '@/features/notifications/api';
 import { Avatar, Button } from '@/shared/ui';
+import { PulseOnChange } from '@/shared/motion';
+import { IconBell } from '@/shared/ui/icons';
 import { API_MODE } from '@/shared/lib/api';
 import './shell.css';
 
@@ -24,6 +26,7 @@ export function AppShell() {
   const open = uiStore(s => s.sidebarOpen);
   const toggle = uiStore(s => s.toggleSidebar);
   const liveStatus = liveStore(s => s.status);
+  const liveAt = liveStore(s => s.snapshot?.at); // 스냅샷 수신 시각 — 수신 순간 인디케이터 pulse
   const admin = useIsAdmin();
   const { data: session } = useSession();
   const logout = useLogout();
@@ -53,10 +56,12 @@ export function AppShell() {
           <span />
           <div className="topbar__right">
             {API_MODE === 'mock' && <span className="badge" style={{ color: 'var(--neutral)' }}>MOCK</span>}
-            <span title={liveStatus === 'open' ? '실시간 연결됨' : '실시간 끊김'}
-              style={{ color: liveStatus === 'open' ? 'var(--ok)' : 'var(--neutral)', fontSize: 10 }}>● LIVE</span>
+            <PulseOnChange signal={liveAt}>
+              <span title={liveStatus === 'open' ? '실시간 연결됨' : '실시간 끊김'}
+                style={{ color: liveStatus === 'open' ? 'var(--ok)' : 'var(--neutral)', fontSize: 10 }}>● LIVE</span>
+            </PulseOnChange>
             <Link to="/notifications" className="topbar__bell" aria-label="알림">
-              🔔{unread > 0 && <span className="topbar__count">{unread}</span>}
+              <IconBell size={16} />{unread > 0 && <span className="topbar__count">{unread}</span>}
             </Link>
             {session?.email && <Avatar name={session.email} />}
             <Button variant="ghost" size="sm" onClick={() => logout.mutate(undefined, { onSuccess: () => nav('/login', { replace: true }) })}>로그아웃</Button>

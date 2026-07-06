@@ -8,9 +8,16 @@ vars:pre-request {
   user_id: replace-with-user-id
   workspace_id: default
   cluster_id: cluster-1
+  cluster_id_2: cluster-2
   target_name: cluster-1
   management_base_url: https://k8s.woonyong.org/
   service_image: replace-with-ecr-image-uri
+  namespace: sandbox
+  deployment_name: demo-web
+  repo_ref: Jungle-303-04/gitops-demo
+  default_branch: main
+  manifest_path: deploy.yaml
+  application_id: replace-with-application-id
   agent_token: replace-with-agent-token-from-target-registration
   agent_id: target-agent
   command_id: replace-with-command-id-from-poll-or-debug-query
@@ -18,6 +25,9 @@ vars:pre-request {
   evidence_key: aws-window-001
   evidence_job_id: replace-with-job-id-from-evidence-job-poll
   provider_key: kubernetes
+  catalog_item_id: replace-with-catalog-item-id
+  plan_id: replace-with-recovery-plan-id
+  action_id: replace-with-recovery-action-id
   approval_id: replace-with-approval-id
   dead_letter_id: 1
   conversation_id: replace-with-conversation-id

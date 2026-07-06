@@ -160,7 +160,7 @@ async def on_command_requested(
 | Identity | `mail.email_verification.requested`, `mail.email_verification.sent` |
 | GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed` |
 | Agent/Target | `agent.connected`, `cluster.evidence.received`, `cluster.desired_state.changed`, `cluster.reconcile.requested`, `cluster.reconcile.started`, `cluster.drift.detected`, `cluster.reconcile.completed`, `cluster.reconcile.failed` |
-| Command | `command.requested`, `command.rejected`, `command.dispatch.ready`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
+| Command | `command.requested`, `command.rejected`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
 | RCA/Safe PR | `evidence.built`, `rca.analysis_blocked`, `rca.followup.required`, `rca.completed`, `safe_pr.requested`, `safe_pr.patch_prepared`, `diff.explained`, `safe_pr.created`, `safe_pr.failed` |
 | Workflow/Approval | `workflow.created`, `workflow.run.started`, `workflow.step.recorded`, `workflow.run.completed`, `workflow.run.failed`, `approval.requested`, `approval.granted`, `approval.rejected` |
 | Dashboard | `dashboard.updated` |
@@ -243,7 +243,6 @@ async def on_event(evt: EventEnvelope, ctx: EventContext):
 ```python
 from packages.contracts.event_bus.bodies import (
     CommandRequestedBody,
-    CommandDispatchReadyBody,
 )
 from packages.runtime.app import App
 
@@ -251,7 +250,6 @@ app = App("command-worker")
 
 @app.on(CommandRequestedBody)              # 한 body 타입 구독
 async def on_command_requested(evt, ctx):
-    yield CommandDispatchReadyBody(...)     # 체이닝: 다음 이벤트는 yield
 
 if __name__ == "__main__":
     app.run()
@@ -361,7 +359,7 @@ NATS JetStream durable pull consumer
 선택 기준:
 
 - exactly-once는 목표가 아니다. 중복 처리는 `event_processing`과 업무 테이블의 stable id로 막는다.
-- 서비스 간 직접 HTTP 호출 순서를 큐에 숨기지 않는다. 선후행은 `command.requested -> command.dispatch.ready -> command.dispatched`처럼 subject 전이로 표현한다.
+- 서비스 간 직접 HTTP 호출 순서를 큐에 숨기지 않는다. 선후행은 `command.requested -> command.dispatched`처럼 subject 전이로 표현한다.
 - MVP에서는 worker별 `fetch_batch_size=1`로 시작한다. 처리 순서와 디버깅을 쉽게 만들기 위해서다.
 - 처리량이 필요해지면 worker replica 수, durable consumer 분리, batch size 조정 순서로 확장한다.
 - 무한 재시도는 금지한다. 같은 이벤트가 계속 실패하면 운영자가 볼 수 있도록 DLQ로 이동한다.

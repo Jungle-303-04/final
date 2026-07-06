@@ -141,6 +141,7 @@ async def on_alert_requested(
 ) -> AsyncIterator[EventBody]:
     decision = check_alert_policy(evt)
     if not decision.allowed:
+        LOGGER.warning("alert rejected", extra={"context": {"reason": decision.reason}})
         yield AlertRejectedBody(reason=decision.reason, requested=evt.to_body())
         return
 
@@ -162,6 +163,17 @@ async def on_alert_requested(
         yield AlertRejectedBody(reason=ALERT_DISPATCH_FAILED_REASON, requested=evt.to_body())
         return
 
+    LOGGER.info(
+        "alert dispatched",
+        extra={
+            "context": {
+                "cluster_id": dispatched.cluster_id,
+                "severity": dispatched.severity,
+                "channel": dispatched.channel,
+                "mode": dispatched.mode,
+            }
+        },
+    )
     yield dispatched
     if evt.next_command is not None:
         yield evt.next_command

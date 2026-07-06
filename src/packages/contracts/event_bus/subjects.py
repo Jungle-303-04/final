@@ -45,8 +45,7 @@ class EventSubject(StrEnum):
     # --- 명령 처리(command-worker): 정책→디스패치→에이전트 큐 ---
     COMMAND_REQUESTED = "command.requested"  # 명령 요청
     COMMAND_REJECTED = "command.rejected"  # 정책 위반 거부
-    COMMAND_DISPATCH_READY = "command.dispatch.ready"  # 실행 계획 수립
-    COMMAND_DISPATCHED = "command.dispatched"  # 대상 클러스터로 라우팅
+    COMMAND_DISPATCHED = "command.dispatched"  # 실행 계획 수립·대상 클러스터로 라우팅
     COMMAND_QUEUED_FOR_AGENT = "command.queued_for_agent"  # 에이전트 큐 적재
     COMMAND_COMPLETED = "command.completed"  # 에이전트 실행 완료
 

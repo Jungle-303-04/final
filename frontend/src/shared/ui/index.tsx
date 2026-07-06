@@ -5,8 +5,9 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '@/shared/lib/api';
 import type { Tone } from '@/shared/lib/types';
 import { toneColor, toneOf } from '@/shared/ui/status';
-import { CountUp } from '@/shared/motion';
+import { AnimatePresence, AnimatedRow, CountUp } from '@/shared/motion';
 import { uiStore } from '@/shared/lib/ui-store';
+import { IconAlertTriangle, IconFile } from '@/shared/ui/icons';
 
 export function Button({ variant = 'secondary', size, loading, children, ...rest }:
   { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; size?: 'sm'; loading?: boolean } &
@@ -43,16 +44,19 @@ export function StatBox({ label, value, tone }: { label: string; value: number; 
 export interface Column<T> { key: string; label: string; render: (row: T) => ReactNode; width?: string }
 export function ResourceTable<T>({ columns, rows, rowKey, onRowClick, empty }:
   { columns: Column<T>[]; rows: T[]; rowKey: (r: T) => string; onRowClick?: (r: T) => void; empty?: ReactNode }) {
-  if (rows.length === 0) return <>{empty ?? <EmptyState icon="📄" title="데이터가 없습니다" />}</>;
+  if (rows.length === 0) return <>{empty ?? <EmptyState icon={<IconFile size={26} />} title="데이터가 없습니다" />}</>;
   return (
     <table className="table">
       <thead><tr>{columns.map(c => <th key={c.key} style={{ width: c.width }}>{c.label}</th>)}</tr></thead>
       <tbody>
-        {rows.map(r => (
-          <tr key={rowKey(r)} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick?.(r)}>
-            {columns.map(c => <td key={c.key}>{c.render(r)}</td>)}
-          </tr>
-        ))}
+        {/* 행 추가/제거/재정렬 시 layout 애니메이션(키 기반) */}
+        <AnimatePresence initial={false}>
+          {rows.map(r => (
+            <AnimatedRow key={rowKey(r)} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick?.(r)}>
+              {columns.map(c => <td key={c.key}>{c.render(r)}</td>)}
+            </AnimatedRow>
+          ))}
+        </AnimatePresence>
       </tbody>
     </table>
   );
@@ -106,7 +110,7 @@ export function Drawer({ open, title, onClose, children }: { open: boolean; titl
   );
 }
 
-export function EmptyState({ icon, title, description, action }: { icon: string; title: string; description?: string; action?: ReactNode }) {
+export function EmptyState({ icon, title, description, action }: { icon: ReactNode; title: string; description?: string; action?: ReactNode }) {
   return <div className="empty"><span className="ico">{icon}</span><strong>{title}</strong>{description && <span style={{ fontSize: 'var(--fs-sm)' }}>{description}</span>}{action}</div>;
 }
 
@@ -119,7 +123,7 @@ export function QueryBoundary<T>({ query, children, skeletonLines }: { query: Us
   if (query.isError) {
     const e = query.error as unknown as ApiError;
     const msg = e.kind === 'forbidden' ? '접근 권한이 없습니다' : e.kind === 'unauthorized' ? '다시 로그인해주세요' : e.kind === 'network' ? '네트워크 오류' : e.detail || '오류가 발생했습니다';
-    return <EmptyState icon="⚠️" title={msg} action={<Button size="sm" onClick={() => query.refetch()}>다시 시도</Button>} />;
+    return <EmptyState icon={<IconAlertTriangle size={26} />} title={msg} action={<Button size="sm" onClick={() => query.refetch()}>다시 시도</Button>} />;
   }
   return <>{children(query.data)}</>;
 }
