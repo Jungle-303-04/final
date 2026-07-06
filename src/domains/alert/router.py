@@ -40,13 +40,16 @@ async def upsert_alert_channel(
     db: Any = Depends(get_db),
 ) -> AlertChannelResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    saved = db.upsert_alert_channel(
-        {
-            **payload.model_dump(exclude={"channel_id"}),
-            **({"channel_id": payload.channel_id} if payload.channel_id else {}),
-            "workspace_id": workspace_id,
-        }
-    )
+    try:
+        saved = db.upsert_alert_channel(
+            {
+                **payload.model_dump(exclude={"channel_id"}),
+                **({"channel_id": payload.channel_id} if payload.channel_id else {}),
+                "workspace_id": workspace_id,
+            }
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CHANNEL_NOT_FOUND) from exc
     return AlertChannelResponse(**saved)
 
 

@@ -120,6 +120,7 @@ def test_schema_defines_expected_tables() -> None:
         "resource_assignments",
         "member_resource_roles",
         "role_permissions",
+        "alert_channels",
         "cluster_registrations",
         "evidence_jobs",
         "evidence_windows",
