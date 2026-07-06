@@ -24,11 +24,13 @@ from domains.command.policy import (
     DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
     CommandConfig,
     ModelLookup,
+    NamespaceAllowlistRule,
     Policy,
     PolicyRuleConfig,
 )
 from domains.command.policy import Result as PolicyResult
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gateway.fields import Gateway
@@ -51,13 +53,6 @@ COMMAND_CONFIG = CommandConfig(
     required_agent_capability="command_receiver",
     policy_rules=(
         PolicyRuleConfig(
-            name="sandbox_namespace",
-            field=Gateway.NAMESPACE,
-            expected=Sandbox.NAMESPACE,
-            default=Sandbox.NAMESPACE,
-            reason="only sandbox namespace writes are allowed",
-        ),
-        PolicyRuleConfig(
             name="command_action_allowlist",
             field=Gateway.ACTION,
             allowed_values=allowed_command_actions(),
@@ -66,7 +61,18 @@ COMMAND_CONFIG = CommandConfig(
         ),
     ),
 )
-POLICY = Policy.build(COMMAND_CONFIG.policy_rules)
+# 네임스페이스 룰은 정적 값 비교가 아니라 제어 허용목록(CONTROL_ALLOWED_NAMESPACES,
+# 기본 sandbox 만)을 평가 시점에 읽는다 — packages.config.control 이 단일 기준.
+POLICY = Policy(
+    (
+        NamespaceAllowlistRule(
+            field=Gateway.NAMESPACE,
+            default_namespace=Sandbox.NAMESPACE,
+            reason=CONTROL_NAMESPACE_DENIED_MESSAGE,
+        ),
+        *Policy.build(COMMAND_CONFIG.policy_rules).rules,
+    )
+)
 NAMESPACE_MISMATCH_REASON = "command namespace must match diff namespace"
 MANIFEST_NAMESPACE_MISMATCH_REASON = "manifest namespace must match command namespace"
 ACTION_NAMESPACE_REASON = "namespace not allowed for this command action"
