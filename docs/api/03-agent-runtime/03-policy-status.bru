@@ -10,6 +10,7 @@ meta {
 
 post {
   url: {{base_url}}agent/policy/status
+  body: json
 }
 
 headers {
@@ -19,7 +20,7 @@ headers {
 
 body:json {
   {
-    "cluster_id": "{{cluster_id}}",
+    "cluster_id": "{{agent_cluster_id}}",
     "generation": 2,
     "status": "applied",
     "message": "policy applied from Bruno",

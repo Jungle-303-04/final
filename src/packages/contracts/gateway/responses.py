@@ -200,6 +200,9 @@ class ClusterSummary(StrictModel):
     connection_status: str
     last_agent_id: str | None = None
     last_agent_seen_at: str | None = None
+    node_count: int = 0
+    pod_count: int = 0
+    incident_count: int = 0
     created_at: str | None = None
     updated_at: str | None = None
 

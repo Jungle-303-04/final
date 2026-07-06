@@ -9,7 +9,9 @@ vars {
   workspace_id: default
   cluster_id: target
   cluster_id_2: target
+  agent_cluster_id: target
   target_name: target
+  agent_target_name: target
   management_base_url: http://api-gateway.management:8000
   service_image: service:local
   namespace: sandbox
@@ -33,6 +35,7 @@ vars {
   conversation_id: auto-set-after-create-conversation
   incident_id: auto-set-after-dashboard-timeline
   org_id: auto-set-after-org-create-or-list
+  created_org_id: auto-set-after-org-create
   group_id: auto-set-after-group-create-or-list
   access_id: auto-set-after-access-grant
   metrics_token: replace-with-metrics-token-if-enabled

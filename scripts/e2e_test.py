@@ -14,7 +14,7 @@ import sys
 import time
 from dataclasses import dataclass
 
-import httpx
+import requests
 
 BASE = os.environ.get("BASE_URL", "").rstrip("/")
 EMAIL = os.environ.get("AUTH_EMAIL", "")
@@ -24,6 +24,7 @@ KUBECTL_CTX = os.environ.get("MGMT_CONTEXT", "")
 TARGET_CTX = os.environ.get("TARGET_CONTEXT", os.environ.get("TARGET_CLUSTER", ""))
 TEST_NS = "sandbox"
 TEST_DEPLOY_NAME = "e2e-test-nginx"
+TIMEOUT = 60
 
 
 # ── result tracking ────────────────────────────────────────────
@@ -73,10 +74,13 @@ def kubectl_json(ctx: str, *args: str) -> dict | list | None:
         return None
 
 
-def api_client() -> httpx.Client:
-    c = httpx.Client(base_url=BASE, timeout=60)
-    c.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
-    return c
+def api_client() -> requests.Session:
+    s = requests.Session()
+    resp = s.post(
+        f"{BASE}/auth/login", json={"email": EMAIL, "password": PASSWORD}, timeout=TIMEOUT
+    )
+    resp.raise_for_status()
+    return s
 
 
 def wait_for(fn, desc: str, timeout: int = 60, interval: int = 3) -> bool:
@@ -93,11 +97,11 @@ def wait_for(fn, desc: str, timeout: int = 60, interval: int = 3) -> bool:
 # ╔══════════════════════════════════════════════════════════════╗
 # ║ 1. CLUSTER REGISTRATION E2E                                ║
 # ╚══════════════════════════════════════════════════════════════╝
-def test_cluster_registration(c: httpx.Client):
+def test_cluster_registration(c: requests.Session):
     print("\n═══ 1. 클러스터 등록 E2E ═══")
 
     # 1-1. API에서 타겟 클러스터 등록 확인
-    resp = c.get(f"/clusters/{CLUSTER_ID}")
+    resp = c.get(f"{BASE}/clusters/{CLUSTER_ID}", timeout=TIMEOUT)
     data = resp.json() if resp.status_code == 200 else {}
     check("등록", "API에서 클러스터 조회", resp.status_code == 200, f"status={data.get('status')}")
 
@@ -111,7 +115,7 @@ def test_cluster_registration(c: httpx.Client):
     check("등록", "cluster-agent 파드 Ready", ready >= 1, f"ready={ready}")
 
     # 1-3. connection-status API
-    resp = c.get(f"/clusters/{CLUSTER_ID}/connection-status")
+    resp = c.get(f"{BASE}/clusters/{CLUSTER_ID}/connection-status", timeout=TIMEOUT)
     status_body = resp.json() if resp.status_code == 200 else {}
     connected = status_body.get("connected", False)
     check("등록", "connection-status API 응답", resp.status_code == 200)
@@ -150,7 +154,7 @@ def test_agent_liveness():
 # ╔══════════════════════════════════════════════════════════════╗
 # ║ 3. METRICS / INVENTORY COLLECTION                          ║
 # ╚══════════════════════════════════════════════════════════════╝
-def test_metrics_inventory(c: httpx.Client):
+def test_metrics_inventory(c: requests.Session):
     print("\n═══ 3. 메트릭/인벤토리 수집 ═══")
 
     # 3-1. node-collector DaemonSet 존재
@@ -182,7 +186,7 @@ def test_metrics_inventory(c: httpx.Client):
 
     # 3-3. inventory API에서 실제 데이터 조회
     for endpoint in ("workloads", "resources", "services", "events", "summary"):
-        resp = c.get(f"/clusters/{CLUSTER_ID}/inventory/{endpoint}")
+        resp = c.get(f"{BASE}/clusters/{CLUSTER_ID}/inventory/{endpoint}", timeout=TIMEOUT)
         body = resp.json() if resp.status_code == 200 else {}
         # Check the response is not empty
         has_data = bool(body) and body != {} and body != []
@@ -270,7 +274,7 @@ def test_nats_events():
 # ╔══════════════════════════════════════════════════════════════╗
 # ║ 5. K8S COMMAND EXECUTION — FULL E2E                        ║
 # ╚══════════════════════════════════════════════════════════════╝
-def test_k8s_commands(c: httpx.Client):
+def test_k8s_commands(c: requests.Session):
     print("\n═══ 5. K8s 커맨드 실행 E2E ═══")
 
     # 5-0. Create a test deployment in target cluster
@@ -321,7 +325,8 @@ def test_k8s_commands(c: httpx.Client):
     # 5-1. ROLLOUT RESTART via API
     print("\n  ── 5-1. Rollout Restart ──")
     resp = c.post(
-        f"/clusters/{CLUSTER_ID}/namespaces/{TEST_NS}/deployments/{TEST_DEPLOY_NAME}/restart"
+        f"{BASE}/clusters/{CLUSTER_ID}/namespaces/{TEST_NS}/deployments/{TEST_DEPLOY_NAME}/restart",
+        timeout=TIMEOUT,
     )
     restart_ok = resp.status_code in (200, 201, 202)
     restart_body = resp.json() if resp.status_code in (200, 201, 202) else resp.text[:200]
@@ -380,8 +385,9 @@ def test_k8s_commands(c: httpx.Client):
     # 5-2. SCALE via API
     print("\n  ── 5-2. Scale ──")
     resp = c.post(
-        f"/clusters/{CLUSTER_ID}/namespaces/{TEST_NS}/deployments/{TEST_DEPLOY_NAME}/scale",
+        f"{BASE}/clusters/{CLUSTER_ID}/namespaces/{TEST_NS}/deployments/{TEST_DEPLOY_NAME}/scale",
         json={"replicas": 2},
+        timeout=TIMEOUT,
     )
     scale_ok = resp.status_code in (200, 201, 202)
     scale_body = resp.json() if scale_ok else resp.text[:200]

@@ -20,6 +20,9 @@ script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.command && body.command.command_id) {
     bru.setVar("command_id", body.command.command_id);
+    if (body.command.lease_id) {
+      bru.setVar("lease_id", body.command.lease_id);
+    }
   }
 }
 
