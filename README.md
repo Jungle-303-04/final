@@ -65,8 +65,6 @@ scripts      검증, AWS 배포, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
 config/env   로컬 env 템플릿
 tests        단위 테스트
-debug-lab    kind/Gateway 관측용 내부 디버그 도구 (src/ 미사용, 제품과 분리)
-examples     격리된 데모 (telemetry evidence Docker Compose)
 ```
 
 ## 처음 실행
