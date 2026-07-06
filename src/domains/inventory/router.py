@@ -16,6 +16,8 @@ from domains.inventory.events import InventorySnapshotRecordedBody
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
+    ClusterUsageResponse,
+    ClusterUsageSample,
     InventoryResourceListResponse,
     InventoryResourceResponse,
     InventorySnapshotResponse,
@@ -190,6 +192,23 @@ async def list_inventory_events(
         namespace=namespace,
         include_deleted=False,
         limit=limit,
+    )
+
+
+@router.get(gateway_routes.CLUSTER_USAGE_PATH, response_model=ClusterUsageResponse)
+async def get_cluster_usage(
+    cluster_id: str,
+    limit: int = Query(default=288, ge=1, le=2000),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ClusterUsageResponse:
+    """스냅샷마다 적재되는 실측 usage 롤업 시계열 — 콘솔 추이 차트용."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_inventory_access(db, current, workspace_id, cluster_id)
+    samples = db.list_cluster_usage_samples(workspace_id, cluster_id, limit=limit)
+    return ClusterUsageResponse(
+        cluster_id=cluster_id,
+        samples=[ClusterUsageSample(**sample) for sample in samples],
     )
 
 
