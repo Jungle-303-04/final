@@ -15,6 +15,35 @@
 
 로컬 cluster context 기반 확인은 현재 팀 테스트 기준에서 사용하지 않는다. 서비스 수준 검증은 AWS EKS에 올라간 management/target cluster를 기준으로 한다.
 
+## 선택 실행: 실제 인프라 E2E 파이프라인 스크립트
+
+`scripts/e2e_test.py`는 기본 PR 검증이나 팀 공통 smoke가 아니다.
+이미 AWS 배포와 target agent 연결이 끝난 뒤, 운영자가 실제 Kubernetes 리소스 변경까지 한 번에 확인하고 싶을 때만 수동으로 실행한다.
+이 스크립트는 API 응답만 확인하지 않고 target cluster의 `sandbox` namespace에 테스트 Deployment를 만들고, restart/scale command가 agent를 거쳐 실제 리소스에 반영되는지 확인한 뒤 삭제한다.
+
+실행 전에 아래 값을 명시한다.
+
+```bash
+export BASE_URL="https://k8s.woonyong.org"
+export AUTH_EMAIL="<aws-test admin email>"
+export AUTH_PASSWORD="<aws-test admin password>"
+export SMOKE_CLUSTER_ID="<target cluster id>"
+export MGMT_CONTEXT="<management EKS kubeconfig context>"
+export TARGET_CONTEXT="<target EKS kubeconfig context>"
+```
+
+그다음 실행한다.
+
+```bash
+uv run python scripts/e2e_test.py
+```
+
+이 스크립트가 실패하면 먼저 실패한 category를 본다.
+`등록` 또는 `에이전트`가 실패하면 target registration과 agent rollout을 본다.
+`메트릭` 또는 `인벤토리`가 실패하면 node collector, inventory snapshot, agent inventory report를 본다.
+`NATS` 또는 `상태전이`가 실패하면 management namespace의 NATS, outbox relay, command-worker, workflow-controller 로그를 본다.
+`커맨드`가 실패하면 `sandbox` namespace에 Deployment를 만들 권한이 있는지와 agent command handler가 실행됐는지 확인한다.
+
 ## EKS가 활성인데도 URL이 안 열리는 이유
 
 AWS Console의 EKS cluster 상태가 `활성`이면 Kubernetes control plane이 살아 있다는 뜻이다.
