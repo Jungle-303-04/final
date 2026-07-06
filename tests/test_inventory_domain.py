@@ -9,6 +9,7 @@ from domains.identity.dependencies import ClusterAgentIdentity
 from domains.inventory.repository import (
     HEALTH_RESOURCE_TYPE,
     USAGE_RESOURCE_TYPE,
+    first_container_image,
     inventory_resource_key,
     snapshot_resources,
 )
@@ -241,3 +242,15 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
 
     assert response.latest_snapshot == {"snapshot_id": "snapshot-1", "resource_count": 1}
     assert response.counts == [{"resource_type": "workload", "health": "healthy", "count": 1}]
+
+
+def test_first_container_image_extracts_workload_pod_then_summary() -> None:
+    # diff-worker actual-state 조회용 — workload spec 우선, 그 다음 pod spec, 마지막 summary
+    workload = {
+        "spec": {"template": {"spec": {"containers": [{"name": "app", "image": "img:v2"}]}}}
+    }
+    assert first_container_image(workload, {}) == "img:v2"
+    assert first_container_image({"spec": {"containers": [{"image": "img:pod"}]}}, {}) == "img:pod"
+    assert first_container_image({}, {"image": "img:sum"}) == "img:sum"
+    assert first_container_image({}, {}) is None
+    assert first_container_image({"spec": {"containers": [{}]}}, {}) is None
