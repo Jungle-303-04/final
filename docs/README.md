@@ -161,6 +161,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [operations-deployment](operations-deployment.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
+- [production-push-2026-07-07](production-push-2026-07-07.md)
 - [secrets](secrets.md)
 
 프론트 상세 설계 문서는 아래에 있다.
