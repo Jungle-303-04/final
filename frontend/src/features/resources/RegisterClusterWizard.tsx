@@ -12,7 +12,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const [provider, setProvider] = useState('existing-k8s');
   const [clusterId, setClusterId] = useState('');
   const [name, setName] = useState('');
-  const [issued, setIssued] = useState<{ agent_token: string; install_manifest: string } | null>(null);
+  const [issued, setIssued] = useState<{ agent_token: string; install_manifest: string; install_command?: string } | null>(null);
 
   // 실백엔드 catalog 는 category 별 객체: { providers: { cloud: [...], deploy: [...], ... } }
   const catalog = useQuery({
@@ -23,7 +23,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const cloudProviders = (catalog.data?.providers?.cloud ?? []).filter(p => p.status === 'available');
   const validate = useMutation({ mutationFn: () => post<{ valid: boolean; errors: string[] }>('/providers/validate', { cloud_provider: provider, deploy_provider: 'manual-manifest' }) });
   const register = useMutation({
-    mutationFn: () => post<{ agent_token: string; install_manifest: string }>('/targets', {
+    mutationFn: () => post<{ agent_token: string; install_manifest: string; install_command?: string }>('/targets', {
       cluster_id: clusterId, name: name || clusterId, environment: 'sandbox', apply: false,
       cloud_provider: provider, deploy_provider: 'manual-manifest',
       management_base_url: `${location.origin}/api`,
@@ -88,7 +88,15 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
               <Button onClick={() => navigator.clipboard.writeText(issued.agent_token)}>복사</Button>
             </div>
           </Field>
-          <Field label="install manifest — kubectl apply -f 로 적용">
+          {issued.install_command && (
+            <Field label="원라인 설치 — 대상 클러스터에서 한 줄로 설치">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="input" readOnly value={issued.install_command} style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }} data-testid="install-command" />
+                <Button onClick={() => navigator.clipboard.writeText(issued.install_command!)}>복사</Button>
+              </div>
+            </Field>
+          )}
+          <Field label={issued.install_command ? 'install manifest (수동 적용 대안)' : 'install manifest — kubectl apply -f 로 적용'}>
             <CodeBlock code={issued.install_manifest} />
           </Field>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
