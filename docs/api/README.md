@@ -21,6 +21,22 @@ docs/api
 깨졌다면 거의 항상 다른 폴더를 연 것이다. `docs/api` 바로 아래에 `bruno.json`과 `environments` 폴더가 있어야 한다.
 파일 경로는 `00-health-auth`처럼 영어 slug를 유지하고, Bruno 화면 표시명은 한글로 맞춘다.
 
+## 전체 Runner 실행
+
+보호 API는 로그인 쿠키가 필요하므로 개별 요청을 바로 누르면 `{"detail":"authentication required"}`가 정상적으로 나올 수 있다.
+전체 확인은 `06 로그인`을 먼저 실행하고 `10 로그아웃`을 맨 마지막에 실행하는 Runner 순서로 돌린다.
+
+로컬에 실제 AWS 값이 들어간 `docs/api/environments/aws-live.local.bru`가 있으면 아래 명령으로 전체 과정을 한 번에 실행한다.
+이 파일은 `*.local.bru`로 ignore되어 Git에 올라가지 않는다.
+
+```bash
+bash scripts/run-bruno-aws.sh
+```
+
+같은 순서를 Bruno 앱에서 실행할 때도 `00-health-auth/01`부터 `00-health-auth/07`까지 먼저 실행하고,
+그 다음 `01`부터 `12` 폴더를 실행한 뒤 `00-health-auth/10 로그아웃`을 마지막에 실행한다.
+`00-health-auth/10 로그아웃`을 중간에 실행하면 이후 보호 API는 다시 로그인 전까지 401을 반환한다.
+
 ## 2단계. 변수 채우기
 
 대부분의 변수는 요청 응답에서 자동으로 채워지므로 직접 넣을 값은 몇 개 없다.

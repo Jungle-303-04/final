@@ -10,7 +10,8 @@ meta {
 }
 
 put {
-  url: {{base_url}}clusters/{{cluster_id}}/policy
+  url: {{base_url}}clusters/{{agent_cluster_id}}/policy
+  body: json
 }
 
 headers {
@@ -19,7 +20,7 @@ headers {
 
 body:json {
   {
-    "cluster_id": "{{cluster_id}}",
+    "cluster_id": "{{agent_cluster_id}}",
     "generation": 2,
     "cluster_role": "target",
     "evidence": {

@@ -42,3 +42,7 @@ export const IconChevronRight = (p: IconProps) => (
 export const IconCheck = (p: IconProps) => (
   <svg {...base(p)}><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
 );
+
+export const IconLock = (p: IconProps) => (
+  <svg {...base(p)}><rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3" /><path d="M12 15v2" /></svg>
+);

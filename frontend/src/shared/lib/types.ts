@@ -5,7 +5,7 @@ export interface Session { authenticated: boolean; user_id: string; email?: stri
 export interface Cluster { cluster_id: string; name: string; environment: string; connection_status: 'connected'|'disconnected'|'unknown'; node_count: number; pod_count: number; incident_count: number; registered_at: string }
 export interface ClusterSummary { cluster_id: string; namespaces: string[]; nodes: NodeInfo[]; pod_phases: Record<string, number>; services: number }
 export interface NodeInfo { name: string; ready: boolean; pod_count: number; version: string; cpu_ratio?: number; mem_ratio?: number }
-export interface Workload { name: string; kind: string; namespace: string; ready: string; restarts: number; image: string; node?: string; phase: string; hot?: boolean }
+export interface Workload { name: string; kind: string; namespace: string; ready: string; restarts: number; image: string; node?: string; phase: string; hot?: boolean; workload_name?: string }
 export interface InventoryResource { kind: string; namespace: string | null; name: string; status: string; age: string; raw?: unknown }
 export interface ServiceInfo { name: string; namespace: string; type: string; cluster_ip: string; ports: string }
 export interface K8sEvent { at: string; type: string; reason: string; target: string; message: string }

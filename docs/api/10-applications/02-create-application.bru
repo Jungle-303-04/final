@@ -7,6 +7,7 @@ meta {
 
 post {
   url: {{base_url}}applications
+  body: json
 }
 
 headers {
@@ -15,7 +16,7 @@ headers {
 
 body:json {
   {
-    "name": "gitops-demo",
+    "name": "checkout-api",
     "repo_ref": "{{repo_ref}}",
     "default_branch": "{{default_branch}}",
     "manifest_path": "{{manifest_path}}"

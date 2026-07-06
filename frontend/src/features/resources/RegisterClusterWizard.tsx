@@ -27,7 +27,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     mutationFn: () => post<{ agent_token: string; install_manifest: string }>('/targets', {
       cluster_id: clusterId, name: name || clusterId, environment: 'sandbox', apply: false,
       cloud_provider: provider, deploy_provider: 'manual-manifest',
-      management_base_url: location.origin, image: 'service:local',
+      management_base_url: `${location.origin}/api`,
     }),
     onSuccess: d => { setIssued(d); queryClient.invalidateQueries({ queryKey: ['clusters'] }); },
   });
@@ -72,6 +72,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           <KeyValue pairs={[['environment', 'sandbox'], ['관측 스택', '기본값 (prometheus/loki/tempo .target.svc)']]} />
           <Footer onPrev={() => setStep(1)} onNext={() => register.mutate(undefined, { onSuccess: () => setStep(3) })}
             nextDisabled={!slugOk} nextLabel="등록 실행" loading={register.isPending} />
+          {register.isError && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{(register.error as Error).message}</p>}
         </>
       )}
       {step === 3 && issued && (

@@ -324,6 +324,7 @@ class RepoChangeRepository(DatabaseConnection):
         if application_ids is not None and not application_ids:
             return []
         table = Application.__table__
+        repo_table = GitRepository.__table__
         statement = (
             select(
                 table.c.application_id,
@@ -333,8 +334,17 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.manifest_path,
                 table.c.status,
                 table.c.metadata,
+                repo_table.c.repo_ref,
+                repo_table.c.default_branch,
                 table.c.created_at,
                 table.c.updated_at,
+            )
+            .join(
+                repo_table,
+                and_(
+                    repo_table.c.workspace_id == table.c.workspace_id,
+                    repo_table.c.repository_id == table.c.repository_id,
+                ),
             )
             .where(table.c.workspace_id == workspace_id)
             .order_by(table.c.name, table.c.application_id)
@@ -348,6 +358,7 @@ class RepoChangeRepository(DatabaseConnection):
 
     def get_application(self, workspace_id: str, application_id: str) -> JsonObject | None:
         table = Application.__table__
+        repo_table = GitRepository.__table__
         statement = (
             select(
                 table.c.application_id,
@@ -357,8 +368,17 @@ class RepoChangeRepository(DatabaseConnection):
                 table.c.manifest_path,
                 table.c.status,
                 table.c.metadata,
+                repo_table.c.repo_ref,
+                repo_table.c.default_branch,
                 table.c.created_at,
                 table.c.updated_at,
+            )
+            .join(
+                repo_table,
+                and_(
+                    repo_table.c.workspace_id == table.c.workspace_id,
+                    repo_table.c.repository_id == table.c.repository_id,
+                ),
             )
             .where(table.c.workspace_id == workspace_id, table.c.application_id == application_id)
             .limit(1)
