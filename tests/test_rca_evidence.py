@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Any
 
 from conftest import SpyDb, load_service, run_handler, subjects_of
@@ -154,7 +153,7 @@ def report_for(root_cause: str) -> RcaCompletedBody:
     )
 
 
-def test_crashloop_flow_requires_approval_evidence_before_command_queue() -> None:
+def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     db = SpyDb()
 
     rca_events = run_to_rca(crashloop_payload(), db=db, correlation_id="corr-auto")
@@ -200,61 +199,35 @@ def test_crashloop_flow_requires_approval_evidence_before_command_queue() -> Non
         recovery_outs[0],
     )
 
+    # rollout restart 는 비파괴 조치 — 승인 없이 자동 선택되어 명령 큐까지 도달해야 함.
     assert subjects_of(recovery_outs + select_outs) == [
         "recovery.planned",
-        "recovery.selection_requested",
+        "recovery.action_selected",
     ]
-    assert select_outs[0].reason == "선택 후보가 승인 필요한 command action입니다."
+    auto_selected = select_outs[0]
+    assert auto_selected.auto_selected is True
+    assert auto_selected.selected_by == "agent-select"
+    assert auto_selected.selected.draft.params.get("command") == "rollout_restart"
 
-    selected = select_outs[0].plan.candidates[0]
-    approved_candidate = replace(
-        selected,
-        draft=replace(
-            selected.draft,
-            params={
-                **selected.draft.params,
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
-            },
-        ),
-    )
-    approved_selection = RecoveryActionSelectedBody(
-        plan=select_outs[0].plan,
-        selected=approved_candidate,
-        selected_by="operator",
-        auto_selected=False,
-        reason="operator approved restart",
-        workspace_id="workspace-1",
-    )
-    approved_dispatch_outs = run_handler(
+    dispatch_outs = run_handler(
         dispatch_worker.on_recovery_action_selected,
-        approved_selection,
+        auto_selected,
     )
-    assert subjects_of(approved_dispatch_outs) == ["command.requested"]
-    approved_command = approved_dispatch_outs[0]
-    assert approved_command.action == "rollout_restart"
-    assert approved_command.namespace == "sandbox"
-    assert approved_command.workspace_id == "workspace-1"
-    assert approved_command.approval_ref == "approval-1"
-    assert approved_command.policy_decision_ref == "policy-decision-1"
+    assert subjects_of(dispatch_outs) == ["command.requested"]
+    auto_command = dispatch_outs[0]
+    assert auto_command.action == "rollout_restart"
+    assert auto_command.namespace == "sandbox"
+    assert auto_command.workspace_id == "workspace-1"
+    assert auto_command.approval_ref is None
+    assert auto_command.policy_decision_ref is None
+    assert auto_command.actor["auto_selected"] is True
 
-    queue_db = SpyDb(
-        get_workflow_approval={
-            "approval_id": "approval-1",
-            "workflow_run_id": approved_command.workflow_run_id,
-            "workspace_id": approved_command.workspace_id,
-            "status": "granted",
-            "details": {
-                "approval_ref": "approval-1",
-                "policy_decision_ref": "policy-decision-1",
-            },
-        }
-    )
+    queue_db = SpyDb()
     command_outs = run_handler(
         command_worker.on_command_requested,
-        approved_command,
+        auto_command,
         db=queue_db,
-        correlation_id="corr-approved",
+        correlation_id="corr-auto-queue",
     )
     assert subjects_of(command_outs) == [
         "command.dispatched",
