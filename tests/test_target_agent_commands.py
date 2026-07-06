@@ -247,6 +247,35 @@ def test_kubernetes_scale_requires_approval_evidence() -> None:
     assert agent.kubernetes.patches == []
 
 
+def test_kubernetes_scale_exempts_approval_in_sandbox_environment() -> None:
+    # sandbox 허용 rule — plan 메타데이터 environment=sandbox 면 승인 증적 없이 실행.
+    # namespace·name-scoped 가드는 그대로 적용된다.
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = FakeKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "environment": "sandbox",
+                "payload": {
+                    "namespace": "target",
+                    "name": "cluster-agent",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert len(agent.kubernetes.patches) == 1
+
+
 def test_kubernetes_command_rejects_non_agent_resource() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

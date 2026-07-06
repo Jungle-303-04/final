@@ -32,6 +32,8 @@ def test_spec_lookup_and_namespace_policy() -> None:
     assert spec is not None
     assert spec.allows_namespace(Sandbox.NAMESPACE)
     assert not spec.allows_namespace("kube-system")
+    # rollout restart 는 비파괴 조치 — 승인 없이 자동 실행 가능해야 함
+    assert spec.requires_approval is False
     assert command_action_spec("nope") is None
     scale = command_action_spec(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION)
     assert scale is not None
