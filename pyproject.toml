@@ -26,6 +26,7 @@ aws = [
 
 [dependency-groups]
 dev = [
+    "alembic>=1.16.0",
     "httpx2>=2.5.0",
     "import-linter>=2.0",
     "pre-commit>=4.6.0",
