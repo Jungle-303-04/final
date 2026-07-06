@@ -32,8 +32,10 @@ TARGET_1_DISPLAY_NAME="${TARGET_1_DISPLAY_NAME:-${TARGET_CLUSTER_1}}"
 TARGET_2_DISPLAY_NAME="${TARGET_2_DISPLAY_NAME:-${TARGET_CLUSTER_2}}"
 
 ECR_REPO="${ECR_REPO:-${PROJECT_SLUG}-service}"
+CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 IMAGE_NAME="${IMAGE_NAME:-}"
+CONSOLE_IMAGE_NAME="${CONSOLE_IMAGE_NAME:-}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 
 MGMT_NODE_TYPE="${MGMT_NODE_TYPE:-t3.xlarge}"
@@ -350,32 +352,65 @@ configure_existing_cluster_context() {
     --alias "${cluster_name}" >/dev/null
 }
 
-ensure_ecr_image() {
-  local account_id="$1"
-  local registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-  local repo_uri="${registry}/${ECR_REPO}"
+ensure_ecr_repository() {
+  local repo="$1"
 
-  log "ensuring ECR repository: ${ECR_REPO}"
+  log "ensuring ECR repository: ${repo}"
   aws ecr describe-repositories \
     --region "${AWS_REGION}" \
-    --repository-names "${ECR_REPO}" >/dev/null 2>&1 \
+    --repository-names "${repo}" >/dev/null 2>&1 \
     || aws ecr create-repository \
       --region "${AWS_REGION}" \
-      --repository-name "${ECR_REPO}" >/dev/null
+      --repository-name "${repo}" >/dev/null
+}
+
+build_and_push_image() {
+  local account_id="$1"
+  local repo="$2"
+  local image_var_name="$3"
+  local dockerfile="$4"
+  local context_dir="$5"
+  local label="$6"
+  local registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+  local repo_uri="${registry}/${repo}"
+  local image_name="${!image_var_name}"
+
+  ensure_ecr_repository "${repo}"
 
   log "logging in to ECR"
   aws ecr get-login-password --region "${AWS_REGION}" \
     | docker login --username AWS --password-stdin "${registry}" >/dev/null
 
-  if [[ -z "${IMAGE_NAME}" ]]; then
-    IMAGE_NAME="${repo_uri}:${IMAGE_TAG}"
+  if [[ -z "${image_name}" ]]; then
+    image_name="${repo_uri}:${IMAGE_TAG}"
+    printf -v "${image_var_name}" "%s" "${image_name}"
   fi
 
-  log "building Docker image: ${IMAGE_NAME}"
-  docker build --platform "${DOCKER_PLATFORM}" -f "${ROOT_DIR}/src/services/Dockerfile" -t "${IMAGE_NAME}" "${ROOT_DIR}"
+  log "building Docker image (${label}): ${image_name}"
+  docker build --platform "${DOCKER_PLATFORM}" -f "${dockerfile}" -t "${image_name}" "${context_dir}"
 
-  log "pushing Docker image: ${IMAGE_NAME}"
-  docker push "${IMAGE_NAME}"
+  log "pushing Docker image (${label}): ${image_name}"
+  docker push "${image_name}"
+}
+
+ensure_ecr_images() {
+  local account_id="$1"
+
+  build_and_push_image \
+    "${account_id}" \
+    "${ECR_REPO}" \
+    IMAGE_NAME \
+    "${ROOT_DIR}/src/services/Dockerfile" \
+    "${ROOT_DIR}" \
+    "service"
+
+  build_and_push_image \
+    "${account_id}" \
+    "${CONSOLE_ECR_REPO}" \
+    CONSOLE_IMAGE_NAME \
+    "${ROOT_DIR}/frontend/Dockerfile" \
+    "${ROOT_DIR}/frontend" \
+    "console"
 }
 
 ensure_ebs_csi() {
@@ -635,8 +670,10 @@ management_rollout_status() {
 
 apply_management_plane() {
   local overlay="${RUNTIME_DIR}/management-kustomization"
-  local image_repo="${IMAGE_NAME%:*}"
-  local image_tag="${IMAGE_NAME##*:}"
+  local service_image_repo="${IMAGE_NAME%:*}"
+  local service_image_tag="${IMAGE_NAME##*:}"
+  local console_image_repo="${CONSOLE_IMAGE_NAME%:*}"
+  local console_image_tag="${CONSOLE_IMAGE_NAME##*:}"
 
   mkdir -p "${overlay}"
   cat >"${overlay}/kustomization.yaml" <<EOF
@@ -646,8 +683,11 @@ resources:
   - ../../deploy/management
 images:
   - name: kubeheal-service
-    newName: ${image_repo}
-    newTag: ${image_tag}
+    newName: ${service_image_repo}
+    newTag: ${service_image_tag}
+  - name: kubeheal-console
+    newName: ${console_image_repo}
+    newTag: ${console_image_tag}
 EOF
 
   log "applying management plane"
@@ -1210,7 +1250,7 @@ main() {
   account_id="$(aws_account_id)"
   log "using AWS account ${account_id}, region ${AWS_REGION}"
 
-  ensure_ecr_image "${account_id}"
+  ensure_ecr_images "${account_id}"
 
   if [[ "${CREATE_CLUSTERS}" == "1" ]]; then
     ensure_cluster "${MGMT_CLUSTER}" "${MGMT_DISPLAY_NAME}" "${MGMT_NODE_TYPE}" "${MGMT_NODES}" "management"

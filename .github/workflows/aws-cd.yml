@@ -83,6 +83,7 @@ jobs:
       TARGET_1_DISPLAY_NAME: ${{ vars.TARGET_1_DISPLAY_NAME || vars.TARGET_CLUSTER_1 || 'KubeHeal Target A' }}
       TARGET_2_DISPLAY_NAME: ${{ vars.TARGET_2_DISPLAY_NAME || vars.TARGET_CLUSTER_2 || 'KubeHeal Target B' }}
       ECR_REPO: ${{ vars.ECR_REPO || 'kubeheal-service' }}
+      CONSOLE_ECR_REPO: ${{ vars.CONSOLE_ECR_REPO || 'kubeheal-console' }}
       IMAGE_TAG: ${{ github.sha }}
       GITHUB_REPO: ${{ vars.GITHUB_REPO || github.repository }}
       GITHUB_BRANCH: ${{ vars.GITHUB_BRANCH || github.ref_name }}

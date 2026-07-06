@@ -20,15 +20,15 @@ console `assets/package.json` 실측 기준.
 
 | 용도 | console | 우리 선택 | 이유 |
 |---|---|---|---|
-| 빌드 | Vite + TS | 동일 | frontend-demo 승계 |
+| 빌드 | Vite + TS | 동일 | 현재 `frontend/package.json` 기준 |
 | 데이터 | Apollo GraphQL + TanStack Query | **TanStack Query 단독** | 우리 백엔드는 REST(openapi.json 제공) |
 | 라우팅 | react-router-dom 6 | 동일 | |
 | 차트 | @nivo (line·pie·**treemap** 등) | @nivo/line + @nivo/treemap | 히트맵 요구(R6)와 정확히 일치 |
-| 노드 그래프 | @xyflow/react | 동일 | frontend-demo 에 이미 사용 중 |
+| 노드 그래프 | @xyflow/react | 동일 | 현재 `frontend/src/features/workflow/WorkflowGraphView.tsx`에서 사용 |
 | 테이블 | @tanstack/react-table + virtua | @tanstack/react-table (가상화는 필요 시) | |
 | 스타일 | styled-components/emotion | **CSS 변수 + CSS Modules** | 런타임 의존 축소, 토큰 중심 |
 | 프리미티브 | design-system(Radix+aria) | **radix-ui 직접**(MIT) | 라이선스 명확, 접근성 확보 |
-| 모션 | react-spring | **motion** | frontend-demo 승계, 요구사항 "다이나믹 UI" |
+| 모션 | react-spring | **motion** | 현재 `frontend/src/shared/motion` 기준, 요구사항 "다이나믹 UI" |
 | 팔레트 | cmdk | 동일 | 커맨드 팔레트 UX |
 | 코드젠 | graphql-codegen + @hey-api/openapi-ts | **@hey-api/openapi-ts** | 백엔드 `GET /openapi.json` → 타입·클라이언트 생성 |
 
@@ -65,19 +65,20 @@ console 의 실제 IA(사이드바: Home / CD / Stacks / Kubernetes / AI / PR / 
 **권고**: 코드 수준 차용은 Apache 2.0 계열(Headlamp, Argo)에서만.
 AGPL(console, Grafana)·GPL(kube-ops-view)은 스크린샷·문서 수준 참조로 제한.
 
-## frontend-demo 이식 대상 (자기 코드 — 제약 없음)
+## 현재 frontend 반영 위치
 
-`frontend-demo/src` 실측. [03-architecture.md](03-architecture.md)의 shared 레이어로 이식.
+예전에 분리해 보던 프론트 컴포넌트 기준은 현재 `frontend/src` 아래로 합쳐 관리한다.
+[03-architecture.md](03-architecture.md)의 shared/features 레이어와 아래 실제 파일을 같이 본다.
 
-| 파일 | 이식처 | 비고 |
+| 기능 | 현재 위치 | 비고 |
 |---|---|---|
-| components/MotionPrimitives.tsx | `shared/motion/` | 공용 모션 프리미티브의 시드 |
-| components/WorkflowNode.tsx, SignalEdge.tsx | `features/workflow/components/` | @xyflow 노드/엣지 |
-| components/AnimatedNumber.tsx | `shared/ui/` | KPI 카운터 |
-| components/Charts.tsx, CanvasChartNode.tsx | `features/metrics/components/` | 차트는 @nivo 로 재작성 검토 |
-| components/CopilotPanel.tsx | `features/chat/` | 채팅 패널 골격 |
-| components/RealtimePanel.tsx | `features/metrics/` | live summary 소비 예제 |
-| motion/, styles.css | `shared/tokens.css`, `shared/motion/` | 토큰·이징 값 추출 |
+| 모션 프리미티브 | `frontend/src/shared/motion/index.tsx` | FadeSlideIn, Stagger, CountUp, PressScale, LayoutMorph |
+| 워크플로우 노드 그래프 | `frontend/src/features/workflow/WorkflowGraphView.tsx` | @xyflow 노드/엣지와 단계 표시 |
+| KPI 카운터 | `frontend/src/shared/motion/index.tsx`, `frontend/src/shared/ui/index.tsx` | CountUp을 StatBox에서 사용 |
+| 차트 wrapper | `frontend/src/shared/ui/charts.tsx` | @nivo 기반 chart shell |
+| 채팅 화면 | `frontend/src/features/chat/ChatView.tsx` | conversation API와 카드 표시 |
+| 실시간 연결 | `frontend/src/shared/lib/live.ts` | `/api/live/browser` WebSocket |
+| 토큰·이징 값 | `frontend/src/shared/tokens.css`, `frontend/src/shared/motion/index.tsx` | 디자인 토큰과 motion 설정 |
 
 ## 백엔드 이벤트 흐름 참조
 

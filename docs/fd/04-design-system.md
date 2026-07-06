@@ -67,7 +67,7 @@
 ## 모션 원칙 ("다이나믹 UI" 요구의 구현 규칙)
 
 1. **의미 있는 모션만**: 진입(무엇이 생겼나), 전이(어디로 갔나), 피드백(무엇이 반응했나). 장식 루프 애니메이션 금지
-2. 프리미티브 5개만 사용 (`shared/motion/`, frontend-demo 이식):
+2. 프리미티브 5개만 사용 (`frontend/src/shared/motion/index.tsx` 기준):
    - `<FadeSlideIn dir delay>` — 카드/패널 진입 (y 8px, --dur-base, --ease-out)
    - `<Stagger gap=40ms>` — 리스트 순차 등장 (최대 8개까지만 지연)
    - `<CountUp value>` — KPI 숫자 (AnimatedNumber 이식)
