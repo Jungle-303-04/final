@@ -1,0 +1,293 @@
+---
+source_commit: 1616d295
+status: synced
+---
+
+# inventory — 멀티 클러스터 Kubernetes 리소스 현황 read model
+
+> 소스: `src/domains/inventory/` · 테스트: `tests/test_inventory_domain.py`
+
+## 책임 (Responsibility)
+
+- **한다**:
+  - cluster-agent가 보고하는 클러스터 리소스 스냅샷의 수신(HTTP)·영속(스냅샷 이력 + 리소스 upsert read model + usage 시계열).
+  - 스냅샷 payload의 정규화: 리소스 식별 키(sha256) 생성, `health`/`usage` 섹션을 합성(synthetic) 리소스로 변환.
+  - `replace` 모드에서 스냅샷에 없는 기존 리소스의 soft delete(`deleted_at` 마킹).
+  - 대시보드용 조회 API: 리소스 목록(타입/네임스페이스 필터), 워크로드/서비스/이벤트 뷰, 최신 스냅샷 + health별 카운트 요약.
+  - 스냅샷 영속 완료 이벤트(`cluster.inventory.snapshot.recorded`) 발행.
+- **하지 않는다**:
+  - 클러스터에서의 실제 리소스 수집 — cluster-agent 담당.
+  - agent 인증·클러스터 권한 판정의 구현 — [identity](./identity.md)의 가드(`require_cluster_agent`, `require_cluster_access`)에 위임.
+  - 리소스 상태 기반 알림·분석 — 다른 도메인(alert, rca 등) 담당.
+
+## 의존성 (Dependencies)
+
+| 방향 | 대상 | 스펙 링크 | 용도 |
+|---|---|---|---|
+| import | `domains.identity.dependencies` | [identity](./identity.md) | `ClusterAgentIdentity`, `require_cluster_agent`, `require_cluster_access`, `require_session` 가드 |
+| import | `packages.contracts.event_bus` (bodies.base / registry / subjects / interfaces) | [contracts](../packages/contracts.md) | `EventBody`, `@event`, `EventSubject`, `JsonObject` |
+| import | `packages.contracts.gateway` (routes / requests / responses) | [contracts](../packages/contracts.md) | 경로 상수, `InventorySnapshotRequest`, `Inventory*Response` |
+| import | `packages.contracts.identity` | [contracts](../packages/contracts.md) | `DEFAULT_WORKSPACE_ID`, `Permission.INVENTORY_READ` |
+| import | `packages.runtime.dependencies` | [runtime](../packages/runtime.md) | `get_db`, `get_events` FastAPI 의존성 |
+| import | `packages.storage` (base / engine) | [storage](../packages/storage.md) | `Base`, 컬럼 헬퍼, `DatabaseConnection`, `iso_or_none`, `unit_of_work_or_null` |
+| 발행 | `cluster.inventory.snapshot.recorded` | [이벤트](#이벤트-events) | 스냅샷 영속 완료 통지 |
+| 외부 | cluster-agent (HTTP POST) | — | 스냅샷 payload 공급자 |
+
+## 공개 인터페이스 (Public API)
+
+### 모듈
+
+- `src/domains/inventory/__init__.py` — 도메인 선언("클러스터 리소스 현황"). 심볼 없음.
+
+### 이벤트 body — `src/domains/inventory/events.py`
+
+- `src/domains/inventory/events.py :: InventorySnapshotRecordedBody` — `@event(EventSubject.CLUSTER_INVENTORY_SNAPSHOT_RECORDED)` (스키마는 [이벤트](#이벤트-events) 참조)
+
+### 리포지토리 — `src/domains/inventory/repository.py`
+
+모듈 상수:
+
+| 앵커 | 값 | 의미 |
+|---|---|---|
+| `src/domains/inventory/repository.py :: SYNTHETIC_NAMESPACE` | `None` | 합성 리소스(health/usage)의 namespace |
+| `src/domains/inventory/repository.py :: HEALTH_RESOURCE_TYPE` | `"health"` | 합성 클러스터 health 리소스 타입 |
+| `src/domains/inventory/repository.py :: USAGE_RESOURCE_TYPE` | `"usage"` | 합성 클러스터 usage 리소스 타입 |
+| `src/domains/inventory/repository.py :: UNKNOWN_STATUS` | `"unknown"` | status/health 미지정 시 기본값 |
+
+모듈 함수:
+
+- `src/domains/inventory/repository.py :: parse_observed_at`
+  ```python
+  def parse_observed_at(value: str | None) -> datetime
+  ```
+  ISO 문자열 파싱. 빈 값·파싱 실패 시 `datetime.now(UTC)`. naive면 UTC tz 부여.
+- `src/domains/inventory/repository.py :: inventory_resource_key`
+  ```python
+  def inventory_resource_key(workspace_id: str, cluster_id: str, resource_type: str, namespace: str | None, kind: str, name: str) -> str
+  ```
+  `[workspace_id, cluster_id, resource_type, namespace or "", kind, name]`를 `json.dumps(ensure_ascii=True, separators=(",", ":"))` 직렬화 후 sha256 hex digest 반환 — 리소스 identity 키(스냅샷 간 안정).
+- `src/domains/inventory/repository.py :: resource_type_of`
+  ```python
+  def resource_type_of(resource: JsonObject) -> str
+  ```
+  `resource["resource_type"]`(없으면 `"custom"`)를 `.strip().lower()`.
+- `src/domains/inventory/repository.py :: normalize_inventory_resource`
+  ```python
+  def normalize_inventory_resource(resource: JsonObject, *, workspace_id: str, cluster_id: str, snapshot_id: str, observed_at: datetime) -> JsonObject
+  ```
+  payload 리소스 1개를 `cluster_inventory_resources` 행 dict로 정규화. 규칙:
+  - `kind`: `resource["kind"]` 없으면 resource_type.
+  - `name`: `name` → `uid` → `f"{resource_type}-resource"` 순 fallback.
+  - `status`/`health`: 없으면 `UNKNOWN_STATUS`.
+  - `labels`/`annotations`/`summary`/`raw`: `dict(... or {})`.
+  - `observed_at` = `first_seen_at` = `last_seen_at` = 인자 `observed_at`, `deleted_at=None`.
+- `src/domains/inventory/repository.py :: snapshot_resources`
+  ```python
+  def snapshot_resources(payload: JsonObject) -> list[JsonObject]
+  ```
+  `payload["resources"]` 복사본 목록에, `payload["health"]`가 비어 있지 않으면 합성 리소스 `{resource_type: "health", api_version: "platform/v1", kind: "ClusterHealth", namespace: None, name: "cluster", status: health.status|unknown, health: health.health|health.status|unknown, summary=raw=health}`를, `payload["usage"]`가 비어 있지 않으면 `{resource_type: "usage", api_version: "platform/v1", kind: "ClusterUsage", namespace: None, name: "cluster", status: usage.status|"sampled", health: "unknown", summary=raw=usage}`를 추가.
+- `src/domains/inventory/repository.py :: snapshot_summary`
+  ```python
+  def snapshot_summary(payload: JsonObject) -> JsonObject
+  ```
+  `{"summary": dict(payload["summary"] or {}), "health": ..., "usage": ...}` 반환.
+
+클래스:
+
+- `src/domains/inventory/repository.py :: InventoryRepository` — `packages.storage.engine.DatabaseConnection` 상속 mixin.
+  - `src/domains/inventory/repository.py :: InventoryRepository.save_inventory_snapshot`
+    ```python
+    def save_inventory_snapshot(self, *, workspace_id: str, cluster_id: str, agent_id: str, payload: JsonObject) -> JsonObject
+    ```
+    동작은 [동작](#동작-behavior) 참조. 반환: `{"accepted": True, "snapshot_id", "cluster_id", "resource_count", "marked_deleted", "resource_types"(정렬된 list)}`.
+  - `src/domains/inventory/repository.py :: InventoryRepository.list_inventory_resources`
+    ```python
+    def list_inventory_resources(self, *, workspace_id: str, cluster_id: str, resource_type: str | None = None, namespace: str | None = None, include_deleted: bool = False, limit: int = 200) -> list[JsonObject]
+    ```
+    `cluster_inventory_resources`에서 workspace/cluster 필수 필터 + `resource_type`·`namespace` 선택 필터(truthy일 때만), `include_deleted=False`면 `deleted_at IS NULL`. 정렬 `resource_type, namespace NULLS FIRST, name`, limit은 `max(1, min(limit, 1000))`로 clamp. 각 행은 `serialize_inventory_resource` 적용.
+  - `src/domains/inventory/repository.py :: InventoryRepository.latest_inventory_snapshot`
+    ```python
+    def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None
+    ```
+    `cluster_inventory_snapshots`에서 `created_at DESC LIMIT 1`. 없으면 None, 있으면 `serialize_inventory_snapshot` 적용.
+  - `src/domains/inventory/repository.py :: InventoryRepository.inventory_resource_counts`
+    ```python
+    def inventory_resource_counts(self, workspace_id: str, cluster_id: str) -> list[JsonObject]
+    ```
+    삭제되지 않은(`deleted_at IS NULL`) 리소스를 `(resource_type, health)`로 GROUP BY, 동일 키 정렬. 반환 원소: `{"resource_type": str, "health": str, "count": int}`.
+  - `src/domains/inventory/repository.py :: InventoryRepository.serialize_inventory_snapshot`
+    ```python
+    def serialize_inventory_snapshot(self, row: JsonObject) -> JsonObject
+    ```
+    `collected_at`/`created_at`을 `iso_or_none`으로 ISO 문자열화한 사본 반환.
+  - `src/domains/inventory/repository.py :: InventoryRepository.serialize_inventory_resource`
+    ```python
+    def serialize_inventory_resource(self, row: JsonObject) -> JsonObject
+    ```
+    `observed_at`/`first_seen_at`/`last_seen_at`/`deleted_at`/`created_at`/`updated_at`을 `iso_or_none` 처리한 사본 반환.
+
+### 라우터 — `src/domains/inventory/router.py`
+
+- `src/domains/inventory/router.py :: router` — `fastapi.APIRouter()` 인스턴스. 엔드포인트는 아래 표.
+- `src/domains/inventory/router.py :: require_inventory_access`
+  ```python
+  def require_inventory_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None
+  ```
+  `require_cluster_access(db, current, workspace_id, cluster_id, Permission.INVENTORY_READ.value)` 호출 shortcut (거부 시 HTTPException).
+- `src/domains/inventory/router.py :: inventory_list_response`
+  ```python
+  def inventory_list_response(db: Any, *, workspace_id: str, cluster_id: str, resource_type: str | None, namespace: str | None, include_deleted: bool, limit: int) -> InventoryResourceListResponse
+  ```
+  `db.list_inventory_resources(...)` 결과를 `InventoryResourceListResponse(cluster_id, resource_type, resources=[InventoryResourceResponse(**r) ...])`로 포장.
+
+엔드포인트 (경로 상수는 `packages.contracts.gateway.routes`):
+
+| 메서드+경로 | 핸들러 앵커 | 요청 | 응답 모델 | 권한/의존성 |
+|---|---|---|---|---|
+| POST `/agent/inventory/snapshots` (`AGENT_INVENTORY_SNAPSHOTS_PATH`) | `src/domains/inventory/router.py :: record_inventory_snapshot` | body: `InventorySnapshotRequest` | `InventorySnapshotResponse` | `require_cluster_agent` (x-agent-token, 401 fail-closed) + `get_db` + `get_events` |
+| GET `/clusters/{cluster_id}/inventory/resources` (`CLUSTER_INVENTORY_RESOURCES_PATH`) | `src/domains/inventory/router.py :: list_inventory_resources` | query: `resource_type: str \| None`, `namespace: str \| None`, `include_deleted: bool = False`, `limit: int = Query(200, ge=1, le=1000)` | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/clusters/{cluster_id}/inventory/workloads` (`CLUSTER_INVENTORY_WORKLOADS_PATH`) | `src/domains/inventory/router.py :: list_inventory_workloads` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/clusters/{cluster_id}/inventory/services` (`CLUSTER_INVENTORY_SERVICES_PATH`) | `src/domains/inventory/router.py :: list_inventory_services` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/clusters/{cluster_id}/inventory/events` (`CLUSTER_INVENTORY_EVENTS_PATH`) | `src/domains/inventory/router.py :: list_inventory_events` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/clusters/{cluster_id}/inventory/summary` (`CLUSTER_INVENTORY_SUMMARY_PATH`) | `src/domains/inventory/router.py :: get_inventory_summary` | — | `InventorySummaryResponse` | `require_session` + `Permission.INVENTORY_READ` |
+
+- workloads/services/events 뷰는 각각 `resource_type="workload"` / `"service"` / `"event"` 고정 + `include_deleted=False`인 `list_inventory_resources`의 특수화다.
+- GET 계열의 `workspace_id`는 `getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)`로 세션에서 얻는다(요청 파라미터 아님).
+- 요청/응답 pydantic 모델(`InventorySnapshotRequest`, `InventoryResource`, `InventorySnapshotResponse`, `InventoryResourceResponse`, `InventoryResourceListResponse`, `InventorySummaryResponse`)의 필드 정의는 [contracts](../packages/contracts.md) 소유 (`src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`).
+
+## 데이터 모델 (Data Model)
+
+### `cluster_inventory_snapshots` — `src/domains/inventory/models.py :: ClusterInventorySnapshotRecord`
+
+`__tablename__ = "cluster_inventory_snapshots"` · 인덱스: `ix_inventory_snapshots_scope (workspace_id, cluster_id, created_at)`
+
+| 필드명 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| snapshot_id | Text | PK | UUID4 문자열 (repository에서 생성) |
+| workspace_id | Text | NOT NULL | 워크스페이스 (agent 토큰 기준 권위값) |
+| cluster_id | Text | NOT NULL | 클러스터 (agent 토큰 기준 권위값) |
+| agent_id | Text | NOT NULL | 보고한 agent id |
+| source | Text | NOT NULL | 수집원 (payload.source, 기본 `"cluster-agent"`) |
+| status | Text | NOT NULL | 스냅샷 상태 (payload.status, 기본 `"accepted"`) |
+| collected_at | TIMESTAMP(timezone=True) | NOT NULL | agent 수집 시각 (`parse_observed_at` 결과) |
+| resource_count | Integer | NOT NULL | 정규화된 리소스 수(합성 리소스 포함) |
+| summary | JSONB | NOT NULL | `snapshot_summary` 결과 `{summary, health, usage}` |
+| created_at | TIMESTAMP(timezone=True) | NOT NULL, server_default=now() | 저장 시각 |
+
+### `cluster_inventory_resources` — `src/domains/inventory/models.py :: ClusterInventoryResourceRecord`
+
+`__tablename__ = "cluster_inventory_resources"` · 인덱스:
+- `ix_inventory_resources_scope (workspace_id, cluster_id, resource_type, namespace, name)`
+- `ix_inventory_resources_health (workspace_id, cluster_id, health)`
+- `ix_inventory_resources_deleted (workspace_id, cluster_id, deleted_at)`
+
+| 필드명 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| inventory_key | Text | PK | `inventory_resource_key` sha256 hex (identity 기반 upsert 키) |
+| snapshot_id | Text | NOT NULL | 마지막으로 관측한 스냅샷 id |
+| workspace_id | Text | NOT NULL | 워크스페이스 |
+| cluster_id | Text | NOT NULL | 클러스터 |
+| resource_type | Text | NOT NULL | 소문자 리소스 타입 (`workload`/`service`/`event`/`health`/`usage`/`custom` 등) |
+| api_version | Text | NOT NULL | K8s apiVersion (없으면 `""`) |
+| kind | Text | NOT NULL | K8s kind (없으면 resource_type) |
+| namespace | Text | nullable | 네임스페이스 (클러스터 스코프·합성 리소스는 NULL) |
+| name | Text | NOT NULL | 리소스 이름 |
+| uid | Text | nullable | K8s uid |
+| resource_version | Text | nullable | K8s resourceVersion |
+| status | Text | NOT NULL | 상태 문자열 (기본 `"unknown"`) |
+| health | Text | NOT NULL | 건강 상태 문자열 (기본 `"unknown"`) |
+| labels | JSONB | NOT NULL | 라벨 맵 |
+| annotations | JSONB | NOT NULL | 어노테이션 맵 |
+| summary | JSONB | NOT NULL | 요약 정보 |
+| raw | JSONB | NOT NULL | 원본 리소스 payload |
+| observed_at | TIMESTAMP(timezone=True) | NOT NULL | 최근 관측 시각 |
+| first_seen_at | TIMESTAMP(timezone=True) | NOT NULL | 최초 관측 시각 (upsert 시 갱신하지 않음) |
+| last_seen_at | TIMESTAMP(timezone=True) | NOT NULL | 마지막 관측 시각 |
+| deleted_at | TIMESTAMP(timezone=True) | nullable | soft delete 마킹 시각 (재관측 시 NULL로 복귀) |
+| created_at | TIMESTAMP(timezone=True) | NOT NULL, server_default=now() | 행 생성 시각 |
+| updated_at | TIMESTAMP(timezone=True) | NOT NULL, server_default=now() | 행 갱신 시각 (repository가 `func.now()`로 명시 갱신) |
+
+### `cluster_usage_samples` — `src/domains/inventory/models.py :: ClusterUsageSampleRecord`
+
+`__tablename__ = "cluster_usage_samples"` · 인덱스: `ix_cluster_usage_samples_scope (workspace_id, cluster_id, sampled_at)`
+
+| 필드명 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BigInteger | PK, autoincrement | 대리 키 |
+| snapshot_id | Text | NOT NULL | 출처 스냅샷 id |
+| workspace_id | Text | NOT NULL | 워크스페이스 |
+| cluster_id | Text | NOT NULL | 클러스터 |
+| sampled_at | TIMESTAMP(timezone=True) | NOT NULL | 샘플 시각 (= 스냅샷 collected_at) |
+| usage | JSONB | NOT NULL | usage payload (append-only 시계열) |
+| created_at | TIMESTAMP(timezone=True) | NOT NULL, server_default=now() | 저장 시각 |
+
+## 이벤트 (Events)
+
+### 발행 (Publishes)
+
+**`cluster.inventory.snapshot.recorded`** (`EventSubject.CLUSTER_INVENTORY_SNAPSHOT_RECORDED`) — `src/domains/inventory/events.py :: InventorySnapshotRecordedBody`
+발행 지점: `record_inventory_snapshot` 핸들러가 영속 성공 후 `events.accept_body(...)`로 발행 (unit of work 내부).
+
+| 필드 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| cluster_id | str | (필수) | agent 신원 기준 클러스터 id |
+| snapshot_id | str | (필수) | 저장된 스냅샷 UUID |
+| agent_id | str | (필수) | 보고한 agent id |
+| resource_count | int | (필수) | 정규화된 리소스 수 |
+| resource_types | list[str] | `[]` | 스냅샷에 포함된 리소스 타입(정렬됨) |
+| workspace_id | str | `DEFAULT_WORKSPACE_ID` (`"default"`) | 워크스페이스 |
+
+### 구독 (Consumes)
+
+없음 — 이 도메인은 이벤트를 구독하지 않는다(입력은 HTTP POST).
+
+## 동작 (Behavior)
+
+### 스냅샷 수신 흐름 — `record_inventory_snapshot`
+
+1. `require_cluster_agent`가 `x-agent-token` 헤더를 해시해 등록 레지스트리에서 권위 `(workspace_id, cluster_id)`를 확인 (`ClusterAgentIdentity`). 토큰 없음/미등록/불일치 → 401.
+2. `payload.cluster_id != identity.cluster_id`면 → 403 `"cluster_id does not match agent identity"` (요청 body의 workspace/cluster 값은 신뢰하지 않음 — 크로스 테넌트 차단).
+3. `unit_of_work_or_null(db)` 트랜잭션 안에서:
+   a. `db.save_inventory_snapshot(workspace_id=identity.workspace_id, cluster_id=identity.cluster_id, agent_id=payload.agent_id, payload=payload.model_dump())`.
+   b. 결과로 `InventorySnapshotRecordedBody`를 `events.accept_body(...)`로 발행.
+4. `InventorySnapshotResponse(**result)` 반환.
+
+### 스냅샷 영속 알고리즘 — `InventoryRepository.save_inventory_snapshot`
+
+1. `snapshot_id = str(uuid.uuid4())`, `observed_at = parse_observed_at(payload["collected_at"])`.
+2. `snapshot_resources(payload)`로 리소스 목록 구성 (health/usage 섹션 → 합성 리소스 추가).
+3. 각 리소스를 `normalize_inventory_resource(...)`로 행 dict 정규화. `seen_keys`(inventory_key 집합)·`seen_types`(resource_type 집합) 수집.
+4. 단일 커넥션(`self.connection()`) 안에서:
+   1. `cluster_inventory_snapshots`에 스냅샷 1행 INSERT (`source` 기본 `"cluster-agent"`, `status` 기본 `"accepted"`, `resource_count=len(normalized)`, `summary=snapshot_summary(payload)`).
+   2. 리소스마다 `pg_insert(...).on_conflict_do_update(index_elements=[inventory_key])` upsert:
+      - 갱신 컬럼: `snapshot_id, api_version, kind, namespace, name, uid, resource_version, status, health, labels, annotations, summary, raw, observed_at, last_seen_at`, `deleted_at=None`(부활), `updated_at=func.now()`.
+      - **비갱신**: `first_seen_at`, `created_at`, `workspace_id`, `cluster_id`, `resource_type` (identity의 일부).
+   3. `summary["usage"]`가 비어 있지 않으면 `cluster_usage_samples`에 1행 INSERT (`sampled_at=observed_at`).
+   4. `payload["replace"]`가 truthy이고 `seen_keys`·`seen_types`가 모두 비어 있지 않으면, 같은 workspace/cluster에서 `resource_type IN seen_types`이면서 `inventory_key NOT IN seen_keys`이고 아직 살아 있는(`deleted_at IS NULL`) 행에 `deleted_at=func.now(), updated_at=func.now()` UPDATE → 영향 행 수를 `marked_deleted`로 기록.
+5. 반환: `{"accepted": True, "snapshot_id", "cluster_id", "resource_count", "marked_deleted", "resource_types": sorted(seen_types)}`.
+
+### 조회 흐름 (GET 계열)
+
+1. `require_session`으로 세션 확인(401), `workspace_id`는 세션 객체에서 획득.
+2. `require_inventory_access` → `require_cluster_access(..., Permission.INVENTORY_READ.value)` (거부 시 403).
+3. repository 조회 → 타임스탬프를 ISO 문자열로 직렬화해 응답 모델로 반환.
+
+## 불변식·오류 (Invariants & Errors)
+
+- **권위 신원**: 저장되는 `workspace_id`/`cluster_id`는 항상 agent 토큰에서 확인된 `ClusterAgentIdentity` 값이다. 요청 body 값은 일치 검증에만 사용된다.
+- **identity 키 안정성**: `inventory_resource_key`는 `(workspace_id, cluster_id, resource_type, namespace, kind, name)`의 순수 함수 — 같은 리소스는 스냅샷이 바뀌어도 같은 행에 upsert된다.
+- **soft delete만 사용**: 리소스 행은 물리 삭제되지 않는다. `replace` 스냅샷에서 사라진 리소스는 `deleted_at`만 마킹되고, 다시 관측되면 `deleted_at=None`으로 부활한다.
+- **replace 범위 한정**: soft delete는 이번 스냅샷에 등장한 `resource_type` 집합 안에서만 수행된다 — 부분 스냅샷이 다른 타입의 리소스를 삭제 처리하지 못한다.
+- **`first_seen_at` 불변**: upsert 갱신 컬럼에 포함되지 않아 최초 관측 시각이 보존된다.
+- **usage는 append-only**: `cluster_usage_samples`는 갱신 없이 INSERT만 한다(시계열).
+- **limit clamp**: repository는 `max(1, min(limit, 1000))`, 라우터는 `Query(ge=1, le=1000)`로 이중 방어.
+- **원자성**: 스냅샷 INSERT + 리소스 upsert + usage INSERT + soft delete + 이벤트 발행이 `unit_of_work_or_null` 단위로 묶인다(영속 실패 시 이벤트 미발행).
+- 오류:
+  - 401 — agent 토큰 없음/미등록/해시 불일치 (`require_cluster_agent`), 또는 세션 없음 (`require_session`).
+  - 403 — `payload.cluster_id != identity.cluster_id` (`"cluster_id does not match agent identity"`), 또는 `inventory.read` 권한 없음.
+  - 422 — `InventorySnapshotRequest` 검증 실패 (StrictModel, `resources` 최대 `MAX_INVENTORY_RESOURCES`).
+  - `collected_at` 파싱 실패는 오류가 아니라 현재 시각(UTC)으로 대체된다 (`parse_observed_at`).
+
+## 설정 (Settings)
+
+이 도메인은 환경변수·설정 키를 직접 읽지 않는다. (DB 연결·이벤트 버스 설정은 [runtime](../packages/runtime.md)/[storage](../packages/storage.md) 참조.)

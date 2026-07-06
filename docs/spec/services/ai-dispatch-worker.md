@@ -1,0 +1,76 @@
+---
+source_commit: 1616d295
+status: synced
+---
+
+# dispatch-worker — 선택된 복구 조치 → 명령/Safe PR 디스패치
+
+> 소스: `src/services/ai/dispatch-worker/app.py` · 테스트: `tests/`
+
+## 책임 (Responsibility)
+
+- `recovery.action_selected` 를 받아 [`RecoveryDispatcher`](ai-agent.md#recoverydispatchpy--recoverydispatcher)로
+  후보의 `route` 에 따라 명령 요청(`command.requested`), Safe PR 요청(`safe_pr.requested`),
+  또는 사람 조치 요청(`rca.action_required`)을 발행한다.
+- ctx 미사용, DB 저장 없음. 실제 명령 실행/PR 생성은 command·scm 계열 워커의 몫.
+
+## 의존성 (Dependencies)
+
+| 방향 | 대상 | 스펙 링크 | 용도 |
+|---|---|---|---|
+| import | `domains.rca.events` | [../../domains/rca.md](../domains/rca.md) | `RecoveryActionSelectedBody` |
+| import | `packages.runtime.app` | [../../packages/runtime.md](../packages/runtime.md) | `App` |
+| import | `services.ai.agent.recovery.dispatch` | [agent.md](ai-agent.md#recoverydispatchpy--recoverydispatcher) | `RecoveryDispatcher` |
+| (간접) | `domains.command` | [../../domains/command.md](../domains/command.md) | `CommandRequestedBody`, 명령 카탈로그 매핑 |
+| (간접) | `domains.scm.events` | [../../domains/scm.md](../domains/scm.md) | `SafePrRequestedBody`, `SafePrFilePatch` |
+| (간접) | `domains.gitops.events` | [../../domains/gitops.md](../domains/gitops.md) | `Diff` 값 객체 |
+| (간접) | `packages.config.constants` | [../../packages/config.md](../packages/config.md) | `GitHub.PROVIDER`, `Sandbox.NAMESPACE/RISK_TAG`, `Target.DEFAULT_CLUSTER_ID` |
+
+## 공개 인터페이스 (Public API)
+
+| 심볼 | 앵커 | 설명 |
+|---|---|---|
+| `app` | `src/services/ai/dispatch-worker/app.py :: app` | `App("dispatch-worker")` |
+| `dispatcher` | `src/services/ai/dispatch-worker/app.py :: dispatcher` | `RecoveryDispatcher()` |
+| `on_recovery_action_selected(evt)` | `src/services/ai/dispatch-worker/app.py :: on_recovery_action_selected` | 유일한 핸들러, body 1건 yield |
+
+## 이벤트 (Events)
+
+### 구독 (Consumes)
+
+| 이벤트 | 라우팅 키 | body |
+|---|---|---|
+| `RecoveryActionSelectedBody` | `recovery.action_selected` | `plan: RecoveryPlan, selected: RecoveryActionCandidate, selected_by, auto_selected, reason, workspace_id` |
+
+### 발행 (Publishes)
+
+`selected.route` 별 정확히 1건:
+
+| route | 이벤트 | 라우팅 키 | 비고 |
+|---|---|---|---|
+| `auto` | `CommandRequestedBody` | `command.requested` | 카탈로그 매핑 실패 시 대신 `rca.action_required`(reason=`"자동 실행 대상 command action으로 변환할 수 없습니다.: {action_type}"`) |
+| `draft_pr` | `SafePrRequestedBody(title=f"{selected.title}: {resource_name}", body=요약/조치/대상/위험도/검증/롤백 텍스트, provider="github", patches)` | `safe_pr.requested` | `draft.params["patches"]` 가 비면 대신 `rca.action_required`(reason_code=`"safe_pr_patch_missing"`, `missing_evidence=["manifest_patch"]`, next_actions=`collect_manifest_context`) |
+| `approval_required` | `RcaActionRequiredBody(reason=f"승인 필요: {title}")` | `rca.action_required` | |
+| `forbidden` | `RcaActionRequiredBody(reason=f"자동 조치 차단: {title}")` | `rca.action_required` | |
+| 미지 route | `RcaActionRequiredBody(reason=f"선택된 복구 후보의 route를 처리할 수 없습니다.: {route}")` | `rca.action_required` | |
+
+## 동작 (Behavior)
+
+1. `yield dispatcher.dispatch_body(evt)` — 분기 로직 전체는
+   [agent.md의 RecoveryDispatcher 절](ai-agent.md#recoverydispatchpy--recoverydispatcher) 참조.
+2. `command.requested` 구성 요점: `cluster_id = plan.target["cluster_id"] or "default-target-cluster"`,
+   `namespace = draft.namespace or "sandbox"`, `diff.status="recovery_action"`,
+   `diff.risk=RiskLevel.SANDBOX_ONLY`, `diff.basis={"source": "rca_recovery", plan_id, action_id, root_cause}`,
+   `actor={"plan_id", "action_id", "auto_selected"}`, `environment` 기본 `"sandbox"`.
+
+## 불변식·오류 (Invariants & Errors)
+
+- Safe PR 은 **구체적 파일 패치가 있을 때만** 요청된다(빈 patch 차단 — scm 게이트 이전 1차 방어).
+- auto 명령은 명령 카탈로그(`command_action_for_recovery`)에 등록된 액션으로만 변환된다.
+- 어떤 입력이든 발행 이벤트는 정확히 1건 — 실패 경로도 이벤트로 수렴.
+
+## 설정 (Settings)
+
+서비스 고유 환경변수 없음. 공통 워커 런타임 설정은
+[evidence-worker의 표](ai-evidence-worker.md#설정-settings)와 동일
+(`SERVICE_NAME=dispatch-worker`).
