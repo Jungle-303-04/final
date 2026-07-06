@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
@@ -54,11 +55,74 @@ class NodeCollectorConfig:
     DEFAULT_POD_NAMESPACE = "target"
     DEFAULT_COLLECT_INTERVAL_SECONDS = "15"
 
-    SAMPLE_CPU_USAGE_RATIO = 0.37
-    SAMPLE_MEMORY_WORKING_SET_BYTES = 268_435_456
-    SAMPLE_FILESYSTEM_USAGE_RATIO = 0.42
+    # 실측 소스 — /proc/stat·/proc/meminfo 는 컨테이너 네임스페이스와 무관하게
+    # 노드(호스트) 값을 보여주므로 DaemonSet 컨테이너에서 그대로 실측이 된다.
+    PROC_STAT_PATH = "/proc/stat"
+    PROC_MEMINFO_PATH = "/proc/meminfo"
+    FILESYSTEM_SAMPLE_PATH = "/"
     RUNTIME_NAME = "containerd"
     METRIC_CONTENT_TYPE = "text/plain; version=0.0.4"
+
+
+class NodeRuntimeSampler:
+    """노드 지표 실측 — 고정 샘플값 금지.
+
+    CPU 는 /proc/stat 의 (idle+iowait)/total 델타로 계산한다. 첫 호출은 부팅 이후
+    평균, 이후 호출부터는 직전 호출과의 구간 사용률. 읽기 실패는 0 으로 보고하고
+    경고를 남긴다(가짜 값보다 명확한 '측정 불가').
+    """
+
+    def __init__(
+        self,
+        proc_stat_path: str = NodeCollectorConfig.PROC_STAT_PATH,
+        proc_meminfo_path: str = NodeCollectorConfig.PROC_MEMINFO_PATH,
+        filesystem_path: str = NodeCollectorConfig.FILESYSTEM_SAMPLE_PATH,
+    ) -> None:
+        self.proc_stat_path = proc_stat_path
+        self.proc_meminfo_path = proc_meminfo_path
+        self.filesystem_path = filesystem_path
+        self._last_cpu: tuple[int, int] | None = None  # (busy, total)
+
+    def cpu_usage_ratio(self) -> float:
+        try:
+            with open(self.proc_stat_path) as handle:
+                fields = handle.readline().split()
+            values = [int(value) for value in fields[1:]]
+        except (OSError, ValueError, IndexError):
+            LOGGER.warning("node_collector_cpu_read_failed")
+            return 0.0
+        idle = values[3] + (values[4] if len(values) > 4 else 0)  # idle + iowait
+        total = sum(values)
+        busy = total - idle
+        previous = self._last_cpu
+        self._last_cpu = (busy, total)
+        if previous is not None:
+            delta_total = total - previous[1]
+            if delta_total > 0:
+                return max(0.0, min(1.0, (busy - previous[0]) / delta_total))
+        return max(0.0, min(1.0, busy / total)) if total else 0.0
+
+    def memory_working_set_bytes(self) -> int:
+        try:
+            totals: dict[str, int] = {}
+            with open(self.proc_meminfo_path) as handle:
+                for line in handle:
+                    key, _, rest = line.partition(":")
+                    totals[key.strip()] = int(rest.split()[0]) * 1024  # kB 단위
+            return max(0, totals["MemTotal"] - totals["MemAvailable"])
+        except (OSError, KeyError, ValueError, IndexError):
+            LOGGER.warning("node_collector_memory_read_failed")
+            return 0
+
+    def filesystem_usage_ratio(self) -> float:
+        try:
+            stats = os.statvfs(self.filesystem_path)
+        except OSError:
+            LOGGER.warning("node_collector_filesystem_read_failed")
+            return 0.0
+        if stats.f_blocks == 0:
+            return 0.0
+        return max(0.0, min(1.0, 1 - stats.f_bavail / stats.f_blocks))
 
 
 @dataclass(frozen=True)
@@ -84,12 +148,14 @@ class NodeCollector:
         namespace: str,
         interval_seconds: int,
         kubernetes: KubernetesApiClient | None = None,
+        sampler: NodeRuntimeSampler | None = None,
     ) -> None:
         self.node_name = node_name
         self.pod_name = pod_name
         self.namespace = namespace
         self.interval_seconds = interval_seconds
         self.kubernetes = kubernetes or KubernetesApiClient()
+        self.sampler = sampler or NodeRuntimeSampler()
         self.collectors: tuple[MetricCollector, ...] = (
             PodMetricCollector(self.kubernetes, self.node_name),
         )
@@ -116,9 +182,9 @@ class NodeCollector:
             pod_name=self.pod_name,
             namespace=self.namespace,
             timestamp=datetime.now(UTC).isoformat(),
-            cpu_usage_ratio=NodeCollectorConfig.SAMPLE_CPU_USAGE_RATIO,
-            memory_working_set_bytes=NodeCollectorConfig.SAMPLE_MEMORY_WORKING_SET_BYTES,
-            filesystem_usage_ratio=NodeCollectorConfig.SAMPLE_FILESYSTEM_USAGE_RATIO,
+            cpu_usage_ratio=self.sampler.cpu_usage_ratio(),
+            memory_working_set_bytes=self.sampler.memory_working_set_bytes(),
+            filesystem_usage_ratio=self.sampler.filesystem_usage_ratio(),
             runtime=NodeCollectorConfig.RUNTIME_NAME,
         )
 

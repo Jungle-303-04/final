@@ -52,6 +52,8 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
         assert "auth_email:" in env_text
         assert "agent_token:" in env_text
         assert "cluster_id:" in env_text
+        assert "alert_channel_id:" in env_text
+        assert "alertmanager_token:" in env_text
         assert "github_webhook_signature:" in env_text
 
 
@@ -69,9 +71,11 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         "/auth/users/{{user_id}}/approve",
         routes.AUTH_RESEND_VERIFICATION_PATH,
         routes.GITHUB_WEBHOOK_PATH,
+        f"{routes.ALERTMANAGER_WEBHOOK_PATH}?cluster_id=",
         routes.AGENT_CONNECT_PATH,
         routes.AGENT_EVIDENCE_PATH,
         routes.TARGETS_PATH,
+        "/install/{{agent_token}}",
         routes.COMMANDS_PATH,
         "/commands/{{command_id}}",
         "/approvals/{{approval_id}}/grant",
@@ -89,6 +93,8 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.USERS_PATH,
         routes.ACCESS_PATH,
         "/access/{{access_id}}",
+        routes.ALERT_CHANNELS_PATH,
+        "/alert-channels/{{alert_channel_id}}",
         routes.AGENT_COMMAND_POLL_PATH,
         "/agent/commands/{{command_id}}/start",
         "/agent/commands/{{command_id}}/heartbeat",
@@ -101,6 +107,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.AGENT_RECONCILE_STATUS_PATH,
         routes.AGENT_DEBUG_QUERY_PATH,
         "/clusters/{{agent_cluster_id}}/policy",
+        "/clusters/{{cluster_id}}/usage",
         routes.PROVIDERS_CATALOG_PATH,
         routes.PROVIDERS_VALIDATE_PATH,
         routes.DASHBOARD_RCA_TIMELINE_PATH,
@@ -155,6 +162,7 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "07-ai",
         "08-ops-dlq",
         "09-management-console",
+        "13-alert-channels",
         "정상 출력",
         "GitHub webhook signature",
         "https://k8s.woonyong.org/",
@@ -192,6 +200,7 @@ def test_bruno_display_names_are_korean() -> None:
         "name: 07 AI 대화",
         "name: 08 운영과 DLQ",
         "name: 09 관리 콘솔",
+        "name: 13 알림 채널",
         "name: 01 상태 확인 healthz",
         "name: 02 준비 상태 readyz",
         "name: 03 OpenAPI 계약 확인",
@@ -206,6 +215,7 @@ def test_bruno_display_names_are_korean() -> None:
         "name: 02 Provider 선택 검증",
         "name: 01 Target 등록과 Manifest 발급",
         "name: 02 Cluster 정책 수정",
+        "name: 03 Agent 설치 Manifest 링크 조회",
         "name: 01 Agent 연결 보고",
         "name: 02 Agent 정책 조회",
         "name: 03 정책 적용 상태 보고",
@@ -222,6 +232,7 @@ def test_bruno_display_names_are_korean() -> None:
         "name: 06 Command 결과 제출",
         "name: 01 RCA Timeline 조회",
         "name: 02 RCA Incident 상세 조회",
+        "name: 04 Alertmanager Webhook 수신",
         "name: 01 GitHub Webhook 수신",
         "name: 02 Approval 승인",
         "name: 03 Approval 거절",
@@ -244,6 +255,10 @@ def test_bruno_display_names_are_korean() -> None:
         "name: 10 권한 목록 조회",
         "name: 11 권한 부여",
         "name: 12 권한 회수",
+        "name: 01 알림 채널 목록 조회",
+        "name: 02 알림 채널 생성 또는 수정",
+        "name: 03 알림 채널 삭제",
+        "name: 11 클러스터 Usage 시계열 조회",
     ]
     missing = [name for name in expected_names if name not in collection]
 

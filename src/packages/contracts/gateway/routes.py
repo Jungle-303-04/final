@@ -10,6 +10,8 @@ AUTH_VERIFY_EMAIL_PATH = "/auth/verify-email"
 AUTH_RESEND_VERIFICATION_PATH = "/auth/resend-verification"
 AUTH_APPROVE_USER_PATH = "/auth/users/{user_id}/approve"
 GITHUB_WEBHOOK_PATH = "/github/webhook"
+# 외부 모니터링(Alertmanager/Grafana) 알림 수신 — 인시던트 파이프라인 트리거.
+ALERTMANAGER_WEBHOOK_PATH = "/webhooks/alertmanager"
 AGENT_CONNECT_PATH = "/agent/connect"
 AGENT_EVIDENCE_PATH = "/agent/evidence"
 TARGETS_PATH = "/targets"
@@ -32,6 +34,9 @@ GROUP_PATH = "/groups/{group_id}"
 GROUP_MEMBERS_PATH = "/groups/{group_id}/members"
 GROUP_MEMBER_PATH = "/groups/{group_id}/members/{user_id}"
 USERS_PATH = "/users"
+# 알림 라우팅 룰 — 워크스페이스별 수신 채널(admin 세션)
+ALERT_CHANNELS_PATH = "/alert-channels"
+ALERT_CHANNEL_PATH = "/alert-channels/{channel_id}"
 ACCESS_PATH = "/access"
 ACCESS_ITEM_PATH = "/access/{access_id}"
 APPLICATIONS_PATH = "/applications"
@@ -61,6 +66,8 @@ CLUSTER_INVENTORY_SUMMARY_PATH = "/clusters/{cluster_id}/inventory/summary"
 CLUSTER_INVENTORY_WORKLOADS_PATH = "/clusters/{cluster_id}/inventory/workloads"
 CLUSTER_INVENTORY_SERVICES_PATH = "/clusters/{cluster_id}/inventory/services"
 CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
+# 스냅샷 기반 실측 활용 시계열(usage rollup) — 콘솔 추이 차트용.
+CLUSTER_USAGE_PATH = "/clusters/{cluster_id}/usage"
 CLUSTER_DEPLOYMENT_SCALE_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale"
 )

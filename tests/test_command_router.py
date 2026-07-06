@@ -293,7 +293,7 @@ def test_scale_deployment_wrapper_rejects_namespace_outside_current_policy() -> 
             )
         except HTTPException as exc:
             assert exc.status_code == 422
-            assert "sandbox namespace" in exc.detail
+            assert "control policy" in exc.detail
         else:
             raise AssertionError("expected HTTPException")
 
@@ -518,5 +518,50 @@ def test_long_poll_waits_for_wakeup_before_retrying_lease(monkeypatch) -> None:
         assert db.calls == 2
         assert wakeup.waits
         assert wakeup.waits[0][0:2] == ("trusted-workspace", "trusted-cluster")
+
+    asyncio.run(run())
+
+
+def test_control_namespace_allowlist_env_extends_beyond_sandbox(monkeypatch) -> None:
+    """CONTROL_ALLOWED_NAMESPACES 에 넣은 네임스페이스는 게이트웨이 제어 검증을 통과한다."""
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,prod-web")
+
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        events = SpyEvents()
+        response = await scale_deployment(
+            "cluster-1",
+            "prod-web",
+            "checkout-api",
+            DeploymentScaleRequest(replicas=3),
+            current_session(),
+            db,
+            events,
+        )
+        assert response.accepted is True
+        assert events.body.namespace == "prod-web"
+
+    asyncio.run(run())
+
+
+def test_control_namespace_allowlist_defaults_to_sandbox_only(monkeypatch) -> None:
+    monkeypatch.delenv("CONTROL_ALLOWED_NAMESPACES", raising=False)
+
+    async def run() -> None:
+        try:
+            await scale_deployment(
+                "cluster-1",
+                "prod-web",
+                "checkout-api",
+                DeploymentScaleRequest(replicas=3),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                SpyEvents(),
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert "control policy" in exc.detail
+        else:
+            raise AssertionError("expected HTTPException")
 
     asyncio.run(run())

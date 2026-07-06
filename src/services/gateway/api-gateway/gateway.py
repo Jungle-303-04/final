@@ -15,6 +15,7 @@ from fastapi.websockets import WebSocketDisconnect
 from settings import Settings
 
 from domains.ai.router import router as ai_router
+from domains.alert.router import router as alert_router
 from domains.applications.router import router as applications_router
 from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
@@ -173,6 +174,7 @@ class ApiGateway:
         self._register_frontend_proxy(app)
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(alert_router)  # 알림 채널 라우팅 룰(admin)
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트

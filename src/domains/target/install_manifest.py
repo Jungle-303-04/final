@@ -190,6 +190,14 @@ subjects:
 """
 
 
+def control_namespaces_line(payload: TargetRegisterRequest) -> str:
+    """제어 허용 네임스페이스 — 지정된 경우에만 ConfigMap 키를 추가(미지정=기존 manifest 동일)."""
+    value = payload.control_namespaces.strip()
+    if not value:
+        return ""
+    return f"\n  CONTROL_ALLOWED_NAMESPACES: {yaml_string(value)}"
+
+
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:
     return f"""
 apiVersion: v1
@@ -204,7 +212,7 @@ data:
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
-  NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}
+  NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}{control_namespaces_line(payload)}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(TARGET_NAMESPACE)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"

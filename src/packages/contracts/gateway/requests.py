@@ -184,6 +184,9 @@ class TargetRegisterRequest(StrictModel):
         ge=MIN_EVIDENCE_INTERVAL_SECONDS,
         le=MAX_EVIDENCE_INTERVAL_SECONDS,
     )
+    # 제어(쓰기) 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만 허용.
+    # 설치 manifest ConfigMap 의 CONTROL_ALLOWED_NAMESPACES 로 주입되어 클러스터별로 다르게 줄 수 있다.
+    control_namespaces: str = ""
     install_node_collector: bool = True
     install_sample_workload: bool = False
     sample_workload_name: str | None = Field(
@@ -292,6 +295,42 @@ class CommandStartRequest(StrictModel):
 
 class CommandHeartbeatRequest(CommandStartRequest):
     pass
+
+
+class AlertChannelUpsertRequest(StrictModel):
+    """알림 채널 생성/수정 — min_severity 이상의 알림만 이 채널로 발송된다."""
+
+    channel_id: str = ""  # 빈 값이면 서버가 생성(신규)
+    name: str = Field(min_length=1)
+    kind: Literal["webhook"] = "webhook"
+    url: str = Field(min_length=1)
+    min_severity: Literal["info", "warning", "critical"] = "warning"
+    enabled: bool = True
+
+
+class AlertmanagerAlert(StrictModel):
+    """Alertmanager webhook payload 의 alert 항목 — 외부 계약이라 필드명 camelCase 유지."""
+
+    model_config = ConfigDict(extra="allow")
+
+    status: str = "firing"
+    labels: dict[str, Any] = Field(default_factory=dict)
+    annotations: dict[str, Any] = Field(default_factory=dict)
+    startsAt: str = ""  # noqa: N815 — Alertmanager 계약 필드명
+    endsAt: str = ""  # noqa: N815
+    fingerprint: str = ""
+
+
+class AlertmanagerWebhookRequest(StrictModel):
+    """Alertmanager v4 webhook — https://prometheus.io/docs/alerting/latest/configuration/#webhook_config"""
+
+    model_config = ConfigDict(extra="allow")
+
+    version: str = "4"
+    groupKey: str = ""  # noqa: N815
+    status: str = "firing"
+    receiver: str = ""
+    alerts: list[AlertmanagerAlert] = Field(default_factory=list)
 
 
 class CommandResultRequest(StrictModel):

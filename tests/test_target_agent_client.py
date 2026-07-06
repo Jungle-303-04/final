@@ -441,9 +441,9 @@ def test_target_agent_rejects_manifest_outside_sandbox(monkeypatch) -> None:
     )
 
     assert result["applied"] is False
-    assert result["message"] == "only sandbox namespace writes are allowed"
+    assert result["message"] == "namespace is not allowed by control policy"
     assert result["resources"][0]["resource"] == "configmap/forbidden"
-    assert result["stderr"] == "only sandbox namespace writes are allowed"
+    assert result["stderr"] == "namespace is not allowed by control policy"
     assert calls == []
 
 

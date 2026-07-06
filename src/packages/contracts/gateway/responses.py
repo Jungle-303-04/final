@@ -172,6 +172,16 @@ class InventoryResourceListResponse(StrictModel):
     resources: list[InventoryResourceResponse]
 
 
+class ClusterUsageSample(StrictModel):
+    sampled_at: str | None = None
+    usage: JsonMap = Field(default_factory=dict)
+
+
+class ClusterUsageResponse(StrictModel):
+    cluster_id: str
+    samples: list[ClusterUsageSample] = Field(default_factory=list)
+
+
 class InventorySummaryResponse(StrictModel):
     cluster_id: str
     latest_snapshot: JsonMap | None = None
@@ -236,6 +246,22 @@ class ClusterConnectionStatusResponse(StrictModel):
     last_agent_id: str | None = None
     last_seen_at: str | None = None
     agents: list[ClusterAgentStatus] = Field(default_factory=list)
+
+
+class AlertChannelResponse(StrictModel):
+    channel_id: str
+    workspace_id: str
+    name: str
+    kind: str
+    url: str
+    min_severity: str
+    enabled: bool
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class AlertChannelListResponse(StrictModel):
+    channels: list[AlertChannelResponse] = Field(default_factory=list)
 
 
 class DeadLettersResponse(StrictModel):
