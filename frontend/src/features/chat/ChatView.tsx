@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { MAX_AI_MESSAGE_LENGTH, useConversation, useConversations, useCreateConversation, useSendMessage, useSelectAction, chatKeys } from '@/features/chat/api';
+import { MAX_AI_MESSAGE_LENGTH, useConversation, useConversations, useCreateConversation, useSendMessage, useSelectAction } from '@/features/chat/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { useIsAdmin } from '@/features/auth/api';
 import { Badge, Button, Card, EmptyState } from '@/shared/ui';
@@ -115,7 +115,7 @@ function ActionSelectCard({ actions }: { actions: NonNullable<ChatMessage['actio
         : <div style={{ display: 'flex', gap: 8 }}>
             <Button size="sm" variant="primary" disabled={!picked || !canDeploy} title={canDeploy ? '' : 'release_operator 권한 필요'}
               loading={select.isPending}
-              onClick={() => picked && select.mutate({ planId: actions.plan_id, actionId: picked }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: chatKeys.list()[0] === 'ai' ? ['ai'] : ['ai'] }) })}>
+              onClick={() => picked && select.mutate({ planId: actions.plan_id, actionId: picked }, { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai'] }) })}>
               선택 실행
             </Button>
           </div>}

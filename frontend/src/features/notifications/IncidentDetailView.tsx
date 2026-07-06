@@ -125,7 +125,7 @@ export default function IncidentDetailView() {
 
   const raw = useMemo(
     () => (q.data ? buildGraph(q.data, collapsed, toggle) : { nodes: [] as Node[], edges: [] as FlowEdge[] }),
-    [q.data, collapsed], // eslint-disable-line react-hooks/exhaustive-deps
+    [q.data, collapsed],
   );
   const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
 
