@@ -12,7 +12,7 @@
 
 | 항목 | 상태 | 조치 제안 |
 | --- | --- | --- |
-| `approval.recommended` (approval-worker 발행) | **구독자 없음 + dashboard timeline 매핑에도 없음** → audit log에만 남고 UI로 노출 경로가 없음 | rca_timeline 매핑에 추가하거나 approval 도메인 read model로 투영. 아니면 워커 자체를 보류 |
+| `approval.recommended` (approval-worker 발행) | 전용 소비 worker는 없지만 dashboard timeline에는 `approval_recommended`로 투영됨 | 별도 approval read model이 필요해질 때만 분리하고, 현재는 RCA timeline 상태로 노출한다 |
 | `audit.>` (RESERVED_STREAM_SUBJECTS) | 발행자 없음(예약만) | 의도된 예약이면 유지, 주석 명확화 |
 | MinIO | 배포만 되고 코드 사용처 없음 | evidence/manifest 대용량 저장 계획이 없으면 배포 제거 |
 | alert-worker의 `alert.dispatched`/`alert.rejected` 자기 구독 | 로그만 남김 — audit-worker가 이미 전 이벤트를 기록 | 두 핸들러 제거 후보(중복 소비) |
