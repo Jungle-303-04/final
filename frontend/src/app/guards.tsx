@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useIsAdmin, useSession } from '@/features/auth/api';
 import { EmptyState, Skeleton } from '@/shared/ui';
+import { IconLock } from '@/shared/ui/icons';
 
 export function RequireSession() {
   const { data, isPending } = useSession();
@@ -17,6 +18,6 @@ export function RequireGuest() {
 }
 export function RequireAdmin() {
   const admin = useIsAdmin();
-  if (!admin) return <EmptyState icon="🔒" title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />;
+  if (!admin) return <EmptyState icon={<IconLock size={26} />} title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />;
   return <Outlet />;
 }

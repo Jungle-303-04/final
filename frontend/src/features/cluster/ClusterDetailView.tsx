@@ -7,7 +7,7 @@ import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, 
 import { liveStore } from '@/shared/lib/live';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
-import { IconFlame } from '@/shared/ui/icons';
+import { IconFile, IconFlame } from '@/shared/ui/icons';
 import type { Workload } from '@/shared/lib/types';
 
 const TABS = [
@@ -128,7 +128,8 @@ function WorkloadsTab({ clusterId, admin, onScale, onRestart }: { clusterId: str
   const deployments = useMemo(() => {
     const byDeploy = new Map<string, Workload[]>();
     (q.data ?? []).forEach(w => {
-      const key = `${w.namespace}/${w.name.replace(/-pod-.*/, '')}`;
+      const name = w.workload_name || w.name;
+      const key = `${w.namespace}/${name}`;
       byDeploy.set(key, [...(byDeploy.get(key) ?? []), w]);
     });
     return [...byDeploy.entries()].map(([key, pods]) => ({ key, ns: pods[0].namespace, name: key.split('/')[1], pods }));
@@ -180,7 +181,7 @@ function ResourcesTab({ clusterId }: { clusterId: string }) {
 function EventsTab({ clusterId }: { clusterId: string }) {
   const q = useClusterEvents(clusterId);
   return <Card><QueryBoundary query={q}>{rows => (
-    rows.length === 0 ? <EmptyState icon="📄" title="이벤트가 없습니다" /> :
+    rows.length === 0 ? <EmptyState icon={<IconFile size={26} />} title="이벤트가 없습니다" /> :
     <ResourceTable rows={rows} rowKey={e => `${e.at}${e.reason}`}
       columns={[
         { key: 'at', label: '시각', render: e => timeAgo(e.at) },

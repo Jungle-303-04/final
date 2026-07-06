@@ -20,6 +20,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody
 from domains.target.events import ClusterDesiredStateChangedBody, TargetDesiredComponent
@@ -100,6 +101,13 @@ DEFAULT_AGENT_ONLINE_WINDOW_SECONDS = 120
 AGENT_STATUS_NEVER_CONNECTED = "never_connected"
 AGENT_STATUS_ONLINE = "online"
 AGENT_STATUS_STALE = "stale"
+AGENT_HEARTBEAT_CAPABILITIES = ["evidence", "commands", "inventory"]
+TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
+GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
+PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
+LOCAL_PLACEHOLDER_IMAGES = {"", "service:local", "kubeheal-service:latest"}
+BLOCKED_TEST_CLUSTER_IDS = {"bruno-api-test"}
+BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -147,9 +155,38 @@ def allowed_kube_contexts() -> set[str]:
 
 
 def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> TargetRegisterRequest:
+    updates: dict[str, str] = {}
     if payload.apply and "deploy_provider" not in payload.model_fields_set:
-        return payload.model_copy(update={"deploy_provider": DIRECT_APPLY_DEPLOY_PROVIDER})
-    return payload
+        updates["deploy_provider"] = DIRECT_APPLY_DEPLOY_PROVIDER
+
+    image = payload.image.strip()
+    if image in LOCAL_PLACEHOLDER_IMAGES:
+        default_image = env(TARGET_AGENT_IMAGE_ENV, "") or env(GITOPS_WEBHOOK_IMAGE_ENV, "")
+        if default_image:
+            updates["image"] = default_image
+
+    management_base_url = payload.management_base_url.strip().rstrip("/")
+    public_base_url = env(PUBLIC_MANAGEMENT_BASE_URL_ENV, "").strip().rstrip("/")
+    if management_base_url and not management_base_url.endswith("/api"):
+        management_base_url = f"{management_base_url}/api"
+    if not management_base_url and public_base_url:
+        management_base_url = (
+            public_base_url if public_base_url.endswith("/api") else f"{public_base_url}/api"
+        )
+    if management_base_url:
+        updates["management_base_url"] = management_base_url
+
+    return payload.model_copy(update=updates) if updates else payload
+
+
+def reject_test_target(payload: TargetRegisterRequest) -> None:
+    name = payload.name.lower()
+    if payload.cluster_id in BLOCKED_TEST_CLUSTER_IDS or any(
+        marker in name for marker in BLOCKED_TEST_CLUSTER_NAME_PARTS
+    ):
+        raise HTTPException(status_code=422, detail="test target registrations are not allowed")
+    if payload.image.strip() in LOCAL_PLACEHOLDER_IMAGES:
+        raise HTTPException(status_code=422, detail="target agent image is not configured")
 
 
 def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
@@ -272,6 +309,37 @@ def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None
     )
 
 
+def touch_agent_seen(
+    db: Any,
+    identity: ClusterAgentIdentity,
+    agent_id: str | None,
+    *,
+    status: str = "connected",
+) -> None:
+    if not agent_id:
+        return
+    # heartbeat 는 best-effort — 저장소가 메서드를 제공하지 않으면 폴링을 막지 않고 건너뜀.
+    saver = getattr(db, "save_cluster_agent_status", None)
+    if saver is None:
+        return
+    saver(
+        workspace_id=identity.workspace_id,
+        cluster_id=identity.cluster_id,
+        agent_id=agent_id,
+        capabilities=AGENT_HEARTBEAT_CAPABILITIES,
+        status=status,
+        details={"heartbeat_source": "agent_api"},
+    )
+
+
+def inventory_counts(counts: list[dict[str, Any]]) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for row in counts:
+        resource_type = str(row.get("resource_type") or "")
+        totals[resource_type] = totals.get(resource_type, 0) + int(row.get("count") or 0)
+    return totals
+
+
 # require_admin_session 이 세션을 검증 → base router 에 둠.
 # (라우터 단위 require_session + require_admin_session = 이중 검증/레이트리밋 2배 회피)
 @router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
@@ -285,6 +353,7 @@ async def register_target(
     scoped_payload = normalize_target_provider_defaults(payload).model_copy(
         update={"workspace_id": workspace_id}
     )
+    reject_test_target(scoped_payload)
     validate_target_install_providers(scoped_payload)
     components = target_desired_components(scoped_payload)
     version = desired_state_version(components)
@@ -362,12 +431,23 @@ async def list_clusters(
         workspace_id,
         {cluster["cluster_id"] for cluster in clusters},
     )
-    return ClusterListResponse(
-        clusters=[
-            cluster_summary(cluster, latest_agents.get(cluster["cluster_id"]))
-            for cluster in clusters
-        ]
-    )
+    summaries = [
+        cluster_summary(cluster, latest_agents.get(cluster["cluster_id"]))
+        for cluster in clusters
+        if cluster["cluster_id"] not in BLOCKED_TEST_CLUSTER_IDS
+        and not any(
+            marker in str(cluster["name"]).lower() for marker in BLOCKED_TEST_CLUSTER_NAME_PARTS
+        )
+    ]
+    for summary in summaries:
+        if hasattr(db, "inventory_resource_counts"):
+            counts = inventory_counts(
+                db.inventory_resource_counts(workspace_id, summary.cluster_id)
+            )
+            summary.node_count = counts.get("node", 0)
+            summary.pod_count = counts.get("pod", 0)
+            summary.incident_count = 0
+    return ClusterListResponse(clusters=summaries)
 
 
 @router.get(gateway_routes.CLUSTER_PATH, response_model=ClusterResponse)
@@ -556,6 +636,7 @@ async def poll_evidence_job(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> EvidenceJobPollResponse:
+    await db_call(touch_agent_seen, db, identity, agent_id)
     job = await lease_next_evidence_job(
         db,
         identity.cluster_id,
@@ -641,6 +722,21 @@ async def evidence_job_result(
     )
     if result is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=EVIDENCE_JOB_NOT_FOUND)
+
+    await db_call(touch_agent_seen, db, identity, payload.agent_id)
+    kubernetes = payload.result.get("kubernetes")
+    if payload.status == "completed" and isinstance(kubernetes, dict):
+        await db_call(
+            db.save_inventory_snapshot,
+            workspace_id=identity.workspace_id,
+            cluster_id=identity.cluster_id,
+            agent_id=payload.agent_id,
+            payload=kubernetes_evidence_to_inventory_snapshot(
+                kubernetes,
+                cluster_id=identity.cluster_id,
+                agent_id=payload.agent_id,
+            ),
+        )
 
     evidence_key = str(result["evidence_key"])
     emitted = await emit_evidence_if_ready(evidence_key, events, db)

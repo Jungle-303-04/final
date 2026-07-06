@@ -5,10 +5,13 @@ import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
+import httpx
+import websockets
 from auth import PasswordAuthService, SessionAuthService
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.websockets import WebSocketDisconnect
 from settings import Settings
 
 from domains.ai.router import router as ai_router
@@ -160,6 +163,7 @@ class ApiGateway:
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
         app = self.app
+        self._register_frontend_proxy(app)
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
@@ -177,9 +181,156 @@ class ApiGateway:
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
+        self._register_live_proxy_routes(app)
         self._register_dead_letter_routes(app)
         self._register_metrics_routes(app)
         self._register_error_handler(app)
+
+    def _register_frontend_proxy(self, app: FastAPI) -> None:
+        @app.middleware("http")
+        async def frontend_proxy_middleware(request: Request, call_next):
+            path = request.scope.get("path", "")
+            if path == "/api" or path.startswith("/api/"):
+                stripped = path[4:] or "/"
+                request.scope["path"] = stripped
+                request.scope["raw_path"] = stripped.encode("ascii", errors="ignore")
+                return await call_next(request)
+            if self._is_frontend_request(request):
+                return await self._proxy_console(request)
+            return await call_next(request)
+
+    @staticmethod
+    def _is_frontend_request(request: Request) -> bool:
+        if request.method not in {"GET", "HEAD"}:
+            return False
+        path = request.url.path
+        if path.startswith("/assets/") or path in {"/favicon.ico", "/manifest.webmanifest"}:
+            return True
+        return "text/html" in request.headers.get("accept", "")
+
+    @staticmethod
+    async def _proxy_console(request: Request) -> Response:
+        console_origin = env(Settings.CONSOLE_ORIGIN_ENV, Settings.DEFAULT_CONSOLE_ORIGIN).rstrip(
+            "/"
+        )
+        target = f"{console_origin}{request.url.path}"
+        if request.url.query:
+            target = f"{target}?{request.url.query}"
+        headers = {
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() not in {"host", "content-length"}
+        }
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=Settings.FRONTEND_PROXY_TIMEOUT_SECONDS,
+            ) as client:
+                upstream = await client.request(request.method, target, headers=headers)
+        except httpx.HTTPError as exc:
+            LOGGER.warning(
+                "frontend_proxy_error",
+                extra={CONTEXT_KEY: {"exception_type": type(exc).__name__, "target": target}},
+                exc_info=exc,
+            )
+            return PlainTextResponse("frontend unavailable", status_code=502)
+
+        excluded_headers = {
+            "connection",
+            "content-encoding",
+            "content-length",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailer",
+            "transfer-encoding",
+            "upgrade",
+        }
+        response_headers = {
+            key: value
+            for key, value in upstream.headers.items()
+            if key.lower() not in excluded_headers
+        }
+        content = b"" if request.method == "HEAD" else upstream.content
+        return Response(
+            content=content,
+            status_code=upstream.status_code,
+            headers=response_headers,
+            media_type=upstream.headers.get("content-type"),
+        )
+
+    def _register_live_proxy_routes(self, app: FastAPI) -> None:
+        @app.websocket("/api/live/{path:path}")
+        async def live_proxy(websocket: WebSocket, path: str) -> None:
+            realtime_origin = env(
+                Settings.REALTIME_ORIGIN_ENV, Settings.DEFAULT_REALTIME_ORIGIN
+            ).rstrip("/")
+            upstream_url = f"{realtime_origin}/live/{path}"
+            # 구독 파라미터(workspace_id·cluster_id 등)는 query 로 전달됨 — 유실하면
+            # realtime-gateway 가 기본 workspace 로만 붙어 이벤트가 비어 보인다.
+            if websocket.url.query:
+                upstream_url = f"{upstream_url}?{websocket.url.query}"
+            headers = [
+                (name, websocket.headers[name])
+                for name in ("cookie", "authorization", "x-session-token")
+                if name in websocket.headers
+            ]
+            await websocket.accept()
+            try:
+                async with websockets.connect(upstream_url, additional_headers=headers) as upstream:
+                    await self._bridge_websocket(websocket, upstream)
+            except Exception as exc:
+                LOGGER.warning(
+                    "live_proxy_error",
+                    extra={
+                        CONTEXT_KEY: {
+                            "exception_type": type(exc).__name__,
+                            "upstream_url": upstream_url,
+                        }
+                    },
+                    exc_info=exc,
+                )
+                with suppress(RuntimeError):
+                    await websocket.close(code=1011)
+
+    @staticmethod
+    async def _bridge_websocket(
+        websocket: WebSocket, upstream: websockets.ClientConnection
+    ) -> None:
+        async def browser_to_upstream() -> None:
+            try:
+                while True:
+                    message = await websocket.receive()
+                    if message["type"] == "websocket.disconnect":
+                        break
+                    if text := message.get("text"):
+                        await upstream.send(text)
+                    elif data := message.get("bytes"):
+                        await upstream.send(data)
+            except WebSocketDisconnect:
+                pass
+            finally:
+                await upstream.close()
+
+        async def upstream_to_browser() -> None:
+            async for message in upstream:
+                if isinstance(message, bytes):
+                    await websocket.send_bytes(message)
+                else:
+                    await websocket.send_text(message)
+
+        tasks = {
+            asyncio.create_task(browser_to_upstream()),
+            asyncio.create_task(upstream_to_browser()),
+        }
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        for task in done:
+            task.result()
+        with suppress(RuntimeError):
+            await websocket.close()
 
     def _register_health_routes(self, app: FastAPI) -> None:
         @app.get(gateway_routes.HEALTHZ_PATH, response_model=HealthResponse)

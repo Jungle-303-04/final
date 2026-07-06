@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import type { ClusterSummary, InventoryResource, K8sEvent, ServiceInfo, Workload } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
-import { adaptCluster } from '@/shared/lib/adapt';
+import { adaptCluster, adaptInventoryResource, adaptInventorySummary, adaptK8sEventResource, adaptServiceResource, adaptWorkloadResource } from '@/shared/lib/adapt';
 
 export const clusterKeys = {
   list: () => ['clusters'] as const,
@@ -12,15 +11,15 @@ export const clusterKeys = {
 export const useClusters = () =>
   useQuery({ queryKey: clusterKeys.list(), queryFn: () => get<{ clusters: Record<string, unknown>[] }>('/clusters'), refetchInterval: 30_000, select: d => d.clusters.map(adaptCluster) });
 export const useClusterSummary = (id: string | undefined) =>
-  useQuery({ queryKey: clusterKeys.summary(id ?? ''), queryFn: () => get<ClusterSummary>(`/clusters/${id}/inventory/summary`), enabled: !!id, refetchInterval: 30_000 });
+  useQuery({ queryKey: clusterKeys.summary(id ?? ''), queryFn: () => get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`), enabled: !!id, refetchInterval: 30_000, select: adaptInventorySummary });
 export const useWorkloads = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'workloads'), queryFn: () => get<{ workloads: Workload[] }>(`/clusters/${id}/inventory/workloads`), refetchInterval: 30_000, select: d => d.workloads });
+  useQuery({ queryKey: clusterKeys.inv(id, 'pods'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`), enabled: !!id, refetchInterval: 30_000, select: d => d.resources.map(adaptWorkloadResource) });
 export const useResources = (id: string, kind?: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, kind ?? 'all'), queryFn: () => get<{ resources: InventoryResource[] }>(`/clusters/${id}/inventory/resources${kind ? `?kind=${kind}` : ''}`), select: d => d.resources });
+  useQuery({ queryKey: clusterKeys.inv(id, kind ?? 'all'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources${kind ? `?resource_type=${kind}` : ''}`), enabled: !!id, select: d => d.resources.map(adaptInventoryResource) });
 export const useServices = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'services'), queryFn: () => get<{ services: ServiceInfo[] }>(`/clusters/${id}/inventory/services`), select: d => d.services });
+  useQuery({ queryKey: clusterKeys.inv(id, 'services'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/services`), enabled: !!id, select: d => d.resources.map(adaptServiceResource) });
 export const useClusterEvents = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'events'), queryFn: () => get<{ events: K8sEvent[] }>(`/clusters/${id}/inventory/events`), select: d => d.events });
+  useQuery({ queryKey: clusterKeys.inv(id, 'events'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/events`), enabled: !!id, select: d => d.resources.map(adaptK8sEventResource) });
 
 export function useScale(clusterId: string) {
   const qc = useQueryClient();
@@ -28,6 +27,7 @@ export function useScale(clusterId: string) {
     mutationFn: ({ ns, name, replicas }: { ns: string; name: string; replicas: number }) =>
       post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/scale`, { replicas }),
     onSuccess: () => { uiStore.getState().toast('info', '스케일 명령을 큐에 등록했습니다'); qc.invalidateQueries({ queryKey: clusterKeys.list() }); },
+    onError: err => uiStore.getState().toast('danger', commandFailureMessage('스케일', err)),
   });
 }
 export function useRestart(clusterId: string) {
@@ -35,5 +35,14 @@ export function useRestart(clusterId: string) {
     mutationFn: ({ ns, name }: { ns: string; name: string }) =>
       post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart`),
     onSuccess: () => uiStore.getState().toast('info', '재시작 명령을 큐에 등록했습니다'),
+    onError: err => uiStore.getState().toast('danger', commandFailureMessage('재시작', err)),
   });
+}
+
+// 제어 명령 실패는 조용히 삼키지 않는다 — policy(403)·검증(422) 사유를 그대로 보여줌.
+function commandFailureMessage(action: string, err: unknown): string {
+  const e = err as { kind?: string; detail?: string };
+  if (e.kind === 'forbidden') return `${action} 거부됨 — 권한 또는 정책(policy)이 허용하지 않습니다`;
+  if (e.kind === 'invalid') return `${action} 실패 — ${e.detail ?? '요청이 정책 조건에 맞지 않습니다'}`;
+  return `${action} 실패 — ${e.detail ?? '잠시 후 다시 시도해주세요'}`;
 }

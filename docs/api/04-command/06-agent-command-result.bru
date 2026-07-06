@@ -10,6 +10,7 @@ meta {
 
 post {
   url: {{base_url}}agent/commands/{{command_id}}/result
+  body: json
 }
 
 headers {
@@ -20,7 +21,7 @@ headers {
 body:json {
   {
     "status": "completed",
-    "cluster_id": "{{cluster_id}}",
+    "cluster_id": "{{agent_cluster_id}}",
     "workspace_id": "{{workspace_id}}",
     "agent_id": "{{agent_id}}",
     "lease_id": "{{lease_id}}",

@@ -54,7 +54,7 @@ const routes: [string, string, Handler][] = [
   ['POST', '/clusters/:id/namespaces/:ns/deployments/:name/restart', () => ({ accepted: true })],
   ['PUT', '/clusters/:id/policy', () => ({ accepted: true })],
   ['POST', '/targets', () => ({ registered: true, applied: false, agent_token: `agt_${uid()}${uid()}`, install_manifest: 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: target\n# … (mock manifest)' })],
-  ['GET', '/providers/catalog', () => ({ providers: [ { key: 'existing-k8s', label: '기존 Kubernetes', kind: 'cloud' }, { key: 'manual-manifest', label: '수동 manifest 적용', kind: 'deploy' } ] })],
+  ['GET', '/providers/catalog', () => ({ providers: { cloud: [ { key: 'existing-k8s', label: '기존 Kubernetes', status: 'available' } ], deploy: [ { key: 'manual-manifest', label: '수동 manifest 적용', status: 'available' } ], source: [ { key: 'github', label: 'GitHub', status: 'available' } ], secret: [ { key: 'env', label: '환경 변수', status: 'available' } ] } })],
   ['POST', '/providers/validate', () => ({ valid: true, errors: [], warnings: [] })],
 
   ['GET', '/applications', () => ({ applications: fx.applications })],

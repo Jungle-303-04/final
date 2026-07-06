@@ -1,8 +1,16 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import type { Application, Deployment } from '@/shared/lib/types';
+import type { Application } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
-import { adaptApplication, adaptRun } from '@/shared/lib/adapt';
+import { adaptApplication, adaptDeployment, adaptRun } from '@/shared/lib/adapt';
+
+export interface CreateApplicationInput {
+  name: string;
+  repo_ref: string;
+  branch: string;
+  manifest_path: string;
+  cluster_id: string;
+}
 
 export const repoKeys = {
   apps: () => ['applications'] as const,
@@ -12,7 +20,11 @@ export const repoKeys = {
 export const useApplications = () =>
   useQuery({ queryKey: repoKeys.apps(), queryFn: () => get<{ applications: Record<string, unknown>[] }>('/applications'), refetchInterval: 30_000, select: d => d.applications.map(adaptApplication) });
 export const useApplication = (id: string) =>
-  useQuery({ queryKey: ['applications', id], queryFn: () => get<Application>(`/applications/${id}`) });
+  useQuery({
+    queryKey: ['applications', id],
+    queryFn: () => get<{ application: Record<string, unknown> }>(`/applications/${id}`),
+    select: d => adaptApplication(d.application),
+  });
 const ACTIVE = new Set(['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING']);
 export function useRuns(appId: string) {
   return useQuery({
@@ -40,7 +52,11 @@ export function useRunsAll(apps: Application[]) {
   });
 }
 export const useDeployments = (appId: string) =>
-  useQuery({ queryKey: repoKeys.deployments(appId), queryFn: () => get<{ deployments: Deployment[] }>(`/applications/${appId}/deployments`), select: d => d.deployments });
+  useQuery({
+    queryKey: repoKeys.deployments(appId),
+    queryFn: () => get<{ deployments: Record<string, unknown>[] }>(`/applications/${appId}/deployments`),
+    select: d => d.deployments.map(adaptDeployment),
+  });
 export function useApproval() {
   const qc = useQueryClient();
   return useMutation({
@@ -55,5 +71,23 @@ export function useApproval() {
 }
 export const useCreateApplication = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (b: Partial<Application>) => post<Application>('/applications', b), onSuccess: () => qc.invalidateQueries({ queryKey: repoKeys.apps() }) });
+  return useMutation({
+    mutationFn: async (input: CreateApplicationInput) => {
+      const created = await post<{ application: Record<string, unknown> }>('/applications', {
+        name: input.name,
+        repo_ref: input.repo_ref,
+        default_branch: input.branch,
+        manifest_path: input.manifest_path,
+      });
+      const app = adaptApplication(created.application);
+      await post(`/applications/${app.application_id}/deployments`, {
+        cluster_id: input.cluster_id,
+        namespace: 'sandbox',
+        environment: 'sandbox',
+        manifest_path: input.manifest_path,
+      });
+      return { ...app, branch: input.branch, cluster_id: input.cluster_id };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: repoKeys.apps() }),
+  });
 };

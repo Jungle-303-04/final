@@ -131,7 +131,7 @@ class KubernetesSnapshotProvider:
         allow_not_found: bool = False,
     ) -> JsonObject:
         response = await client.get(f"{base_url}{path}", headers=headers)
-        if allow_not_found and response.status_code == 404:
+        if allow_not_found and response.status_code in {403, 404}:
             return {"items": []}
         response.raise_for_status()
         payload = response.json()
