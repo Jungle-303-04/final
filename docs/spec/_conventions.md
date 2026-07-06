@@ -76,14 +76,37 @@ docs/spec/
 환경변수·설정 키 | 타입 | 기본값 | 의미.
 ```
 
-## 5. 100% 동기화 규칙
+## 5. 동기화 상태 추적 (기준 커밋 + status)
 
-1. **스펙 먼저**: 기능 변경 = 스펙 페이지 수정 → 코드 수정 → 같은 PR/커밋에 포함.
+모든 스펙 페이지는 맨 위에 front matter를 갖는다.
+
+```markdown
+---
+source_commit: <스펙이 반영하는 코드의 커밋 SHA (짧은 형식 가능)>
+status: synced | spec-ahead
+---
+```
+
+| status | 의미 | 전이 |
+|---|---|---|
+| `synced` | 스펙 = 코드. `source_commit` 시점의 코드와 100% 일치 | 코드 반영 커밋에서 `source_commit` 갱신 |
+| `spec-ahead` | **스펙은 수정됐지만 코드가 아직 미반영** (설계 선행) | 구현 완료 후 `synced`로 변경 + `source_commit` 갱신 |
+| `code-ahead` | 코드가 스펙보다 앞섬 (스펙 미갱신) — **직접 쓰지 않는다.** 검증 스크립트가 자동 탐지 | 스펙 갱신 후 `synced` |
+
+탐지 원리 (`scripts/verify_spec_links.py`):
+- 페이지의 코드 앵커 경로들을 수집해 `git log {source_commit}..HEAD -- <경로들>` 실행.
+- 커밋이 존재하면 그 페이지는 **code-ahead(스펙 뒤처짐)** 로 보고되고 해당 커밋 목록을 출력한다.
+- `status: spec-ahead` 페이지는 "구현 대기" 목록으로 별도 보고한다.
+- docs만 바꾼 커밋은 소스 경로 필터에 걸리지 않으므로 오탐이 없다.
+
+## 6. 100% 동기화 규칙
+
+1. **스펙 먼저**: 기능 변경 = 스펙 페이지 수정(`status: spec-ahead`) → 코드 수정 → 같은 PR에서 `synced` + `source_commit` 갱신.
 2. **커버리지**: 모듈의 모든 public 심볼(밑줄로 시작하지 않는 클래스·함수·상수)은 스펙에 존재해야 한다.
 3. **아키텍처 경계**: `services → domains → packages` 단방향 의존([.importlinter](../../.importlinter)로 CI 강제). 스펙의 의존성 표도 이 방향을 위반할 수 없다.
-4. **검증**: `python scripts/verify_spec_links.py` 로 (a) 스펙 내 상대링크 존재 여부, (b) 코드 앵커 경로 존재 여부를 검사한다.
+4. **검증**: `python scripts/verify_spec_links.py` 로 (a) 상대링크 존재, (b) 코드 앵커 경로·심볼 존재, (c) front matter 존재, (d) code-ahead/spec-ahead 동기화 상태를 검사한다.
 
-## 6. AI 에이전트 사용법
+## 7. AI 에이전트 사용법
 
 - 새 기능: `README.md` 인덱스 → 관련 도메인/서비스 스펙 → 링크를 따라 의존 스펙 순으로 읽는다.
 - 코드 생성 시 스펙의 시그니처·이벤트 스키마·불변식을 그대로 구현한다. 스펙에 없는 public 심볼을 만들면 스펙에 추가한다.
