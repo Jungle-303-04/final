@@ -78,6 +78,7 @@ class AccessListResponse(StrictModel):
 
 class AccessGrantResponse(StrictModel):
     access_id: str
+    subject_id: str | None = None
     subject_type: str
     subject_label: str
     resource_type: str
@@ -204,19 +205,22 @@ async def grant_access(
             "organization_id": workspace_id,
         }
     )
-    # 방금 부여한 grant 를 조회로 되돌려줌(access_id 확정)
+    # 방금 부여한 grant 를 조회로 되돌려줌(access_id 확정).
+    # subject_id 까지 비교해야 같은 resource+role 의 다른 사용자 grant 와 재매칭되지 않음.
     grants = db.list_access_grants(payload.resource_id)
-    match = next(
-        (
-            g
-            for g in grants
-            if g["resource_id"] == payload.resource_id and g["role"] == payload.role
-        ),
-        None,
-    )
+    matches = [
+        g
+        for g in grants
+        if g["resource_id"] == payload.resource_id
+        and g["role"] == payload.role
+        and g.get("subject_id") == payload.subject_id
+    ]
+    # created_at 오름차순 조회이므로 마지막 항목이 방금 부여한 grant.
+    match = matches[-1] if matches else None
     if match is None:
         return AccessGrantResponse(
             access_id="pending",
+            subject_id=payload.subject_id,
             subject_type=payload.subject_type,
             subject_label=payload.subject_label or payload.subject_id,
             resource_type=payload.resource_type,
