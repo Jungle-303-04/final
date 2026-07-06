@@ -683,6 +683,20 @@ SAMPLE_WORKLOAD_NAME="${SAMPLE_WORKLOAD_NAME:-}" \
 SAMPLE_WORKLOAD_IMAGE="${SAMPLE_WORKLOAD_IMAGE:-}" \
 bash "${ROOT_DIR}/scripts/register-target.sh"
 
+# target 텔레메트리 스택(Prometheus/Loki/Tempo/OTel) 설치 — evidence provider 실데이터 소스.
+# helm 미설치·오프라인 환경은 INSTALL_TELEMETRY=0 으로 건너뛴 뒤 나중에 수동 실행한다.
+INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-1}"
+if [ "${INSTALL_TELEMETRY}" = "1" ]; then
+  echo "==> installing telemetry stack on target cluster"
+  if TARGET_CONTEXT="kind-${TARGET_CLUSTER}" bash "${ROOT_DIR}/scripts/install-telemetry.sh"; then
+    echo "==> telemetry stack ready"
+  else
+    echo "WARN: telemetry install failed — 재시도: TARGET_CONTEXT=kind-${TARGET_CLUSTER} bash scripts/install-telemetry.sh" >&2
+  fi
+else
+  echo "==> skipping telemetry install (INSTALL_TELEMETRY=0)"
+fi
+
 echo
 echo "service is ready."
 echo "Gateway:      ${BASE_URL:-http://localhost:${GATEWAY_PORT}}"
