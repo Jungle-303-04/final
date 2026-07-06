@@ -53,7 +53,7 @@ async def upsert_alert_channel(
     return AlertChannelResponse(**saved)
 
 
-@router.delete(gateway_routes.ALERT_CHANNEL_PATH, status_code=204)
+@router.delete(gateway_routes.ALERT_CHANNEL_PATH, status_code=204, response_model=None)
 async def delete_alert_channel(
     channel_id: str,
     current: Any = Depends(require_admin_session),
