@@ -48,6 +48,8 @@ with sync_playwright() as p:
         pg.goto(f'{BASE}/repos'); pg.wait_for_selector('tbody tr')
         pg.locator('tbody tr', has_text='checkout-api').first.click()
         pg.wait_for_selector('text=승인 대기')
+        # plan 스타일 디프 — 승인 카드 아래 리소스별 +/~/- 미리보기
+        pg.wait_for_selector('[data-testid=plan-diff]')
         pg.screenshot(path=f'{SHOTS}/03-repo-runs.png')
         pg.locator('button', has_text='승인').first.click()
         pg.wait_for_selector('text=승인 완료 — 배포가 진행됩니다')

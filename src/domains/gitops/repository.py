@@ -457,9 +457,44 @@ class RepoChangeRepository(DatabaseConnection):
             .order_by(table.c.created_at.desc())
             .limit(max(1, min(limit, 500)))
         )
+        step_table = WorkflowRunStep.__table__
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        return [serialize_workflow_run(row) for row in rows]
+            runs = [serialize_workflow_run(row) for row in rows]
+            run_ids = [str(run["workflow_run_id"]) for run in runs]
+            if run_ids:
+                # 단계별 상세(details 에 diff plan 포함)를 함께 실어 콘솔이 리소스 단위
+                # +/~/- 미리보기를 그릴 수 있게 함 — 별도 라운드트립 없이 한 응답으로.
+                step_rows = (
+                    conn.execute(
+                        select(
+                            step_table.c.workflow_run_id,
+                            step_table.c.name,
+                            step_table.c.status,
+                            step_table.c.message,
+                            step_table.c.details,
+                            step_table.c.updated_at,
+                        )
+                        .where(step_table.c.workflow_run_id.in_(run_ids))
+                        .order_by(step_table.c.created_at)
+                    )
+                    .mappings()
+                    .all()
+                )
+                steps_by_run: dict[str, list[JsonObject]] = {}
+                for step in step_rows:
+                    steps_by_run.setdefault(str(step["workflow_run_id"]), []).append(
+                        {
+                            "name": step["name"],
+                            "status": step["status"],
+                            "message": step["message"],
+                            "details": dict(step["details"] or {}),
+                            "updated_at": iso_or_none(step["updated_at"]),
+                        }
+                    )
+                for run in runs:
+                    run["steps"] = steps_by_run.get(str(run["workflow_run_id"]), [])
+        return runs
 
     def start_workflow_run(self, payload: JsonObject) -> JsonObject:
         workflow_run_id = derive_workflow_run_id(payload)

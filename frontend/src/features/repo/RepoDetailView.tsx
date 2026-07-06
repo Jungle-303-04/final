@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApplication, useDeployments, useRuns } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { Badge, Breadcrumbs, Button, Card, CodeBlock, EmptyState, KeyValue, QueryBoundary, ResourceTable, Tabs } from '@/shared/ui';
+import { PlanDiff } from '@/shared/ui/plan-diff';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
 import { IconClock } from '@/shared/ui/icons';
@@ -63,11 +64,17 @@ export default function RepoDetailView() {
                     <Button size="sm" onClick={() => nav(`/workflows/${r.run_id}`)}>그래프 보기</Button>
                   </span>
                 </div>
-                {r.status === 'WAITING_FOR_APPROVAL' && r.approval_id && (
-                  <div style={{ marginTop: 10 }}>
-                    <ApprovalCard approvalId={r.approval_id} summary={`${shortSha(r.commit_sha)} 배포 승인`} compact />
-                  </div>
-                )}
+                {r.status === 'WAITING_FOR_APPROVAL' && r.approval_id && (() => {
+                  const diffStep = r.steps.find(s => s.name === 'DIFFING');
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <ApprovalCard approvalId={r.approval_id} summary={`${shortSha(r.commit_sha)} 배포 승인`} compact />
+                      {diffStep?.changes && diffStep.changes.length > 0 && (
+                        <div style={{ marginTop: 8 }}><PlanDiff changes={diffStep.changes} resource={diffStep.resource} /></div>
+                      )}
+                    </div>
+                  );
+                })()}
               </Card>
             ))}</Stagger>
         }</QueryBoundary>
