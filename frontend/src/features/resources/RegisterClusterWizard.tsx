@@ -15,7 +15,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const [issued, setIssued] = useState<{ agent_token: string; install_manifest: string } | null>(null);
   const [connected, setConnected] = useState(false);
 
-  const catalog = useQuery({ queryKey: ['providers'], queryFn: () => get<{ providers: { key: string; label: string; kind: string }[] }>('/providers/catalog'), enabled: open });
+  // 실백엔드 catalog 는 category 별 객체: { providers: { cloud: [...], deploy: [...], ... } }
+  const catalog = useQuery({
+    queryKey: ['providers'],
+    queryFn: () => get<{ providers: Record<string, { key: string; label: string; status: string }[]> }>('/providers/catalog'),
+    enabled: open,
+  });
+  const cloudProviders = (catalog.data?.providers?.cloud ?? []).filter(p => p.status === 'available');
   const validate = useMutation({ mutationFn: () => post<{ valid: boolean; errors: string[] }>('/providers/validate', { cloud_provider: provider, deploy_provider: 'manual-manifest' }) });
   const register = useMutation({
     mutationFn: () => post<{ agent_token: string; install_manifest: string }>('/targets', {
@@ -38,7 +44,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
       {step === 0 && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {(catalog.data?.providers ?? []).filter(p => p.kind === 'cloud').map(p => (
+            {cloudProviders.map(p => (
               <button key={p.key} className="card" style={{ cursor: 'pointer', textAlign: 'left', borderColor: provider === p.key ? 'var(--brand)' : 'var(--border)' }}
                 onClick={() => setProvider(p.key)}>
                 <b>{p.label}</b><p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: '4px 0 0' }}>{p.key}</p>
@@ -71,7 +77,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
       {step === 3 && issued && (
         <>
           <Badge tone="ok">등록 완료</Badge>
-          <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)' }}>⚠ agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다.</p>
+          <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)' }}>agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다.</p>
           <Field label="agent token">
             <div style={{ display: 'flex', gap: 8 }}>
               <input className="input" readOnly value={issued.agent_token} style={{ fontFamily: 'var(--font-mono)' }} data-testid="agent-token" />

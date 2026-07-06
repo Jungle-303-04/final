@@ -2,13 +2,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
 import { get, post } from '@/shared/lib/api';
-import type { DeadLetter, Incident, Notice, WorkflowRun } from '@/shared/lib/types';
+import type { DeadLetter, Notice, WorkflowRun } from '@/shared/lib/types';
+import { adaptIncident, adaptIncidentDetail } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { timeAgo } from '@/shared/lib/format';
 
 export const useTimeline = () =>
-  useQuery({ queryKey: ['timeline'], queryFn: () => get<{ items: Incident[] }>('/dashboard/rca/timeline?limit=20'), refetchInterval: 60_000, select: d => d.items });
+  useQuery({ queryKey: ['timeline'], queryFn: () => get<{ items: Record<string, unknown>[] }>('/dashboard/rca/timeline?limit=20'), refetchInterval: 60_000, select: d => d.items.map(adaptIncident) });
+export const useIncident = (incidentId: string) =>
+  useQuery({
+    queryKey: ['incident', incidentId],
+    queryFn: () => get<{ item: Record<string, unknown> }>(`/dashboard/rca/incidents/${incidentId}`),
+    enabled: !!incidentId, refetchInterval: 30_000,
+    select: d => adaptIncidentDetail(d.item ?? {}),
+  });
 export const useDeadLetters = (enabled: boolean) =>
   useQuery({ queryKey: ['dead-letters'], queryFn: () => get<{ dead_letters: DeadLetter[] }>('/dead-letters?limit=20'), refetchInterval: 60_000, enabled, select: d => d.dead_letters });
 export const useReplayDeadLetter = () => {
@@ -33,13 +41,13 @@ export function useNotices(): { notices: Notice[]; unread: number; markAllSeen: 
     const out: Notice[] = [];
     runs.forEach(({ appId, runs: rs }) => rs.filter((r: WorkflowRun) => r.status === 'WAITING_FOR_APPROVAL').forEach((r: WorkflowRun) => out.push({
       id: `apr-${r.run_id}`, kind: 'approval', tone: 'warn',
-      title: `배포 승인 필요: ${appId} ${r.commit_sha.slice(0, 7)}`, at: r.started_at, link: `/workflows/${r.run_id}`, read: false,
+      title: `배포 승인 필요: ${appId} ${(r.commit_sha ?? '').slice(0, 7)}`, at: r.started_at ?? '', link: `/workflows/${r.run_id}`, read: false,
     })));
-    (timeline.data ?? []).forEach(i => out.push({ id: `inc-${i.incident_id}`, kind: 'incident', tone: 'danger', title: `인시던트: ${i.summary}`, at: i.at, link: `/ai?prefill=${encodeURIComponent(`인시던트 ${i.incident_id} 분석해줘`)}`, read: false }));
+    (timeline.data ?? []).forEach(i => out.push({ id: `inc-${i.incident_id}`, kind: 'incident', tone: 'danger', title: `인시던트: ${i.summary}`, at: i.at, link: `/incidents/${i.incident_id}`, read: false }));
     (dlq.data ?? []).filter(d => d.status === 'open').forEach(d => out.push({ id: `dlq-${d.id}`, kind: 'dlq', tone: 'danger', title: `처리 실패 이벤트: ${d.original_subject} (${d.consumer})`, at: d.created_at, link: '/settings/ops', read: false }));
     return out
       .map(n => ({ ...n, read: (localStorage.getItem(seenKey(n.kind)) ?? '') >= n.at }))
-      .sort((a, b) => b.at.localeCompare(a.at));
+      .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
   }, [runs, timeline.data, dlq.data]);
 
   return {

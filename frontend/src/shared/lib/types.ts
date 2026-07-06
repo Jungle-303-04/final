@@ -26,5 +26,8 @@ export interface Group { group_id: string; org_id: string; name: string; member_
 export interface User { user_id: string; email: string; role: string; status: 'active'|'pending_verification'|'pending_approval'; groups: string[]; created_at: string }
 export interface AccessGrant { access_id: string; subject_type: 'user'|'group'; subject_label: string; resource_type: string; resource_id: string; role: string; granted_at: string }
 export interface Notice { id: string; kind: 'approval'|'incident'|'dlq'|'cluster'; tone: Tone; title: string; at: string; link: string; read: boolean }
+export interface IncidentDetail { incident_id: string; cluster_id: string; status: string; current_subject: string; summary: string;
+  root_cause: string | null; confidence: number | null; supporting_evidence: string[]; missing_evidence: string[];
+  action_route: string | null; command_id: string | null; pr_url: string | null; error_reason: string | null; updated_at: string }
 export interface LiveSnapshot { at: string; connected: boolean; namespaces: { namespace: string; pods: { name: string; phase: string; restarts: number; hot: boolean }[] }[]; rollout?: { name: string; progress: number } }
 export interface CatalogItem { item_id: string; name: string; description: string; category: string }

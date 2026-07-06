@@ -1,0 +1,19 @@
+/* 그래프 공통 스타일 — 활성 edge dash-flow, 활성 노드 pulse (색은 tokens.css 변수만) */
+@keyframes flow-dash { to { stroke-dashoffset: -20; } }
+@keyframes flow-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.flow-node--pulse { animation: flow-pulse 1.4s var(--ease-in-out) infinite; }
+
+.flow-group { display:flex; align-items:center; gap:8px; padding:10px 14px; min-width:150px;
+  background:var(--surface-2); border:1.5px solid var(--border); border-radius:var(--radius-md);
+  color:var(--text-1); font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
+.flow-group:hover { border-color: var(--border-focus); }
+.flow-group__count { font-size:var(--fs-xs); font-weight:700; color:var(--text-2);
+  background:var(--surface-3); border-radius:999px; padding:1px 7px; }
+.flow-group__chev { display:inline-flex; color:var(--text-3); transition:transform var(--dur-base) var(--ease-out); }
+.flow-group__chev--open { transform:rotate(90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-node--pulse { animation: none; }
+  .react-flow__edge-path { animation: none !important; }
+}
