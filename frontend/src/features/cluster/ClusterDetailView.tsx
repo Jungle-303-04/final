@@ -7,6 +7,7 @@ import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, 
 import { liveStore } from '@/shared/lib/live';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
+import { IconFlame } from '@/shared/ui/icons';
 import type { Workload } from '@/shared/lib/types';
 
 const TABS = [
@@ -65,7 +66,7 @@ export default function ClusterDetailView() {
             rows={podRows} rowKey={w => `${w.namespace}/${w.name}`}
             onRowClick={w => nav(`/clusters/${clusterId}/pods/${w.namespace}/${w.name}?tab=pods`)}
             columns={[
-              { key: 'name', label: '이름', render: w => <span>{w.hot && '🔥 '}{w.name}</span> },
+              { key: 'name', label: '이름', render: w => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{w.hot && <IconFlame size={13} style={{ color: 'var(--warn)' }} />}{w.name}</span> },
               { key: 'ns', label: '네임스페이스', render: w => w.namespace },
               { key: 'phase', label: '상태', render: w => <Badge status={w.phase} /> },
               { key: 'restarts', label: '재시작', render: w => w.restarts },
