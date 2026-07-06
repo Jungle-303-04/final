@@ -62,7 +62,7 @@ class GitHubPoller:
         self._client = client
         self._last_sha: str | None = None  # 같은 커밋 중복 POST 만 줄이는 메모리 가드(최소)
         # ETag 조건부 요청 — 변경 없으면 304 로 응답받아 GitHub rate limit 을 소모하지 않음
-        # (Plural GitOps 아키텍처의 'SCM provider 를 압박하지 않는 폴링' 원칙).
+        # (SCM provider 를 압박하지 않는 폴링 원칙).
         self._etag: str | None = None
 
     async def run(self) -> None:
