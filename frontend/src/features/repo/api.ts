@@ -1,8 +1,8 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import type { Application, Deployment, WorkflowRun } from '@/shared/lib/types';
+import type { Application, Deployment } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
-import { adaptApplication } from '@/shared/lib/adapt';
+import { adaptApplication, adaptRun } from '@/shared/lib/adapt';
 
 export const repoKeys = {
   apps: () => ['applications'] as const,
@@ -17,20 +17,26 @@ const ACTIVE = new Set(['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'W
 export function useRuns(appId: string) {
   return useQuery({
     queryKey: repoKeys.runs(appId),
-    queryFn: () => get<{ runs: WorkflowRun[] }>(`/applications/${appId}/runs`),
-    select: d => d.runs,
+    queryFn: () => get<{ runs: Record<string, unknown>[] }>(`/applications/${appId}/runs`),
+    select: d => d.runs.map(adaptRun),
     // 활성 run 있을 때만 10s, 아니면 60s (docs/fd/views/repo AC)
-    refetchInterval: (q) => (q.state.data?.runs.some(r => ACTIVE.has(r.status)) ? 10_000 : 60_000),
+    refetchInterval: (q) =>
+      (q.state.data?.runs.some(r => ACTIVE.has(String(r.status ?? '').toUpperCase())) ? 10_000 : 60_000),
   });
 }
 export function useRunsAll(apps: Application[]) {
   return useQueries({
     queries: apps.map(a => ({
       queryKey: repoKeys.runs(a.application_id),
-      queryFn: () => get<{ runs: WorkflowRun[] }>(`/applications/${a.application_id}/runs`),
-      refetchInterval: 30_000,
+      queryFn: () => get<{ runs: Record<string, unknown>[] }>(`/applications/${a.application_id}/runs`),
+      // useRuns 와 동일: 활성 run 있으면 10s, 아니면 30s
+      refetchInterval: (q: { state: { data?: { runs: Record<string, unknown>[] } } }) =>
+        (q.state.data?.runs.some(r => ACTIVE.has(String(r.status ?? '').toUpperCase())) ? 10_000 : 30_000),
     })),
-    combine: results => results.map((r, i) => ({ appId: apps[i]?.application_id ?? '', runs: r.data?.runs ?? [] })),
+    combine: results => results.map((r, i) => ({
+      appId: apps[i]?.application_id ?? '',
+      runs: (r.data?.runs ?? []).map(adaptRun),
+    })),
   });
 }
 export const useDeployments = (appId: string) =>
