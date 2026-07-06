@@ -39,6 +39,7 @@ export const router = createBrowserRouter([
         { path: '/ai', element: L(() => import('@/features/chat/ChatView')) },
         { path: '/ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
         { path: '/notifications', element: L(() => import('@/features/notifications/NotificationsView')) },
+        { path: '/incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
         { path: '/catalog', element: L(() => import('@/features/resources/CatalogView')) },
         {
           path: '/settings',

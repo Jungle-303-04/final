@@ -4,6 +4,7 @@ import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { Badge, Breadcrumbs, Button, Card, CodeBlock, EmptyState, KeyValue, QueryBoundary, ResourceTable, Tabs } from '@/shared/ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
+import { IconClock } from '@/shared/ui/icons';
 
 const STEP_ORDER = ['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING', 'SUCCEEDED'];
 
@@ -35,7 +36,7 @@ export default function RepoDetailView() {
       ]} />
       {tab === 'runs' && (
         <QueryBoundary query={runsQ}>{rs => rs.length === 0
-          ? <EmptyState icon="⏳" title="첫 커밋 감지 대기 중" description="webhook/poller 가 변경을 감지하면 run 이 생성됩니다" />
+          ? <EmptyState icon={<IconClock size={26} />} title="첫 커밋 감지 대기 중" description="webhook/poller 가 변경을 감지하면 run 이 생성됩니다" />
           : <Stagger>{rs.map(r => (
               <Card key={r.run_id} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

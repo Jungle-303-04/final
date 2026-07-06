@@ -11,7 +11,7 @@ export default function WorkflowListView() {
   const all = useRunsAll(apps.data ?? []);
   const nav = useNavigate();
   const rows = all.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId })))
-    .sort((a, b) => Number(ACTIVE.has(b.status)) - Number(ACTIVE.has(a.status)) || b.started_at.localeCompare(a.started_at));
+    .sort((a, b) => Number(ACTIVE.has(b.status)) - Number(ACTIVE.has(a.status)) || (b.started_at ?? '').localeCompare(a.started_at ?? ''));
   return (
     <FadeSlideIn>
       <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>워크플로우</h1>
