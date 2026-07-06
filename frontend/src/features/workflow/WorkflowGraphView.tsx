@@ -1,69 +1,81 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Background, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { Badge, Breadcrumbs, Card, CodeBlock, KeyValue, Skeleton } from '@/shared/ui';
+import { IconCheck } from '@/shared/ui/icons';
 import { toneColor, toneOf } from '@/shared/ui/status';
+import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
 import { shortSha } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { RunStep, WorkflowRun } from '@/shared/lib/types';
 
 const ORDER = ['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING', 'SUCCEEDED'];
+const TERMINAL = new Set(['SUCCEEDED', 'FAILED']);
 
 function StepNode({ data }: NodeProps<Node<{ step: RunStep; active: boolean }>>) {
   const { step, active } = data;
   const tone = step.status === 'PENDING' ? 'neutral' : toneOf(step.status);
   return (
-    <div style={{
-      padding: '10px 14px', borderRadius: 10, minWidth: 132, textAlign: 'center',
+    <div className={active ? 'flow-node--pulse' : undefined} style={{
+      padding: '10px 14px', borderRadius: 'var(--radius-md)', minWidth: 132, textAlign: 'center',
       background: step.status === 'PENDING' ? 'transparent' : 'var(--surface-2)',
       border: `1.5px solid ${step.status === 'PENDING' ? 'var(--border)' : toneColor(tone)}`,
       color: step.status === 'PENDING' ? 'var(--text-3)' : 'var(--text-1)',
-      fontSize: 12, fontWeight: 600,
-      animation: active ? 'pulse 1.4s infinite' : undefined,
+      fontSize: 'var(--fs-sm)', fontWeight: 600,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
     }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      {step.status === 'SUCCEEDED' && '✓ '}{step.name}
+      {step.status === 'SUCCEEDED' && <IconCheck size={12} style={{ color: toneColor('ok') }} />}{step.name}
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   );
 }
 const nodeTypes = { step: StepNode };
+type FlowEdge = Edge<FlowEdgeData>;
 
 export default function WorkflowGraphView() {
   const { runId = '' } = useParams();
   const apps = useApplications();
-  const all = useRunsAll(apps.data ?? []);
+  const all = useRunsAll(apps.data ?? []); // 활성 run 있으면 10s polling (repo/api)
   const found = all.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId }))).find(r => r.run_id === runId);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const { nodes, edges } = useMemo(() => {
-    if (!found) return { nodes: [] as Node[], edges: [] as Edge[] };
+  const raw = useMemo(() => {
+    if (!found) return { nodes: [] as Node[], edges: [] as FlowEdge[] };
     const run = found as WorkflowRun & { appId: string };
-    const nodes: Node[] = ORDER.map((name, i) => {
+    const running = !TERMINAL.has(run.status);
+    const statusIdx = ORDER.indexOf(run.status); // 진행 중이면 현재 단계 위치
+    const nodes: Node[] = ORDER.map(name => {
       const step = run.steps.find(s => s.name === name) ?? { name, status: 'PENDING' };
-      return { id: name, type: 'step', position: { x: i * 170, y: 60 + (i % 2) * 8 }, data: { step, active: step.status !== 'PENDING' && step.status === run.status && !['SUCCEEDED', 'FAILED'].includes(run.status) } };
+      return { id: name, type: 'step', position: { x: 0, y: 0 }, data: { step, active: running && step.name === run.status } };
     });
-    const edges: Edge[] = ORDER.slice(1).map((name, i) => ({
-      id: `e${i}`, source: ORDER[i], target: name, animated: run.steps.find(s => s.name === name)?.status !== 'PENDING' && !['SUCCEEDED', 'FAILED'].includes(run.status),
-      style: { stroke: 'var(--border)' },
-    }));
+    // edge 톤: 완료 구간 ok / 현재 단계 진입 edge 는 active(dash-flow) / 미도달 neutral
+    const edges: FlowEdge[] = ORDER.slice(1).map((name, i) => {
+      const targetIdx = i + 1;
+      const done = run.status === 'SUCCEEDED' || (statusIdx >= 0 && targetIdx < statusIdx)
+        || run.steps.find(s => s.name === name)?.status === 'SUCCEEDED';
+      const active = running && statusIdx >= 0 && targetIdx === statusIdx;
+      return {
+        id: `e${i}`, source: ORDER[i], target: name, type: 'animated',
+        data: { active, tone: done ? 'ok' as const : undefined },
+      };
+    });
     if (run.status === 'FAILED') {
       const failedAt = run.steps.find(s => s.status === 'FAILED')?.name ?? 'POLICY_CHECKING';
-      nodes.push({ id: 'FAILED', type: 'step', position: { x: ORDER.indexOf(failedAt) * 170 + 90, y: 170 }, data: { step: { name: 'FAILED', status: 'FAILED' }, active: false } });
-      edges.push({ id: 'ef', source: failedAt, target: 'FAILED', style: { stroke: 'var(--danger)', strokeDasharray: '4 3' } });
+      nodes.push({ id: 'FAILED', type: 'step', position: { x: 0, y: 0 }, data: { step: { name: 'FAILED', status: 'FAILED' }, active: false } });
+      edges.push({ id: 'ef', source: failedAt, target: 'FAILED', type: 'animated', data: { active: false, tone: 'danger' } });
     }
     return { nodes, edges };
   }, [found]);
+  const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
 
   if (!found) return apps.isPending ? <Skeleton lines={5} /> : <Card>run 을 찾을 수 없습니다: {runId}</Card>;
   const selectedStep = selected ? found.steps.find(s => s.name === selected) : null;
 
   return (
     <FadeSlideIn>
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }`}</style>
       <Breadcrumbs items={[{ label: '워크플로우', to: '/workflows' }, { label: `${found.appId} · ${shortSha(found.commit_sha)}` }]} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px' }}>
         <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>{found.appId}</h1>
@@ -74,10 +86,7 @@ export default function WorkflowGraphView() {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
         <Card style={{ height: 340, padding: 0 }}>
-          <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView proOptions={{ hideAttribution: true }}
-            onNodeClick={(_e, n) => setSelected(n.id)} nodesDraggable={false} nodesConnectable={false} colorMode="dark">
-            <Background gap={20} color="var(--surface-2)" />
-          </ReactFlow>
+          <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={setSelected} />
         </Card>
         <Card title={selected ?? '단계 상세'}>
           {selectedStep
