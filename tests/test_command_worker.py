@@ -81,11 +81,13 @@ def command_request(
     approval_ref: str | None = "approval-1",
     policy_decision_ref: str | None = "policy-decision-1",
     payload: JsonObject | None = None,
+    environment: str = "production",
 ) -> CommandRequestedBody:
     return CommandRequestedBody(
         cluster_id=Target.DEFAULT_CLUSTER_ID,
         action=action,
         namespace=Sandbox.NAMESPACE,
+        environment=environment,
         reason="test",
         diff=Diff(
             resource="deployment/checkout-api",
@@ -310,25 +312,33 @@ def test_sweep_expired_commands_is_quiet_when_nothing_expired() -> None:
             id="unsupported-action",
         ),
         pytest.param(
-            command_request(approval_ref=None, policy_decision_ref="policy-decision-1"),
+            command_request(
+                Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                approval_ref=None,
+                policy_decision_ref="policy-decision-1",
+            ),
             _DEFAULT_APPROVAL,
             MISSING_APPROVAL_REF_REASON,
             id="missing-approval-ref",
         ),
         pytest.param(
-            command_request(approval_ref="approval-1", policy_decision_ref=None),
+            command_request(
+                Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                approval_ref="approval-1",
+                policy_decision_ref=None,
+            ),
             _DEFAULT_APPROVAL,
             MISSING_POLICY_DECISION_REF_REASON,
             id="missing-policy-decision-ref",
         ),
         pytest.param(
-            command_request(),
+            command_request(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION),
             None,
             APPROVAL_RECORD_MISSING_REASON,
             id="missing-recorded-approval",
         ),
         pytest.param(
-            command_request(),
+            command_request(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION),
             approval_record(policy_decision_ref="policy-decision-other"),
             APPROVAL_POLICY_DECISION_MISMATCH_REASON,
             id="policy-decision-ref-mismatch",
@@ -425,3 +435,45 @@ def test_command_handler_rejects_manifest_namespace_mismatch_before_queue() -> N
     assert isinstance(events[0], CommandRejectedBody)
     assert events[0].reason == MANIFEST_NAMESPACE_MISMATCH_REASON
     assert store.calls == []
+
+
+def test_command_handler_queues_sandbox_scale_without_recorded_approval() -> None:
+    # sandbox 허용 rule — scale 은 sandbox 환경에서 승인 기록 없이 큐에 도달해야 함.
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(approval=None)  # 승인 기록 자체가 없음
+        ctx = SimpleNamespace(correlation_id="corr-sandbox-scale", db=store)
+        request = command_request(
+            Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            approval_ref=None,
+            policy_decision_ref=None,
+            environment="sandbox",
+        )
+        events = await collect_events(handle_command_requested(request, ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert len(store.calls) == 1
+
+
+def test_command_handler_still_requires_approval_for_production_scale() -> None:
+    # sandbox 외 환경은 면제되지 않음 — 승인 체인 유지.
+    async def run() -> list[EventBody]:
+        store = SpyAgentCommandStore(approval=None)
+        ctx = SimpleNamespace(correlation_id="corr-prod-scale", db=store)
+        request = command_request(
+            Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            approval_ref=None,
+            policy_decision_ref=None,
+            environment="production",
+        )
+        return await collect_events(handle_command_requested(request, ctx))
+
+    events = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)

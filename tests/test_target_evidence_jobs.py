@@ -313,6 +313,11 @@ class FakeEvidenceJobDb:
         self.completed: list[dict[str, Any]] = []
         self.claimed: list[str] = []
         self.recorded: list[dict[str, Any]] = []
+        self.agent_heartbeats: list[dict[str, Any]] = []
+
+    def save_cluster_agent_status(self, **kwargs: Any) -> None:
+        # touch_agent_seen 계약 충족 — agent 경로 heartbeat 기록을 관찰 가능하게 남김
+        self.agent_heartbeats.append(kwargs)
 
     def queue_evidence_jobs(self, **kwargs: Any) -> dict[str, Any]:
         return {

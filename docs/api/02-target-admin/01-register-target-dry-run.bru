@@ -11,6 +11,7 @@ meta {
 
 post {
   url: {{base_url}}targets
+  body: json
 }
 
 headers {
@@ -19,8 +20,8 @@ headers {
 
 body:json {
   {
-    "cluster_id": "{{cluster_id}}",
-    "name": "{{target_name}}",
+    "cluster_id": "{{agent_cluster_id}}",
+    "name": "{{agent_target_name}}",
     "environment": "sandbox",
     "management_base_url": "{{management_base_url}}",
     "image": "{{service_image}}",

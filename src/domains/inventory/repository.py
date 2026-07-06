@@ -140,6 +140,23 @@ def snapshot_summary(payload: JsonObject) -> JsonObject:
     }
 
 
+def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
+    """K8s 리소스 raw/summary 에서 첫 컨테이너 이미지를 찾음(workload → pod → summary 순)."""
+    for path in (("spec", "template", "spec", "containers"), ("spec", "containers")):
+        node: object = raw
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+            if node is None:
+                break
+        if isinstance(node, list):
+            for container in node:
+                image = container.get("image") if isinstance(container, dict) else None
+                if image:
+                    return str(image)
+    image = summary.get("image")
+    return str(image) if image else None
+
+
 class InventoryRepository(DatabaseConnection):
     def save_inventory_snapshot(
         self,
@@ -274,6 +291,45 @@ class InventoryRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [self.serialize_inventory_resource(dict(row)) for row in rows]
+
+    def get_actual_resource_image(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str | None,
+        resource: str,
+    ) -> str | None:
+        """diff-worker actual-state 조회 — 최신 inventory 리소스에서 컨테이너 이미지 추출.
+
+        resource 는 gitops resource_ref 형식("kind/name", kind 는 소문자)이다.
+        스냅샷이 없거나 이미지가 없으면 None — 호출부(diff-worker)가 "unknown" 처리.
+        """
+        kind, _, name = str(resource).partition("/")
+        if not kind or not name:
+            return None
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table.c.summary, table.c.raw)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.name == name,
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.last_seen_at.desc())
+            .limit(1)
+        )
+        if namespace:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        if row is None:
+            return None
+        return first_container_image(
+            dict(row["raw"] or {}),
+            dict(row["summary"] or {}),
+        )
 
     def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
         table = ClusterInventorySnapshotRecord.__table__

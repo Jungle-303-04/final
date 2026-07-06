@@ -784,7 +784,11 @@ class TargetClusterAgent:
     async def execute_command(self, command: CommandRecord) -> JsonObject:
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
-        if self.write_action_requires_approval(action) and not self.has_approval_evidence(command):
+        if (
+            self.write_action_requires_approval(action)
+            and not self.has_approval_evidence(command)
+            and not self.approval_exempt_for_environment(action, command)
+        ):
             return self.command_result(False, AgentConfig.MISSING_APPROVAL_EVIDENCE_MESSAGE)
         try:
             return await self.command_registry.execute(
@@ -804,9 +808,10 @@ class TargetClusterAgent:
             return self.command_result(False, str(exc))
 
     def write_action_requires_approval(self, action: str) -> bool:
+        # rollout_restart 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용한다
+        # (namespace 정책 가드는 그대로 적용됨). 상태 변경 액션만 승인 증적을 요구한다.
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
-            AgentConfig.ROLLOUT_RESTART_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
         }
 
@@ -820,6 +825,27 @@ class TargetClusterAgent:
             if isinstance(nested, str) and nested:
                 return nested
         return ""
+
+    def approval_exempt_for_environment(self, action: str, command: CommandRecord) -> bool:
+        """sandbox 허용 rule — command-worker 의 COMMAND_AUTO_APPROVE_* 와 대칭.
+
+        지정 액션(기본: deployment scale)이 sandbox 환경 plan 메타데이터를 가지면
+        승인 증적 없이 실행을 허용한다. namespace·name-scoped 정책 가드는 그대로 적용됨.
+        """
+        actions = {
+            item.strip()
+            for item in env("AGENT_AUTO_APPROVE_ACTIONS", KUBERNETES_DEPLOYMENT_SCALE_ACTION).split(
+                ","
+            )
+            if item.strip()
+        }
+        environments = {
+            item.strip().lower()
+            for item in env("AGENT_AUTO_APPROVE_ENVIRONMENTS", "sandbox").split(",")
+            if item.strip()
+        }
+        environment = self.command_metadata_value(command, "environment").strip().lower()
+        return action in actions and environment in environments
 
     def has_approval_evidence(self, command: CommandRecord) -> bool:
         return bool(

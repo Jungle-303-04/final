@@ -9,14 +9,16 @@ vars:pre-request {
   workspace_id: default
   cluster_id: cluster-1
   cluster_id_2: cluster-2
+  agent_cluster_id: bruno-api-test
   target_name: cluster-1
+  agent_target_name: Bruno API Test Target
   management_base_url: https://k8s.woonyong.org/
-  service_image: replace-with-ecr-image-uri
+  service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4cb1f247eebec806e1191e72c9763557b55b027d
   namespace: sandbox
-  deployment_name: demo-web
-  repo_ref: Jungle-303-04/gitops-demo
+  deployment_name: checkout-api
+  repo_ref: Jungle-303-04/final
   default_branch: main
-  manifest_path: deploy.yaml
+  manifest_path: src/samples/smoke/deploy.yaml
   application_id: replace-with-application-id
   agent_token: replace-with-agent-token-from-target-registration
   agent_id: target-agent
@@ -33,6 +35,7 @@ vars:pre-request {
   conversation_id: replace-with-conversation-id
   incident_id: replace-with-incident-id
   org_id: default
+  created_org_id: replace-with-created-org-id
   group_id: default
   access_id: replace-with-access-id
   metrics_token: replace-with-metrics-token-if-enabled

@@ -11,6 +11,7 @@ meta {
 
 post {
   url: {{base_url}}github/webhook
+  body: json
 }
 
 headers {
@@ -24,19 +25,20 @@ script:pre-request {
   const crypto = require("crypto");
   const payload = {
     "commit_sha": "bruno-commit-001",
-    "image": "ghcr.io/example/checkout-api:bruno",
+    "image": bru.getEnvVar("service_image") || "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest",
     "replicas": 2,
     "workspace_id": "default",
     "repository_id": "repo-bruno",
-    "repo_ref": "Jungle-303-04/gitops-demo",
-    "branch": "main",
+    "repo_ref": bru.getEnvVar("repo_ref") || "Jungle-303-04/final",
+    "branch": bru.getEnvVar("default_branch") || "main",
     "watch_target_id": "watch-bruno",
     "binding_id": "binding-bruno",
     "application_id": "app-bruno",
     "workflow_run_id": "wf-bruno",
     "environment": "sandbox",
     "cluster_id": "{{cluster_id}}",
-    "manifest_path": "deploy.yaml"
+    "manifest_path": bru.getEnvVar("manifest_path") || "src/samples/smoke/deploy.yaml",
+    "force": true
   };
   const workspaceId = bru.getEnvVar("workspace_id");
   if (workspaceId) {

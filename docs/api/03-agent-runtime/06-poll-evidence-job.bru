@@ -20,6 +20,9 @@ script:post-response {
   const body = res.getBody();
   if (res.status === 200 && body && body.job && body.job.job_id) {
     bru.setVar("evidence_job_id", body.job.job_id);
+    if (body.job.lease_id) {
+      bru.setVar("lease_id", body.job.lease_id);
+    }
     if (body.job.provider_key) {
       bru.setVar("provider_key", body.job.provider_key);
     }

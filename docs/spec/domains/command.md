@@ -58,7 +58,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 ### 내장 액션 — `src/domains/command/builtin_actions.py`
 
-빈 marker 클래스 3개에 `@command.action` 부착. 모두 `allowed_namespaces=(Sandbox.NAMESPACE,)`(= `("sandbox",)`). `requires_approval` 은 `rollout_restart`=False(비파괴 자동 실행 허용), `apply_manifest`/`deployment_scale`=True.
+빈 marker 클래스 3개에 `@command.action` 부착. 모두 `allowed_namespaces=(Sandbox.NAMESPACE,)`(= `("sandbox",)`). `requires_approval` 은 `rollout_restart`=False(비파괴 자동 실행 허용), `apply_manifest`/`deployment_scale`=True. 단 `deployment_scale` 은 sandbox 환경 한정 승인 면제 rule(`COMMAND_AUTO_APPROVE_*` env, handler 의 `approval_exempt_for_environment`)이 기본 적용된다.
 
 | marker 클래스(앵커) | action | recovery_aliases |
 |---|---|---|
