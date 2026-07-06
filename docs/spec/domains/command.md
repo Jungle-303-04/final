@@ -1,11 +1,11 @@
 ---
-source_commit: 20945a70
+source_commit: 664925a6
 status: synced
 ---
 
 # command — 명령 정책·에이전트 큐·명령 HTTP API
 
-> 소스: `src/domains/command/` · 테스트: `tests/test_command_router.py`, `tests/test_command_worker.py`, `tests/test_command_catalog.py`, `tests/test_command_janitor.py`, `tests/test_target_agent_commands.py`
+> 소스: `src/domains/command/` · 테스트: `tests/test_command_router.py`, `tests/test_command_worker.py`, `tests/test_command_catalog.py`, `tests/test_command_janitor.py`, `tests/test_command_wakeup.py`, `tests/test_target_agent_commands.py`
 
 ## 책임 (Responsibility)
 
@@ -21,9 +21,9 @@ status: synced
 |---|---|---|---|
 | import | `domains.gitops` | [./gitops.md](./gitops.md) | `Diff` 값 객체 (`CommandRequestedBody.diff`) |
 | import | `domains.identity` | [./identity.md](./identity.md) | `require_session`, `require_cluster_access`, `require_cluster_agent`, `ClusterAgentIdentity`, `RESOURCE_ACCESS_DENIED_MESSAGE` |
-| import | `packages.config` | [../packages/config.md](../packages/config.md) | `env`, `require`, 상수 `Command`/`CommandStatus`/`Sandbox`/`Target` |
+| import | `packages.config` | [../packages/config.md](../packages/config.md) | `env`, `require`, 상수 `Command`/`CommandStatus`/`Sandbox`/`Target`, 제어 허용목록 `control.py`(`control_namespace_allowed`, `CONTROL_NAMESPACE_DENIED_MESSAGE`) |
 | import | `packages.contracts` | [../packages/contracts.md](../packages/contracts.md) | `EventBody`, `@event`, `EventSubject`, `Actor`, gateway routes/모델/`Gateway` 필드, `ApprovalStatus`, `AgentCommandStore`, `CommandRecord`, `DEFAULT_WORKSPACE_ID`, gitops 기본값 |
-| import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | `get_db`, `get_events`, `EventContext` |
+| import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | `get_db`, `get_events`, `EventContext`, 롱폴 웨이크업 `command_wakeup`(`WAKEUP`, `AGENT_COMMAND_CHANNEL`, `wakeup_key`) |
 | import | `packages.events` | [../packages/events.md](../packages/events.md) | `event()` envelope 생성 (결과 이벤트 스테이징) |
 | import | `packages.storage` | [../packages/storage.md](../packages/storage.md) | `DatabaseConnection`, `row_dict`, `serialize_command`, `UNKNOWN_AGENT_ID`, `EventModel`/`OutboxModel` |
 | 구독 | `command.requested` | 아래 [이벤트](#이벤트-events) | 정책 평가 → 계획 수립 → 큐 적재 |
@@ -88,6 +88,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | `Rule` | `Protocol`: 속성 `reason: str`, `def allows(self, target: Lookup) -> bool` | `src/domains/command/policy.py :: Rule` |
 | `EqualsRule` | frozen dataclass(name, field, expected, reason, default=None); `allows` = `target.value(field, default) == expected`; `@classmethod build(config) -> EqualsRule` | `src/domains/command/policy.py :: EqualsRule` |
 | `AllowedValuesRule` | frozen dataclass(name, field, allowed_values, reason, default=None); `allows` = `target.value(field, default) in allowed_values`; `build` 동일 | `src/domains/command/policy.py :: AllowedValuesRule` |
+| `NamespaceAllowlistRule` | frozen dataclass(`field: str`, `default_namespace: str`, `reason: str`); `allows` = `control_namespace_allowed(str(target.value(field, default_namespace)))` — 기준은 `src/packages/config/control.py`의 `CONTROL_ALLOWED_NAMESPACES` 단일 소스(기본 sandbox만). env를 평가 시점마다 읽어 재기동 없이 반영 | `src/domains/command/policy.py :: NamespaceAllowlistRule` |
 | `Result` | frozen dataclass(`allowed: bool`, `reason: str \| None = None`); `Result.allow()`, `Result.reject(reason)`, `require_reason() -> str`(reason 없으면 `require(...)` 실패) | `src/domains/command/policy.py :: Result` |
 | `Policy` | `__init__(rules: Sequence[Rule])`; `Policy.build(configs)` — `allowed_values` 있으면 `AllowedValuesRule`, 아니면 `EqualsRule`; `evaluate(target) -> Result` — 첫 위반 룰의 reason으로 reject, 전부 통과 시 allow | `src/domains/command/policy.py :: Policy` |
 
@@ -95,11 +96,16 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 | 심볼 | 시그니처/값 | 앵커 |
 |---|---|---|
-| `COMMAND_CONFIG` | `CommandConfig(service_name="command-worker", agent_route_channel="agent-poll", policy_steps=("validate policy", "route target cluster", "queue for agent"), default_namespace=Sandbox.NAMESPACE, default_cluster_id=Target.DEFAULT_CLUSTER_ID, default_command_action=Command.DEFAULT_ACTION, command_status_queued=CommandStatus.QUEUED, lease/heartbeat/retry=policy 기본 상수, required_agent_capability="command_receiver", policy_rules=아래 2룰)` | `src/domains/command/handler.py :: COMMAND_CONFIG` |
-| `POLICY` | `Policy.build(COMMAND_CONFIG.policy_rules)` | `src/domains/command/handler.py :: POLICY` |
+| `COMMAND_CONFIG` | `CommandConfig(service_name="command-worker", agent_route_channel="agent-poll", policy_steps=("validate policy", "route target cluster", "queue for agent"), default_namespace=Sandbox.NAMESPACE, default_cluster_id=Target.DEFAULT_CLUSTER_ID, default_command_action=Command.DEFAULT_ACTION, command_status_queued=CommandStatus.QUEUED, lease/heartbeat/retry=policy 기본 상수, required_agent_capability="command_receiver", policy_rules=`command_action_allowlist` 1룰)` | `src/domains/command/handler.py :: COMMAND_CONFIG` |
+| `POLICY` | `Policy((NamespaceAllowlistRule(field=Gateway.NAMESPACE, default_namespace=Sandbox.NAMESPACE, reason=CONTROL_NAMESPACE_DENIED_MESSAGE), *Policy.build(COMMAND_CONFIG.policy_rules).rules))` — 네임스페이스 룰은 정적 값 비교가 아니라 제어 허용목록을 평가 시점에 읽음 | `src/domains/command/handler.py :: POLICY` |
+| `AUTO_APPROVE_ACTIONS_ENV` | `"COMMAND_AUTO_APPROVE_ACTIONS"` | `src/domains/command/handler.py :: AUTO_APPROVE_ACTIONS_ENV` |
+| `AUTO_APPROVE_ENVIRONMENTS_ENV` | `"COMMAND_AUTO_APPROVE_ENVIRONMENTS"` | `src/domains/command/handler.py :: AUTO_APPROVE_ENVIRONMENTS_ENV` |
+| `DEFAULT_AUTO_APPROVE_ACTIONS` | `Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION` (`"k8s.apps.v1.deployments.scale"`) | `src/domains/command/handler.py :: DEFAULT_AUTO_APPROVE_ACTIONS` |
+| `DEFAULT_AUTO_APPROVE_ENVIRONMENTS` | `"sandbox"` | `src/domains/command/handler.py :: DEFAULT_AUTO_APPROVE_ENVIRONMENTS` |
+| `approval_exempt_for_environment` | `def approval_exempt_for_environment(command: CommandRequestedBody) -> bool` — `command.action ∈ COMMAND_AUTO_APPROVE_ACTIONS`(CSV, env 평가 시점 조회) AND `command.environment`(strip·lower) ∈ `COMMAND_AUTO_APPROVE_ENVIRONMENTS`. 기본: deployment scale × sandbox 환경만 승인 기록 면제. 카탈로그 `allowed_namespaces`·네임스페이스 룰은 그대로 적용 | `src/domains/command/handler.py :: approval_exempt_for_environment` |
 | `desired_manifest_namespace` | `def desired_manifest_namespace(command: CommandRequestedBody) -> str \| None` — `diff.desired_manifest["metadata"]["namespace"]`(dict 아닐/빈 값이면 None) | `src/domains/command/handler.py :: desired_manifest_namespace` |
 | `evaluate_command_policy` | `def evaluate_command_policy(command: CommandRequestedBody) -> Result` | `src/domains/command/handler.py :: evaluate_command_policy` |
-| `command_requires_recorded_approval` | `def command_requires_recorded_approval(command: CommandRequestedBody) -> bool` — spec 존재 && `requires_approval` | `src/domains/command/handler.py :: command_requires_recorded_approval` |
+| `command_requires_recorded_approval` | `def command_requires_recorded_approval(command: CommandRequestedBody) -> bool` — spec 존재 && `requires_approval` && `not approval_exempt_for_environment(command)` | `src/domains/command/handler.py :: command_requires_recorded_approval` |
 | `evaluate_recorded_approval` | `async def evaluate_recorded_approval(command: CommandRequestedBody, db: AgentCommandStore) -> Result` | `src/domains/command/handler.py :: evaluate_recorded_approval` |
 | `idempotency_key` | `def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str` — 아래 [동작](#동작-behavior) | `src/domains/command/handler.py :: idempotency_key` |
 | `build_plan` | `def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan` | `src/domains/command/handler.py :: build_plan` |
@@ -108,7 +114,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | `sweep_expired_agent_commands` | `async def sweep_expired_agent_commands(ctx: EventContext[AgentCommandStore]) -> AsyncIterator[EventBody]` | `src/domains/command/handler.py :: sweep_expired_agent_commands` |
 | `handle_command_requested` | `async def handle_command_requested(evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]) -> AsyncIterator[EventBody]` | `src/domains/command/handler.py :: handle_command_requested` |
 
-정책 룰 2종(`COMMAND_CONFIG.policy_rules`): ① `sandbox_namespace` — `Gateway.NAMESPACE` 필드가 `Sandbox.NAMESPACE`(`"sandbox"`)와 같아야 함(default `"sandbox"`, reason `"only sandbox namespace writes are allowed"`), ② `command_action_allowlist` — `Gateway.ACTION` 필드가 `allowed_command_actions()` 안에 있어야 함(default `Command.DEFAULT_ACTION`, reason `"unsupported command action"`).
+`POLICY` 룰 2종: ① 네임스페이스 허용목록 — `NamespaceAllowlistRule(Gateway.NAMESPACE)` — namespace가 `control_allowed_namespaces()`(env `CONTROL_ALLOWED_NAMESPACES`, 기본 `("sandbox",)`) 안에 있어야 함, reason `CONTROL_NAMESPACE_DENIED_MESSAGE` = `"namespace is not allowed by control policy"` (`src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE`), ② `command_action_allowlist`(`COMMAND_CONFIG.policy_rules` 유일 룰) — `Gateway.ACTION` 필드가 `allowed_command_actions()` 안에 있어야 함(default `Command.DEFAULT_ACTION`, reason `"unsupported command action"`). 기존 정적 `sandbox_namespace` 룰은 제거되고 `packages.config.control` 단일 기준으로 대체됐다.
 
 거부 사유 상수(모두 `src/domains/command/handler.py :: <이름>` 앵커):
 
@@ -130,7 +136,8 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 | 메서드 | 시그니처 | 쿼리 의미 |
 |---|---|---|
-| `queue_agent_command` | `(self, correlation_id: str, plan: JsonObject, status: str) -> None` | `INSERT INTO agent_commands ... ON CONFLICT (command_id) DO NOTHING` (멱등). `payload=plan` 전문 저장, lease 필드 NULL, `result={}`. 같은 트랜잭션에서 `pg_notify("agent_command_queued", "<workspace_id>/<cluster_id>")`를 호출해 대기 중인 agent long-poll을 즉시 깨운다. 리스너가 없어도 DB row가 source of truth라 동작은 폴링으로 보장된다 |
+| `queue_agent_command` | `(self, correlation_id: str, plan: JsonObject, status: str) -> None` | `INSERT INTO agent_commands ... ON CONFLICT (command_id) DO NOTHING` (멱등). `payload=plan` 전문 저장, lease 필드 NULL, `result={}`. 같은 트랜잭션에서 `pg_notify(AGENT_COMMAND_CHANNEL, wakeup_key(workspace_id, cluster_id))`(`src/packages/runtime/command_wakeup.py :: AGENT_COMMAND_CHANNEL` = `"agent_command_queued"`, payload는 `wakeup_key`가 만드는 `"<workspace_id>/<cluster_id>"`)를 호출해 대기 중인 agent long-poll을 즉시 깨운다. 리스너가 없어도 DB row가 source of truth라 동작은 폴링으로 보장된다 |
+| `get_agent_command` | `async (self, command_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID) -> JsonObject \| None` | 워크스페이스 범위 명령 단건 SELECT(`command_id, cluster_id, correlation_id, action, status, result, completed_at`) — 콘솔이 명령 상태·실제 결과를 폴링하는 용도. 없으면 None |
 | `lease_agent_command` | `async (self, cluster_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID, queued_status: str = CommandStatus.QUEUED, leased_status: str = CommandStatus.LEASED, agent_id: str = UNKNOWN_AGENT_ID, lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS) -> CommandRecord \| None` | 후보 = (status=queued) OR (status=leased AND leased_until<now()) OR (status=running AND leased_until<now())를 `workspace_id+cluster_id`로 필터, `ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED` 스칼라 서브쿼리 → `UPDATE ... SET status=leased, lease_id=uuid4, agent_id, leased_until=now+lease_seconds RETURNING`. 없으면 None, 있으면 `serialize_command(row_dict(...))` |
 | `start_agent_command` | `async (self, command_id: str, workspace_id: str, cluster_id: str, lease_id: str, agent_id: str, running_status: str = CommandStatus.RUNNING, lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS) -> str \| None` | lease_id+agent_id+status=LEASED+미만료 조건의 UPDATE → RUNNING, `started_at=now()`, lease 연장. RETURNING correlation_id(불일치 시 None) |
 | `heartbeat_agent_command` | `async (self, command_id, workspace_id, cluster_id, lease_id, agent_id, lease_seconds=DEFAULT_COMMAND_LEASE_SECONDS) -> str \| None` | status IN (LEASED, RUNNING) + 미만료 조건에서 `leased_until` 연장만. RETURNING correlation_id |
@@ -149,14 +156,14 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | `MAX_POLL_SECONDS` | `COMMAND_POLL_MAX_SECONDS` | 30 |
 | `POLL_SLEEP_SECONDS` | `COMMAND_POLL_SLEEP_SECONDS` | 1 |
 
-기타 상수: `LEASE_SECONDS = DEFAULT_COMMAND_LEASE_SECONDS`, `NOT_FOUND_CODE = 404`, `NOT_FOUND_MESSAGE = "command not found"`, `RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE`, `UNPROCESSABLE_CODE = 422`, `MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"`, `CONTROL_NAMESPACE_NOT_ALLOWED = "only sandbox namespace control is currently supported"` (앵커: `src/domains/command/router.py :: <이름>`).
+기타 상수: `LEASE_SECONDS = DEFAULT_COMMAND_LEASE_SECONDS`, `NOT_FOUND_CODE = 404`, `NOT_FOUND_MESSAGE = "command not found"`, `RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE`, `UNPROCESSABLE_CODE = 422`, `MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"`, `CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE`(= `"namespace is not allowed by control policy"`, `src/packages/config/control.py` 단일 기준) (앵커: `src/domains/command/router.py :: <이름>`).
 
 헬퍼:
 
 | 심볼 | 시그니처 | 앵커 |
 |---|---|---|
 | `command_diff` | `def command_diff(payload: CommandRequest, workspace_id: str) -> Diff` — `payload.diff` 없으면 422; `{**payload.diff, "workspace_id", "cluster_id"}`로 `Diff.from_body` | `src/domains/command/router.py :: command_diff` |
-| `validate_control_namespace` | `def validate_control_namespace(namespace: str) -> None` — `Sandbox.NAMESPACE` 아니면 422 | `src/domains/command/router.py :: validate_control_namespace` |
+| `validate_control_namespace` | `def validate_control_namespace(namespace: str) -> None` — `control_namespace_allowed(namespace)`(`src/packages/config/control.py :: control_namespace_allowed`) 아니면 422 `CONTROL_NAMESPACE_NOT_ALLOWED` | `src/domains/command/router.py :: validate_control_namespace` |
 | `require_cluster_deploy_access` | `def require_cluster_deploy_access(db, current, workspace_id, cluster_id) -> None` — `Permission.DEPLOY_RUN` | `src/domains/command/router.py :: require_cluster_deploy_access` |
 | `require_cluster_read_access` | `def require_cluster_read_access(db, current, workspace_id, cluster_id) -> None` — `Permission.EVIDENCE_READ` | `src/domains/command/router.py :: require_cluster_read_access` |
 | `deployment_control_diff` | `def deployment_control_diff(*, workspace_id, cluster_id, namespace, deployment, action, basis) -> Diff` — `resource=f"deployment/{deployment}"`, `desired_image=""`, `actual_image="resource-not-inspected"`, `risk=Sandbox.RISK_TAG`, `status=action` | `src/domains/command/router.py :: deployment_control_diff` |
@@ -169,9 +176,12 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | 메서드+경로 | 핸들러(앵커) | 요청 | 응답 | 권한 |
 |---|---|---|---|---|
 | `POST /commands` (`gateway_routes.COMMANDS_PATH`) | `src/domains/command/router.py :: commands` | `CommandRequest` | `AcceptedResponse` | `require_session` + cluster `DEPLOY_RUN` |
-| `POST /clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale` (`CLUSTER_DEPLOYMENT_SCALE_PATH`) | `src/domains/command/router.py :: scale_deployment` | `DeploymentScaleRequest` | `AcceptedResponse` | `require_session` + cluster `DEPLOY_RUN`, namespace는 `sandbox`만 |
+| `POST /clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale` (`CLUSTER_DEPLOYMENT_SCALE_PATH`) | `src/domains/command/router.py :: scale_deployment` | `DeploymentScaleRequest` | `AcceptedResponse` | `require_session` + cluster `DEPLOY_RUN`, namespace는 제어 허용목록(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox)만 |
 | `POST /clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart` (`CLUSTER_DEPLOYMENT_RESTART_PATH`) | `src/domains/command/router.py :: restart_deployment` | `DeploymentRestartRequest` | `AcceptedResponse` | 위와 동일 |
 | `POST /agent/debug/query` (`AGENT_DEBUG_QUERY_PATH`) | `src/domains/command/router.py :: agent_debug_query` | `AgentDebugQueryRequest` | `AgentDebugQueryResponse` | `require_session` + cluster `EVIDENCE_READ` |
+| `GET /commands/{command_id}` (`COMMAND_STATUS_PATH`) | `src/domains/command/router.py :: command_status` | — | `CommandStatusResponse(command_id, cluster_id, correlation_id, action, status, result, completed_at(ISO \| None))` | `require_session` + cluster `EVIDENCE_READ`(`require_cluster_read_access`) |
+
+`command_status`는 `db.get_agent_command(command_id, 세션 workspace_id)` 조회 후(None이면 404 `"command not found"`) 행의 `cluster_id`에 대한 읽기 권한을 검사한다 — 콘솔이 명령 진행 상태와 agent가 올린 실제 결과를 폴링하는 용도(가짜 완료 표시 제거).
 
 #### 에이전트 엔드포인트 (`agent_router` — `src/domains/command/router.py :: agent_router`, 마지막에 `router.include_router(agent_router)`)
 
@@ -264,11 +274,11 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
    1. `evt.diff.is_image_only_noop()` → reject(`Sandbox.NO_DIFF_REASON` = `"desired and actual images already match"`).
    2. `evt.namespace != evt.diff.namespace` → reject(`NAMESPACE_MISMATCH_REASON`).
    3. `desired_manifest_namespace(evt)`가 있고 `evt.namespace`와 다르면 → reject(`MANIFEST_NAMESPACE_MISMATCH_REASON`).
-   4. `POLICY.evaluate(ModelLookup(evt))` — sandbox namespace 룰 + action allowlist 룰.
+   4. `POLICY.evaluate(ModelLookup(evt))` — 제어 네임스페이스 허용목록 룰(`NamespaceAllowlistRule`) + action allowlist 룰.
    5. 액션 spec의 `allows_namespace` 위반 → reject(`ACTION_NAMESPACE_REASON`).
-   6. spec.requires_approval인데 `approval_ref`/`policy_decision_ref` 누락 → reject(각 사유).
+   6. spec.requires_approval이고 `approval_exempt_for_environment(evt)`가 아닌데 `approval_ref`/`policy_decision_ref` 누락 → reject(각 사유). (기본값 기준 sandbox 환경의 deployment scale은 면제.)
 2. 거부 시 `CommandRejectedBody(reason, requested=evt.to_body())` yield 후 종료.
-3. `evaluate_recorded_approval(evt, ctx.db)`: 승인 필요 명령이면 `db.get_workflow_approval(approval_ref, workspace_id)` 레코드 검증 — getter 없음/레코드 없음 → `APPROVAL_RECORD_MISSING_REASON`; `workflow_run_id` 불일치 → `APPROVAL_WORKFLOW_MISMATCH_REASON`; status가 `ApprovalStatus.GRANTED`/`NOT_REQUIRED`가 아니면 → `APPROVAL_NOT_GRANTED_REASON`; `details.policy_decision_ref`/`details.approval_ref`가 기록돼 있고 불일치 → `APPROVAL_POLICY_DECISION_MISMATCH_REASON`. 거부 시 `CommandRejectedBody` yield 후 종료.
+3. `evaluate_recorded_approval(evt, ctx.db)`: 승인 필요 명령(`command_requires_recorded_approval` — 환경 면제 반영)이면 `db.get_workflow_approval(approval_ref, workspace_id)` 레코드 검증 — getter 없음/레코드 없음 → `APPROVAL_RECORD_MISSING_REASON`; `workflow_run_id` 불일치 → `APPROVAL_WORKFLOW_MISMATCH_REASON`; status가 `ApprovalStatus.GRANTED`/`NOT_REQUIRED`가 아니면 → `APPROVAL_NOT_GRANTED_REASON`; `details.policy_decision_ref`/`details.approval_ref`가 기록돼 있고 불일치 → `APPROVAL_POLICY_DECISION_MISMATCH_REASON`. 거부 시 `CommandRejectedBody` yield 후 종료.
 
 ### idempotency_key / build_plan
 
@@ -298,8 +308,8 @@ leased/running + 만료 후 grace 300s 경과 ──janitor──▶ failed
 - 리스 프로토콜: start/heartbeat/result는 `lease_id + agent_id + 상태 + leased_until >= now()`가 모두 일치해야 성공 — 불일치는 404 `"command not found"`.
 - 리스 획득은 `FOR UPDATE SKIP LOCKED`로 에이전트 간 경합 안전.
 - 결과 기록과 `command.completed` 이벤트 스테이징(events+outbox)은 단일 트랜잭션(원자성).
-- 쓰기 명령(내장 3종)은 sandbox 네임스페이스 한정 + 승인 레코드 필수.
-- 수동 명령은 diff 필수(422), 서버가 임의 리소스를 합성하지 않음. deployment 제어는 sandbox 외 네임스페이스 422.
+- 쓰기 명령(내장 3종)은 제어 허용 네임스페이스(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox만) 한정. 승인 레코드는 `apply_manifest`는 필수, `deployment_scale`은 sandbox 환경 면제(기본), `rollout_restart`는 비파괴라 불요.
+- 수동 명령은 diff 필수(422), 서버가 임의 리소스를 합성하지 않음. deployment 제어는 허용목록 외 네임스페이스 422(`"namespace is not allowed by control policy"`).
 - 정책 reject에는 반드시 reason이 있다(`Result.require_reason`).
 - 카탈로그 중복 등록(동일 action, 다른 spec) → `ValueError`.
 
@@ -313,4 +323,8 @@ leased/running + 만료 후 grace 300s 경과 ──janitor──▶ failed
 | `COMMAND_RETRY_DELAY_SECONDS` | int | 5 | 재시도 간격 초 |
 | `COMMAND_POLL_DEFAULT_SECONDS` | int | 10 | 롱폴 기본 대기 초 |
 | `COMMAND_POLL_MAX_SECONDS` | int | 30 | 롱폴 최대 대기 초 |
-| `COMMAND_POLL_SLEEP_SECONDS` | int | 1 | 롱폴 반복 간 대기 초 |
+| `COMMAND_POLL_SLEEP_SECONDS` | int | 1 | 롱폴 반복 간 대기 초(LISTEN/NOTIFY 미가동 시 폴링 주기) |
+| `CONTROL_ALLOWED_NAMESPACES` | str(CSV) | `"sandbox"` | 제어(쓰기) 명령 허용 네임스페이스 — `src/packages/config/control.py`가 단일 기준(게이트웨이 검증·워커 정책·cluster-agent 공용), 매 호출 시 평가 |
+| `COMMAND_AUTO_APPROVE_ACTIONS` | str(CSV) | `"k8s.apps.v1.deployments.scale"` | 환경 한정 승인 면제 대상 액션 |
+| `COMMAND_AUTO_APPROVE_ENVIRONMENTS` | str(CSV, 소문자 비교) | `"sandbox"` | 승인 면제가 적용되는 environment 목록 |
+| `COMMAND_NOTIFY_DATABASE_URL` | str | 미설정 = 리스너 비활성 | LISTEN/NOTIFY 웨이크업 리스너용 직결 DB URL(pgbouncer 우회) — `src/packages/runtime/command_wakeup.py :: COMMAND_NOTIFY_DATABASE_URL_ENV`([runtime](../packages/runtime.md)). 미설정/리스너 장애 시 `WAKEUP.wait`가 타임아웃까지 잠들어 기존 주기 폴링과 동일(fail-open) |

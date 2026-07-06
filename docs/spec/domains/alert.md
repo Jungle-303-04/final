@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -28,16 +28,19 @@ status: synced
 
 - `src/domains/alert/events.py` — 이벤트 body 3종 (아래 [이벤트](#이벤트-events)).
 - `src/domains/alert/models.py :: AlertChannel` — 워크스페이스별 webhook 채널 테이블.
-- `src/domains/alert/repository.py :: severity_rank(severity) -> int` — `info < warning < critical`, 알 수 없는 severity는 `warning`으로 취급.
+- `src/domains/alert/repository.py :: SEVERITY_RANK` — `{"info": 0, "warning": 1, "critical": 2}` 순위 맵(단일 기준).
+- `src/domains/alert/repository.py :: DEFAULT_SEVERITY_RANK` — `SEVERITY_RANK["warning"]` — 미지 severity 의 기본 순위.
+- `src/domains/alert/repository.py :: severity_rank(severity) -> int` — strip·lower 후 순위 조회, 알 수 없는 severity는 `warning`으로 취급.
 - `src/domains/alert/repository.py :: severity_matches(min_severity, severity) -> bool` — 채널의 최소 severity 이상인지 판정.
+- `src/domains/alert/repository.py :: serialize_alert_channel(row) -> JsonObject` — `created_at`/`updated_at`을 ISO 문자열화한 사본.
 - `src/domains/alert/repository.py :: AlertChannelRepository`
   - `list_alert_channels(workspace_id, only_enabled=False) -> list[JsonObject]`
-  - `upsert_alert_channel(payload) -> JsonObject`
+  - `upsert_alert_channel(payload) -> JsonObject` — `channel_id` 충돌 시 `WHERE workspace_id = excluded.workspace_id` 가드로 같은 workspace 행만 갱신. RETURNING 행이 없으면(타 workspace 채널) `LookupError("alert channel not found in workspace")`.
   - `delete_alert_channel(workspace_id, channel_id) -> bool`
-- `src/domains/alert/router.py :: router`
-  - `GET /alert-channels` — admin 세션의 workspace 채널 목록.
-  - `POST /alert-channels` — admin 세션의 workspace 채널 생성/수정.
-  - `DELETE /alert-channels/{channel_id}` — admin 세션의 workspace 채널 삭제.
+- `src/domains/alert/router.py :: router` — 오류 상수: `NOT_FOUND_CODE = 404` (`src/domains/alert/router.py :: NOT_FOUND_CODE`), `CHANNEL_NOT_FOUND = "alert channel not found"` (`src/domains/alert/router.py :: CHANNEL_NOT_FOUND`).
+  - `GET /alert-channels` (`ALERT_CHANNELS_PATH`) — 핸들러 `src/domains/alert/router.py :: list_alert_channels` — admin 세션의 workspace 채널 목록 (`AlertChannelListResponse`).
+  - `POST /alert-channels` (`ALERT_CHANNELS_PATH`) — 핸들러 `src/domains/alert/router.py :: upsert_alert_channel` — admin 세션의 workspace 채널 생성/수정 (`AlertChannelUpsertRequest` → `AlertChannelResponse`). 리포지토리 `LookupError`는 404 `CHANNEL_NOT_FOUND`로 변환.
+  - `DELETE /alert-channels/{channel_id}` (`ALERT_CHANNEL_PATH`) — 핸들러 `src/domains/alert/router.py :: delete_alert_channel` — admin 세션의 workspace 채널 삭제(204). 대상 없으면 404 `CHANNEL_NOT_FOUND`.
 
 ## 데이터 모델 (Data Model)
 

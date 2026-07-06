@@ -1,5 +1,5 @@
 ---
-source_commit: 20945a70
+source_commit: 664925a6
 status: synced
 ---
 
@@ -11,7 +11,7 @@ status: synced
 
 - `alert.requested` 를 받아 ① 정책 검증(severity 차단·자동 명령 환경 제한) → ② workspace 알림 채널 또는 전역 provider(log/webhook)로 전송 → ③ 성공 시 `alert.dispatched` + (있으면) `next_command`(`command.requested`) 체이닝, 실패/차단 시 `alert.rejected` 발행.
 - pre-deploy alert gate: 전송이 확인되지 않으면 다음 명령을 절대 이어주지 않는다(fail-closed).
-- `alert.dispatched`/`alert.rejected`는 워커가 직접 구독하지 않는다. 이 이벤트들은 outbox/event log와 projection 계층에서 관측한다.
+- `alert.dispatched`/`alert.rejected`는 워커가 직접 구독하지 않는다(자기 구독 핸들러 제거 — audit-worker 가 전 이벤트를 이미 기록). 이 이벤트들은 outbox/event log와 projection 계층에서 관측하고, 워커 자신은 발송 시점 로그(정책 거부 `alert rejected`, 채널 실패 `alert channel dispatch failed`, 전송 실패 `alert dispatch failed` warning)만 남긴다.
 
 ## 의존성 (Dependencies)
 

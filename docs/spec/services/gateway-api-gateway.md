@@ -1,9 +1,9 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
-# api-gateway — HTTP 입구(인증·인가·이벤트 수납·프록시 없는 단일 API 서버)
+# api-gateway — HTTP 입구(인증·인가·이벤트 수납·콘솔/라이브 중계까지 겸하는 단일 진입점)
 
 > 소스: `src/services/gateway/api-gateway/` · 테스트: `tests/test_identity_auth_routes.py`, `tests/test_password_auth.py`, `tests/test_auth_security.py`, `tests/test_gateway_error_handler.py`, `tests/test_metrics.py`, `tests/test_dlq_reliability.py`, `tests/test_api_event_gateway.py`
 
@@ -13,7 +13,8 @@ status: synced
 - 이메일+패스워드 회원가입/로그인/이메일 인증/승인 흐름과 Redis 세션(불투명 opaque 토큰) 관리. **JWT 는 사용하지 않는다** — 세션 토큰은 `secrets.token_urlsafe` 로 생성한 랜덤 문자열이고 상태는 전부 Redis 에 있다.
 - HTTP 요청을 내부 이벤트 봉투로 변환해 **outbox 에 스테이징**하고, 백그라운드 relay 태스크가 NATS 로 발행한다(직접 publish 최소화).
 - dead letter 조회/재발행(admin), Prometheus `/metrics` 노출.
-- 하지 않는 것: 이벤트 소비(워커 아님), 비즈니스 로직(도메인 라우터/워커 소유), 별도 서비스로의 리버스 프록시(업스트림 프록시 경로 없음 — 모든 라우트는 이 프로세스 안의 도메인 라우터가 직접 처리).
+- **단일 origin 진입점**: 콘솔 정적 자산은 `CONSOLE_ORIGIN` 으로 프록시, `/api` prefix 는 미들웨어에서 제거 후 인프로세스 라우터로 전달, `/api/live/{path}` WebSocket 은 realtime-gateway 로 중계(`_bridge_websocket`). API 라우트 자체는 여전히 이 프로세스 안의 도메인 라우터가 직접 처리한다.
+- 하지 않는 것: 이벤트 소비(워커 아님), 비즈니스 로직(도메인 라우터/워커 소유).
 
 ## 의존성 (Dependencies)
 
@@ -37,9 +38,12 @@ status: synced
 | import | `packages.events` | [../../packages/events.md](../packages/events.md) | `NatsEventBus` |
 | import | `packages.runtime` | [../../packages/runtime.md](../packages/runtime.md) | `FastApiService`, `ApiEventGateway`, `OutboxRelay`, metrics 렌더러 |
 | import | `packages.storage` | [../../packages/storage.md](../packages/storage.md) | `Database`, `unit_of_work_or_null`, `RedisSessionStore`, `AuthSession`, `RateLimitExceeded` |
-| 외부 | PostgreSQL | — | 도메인 테이블·outbox·dead letter·처리대장 |
+| import | `packages.runtime.command_wakeup` | [../../packages/runtime.md](../packages/runtime.md) | `WAKEUP`(command 롱폴 LISTEN/NOTIFY 웨이크업) lifespan start/stop |
+| 외부 | PostgreSQL | — | 도메인 테이블·outbox·dead letter·처리대장 (+`COMMAND_NOTIFY_DATABASE_URL` 직결 LISTEN) |
 | 외부 | Redis | — | 세션·레이트리밋·이메일 인증 토큰 |
 | 외부 | NATS JetStream | — | outbox relay 발행 대상 |
+| 외부 | console (httpx) | — | 프론트 정적 자산 프록시(`CONSOLE_ORIGIN`) |
+| 외부 | realtime-gateway (websockets) | [realtime-realtime-gateway.md](realtime-realtime-gateway.md) | `/api/live/*` WebSocket 중계(`REALTIME_ORIGIN`) |
 
 ## 공개 인터페이스 (Public API)
 
@@ -65,7 +69,9 @@ status: synced
   - `ApiGateway._session_store_config()` — `RedisSessionStoreConfig` 구성(아래 [설정](#설정-settings)의 세션 항목 참조).
   - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()` → `_relay_outbox()` 태스크 시작. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → relay 취소 → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
   - `ApiGateway._relay_outbox()` — `OutboxRelay(db, bus, "api-gateway")` 를 무한 루프로 실행. 배치가 가득 찼으면(`sent >= relay.batch`) 즉시 재실행, 아니면 `OUTBOX_RELAY_INTERVAL_SECONDS`(기본 1초) sleep. 예외는 `gateway_outbox_relay_error` 경고 로그 후 계속.
-  - `ApiGateway.configure_routes()` — 라우터 등록 순서: frontend proxy → health → identity → alert channels → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → dead-letter → metrics → 전역 오류 핸들러.
+  - `ApiGateway.configure_routes()` — 라우터 등록 순서: frontend proxy(미들웨어) → health → identity → alert channels → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → live proxy(WS) → dead-letter → metrics → 전역 오류 핸들러.
+  - `ApiGateway._register_frontend_proxy(app)` — `@app.middleware("http")`: 경로가 `/api` 또는 `/api/*` 면 prefix 를 벗겨(`request.scope["path"]` 재작성) 인프로세스 라우터로 통과, `_is_frontend_request`(GET/HEAD 이면서 `/assets/*`·`/favicon.ico`·`/manifest.webmanifest` 또는 `Accept: text/html`)면 `_proxy_console` 로 콘솔 정적 자산을 프록시(httpx, hop-by-hop 헤더 제거, 실패 시 502 `"frontend unavailable"` + `frontend_proxy_error` 로그). 그 외는 그대로 통과.
+  - `ApiGateway._register_live_proxy_routes(app)` — `@app.websocket("/api/live/{path:path}")`: `REALTIME_ORIGIN` 의 `/live/{path}` 로 접속(구독 query string 그대로 전달 — 유실 시 기본 workspace 로만 붙어 이벤트가 비어 보임), `cookie`/`authorization`/`x-session-token` 헤더 승계 후 `_bridge_websocket` 로 양방향 중계. 업스트림 실패는 `live_proxy_error` 로그 후 1011 종료.
 - `src/services/gateway/api-gateway/gateway.py :: agent_connected_body_from_request(payload, identity)` — `AgentConnectRequest` 의 `cluster_id` 를 버리고 인증 identity 의 `cluster_id`/`workspace_id` 를 권위값으로 채운 `AgentConnectedBody` 생성.
 - `src/services/gateway/api-gateway/gateway.py :: create_app` — `ApiGateway().app` 반환(테스트·uvicorn factory 공용).
 
@@ -118,6 +124,8 @@ status: synced
 | GET | `/dead-letters` | `gateway.py :: ApiGateway._register_dead_letter_routes` | 세션 | admin (전 테넌트 노출이므로) |
 | POST | `/dead-letters/{dead_letter_id}/replay` | 〃 | 세션 | admin |
 | GET | `/metrics` | `gateway.py :: ApiGateway._register_metrics_routes` | `METRICS_TOKEN` 설정 시 Bearer(compare_digest), 미설정 시 공개 | — |
+| GET/HEAD | (콘솔 자산 — `/assets/*` 등) | `gateway.py :: ApiGateway._register_frontend_proxy` | 공개(콘솔 upstream 프록시) | — |
+| WS | `/api/live/{path}` | `gateway.py :: ApiGateway._register_live_proxy_routes` | 인증 헤더/쿠키를 realtime-gateway 로 승계 | — |
 
 ### identity (`src/domains/identity/router.py`)
 
@@ -200,9 +208,10 @@ status: synced
 
 | 메서드 | 경로 | 인증 | 권한 |
 |---|---|---|---|
-| POST | `/commands` | 세션 | `require_cluster_access`(deploy) |
-| POST | `/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale` | 세션 | deploy 접근 |
-| POST | `/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart` | 세션 | deploy 접근 |
+| POST | `/commands` | 세션 | `require_cluster_access`(deploy) + `validate_control_namespace`(허용목록 밖 422) |
+| GET | `/commands/{command_id}` | 세션 | cluster read 접근 — 콘솔이 명령 상태·agent 실측 결과 폴링(`get_agent_command`, 없으면 404) |
+| POST | `/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale` | 세션 | deploy 접근 + `validate_control_namespace` |
+| POST | `/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart` | 세션 | deploy 접근 + `validate_control_namespace` |
 | POST | `/agent/debug/query` | 세션 | cluster read 접근 |
 | GET | `/agent/commands/poll` | agent | 토큰 identity 의 cluster 만 롱폴 |
 | POST | `/agent/commands/{command_id}/start` | agent | — |
@@ -241,7 +250,7 @@ status: synced
 ### 부팅과 미들웨어 순서
 
 1. `main()` → `FastApiService("api-gateway", create_app)` → uvicorn(`0.0.0.0:$PORT`, 기본 8000).
-2. 미들웨어는 **CORSMiddleware 하나**뿐(조건부). 그 외 cross-cutting 은 ① FastAPI `Depends` 가드(라우트 단위 인증/인가), ② 전역 `@app.exception_handler(Exception)`(모든 미처리 예외 → 500 `{"error": "internal server error"}` + `gateway_unhandled_error` 로그)로 처리한다.
+2. 미들웨어는 **frontend proxy**(`/api` prefix 제거 + 콘솔 자산 프록시)와 **CORSMiddleware**(조건부) 둘. 그 외 cross-cutting 은 ① FastAPI `Depends` 가드(라우트 단위 인증/인가), ② 전역 `@app.exception_handler(Exception)`(모든 미처리 예외 → 500 `{"error": "internal server error"}` + `gateway_unhandled_error` 로그)로 처리한다.
 3. lifespan: DB 대기 → Redis 연결 → NATS 연결 → outbox relay 태스크 → `COMMAND_NOTIFY_DATABASE_URL`이 설정된 경우 command wakeup listener.
 
 ### 인증 흐름 (상태 머신)
@@ -278,6 +287,7 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 - 패스워드 해시 형식/알고리즘 불일치는 예외 없이 `False`(fail-closed).
 - 이메일 인증 토큰은 1회용(GETDEL).
 - dead letter 조회/재발행은 admin 전용 — 임의 이벤트 재발행 권한이기 때문.
+- 제어(쓰기) 명령 라우트는 `validate_control_namespace`(`src/domains/command/router.py :: validate_control_namespace`)로 [config control 허용목록](../packages/config.md)을 검사 — 허용목록 밖 네임스페이스는 422 `"namespace is not allowed by control policy"`.
 - `limit` 쿼리는 `1..MAX_DEAD_LETTER_LIMIT(100)` 로 클램프.
 - HTTP 오류 코드: 400(확인 불일치/무효 토큰), 401(자격/세션/agent 토큰), 403(이메일 미인증·승인 대기·admin/리소스 권한), 404(user/dead letter/command), 409(중복 가입/replay 경합), 429(레이트리밋), 500(전역 핸들러).
 
@@ -291,6 +301,10 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 | `APP_TITLE` / `APP_VERSION` (상수) | str | `API Gateway` / `0.1.0` | FastAPI 메타 |
 | `PORT` | int | `8000` | HTTP 포트 (`FastApiService`) |
 | `OUTBOX_RELAY_INTERVAL_SECONDS` | int | `1` | relay 유휴 간격 초 |
+| `CONSOLE_ORIGIN` | str | `http://console.management.svc.cluster.local:80` | 콘솔 정적 자산 프록시 upstream |
+| `REALTIME_ORIGIN` | str | `ws://realtime-gateway.management.svc.cluster.local:8000` | `/api/live/*` WS 중계 upstream |
+| `FRONTEND_PROXY_TIMEOUT_SECONDS` (상수) | float | `10.0` | 콘솔 프록시 httpx 타임아웃 |
+| `COMMAND_NOTIFY_DATABASE_URL` | str | 미설정 | 설정 시 lifespan 이 command 롱폴 웨이크업용 Postgres LISTEN 직결 연결(`WAKEUP.start`)을 연다 |
 | `CORS_ALLOW_ORIGINS` | csv | `http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173` | 쿠키 인증 허용 origin |
 | `REDIS_URL` | str | `redis://redis:6379/0` | 세션 스토어 |
 | `SESSION_TTL_SECONDS` | int | `86400` | 세션·쿠키 TTL |

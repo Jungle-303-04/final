@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -10,12 +10,12 @@ status: synced
 ## 책임 (Responsibility)
 
 - 노드별 DaemonSet 형태로 배치되어(환경변수 `NODE_NAME` 으로 담당 노드 식별):
-  - 고정 샘플값 기반 노드 런타임 스냅샷(`NodeRuntimeSample`)을 `/snapshot` 으로 제공하고,
+  - **실측** 노드 런타임 스냅샷(`NodeRuntimeSample`)을 `/snapshot` 으로 제공하고,
   - Kubernetes API 에서 읽은 Pod 상태를 포함한 메트릭을 `/metrics` 로 Prometheus text exposition 형식으로 노출하고,
   - `COLLECT_INTERVAL_SECONDS` 주기로 스냅샷을 구조화 로그(`node_runtime_sample_collected`)로 남긴다.
 - **이벤트 버스(NATS)를 사용하지 않는다** — 순수 HTTP(FastAPI + uvicorn) 서비스.
 - DB 접근 없음.
-- 주의: CPU/메모리/파일시스템 값은 실측이 아니라 `NodeCollectorConfig` 의 **고정 샘플 상수**다(cgroup/proc 읽기 없음). 실측 데이터는 Pod 메트릭(Kubernetes API 경유)뿐이다.
+- CPU/메모리/파일시스템 값은 `NodeRuntimeSampler` 가 실측한다 — CPU 는 `/proc/stat` 의 (idle+iowait)/total **델타**, 메모리는 `/proc/meminfo` 의 `MemTotal - MemAvailable`, 파일시스템은 `os.statvfs("/")`. `/proc/stat`·`/proc/meminfo` 는 컨테이너 네임스페이스와 무관하게 호스트(노드) 값을 보여주므로 DaemonSet 컨테이너에서 그대로 실측이 된다. 읽기 실패는 가짜 값 대신 `0` 으로 보고하고 경고 로그를 남긴다(기존의 고정 샘플 상수 `SAMPLE_*` 는 제거됨).
 
 ## 의존성 (Dependencies)
 
@@ -79,14 +79,32 @@ class NodeCollectorConfig:
     DEFAULT_POD_NAMESPACE = "target"
     DEFAULT_COLLECT_INTERVAL_SECONDS = "15"
 
-    SAMPLE_CPU_USAGE_RATIO = 0.37
-    SAMPLE_MEMORY_WORKING_SET_BYTES = 268_435_456
-    SAMPLE_FILESYSTEM_USAGE_RATIO = 0.42
+    PROC_STAT_PATH = "/proc/stat"
+    PROC_MEMINFO_PATH = "/proc/meminfo"
+    FILESYSTEM_SAMPLE_PATH = "/"
     RUNTIME_NAME = "containerd"
     METRIC_CONTENT_TYPE = "text/plain; version=0.0.4"
 ```
 
 - 앵커: `src/services/target/node-collector/node_collector.py :: NodeCollectorConfig`
+
+```python
+class NodeRuntimeSampler:
+    def __init__(
+        self,
+        proc_stat_path: str = NodeCollectorConfig.PROC_STAT_PATH,
+        proc_meminfo_path: str = NodeCollectorConfig.PROC_MEMINFO_PATH,
+        filesystem_path: str = NodeCollectorConfig.FILESYSTEM_SAMPLE_PATH,
+    ) -> None
+    def cpu_usage_ratio(self) -> float
+    def memory_working_set_bytes(self) -> int
+    def filesystem_usage_ratio(self) -> float
+```
+
+- 앵커: `src/services/target/node-collector/node_collector.py :: NodeRuntimeSampler` — 노드 지표 실측기(고정 샘플값 금지).
+- `cpu_usage_ratio`: `/proc/stat` 첫 줄(cpu 합계)에서 `idle = values[3] + iowait(values[4])`, `busy = total - idle`. 직전 호출값 `_last_cpu: (busy, total)` 이 있으면 구간 델타 `Δbusy/Δtotal`, 첫 호출은 부팅 이후 평균 `busy/total`. 결과는 0.0~1.0 clamp. `OSError/ValueError/IndexError` 시 `node_collector_cpu_read_failed` 경고 후 `0.0`.
+- `memory_working_set_bytes`: `/proc/meminfo` 를 파싱(kB→bytes ×1024)해 `max(0, MemTotal - MemAvailable)`. 실패 시 `node_collector_memory_read_failed` 경고 후 `0`.
+- `filesystem_usage_ratio`: `os.statvfs(filesystem_path)` 로 `1 - f_bavail/f_blocks` (0.0~1.0 clamp, `f_blocks == 0` 이면 `0.0`). `OSError` 시 `node_collector_filesystem_read_failed` 경고 후 `0.0`.
 
 ```python
 @dataclass(frozen=True)
@@ -114,6 +132,7 @@ class NodeCollector:
         namespace: str,
         interval_seconds: int,
         kubernetes: KubernetesApiClient | None = None,
+        sampler: NodeRuntimeSampler | None = None,
     ) -> None
     @classmethod
     def from_env(cls) -> NodeCollector
@@ -123,7 +142,7 @@ class NodeCollector:
 ```
 
 - 앵커: `src/services/target/node-collector/node_collector.py :: NodeCollector`
-- `kubernetes` 미지정 시 `KubernetesApiClient()` 생성. `self.collectors` 는 `(PodMetricCollector(self.kubernetes, self.node_name),)` 튜플로 고정.
+- `kubernetes` 미지정 시 `KubernetesApiClient()` 생성, `sampler` 미지정 시 `NodeRuntimeSampler()` 생성. `self.collectors` 는 `(PodMetricCollector(self.kubernetes, self.node_name),)` 튜플로 고정.
 
 ```python
 def create_app(collector: NodeCollector | None = None) -> FastAPI
@@ -241,9 +260,9 @@ def render_prometheus_metrics(samples: list[MetricSample]) -> str
 | `pod_name` | `str` | `POD_NAME` 환경변수 |
 | `namespace` | `str` | `POD_NAMESPACE` 환경변수 |
 | `timestamp` | `str` | 호출 시점 `datetime.now(UTC).isoformat()` |
-| `cpu_usage_ratio` | `float` | 고정 상수 `0.37` |
-| `memory_working_set_bytes` | `int` | 고정 상수 `268_435_456` |
-| `filesystem_usage_ratio` | `float` | 고정 상수 `0.42` |
+| `cpu_usage_ratio` | `float` | `NodeRuntimeSampler.cpu_usage_ratio()` — `/proc/stat` 델타 실측 (실패 시 `0.0`) |
+| `memory_working_set_bytes` | `int` | `NodeRuntimeSampler.memory_working_set_bytes()` — `/proc/meminfo` 실측 (실패 시 `0`) |
+| `filesystem_usage_ratio` | `float` | `NodeRuntimeSampler.filesystem_usage_ratio()` — `os.statvfs("/")` 실측 (실패 시 `0.0`) |
 | `runtime` | `str` | 고정 상수 `"containerd"` |
 
 ## 공개 HTTP 인터페이스 (Public API — endpoints)
@@ -260,15 +279,15 @@ def render_prometheus_metrics(samples: list[MetricSample]) -> str
 
 모든 메트릭의 공통 라벨: `node=<node_name>`, `runtime="containerd"`. TYPE 은 전부 `gauge`(`MetricSample.type` 기본값). 각 샘플은 `# HELP` / `# TYPE` / `name{labels} value` 3줄로 렌더되고 마지막에 빈 줄 1개(`render_prometheus_metrics`).
 
-### 1. 기본 노드 샘플 (snapshot 기반, 고정 상수 — 파일/API 읽기 없음)
+### 1. 기본 노드 샘플 (snapshot 기반 — `NodeRuntimeSampler` 실측)
 
 앵커: `src/services/target/node-collector/node_collector.py :: NodeCollector.prometheus_metrics`
 
 | 메트릭 이름 | HELP | 값 |
 |---|---|---|
-| `node_collector_cpu_usage_ratio` | Node CPU usage ratio. | `0.37` (고정) |
-| `node_collector_memory_working_set_bytes` | Node memory working set. | `268435456` (고정) |
-| `node_collector_filesystem_usage_ratio` | Node filesystem usage ratio. | `0.42` (고정) |
+| `node_collector_cpu_usage_ratio` | Node CPU usage ratio. | `/proc/stat` 델타 실측 (0.0~1.0) |
+| `node_collector_memory_working_set_bytes` | Node memory working set. | `/proc/meminfo` `MemTotal - MemAvailable` (bytes) |
+| `node_collector_filesystem_usage_ratio` | Node filesystem usage ratio. | `os.statvfs("/")` 실측 (0.0~1.0) |
 
 ### 2. PodMetricCollector (`collector_name="pod"`)
 
@@ -322,10 +341,11 @@ def render_prometheus_metrics(samples: list[MetricSample]) -> str
 
 - 개별 수집기 실패가 `/metrics` 응답 전체를 실패시키지 않는다 — 실패한 수집기는 `node_collector_scrape_error=1` 로만 표면화된다.
 - `node_collector_scrape_error` 는 수집기 개수만큼(성공/실패 무관) 항상 노출된다.
-- 기본 3개 메트릭은 Kubernetes API 가용성과 무관하게 항상 노출된다.
+- 기본 3개 메트릭은 Kubernetes API 가용성과 무관하게 항상 노출된다. 샘플러의 개별 읽기 실패(`/proc/stat`·`/proc/meminfo`·`statvfs`)도 예외를 던지지 않고 해당 값만 `0` 으로 보고한다(가짜 값보다 명확한 '측정 불가' + 경고 로그).
+- `cpu_usage_ratio` 는 상태가 있는 측정이다 — 첫 호출은 부팅 이후 평균, 이후 호출은 직전 호출과의 구간 사용률(`_last_cpu` 프로세스 메모리 상태).
 - `KubernetesApiClient.auth_headers` 는 ServiceAccount 토큰 파일이 없으면 예외(`FileNotFoundError` 등) — 이는 `prometheus_metrics` 의 수집기 예외 처리로 흡수된다.
 - Pod payload 의 형식 이상(`items`/`spec`/`status`/`conditions` 가 기대 타입이 아님)은 예외가 아니라 필터링/제외로 처리된다.
-- `/snapshot` 과 주기 로그의 값은 매 호출 시각(`timestamp`)만 변하고 리소스 수치는 고정 상수다.
+- `/snapshot` 과 주기 로그의 리소스 수치는 매 호출 시점에 샘플러가 실측한 값이다(`runtime` 만 고정 상수 `"containerd"`).
 
 ## 설정 (Settings)
 
