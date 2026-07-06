@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager, suppress
 
 from auth import PasswordAuthService, SessionAuthService
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from settings import Settings
 
@@ -17,6 +18,7 @@ from domains.command.router import router as command_router
 from domains.dashboard.router import router as dashboard_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
+from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
     require_admin_session,
@@ -78,6 +80,7 @@ class ApiGateway:
         self.app = FastAPI(
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )
+        self._configure_cors(self.app)
         # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
         self.app.state.db = self.db
         self.app.state.events = self.events
@@ -85,6 +88,23 @@ class ApiGateway:
         self.app.state.password_auth = self.password_auth
         self.configure_routes()
         self._relay_task: asyncio.Task[None] | None = None
+
+    @staticmethod
+    def _configure_cors(app: FastAPI) -> None:
+        # 브라우저 SPA 가 다른 origin(개발 서버)에서 쿠키 인증 요청을 보내려면 CORS 허용 필요.
+        # 쿠키 전송(allow_credentials=True) 시 origin 을 "*" 로 둘 수 없어 명시 목록 사용.
+        # CORS_ALLOW_ORIGINS(콤마 구분) 미설정 시 로컬 개발 origin 기본 허용.
+        raw = env(Settings.CORS_ALLOW_ORIGINS_ENV, Settings.DEFAULT_CORS_ALLOW_ORIGINS)
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        if not origins:
+            return
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @staticmethod
     def _session_store_config() -> RedisSessionStoreConfig:
@@ -145,6 +165,7 @@ class ApiGateway:
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
+        app.include_router(identity_admin_router)  # 관리 콘솔: 조직/그룹/멤버/권한(admin 세션)
         app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
