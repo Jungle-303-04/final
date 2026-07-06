@@ -122,6 +122,13 @@ https://console.example.com/live/*
 Reverse proxy는 frontend asset과 backend API를 같은 host 아래에 둔다.
 SPA route fallback은 frontend asset 서버에서 처리하고, API prefix는 backend로 먼저 라우팅한다.
 
+현재 실제 배포 파일은 아래 기준으로 고정한다.
+
+- `frontend/Dockerfile`: Vite build를 수행한 뒤 nginx-unprivileged 이미지에 `dist/`를 복사한다.
+- `frontend/nginx.conf`: `/api/`는 `api-gateway`, `/api/live/`는 `realtime-gateway`로 프록시한다.
+- `deploy/management/console.yaml`: `console` Deployment와 LoadBalancer Service를 만든다.
+- `scripts/aws-up.sh`: `CONSOLE_ECR_REPO` 이미지를 빌드하고 `kubeheal-console` 이미지를 실제 ECR image로 치환한다.
+
 ### 4. 다른 origin을 쓰면 CORS를 정확히 제한한다
 
 개발 중 `http://localhost:5173` frontend가 `http://localhost:8000` Gateway를 호출하는 경우처럼 origin이 갈라질 수 있다.
@@ -220,24 +227,24 @@ Frontend 기준:
 - 사용자가 임의 `workspace_id`를 선택해 tenant를 바꾸게 하지 않는다.
 - backend가 내려주지 않은 row를 frontend에서 합성해 보여주지 않는다.
 
-## 권장 frontend stack
+## 현재 frontend stack
 
-현재 repo에는 frontend app이 별도로 없다.
-새로 만들 때는 `frontend/` 아래에 둔다.
-
-권장 구성:
+현재 frontend app은 `frontend/` 아래에 있다.
+`frontend/package.json` 기준으로 먼저 익혀야 하는 구성은 아래와 같다.
 
 - Vite
 - React
 - TypeScript
 - TanStack Query
 - React Router
-- generated OpenAPI types
 - Motion for React
-- Recharts
 - React Flow
-- Nivo 또는 visx는 고급 시각화가 필요할 때 후보로 검토
-- Playwright 또는 Vitest + Testing Library
+- Nivo line/treemap
+- Zustand
+- ESLint
+
+OpenAPI 타입 생성은 production 완성 단계에서 `generated/api`로 고정한다.
+그 전까지는 `src/packages/contracts/gateway/routes.py`, `requests.py`, `responses.py`와 `frontend/src/shared/lib/types.ts`를 같이 보고 DTO를 맞춘다.
 
 GraphQL client는 기본 선택이 아니다.
 우리 backend 계약은 FastAPI REST/Pydantic DTO와 WebSocket 계약으로 이미 나뉘어 있다.
@@ -445,78 +452,61 @@ const widgetSchema = z.object({
 
 ## 폴더 구조
 
-권장 구조:
+현재 `frontend/` 구조와 확장 위치:
 
 ```text
 frontend/
   package.json
   vite.config.ts
+  nginx.conf
+  Dockerfile
   src/
     app/
-      App.tsx
       router.tsx
-      providers/
-        QueryProvider.tsx
-        SessionProvider.tsx
+      providers.tsx
+      guards.tsx
+      shell/
+        AppShell.tsx
     shared/
-      api/
-        client.ts
-        errors.ts
-        generated.ts
-        paths.ts
-      auth/
-        session.ts
-        csrf.ts
-      realtime/
-        socket.ts
-      charts/
-        ChartShell.tsx
-        LineChartWidget.tsx
-        BarChartWidget.tsx
-      dynamic-ui/
-        registry.ts
-        manifest.ts
-        viewModel.ts
-      motion/
-        transitions.ts
-        ReducedMotionProvider.tsx
+      lib/
+        api.ts
+        adapt.ts
+        live.ts
+        query.ts
+        types.ts
+        ui-store.ts
+        mock/
       ui/
-        EmptyState.tsx
-        ErrorState.tsx
-        LoadingState.tsx
+        index.tsx
+        charts.tsx
+        status.ts
+        app.css
+      motion/
+        index.tsx
+      tokens.css
     features/
       auth/
-        LoginPage.tsx
-        LogoutButton.tsx
-      dashboard/
-        api.ts
-        RcaTimelinePage.tsx
-        RcaIncidentPage.tsx
-        status.ts
-      command/
-        api.ts
-        CommandButton.tsx
-      approval/
-        api.ts
-        ApprovalActions.tsx
-      realtime/
-        useRealtime.ts
-      operations-map/
-        FlowMapWidget.tsx
-        pipeline.ts
+      org/
+      resources/
+      fleet/
+      cluster/
+      repo/
+      metrics/
+      workflow/
+      chat/
+      notifications/
+  tests/
 ```
 
 역할:
 
-- `shared/api/client.ts`: 유일한 HTTP 호출 경계
-- `shared/auth/session.ts`: `/auth/session`, `/auth/login`, `/auth/logout`
-- `shared/auth/csrf.ts`: CSRF token memory 관리
-- `features/dashboard/api.ts`: `/dashboard/rca/*`만 감싼다
-- `features/realtime/useRealtime.ts`: `/live/browser` 연결과 reconnect 처리
-- `shared/dynamic-ui/registry.ts`: 안전한 dynamic component allowlist
-- `shared/dynamic-ui/viewModel.ts`: DTO를 widget manifest로 변환
-- `shared/charts/*`: 공통 chart shell과 theme adapter
-- `shared/motion/*`: 공통 transition과 reduced motion 처리
+- `shared/lib/api.ts`: 유일한 HTTP 호출 경계. `/api` prefix와 cookie 포함 fetch를 처리한다.
+- `shared/lib/live.ts`: `/api/live/browser` WebSocket 연결과 reconnect 처리를 맡는다.
+- `shared/lib/types.ts`: Gateway response를 frontend view model로 읽기 위한 현재 타입 경계다.
+- `features/notifications/api.ts`: `/dashboard/rca/timeline`을 소비하는 실제 예시다.
+- `features/workflow/WorkflowGraphView.tsx`: @xyflow/react 노드 그래프 실제 구현 위치다.
+- `shared/ui/charts.tsx`: Nivo chart wrapper 위치다.
+- `shared/motion/index.tsx`: 공통 transition과 reduced motion 처리 위치다.
 - feature component는 backend URL 문자열을 직접 만들지 않는다
 
 ## API 계약 생성

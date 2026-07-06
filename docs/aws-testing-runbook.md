@@ -86,6 +86,7 @@ management rollout 대상 목록 조회와 각 rollout status를 3번 재시도�
 | `TARGET_1_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target A` | target 1 표시 이름 |
 | `TARGET_2_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target B` | target 2 표시 이름 |
 | `ECR_REPO` | repository variable, workflow 기본 `kubeheal-service` | 서비스 container image repository |
+| `CONSOLE_ECR_REPO` | repository variable, workflow 기본 `kubeheal-console` | `frontend/` 운영 콘솔 container image repository |
 | `AWS_AUTO_DEPLOY` | `1` | `main` push 때 AWS CD 배포 허용 |
 | `AWS_CREATE_CLUSTERS` | `0` | 기본은 기존 EKS cluster 사용 |
 | `AWS_ENSURE_EBS_CSI` | `0` | 기본은 기존 EBS CSI 설정 사용 |
@@ -111,7 +112,8 @@ Bruno나 Gateway 문제가 아니라 Cloudflare가 origin DNS record를 찾지 �
 1. AWS LoadBalancer가 살아 있는지 먼저 확인한다.
 
 ```bash
-LB_HOST="$(kubectl --context kubernetes-ops -n management get svc api-gateway \
+MGMT_CLUSTER="${MGMT_CLUSTER:-kubeheal-mgmt}"
+LB_HOST="$(kubectl --context "${MGMT_CLUSTER}" -n management get svc api-gateway \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
 
 curl -i "http://${LB_HOST}/healthz"

@@ -42,7 +42,7 @@ Kubernetes 운영 자동화 플랫폼의 웹 콘솔 설계 문서 세트.
 
 | ID | 결정 | 요약 |
 |---|---|---|
-| D1 | 앱 위치 | 신규 `frontend/` 폴더. `frontend-demo/`는 참조 데모로 보존, 모션 프리미티브·워크플로우 노드 컴포넌트는 이식 |
+| D1 | 앱 위치 | 실제 앱은 `frontend/` 폴더. 모션 프리미티브는 `frontend/src/shared/motion`, 워크플로우 노드 그래프는 `frontend/src/features/workflow/WorkflowGraphView.tsx` 기준으로 관리 |
 | D2 | 스택 | React 18 + TypeScript + Vite. 라우팅 react-router-dom v6, 서버 상태 @tanstack/react-query v5, UI 상태 zustand, 그래프 @xyflow/react, 차트/히트맵 @nivo(line·treemap), 테이블 @tanstack/react-table, 프리미티브 radix-ui, 모션 motion(구 framer-motion), 팔레트 cmdk |
 | D3 | 라이선스 | 외부 기준 콘솔 소스 **복사 금지**(AGPL v3 전파). IA/UX/네이밍 패턴 참조만. 외부 기준 design-system 패키지는 LICENSE 파일 미확인으로 채택 보류 → 자체 토큰 + Radix(MIT) |
 | D4 | 인증 | 백엔드 세션 쿠키(`service_session`, httpOnly) 그대로 사용. 프론트는 토큰 저장 안 함. 부팅 시 `GET /auth/session`으로 세션 확인 |

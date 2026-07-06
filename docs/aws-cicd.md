@@ -47,7 +47,8 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - target id 1: repository variable `TARGET_CLUSTER_ID_1`, 기본 `TARGET_CLUSTER_1`
 - target id 2: repository variable `TARGET_CLUSTER_ID_2`, 기본 `TARGET_CLUSTER_2`
 - smoke target id: repository variable `SMOKE_CLUSTER_ID`, 기본 `TARGET_CLUSTER_ID_1`
-- ECR repository: repository variable `ECR_REPO`, 기본 `kubeheal-service`
+- service ECR repository: repository variable `ECR_REPO`, 기본 `kubeheal-service`
+- console ECR repository: repository variable `CONSOLE_ECR_REPO`, 기본 `kubeheal-console`
 - display names: repository variables `MGMT_DISPLAY_NAME`, `TARGET_1_DISPLAY_NAME`, `TARGET_2_DISPLAY_NAME`
 - dashboard/API domain: 기본 없음. `CUSTOM_DOMAIN`과 DNS zone을 설정한 경우에만 연결
 
@@ -69,8 +70,8 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 
 배포 job의 기본값은 기존 EKS 클러스터가 있다고 가정한다.
 
-- container image build/push
-- ECR push
+- service/console container image build
+- service/console ECR push
 - management runtime ConfigMap/Secret upsert
 - management manifests apply
 - `api-gateway` LoadBalancer health check
@@ -93,6 +94,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - `TARGET_CLUSTER_1`: 기본 `kubeheal-target-a`
 - `TARGET_CLUSTER_2`: 기본 `kubeheal-target-b`
 - `ECR_REPO`: 기본 `kubeheal-service`
+- `CONSOLE_ECR_REPO`: 기본 `kubeheal-console`
 - `AUTO_PROMOTE_DEV_TO_MAIN`: `0`이면 dev 자동 main 승격 비활성화
 - `AWS_AUTO_DEPLOY`: `0`이면 main push 자동 AWS 배포 비활성화
 - `GIT_CHECKOUT_CACHE_ENABLED`: 기본 AWS CD `1`
