@@ -297,6 +297,31 @@ class CommandHeartbeatRequest(CommandStartRequest):
     pass
 
 
+class AlertmanagerAlert(StrictModel):
+    """Alertmanager webhook payload 의 alert 항목 — 외부 계약이라 필드명 camelCase 유지."""
+
+    model_config = ConfigDict(extra="allow")
+
+    status: str = "firing"
+    labels: dict[str, Any] = Field(default_factory=dict)
+    annotations: dict[str, Any] = Field(default_factory=dict)
+    startsAt: str = ""  # noqa: N815 — Alertmanager 계약 필드명
+    endsAt: str = ""  # noqa: N815
+    fingerprint: str = ""
+
+
+class AlertmanagerWebhookRequest(StrictModel):
+    """Alertmanager v4 webhook — https://prometheus.io/docs/alerting/latest/configuration/#webhook_config"""
+
+    model_config = ConfigDict(extra="allow")
+
+    version: str = "4"
+    groupKey: str = ""  # noqa: N815
+    status: str = "firing"
+    receiver: str = ""
+    alerts: list[AlertmanagerAlert] = Field(default_factory=list)
+
+
 class CommandResultRequest(StrictModel):
     model_config = ConfigDict(extra="allow")
 
