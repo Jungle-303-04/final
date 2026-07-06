@@ -25,8 +25,17 @@ export default function RepoDetailView() {
       <QueryBoundary query={appQ}>{app => (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>{app.name} <code style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{app.repo_ref}@{app.branch}</code></h1>
-          <a href={`https://github.com/${app.repo_ref}`} target="_blank" rel="noreferrer"><Button>GitHub ↗</Button></a>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a href={`https://github.com/${app.repo_ref}/blob/${app.branch}/${app.manifest_path}`} target="_blank" rel="noreferrer"><Button>manifest 수정 ↗</Button></a>
+            <a href={`https://github.com/${app.repo_ref}`} target="_blank" rel="noreferrer"><Button>GitHub ↗</Button></a>
+          </div>
         </div>
+      )}</QueryBoundary>
+      <QueryBoundary query={appQ}>{app => (
+        <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', margin: '-8px 0 12px' }}>
+          manifest(<code>{app.manifest_path}</code>)는 Git 이 원본입니다 — GitHub 에서 수정해 커밋하면
+          webhook/poller 가 감지해 자동으로 run 이 생성됩니다. 콘솔에서는 직접 수정하지 않습니다.
+        </p>
       )}</QueryBoundary>
       <Tabs current={tab} onChange={k => setSp({ tab: k })} items={[
         { key: 'runs', label: 'Runs', badge: runs.length },
