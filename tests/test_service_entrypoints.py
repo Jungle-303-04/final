@@ -151,8 +151,10 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
 def test_gateway_pool_capacity_covers_agent_long_poll_fanout() -> None:
     services = read_project_file("deploy/management/services.yaml")
 
-    assert '- name: DB_POOL_SIZE\n              value: "8"' in services
-    assert '- name: DB_MAX_OVERFLOW\n              value: "8"' in services
+    # 게이트웨이는 세션 API + agent 롱폴 동시성 최대 지점 — pgbouncer(transaction
+    # pooling)가 서버 커넥션을 다중화하므로 클라이언트 풀 16+16 으로 폴 팬아웃을 흡수한다.
+    assert '- name: DB_POOL_SIZE\n              value: "16"' in services
+    assert '- name: DB_MAX_OVERFLOW\n              value: "16"' in services
     assert '- name: DB_POOL_TIMEOUT_SECONDS\n              value: "20"' in services
 
 

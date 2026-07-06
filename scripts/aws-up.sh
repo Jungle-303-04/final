@@ -625,6 +625,9 @@ EOF
 
   local secret_args=(
     --from-literal=DATABASE_URL="${DATABASE_URL}"
+    # 롱폴 웨이크업(LISTEN/NOTIFY) 전용 직결 URL — pgbouncer(transaction pooling)
+    # 경유로는 LISTEN 이 불가해 postgres 에 직접 붙는다(게이트웨이당 커넥션 1개).
+    --from-literal=COMMAND_NOTIFY_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}"
     --from-literal=GITHUB_WEBHOOK_SECRET="${GITHUB_WEBHOOK_SECRET}"
   )
   if valid_github_token "${GITHUB_TOKEN}"; then
