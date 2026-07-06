@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import httpx
 
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
+from domains.alert.repository import severity_matches
 from packages.config.logs import get_logger
 from packages.config.settings import env
 from packages.contracts.alert.provider import AlertProvider
@@ -135,6 +136,34 @@ def build_alert_provider(name: str | None = None) -> AlertProvider:
 ALERT_PROVIDER: AlertProvider = build_alert_provider()
 
 
+async def dispatch_to_channel(
+    alert: AlertRequestedBody, channel: dict[str, object]
+) -> AlertDispatchedBody:
+    """워크스페이스 채널 1개로 webhook 발송 — 채널 이름이 dispatched.channel 이 된다."""
+    timeout = float(env(ALERT_HTTP_TIMEOUT_SECONDS_ENV, DEFAULT_ALERT_HTTP_TIMEOUT_SECONDS))
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(str(channel["url"]), json=alert.to_body())
+        response.raise_for_status()
+    return dispatched_body(alert, channel=str(channel["name"]), mode=WEBHOOK_PROVIDER_NAME)
+
+
+async def matching_channels(
+    evt: AlertRequestedBody, ctx: EventContext[object]
+) -> list[dict[str, object]]:
+    """워크스페이스의 enabled 채널 중 min_severity 를 충족하는 것 — 저장소 없으면 빈 목록."""
+    lister = getattr(ctx.db, "list_alert_channels", None)
+    if lister is None:
+        return []
+    # 위치 인자만 사용 — 테스트 대역(범용 spy)과의 호환을 위해 kwargs 를 강제하지 않는다.
+    channels = await lister(evt.workspace_id) or []
+    return [
+        dict(channel)
+        for channel in channels
+        if bool(channel.get("enabled", True))
+        and severity_matches(str(channel.get("min_severity", "warning")), evt.severity)
+    ]
+
+
 @app.on(AlertRequestedBody)
 async def on_alert_requested(
     evt: AlertRequestedBody, ctx: EventContext[object]
@@ -143,6 +172,34 @@ async def on_alert_requested(
     if not decision.allowed:
         LOGGER.warning("alert rejected", extra={"context": {"reason": decision.reason}})
         yield AlertRejectedBody(reason=decision.reason, requested=evt.to_body())
+        return
+
+    # 라우팅 룰 — 워크스페이스 채널이 있으면 severity 매칭 채널 전부로 발송.
+    # 채널이 하나도 없으면 기존 전역 provider(env) 폴백: 도입 전과 동작 동일.
+    channels = await matching_channels(evt, ctx)
+    if channels:
+        delivered = 0
+        for channel in channels:
+            try:
+                yield await dispatch_to_channel(evt, channel)
+                delivered += 1
+            except Exception as exc:  # noqa: BLE001 - 채널별 실패는 다른 채널을 막지 않음
+                LOGGER.warning(
+                    "alert channel dispatch failed",
+                    extra={
+                        "context": {
+                            "channel": channel.get("name"),
+                            "severity": evt.severity,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
+        if delivered == 0:
+            # 전 채널 실패 — 전송 확인 없이는 next_command 를 이어주지 않음(fail-closed).
+            yield AlertRejectedBody(reason=ALERT_DISPATCH_FAILED_REASON, requested=evt.to_body())
+            return
+        if evt.next_command is not None:
+            yield evt.next_command
         return
 
     try:

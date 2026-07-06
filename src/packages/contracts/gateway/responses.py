@@ -248,6 +248,22 @@ class ClusterConnectionStatusResponse(StrictModel):
     agents: list[ClusterAgentStatus] = Field(default_factory=list)
 
 
+class AlertChannelResponse(StrictModel):
+    channel_id: str
+    workspace_id: str
+    name: str
+    kind: str
+    url: str
+    min_severity: str
+    enabled: bool
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class AlertChannelListResponse(StrictModel):
+    channels: list[AlertChannelResponse] = Field(default_factory=list)
+
+
 class DeadLettersResponse(StrictModel):
     dead_letters: list[JsonMap]
 
