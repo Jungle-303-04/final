@@ -11,6 +11,7 @@ tmp/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.import_linter_cache/
 *.py[cod]
 dist/
 build/
