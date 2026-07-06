@@ -17,11 +17,14 @@ const state = {
   grants: structuredClone(fx.grants),
   runsByApp: structuredClone(fx.runsByApp),
   deadLetters: structuredClone(fx.deadLetters),
+  commands: new Map<string, { cluster_id: string; correlation_id: string; queued_at: number }>(),
 };
 
 const delay = (ms = 180) => new Promise(r => setTimeout(r, ms));
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// mock 전용 — 데모 핸들러가 임의 JSON body 를 다루므로 any 허용(실 API 경로 아님).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (params: Record<string, string>, body: any, query: URLSearchParams) => unknown;
 const routes: [string, string, Handler][] = [
   ['GET', '/auth/session', () => state.session ?? { authenticated: false }],
@@ -45,15 +48,67 @@ const routes: [string, string, Handler][] = [
   ['GET', '/clusters', () => ({ clusters: fx.clusters })],
   ['GET', '/clusters/:id', (p) => ({ cluster: fx.clusters.find(c => c.cluster_id === p.id) ?? err404() })],
   ['GET', '/clusters/:id/connection-status', (p) => ({ cluster_id: p.id, connection_status: 'connected' })],
-  ['GET', '/clusters/:id/inventory/summary', (p) => fx.summaryOf(p.id)],
+  // 실 backend inventory 계약과 동형으로 응답한다 — adapt.ts 는 실 계약만 해석하므로
+  // mock 이 프론트 최종 형태를 직접 주면 nodes/pods/services 가 전부 빈 값으로 붕괴한다.
+  ['GET', '/clusters/:id/inventory/summary', (p) => ({
+    cluster_id: p.id,
+    latest_snapshot: { snapshot_id: `snap-${p.id}`, cluster_id: p.id, status: 'completed', summary: fx.summaryOf(p.id) },
+    counts: {},
+  })],
   ['GET', '/clusters/:id/inventory/workloads', (p) => ({ workloads: fx.workloadsByCluster[p.id] ?? [] })],
-  ['GET', '/clusters/:id/inventory/resources', (_p, _b, q) => ({ resources: fx.resources.filter(r => !q.get('kind') || r.kind === q.get('kind')) })],
-  ['GET', '/clusters/:id/inventory/services', () => ({ services: fx.services })],
-  ['GET', '/clusters/:id/inventory/events', () => ({ events: fx.events })],
+  ['GET', '/clusters/:id/inventory/resources', (p, _b, q) => {
+    const rt = q.get('resource_type');
+    if (rt === 'pod') {
+      return {
+        cluster_id: p.id, resource_type: rt,
+        resources: (fx.workloadsByCluster[p.id] ?? []).map(w => ({
+          resource_type: 'pod', kind: 'Pod', namespace: w.namespace, name: w.name,
+          status: w.phase, health: w.hot ? 'degraded' : 'healthy',
+          summary: {
+            phase: w.phase, ready: w.ready, restart_total: w.restarts, image: w.image,
+            node_name: w.node, owner_kind: w.kind, owner_name: w.workload_name ?? w.name.replace(/-\d+$/, ''),
+          },
+        })),
+      };
+    }
+    return {
+      cluster_id: p.id, resource_type: rt,
+      resources: fx.resources
+        .filter(r => !rt || r.kind.toLowerCase() === rt.toLowerCase())
+        .map(r => ({ resource_type: r.kind.toLowerCase(), kind: r.kind, namespace: r.namespace, name: r.name, status: r.status, observed_at: r.age })),
+    };
+  }],
+  ['GET', '/clusters/:id/inventory/services', (p) => ({
+    cluster_id: p.id, resource_type: 'service',
+    resources: fx.services.map(s => ({
+      resource_type: 'service', kind: 'Service', namespace: s.namespace, name: s.name, status: 'active',
+      summary: {
+        type: s.type, cluster_ip: s.cluster_ip,
+        ports: s.ports.split(',').map(x => { const [port, protocol] = x.trim().split('/'); return { port: Number(port), protocol }; }),
+      },
+    })),
+  })],
+  ['GET', '/clusters/:id/inventory/events', (p) => ({
+    cluster_id: p.id, resource_type: 'event',
+    resources: fx.events.map((e, i) => {
+      const [kind, name] = e.target.split('/');
+      return {
+        resource_type: 'event', kind: 'Event', namespace: 'sandbox', name: `${name}.evt-${i}`, status: e.type,
+        summary: { type: e.type, reason: e.reason, message: e.message, involved_kind: kind, involved_name: name, last_timestamp: e.at },
+      };
+    }),
+  })],
   ['POST', '/clusters/:id/namespaces/:ns/deployments/:name/scale', () => ({ accepted: true })],
   ['POST', '/clusters/:id/namespaces/:ns/deployments/:name/restart', () => ({ accepted: true })],
   ['PUT', '/clusters/:id/policy', () => ({ accepted: true })],
-  ['POST', '/targets', () => ({ registered: true, applied: false, agent_token: `agt_${uid()}${uid()}`, install_manifest: 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: target\n# … (mock manifest)' })],
+  ['POST', '/targets', () => {
+    const agent_token = `agt_${uid()}${uid()}`;
+    return {
+      registered: true, applied: false, agent_token,
+      install_command: `curl -fsSL ${location.origin}/api/install/${agent_token} | kubectl apply -f -`,
+      install_manifest: 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: target\n# … (mock manifest)',
+    };
+  }],
   ['GET', '/providers/catalog', () => ({ providers: { cloud: [ { key: 'existing-k8s', label: '기존 Kubernetes', status: 'available' } ], deploy: [ { key: 'manual-manifest', label: '수동 manifest 적용', status: 'available' } ], source: [ { key: 'github', label: 'GitHub', status: 'available' } ], secret: [ { key: 'env', label: '환경 변수', status: 'available' } ] } })],
   ['POST', '/providers/validate', () => ({ valid: true, errors: [], warnings: [] })],
 
@@ -94,7 +149,33 @@ const routes: [string, string, Handler][] = [
     d.status = 'replayed';
     return { accepted: true, dead_letter_id: d.id };
   }],
-  ['POST', '/agent/debug/query', () => ({ accepted: true, command_id: `cmd-${uid()}`, correlation_id: uid() })],
+  ['POST', '/agent/debug/query', (_p, b) => {
+    const command_id = `cmd-${uid()}`;
+    const correlation_id = uid();
+    state.commands.set(command_id, { cluster_id: b?.cluster_id ?? 'target', correlation_id, queued_at: Date.now() });
+    return { accepted: true, command_id, correlation_id };
+  }],
+  // 실 계약과 동일한 명령 상태 폴링 — 잠시 running 후 completed 로 전이(데모)
+  ['GET', '/commands/:id', (p) => {
+    const cmd = state.commands.get(p.id) ?? err404();
+    const elapsed = Date.now() - cmd.queued_at;
+    const status = elapsed < 1500 ? 'running' : 'completed';
+    return {
+      command_id: p.id,
+      cluster_id: cmd.cluster_id,
+      correlation_id: cmd.correlation_id,
+      action: 'telemetry.query.run',
+      status,
+      result: status !== 'completed' ? {} : {
+        status: 'completed', applied: false, message: 'telemetry query executed',
+        result: { source: 'prometheus', results: { console_promql: {
+          query_mode: 'range', result_type: 'matrix', point_count: 20,
+          series: [{ metric: { pod: 'checkout-api' }, values: Array.from({ length: 20 }, (_, i) => ({ timestamp: cmd.queued_at / 1000 + i * 15, value: 0.3 + 0.05 * Math.sin(i) })) }],
+        } } },
+      },
+      completed_at: status === 'completed' ? new Date().toISOString() : null,
+    };
+  }],
 
   // 갭 API (G1~G5, G10) — docs/fd/06 계약 초안 구현
   ['GET', '/orgs', () => ({ orgs: state.orgs })],

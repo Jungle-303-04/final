@@ -1,15 +1,17 @@
 import os, sys
 from playwright.sync_api import sync_playwright
 
-BASE = 'http://localhost:4173'
+BASE = os.environ.get('SMOKE_BASE', 'http://localhost:4173')
 CHROME = os.path.expanduser('~/.cache/ms-playwright/chromium-1228/chrome-linux/chrome')
+SHOTS = os.environ.get('SMOKE_SHOTS_DIR', '/tmp/shots')
+os.makedirs(SHOTS, exist_ok=True)
 passed, failed = [], []
 def ok(name): passed.append(name); print(f'  ✓ {name}', flush=True)
 def bad(name, e): failed.append((name, str(e)[:160])); print(f'  ✗ {name}: {str(e)[:160]}', flush=True)
 
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path=CHROME, args=['--no-sandbox','--disable-gpu','--disable-dev-shm-usage'],
-                          env={'LD_LIBRARY_PATH': '/tmp/locallibs/usr/lib/aarch64-linux-gnu'})
+                          env={**os.environ, 'LD_LIBRARY_PATH': '/tmp/locallibs/usr/lib/aarch64-linux-gnu'})
     pg = b.new_page(viewport={'width': 1440, 'height': 900})
     pg.set_default_timeout(8000)
     errors = []
@@ -19,7 +21,7 @@ with sync_playwright() as p:
         try: fn(); ok(name)
         except Exception as e:
             bad(name, e)
-            pg.screenshot(path=f'/tmp/shots/fail-{len(failed)}.png')
+            pg.screenshot(path=f'{SHOTS}/fail-{len(failed)}.png')
 
     def s1():
         pg.goto(f'{BASE}/overview'); pg.wait_for_url('**/login**')
@@ -28,7 +30,7 @@ with sync_playwright() as p:
         pg.fill('input[type=password]', 'local-test-password-1234')
         pg.click('button[type=submit]'); pg.wait_for_url('**/overview')
         pg.wait_for_selector('[data-testid=treemap]')
-        pg.screenshot(path='/tmp/shots/01-overview-heatmap.png')
+        pg.screenshot(path=f'{SHOTS}/01-overview-heatmap.png')
     step('로그인 → 히트맵 렌더', s2)
     def s3():
         pg.goto(f'{BASE}/overview/c/target'); pg.wait_for_selector('[data-testid=treemap]')
@@ -40,13 +42,13 @@ with sync_playwright() as p:
         for tab in ['팟', '노드', '서비스', '이벤트']:
             pg.locator('div.tabs button', has_text=tab).first.click()
             pg.wait_for_timeout(350)
-        pg.screenshot(path='/tmp/shots/02-cluster-detail.png')
+        pg.screenshot(path=f'{SHOTS}/02-cluster-detail.png')
     step('클러스터 상세 탭 순회', s4)
     def s5():
         pg.goto(f'{BASE}/repos'); pg.wait_for_selector('tbody tr')
         pg.locator('tbody tr', has_text='checkout-api').first.click()
         pg.wait_for_selector('text=승인 대기')
-        pg.screenshot(path='/tmp/shots/03-repo-runs.png')
+        pg.screenshot(path=f'{SHOTS}/03-repo-runs.png')
         pg.locator('button', has_text='승인').first.click()
         pg.wait_for_selector('text=승인 완료 — 배포가 진행됩니다')
     step('run 승인 → 전이 토스트', s5)
@@ -54,7 +56,7 @@ with sync_playwright() as p:
         pg.goto(f'{BASE}/workflows'); pg.wait_for_selector('tbody tr')
         pg.locator('tbody tr').first.click()
         pg.wait_for_selector('.react-flow')
-        pg.screenshot(path='/tmp/shots/04-workflow-graph.png')
+        pg.screenshot(path=f'{SHOTS}/04-workflow-graph.png')
     step('워크플로우 노드 그래프', s6)
     def s7():
         pg.goto(f'{BASE}/ai'); pg.wait_for_selector('text=sandbox CrashLoop 원인 분석')
@@ -69,14 +71,15 @@ with sync_playwright() as p:
         pg.click('[data-testid=chat-send]')
         pg.wait_for_selector('[data-testid=typing]')
         pg.wait_for_selector('text=확인했습니다', timeout=10000)
-        pg.screenshot(path='/tmp/shots/05-ai-chat.png')
+        pg.screenshot(path=f'{SHOTS}/05-ai-chat.png')
     step('채팅 왕복(waiting→응답)', s8)
     def s9():
         pg.goto(f'{BASE}/metrics'); pg.wait_for_timeout(2000)
         pg.locator('button', has_text='실행').first.click()
         pg.wait_for_selector('[data-testid=query-card]')
-        pg.wait_for_selector('text=결과 3 series', timeout=10000)
-        pg.screenshot(path='/tmp/shots/06-metrics.png')
+        # 명령 상태 폴링(GET /commands/{id}) 실측 요약 — "N series · M pts · 평균 X.XX"
+        pg.wait_for_selector('text=series ·', timeout=10000)
+        pg.screenshot(path=f'{SHOTS}/06-metrics.png')
     step('비동기 쿼리 카드 queued→done', s9)
     def s10():
         pg.goto(f'{BASE}/notifications'); pg.wait_for_selector('text=인시던트')
@@ -90,7 +93,7 @@ with sync_playwright() as p:
         pg.goto(f'{BASE}/settings/orgs'); pg.click('[data-testid=new-org]')
         pg.fill('[data-testid=org-name]', 'QA조직'); pg.click('[data-testid=org-submit]')
         pg.wait_for_selector('td >> text=QA조직')
-        pg.screenshot(path='/tmp/shots/07-org-admin.png')
+        pg.screenshot(path=f'{SHOTS}/07-org-admin.png')
     step('조직 생성', s12)
     def s13():
         pg.goto(f'{BASE}/clusters')
@@ -100,7 +103,7 @@ with sync_playwright() as p:
         pg.fill('[data-testid=cluster-id]', 'qa-cluster')
         pg.click('[data-testid=wizard-next]')
         pg.wait_for_selector('[data-testid=agent-token]')
-        pg.screenshot(path='/tmp/shots/08-cluster-wizard.png')
+        pg.screenshot(path=f'{SHOTS}/08-cluster-wizard.png')
     step('클러스터 등록 위저드 → 토큰 발급', s13)
     def s14():
         pg.locator('button', has_text='완료').click()

@@ -15,6 +15,7 @@ from domains.target.router import (
     apply_manifest_with_kubectl,
     cluster_connection_status,
     get_cluster_connection_status,
+    install_manifest_by_token,
     list_clusters,
     register_target,
     schedule_evidence_jobs,
@@ -558,3 +559,72 @@ def test_target_registration_wraps_writes_and_event_in_single_transaction() -> N
     assert db.calls == [("register", True), ("policy", True), ("desired_states", True)]
     assert events.accepted_in_uow == [True]
     assert db.uow_active is False
+
+
+class FakeInstallLinkDb:
+    """원라인 인스톨러용 — 토큰 해시 대조 + 등록 설정 재조회만 제공."""
+
+    def __init__(self, token: str, settings: dict[str, object]) -> None:
+        self.token_hash = hash_agent_token(token)
+        self.settings = settings
+
+    def authenticate_cluster_agent(self, token_hash: str) -> dict[str, object] | None:
+        if token_hash != self.token_hash:
+            return None
+        return {"workspace_id": "default", "cluster_id": "target-cluster-01"}
+
+    def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": self.settings,
+        }
+
+
+def test_install_manifest_by_token_serves_same_manifest_as_registration() -> None:
+    token = "install-token-1"
+    settings = target_request().model_dump(exclude={"apply", "kube_context"})
+    db = FakeInstallLinkDb(token, settings)
+
+    response = asyncio.run(install_manifest_by_token(token, db=db))
+
+    assert response.media_type == "text/yaml"
+    body = response.body.decode()
+    assert 'AGENT_TOKEN: "install-token-1"' in body
+    assert "name: cluster-agent" in body
+    assert body == target_install_manifest(target_request(), token)
+
+
+def test_install_manifest_by_token_rejects_unknown_token() -> None:
+    db = FakeInstallLinkDb(
+        "real-token", target_request().model_dump(exclude={"apply", "kube_context"})
+    )
+    try:
+        asyncio.run(install_manifest_by_token("wrong-token", db=db))
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("expected HTTPException")
+
+
+def test_target_registration_returns_one_line_install_command() -> None:
+    db = FakeDb()
+    events = FakeEvents()
+
+    async def run():
+        return await register_target(
+            target_request(),
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.install_command.startswith(
+        "curl -fsSL http://management.local:30080/api/install/"
+    )
+    assert response.install_command.endswith("| kubectl apply -f -")
+    assert response.agent_token in response.install_command

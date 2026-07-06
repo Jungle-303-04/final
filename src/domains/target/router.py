@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -246,6 +247,19 @@ def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
     return result.stdout
 
 
+def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
+    """원라인 설치 명령 — 토큰이 박힌 manifest URL 을 kubectl 로 바로 적용.
+
+    base 는 등록 payload 의 management_base_url(agent 가 접속하는 공개 게이트웨이 주소)
+    그대로 사용 — 서버가 임의 호스트를 합성하지 않음.
+    """
+    base = payload.management_base_url.strip().rstrip("/")
+    if not base:
+        return ""
+    path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
+    return f"curl -fsSL {base}{path} | kubectl apply -f -"
+
+
 def install_response(
     payload: TargetRegisterRequest, manifest: str, apply_output: str | None, agent_token: str
 ) -> TargetInstallResponse:
@@ -257,6 +271,7 @@ def install_response(
         apply_output=apply_output,
         install_manifest=manifest,
         agent_token=agent_token,
+        install_command=install_command_for(payload, agent_token),
     )
 
 
@@ -407,6 +422,28 @@ async def register_target(
             )
         )
     return install_response(scoped_payload, manifest, apply_output, agent_token)
+
+
+@router.get(gateway_routes.INSTALL_MANIFEST_PATH, include_in_schema=True)
+async def install_manifest_by_token(
+    agent_token: str,
+    db: Any = Depends(get_db),
+) -> PlainTextResponse:
+    """원라인 인스톨러 — `curl <base>/install/<token> | kubectl apply -f -`.
+
+    토큰 자체가 자격증명: 해시 대조로 등록 클러스터를 찾고, 저장된 등록 설정으로
+    같은 manifest 를 재렌더해 YAML 로 반환함(서버는 토큰 원문·manifest 를 저장하지 않음).
+    미등록/불일치 토큰은 404 — 존재 여부를 구분해 주지 않음.
+    """
+    identity = db.authenticate_cluster_agent(hash_agent_token(agent_token))
+    if identity is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
+    if registration is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
+    payload = TargetRegisterRequest(**(registration.get("settings") or {}))
+    manifest = target_install_manifest(payload, agent_token)
+    return PlainTextResponse(manifest, media_type="text/yaml")
 
 
 @router.get(gateway_routes.CLUSTERS_PATH, response_model=ClusterListResponse)

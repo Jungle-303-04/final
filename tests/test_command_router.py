@@ -10,6 +10,7 @@ from domains.command.router import (
     agent_debug_query,
     command_heartbeat,
     command_start,
+    command_status,
     commands,
     scale_deployment,
 )
@@ -386,6 +387,78 @@ def test_command_heartbeat_rejects_stale_lease() -> None:
             )
         except HTTPException as exc:
             assert exc.status_code == 404
+        else:
+            raise AssertionError("expected HTTPException")
+
+    asyncio.run(run())
+
+
+class SpyCommandStatusDb(SpyAccessDb):
+    def __init__(self, allowed: bool, row: dict[str, object] | None) -> None:
+        super().__init__(allowed)
+        self.row = row
+        self.requested: list[tuple[str, str]] = []
+
+    async def get_agent_command(
+        self, command_id: str, workspace_id: str
+    ) -> dict[str, object] | None:
+        self.requested.append((command_id, workspace_id))
+        return self.row
+
+
+def completed_command_row() -> dict[str, object]:
+    return {
+        "command_id": "cmd-debug-abc",
+        "cluster_id": "cluster-1",
+        "correlation_id": "corr-debug-1",
+        "action": "telemetry.query.run",
+        "status": "completed",
+        "result": {
+            "status": "completed",
+            "applied": True,
+            "message": "telemetry query executed",
+            "result": [{"metric": {"pod": "checkout"}, "values": [[1, "0.2"]]}],
+        },
+        "completed_at": None,
+    }
+
+
+def test_command_status_returns_row_scoped_to_workspace() -> None:
+    async def run() -> None:
+        db = SpyCommandStatusDb(allowed=True, row=completed_command_row())
+        response = await command_status("cmd-debug-abc", current_session(), db)
+
+        assert db.requested == [("cmd-debug-abc", "workspace-1")]
+        assert db.calls == [("user-1", "workspace-1", "cluster", "cluster-1", "evidence.read")]
+        assert response.status == "completed"
+        assert response.action == "telemetry.query.run"
+        assert response.result["applied"] is True
+        assert response.result["result"][0]["metric"] == {"pod": "checkout"}
+
+    asyncio.run(run())
+
+
+def test_command_status_missing_command_is_not_found() -> None:
+    async def run() -> None:
+        db = SpyCommandStatusDb(allowed=True, row=None)
+        try:
+            await command_status("cmd-missing", current_session(), db)
+        except HTTPException as exc:
+            assert exc.status_code == 404
+        else:
+            raise AssertionError("expected HTTPException")
+
+    asyncio.run(run())
+
+
+def test_command_status_denies_without_cluster_read_access() -> None:
+    async def run() -> None:
+        db = SpyCommandStatusDb(allowed=False, row=completed_command_row())
+        try:
+            await command_status("cmd-debug-abc", current_session(), db)
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail == RESOURCE_ACCESS_DENIED
         else:
             raise AssertionError("expected HTTPException")
 

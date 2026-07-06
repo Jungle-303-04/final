@@ -61,6 +61,9 @@ class GitHubPoller:
         self.once = env_truthy(Settings.POLL_ONCE_ENV)  # CronJob 모드면 1회 후 종료.
         self._client = client
         self._last_sha: str | None = None  # 같은 커밋 중복 POST 만 줄이는 메모리 가드(최소)
+        # ETag 조건부 요청 — 변경 없으면 304 로 응답받아 GitHub rate limit 을 소모하지 않음
+        # (Plural GitOps 아키텍처의 'SCM provider 를 압박하지 않는 폴링' 원칙).
+        self._etag: str | None = None
 
     async def run(self) -> None:
         if self._client is not None:
@@ -124,6 +127,8 @@ class GitHubPoller:
             params={"per_page": 1, "sha": self.branch},
             headers=self._github_headers(),
         )
+        if response.status_code == Settings.NOT_MODIFIED_STATUS_CODE:
+            return None  # ETag 일치 — 새 커밋 없음(rate limit 미소모).
         if response.status_code in Settings.SOFT_SKIP_STATUS_CODES:
             LOGGER.info(
                 "github_poll_skipped",
@@ -150,6 +155,7 @@ class GitHubPoller:
             )
             return None
         response.raise_for_status()
+        self._etag = response.headers.get("etag") or self._etag
         commits = response.json()
         return commits[0]["sha"] if commits else None
 
@@ -191,6 +197,9 @@ class GitHubPoller:
         return headers
 
     def _github_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
         if self.token:
-            return {"Authorization": f"Bearer {self.token}"}
-        return {}
+            headers["Authorization"] = f"Bearer {self.token}"
+        if self._etag:  # 조건부 요청 — 변경 없으면 304.
+            headers["If-None-Match"] = self._etag
+        return headers

@@ -74,6 +74,18 @@ class AgentDebugQueryResponse(StrictModel):
     correlation_id: str
 
 
+class CommandStatusResponse(StrictModel):
+    """브라우저 콘솔이 명령 진행 상태·실제 결과를 조회하는 응답 — 가짜 완료 표시 금지 계약."""
+
+    command_id: str
+    cluster_id: str
+    correlation_id: str
+    action: str
+    status: str
+    result: dict[str, Any] = Field(default_factory=dict)
+    completed_at: str | None = None
+
+
 class RcaTimelineItem(StrictModel):
     workspace_id: str
     correlation_id: str
@@ -176,6 +188,8 @@ class TargetInstallResponse(StrictModel):
     # 이 클러스터의 per-cluster agent 토큰(원문). 등록 관리자에게 1회 반환 —
     # agent 배포 secret 주입 및 agent 인증(x-agent-token)에 사용. 서버는 해시만 저장.
     agent_token: str
+    # 원라인 설치 명령 — curl <base>/install/<token> | kubectl apply -f -
+    install_command: str = ""
 
 
 class ClusterAgentStatus(StrictModel):
