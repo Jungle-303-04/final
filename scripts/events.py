@@ -27,12 +27,19 @@ def _load(path: Path, name: str) -> None:
         raise RuntimeError(f"cannot load: {path}")
     # 서비스 내부 모듈(command_config 등) import 를 위해 디렉토리를 path 에.
     sys.path.insert(0, str(path.parent))
+    # 이전 워커의 로컬 events 모듈이 sys.modules 에 남아 있으면
+    # 다음 워커가 자기 events.py 를 import 하지 못한다. 격리를 위해 제거.
+    stale_events = sys.modules.pop("events", None)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     try:
         spec.loader.exec_module(module)
     finally:
         sys.path.remove(str(path.parent))
+        # 로드 후에도 로컬 events 를 정리하여 다음 워커에 영향 방지.
+        sys.modules.pop("events", None)
+        if stale_events is not None:
+            pass  # 이전 것은 복원하지 않음 — 각 워커가 독립 로드
 
 
 def main() -> None:
