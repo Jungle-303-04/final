@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -21,6 +21,7 @@ status: synced
 | import | `packages.events` | [events](events.md) | `NatsEventBus`, `RecordedEventClient`, `DeadLetterSink`, `event_causation`, `event()` |
 | import | `packages.storage` | [storage](storage.md) | `Database`, `wait_for_database`, `has_active_connection` |
 | 외부 | FastAPI, uvicorn | — | http 서비스 실행 |
+| 외부 | psycopg | — | `command_wakeup` 의 Postgres LISTEN 직결 연결 |
 | 발행 | `dead_letter.created` (DeadLetterSink 경유) | [events](events.md#이벤트-events) | 재시도 소진/디코드 실패 |
 
 ## 공개 인터페이스 (Public API)
@@ -227,7 +228,8 @@ class ApiEventGateway:
 | `wakeup_key(workspace_id, cluster_id)` | payload 문자열 `"<workspace_id>/<cluster_id>"` 생성 |
 | `CommandWakeup.wait(workspace_id, cluster_id, timeout)` | 같은 key의 `asyncio.Event`를 등록하고 알림 또는 timeout까지 대기. 알림이 없으면 sleep과 같은 의미 |
 | `CommandWakeup.notify_local(payload)` | payload key에 해당하는 모든 waiter를 깨우고 깨운 수를 반환 |
-| `CommandWakeup.start(notify_url)` | 중복 실행이면 no-op, 아니면 background task로 Postgres `LISTEN agent_command_queued` 시작 |
+| `CommandWakeup.listening` | property — listener task가 살아 있는지(있고 done 아님) |
+| `CommandWakeup.start(notify_url)` | 중복 실행(`listening`)이면 no-op, 아니면 background task로 Postgres `LISTEN agent_command_queued` 시작. listener 예외는 warning 로그 후 `RECONNECT_DELAY_SECONDS` 대기 재접속(fail-open) |
 | `CommandWakeup.stop()` | background listener task 취소 |
 | `WAKEUP` | gateway/command router가 공유하는 프로세스 전역 인스턴스 |
 

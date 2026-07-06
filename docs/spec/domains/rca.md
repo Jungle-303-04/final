@@ -1,15 +1,16 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
 # rca — 증거 수신·근본원인분석(RCA)·복구 계획 도메인
 
-> 소스: `src/domains/rca/` · 테스트: `tests/test_rca_evidence.py`, `tests/test_rca_feedback_flow.py`, `tests/test_agent_evidence_ingest.py`, `tests/test_operational_event_followups.py`, `tests/test_schemas.py`
+> 소스: `src/domains/rca/` · 테스트: `tests/test_rca_evidence.py`, `tests/test_rca_feedback_flow.py`, `tests/test_agent_evidence_ingest.py`, `tests/test_alertmanager_webhook.py`, `tests/test_operational_event_followups.py`, `tests/test_schemas.py`
 
 ## 책임 (Responsibility)
 
 - 클러스터 agent가 보낸 **증거(evidence)를 HTTP로 수신**하고 `cluster.evidence.received` 이벤트로 변환·중복 제거하여 이벤트 버스에 적재한다.
+- 외부 모니터링(Alertmanager) **webhook을 수신**해 firing 알림을 같은 `cluster.evidence.received` 파이프라인으로 흘려 인시던트를 트리거한다(Bearer 토큰 인증, evidence-window dedup).
 - RCA 파이프라인 전 구간(증거 정규화 → 장애 감지 → 근거 번들 → 원인 후보 생성/평가 → 완료/차단/후속조치 → 복구 계획/선택 → Safe PR 패치)의 **이벤트 body 계약을 정의**한다.
 - 증거·RCA 리포트·RCA backlog·복구 계획을 **DB에 영속**한다(`RcaRepository`).
 - 사람이 복구 후보를 **선택하는 HTTP 엔드포인트**를 제공하고, 선택 시 승인 레코드 생성 + `recovery.action_selected` 이벤트를 발행한다.
@@ -24,6 +25,7 @@ status: synced
 | import | `packages.contracts.identity` | [contracts](../packages/contracts.md) | `DEFAULT_WORKSPACE_ID`, `Permission`, `ResourceRole` |
 | import | `packages.contracts.auth` | [contracts](../packages/contracts.md) | `Actor` |
 | import | `packages.contracts.gateway` | [contracts](../packages/contracts.md) | 라우트 경로 상수, `AgentEvidenceRequest`, `RecoveryActionSelectRequest`, `AcceptedResponse` |
+| import | `packages.config.settings` | [config](../packages/config.md) | `env()` — Alertmanager webhook 토큰 조회 |
 | import | `packages.events.envelope` | [events](../packages/events.md) | `event()` 봉투 생성 |
 | import | `packages.runtime.dependencies` | [runtime](../packages/runtime.md) | `get_db`, `get_events` FastAPI 의존성 |
 | import | `packages.storage.base` / `packages.storage.engine` | [storage](../packages/storage.md) | `Base`, 컬럼 헬퍼, `DatabaseConnection`, `unit_of_work_or_null` |
@@ -75,6 +77,17 @@ status: synced
 | `RECOVERY_SELECTION_ACCESS_DENIED` | `"recovery selection access denied"` | `src/domains/rca/router.py :: RECOVERY_SELECTION_ACCESS_DENIED` |
 | `HTTP_NOT_FOUND` | `404` | `src/domains/rca/router.py :: HTTP_NOT_FOUND` |
 | `HTTP_CONFLICT` | `409` | `src/domains/rca/router.py :: HTTP_CONFLICT` |
+| `ALERTMANAGER_WEBHOOK_TOKEN_ENV` | `"ALERTMANAGER_WEBHOOK_TOKEN"` | `src/domains/rca/router.py :: ALERTMANAGER_WEBHOOK_TOKEN_ENV` |
+| `ALERTMANAGER_SOURCE_ID` | `"alertmanager-webhook"` | `src/domains/rca/router.py :: ALERTMANAGER_SOURCE_ID` |
+| `WEBHOOK_NOT_CONFIGURED` | `"alertmanager webhook is not configured"` | `src/domains/rca/router.py :: WEBHOOK_NOT_CONFIGURED` |
+| `WEBHOOK_TOKEN_INVALID` | `"invalid webhook token"` | `src/domains/rca/router.py :: WEBHOOK_TOKEN_INVALID` |
+| `CLUSTER_NOT_REGISTERED` | `"cluster is not registered"` | `src/domains/rca/router.py :: CLUSTER_NOT_REGISTERED` |
+| `HTTP_UNAUTHORIZED` | `401` | `src/domains/rca/router.py :: HTTP_UNAUTHORIZED` |
+| `HTTP_SERVICE_UNAVAILABLE` | `503` | `src/domains/rca/router.py :: HTTP_SERVICE_UNAVAILABLE` |
+| `require_alertmanager_token` | `(request: Request) -> None` — `ALERTMANAGER_WEBHOOK_TOKEN` env 미설정이면 503(fail-closed), `Authorization: Bearer <token>`을 `secrets.compare_digest`로 대조해 불일치/누락이면 401 | `src/domains/rca/router.py :: require_alertmanager_token` |
+| `alertmanager_evidence_key` | `(workspace_id: str, cluster_id: str, payload: AlertmanagerWebhookRequest) -> str` — firing 알림들의 `"{fingerprint}@{startsAt}"` 정렬 목록 + `groupKey`를 sha256 → `f"{workspace_id}:{cluster_id}:alertmanager:{digest[:32]}"`. 같은 그룹의 반복 통지(repeat_interval)는 같은 키로 dedup, 새 알림 추가·startsAt 변경 시 새 인시던트 | `src/domains/rca/router.py :: alertmanager_evidence_key` |
+| `build_alertmanager_evidence_body` | `(workspace_id, cluster_id, payload, evidence_key) -> ClusterEvidenceReceivedBody` — firing 알림만 `metrics.alertmanager = {group_key, receiver, alerts}`로 실음. `kubernetes={}`, `logs=[]`, `traces={}`, `source_id=ALERTMANAGER_SOURCE_ID`, `window_start=min(firing startsAt)` | `src/domains/rca/router.py :: build_alertmanager_evidence_body` |
+| `alertmanager_webhook` | `async (payload: AlertmanagerWebhookRequest, request: Request, cluster_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID, events, db) -> AcceptedResponse` | `src/domains/rca/router.py :: alertmanager_webhook` |
 | `scoped_evidence_key` | `(identity: ClusterAgentIdentity, evidence_key: str | None) -> str | None` — `evidence_key`가 falsy면 `None`, 아니면 `f"{identity.workspace_id}:{identity.cluster_id}:{evidence_key}"` | `src/domains/rca/router.py :: scoped_evidence_key` |
 | `build_cluster_evidence_body` | `(payload: AgentEvidenceRequest, identity: ClusterAgentIdentity) -> ClusterEvidenceReceivedBody` — `payload.model_dump(exclude={"correlation_id"})` 후 `workspace_id/cluster_id`를 토큰 identity로 덮어쓰고 `evidence_key`를 스코프 처리 | `src/domains/rca/router.py :: build_cluster_evidence_body` |
 | `agent_evidence` | `async (payload: AgentEvidenceRequest, identity: ClusterAgentIdentity = Depends(require_cluster_agent), events: Any = Depends(get_events), db: Any = Depends(get_db)) -> AcceptedResponse` | `src/domains/rca/router.py :: agent_evidence` |
@@ -91,6 +104,7 @@ status: synced
 | 메서드+경로 | 요청 모델 | 응답 모델 | 권한/의존성 | 핸들러 앵커 |
 |---|---|---|---|---|
 | `POST /agent/evidence` (`gateway_routes.AGENT_EVIDENCE_PATH`) | `AgentEvidenceRequest` ([contracts](../packages/contracts.md)) | `AcceptedResponse` | `Depends(require_cluster_agent)` — `x-agent-token` 헤더 per-cluster 토큰, 실패 시 401. `get_events`, `get_db` | `src/domains/rca/router.py :: agent_evidence` |
+| `POST /webhooks/alertmanager?cluster_id=` (`gateway_routes.ALERTMANAGER_WEBHOOK_PATH`) | query: `cluster_id: str`(필수), `workspace_id: str = "default"` + body: `AlertmanagerWebhookRequest`(Alertmanager v4 webhook, `groupKey`/`receiver`/`alerts[]`) | `AcceptedResponse` | `require_alertmanager_token` — `Authorization: Bearer` 토큰(핸들러 내부 호출). 미설정 503, 불일치 401 | `src/domains/rca/router.py :: alertmanager_webhook` |
 | `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select` (`gateway_routes.RCA_RECOVERY_ACTION_SELECT_PATH`) | path: `plan_id: str`, `action_id: str` + body: `RecoveryActionSelectRequest` (`reason: str | None`, max 500자) | `AcceptedResponse` | `Depends(require_session)` (유효 세션 401 가드) + 핸들러 내부에서 `require_cluster_access(..., Permission.DEPLOY_RUN.value)` (실패 시 `RECOVERY_SELECTION_ACCESS_DENIED`). `get_db`, `get_events` | `src/domains/rca/router.py :: select_recovery_action` |
 
 `AcceptedResponse` 스키마: `accepted: bool`, `event_id: str`, `correlation_id: str`.
@@ -602,6 +616,15 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
    - `evidence_key` 없음: `db.stage_event_once(event_envelope)`로 outbox 적재.
 6. `AcceptedResponse(accepted=True, event_id=…, correlation_id=…)` 반환.
 
+### 1b. Alertmanager webhook 수신 — `POST /webhooks/alertmanager?cluster_id=`
+
+1. `require_alertmanager_token` — `ALERTMANAGER_WEBHOOK_TOKEN` 미설정이면 503 `WEBHOOK_NOT_CONFIGURED`(입구 자체를 잠금, fail-closed), Bearer 토큰 불일치/누락이면 401 `WEBHOOK_TOKEN_INVALID`.
+2. `db.get_cluster_registration(workspace_id, cluster_id)` — 미등록 클러스터면 404 `CLUSTER_NOT_REGISTERED`.
+3. firing 알림이 하나도 없으면(resolved만) 수락만 하고 인시던트를 열지 않는다 — `AcceptedResponse(accepted=True, event_id="", correlation_id="")`.
+4. `alertmanager_evidence_key`로 dedup 키 생성 → `build_alertmanager_evidence_body`로 `ClusterEvidenceReceivedBody`(source_id `alertmanager-webhook`) 구성 → envelope 생성.
+5. `db.get_evidence_window(evidence_key)` — 기존 창이 있으면 기존 `event_id`/`correlation_id`로 즉시 응답(중복 통지 무시). 없으면 `db.record_evidence_event_once(...)`로 윈도우 기록+outbox 스테이징(agent evidence와 동일한 멱등 경로, `agent_id=None`, `window_start=body.window_start or evidence_key`).
+6. `AcceptedResponse(accepted=True, event_id, correlation_id)` 반환.
+
 ### 2. 복구 후보 선택 — `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`
 
 1. `require_session`으로 사용자 세션 확보, `workspace_id = current.workspace_id`.
@@ -646,6 +669,9 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 | 상황 | 응답 | detail |
 |---|---|---|
 | agent 토큰 없음/미등록/해시 불일치 | 401 | (identity 도메인 메시지) |
+| Alertmanager webhook 토큰 미설정 | 503 (`HTTP_SERVICE_UNAVAILABLE`) | `WEBHOOK_NOT_CONFIGURED` = `"alertmanager webhook is not configured"` |
+| Alertmanager webhook 토큰 불일치/누락 | 401 (`HTTP_UNAUTHORIZED`) | `WEBHOOK_TOKEN_INVALID` = `"invalid webhook token"` |
+| Alertmanager webhook 대상 클러스터 미등록 | 404 (`HTTP_NOT_FOUND`) | `CLUSTER_NOT_REGISTERED` = `"cluster is not registered"` |
 | 세션 없음 | 401 | (identity 도메인 메시지) |
 | 클러스터 권한 없음 (`Permission.DEPLOY_RUN`) | (require_cluster_access가 발생시키는 상태코드) | `RECOVERY_SELECTION_ACCESS_DENIED` = `"recovery selection access denied"` |
 | 복구 계획 없음 | 404 (`HTTP_NOT_FOUND`) | `RECOVERY_PLAN_NOT_FOUND` = `"recovery plan not found"` |
@@ -654,4 +680,8 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 
 ## 설정 (Settings)
 
-이 도메인은 자체 환경변수/설정 키를 갖지 않는다. 이벤트 소스명은 런타임 `events` 객체의 `source` 속성에서 취하며 없으면 `"api-gateway"`를 쓴다.
+| 환경변수 | 타입 | 기본값 | 의미 |
+|---|---|---|---|
+| `ALERTMANAGER_WEBHOOK_TOKEN` (`ALERTMANAGER_WEBHOOK_TOKEN_ENV`) | str | `""` (미설정 시 webhook 503 거부) | Alertmanager webhook Bearer 토큰. 매 요청 시 `env()`로 평가 |
+
+이벤트 소스명은 런타임 `events` 객체의 `source` 속성에서 취하며 없으면 `"api-gateway"`를 쓴다.
