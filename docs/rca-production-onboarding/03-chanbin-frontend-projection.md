@@ -216,7 +216,6 @@ recovery.planned
 recovery.selection_requested
 recovery.action_selected
 command.requested
-command.dispatch.ready
 command.dispatched
 command.queued_for_agent
 command.completed

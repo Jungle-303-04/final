@@ -257,7 +257,6 @@ def test_crashloop_flow_requires_approval_evidence_before_command_queue() -> Non
         correlation_id="corr-approved",
     )
     assert subjects_of(command_outs) == [
-        "command.dispatch.ready",
         "command.dispatched",
         "command.queued_for_agent",
     ]
