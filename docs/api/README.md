@@ -334,6 +334,10 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 `02-create-application`은 데모 레포(`repo_ref`, `default_branch`, `manifest_path`)를 애플리케이션으로 등록한다. 응답의 `application.application_id`를 자동 저장한다.
 `03-get-application`은 상세, `04-list-deployments`는 배포 바인딩 목록, `05-create-deployment`는 `cluster_id`/`namespace`에 배포를 묶는다.
 `06-list-runs`는 그 애플리케이션의 워크플로우 run 목록이다(웹훅 push 후 run이 생긴다).
+각 run에는 `workflow_run_id`, `application_id`, `commit_sha`, `status`, `current_step`, `created_at`, `metadata`, `approval_id`, `safe_pr`, `steps`가 들어온다.
+`steps`는 `workflow_run_steps` 테이블을 같은 응답에 붙인 값이고, 각 항목은 `name`, `status`, `message`, `details`, `updated_at` 구조다.
+프론트는 `details.resource`, `details.namespace`, `details.changes[]`를 사용해서 워크플로 단계별 리소스 이름과 필드 변경 미리보기를 그린다.
+`details.changes[]`는 diff-worker가 만든 3-way 비교 결과이며 `field_path`, `classification`, `before`, `after`를 읽으면 된다.
 
 ### 11-clusters
 

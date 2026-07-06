@@ -17,7 +17,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 승인 버튼 활성 |
 | import | `@/features/resources/ConnectRepoWizard` | [resources](./resources.md) | 목록 화면 위저드 |
 | import ← | [workflow](./workflow.md), [chat](./chat.md), [notifications](./notifications.md), [org](./org.md) | — | `useApplications`/`useRuns*`/`ApprovalCard` 소비 |
@@ -75,6 +75,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   │     code(shortSha) · Badge(status) · 미니 스텝바(STEP_ORDER 별 14×5 칩 — SUCCEEDED ok/FAILED danger/PENDING surface-3/그 외 info)
   │     · timeAgo(started_at) · "그래프 보기" → /workflows/${run_id}
   │     status===WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인', compact)
+  │       + DIFFING step 의 changes 가 있으면 PlanDiff(changes, resource)
   ├─ [deployments] ResourceTable: 클러스터(Link /clusters/:id?tab=workloads)/네임스페이스/이름/이미지(code)/Replicas/상태 Badge
   ├─ [safe-pr] safePrRun 없으면 EmptyState('🤖 Safe PR 이력이 없습니다')
   │   있으면 Card('Safe PR — <sha>'): Badge(safe_pr.status) + pr_url 링크 'PR 열기 ↗' + explanation
