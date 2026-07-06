@@ -18,6 +18,10 @@ from domains.inventory.models import (
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
+# 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한.
+# (파라미터 수 제한과 단일 트랜잭션 락 시간 사이의 절충값, env 아님: 계약이 아니라 내부 상수)
+INVENTORY_UPSERT_CHUNK = 500
+
 SYNTHETIC_NAMESPACE = None
 HEALTH_RESOURCE_TYPE = "health"
 USAGE_RESOURCE_TYPE = "usage"
@@ -202,31 +206,37 @@ class InventoryRepository(DatabaseConnection):
                     summary=summary,
                 )
             )
-            for resource in normalized:
+            # 배치 업서트 — 리소스당 1문(5천 팟 = 5천 쿼리)이던 것을 청크당 1문으로.
+            # excluded.* 로 충돌 행을 새 값으로 갱신하므로 행별 set_ 값을 만들 필요가 없다.
+            for start in range(0, len(normalized), INVENTORY_UPSERT_CHUNK):
+                chunk = normalized[start : start + INVENTORY_UPSERT_CHUNK]
+                insert = pg_insert(resource_table).values(
+                    [{**resource, "deleted_at": None} for resource in chunk]
+                )
+                update_columns = {
+                    column: insert.excluded[column]
+                    for column in (
+                        "snapshot_id",
+                        "api_version",
+                        "kind",
+                        "namespace",
+                        "name",
+                        "uid",
+                        "resource_version",
+                        "status",
+                        "health",
+                        "labels",
+                        "annotations",
+                        "summary",
+                        "raw",
+                        "observed_at",
+                        "last_seen_at",
+                    )
+                }
                 conn.execute(
-                    pg_insert(resource_table)
-                    .values(**resource, updated_at=func.now())
-                    .on_conflict_do_update(
+                    insert.on_conflict_do_update(
                         index_elements=[resource_table.c.inventory_key],
-                        set_={
-                            "snapshot_id": resource["snapshot_id"],
-                            "api_version": resource["api_version"],
-                            "kind": resource["kind"],
-                            "namespace": resource["namespace"],
-                            "name": resource["name"],
-                            "uid": resource["uid"],
-                            "resource_version": resource["resource_version"],
-                            "status": resource["status"],
-                            "health": resource["health"],
-                            "labels": resource["labels"],
-                            "annotations": resource["annotations"],
-                            "summary": resource["summary"],
-                            "raw": resource["raw"],
-                            "observed_at": resource["observed_at"],
-                            "last_seen_at": resource["last_seen_at"],
-                            "deleted_at": None,
-                            "updated_at": func.now(),
-                        },
+                        set_={**update_columns, "deleted_at": None, "updated_at": func.now()},
                     )
                 )
             if summary["usage"]:
