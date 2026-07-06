@@ -184,6 +184,9 @@ class TargetRegisterRequest(StrictModel):
         ge=MIN_EVIDENCE_INTERVAL_SECONDS,
         le=MAX_EVIDENCE_INTERVAL_SECONDS,
     )
+    # 제어(쓰기) 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만 허용.
+    # 설치 manifest ConfigMap 의 CONTROL_ALLOWED_NAMESPACES 로 주입되어 클러스터별로 다르게 줄 수 있다.
+    control_namespaces: str = ""
     install_node_collector: bool = True
     install_sample_workload: bool = False
     sample_workload_name: str | None = Field(

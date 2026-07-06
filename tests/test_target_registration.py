@@ -628,3 +628,14 @@ def test_target_registration_returns_one_line_install_command() -> None:
     )
     assert response.install_command.endswith("| kubectl apply -f -")
     assert response.agent_token in response.install_command
+
+
+def test_install_manifest_injects_control_namespaces_when_specified() -> None:
+    request = target_request().model_copy(update={"control_namespaces": "sandbox,prod-web"})
+    manifest = target_install_manifest(request, "agent-secret")
+    assert 'CONTROL_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
+
+
+def test_install_manifest_omits_control_namespaces_by_default() -> None:
+    manifest = target_install_manifest(target_request(), "agent-secret")
+    assert "CONTROL_ALLOWED_NAMESPACES" not in manifest
