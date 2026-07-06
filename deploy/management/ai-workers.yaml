@@ -18,6 +18,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/chat-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -44,6 +60,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/evidence-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -70,6 +102,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/incident-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -96,6 +144,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/plan-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -122,6 +186,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/analyze-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -148,6 +228,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/recovery-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -174,6 +270,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/select-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -200,6 +312,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/dispatch-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -226,6 +354,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/backlog-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -252,6 +396,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/diff-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -278,6 +438,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/rollout-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -304,6 +480,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/approval-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
@@ -330,6 +522,22 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/ai/rca-feedback-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: management-runtime-config
