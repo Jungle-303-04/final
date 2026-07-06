@@ -56,7 +56,7 @@ manifest      CodeBlock(yaml, 접힘) [복사] [다운로드]
 
 | 항목 | 내용 |
 |---|---|
-| API (초안) | `GET/POST /access`, `DELETE /access/{access_id}` — [06 §G5](../06-api-map.md#g5-리소스-접근-관리) |
+| API | `GET /access?resource_id=...`, `POST /access`, `DELETE /access/{access_id}` — [06 §G5](../06-api-map.md#g5-리소스-접근-관리) |
 | 역할 의미 | `packages/contracts/identity` 의 ResourceRole·Permission 매핑 표를 그대로 툴팁화 |
 | 가드 연동 | 부여 결과는 [05 § 가드](../05-routes-ia.md#가드-appguardstsx) RequirePermission 의 데이터 소스 |
 

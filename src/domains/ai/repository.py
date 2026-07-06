@@ -109,9 +109,7 @@ class AiConversationRepository(DatabaseConnection):
     def list_ai_conversations(self, workspace_id: str, *, limit: int = 100) -> list[JsonObject]:
         table = self.conversation_table
         statement = (
-            select(
-                table.c.conversation_id, table.c.title, table.c.status, table.c.updated_at
-            )
+            select(table.c.conversation_id, table.c.title, table.c.status, table.c.updated_at)
             .where(table.c.workspace_id == workspace_id)
             .order_by(table.c.updated_at.desc())
             .limit(max(1, min(limit, 200)))

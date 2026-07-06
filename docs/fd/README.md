@@ -18,7 +18,7 @@ Kubernetes 운영 자동화 플랫폼의 웹 콘솔 설계 문서 세트.
 | 3 | [03-architecture.md](03-architecture.md) | 프론트 아키텍처: 레이어, 폴더, 상태관리, API 클라이언트 | 1, 2 |
 | 4 | [04-design-system.md](04-design-system.md) | 토큰, 테마, 모션 원칙, 공용 컴포넌트 계약 | 3 |
 | 5 | [05-routes-ia.md](05-routes-ia.md) | 라우트 트리, 내비게이션, 권한별 가시성 | 1, 3 |
-| 6 | [06-api-map.md](06-api-map.md) | API 전체 인벤토리 + 뷰 역링크 + 신규 API 계약 초안 | 1 |
+| 6 | [06-api-map.md](06-api-map.md) | API 전체 인벤토리 + 뷰 역링크 + 갭 상태 표 | 1 |
 | 7 | [07-build-plan.md](07-build-plan.md) | Fable5 원패스 구현 순서, 단계별 완료 기준, 검증 | 전부 |
 
 ### 뷰 명세 (`views/`)
@@ -48,7 +48,7 @@ Kubernetes 운영 자동화 플랫폼의 웹 콘솔 설계 문서 세트.
 | D4 | 인증 | 백엔드 세션 쿠키(`service_session`, httpOnly) 그대로 사용. 프론트는 토큰 저장 안 함. 부팅 시 `GET /auth/session`으로 세션 확인 |
 | D5 | API 접근 | 훅 계층(`features/*/api.ts`)에서만 fetch. 뷰/컴포넌트의 직접 fetch 금지 |
 | D6 | 실시간 | realtime-gateway `WS /live/browser` 구독. 재연결·백오프는 공용 `useLiveSocket` 훅 한 곳에서만 처리 |
-| D7 | 백엔드 갭 | 조직/그룹/멤버/알림 API는 현재 없음. 프론트는 [06-api-map.md](06-api-map.md)의 계약 초안대로 훅을 먼저 만들고 mock adapter 로 개발, 백엔드 완성 시 어댑터만 교체 |
+| D7 | 백엔드 갭 | 조직/그룹/멤버/권한/AI 목록 API는 실존 HTTP route 기준으로 붙인다. 남은 갭은 [06-api-map.md](06-api-map.md)의 상태 표를 보고, 뷰에서는 실존 API와 후보 API를 섞어 쓰지 않는다 |
 | D8 | 언어 | UI 문구 한국어 기본. 코드 식별자·주석 규칙은 저장소 컨벤션(주석 한글 명사형) |
 | D9 | 테마 | 다크 우선 단일 테마(외부 기준 콘솔 무드). 토큰은 CSS 변수, 라이트 모드는 범위 외 |
 | D10 | 품질 게이트 | `tsc --noEmit`, eslint, vitest, Playwright smoke — [07-build-plan.md](07-build-plan.md) 기준 |
@@ -73,5 +73,5 @@ Kubernetes 운영 자동화 플랫폼의 웹 콘솔 설계 문서 세트.
 
 1. 모든 API 참조는 `routes.py` 상수 경로 문자열과 일치해야 한다 — [06-api-map.md](06-api-map.md)가 단일 출처
 2. 뷰 문서의 컴포넌트는 [04-design-system.md](04-design-system.md) 인벤토리에 있는 것만 사용(없으면 먼저 인벤토리에 추가)
-3. 백엔드에 없는 API 를 쓰는 설계는 반드시 "갭(G-n)" 표기와 함께 06 문서의 계약 초안을 링크
+3. 백엔드에 route가 없는 API 를 쓰는 설계는 반드시 "갭(G-n)" 표기와 함께 06 문서의 상태 표를 링크
 4. 문서 수정 시 겹치는 내용을 복사하지 말고 링크 — 단일 출처 유지

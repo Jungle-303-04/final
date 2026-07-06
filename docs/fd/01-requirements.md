@@ -19,9 +19,10 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/org-admin.md](views/org-admin.md) |
-| 현황 | 백엔드에 organization/group **데이터 모델은 존재**(`domains/identity/models.py`, `packages/contracts/identity`)하나 CRUD HTTP API 없음 |
-| 갭 | **G1**(조직 CRUD), **G2**(그룹 CRUD·멤버십), **G3**(사용자 목록 조회) — 계약 초안: [06-api-map.md § 신규 API](06-api-map.md#신규-api-계약-초안) |
-| 개발 방식 | D7 — 계약 초안 기준 훅 + mock adapter 선행, 백엔드 붙으면 어댑터 교체 |
+| 현황 | `src/domains/identity/admin_router.py`에 조직 목록/생성/삭제, 그룹 목록/생성/멤버십, 사용자 목록 route가 붙어 있다 |
+| API | `GET/POST /orgs`, `DELETE /orgs/{org_id}`, `GET/POST /groups`, `GET /groups/{group_id}/members`, `PUT/DELETE /groups/{group_id}/members/{user_id}`, `GET /users` |
+| 갭 | G1/G2/G3의 1차 운영 화면 차단 범위는 코드 반영됨. 조직 수정, 그룹 수정/삭제 같은 세부 편집은 후속 개선 항목으로 둔다 |
+| 개발 방식 | 실존 route 기준으로 훅을 붙이고, mock은 로컬 데모용 fallback으로만 둔다 |
 
 ## R4. 리소스 생성 (레포, 클러스터)
 
@@ -38,8 +39,9 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 |---|---|
 | 뷰 | [views/resources.md § 권한 탭](views/resources.md#권한-탭) |
 | 모델 | ResourceRole(observer/release_operator/cluster_steward…) × 대상(user/group) × 리소스(cluster/repository/application) — `packages/contracts/identity` |
-| 현황 | 권한 부여는 백엔드 내부(`_grant_owner_if_present` 등)에만 존재. 조회·부여·회수 HTTP API 없음 |
-| 갭 | **G5**(리소스 접근 목록/부여/회수 API) |
+| 현황 | `GET/POST /access`, `DELETE /access/{access_id}`가 `src/domains/identity/admin_router.py`에 붙어 있다 |
+| API | `GET /access?resource_id=...`, `POST /access`, `DELETE /access/{access_id}` |
+| 갭 | G5의 권한 목록/부여/회수는 코드 반영됨. `resource_type` 필터는 현재 화면에서 `resource_id` 중심으로 사용한다 |
 
 ## R6. 클러스터 모음 → 클러스터 → 노드 → 팟 (히트맵 드릴다운)
 
@@ -80,7 +82,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/ai-chat.md](views/ai-chat.md) |
-| API | `POST /ai/conversations`, `GET /ai/conversations/{id}`(폴링), `POST /ai/conversations/{id}/messages` |
+| API | `GET /ai/conversations`, `POST /ai/conversations`, `GET /ai/conversations/{id}`(폴링), `POST /ai/conversations/{id}/messages` |
 | 실행 승인 | Claude/Codex 식 "선택지 카드" = 백엔드 실체와 매핑: RCA 액션 선택 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`, 승인 `POST /approvals/{id}/grant|reject` |
 | 갭 | 스트리밍 없음(폴링 기반) — 폴링 UX로 설계. WS 확장은 **G8**(선택) |
 
@@ -92,23 +94,23 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 소스 | 승인 대기(approval), DLQ(`GET /dead-letters` admin), 인시던트(`GET /dashboard/rca/timeline`) |
 | 갭 | 통합 알림 조회 API 없음 — **G9**(notifications feed). 초기 버전은 3개 소스 클라이언트 합성으로 구현 가능 |
 
-## 갭 요약 (백엔드 추가 필요 항목)
+## 갭 상태 요약
 
 우선순위 P1=프론트 1차 릴리스 차단, P2=차선.
 
-| 갭 | 내용 | 우선순위 | 계약 초안 |
+| 갭 | 내용 | 상태 | 기준 문서 |
 |---|---|---|---|
-| G1 | 조직 CRUD | P1 | [06 §G1](06-api-map.md#g1-조직-crud) |
-| G2 | 그룹 CRUD + 멤버십 | P1 | [06 §G2](06-api-map.md#g2-그룹-crud--멤버십) |
-| G3 | 사용자 목록/상태 조회 | P1 | [06 §G3](06-api-map.md#g3-사용자-목록) |
+| G1 | 조직 목록/생성/삭제 | 코드 반영 | [06 §G1](06-api-map.md#g1-조직-crud) |
+| G2 | 그룹 목록/생성 + 멤버십 | 코드 반영 | [06 §G2](06-api-map.md#g2-그룹-crud--멤버십) |
+| G3 | 사용자 목록/상태 조회 | 코드 반영 | [06 §G3](06-api-map.md#g3-사용자-목록) |
 | G4 | repository/watch target 목록 | P2 | [06 §G4](06-api-map.md#g4-레포지토리-목록) |
-| G5 | 리소스 접근(권한) 목록/부여/회수 | P1 | [06 §G5](06-api-map.md#g5-리소스-접근-관리) |
+| G5 | 리소스 접근(권한) 목록/부여/회수 | 코드 반영 | [06 §G5](06-api-map.md#g5-리소스-접근-관리) |
 | G6 | 노드 실시간 메트릭 요약 | P2 | [06 §G6](06-api-map.md#g6-노드-메트릭-요약) |
 | G7 | 메트릭 range query 프록시 | P2 | [06 §G7](06-api-map.md#g7-메트릭-프록시) |
 | G8 | AI 대화 WS 스트리밍 | P3(선택) | [06 §G8](06-api-map.md#g8-ai-스트리밍) |
 | G9 | 통합 알림 피드 | P2 | [06 §G9](06-api-map.md#g9-알림-피드) |
-| G10 | AI 대화 목록 조회 | P1 | [06 §G10](06-api-map.md#g10-ai-대화-목록-p1--ai-chat-목록-화면-차단-해소) |
+| G10 | AI 대화 목록 조회 | 코드 반영 | [06 §G10](06-api-map.md#g10-ai-대화-목록-p1--ai-chat-목록-화면-차단-해소) |
 | G11 | 클러스터 정책 조회(GET) | P2 | [06 §G11](06-api-map.md#g11-클러스터-정책-조회-p2) |
 
-**모순 방지 규칙**: 뷰 문서가 위 갭 API 를 쓸 때는 반드시 `(G-n)` 을 붙인다.
-갭이 P1인 화면은 mock adapter 로 먼저 완성한다(D7).
+**모순 방지 규칙**: "코드 반영" 항목은 실존 route 기준으로 Bruno와 화면을 만든다.
+P2/P3 항목은 화면에서 후보 기능으로 분리하고, 실존 API처럼 쓰지 않는다.
