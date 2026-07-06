@@ -101,7 +101,14 @@ const routes: [string, string, Handler][] = [
   ['POST', '/clusters/:id/namespaces/:ns/deployments/:name/scale', () => ({ accepted: true })],
   ['POST', '/clusters/:id/namespaces/:ns/deployments/:name/restart', () => ({ accepted: true })],
   ['PUT', '/clusters/:id/policy', () => ({ accepted: true })],
-  ['POST', '/targets', () => ({ registered: true, applied: false, agent_token: `agt_${uid()}${uid()}`, install_manifest: 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: target\n# … (mock manifest)' })],
+  ['POST', '/targets', () => {
+    const agent_token = `agt_${uid()}${uid()}`;
+    return {
+      registered: true, applied: false, agent_token,
+      install_command: `curl -fsSL ${location.origin}/api/install/${agent_token} | kubectl apply -f -`,
+      install_manifest: 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: target\n# … (mock manifest)',
+    };
+  }],
   ['GET', '/providers/catalog', () => ({ providers: { cloud: [ { key: 'existing-k8s', label: '기존 Kubernetes', status: 'available' } ], deploy: [ { key: 'manual-manifest', label: '수동 manifest 적용', status: 'available' } ], source: [ { key: 'github', label: 'GitHub', status: 'available' } ], secret: [ { key: 'env', label: '환경 변수', status: 'available' } ] } })],
   ['POST', '/providers/validate', () => ({ valid: true, errors: [], warnings: [] })],
 
