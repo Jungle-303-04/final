@@ -11,6 +11,7 @@ status: synced
 
 - **lib/**: API 접근 단일 지점(`api.ts`), React Query 클라이언트(`query.ts`), WS 실시간 스냅샷 스토어(`live.ts`), UI 전역 상태(`ui-store.ts`), 백엔드 계약 수기 타입(`types.ts`), 실백엔드 응답 정규화 어댑터(`adapt.ts`), 포맷터(`format.ts`), mock 라우터·픽스처(`mock/`).
 - **ui/**: 공용 프리미티브 컴포넌트(`index.tsx`), 상태→색 매핑(`status.ts`), SVG 아이콘(`icons.tsx`), nivo 차트 래퍼(`charts.tsx`), 컴포넌트 스타일(`app.css`).
+- **ui/plan-diff.tsx**: 워크플로 승인 전에 diff-worker의 3-way plan 변경 목록을 필드 단위로 보여주는 공용 미리보기 컴포넌트.
 - **flow/**: ReactFlow 그래프 공통 모듈(dagre 자동 배치, 애니메이션 edge, 접기 그룹 노드, 캔버스 래퍼).
 - **motion/**: 모션 프리미티브(뷰에서 인라인 `animate` 금지 — 여기서만).
 - **tokens.css**: 디자인 토큰 정본(hex 직접 사용 금지).
@@ -110,7 +111,8 @@ export const queryClient = new QueryClient({
 | `K8sEvent` | `at; type; reason; target; message` |
 | `Application` | `application_id; name; repo_ref; branch; cluster_id; manifest_path; last_run_status?; last_deployed_at?` |
 | `WorkflowRun` | `run_id; application_id; commit_sha; status; current_step; started_at; steps: RunStep[]; approval_id?; safe_pr?: SafePr` |
-| `RunStep` | `name; status; detail?` |
+| `RunStep` | `name; status; detail?; resource?; changes?: PlanChange[]` |
+| `PlanChange` | `field_path; classification; before?; after?` — diff-worker 3-way 비교 결과를 워크플로 단계 미리보기에 표시할 때 사용 |
 | `SafePr` | `status; pr_url?; explanation?; diff_before?; diff_after?; error?` |
 | `Deployment` | `cluster_id; namespace; name; image; replicas: number; status` |
 | `Conversation` | `conversation_id; title; status: 'idle'\|'waiting'; updated_at; messages: ChatMessage[]` |
@@ -134,7 +136,7 @@ export const queryClient = new QueryClient({
 |---|---|---|
 | `adaptCluster` | `frontend/src/shared/lib/adapt.ts :: adaptCluster` | `(raw: Record<string,unknown>) => Cluster`. `name ?? cluster_id`, `environment ?? 'unknown'`, `connection_status ?? 'unknown'`, 수치 기본 0, `registered_at ?? created_at ?? now` |
 | `adaptApplication` | `frontend/src/shared/lib/adapt.ts :: adaptApplication` | `=> Application`. `name ?? application_id`, `branch ?? 'main'` |
-| `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id` |
+| `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. mock 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 콘솔 단계 이름으로 매핑한다. `details.resource`/`details.namespace`는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
 | `adaptIncident` | `frontend/src/shared/lib/adapt.ts :: adaptIncident` | `=> Incident`. summary 우선순위: `root_cause`(단 `'unknown'` 제외) → `error_reason` → `current_subject` → `'인시던트'`. `incident_id ?? correlation_id`, `stage = current_subject ?? status`, `at = at ?? updated_at` |
 | `adaptIncidentDetail` | `frontend/src/shared/lib/adapt.ts :: adaptIncidentDetail` | `=> IncidentDetail`. `adaptIncident` 기반 + `status ?? stage ?? 'open'`, null 정규화(`''`→null), `confidence` 는 number 일 때만, evidence 배열은 `Array.isArray` 검사 후 `map(String)` |
 | `adaptConversationSummary` | `frontend/src/shared/lib/adapt.ts :: adaptConversationSummary` | `=> Omit<Conversation,'messages'>`. `title ?? '대화'`, `status` 는 `'waiting'` 만 인정, 아니면 `'idle'` |
@@ -235,6 +237,20 @@ export async function mockRequest<T>(method: string, pathWithQuery: string, body
 | `Toasts` | (없음) | `uiStore.toasts` 구독, `aria-live="polite"`, 좌측 보더 `toneColor(tone)` |
 | `SearchInput` | `{ value: string; onChange: (v) => void; placeholder? }` | `/` 키(포커스가 body 일 때)로 포커스. 기본 placeholder `'검색 ( / )'`, maxWidth 320 |
 | `useSearchFilter<T>` (훅) | `(rows: T[], pick: (r) => string) => [T[], string, (v) => void]` | 소문자 includes 필터 |
+
+## PlanDiff (`ui/plan-diff.tsx`)
+
+`frontend/src/shared/ui/plan-diff.tsx :: PlanDiff`
+
+```tsx
+export function PlanDiff({ changes, resource }: { changes: PlanChange[]; resource?: string })
+```
+
+- 입력은 `RunStep.changes` 그대로 사용한다. 프론트에서 임의로 diff를 만들지 않는다.
+- `classification === 'already_converged'` 항목은 적용 대상이 아니므로 목록에서 접고, 하단에 "이미 일치 N건"으로 표시한다.
+- 나머지는 `field_path`, `before`, `after`를 한 줄씩 보여준다.
+- 표시 기호: `adoption_required`는 `+`, `intended_change`는 `~`, `drift`는 `!`, `conflict_or_manual_change`는 경고 기호, 그 외는 `~`.
+- 사용 위치: [repo](./repo.md)의 run 승인 카드 아래, [workflow](./workflow.md)의 승인 카드와 단계 상세 패널.
 
 ## 상태 어휘 (`ui/status.ts`)
 
