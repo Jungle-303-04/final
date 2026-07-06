@@ -179,25 +179,5 @@ async def on_alert_requested(
         yield evt.next_command
 
 
-@app.on(AlertDispatchedBody)
-async def on_alert_dispatched(evt: AlertDispatchedBody) -> None:
-    LOGGER.info(
-        "alert dispatched",
-        extra={
-            "context": {
-                "cluster_id": evt.cluster_id,
-                "severity": evt.severity,
-                "channel": evt.channel,
-                "mode": evt.mode,
-            }
-        },
-    )
-
-
-@app.on(AlertRejectedBody)
-async def on_alert_rejected(evt: AlertRejectedBody) -> None:
-    LOGGER.warning("alert rejected", extra={"context": {"reason": evt.reason}})
-
-
 if __name__ == "__main__":
     app.run()

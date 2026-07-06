@@ -33,6 +33,9 @@ TERMINAL_SUBJECTS = {
     EventSubject.RCA_ACTION_REQUIRED,
     EventSubject.DIFF_EXPLAINED,
     EventSubject.APPROVAL_RECOMMENDED,
+    # alert 전송 결과는 projection(audit/dashboard) 전용 종단 이벤트 — self-subscription 제거로 이동
+    EventSubject.ALERT_DISPATCHED,
+    EventSubject.ALERT_REJECTED,
     EventSubject.EMAIL_VERIFICATION_SENT,
     EventSubject.EMAIL_VERIFICATION_FAILED,
     EventSubject.AI_MESSAGE_RESPONDED,
