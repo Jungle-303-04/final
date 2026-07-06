@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import time
@@ -50,6 +49,7 @@ from packages.contracts.gateway.responses import (
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
+from packages.runtime.command_wakeup import WAKEUP
 from packages.runtime.dependencies import get_db, get_events
 
 # 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
@@ -229,7 +229,12 @@ def debug_query_plan(
 async def lease_next_command(
     db: Any, cluster_id: str, workspace_id: str, agent_id: str, timeout: int
 ) -> JsonObject | None:
-    """롱폴 — 이 클러스터의 다음 명령을 timeout 까지 대기하며 리스(아웃바운드 단일 채널)."""
+    """롱폴 — 이 클러스터의 다음 명령을 timeout 까지 대기하며 리스(아웃바운드 단일 채널).
+
+    대기는 LISTEN/NOTIFY 웨이크업(WAKEUP)을 우선 사용 — 명령 큐잉 순간 즉시
+    재시도한다. 리스너 미가동이면 wait 가 타임아웃까지 잠들어 기존 주기 폴링과
+    동일하게 동작한다(정확성은 폴링이, 지연·부하 개선은 알림이 담당).
+    """
     deadline = time.time() + min(timeout, MAX_POLL_SECONDS)
     while time.time() < deadline:
         row = await db.lease_agent_command(
@@ -242,7 +247,7 @@ async def lease_next_command(
         )
         if row:
             return row
-        await asyncio.sleep(POLL_SLEEP_SECONDS)
+        await WAKEUP.wait(workspace_id, cluster_id, min(POLL_SLEEP_SECONDS, deadline - time.time()))
     return None
 
 

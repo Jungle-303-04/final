@@ -49,6 +49,7 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
 from packages.events.bus import NatsEventBus
+from packages.runtime.command_wakeup import COMMAND_NOTIFY_DATABASE_URL_ENV, WAKEUP
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
 from packages.runtime.relay import OutboxRelay
@@ -132,9 +133,15 @@ class ApiGateway:
         await self.sessions.connect()
         await self.bus.connect()
         self._relay_task = asyncio.create_task(self._relay_outbox())
+        # 명령 롱폴 웨이크업 — 직결 URL 이 설정된 경우에만 LISTEN 시작.
+        # (pgbouncer transaction pooling 경유로는 LISTEN 불가; 미설정 시 주기 폴링 유지)
+        notify_url = env(COMMAND_NOTIFY_DATABASE_URL_ENV, "")
+        if notify_url:
+            await WAKEUP.start(notify_url)
         try:
             yield
         finally:
+            await WAKEUP.stop()
             if self._relay_task is not None:
                 self._relay_task.cancel()
                 with suppress(asyncio.CancelledError):
