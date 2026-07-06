@@ -14,7 +14,7 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `08 운영과 DLQ`까지 한글 폴더명이 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `09 관리 콘솔`까지 한글 폴더명이 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
 
@@ -42,7 +42,8 @@ docs/api
 5. `conversation_id`는 `07-ai/01-create-conversation` 성공 후 저장된다.
 6. `incident_id`는 `05-rca-dashboard/01-dashboard-timeline`에 incident row가 있을 때 저장된다.
 7. `dead_letter_id`는 `08-ops-dlq/01-dead-letters`에 항목이 있을 때 저장된다.
-8. `github_webhook_signature`는 `github_webhook_secret`이 채워져 있으면 요청 직전에 자동 계산된다.
+8. `org_id`, `group_id`, `access_id`는 `09-management-console` 목록/생성/부여 요청에서 저장된다.
+9. `github_webhook_signature`는 `github_webhook_secret`이 채워져 있으면 요청 직전에 자동 계산된다.
 
 아래는 각 값의 의미 설명이다.
 
@@ -247,6 +248,10 @@ AI worker가 아직 응답하지 않았더라도 사용자가 보낸 메시지�
 대화 상태를 waiting으로 바꾸고, 새 `AiMessageReceived` event를 발행한다.
 운영자가 같은 RCA 맥락에서 질문을 이어갈 때 사용한다.
 
+`04-list-conversations`는 로그인한 사용자의 AI 대화 목록을 조회하는 API다.
+좌측 대화 목록과 최근 대화 복구에 쓰인다.
+목록에서 첫 대화가 있으면 `conversation_id`를 자동 저장해서 상세 조회로 바로 이어갈 수 있다.
+
 ### 08-ops-dlq
 
 `01-dead-letters`는 처리 실패로 dead letter에 남은 event를 조회하는 API다.
@@ -260,6 +265,41 @@ worker 오류를 확인할 때 먼저 이 목록을 본다.
 `03-metrics`는 Gateway 운영 metric을 Prometheus text 형식으로 보는 API다.
 `METRICS_TOKEN`이 설정되어 있으면 `authorization: Bearer {{metrics_token}}`이 필요하다.
 dead letter, outbox pending, command status 같은 운영 지표를 확인한다.
+
+### 09-management-console
+
+`01-list-orgs`는 조직 목록을 조회한다.
+관리 콘솔 조직 화면의 첫 API이고, 응답에 조직이 있으면 첫 `org_id`를 자동 저장한다.
+
+`02-create-org`는 새 조직을 만든다.
+성공하면 응답의 `org_id`를 저장하므로 바로 그룹 생성 요청에서 사용할 수 있다.
+
+`03-delete-org`는 `org_id` 조직을 비활성화한다.
+소속 그룹이 남아 있으면 `groups_exist` 충돌이 날 수 있고, 이것도 정상적인 보호 동작이다.
+
+`04-list-users`는 사용자 목록을 조회한다.
+승인, 그룹 멤버십, 권한 부여 흐름에서 쓸 `user_id`를 확인한다.
+
+`05-list-groups`는 조직에 속한 그룹을 조회한다.
+응답에 그룹이 있으면 첫 `group_id`를 자동 저장한다.
+
+`06-create-group`은 `org_id` 아래 그룹을 만든다.
+성공하면 `group_id`를 저장해서 멤버 추가/제거 요청으로 이어간다.
+
+`07-list-group-members`는 특정 그룹의 멤버를 조회한다.
+그룹 Drawer의 멤버 탭과 같은 데이터다.
+
+`08-add-group-member`와 `09-remove-group-member`는 그룹 멤버십을 바꾼다.
+둘 다 admin session이 필요하고, `group_id`, `user_id`가 맞아야 한다.
+
+`10-list-access`는 특정 리소스의 권한 grant 목록을 조회한다.
+기본 예시는 `resource_id={{cluster_id}}`로 클러스터 권한을 본다.
+
+`11-grant-access`는 사용자나 그룹에 리소스 권한을 부여한다.
+성공하면 `access_id`가 저장된다.
+
+`12-revoke-access`는 `access_id` 권한을 회수한다.
+실제 권한을 지우는 요청이므로 테스트용 grant를 만든 뒤 이어서 보내는 흐름을 권장한다.
 
 ## 3단계. 서버 상태 확인
 
@@ -404,6 +444,9 @@ approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `
 
 정상 출력에는 `accepted: true`, `conversation_id`, `message_id`, `event_id`가 있다.
 
+`07-ai/04-list-conversations.bru`를 보내면 대화 목록이 나온다.
+정상 출력에는 `conversations` 배열이 있다.
+
 ## 12단계. 운영 API 확인
 
 `08-ops-dlq/01-dead-letters.bru`를 보낸다.
@@ -415,6 +458,35 @@ approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `
 
 `08-ops-dlq/03-metrics.bru`는 metrics token이 켜져 있으면 `authorization: Bearer {{metrics_token}}`이 필요하다.
 정상 출력은 Prometheus text이고, `event_dead_letters_open_total`, `outbox_pending_total`, `command_status_total`이 보여야 한다.
+
+## 13단계. 관리 콘솔 API 확인
+
+이 단계는 admin 계정으로 로그인한 뒤 보낸다.
+찬빈이 조직/그룹/멤버/권한 화면을 실제 API에 붙였는지 확인하는 흐름이다.
+
+먼저 `09-management-console/01-list-orgs.bru`를 보낸다.
+정상 출력에는 `orgs` 배열이 있다.
+
+새 조직을 만들 때는 `09-management-console/02-create-org.bru`를 보낸다.
+정상 출력에는 `org_id`, `name`, `member_count`, `group_count`가 있다.
+
+조직 삭제를 연습할 때는 방금 만든 테스트 조직의 `org_id`인지 확인하고 `09-management-console/03-delete-org.bru`를 보낸다.
+정상 삭제는 `204`이고, 그룹이 남아 있으면 `409`가 정상적인 보호 응답이다.
+
+사용자와 그룹은 아래 순서로 본다.
+
+1. `09-management-console/04-list-users.bru`는 `users` 배열을 반환한다.
+2. `09-management-console/05-list-groups.bru`는 `groups` 배열을 반환한다.
+3. `09-management-console/06-create-group.bru`는 `group_id`를 반환한다.
+4. `09-management-console/07-list-group-members.bru`는 `members` 배열을 반환한다.
+5. `09-management-console/08-add-group-member.bru`는 `accepted: true`를 반환한다.
+6. `09-management-console/09-remove-group-member.bru`는 `204`를 반환한다.
+
+권한은 아래 순서로 본다.
+
+1. `09-management-console/10-list-access.bru`는 `grants` 배열을 반환한다.
+2. `09-management-console/11-grant-access.bru`는 `access_id`, `resource_id`, `role`을 반환한다.
+3. `09-management-console/12-revoke-access.bru`는 `204`를 반환한다.
 
 ## Bruno CLI로 import 문법만 확인하기
 

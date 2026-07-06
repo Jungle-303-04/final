@@ -41,13 +41,13 @@ frontend/
         api.ts                  # fetch 래퍼(세션 쿠키, 에러 정규화, baseURL)
         query.ts                # QueryClient 설정, queryKey 팩토리
         live.ts                 # useLiveSocket (WS 재연결·백오프 단일 구현)
-        mock.ts                 # 갭(G-n) API 의 mock adapter 스위치
+        mock/                   # 로컬 데모용 API fallback. real mode에서는 Gateway route 호출
         format.ts               # 날짜/용량/기간 포맷
     generated/
       api/                      # @hey-api/openapi-ts 산출물 (수정 금지)
     features/
       auth/          { api.ts, views/, components/ }
-      org/           { api.ts(mock 포함 G1~G3,G5), views/, components/ }
+      org/           { api.ts(G1~G3,G5 실존 route), views/, components/ }
       resources/     { api.ts, views/, components/wizard/ }
       fleet/         { api.ts, views/, components/Treemap*.tsx }
       cluster/       { api.ts, views/, components/ }
@@ -95,8 +95,8 @@ export function useScaleDeployment(clusterId: string) {
 }
 ```
 
-4. **갭 API(G-n)**: `shared/lib/mock.ts` 의 `withMock(real, mock, flag)` 로 감싼다.
-   env `VITE_MOCK_GAPS=1`이면 mock, 아니면 real. 뷰 코드는 갭 여부를 모른다(D7).
+4. **mock fallback**: `shared/lib/api.ts`가 `VITE_API_MODE=mock|real`을 보고 `shared/lib/mock/router.ts` 또는 Gateway `/api` proxy를 선택한다.
+   실존 route는 real mode에서 바로 호출하고, mock은 로컬 데모와 화면 smoke 용도로만 둔다.
 
 ## 실시간 (WS /live/browser)
 

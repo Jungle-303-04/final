@@ -30,10 +30,10 @@
 ├─ /notifications           NotificationsView
 ├─ /catalog                 CatalogView (서비스 카탈로그 설치)
 └─ /settings  (RequireAdmin — service_admin)
-    ├─ /settings/members    MembersView        (G3)
-    ├─ /settings/orgs       OrganizationsView  (G1)
-    ├─ /settings/groups     GroupsView         (G2)
-    ├─ /settings/access     AccessView         (G5, 리소스 권한)
+    ├─ /settings/members    MembersView        (GET /users)
+    ├─ /settings/orgs       OrganizationsView  (GET/POST/DELETE /orgs)
+    ├─ /settings/groups     GroupsView         (GET/POST /groups + members)
+    ├─ /settings/access     AccessView         (GET/POST/DELETE /access)
     └─ /settings/ops        OpsView (DLQ 관리 — /dead-letters)
 ```
 
@@ -63,7 +63,7 @@
 | RequireAdmin | roles 에 service_admin | 403 EmptyState("권한 필요") |
 | RequirePermission(p) | 리소스 권한 p 보유 | 액션 버튼 disabled + Tooltip 사유 |
 
-권한 판별 데이터: 세션 응답의 roles + 리소스별 접근(G5 — mock 단계에서는 세션 roles 만으로 단순화, [01-requirements.md §R5](01-requirements.md#r5-리소스-권한-설정-그룹사용자)).
+권한 판별 데이터: 세션 응답의 roles + 리소스별 접근(G5 실존 API, [01-requirements.md §R5](01-requirements.md#r5-리소스-권한-설정-그룹사용자)).
 
 ## 딥링크·URL 상태 규칙
 
