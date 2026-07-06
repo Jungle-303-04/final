@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/app/shell/AppShell';
 import { RequireAdmin, RequireGuest, RequireSession } from '@/app/guards';
+import { consoleRoutes } from '@/features/console/routes';
 import { Skeleton } from '@/shared/ui';
 
 const L = (f: () => Promise<{ default: React.ComponentType }>) => {
@@ -56,5 +57,9 @@ export const router = createBrowserRouter([
       ],
     }],
   },
+  // 복각 UI — 단일 콘솔 앱 (구 /plural은 /console로 흡수)
+  consoleRoutes,
+  { path: '/plural', element: <Navigate to="/console" replace /> },
+  { path: '/plural/*', element: <Navigate to="/console" replace /> },
   { path: '*', element: <Navigate to="/overview" replace /> },
 ]);
