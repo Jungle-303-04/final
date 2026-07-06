@@ -32,6 +32,10 @@ from packages.runtime.dependencies import get_db
 from packages.storage.engine import unit_of_work_or_null
 
 router = APIRouter()
+# 글로벌 서비스 선언 — cluster_id 자리에 쓰는 특수값(등록된 전 클러스터로 확장).
+GLOBAL_CLUSTER_SELECTOR = "*"
+GLOBAL_BINDING_KEY = "global"
+NO_CLUSTERS_FOR_GLOBAL_BINDING = "no registered clusters to expand global binding"
 HTTP_NOT_FOUND = 404
 APPLICATION_NOT_FOUND = "application not found"
 
@@ -158,13 +162,14 @@ async def upsert_application_deployment(
         application_id,
         Permission.APPLICATION_MANAGE.value,
     )
-    require_cluster_access(
-        db,
-        current,
-        workspace_id,
-        payload.cluster_id,
-        Permission.DEPLOY_RUN.value,
-    )
+    if payload.cluster_id != GLOBAL_CLUSTER_SELECTOR:
+        require_cluster_access(
+            db,
+            current,
+            workspace_id,
+            payload.cluster_id,
+            Permission.DEPLOY_RUN.value,
+        )
     application = get_application_or_404(db, workspace_id, application_id)
     body = {
         **payload.model_dump(),
@@ -174,6 +179,33 @@ async def upsert_application_deployment(
         "app_name": application["name"],
         "manifest_path": payload.manifest_path or application["manifest_path"],
     }
+    # 글로벌 서비스 — cluster_id "*" 는 등록된 모든 클러스터로 확장 생성한다.
+    # 각 바인딩에 deploy_policy.global 이 남아 (a) 웹훅 fan-out 대상이 되고
+    # (b) 신규 클러스터 등록 시 workflow-controller 가 자동으로 합류시킨다.
+    if payload.cluster_id == GLOBAL_CLUSTER_SELECTOR:
+        clusters = db.list_cluster_registrations(workspace_id)
+        if not clusters:
+            raise HTTPException(status_code=422, detail=NO_CLUSTERS_FOR_GLOBAL_BINDING)
+        # 전 대상 클러스터 deploy 권한을 먼저 검증 — 하나라도 없으면 아무것도 만들지 않음.
+        for cluster in clusters:
+            require_cluster_access(
+                db,
+                current,
+                workspace_id,
+                str(cluster["cluster_id"]),
+                Permission.DEPLOY_RUN.value,
+            )
+        stored_list = [
+            db.register_deployment_binding(
+                {
+                    **body,
+                    "cluster_id": str(cluster["cluster_id"]),
+                    "deploy_policy": {**payload.deploy_policy, GLOBAL_BINDING_KEY: True},
+                }
+            )
+            for cluster in clusters
+        ]
+        return DeploymentBindingResponse(deployment=stored_list[0])
     stored = db.register_deployment_binding(body)
     return DeploymentBindingResponse(deployment=stored)
 
