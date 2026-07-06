@@ -465,6 +465,7 @@ status mapping은 `src/domains/dashboard/repository.py`의 `RCA_TIMELINE_STATUS_
 | `recovery.planned` | `recovery_planned` | 복구 후보 묶음이 만들어진 상태다. |
 | `recovery.selection_requested` | `selection_required` | 사람이 복구 후보를 골라야 하는 상태다. |
 | `recovery.action_selected` | `recovery_selected` | 선택된 복구 route가 정해진 상태다. |
+| `approval.recommended` | `approval_recommended` | 승인/거절 보조 판단이 기록된 상태다. |
 | `command.requested` | `command_requested` | command 실행 요청이 들어간 상태다. |
 | `command.dispatched` | `command_dispatched` | command route가 정해진 상태다. |
 | `command.queued_for_agent` | `command_queued` | target agent poll queue에 들어간 상태다. |

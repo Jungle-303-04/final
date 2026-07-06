@@ -8,6 +8,11 @@ class Settings:
     SERVICE_NAME = "api-gateway"
     APP_TITLE = "API Gateway"
     APP_VERSION = "0.1.0"
+    CONSOLE_ORIGIN_ENV = "CONSOLE_ORIGIN"
+    DEFAULT_CONSOLE_ORIGIN = "http://console.management.svc.cluster.local:80"
+    FRONTEND_PROXY_TIMEOUT_SECONDS = 10.0
+    REALTIME_ORIGIN_ENV = "REALTIME_ORIGIN"
+    DEFAULT_REALTIME_ORIGIN = "ws://realtime-gateway.management.svc.cluster.local:8000"
 
     COMMAND_NOT_FOUND_STATUS_CODE = 404
     CONFLICT_STATUS_CODE = 409

@@ -55,6 +55,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
               onClick={() => create.mutate({ name, repo_ref: repoRef, branch, manifest_path: manifestPath, cluster_id: clusterId },
                 { onSuccess: d => { onClose(); nav(`/repos/${d.application_id}`); } })}>연결</Button>
           </div>
+          {create.isError && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{(create.error as Error).message}</p>}
         </>
       )}
     </Modal>

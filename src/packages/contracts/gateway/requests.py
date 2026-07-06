@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.contracts.gateway.base import StrictModel
@@ -174,7 +174,7 @@ class TargetRegisterRequest(StrictModel):
     environment: str = DEFAULT_TARGET_ENVIRONMENT
     workspace_id: str = DEFAULT_WORKSPACE_ID
     management_base_url: str = Field(min_length=1)
-    image: str = Field(min_length=1)
+    image: str = ""
     prometheus_base_url: str = DEFAULT_PROMETHEUS_BASE_URL
     loki_base_url: str = DEFAULT_LOKI_BASE_URL
     tempo_base_url: str = DEFAULT_TEMPO_BASE_URL
@@ -295,6 +295,8 @@ class CommandHeartbeatRequest(CommandStartRequest):
 
 
 class CommandResultRequest(StrictModel):
+    model_config = ConfigDict(extra="allow")
+
     status: Literal["completed", "failed"] = DEFAULT_COMMAND_STATUS
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID

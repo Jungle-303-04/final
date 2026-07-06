@@ -11,6 +11,7 @@ meta {
 
 post {
   url: {{base_url}}agent/debug/query
+  body: json
 }
 
 headers {
@@ -19,7 +20,7 @@ headers {
 
 body:json {
   {
-    "cluster_id": "{{cluster_id}}",
+    "cluster_id": "{{agent_cluster_id}}",
     "reason": "manual Bruno telemetry query",
     "query": {
       "source": "prometheus",

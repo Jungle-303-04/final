@@ -11,6 +11,7 @@ meta {
 
 post {
   url: {{base_url}}commands
+  body: json
 }
 
 headers {
@@ -19,7 +20,7 @@ headers {
 
 body:json {
   {
-    "cluster_id": "{{cluster_id}}",
+    "cluster_id": "{{agent_cluster_id}}",
     "action": "rollout_restart",
     "namespace": "sandbox",
     "reason": "manual Bruno command test",
@@ -27,15 +28,15 @@ body:json {
     "policy_decision_ref": "policy-bruno-manual",
     "diff": {
       "workspace_id": "{{workspace_id}}",
-      "cluster_id": "{{cluster_id}}",
+      "cluster_id": "{{agent_cluster_id}}",
       "application_id": "app-bruno",
       "workflow_run_id": "wf-bruno",
       "binding_id": "binding-bruno",
       "environment": "sandbox",
       "namespace": "sandbox",
-      "resource_kind": "Deployment",
-      "resource_name": "checkout-api",
-      "action": "modify",
+      "resource": "deployment/checkout-api",
+      "desired_image": "{{service_image}}",
+      "actual_image": "resource-not-inspected",
       "risk": "sandbox-only",
       "desired_manifest": {
         "apiVersion": "apps/v1",
@@ -44,8 +45,7 @@ body:json {
           "name": "checkout-api",
           "namespace": "sandbox"
         }
-      },
-      "actual_manifest": {}
+      }
     }
   }
 }
