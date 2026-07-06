@@ -36,6 +36,7 @@ SKIP_PAGES = {"_conventions.md"}
 errors: list[str] = []
 code_ahead: list[str] = []
 spec_ahead: list[str] = []
+sync_checks: list[tuple[Path, str, set[str]]] = []  # (page, source_commit, anchor_paths)
 
 
 def git(*args: str) -> str:
@@ -44,14 +45,32 @@ def git(*args: str) -> str:
     ).stdout.strip()
 
 
+_src_cache: dict[str, str] = {}
+_exists_cache: dict[str, bool] = {}
+
+
+def src_text(path: Path, key: str) -> str:
+    if key not in _src_cache:
+        _src_cache[key] = path.read_text(encoding="utf-8", errors="ignore")
+    return _src_cache[key]
+
+
+def path_exists(path: Path, key: str) -> bool:
+    if key not in _exists_cache:
+        _exists_cache[key] = path.exists()
+    return _exists_cache[key]
+
+
 for page in sorted(SPEC.rglob("*.md")):
     if page.name in SKIP_PAGES:
         continue
     rel_page = page.relative_to(ROOT)
     text = page.read_text(encoding="utf-8")
 
-    # 1. 상대 링크
-    for m in MD_LINK.finditer(text):
+    # 1. 상대 링크 — 코드 펜스·인라인 코드 안의 유사 패턴(regex, 다이어그램)은 제외
+    prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    prose = re.sub(r"`[^`\n]*`", "", prose)
+    for m in MD_LINK.finditer(prose):
         href = m.group(1)
         if href.startswith(("http://", "https://", "mailto:")):
             continue
@@ -63,13 +82,13 @@ for page in sorted(SPEC.rglob("*.md")):
     for m in ANCHOR.finditer(text):
         path_str, symbol = m.group(1), m.group(2)
         target = ROOT / path_str
-        if not target.exists():
+        if not path_exists(target, path_str):
             errors.append(f"{rel_page}: 없는 코드 경로 → {path_str}")
             continue
         anchor_paths.add(path_str)
         if symbol and target.is_file():
             head = symbol.split(".")[0]
-            src = target.read_text(encoding="utf-8", errors="ignore")
+            src = src_text(target, path_str)
             if not re.search(rf"\b{re.escape(head)}\b", src):
                 errors.append(f"{rel_page}: 심볼 없음 → {path_str} :: {symbol}")
 
@@ -98,17 +117,50 @@ for page in sorted(SPEC.rglob("*.md")):
         spec_ahead.append(str(rel_page))
         continue
 
-    if git("cat-file", "-t", commit) != "commit":
-        errors.append(f"{rel_page}: source_commit이 유효한 커밋이 아님 → {commit}")
-        continue
+    sync_checks.append((rel_page, commit, anchor_paths))
 
-    if anchor_paths:
-        newer = git("log", "--oneline", f"{commit}..HEAD", "--", *sorted(anchor_paths))
-        if newer:
-            lines = newer.splitlines()
+# ── code-ahead 배치 탐지 (커밋별 git 1회) ─────────────
+by_commit: dict[str, list[tuple[Path, set[str]]]] = {}
+for rel_page, commit, paths in sync_checks:
+    by_commit.setdefault(commit, []).append((rel_page, paths))
+
+for commit, pages_paths in by_commit.items():
+    if git("cat-file", "-t", commit) != "commit":
+        for rel_page, _ in pages_paths:
+            errors.append(f"{rel_page}: source_commit이 유효한 커밋이 아님 → {commit}")
+        continue
+    # 해당 커밋 이후 변경된 소스 파일 → 커밋 목록 매핑 (git 호출 1회)
+    raw = git(
+        "log",
+        "--format=COMMIT:%h %s",
+        "--name-only",
+        f"{commit}..HEAD",
+        "--",
+        "src",
+        "frontend/src",
+        "alembic",
+        "config",
+    )
+    changed: dict[str, list[str]] = {}
+    current = ""
+    for line in raw.splitlines():
+        if line.startswith("COMMIT:"):
+            current = line[len("COMMIT:") :]
+        elif line.strip():
+            changed.setdefault(line.strip(), []).append(current)
+    for rel_page, paths in pages_paths:
+        hits: dict[str, None] = {}
+        for f, commits in changed.items():
+            for p in paths:
+                p_clean = p.rstrip("/")
+                if f == p_clean or f.startswith(p_clean + "/"):
+                    for c in commits:
+                        hits[c] = None
+        if hits:
+            commits_list = list(hits)
             code_ahead.append(
-                f"{rel_page} (기준 {commit[:8]}, 이후 코드 커밋 {len(lines)}건)\n"
-                + "\n".join(f"      {line}" for line in lines[:5])
+                f"{rel_page} (기준 {commit[:8]}, 이후 코드 커밋 {len(commits_list)}건)\n"
+                + "\n".join(f"      {c}" for c in commits_list[:5])
             )
 
 # ── 보고 ──────────────────────────────────────────────

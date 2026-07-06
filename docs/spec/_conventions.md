@@ -1,8 +1,8 @@
 # 스펙 작성 컨벤션 (Spec-Driven Development)
 
-> 이 폴더(`docs/spec/`)는 **구현의 단일 진실 원천(source of truth)** 이다.
-> 코드를 변경할 때는 반드시 해당 스펙 페이지를 먼저 수정하고, 코드를 스펙에 맞춘다.
-> AI 에이전트는 코드를 읽기 전에 이 폴더의 스펙을 먼저 읽고, 스펙과 코드가 다르면 **스펙 위반**으로 간주해 보고한다.
+> 이 폴더(`docs/spec/`)는 실제 구현을 팀원이 따라 읽을 수 있게 풀어 쓴 명세다.
+> 현재 프로젝트에서는 실제 코드와 테스트가 기준이다. 스펙과 코드가 다르면 코드를 먼저 확인하고 문서를 갱신한다.
+> 새 설계가 문서에 먼저 적히는 경우에도, 이미 동작하는 것처럼 쓰지 않고 구현 단계와 검증 방법을 분리해서 적는다.
 
 ## 1. 폴더 구조
 
@@ -10,15 +10,14 @@
 docs/spec/
 ├── README.md            # 전체 인덱스 (여기서 모든 페이지로 진입)
 ├── _conventions.md      # 이 문서
-├── architecture.md      # 시스템 전체 토폴로지·계층 규칙·이벤트 흐름
 ├── packages/            # src/packages/* — 공유 커널 (계약·이벤트·스토리지·런타임)
 ├── domains/             # src/domains/*  — 도메인 모델·이벤트·리포지토리·라우터
 ├── services/            # src/services/* — 워커·게이트웨이 (프로세스 단위)
 └── frontend/            # frontend/src/* — 앱 셸·피처·공유 모듈
 ```
 
-스펙 폴더 구조는 소스 트리 구조와 1:1 대응한다.
-`src/domains/rca/` ↔ `docs/spec/domains/rca.md`, `src/services/ai/rca-worker/` ↔ `docs/spec/services/ai/rca-worker.md`.
+스펙 폴더 구조는 루트 기준 3레벨 제한을 지키면서 소스 트리와 대응한다.
+`src/domains/rca/` ↔ `docs/spec/domains/rca.md`, `src/services/ai/rca-worker/` ↔ `docs/spec/services/ai-rca-worker.md`.
 
 ## 2. 코드 앵커(Code Anchor) 표기
 
@@ -37,8 +36,8 @@ docs/spec/
 
 ## 3. 페이지 간 링크
 
-- 스펙 페이지끼리는 **상대경로 마크다운 링크**로 연결한다: `[rca 도메인](../domains/rca.md)`.
-- 다른 페이지의 특정 섹션은 헤딩 앵커로: `[RcaSession](../domains/rca.md#rcasession)`.
+- 스펙 페이지끼리는 **상대경로 마크다운 링크**로 연결한다: `[rca 도메인](domains/rca.md)`.
+- 다른 페이지의 특정 섹션은 헤딩 앵커로: `[RcaSession](domains/rca.md#rcasession)`.
 - import 관계가 있으면 링크 관계도 있어야 한다. 코드가 `domains.rca`를 import하면 그 서비스 스펙은 `domains/rca.md`를 링크한다.
 
 ## 4. 페이지 템플릿
@@ -101,7 +100,7 @@ status: synced | spec-ahead
 
 ## 6. 100% 동기화 규칙
 
-1. **스펙 먼저**: 기능 변경 = 스펙 페이지 수정(`status: spec-ahead`) → 코드 수정 → 같은 PR에서 `synced` + `source_commit` 갱신.
+1. **코드 기준 동기화**: 구현이 이미 있으면 코드를 기준으로 스펙을 맞춘다. 새 설계가 먼저 필요하면 `status: spec-ahead`로 두고 구현 단계와 테스트를 분리해서 적는다.
 2. **커버리지**: 모듈의 모든 public 심볼(밑줄로 시작하지 않는 클래스·함수·상수)은 스펙에 존재해야 한다.
 3. **아키텍처 경계**: `services → domains → packages` 단방향 의존([.importlinter](../../.importlinter)로 CI 강제). 스펙의 의존성 표도 이 방향을 위반할 수 없다.
 4. **검증**: `python scripts/verify_spec_links.py` 로 (a) 상대링크 존재, (b) 코드 앵커 경로·심볼 존재, (c) front matter 존재, (d) code-ahead/spec-ahead 동기화 상태를 검사한다.
