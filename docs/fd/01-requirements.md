@@ -74,7 +74,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/workflow.md](views/workflow.md) |
-| 시각화 | run 의 9단계 상태(WorkflowRunStatus)를 @xyflow/react 노드 그래프로. `frontend-demo` WorkflowNode/SignalEdge 이식 |
+| 시각화 | run 의 9단계 상태(WorkflowRunStatus)를 @xyflow/react 노드 그래프로. 실제 구현 기준은 `frontend/src/features/workflow/WorkflowGraphView.tsx` |
 | 생성 | "워크플로우 생성" = application + binding 생성 위저드([views/resources.md](views/resources.md))의 결과. 임의 DAG 편집기는 백엔드 실행 모델에 없음 → 범위 제외(문서에 명시) |
 
 ## R10. AI 채팅

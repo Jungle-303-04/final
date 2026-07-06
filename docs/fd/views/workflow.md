@@ -14,7 +14,8 @@ ResourceTable: 앱, commit, 상태 Badge, 현재 단계, 시작, 경과. 필터:
 
 ## 그래프 — WorkflowGraphView (/workflows/:runId)
 
-@xyflow/react + frontend-demo 의 WorkflowNode/SignalEdge 이식([02 § 이식](../02-reference-map.md#frontend-demo-이식-대상-자기-코드--제약-없음)).
+@xyflow/react 기반 구현은 `frontend/src/features/workflow/WorkflowGraphView.tsx`와
+[02 § 현재 frontend 반영 위치](../02-reference-map.md#현재-frontend-반영-위치)를 기준으로 본다.
 
 고정 파이프라인 노드 9개(가로 배치, elkjs 불필요 — 순서 고정):
 
