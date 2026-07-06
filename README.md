@@ -43,6 +43,7 @@ src/services
   alert/alert-worker
   mail/mail-worker
   target/cluster-agent
+  target/drift-worker
   target/node-collector
   target/reconcile-worker
 src/domains
@@ -138,6 +139,7 @@ mail-worker                  mail.email_verification.requested -> 인증 메일 
 
 [target]
 cluster-agent                대상 클러스터 outbound agent, command receiver, evidence job scheduler
+drift-worker                 target desired/actual drift evidence 생성
 node-collector               선택형 DaemonSet collector
 reconcile-worker             target 상태 reconcile
 ```
