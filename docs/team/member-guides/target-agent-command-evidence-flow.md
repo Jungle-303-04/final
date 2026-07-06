@@ -99,6 +99,9 @@ class CommandRequest(StrictModel):
 - `CommandRequestedBody`로 변환된 뒤 event runtime으로 들어간다.
 
 Agent가 명령을 가져갈 때는 `GET /agent/commands/poll`을 호출한다. 이 route는 `x-agent-token` 기반 `require_cluster_agent`를 통과해야 한다. body나 query의 `workspace_id`, `cluster_id`는 신뢰하지 않고 token identity의 값을 사용한다.
+Gateway는 `COMMAND_NOTIFY_DATABASE_URL`이 설정되어 있으면 Postgres `LISTEN agent_command_queued`로 새 command queue 알림을 듣고, 같은 workspace/cluster로 long-poll 중인 요청을 즉시 깨운다.
+그래도 정본은 항상 `agent_commands` lease 쿼리다.
+알림 listener가 없거나 끊겨도 poll timeout 뒤 재시도하는 구조라 command 유실이 없어야 한다.
 
 ```text
 GET /agent/commands/poll?agent_id=<agent-id>&timeout=<seconds>
