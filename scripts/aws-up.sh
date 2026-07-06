@@ -693,6 +693,17 @@ EOF
   log "applying management plane"
   kubectl --context "${MGMT_CLUSTER}" apply -k "${overlay}"
 
+  # 레거시 워커 정리 — 옛 이름의 Deployment 가 남아 있으면 옛 코드가
+  # 같은 subject 를 경합 소비해 이벤트 계약 위반(DLQ)과 파이프라인 오동작을 일으킨다.
+  # (up.sh 의 로컬 정리 목록과 동일하게 유지할 것)
+  log "removing legacy deployments"
+  for old_deploy in \
+    oauth-auth-service git-event-processor manifest-renderer desired-state-sync \
+    command-orchestrator command-dispatcher agent-connection-gateway \
+    evidence-builder ai-rca-service safe-pr-service rca-fallback-worker; do
+    kubectl --context "${MGMT_CLUSTER}" -n management delete "deploy/${old_deploy}" --ignore-not-found
+  done
+
   log "restarting management deployments"
   kubectl --context "${MGMT_CLUSTER}" -n management rollout restart deployment >/dev/null
 
