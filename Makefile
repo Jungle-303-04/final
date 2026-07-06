@@ -12,7 +12,7 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod aws-smoke aws-up aws-down clean
+.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check events crash-test check build-image up install-telemetry down status smoke scale kill-pod external-kubeconfig cluster-interactions aws-smoke aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -99,6 +99,12 @@ scale: ## management worker 스케일 조정. 예: make scale DEPLOYMENT=rca-wor
 kill-pod: ## management pod 삭제 후 복구 확인. 예: make kill-pod DEPLOYMENT=rca-worker
 	@test -n "$(DEPLOYMENT)"
 	bash scripts/kill-pod.sh "$(DEPLOYMENT)"
+
+external-kubeconfig: ## 외부 콘솔 클러스터 kubeconfig 동기화/검증
+	bash scripts/external-console-kubeconfig.sh
+
+cluster-interactions: ## 두 클러스터 read-only 상태/서비스/Helm/event 확인
+	bash scripts/cluster-interactions.sh
 
 aws-up: ## AWS EKS management + target 2개 테스트 환경 생성
 	bash scripts/aws-up.sh
