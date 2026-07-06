@@ -51,8 +51,8 @@ status: synced
 자동 선택 조건(모두 만족):
 `selected.route == "auto"` **and** `not selected.approval_required` **and**
 명령 카탈로그 spec 의 `requires_approval` 이 False
-(현행 [builtin 복구 룰](ai-agent.md#recoverybuiltinpy--등록된-복구-룰)과
-명령 카탈로그에서는 항상 선택 요청으로 흐른다).
+(현행 builtin 룰에서는 `rollout_restart` 후보만 이 조건을 모두 만족해
+자동 선택되고, 나머지는 선택 요청으로 흐른다).
 
 ## 동작 (Behavior)
 
