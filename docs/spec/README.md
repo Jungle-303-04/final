@@ -60,7 +60,6 @@
 - [services/ai-rca-worker](services/ai-rca-worker.md)
 - [services/ai-recovery-worker](services/ai-recovery-worker.md)
 - [services/ai-rollout-worker](services/ai-rollout-worker.md)
-- [services/ai-safe-pr-worker](services/ai-safe-pr-worker.md)
 - [services/ai-select-worker](services/ai-select-worker.md)
 - [services/alert-alert-worker](services/alert-alert-worker.md)
 - [services/command-command-janitor](services/command-command-janitor.md)

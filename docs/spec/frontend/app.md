@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -95,7 +95,7 @@ export const router = createBrowserRouter([...])
 |---|---|---|
 | `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | `useSession()` pending 이면 `<div style={{padding:48}}><Skeleton lines={5}/></div>`. `data?.authenticated` 가 falsy 면 `<Navigate to={"/login?returnTo=" + encodeURIComponent(loc.pathname)} replace />`. 아니면 `<Outlet />` |
 | `RequireGuest` | `frontend/src/app/guards.tsx :: RequireGuest` | pending 이면 `null`. `authenticated` 면 `/overview` 로 replace 이동. 아니면 `<Outlet />` |
-| `RequireAdmin` | `frontend/src/app/guards.tsx :: RequireAdmin` | `useIsAdmin()` 가 false 면 `<EmptyState icon="🔒" title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />` 렌더(리다이렉트 아님). true 면 `<Outlet />` |
+| `RequireAdmin` | `frontend/src/app/guards.tsx :: RequireAdmin` | `useIsAdmin()` 가 false 면 `<EmptyState icon={<IconLock size={26} />} title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />` 렌더(리다이렉트 아님, 아이콘은 `frontend/src/shared/ui/icons.tsx :: IconLock`). true 면 `<Outlet />` |
 
 ### 앱 셸 — `frontend/src/app/shell/AppShell.tsx :: AppShell`
 
@@ -152,4 +152,4 @@ AppShell (div.shell / 접힘 시 .shell--collapsed)
 
 | 키 | 타입 | 기본값 | 의미 |
 |---|---|---|---|
-| `VITE_API_MODE` | `'mock' \| 'real'` | `mock` | `mock` 이면 탑바에 MOCK 뱃지 표시, live 는 가짜 스트림 ([shared](./shared.md#설정-settings) 참조) |
+| `VITE_API_MODE` | `'mock' \| 'real'` | `real` | `'mock'` 을 명시했을 때만 mock 동작(우발적 페이크 차단). mock 이면 탑바에 MOCK 뱃지 표시, live 는 가짜 스트림. 로컬 vite dev 는 `frontend/.env.development` 가 `mock` 을 기본 지정 ([shared](./shared.md#설정-settings) 참조) |

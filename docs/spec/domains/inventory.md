@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -13,7 +13,9 @@ status: synced
   - cluster-agent가 보고하는 클러스터 리소스 스냅샷의 수신(HTTP)·영속(스냅샷 이력 + 리소스 upsert read model + usage 시계열).
   - 스냅샷 payload의 정규화: 리소스 식별 키(sha256) 생성, `health`/`usage` 섹션을 합성(synthetic) 리소스로 변환.
   - `replace` 모드에서 스냅샷에 없는 기존 리소스의 soft delete(`deleted_at` 마킹).
-  - 대시보드용 조회 API: 리소스 목록(타입/네임스페이스 필터), 워크로드/서비스/이벤트 뷰, 최신 스냅샷 + health별 카운트 요약.
+  - target-agent kubernetes evidence를 인벤토리 스냅샷 payload로 변환하는 순수 함수(`kubernetes_snapshot.py`) — usage 롤업(pod/restart/node 실측 집계) 포함.
+  - 대시보드용 조회 API: 리소스 목록(타입/네임스페이스 필터), 워크로드/서비스/이벤트 뷰, 최신 스냅샷 + health별 카운트 요약, 실측 usage 시계열(`GET /clusters/{cluster_id}/usage`).
+  - diff-worker actual-state 조회용: 최신 인벤토리 리소스에서 컨테이너 이미지 추출(`get_actual_resource_image`).
   - 스냅샷 영속 완료 이벤트(`cluster.inventory.snapshot.recorded`) 발행.
 - **하지 않는다**:
   - 클러스터에서의 실제 리소스 수집 — cluster-agent 담당.
@@ -39,6 +41,14 @@ status: synced
 
 - `src/domains/inventory/__init__.py` — 도메인 선언("클러스터 리소스 현황"). 심볼 없음.
 
+### kubernetes evidence 변환 — `src/domains/inventory/kubernetes_snapshot.py`
+
+- `src/domains/inventory/kubernetes_snapshot.py :: kubernetes_evidence_to_inventory_snapshot`
+  ```python
+  def kubernetes_evidence_to_inventory_snapshot(kubernetes: JsonObject, *, cluster_id: str, agent_id: str) -> JsonObject
+  ```
+  target-agent kubernetes evidence(`workloads`/`pods`/`nodes`/`services`/`events`/`endpoints` 목록)를 `save_inventory_snapshot`이 받는 payload로 변환하는 순수 함수. `source="cluster-agent:kubernetes"`, `replace=True`, `collected_at=cluster.collected_at`. `health.status`는 리소스가 있으면 `"healthy"` 아니면 `"empty"`. `usage`는 실측 롤업(내부 `_usage_rollup`): pod/node가 하나도 없으면 빈 dict(usage 행 미생성), 있으면 `{pod_total, pod_running, pod_pending, pod_failed(phase 카운트), restart_total, node_total, node_ready}` — agent가 실제 관측한 값만 집계(합성 값 금지). 호출부는 target 도메인의 evidence job 결과 처리([target](./target.md)).
+
 ### 이벤트 body — `src/domains/inventory/events.py`
 
 - `src/domains/inventory/events.py :: InventorySnapshotRecordedBody` — `@event(EventSubject.CLUSTER_INVENTORY_SNAPSHOT_RECORDED)` (스키마는 [이벤트](#이벤트-events) 참조)
@@ -49,6 +59,7 @@ status: synced
 
 | 앵커 | 값 | 의미 |
 |---|---|---|
+| `src/domains/inventory/repository.py :: INVENTORY_UPSERT_CHUNK` | `500` | 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한(파라미터 수 제한과 트랜잭션 락 시간의 절충, env 아님) |
 | `src/domains/inventory/repository.py :: SYNTHETIC_NAMESPACE` | `None` | 합성 리소스(health/usage)의 namespace |
 | `src/domains/inventory/repository.py :: HEALTH_RESOURCE_TYPE` | `"health"` | 합성 클러스터 health 리소스 타입 |
 | `src/domains/inventory/repository.py :: USAGE_RESOURCE_TYPE` | `"usage"` | 합성 클러스터 usage 리소스 타입 |
@@ -91,6 +102,11 @@ status: synced
   def snapshot_summary(payload: JsonObject) -> JsonObject
   ```
   `{"summary": dict(payload["summary"] or {}), "health": ..., "usage": ...}` 반환.
+- `src/domains/inventory/repository.py :: first_container_image`
+  ```python
+  def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None
+  ```
+  K8s 리소스 raw에서 첫 컨테이너 이미지 탐색 — `spec.template.spec.containers`(workload) → `spec.containers`(pod) → `summary["image"]` 순 fallback, 없으면 None.
 
 클래스:
 
@@ -105,6 +121,16 @@ status: synced
     def list_inventory_resources(self, *, workspace_id: str, cluster_id: str, resource_type: str | None = None, namespace: str | None = None, include_deleted: bool = False, limit: int = 200) -> list[JsonObject]
     ```
     `cluster_inventory_resources`에서 workspace/cluster 필수 필터 + `resource_type`·`namespace` 선택 필터(truthy일 때만), `include_deleted=False`면 `deleted_at IS NULL`. 정렬 `resource_type, namespace NULLS FIRST, name`, limit은 `max(1, min(limit, 1000))`로 clamp. 각 행은 `serialize_inventory_resource` 적용.
+  - `src/domains/inventory/repository.py :: InventoryRepository.get_actual_resource_image`
+    ```python
+    def get_actual_resource_image(self, workspace_id: str, cluster_id: str, namespace: str | None, resource: str) -> str | None
+    ```
+    diff-worker actual-state 조회. `resource`는 gitops resource_ref 형식(`"kind/name"`, kind 소문자) — `kind`/`name`으로 분해해 살아 있는(`deleted_at IS NULL`) 최신(`last_seen_at DESC LIMIT 1`) 행을 찾고(`lower(kind)` 비교, namespace는 truthy일 때만 필터) `first_container_image(raw, summary)` 반환. 스냅샷/이미지가 없으면 None — 호출부(diff-worker)가 "unknown" 처리.
+  - `src/domains/inventory/repository.py :: InventoryRepository.list_cluster_usage_samples`
+    ```python
+    def list_cluster_usage_samples(self, workspace_id: str, cluster_id: str, *, limit: int = 288) -> list[JsonObject]
+    ```
+    `cluster_usage_samples`에서 최신 `limit`개(1..2000 clamp)를 뽑아 시간 오름차순으로 반환(차트용). 원소: `{"sampled_at": ISO 문자열, "usage": dict}`.
   - `src/domains/inventory/repository.py :: InventoryRepository.latest_inventory_snapshot`
     ```python
     def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None
@@ -149,6 +175,7 @@ status: synced
 | GET `/clusters/{cluster_id}/inventory/workloads` (`CLUSTER_INVENTORY_WORKLOADS_PATH`) | `src/domains/inventory/router.py :: list_inventory_workloads` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/services` (`CLUSTER_INVENTORY_SERVICES_PATH`) | `src/domains/inventory/router.py :: list_inventory_services` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/events` (`CLUSTER_INVENTORY_EVENTS_PATH`) | `src/domains/inventory/router.py :: list_inventory_events` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/clusters/{cluster_id}/usage` (`CLUSTER_USAGE_PATH`) | `src/domains/inventory/router.py :: get_cluster_usage` | query: `limit: int = Query(288, ge=1, le=2000)` | `ClusterUsageResponse(cluster_id, samples=[ClusterUsageSample ...])` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/summary` (`CLUSTER_INVENTORY_SUMMARY_PATH`) | `src/domains/inventory/router.py :: get_inventory_summary` | — | `InventorySummaryResponse` | `require_session` + `Permission.INVENTORY_READ` |
 
 - workloads/services/events 뷰는 각각 `resource_type="workload"` / `"service"` / `"event"` 고정 + `include_deleted=False`인 `list_inventory_resources`의 특수화다.
@@ -218,7 +245,7 @@ status: synced
 | workspace_id | Text | NOT NULL | 워크스페이스 |
 | cluster_id | Text | NOT NULL | 클러스터 |
 | sampled_at | TIMESTAMP(timezone=True) | NOT NULL | 샘플 시각 (= 스냅샷 collected_at) |
-| usage | JSONB | NOT NULL | usage payload (append-only 시계열) |
+| usage | JSONB | NOT NULL | usage payload (append-only 시계열). kubernetes evidence 경유 스냅샷은 실측 롤업 `{pod_total, pod_running, pod_pending, pod_failed, restart_total, node_total, node_ready}` |
 | created_at | TIMESTAMP(timezone=True) | NOT NULL, server_default=now() | 저장 시각 |
 
 ## 이벤트 (Events)
@@ -259,7 +286,7 @@ status: synced
 3. 각 리소스를 `normalize_inventory_resource(...)`로 행 dict 정규화. `seen_keys`(inventory_key 집합)·`seen_types`(resource_type 집합) 수집.
 4. 단일 커넥션(`self.connection()`) 안에서:
    1. `cluster_inventory_snapshots`에 스냅샷 1행 INSERT (`source` 기본 `"cluster-agent"`, `status` 기본 `"accepted"`, `resource_count=len(normalized)`, `summary=snapshot_summary(payload)`).
-   2. 리소스마다 `pg_insert(...).on_conflict_do_update(index_elements=[inventory_key])` upsert:
+   2. 리소스를 `INVENTORY_UPSERT_CHUNK`(500)개 청크로 나눠 **배치 업서트** — 청크당 다중 VALUES 1문 `pg_insert(...).on_conflict_do_update(index_elements=[inventory_key])`(리소스당 1문이던 것을 대체, `excluded.*`로 충돌 행 갱신):
       - 갱신 컬럼: `snapshot_id, api_version, kind, namespace, name, uid, resource_version, status, health, labels, annotations, summary, raw, observed_at, last_seen_at`, `deleted_at=None`(부활), `updated_at=func.now()`.
       - **비갱신**: `first_seen_at`, `created_at`, `workspace_id`, `cluster_id`, `resource_type` (identity의 일부).
    3. `summary["usage"]`가 비어 있지 않으면 `cluster_usage_samples`에 1행 INSERT (`sampled_at=observed_at`).

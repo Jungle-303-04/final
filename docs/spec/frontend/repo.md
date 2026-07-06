@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -17,7 +17,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 승인 버튼 활성 |
 | import | `@/features/resources/ConnectRepoWizard` | [resources](./resources.md) | 목록 화면 위저드 |
 | import ← | [workflow](./workflow.md), [chat](./chat.md), [notifications](./notifications.md), [org](./org.md) | — | `useApplications`/`useRuns*`/`ApprovalCard` 소비 |
@@ -29,12 +29,13 @@ status: synced
 |---|---|---|---|
 | `repoKeys` | `frontend/src/features/repo/api.ts :: repoKeys` | — | `apps() = ['applications']`, `runs(id) = ['applications', id, 'runs']`, `deployments(id) = ['applications', id, 'deployments']` |
 | `useApplications` | `frontend/src/features/repo/api.ts :: useApplications` | GET `/applications` | 30s, select `d.applications.map(adaptApplication)` |
-| `useApplication` | `frontend/src/features/repo/api.ts :: useApplication` | GET `/applications/${id}` | 쿼리키 `['applications', id]` |
+| `useApplication` | `frontend/src/features/repo/api.ts :: useApplication` | GET `/applications/${id}` → `{application: raw}` | 쿼리키 `['applications', id]`, `select: d => adaptApplication(d.application)` |
 | `useRuns` | `frontend/src/features/repo/api.ts :: useRuns` | GET `/applications/${appId}/runs` | select `d.runs.map(adaptRun)`. **적응 폴링**: raw runs 중 상태(대문자화)가 ACTIVE 집합에 있으면 10s, 아니면 60s |
 | `useRunsAll` | `frontend/src/features/repo/api.ts :: useRunsAll` | 앱별 GET `/applications/${id}/runs` (useQueries) | `(apps: Application[])` → `combine` 으로 `{ appId, runs: adaptRun[] }[]` 반환. 활성 run 있으면 10s, 아니면 30s |
-| `useDeployments` | `frontend/src/features/repo/api.ts :: useDeployments` | GET `/applications/${appId}/deployments` | select `.deployments` |
+| `useDeployments` | `frontend/src/features/repo/api.ts :: useDeployments` | GET `/applications/${appId}/deployments` | select `d.deployments.map(adaptDeployment)` |
 | `useApproval` | `frontend/src/features/repo/api.ts :: useApproval` | POST `/approvals/${approvalId}/${action}` (`action: 'grant'\|'reject'`) | 성공: toast(`grant → ok '승인 완료 — 배포가 진행됩니다'` / `reject → warn '거절했습니다'`) + `['applications']`·`applications*` predicate·`ai*` predicate invalidate |
-| `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | POST `/applications` body `Partial<Application>` | 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
+| `CreateApplicationInput` | `frontend/src/features/repo/api.ts :: CreateApplicationInput` | — | `{ name; repo_ref; branch; manifest_path; cluster_id }` — 레포 연결 위저드 입력 계약 |
+| `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | ① POST `/applications` body `{name, repo_ref, default_branch: branch, manifest_path}` → `{application: raw}` ② POST `/applications/${id}/deployments` body `{cluster_id, namespace:'sandbox', environment:'sandbox', manifest_path}` | `(input: CreateApplicationInput)` — 앱 생성 후 배포 대상 등록까지 2단계 순차 실행. 반환은 `adaptApplication` 결과에 `branch`/`cluster_id` 를 덮어쓴 값. 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
 
 `ACTIVE`(모듈 상수, 비공개): `{'STARTED','RENDERING','DIFFING','POLICY_CHECKING','WAITING_FOR_APPROVAL','APPLYING','ROLLOUT_WAITING'}`.
 
@@ -68,7 +69,10 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   ```
   FadeSlideIn
   ├─ Breadcrumbs [레포 → app.name]
-  ├─ 헤더: h1(name + code repo_ref@branch) · a(https://github.com/<repo_ref>, 새 탭) "GitHub ↗"
+  ├─ 헤더: h1(name + code repo_ref@branch) · 버튼 2개(새 탭):
+  │    "manifest 수정 ↗" → https://github.com/<repo_ref>/blob/<branch>/<manifest_path> · "GitHub ↗" → https://github.com/<repo_ref>
+  ├─ 안내문: "manifest(<manifest_path>)는 Git 이 원본입니다 — GitHub 에서 수정해 커밋하면
+  │    webhook/poller 가 감지해 자동으로 run 이 생성됩니다. 콘솔에서는 직접 수정하지 않습니다."
   ├─ Tabs: runs(badge=run 수)/deployments(배포)/safe-pr(Safe PR)/settings(설정)
   ├─ [runs] 비면 EmptyState(IconClock '첫 커밋 감지 대기 중' — webhook/poller 안내)
   │   아니면 Stagger(run별 Card):
@@ -96,4 +100,6 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 - run 폴링 주기는 활성 run 존재 여부에서만 파생(수동 refetch 트리거 금지): 단일 앱 10s/60s, 전체 10s/30s.
 - 승인 UI 는 `ApprovalCard` 하나만 존재 — 다른 feature 에서 재구현 금지.
 - 승인 성공 시 chat 캐시(`['ai']` prefix)도 무효화해 대화 속 `approval_ref` 상태를 동기화한다.
-- run 상태 문자열은 `adaptRun` 이 대문자로 정규화한 값으로만 비교한다.
+- run 상태 문자열은 `adaptRun` 이 대문자로 정규화한 값으로만 비교한다(실백엔드 step 이름 매핑 포함 — [shared/adapt](shared.md#어댑터-libadaptts)).
+- manifest 는 Git 이 원본 — 콘솔은 링크("manifest 수정 ↗")만 제공하고 직접 편집 UI 를 만들지 않는다.
+- 앱 생성은 `/applications` → `/applications/:id/deployments` 2단계 순차 호출 — 백엔드 필드명(`default_branch`) 변환은 `useCreateApplication` 내부에서만 한다.

@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -47,8 +47,8 @@ status: synced
   FadeSlideIn
   ├─ Breadcrumbs [워크플로우 → '<appId> · <sha>']
   ├─ 헤더: h1(appId) + code(sha) + Badge(status)
-  ├─ WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인 — diff: <DIFFING step detail>')
-  │   + DIFFING step 의 changes 가 있으면 PlanDiff(changes, resource)
+  ├─ WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인' — DIFFING step 에 detail 이 있을 때만 ' — diff: <detail>' 접미)
+  │   + DIFFING step 의 changes 가 있으면 '적용될 변경 (plan)' 카드 안에 PlanDiff(changes, resource)
   └─ 그리드(1fr 300px):
      ├─ Card(h 340, p 0) > FlowCanvas(nodes, edges, nodeTypes, onNodeClick=setSelected)
      └─ Card(title = selected ?? '단계 상세')
@@ -68,4 +68,5 @@ status: synced
 
 - 노드 좌표 하드코딩 금지 — 반드시 `useAutoLayout`(dagre) 사용.
 - dash-flow(active) edge 는 진행 중 run 의 "현재 단계 진입 edge" 하나뿐이다.
-- 단계 어휘는 `ORDER` 8단계 + FAILED 로 고정 — [repo](./repo.md) 의 미니 스텝바와 동일 순서를 유지한다.
+- 단계 어휘는 `ORDER` 8단계 + FAILED 로 고정 — [repo](./repo.md) 의 미니 스텝바와 동일 순서를 유지한다. 실백엔드 run 의 steps[](`git/render/diff/policy/approval/...`)는 [shared/adapt](shared.md#어댑터-libadaptts) 의 `adaptRun` 이 이 어휘로 매핑해서 도착한다 — 뷰에서 재매핑 금지.
+- plan 미리보기는 `RunStep.changes` 를 `PlanDiff` 에 그대로 전달 — 프론트에서 diff 를 만들지 않는다.

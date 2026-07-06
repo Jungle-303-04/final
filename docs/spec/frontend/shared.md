@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -34,7 +34,7 @@ status: synced
 |---|---|---|
 | `ApiErrorKind` | `frontend/src/shared/lib/api.ts :: ApiErrorKind` | `'unauthorized' \| 'forbidden' \| 'not_found' \| 'invalid' \| 'rate_limited' \| 'server' \| 'network'` |
 | `ApiError` | `frontend/src/shared/lib/api.ts :: ApiError` | `class extends Error { kind; status; detail; constructor(status: number, detail: string) }` — kind 매핑: 401→unauthorized, 403→forbidden, 404→not_found, 422/409→invalid, 429→rate_limited, ≥500→server, 그 외→network |
-| `API_MODE` | `frontend/src/shared/lib/api.ts :: API_MODE` | `(import.meta.env.VITE_API_MODE ?? 'mock') as 'mock' \| 'real'` |
+| `API_MODE` | `frontend/src/shared/lib/api.ts :: API_MODE` | `(import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'real')` — **기본 real**. mock 은 `VITE_API_MODE=mock` 을 명시한 빌드에서만(우발적 페이크 차단, dev 기본은 `frontend/.env.development`) |
 | `setUnauthorizedHandler` | `frontend/src/shared/lib/api.ts :: setUnauthorizedHandler` | `(fn: () => void) => void` — 모듈 변수 `onUnauthorized` 등록 |
 | `api` | `frontend/src/shared/lib/api.ts :: api` | `async <T>(method: string, path: string, body?: unknown): Promise<T>` |
 | `get` / `post` / `put` / `del` | `frontend/src/shared/lib/api.ts :: get` 등 | `api` 의 메서드 커링 (`del` 은 DELETE) |
@@ -75,13 +75,15 @@ export const queryClient = new QueryClient({
   snapshot: LiveSnapshot | null;
   history: { at: number; restarts: number; running: number }[];   // 최대 900포인트 유지(slice(-899) + 신규)
   apply: (s: LiveSnapshot) => void;
+  applyCounts: (restarts: number, running: number) => void;
   setStatus: (s: status) => void }
 ```
 
 - `apply(snapshot)`: 전체 pods 를 flat 하여 `restarts` 합·`phase==='Running'` 수를 `history` 포인트(`at: Date.now()`)로 추가.
+- `applyCounts(restarts, running)`: 스냅샷 없이 집계 숫자만 history 포인트로 추가 — 게이트웨이의 `live.summary` 경량 메시지용.
 - `startLive()` 동작:
   - **mock**: status 'open', 1초 `setInterval` 로 `workloadsByCluster['target']` 기반 가짜 `LiveSnapshot` 생성 — pods 는 `{name, phase, hot: p.hot ?? false, restarts: p.restarts + (hot ? floor(tick/5) : 0)}`, `namespaces: [{namespace:'sandbox', pods}]`, `rollout` 은 `tick % 40 < 20` 일 때 `{ name:'checkout-api', progress: min(100, (tick%20)*10) }`.
-  - **real**: 내부 `connect(attempt)` — `new WebSocket(`${wss|ws}://${location.host}/api/live/browser`)` (https→wss). `onopen`→'open', `onmessage`→`JSON.parse` 후 `apply`(파싱 실패는 무시), `onclose`→'closed' 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결. 구독 채널은 이 단일 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
+  - **real**: 내부 `async connect(attempt)` — 먼저 비공개 `currentWorkspaceId()`(GET `/api/auth/session` 직접 fetch, 실패 시 `'default'`)로 워크스페이스를 알아낸 뒤 `new WebSocket(`${wss|ws}://${location.host}/api/live/browser?workspace_id=<id>`)` (https→wss). `onopen`→'open'; `onmessage`→`JSON.parse` 후 분기: `type === 'live.summary'` 면 `applyCounts(summary.restart_delta, summary.pods_ready)`, `namespaces` 필드가 있으면 전체 스냅샷으로 `apply`(그 외/파싱 실패는 무시); `onclose`→'closed' 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결. 구독 채널은 이 단일 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
 
 ## UI 전역 상태 (`lib/ui-store.ts`)
 
@@ -105,7 +107,7 @@ export const queryClient = new QueryClient({
 | `Cluster` | `cluster_id; name; environment; connection_status: 'connected'\|'disconnected'\|'unknown'; node_count; pod_count; incident_count; registered_at` |
 | `ClusterSummary` | `cluster_id; namespaces: string[]; nodes: NodeInfo[]; pod_phases: Record<string, number>; services: number` |
 | `NodeInfo` | `name; ready: boolean; pod_count; version; cpu_ratio?; mem_ratio?` |
-| `Workload` | `name; kind; namespace; ready: string; restarts: number; image; node?; phase; hot?` |
+| `Workload` | `name; kind; namespace; ready: string; restarts: number; image; node?; phase; hot?; workload_name?` — `workload_name` 은 인벤토리 summary 의 owner_name(디플로이먼트 그룹핑 키) |
 | `InventoryResource` | `kind; namespace: string \| null; name; status; age; raw?: unknown` |
 | `ServiceInfo` | `name; namespace; type; cluster_ip; ports` |
 | `K8sEvent` | `at; type; reason; target; message` |
@@ -135,8 +137,14 @@ export const queryClient = new QueryClient({
 | 심볼 | 앵커 | 규칙 |
 |---|---|---|
 | `adaptCluster` | `frontend/src/shared/lib/adapt.ts :: adaptCluster` | `(raw: Record<string,unknown>) => Cluster`. `name ?? cluster_id`, `environment ?? 'unknown'`, `connection_status ?? 'unknown'`, 수치 기본 0, `registered_at ?? created_at ?? now` |
-| `adaptApplication` | `frontend/src/shared/lib/adapt.ts :: adaptApplication` | `=> Application`. `name ?? application_id`, `branch ?? 'main'` |
-| `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. mock 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 콘솔 단계 이름으로 매핑한다. `details.resource`/`details.namespace`는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
+| `adaptInventorySummary` | `frontend/src/shared/lib/adapt.ts :: adaptInventorySummary` | `=> ClusterSummary`. `raw.latest_snapshot.summary`(이중 중첩 `summary.summary` 도 허용)에서 namespaces/nodes/pod_phases/services 추출. 노드는 비공개 `adaptNodeSummary` 로 필드별 안전 변환 |
+| `adaptWorkloadResource` | `frontend/src/shared/lib/adapt.ts :: adaptWorkloadResource` | 인벤토리 pod 리소스(`summary` 포함) `=> Workload`. `kind = summary.owner_kind ?? kind ?? 'Pod'`, `restarts = summary.restart_total`, `image = summary.image ?? containers[].image`, `workload_name = summary.owner_name ?? name`, `hot = (health === 'degraded')` |
+| `adaptServiceResource` | `frontend/src/shared/lib/adapt.ts :: adaptServiceResource` | `=> ServiceInfo`. `summary.ports[]` 를 `'<port>/<protocol>'` join, `type = summary.type ?? status`, `cluster_ip = summary.cluster_ip` |
+| `adaptK8sEventResource` | `frontend/src/shared/lib/adapt.ts :: adaptK8sEventResource` | `=> K8sEvent`. `at = last_timestamp ?? first_timestamp ?? observed_at ?? created_at`, `target = '<involved_kind>/<involved_name>'` |
+| `adaptInventoryResource` | `frontend/src/shared/lib/adapt.ts :: adaptInventoryResource` | `=> InventoryResource`. `status ?? health ?? 'unknown'`, `age = observed_at ?? created_at`, `raw = raw ?? summary` |
+| `adaptApplication` | `frontend/src/shared/lib/adapt.ts :: adaptApplication` | `=> Application`. `name ?? application_id`, `repo_ref ?? metadata.repo_ref`, `branch ?? default_branch ?? metadata.branch ?? 'main'` |
+| `adaptDeployment` | `frontend/src/shared/lib/adapt.ts :: adaptDeployment` | `=> Deployment`. `namespace ?? 'sandbox'`, `name ?? app_name`, 수치 기본 0, `status ?? 'unknown'` |
+| `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. mock 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 비공개 `STEP_NAME_MAP` 으로 콘솔 단계 이름에 매핑한다(git→STARTED, render→RENDERING, diff→DIFFING, policy→POLICY_CHECKING, approval/safe_pr→WAITING_FOR_APPROVAL, apply→APPLYING, health→ROLLOUT_WAITING, 미등록 이름은 대문자화). `details.resource`(+`details.namespace` 접미)는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
 | `adaptIncident` | `frontend/src/shared/lib/adapt.ts :: adaptIncident` | `=> Incident`. summary 우선순위: `root_cause`(단 `'unknown'` 제외) → `error_reason` → `current_subject` → `'인시던트'`. `incident_id ?? correlation_id`, `stage = current_subject ?? status`, `at = at ?? updated_at` |
 | `adaptIncidentDetail` | `frontend/src/shared/lib/adapt.ts :: adaptIncidentDetail` | `=> IncidentDetail`. `adaptIncident` 기반 + `status ?? stage ?? 'open'`, null 정규화(`''`→null), `confidence` 는 number 일 때만, evidence 배열은 `Array.isArray` 검사 후 `map(String)` |
 | `adaptConversationSummary` | `frontend/src/shared/lib/adapt.ts :: adaptConversationSummary` | `=> Omit<Conversation,'messages'>`. `title ?? '대화'`, `status` 는 `'waiting'` 만 인정, 아니면 `'idle'` |
@@ -159,7 +167,7 @@ export async function mockRequest<T>(method: string, pathWithQuery: string, body
 - 180ms 지연 후 `(method, 경로 패턴)` 테이블 매칭. 패턴 세그먼트 `:name` → params. 미매칭 시 `ApiError(404, 'mock 경로 없음: …')`.
 - GET 결과는 `structuredClone` 으로 깊은 복사(React Query 변경 감지 보장, 실백엔드 직렬화와 동형).
 - mock 세션은 `localStorage['mock:session']` 지속(새로고침/딥링크에서 로그인 유지).
-- 상태(`state`): fixtures 를 `structuredClone` 한 `conversations/users/orgs/groups/grants/runsByApp/deadLetters` + `session`.
+- 상태(`state`): fixtures 를 `structuredClone` 한 `conversations/users/orgs/groups/grants/runsByApp/deadLetters` + `session` + `commands`(Map — 발행된 debug query 명령의 `cluster_id/correlation_id/queued_at`).
 
 라우트 테이블(실제 계약 docs/fd/06 과 동일 경로, [api-gateway](../services/gateway-api-gateway.md) 참조):
 
@@ -172,11 +180,15 @@ export async function mockRequest<T>(method: string, pathWithQuery: string, body
 | POST | `/auth/resend-verification` | `{accepted:true, verification_required:true}` |
 | POST | `/auth/users/:userId/approve` | 유저 status→'active' (없으면 404) |
 | GET | `/clusters` · `/clusters/:id` · `/clusters/:id/connection-status` | fixtures. connection-status 는 항상 `'connected'` |
-| GET | `/clusters/:id/inventory/summary` `/workloads` `/resources`(`?kind` 필터) `/services` `/events` | fixtures |
+| GET | `/clusters/:id/inventory/summary` | **실 backend 계약과 동형** envelope `{cluster_id, latest_snapshot: {snapshot_id, status, summary: summaryOf(id)}, counts}` — adapt.ts 는 실 계약만 해석하므로 mock 이 프론트 최종 형태를 직접 주면 화면이 빈 값으로 붕괴한다 |
+| GET | `/clusters/:id/usage` | 실 계약과 동형 — 30s 간격 24개 `{sampled_at, usage: {pod_total/pod_running/pod_pending/pod_failed/restart_total/node_total/node_ready}}` 샘플 생성 |
+| GET | `/clusters/:id/inventory/workloads` | fixtures 그대로(레거시 경로 — 콘솔 훅은 이제 `resources?resource_type=pod` 를 사용) |
+| GET | `/clusters/:id/inventory/resources` | `?resource_type=` 필터. `pod` 면 workloads 픽스처를 pod 리소스 형태(`summary: {phase, ready, restart_total, image, node_name, owner_kind, owner_name}`)로 변환, 그 외는 `fx.resources` 를 `{resource_type, kind, namespace, name, status, observed_at}` 로 변환 |
+| GET | `/clusters/:id/inventory/services` · `/events` | `resources[]` + `summary` 실 계약 형태(서비스: type/cluster_ip/ports[], 이벤트: type/reason/message/involved_kind/involved_name/last_timestamp) |
 | POST | `/clusters/:id/namespaces/:ns/deployments/:name/scale` · `/restart` | `{accepted:true}` |
 | PUT | `/clusters/:id/policy` | `{accepted:true}` |
-| POST | `/targets` | `{registered, applied:false, agent_token:'agt_…', install_manifest:'…'}` |
-| GET | `/providers/catalog` | `{providers:[{key:'existing-k8s',…},{key:'manual-manifest',…}]}` (flat 배열 — 실백엔드는 category별 객체) |
+| POST | `/targets` | `{registered, applied:false, agent_token:'agt_…', install_command:'curl -fsSL <origin>/api/install/<token> \| kubectl apply -f -', install_manifest:'…'}` |
+| GET | `/providers/catalog` | 실백엔드와 동형 category별 객체 `{providers: {cloud:[existing-k8s], deploy:[manual-manifest], source:[github], secret:[env]}}` (각 항목 `status:'available'`) |
 | POST | `/providers/validate` | `{valid:true, errors:[], warnings:[]}` |
 | GET/POST | `/applications`, GET `/applications/:id` `/deployments` `/runs` | fixtures/state |
 | GET | `/catalog/items` · POST `/catalog/items/:id/installs` | fixtures / `{accepted:true}` |
@@ -185,7 +197,8 @@ export async function mockRequest<T>(method: string, pathWithQuery: string, body
 | POST | `/rca/recovery-plans/:planId/actions/:actionId/select` | 해당 plan 의 `actions.selected` 세팅 |
 | GET | `/dashboard/rca/timeline` · `/dashboard/rca/incidents/:id` | fixtures `incidents` |
 | GET | `/dead-letters` · POST `/dead-letters/:id/replay` | status→'replayed' |
-| POST | `/agent/debug/query` | `{accepted, command_id:'cmd-…', correlation_id}` |
+| POST | `/agent/debug/query` | `state.commands` 에 명령 저장 후 `{accepted, command_id:'cmd-…', correlation_id}` |
+| GET | `/commands/:id` | 실 계약과 동일한 명령 상태 폴링 — 발행 후 1.5s 미만이면 `running`, 이후 `completed` + prometheus matrix 형태 데모 result(`result.results.console_promql.series[]`). 미발행 id 는 404 |
 | GET/POST/DELETE | `/orgs`(DELETE 는 그룹 존재 시 422 `'groups_exist'`) · `/groups` · `/groups/:id/members(/:userId)` · `/users`(`?status`) · `/access`(`?resource_id`) · `/access/:id` | 갭 API G1~G5·G10 계약 초안 |
 
 ## Mock 픽스처 (`lib/mock/fixtures.ts`)
@@ -199,7 +212,7 @@ export async function mockRequest<T>(method: string, pathWithQuery: string, body
 | `summaryOf` | `(clusterId: string) => ClusterSummary` — 팟에서 노드/네임스페이스/phase 집계. cluster-2 는 노드 not ready. cpu_ratio `0.35+i*0.18`, mem_ratio `0.5+i*0.1`, version 'v1.31.2', services 6 |
 | `resources` / `services` / `events` | 인벤토리 샘플 (Deployment/ConfigMap/Node, checkout-api·prometheus 서비스, BackOff·ScalingReplicaSet 이벤트) |
 | `applications` | `app-checkout`(WAITING_FOR_APPROVAL), `app-cart`(SUCCEEDED) |
-| `runsByApp` | `mkRun` 생성 — STEPS `['STARTED','RENDERING','DIFFING','POLICY_CHECKING','WAITING_FOR_APPROVAL','APPLYING','ROLLOUT_WAITING','SUCCEEDED']` 기준 step status 계산. run-1(WAITING_FOR_APPROVAL, approval_id 'apr-1'), run-3(SUCCEEDED + `safe_pr`: pr_url·explanation·diff before/after), run-2(FAILED — index 3 스텝 FAILED) |
+| `runsByApp` | `mkRun` 생성 — STEPS `['STARTED','RENDERING','DIFFING','POLICY_CHECKING','WAITING_FOR_APPROVAL','APPLYING','ROLLOUT_WAITING','SUCCEEDED']` 기준 step status 계산. DIFFING 스텝에는 실백엔드 diff-worker 3-way plan 산출물과 동형인 `resource`(`'deployment/checkout-api · sandbox'`)와 `changes[]`(intended_change/adoption_required/drift/already_converged 4건 — PlanDiff 미리보기용) 포함. run-1(WAITING_FOR_APPROVAL, approval_id 'apr-1'), run-3(SUCCEEDED + `safe_pr`: pr_url·explanation·diff before/after), run-2(FAILED — index 3 스텝 FAILED) |
 | `deploymentsByApp` | 앱별 Deployment 1건씩 |
 | `conversations` | conv-1: 유저 질문 + tool_calls 포함 assistant 분석 + `actions`(plan-1: act-1 memory 상향/act-2 rollout restart) |
 | `incidents` | inc-1: `sandbox-pod-13 CrashLoopBackOff`, stage 'recovery.planned' |
@@ -270,7 +283,7 @@ export function PlanDiff({ changes, resource }: { changes: PlanChange[]; resourc
 
 이모지 금지 원칙에 따른 공용 SVG 아이콘. 공통 props `IconProps = SVGProps<SVGSVGElement> & { size?: number }` (기본 size 20, viewBox 24, `stroke: currentColor`, strokeWidth 1.8, `aria-hidden`).
 
-export: `IconCheckCircle`, `IconAlertTriangle`, `IconClock`, `IconBell`, `IconFlame`, `IconFile`, `IconChevronRight`, `IconCheck` — 각각 `frontend/src/shared/ui/icons.tsx :: Icon<이름>`.
+export: `IconCheckCircle`, `IconAlertTriangle`, `IconClock`, `IconBell`, `IconFlame`, `IconFile`, `IconChevronRight`, `IconCheck`, `IconLock` — 각각 `frontend/src/shared/ui/icons.tsx :: Icon<이름>`.
 
 ## 차트 (`ui/charts.tsx`)
 
@@ -346,5 +359,5 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 
 | 환경변수 | 타입 | 기본값 | 의미 |
 |---|---|---|---|
-| `VITE_API_MODE` | `'mock' \| 'real'` | `'mock'` | mock 이면 모든 API 가 `mockRequest` 로, live 는 가짜 1s 스트림 |
+| `VITE_API_MODE` | `'mock' \| 'real'` | `'real'` | `'mock'` 명시 시에만 모든 API 가 `mockRequest` 로, live 는 가짜 1s 스트림. 로컬 vite dev 기본값은 `frontend/.env.development` 가 `mock` 으로 지정(실 백엔드 연동 시 `.env.development.local` 등으로 덮어씀) |
 | `VITE_API_BASE` | string | `'/api'` | real 모드 REST prefix |
