@@ -22,7 +22,7 @@ export default function FleetHeatmapView() {
 
   const snapshot = liveStore(s => s.snapshot); // WS 스냅샷 — 수신 시 타일/스탯 즉시 갱신(D6)
 
-  const clusters = clustersQ.data ?? [];
+  const clusters = useMemo(() => clustersQ.data ?? [], [clustersQ.data]);
   // 팟 레벨은 WS 스냅샷 값을 이름 기준으로 덮어써 polling 을 기다리지 않고 실시간 반영
   const livePods = useMemo(
     () => new Map((snapshot?.namespaces ?? []).flatMap(n => n.pods).map(p => [p.name, p])),
@@ -35,7 +35,7 @@ export default function FleetHeatmapView() {
       return l ? { ...p, phase: l.phase, restarts: l.restarts, hot: l.hot } : p;
     });
   }, [clusterId, workloadsQ.data, livePods]);
-  const nodes = clusterId ? (summaryQ.data?.nodes ?? []) : [];
+  const nodes = useMemo(() => (clusterId ? (summaryQ.data?.nodes ?? []) : []), [clusterId, summaryQ.data]);
 
   const tiles: HeatNode[] = useMemo(() => {
     if (!clusterId) return clusters.map(c => ({ id: c.cluster_id, label: `${c.name} · ${c.pod_count}pods`, value: Math.max(1, c.pod_count), score: clusterScore(c) }));

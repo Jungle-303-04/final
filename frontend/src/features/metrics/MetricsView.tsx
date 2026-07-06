@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { useClusters, useClusterSummary, useWorkloads } from '@/features/cluster/api';
+import { commandResultMessage, isTerminal, summarizeTelemetryResult, useCommandStatus } from '@/features/metrics/api';
 import { Badge, Button, Card, StatBox } from '@/shared/ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
 import { FadeSlideIn } from '@/shared/motion';
@@ -13,12 +14,12 @@ const PRESETS = [
   { label: '노드 CPU', promql: 'sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (node)' },
   { label: '네임스페이스 메모리', promql: 'sum(container_memory_working_set_bytes) by (namespace)' },
 ];
-interface QueryCard { id: string; promql: string; state: 'queued' | 'running' | 'done' | 'failed'; commandId?: string }
+interface QueryCard { id: string; promql: string; commandId?: string; submitFailed?: boolean }
 
 export default function MetricsView() {
   const [sp] = useSearchParams();
   const clustersQ = useClusters();
-  const clusters = clustersQ.data ?? [];
+  const clusters = useMemo(() => clustersQ.data ?? [], [clustersQ.data]);
   const [clusterId, setClusterId] = useState(sp.get('cluster') ?? '');
   const [paused, setPaused] = useState(false);
   const [promql, setPromql] = useState(PRESETS[0].promql);
@@ -54,17 +55,17 @@ export default function MetricsView() {
   const phases = Object.keys(livePhases).length ? livePhases : Object.keys(inventoryPhases).length ? inventoryPhases : workloadPhases;
   const inventoryRunning = phases.Running ?? 0;
   const inventoryRestarts = workloads.reduce((sum, pod) => sum + pod.restarts, 0);
-  const chartPoints = (paused ? frozen : history).length
-    ? (paused ? frozen : history)
-    : clusterId ? [{ at: Date.now(), restarts: inventoryRestarts, running: inventoryRunning }] : [];
-
   const series: Series[] = useMemo(() => {
-    const pts = chartPoints.slice(-120);
+    const base = paused ? frozen : history;
+    const pts = (base.length
+      ? base
+      : clusterId ? [{ at: Date.now(), restarts: inventoryRestarts, running: inventoryRunning }] : []
+    ).slice(-120);
     return [
       { id: '재시작 합', data: pts.map((p, i) => ({ x: i, y: p.restarts })) },
       { id: '실행 팟', data: pts.map((p, i) => ({ x: i, y: p.running })) },
     ];
-  }, [chartPoints]);
+  }, [paused, frozen, history, clusterId, inventoryRestarts, inventoryRunning]);
 
   const run = useMutation({
     mutationFn: (q: string) => post<{ command_id: string }>('/agent/debug/query', {
@@ -80,13 +81,10 @@ export default function MetricsView() {
   });
   const execute = () => {
     const id = Math.random().toString(36).slice(2, 8);
-    setCards(cs => [{ id, promql, state: 'queued' }, ...cs]);
+    setCards(cs => [{ id, promql }, ...cs]);
     run.mutate(promql, {
-      onSuccess: d => {
-        setCards(cs => cs.map(c => c.id === id ? { ...c, state: 'running', commandId: d.command_id } : c));
-        setTimeout(() => setCards(cs => cs.map(c => c.id === id ? { ...c, state: 'done' } : c)), 3500);
-      },
-      onError: () => setCards(cs => cs.map(c => c.id === id ? { ...c, state: 'failed' } : c)),
+      onSuccess: d => setCards(cs => cs.map(c => c.id === id ? { ...c, commandId: d.command_id } : c)),
+      onError: () => setCards(cs => cs.map(c => c.id === id ? { ...c, submitFailed: true } : c)),
     });
   };
 
@@ -119,17 +117,35 @@ export default function MetricsView() {
           <Button variant="primary" onClick={execute}>실행</Button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cards.map(c => (
-            <div key={c.id} className="card" style={{ background: 'var(--surface-2)', padding: 10, display: 'flex', gap: 10, alignItems: 'center' }} data-testid="query-card">
-              <Badge status={c.state} />
-              <code style={{ fontSize: 'var(--fs-xs)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.promql}</code>
-              {c.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{c.commandId}</span>}
-              {c.state === 'done' && <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>결과 3 series · 평균 0.42</span>}
-              {c.state === 'failed' && <Button size="sm" onClick={execute}>재시도</Button>}
-            </div>
-          ))}
+          {cards.map(c => <QueryCardRow key={c.id} card={c} onRetry={execute} />)}
         </div>
       </Card>
     </FadeSlideIn>
+  );
+}
+
+// 쿼리 카드 1개 — 명령 상태를 폴링해 agent 가 올린 실측 결과만 표시한다.
+function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void }) {
+  const statusQ = useCommandStatus(card.commandId);
+  const status = card.submitFailed ? 'failed' : statusQ.data?.status ?? 'queued';
+  const badge = status === 'completed' ? 'done' : status === 'leased' ? 'running' : status;
+  const result = statusQ.data?.result ?? {};
+  const summary = status === 'completed' ? summarizeTelemetryResult(result) : null;
+  const failMessage = status === 'failed' && !card.submitFailed ? commandResultMessage(result) : null;
+  return (
+    <div className="card" style={{ background: 'var(--surface-2)', padding: 10, display: 'flex', gap: 10, alignItems: 'center' }} data-testid="query-card">
+      <Badge status={badge} />
+      <code style={{ fontSize: 'var(--fs-xs)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.promql}</code>
+      {card.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{card.commandId}</span>}
+      {summary && (
+        <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>
+          {summary.series} series · {summary.points} pts{summary.avg !== null ? ` · 평균 ${summary.avg.toFixed(2)}` : ''}
+        </span>
+      )}
+      {status === 'completed' && !summary && <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>{commandResultMessage(result) ?? '완료'}</span>}
+      {failMessage && <span style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)' }}>{failMessage}</span>}
+      {!isTerminal(status) && card.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>agent 실행 대기·수행 중</span>}
+      {status === 'failed' && <Button size="sm" onClick={onRetry}>재시도</Button>}
+    </div>
   );
 }

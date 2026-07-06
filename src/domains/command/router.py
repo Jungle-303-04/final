@@ -46,6 +46,7 @@ from packages.contracts.gateway.responses import (
     AgentDebugQueryResponse,
     CommandHeartbeatResponse,
     CommandStartedResponse,
+    CommandStatusResponse,
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
@@ -354,6 +355,32 @@ async def agent_debug_query(
         accepted=True,
         command_id=str(plan["command_id"]),
         correlation_id=correlation_id,
+    )
+
+
+@router.get(gateway_routes.COMMAND_STATUS_PATH, response_model=CommandStatusResponse)
+async def command_status(
+    command_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> CommandStatusResponse:
+    """콘솔이 명령 진행 상태와 agent 가 올린 실제 결과를 폴링 — 가짜 완료 표시 제거용."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    row = await db.get_agent_command(command_id, workspace_id)
+    if row is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
+    completed_at = row.get("completed_at")
+    return CommandStatusResponse(
+        command_id=str(row["command_id"]),
+        cluster_id=str(row["cluster_id"]),
+        correlation_id=str(row["correlation_id"]),
+        action=str(row["action"]),
+        status=str(row["status"]),
+        result=dict(row.get("result") or {}),
+        completed_at=completed_at.isoformat()
+        if hasattr(completed_at, "isoformat")
+        else (str(completed_at) if completed_at else None),
     )
 
 

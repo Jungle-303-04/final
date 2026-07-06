@@ -10,16 +10,17 @@ export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => get
 export const useGrants = (resourceId?: string) =>
   useQuery({ queryKey: ['access', resourceId ?? 'all'], queryFn: () => get<{ grants: AccessGrant[] }>(`/access${resourceId ? `?resource_id=${resourceId}` : ''}`), select: d => d.grants });
 
-function invalidator(keys: string[][]) {
+// 커스텀 훅 — hooks 규칙 준수를 위해 use 접두사(내부에서 useQueryClient 호출).
+function useInvalidator(keys: string[][]) {
   const qc = useQueryClient();
   return () => keys.forEach(k => qc.invalidateQueries({ queryKey: k }));
 }
 export function useCreateOrg() {
-  const inv = invalidator([['orgs']]);
+  const inv = useInvalidator([['orgs']]);
   return useMutation({ mutationFn: (b: { name: string; description?: string }) => post<Org>('/orgs', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '조직을 만들었습니다'); } });
 }
 export function useDeleteOrg() {
-  const inv = invalidator([['orgs']]);
+  const inv = useInvalidator([['orgs']]);
   return useMutation({
     mutationFn: (id: string) => del(`/orgs/${id}`),
     onSuccess: inv,
@@ -27,7 +28,7 @@ export function useDeleteOrg() {
   });
 }
 export function useCreateGroup() {
-  const inv = invalidator([['groups'], ['orgs']]);
+  const inv = useInvalidator([['groups'], ['orgs']]);
   return useMutation({ mutationFn: (b: { org_id: string; name: string }) => post<Group>('/groups', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '그룹을 만들었습니다'); } });
 }
 export function useGroupMembers(groupId: string) {
@@ -43,10 +44,10 @@ export function useToggleMembership(groupId: string) {
 }
 export interface GrantPayload { subject_type: 'user' | 'group'; subject_id: string; subject_label?: string; resource_type: string; resource_id: string; role: string }
 export function useGrantAccess() {
-  const inv = invalidator([['access']]);
+  const inv = useInvalidator([['access']]);
   return useMutation({ mutationFn: (b: GrantPayload) => post('/access', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 부여했습니다'); } });
 }
 export function useRevokeAccess() {
-  const inv = invalidator([['access']]);
+  const inv = useInvalidator([['access']]);
   return useMutation({ mutationFn: (id: string) => del(`/access/${id}`), onSuccess: inv });
 }
