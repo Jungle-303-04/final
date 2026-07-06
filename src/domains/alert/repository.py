@@ -71,10 +71,13 @@ class AlertChannelRepository(DatabaseConnection):
                 "enabled": insert.excluded.enabled,
                 "updated_at": func.now(),
             },
+            where=table.c.workspace_id == insert.excluded.workspace_id,
         ).returning(table)
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
-        return serialize_alert_channel(dict(row)) if row else {**values}
+        if row:
+            return serialize_alert_channel(dict(row))
+        raise LookupError("alert channel not found in workspace")
 
     def delete_alert_channel(self, workspace_id: str, channel_id: str) -> bool:
         table = AlertChannel.__table__

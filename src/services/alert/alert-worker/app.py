@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -155,7 +156,9 @@ async def matching_channels(
     if lister is None:
         return []
     # 위치 인자만 사용 — 테스트 대역(범용 spy)과의 호환을 위해 kwargs 를 강제하지 않는다.
-    channels = await lister(evt.workspace_id) or []
+    loaded = lister(evt.workspace_id)
+    channels = await loaded if inspect.isawaitable(loaded) else loaded
+    channels = channels or []
     return [
         dict(channel)
         for channel in channels

@@ -21,6 +21,7 @@ status: synced
 |---|---|---|---|
 | import | `domains.identity` | [../../domains/identity.md](../domains/identity.md) | 인증 라우터·admin 콘솔 라우터·가드(`require_session`/`require_admin_session`/`require_cluster_agent`) |
 | import | `domains.ai` | [../../domains/ai.md](../domains/ai.md) | AI conversation 라우터 |
+| import | `domains.alert` | [../../domains/alert.md](../domains/alert.md) | 알림 채널 admin 라우터 |
 | import | `domains.applications` | [../../domains/applications.md](../domains/applications.md) | application/deployment 바인딩 라우터 |
 | import | `domains.catalog` | [../../domains/catalog.md](../domains/catalog.md) | service catalog 라우터 |
 | import | `domains.command` | [../../domains/command.md](../domains/command.md) | command 라우터(+agent 폴링 라우트) |
@@ -64,7 +65,7 @@ status: synced
   - `ApiGateway._session_store_config()` — `RedisSessionStoreConfig` 구성(아래 [설정](#설정-settings)의 세션 항목 참조).
   - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()` → `_relay_outbox()` 태스크 시작. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → relay 취소 → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
   - `ApiGateway._relay_outbox()` — `OutboxRelay(db, bus, "api-gateway")` 를 무한 루프로 실행. 배치가 가득 찼으면(`sent >= relay.batch`) 즉시 재실행, 아니면 `OUTBOX_RELAY_INTERVAL_SECONDS`(기본 1초) sleep. 예외는 `gateway_outbox_relay_error` 경고 로그 후 계속.
-  - `ApiGateway.configure_routes()` — 라우터 등록 순서: health → identity → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → dead-letter → metrics → 전역 오류 핸들러.
+  - `ApiGateway.configure_routes()` — 라우터 등록 순서: frontend proxy → health → identity → alert channels → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → dead-letter → metrics → 전역 오류 핸들러.
 - `src/services/gateway/api-gateway/gateway.py :: agent_connected_body_from_request(payload, identity)` — `AgentConnectRequest` 의 `cluster_id` 를 버리고 인증 identity 의 `cluster_id`/`workspace_id` 를 권위값으로 채운 `AgentConnectedBody` 생성.
 - `src/services/gateway/api-gateway/gateway.py :: create_app` — `ApiGateway().app` 반환(테스트·uvicorn factory 공용).
 
@@ -145,10 +146,13 @@ status: synced
 | POST | `/access` | 세션 | admin |
 | DELETE | `/access/{access_id}` (204) | 세션 | admin |
 
-### providers / catalog / ai / applications
+### alert channels / providers / catalog / ai / applications
 
 | 메서드 | 경로 | 인증 | 권한 |
 |---|---|---|---|
+| GET | `/alert-channels` | 세션 | admin |
+| POST | `/alert-channels` | 세션 | admin |
+| DELETE | `/alert-channels/{channel_id}` (204) | 세션 | admin |
 | GET | `/providers/catalog` | 공개 | — |
 | POST | `/providers/validate` | 공개 | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
@@ -166,6 +170,7 @@ status: synced
 | 메서드 | 경로 | 인증 | 권한 |
 |---|---|---|---|
 | POST | `/targets` | 세션 | admin (`kubectl apply` 실행) |
+| GET | `/install/{agent_token}` | 공개 URL + agent token 참조 | 토큰 해시가 등록된 target 만 |
 | GET | `/clusters` | 세션 | — (접근 가능 cluster 필터) |
 | GET | `/clusters/{cluster_id}` | 세션 | `require_cluster_access` |
 | GET | `/clusters/{cluster_id}/connection-status` | 세션 | `require_cluster_access` |
@@ -186,7 +191,9 @@ status: synced
 | POST | `/approvals/{approval_id}/reject` | 세션 | `require_cluster_access`(deploy) |
 | POST | `/agent/inventory/snapshots` | agent | — |
 | GET | `/clusters/{cluster_id}/inventory/{resources,workloads,services,events,summary}` | 세션 | `require_cluster_access` |
+| GET | `/clusters/{cluster_id}/usage` | 세션 | `require_cluster_access` |
 | POST | `/agent/evidence` | agent | evidence_key 를 토큰 cluster 로 스코핑 |
+| POST | `/webhooks/alertmanager` | Bearer `ALERTMANAGER_WEBHOOK_TOKEN` | `cluster_id` 등록 확인 후 evidence 입구 |
 | POST | `/rca/recovery-plans/{plan_id}/actions/{action_id}/select` | 세션 | `require_cluster_access` |
 
 ### command / dashboard (`src/domains/command/router.py`, `router.include_router(agent_router)`)
@@ -225,6 +232,7 @@ status: synced
 |---|---|---|
 | `AgentConnectedBody` | `agent.connected` | `POST /agent/connect` — `save_cluster_agent_status` 와 같은 트랜잭션 |
 | `EmailVerificationRequestedBody` | `mail.email_verification.requested` | signup / resend-verification 성공 시 (`_request_email_verification`) |
+| `ClusterEvidenceReceivedBody` | `cluster.evidence.received` | `POST /webhooks/alertmanager` 또는 RCA evidence 라우터 — Alertmanager firing 알림을 evidence payload로 변환 |
 | (임의 원본 subject) | dead letter 의 `original_subject` | `POST /dead-letters/{id}/replay` — 원본 payload·correlation_id·`original_event_id`(causation) 로 재발행 |
 | 도메인 라우터 발행 이벤트 | `git.webhook.received`, `command.requested`, `cluster.evidence.received`, `ai.message.received`, `approval.granted/rejected` 등 | 각 도메인 스펙 참조 |
 

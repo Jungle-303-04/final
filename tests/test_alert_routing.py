@@ -52,9 +52,14 @@ class FakeWorkerDb:
         self.channels = channels
         self.requested: list[str] = []
 
-    async def list_alert_channels(self, workspace_id: str):
+    def list_alert_channels(self, workspace_id: str):
         self.requested.append(workspace_id)
         return self.channels
+
+
+class AsyncFakeWorkerDb(FakeWorkerDb):
+    async def list_alert_channels(self, workspace_id: str):
+        return super().list_alert_channels(workspace_id)
 
 
 def run_handler(module, evt, db):
@@ -87,6 +92,23 @@ def test_worker_routes_to_matching_channels(monkeypatch) -> None:
     assert db.requested == ["workspace-1"]
     channels = {body.channel for body in bodies}
     assert channels == {"ops-critical", "ops-all"}
+
+
+def test_worker_accepts_async_channel_store(monkeypatch) -> None:
+    module = load_alert_worker()
+    sent: list[str] = []
+
+    async def fake_dispatch(alert, channel):
+        sent.append(str(channel["name"]))
+        return module.dispatched_body(alert, channel=str(channel["name"]), mode="webhook")
+
+    monkeypatch.setattr(module, "dispatch_to_channel", fake_dispatch)
+    db = AsyncFakeWorkerDb([{"name": "async-ops", "url": "http://hook", "min_severity": "info"}])
+
+    bodies = run_handler(module, alert("critical"), db)
+
+    assert sent == ["async-ops"]
+    assert [body.channel for body in bodies] == ["async-ops"]
 
 
 def test_worker_skips_channels_below_min_severity(monkeypatch) -> None:
@@ -189,6 +211,30 @@ def test_alert_channel_delete_missing_is_404() -> None:
     async def run() -> None:
         try:
             await delete_alert_channel("ghost", ADMIN, FakeChannelDb())
+        except HTTPException as exc:
+            assert exc.status_code == 404
+        else:
+            raise AssertionError("expected HTTPException")
+
+    asyncio.run(run())
+
+
+def test_alert_channel_upsert_missing_channel_is_404() -> None:
+    class MissingOnUpdateDb(FakeChannelDb):
+        def upsert_alert_channel(self, payload: dict) -> dict:
+            raise LookupError("not in workspace")
+
+    async def run() -> None:
+        try:
+            await upsert_alert_channel(
+                AlertChannelUpsertRequest(
+                    channel_id="chan-other-workspace",
+                    name="ops",
+                    url="https://hooks.example/x",
+                ),
+                ADMIN,
+                MissingOnUpdateDb(),
+            )
         except HTTPException as exc:
             assert exc.status_code == 404
         else:
