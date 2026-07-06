@@ -30,6 +30,12 @@ class Settings:
     )
     OUTBOX_RELAY_INTERVAL_SECONDS = int(env(OUTBOX_RELAY_INTERVAL_SECONDS_ENV, "1"))
 
+    # 브라우저 SPA CORS — 쿠키 인증 요청 허용 origin(콤마 구분). 로컬 개발 origin 기본 포함.
+    CORS_ALLOW_ORIGINS_ENV = "CORS_ALLOW_ORIGINS"
+    DEFAULT_CORS_ALLOW_ORIGINS = (
+        "http://localhost:5173,http://localhost:4173,"
+        "http://127.0.0.1:5173,http://127.0.0.1:4173"
+    )
     REDIS_URL_ENV = "REDIS_URL"
     SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
     SESSION_KEY_PREFIX = "session"
