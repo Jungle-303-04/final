@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 664925a6
 status: synced
 ---
 
@@ -39,7 +39,7 @@ status: synced
 | `useGrantAccess` | `frontend/src/features/org/api.ts :: useGrantAccess` | POST `/access` body `GrantPayload` | 성공: `['access']` invalidate + toast ok `'권한을 부여했습니다'` |
 | `useRevokeAccess` | `frontend/src/features/org/api.ts :: useRevokeAccess` | DELETE `/access/${id}` | 성공: `['access']` invalidate |
 
-내부 헬퍼 `invalidator(keys)` — 성공 시 여러 쿼리키 invalidate 하는 클로저(비공개, 훅 규칙상 훅 본문에서 호출).
+내부 헬퍼 `useInvalidator(keys)` — 성공 시 여러 쿼리키 invalidate 하는 클로저(비공개). 내부에서 `useQueryClient` 를 호출하므로 hooks 규칙 준수를 위해 `use` 접두사 커스텀 훅으로 명명한다.
 
 ## 컴포넌트
 

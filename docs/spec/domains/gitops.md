@@ -1,11 +1,11 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
 # gitops — git webhook→manifest→diff 파이프라인의 events·tables·repo
 
-> 소스: `src/domains/gitops/` · 테스트: `tests/test_gitops_approval_router.py`, `tests/test_gitops_diffing.py`, `tests/test_git_pull_worker.py`, `tests/test_manifest_render_worker.py`, `tests/test_diff_worker.py`, `tests/test_diff_analyze_worker.py`, `tests/test_workflow_controller.py`
+> 소스: `src/domains/gitops/` · 테스트: `tests/test_gitops_approval_router.py`, `tests/test_gitops_diffing.py`, `tests/test_git_pull_worker.py`, `tests/test_manifest_render_worker.py`, `tests/test_diff_worker.py`, `tests/test_diff_analyze_worker.py`, `tests/test_workflow_controller.py`, `tests/test_promotion_and_global.py`
 
 ## 책임 (Responsibility)
 
@@ -114,10 +114,16 @@ status: synced
 | `def register_watch_target(self, payload: JsonObject) -> JsonObject` | `git_watch_targets` upsert(`watch_target_id` 충돌 시 branch/manifest_path/interval_seconds/last_seen_commit_sha/last_polled_at/status/settings 갱신). `interval_seconds` 기본 30 | `src/domains/gitops/repository.py :: RepoChangeRepository.register_watch_target` |
 | `def register_deployment_binding(self, payload: JsonObject) -> JsonObject` | `deployment_bindings` upsert(`binding_id` 충돌 시 대상·정책 필드 전부 갱신). `cluster_id`/`namespace`/`app_name`은 payload 필수(`payload["…"]`). `user_id` 있으면 `deployment_binding` 리소스에 롤 부여 | `src/domains/gitops/repository.py :: RepoChangeRepository.register_deployment_binding` |
 | `def upsert_application(self, payload: JsonObject) -> JsonObject` | `applications` upsert. 먼저 `(workspace_id, repository_id, name)`으로 기존 행 조회 — 존재하고 application_id 가 다르면 기존 ID 로 흡수(dedup, `application_id_merged_by_name` 경고 로그) 후 UPDATE, 아니면 `application_id` 충돌 upsert. 반환 payload 에 `application_id`=해석된 ID | `src/domains/gitops/repository.py :: RepoChangeRepository.upsert_application` |
-| `def list_applications(self, workspace_id: str, *, application_ids: set[str] | None = None, limit: int = 100) -> list[JsonObject]` | workspace 의 애플리케이션 목록. `application_ids`가 빈 set 이면 즉시 `[]`, None 아니면 IN 필터. 정렬 `name, application_id`, limit 1..500 클램프 | `src/domains/gitops/repository.py :: RepoChangeRepository.list_applications` |
-| `def get_application(self, workspace_id: str, application_id: str) -> JsonObject | None` | 단건 조회(serialize_application) | `src/domains/gitops/repository.py :: RepoChangeRepository.get_application` |
+| `def list_applications(self, workspace_id: str, *, application_ids: set[str] | None = None, limit: int = 100) -> list[JsonObject]` | workspace 의 애플리케이션 목록 — `git_repositories` 와 조인해 `repo_ref`/`default_branch` 를 함께 반환. `application_ids`가 빈 set 이면 즉시 `[]`, None 아니면 IN 필터. 정렬 `name, application_id`, limit 1..500 클램프 | `src/domains/gitops/repository.py :: RepoChangeRepository.list_applications` |
+| `def get_application(self, workspace_id: str, application_id: str) -> JsonObject | None` | 단건 조회(serialize_application) — `git_repositories` 조인으로 `repo_ref`/`default_branch` 포함 | `src/domains/gitops/repository.py :: RepoChangeRepository.get_application` |
 | `def list_application_deployment_bindings(self, workspace_id: str, application_id: str, *, limit: int = 100) -> list[JsonObject]` | 애플리케이션 조회 후 `(workspace_id, repository_id=app.repository_id, app_name=app.name)`으로 바인딩 목록. 앱 없으면 `[]`. 정렬 `environment, cluster_id, namespace` | `src/domains/gitops/repository.py :: RepoChangeRepository.list_application_deployment_bindings` |
 | `def list_application_workflow_runs(self, workspace_id: str, application_id: str, *, limit: int = 100) -> list[JsonObject]` | 앱의 워크플로 실행 목록, `created_at DESC`. 조회한 run id 기준으로 `workflow_run_steps`를 한 번 더 읽어서 각 run의 `steps` 배열에 붙인다. step 항목은 `name/status/message/details/updated_at`이며, `details.changes[]`는 프론트 워크플로 미리보기에서 필드 변경 목록으로 사용한다. | `src/domains/gitops/repository.py :: RepoChangeRepository.list_application_workflow_runs` |
+| `def get_deployment_binding(self, workspace_id: str, binding_id: str) -> JsonObject | None` | 바인딩 단건 조회(serialize_deployment_binding) | `src/domains/gitops/repository.py :: RepoChangeRepository.get_deployment_binding` |
+| `def list_repository_deployment_bindings(self, workspace_id: str, repository_id: str) -> list[JsonObject]` | 같은 repo 를 바라보는 `active` 바인딩 전부 — 글로벌 서비스 webhook fan-out 대상 조회. 정렬 `cluster_id, binding_id` | `src/domains/gitops/repository.py :: RepoChangeRepository.list_repository_deployment_bindings` |
+| `def list_workspace_deployment_bindings(self, workspace_id: str) -> list[JsonObject]` | 워크스페이스의 `active` 바인딩 전부 — 글로벌 그룹 탐색용(바인딩 수 소규모 전제). 정렬 `repository_id, app_name, cluster_id` | `src/domains/gitops/repository.py :: RepoChangeRepository.list_workspace_deployment_bindings` |
+| `def get_workflow_run(self, workflow_run_id: str) -> JsonObject | None` | 워크플로 run 단건 조회(serialize_workflow_run) | `src/domains/gitops/repository.py :: RepoChangeRepository.get_workflow_run` |
+| `def get_workflow_step_details(self, workflow_run_id: str, name: str) -> JsonObject | None` | 특정 step 의 `details` JSONB 단건 조회 — 승격(promotion) 시 소스 run 의 diff step details 에서 image/replicas 를 읽는 용도 | `src/domains/gitops/repository.py :: RepoChangeRepository.get_workflow_step_details` |
+| `def latest_succeeded_run_for_binding(self, workspace_id: str, binding_id: str) -> JsonObject | None` | 바인딩의 최근 `succeeded` run(`updated_at DESC LIMIT 1`) — 신규 클러스터가 글로벌 바인딩에 합류할 때 초기 배포 기준 | `src/domains/gitops/repository.py :: RepoChangeRepository.latest_succeeded_run_for_binding` |
 | `def start_workflow_run(self, payload: JsonObject) -> JsonObject` | `workflow_runs` upsert. 생성은 무조건, 기존 행 갱신은 `workflow_transition_guard` 통과 시에만(status/current_step/summary/command_id/metadata). status 기본 `started`, current_step 기본 `git` | `src/domains/gitops/repository.py :: RepoChangeRepository.start_workflow_run` |
 | `def update_workflow_run(self, payload: JsonObject) -> JsonObject` | `workflow_run_id` 기준 UPDATE(status/current_step/summary/command_id/metadata 중 존재 키만). `status` 포함 시 전이 가드 적용 | `src/domains/gitops/repository.py :: RepoChangeRepository.update_workflow_run` |
 | `def record_workflow_step(self, payload: JsonObject) -> JsonObject` | `workflow_run_steps` upsert(`(workflow_run_id, name)` 충돌 시 status/message/details 갱신). step 이름은 `name` 또는 `step` 키, 기본 `git`. status 기본 `succeeded` | `src/domains/gitops/repository.py :: RepoChangeRepository.record_workflow_step` |
@@ -223,7 +229,7 @@ status: synced
 | environment | Text | NOT NULL | 등록 기본 `sandbox` |
 | resource_class | Text | NOT NULL | `ResourceClass`: `application` / `platform` / `system` |
 | status | Text | NOT NULL | `DeploymentBindingStatus`: `active` / `paused` / `invalid_config` |
-| deploy_policy | JSONB | NOT NULL | 배포 정책(승인 필요 여부 등) |
+| deploy_policy | JSONB | NOT NULL | 배포 정책(승인 필요 여부 등). workflow-controller 가 해석하는 키: `promotes_to_binding_id`(성공 시 대상 바인딩으로 같은 커밋 승격 재진입), `global: true`(글로벌 서비스 — webhook fan-out·신규 클러스터 자동 합류 대상) |
 | access_policy | JSONB | NOT NULL | |
 | created_at / updated_at | TIMESTAMP(tz) | NOT NULL, default now() | |
 

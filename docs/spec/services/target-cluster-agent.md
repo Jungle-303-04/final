@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -23,7 +23,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `packages.config` | [../../packages/config.md](../packages/config.md) | `env`, `get_logger`/`CONTEXT_KEY`, 상수(`Command`, `CommandStatus`, `Sandbox`, `Target`) |
+| import | `packages.config` | [../../packages/config.md](../packages/config.md) | `env`, `get_logger`/`CONTEXT_KEY`, 상수(`Command`, `CommandStatus`, `Sandbox`, `Target`), `control.control_namespace_allowed`/`CONTROL_NAMESPACE_DENIED_MESSAGE` — 제어(쓰기) 허용 네임스페이스 단일 기준(`src/packages/config/control.py`) |
 | import | `packages.contracts.gateway` | [../../packages/contracts.md](../packages/contracts.md) | `routes`(에이전트 HTTP 경로), `Gateway` 필드 enum, `requests`(`AgentPolicy`, `EvidenceProviderPolicy`, `EvidenceRuntimePolicy`, `BootstrapPolicy`, `DesiredStatePolicy`, `DesiredResource`, `StrictModel`, `DEFAULT_QUEUE_AGE_TARGET_SECONDS`, 관측 스택 기본 URL), `policy_merge.merge_agent_policy` |
 | import | `packages.contracts.gitops` | [../../packages/contracts.md](../packages/contracts.md) | `supported_kubernetes_resource` — manifest kind → API prefix와 Kubernetes resource collection 매핑 |
 | import | `packages.contracts.identity` | [../../packages/contracts.md](../packages/contracts.md) | `DEFAULT_WORKSPACE_ID`(`"default"`) |
@@ -39,6 +39,7 @@ status: synced
 | 외부 | OTLP collector | — | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`로 span export (미설정 시 export 없음) |
 | 관련 | node-collector | [./node-collector.md](target-node-collector.md) | 이 에이전트가 DaemonSet으로 rollout하는 노드 수집기 |
 | 관련 | drift-worker / reconcile-worker | [./drift-worker.md](target-drift-worker.md), [./reconcile-worker.md](target-reconcile-worker.md) | 관리 플레인 측 target 도메인 워커(에이전트 결과의 소비자) |
+| 관련 | 설치 manifest 렌더러 | — (`src/domains/target/install_manifest.py`) | 이 에이전트의 Deployment/ConfigMap을 렌더. 등록 응답의 `install_command`(`src/packages/contracts/gateway/responses.py :: TargetInstallResponse`)가 가리키는 원라인 인스톨러 `GET /install/{agent_token}`(`src/packages/contracts/gateway/routes.py :: INSTALL_MANIFEST_PATH`)은 토큰 해시 대조로 manifest를 재렌더하며, 등록 요청 `TargetRegisterRequest.control_namespaces` CSV를 ConfigMap의 `CONTROL_ALLOWED_NAMESPACES` env로 주입한다 |
 
 아키텍처 규칙: 이 서비스는 `src/domains/*`를 import하지 않는다. 오직 `packages.*` 계약만 사용한다.
 
@@ -94,7 +95,7 @@ status: synced
 | `COMMAND_RESULT_MESSAGE` | `"Kubernetes action processed in sandbox namespace"` |
 | `MANIFEST_CREATED_MESSAGE` / `MANIFEST_PATCHED_MESSAGE` | `"Kubernetes manifest created in sandbox namespace"` / `"Kubernetes manifest patched in sandbox namespace"` |
 | `DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE` | `"Kubernetes deployment rollout completed"` |
-| `WRITE_NAMESPACE_DENIED_MESSAGE` | `"only sandbox namespace writes are allowed"` |
+| `WRITE_NAMESPACE_DENIED_MESSAGE` | `CONTROL_NAMESPACE_DENIED_MESSAGE`(`"namespace is not allowed by control policy"`, `src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE`) — 허용 네임스페이스는 `packages.config.control` 단일 기준 |
 | `MISSING_APPROVAL_EVIDENCE_MESSAGE` | `"write command requires approval_ref and policy_decision_ref"` |
 
 `HttpManagementPlaneClient` — `src/services/target/cluster-agent/agent.py :: HttpManagementPlaneClient`:
@@ -147,6 +148,7 @@ async def reconcile_node_collector_once(self) -> None
 async def execute_command(self, command: CommandRecord) -> JsonObject
 def write_action_requires_approval(self, action: str) -> bool
 def command_metadata_value(self, command: CommandRecord, field: str) -> str
+def approval_exempt_for_environment(self, action: str, command: CommandRecord) -> bool
 def has_approval_evidence(self, command: CommandRecord) -> bool
 async def run_query_command(self, ctx: CommandContext[TelemetryQueryCommandPayload]) -> JsonObject      # @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
 async def patch_deployment_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_PATCH_ACTION, api_group="apps", version="v1", resource="deployments", verb="patch", payload_model=KubernetesPatchPayload)
@@ -362,7 +364,7 @@ def __init__(self, *, cluster_id: str, transport: httpx.AsyncBaseTransport | Non
 @classmethod
 def from_config(cls, read_config: ConfigReader) -> KubernetesSnapshotProvider   # cluster_id = read_config("TARGET_CLUSTER_ID", Target.DEFAULT_CLUSTER_ID)
 async def query(self, _client: httpx.AsyncClient, telemetry_query: KubernetesSnapshotQuery) -> JsonObject
-async def get_json(self, client, base_url, headers, path, *, allow_not_found: bool = False) -> JsonObject
+async def get_json(self, client, base_url, headers, path, *, allow_not_found: bool = False) -> JsonObject   # allow_not_found=True 면 403/404 를 {"items": []} 로 처리
 def empty_results(self) -> JsonObject
 def append_result(self, results: JsonObject, telemetry_query, payload: JsonObject) -> None
 def build_response(self, results: JsonObject) -> JsonObject
@@ -556,7 +558,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
    - 백그라운드 태스크로 `heartbeat_command_until_done`(20초마다 heartbeat, 실패해도 경고만) 실행, 완료 시 cancel.
    - `execute_command(command)`:
      a. `action`, `command_payload(command)` 추출.
-     b. **승인 게이트**: `action ∈ {apply_manifest, rollout_restart, k8s.apps.v1.deployments.scale}`이고 `approval_ref`·`policy_decision_ref`(top-level 또는 payload 내부)가 둘 다 없으면 즉시 실패 결과(`MISSING_APPROVAL_EVIDENCE_MESSAGE`).
+     b. **승인 게이트**: `action ∈ {apply_manifest, k8s.apps.v1.deployments.scale}`(`write_action_requires_approval` — `rollout_restart`는 spec 변경이 없는 비파괴 조치라 제외)이고 `approval_ref`·`policy_decision_ref`(top-level 또는 payload 내부)가 둘 다 없고 `approval_exempt_for_environment(action, command)`도 아니면 즉시 실패 결과(`MISSING_APPROVAL_EVIDENCE_MESSAGE`). 면제 rule: `AGENT_AUTO_APPROVE_ACTIONS`(기본 `k8s.apps.v1.deployments.scale`) × `AGENT_AUTO_APPROVE_ENVIRONMENTS`(기본 `sandbox`) — plan 메타데이터의 `environment`가 매칭되면 승인 증적 없이 허용(command-worker의 `COMMAND_AUTO_APPROVE_*` rule과 대칭).
      c. `command_registry.execute(action, payload, metadata={command_id, approval_ref, policy_decision_ref})`. 레지스트리는: 핸들러 조회(없으면 default) → `payload_model` 있으면 `model_validate`(pydantic `extra="forbid"`) → k8s spec 있으면 `KubernetesCommandPolicy.ensure_allowed` → `CommandContext` 구성 후 핸들러 호출.
      d. 예외는 전부 `command_result(False, str(exc))`로 흡수(폴링 루프는 죽지 않음).
 3. 결과는 `command_outbox.enqueue_result(...)`로 SQLite에 먼저 기록 후 `flush_command_results_once` 즉시 시도.
@@ -568,8 +570,8 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 ### k8s 쓰기 커맨드 상세
 
-- `apply_manifest_command`: `diff.desired_manifest`가 있으면 `apply_kubernetes_manifest(manifest, namespace)` — manifest 정규화(`kubernetes_manifest_resource`), **namespace가 `sandbox`가 아니면 거부**. GET으로 존재 확인 → 404면 POST 생성(`application/json`), 존재하면 PATCH(`application/merge-patch+json`). kind가 `Deployment`면 `wait_for_deployment_rollout`으로 완료 대기. manifest가 없으면 `diff.resource`(deployment)와 `diff.desired_image`로 strategic-merge patch(`build_apply_manifest_patch`) — 이 경로도 sandbox 외 거부.
-- `rollout_restart_command`: sandbox 검사 → `build_rollout_restart_patch`로 annotation만 갱신 → `patch_deployment`.
+- `apply_manifest_command`: `diff.desired_manifest`가 있으면 `apply_kubernetes_manifest(manifest, namespace)` — manifest 정규화(`kubernetes_manifest_resource`), **namespace가 제어 허용목록에 없으면 거부**(`control_namespace_allowed`, 기본 `sandbox`만). GET으로 존재 확인 → 404면 POST 생성(`application/json`), 존재하면 PATCH(`application/merge-patch+json`). kind가 `Deployment`면 `wait_for_deployment_rollout`으로 완료 대기. manifest가 없으면 `diff.resource`(deployment)와 `diff.desired_image`로 strategic-merge patch(`build_apply_manifest_patch`) — 이 경로도 허용목록 외 거부.
+- `rollout_restart_command`: 허용 네임스페이스 검사(`control_namespace_allowed`) → `build_rollout_restart_patch`로 annotation만 갱신 → `patch_deployment`.
 - `patch_deployment(namespace, deployment, patch)`: `PATCH {base}/apis/apps/v1/namespaces/{ns}/deployments/{name}` (`application/strategic-merge-patch+json`) → `wait_for_deployment_rollout`.
 - `wait_for_deployment_rollout`: timeout(기본 30s)이 0 이하이면 대기 없이 성공 취급(`waited: False`). 이후 2초 간격으로 Deployment GET → `deployment_rollout_status`로 ready 판정(`desired==0` 이거나 `observed>=generation && updated>=desired && ready>=desired && available>=desired && Progressing/Available condition != "False"`). ready → `(True, DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE, status)`, deadline 초과 → `(False, "deployment rollout not ready before timeout: {name}", last_status)`.
 - k8s API 미구성(`kubernetes_api_base_url()` 또는 토큰 없음) 시 쓰기 경로는 전부 `(False, "kubernetes api not configured; dry-run only", {})`.
@@ -614,7 +616,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 | provider | HTTP 호출 | 파라미터 |
 |---|---|---|
-| `KubernetesSnapshotProvider.query` | k8s API GET 9개: `/api/v1/namespaces/{ns}/pods`, `/api/v1/namespaces/{ns}/events`, `/api/v1/nodes`, `/apis/apps/v1/namespaces/{ns}/deployments`, `.../statefulsets`, `.../daemonsets`, `.../replicasets`, `/api/v1/namespaces/{ns}/services`, `/apis/discovery.k8s.io/v1/namespaces/{ns}/endpointslices`(404 허용→`{"items": []}`) | ns = `telemetry_query.namespace or "target"`. Bearer SA 토큰. API 미구성 시 `{"status": "unavailable", "reason": "kubernetes api is not configured", ...}` 반환(HTTP 호출 없음) |
+| `KubernetesSnapshotProvider.query` | k8s API GET 9개: `/api/v1/namespaces/{ns}/pods`, `/api/v1/namespaces/{ns}/events`, `/api/v1/nodes`, `/apis/apps/v1/namespaces/{ns}/deployments`, `.../statefulsets`, `.../daemonsets`, `.../replicasets`, `/api/v1/namespaces/{ns}/services`, `/apis/discovery.k8s.io/v1/namespaces/{ns}/endpointslices`(403/404 허용→`{"items": []}`) | ns = `telemetry_query.namespace or "target"`. Bearer SA 토큰. API 미구성 시 `{"status": "unavailable", "reason": "kubernetes api is not configured", ...}` 반환(HTTP 호출 없음) |
 | `PrometheusMetricsProvider.query_instant` | `GET {PROMETHEUS_BASE_URL}/api/v1/query` | `query=<promql>` (span `prometheus.query`) |
 | `PrometheusMetricsProvider.query_range` | `GET {PROMETHEUS_BASE_URL}/api/v1/query_range` | `query=<promql>`, `start=now-range_seconds`(소수 3자리), `end=now`, `step=step_seconds or max(1, range_seconds//30)` (span `prometheus.query_range`) |
 | `LokiLogsProvider.query` | `GET {LOKI_BASE_URL}/loki/api/v1/query_range` | `query=<logql>`, `limit=LOKI_QUERY_LIMIT(20)` (span `loki.query_range`) |
@@ -646,8 +648,8 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 
 ## 불변식·오류 (Invariants & Errors)
 
-1. **sandbox 쓰기 제한**: `apply_manifest`/`rollout_restart` 계열의 워크로드 쓰기는 namespace가 `sandbox`가 아니면 `"only sandbox namespace writes are allowed"`로 거부한다.
-2. **승인 증적 필수**: `apply_manifest`, `k8s.apps.v1.deployments.scale`은 `approval_ref`와 `policy_decision_ref`가 모두 있어야 실행된다(`write_action_requires_approval` + `has_approval_evidence`). `rollout_restart` 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용되며, namespace 정책 가드는 동일하게 적용된다. `deployment scale` 은 plan 메타데이터 environment 가 sandbox 면 승인 증적을 면제한다(`AGENT_AUTO_APPROVE_ACTIONS`/`AGENT_AUTO_APPROVE_ENVIRONMENTS`, 기본 scale×sandbox) — command-worker 의 `COMMAND_AUTO_APPROVE_*` rule 과 대칭. `k8s.*.patch` 2종은 이 승인 게이트 집합에 포함되지 않는 대신 아래 3의 name-scoped 정책으로 제한된다.
+1. **제어 네임스페이스 허용목록**: `apply_manifest`/`rollout_restart` 계열의 워크로드 쓰기는 namespace가 허용목록(`control_namespace_allowed`, `CONTROL_ALLOWED_NAMESPACES` env — 기본 `sandbox`만)에 없으면 `"namespace is not allowed by control policy"`로 거부한다. 이 기준은 게이트웨이 검증·command-worker 정책과 공유되는 단일 원천(`src/packages/config/control.py :: control_allowed_namespaces`)이며, 대상 클러스터에서는 설치 manifest의 agent ConfigMap(`src/domains/target/install_manifest.py`)이 등록 요청의 `control_namespaces` CSV(`src/packages/contracts/gateway/requests.py :: TargetRegisterRequest`)를 `CONTROL_ALLOWED_NAMESPACES` env로 주입한다 — 클러스터별로 다르게 줄 수 있다.
+2. **승인 증적 필수**: `apply_manifest`, `k8s.apps.v1.deployments.scale`은 `approval_ref`와 `policy_decision_ref`가 모두 있어야 실행된다(`write_action_requires_approval` + `has_approval_evidence`). `rollout_restart` 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용되며, namespace 정책 가드는 동일하게 적용된다. `deployment scale` 은 plan 메타데이터 environment 가 sandbox 면 승인 증적을 면제한다(`approval_exempt_for_environment` — `AGENT_AUTO_APPROVE_ACTIONS`/`AGENT_AUTO_APPROVE_ENVIRONMENTS`, 기본 scale×sandbox) — command-worker 의 `COMMAND_AUTO_APPROVE_*` rule 과 대칭. `k8s.*.patch` 2종은 이 승인 게이트 집합에 포함되지 않는 대신 아래 3의 name-scoped 정책으로 제한된다.
 3. **k8s 커맨드 정책(name-scoped 자기 제어)**: scope는 `target-agent`만, verb는 `get/patch/apply`만, 리소스는 `deployments`/`configmaps`만. namespace는 role 고정(target→`target`, management→`management`), 이름은 `cluster-agent`(Deployment) / `target-agent-policy`(ConfigMap)만. 위반은 `PermissionError`.
 4. **reconcile 정책**: `user-workload` scope 금지, `system` scope의 Deployment 금지, namespace는 role 고정, ConfigMap은 `target-agent-policy`·target-agent Deployment는 `cluster-agent`만 (`DesiredStateReconciler.ensure_allowed`, `PermissionError`).
 5. **정책 정합성**: `apply_policy`는 정책의 `cluster_id`/`cluster_role`이 에이전트와 다르면 `ValueError`. `AgentPolicy` 등 요청 모델은 전부 `StrictModel(extra="forbid")` — 계약 밖 필드는 검증 실패.
@@ -672,6 +674,9 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 | `HOSTNAME` | str | `target-agent` | agent_id (pod hostname) | `config.py` |
 | `AGENT_TOKEN` | str | `""` | `x-agent-token` 헤더 값 (HTTP·WS 공용) | `config.py` |
 | `CLUSTER_ROLE` | str | `target` | `target` \| `management` — 정책/커맨드 네임스페이스 결정 | `config.py` |
+| `CONTROL_ALLOWED_NAMESPACES` | str(콤마 구분) | `sandbox` | 워크로드 쓰기(`apply_manifest`/`rollout_restart`) 허용 네임스페이스 목록. 매 호출 시 env 를 읽음. 설치 manifest ConfigMap이 등록 요청의 `control_namespaces`로 주입 | `src/packages/config/control.py` |
+| `AGENT_AUTO_APPROVE_ACTIONS` | str(콤마 구분) | `k8s.apps.v1.deployments.scale` | 승인 증적 면제 대상 액션 목록(`approval_exempt_for_environment`) | `agent.py` |
+| `AGENT_AUTO_APPROVE_ENVIRONMENTS` | str(콤마 구분) | `sandbox` | 면제가 적용되는 plan 메타데이터 environment 목록(소문자 비교) | `agent.py` |
 | `BOOTSTRAP_MODE` | str | `target` | 기본 정책의 `bootstrap.mode` | `config.py` |
 | `EVIDENCE_INTERVAL_SECONDS` | int | `10` | provider 기본 수집 주기·윈도 크기 | `config.py` |
 | `AGENT_CONTROL_DB_PATH` | str | `/tmp/target-agent/agent-control.db` | 정책/reconcile SQLite 경로 | `config.py` |
