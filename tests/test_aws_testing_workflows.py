@@ -198,6 +198,31 @@ def test_aws_image_and_workflow_support_remote_git_manifest_reads() -> None:
     assert "`GH_APP_TOKEN`" in runbook
 
 
+def test_aws_cd_builds_and_patches_console_frontend_image() -> None:
+    workflow = read(".github/workflows/aws-cd.yml")
+    script = read("scripts/aws-up.sh")
+    down_script = read("scripts/aws-down.sh")
+    console_manifest = read("deploy/management/console.yaml")
+    frontend_dockerfile = read("frontend/Dockerfile")
+    runbook = read("docs/aws-testing-runbook.md")
+
+    assert "CONSOLE_ECR_REPO: ${{ vars.CONSOLE_ECR_REPO || 'kubeheal-console' }}" in workflow
+    assert 'CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"' in script
+    assert 'CONSOLE_IMAGE_NAME="${CONSOLE_IMAGE_NAME:-}"' in script
+    assert "ensure_ecr_images()" in script
+    assert "${ROOT_DIR}/frontend/Dockerfile" in script
+    assert "${ROOT_DIR}/frontend" in script
+    assert "kubeheal-console" in script
+    assert "newName: ${console_image_repo}" in script
+    assert "newTag: ${console_image_tag}" in script
+    assert "image: kubeheal-console:latest" in console_manifest
+    assert "FROM node:22-alpine AS build" in frontend_dockerfile
+    assert "RUN npm run build" in frontend_dockerfile
+    assert "COPY --from=build /app/dist/" in frontend_dockerfile
+    assert 'CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"' in down_script
+    assert "`CONSOLE_ECR_REPO`" in runbook
+
+
 def test_aws_smoke_uses_runnable_application_manifest() -> None:
     workflow = read(".github/workflows/aws-cd.yml")
     script = read("scripts/aws-up.sh")

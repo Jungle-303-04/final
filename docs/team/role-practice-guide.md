@@ -105,7 +105,7 @@ flowchart LR
 | --- | --- |
 | dashboard-worker | `src/services/projection/dashboard-worker`가 있고 `RcaTimeline`을 upsert한다 |
 | `/dashboard/rca/timeline`, `/dashboard/rca/incidents/{incident_id}` | `src/packages/contracts/gateway/routes.py`에 route 상수가 있다 |
-| frontend app | 현재 이 source repo에는 `dashboard/`, `frontend/`, `package.json` 기반 프론트 앱이 없다 |
+| frontend app | `frontend/`에 React/Vite 운영 콘솔 앱이 있다. API는 Gateway 계약과 same-origin `/api` proxy 기준으로 붙인다 |
 | `dashboard.updated` | 현재 `EventSubject`에 없다. 우선 query API 기준으로 화면을 붙인다 |
 
 그래서 찬빈 파트는 "이미 있는 화면을 고친다"가 아니라, 먼저 backend 계약과 read model 목표를 고정하고, 그 다음 frontend가 실제 API를 소비하게 만드는 순서로 봐야 한다.
@@ -585,11 +585,11 @@ Frontend
 | `/dashboard/rca/timeline` | 있다. RCA timeline list API다 |
 | `/dashboard/rca/incidents/{incident_id}` | 있다. incident detail API다 |
 | `/dashboard/stream` | 없다. dashboard용 SSE는 후속 목표다 |
-| frontend app | 현재 이 repo에는 없다 |
+| frontend app | `frontend/`에 React/Vite 운영 콘솔 앱이 있고 `/api`, `/api/live` proxy 기준으로 Gateway와 연결한다 |
 | realtime-gateway | 있다. target live summary 같은 실시간 경계는 참고할 수 있다 |
 
-그래서 문서나 화면은 현재 구현된 `/dashboard/rca/*` route만 기준으로 잡는다.
-찬빈 작업은 현재 구현된 `/dashboard/rca/*` API를 기준으로 UI를 붙이고, 필요한 summary/stream만 작게 확장하는 작업이다.
+그래서 문서나 화면은 현재 구현된 `/dashboard/rca/*` route와 `frontend/src` 구조를 같이 기준으로 잡는다.
+찬빈 작업은 현재 구현된 `/dashboard/rca/*` API를 먼저 화면에 붙이고, 필요한 summary/stream만 작게 확장하는 작업이다.
 
 ### 찬빈이 바로 열어볼 파일
 
@@ -680,11 +680,12 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   -q
 ```
 
-frontend app이 추가된 뒤에는 그 repo에서 별도로:
+frontend app에서는 별도로:
 
 ```bash
-npm test
+cd frontend
 npm run build
+npm run lint
 ```
 
 ## 서로 넘길 때 체크리스트

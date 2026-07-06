@@ -61,6 +61,7 @@ src/packages
 src/samples  smoke 테스트용 샘플 manifest (Bruno webhook·smoke script 가 참조)
 deploy       management/target Kubernetes manifest
 docs/api     Bruno API 수동 테스트 collection
+frontend     운영 콘솔 React/Vite 앱과 nginx same-origin proxy 설정
 scripts      검증, AWS 배포, 상태 확인, smoke, scale, pod 복구 script
 secrets      SOPS/age 시크릿 템플릿
 config/env   로컬 env 템플릿

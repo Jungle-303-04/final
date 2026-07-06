@@ -7,6 +7,7 @@ MGMT_CLUSTER="${MGMT_CLUSTER:-${PROJECT_SLUG}-mgmt}"
 TARGET_CLUSTER_1="${TARGET_CLUSTER_1:-${PROJECT_SLUG}-target-a}"
 TARGET_CLUSTER_2="${TARGET_CLUSTER_2:-${PROJECT_SLUG}-target-b}"
 ECR_REPO="${ECR_REPO:-${PROJECT_SLUG}-service}"
+CONSOLE_ECR_REPO="${CONSOLE_ECR_REPO:-${PROJECT_SLUG}-console}"
 DELETE_ECR="${DELETE_ECR:-0}"
 
 need() {
@@ -40,11 +41,13 @@ delete_cluster_if_exists "${TARGET_CLUSTER_1}"
 delete_cluster_if_exists "${MGMT_CLUSTER}"
 
 if [[ "${DELETE_ECR}" == "1" ]]; then
-  echo "==> deleting ECR repository: ${ECR_REPO}"
-  aws ecr delete-repository \
-    --region "${AWS_REGION}" \
-    --repository-name "${ECR_REPO}" \
-    --force >/dev/null 2>&1 || true
+  for repo in "${ECR_REPO}" "${CONSOLE_ECR_REPO}"; do
+    echo "==> deleting ECR repository: ${repo}"
+    aws ecr delete-repository \
+      --region "${AWS_REGION}" \
+      --repository-name "${repo}" \
+      --force >/dev/null 2>&1 || true
+  done
 else
-  echo "==> keeping ECR repository ${ECR_REPO} (set DELETE_ECR=1 to remove it)"
+  echo "==> keeping ECR repositories ${ECR_REPO}, ${CONSOLE_ECR_REPO} (set DELETE_ECR=1 to remove them)"
 fi
