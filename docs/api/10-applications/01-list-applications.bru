@@ -1,0 +1,23 @@
+meta {
+  name: 01 애플리케이션 목록
+  type: http
+  seq: 1
+  tags: [applications, read]
+}
+
+get {
+  url: {{base_url}}applications
+}
+
+script:post-response {
+  const b = res.getBody();
+  if (res.status === 200 && b && Array.isArray(b.applications) && b.applications.length) {
+    bru.setVar("application_id", b.applications[0].application_id);
+  }
+}
+
+tests {
+  test("200 or auth failure", function () {
+    expect([200, 401, 403]).to.include(res.status);
+  });
+}
