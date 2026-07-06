@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -47,6 +47,7 @@ status: synced
 | `EMAIL_VERIFICATION_SUCCESS_REDIRECT` | `"/login?verified=1"` | `src/domains/identity/router.py :: EMAIL_VERIFICATION_SUCCESS_REDIRECT` |
 | `EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT` | `"/login?verified=1&approval=pending"` | `src/domains/identity/router.py :: EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT` |
 | `TRUST_PROXY_ENV` | `"TRUST_PROXY"` | `src/domains/identity/router.py :: TRUST_PROXY_ENV` |
+| `FALSE_COOKIE_SECURE_VALUES` | `{"0", "false", "no", "off"}` — COOKIE_SECURE 비보안(http) 신호로 인정하는 값 집합 | `src/domains/identity/router.py :: FALSE_COOKIE_SECURE_VALUES` |
 
 엔드포인트 (경로 상수는 `packages/contracts/gateway/routes.py` 참조):
 
@@ -95,7 +96,7 @@ status: synced
 | `GroupMembersResponse` | `members: list[dict[str, Any]]` | `src/domains/identity/admin_router.py :: GroupMembersResponse` |
 | `UserListResponse` | `users: list[dict[str, Any]]` | `src/domains/identity/admin_router.py :: UserListResponse` |
 | `AccessListResponse` | `grants: list[dict[str, Any]]` | `src/domains/identity/admin_router.py :: AccessListResponse` |
-| `AccessGrantResponse` | `access_id: str`, `subject_type: str`, `subject_label: str`, `resource_type: str`, `resource_id: str`, `role: str`, `granted_at: str \| None = None` | `src/domains/identity/admin_router.py :: AccessGrantResponse` |
+| `AccessGrantResponse` | `access_id: str`, `subject_id: str \| None = None`, `subject_type: str`, `subject_label: str`, `resource_type: str`, `resource_id: str`, `role: str`, `granted_at: str \| None = None` | `src/domains/identity/admin_router.py :: AccessGrantResponse` |
 | `AcceptedResponse` | `accepted: bool = True` | `src/domains/identity/admin_router.py :: AcceptedResponse` |
 
 엔드포인트:
@@ -199,7 +200,7 @@ status: synced
 | `add_group_member(self, group_id: str, user_id: str) -> None` | 그룹 멤버 upsert(role=`member`) |
 | `remove_group_member(self, group_id: str, user_id: str) -> None` | 그룹 멤버 status 를 `disabled` 로 (soft delete) |
 | `list_users(self, status: str \| None = None) -> list[JsonObject]` | 사용자 목록(생성순) + 사용자별 active 그룹 ID 목록. `status` 필터 선택. 반환 `{user_id, email(없으면 user_id), role, status, groups, created_at(ISO)}` |
-| `list_access_grants(self, resource_id: str \| None = None) -> list[JsonObject]` | active 멤버 리소스 역할을 배정·사용자와 조인(사용자는 outer join), 생성순. 반환 `{access_id(=role 행 id 문자열), subject_type: "user", subject_label(email 또는 user_id), resource_type, resource_id, role, granted_at(ISO)}` |
+| `list_access_grants(self, resource_id: str \| None = None) -> list[JsonObject]` | active 멤버 리소스 역할을 배정·사용자와 조인(사용자는 outer join), 생성순. 반환 `{access_id(=role 행 id 문자열), subject_id(=user_id), subject_type: "user", subject_label(email 또는 user_id), resource_type, resource_id, role, granted_at(ISO)}` |
 | `revoke_access(self, access_id: str) -> None` | `access_id` 를 int 변환(실패 시 조용히 무시) 후 해당 member_resource_roles 행 status 를 `disabled` 로 |
 
 Upsert 정책(비공개 헬퍼들의 계약, 재구성에 필요):
@@ -394,7 +395,8 @@ Upsert 정책(비공개 헬퍼들의 계약, 재구성에 필요):
 
 ### 세션 쿠키
 
-- 로그인/인증 성공 시 `Auth.SESSION_COOKIE_NAME`(`service_session`) 쿠키에 세션 토큰을 심는다: `httponly=True`, `secure=(COOKIE_SECURE != "0")`, `samesite="lax"`, `max_age=SESSION_TTL_SECONDS`(기본 86400). 토큰은 JSON 으로 반환하지 않는다(XSS 탈취 차단).
+- 로그인/인증 성공 시 `Auth.SESSION_COOKIE_NAME`(`service_session`) 쿠키에 세션 토큰을 심는다: `httponly=True`, `samesite="lax"`, `max_age=SESSION_TTL_SECONDS`(기본 86400). 토큰은 JSON 으로 반환하지 않는다(XSS 탈취 차단).
+- `secure` 판정: `COOKIE_SECURE` 값을 strip·lower 한 결과가 `FALSE_COOKIE_SECURE_VALUES`(`"0"`, `"false"`, `"no"`, `"off"`)에 속하지 않으면 Secure — http 배포에서 Secure 쿠키를 브라우저가 버려 세션이 유실되는 설정 실수를 줄인다. 기본은 Secure.
 - 로그아웃 시 `password_auth.logout(current.token)` 후 동일 속성으로 쿠키 삭제.
 
 ### 레이트리밋 클라이언트 키
@@ -415,7 +417,7 @@ agent 는 `x-agent-token` 헤더로 인증한다. 게이트웨이는 토큰의 S
 
 ### 관리 콘솔 access 부여 (`grant_access`)
 
-admin 세션의 `workspace_id` 를 `organization_id` 로 사용해 `grant_resource_access` 실행 후, `list_access_grants(resource_id)` 를 재조회해 `resource_id`+`role` 이 일치하는 첫 grant 를 응답으로 반환(access_id 확정). 일치 항목이 없으면 `access_id="pending"` 으로 요청 echo 응답.
+admin 세션의 `workspace_id` 를 `organization_id` 로 사용해 `grant_resource_access` 실행 후, `list_access_grants(resource_id)` 를 재조회해 `resource_id`+`role`+`subject_id` 가 모두 일치하는 grant 중 **마지막 항목**(created_at 오름차순 조회이므로 방금 부여한 것)을 응답으로 반환(access_id 확정) — subject_id 까지 비교해야 같은 resource+role 의 다른 사용자 grant 와 재매칭되지 않는다. 일치 항목이 없으면 `access_id="pending"` 으로 요청 echo 응답.
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -435,7 +437,7 @@ admin 세션의 `workspace_id` 를 `organization_id` 로 사용해 `grant_resour
 |---|---|---|---|
 | `PUBLIC_BASE_URL` | str | `""` | 인증 메일 링크의 공개 베이스 URL. 비어 있으면 `request.url_for` 사용 |
 | `TRUST_PROXY` | str | `""` | `"1"` 일 때만 `X-Forwarded-For` 를 클라이언트 키로 신뢰 |
-| `COOKIE_SECURE` (`Auth.COOKIE_SECURE_ENV`) | str | `"1"` | `"0"` 이면 세션 쿠키 Secure 해제(로컬 http 개발용) |
+| `COOKIE_SECURE` (`Auth.COOKIE_SECURE_ENV`) | str | `"1"` | `0`/`false`/`no`/`off`(대소문자 무관)면 세션 쿠키 Secure 해제(http 배포·로컬 개발용), 그 외는 Secure |
 | `SESSION_TTL_SECONDS` (`Auth.SESSION_TTL_ENV`) | str(int) | `"86400"` (`Auth.DEFAULT_SESSION_TTL_SECONDS`) | 세션 쿠키 max_age |
 | (상수) `Auth.SESSION_COOKIE_NAME` | str | `"service_session"` | 세션 쿠키 이름 |
 | (상수) `Auth.COOKIE_SAMESITE` | str | `"lax"` | 세션 쿠키 SameSite |

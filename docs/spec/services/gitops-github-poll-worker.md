@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 664925a6
 status: synced
 ---
 
@@ -11,7 +11,7 @@ status: synced
 
 - GitHub REST API를 주기적으로 폴링해 대상 repo/branch의 최신 commit을 감지하고, 새 commit이면 [api-gateway](gateway-api-gateway.md)의 `/github/webhook`으로 HMAC 서명된 POST를 보낸다. 이후 경로는 실제 webhook과 동일하다(outbox → NATS `git.webhook.received` → [git-pull-worker](gitops-git-pull-worker.md) → pipeline).
 - 모듈 docstring 명시: ArgoCD와 같은 방향("polling 기본 + webhook 가속(옵션)"), cluster-agent와 같은 timer producer 형태. 외부 endpoint를 못 여는 환경이나 webhook 누락 보정용.
-- 현재 구현은 최신 commit 1건만 조회하며, 같은 commit 반복은 메모리 가드(`_last_sha`)와 ledger dedup으로 흡수한다. ETag/cursor 기반 incremental 조회는 현재 코드에 들어 있지 않고 provider adapter 내부 최적화로 추가 가능하다는 주석만 존재한다.
+- 현재 구현은 최신 commit 1건만 조회하며, 같은 commit 반복은 메모리 가드(`_last_sha`)와 ledger dedup으로 흡수한다. **ETag 조건부 요청**을 지원한다 — 직전 응답의 `ETag`를 기억해 `If-None-Match`로 보내고, `304 Not Modified`면 새 커밋 없음으로 처리한다(304 응답은 GitHub rate limit을 소모하지 않음 — SCM provider를 압박하지 않는 폴링 원칙).
 - 하지 않는 것: NATS 이벤트 직접 발행/구독(이 워커는 이벤트 버스에 붙지 않는 HTTP 클라이언트다), commit 내용 해석, manifest 처리.
 
 ## 의존성 (Dependencies)
@@ -66,7 +66,7 @@ class GitHubPoller:
 `src/services/gitops/github-poll-worker/poller.py :: GitHubPoller`
 (내부 메서드 `_webhook_headers(body: bytes) -> dict[str, str]`, `_github_headers() -> dict[str, str]`는 동작 섹션에서 설명.)
 
-생성자에서 읽는 인스턴스 상태(모두 `env()` 기반, 설정 섹션 참조): `base_url`(끝 `/` 제거), `repo`, `branch`, `workspace_id`, `repository_id`, `watch_target_id`, `binding_id`, `cluster_id`, `manifest_path`, `interval`(int), `token`, `github_api_base`(끝 `/` 제거), `webhook_secret`, `image`, `once`(`env_truthy(POLL_ONCE)`), `_client`(주입 클라이언트), `_last_sha: str | None = None`(같은 커밋 중복 POST만 줄이는 메모리 가드).
+생성자에서 읽는 인스턴스 상태(모두 `env()` 기반, 설정 섹션 참조): `base_url`(끝 `/` 제거), `repo`, `branch`, `workspace_id`, `repository_id`, `watch_target_id`, `binding_id`, `cluster_id`, `manifest_path`, `interval`(int), `token`, `github_api_base`(끝 `/` 제거), `webhook_secret`, `image`, `once`(`env_truthy(POLL_ONCE)`), `_client`(주입 클라이언트), `_last_sha: str | None = None`(같은 커밋 중복 POST만 줄이는 메모리 가드), `_etag: str | None = None`(ETag 조건부 요청용 — 변경 없으면 304로 rate limit 미소모).
 
 ### settings.py
 
@@ -100,6 +100,7 @@ class Settings:
 | `POLL_MAX_BACKOFF_SECONDS_ENV` / `POLL_MAX_BACKOFF_SECONDS` | `"POLL_MAX_BACKOFF_SECONDS"` / `int(env(..., "300"))` — import 시점 평가 |
 | `POLL_BACKOFF_JITTER_SECONDS_ENV` / `POLL_BACKOFF_JITTER_SECONDS` | `"POLL_BACKOFF_JITTER_SECONDS"` / `int(env(..., "3"))` — import 시점 평가 |
 | `SOFT_SKIP_STATUS_CODES` | `{403, 429}` |
+| `NOT_MODIFIED_STATUS_CODE` | `304` — ETag(`If-None-Match`) 조건부 요청의 '변경 없음' 응답 코드 |
 | `ACCESS_ERROR_STATUS_CODES` | `{401, 404}` |
 | `WEBHOOK_IMAGE_ENV` / `DEFAULT_IMAGE` | `"GITOPS_WEBHOOK_IMAGE"` / `""` (기본값 없음 — 명시 env로만 유입) |
 | `DEFAULT_REPLICAS` | `2` |
@@ -161,12 +162,13 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 ### `latest_commit_sha` — GitHub API 호출 명세
 
 1. `require_poll_config()` — `self.repo`가 비었거나 `/`가 없으면 `ValueError("GITHUB_REPO must be set to owner/repo")`.
-2. `GET {github_api_base}/repos/{repo}/commits`, query `per_page=1&sha={branch}`, 헤더는 `_github_headers()` — 토큰 있으면 `{"Authorization": f"Bearer {token}"}`, 없으면 `{}`.
+2. `GET {github_api_base}/repos/{repo}/commits`, query `per_page=1&sha={branch}`, 헤더는 `_github_headers()` — 토큰 있으면 `Authorization: Bearer {token}`, `_etag`가 있으면 `If-None-Match: <etag>` 추가(조건부 요청).
 3. 상태 코드 처리:
+   - `304`(`NOT_MODIFIED_STATUS_CODE`, ETag 일치) → 즉시 `None` — 새 커밋 없음, GitHub rate limit 미소모.
    - `403/429`(`SOFT_SKIP_STATUS_CODES`, rate limit 등) → `github_poll_skipped` info 로그 후 `None`.
    - `401/404`(`ACCESS_ERROR_STATUS_CODES`, 인증/접근 오류) → `github_poll_access_denied` warning 로그(hint: "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요") 후 `None` — 예외로 CronJob을 죽이지 않음.
    - 그 외 오류 → `response.raise_for_status()`로 예외(→ loop 백오프 또는 once 모드 실패).
-4. 성공 → `commits[0]["sha"]`, 빈 배열이면 `None`.
+4. 성공 → `self._etag = response.headers.get("etag") or self._etag`로 ETag 갱신 후 `commits[0]["sha"]`, 빈 배열이면 `None`.
 
 ### `emit_webhook` — webhook POST 명세
 
@@ -178,6 +180,7 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 ## 불변식·오류 (Invariants & Errors)
 
 - 같은 commit SHA는 프로세스 생존 중 두 번 POST되지 않는다(`_last_sha` 메모리 가드). 재시작/CronJob 모드에서는 가드가 초기화되므로 최종 dedup은 downstream ledger 책임.
+- `_etag`도 프로세스 메모리 상태다 — 재시작/CronJob 1회 실행에서는 첫 요청이 항상 무조건부(rate limit 1회 소모)이고, 상주 loop 모드에서 변경 없는 주기는 304로 rate limit을 소모하지 않는다. 304 응답에서는 `_etag`가 갱신되지 않는다(성공 2xx 응답의 `etag` 헤더만 저장).
 - `emit_webhook` 성공 후에만 `_last_sha`가 갱신된다 — POST 실패 시 다음 주기에 같은 commit을 재시도한다.
 - 403/429/401/404는 예외가 아니라 skip(None)으로 처리된다 — 폴링 프로세스(특히 CronJob)를 죽이지 않는 fail-soft. 그 외 HTTP 오류·네트워크 예외는 loop 모드에서 지수 백오프(기본 5s, 상한 300s, 지터 0~3s), once 모드에서는 전파되어 실행 실패.
 - `GITHUB_REPO`는 `owner/repo` 형식이 강제된다(`require_poll_config`), `GITOPS_WEBHOOK_IMAGE`는 emit 시점에 필수.
