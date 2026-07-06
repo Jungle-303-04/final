@@ -1,0 +1,81 @@
+---
+source_commit: 96ba52c8
+status: synced
+---
+
+# features/resources — 카탈로그·클러스터 등록/레포 연결 위저드
+
+> 소스: `frontend/src/features/resources/`
+
+## 책임 (Responsibility)
+
+- 카탈로그 화면(`/catalog`)과 리소스 온보딩 위저드 2종: 클러스터 등록(`RegisterClusterWizard`), 레포 연결(`ConnectRepoWizard`).
+- 위저드는 모달 컴포넌트로 export 되어 [cluster/ClusterListView](./cluster.md)·[repo/RepoListView](./repo.md) 가 소유한 open state 로 띄운다.
+
+## 의존성 (Dependencies)
+
+| 방향 | 대상 | 스펙 링크 | 용도 |
+|---|---|---|---|
+| import | `@/shared/lib/api`(`get/post`), `@/shared/lib/ui-store`, `@/shared/lib/query`(`queryClient`), `@/shared/lib/types`(`CatalogItem`), `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/features/repo/api`(`useCreateApplication`), `@/features/cluster/api`(`useClusters`) | [repo](./repo.md), [cluster](./cluster.md) | 레포 연결 위저드 |
+| import ← | [cluster](./cluster.md), [repo](./repo.md) | — | 위저드 소비자 |
+| 백엔드 | `/catalog/*`, `/providers/*`, `/targets`, `/clusters/:id/connection-status` | [api-gateway](../services/gateway-api-gateway.md) | Bruno 02-target-admin 흐름과 동일 API 순서 |
+
+## 공개 인터페이스 (Public API)
+
+### `frontend/src/features/resources/CatalogView.tsx :: CatalogView` (default export)
+
+- 라우트: `/catalog`.
+- 데이터: 인라인 `useQuery({ queryKey: ['catalog'], queryFn: get('/catalog/items'), select: d => d.items })`; 설치는 `useMutation(POST /catalog/items/${id}/installs, body {})` — 성공 시 toast ok `'설치를 요청했습니다'`.
+- 트리: h1 '카탈로그' → `QueryBoundary` → 카드 그리드(`repeat(auto-fill, minmax(260px, 1fr))`) → `Stagger` 로 항목별 `Card(title=name, actions=설치 primary sm 버튼)`: description + category.
+
+### `frontend/src/features/resources/RegisterClusterWizard.tsx :: RegisterClusterWizard`
+
+```tsx
+export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClose: () => void })
+```
+
+- `Modal(size 'lg', title '클러스터 등록')` + `Stepper(STEPS = ['프로바이더','검증','설정','발급'], current=step)`.
+- state: `step`(0~3), `provider`(기본 'existing-k8s'), `clusterId`, `name`, `issued: {agent_token; install_manifest} | null`, `connected: boolean`.
+- API 순서:
+  1. **프로바이더**: `useQuery(['providers'], GET /providers/catalog, enabled: open)` — 실백엔드는 category 별 객체 `{providers: {cloud: [...], deploy: [...]}}`; `cloudProviders = providers.cloud ?? []` 중 `status === 'available'` 만 카드 그리드로 표시(선택 시 보더 `--brand`).
+  2. **검증**: `useMutation(POST /providers/validate, body {cloud_provider: provider, deploy_provider: 'manual-manifest'})` — `valid` 면 다음 단계, 아니면 errors 를 danger 로 나열. 표시 문구: `선택한 조합: <provider> + manual-manifest`.
+  3. **설정**: `cluster_id` 입력 — slug 검증 `/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/`(실패 시 error `'소문자·숫자·하이픈만 가능합니다'`, 다음 disabled, `data-testid="cluster-id"`) + 표시 이름 + `KeyValue([environment 'sandbox'], [관측 스택 '기본값 (prometheus/loki/tempo .target.svc)'])`.
+     "등록 실행" → `useMutation(POST /targets)` body:
+     ```json
+     { "cluster_id", "name": name || clusterId, "environment": "sandbox", "apply": false,
+       "cloud_provider": provider, "deploy_provider": "manual-manifest",
+       "management_base_url": location.origin, "image": "service:local" }
+     ```
+     성공 시 `issued` 저장 + `queryClient.invalidateQueries(['clusters'])`.
+  4. **발급**: `Badge ok '등록 완료'` + 경고 "agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다." + agent token readonly input(mono, `data-testid="agent-token"`, 복사 버튼) + install manifest `CodeBlock`("kubectl apply -f 로 적용") + "연결 확인" 버튼(`useMutation(GET /clusters/${clusterId}/connection-status)` — `connection_status === 'connected'` 면 `Badge ok connected`) + "완료"(reset).
+- `reset()`: 모든 state 초기화 후 `onClose()`. 내부 `Footer` 서브컴포넌트(`{onPrev?; onNext; nextLabel?='다음'; nextDisabled?; loading?}`, `data-testid="wizard-next"`).
+
+### `frontend/src/features/resources/ConnectRepoWizard.tsx :: ConnectRepoWizard`
+
+```tsx
+export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: () => void })
+```
+
+- `Modal(size 'lg', title '레포 연결')` + `Stepper(['레포','배포 대상','확인'])`.
+- state: `step`, `repoRef`, `branch`(기본 'main'), `manifestPath`(기본 'deploy.yaml'), `clusterId`.
+- 검증: `refOk = /^[\w.-]+\/[\w.-]+$/.test(repoRef)`(실패 시 error `'owner/name 형식이어야 합니다'`, 다음 disabled). 앱 이름은 `repoRef.split('/')[1]`.
+- 단계:
+  1. repo_ref/브랜치/manifest 경로 입력 → 다음(첫 클러스터로 `clusterId` 초기화).
+  2. 대상 클러스터 select(`useClusters`).
+  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, cluster_id})` — 성공 시 `onClose()` 후 `nav('/repos/${application_id}')`.
+
+## 라우트
+
+| 경로 | 컴포넌트 | 가드 | 설명 |
+|---|---|---|---|
+| `/catalog` | `CatalogView` | `RequireSession`+`AppShell` | 카탈로그 설치 요청 |
+| (모달) | `RegisterClusterWizard` | 호출 화면(`/clusters`)의 가드 | 4단계 등록 플로우 |
+| (모달) | `ConnectRepoWizard` | 호출 화면(`/repos`)의 가드 | 3단계 연결 플로우 |
+
+## 불변식·오류 (Invariants & Errors)
+
+- 클러스터 등록 API 호출 순서는 catalog → validate → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일).
+- agent token 은 발급 응답에서만 표시하고 어디에도 저장하지 않는다(위저드 닫으면 소실).
+- `cluster_id` 는 소문자 slug, `repo_ref` 는 `owner/name` 형식을 클라이언트에서 선검증한다.
+- 등록 성공 시 `['clusters']` invalidate — 목록 화면이 즉시 갱신된다.
