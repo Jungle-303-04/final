@@ -1,6 +1,6 @@
 # 뷰: 메트릭
 
-[← 지도](../README.md) · 요구사항 [R8](../01-requirements.md#r8-그래프-메트릭-뷰) · 갭 [G6·G7](../06-api-map.md#신규-api-계약-초안)
+[← 지도](../README.md) · 요구사항 [R8](../01-requirements.md#r8-그래프-메트릭-뷰) · 갭 [G6·G7](../06-api-map.md#갭-상태-표)
 
 백엔드 제약이 UX 를 결정한다: **동기 range query API 가 없다**(G7).
 따라서 1) 실시간 스트림(WS), 2) 비동기 온디맨드 쿼리(debug query) 두 모드로 설계.

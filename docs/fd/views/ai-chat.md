@@ -7,7 +7,7 @@
 
 | Claude식 개념 | 우리 백엔드 실체 |
 |---|---|
-| 채팅 왕복 | `POST /ai/conversations`, `POST .../messages`, `GET /ai/conversations/{id}` 폴링 |
+| 채팅 왕복 | `GET /ai/conversations`, `POST /ai/conversations`, `POST .../messages`, `GET /ai/conversations/{id}` 폴링 |
 | 도구 실행 제안 | assistant 메시지 metadata(도구 호출 기록) + RCA recovery plan 의 action 후보 |
 | 선택 창 | recovery action 선택: `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select` |
 | 실행 승인 | approval: `POST /approvals/{approval_id}/grant\|reject` |
@@ -15,8 +15,7 @@
 ## 목록 — ChatListView (/ai)
 
 좌측 대화 목록(제목·시각·상태 dot) + [새 대화].
-데이터: `GET /ai/conversations` **(G10 — 실측상 목록 API 없음, mock 선행)**.
-mock 단계 보조: 생성한 대화 id 를 localStorage 에 적재해 단건 조회로 목록 재구성.
+데이터: `GET /ai/conversations` (G10 코드 반영).
 새 대화: 첫 메시지 입력 → `POST /ai/conversations` → /ai/:id 이동.
 
 ## 대화 — ChatView (/ai/:conversationId)

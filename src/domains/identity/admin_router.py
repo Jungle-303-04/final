@@ -207,7 +207,11 @@ async def grant_access(
     # 방금 부여한 grant 를 조회로 되돌려줌(access_id 확정)
     grants = db.list_access_grants(payload.resource_id)
     match = next(
-        (g for g in grants if g["resource_id"] == payload.resource_id and g["role"] == payload.role),
+        (
+            g
+            for g in grants
+            if g["resource_id"] == payload.resource_id and g["role"] == payload.role
+        ),
         None,
     )
     if match is None:

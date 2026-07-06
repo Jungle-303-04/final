@@ -1,4 +1,4 @@
-# 06. API 맵 — 인벤토리와 신규 계약 초안
+# 06. API 맵 — 인벤토리와 갭 상태
 
 [← 문서 지도](README.md)
 
@@ -17,6 +17,19 @@
 | POST /auth/signup · POST /auth/login · POST /auth/logout | 🔓/🍪 | [auth](views/auth.md) |
 | GET /auth/verify-email · POST /auth/resend-verification | 🔓 | [auth](views/auth.md) |
 | POST /auth/users/{user_id}/approve | 👑 | [org-admin 멤버](views/org-admin.md#멤버--membersview-g3) |
+
+### 관리 콘솔 (organization, group, user, access)
+
+| 메서드 경로 | 인증 | 사용 뷰 |
+|---|---|---|
+| GET /orgs · POST /orgs | 👑 | [org-admin 조직](views/org-admin.md#조직--organizationsview-g1) |
+| DELETE /orgs/{org_id} | 👑 | [org-admin 조직](views/org-admin.md#조직--organizationsview-g1) |
+| GET /groups · POST /groups | 👑 | [org-admin 그룹](views/org-admin.md#그룹--groupsview-g2) |
+| GET /groups/{group_id}/members | 👑 | [org-admin 그룹](views/org-admin.md#그룹--groupsview-g2) |
+| PUT /groups/{group_id}/members/{user_id} · DELETE /groups/{group_id}/members/{user_id} | 👑 | 그룹 Drawer 멤버십 편집 |
+| GET /users | 👑 | [org-admin 멤버](views/org-admin.md#멤버--membersview-g3) |
+| GET /access | 🍪 | [resources 권한](views/resources.md#권한-탭--accessview-g5) |
+| POST /access · DELETE /access/{access_id} | 👑 | [resources 권한](views/resources.md#권한-탭--accessview-g5) |
 
 ### 클러스터/타깃 (target, inventory, command)
 
@@ -47,6 +60,7 @@
 
 | 메서드 경로 | 인증 | 사용 뷰 |
 |---|---|---|
+| GET /ai/conversations | 🍪 | [ai-chat 목록](views/ai-chat.md#목록--chatlistview-ai) |
 | POST /ai/conversations | 🍪 | [ai-chat](views/ai-chat.md) |
 | GET /ai/conversations/{conversation_id} | 🍪 | ai-chat 폴링 |
 | POST /ai/conversations/{id}/messages | 🍪 | ai-chat 전송 |
@@ -71,31 +85,34 @@
 
 `/live/agent` 는 agent 전용 — 프론트 미사용.
 
-## 신규 API 계약 초안
+## 갭 상태 표
 
-백엔드 팀 구현 대상. 프론트는 이 계약으로 mock 선행(D7).
-공통 규칙: 세션 인증, workspace 는 세션에서 유도(클라이언트 입력 금지 — 기존 보안 원칙),
-쓰기는 audit 이벤트 발행.
+이 섹션은 G번호의 현재 상태를 고정한다.
+코드 반영 항목은 위 실존 API 인벤토리와 `src/domains/identity/admin_router.py`, `src/domains/ai/router.py`를 따른다.
+후속 항목은 프론트가 실존 route처럼 호출하지 않고, 별도 작업으로 연결한다.
+공통 규칙: 세션 인증, workspace 는 세션에서 유도(클라이언트 입력 금지 — 기존 보안 원칙).
 
 ### G1. 조직 CRUD
 
 ```text
 GET    /orgs                      → { orgs: [{ org_id, name, description, member_count, group_count, created_at }] }
 POST   /orgs        {name, description?}                          👑
-PATCH  /orgs/{org_id}  {name?, description?}                      👑
-DELETE /orgs/{org_id}   — 소속 그룹 존재 시 422 {detail:"groups_exist"}  👑
+DELETE /orgs/{org_id}   — 소속 그룹 존재 시 409 {detail:"groups_exist"}  👑
 ```
+
+코드 반영 범위: 목록, 생성, 삭제. 조직 수정 route는 후속 편집 항목이다.
 
 ### G2. 그룹 CRUD + 멤버십
 
 ```text
 GET    /groups?org_id=            → { groups: [{ group_id, org_id, name, member_count }] }
 POST   /groups      {org_id, name, description?}                  👑
-PATCH  /groups/{group_id} · DELETE /groups/{group_id}             👑
 GET    /groups/{group_id}/members → { members: [{ user_id, email }] }
 PUT    /groups/{group_id}/members/{user_id}   (멱등 추가)          👑
 DELETE /groups/{group_id}/members/{user_id}                       👑
 ```
+
+코드 반영 범위: 목록, 생성, 멤버 목록, 멤버 추가/제거. 그룹 수정/삭제 route는 후속 편집 항목이다.
 
 ### G3. 사용자 목록
 
@@ -103,6 +120,8 @@ DELETE /groups/{group_id}/members/{user_id}                       👑
 GET /users?status=active|pending_verification|pending_approval&q=
   → { users: [{ user_id, email, role, status, groups: [group_id], created_at }] }   👑
 ```
+
+코드 반영 범위: `status` 필터. 검색 `q`는 후속 필터 항목이다.
 
 ### G4. 레포지토리 목록
 
@@ -116,11 +135,11 @@ GET /repositories → { repositories: [{ repository_id, repo_ref, default_branch
 ### G5. 리소스 접근 관리
 
 ```text
-GET    /access?resource_type=cluster|repository|application&resource_id=
+GET    /access?resource_id=
   → { grants: [{ access_id, subject_type: user|group, subject_id, subject_label,
                  resource_type, resource_id, role, granted_at }] }                🍪 read
-POST   /access  {subject_type, subject_id, resource_type, resource_id, role}     👑 또는 리소스 owner
-DELETE /access/{access_id}                                                        동일
+POST   /access  {subject_type, subject_id, subject_label?, resource_type, resource_id, role} 👑
+DELETE /access/{access_id}                                                        👑
 role ∈ ResourceRole (packages/contracts/identity 정본)
 ```
 
@@ -156,7 +175,7 @@ POST /notifications/read  {last_seen_at}
 GET /ai/conversations → { conversations: [{ conversation_id, title, status, updated_at }] }  🍪
 ```
 
-현재는 생성/단건조회만 존재(실측). mock 우선, 백엔드 추가 난도 낮음(기존 테이블 조회).
+코드 반영 범위: 목록 조회. 프론트는 이 route를 실제 목록 데이터 소스로 사용한다.
 
 ### G11. 클러스터 정책 조회 (P2)
 
@@ -169,5 +188,5 @@ GET /clusters/{cluster_id}/policy → AgentPolicy   👑
 
 ## 갭-뷰 정합성 규칙 재확인
 
-[01 § 갭 요약](01-requirements.md#갭-요약-백엔드-추가-필요-항목)의 표와 이 문서 초안 목록은 1:1 이어야 한다.
-G10 추가로 01 문서 표도 갱신됨 — 불일치 발견 시 이 문서가 정본.
+[01 § 갭 상태 요약](01-requirements.md#갭-상태-요약)의 상태와 이 문서 상태는 1:1 이어야 한다.
+불일치가 보이면 `routes.py`와 실제 router가 정본이고, 이 문서를 즉시 맞춘다.
