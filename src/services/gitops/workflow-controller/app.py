@@ -40,7 +40,9 @@ from domains.gitops.repository import (
     derive_workflow_run_id,
 )
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
+from domains.target.events import ClusterDesiredStateChangedBody
 from packages.config.constants import CommandStatus, Sandbox, Target
+from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
@@ -55,6 +57,7 @@ from packages.contracts.stores import WorkflowStore
 from packages.runtime.app import App, EventContext
 
 app = App("workflow-controller")
+LOGGER = get_logger(__name__)
 
 MANUAL_APPROVAL_ROLE = ResourceRole.RELEASE_OPERATOR.value
 POLICY_DECISION_REF_PREFIX = "policy-decision"
@@ -290,6 +293,9 @@ async def on_git_webhook(
         "webhook accepted",
         {"commit_sha": evt.commit_sha, "branch": evt.branch},
     )
+    # 글로벌 서비스 — 같은 repo 의 global 바인딩에도 이 변경을 전개한다.
+    async for fanout_body in fanout_global_bindings(evt, ctx):
+        yield fanout_body
 
 
 @app.on(GitChangedBody)
@@ -778,6 +784,268 @@ def workflow_created_fields(payload: JsonObject) -> JsonObject:
         "commit_sha": str(payload.get("commit_sha", "")),
         "manifest_path": str(payload.get("manifest_path", "")),
     }
+
+
+# ── 승격 파이프라인 / 글로벌 서비스 ──────────────────────────────
+# 두 룰 모두 바인딩의 deploy_policy JSONB 에 선언된다(스키마·이벤트 계약 변경 없음):
+#   {"promotes_to_binding_id": "<binding>"}  → run 성공 시 대상 바인딩으로 재진입
+#   {"global": true}                          → 같은 repo 웹훅을 이 바인딩에도 fan-out
+PROMOTES_TO_KEY = "promotes_to_binding_id"
+GLOBAL_BINDING_KEY = "global"
+DEFAULT_PROMOTION_REPLICAS = 2
+CLUSTER_REGISTERED_REASON = "target registered"
+
+
+def binding_policy(binding: JsonObject) -> JsonObject:
+    return dict(binding.get("deploy_policy") or {})
+
+
+async def promoted_image_and_replicas(
+    ctx: EventContext[WorkflowStore], workflow_run_id: str
+) -> tuple[str, int]:
+    """소스 run 의 diff 단계 상세에서 실제 적용된 이미지·레플리카를 읽는다(합성 금지)."""
+    details = await ctx.db.get_workflow_step_details(workflow_run_id, WorkflowStepName.DIFF.value)
+    details = details or {}
+    image = str(details.get("desired_image") or "")
+    basis = details.get("basis") if isinstance(details.get("basis"), Mapping) else {}
+    try:
+        replicas = int(basis.get("replicas", DEFAULT_PROMOTION_REPLICAS))
+    except (TypeError, ValueError):
+        replicas = DEFAULT_PROMOTION_REPLICAS
+    return image, replicas
+
+
+def entry_webhook_for_binding(
+    *,
+    workspace_id: str,
+    application_id: str,
+    binding: JsonObject,
+    commit_sha: str,
+    image: str,
+    replicas: int,
+    repo_ref: str,
+    branch: str,
+) -> GitWebhookReceivedBody:
+    """대상 바인딩으로 표준 파이프라인(렌더→디프→정책→승인→적용)을 재진입시키는 입구 이벤트."""
+    return GitWebhookReceivedBody(
+        commit_sha=commit_sha,
+        image=image,
+        replicas=replicas,
+        workspace_id=workspace_id,
+        repository_id=str(binding["repository_id"]),
+        repo_ref=repo_ref,
+        branch=branch,
+        watch_target_id=str(binding.get("watch_target_id") or ""),
+        binding_id=str(binding["binding_id"]),
+        application_id=application_id,
+        environment=str(binding["environment"]),
+        cluster_id=str(binding["cluster_id"]),
+        manifest_path=str(binding["manifest_path"]),
+    )
+
+
+async def run_exists_for(
+    ctx: EventContext[WorkflowStore],
+    *,
+    workspace_id: str,
+    application_id: str,
+    binding: JsonObject,
+    commit_sha: str,
+) -> bool:
+    run_id = derive_workflow_run_id(
+        {
+            "workspace_id": workspace_id,
+            "application_id": application_id,
+            "binding_id": binding["binding_id"],
+            "environment": binding["environment"],
+            "commit_sha": commit_sha,
+        }
+    )
+    return await ctx.db.get_workflow_run(run_id) is not None
+
+
+@app.on(WorkflowRunCompletedBody)
+async def on_run_completed_promote(
+    evt: WorkflowRunCompletedBody, ctx: EventContext[WorkflowStore]
+) -> AsyncIterator[EventBody]:
+    """승격 룰 — 성공 종결 run 의 바인딩에 promotes_to 가 있으면 같은 commit 으로
+    대상 바인딩의 표준 파이프라인을 연다. 대상 run 이 이미 있으면(재전달·순환) no-op."""
+    source = await ctx.db.get_deployment_binding(evt.workspace_id, evt.binding_id)
+    if not source:
+        return
+    target_id = str(binding_policy(source).get(PROMOTES_TO_KEY) or "")
+    if not target_id or target_id == evt.binding_id:
+        return
+    target = await ctx.db.get_deployment_binding(evt.workspace_id, target_id)
+    if not target:
+        LOGGER.warning(
+            "promotion_target_missing",
+            extra={"context": {"binding_id": evt.binding_id, "target": target_id}},
+        )
+        return
+    run = await ctx.db.get_workflow_run(evt.workflow_run_id)
+    commit_sha = str((run or {}).get("commit_sha") or "")
+    if not commit_sha:
+        return
+    if await run_exists_for(
+        ctx,
+        workspace_id=evt.workspace_id,
+        application_id=evt.application_id,
+        binding=target,
+        commit_sha=commit_sha,
+    ):
+        return
+    application = await ctx.db.get_application(evt.workspace_id, evt.application_id)
+    if not application:
+        return
+    image, replicas = await promoted_image_and_replicas(ctx, evt.workflow_run_id)
+    if not image:
+        LOGGER.warning(
+            "promotion_skipped_no_image",
+            extra={"context": {"workflow_run_id": evt.workflow_run_id}},
+        )
+        return
+    LOGGER.info(
+        "promotion_triggered",
+        extra={
+            "context": {
+                "from_binding": evt.binding_id,
+                "to_binding": target_id,
+                "commit_sha": commit_sha,
+            }
+        },
+    )
+    yield entry_webhook_for_binding(
+        workspace_id=evt.workspace_id,
+        application_id=evt.application_id,
+        binding=target,
+        commit_sha=commit_sha,
+        image=image,
+        replicas=replicas,
+        repo_ref=str(application.get("repo_ref") or ""),
+        branch=str(application.get("default_branch") or ""),
+    )
+
+
+async def fanout_global_bindings(
+    evt: GitWebhookReceivedBody, ctx: EventContext[WorkflowStore]
+) -> AsyncIterator[EventBody]:
+    """글로벌 룰 — 웹훅을 같은 repo 의 global 바인딩들로 확장한다.
+
+    자식(global 바인딩 대상) 웹훅은 재확장하지 않아 증폭이 1단으로 끝난다.
+    이미 같은 commit 의 run 이 있는 바인딩은 건너뛴다(중복·재전달 수렴).
+    """
+    source = await ctx.db.get_deployment_binding(evt.workspace_id, evt.binding_id)
+    if source is not None and binding_policy(source).get(GLOBAL_BINDING_KEY):
+        return
+    repository_id = str((source or {}).get("repository_id") or evt.repository_id or "")
+    if not repository_id:
+        return
+    siblings = (
+        await ctx.db.list_repository_deployment_bindings(evt.workspace_id, repository_id) or []
+    )
+    for binding in siblings:
+        if str(binding["binding_id"]) == evt.binding_id:
+            continue
+        if not binding_policy(binding).get(GLOBAL_BINDING_KEY):
+            continue
+        if await run_exists_for(
+            ctx,
+            workspace_id=evt.workspace_id,
+            application_id=evt.application_id,
+            binding=binding,
+            commit_sha=evt.commit_sha,
+        ):
+            continue
+        LOGGER.info(
+            "global_binding_fanout",
+            extra={
+                "context": {
+                    "binding_id": binding["binding_id"],
+                    "cluster_id": binding["cluster_id"],
+                    "commit_sha": evt.commit_sha,
+                }
+            },
+        )
+        yield entry_webhook_for_binding(
+            workspace_id=evt.workspace_id,
+            application_id=evt.application_id,
+            binding=binding,
+            commit_sha=evt.commit_sha,
+            image=evt.image,
+            replicas=evt.replicas,
+            repo_ref=evt.repo_ref,
+            branch=evt.branch,
+        )
+
+
+@app.on(ClusterDesiredStateChangedBody)
+async def on_cluster_registered_attach_globals(
+    evt: ClusterDesiredStateChangedBody, ctx: EventContext[WorkflowStore]
+) -> AsyncIterator[EventBody]:
+    """신규 클러스터 합류 — 글로벌 그룹의 바인딩을 자동 생성하고, 템플릿 바인딩의
+    최근 성공 run 이 있으면 그 commit·image 로 초기 배포 파이프라인을 연다."""
+    if evt.reason != CLUSTER_REGISTERED_REASON:
+        return
+    bindings = await ctx.db.list_workspace_deployment_bindings(evt.workspace_id) or []
+    global_bindings = [b for b in bindings if binding_policy(b).get(GLOBAL_BINDING_KEY)]
+    groups: dict[tuple[str, str, str], list[JsonObject]] = {}
+    for binding in global_bindings:
+        key = (str(binding["repository_id"]), str(binding["app_name"]), str(binding["namespace"]))
+        groups.setdefault(key, []).append(binding)
+    for members in groups.values():
+        if any(str(member["cluster_id"]) == evt.cluster_id for member in members):
+            continue
+        template = members[0]
+        created = await ctx.db.register_deployment_binding(
+            {
+                "workspace_id": evt.workspace_id,
+                "repository_id": template["repository_id"],
+                "watch_target_id": template.get("watch_target_id"),
+                "cluster_id": evt.cluster_id,
+                "namespace": template["namespace"],
+                "app_name": template["app_name"],
+                "manifest_path": template["manifest_path"],
+                "environment": template["environment"],
+                "resource_class": template.get("resource_class", "application"),
+                "deploy_policy": binding_policy(template),
+                "access_policy": dict(template.get("access_policy") or {}),
+            }
+        )
+        LOGGER.info(
+            "global_binding_attached",
+            extra={
+                "context": {
+                    "cluster_id": evt.cluster_id,
+                    "binding_id": created.get("binding_id"),
+                    "app_name": template["app_name"],
+                }
+            },
+        )
+        last = await ctx.db.latest_succeeded_run_for_binding(
+            evt.workspace_id, str(template["binding_id"])
+        )
+        if not last:
+            continue  # 배포 이력 없음 — 다음 git 변경 때 fan-out 으로 합류
+        image, replicas = await promoted_image_and_replicas(ctx, str(last["workflow_run_id"]))
+        application = await ctx.db.get_application(evt.workspace_id, str(last["application_id"]))
+        if not image or not application:
+            continue
+        new_binding = await ctx.db.get_deployment_binding(
+            evt.workspace_id, str(created["binding_id"])
+        )
+        if not new_binding:
+            continue
+        yield entry_webhook_for_binding(
+            workspace_id=evt.workspace_id,
+            application_id=str(last["application_id"]),
+            binding=new_binding,
+            commit_sha=str(last["commit_sha"]),
+            image=image,
+            replicas=replicas,
+            repo_ref=str(application.get("repo_ref") or ""),
+            branch=str(application.get("default_branch") or ""),
+        )
 
 
 if __name__ == "__main__":
