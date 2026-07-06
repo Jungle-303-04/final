@@ -18,6 +18,7 @@ from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
 from packages.events.envelope import event
+from packages.runtime.command_wakeup import AGENT_COMMAND_CHANNEL, wakeup_key
 from packages.storage.engine import (
     UNKNOWN_AGENT_ID,
     DatabaseConnection,
@@ -35,13 +36,15 @@ EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the
 class AgentCommandRepository(DatabaseConnection):
     def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
         table = AgentCommand.__table__
+        workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        cluster_id = str(plan["cluster_id"])
         statement = (
             pg_insert(table)
             .values(
                 command_id=plan["command_id"],
-                workspace_id=plan.get("workspace_id", DEFAULT_WORKSPACE_ID),
+                workspace_id=workspace_id,
                 correlation_id=correlation_id,
-                cluster_id=plan["cluster_id"],
+                cluster_id=cluster_id,
                 action=plan["action"],
                 payload=plan,
                 status=status,
@@ -57,6 +60,15 @@ class AgentCommandRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+            # 커밋 시점에 전달되는 웨이크업 알림 — 게이트웨이 롱폴이 1초 폴링 주기를
+            # 기다리지 않고 즉시 lease 를 재시도한다(리스너 없으면 무해한 no-op).
+            conn.execute(
+                text("select pg_notify(:channel, :payload)"),
+                {
+                    "channel": AGENT_COMMAND_CHANNEL,
+                    "payload": wakeup_key(workspace_id, cluster_id),
+                },
+            )
 
     async def get_agent_command(
         self, command_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID
