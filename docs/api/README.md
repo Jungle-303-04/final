@@ -27,8 +27,8 @@ docs/api
 
 직접 채워야 하는 값은 처음 한 번만 본다.
 
-1. `base_url`은 Gateway 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/api/`로 이미 채워져 있다. **라이브는 console(nginx)이 앞단이라 API가 `/api` 프리픽스 아래에 있다** — 그래서 `/api/`로 끝나야 한다(루트로 두면 전부 404).
-2. `auth_password`만 직접 넣으면 된다. `auth_email`은 `woonyong-kr@gmail.com`(라이브 active service_admin)으로 채워져 있고, `auth_password`에 **가입 때 정한 비밀번호**를 넣는다. 다른 계정으로 볼거면 두 값을 바꾼다.
+1. `base_url`은 Gateway 직접 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/`로 이미 채워져 있다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
+2. `auth_email`/`auth_password`는 로그인할 계정이다. collection 기본값은 로컬 bootstrap 계정인 `admin.local@example.com` / `local-test-password-1234`다. AWS에 다른 admin 계정으로 bootstrap되어 있으면 `aws-test` Environment에서 두 값을 그 계정으로 바꾼다.
 3. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 4. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
 5. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
@@ -48,15 +48,17 @@ docs/api
 
 아래는 각 값의 의미 설명이다.
 
-`base_url`은 Gateway 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/api/`를 쓴다.
-라이브는 console(nginx)이 정적 프론트를 서빙하며 `/api/*`를 내부 api-gateway로 프록시하므로, API는 반드시 `/api` 아래에서 호출한다.
+`base_url`은 Gateway 직접 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/`를 쓴다.
+현재 AWS CD smoke와 Cloudflare DNS는 `api-gateway` LoadBalancer를 `k8s.woonyong.org`로 연결한다. 그래서 Bruno에서는 `/healthz`, `/providers/validate`, `/agent/debug/query`처럼 Gateway route를 그대로 붙여 호출한다.
 
-Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
+프론트 콘솔의 nginx는 브라우저 same-origin 요청을 위해 `/api/*`를 내부 `api-gateway`로 proxy한다. 이 경로는 프론트 화면에서 쓰는 경로이고, Bruno collection의 `base_url`에는 넣지 않는다.
+
+Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/`로 풀린다.
 그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test`를 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
-라이브 기본값은 `woonyong-kr@gmail.com`(active service_admin)이고, `auth_password`에 가입 때 정한 비밀번호를 넣는다.
-다른 계정으로 bootstrap되어 있으면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
+collection 기본값은 `admin.local@example.com` / `local-test-password-1234`이고, 로컬 bootstrap smoke에서 바로 쓸 수 있는 값이다.
+AWS 라이브에서 `AUTH_EMAIL`/`AUTH_PASSWORD` secret으로 다른 admin을 bootstrap했다면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
 
 `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 id다. 기본값은 `cluster-1`/`cluster-2`다.
 단, 두 클러스터에 cluster-agent가 아직 배포되지 않았다면 `clusters` 목록/인벤토리는 비어 있을 수 있다 —
