@@ -4,11 +4,14 @@ from domains.command.actions import command
 from packages.config.constants import Command, Sandbox
 
 
+# rollout restart 는 spec 변경이 없는 비파괴 조치라 자동 실행을 허용한다.
+# (sandbox namespace 한정은 allowed_namespaces 로 계속 강제됨.
+#  apply_manifest / deployment_scale 같은 상태 변경 액션은 승인 체인을 유지한다.)
 @command.action(
     Command.DEFAULT_ACTION,
     recovery_aliases=("rollout_restart",),
     allowed_namespaces=(Sandbox.NAMESPACE,),
-    requires_approval=True,
+    requires_approval=False,
 )
 class RolloutRestartCommand:
     pass

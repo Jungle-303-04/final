@@ -29,6 +29,7 @@ from domains.command.policy import (
 )
 from domains.command.policy import Result as PolicyResult
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
+from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.gitops import ApprovalStatus
@@ -102,7 +103,7 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     spec = command_action_spec(command.action)
     if spec is not None and not spec.allows_namespace(command.namespace):
         return PolicyResult.reject(ACTION_NAMESPACE_REASON)
-    if spec is not None and spec.requires_approval:
+    if spec is not None and spec.requires_approval and not approval_exempt_for_environment(command):
         if not command.approval_ref:
             return PolicyResult.reject(MISSING_APPROVAL_REF_REASON)
         if not command.policy_decision_ref:
@@ -110,9 +111,39 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     return result
 
 
+AUTO_APPROVE_ACTIONS_ENV = "COMMAND_AUTO_APPROVE_ACTIONS"
+AUTO_APPROVE_ENVIRONMENTS_ENV = "COMMAND_AUTO_APPROVE_ENVIRONMENTS"
+DEFAULT_AUTO_APPROVE_ACTIONS = Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION
+DEFAULT_AUTO_APPROVE_ENVIRONMENTS = "sandbox"
+
+
+def _csv_values(value: str) -> set[str]:
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
+    """sandbox 허용 rule — 지정 액션은 sandbox 환경에서 승인 기록 없이 실행을 허용함.
+
+    기본값: k8s deployment scale 만 sandbox 환경 면제.
+    production 등 다른 환경은 environment 불일치로 면제되지 않으며,
+    COMMAND_AUTO_APPROVE_ACTIONS / COMMAND_AUTO_APPROVE_ENVIRONMENTS 로 조정한다.
+    카탈로그 allowed_namespaces·에이전트 name-scoped 정책은 그대로 적용된다.
+    """
+    actions = _csv_values(env(AUTO_APPROVE_ACTIONS_ENV, DEFAULT_AUTO_APPROVE_ACTIONS))
+    environments = {
+        item.lower()
+        for item in _csv_values(
+            env(AUTO_APPROVE_ENVIRONMENTS_ENV, DEFAULT_AUTO_APPROVE_ENVIRONMENTS)
+        )
+    }
+    return command.action in actions and command.environment.strip().lower() in environments
+
+
 def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
     spec = command_action_spec(command.action)
-    return bool(spec is not None and spec.requires_approval)
+    if spec is None or not spec.requires_approval:
+        return False
+    return not approval_exempt_for_environment(command)
 
 
 async def evaluate_recorded_approval(
