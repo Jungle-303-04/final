@@ -58,6 +58,11 @@ body 스키마는 [command 도메인](../domains/command.md) 참조.
 | 구독 | `command.requested` | `CommandRequestedBody(cluster_id, action, namespace, reason, diff, workspace_id, application_id, workflow_run_id, binding_id, environment, requested_by?, actor?, approval_ref?, policy_decision_ref?, payload)` | durable `command-worker` |
 | 발행 | `command.rejected` | `CommandRejectedBody(reason, requested=evt.to_body())` | 정책/승인 검증 실패 |
 | 발행 | `command.dispatched` | `CommandDispatchedBody(plan, route)` | 정책 통과·계획 수립 직후 |
+
+승인 면제 rule: `COMMAND_AUTO_APPROVE_ACTIONS`(기본 `k8s.apps.v1.deployments.scale`) ×
+`COMMAND_AUTO_APPROVE_ENVIRONMENTS`(기본 `sandbox`) 조합이면 승인 기록 없이 큐 적재를 허용한다
+(`approval_exempt_for_environment`). 카탈로그 `allowed_namespaces` 와 에이전트 name-scoped
+정책은 면제와 무관하게 계속 적용된다.
 | 발행 | `command.queued_for_agent` | `CommandQueuedForAgentBody(command_id, cluster_id, workspace_id, application_id, workflow_run_id, binding_id, environment, approval_ref?, policy_decision_ref?)` | DB 큐 적재 후 |
 | 발행 | `command.completed` | `CommandCompletedBody(command_id, result)` | sweep 이 만료 명령을 FAILED 종결할 때(각 행마다 1건) |
 
