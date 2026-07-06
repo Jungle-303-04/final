@@ -121,7 +121,6 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
     )
     outs = run_handler(command.on_command_requested, payload, db=queue, correlation_id="corr-2")
     assert subjects_of(outs) == [
-        "command.dispatch.ready",
         "command.dispatched",
         "command.queued_for_agent",
     ]

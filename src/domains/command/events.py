@@ -97,18 +97,14 @@ class Route(EventBody):
     cluster_id: str
 
 
-@event(EventSubject.COMMAND_DISPATCH_READY)
-@dataclass(frozen=True)
-class CommandDispatchReadyBody(EventBody):
-    """command.dispatch.ready — 정책 통과, 실행 계획 수립."""
-
-    plan: Plan
-
-
 @event(EventSubject.COMMAND_DISPATCHED)
 @dataclass(frozen=True)
 class CommandDispatchedBody(EventBody):
-    """command.dispatched — 대상 클러스터 라우팅."""
+    """command.dispatched — 정책 통과, 실행 계획 수립·대상 클러스터 라우팅.
+
+    (구 command.dispatch.ready 를 흡수 — 계획 수립과 라우팅이 같은 핸들러에서
+    동기적으로 일어나므로 단계를 나누지 않음.)
+    """
 
     plan: Plan
     route: Route

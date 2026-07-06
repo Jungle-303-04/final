@@ -47,8 +47,7 @@ sequenceDiagram
     User->>Gateway: POST /commands
     Gateway->>Bus: command.requested
     Worker->>Worker: policy / action catalog / approval guard
-    Worker->>Bus: command.dispatch.ready
-    Worker->>Bus: command.dispatched
+    Worker->>Bus:     Worker->>Bus: command.dispatched
     Worker->>DB: queue_agent_command(plan)
     Worker->>Bus: command.queued_for_agent
     Agent->>Gateway: GET /agent/commands/poll
@@ -277,7 +276,6 @@ command.requested
   -> command.rejected
 
 command.requested
-  -> command.dispatch.ready
   -> command.dispatched
   -> agent_commands row insert
   -> command.queued_for_agent

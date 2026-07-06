@@ -102,6 +102,9 @@ spec:
       port: 6379
       targetPort: redis
 ---
+# MinIO — raw evidence 번들·rendered manifest 아티팩트용 object store (S3 로컬 스탠드인).
+# 현재 서비스 코드 연결 전 상태 (연결 계획: docs/operations-deployment.md 'Object Store | S3 후보' 참고).
+# 운영(EKS)에서는 managed S3 로 교체하고 endpoint 는 Secret/ConfigMap 으로 주입한다.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

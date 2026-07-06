@@ -203,7 +203,6 @@ Gateway /github/webhook
   -> alert.requested
   -> alert.dispatched
   -> command.requested
-  -> command.dispatch.ready
   -> command.dispatched
   -> command.queued_for_agent
   -> Agent GET /agent/commands/poll
@@ -358,7 +357,7 @@ uv run pytest tests/test_command_worker.py tests/test_command_router.py tests/te
 
 완료 기준:
 
-- `command.requested -> command.dispatch.ready -> command.queued_for_agent`가 테스트된다.
+- `command.requested -> command.dispatched -> command.queued_for_agent`가 테스트된다.
 - 정책 거부는 `command.rejected`로 표현된다.
 - Target Agent 직접 호출 코드가 없다.
 
