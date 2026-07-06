@@ -450,7 +450,7 @@ approval_required=`"approval_required"`.
 
 | action_type | title | route | risk | score | approval_required | params |
 |---|---|---|---|---|---|---|
-| `rollout_restart` | 대상 워크로드 재시작 | `auto` | low | 0.58 | True | `{"command": "rollout_restart"}` |
+| `rollout_restart` | 대상 워크로드 재시작 | `auto` | low | 0.58 | False | `{"command": "rollout_restart"}` |
 | `scale` | 임시 replica 증설 PR | `draft_pr` | medium | 0.52 | True | `{"scale": "increase_replicas"}` |
 
 **`src/services/ai/agent/recovery/builtin.py :: RolloutRecoveryActions`** —
@@ -526,8 +526,9 @@ approval_required=`"approval_required"`.
 — `draft.params["command"] or draft.action_type` 을
 [`command_action_for_recovery`](../domains/command.md) 로 카탈로그 액션에 매핑,
 `command_action_spec(action).requires_approval` 이 True면 True.
-(내장 카탈로그의 `rollout_restart`/`apply_manifest`/`deployment_scale` 은 전부 `requires_approval=True` —
-따라서 현행 지식 베이스에서 auto 실행이 자동 선택되는 경로는 없음.)
+(내장 카탈로그에서 `rollout_restart` 는 비파괴 조치라 `requires_approval=False` —
+oom_killed 의 rollout_restart 후보가 자동 선택되어 auto 실행된다.
+`apply_manifest`/`deployment_scale` 은 `requires_approval=True` 로 승인 체인을 유지한다.)
 
 `src/services/ai/agent/recovery/select.py :: selection_reason`
 — `requires_approval` 이면 `APPROVAL_REQUIRED_COMMAND_REASON`, 아니면 `SELECTION_REQUIRED_REASON`.
