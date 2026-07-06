@@ -46,7 +46,8 @@ jobs:
 
       - name: No tracked env/secret files
         run: |
-          tracked=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.example$' || true)
+          # frontend/.env.development 은 vite 관례 파일 — 시크릿 없이 mock 모드 플래그만 담음(허용).
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.example$' | grep -v '^frontend/\.env\.development$' || true)
           if [ -n "$tracked" ]; then
             echo "추적 중인 env 파일 발견(시크릿 커밋 금지): $tracked"
             exit 1
@@ -54,6 +55,23 @@ jobs:
 
       - name: Unit tests
         run: uv run pytest -q
+
+  frontend-checks:
+    name: Frontend typecheck, lint, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend gate (tsc + eslint + build)
+        run: bash scripts/frontend-check.sh
 
   manifest-checks:
     name: Kubernetes manifest checks
