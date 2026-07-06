@@ -5,7 +5,7 @@ status: synced
 
 # cluster-agent — target 클러스터 상주 에이전트 (증거 수집 · 커맨드 실행 · 정책 동기화 · 실시간 요약)
 
-> 소스: `src/services/target/cluster-agent/` · 테스트: `tests/test_target_agent_client.py`, `tests/test_target_agent_commands.py`, `tests/test_target_evidence_jobs.py`, `tests/test_target_policy_control.py`, `tests/test_target_reconciler.py`, `tests/test_live_summary.py`, `tests/test_telemetry_registry.py`, `tests/test_target_kubernetes_evidence.py`, `tests/test_target_metric_evidence.py`, `tests/test_target_log_evidence.py`, `tests/test_target_trace_evidence.py`
+> 소스: `src/services/target/cluster-agent/` · 테스트: `tests/test_target_agent_client.py`, `tests/test_target_agent_commands.py`, `tests/test_target_evidence_jobs.py`, `tests/test_target_policy_control.py`, `tests/test_target_reconciler.py`, `tests/test_live_summary.py`, `tests/test_telemetry_registry.py`, `tests/test_target_kubernetes_evidence.py`, `tests/test_target_metric_evidence.py`, `tests/test_target_telemetry_evidence.py`
 
 ## 책임 (Responsibility)
 
