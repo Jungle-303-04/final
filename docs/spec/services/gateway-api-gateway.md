@@ -62,7 +62,7 @@ status: synced
 - `src/services/gateway/api-gateway/gateway.py :: ApiGateway` — 생성자에서 `Database()`, `NatsEventBus()`, `ApiEventGateway(bus, db, "api-gateway")`, `RedisSessionStore`, `SessionAuthService`, `PasswordAuthService`, `FastAPI(title, version, lifespan)` 를 만들고 CORS 설정 후 라우트 등록. 공유 객체는 `app.state.db / app.state.events / app.state.auth / app.state.password_auth` 에 DI.
   - `ApiGateway._configure_cors(app)` — `CORS_ALLOW_ORIGINS`(콤마 구분, 기본 로컬 dev origin 4종) 파싱 후 `CORSMiddleware(allow_credentials=True, allow_methods=["*"], allow_headers=["*"])` 추가. origin 목록이 비면 미들웨어 자체를 추가하지 않음.
   - `ApiGateway._session_store_config()` — `RedisSessionStoreConfig` 구성(아래 [설정](#설정-settings)의 세션 항목 참조).
-  - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()` → `_relay_outbox()` 태스크 시작. 종료 시 relay 취소 → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
+  - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()` → `_relay_outbox()` 태스크 시작. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → relay 취소 → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
   - `ApiGateway._relay_outbox()` — `OutboxRelay(db, bus, "api-gateway")` 를 무한 루프로 실행. 배치가 가득 찼으면(`sent >= relay.batch`) 즉시 재실행, 아니면 `OUTBOX_RELAY_INTERVAL_SECONDS`(기본 1초) sleep. 예외는 `gateway_outbox_relay_error` 경고 로그 후 계속.
   - `ApiGateway.configure_routes()` — 라우터 등록 순서: health → identity → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → dead-letter → metrics → 전역 오류 핸들러.
 - `src/services/gateway/api-gateway/gateway.py :: agent_connected_body_from_request(payload, identity)` — `AgentConnectRequest` 의 `cluster_id` 를 버리고 인증 identity 의 `cluster_id`/`workspace_id` 를 권위값으로 채운 `AgentConnectedBody` 생성.
@@ -234,7 +234,7 @@ status: synced
 
 1. `main()` → `FastApiService("api-gateway", create_app)` → uvicorn(`0.0.0.0:$PORT`, 기본 8000).
 2. 미들웨어는 **CORSMiddleware 하나**뿐(조건부). 그 외 cross-cutting 은 ① FastAPI `Depends` 가드(라우트 단위 인증/인가), ② 전역 `@app.exception_handler(Exception)`(모든 미처리 예외 → 500 `{"error": "internal server error"}` + `gateway_unhandled_error` 로그)로 처리한다.
-3. lifespan: DB 대기 → Redis 연결 → NATS 연결 → outbox relay 태스크.
+3. lifespan: DB 대기 → Redis 연결 → NATS 연결 → outbox relay 태스크 → `COMMAND_NOTIFY_DATABASE_URL`이 설정된 경우 command wakeup listener.
 
 ### 인증 흐름 (상태 머신)
 

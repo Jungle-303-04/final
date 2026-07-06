@@ -93,6 +93,9 @@ Fargate는 다음 조건을 모두 만족할 때만 쓴다.
 | VPC endpoint | ECR, S3, CloudWatch, Secrets Manager 사용 시 우선 검토 |
 
 Target Cluster에 command를 보내기 위해 target cluster API server를 외부에 공개하지 않는다. Agent가 command queue를 polling하거나 stream으로 받아 실행한다.
+AWS 배포에서는 `management-runtime-secret.COMMAND_NOTIFY_DATABASE_URL`을 Postgres 직결 URL로 넣어 api-gateway가 `LISTEN agent_command_queued`를 열 수 있게 한다.
+이 값은 command long-poll 지연을 줄이는 보조 경로이며, PgBouncer transaction pooling URL을 넣으면 `LISTEN`이 안정적으로 동작하지 않는다.
+값이 없어도 command는 `agent_commands` lease polling으로 계속 동작한다.
 
 ## 권한 기준
 
