@@ -17,7 +17,7 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`), `@/features/repo/ApprovalCard` | [repo](./repo.md) | 데이터·승인 카드 |
-| import | `@/shared/flow`(`FlowCanvas`, `useAutoLayout`, `FlowEdgeData`), `@/shared/ui`, `@/shared/ui/status`, `@/shared/ui/icons`, `@/shared/lib/format`, `@/shared/motion`, `@/shared/lib/types` | [shared](shared.md) | 그래프·UI |
+| import | `@/shared/flow`(`FlowCanvas`, `useAutoLayout`, `FlowEdgeData`), `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/status`, `@/shared/ui/icons`, `@/shared/lib/format`, `@/shared/motion`, `@/shared/lib/types` | [shared](shared.md) | 그래프·UI |
 | 외부 | `@xyflow/react`(`Handle`, `Position`, 타입) | — | 커스텀 노드 |
 | 백엔드 | (간접) GET `/applications`, GET `/applications/:id/runs` | [api-gateway](../services/gateway-api-gateway.md) | repo 훅 경유 |
 
@@ -48,11 +48,12 @@ status: synced
   ├─ Breadcrumbs [워크플로우 → '<appId> · <sha>']
   ├─ 헤더: h1(appId) + code(sha) + Badge(status)
   ├─ WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인 — diff: <DIFFING step detail>')
+  │   + DIFFING step 의 changes 가 있으면 PlanDiff(changes, resource)
   └─ 그리드(1fr 300px):
      ├─ Card(h 340, p 0) > FlowCanvas(nodes, edges, nodeTypes, onNodeClick=setSelected)
      └─ Card(title = selected ?? '단계 상세')
         선택 시 KeyValue(상태 Badge — PENDING 은 status 'unknown' 으로 표기 / 상세 detail ?? '—')
-        + DIFFING 선택이고 detail 있으면 CodeBlock(detail)
+        + 선택 step 에 changes 가 있으면 PlanDiff(changes, resource), 없고 DIFFING detail 만 있으면 CodeBlock(detail)
         미선택 시 안내문 '노드를 클릭하면 산출물이 표시됩니다.'
   ```
 

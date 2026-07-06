@@ -11,7 +11,14 @@ export interface ServiceInfo { name: string; namespace: string; type: string; cl
 export interface K8sEvent { at: string; type: string; reason: string; target: string; message: string }
 export interface Application { application_id: string; name: string; repo_ref: string; branch: string; cluster_id: string; manifest_path: string; last_run_status?: string; last_deployed_at?: string }
 export interface WorkflowRun { run_id: string; application_id: string; commit_sha: string; status: string; current_step: string; started_at: string; steps: RunStep[]; approval_id?: string; safe_pr?: SafePr }
-export interface RunStep { name: string; status: string; detail?: string }
+export interface RunStep { name: string; status: string; detail?: string; resource?: string; changes?: PlanChange[] }
+// terraform plan 스타일 필드 변경 — diff-worker 의 3-way 비교(old_desired/live/new_desired) 산출물
+export interface PlanChange {
+  field_path: string;
+  classification: 'intended_change' | 'adoption_required' | 'drift' | 'conflict_or_manual_change' | 'already_converged' | string;
+  before?: unknown;
+  after?: unknown;
+}
 export interface SafePr { status: string; pr_url?: string; explanation?: string; diff_before?: string; diff_after?: string; error?: string }
 export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string }
 export interface Conversation { conversation_id: string; title: string; status: 'idle'|'waiting'; updated_at: string; messages: ChatMessage[] }
