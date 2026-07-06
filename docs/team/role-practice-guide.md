@@ -289,7 +289,6 @@ RCA 결론을 내리거나 PR 본문을 쓰는 일은 민정 책임이 아니다
 ```text
 command.requested
   -> command-worker
-  -> command.dispatch.ready
   -> command.dispatched
   -> command.queued_for_agent
   -> Target Agent GET /agent/commands/poll
@@ -768,7 +767,6 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 확인할 것:
 
 - `command.requested`
-- `command.dispatch.ready`
 - `command.dispatched`
 - `command.queued_for_agent`
 - `command.completed`
