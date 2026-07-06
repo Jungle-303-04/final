@@ -65,7 +65,11 @@ def test_webhook_rejects_when_token_not_configured(monkeypatch) -> None:
     try:
         asyncio.run(
             alertmanager_webhook(
-                firing_payload(), bearer_request("any"), "cluster-1", "default", EVENTS,
+                firing_payload(),
+                bearer_request("any"),
+                "cluster-1",
+                "default",
+                EVENTS,
                 FakeWebhookDb(),
             )
         )
@@ -80,7 +84,11 @@ def test_webhook_rejects_invalid_token(monkeypatch) -> None:
     try:
         asyncio.run(
             alertmanager_webhook(
-                firing_payload(), bearer_request("wrong"), "cluster-1", "default", EVENTS,
+                firing_payload(),
+                bearer_request("wrong"),
+                "cluster-1",
+                "default",
+                EVENTS,
                 FakeWebhookDb(),
             )
         )
@@ -95,7 +103,11 @@ def test_webhook_rejects_unregistered_cluster(monkeypatch) -> None:
     try:
         asyncio.run(
             alertmanager_webhook(
-                firing_payload(), bearer_request("secret-token"), "ghost", "default", EVENTS,
+                firing_payload(),
+                bearer_request("secret-token"),
+                "ghost",
+                "default",
+                EVENTS,
                 FakeWebhookDb(registered=False),
             )
         )
@@ -165,7 +177,9 @@ def test_evidence_key_changes_when_new_alert_joins_group() -> None:
         update={
             "alerts": [
                 *base.alerts,
-                AlertmanagerAlert(status="firing", fingerprint="new456", startsAt="2026-07-07T02:00:00Z"),
+                AlertmanagerAlert(
+                    status="firing", fingerprint="new456", startsAt="2026-07-07T02:00:00Z"
+                ),
             ]
         }
     )
@@ -176,7 +190,9 @@ def test_evidence_key_changes_when_new_alert_joins_group() -> None:
 
 def test_evidence_body_window_start_uses_earliest_firing_alert() -> None:
     body = build_alertmanager_evidence_body(
-        "default", "cluster-1", firing_payload(),
+        "default",
+        "cluster-1",
+        firing_payload(),
         alertmanager_evidence_key("default", "cluster-1", firing_payload()),
     )
     assert body.window_start == "2026-07-07T01:00:00Z"
