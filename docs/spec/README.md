@@ -1,122 +1,106 @@
-# 스펙 인덱스 — 구현 명세 (Source of Truth)
+# 스펙 인덱스 — 구현 명세
 
-> 이 폴더는 현재 구현과 100% 동기화되는 명세다. 작성·수정 규칙은 [_conventions.md](_conventions.md) 참고.
-> 시스템 전체 그림은 [architecture.md](architecture.md)에서 시작한다.
+> 이 폴더는 현재 구현과 맞춰 읽는 상세 명세다. 작성·수정 규칙은 [_conventions.md](_conventions.md)에서 확인한다.
+> 전체 시스템 그림은 [아키텍처](../architecture.md)와 [아키텍처 다이어그램](../architecture-diagram.md)에서 시작한다.
 
-## 계층 규칙
+## 읽는 순서
 
-`services → domains → packages` 단방향 의존 ([.importlinter](../../.importlinter)로 CI 강제).
+1. [_conventions](_conventions.md)로 작성 규칙을 먼저 확인한다.
+2. packages 문서에서 공유 계약과 런타임을 본다.
+3. domains 문서에서 DB, route, event body를 본다.
+4. services 문서에서 worker decorator와 event 흐름을 본다.
+5. frontend 문서에서 화면, 권한 필터, API 호출 위치를 본다.
 
-## packages — 공유 커널 (`src/packages/`)
+## 시스템 개요
 
-| 스펙 | 소스 | 요약 |
-|---|---|---|
-| [contracts](packages/contracts.md) | `src/packages/contracts/` | 서비스 간 계약(인터페이스·DTO·이벤트 버스 계약) |
-| [events](packages/events.md) | `src/packages/events/` | 이벤트 버스·엔벨로프 |
-| [storage](packages/storage.md) | `src/packages/storage/` | DB 엔진·세션·스키마·리포지토리 기반 |
-| [runtime](packages/runtime.md) | `src/packages/runtime/` | 워커 런타임 공통 |
-| [security](packages/security.md) | `src/packages/security/` | 보안 유틸 |
-| [config](packages/config.md) | `src/packages/config/` | 설정 로딩 |
-| [ai](packages/ai.md) | `src/packages/ai/` | AI 공통(LLM 클라이언트 등) |
+- [architecture](architecture.md) — 스펙 레벨 토폴로지·핵심 이벤트 플로우·신뢰성 불변식
 
-## domains — 도메인 계층 (`src/domains/`)
+## packages
 
-| 스펙 | 소스 | 요약 |
-|---|---|---|
-| [ai](domains/ai.md) | `src/domains/ai/` | |
-| [alert](domains/alert.md) | `src/domains/alert/` | |
-| [applications](domains/applications.md) | `src/domains/applications/` | |
-| [audit](domains/audit.md) | `src/domains/audit/` | |
-| [catalog](domains/catalog.md) | `src/domains/catalog/` | |
-| [command](domains/command.md) | `src/domains/command/` | |
-| [dashboard](domains/dashboard.md) | `src/domains/dashboard/` | |
-| [gitops](domains/gitops.md) | `src/domains/gitops/` | |
-| [identity](domains/identity.md) | `src/domains/identity/` | |
-| [inventory](domains/inventory.md) | `src/domains/inventory/` | |
-| [mail](domains/mail.md) | `src/domains/mail/` | |
-| [providers](domains/providers.md) | `src/domains/providers/` | |
-| [rca](domains/rca.md) | `src/domains/rca/` | |
-| [scm](domains/scm.md) | `src/domains/scm/` | |
-| [target](domains/target.md) | `src/domains/target/` | |
-| [registry](domains/registry.md) | `src/domains/registry.py` | 도메인 자동 발견(합성 루트) |
+- [packages/ai](packages/ai.md)
+- [packages/config](packages/config.md)
+- [packages/contracts](packages/contracts.md)
+- [packages/events](packages/events.md)
+- [packages/runtime](packages/runtime.md)
+- [packages/security](packages/security.md)
+- [packages/storage](packages/storage.md)
 
-## services — 프로세스 계층 (`src/services/`)
+## domains
 
-### gateway / realtime
+- [domains/ai](domains/ai.md)
+- [domains/alert](domains/alert.md)
+- [domains/applications](domains/applications.md)
+- [domains/audit](domains/audit.md)
+- [domains/catalog](domains/catalog.md)
+- [domains/command](domains/command.md)
+- [domains/dashboard](domains/dashboard.md)
+- [domains/gitops](domains/gitops.md)
+- [domains/identity](domains/identity.md)
+- [domains/inventory](domains/inventory.md)
+- [domains/mail](domains/mail.md)
+- [domains/providers](domains/providers.md)
+- [domains/rca](domains/rca.md)
+- [domains/registry](domains/registry.md)
+- [domains/scm](domains/scm.md)
+- [domains/target](domains/target.md)
 
-| 스펙 | 소스 |
-|---|---|
-| [api-gateway](services/gateway/api-gateway.md) | `src/services/gateway/api-gateway/` |
-| [realtime-gateway](services/realtime/realtime-gateway.md) | `src/services/realtime/realtime-gateway/` |
+## services
 
-### ai
+- [services/ai-agent](services/ai-agent.md)
+- [services/ai-analyze-worker](services/ai-analyze-worker.md)
+- [services/ai-approval-worker](services/ai-approval-worker.md)
+- [services/ai-backlog-worker](services/ai-backlog-worker.md)
+- [services/ai-chat-worker](services/ai-chat-worker.md)
+- [services/ai-diff-worker](services/ai-diff-worker.md)
+- [services/ai-dispatch-worker](services/ai-dispatch-worker.md)
+- [services/ai-evidence-worker](services/ai-evidence-worker.md)
+- [services/ai-incident-worker](services/ai-incident-worker.md)
+- [services/ai-plan-worker](services/ai-plan-worker.md)
+- [services/ai-rca-feedback-worker](services/ai-rca-feedback-worker.md)
+- [services/ai-rca-worker](services/ai-rca-worker.md)
+- [services/ai-recovery-worker](services/ai-recovery-worker.md)
+- [services/ai-rollout-worker](services/ai-rollout-worker.md)
+- [services/ai-safe-pr-worker](services/ai-safe-pr-worker.md)
+- [services/ai-select-worker](services/ai-select-worker.md)
+- [services/alert-alert-worker](services/alert-alert-worker.md)
+- [services/command-command-janitor](services/command-command-janitor.md)
+- [services/command-command-worker](services/command-command-worker.md)
+- [services/gateway-api-gateway](services/gateway-api-gateway.md)
+- [services/gitops-diff-analyze-worker](services/gitops-diff-analyze-worker.md)
+- [services/gitops-diff-worker](services/gitops-diff-worker.md)
+- [services/gitops-git-pull-worker](services/gitops-git-pull-worker.md)
+- [services/gitops-github-poll-worker](services/gitops-github-poll-worker.md)
+- [services/gitops-manifest-render-worker](services/gitops-manifest-render-worker.md)
+- [services/gitops-safe-pr-worker](services/gitops-safe-pr-worker.md)
+- [services/gitops-scm-worker](services/gitops-scm-worker.md)
+- [services/gitops-workflow-controller](services/gitops-workflow-controller.md)
+- [services/mail-mail-worker](services/mail-mail-worker.md)
+- [services/projection-audit-worker](services/projection-audit-worker.md)
+- [services/projection-dashboard-worker](services/projection-dashboard-worker.md)
+- [services/projection-dead-letter-monitor](services/projection-dead-letter-monitor.md)
+- [services/realtime-realtime-gateway](services/realtime-realtime-gateway.md)
+- [services/target-cluster-agent](services/target-cluster-agent.md)
+- [services/target-drift-worker](services/target-drift-worker.md)
+- [services/target-node-collector](services/target-node-collector.md)
+- [services/target-reconcile-worker](services/target-reconcile-worker.md)
 
-| 스펙 | 소스 |
-|---|---|
-| [agent (공유 파이프라인)](services/ai/agent.md) | `src/services/ai/agent/` |
-| [analyze-worker](services/ai/analyze-worker.md) | `src/services/ai/analyze-worker/` |
-| [approval-worker](services/ai/approval-worker.md) | `src/services/ai/approval-worker/` |
-| [backlog-worker](services/ai/backlog-worker.md) | `src/services/ai/backlog-worker/` |
-| [chat-worker](services/ai/chat-worker.md) | `src/services/ai/chat-worker/` |
-| [diff-worker](services/ai/diff-worker.md) | `src/services/ai/diff-worker/` |
-| [dispatch-worker](services/ai/dispatch-worker.md) | `src/services/ai/dispatch-worker/` |
-| [evidence-worker](services/ai/evidence-worker.md) | `src/services/ai/evidence-worker/` |
-| [incident-worker](services/ai/incident-worker.md) | `src/services/ai/incident-worker/` |
-| [plan-worker](services/ai/plan-worker.md) | `src/services/ai/plan-worker/` |
-| [rca-feedback-worker](services/ai/rca-feedback-worker.md) | `src/services/ai/rca-feedback-worker/` |
-| [rca-worker](services/ai/rca-worker.md) | `src/services/ai/rca-worker/` |
-| [recovery-worker](services/ai/recovery-worker.md) | `src/services/ai/recovery-worker/` |
-| [rollout-worker](services/ai/rollout-worker.md) | `src/services/ai/rollout-worker/` |
-| [safe-pr-worker](services/ai/safe-pr-worker.md) | `src/services/ai/safe-pr-worker/` |
-| [select-worker](services/ai/select-worker.md) | `src/services/ai/select-worker/` |
+## frontend
 
-### gitops
+- [frontend/app](frontend/app.md)
+- [frontend/auth](frontend/auth.md)
+- [frontend/chat](frontend/chat.md)
+- [frontend/cluster](frontend/cluster.md)
+- [frontend/fleet](frontend/fleet.md)
+- [frontend/metrics](frontend/metrics.md)
+- [frontend/notifications](frontend/notifications.md)
+- [frontend/org](frontend/org.md)
+- [frontend/repo](frontend/repo.md)
+- [frontend/resources](frontend/resources.md)
+- [frontend/shared](frontend/shared.md)
+- [frontend/workflow](frontend/workflow.md)
 
-| 스펙 | 소스 |
-|---|---|
-| [diff-analyze-worker](services/gitops/diff-analyze-worker.md) | `src/services/gitops/diff-analyze-worker/` |
-| [diff-worker](services/gitops/diff-worker.md) | `src/services/gitops/diff-worker/` |
-| [git-pull-worker](services/gitops/git-pull-worker.md) | `src/services/gitops/git-pull-worker/` |
-| [github-poll-worker](services/gitops/github-poll-worker.md) | `src/services/gitops/github-poll-worker/` |
-| [manifest-render-worker](services/gitops/manifest-render-worker.md) | `src/services/gitops/manifest-render-worker/` |
-| [safe-pr-worker](services/gitops/safe-pr-worker.md) | `src/services/gitops/safe-pr-worker/` |
-| [scm-worker](services/gitops/scm-worker.md) | `src/services/gitops/scm-worker/` |
-| [workflow-controller](services/gitops/workflow-controller.md) | `src/services/gitops/workflow-controller/` |
+## 유지 규칙
 
-### target
-
-| 스펙 | 소스 |
-|---|---|
-| [cluster-agent](services/target/cluster-agent.md) | `src/services/target/cluster-agent/` |
-| [drift-worker](services/target/drift-worker.md) | `src/services/target/drift-worker/` |
-| [node-collector](services/target/node-collector.md) | `src/services/target/node-collector/` |
-| [reconcile-worker](services/target/reconcile-worker.md) | `src/services/target/reconcile-worker/` |
-
-### projection / alert / command / mail
-
-| 스펙 | 소스 |
-|---|---|
-| [audit-worker](services/projection/audit-worker.md) | `src/services/projection/audit-worker/` |
-| [dashboard-worker](services/projection/dashboard-worker.md) | `src/services/projection/dashboard-worker/` |
-| [dead-letter-monitor](services/projection/dead-letter-monitor.md) | `src/services/projection/dead-letter-monitor/` |
-| [alert-worker](services/alert/alert-worker.md) | `src/services/alert/alert-worker/` |
-| [command-worker](services/command/command-worker.md) | `src/services/command/command-worker/` |
-| [command-janitor](services/command/command-janitor.md) | `src/services/command/command-janitor/` |
-| [mail-worker](services/mail/mail-worker.md) | `src/services/mail/mail-worker/` |
-
-## frontend (`frontend/src/`)
-
-| 스펙 | 소스 | 요약 |
-|---|---|---|
-| [app](frontend/app.md) | `frontend/src/app/` | 셸·라우터·가드·프로바이더 |
-| [shared](frontend/shared.md) | `frontend/src/shared/` | 공용 UI·lib·flow·motion·토큰 |
-| [features/auth](frontend/features/auth.md) | `frontend/src/features/auth/` | |
-| [features/chat](frontend/features/chat.md) | `frontend/src/features/chat/` | |
-| [features/cluster](frontend/features/cluster.md) | `frontend/src/features/cluster/` | |
-| [features/fleet](frontend/features/fleet.md) | `frontend/src/features/fleet/` | |
-| [features/metrics](frontend/features/metrics.md) | `frontend/src/features/metrics/` | |
-| [features/notifications](frontend/features/notifications.md) | `frontend/src/features/notifications/` | |
-| [features/org](frontend/features/org.md) | `frontend/src/features/org/` | |
-| [features/repo](frontend/features/repo.md) | `frontend/src/features/repo/` | |
-| [features/resources](frontend/features/resources.md) | `frontend/src/features/resources/` | |
-| [features/workflow](frontend/features/workflow.md) | `frontend/src/features/workflow/` | |
+새 스펙 문서를 추가하면 이 파일과 [문서 루트](../README.md)에 같이 연결한다.
+서비스 문서는 `docs/spec/services/<그룹>-<프로세스>.md` 형태로 둔다. 루트 기준 문서 깊이를 넘기지 않기 위해 하위 폴더를 더 만들지 않는다.
+문서가 실제 코드보다 앞서는 경우에는 구현 단계로만 적고, 이미 동작하는 것처럼 쓰지 않는다.

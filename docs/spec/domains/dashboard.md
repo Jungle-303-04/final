@@ -1,0 +1,157 @@
+---
+source_commit: 1616d295
+status: synced
+---
+
+# dashboard — 프론트가 읽는 RCA timeline projection/read model
+
+> 소스: `src/domains/dashboard/` · 테스트: `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py`
+
+## 책임 (Responsibility)
+
+- 이미 흐른 RCA/command/safe_pr 이벤트를 화면에서 바로 읽기 좋은 `rca_timeline` row로 투영하는 read model 테이블·리포지토리·투영 함수를 소유한다.
+- 권한이 적용된 RCA timeline 조회 HTTP API 2종을 제공한다.
+- 이 도메인은 **이벤트를 새로 발행하지 않는다**. 투영 트리거(이벤트 소비 루프)는 projection 워커가 담당한다.
+
+## 의존성 (Dependencies)
+
+| 방향 | 대상 | 스펙 링크 | 용도 |
+|---|---|---|---|
+| import | `packages.storage` | [../packages/storage.md](../packages/storage.md) | `Base`/컬럼 헬퍼, `DatabaseConnection` |
+| import | `packages.contracts` | [../packages/contracts.md](../packages/contracts.md) | `EventEnvelope`, `JsonObject`, `EventSubject`, gateway routes/응답 모델, `AccessResourceType`, `Permission`, `DEFAULT_WORKSPACE_ID` |
+| import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | `get_db` |
+| import | `domains.identity` | [./identity.md](./identity.md) | `require_session`, `require_cluster_access`, `RESOURCE_ACCESS_DENIED_MESSAGE` |
+| 구독(간접) | RCA/command/safe_pr 계열 이벤트 | [./rca.md](./rca.md), [./command.md](./command.md), [./scm.md](./scm.md) | `timeline_update_from_event`의 입력 |
+
+## 공개 인터페이스 (Public API)
+
+### 리포지토리 — `src/domains/dashboard/repository.py`
+
+| 심볼 | 정의 | 앵커 |
+|---|---|---|
+| `Path` | `tuple[str, ...]` 타입 별칭 | `src/domains/dashboard/repository.py :: Path` |
+| `RCA_TIMELINE_STATUS_BY_SUBJECT` | `dict[str, str]` — subject → status 매핑(아래 표) | `src/domains/dashboard/repository.py :: RCA_TIMELINE_STATUS_BY_SUBJECT` |
+| `DashboardRepository` | `class DashboardRepository(DatabaseConnection)` — `table = RcaTimeline.__table__` | `src/domains/dashboard/repository.py :: DashboardRepository` |
+| `timeline_update_from_event` | `def timeline_update_from_event(evt: EventEnvelope) -> JsonObject \| None` | `src/domains/dashboard/repository.py :: timeline_update_from_event` |
+| `serialize_timeline_row` | `def serialize_timeline_row(row: Any) -> JsonObject` — created_at/updated_at ISO화(`isoformat` 없으면 None), supporting/missing_evidence `or []` | `src/domains/dashboard/repository.py :: serialize_timeline_row` |
+
+#### subject → status 매핑 (`RCA_TIMELINE_STATUS_BY_SUBJECT`)
+
+| EventSubject | status |
+|---|---|
+| `CLUSTER_EVIDENCE_RECEIVED` | `evidence_received` |
+| `EVIDENCE_BUILT` | `evidence_built` |
+| `INCIDENT_DETECTED` | `incident_detected` |
+| `EVIDENCE_BUNDLE_BUILT` | `evidence_bundled` |
+| `RCA_RULE_MISSING` | `rule_missing` |
+| `RCA_BACKLOG_ITEM_CREATED` | `backlog_created` |
+| `RCA_AI_FALLBACK_REQUESTED` | `ai_fallback_requested` |
+| `RCA_CANDIDATES_PLANNED` | `rca_planned` |
+| `RCA_CANDIDATES_EVALUATED` | `rca_evaluated` |
+| `RCA_COMPLETED` | `rca_completed` |
+| `RCA_FOLLOWUP_REQUIRED` | `followup_required` |
+| `RCA_ACTION_REQUIRED` | `action_required` |
+| `RECOVERY_PLANNED` | `recovery_planned` |
+| `RECOVERY_SELECTION_REQUESTED` | `selection_required` |
+| `RECOVERY_ACTION_SELECTED` | `recovery_selected` |
+| `COMMAND_REQUESTED` | `command_requested` |
+| `COMMAND_DISPATCHED` | `command_dispatched` |
+| `COMMAND_QUEUED_FOR_AGENT` | `command_queued` |
+| `COMMAND_COMPLETED` | `command_completed` |
+| `COMMAND_REJECTED` | `command_rejected` |
+| `SAFE_PR_REQUESTED` | `pr_requested` |
+| `SAFE_PR_PATCH_PREPARED` | `pr_patch_prepared` |
+| `DIFF_EXPLAINED` | `pr_diff_explained` |
+| `SAFE_PR_READY_FOR_CREATION` | `pr_ready_for_creation` |
+| `SAFE_PR_CREATED` | `pr_created` |
+| `SAFE_PR_FAILED` | `pr_failed` |
+
+#### DashboardRepository 메서드
+
+| 메서드 | 시그니처 | 쿼리 의미 |
+|---|---|---|
+| `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① `preserve_when_missing` 컬럼(cluster_id, incident_id, evidence_ref, root_cause, confidence, supporting_evidence, missing_evidence, action_route, command_id, pr_url)은 `coalesce(EXCLUDED.<col>, 기존값)` — 새 값이 NULL이면 기존값 보존. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
+| `list_rca_timeline` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None, limit: int = 50) -> list[JsonObject]` | `allowed_cluster_ids == set()`이면 빈 리스트 즉시 반환(권한 0). `WHERE workspace_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT ?` 후 `serialize_timeline_row`. `None`은 필터 없음(전체 허용) |
+| `get_rca_timeline_item` | `(self, workspace_id: str, incident_id: str, allowed_cluster_ids: set[str] \| None) -> JsonObject \| None` | `WHERE workspace_id=? AND incident_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT 1` |
+
+#### `timeline_update_from_event(evt)` 투영 규칙
+
+1. `RCA_TIMELINE_STATUS_BY_SUBJECT.get(str(evt.subject))` — 매핑 없는 subject는 `None` 반환(투영 안 함).
+2. row 구성: `workspace_id`(payload 다중 경로 탐색, 실패 시 `DEFAULT_WORKSPACE_ID`), `correlation_id = evt.correlation_id or evt.event_id`, `cluster_id`/`incident_id`/`evidence_ref`/`root_cause`/`confidence`(float 변환 실패 시 None)/`supporting_evidence`/`missing_evidence`/`action_route`/`command_id`/`pr_url`/`error_reason`는 payload의 정해진 경로 목록을 순서대로 탐색(내부 헬퍼 `_first_string`/`_first_value`/`_first_list`/`_evaluation_list`/`_evidence_reference_list`/`_evaluation_reference_list`/`_format_evidence_reference`/`_value_at`/`_dedupe` — 소스 참조), `current_subject = str(evt.subject)`, `status` = 매핑값, `last_event_id = evt.event_id`, `last_event_at = str(evt.created_at)`, `payload` = evt.payload(dict 아니면 `{}`).
+3. `action_route`: payload `plan.execution_route` → `selected.route` 우선; 없으면 subject가 `command.`로 시작 → `"command"`, `safe_pr.`로 시작하거나 `DIFF_EXPLAINED` → `"safe_pr"`, 그 외 None.
+4. evidence 참조 형식화: dict에 `evidence_ref` 있으면 그 값, 아니면 `f"{source}:{name}"`, 아니면 `check_id`, 없으면 제외. 목록은 중복 제거(순서 보존).
+
+### 라우터 — `src/domains/dashboard/router.py`
+
+상수: `DEFAULT_TIMELINE_LIMIT = 50`, `MAX_TIMELINE_LIMIT = 100`, `NOT_FOUND_CODE = 404`, `TIMELINE_ITEM_FIELDS = set(RcaTimelineItem.model_fields)` (앵커: `src/domains/dashboard/router.py :: DEFAULT_TIMELINE_LIMIT` 등). `router = APIRouter()` — `src/domains/dashboard/router.py :: router`.
+
+| 메서드+경로 | 핸들러(앵커) | 요청 | 응답 | 권한 |
+|---|---|---|---|---|
+| `GET /dashboard/rca/timeline` (`gateway_routes.DASHBOARD_RCA_TIMELINE_PATH`) | `src/domains/dashboard/router.py :: rca_timeline` | query `cluster_id: str \| None = None`, `limit: int = 50 (ge=1, le=100)` | `RcaTimelineResponse(items=[RcaTimelineItem...])` | `require_session` + cluster `Permission.RCA_READ` |
+| `GET /dashboard/rca/incidents/{incident_id}` (`DASHBOARD_RCA_INCIDENT_PATH`) | `src/domains/dashboard/router.py :: rca_incident` | query `cluster_id: str \| None = None` | `RcaIncidentResponse(item=RcaTimelineItem)`; 없으면 404 `"RCA incident not found"` | 동일 |
+
+공개 헬퍼: `timeline_item(row: JsonObject) -> RcaTimelineItem` (`src/domains/dashboard/router.py :: timeline_item`) — `TIMELINE_ITEM_FIELDS`만 추출, supporting/missing_evidence는 `or []`.
+
+## 데이터 모델 (Data Model)
+
+### `rca_timeline` — `src/domains/dashboard/models.py :: RcaTimeline`
+
+`__table_args__ = (UniqueConstraint("workspace_id", "correlation_id"),)`
+
+| 필드 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BigInteger | PK, autoincrement | 시퀀스 |
+| workspace_id | Text | NOT NULL, UNIQUE(workspace_id, correlation_id) | 워크스페이스 |
+| correlation_id | Text | NOT NULL, UNIQUE(workspace_id, correlation_id) | 흐름 식별자(업서트 키) |
+| cluster_id | Text | nullable | 대상 클러스터 (보존 컬럼) |
+| incident_id | Text | nullable | 인시던트 ID (보존 컬럼) |
+| evidence_ref | Text | nullable | 증거 오브젝트 참조 (보존 컬럼) |
+| current_subject | Text | NOT NULL | 마지막 반영 이벤트 subject |
+| status | Text | NOT NULL | 매핑 테이블의 상태 문자열 |
+| root_cause | Text | nullable | RCA 결과 (보존 컬럼) |
+| confidence | Float | nullable | RCA 신뢰도 (보존 컬럼) |
+| supporting_evidence | JSONB (list[str]) | nullable | 근거 목록 (보존 컬럼) |
+| missing_evidence | JSONB (list[str]) | nullable | 부족 증거 목록 (보존 컬럼) |
+| action_route | Text | nullable | `command` / `safe_pr` 등 (보존 컬럼) |
+| command_id | Text | nullable | 연결 명령 (보존 컬럼) |
+| pr_url | Text | nullable | 생성 PR URL (보존 컬럼) |
+| error_reason | Text | nullable | 거부/실패 사유 (최신 이벤트 기준 교체) |
+| last_event_id | Text | NOT NULL | 마지막 이벤트 ID |
+| last_event_at | Text | NOT NULL | 마지막 이벤트 시각 문자열(순서 비교 키) |
+| payload | JSONB | NOT NULL | 마지막 이벤트 payload 전문 |
+| created_at / updated_at | TIMESTAMP(timezone=True) | NOT NULL, server_default now() | 시각 |
+
+## 이벤트 (Events)
+
+- 발행: 없음.
+- 구독: 직접 구독하지 않음. projection 워커가 수신한 envelope를 `timeline_update_from_event`에 통과시켜 매핑 표의 27개 subject만 투영한다.
+
+## 동작 (Behavior)
+
+### 투영 흐름
+
+1. 워커가 이벤트 envelope 수신 → `timeline_update_from_event(evt)`.
+2. `None`이면 skip; row면 `DashboardRepository.upsert_rca_timeline(row)`.
+3. 업서트는 `(workspace_id, correlation_id)` 단위 — 한 흐름당 1행이 최신 상태로 수렴.
+
+### 순서 역전 방어
+
+이벤트가 순서 없이 도착해도: 식별자성 컬럼은 coalesce로 축적(한 번 채워지면 NULL로 되돌아가지 않음), 상태성 컬럼은 `last_event_at` 비교로 더 최신 이벤트만 반영.
+
+### 조회 권한 흐름 (`_allowed_cluster_ids`)
+
+- `cluster_id` 쿼리 지정 시: `require_cluster_access(..., Permission.RCA_READ)` 통과 후 `{cluster_id}`.
+- 미지정 시: `db.accessible_resource_ids(user_id, workspace_id, AccessResourceType.CLUSTER, Permission.RCA_READ)` (스레드로 오프로드). 반환이 빈 set이면 결과 0건, `None`이면 무제한.
+- DB 조회는 `asyncio.to_thread`로 실행(동기 리포지토리 논블로킹화).
+
+## 불변식·오류 (Invariants & Errors)
+
+- `(workspace_id, correlation_id)` 유일 — 같은 흐름은 항상 1행.
+- 보존 컬럼은 절대 NULL로 퇴행하지 않음(coalesce).
+- `last_event_at`이 더 오래된 이벤트는 상태를 되돌리지 못함.
+- `allowed_cluster_ids == set()`은 DB 접근 없이 빈 결과(정보 노출 0).
+- 미존재 인시던트 → 404 `"RCA incident not found"`.
+
+## 설정 (Settings)
+
+없음.
