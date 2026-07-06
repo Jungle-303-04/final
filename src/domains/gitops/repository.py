@@ -496,6 +496,87 @@ class RepoChangeRepository(DatabaseConnection):
                     run["steps"] = steps_by_run.get(str(run["workflow_run_id"]), [])
         return runs
 
+    def get_deployment_binding(self, workspace_id: str, binding_id: str) -> JsonObject | None:
+        table = DeploymentBinding.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id, table.c.binding_id == binding_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_deployment_binding(dict(row)) if row else None
+
+    def list_repository_deployment_bindings(
+        self, workspace_id: str, repository_id: str
+    ) -> list[JsonObject]:
+        """같은 repo 를 바라보는 활성 바인딩 전부 — 글로벌 fan-out 대상 조회."""
+        table = DeploymentBinding.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.repository_id == repository_id,
+                table.c.status == DeploymentBindingStatus.ACTIVE.value,
+            )
+            .order_by(table.c.cluster_id, table.c.binding_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_deployment_binding(dict(row)) for row in rows]
+
+    def list_workspace_deployment_bindings(self, workspace_id: str) -> list[JsonObject]:
+        """워크스페이스의 활성 바인딩 전부 — 글로벌 그룹 탐색용(바인딩 수는 소규모)."""
+        table = DeploymentBinding.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.status == DeploymentBindingStatus.ACTIVE.value,
+            )
+            .order_by(table.c.repository_id, table.c.app_name, table.c.cluster_id)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_deployment_binding(dict(row)) for row in rows]
+
+    def get_workflow_run(self, workflow_run_id: str) -> JsonObject | None:
+        table = WorkflowRun.__table__
+        statement = select(table).where(table.c.workflow_run_id == workflow_run_id).limit(1)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_workflow_run(dict(row)) if row else None
+
+    def get_workflow_step_details(self, workflow_run_id: str, name: str) -> JsonObject | None:
+        table = WorkflowRunStep.__table__
+        statement = (
+            select(table.c.details)
+            .where(table.c.workflow_run_id == workflow_run_id, table.c.name == name)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row["details"] or {}) if row else None
+
+    def latest_succeeded_run_for_binding(
+        self, workspace_id: str, binding_id: str
+    ) -> JsonObject | None:
+        """바인딩의 최근 성공 run — 신규 클러스터 합류 시 초기 배포 기준."""
+        table = WorkflowRun.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.binding_id == binding_id,
+                table.c.status == WorkflowRunStatus.SUCCEEDED.value,
+            )
+            .order_by(table.c.updated_at.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_workflow_run(dict(row)) if row else None
+
     def start_workflow_run(self, payload: JsonObject) -> JsonObject:
         workflow_run_id = derive_workflow_run_id(payload)
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
