@@ -12,6 +12,7 @@ from domains.command.router import (
     command_start,
     command_status,
     commands,
+    lease_next_command,
     scale_deployment,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
@@ -461,5 +462,61 @@ def test_command_status_denies_without_cluster_read_access() -> None:
             assert exc.detail == RESOURCE_ACCESS_DENIED
         else:
             raise AssertionError("expected HTTPException")
+
+    asyncio.run(run())
+
+
+def test_long_poll_waits_for_wakeup_before_retrying_lease(monkeypatch) -> None:
+    class EmptyThenCommandDb:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def lease_agent_command(
+            self,
+            cluster_id: str,
+            workspace_id: str,
+            queued_status: str,
+            leased_status: str,
+            agent_id: str,
+            lease_seconds: int,
+        ) -> dict[str, object] | None:
+            self.calls += 1
+            if self.calls == 1:
+                return None
+            return {
+                "command_id": "cmd-1",
+                "cluster_id": cluster_id,
+                "workspace_id": workspace_id,
+                "agent_id": agent_id,
+                "lease_seconds": lease_seconds,
+                "queued_status": queued_status,
+                "leased_status": leased_status,
+            }
+
+    class ImmediateWakeup:
+        def __init__(self) -> None:
+            self.waits: list[tuple[str, str, float]] = []
+
+        async def wait(self, workspace_id: str, cluster_id: str, timeout: float) -> None:
+            self.waits.append((workspace_id, cluster_id, timeout))
+
+    async def run() -> None:
+        db = EmptyThenCommandDb()
+        wakeup = ImmediateWakeup()
+        monkeypatch.setattr("domains.command.router.WAKEUP", wakeup)
+
+        row = await lease_next_command(
+            db,
+            cluster_id="trusted-cluster",
+            workspace_id="trusted-workspace",
+            agent_id="agent-1",
+            timeout=2,
+        )
+
+        assert row is not None
+        assert row["command_id"] == "cmd-1"
+        assert db.calls == 2
+        assert wakeup.waits
+        assert wakeup.waits[0][0:2] == ("trusted-workspace", "trusted-cluster")
 
     asyncio.run(run())
