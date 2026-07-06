@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import secrets
 from dataclasses import replace
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -21,9 +22,14 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
+from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import AgentEvidenceRequest, RecoveryActionSelectRequest
+from packages.contracts.gateway.requests import (
+    AgentEvidenceRequest,
+    AlertmanagerWebhookRequest,
+    RecoveryActionSelectRequest,
+)
 from packages.contracts.gateway.responses import AcceptedResponse
 from packages.contracts.gitops import (
     DEFAULT_APPLICATION_ID,
@@ -32,7 +38,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
     ApprovalStatus,
 )
-from packages.contracts.identity import Permission, ResourceRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission, ResourceRole
 from packages.events.envelope import event
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
@@ -111,6 +117,126 @@ async def agent_evidence(
             correlation_id=recorded["correlation_id"],
         )
     recorded = await db_call(db.stage_event_once, event_envelope)
+    return AcceptedResponse(
+        accepted=True,
+        event_id=recorded["event_id"],
+        correlation_id=recorded["correlation_id"],
+    )
+
+
+# 외부 모니터링 웹훅 — Alertmanager 가 firing 알림을 보내면 인시던트 파이프라인을 연다.
+ALERTMANAGER_WEBHOOK_TOKEN_ENV = "ALERTMANAGER_WEBHOOK_TOKEN"
+ALERTMANAGER_SOURCE_ID = "alertmanager-webhook"
+WEBHOOK_NOT_CONFIGURED = "alertmanager webhook is not configured"
+WEBHOOK_TOKEN_INVALID = "invalid webhook token"
+CLUSTER_NOT_REGISTERED = "cluster is not registered"
+HTTP_UNAUTHORIZED = 401
+HTTP_SERVICE_UNAVAILABLE = 503
+
+
+def require_alertmanager_token(request: Request) -> None:
+    """Bearer 토큰 대조 — 토큰 미설정이면 입구 자체를 잠근다(fail-closed)."""
+    configured = env(ALERTMANAGER_WEBHOOK_TOKEN_ENV, "")
+    if not configured:
+        raise HTTPException(status_code=HTTP_SERVICE_UNAVAILABLE, detail=WEBHOOK_NOT_CONFIGURED)
+    supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if not supplied or not secrets.compare_digest(supplied, configured):
+        raise HTTPException(status_code=HTTP_UNAUTHORIZED, detail=WEBHOOK_TOKEN_INVALID)
+
+
+def alertmanager_evidence_key(
+    workspace_id: str, cluster_id: str, payload: AlertmanagerWebhookRequest
+) -> str:
+    """같은 알림 그룹의 반복 통지(repeat_interval)는 같은 키 → 인시던트 1건으로 dedup.
+
+    새 알림이 그룹에 추가되거나 알림 시작 시각이 바뀌면 키가 바뀌어 새 인시던트가 열린다.
+    """
+    firing = sorted(
+        f"{alert.fingerprint}@{alert.startsAt}"
+        for alert in payload.alerts
+        if alert.status == "firing"
+    )
+    raw = "|".join([payload.groupKey, *firing])
+    digest = hashlib.sha256(raw.encode()).hexdigest()[:32]
+    return f"{workspace_id}:{cluster_id}:alertmanager:{digest}"
+
+
+def build_alertmanager_evidence_body(
+    workspace_id: str,
+    cluster_id: str,
+    payload: AlertmanagerWebhookRequest,
+    evidence_key: str,
+) -> ClusterEvidenceReceivedBody:
+    firing = [alert.model_dump() for alert in payload.alerts if alert.status == "firing"]
+    window_start = min(
+        (alert.startsAt for alert in payload.alerts if alert.status == "firing" and alert.startsAt),
+        default=None,
+    )
+    return ClusterEvidenceReceivedBody(
+        cluster_id=cluster_id,
+        workspace_id=workspace_id,
+        kubernetes={},
+        metrics={
+            "alertmanager": {
+                "group_key": payload.groupKey,
+                "receiver": payload.receiver,
+                "alerts": firing,
+            }
+        },
+        logs=[],
+        traces={},
+        source_id=ALERTMANAGER_SOURCE_ID,
+        window_start=window_start,
+        evidence_key=evidence_key,
+    )
+
+
+@router.post(gateway_routes.ALERTMANAGER_WEBHOOK_PATH, response_model=AcceptedResponse)
+async def alertmanager_webhook(
+    payload: AlertmanagerWebhookRequest,
+    request: Request,
+    cluster_id: str,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
+    events: Any = Depends(get_events),
+    db: Any = Depends(get_db),
+) -> AcceptedResponse:
+    require_alertmanager_token(request)
+    registration = await db_call(db.get_cluster_registration, workspace_id, cluster_id)
+    if registration is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=CLUSTER_NOT_REGISTERED)
+
+    if not any(alert.status == "firing" for alert in payload.alerts):
+        # resolved 만 담긴 통지는 수락만 하고 인시던트를 열지 않는다.
+        return AcceptedResponse(accepted=True, event_id="", correlation_id="")
+
+    evidence_key = alertmanager_evidence_key(workspace_id, cluster_id, payload)
+    evidence_body = build_alertmanager_evidence_body(
+        workspace_id, cluster_id, payload, evidence_key
+    )
+    event_envelope = event(
+        evidence_body.__subject__,
+        getattr(events, "source", "api-gateway"),
+        evidence_body.to_body(),
+        None,
+    )
+    existing = await db_call(db.get_evidence_window, evidence_key)
+    if existing:
+        return AcceptedResponse(
+            accepted=True,
+            event_id=existing["event_id"],
+            correlation_id=existing["correlation_id"],
+        )
+    recorded = await db_call(
+        db.record_evidence_event_once,
+        evidence_key=evidence_key,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        source_id=ALERTMANAGER_SOURCE_ID,
+        window_start=evidence_body.window_start or evidence_key,
+        agent_id=None,
+        event_envelope=event_envelope,
+        payload=evidence_body.to_body(),
+    )
     return AcceptedResponse(
         accepted=True,
         event_id=recorded["event_id"],
