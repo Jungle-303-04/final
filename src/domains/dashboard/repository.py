@@ -49,6 +49,15 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
     EventSubject.SAFE_PR_FAILED.value: "pr_failed",
 }
 
+# 열린 인시던트 판정 — 아래 종결 status 에 도달하지 않았고 incident_id 가 있는 row 는 open.
+# (command 완료/거부, PR 생성/실패가 복구 흐름의 종착점. 그 외 상태는 아직 조치 진행 중)
+CLOSED_INCIDENT_STATUSES: tuple[str, ...] = (
+    "command_completed",
+    "command_rejected",
+    "pr_created",
+    "pr_failed",
+)
+
 
 class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
@@ -142,6 +151,65 @@ class DashboardRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return serialize_timeline_row(row) if row is not None else None
+
+    def count_open_rca_incidents(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: set[str] | None = None,
+    ) -> dict[str, int]:
+        """fleet 롤업용 — 클러스터별 열린(종결 전) 인시던트 수. 빈 허용 집합이면 {}."""
+        if allowed_cluster_ids is not None and not allowed_cluster_ids:
+            return {}
+        statement: Select[Any] = (
+            select(RcaTimeline.cluster_id, func.count().label("count"))
+            .where(
+                RcaTimeline.workspace_id == workspace_id,
+                RcaTimeline.incident_id.is_not(None),
+                RcaTimeline.cluster_id.is_not(None),
+                RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
+            )
+            .group_by(RcaTimeline.cluster_id)
+        )
+        statement = _apply_cluster_filter(statement, allowed_cluster_ids)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return {str(row["cluster_id"]): int(row["count"]) for row in rows}
+
+    def list_open_rca_incidents(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[JsonObject]:
+        """드릴다운용 — 한 클러스터의 열린 인시던트 요약(최신 갱신순)."""
+        statement: Select[Any] = (
+            select(RcaTimeline.__table__)
+            .where(
+                RcaTimeline.workspace_id == workspace_id,
+                RcaTimeline.cluster_id == cluster_id,
+                RcaTimeline.incident_id.is_not(None),
+                RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
+            )
+            .order_by(RcaTimeline.updated_at.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [open_incident_summary(serialize_timeline_row(row)) for row in rows]
+
+
+def open_incident_summary(row: JsonObject) -> JsonObject:
+    """timeline row → 드릴다운 인시던트 요약. payload 원문은 그대로 내리지 않는다."""
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    return {
+        "incident_id": row.get("incident_id"),
+        "correlation_id": row.get("correlation_id"),
+        "symptom": _first_string(payload, ("incident", "symptom"), ("symptom",)),
+        "root_cause": row.get("root_cause"),
+        "status": row.get("status"),
+        "created_at": row.get("created_at"),
+    }
 
 
 def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
