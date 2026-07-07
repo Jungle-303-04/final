@@ -95,8 +95,8 @@ export function useScaleDeployment(clusterId: string) {
 }
 ```
 
-4. **mock fallback**: `shared/lib/api.ts`가 `VITE_API_MODE=mock|real`을 보고 `shared/lib/mock/router.ts` 또는 Gateway `/api` proxy를 선택한다.
-   실존 route는 real mode에서 바로 호출하고, mock은 로컬 데모와 화면 smoke 용도로만 둔다.
+4. **실 API 단일 경로**: `shared/lib/api.ts`는 `VITE_API_BASE ?? '/api'`만 사용한다.
+   로컬 dev/preview 는 `frontend/vite.config.ts` 의 `/api` proxy로 Gateway에 붙고, 브라우저에서 가짜 API 라우터를 선택하는 분기는 없다.
 
 ## 실시간 (WS /live/browser)
 

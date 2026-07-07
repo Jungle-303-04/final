@@ -39,9 +39,18 @@ export interface IncidentDetail { incident_id: string; correlation_id: string; c
 // GET /evidence — 저장된 evidence row (EvidenceQueryResponse.items[])
 export interface EvidenceRecord { id: number; correlation_id: string; kind: string; payload: Record<string, unknown>; created_at: string | null }
 // GET /rca-reports — RCA report 화이트리스트 요약 (RcaReportListResponse.items[])
+export interface RcaCandidateScore { candidate_id: string; title: string | null; source: string | null;
+  score: number | null; reason: string | null; supporting_evidence: string[]; missing_evidence: string[] }
+export interface RcaEvidenceRef { source: string; name: string; check_id: string | null;
+  summary: string | null; query: string | null; evidence_ref: string | null }
+export interface RcaMissingCheck { check_id: string; source: string | null; status: string | null; reason: string | null }
 export interface RcaReportSummary { id: number; correlation_id: string; root_cause: string; action: string;
   incident_id: string | null; cluster_id: string | null; symptom: string | null; severity: string | null;
   confidence: number | null; reason: string | null; evidence_ref: string | null;
-  supporting_evidence: string[]; missing_evidence: string[]; created_at: string | null }
+  supporting_evidence: string[]; missing_evidence: string[]; created_at: string | null;
+  // 분석 심화 필드 — 구 버전 백엔드 응답엔 없을 수 있어 optional(배포 순서 무관 동작)
+  resource_kind?: string | null; resource_name?: string | null; namespace?: string | null;
+  secondary_symptoms?: string[]; selected_candidate_id?: string | null;
+  candidates?: RcaCandidateScore[]; supporting_evidence_refs?: RcaEvidenceRef[]; missing_evidence_checks?: RcaMissingCheck[] }
 export interface LiveSnapshot { at: string; connected: boolean; namespaces: { namespace: string; pods: { name: string; phase: string; restarts: number; hot: boolean }[] }[]; rollout?: { name: string; progress: number } }
 export interface CatalogItem { item_id: string; name: string; description: string; category: string }

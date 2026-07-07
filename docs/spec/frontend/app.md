@@ -113,7 +113,6 @@ AppShell (div.shell / 접힘 시 .shell--collapsed)
 └─ div.main
    ├─ header.topbar
    │  └─ div.topbar__right
-   │     ├─ MOCK 뱃지 (API_MODE === 'mock' 일 때만, span.badge, color var(--neutral))
    │     ├─ PulseOnChange(signal=liveAt) → "● LIVE" (open: var(--ok) / 그 외 var(--neutral), fontSize 10)
    │     ├─ Link(/notifications).topbar__bell → IconBell(16) + unread>0 시 span.topbar__count
    │     ├─ Avatar(name=session.email)  (email 있을 때만)
@@ -137,7 +136,7 @@ AppShell (div.shell / 접힘 시 .shell--collapsed)
 
 1. 부팅: `main.tsx` → `Providers`(QueryClient + 401 핸들러 + Toasts) → `RouterProvider`.
 2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 로그인되면 `/overview` 강제 이동.
-3. 세션 플로우: `RequireSession` 이 세션 확인 후 `AppShell` 렌더 → `startLive()` 1회 호출로 WS(또는 mock 스트림) 시작.
+3. 세션 플로우: `RequireSession` 이 세션 확인 후 `AppShell` 렌더 → `startLive()` 1회 호출로 WS 시작.
 4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재경로>` 이동.
 5. 알 수 없는 경로는 항상 `/overview` 로 회수된다.
 
@@ -152,4 +151,4 @@ AppShell (div.shell / 접힘 시 .shell--collapsed)
 
 | 키 | 타입 | 기본값 | 의미 |
 |---|---|---|---|
-| `VITE_API_MODE` | `'mock' \| 'real'` | `real` | `'mock'` 을 명시했을 때만 mock 동작(우발적 페이크 차단). mock 이면 탑바에 MOCK 뱃지 표시, live 는 가짜 스트림. 로컬 vite dev 는 `frontend/.env.development` 가 `mock` 을 기본 지정 ([shared](./shared.md#설정-settings) 참조) |
+| `VITE_API_BASE` | string | `'/api'` | REST prefix. 로컬 vite dev/preview 는 [shared 설정](./shared.md#설정-settings)의 `/api` proxy 기준을 따른다. |
