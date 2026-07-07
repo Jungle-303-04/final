@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:24 KST (console origin /api smoke 정규화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:42 KST (inventory resource detail API)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,21 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (19:42 KST) — inventory resource detail API
+
+- 구현:
+  - `GET /clusters/{cluster_id}/inventory/resource-detail` 추가.
+  - 입력 identity: `resource_type`, `kind`, `name`, optional `namespace`.
+  - 응답: `resource`, `related`, `events`. 모든 public `InventoryResourceResponse`는 Kubernetes raw object 를 제거한다.
+  - 관계 계산은 실제 inventory read model만 사용한다: node→pods(`summary.node_name`), service→pods(selector/labels), workload→pods(selector 또는 owner).
+  - 이벤트는 Kubernetes Event `summary.involved_kind/name/uid`가 resource identity와 일치하는 row만 반환한다.
+- 검증:
+  - `.venv/bin/ruff check src/domains/inventory/repository.py src/domains/inventory/router.py src/packages/contracts/gateway/routes.py src/packages/contracts/gateway/responses.py tests/test_inventory_domain.py tests/test_platform_foundation_openapi.py` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_inventory_domain.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py` → 21 passed.
+- 다음:
+  - 프론트 `useResourceDetail`과 공통 Drawer/DrilldownPanel을 붙인다.
+  - 레포/클러스터 연결은 아직 완료 아님: repo는 `source_type` 영속화/atomic app+binding/서버 재검증, cluster는 discovery/preflight와 registration write boundary 정합화가 필요하다.
 
 ## 체크포인트 (19:24 KST) — console origin /api smoke 정규화
 

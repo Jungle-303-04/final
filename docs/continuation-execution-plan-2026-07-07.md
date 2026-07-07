@@ -16,6 +16,21 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 19:42 KST 체크포인트
+
+- Inventory resource detail API 추가.
+- 구현:
+  - `GET /clusters/{cluster_id}/inventory/resource-detail`가 `resource_type`, `kind`, `name`, optional `namespace`를 받아 단일 resource identity를 조회한다.
+  - 응답은 `resource`, `related`, `events`이며 public 응답에서 Kubernetes raw object를 제거한다.
+  - 관계 계산은 실제 inventory read model 기반: node→pods, service→selector pods, workload→selector/owner pods.
+  - 이벤트는 Kubernetes Event `involved_kind/name/uid`가 대상 resource와 일치하는 row만 반환한다.
+- 검증:
+  - ruff targeted check → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_inventory_domain.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py` → 21 passed.
+- 다음:
+  - frontend `useResourceDetail`/DrilldownPanel 연결.
+  - repo/cluster 연결 안정화는 아직 남음: repo source_type persistence/atomic create, cluster registration write-boundary preflight reuse.
+
 ### 2026-07-07 19:24 KST 체크포인트
 
 - Console origin /api smoke 정규화.

@@ -18,6 +18,7 @@ from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
     ClusterUsageResponse,
     ClusterUsageSample,
+    InventoryResourceDetailResponse,
     InventoryResourceListResponse,
     InventoryResourceResponse,
     InventorySnapshotResponse,
@@ -130,6 +131,66 @@ async def list_inventory_resources(
         namespace=namespace,
         include_deleted=include_deleted,
         limit=limit,
+    )
+
+
+@router.get(
+    gateway_routes.CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH,
+    response_model=InventoryResourceDetailResponse,
+)
+async def get_inventory_resource_detail(
+    cluster_id: str,
+    resource_type: str = Query(min_length=1, max_length=80),
+    kind: str = Query(min_length=1, max_length=120),
+    name: str = Query(min_length=1, max_length=253),
+    namespace: str | None = Query(default=None, max_length=253),
+    related_limit: int = Query(default=100, ge=1, le=1000),
+    event_limit: int = Query(default=50, ge=1, le=200),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> InventoryResourceDetailResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_inventory_access(db, current, workspace_id, cluster_id)
+    resource = db.get_inventory_resource(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type=resource_type,
+        kind=kind,
+        namespace=namespace,
+        name=name,
+    )
+    if resource is None:
+        raise HTTPException(status_code=404, detail="inventory resource not found")
+    public_resource = public_inventory_resource(resource)
+    related = {
+        group: [InventoryResourceResponse(**public_inventory_resource(item)) for item in items]
+        for group, items in db.list_related_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource=resource,
+            limit=related_limit,
+        ).items()
+    }
+    events = [
+        InventoryResourceResponse(**public_inventory_resource(event))
+        for event in db.list_resource_events(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource=resource,
+            limit=event_limit,
+        )
+    ]
+    return InventoryResourceDetailResponse(
+        cluster_id=cluster_id,
+        identity={
+            "resource_type": resource_type.strip().lower(),
+            "kind": kind,
+            "namespace": namespace,
+            "name": name,
+        },
+        resource=InventoryResourceResponse(**public_resource),
+        related=related,
+        events=events,
     )
 
 

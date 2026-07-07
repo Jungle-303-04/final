@@ -33,6 +33,7 @@ ResourceTable: 이름, 환경 Badge, 연결 상태(●), 노드/팟 수, 열린 
 
 summary/workloads는 30s refetch, usage 집계는 `ClusterAggPanel`이 `GET /clusters/{id}/summary`로 따로 읽는다.
 pods 탭의 hot 표시는 liveStore(WS) — 구조는 inventory 정본([fleet-heatmap § 데이터](fleet-heatmap.md#데이터) 동일 규칙).
+단일 리소스 Drawer는 `GET /clusters/{id}/inventory/resource-detail?resource_type=&kind=&name=&namespace=`를 정본 계약으로 사용해야 한다. 응답의 `resource`, `related`, `events`는 inventory read model 기반이며 public 응답에 raw Kubernetes object는 없다.
 
 ## ContextActions와 Drawer
 
