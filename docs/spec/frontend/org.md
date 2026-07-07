@@ -45,7 +45,7 @@ status: synced
 
 ### `frontend/src/features/org/SettingsNav.tsx :: SettingsNav`
 
-`{ title: string; children: ReactNode }` — h1 `설정 — <title>` + 탭 NavLink 5개(`/settings/members` 멤버, `/settings/orgs` 조직, `/settings/groups` 그룹, `/settings/access` 리소스 권한, `/settings/ops` 운영(DLQ)) + children. `FadeSlideIn` 래핑. 설정 5개 화면이 모두 이 레이아웃을 사용.
+`{ title: string; children: ReactNode }` — `PageHeader(title='설정 — <title>', sub='조직·그룹·멤버·리소스 권한과 운영(DLQ) 관리')` + `.tabs` 탭 NavLink 5개(`/settings/members` 멤버, `/settings/orgs` 조직, `/settings/groups` 그룹, `/settings/access` 리소스 권한, `/settings/ops` 운영(DLQ)) + children. 탭 링크 스타일은 공통 `.tabs a` 규칙에 맡기며 active 색을 덮는 인라인 color 를 두지 않는다. `FadeSlideIn` 래핑. 설정 5개 화면이 모두 이 레이아웃을 사용.
 
 ### `frontend/src/features/org/MembersView.tsx :: MembersView` (default export) — `/settings/members`
 
@@ -78,7 +78,7 @@ status: synced
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/settings/members` | `MembersView` | `RequireSession`+`AppShell`+`RequireAdmin` | 멤버 목록·가입 승인 |
+| `/settings/members` | `MembersView` | `RequireSession`+`ConsoleLayout`+`RequireAdmin` | 멤버 목록·가입 승인 |
 | `/settings/orgs` | `OrganizationsView` | 〃 | 조직 생성·삭제(이름 확인) |
 | `/settings/groups` | `GroupsView` | 〃 | 그룹 생성·멤버십 토글 |
 | `/settings/access` | `AccessView` | 〃 | 리소스 권한 부여/회수 |

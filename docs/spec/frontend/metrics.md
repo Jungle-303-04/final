@@ -79,7 +79,7 @@ status: synced
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/metrics` | `MetricsView` | `RequireSession`+`AppShell` | `?cluster=` 로 초기 클러스터 지정([cluster 상세](./cluster.md)의 "메트릭 보기" 링크) |
+| `/metrics` | `MetricsView` | `RequireSession`+`ConsoleLayout` | `?cluster=` 로 초기 클러스터 지정([cluster 상세](./cluster.md)의 "메트릭 보기" 링크) |
 
 ## 불변식·오류 (Invariants & Errors)
 

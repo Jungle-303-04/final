@@ -164,6 +164,8 @@ POST /clusters/{id}/metrics/query  {promql, start?, end?, step?}
 
 ### G9. 알림 피드 (P2)
 
+현재 프론트는 이 API를 쓰지 않고 `useNotices()`가 승인 대기 run, RCA timeline, DLQ를 클라이언트에서 합성한다. 아래는 통합 알림 API 도입 시 교체할 계획 계약이다.
+
 ```text
 GET  /notifications?after=          → { notices: [Notice] }   (Notice 는 notifications.md 타입)
 POST /notifications/read  {last_seen_at}

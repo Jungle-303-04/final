@@ -69,8 +69,8 @@ status: synced
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/ai` | `ChatView` | `RequireSession`+`AppShell` | 새 대화(`?prefill=` 지원) |
-| `/ai/:conversationId` | `ChatView` | `RequireSession`+`AppShell` | 기존 대화 스레드 |
+| `/ai` | `ChatView` | `RequireSession`+`ConsoleLayout` | 새 대화(`?prefill=` 지원) |
+| `/ai/:conversationId` | `ChatView` | `RequireSession`+`ConsoleLayout` | 기존 대화 스레드 |
 
 ## 동작 (Behavior)
 

@@ -48,7 +48,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/fleet-heatmap.md](views/fleet-heatmap.md) (모음·드릴), [views/cluster-detail.md](views/cluster-detail.md) (상세) |
-| 판단 | "주식 히트맵" 직관 판단은 **타당** — treemap(면적=규모, 색=건강도)은 fleet 규모 파악에 최적. 외부 기준 콘솔도 @nivo/treemap 사용. 채택 |
+| 판단 | "주식 히트맵" 직관 판단은 **타당** — treemap(면적=규모, 색=건강도)은 fleet 규모 파악에 최적. 외부 기준 콘솔도 treemap 패턴을 사용. 채택 |
 | API | `GET /clusters`, `GET /clusters/{id}/inventory/summary`, `.../workloads`, `.../resources`, `WS /live/browser`(실시간 색 갱신) |
 | 갭 | 노드 단위 상세는 inventory 스냅샷의 node 리소스로 표현 가능. 노드별 실시간 메트릭은 live summary 범위 확인 — 부족 시 **G6**(node metrics 요약) |
 
@@ -83,7 +83,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 |---|---|
 | 뷰 | [views/ai-chat.md](views/ai-chat.md) |
 | API | `GET /ai/conversations`, `POST /ai/conversations`, `GET /ai/conversations/{id}`(폴링), `POST /ai/conversations/{id}/messages` |
-| 실행 승인 | Claude/Codex 식 "선택지 카드" = 백엔드 실체와 매핑: RCA 액션 선택 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`, 승인 `POST /approvals/{id}/grant|reject` |
+| 실행 승인 | 외부 기준 "선택지 카드" = 백엔드 실체와 매핑: RCA 액션 선택 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`, 승인 `POST /approvals/{id}/grant|reject` |
 | 갭 | 스트리밍 없음(폴링 기반) — 폴링 UX로 설계. WS 확장은 **G8**(선택) |
 
 ## R11. 알림
