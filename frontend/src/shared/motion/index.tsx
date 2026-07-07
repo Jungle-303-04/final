@@ -1,15 +1,16 @@
 // 모션 프리미티브 — 인라인 animate 금지, 여기서만 (docs/fd/04 § 모션 원칙)
 import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 export { AnimatePresence };
 
-export function FadeSlideIn({ children, delay = 0, dir = 'up' }: { children: ReactNode; delay?: number; dir?: 'up' | 'left' }) {
+export function FadeSlideIn({ children, delay = 0, dir = 'up', style }:
+  { children: ReactNode; delay?: number; dir?: 'up' | 'left'; style?: CSSProperties }) {
   const reduced = useReducedMotion();
-  if (reduced) return <>{children}</>;
+  if (reduced) return style ? <div style={style}>{children}</div> : <>{children}</>;
   const from = dir === 'up' ? { y: 8 } : { x: 8 };
   return (
-    <motion.div initial={{ opacity: 0, ...from }} animate={{ opacity: 1, x: 0, y: 0 }}
+    <motion.div style={style} initial={{ opacity: 0, ...from }} animate={{ opacity: 1, x: 0, y: 0 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1], delay }}>
       {children}
     </motion.div>
