@@ -4,13 +4,15 @@ import type { Session } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 
 export const sessionKey = ['session'] as const;
-const SESSION_CHECK_TIMEOUT_MS = 8_000;
+const SESSION_CHECK_TIMEOUT_MS = 20_000;
+const SESSION_STALE_MS = 120_000;
 
 export function useSession() {
   return useQuery({
     queryKey: sessionKey,
     queryFn: () => get<Session>('/auth/session', { timeoutMs: SESSION_CHECK_TIMEOUT_MS }),
-    staleTime: 60_000,
+    staleTime: SESSION_STALE_MS,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 }
@@ -21,7 +23,7 @@ export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: { email: string; password: string }) => post<Session>('/auth/login', b),
-    onSuccess: () => qc.invalidateQueries({ queryKey: sessionKey }),
+    onSuccess: session => qc.setQueryData(sessionKey, session),
   });
 }
 export function useLogout() {
