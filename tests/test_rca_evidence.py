@@ -87,7 +87,7 @@ def run_to_rca(
         db=db,
         correlation_id=correlation_id,
     )
-    if incident_outs[-1].__subject__ == "rca.action_required":
+    if incident_outs[-1].__subject__ != "evidence.bundle.built":
         return evidence_outs + incident_outs
 
     plan_outs = run_handler(
@@ -329,7 +329,6 @@ def test_no_incident_flow_stops_before_rca_analysis() -> None:
     assert subjects_of(events) == [
         "evidence.built",
         "incident.detected",
-        "rca.action_required",
     ]
     assert event_by_subject(events, "incident.detected").detected is False
     assert db.called("save_evidence")
