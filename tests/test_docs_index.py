@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DOCS_DIR = ROOT_DIR / "docs"
+FRONTEND_DOCS_DIR = ROOT_DIR / "frontend" / "docs"
+FRONTEND_SCRIPTS_DIR = ROOT_DIR / "frontend" / "scripts"
 
 
 def read(path: str) -> str:
@@ -71,6 +73,8 @@ def test_docs_and_api_do_not_use_retired_scope_or_stale_language() -> None:
 
     checked_paths = [ROOT_DIR / "README.md"]
     checked_paths.extend(DOCS_DIR.rglob("*.md"))
+    checked_paths.extend(FRONTEND_DOCS_DIR.rglob("*.md"))
+    checked_paths.extend(FRONTEND_SCRIPTS_DIR.rglob("*.ts"))
     checked_paths.extend((DOCS_DIR / "api").rglob("*.bru"))
     checked_paths.extend((DOCS_DIR / "api").rglob("*.json"))
 

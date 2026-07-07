@@ -23,9 +23,9 @@ docs/api
 
 ## 전체 Runner 실행
 
-보호 API는 로그인 쿠키가 필요하지만 collection 기본값 `auto_login: true`가 켜져 있다.
-그래서 개별 보호 API를 바로 눌러도 Bruno pre-request script가 `auth_email`/`auth_password`로 먼저 로그인하고 `service_session` cookie를 저장한다.
-401/403 동작을 일부러 확인하려면 Environment의 `auto_login`을 `false`로 바꾼 뒤 요청한다.
+보호 API는 로그인 쿠키가 필요하다.
+운영 URL을 가리키는 collection 기본값과 `aws-test` Environment는 실제 계정을 커밋하지 않기 위해 `auto_login: false`와 placeholder 인증값을 쓴다.
+실제 AWS 확인은 로컬 전용 `*.local.bru` 환경에 운영자 계정을 넣거나 Bruno UI에서 `auth_email`/`auth_password`를 채운 뒤 `auto_login`을 켠다.
 전체 확인은 기존처럼 `06 로그인`을 포함한 Runner 순서로 돌려도 되고, `10 로그아웃`은 맨 마지막에 실행한다.
 
 로컬에 실제 AWS 값이 들어간 `docs/api/environments/aws-live.local.bru`가 있으면 아래 명령으로 전체 과정을 한 번에 실행한다.
@@ -47,8 +47,8 @@ bash scripts/run-bruno-aws.sh
 직접 채워야 하는 값은 처음 한 번만 본다.
 
 1. `base_url`은 Gateway API 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/api/`로 이미 채워져 있다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
-2. `auto_login`은 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다. 기본값은 `true`다.
-3. `auth_email`/`auth_password`는 자동 로그인과 `06-login` 요청에 쓸 계정이다. collection 기본값은 로컬 bootstrap 계정인 `admin.local@example.com` / `local-test-password-1234`다. AWS에 다른 admin 계정으로 bootstrap되어 있으면 `aws-test` Environment에서 두 값을 그 계정으로 바꾼다.
+2. `auto_login`은 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다. 운영 기본값은 `false`다. 로컬 환경만 bootstrap smoke 편의를 위해 `true`다.
+3. `auth_email`/`auth_password`는 자동 로그인과 `06-login` 요청에 쓸 계정이다. collection과 `aws-test`에는 placeholder만 커밋한다. 실제 AWS 계정은 `docs/api/environments/aws-live.local.bru` 같은 gitignore된 local env 또는 Bruno UI override에만 둔다.
 4. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
 5. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
 6. `alertmanager_token`은 외부 Alertmanager webhook 입구가 켜진 배포에서만 넣는다. 배포의 `ALERTMANAGER_WEBHOOK_TOKEN`과 같아야 한다.
@@ -76,14 +76,21 @@ bash scripts/run-bruno-aws.sh
 프론트 콘솔을 직접 여는 주소는 `https://k8s.woonyong.org/`지만, Bruno collection의 AWS `base_url`에는 `/api/`까지 포함한다.
 
 Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
-그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test`를 선택한다.
+그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test` 또는 gitignore된 `aws-live.local`을 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
-collection 기본값은 `admin.local@example.com` / `local-test-password-1234`이고, 로컬 bootstrap smoke에서 바로 쓸 수 있는 값이다.
-AWS 라이브에서 `AUTH_EMAIL`/`AUTH_PASSWORD` secret으로 다른 admin을 bootstrap했다면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
+collection과 `aws-test` 기본값은 placeholder다.
+
+```text
+auth_email: replace-with-auth-email
+auth_password: replace-with-auth-password
+```
+
+로컬 bootstrap smoke 값은 `local` Environment에만 둔다.
+AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다.
 
 `auto_login`은 Bruno에서 보호 API를 바로 눌렀을 때 collection pre-request script가 자동으로 `/auth/login`을 호출할지 정한다.
-기본값은 `true`라서 `01-providers`, `02-target-admin`, `05-rca-dashboard`, `07-ai`, `09-management-console` 같은 세션 API를 먼저 로그인 요청 없이 실행할 수 있다.
+운영 기본값은 `false`다. 로컬 smoke 또는 개인 local env에서만 `true`로 켠다.
 자동 로그인은 `service_session` cookie가 없을 때만 동작하며, `x-agent-token` API, install 링크, GitHub/Alertmanager webhook, `/metrics`, health/openapi/auth 흐름에는 붙지 않는다.
 인증 실패 응답을 직접 보고 싶으면 Environment에서 `auto_login`을 `false`로 바꾼다.
 
@@ -94,13 +101,7 @@ AWS 라이브에서 `AUTH_EMAIL`/`AUTH_PASSWORD` secret으로 다른 admin을 bo
 팀 통합 테스트는 `aws-test` Environment가 기준이다.
 로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
 `local` Environment는 개인이 Gateway를 별도로 띄워 빠르게 확인할 때만 쓰는 보조 profile이다.
-기본값은 아래와 같다.
-
-```text
-auth_email: admin.local@example.com
-auth_password: local-test-password-1234
-cluster_id: target
-```
+로컬 bootstrap 값은 `docs/api/environments/local.bru`에만 둔다.
 
 `agent_token`은 `02-target-admin/01-register-target-dry-run.bru` 응답에서 받거나, 이미 등록된 target agent token reference를 운영자가 넣는다.
 이 값이 있으면 `02-target-admin/03-install-manifest-by-token.bru`로 원라인 설치 링크가 실제 YAML을 반환하는지도 확인할 수 있다.

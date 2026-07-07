@@ -16,6 +16,26 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:22 KST 체크포인트
+
+- `6cf5f548 fix: 드릴 메트릭 / 실제시각 / 로그인 복원`은 origin/dev push 완료.
+- 최신 Actions:
+  - `6cf5f548`: CI `28855387595`, AWS CD `28855387636`, Promote `28855387617` failure.
+  - 모든 test/verify job은 `runnerName=null`, 4~6초 내 failure. deploy/merge job은 skipped.
+  - `c2dd6901`: CI `28854743151`, AWS CD `28854743097`, Promote `28854743082`도 같은 패턴.
+  - 코드 로그가 없는 runner allocation/Actions control-plane/quota/policy 계층 문제로 본다.
+- 라이브 smoke:
+  - `/` HTTP 200, `/console/` HTTP 200.
+  - `/api/healthz` HTTP 502.
+  - `/api/readyz` timeout.
+  - `/api/providers/cluster-discovery` timeout.
+  - DB reset 금지. Cloudflare origin, console nginx `/api` proxy, api-gateway service/endpoints/rollout부터 확인한다.
+- 정리:
+  - collection/aws-test Bruno 인증값은 placeholder + `auto_login: false`.
+  - 실제 AWS 계정은 gitignore된 `*.local.bru` 또는 Bruno UI override에만 둔다.
+  - `frontend/docs` stale mock 설명과 삭제된 mock import script를 정리했다.
+  - `tests/test_docs_index.py`가 `frontend/docs`와 `frontend/scripts`도 stale language scan에 포함한다.
+
 ### 2026-07-07 18:14 KST 체크포인트
 
 - 프론트 실제시각/드릴 메트릭 보강.

@@ -116,14 +116,15 @@ Bruno에서 `docs/api`를 Open Collection으로 열고 Environment를 `aws-test`
 `aws-test` 기본값:
 
 ```text
-base_url: https://k8s.woonyong.org/
-auth_email: admin.local@example.com
-auth_password: local-test-password-1234
+base_url: https://k8s.woonyong.org/api/
+auto_login: false
+auth_email: replace-with-auth-email
+auth_password: replace-with-auth-password
 cluster_id: cluster-1
 ```
 
-운영자가 AWS bootstrap 계정을 다른 값으로 설정했다면 Bruno Environment의 `auth_email`, `auth_password`만 그 값으로 바꾼다.
-문서나 collection 파일에는 실제 비밀번호를 쓰지 않는다.
+AWS bootstrap 계정은 Bruno UI override 또는 gitignore된 `*.local.bru` 파일에만 넣는다.
+문서나 collection 파일에는 실제 이메일/비밀번호를 쓰지 않는다.
 
 먼저 보낼 요청:
 

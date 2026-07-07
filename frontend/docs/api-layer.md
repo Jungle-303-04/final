@@ -1,32 +1,27 @@
-# API 계층 (`src/features/console/api/`)
+# API 계층
 
-콘솔 UI의 **유일한 데이터 접근 지점**. 페이지·위젯·맵은 전부 `../api`에서만 import하고,
-mock 구현(`mock.ts`, `metrics.ts`)은 이 계층 뒤의 어댑터로 격리되어 있다.
+콘솔 UI의 데이터 접근은 TanStack Query hook과 `shared/lib/api.ts`로 모은다.
+페이지·위젯·맵은 실제 Gateway 응답 또는 그 응답을 정규화한 adapter 값만 사용한다.
 
 ## 구조
 
 ```
-페이지/위젯/맵 ──> api/index.ts ──> mock.ts      (엔티티: 클러스터·서비스·저장소…)
-                              └──> metrics.ts   (팟-상향 집계: PodMetric → Node/Group/Cluster/Fleet)
+페이지/위젯/맵 ──> features/*/api.ts ──> shared/lib/api.ts ──> Gateway /api/*
+                              └──> shared/lib/adapt.ts (필드명·빈 값 정규화)
 ```
 
-- 어댑터 내부(`metrics.ts` → `mock.ts`)를 제외하면 UI 코드에 mock 직접 import는 없다.
-  검증: `grep -rn "from '\.\{1,2\}/mock'" src/features/console` → api/·어댑터만 나와야 함.
-- 데이터 **타입이 곧 API 계약**이다 (`ConsoleCluster`, `PodMetric`, `ClusterAgg`, `FleetAgg` …).
+- 운영 UI는 API 실패를 조용히 대체하지 않는다. `QueryBoundary` 또는 각 화면의 error state가 실패를 드러낸다.
+- 데이터 타입은 수기 타입(`shared/lib/types.ts`)과 Gateway contract 문서로 관리한다. 장기적으로 OpenAPI 코드 생성으로 전환한다.
 
-## 백엔드 연결 절차
+## 백엔드 연결 기준
 
-1. `api/index.ts`의 re-export를 실제 구현으로 교체한다 (TanStack Query 권장 — 의존성 설치됨).
-   - `getClusterAgg(id)` → `GET /api/clusters/:id/metrics`
-   - `getPodMetrics(id)` → `GET /api/clusters/:id/pods`
-   - `collectorOf(id)` → node-collector 헬스 엔드포인트 (I11: 비정상이면 available:false)
-   - `CLUSTERS`/`SERVICES` 등 목록 → 대응 목록 API
-2. 페이지 코드는 수정하지 않는다 — 반환 타입이 유지되는 한 그대로 동작.
-3. 집계 불변식(부모=Σ자식, 가중평균)은 백엔드가 보장해야 하며,
-   `scripts/validate-metrics.ts`의 검증 항목이 그 계약의 사양이다.
+1. 새 화면은 먼저 실제 Gateway endpoint 또는 기존 read model이 있는지 확인한다.
+2. endpoint가 없으면 백엔드 query/read model을 추가한다. 프론트에서 값을 합성하지 않는다.
+3. adapter는 이름/형태 정규화와 null-safe 렌더 방어만 한다.
+4. 메트릭 drilldown은 `/metrics?cluster=...&subject=...&name=...` 컨텍스트를 PromQL 템플릿에 주입하고, `POST /agent/debug/query` 결과만 표시한다.
 
 ## 불변식 (기획서 docs/map-rbac-plan.md의 I1~I12)
 
 - I3: 모든 수치는 팟 레벨에서 생성 → 상향 합산. 비율은 Σ사용량÷Σ용량.
 - I6: 플릿 집계 함수(`getFleetAgg`)는 반드시 "뷰어에게 보이는 클러스터 목록"을 인자로 받는다.
-- I11: 수집기 비정상 클러스터는 값을 만들지 않는다 — `available:false` + 사유.
+- I11: 수집기 비정상 클러스터는 값을 만들지 않는다. 빈 상태와 error state로 표시한다.
