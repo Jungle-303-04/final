@@ -9,21 +9,19 @@ from domains.rca.events import (
     MissingEvidenceCheck,
 )
 from services.ai.agent.causes.engine import required_evidence_sources
+from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
 
 EvidenceSource = ClusterEvidenceReceivedBody | Evidence
 
 
 def extract_resource(kubernetes: dict) -> tuple[str, str, str | None]:
-    resource = kubernetes.get("resource", {})
-    return (
-        str(resource.get("kind", "Unknown")),
-        str(resource.get("name", "unknown")),
-        resource.get("namespace"),
-    )
+    # incident 분류(pipeline/incident.py)와 같은 규칙 — 명시 resource > 유도 신호의 리소스.
+    return resolve_resource(kubernetes, derive_symptom(kubernetes).signal)
 
 
 def extract_symptom(kubernetes: dict) -> str:
-    return str(kubernetes.get("symptom", "unknown"))
+    # incident 분류와 같은 규칙 — 명시 symptom > snapshot 신호 유도 > "unknown".
+    return derive_symptom(kubernetes).symptom
 
 
 def build_incident_evidence_bundle(
