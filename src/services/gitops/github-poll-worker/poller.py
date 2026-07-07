@@ -1,6 +1,6 @@
 """github-poll-worker — GitHub 주기 polling, 새 commit을 webhook 입구로 전달
 
-ArgoCD와 같은 방향: "polling 기본 + webhook 가속(옵션)".
+GitOps 컨트롤러류와 같은 방향: "polling 기본 + webhook 가속(옵션)".
 외부 endpoint를 못 여는 환경이나 webhook 누락 보정용 polling.
 
 cluster-agent와 같은 timer producer 형태: 주기마다 외부 호출 후
