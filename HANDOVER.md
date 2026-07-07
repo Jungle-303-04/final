@@ -63,18 +63,32 @@
 - 번들 원문 grep: `클러스터 맵` 0건, `MOCK 모드` 0건, 비용 문자열 0건 — **스크린샷의 구화면(가짜 비용/1,000개 팟/중복 헤딩) 라이브에서 소멸 확인**.
 - /api/healthz ok. 이후 push(49d551e8~)는 다음 CD 사이클에서 반영 — 같은 방식으로 재확인할 것.
 
+### 반복 7 — 마무리 폴리시 + 라이브 2차 검증 (6b786707~475de2f4, 13:0x KST)
+
+- 승인 카드: 거절 클릭 시 승인 버튼에 로딩이 뜨던 문제 → `approval.variables.action` 으로 클릭한 버튼에만 로딩(475de2f4).
+- 메트릭 헤더 PageHeader 통일, rca-reports Bruno 에 심화 필드 검증 추가(6b786707), repo 스펙 동기화(88ec88e5).
+- **라이브 2차 검증 완료**: 6b786707 AWS CD success. lazy 청크 직접 grep —
+  `IncidentDetailView-v-ruHVvH.js` 에 "후보 평가"(RCA 심화 UI), `MetricsView-DXcELkOw.js` 에 "노드 CPU 사용률"(새 프리셋) 존재.
+  주의: 메인 `index-*.js` 해시는 lazy 청크만 바뀌면 안 변한다 — 배포 확인은 메인 번들에서 청크 파일명 grep 후 그 청크를 확인할 것.
+- GitHub Actions 상태 확인 방법: `curl -H "Authorization: token <PAT>" https://api.github.com/repos/Jungle-303-04/final/actions/runs?branch=dev` (PAT 는 /tmp/askpass.sh 참고, 원문 커밋 금지).
+
 ### 검증 상태 (반복 1~3)
 
 - frontend: `npm run build` + `npm run lint` 그린. backend: `pytest -k "rca or evidence or gateway or dashboard"` 153 passed,
   ruff/lint-imports 그린(lint-imports 는 `PYTHONPATH=src` 필요).
 - push 완료(17ac76e1) → dev CI → main promote → AWS CD (~10분). 배포 후 `curl -s https://k8s.woonyong.org | grep assets/index-` 로 해시 변경 확인할 것.
 
-### 다음 백로그 (우선순위)
+### 다음 백로그 (우선순위) — 반복 1~7 이후 잔여
 
-1. 각 페이지 인터랙션 정밀 감사 — 폼 제출 후 갱신/리셋, 모달 닫힘, 핸들러 없는 버튼, 중복 헤딩 (진행 중)
-2. 빈/로딩/에러 상태 일관성(QueryBoundary 미사용 지점) + plural 토큰 간격/타이포 정리
-3. 데드 파일 스윕(unimported 파일 검출)
-4. 배포 후 라이브 스팟체크(asset 해시·구 화면 잔존 여부)
+1. ~~인터랙션 정밀 감사~~ / ~~데드 파일·익스포트 스윕~~ / ~~라이브 스팟체크~~ — **완료** (frontend/AUDIT.md 섹션 I).
+2. **recovery plan 상태 노출**(지시 3의 잔여): `recovery_plans` 테이블(status: selection_requested/selected,
+   selected_action_id)이 correlation 별로 있으나 조회 API 없음(select 만 존재). 인시던트 상세의 "복구 조치" 그룹에
+   붙이려면 (a) `GET /rca-reports` 에 join 하거나 (b) timeline projection 에 recovery 상태 반영 필요 — projection
+   워커 수정이라 최소 확장 범위 밖으로 판단, 범위 합의 후 진행 권장.
+3. 로그인 후 실브라우저 E2E 스팟체크(등록 위저드→연결, 승인 grant, 인시던트 상세 심화 필드 실데이터 렌더) —
+   자격증명 필요(이 세션엔 없음).
+4. OpenAI 크레딧 충전 후 chat/fallback LLM 라이브 검증(기존 백로그 승계).
+5. evidence retention·fastapi 버전 정렬 등 기존 HANDOVER 하단 백로그 승계.
 
 ### 환경 메모 (콜드 스타트용)
 
