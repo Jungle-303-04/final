@@ -184,7 +184,8 @@
 - L1 fleet: 타일=클러스터, 크기=`pods_total`, 색=`health`, 관리 클러스터 뱃지 표시.
 - L2 노드: `GET /clusters/{id}/nodes/summary`를 우선 사용하고 미배포 404일 때 기존 inventory summary/pod inventory로 fallback한다. 타일=노드, 크기=`pods_running`, CPU/MEM 미니 게이지, condition 뱃지를 표시한다.
 - L3 팟: `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 404일 때 pod inventory fallback을 사용한다. 타일=팟, 크기=CPU/MEM 또는 균등, `incident_correlation_id`가 있으면 critical + pulse border로 표시하고 Drawer에서 "인시던트 보기" CTA를 제공한다.
-- 클러스터 상세 URL은 `/clusters/{id}?node=<node>`로 노드 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
+- 클러스터 상세 URL은 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 노드/팟 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
+- 팟 Drawer는 search param에서 파생한다. 팟 목록 로딩 중에는 Skeleton, 조회 실패는 재시도, stale URL은 "팟 상세 없음" EmptyState로 처리한다.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 

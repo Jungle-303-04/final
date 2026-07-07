@@ -207,10 +207,18 @@ export default function ClusterDetailView() {
         clusterId={clusterId}
         clusterName={cluster?.name ?? clusterId}
         selectedNode={sp.get('node') ?? ''}
+        selectedPodId={sp.get('pod') ?? ''}
         onSelectNode={(node) => {
           const next = new URLSearchParams(sp);
           if (node) next.set('node', node);
           else next.delete('node');
+          next.delete('pod');
+          setSp(next);
+        }}
+        onSelectPod={(podId) => {
+          const next = new URLSearchParams(sp);
+          if (podId) next.set('pod', podId);
+          else next.delete('pod');
           setSp(next);
         }}
       />
@@ -396,19 +404,23 @@ function ClusterDrilldownPanel({
   clusterId,
   clusterName,
   selectedNode,
+  selectedPodId,
   onSelectNode,
+  onSelectPod,
 }: {
   clusterId: string;
   clusterName: string;
   selectedNode: string;
+  selectedPodId: string;
   onSelectNode: (node: string) => void;
+  onSelectPod: (podId: string) => void;
 }) {
   const nodesQ = useNodeSummaries(clusterId);
   const podsQ = useNodePodSummaries(clusterId, selectedNode || undefined);
-  const [selectedPod, setSelectedPod] = useState<PodHeatmapSummary | null>(null);
   const nav = useNavigate();
   const pathFor = useConsolePath();
   const node = nodesQ.data?.find((item) => item.id === selectedNode || item.name === selectedNode);
+  const selectedPod = selectedPodId ? (podsQ.data ?? []).find((pod) => pod.id === selectedPodId) ?? null : null;
   const tiles = selectedNode ? podTiles(podsQ.data ?? []) : nodeTiles(nodesQ.data ?? []);
   const loading = selectedNode ? podsQ.isPending : nodesQ.isPending;
   const error = selectedNode ? podsQ.error : nodesQ.error;
@@ -434,17 +446,17 @@ function ClusterDrilldownPanel({
               onSelectNode(tile.id);
               return;
             }
-            setSelectedPod((podsQ.data ?? []).find((pod) => pod.id === tile.id) ?? null);
+            onSelectPod(tile.id);
           }}
         />
       </Card>
 
       <Drawer
-        open={Boolean(selectedPod)}
+        open={Boolean(selectedPodId)}
         title={selectedPod ? `${selectedPod.namespace}/${selectedPod.name}` : '팟 상세'}
-        onOpenChange={(open) => !open && setSelectedPod(null)}
+        onOpenChange={(open) => !open && onSelectPod('')}
       >
-        {selectedPod && (
+        {selectedPod ? (
           <div className="grid gap-4">
             <Card title="팟 상세">
               <KeyValueList
@@ -467,6 +479,12 @@ function ClusterDrilldownPanel({
               </Button>
             )}
           </div>
+        ) : podsQ.isPending ? (
+          <Skeleton lines={6} />
+        ) : podsQ.isError ? (
+          <EmptyState title="팟 상세 조회 실패" description={(podsQ.error as Error).message} action={<Button size="sm" onClick={() => void podsQ.refetch()}>다시 시도</Button>} />
+        ) : (
+          <EmptyState title="팟 상세 없음" description="선택한 노드에서 해당 팟을 찾을 수 없습니다" action={<Button size="sm" onClick={() => onSelectPod('')}>닫기</Button>} />
         )}
       </Drawer>
     </>

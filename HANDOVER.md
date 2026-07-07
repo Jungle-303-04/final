@@ -1,11 +1,21 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:20 KST (콘솔 디자인 시스템 Phase 2 메트릭 이관/수동 콘솔 배포 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:19 KST (히트맵 드릴다운 팟 URL 동기화 반영)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 히트맵 드릴다운 URL 복원 보강
+
+- 구현:
+  - `ClusterDetailView`의 `ClusterDrilldownPanel`에서 선택 팟 Drawer를 로컬 state 대신 search param `pod=<namespace/name>`에서 파생하도록 변경했다.
+  - 노드 선택/줌아웃 시 `pod` param을 함께 정리하고, 팟 타일 클릭 시 `/clusters/{id}?node=<node>&pod=<namespace/name>` 상태가 남는다.
+  - 새로고침/공유 URL에서 팟 목록이 로딩 중이면 Skeleton, 실패하면 재시도, stale pod 값이면 EmptyState로 처리한다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
 
 ## 체크포인트 — 콘솔 디자인 시스템 Phase 2 메트릭 이관 완료
 
