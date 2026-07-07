@@ -41,7 +41,9 @@ class IncidentDetector:
         # Alertmanager webhook evidence arrives through metrics, not the Kubernetes
         # snapshot. Keep firing alert groups incident-worthy without treating every
         # normal metrics sample as an incident.
-        alertmanager = evidence.metrics.get("alertmanager") if isinstance(evidence.metrics, dict) else None
+        alertmanager = (
+            evidence.metrics.get("alertmanager") if isinstance(evidence.metrics, dict) else None
+        )
         if isinstance(alertmanager, dict):
             alerts = alertmanager.get("alerts")
             return isinstance(alerts, list) and any(

@@ -128,7 +128,9 @@ class GitHubRepositoryClient:
             raise RepositoryDiscoveryError(502, "github tree response was invalid")
         warnings = []
         if bool(tree_data.get("truncated")):
-            warnings.append("repository tree was truncated by GitHub; candidate list may be incomplete")
+            warnings.append(
+                "repository tree was truncated by GitHub; candidate list may be incomplete"
+            )
         if len(raw_tree) > MAX_TREE_ITEMS:
             warnings.append("repository tree is large; scanned the first bounded set of paths")
         return [
@@ -367,7 +369,9 @@ def repository_metadata_warnings(metadata: Mapping[str, Any]) -> list[str]:
     return warnings
 
 
-def manifest_candidates_from_tree(tree: Sequence[Mapping[str, Any]]) -> list[RepositoryManifestCandidate]:
+def manifest_candidates_from_tree(
+    tree: Sequence[Mapping[str, Any]],
+) -> list[RepositoryManifestCandidate]:
     candidates: dict[str, RepositoryManifestCandidate] = {}
     for item in tree:
         if str(item.get("type") or "") != "blob":
@@ -422,7 +426,9 @@ def add_candidate(
     reason: str,
 ) -> None:
     existing = candidates.get(path)
-    if existing is not None and source_priority(existing.source_type) <= source_priority(source_type):
+    if existing is not None and source_priority(existing.source_type) <= source_priority(
+        source_type
+    ):
         return
     candidates[path] = RepositoryManifestCandidate(
         path=path,
