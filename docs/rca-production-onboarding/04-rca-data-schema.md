@@ -193,6 +193,7 @@ consumer: `plan-worker`, dashboard detail
 | `resource_name` | 사람이 찾을 수 있는 리소스 이름이다. |
 | `namespace` | Kubernetes 명령과 화면 필터에 필요하다. |
 | `symptom` | RCA rule catalog의 매칭 키다. |
+| `secondary_symptoms` | 대표 symptom 외에 snapshot에서 함께 관측된 신호 라벨이다. 여러 장애 신호가 겹쳐도 triage 정보를 잃지 않는다. |
 | `severity` | alert/UI 우선순위에 필요하다. |
 | `first_seen_at` | incident timeline 시작점이다. |
 | `summary` | 대시보드 카드와 PR body에 표시한다. |

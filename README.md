@@ -22,6 +22,7 @@ src/services
   gitops/scm-worker
   ai/evidence-worker
   ai/incident-worker
+  ai/ai-fallback-worker
   ai/plan-worker
   ai/analyze-worker
   ai/rca-worker
@@ -110,6 +111,7 @@ scm-worker                   safe_pr.ready -> safe_pr.created/safe_pr.failed (�
 [ai — evidence/RCA/recovery 파이프라인]
 evidence-worker              cluster.evidence.received -> evidence.built
 incident-worker              evidence.built -> incident.detected -> evidence.bundle.built
+ai-fallback-worker           rca.ai_fallback.requested -> LLM 원인 후보 생성
 plan-worker                  evidence.bundle.built -> rca.candidates.planned
 analyze-worker               rca.candidates.planned -> rca.candidates.evaluated
 rca-worker                   rca.candidates.evaluated -> rca.completed
