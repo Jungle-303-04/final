@@ -13,11 +13,12 @@
 
 - 대화 맥락이 사라져도 바로 이어받을 수 있도록 [docs/continuation-execution-plan-2026-07-07.md](docs/continuation-execution-plan-2026-07-07.md)를 추가했다.
 - 이 문서에는 현재 SHA/run ID, 최신 검증 결과, dev/main Actions 상태, live smoke 명령, 남은 10개 작업 항목, DB 초기화 게이트, 금지 명령, 다음 구현 후보와 예상 write set을 정리했다.
-- 현재 최신 dev 커밋은 `b013b431`이고 main merge commit은 `f2b7d43`이다.
+- 문서화 직전 production-code baseline dev 커밋은 `b013b431`이고 main merge commit은 `f2b7d43`이다. 문서 커밋 이후 실제 최신 SHA는 `git rev-parse HEAD origin/dev origin/main`으로 확인한다.
 - 최신 main AWS CD run은 `28847747039`이며, 문서 작성 당시 `Test before deploy`는 성공했고 `Deploy to AWS EKS`가 진행 중이다.
 - 이전 main AWS CD `28847597545`는 더 최신 run 때문에 취소됐으므로 실패로 보지 않는다.
 - live `https://k8s.woonyong.org/api/healthz`는 직전 확인에서 `{"status":"ok","service":"api-gateway"}`였다.
-- 병렬 explorer `Banach`(`019f3b5e-8f4b-74a0-a447-56a1e0bfd325`)가 GitOps poller를 DB 등록 watch target 기반으로 전환할 구현 seam을 read-only 분석 중이다.
+- 병렬 explorer `Banach`(`019f3b5e-8f4b-74a0-a447-56a1e0bfd325`)가 GitOps poller를 DB 등록 watch target 기반으로 전환할 구현 seam을 read-only 분석 완료했다.
+- 분석 결과는 연속 실행 계획 문서의 "레포 등록 동적화" 섹션에 반영했다. 다음 구현 후보는 `github-poll-worker` env 단일 target 구조를 DB의 `git_repositories`/`git_watch_targets`/`deployment_bindings` 순회로 전환하는 작업이다.
 
 ## 최신 업데이트 (15:58 KST) — provider admin 경계 + 최종 DB 초기화 절차 재정렬
 
