@@ -201,6 +201,7 @@
 - 실행 이력, 배포 대상, Safe PR 탭은 loading, empty, error+retry 상태를 모두 갖는다. 승인 대기 run은 공유 `ApprovalCard`와 token 기반 PlanDiffPanel을 표시한다.
 - `useApproval`은 legacy `uiStore` toast 대신 `@/ui` toast를 사용하고 성공/실패 사유를 한국어로 표시한다.
 - 검증(2026-07-08 08:41 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`) 0건. Playwright mock으로 `/repos/app-1`를 1440/1024/390 폭에서 순회했고 실행/배포 대상/Safe PR/설정 탭 표시, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/repo-detail-desktop.png`, `/tmp/repo-detail-tablet.png`, `/tmp/repo-detail-mobile.png`.
+- 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `77ecf6be-repo-detail-ui-20260708084354`, `RepoDetailView-a14V4fYv.js`와 `ApprovalCard-Ci8lQGAe.js` lazy chunk 서빙 확인.
 
 ## 클러스터 제어 UX 변경 (2026-07-08)
 
