@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:20 KST (설정/조직 디자인 시스템 이관 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:01 KST (설정/조직 디자인 시스템 이관 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -24,8 +24,8 @@
   - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q` passed, 17 tests.
   - `make check` passed, 795 passed / 3 skipped.
   - `make manifest-check` passed.
+  - Playwright mock: `/settings/members`, `/settings/orgs`, `/settings/groups`, `/settings/access`, `/settings/ops`를 1440/1024/390 폭에서 순회했다. 멤버 검색 0건+필터 초기화, 조직/그룹 중복 이름 제출 차단, `last_admin` 인라인 오류, 권한 회수 요약 모달, DLQ 재처리 요약 모달, horizontal overflow 0, console error 0 확인.
 - 남은 확인:
-  - Playwright 1440/1024/390 mock visual smoke.
   - 커밋/푸시 후 Actions 확인. Actions `steps: []` 실패가 반복되면 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
 
 ## 체크포인트 — AI 채팅 디자인 시스템 이관
