@@ -58,11 +58,6 @@ spec:
               value: "16"
             - name: DB_POOL_TIMEOUT_SECONDS
               value: "20"
-            # agent evidence payload 는 이벤트 1건이 클 수 있다.
-            # 기존 gateway outbox relay 기본값(1000)은 재시작 후 backlog 처리 순간 메모리 피크를 키우므로
-            # gateway 에서는 작은 배치로 안정성을 우선한다.
-            - name: OUTBOX_RELAY_BATCH
-              value: "10"
             # 반복 JSON/DB 처리 후 RSS 를 덜 붙잡게 해 OOM 여유를 확보한다.
             - name: MALLOC_ARENA_MAX
               value: "2"
@@ -94,6 +89,72 @@ spec:
       port: 8000
       targetPort: http
       nodePort: 30080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outbox-relay
+  namespace: management
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: outbox-relay
+  template:
+    metadata:
+      labels:
+        app: outbox-relay
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: kubeheal-service:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/gateway/outbox-relay/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+          env:
+            # api-gateway 가 적재한 outbox 행만 relay 한다. source 변경 금지.
+            - name: OUTBOX_RELAY_BATCH
+              value: "10"
+            - name: OUTBOX_RELAY_INTERVAL_SECONDS
+              value: "1"
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+            - name: MALLOC_TRIM_THRESHOLD_
+              value: "65536"
 ---
 apiVersion: apps/v1
 kind: Deployment

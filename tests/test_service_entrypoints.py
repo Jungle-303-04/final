@@ -140,6 +140,7 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
         "workflow-controller",
         "alert-worker",
         "command-janitor",
+        "outbox-relay",
         "evidence-worker",
         "ai-diff-worker",
         "dashboard-worker",

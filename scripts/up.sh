@@ -100,6 +100,7 @@ APP_WORKER_DEPLOYMENTS=(
   mail-worker
   command-worker
   command-janitor
+  outbox-relay
   target-reconcile-worker
   rca-worker
   rca-feedback-worker
@@ -127,6 +128,7 @@ SMOKE_WORKER_DEPLOYMENTS=(
   diff-analyze-worker
   safe-pr-worker
   workflow-controller
+  outbox-relay
   audit-worker
   dashboard-worker
   dead-letter-monitor
@@ -143,6 +145,7 @@ RCA_WORKER_DEPLOYMENTS=(
   alert-worker
   command-worker
   command-janitor
+  outbox-relay
   evidence-worker
   incident-worker
   plan-worker

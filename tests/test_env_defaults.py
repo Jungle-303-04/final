@@ -37,7 +37,6 @@ def test_gateway_settings_env_defaults_remain_unchanged() -> None:
         "guard_gateway_settings",
     )
     config = settings.Settings
-    assert config.OUTBOX_RELAY_INTERVAL_SECONDS == 1
     assert config.DEFAULT_RATE_LIMIT == 120
     assert config.RATE_LIMIT_WINDOW_SECONDS == 60
     assert config.SIGNUP_EMAIL_RATE_LIMIT == 3
@@ -48,6 +47,16 @@ def test_gateway_settings_env_defaults_remain_unchanged() -> None:
     assert config.AUTH_ABUSE_SECOND_LOCK_SECONDS == 60 * 60
     assert config.AUTH_ABUSE_THIRD_LOCK_SECONDS == 24 * 60 * 60
     assert config.AUTH_ABUSE_STRIKE_TTL_SECONDS == 24 * 60 * 60
+
+
+def test_outbox_relay_env_defaults_remain_unchanged() -> None:
+    config = load_file(
+        ROOT / "src" / "services" / "gateway" / "outbox-relay" / "app.py",
+        "guard_outbox_relay_app",
+    )
+    assert config.OUTBOX_RELAY == "outbox-relay"
+    assert config.OUTBOX_RELAY_SOURCE == "api-gateway"
+    assert config.DEFAULT_OUTBOX_RELAY_INTERVAL_SECONDS == 1.0
     assert config.OUTBOX_RELAY_INTERVAL_SECONDS_ENV == "OUTBOX_RELAY_INTERVAL_SECONDS"
 
 
