@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from sqlalchemy import case, func, select
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.rca.models import Evidence, RcaBacklogItem, RcaReport, RecoveryPlanRecord
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.storage.engine import DatabaseConnection
+from packages.storage.engine import DatabaseConnection, iso_or_none
 
 RECOVERY_PLAN_STATUS_SELECTION_REQUESTED = "selection_requested"
 RECOVERY_PLAN_STATUS_SELECTED = "selected"
@@ -71,6 +74,67 @@ class RcaRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             return [dict(row) for row in conn.execute(statement).mappings()]
+
+    def list_evidence_records(
+        self,
+        workspace_id: str,
+        *,
+        correlation_id: str | None = None,
+        kind: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[JsonObject]:
+        """워크스페이스 범위 evidence 목록(최신순) — /evidence 범용 조회 API 용.
+
+        since 는 포함(>=), until 은 미포함(<) 경계. limit/offset 은 호출자(라우터)가 검증함.
+        """
+        table = Evidence.__table__
+        statement: Select[Any] = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.created_at.desc(), table.c.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if correlation_id is not None:
+            statement = statement.where(table.c.correlation_id == correlation_id)
+        if kind is not None:
+            statement = statement.where(table.c.kind == kind)
+        statement = _apply_created_at_window(statement, table, since, until)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [_serialize_created_at(row) for row in rows]
+
+    def list_rca_report_records(
+        self,
+        workspace_id: str,
+        *,
+        correlation_id: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[JsonObject]:
+        """워크스페이스 범위 RCA report 목록(최신순) — /rca-reports 조회 API 용.
+
+        since 는 포함(>=), until 은 미포함(<) 경계. payload 요약은 라우터가 수행함.
+        """
+        table = RcaReport.__table__
+        statement: Select[Any] = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.created_at.desc(), table.c.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if correlation_id is not None:
+            statement = statement.where(table.c.correlation_id == correlation_id)
+        statement = _apply_created_at_window(statement, table, since, until)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [_serialize_created_at(row) for row in rows]
 
     def upsert_recovery_selection_request(
         self,
@@ -175,3 +239,22 @@ class RcaRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+
+def _apply_created_at_window(
+    statement: Select[Any],
+    table: Any,
+    since: datetime | None,
+    until: datetime | None,
+) -> Select[Any]:
+    if since is not None:
+        statement = statement.where(table.c.created_at >= since)
+    if until is not None:
+        statement = statement.where(table.c.created_at < until)
+    return statement
+
+
+def _serialize_created_at(row: Any) -> JsonObject:
+    item = dict(row)
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    return item
