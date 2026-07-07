@@ -87,8 +87,12 @@
   - `cd frontend && npm run build` → passed(기존 large chunk warning만 있음).
   - 실제 로그인 세션으로 `GET /api/clusters/cluster-1/inventory/resources?resource_type=node&limit=5` → 200, 실제 노드 2개 확인.
   - 같은 세션으로 실제 노드 `GET /api/clusters/cluster-1/inventory/resource-detail?resource_type=node&kind=Node&name=<node>` → 200, `cluster_id=cluster-1`, related pods 8개.
-- 배포 필요:
-  - frontend image 재빌드/rollout 후 `/`와 `/console/` 모두에서 클러스터 상세 drilldown, 팟 딥링크, `/api/healthz` smoke를 다시 확인한다.
+- 커밋/배포:
+  - commit/push: `cfb10563 feat: resource-detail 기반 클러스터 드릴다운` → `origin/dev`.
+  - console CodeBuild `kubernetes-ops-console-build:5fd04763-9825-4c22-ba6d-3aad1fe60221` → succeeded.
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:cfb10563-dev`, rollout 1/1 ready.
+  - live smoke: `https://k8s.woonyong.org/` → 200 `text/html`, `https://k8s.woonyong.org/console/` → 200 `text/html`, `https://k8s.woonyong.org/api/healthz` → 200 `application/json`.
+  - 실제 로그인 세션으로 post-deploy `resource-detail` 재확인: cluster-1 실제 Node `ip-192-168-29-53.ap-northeast-2.compute.internal` → 200, related pods 8개.
 
 ## 체크포인트 (21:21 KST) — `/console` 데모 보존 + AI chat 실제 계약 수정
 
