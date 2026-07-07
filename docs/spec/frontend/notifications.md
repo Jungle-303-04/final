@@ -11,6 +11,7 @@ status: synced
 
 - 3개 실존 소스(승인 대기 run · RCA 타임라인 인시던트 · open Dead Letter)를 정규화한 합성 알림 피드(`useNotices`) — 전용 알림 API(G9) 도입 시 `api.ts` 만 교체.
 - RCA 타임라인/인시던트 상세 훅, 인시던트 파이프라인 그래프 뷰, Dead Letter 재처리 화면(설정 하위).
+- 알림 채널 설정 화면(`/settings/alerts`): Webhook 채널 조회, 테스트 발송 선검증, 저장/삭제.
 - 읽음 처리는 localStorage 워터마크(kind 별 마지막 확인 시각)로 로컬 관리.
 
 ## 의존성 (Dependencies)
@@ -20,10 +21,10 @@ status: synced
 | import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/adapt`(`adaptIncident`, `adaptIncidentDetail`), `@/shared/lib/format`, `@/shared/flow`, `@/ui` | [shared](shared.md) | API·그래프·UI |
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`) | [repo](./repo.md) | 승인 대기 알림 소스 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | DLQ 쿼리는 admin 만 |
-| import | `@/features/org/SettingsNav` | [org](./org.md) | OpsView 레이아웃 |
+| import | `@/features/org/SettingsNav` | [org](./org.md) | OpsView·AlertChannelsView 레이아웃 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [app/ConsoleLayout](app.md)(unread 뱃지), [fleet](./fleet.md)·[cluster](./cluster.md)(useTimeline) | — | 소비자 |
-| 백엔드 | `/dashboard/rca/*`, `/dead-letters*` | [api-gateway](../services/gateway-api-gateway.md) | |
+| 백엔드 | `/dashboard/rca/*`, `/dead-letters*`, `/alert-channels*` | [api-gateway](../services/gateway-api-gateway.md) | |
 
 ## 공개 인터페이스 (Public API) — `api.ts`
 
@@ -37,6 +38,10 @@ status: synced
 | `useDeadLetters` | `frontend/src/features/notifications/api.ts :: useDeadLetters` | GET `/dead-letters?limit=20` with `{timeoutMs: 8_000}` | `(enabled: boolean)`, 쿼리키 `['dead-letters']`, 60s, `retry:false`, select `.dead_letters` |
 | `useRecoveryPlan` | `frontend/src/features/notifications/api.ts :: useRecoveryPlan` | GET `/rca/recovery-plans/by-correlation/${correlationId}` with `{timeoutMs: 8_000}` | 쿼리키 `['recovery-plan', correlationId]`, `enabled: !!correlationId`, 30s. `not_found`은 재시도하지 않고 그 외 오류는 2회 미만 재시도 |
 | `useReplayDeadLetter` | `frontend/src/features/notifications/api.ts :: useReplayDeadLetter` | POST `/dead-letters/${id}/replay` | mutation `(id: number)`, 성공/실패 `@/ui` toast, 성공 시 `['dead-letters']` invalidate |
+| `useAlertChannels` | `frontend/src/features/notifications/api.ts :: useAlertChannels` | GET `/alert-channels` with `{timeoutMs: 8_000}` | 쿼리키 `['alert-channels']`, `retry:false`, select `.channels` |
+| `useTestAlertChannel` | `frontend/src/features/notifications/api.ts :: useTestAlertChannel` | POST `/alert-channels/test` | mutation `AlertChannelTestPayload` → `{valid; delivered; code?; detail; status_code?}`. 컴포넌트가 현재 입력 서명과 성공 응답을 묶어 저장 활성 조건으로 사용 |
+| `useSaveAlertChannel` | `frontend/src/features/notifications/api.ts :: useSaveAlertChannel` | POST `/alert-channels` | mutation `AlertChannelPayload`, 성공/실패 `@/ui` toast, 성공 시 `['alert-channels']` invalidate |
+| `useDeleteAlertChannel` | `frontend/src/features/notifications/api.ts :: useDeleteAlertChannel` | DELETE `/alert-channels/${channelId}` | mutation `(channelId: string)`, 성공/실패 `@/ui` toast, 성공 시 `['alert-channels']` invalidate |
 | `useNotices` | `frontend/src/features/notifications/api.ts :: useNotices` | (합성 — 아래) | `() => { notices: Notice[]; unread: number; markAllSeen: (kind?: string) => void }` |
 | `timeAgo` (re-export) | `frontend/src/features/notifications/api.ts :: timeAgo` | — | shared/lib/format 재수출 |
 
@@ -89,6 +94,17 @@ status: synced
 - 테이블 열: ID / Subject(code) / Consumer / 오류 / 상태 Badge(open → 열림, 그 외 처리됨) / 발생(timeAgo) / (`status==='open'` 이면 "재처리" sm 버튼 → confirm 모달). 실행 중에는 해당 행 버튼만 pending.
 - 확인 모달('Dead Letter 재처리'): ID/Subject/Consumer/오류 요약을 보여주고, "원인이 해결된 뒤에만 같은 이벤트를 event bus로 다시 넣으세요" 문구를 표시한다. 재처리 실행(`replay.mutate(id)`) 성공 시 모달을 닫는다.
 
+### `frontend/src/features/notifications/AlertChannelsView.tsx :: AlertChannelsView` (default export)
+
+- 라우트: `/settings/alerts` (가드 `RequireAdmin`). 레이아웃: `SettingsNav(title='알림 채널')`.
+- 데이터: `useAlertChannels`, `useTestAlertChannel`, `useSaveAlertChannel`, `useDeleteAlertChannel`.
+- state: `form`(`channel_id`, `name`, `url`, `min_severity`, `enabled`, `test_severity`, `test_message`), `testedSignature`, `testError`, `deleting`.
+- 목록: `Card('채널 목록')` 안에 `@/ui Table`. loading Skeleton, 오류+재시도, 빈 상태('알림 채널 없음') 구분.
+- 테이블 열: 채널(이름+URL) / 최소 심각도 / 상태 / 수정 시간 / 편집·삭제. 삭제는 `ConfirmDialog`를 거쳐 `DELETE /alert-channels/{id}`.
+- 폼: 이름, HTTPS Webhook URL, 최소 심각도, 채널 활성 checkbox, 테스트 심각도, 테스트 메시지.
+- 저장 활성 조건: 로컬 검증 통과 + `POST /alert-channels/test` 응답이 `valid && delivered` + 응답 시점의 `formSignature`가 현재 입력값과 동일. 사용자가 값을 변경하면 `testedSignature`가 불일치해 저장이 즉시 비활성화된다.
+- 저장 실행: `POST /alert-channels` body `{channel_id?; name; kind:'webhook'; url; min_severity; enabled}`. 성공 시 저장된 응답으로 편집 폼을 갱신해 현재 저장값은 테스트 통과 상태로 유지한다.
+
 ## 라우트
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
@@ -97,6 +113,7 @@ status: synced
 | `/notifications` | `<Navigate to="/incidents" replace />` | 없음 | 구 알림 경로 호환 redirect |
 | `/incidents/:incidentId` | `IncidentDetailView` | `RequireSession`+`ConsoleLayout` | RCA 파이프라인 그래프 |
 | `/settings/ops` | `OpsView` | `RequireSession`+`ConsoleLayout`+`RequireAdmin` | DLQ 목록·재처리 |
+| `/settings/alerts` | `AlertChannelsView` | `RequireSession`+`ConsoleLayout`+`RequireAdmin` | 알림 채널 테스트·저장 |
 
 ## 불변식·오류 (Invariants & Errors)
 

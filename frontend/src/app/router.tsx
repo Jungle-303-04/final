@@ -35,6 +35,7 @@ const consoleChildren = (basePath = '') => [
       { path: 'orgs', element: L(() => import('@/features/org/OrganizationsView')) },
       { path: 'groups', element: L(() => import('@/features/org/GroupsView')) },
       { path: 'access', element: L(() => import('@/features/org/AccessView')) },
+      { path: 'alerts', element: L(() => import('@/features/notifications/AlertChannelsView')) },
       { path: 'ops', element: L(() => import('@/features/notifications/OpsView')) },
     ],
   },

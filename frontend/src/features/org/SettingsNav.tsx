@@ -7,14 +7,14 @@ import { fadeInUp } from '@/ui/motion';
 
 const ITEMS = [
   ['/settings/members', '멤버'], ['/settings/orgs', '조직'], ['/settings/groups', '그룹'],
-  ['/settings/access', '리소스 권한'], ['/settings/ops', '운영(DLQ)'],
+  ['/settings/access', '리소스 권한'], ['/settings/alerts', '알림 채널'], ['/settings/ops', '운영(DLQ)'],
 ] as const;
 
 export function SettingsNav({ title, children }: { title: string; children: ReactNode }) {
   const pathFor = useConsolePath();
   return (
     <motion.div variants={fadeInUp} initial="initial" animate="animate" className="grid gap-6">
-      <PageHeader title={`설정 - ${title}`} description="조직, 멤버, 권한, 운영 큐를 한 곳에서 관리합니다" />
+      <PageHeader title={`설정 - ${title}`} description="조직, 멤버, 권한, 알림 채널, 운영 큐를 한 곳에서 관리합니다" />
       <nav className="flex max-w-full gap-1 overflow-x-auto border-b border-border" aria-label="설정">
         {ITEMS.map(([to, label]) => (
           <NavLink

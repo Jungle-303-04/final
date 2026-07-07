@@ -1,11 +1,31 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:19 KST (인증 전개형 검증 UX 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:28 KST (알림 채널 전개형 검증 UX 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 알림 채널 전개형 검증 UX
+
+- 구현:
+  - `/settings/alerts`에 `AlertChannelsView`를 추가하고 `SettingsNav`에 "알림 채널" 탭을 연결했다.
+  - `frontend/src/features/notifications/api.ts`에 `useAlertChannels`, `useTestAlertChannel`, `useSaveAlertChannel`, `useDeleteAlertChannel`을 추가했다.
+  - 채널 목록은 `GET /alert-channels`로 조회하고 loading, empty, error+retry 상태를 `@/ui` Table/EmptyState로 처리한다.
+  - 채널 폼은 이름, HTTPS Webhook URL, 최소 심각도, 활성 여부, 테스트 심각도, 테스트 메시지를 받는다.
+  - 저장 버튼은 로컬 검증과 `POST /alert-channels/test`의 `valid && delivered`가 현재 입력 서명과 일치할 때만 활성화된다. 입력값을 바꾸면 테스트 통과 상태가 reset된다.
+  - 저장은 `POST /alert-channels`, 삭제는 `DELETE /alert-channels/{id}`를 사용하고 성공/실패 toast와 삭제 확인 모달을 제공한다.
+  - `frontend/src/ui/index.tsx`에 `Checkbox` 프리미티브를 추가했다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - grep: 알림 채널 변경 범위의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, feature `.css` 0건. `frontend/src/ui/index.tsx`의 `duration-[var(--ui-duration-fast)]`는 UI primitive token 사용이다.
+  - Playwright mock: `/settings/alerts`를 1440/1024/390 폭에서 순회했다. 초기 저장 비활성, 테스트 전 저장 비활성, 테스트 성공 후 저장 활성, 입력 변경 후 저장 재비활성, horizontal overflow 0, console error 0 확인.
+- 남은 확인:
+  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
 
 ## 체크포인트 — 인증 전개형 검증 UX
 

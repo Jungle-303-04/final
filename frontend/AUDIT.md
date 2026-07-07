@@ -136,7 +136,7 @@
 |---|---|---|
 | 레포 연결 | repo 입력 -> `POST /repos/validate` 또는 현행 `POST /repositories/discovery/probe`; branch -> `GET /repositories/discovery/branches`; manifest 후보 -> `GET /repositories/discovery/manifests`; manifest 선택 -> `POST /repositories/discovery/validate`; 배포 대상 -> `GET /clusters`에서 `connection_status in connected/online` 이고 `role != management`인 클러스터만 선택; 등록 -> 선택 클러스터별 `POST /applications/connect`; 400 `cluster_not_connected`는 인라인 사유 | 완료 |
 | 클러스터 등록 | provider/필드 입력 -> 로컬 검증; 확인 -> `POST /targets/preflight`(`cloud_provider`, `deploy_provider=manual-manifest`, `provider_config`, `apply=false`); 통과 -> `POST /targets`; 설치 -> `bootstrap_steps`/`bootstrap_command`/`install_command` 우선순위 CodeBlock 복사; 연결 -> `GET /clusters/{id}/connection-status` 5초 폴링 | 완료 |
-| 알림 채널 | 설정 입력 -> 테스트 발송 API; 테스트 성공 -> 저장 API | 계약 확인 필요 |
+| 알림 채널 | 설정 입력 -> `POST /alert-channels/test`; `valid && delivered`인 현재 입력 서명만 저장 활성; 저장 -> `POST /alert-channels`; 목록 -> `GET /alert-channels`; 삭제 -> `DELETE /alert-channels/{id}` | 완료 |
 | 룰 추가 | YAML 입력 -> validate API; 유효 -> symptom/후보 수 preview | 계약 확인 필요 |
 | 회원가입 | 이메일 입력 debounce -> `POST /auth/check-email`; 사용 가능해야 비밀번호 단계 표시; 비밀번호 강도/정책 실시간; 가입 -> `POST /auth/signup`; 성공 화면 재발송 -> `POST /auth/resend-verification` | 완료 |
 | 로그인 실패 분기 | 로그인 -> `POST /auth/login`; `invalid_credentials`는 단일 문구, `email_unverified`는 재발송 CTA, `approval_pending`은 `/pending` 자동 확인 화면 | 완료 |
@@ -163,6 +163,16 @@
 - `app/guards.tsx`는 `@/ui` 프리미티브와 Tailwind token으로 이관해 인증 계열의 `@/shared/ui`, inline style 의존을 제거했다.
 - 검증(2026-07-08 08:16 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`을 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `3e56fe39-auth-validation-ui-20260708081840`, 인증 lazy chunk 5종 서빙 확인.
+
+## 알림 채널 전개형 검증 UX 변경 (2026-07-08)
+
+- `AlertChannelsView`를 `/settings/alerts`에 추가하고 `SettingsNav`에 "알림 채널" 탭을 연결했다.
+- 채널 목록은 `GET /alert-channels`를 사용하며 loading, empty, error+retry 상태를 모두 `@/ui` Table/EmptyState로 처리한다.
+- 채널 폼은 이름, HTTPS Webhook URL, 최소 심각도, 활성 여부, 테스트 심각도, 테스트 메시지를 받는다. 저장 버튼은 로컬 검증과 `POST /alert-channels/test`의 `valid && delivered`가 현재 입력 서명과 일치할 때만 활성화된다.
+- 입력값을 변경하면 테스트 통과 상태가 즉시 reset되어 저장 전 재검증을 강제한다.
+- 저장은 `POST /alert-channels`, 삭제는 `DELETE /alert-channels/{id}`를 사용하고 성공/실패 toast와 삭제 확인 모달을 제공한다.
+- `features/notifications/AlertChannelsView.tsx`, `features/notifications/api.ts`, `features/org/SettingsNav.tsx`, `app/router.tsx`의 알림 채널 범위는 `@/ui` 프리미티브와 Tailwind token만 사용한다. `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, feature `.css` 의존은 0건이다.
+- 검증(2026-07-08 08:27 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/settings/alerts`를 1440/1024/390 폭에서 순회했고, 초기 저장 비활성, 테스트 전 저장 비활성, 테스트 성공 후 저장 활성, 입력 변경 후 저장 재비활성, horizontal overflow 0, unexpected console error 0 확인.
 
 ## 클러스터 등록 위저드 UX 변경 (2026-07-08)
 
