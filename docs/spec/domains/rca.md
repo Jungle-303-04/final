@@ -234,6 +234,7 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 | `first_seen_at` | `str | None` | — |
 | `summary` | `str` | — |
 | `workspace_id` | `str` | `DEFAULT_WORKSPACE_ID` |
+| `secondary_symptoms` | `list[str]` | `[]` |
 
 #### EvidenceReference — `src/domains/rca/events.py :: EvidenceReference`
 
