@@ -249,6 +249,7 @@ PY
   curl -fsS -X POST "${BASE_URL}/commands" \
     -b "${COOKIE_JAR}" \
     -H "content-type: application/json" \
+    -H "x-service-csrf: same-origin" \
     -d @"${WEBHOOK_RESPONSE}.command.json"
   echo
 fi
