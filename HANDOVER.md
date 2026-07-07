@@ -1,12 +1,27 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:25 KST (정상 샘플 dashboard projection 차단)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:45 KST (실가입 인증 경로 보강 + DB 초기화 방침)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
 - 운영 코드, 배포 대상 화면, API 응답, DB 정리/복구 절차에는 **목업 데이터, 페이크 데이터, 하드코딩된 클러스터/레포/인시던트 값 사용 금지**.
 - 화면 수치와 드릴다운은 실제 세션 권한으로 접근 가능한 DB/API/클러스터 관측값만 표시한다. 개발용/테스트용 격리 객체는 단위 테스트 내부에만 두고 운영 경로에 연결하지 않는다.
-- DB 초기화/정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
+- 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
+- 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (15:45 KST) — 실가입 인증 경로 보강 패스
+
+- **추가 인증 분석 결과**:
+  - 내부 이메일/비밀번호 인증 MVP는 존재하지만, 운영 기준에서 3가지 모순이 남아 있었음: AWS admin bootstrap 이 구 `role='admin'`/`workspace_members` SQL 사용, 메일 링크가 콘솔 nginx 의 `/api/*` 프록시를 못 타는 `/auth/verify-email` 로 생성, 로그인 시 비밀번호 검증 전에 pending 상태를 노출.
+- **수정 완료(로컬 전체 검증 완료, 다음 커밋/배포 대상)**:
+  - 로그인에 escalating rate limit 추가(`LOGIN_EMAIL_RATE_LIMIT`, `LOGIN_IP_RATE_LIMIT`) + 비밀번호 검증 후에만 `pending_email_verification`/`pending_approval` 상태 안내.
+  - 인증 메일 URL은 `PUBLIC_API_BASE_URL`이 있으면 그 값을 사용하고, 없으면 `PUBLIC_BASE_URL + /api/auth/verify-email` 로 생성. AWS 배포는 `CUSTOM_DOMAIN` 기준 `PUBLIC_BASE_URL` 자동 주입.
+  - `/verify-email?token=...` 구 링크로 진입해도 프론트가 같은 origin `/api/auth/verify-email?token=...` 로 넘겨 실제 토큰 소비/세션 쿠키 설정 경로를 탄다.
+  - AWS admin bootstrap 은 raw SQL/구 테이블 대신 `Database.upsert_admin_account()` 를 호출해 `service_admin`/기본 조직/그룹 편입 계약을 그대로 사용.
+- **검증 완료**:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q` → 674 passed, 3 skipped.
+  - `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check`, `npm run typecheck` → 통과.
+  - 다음: 인증 보강 커밋/푸시 → dev/main 배포 → 실서비스 login/session/signup-link 경로 검증 → 최종 DB 초기화 절차 진입.
 
 ## 최신 업데이트 (15:25 KST) — 정상 샘플 dashboard projection 차단 패스
 

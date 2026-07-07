@@ -61,6 +61,14 @@ def signup_rate_limit_policy() -> AuthRateLimitPolicy:
     )
 
 
+def login_rate_limit_policy() -> AuthRateLimitPolicy:
+    return _auth_policy(
+        scope="login",
+        email_limit=Settings.LOGIN_EMAIL_RATE_LIMIT,
+        client_limit=Settings.LOGIN_IP_RATE_LIMIT,
+    )
+
+
 def resend_verification_rate_limit_policy() -> AuthRateLimitPolicy:
     return _auth_policy(
         scope="resend",

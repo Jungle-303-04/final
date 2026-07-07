@@ -33,6 +33,7 @@ from packages.runtime.dependencies import get_events
 
 router = APIRouter()
 PUBLIC_BASE_URL_ENV = "PUBLIC_BASE_URL"
+PUBLIC_API_BASE_URL_ENV = "PUBLIC_API_BASE_URL"
 EMAIL_VERIFICATION_SUCCESS_REDIRECT = "/login?verified=1"
 EMAIL_VERIFICATION_PENDING_APPROVAL_REDIRECT = "/login?verified=1&approval=pending"
 
@@ -82,9 +83,12 @@ def _authenticated_body(session: Any) -> AuthSessionResponse:
 
 def _verification_url(request: Request, token: str) -> str:
     query = urlencode({"token": token})
+    public_api_base_url = env(PUBLIC_API_BASE_URL_ENV, "").rstrip("/")
+    if public_api_base_url:
+        return f"{public_api_base_url}{gateway_routes.AUTH_VERIFY_EMAIL_PATH}?{query}"
     public_base_url = env(PUBLIC_BASE_URL_ENV, "").rstrip("/")
     if public_base_url:
-        return f"{public_base_url}{gateway_routes.AUTH_VERIFY_EMAIL_PATH}?{query}"
+        return f"{public_base_url}/api{gateway_routes.AUTH_VERIFY_EMAIL_PATH}?{query}"
     return f"{request.url_for('verify_email')}?{query}"
 
 
@@ -185,10 +189,11 @@ async def resend_verification(
 @router.post(gateway_routes.AUTH_LOGIN_PATH, response_model=AuthSessionResponse)
 async def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     password_auth: Any = Depends(get_password_auth),
 ) -> AuthSessionResponse:
-    current = await password_auth.login(payload.email, payload.password)
+    current = await password_auth.login(payload.email, payload.password, _client_key(request))
     _set_session_cookie(response, current)
     return _authenticated_body(current)
 

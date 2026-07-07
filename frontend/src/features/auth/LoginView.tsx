@@ -15,7 +15,7 @@ export default function LoginView() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     login.mutate({ email, password }, {
-      onSuccess: () => nav(sp.get('returnTo') ?? '/', { replace: true }),
+      onSuccess: () => nav(safeReturnTo(sp.get('returnTo')), { replace: true }),
       onError: (err) => {
         const a = err as ApiError;
         if (a.status === 403 && a.detail.includes('approval')) nav(`/pending?email=${encodeURIComponent(email)}`);
@@ -37,4 +37,9 @@ export default function LoginView() {
       </p>
     </AuthLayout>
   );
+}
+
+function safeReturnTo(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('://')) return '/';
+  return value;
 }
