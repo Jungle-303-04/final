@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.rca.models import Evidence, RcaBacklogItem, RcaReport, RecoveryPlanRecord
@@ -106,10 +106,12 @@ class RcaRepository(DatabaseConnection):
         until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
+        cursor: tuple[datetime, int] | None = None,
     ) -> list[JsonObject]:
         """워크스페이스 범위 evidence 목록(최신순) — /evidence 범용 조회 API 용.
 
-        since 는 포함(>=), until 은 미포함(<) 경계. limit/offset 은 호출자(라우터)가 검증함.
+        since 는 포함(>=), until 은 미포함(<) 경계.
+        cursor 가 있으면 (created_at, id) keyset 을 우선하고, 없으면 offset 하위호환을 쓴다.
         """
         table = Evidence.__table__
         statement: Select[Any] = (
@@ -117,13 +119,13 @@ class RcaRepository(DatabaseConnection):
             .where(table.c.workspace_id == workspace_id)
             .order_by(table.c.created_at.desc(), table.c.id.desc())
             .limit(limit)
-            .offset(offset)
         )
         if correlation_id is not None:
             statement = statement.where(table.c.correlation_id == correlation_id)
         if kind is not None:
             statement = statement.where(table.c.kind == kind)
         statement = _apply_created_at_window(statement, table, since, until)
+        statement = _apply_keyset_or_offset(statement, table, cursor, offset)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [_serialize_created_at(row) for row in rows]
@@ -137,10 +139,12 @@ class RcaRepository(DatabaseConnection):
         until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
+        cursor: tuple[datetime, int] | None = None,
     ) -> list[JsonObject]:
         """워크스페이스 범위 RCA report 목록(최신순) — /rca-reports 조회 API 용.
 
         since 는 포함(>=), until 은 미포함(<) 경계. payload 요약은 라우터가 수행함.
+        cursor 가 있으면 (created_at, id) keyset 을 우선하고, 없으면 offset 하위호환을 쓴다.
         """
         table = RcaReport.__table__
         statement: Select[Any] = (
@@ -148,11 +152,11 @@ class RcaRepository(DatabaseConnection):
             .where(table.c.workspace_id == workspace_id)
             .order_by(table.c.created_at.desc(), table.c.id.desc())
             .limit(limit)
-            .offset(offset)
         )
         if correlation_id is not None:
             statement = statement.where(table.c.correlation_id == correlation_id)
         statement = _apply_created_at_window(statement, table, since, until)
+        statement = _apply_keyset_or_offset(statement, table, cursor, offset)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [_serialize_created_at(row) for row in rows]
@@ -350,6 +354,24 @@ def _apply_created_at_window(
     if until is not None:
         statement = statement.where(table.c.created_at < until)
     return statement
+
+
+def _apply_keyset_or_offset(
+    statement: Select[Any],
+    table: Any,
+    cursor: tuple[datetime, int] | None,
+    offset: int,
+) -> Select[Any]:
+    if cursor is None:
+        return statement.offset(offset)
+    created_at, row_id = cursor
+    # 최신순 정렬에서 cursor 다음 페이지는 더 오래된 시각 또는 같은 시각의 더 작은 id 다.
+    return statement.where(
+        or_(
+            table.c.created_at < created_at,
+            and_(table.c.created_at == created_at, table.c.id < row_id),
+        )
+    )
 
 
 def _serialize_created_at(row: Any) -> JsonObject:

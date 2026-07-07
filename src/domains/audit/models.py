@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.storage.base import (
@@ -17,6 +17,7 @@ from packages.storage.base import (
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    __table_args__ = (Index("ix_audit_log_created_at", "created_at"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = text_column()

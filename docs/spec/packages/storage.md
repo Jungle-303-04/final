@@ -5,11 +5,11 @@ status: synced
 
 # packages/storage — PostgreSQL 엔진·코어 테이블·코어 리포지토리·Redis 세션
 
-> 소스: `src/packages/storage/` · 테스트: `tests/test_database_unit.py`, `tests/test_outbox.py`, `tests/test_dlq_reliability.py`, `tests/test_session_store.py`, `tests/test_schemas.py`
+> 소스: `src/packages/storage/` · 테스트: `tests/test_database_unit.py`, `tests/test_outbox.py`, `tests/test_storage_retention.py`, `tests/test_dlq_reliability.py`, `tests/test_session_store.py`, `tests/test_schemas.py`
 
 ## 책임 (Responsibility)
 
-- SQLAlchemy 선언 베이스·공용 컬럼 헬퍼(`base.py`), 엔진/트랜잭션/호환 마이그레이션(`engine.py :: DatabaseConnection`), 코어 테이블(`schema.py`: events/event_processing/event_dead_letters/outbox), 코어 리포지토리(`repositories/`: event/dead_letter/outbox), Redis 세션 스토어(`sessions.py`)를 제공한다.
+- SQLAlchemy 선언 베이스·공용 컬럼 헬퍼(`base.py`), 엔진/트랜잭션/호환 마이그레이션(`engine.py :: DatabaseConnection`), 코어 테이블(`schema.py`: events/event_processing/event_dead_letters/outbox), 코어 리포지토리(`repositories/`: event/dead_letter/outbox), retention sweep helper(`retention.py`), Redis 세션 스토어(`sessions.py`)를 제공한다.
 - **도메인 테이블/리포지토리는 소유하지 않는다** — `domains/registry.py` 가 자동 발견해 `Database` 클래스로 합성한다(아래 "도메인 자동발견" 절).
 - 스키마 관리: 정식 마이그레이션 도구 도입 전까지 `create_all` + 호환 DDL(`ensure_compatible_schema`)로 로컬/배포 DB 를 호환 상태로 유지한다.
 
@@ -132,6 +132,8 @@ def finish_event_processing(self, evt: EventEnvelope, consumer: str) -> None   #
 def fail_event_processing(self, evt: EventEnvelope, consumer: str, error: str, status: str) -> None
     # status(RETRYING/DEAD_LETTERED), last_error=compact_error(error)
 def event_processing_status_counts(self) -> dict[str, int]                     # status 별 count(메트릭용)
+def delete_events_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int
+    # created_at < cutoff 인 events row 를 CTE로 limit 개 삭제하고 삭제 수 반환(retention)
 ```
 
 ### `repositories/dead_letter.py` — DLQ
@@ -174,6 +176,37 @@ async def mark_events_dead_lettered(self, events: list[EventEnvelope], consumer:
     # 비재시도 outbox 이벤트를 event_dead_letters(status=open, attempts=1)에 남기고
     # 해당 outbox 행을 sent_at=now(), lease 해제로 표시해 relay 대상에서 제거
 def outbox_pending_count(self) -> int    # sent_at IS NULL count(메트릭용)
+def delete_sent_outbox_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int
+    # sent_at IS NOT NULL AND sent_at < cutoff 인 발행 완료 row 를 CTE로 limit 개 삭제(retention)
+```
+
+### `retention.py` — 코어 대형 payload 테이블 보존 정책
+
+상수(앵커 `src/packages/storage/retention.py :: <이름>`):
+
+| 상수 | 기본값 | 의미 |
+|---|---|---|
+| `OUTBOX_SENT_RETENTION_HOURS_ENV` | `OUTBOX_SENT_RETENTION_HOURS` | sent outbox 보존 시간 env |
+| `EVENT_RETENTION_DAYS_ENV` | `EVENT_RETENTION_DAYS` | events 보존 일수 env |
+| `AUDIT_LOG_RETENTION_DAYS_ENV` | `AUDIT_LOG_RETENTION_DAYS` | audit_log 보존 일수 env |
+| `DB_RETENTION_DELETE_LIMIT_ENV` | `DB_RETENTION_DELETE_LIMIT` | 테이블별 delete batch 상한 env |
+| `DEFAULT_OUTBOX_SENT_RETENTION_HOURS` | `"24"` | sent outbox 기본 보존 시간 |
+| `DEFAULT_EVENT_RETENTION_DAYS` | `"7"` | events 기본 보존 일수 |
+| `DEFAULT_AUDIT_LOG_RETENTION_DAYS` | `"7"` | audit_log 기본 보존 일수 |
+| `DEFAULT_DB_RETENTION_DELETE_LIMIT` | `"1000"` | 기본 delete batch 상한 |
+
+```python
+@dataclass(frozen=True)
+class RetentionSweepResult:
+    outbox_sent: int = 0
+    events: int = 0
+    audit_log: int = 0
+    @property
+    def total(self) -> int
+
+async def sweep_storage_retention(db: Any, *, now: datetime | None = None) -> RetentionSweepResult
+    # env 기준 cutoff 산출 후 delete_sent_outbox_older_than,
+    # delete_events_older_than, delete_audit_logs_older_than 을 각 1 batch 호출
 ```
 
 ### `sessions.py` — Redis 세션·레이트리밋·이메일 인증 토큰
@@ -349,6 +382,10 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 | `DB_POOL_SIZE` | int | `2` | 풀 상주 커넥션 수 |
 | `DB_MAX_OVERFLOW` | int | `2` | 순간 초과 허용 커넥션 수 |
 | `DB_POOL_TIMEOUT_SECONDS` | int | `10` | 풀 커넥션 대기 한도 |
+| `OUTBOX_SENT_RETENTION_HOURS` | int | `24` | sent outbox row 보존 시간 |
+| `EVENT_RETENTION_DAYS` | int | `7` | events row 보존 일수 |
+| `AUDIT_LOG_RETENTION_DAYS` | int | `7` | audit_log row 보존 일수 |
+| `DB_RETENTION_DELETE_LIMIT` | int | `1000` | retention sweep의 테이블별 delete batch 상한 |
 
 (풀은 항상 `pool_pre_ping=True`, `pool_recycle=300`. 게이트웨이/워커의 트래픽 특성 차이는 서비스별 deploy env 로 오버라이드.)
 

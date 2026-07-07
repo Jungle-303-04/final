@@ -124,3 +124,17 @@ class OutboxRepository(DatabaseConnection):
         statement = select(func.count()).where(table.c.sent_at.is_(None))
         with self.connection() as conn:
             return int(conn.execute(statement).scalar() or 0)
+
+    def delete_sent_outbox_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:
+        """발행 완료 outbox 를 보존 기간 이후 배치 삭제한다."""
+        table = OutboxModel.__table__
+        expired = (
+            select(table.c.id)
+            .where(table.c.sent_at.is_not(None), table.c.sent_at < cutoff)
+            .order_by(table.c.id)
+            .limit(limit)
+            .cte("expired_outbox")
+        )
+        statement = table.delete().where(table.c.id.in_(select(expired.c.id))).returning(table.c.id)
+        with self.connection() as conn:
+            return len(conn.execute(statement).all())

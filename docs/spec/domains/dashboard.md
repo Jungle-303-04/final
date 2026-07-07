@@ -5,7 +5,7 @@ status: synced
 
 # dashboard — 프론트가 읽는 RCA timeline projection/read model
 
-> 소스: `src/domains/dashboard/` · 테스트: `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py`
+> 소스: `src/domains/dashboard/` · 테스트: `tests/test_dashboard_projection.py`, `tests/test_dashboard_router.py`, `tests/test_database_unit.py`, `tests/test_rca_timeline_janitor.py`
 
 ## 책임 (Responsibility)
 
@@ -79,8 +79,9 @@ status: synced
 | `get_rca_timeline_item` | `(self, workspace_id: str, incident_id: str, allowed_cluster_ids: set[str] \| None) -> JsonObject \| None` | `WHERE workspace_id=? AND incident_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT 1` |
 | `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 logical incident 수. `WHERE workspace_id=? AND incident_id IS NOT NULL AND cluster_id IS NOT NULL AND status NOT IN CLOSED_INCIDENT_STATUSES [AND cluster_id IN allowed]` 후 `incident_logical_key` projection 컬럼을 SQL `COUNT(DISTINCT ...) GROUP BY cluster_id`로 집계한다. 큰 `payload` JSON을 다시 파싱하지 않고, Python으로 row 전체를 풀스캔하지 않는다. 빈 허용 집합이면 `{}` |
 | `list_open_rca_incidents` | `(self, workspace_id: str, cluster_id: str, *, limit: int = 20) -> list[JsonObject]` | 드릴다운용 — 같은 open 판정으로 `updated_at DESC LIMIT`(1..100 clamp) 후 `open_incident_summary` 적용 |
+| `expire_stale_open_rca_incidents` | `(self, max_age_days: int = 3, limit: int = 500) -> list[JsonObject]` | 오래 열린 incident row를 CTE `stale_open_incidents`로 `FOR UPDATE SKIP LOCKED` 선점 후 `status="incident_expired"`로 원자 UPDATE. `error_reason`이 비어 있으면 retention window 초과 메시지를 채운다. [rca-timeline-janitor](../services/projection-rca-timeline-janitor.md)가 호출한다 |
 
-열린 인시던트 판정 상수 `CLOSED_INCIDENT_STATUSES`(앵커: `src/domains/dashboard/repository.py :: CLOSED_INCIDENT_STATUSES`) = `("command_completed", "command_rejected", "pr_created", "pr_failed")` — 이 종결 status 에 도달하지 않았고 `incident_id`가 있는 row 가 open. `timeline_update_from_event`는 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`, `incident_logical_key`를 함께 투영해 fleet/드릴다운 조회가 큰 payload 를 반복 파싱하지 않게 한다. 모듈 함수 `open_incident_summary`(앵커: `src/domains/dashboard/repository.py :: open_incident_summary`)는 timeline row 를 `{incident_id, correlation_id, symptom(우선순위: `incident_symptom` → payload fallback), root_cause, status, created_at}` 화이트리스트 요약으로 변환한다(payload 원문 비노출).
+열린 인시던트 판정 상수 `CLOSED_INCIDENT_STATUSES`(앵커: `src/domains/dashboard/repository.py :: CLOSED_INCIDENT_STATUSES`) = `("command_completed", "command_rejected", "pr_created", "pr_failed", "incident_expired")` — 이 종결 status 에 도달하지 않았고 `incident_id`가 있는 row 가 open. `timeline_update_from_event`는 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`, `incident_logical_key`를 함께 투영해 fleet/드릴다운 조회가 큰 payload 를 반복 파싱하지 않게 한다. 모듈 함수 `open_incident_summary`(앵커: `src/domains/dashboard/repository.py :: open_incident_summary`)는 timeline row 를 `{incident_id, correlation_id, symptom(우선순위: `incident_symptom` → payload fallback), root_cause, status, created_at}` 화이트리스트 요약으로 변환한다(payload 원문 비노출).
 
 #### `timeline_update_from_event(evt)` 투영 규칙
 

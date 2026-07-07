@@ -279,8 +279,8 @@ timeline에서 받은 `incident_id`로 이어서 호출한다.
 resolved 알림만 들어오면 이벤트를 새로 만들지 않고 `accepted: true`와 빈 `event_id`로 끝날 수 있다.
 
 `05-evidence-query`는 세션 워크스페이스에 저장된 evidence row를 최신순으로 조회하는 범용 API다.
-`correlation_id`, `kind`, `since`/`until`(ISO-8601), `limit`(기본 50, 최대 200), `offset`으로 거른다.
-응답의 `has_more`가 true면 같은 조건에 `offset`을 `limit`만큼 늘려 다음 페이지를 받는다.
+`correlation_id`, `kind`, `since`/`until`(ISO-8601), `limit`(기본 50, 최대 200), `offset`, `cursor`로 거른다.
+응답의 `has_more`가 true이고 `next_cursor`가 있으면 같은 조건에 `cursor=next_cursor`를 넣어 다음 페이지를 받는다. `offset`은 기존 호출 호환용으로 남아 있다.
 
 `06-rca-reports`는 저장된 RCA report 목록을 조회하는 API다. filter와 페이지네이션은 `05`와 같다(`kind` 제외).
 payload 원문 대신 `root_cause`, `action`, incident 요약, `confidence` 같은 화이트리스트 필드만 내려간다.

@@ -8,6 +8,9 @@ RCA report 는 payload 원문 대신 화이트리스트 요약만 내려 secret 
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
+from binascii import Error as BinasciiError
 from datetime import datetime
 from typing import Any
 
@@ -29,6 +32,8 @@ DEFAULT_QUERY_LIMIT = 50
 MAX_QUERY_LIMIT = 200
 HTTP_UNPROCESSABLE = 422
 INVALID_TIMESTAMP_DETAIL = "must be an ISO-8601 timestamp"
+INVALID_CURSOR_DETAIL = "cursor is invalid"
+CURSOR_VERSION = 1
 
 router = APIRouter()
 
@@ -41,9 +46,11 @@ async def list_evidence(
     until: str | None = None,
     limit: int = Query(default=DEFAULT_QUERY_LIMIT, ge=1, le=MAX_QUERY_LIMIT),
     offset: int = Query(default=0, ge=0),
+    cursor: str | None = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> EvidenceQueryResponse:
+    page_cursor = parse_page_cursor(cursor)
     rows = await asyncio.to_thread(
         db.list_evidence_records,
         _workspace_id(current),
@@ -51,15 +58,18 @@ async def list_evidence(
         kind=kind,
         since=parse_query_timestamp(since, "since"),
         until=parse_query_timestamp(until, "until"),
-        # has_more 판정용으로 1건 더 조회하고 응답은 limit 개로 자름(offset 페이지네이션).
+        # has_more 판정용으로 1건 더 조회하고 응답은 limit 개로 자름.
         limit=limit + 1,
         offset=offset,
+        cursor=page_cursor,
     )
+    items = rows[:limit]
     return EvidenceQueryResponse(
-        items=[EvidenceRecordItem(**evidence_record(row)) for row in rows[:limit]],
+        items=[EvidenceRecordItem(**evidence_record(row)) for row in items],
         limit=limit,
         offset=offset,
         has_more=len(rows) > limit,
+        next_cursor=next_page_cursor(items, has_more=len(rows) > limit),
     )
 
 
@@ -70,9 +80,11 @@ async def list_rca_reports(
     until: str | None = None,
     limit: int = Query(default=DEFAULT_QUERY_LIMIT, ge=1, le=MAX_QUERY_LIMIT),
     offset: int = Query(default=0, ge=0),
+    cursor: str | None = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> RcaReportListResponse:
+    page_cursor = parse_page_cursor(cursor)
     rows = await asyncio.to_thread(
         db.list_rca_report_records,
         _workspace_id(current),
@@ -81,12 +93,15 @@ async def list_rca_reports(
         until=parse_query_timestamp(until, "until"),
         limit=limit + 1,
         offset=offset,
+        cursor=page_cursor,
     )
+    items = rows[:limit]
     return RcaReportListResponse(
-        items=[RcaReportSummaryItem(**rca_report_summary(row)) for row in rows[:limit]],
+        items=[RcaReportSummaryItem(**rca_report_summary(row)) for row in items],
         limit=limit,
         offset=offset,
         has_more=len(rows) > limit,
+        next_cursor=next_page_cursor(items, has_more=len(rows) > limit),
     )
 
 
@@ -101,6 +116,53 @@ def parse_query_timestamp(value: str | None, name: str) -> datetime | None:
             status_code=HTTP_UNPROCESSABLE,
             detail=f"{name} {INVALID_TIMESTAMP_DETAIL}",
         ) from exc
+
+
+def parse_page_cursor(value: str | None) -> tuple[datetime, int] | None:
+    if value is None:
+        return None
+    try:
+        padding = "=" * (-len(value) % 4)
+        decoded = base64.urlsafe_b64decode(f"{value}{padding}").decode("utf-8")
+        payload = json.loads(decoded)
+        if not isinstance(payload, dict) or payload.get("v") != CURSOR_VERSION:
+            raise ValueError(INVALID_CURSOR_DETAIL)
+        try:
+            created_at = parse_query_timestamp(str(payload["created_at"]), "cursor.created_at")
+        except HTTPException as exc:
+            raise ValueError(INVALID_CURSOR_DETAIL) from exc
+        row_id = int(payload["id"])
+        if created_at is None or row_id < 1:
+            raise ValueError(INVALID_CURSOR_DETAIL)
+    except (
+        BinasciiError,
+        KeyError,
+        TypeError,
+        ValueError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise HTTPException(status_code=HTTP_UNPROCESSABLE, detail=INVALID_CURSOR_DETAIL) from exc
+    return created_at, row_id
+
+
+def next_page_cursor(rows: list[JsonObject], *, has_more: bool) -> str | None:
+    if not has_more or not rows:
+        return None
+    tail = rows[-1]
+    created_at = tail.get("created_at")
+    row_id = tail.get("id")
+    if created_at in (None, "") or row_id is None:
+        return None
+    payload = {
+        "v": CURSOR_VERSION,
+        "created_at": created_at.isoformat()
+        if hasattr(created_at, "isoformat")
+        else str(created_at),
+        "id": int(row_id),
+    }
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def evidence_record(row: JsonObject) -> JsonObject:

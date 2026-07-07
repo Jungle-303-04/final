@@ -5,7 +5,7 @@ status: synced
 
 # rca — 증거 수신·근본원인분석(RCA)·복구 계획 도메인
 
-> 소스: `src/domains/rca/` · 테스트: `tests/test_rca_evidence.py`, `tests/test_rca_feedback_flow.py`, `tests/test_agent_evidence_ingest.py`, `tests/test_alertmanager_webhook.py`, `tests/test_operational_event_followups.py`, `tests/test_schemas.py`
+> 소스: `src/domains/rca/` · 테스트: `tests/test_rca_evidence.py`, `tests/test_evidence_query_api.py`, `tests/test_rca_feedback_flow.py`, `tests/test_agent_evidence_ingest.py`, `tests/test_alertmanager_webhook.py`, `tests/test_operational_event_followups.py`, `tests/test_schemas.py`
 
 ## 책임 (Responsibility)
 
@@ -61,8 +61,8 @@ status: synced
 | `save_evidence(self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject) -> None` | `evidence` 테이블에 단순 INSERT(pg_insert) | `src/domains/rca/repository.py :: RcaRepository.save_evidence` |
 | `upsert_rca_backlog_item(self, body: JsonObject) -> None` | `rca_backlog_items`에 `backlog_id` 충돌 시 UPDATE. `missing_evidence`는 `{"items": body["missing_evidence"]}` 로 감싸 저장. 신규 INSERT 시 `occurrence_count=1`, 충돌 시 `occurrence_count + 1` 증가. `incident_id/reason/evidence_ref/missing_evidence/status/payload/updated_at` 갱신(단, `symptom/title/workspace_id/created_at`은 최초값 유지) | `src/domains/rca/repository.py :: RcaRepository.upsert_rca_backlog_item` |
 | `list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[JsonObject]` | `rca_reports`를 `workspace_id`로 필터, `created_at DESC, id DESC` 정렬, `limit` 건 조회(최신순). AI 도구 등 읽기 전용 소비자용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_reports` |
-| `list_evidence_records(self, workspace_id: str, *, correlation_id=None, kind=None, since=None, until=None, limit=50, offset=0) -> list[JsonObject]` | `evidence`를 `workspace_id` 필수 + 선택 필터(`correlation_id/kind`, `created_at >= since`, `created_at < until`)로 조회. `created_at DESC, id DESC` 정렬 + `limit/offset` 페이지네이션. `created_at`은 ISO 문자열로 직렬화 — `/evidence` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_evidence_records` |
-| `list_rca_report_records(self, workspace_id: str, *, correlation_id=None, since=None, until=None, limit=50, offset=0) -> list[JsonObject]` | `rca_reports`를 같은 방식(워크스페이스 필수, 선택 필터, 최신순, limit/offset)으로 조회. payload 요약은 라우터(`rca_report_summary`)가 수행 — `/rca-reports` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_report_records` |
+| `list_evidence_records(self, workspace_id: str, *, correlation_id=None, kind=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `evidence`를 `workspace_id` 필수 + 선택 필터(`correlation_id/kind`, `created_at >= since`, `created_at < until`)로 조회. `created_at DESC, id DESC` 정렬. `cursor=(created_at, id)`가 있으면 keyset 조건(`created_at < cursor.created_at OR created_at = cursor.created_at AND id < cursor.id`)을 우선하고, 없으면 `offset` 하위호환을 쓴다. `created_at`은 ISO 문자열로 직렬화 — `/evidence` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_evidence_records` |
+| `list_rca_report_records(self, workspace_id: str, *, correlation_id=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `rca_reports`를 같은 방식(워크스페이스 필수, 선택 필터, 최신순, cursor 우선/offset 하위호환)으로 조회. payload 요약은 라우터(`rca_report_summary`)가 수행 — `/rca-reports` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_report_records` |
 | `upsert_recovery_selection_request(self, correlation_id: str, workspace_id: str, plan: JsonObject) -> None` | `recovery_plans`에 `(workspace_id, plan_id)` 유니크 기준 upsert. status는 `selection_requested`로 넣되, 기존 row가 이미 `selected`면 status를 **유지**(CASE 식) — 나머지 필드(`correlation_id/incident_id/evidence_ref/payload/updated_at`)는 갱신 | `src/domains/rca/repository.py :: RcaRepository.upsert_recovery_selection_request` |
 | `get_recovery_plan(self, plan_id: str, workspace_id: str) -> JsonObject | None` | `recovery_plans`에서 `(plan_id, workspace_id)` 일치 1건을 dict로 반환(`plan_id, workspace_id, correlation_id, incident_id, evidence_ref, status, selected_action_id, selected_by, payload` 컬럼), 없으면 `None` | `src/domains/rca/repository.py :: RcaRepository.get_recovery_plan` |
 | `select_recovery_plan_action_if_open(self, plan_id: str, workspace_id: str, action_id: str, selected_by: str) -> JsonObject | None` | status가 `OPEN_RECOVERY_PLAN_STATUSES`(= `selection_requested`)인 row만 조건부 UPDATE → `status="selected"`, `selected_action_id`, `selected_by`, `updated_at=now()`. `RETURNING payload, correlation_id`. 열려 있지 않으면(이미 selected 등) `None` — 동시 선택 경합 방지 | `src/domains/rca/repository.py :: RcaRepository.select_recovery_plan_action_if_open` |
@@ -119,9 +119,13 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `MAX_QUERY_LIMIT` | `200` | `src/domains/rca/query_router.py :: MAX_QUERY_LIMIT` |
 | `HTTP_UNPROCESSABLE` | `422` | `src/domains/rca/query_router.py :: HTTP_UNPROCESSABLE` |
 | `INVALID_TIMESTAMP_DETAIL` | `"must be an ISO-8601 timestamp"` | `src/domains/rca/query_router.py :: INVALID_TIMESTAMP_DETAIL` |
-| `list_evidence` | `async (correlation_id, kind, since, until, limit=Query(50, ge=1, le=200), offset=Query(0, ge=0), current=Depends(require_session), db=Depends(get_db)) -> EvidenceQueryResponse` — `has_more` 판정을 위해 `limit+1` 건 조회 후 `limit` 개로 자름 | `src/domains/rca/query_router.py :: list_evidence` |
-| `list_rca_reports` | `async (correlation_id, since, until, limit, offset, current, db) -> RcaReportListResponse` — 같은 페이지네이션, 항목은 `rca_report_summary` 요약 | `src/domains/rca/query_router.py :: list_rca_reports` |
+| `INVALID_CURSOR_DETAIL` | `"cursor is invalid"` | `src/domains/rca/query_router.py :: INVALID_CURSOR_DETAIL` |
+| `CURSOR_VERSION` | `1` | `src/domains/rca/query_router.py :: CURSOR_VERSION` |
+| `list_evidence` | `async (correlation_id, kind, since, until, limit=Query(50, ge=1, le=200), offset=Query(0, ge=0), cursor=None, current=Depends(require_session), db=Depends(get_db)) -> EvidenceQueryResponse` — `has_more` 판정을 위해 `limit+1` 건 조회 후 `limit` 개로 자름. `cursor`가 있으면 offset보다 우선 | `src/domains/rca/query_router.py :: list_evidence` |
+| `list_rca_reports` | `async (correlation_id, since, until, limit, offset, cursor, current, db) -> RcaReportListResponse` — 같은 페이지네이션, 항목은 `rca_report_summary` 요약. `next_cursor`가 있으면 다음 요청의 `cursor`로 넘긴다 | `src/domains/rca/query_router.py :: list_rca_reports` |
 | `parse_query_timestamp` | `(value: str \| None, name: str) -> datetime \| None` — ISO-8601(`Z` suffix 허용) 파싱, 실패 시 `HTTPException(422)` | `src/domains/rca/query_router.py :: parse_query_timestamp` |
+| `parse_page_cursor` | `(value: str \| None) -> tuple[datetime, int] \| None` — base64url JSON(`{"v":1,"created_at":...,"id":...}`)을 검증해 keyset cursor로 변환. 형식 오류는 422 `"cursor is invalid"` | `src/domains/rca/query_router.py :: parse_page_cursor` |
+| `next_page_cursor` | `(rows: list[JsonObject], *, has_more: bool) -> str \| None` — 다음 페이지가 있을 때 현재 응답 마지막 row의 `created_at`/`id`로 padding 없는 base64url cursor를 만든다 | `src/domains/rca/query_router.py :: next_page_cursor` |
 | `evidence_record` | `(row: JsonObject) -> JsonObject` — `EvidenceRecordItem` 필드 매핑 | `src/domains/rca/query_router.py :: evidence_record` |
 | `rca_report_summary` | `(row: JsonObject) -> JsonObject` — payload 원문 대신 `incident`/`rca_detail` 화이트리스트 필드만 추출(secret 원문 미노출). 분석 심화 필드 포함: 대상 리소스(`resource_kind/resource_name/namespace`), `secondary_symptoms`, `selected_candidate_id`, `candidates`(후보×평가 병합, 점수 내림차순), `supporting_evidence_refs`(source/name/check_id/summary/query), `missing_evidence_checks`. 후보 `signals` DSL 원문은 미노출 | `src/domains/rca/query_router.py :: rca_report_summary` |
 | `_str_list` / `_candidate_scores` / `_evidence_refs` / `_missing_checks` | payload 하위 구조를 방어적으로 정규화하는 내부 헬퍼 — dict/list 형태가 아니면 빈 리스트 | `src/domains/rca/query_router.py :: _candidate_scores` |
@@ -134,8 +138,8 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `POST /webhooks/alertmanager?cluster_id=` (`gateway_routes.ALERTMANAGER_WEBHOOK_PATH`) | query: `cluster_id: str`(필수), `workspace_id: str = "default"` + body: `AlertmanagerWebhookRequest`(Alertmanager v4 webhook, `groupKey`/`receiver`/`alerts[]`) | `AcceptedResponse` | `require_alertmanager_token` — `Authorization: Bearer` 토큰(핸들러 내부 호출). 미설정 503, 불일치 401 | `src/domains/rca/router.py :: alertmanager_webhook` |
 | `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select` (`gateway_routes.RCA_RECOVERY_ACTION_SELECT_PATH`) | path: `plan_id: str`, `action_id: str` + body: `RecoveryActionSelectRequest` (`reason: str | None`, max 500자) | `AcceptedResponse` | `Depends(require_session)` (유효 세션 401 가드) + 핸들러 내부에서 `require_cluster_access(..., Permission.DEPLOY_RUN.value)` (실패 시 `RECOVERY_SELECTION_ACCESS_DENIED`). `get_db`, `get_events` | `src/domains/rca/router.py :: select_recovery_action` |
 
-| `GET /evidence` (`gateway_routes.EVIDENCE_QUERY_PATH`) | query: `correlation_id?`, `kind?`, `since?`/`until?`(ISO-8601), `limit`(기본 50, 최대 200), `offset`(≥0) | `EvidenceQueryResponse` | `Depends(require_session)` — 세션 워크스페이스로만 범위 지정. `get_db` | `src/domains/rca/query_router.py :: list_evidence` |
-| `GET /rca-reports` (`gateway_routes.RCA_REPORTS_PATH`) | query: `correlation_id?`, `since?`/`until?`, `limit`, `offset` | `RcaReportListResponse` | `Depends(require_session)` — 세션 워크스페이스로만 범위 지정. `get_db` | `src/domains/rca/query_router.py :: list_rca_reports` |
+| `GET /evidence` (`gateway_routes.EVIDENCE_QUERY_PATH`) | query: `correlation_id?`, `kind?`, `since?`/`until?`(ISO-8601), `limit`(기본 50, 최대 200), `offset`(≥0, 하위호환), `cursor?`(base64url keyset) | `EvidenceQueryResponse(items, limit, offset, has_more, next_cursor)` | `Depends(require_session)` — 세션 워크스페이스로만 범위 지정. `get_db` | `src/domains/rca/query_router.py :: list_evidence` |
+| `GET /rca-reports` (`gateway_routes.RCA_REPORTS_PATH`) | query: `correlation_id?`, `since?`/`until?`, `limit`, `offset`(하위호환), `cursor?` | `RcaReportListResponse(items, limit, offset, has_more, next_cursor)` | `Depends(require_session)` — 세션 워크스페이스로만 범위 지정. `get_db` | `src/domains/rca/query_router.py :: list_rca_reports` |
 
 `AcceptedResponse` 스키마: `accepted: bool`, `event_id: str`, `correlation_id: str`.
 
@@ -146,6 +150,8 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 ### Evidence — `src/domains/rca/models.py :: Evidence`
 
 `__tablename__ = "evidence"` — 수신된 원본 증거 기록.
+
+인덱스: `ix_evidence_workspace_correlation_created (workspace_id, correlation_id, created_at, id)`, `ix_evidence_workspace_created_id (workspace_id, created_at, id)`.
 
 | 필드명 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -159,6 +165,8 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 ### RcaReport — `src/domains/rca/models.py :: RcaReport`
 
 `__tablename__ = "rca_reports"` — RCA 완료 리포트.
+
+인덱스: `ix_rca_reports_workspace_correlation_created (workspace_id, correlation_id, created_at, id)`, `ix_rca_reports_workspace_created_id (workspace_id, created_at, id)`.
 
 | 필드명 | 타입 | 제약 | 설명 |
 |---|---|---|---|

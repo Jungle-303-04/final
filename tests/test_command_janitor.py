@@ -40,6 +40,11 @@ class FakeEvents:
         self.emitted.append((subject, source, payload, correlation_id))
 
 
+class FailingRetentionDb:
+    async def delete_sent_outbox_older_than(self, *args: Any, **kwargs: Any) -> int:
+        raise RuntimeError("db busy")
+
+
 def test_command_janitor_emits_completion_for_expired_commands() -> None:
     janitor = load_service("command/command-janitor")
     db = FakeDb()
@@ -64,3 +69,9 @@ def test_command_janitor_emits_completion_for_expired_commands() -> None:
             "corr-original",
         )
     ]
+
+
+def test_command_janitor_retention_failure_does_not_stop_loop() -> None:
+    janitor = load_service("command/command-janitor")
+
+    assert asyncio.run(janitor.sweep_database_retention(FailingRetentionDb())) == 0

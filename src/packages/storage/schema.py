@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, Integer, PrimaryKeyConstraint, Text
+from sqlalchemy import BigInteger, Index, Integer, PrimaryKeyConstraint, Text, text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,7 @@ from packages.storage.base import (
 
 class EventModel(Base):
     __tablename__ = "events"
+    __table_args__ = (Index("ix_events_created_at", "created_at"),)
 
     event_id: Mapped[str] = mapped_column(Text, primary_key=True)
     subject: Mapped[str] = text_column()
@@ -62,7 +63,10 @@ class EventDeadLetter(Base):
 
 class OutboxModel(Base):
     __tablename__ = "outbox"
-    __table_args__ = (Index("ix_outbox_claim", "source", "sent_at", "leased_until", "id"),)
+    __table_args__ = (
+        Index("ix_outbox_claim", "source", "sent_at", "leased_until", "id"),
+        Index("ix_outbox_sent_at", "sent_at", postgresql_where=text("sent_at IS NOT NULL")),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(Text, unique=True, nullable=False)

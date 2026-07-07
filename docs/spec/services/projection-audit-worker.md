@@ -3,7 +3,7 @@ source_commit: 1616d295
 status: synced
 ---
 
-# audit-worker — 모든 이벤트를 불변 감사 로그로 적재하는 프로젝션 워커
+# audit-worker — 모든 이벤트를 감사 로그로 적재하는 프로젝션 워커
 
 > 소스: `src/services/projection/audit-worker/app.py` · 테스트: `tests/test_projection.py`, `tests/test_service_entrypoints.py`
 
@@ -42,6 +42,8 @@ status: synced
 | payload | JSONB | not null | 봉투 payload 원본 |
 | created_at | timestamp | server default now | 적재 시각 |
 
+인덱스: `ix_audit_log_created_at (created_at)`. 이 워커는 INSERT만 수행하며, 오래된 row 삭제는 [command-janitor](command-command-janitor.md)의 retention sweep이 `domains.audit` repository를 통해 수행한다.
+
 ## 이벤트 (Events)
 
 - 구독(Consumes): **전체** — subject `>`(`ALL_EVENTS_SUBJECT`), body 디코드 없이 `EventEnvelope` 원형 수신.
@@ -56,7 +58,7 @@ status: synced
 
 ## 불변식·오류 (Invariants & Errors)
 
-- 감사 로그는 append-only(UPDATE/DELETE 경로 없음).
+- audit-worker 처리 경로는 append-only(UPDATE/DELETE 없음). 운영 retention delete는 이 워커가 아니라 [command-janitor](command-command-janitor.md)가 수행한다.
 - 단건·벌크 insert 는 같은 매핑(`audit_log_row`)을 공유(단일 출처).
 - 핸들러 실패 시 WorkerRuntime 공통 정책: 최대 `WORKER_MAX_ATTEMPTS`(기본 3) 재시도 후 DLQ(`dead_letter.created` 발행) — [runtime](../packages/runtime.md) 참조.
 - 자기 자신이 소비하는 `dead_letter.created` 도 감사 로그에 남는다(전체 구독이므로).

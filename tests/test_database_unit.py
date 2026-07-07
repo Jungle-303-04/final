@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from domains import registry
+from domains.audit.repository import AuditLogRepository
 from domains.gitops.repository import (
     RepoChangeRepository,
     derive_application_id,
@@ -23,6 +24,7 @@ from domains.gitops.repository import (
     derive_repository_id,
     derive_watch_target_id,
 )
+from domains.rca.repository import RcaRepository
 from domains.target.repository import TargetAgentRepository
 from packages.contracts.event_bus.processing import CLAIM_BLOCKED
 from packages.contracts.gitops import (
@@ -1210,3 +1212,89 @@ def test_mark_dead_letter_replayed_guards_open_status_atomically() -> None:
     params = set(compiled.params.values())
     assert storage_engine.DEAD_LETTER_STATUS_OPEN in params  # WHERE: 열린 행만
     assert storage_engine.DEAD_LETTER_STATUS_REPLAYED in params  # SET: replay 표시
+
+
+class _SqlRecordingResult:
+    def __init__(self, rows: list[Any] | None = None) -> None:
+        self._rows = rows or []
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def mappings(self) -> _SqlRecordingResult:
+        return self
+
+
+def _repository_with_recorded_sql(
+    repository_type: type, recorded: list[Any], rows: list[Any] | None = None
+):
+    class FakeConnection:
+        def execute(self, statement: Any, *args: Any, **kwargs: Any) -> _SqlRecordingResult:
+            recorded.append(statement)
+            return _SqlRecordingResult(rows)
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(repository_type)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+    return repository
+
+
+def test_rca_query_keyset_uses_created_at_and_id_without_offset() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(RcaRepository, recorded)
+
+    repository.list_evidence_records(
+        "workspace-1",
+        limit=11,
+        offset=999,
+        cursor=(datetime(2026, 7, 8, 5, 0, tzinfo=UTC), 42),
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "FROM evidence" in sql
+    assert "evidence.created_at <" in sql
+    assert "evidence.id <" in sql
+    assert "OFFSET" not in sql
+
+
+def test_rca_query_without_cursor_keeps_offset_compatibility() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(RcaRepository, recorded)
+
+    repository.list_rca_report_records("workspace-1", limit=11, offset=30, cursor=None)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "FROM rca_reports" in sql
+    assert "OFFSET" in sql
+
+
+def test_retention_delete_queries_are_batched() -> None:
+    cutoff = datetime(2026, 7, 1, tzinfo=UTC)
+    cases = (
+        (OutboxRepository, "delete_sent_outbox_older_than", "expired_outbox", "DELETE FROM outbox"),
+        (EventRepository, "delete_events_older_than", "expired_events", "DELETE FROM events"),
+        (
+            AuditLogRepository,
+            "delete_audit_logs_older_than",
+            "expired_audit_log",
+            "DELETE FROM audit_log",
+        ),
+    )
+    for repository_type, method_name, cte_name, delete_sql in cases:
+        recorded: list[Any] = []
+        repository = _repository_with_recorded_sql(repository_type, recorded, rows=[(1,), (2,)])
+
+        count = getattr(repository, method_name)(cutoff, limit=500)
+
+        assert count == 2
+        compiled = recorded[0].compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        assert cte_name in sql
+        assert delete_sql in sql
+        assert "LIMIT" in sql
+        assert "RETURNING" in sql
