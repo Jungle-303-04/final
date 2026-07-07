@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 04:01 KST (evidence claim-check 라이브 안정화 완료)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 04:05 KST (콘솔 디자인 시스템 Phase 0/1 배포 확인)
 
 ## 체크포인트 — evidence claim-check 라이브 안정화 완료
 
@@ -34,7 +34,8 @@
 
 - 브랜치/주의:
   - 현재 브랜치: `dev`.
-  - 프론트 작업 시작 전부터 백엔드 파일 다수가 modified 상태였다. 이 변경은 건드리지 말고 프론트 변경만 별도 stage/commit 한다.
+  - 프론트 디자인 시스템 커밋: `df55e429 feat: Tailwind 디자인 시스템 파운데이션` → `origin/dev`.
+  - GitHub Actions는 이번 push도 4~5초 만에 steps 없이 실패했다. 이전과 같은 runner/Actions 계층 문제로 보고 수동 console 배포 경로를 사용했다.
 - 구현:
   - Tailwind CSS v4 + `@tailwindcss/vite` 설치, Vite 플러그인 연결.
   - 새 정본 토큰: `frontend/src/ui/theme.css`. Tailwind CSS-first `@theme inline`으로 `bg/surface/raised`, `border/border-strong`, `primary/secondary/muted`, `accent/success/warning/danger/info`, `control/panel`, `soft/elevated` semantic utility를 제공한다.
@@ -48,10 +49,18 @@
   - `cd frontend && npm run build` passed. 기존 large chunk warning만 있음.
   - Playwright Chromium 설치 후 `/dev/ui` 1440/1024/390 폭 스크린샷 검증: console error 0, document horizontal overflow 0.
   - screenshots: `/tmp/k8s-ui-desktop-1440.png`, `/tmp/k8s-ui-tablet-1024.png`, `/tmp/k8s-ui-mobile-390.png`.
+- 배포/live smoke:
+  - CI/CD 자동 경로 실패: CI run `28890815267`, AWS CD run `28890814781`; jobs는 생성됐지만 steps가 비어 있고 5초 안팎으로 failure.
+  - 수동 console image build/push: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:df55e429-design-system-20260708035456`.
+  - `kubectl -n management set image deploy/console ...` 후 rollout 완료, Ready `1/1`.
+  - public HTML asset: `assets/index-akMwoh9-.js`, `assets/index-CIqYri1L.css`.
+  - public smoke: `/api/healthz` 200, `/api/readyz` 200.
+  - live browser smoke: `/` → `/login?returnTo=%2F`, email input 1개, password input 1개, submit button 1개, document overflow 0. 비로그인 세션 조회 401 콘솔 메시지는 예상 범위.
+  - screenshot: `/tmp/k8s-live-design-system-login.png`.
 - 다음:
-  1. 이 프론트 단위를 커밋/푸시한다.
-  2. Phase 2 첫 화면은 로그인/가입이다. `features/auth/*`의 inline style과 `shared/ui` 의존을 `src/ui` 프리미티브로 이관하고, 화면 이관 완료 후 관련 레거시 스타일 사용을 제거한다.
-  3. 앱 셸 이관 전까지 `plural-ui`/`shared/ui`/`theme-bridge`는 유지한다. 화면 단위로 공존 기간을 줄인다.
+  1. Phase 2 첫 화면은 로그인/가입이다. `features/auth/*`의 inline style과 `shared/ui` 의존을 `src/ui` 프리미티브로 이관하고, 화면 이관 완료 후 관련 레거시 스타일 사용을 제거한다.
+  2. 앱 셸 이관 전까지 `plural-ui`/`shared/ui`/`theme-bridge`는 유지한다. 화면 단위로 공존 기간을 줄인다.
+  3. 자동 Actions 실패는 코드 실패가 아니므로 다음 배포도 run 상세의 steps 유무를 먼저 확인한다. steps 없는 4~6초 실패가 반복되면 수동 console/backend 배포 경로를 사용한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
