@@ -16,6 +16,22 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 20:03 KST 체크포인트
+
+- api-gateway OOM 안정화 진행.
+- 라이브 확인:
+  - `api-gateway` Pod Last State `OOMKilled`, exit code 137, restart count 37.
+  - api-gateway LB `/healthz`, `/api/healthz`는 alive window에서 200.
+  - console LB `/api/healthz`는 gateway 재시작 타이밍에 502.
+- 구현:
+  - 1차로 `deploy/management/services.yaml`의 api-gateway resources를 requests `cpu=50m`, `memory=256Mi`, limits `cpu=1`, `memory=1Gi`로 상향했으나 새 Pod도 시작 직후 OOM/restart가 재현됐다.
+  - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했다.
+  - gateway `OUTBOX_RELAY_BATCH=50`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있다.
+- 다음 실행:
+  - 2Gi resources + `OUTBOX_RELAY_BATCH=50` live patch rollout을 확인한다.
+  - `kubectl rollout status deploy/api-gateway`, console LB `/api/healthz`, public `/api/healthz`를 확인.
+  - 이 변경은 OOM 완화용이고, evidence/result 폭증, outbox relay batch memory, incident/DLQ 증가는 별도 RCA로 이어간다.
+
 ### 2026-07-07 19:55 KST 체크포인트
 
 - Repo atomic connect 구현 중/검증 예정.
