@@ -1556,3 +1556,60 @@
 - 스팟 중단 대응:
   - EKS managed nodegroup이 `cluster-1-spot`/`cluster-2-spot` 노드를 자동 교체한다.
   - 데모 중 중단이 발생하면 일시적인 노드 장애/재스케줄 시나리오로 활용 가능. 스팟 확보가 길어지면 위 즉시 완화 명령으로 desired=2까지 올리거나 온디맨드 롤백을 수행.
+
+## Backend follow-up: event drain / projection / relay hardening (2026-07-08)
+
+> 작업 범위: backend/infra only. `frontend/`는 다른 UI 세션 변경과 충돌 방지를 위해 이 세션에서 수정·stage·commit하지 않음.
+
+### 커밋 / 배포
+
+- `8829d5b7 perf: RCA report projection / payload 조회 최적화`
+  - `rca_reports` 목록 조회 projection 컬럼 추가(`20260708_0610_rca_report_projection_columns.py`).
+  - `GET /rca-reports` 저장소 조회에서 `payload` SELECT 제거. `rca_report_summary`는 projection 우선, legacy/test payload fallback 유지.
+  - `/dashboard/rca/timeline` 목록/상세 조회에서 `rca_timeline.payload` SELECT 제거.
+  - live DB에 projection 컬럼 수동 적용, 기존 `rca_reports` 904행 backfill.
+- `9cb3f144 fix: api gateway replicas / 운영 안정화`
+  - `api-gateway` manifest: replicas `1 -> 2`, requests `100m/1Gi -> 500m/2Gi`.
+  - live `api-gateway` 2/2 Ready 확인.
+- `8c623faa fix: outbox relay all-source / 고아 이벤트 해소`
+  - 전용 `outbox-relay` 기본 `OUTBOX_RELAY_SOURCE="*"`로 변경. `source=None`이면 모든 source row를 lease/skip-locked로 claim.
+  - 워커 내장 relay는 기존처럼 자기 source 필터 유지. 전용 relay와 동시 실행돼도 outbox row lease가 중복 발행을 막음.
+  - all-source claim partial index 추가: `ix_outbox_claim_all_sources (sent_at, leased_until, id) WHERE sent_at IS NULL`.
+  - live DB에 index 수동 적용.
+- 최신 live backend image:
+  - `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:8c623faa-service-20260708052433`
+  - `kubernetes-ops-service` 이미지를 쓰는 management deployment 전체와 `github-poll-worker` CronJob에 적용 완료.
+
+### 검증 완료
+
+- 로컬:
+  - `uv run pytest -q` → `747 passed, 3 skipped`.
+  - `uv run pytest tests/test_outbox.py tests/test_database_unit.py tests/test_env_defaults.py tests/test_error_paths.py tests/test_docs_index.py -q` → 통과.
+  - `uv run ruff check ...` → 통과.
+  - `PYTHONPATH=src uv run lint-imports` → 통과.
+  - `PYTHONDONTWRITEBYTECODE=1 make events` → 이벤트 그래프 생성 통과. typed consumer가 없는 subject는 audit/dashboard 전체 구독 또는 terminal/UI/outbound event로 `docs/event-graph-audit.md`에 분류 완료.
+  - `uvx vulture src tests --min-confidence 80` → 삭제 대상 없음(삭제 라인 수 0).
+- Live:
+  - management deployment `40/40` Ready(backend 35개 + console/cloudflared/storage 포함). `api-gateway`는 `2/2`.
+  - `https://k8s.woonyong.org/api/healthz` 200, `readyz` 200.
+  - `outbox-relay` 로그에서 `relay_source="all"` 확인. `workflow-controller`, `incident-worker`, `api-gateway` source 이벤트 relay 확인.
+  - outbox pending: `0`.
+  - `event_dead_letters` open: `0`; 상태 요약 `archived=1891`, `replayed=529`.
+  - legacy backlog: `missing-cause-rule:default:unknown` open 1건(occurrence 11433) → `resolved` 처리 완료.
+  - `github-poll-worker` 최신 이미지 기준 수동 10회 연속 `Complete` 확인. 기존 Failed job 잔재 삭제.
+- E2E:
+  - `TARGET_CONTEXT=cluster-1 bash scripts/scenario-inject.sh inject crashloop`.
+  - 새 report 생성 확인: `rca_reports.id=927`, correlation `f7bf5469-4899-4682-a3aa-6f621793e705`, `cluster-1`, `CrashLoopBackOff`, resource `payment-gateway-6c6c5994f7`, root cause `config_env_error`, confidence `1.0`, candidates `5`.
+  - `recovery_plans` 생성 확인: status `selection_requested`.
+  - `rca_timeline` 확인: status `approval_recommended`, action_route `draft_pr`.
+  - 인증 쿠키로 `GET /api/rca-reports?correlation_id=f7bf5469-4899-4682-a3aa-6f621793e705&limit=1` 호출 → 200, item id `927` 반환.
+  - 주입한 crashloop fault cleanup 완료(`scenario=crashloop` 남은 리소스 0).
+
+### 관찰 중 / 다음 확인
+
+- 30분 신규 DLQ 관찰 시작: `2026-07-07T20:30:41Z`.
+  - 시작 기준: `event_dead_letters` 최신 생성시각 `2026-07-07 18:45:53.193523+00`, 관찰 시작 이후 신규 `0`.
+  - 관찰 종료 후 확인할 것: `event_dead_letters.created_at >= '2026-07-07 20:27:55+00'` count `0`, outbox pending `0`, outbox/api-gateway 로그 `MaxPayloadError|dead_letter|Traceback|ERROR` 없음.
+- `TARGET_CONTEXT=target1` kube context는 현재 없음. 실제 target context는 `cluster-1`/`cluster-2`라 이번 E2E는 `cluster-1`로 수행.
+- live DB에는 `alembic_version` 테이블이 없어 migration은 기존 운영 방식대로 psql 수동 DDL로 적용함. 다음 운영 정리 시 Alembic versioning 도입 여부를 결정할 것.
+- 작업트리에 `frontend/` 변경이 생길 수 있음(다른 UI 세션). backend 후속 커밋 시 `git status --short` 확인 후 frontend 파일은 stage하지 말 것.
