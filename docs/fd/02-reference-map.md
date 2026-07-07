@@ -72,7 +72,7 @@ AGPL(console, Grafana)·GPL(kube-ops-view)은 스크린샷·문서 수준 참조
 
 | 기능 | 현재 위치 | 비고 |
 |---|---|---|
-| 모션 프리미티브 | `frontend/src/shared/motion/index.tsx` | FadeSlideIn, Stagger, CountUp, PressScale, LayoutMorph |
+| 모션 프리미티브 | `frontend/src/shared/motion/index.tsx` | FadeSlideIn, Stagger, CountUp, AnimatedList, PulseOnChange |
 | 워크플로우 노드 그래프 | `frontend/src/features/workflow/WorkflowGraphView.tsx` | @xyflow 노드/엣지와 단계 표시 |
 | KPI 카운터 | `frontend/src/shared/motion/index.tsx`, `frontend/src/shared/ui/index.tsx` | CountUp을 StatBox에서 사용 |
 | 차트 wrapper | `frontend/src/shared/ui/charts.tsx` | @nivo 기반 chart shell |
