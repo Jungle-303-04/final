@@ -1,5 +1,5 @@
 ---
-source_commit: 32330d7c
+source_commit: 1960ed83
 status: synced
 ---
 
@@ -41,9 +41,9 @@ status: synced
 
 `api()` 동작:
 
-1. `createRequestSignal(options)` 로 optional `AbortSignal`을 만든다. `timeoutMs`가 없으면 caller signal 을 그대로 쓰고, 있으면 새 `AbortController`를 만들고 timeout 또는 parent abort 중 먼저 온 이벤트로 abort 한다.
-2. `fetch(`${BASE}${path}`, { method, credentials: 'include', headers, body, signal })`. `BASE = import.meta.env.VITE_API_BASE ?? '/api'`. body 가 있으면 `content-type: application/json`, POST/PUT/PATCH/DELETE 는 CSRF intent header 를 붙인다.
-3. fetch 예외(네트워크 실패 또는 abort) → timeout 으로 abort 된 경우 `throw new ApiError(0, '요청 시간이 초과되었습니다')`, 그 외 `throw new ApiError(0, '네트워크 오류')`. `finally`에서 timeout 과 parent abort listener 를 해제한다.
+1. `createRequestSignal(options)` 로 optional `AbortSignal`과 timeout promise 를 만든다. `timeoutMs`가 없으면 caller signal 을 그대로 쓰고 `timeout=null`을 반환한다. 있으면 새 `AbortController`를 만들고 parent abort 를 controller 로 전달한다.
+2. `fetch(`${BASE}${path}`, { method, credentials: 'include', headers, body, signal })`. `BASE = import.meta.env.VITE_API_BASE ?? '/api'`. body 가 있으면 `content-type: application/json`, POST/PUT/PATCH/DELETE 는 CSRF intent header 를 붙인다. timeout promise 가 있으면 `Promise.race([request, timeout])`로 fetch 와 경쟁시킨다.
+3. timeout promise 는 지정 ms 후 controller 를 abort 하고 `ApiError(0, '요청 시간이 초과되었습니다')`로 reject 한다. fetch 예외는 timeout 여부를 `requestSignal.timedOut()`으로 판정해 timeout 또는 `ApiError(0, '네트워크 오류')`로 변환한다. `finally`에서 timeout 과 parent abort listener 를 해제한다.
 4. `!res.ok`: 401 이면 `onUnauthorized?.()` 먼저 호출. detail 은 `res.json().detail ?? res.statusText`(파싱 실패 시 statusText). `throw new ApiError(res.status, String(detail))`.
 5. 204 → `undefined as T`, 그 외 → `res.json()`.
 
@@ -66,7 +66,7 @@ export const queryClient = new QueryClient({
 | 심볼 | 앵커 | 내용 |
 |---|---|---|
 | `liveStore` | `frontend/src/shared/lib/live.ts :: liveStore` | zustand `create<LiveState>` |
-| `startLive` | `frontend/src/shared/lib/live.ts :: startLive` | `() => void` — 모듈 플래그 `started` 로 1회만 실행 |
+| `startLive` | `frontend/src/shared/lib/live.ts :: startLive` | `(workspaceId: string \| null \| undefined) => void` — workspace 기준으로 단일 WebSocket 을 유지 |
 
 `LiveState` (비공개 interface):
 
@@ -81,8 +81,10 @@ export const queryClient = new QueryClient({
 
 - `apply(snapshot)`: 전체 pods 를 flat 하여 `restarts` 합·`phase==='Running'` 수를 `history` 포인트(`at: Date.now(), clusterId: snapshot.cluster_id ?? null`)로 추가.
 - `applyCounts(clusterId, restarts, running)`: 스냅샷 없이 집계 숫자와 cluster id 를 history 포인트로 추가 — 게이트웨이의 `live.summary` 경량 메시지용.
-- `startLive()` 동작:
-  - 내부 `async connect(attempt)` — 먼저 비공개 `currentWorkspaceId()`(GET `/api/auth/session` 직접 fetch, 실패 시 `'default'`)로 워크스페이스를 알아낸 뒤 `new WebSocket(`${wss|ws}://${location.host}/api/live/browser?workspace_id=<id>`)` (https→wss). `onopen`→'open'; `onmessage`→`JSON.parse` 후 분기: `type === 'live.summary'` 면 `applyCounts(summary.restart_delta, summary.pods_ready)`, `namespaces` 필드가 있으면 전체 스냅샷으로 `apply`(그 외/파싱 실패는 무시); `onclose`→'closed' 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결. 구독 채널은 이 단일 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
+- `startLive(workspaceId)` 동작:
+  - `workspaceId`가 비어 있으면 기존 소켓과 재연결 타이머를 닫고 status 를 `'closed'`로 둔다.
+  - 같은 workspace 이고 기존 socket 이 `CONNECTING` 또는 `OPEN`이면 아무것도 하지 않는다.
+  - workspace 가 바뀌면 기존 socket 을 닫고 `connectionSeq`를 증가시킨 뒤 `new WebSocket(`${wss|ws}://${location.host}/api/live/browser?workspace_id=<id>`)` (https→wss)을 연다. `onopen`→'open'; `onmessage`→`JSON.parse` 후 분기: `type === 'live.summary'` 면 `applyCounts(summary.restart_delta, summary.pods_ready)`, `namespaces` 필드가 있으면 전체 스냅샷으로 `apply`(그 외/파싱 실패는 무시). `onclose`는 현재 `connectionSeq`일 때만 `'closed'` 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결을 예약한다. 구독 채널은 현재 workspace 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
 
 ## UI 전역 상태 (`lib/ui-store.ts`)
 
@@ -194,7 +196,7 @@ export const queryClient = new QueryClient({
 | `Breadcrumbs` | `{ items: { label: string; to?: string }[] }` | to 있으면 Link |
 | `Stepper` | `{ steps: string[]; current: number }` | `i < current` done / `i === current` now |
 | `Toasts` | (없음) | `uiStore.toasts` 구독, `aria-live="polite"`, 좌측 보더 `toneColor(tone)`, `AnimatePresence` layout slide-up/fade 전환 |
-| `SearchInput` | `{ value: string; onChange: (v) => void; placeholder? }` | `/` 키(포커스가 body 일 때)로 포커스. 기본 placeholder `'검색 ( / )'`, maxWidth 320 |
+| `SearchInput` | `{ value: string; onChange: (v) => void; placeholder?; ariaLabel? }` | `/` 키(포커스가 body 일 때)로 포커스. 기본 placeholder `'검색'`, `aria-label = ariaLabel ?? placeholder ?? '검색'`, maxWidth 320 |
 | `useSearchFilter<T>` (훅) | `(rows: T[], pick: (r) => string) => [T[], string, (v) => void]` | 소문자 includes 필터 |
 
 ## PlanDiff (`ui/plan-diff.tsx`)
@@ -289,7 +291,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 
 ## 컴포넌트 스타일 (`ui/app.css`)
 
-`frontend/src/shared/ui/app.css` — 토큰 변수만 사용하는 클래스: `.btn`(+`--primary/--danger/--ghost/--sm`), `.card`, `.badge`(+`.dot`), `.statbox`, `.table`(+hover, `.clickable`), `.tabs`, `.input`, `.field`(+`.err`), `.modal-backdrop`/`.modal`(+`--lg` 760px)/`.drawer`(520px 우측), `.empty`, `.skeleton`(shimmer, reduced-motion 시 정지), `.kv`(140px 1fr 그리드), `.code`, `.avatar`, `.toasts`/`.toast`, `.crumbs`, `.stepper`(+`.done`/`.now`).
+`frontend/src/shared/ui/app.css` — 토큰 변수만 사용하는 클래스: `.btn`(+`--primary/--danger/--ghost/--sm`), `.card`, `.badge`(+`.dot`), `.statbox`, `.table`(+hover, `.clickable`), `.tabs`, `.input`, `.field`(+`.err`), `.modal-backdrop`/`.modal`(+`--lg` 760px)/`.drawer`(520px 우측), `.empty`, `.skeleton`(shimmer, reduced-motion 시 정지), `.kv`(140px 1fr 그리드), `.code`, `.avatar`, `.toasts`/`.toast`, `.crumbs`, `.stepper`(+`.done`/`.now`), `.chat-tool-trace`/`.chat-tool-args`(assistant tool trace details).
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -297,7 +299,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 - 색은 항상 토큰 변수·`toneColor` 경유. hex 하드코딩 금지.
 - nivo·`@xyflow/react`·`motion` 은 각각 `ui/charts.tsx`·`flow/`·`motion/` 밖으로 새 import 를 만들지 않는다.
 - zustand selector 에서 새 객체 생성 금지(무한 리렌더) — 파생값은 컴포넌트의 `useMemo` 로.
-- `startLive()` 는 멱등(모듈 플래그) — 여러 번 호출해도 연결 1개.
+- `startLive(workspaceId)` 는 workspace 기준 멱등 — 같은 workspace 에서 여러 번 호출해도 연결 1개, workspace 변경/해제 시 이전 연결과 재연결 타이머를 정리한다.
 
 ## 설정 (Settings)
 

@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: 1d7b4fbd
 status: synced
 ---
 
@@ -9,7 +9,7 @@ status: synced
 
 ## 책임 (Responsibility)
 
-- 세션 조회/로그인/로그아웃/가입/검증 메일 재전송/사용자 승인 훅(`api.ts`)과 게스트 화면 4종(로그인·가입·승인 대기·이메일 검증)을 제공한다.
+- 세션 조회/로그인/로그아웃/가입/검증 메일 재전송/사용자 승인 훅(`api.ts`), 최근 세션 hint helper, 사용자 interaction 기반 세션 refresh helper 와 게스트 화면 4종(로그인·가입·승인 대기·이메일 검증)을 제공한다.
 - `useSession`/`useIsAdmin` 은 [app 가드](app.md#가드--frontendsrcappguardstsx)와 [ConsoleLayout](app.md), 타 feature 의 권한 판정에 공용으로 쓰인다.
 
 ## 의존성 (Dependencies)
@@ -25,9 +25,13 @@ status: synced
 | 심볼 | 앵커 | 시그니처 | API (메서드+경로) | 비고 |
 |---|---|---|---|---|
 | `sessionKey` | `frontend/src/features/auth/api.ts :: sessionKey` | `['session'] as const` | — | 세션 쿼리 키 |
-| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` via `get(..., { timeoutMs: 8_000 })` | `staleTime: 60_000`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다. 8초 안에 응답이 없으면 API 클라이언트가 요청을 abort 하고 network 오류 detail 로 `'요청 시간이 초과되었습니다'`를 준다 |
-| `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 시 `sessionKey` invalidate |
-| `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `qc.clear()` (캐시 전체 삭제) |
+| `markSessionSeen` | `frontend/src/features/auth/api.ts :: markSessionSeen` | `() => void` | — | `localStorage['k8s-console-session-seen-at'] = Date.now()` 저장. SSR/window 없음이면 no-op |
+| `clearSessionHint` | `frontend/src/features/auth/api.ts :: clearSessionHint` | `() => void` | — | 최근 세션 hint 삭제. 401/logout 에서 호출 |
+| `hasRecentSessionHint` | `frontend/src/features/auth/api.ts :: hasRecentSessionHint` | `() => boolean` | — | hint timestamp 가 현재 기준 2시간(`SESSION_HINT_TTL_MS`) 이내이면 true |
+| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` via `get(..., { timeoutMs: 20_000 })` | `staleTime: 120_000`, `refetchOnWindowFocus:false`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다. 20초 안에 응답이 없으면 API 클라이언트가 요청을 abort 하고 network 오류 detail 로 `'요청 시간이 초과되었습니다'`를 준다 |
+| `refreshSession` | `frontend/src/features/auth/api.ts :: refreshSession` | `() => Promise<Session>` | POST `/auth/session/refresh` | 세션 리프레시 helper. 자동 호출은 `frontend/src/features/auth/sessionRefresh.ts` 소비자 책임 |
+| `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 응답이 authenticated 면 `markSessionSeen()` 후 `queryClient.setQueryData(sessionKey, session)`로 즉시 반영 |
+| `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `clearSessionHint()` + `qc.clear()` (캐시 전체 삭제) |
 | `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
 | `useApproveUser` | `frontend/src/features/auth/api.ts :: useApproveUser` | mutation `(userId: string)` | POST `/auth/users/${userId}/approve` | 성공 시 `['users']` invalidate — [org/MembersView](./org.md) 에서 사용 |
 | `useIsAdmin` | `frontend/src/features/auth/api.ts :: useIsAdmin` | `() => boolean` | — | `session.roles.includes('service_admin') ?? false` |
@@ -86,6 +90,7 @@ status: synced
 ## 불변식·오류 (Invariants & Errors)
 
 - 로그아웃 성공 시 React Query 캐시 전체 clear — 이전 사용자 데이터 잔존 금지.
-- 로그인 성공은 `sessionKey` invalidate 로 전파(가드가 자동으로 재평가).
-- 세션 확인 timeout 은 `useSession()`에만 적용한다. 다른 인증 mutation 에 새 timeout 정책을 강제하지 않는다.
+- 로그인 성공은 서버 응답 `Session`을 `sessionKey` 캐시에 직접 쓰고 최근 세션 hint 를 기록해 즉시 전파한다.
+- 최근 세션 hint 는 `RequireSession` pending 상태에서만 기존 콘솔 화면을 유지하기 위한 최적화다. 401/unauthorized 및 logout 은 반드시 hint 를 삭제한다.
+- 세션 확인 timeout 은 `useSession()`에만 20초로 적용한다. 다른 인증 mutation 에 새 timeout 정책을 강제하지 않는다.
 - 오류 표시는 `ApiError.status`/`detail` 기반 — 상태코드별 한국어 메시지는 위 명세 그대로.

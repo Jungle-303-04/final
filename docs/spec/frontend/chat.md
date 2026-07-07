@@ -1,5 +1,5 @@
 ---
-source_commit: f91a4def
+source_commit: 1960ed83
 status: synced
 ---
 
@@ -82,7 +82,8 @@ status: synced
 
 - `MessageRenderer { m: ChatMessage }`
   - user: 우측 정렬 `.chat-bubble--user`(배경 `--brand`, radius `14px 14px 4px 14px`, `white-space: pre-wrap`, `overflow-wrap:anywhere`).
-  - assistant: 좌측 정렬 `.chat-bubble--assistant`(surface-2 + border, radius `14px 14px 14px 4px`). content 는 `split('**')` 로 홀수 인덱스만 `<b>`(단순 볼드 마크업). 이어서 `tool_calls` 행들(`Badge tone=status '도구'` + code name + args), `actions` → `ActionSelectCard`, `approval_ref` → `ApprovalCard(approval_id, summary, resolved, compact)`.
+- assistant: 좌측 정렬 `.chat-bubble--assistant`(surface-2 + border, radius `14px 14px 14px 4px`). content 는 `split('**')` 로 홀수 인덱스만 `<b>`(단순 볼드 마크업). 이어서 `tool_calls`는 `ToolTraceRow` details 로 접힌 상태(`summary`: `Badge tone=status '도구'` + code name)로 렌더하고, 펼치면 args 를 `.chat-tool-args` code block 으로 보여준다. `actions` → `ActionSelectCard`, `approval_ref` → `ApprovalCard(approval_id, summary, resolved, compact)`.
+- `ToolTraceRow { trace }`: assistant 도구 호출 1건을 `<details className="chat-tool-trace">`로 렌더한다. `compactToolArgs(args)`는 앞뒤 공백 제거 후 900자를 넘으면 900자 + `…`로 줄인다.
 - `ActionSelectCard { actions: NonNullable<ChatMessage['actions']> }` (`data-testid="action-card"`)
   - state: `picked: string | null`. `locked = !!actions.selected`.
   - 옵션별 radio(라벨 + `Badge tone=risk '위험도'` + impact 설명). locked 면 radio disabled, 미선택 옵션 opacity 0.5.
