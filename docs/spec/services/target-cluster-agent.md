@@ -248,11 +248,12 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 
 `KubernetesCommandPolicy.ensure_allowed` 규칙 (위반 시 전부 `PermissionError`):
 1. `spec.scope != "target-agent"` → `"{scope} Kubernetes commands are not enabled"`.
-2. `spec.verb not in {"get", "patch", "apply"}` → 거부.
-3. `spec.resource not in {"deployments", "configmaps"}` → 거부.
-4. payload의 `namespace`/`name`은 비어 있지 않은 str 필수(`"kubernetes command payload requires {name}"`).
-5. namespace는 role별 고정: `management` role → `"management"`, 그 외 → `"target"`.
-6. deployments는 `name == "cluster-agent"`, configmaps는 `name == "target-agent-policy"`만 허용(name-scoped).
+2. `cluster_role == "management"` 이고 `spec.verb != "get"` → `"management agent cannot control management workloads"`로 거부. RBAC가 잘못 열려도 management agent는 자기 Deployment/ConfigMap을 patch/apply/scale 하지 못한다.
+3. `spec.verb not in {"get", "patch", "apply"}` → 거부.
+4. `spec.resource not in {"deployments", "configmaps"}` → 거부.
+5. payload의 `namespace`/`name`은 비어 있지 않은 str 필수(`"kubernetes command payload requires {name}"`).
+6. namespace는 role별 고정: `management` role → `"management"`, 그 외 → `"target"`.
+7. deployments는 `name == "cluster-agent"`, configmaps는 `name == "target-agent-policy"`만 허용(name-scoped).
 
 `namespaced_resource_path`: `api_group ∈ {"", "core"}` → `/api/{version}/...`, 그 외 → `/apis/{api_group}/{version}/...`; 최종 `/namespaces/{namespace}/{resource}/{name}[/{subresource}]`.
 
@@ -575,7 +576,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 - `patch_deployment(namespace, deployment, patch)`: `PATCH {base}/apis/apps/v1/namespaces/{ns}/deployments/{name}` (`application/strategic-merge-patch+json`) → `wait_for_deployment_rollout`.
 - `wait_for_deployment_rollout`: timeout(기본 30s)이 0 이하이면 대기 없이 성공 취급(`waited: False`). 이후 2초 간격으로 Deployment GET → `deployment_rollout_status`로 ready 판정(`desired==0` 이거나 `observed>=generation && updated>=desired && ready>=desired && available>=desired && Progressing/Available condition != "False"`). ready → `(True, DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE, status)`, deadline 초과 → `(False, "deployment rollout not ready before timeout: {name}", last_status)`.
 - k8s API 미구성(`kubernetes_api_base_url()` 또는 토큰 없음) 시 쓰기 경로는 전부 `(False, "kubernetes api not configured; dry-run only", {})`.
-- 데코레이터 기반 `k8s.*` 커맨드 3종은 `KubernetesApiClient.patch_namespaced_resource`(merge-patch) 사용: deployments.patch/`configmaps.patch`는 본문 patch, deployments.scale은 `subresource="scale"`에 `{"spec": {"replicas": n}}`. 대상은 정책상 `target`(또는 management role이면 `management`) 네임스페이스의 `cluster-agent` Deployment / `target-agent-policy` ConfigMap으로 name-scoped — 즉 에이전트 자기 자신 제어 전용.
+- 데코레이터 기반 `k8s.*` 커맨드 3종은 `KubernetesApiClient.patch_namespaced_resource`(merge-patch) 사용: deployments.patch/`configmaps.patch`는 본문 patch, deployments.scale은 `subresource="scale"`에 `{"spec": {"replicas": n}}`. target role에서는 `target` 네임스페이스의 `cluster-agent` Deployment / `target-agent-policy` ConfigMap으로 name-scoped다. management role에서는 같은 self-control write도 정책층에서 Kubernetes 호출 전 거부한다.
 
 ### control 루프
 
@@ -650,7 +651,7 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 
 1. **제어 네임스페이스 허용목록**: `apply_manifest`/`rollout_restart` 계열의 워크로드 쓰기는 namespace가 허용목록(`control_namespace_allowed`, `CONTROL_ALLOWED_NAMESPACES` env — 기본 `sandbox`만)에 없으면 `"namespace is not allowed by control policy"`로 거부한다. 이 기준은 게이트웨이 검증·command-worker 정책과 공유되는 단일 원천(`src/packages/config/control.py :: control_allowed_namespaces`)이며, 대상 클러스터에서는 설치 manifest의 agent ConfigMap(`src/domains/target/install_manifest.py`)이 등록 요청의 `control_namespaces` CSV(`src/packages/contracts/gateway/requests.py :: TargetRegisterRequest`)를 `CONTROL_ALLOWED_NAMESPACES` env로 주입한다 — 클러스터별로 다르게 줄 수 있다.
 2. **승인 증적 필수**: `apply_manifest`, `k8s.apps.v1.deployments.scale`은 `approval_ref`와 `policy_decision_ref`가 모두 있어야 실행된다(`write_action_requires_approval` + `has_approval_evidence`). `rollout_restart` 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용되며, namespace 정책 가드는 동일하게 적용된다. `deployment scale` 은 plan 메타데이터 environment 가 sandbox 면 승인 증적을 면제한다(`approval_exempt_for_environment` — `AGENT_AUTO_APPROVE_ACTIONS`/`AGENT_AUTO_APPROVE_ENVIRONMENTS`, 기본 scale×sandbox) — command-worker 의 `COMMAND_AUTO_APPROVE_*` rule 과 대칭. `k8s.*.patch` 2종은 이 승인 게이트 집합에 포함되지 않는 대신 아래 3의 name-scoped 정책으로 제한된다.
-3. **k8s 커맨드 정책(name-scoped 자기 제어)**: scope는 `target-agent`만, verb는 `get/patch/apply`만, 리소스는 `deployments`/`configmaps`만. namespace는 role 고정(target→`target`, management→`management`), 이름은 `cluster-agent`(Deployment) / `target-agent-policy`(ConfigMap)만. 위반은 `PermissionError`.
+3. **k8s 커맨드 정책(name-scoped 자기 제어)**: target role만 자기 agent 리소스(`target` namespace의 `cluster-agent` Deployment / `target-agent-policy` ConfigMap)를 patch/apply 할 수 있다. management role은 read-only라 `get` 외 `target-agent` scope write도 `"management agent cannot control management workloads"`로 거부한다. 공통으로 scope는 `target-agent`, verb는 `get/patch/apply`, 리소스는 `deployments`/`configmaps`, namespace/name은 role별 고정값만 허용한다.
 4. **reconcile 정책**: `user-workload` scope 금지, `system` scope의 Deployment 금지, namespace는 role 고정, ConfigMap은 `target-agent-policy`·target-agent Deployment는 `cluster-agent`만 (`DesiredStateReconciler.ensure_allowed`, `PermissionError`).
 5. **정책 정합성**: `apply_policy`는 정책의 `cluster_id`/`cluster_role`이 에이전트와 다르면 `ValueError`. `AgentPolicy` 등 요청 모델은 전부 `StrictModel(extra="forbid")` — 계약 밖 필드는 검증 실패.
 6. **커맨드 결과는 반드시 outbox 경유**: 실행 결과는 SQLite에 먼저 기록되고 전송 성공 시에만 삭제된다(재시작에도 결과 보존). 전송 5회 실패 시 `abandoned`로 봉인되어 무한 재시도를 막는다. `enqueue_result`는 `command_id` UPSERT라 중복 실행에 멱등.

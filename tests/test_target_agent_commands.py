@@ -5,6 +5,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "agent.py"
 
@@ -352,6 +354,37 @@ def test_kubernetes_scale_rejects_namespace_outside_control_policy() -> None:
     assert agent.kubernetes.patches == []
 
 
+def test_kubernetes_scale_rejects_management_namespace_even_if_allowlisted(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,management")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = FakeKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
+                "payload": {
+                    "namespace": "management",
+                    "name": "api-gateway",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "namespace is not allowed by control policy"
+    assert agent.kubernetes.patches == []
+
+
 def test_management_agent_ignores_write_command_before_kubernetes_call() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
@@ -378,4 +411,24 @@ def test_management_agent_ignores_write_command_before_kubernetes_call() -> None
 
     assert result["status"] == "failed"
     assert result["message"] == "management_readonly"
+    assert agent.kubernetes.patches == []
+
+
+def test_management_agent_policy_rejects_self_patch_if_top_guard_is_bypassed() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.cluster_role = "management"
+    agent.kubernetes = FakeKubernetesClient()
+    register_agent_commands(module, agent)
+    registered = agent.command_registry.handlers[module.KUBERNETES_DEPLOYMENT_PATCH_ACTION]
+    payload = module.KubernetesPatchPayload(
+        namespace="management",
+        name="cluster-agent",
+        patch={"spec": {"replicas": 0}},
+    )
+
+    with pytest.raises(PermissionError, match="management agent cannot control management workloads"):
+        agent.command_registry.kubernetes_policy.ensure_allowed(registered.spec.kubernetes, payload)
+
     assert agent.kubernetes.patches == []
