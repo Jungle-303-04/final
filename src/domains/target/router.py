@@ -111,12 +111,15 @@ AGENT_HEARTBEAT_CAPABILITIES = ["evidence", "commands", "inventory"]
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
+PUBLIC_API_BASE_URL_ENV = "PUBLIC_API_BASE_URL"
+PUBLIC_BASE_URL_ENV = "PUBLIC_BASE_URL"
 LOCAL_PLACEHOLDER_IMAGES = {"", "service:local", "kubeheal-service:latest"}
 BLOCKED_TEST_CLUSTER_IDS = {"bruno-api-test"}
 BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
 CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 AGENT_STATUS_NOT_REGISTERED = "not_registered"
 TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
+MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -163,6 +166,25 @@ def allowed_kube_contexts() -> set[str]:
     return {item.strip() for item in raw.split(",") if item.strip()}
 
 
+def normalized_management_base_url(value: str) -> str:
+    base = value.strip().rstrip("/")
+    if not base:
+        return ""
+    return base if base.endswith("/api") else f"{base}/api"
+
+
+def public_management_base_url() -> str:
+    for key in (
+        PUBLIC_MANAGEMENT_BASE_URL_ENV,
+        PUBLIC_API_BASE_URL_ENV,
+        PUBLIC_BASE_URL_ENV,
+    ):
+        base = normalized_management_base_url(env(key, ""))
+        if base:
+            return base
+    return ""
+
+
 def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> TargetRegisterRequest:
     updates: dict[str, str] = {}
     if payload.apply and "deploy_provider" not in payload.model_fields_set:
@@ -174,14 +196,9 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
         if default_image:
             updates["image"] = default_image
 
-    management_base_url = payload.management_base_url.strip().rstrip("/")
-    public_base_url = env(PUBLIC_MANAGEMENT_BASE_URL_ENV, "").strip().rstrip("/")
-    if management_base_url and not management_base_url.endswith("/api"):
-        management_base_url = f"{management_base_url}/api"
-    if not management_base_url and public_base_url:
-        management_base_url = (
-            public_base_url if public_base_url.endswith("/api") else f"{public_base_url}/api"
-        )
+    management_base_url = normalized_management_base_url(payload.management_base_url)
+    if not management_base_url:
+        management_base_url = public_management_base_url()
     if management_base_url:
         updates["management_base_url"] = management_base_url
 
@@ -196,6 +213,11 @@ def reject_test_target(payload: TargetRegisterRequest) -> None:
         raise HTTPException(status_code=422, detail="test target registrations are not allowed")
     if payload.image.strip() in LOCAL_PLACEHOLDER_IMAGES:
         raise HTTPException(status_code=422, detail="target agent image is not configured")
+
+
+def require_management_base_url(payload: TargetRegisterRequest) -> None:
+    if not payload.management_base_url.strip():
+        raise HTTPException(status_code=422, detail=MANAGEMENT_BASE_URL_NOT_CONFIGURED)
 
 
 def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
@@ -281,6 +303,12 @@ def target_preflight_provider_checks(
 
     if not target_agent_image_ready(payload.image):
         errors.append(TARGET_AGENT_IMAGE_NOT_CONFIGURED)
+        provider_errors += 1
+    if (
+        not normalized_management_base_url(payload.management_base_url)
+        and not public_management_base_url()
+    ):
+        errors.append(MANAGEMENT_BASE_URL_NOT_CONFIGURED)
         provider_errors += 1
 
     if (
@@ -533,6 +561,7 @@ async def register_target(
         update={"workspace_id": workspace_id}
     )
     reject_test_target(scoped_payload)
+    require_management_base_url(scoped_payload)
     validate_target_install_providers(scoped_payload)
     components = target_desired_components(scoped_payload)
     version = desired_state_version(components)

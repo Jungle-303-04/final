@@ -66,17 +66,18 @@ def test_command_request_leaves_namespace_policy_to_command_worker() -> None:
             {"commit_sha": "abc123", "replicas": 0},
             id="webhook-invalid-replica-count",
         ),
-        pytest.param(
-            TargetRegisterRequest,
-            {"management_base_url": ""},
-            id="target-register-empty-management-url",
-        ),
     ],
 )
 def test_gateway_schema_rejects_invalid_payload(model: type, payload: dict) -> None:
     # 스키마 계약 드리프트 방지 — 제약(unknown 필드 거부·길이·형식) 완화 시 실패해야 함.
     with pytest.raises(ValidationError):
         model(**payload)
+
+
+def test_target_register_request_allows_server_owned_management_url() -> None:
+    request = TargetRegisterRequest(management_base_url="")
+
+    assert request.management_base_url == ""
 
 
 def test_event_uses_payload_correlation_id() -> None:

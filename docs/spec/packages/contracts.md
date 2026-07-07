@@ -392,7 +392,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 | `name` | `str` | `DEFAULT_TARGET_NAME` |
 | `environment` | `str` | `DEFAULT_TARGET_ENVIRONMENT` |
 | `workspace_id` | `str` | `DEFAULT_WORKSPACE_ID` |
-| `management_base_url` | `str` | (필수, `min_length=1`) |
+| `management_base_url` | `str` | `""` — 클라이언트 생략 가능. 백엔드가 공개 URL env 로 정규화하고, 최종 미해결 시 preflight/register 에서 차단 |
 | `image` | `str` | `""` |
 | `prometheus_base_url` | `str` | `DEFAULT_PROMETHEUS_BASE_URL` |
 | `loki_base_url` | `str` | `DEFAULT_LOKI_BASE_URL` |

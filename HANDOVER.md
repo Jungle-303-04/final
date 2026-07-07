@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:51 KST (console `8c8b3b02-dev` live smoke)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 22:00 KST (cluster registration URL ownership patch ready)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,29 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+
+## 체크포인트 (22:00 KST) — 클러스터 등록 URL 소유권 정리
+
+- 구현:
+  - 클러스터 등록 프론트가 더 이상 `management_base_url: ${location.origin}/api`를 보내지 않는다. 브라우저 origin은 Cloudflare/프록시/내부망 구성에 따라 target agent가 접속할 공개 API URL과 다를 수 있으므로 운영 URL 합성은 백엔드가 소유한다.
+  - `TargetRegisterRequest.management_base_url`은 클라이언트 생략 가능 기본값 `""`로 바꿨다. `TargetPreflightRequest`도 같은 필드를 받는다.
+  - 백엔드는 `PUBLIC_MANAGEMENT_BASE_URL` → `PUBLIC_API_BASE_URL` → `PUBLIC_BASE_URL` 순서로 공개 관리 URL을 정규화한다. `/api` 접미가 없으면 붙인다.
+  - 정규화 후에도 공개 URL이 없으면 preflight/register가 `"management base URL is not configured"`로 실패한다. 즉, 운영 경로에서 임의/목업 URL로 진행하지 않는다.
+  - live `management-runtime-config`에는 이미 `PUBLIC_BASE_URL=https://k8s.woonyong.org`가 있어 새 backend 배포 후 클러스터 등록은 `https://k8s.woonyong.org/api/install/<token>` 원라인 설치 명령을 생성해야 한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/target/router.py src/packages/contracts/gateway/requests.py tests/test_target_registration.py tests/test_schemas.py` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_target_registration.py tests/test_schemas.py tests/test_provider_registry.py tests/test_docs_index.py` → 59 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test -- --runInBand` → 8 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+- 병렬 감사 결과 반영:
+  - Arendt: 레포 연결은 실제 GitHub probe/branch/manifest/validate를 쓰지만, `credential_ref` 계약과 `source_type` render-worker 전파 parity가 부족하다.
+  - Aquinas: `/console` 경로 보존 누락이 목록 3곳에 남아 있고, 위젯/쿼리 등록은 아직 영속 API가 아니라 local state다.
+- 다음 커밋 후보:
+  1. `/console` 경로 보존 누락 수정: `ClusterListView.tsx`, `RepoListView.tsx`, `WorkflowListView.tsx`.
+  2. 클러스터 discovery UX 정직화: “discovered”가 아니라 configured import candidates로 라벨/상태를 명확히 하고, Plural/external은 실제 API 검증 전 `available` 표현을 낮춘다.
+  3. repo render parity: `source_type`을 application/watch target/event/render-worker까지 보존해 kustomize/helm 검증과 실행 경로를 일치시킨다.
+  4. 저장형 쿼리/위젯 API: 현재 `MetricsView` local state를 실제 backend 저장 모델로 승격한다.
 
 ## 체크포인트 (21:21 KST) — `/console` 데모 보존 + AI chat 실제 계약 수정
 
