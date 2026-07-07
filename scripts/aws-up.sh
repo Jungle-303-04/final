@@ -1292,9 +1292,9 @@ main() {
 
   echo
   echo "AWS setup is ready."
-  echo "Gateway: ${base_url}"
+  echo "Public origin: ${base_url}"
   if [[ "${CUSTOM_DOMAIN_CONFIGURED}" == "1" ]]; then
-    echo "Custom domain: http://${CUSTOM_DOMAIN}"
+    echo "Custom domain: ${CUSTOM_DOMAIN}"
   fi
   echo "Management cluster: ${MGMT_CLUSTER} (${MGMT_DISPLAY_NAME})"
   echo "Target 1: ${TARGET_CLUSTER_1} (${TARGET_1_DISPLAY_NAME})"
