@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 
 from domains.identity.dependencies import (
@@ -123,6 +123,18 @@ async def _request_email_verification(request: Request, events: Any, challenge: 
 
 @router.get(gateway_routes.AUTH_SESSION_PATH, response_model=AuthSessionResponse)
 async def session(current: Any = Depends(require_session)) -> AuthSessionResponse:
+    return _authenticated_body(current)
+
+
+@router.post(gateway_routes.AUTH_SESSION_REFRESH_PATH, response_model=AuthSessionResponse)
+async def refresh_session(
+    response: Response,
+    current: Any = Depends(require_session),
+    password_auth: Any = Depends(get_password_auth),
+) -> AuthSessionResponse:
+    if not await password_auth.sessions.touch_session(current.token):
+        raise HTTPException(status_code=401, detail="authentication required")
+    _set_session_cookie(response, current)
     return _authenticated_body(current)
 
 

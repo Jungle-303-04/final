@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import shutil
 import subprocess
@@ -48,6 +49,7 @@ from packages.contracts.gateway.requests import (
     AgentReconcileStatusRequest,
     EvidenceJobResultRequest,
     EvidenceJobScheduleRequest,
+    TargetPreflightRequest,
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import (
@@ -59,6 +61,7 @@ from packages.contracts.gateway.responses import (
     EvidenceJobResultResponse,
     EvidenceJobScheduleResponse,
     TargetInstallResponse,
+    TargetPreflightResponse,
 )
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -109,6 +112,9 @@ PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
 LOCAL_PLACEHOLDER_IMAGES = {"", "service:local", "kubeheal-service:latest"}
 BLOCKED_TEST_CLUSTER_IDS = {"bruno-api-test"}
 BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
+CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+AGENT_STATUS_NOT_REGISTERED = "not_registered"
+TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -213,6 +219,69 @@ def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
                 f"deploy_provider={DIRECT_APPLY_DEPLOY_PROVIDER}"
             ),
         )
+
+
+def target_agent_image_ready(image: str = "") -> bool:
+    candidate = image.strip()
+    if candidate and candidate not in LOCAL_PLACEHOLDER_IMAGES:
+        return True
+    return bool(env(TARGET_AGENT_IMAGE_ENV, "") or env(GITOPS_WEBHOOK_IMAGE_ENV, ""))
+
+
+def target_preflight_provider_checks(
+    payload: TargetPreflightRequest,
+) -> tuple[bool, list[str], list[str], dict[str, Any], bool | None]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    selected: dict[str, Any] = {}
+    provider_errors = 0
+
+    for category, key in (
+        (ProviderCategory.CLOUD, payload.cloud_provider),
+        (ProviderCategory.DEPLOY, payload.deploy_provider),
+    ):
+        try:
+            selected[category.value] = require_available_provider(category, key).to_body()
+        except ValueError as exc:
+            errors.append(f"{TARGET_PROVIDER_INVALID}: {exc}")
+            provider_errors += 1
+
+    if payload.apply and payload.deploy_provider != DIRECT_APPLY_DEPLOY_PROVIDER:
+        errors.append(
+            f"{TARGET_PROVIDER_INVALID}: direct apply requires "
+            f"deploy_provider={DIRECT_APPLY_DEPLOY_PROVIDER}"
+        )
+        provider_errors += 1
+    if payload.kube_context and payload.deploy_provider != DIRECT_APPLY_DEPLOY_PROVIDER:
+        errors.append(
+            f"{TARGET_PROVIDER_INVALID}: kube_context requires "
+            f"deploy_provider={DIRECT_APPLY_DEPLOY_PROVIDER}"
+        )
+        provider_errors += 1
+
+    kube_context_allowed: bool | None = None
+    allowlist = allowed_kube_contexts()
+    if payload.kube_context:
+        kube_context_allowed = payload.kube_context in allowlist
+        if not kube_context_allowed:
+            errors.append(KUBE_CONTEXT_NOT_ALLOWED)
+            provider_errors += 1
+    elif payload.apply and payload.deploy_provider == DIRECT_APPLY_DEPLOY_PROVIDER and allowlist:
+        kube_context_allowed = False
+        errors.append(KUBE_CONTEXT_NOT_ALLOWED)
+        provider_errors += 1
+
+    if payload.deploy_provider == DIRECT_APPLY_DEPLOY_PROVIDER and not allowlist:
+        warnings.append(
+            "KUBE_CONTEXT_ALLOWLIST is empty; direct apply can only use the api-gateway "
+            "process current kube context"
+        )
+
+    if not target_agent_image_ready(payload.image):
+        errors.append(TARGET_AGENT_IMAGE_NOT_CONFIGURED)
+        provider_errors += 1
+
+    return provider_errors == 0, errors, warnings, selected, kube_context_allowed
 
 
 def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
@@ -357,6 +426,64 @@ def inventory_counts(counts: list[dict[str, Any]]) -> dict[str, int]:
 
 # require_admin_session 이 세션을 검증 → base router 에 둠.
 # (라우터 단위 require_session + require_admin_session = 이중 검증/레이트리밋 2배 회피)
+@router.post(gateway_routes.TARGETS_PREFLIGHT_PATH, response_model=TargetPreflightResponse)
+async def target_registration_preflight(
+    payload: TargetPreflightRequest,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> TargetPreflightResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    cluster_id = payload.cluster_id.strip()
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not cluster_id:
+        errors.append("cluster_id is required")
+    elif not CLUSTER_ID_PATTERN.match(cluster_id):
+        errors.append("cluster_id must use lowercase letters, numbers, and hyphens")
+    if cluster_id in BLOCKED_TEST_CLUSTER_IDS:
+        errors.append("test target registrations are not allowed")
+
+    provider_ready, provider_errors, provider_warnings, selected, kube_context_allowed = (
+        target_preflight_provider_checks(payload)
+    )
+    errors.extend(provider_errors)
+    warnings.extend(provider_warnings)
+
+    existing = None
+    getter = getattr(db, "get_cluster_registration", None)
+    if cluster_id and callable(getter):
+        existing = getter(workspace_id, cluster_id)
+    duplicate_cluster_id = existing is not None
+    if duplicate_cluster_id:
+        errors.append("cluster_id is already registered")
+
+    agents: list[dict[str, Any]] = []
+    lister = getattr(db, "list_cluster_agent_statuses", None)
+    if cluster_id and callable(lister):
+        agents = lister(workspace_id, cluster_id)
+    latest_agent = agents[0] if agents else None
+    connection_status = (
+        cluster_connection_status(latest_agent)
+        if duplicate_cluster_id or latest_agent
+        else AGENT_STATUS_NOT_REGISTERED
+    )
+
+    return TargetPreflightResponse(
+        valid=not errors,
+        duplicate_cluster_id=duplicate_cluster_id,
+        provider_ready=provider_ready,
+        agent_install_status=connection_status,
+        connection_status=connection_status,
+        kube_context_allowed=kube_context_allowed,
+        errors=errors,
+        warnings=warnings,
+        selected=selected,
+        last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
+        last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
+    )
+
+
 @router.post(gateway_routes.TARGETS_PATH, response_model=TargetInstallResponse)
 async def register_target(
     payload: TargetRegisterRequest,

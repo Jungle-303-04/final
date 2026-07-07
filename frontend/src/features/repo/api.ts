@@ -12,10 +12,53 @@ export interface CreateApplicationInput {
   cluster_id: string;
 }
 
+export interface RepositoryProbe {
+  repo_ref: string;
+  normalized_repo_ref: string;
+  valid: boolean;
+  reachable: boolean;
+  default_branch?: string | null;
+  private?: boolean | null;
+  html_url?: string | null;
+  warnings: string[];
+  errors: string[];
+}
+
+export interface RepositoryBranch {
+  name: string;
+  protected: boolean;
+  default: boolean;
+}
+
+export interface RepositoryManifestCandidate {
+  path: string;
+  source_type: 'raw-yaml' | 'raw-json' | 'kustomize' | 'helm' | string;
+  display_name: string;
+  reason: string;
+}
+
+export interface RepositoryManifestValidation {
+  repo_ref: string;
+  branch: string;
+  manifest_path: string;
+  valid: boolean;
+  status: string;
+  validation_mode: string;
+  resource_count: number;
+  resources: { api_version: string; kind: string; namespace?: string | null; name: string }[];
+  warnings: string[];
+  errors: string[];
+}
+
 export const repoKeys = {
   apps: () => ['applications'] as const,
   runs: (id: string) => ['applications', id, 'runs'] as const,
   deployments: (id: string) => ['applications', id, 'deployments'] as const,
+  probe: (repoRef: string) => ['repo-discovery', 'probe', repoRef] as const,
+  branches: (repoRef: string) => ['repo-discovery', 'branches', repoRef] as const,
+  manifests: (repoRef: string, branch: string) => ['repo-discovery', 'manifests', repoRef, branch] as const,
+  validation: (repoRef: string, branch: string, manifestPath: string, sourceType: string) =>
+    ['repo-discovery', 'validation', repoRef, branch, manifestPath, sourceType] as const,
 };
 export const useApplications = () =>
   useQuery({ queryKey: repoKeys.apps(), queryFn: () => get<{ applications: Record<string, unknown>[] }>('/applications'), refetchInterval: 30_000, select: d => d.applications.map(adaptApplication) });
@@ -60,6 +103,53 @@ export const useDeployments = (appId: string) =>
     queryKey: repoKeys.deployments(appId),
     queryFn: () => get<{ deployments: Record<string, unknown>[] }>(`/applications/${appId}/deployments`),
     select: d => d.deployments.map(adaptDeployment),
+  });
+export const useRepositoryProbe = (repoRef: string, enabled: boolean) =>
+  useQuery({
+    queryKey: repoKeys.probe(repoRef),
+    queryFn: () => post<RepositoryProbe>('/repositories/discovery/probe', { repo_ref: repoRef }),
+    enabled,
+    retry: false,
+    staleTime: 60_000,
+  });
+export const useRepositoryBranches = (repoRef: string, enabled: boolean) =>
+  useQuery({
+    queryKey: repoKeys.branches(repoRef),
+    queryFn: () => get<{ default_branch?: string | null; branches: RepositoryBranch[]; warnings: string[] }>(
+      `/repositories/discovery/branches?repo_ref=${encodeURIComponent(repoRef)}`,
+    ),
+    enabled,
+    retry: false,
+    staleTime: 60_000,
+  });
+export const useRepositoryManifestCandidates = (repoRef: string, branch: string, enabled: boolean) =>
+  useQuery({
+    queryKey: repoKeys.manifests(repoRef, branch),
+    queryFn: () => get<{ candidates: RepositoryManifestCandidate[]; warnings: string[] }>(
+      `/repositories/discovery/manifests?repo_ref=${encodeURIComponent(repoRef)}&branch=${encodeURIComponent(branch)}`,
+    ),
+    enabled,
+    retry: false,
+    staleTime: 30_000,
+  });
+export const useRepositoryManifestValidation = (
+  repoRef: string,
+  branch: string,
+  manifestPath: string,
+  sourceType: string,
+  enabled: boolean,
+) =>
+  useQuery({
+    queryKey: repoKeys.validation(repoRef, branch, manifestPath, sourceType),
+    queryFn: () => post<RepositoryManifestValidation>('/repositories/discovery/validate', {
+      repo_ref: repoRef,
+      branch,
+      manifest_path: manifestPath,
+      source_type: sourceType,
+    }),
+    enabled,
+    retry: false,
+    staleTime: 30_000,
   });
 export function useApproval() {
   const qc = useQueryClient();

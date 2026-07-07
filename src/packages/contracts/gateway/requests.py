@@ -213,6 +213,15 @@ class TargetRegisterRequest(StrictModel):
         return self
 
 
+class TargetPreflightRequest(StrictModel):
+    cluster_id: str = Field(default="", max_length=253)
+    cloud_provider: str = "existing-k8s"
+    deploy_provider: str = "manual-manifest"
+    apply: bool = False
+    kube_context: str | None = None
+    image: str = ""
+
+
 class CommandRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     action: str = Command.DEFAULT_ACTION
@@ -262,6 +271,17 @@ class ApplicationUpsertRequest(StrictModel):
     default_branch: str = DEFAULT_REPO_BRANCH
     manifest_path: str = DEFAULT_MANIFEST_PATH
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RepositoryProbeRequest(StrictModel):
+    repo_ref: str = Field(min_length=1, max_length=240)
+
+
+class RepositoryManifestValidationRequest(StrictModel):
+    repo_ref: str = Field(min_length=1, max_length=240)
+    branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
+    manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
+    source_type: str = Field(default="", max_length=40)
 
 
 class DeploymentBindingUpsertRequest(StrictModel):

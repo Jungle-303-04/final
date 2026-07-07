@@ -11,6 +11,7 @@ class FakeRedisClient:
         self.values: dict[str, str] = {}
         self.get_calls = 0
         self.delete_calls = 0
+        self.expire_calls: list[tuple[str, int]] = []
 
     async def getdel(self, key: str) -> str | None:
         return self.values.pop(key, None)
@@ -22,6 +23,10 @@ class FakeRedisClient:
     async def delete(self, key: str) -> None:
         self.delete_calls += 1
         self.values.pop(key, None)
+
+    async def expire(self, key: str, ttl_seconds: int) -> bool:
+        self.expire_calls.append((key, ttl_seconds))
+        return key in self.values
 
 
 def session_config() -> RedisSessionStoreConfig:
@@ -56,3 +61,29 @@ def test_email_verification_token_is_consumed_once() -> None:
     assert second is None
     assert redis.get_calls == 0
     assert redis.delete_calls == 0
+
+
+def test_touch_session_extends_session_ttl_without_reading_payload() -> None:
+    store = RedisSessionStore(session_config())
+    redis = FakeRedisClient()
+    redis.values["session:token-1"] = json.dumps(
+        {"user_id": "user-1", "roles": ["user"], "workspace_id": "default"}
+    )
+    store.client = redis  # type: ignore[assignment]
+
+    touched = asyncio.run(store.touch_session("token-1"))
+
+    assert touched is True
+    assert redis.expire_calls == [("session:token-1", 60)]
+    assert redis.get_calls == 0
+
+
+def test_touch_session_returns_false_for_missing_token() -> None:
+    store = RedisSessionStore(session_config())
+    redis = FakeRedisClient()
+    store.client = redis  # type: ignore[assignment]
+
+    touched = asyncio.run(store.touch_session("missing-token"))
+
+    assert touched is False
+    assert redis.expire_calls == [("session:missing-token", 60)]
