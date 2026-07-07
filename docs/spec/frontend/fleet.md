@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 0b4058dd
 status: synced
 ---
 
@@ -18,7 +18,7 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `@/shared/lib/api`(`get`) | [shared](shared.md) | REST client |
-| import ← | `@/features/console/pages/HomePage` | [app](app.md) | `useFleetSummary`, `healthScore`, `healthLabel` 소비 |
+| import ← | `@/features/console/pages/HomePage` | [app](app.md) | `useFleetSummary`, `healthScore`, `healthLabel` 소비. 선택 클러스터의 usage/widget/preset 훅과 함께 홈 dashboard grid 를 구성 |
 | import ← | `@/features/cluster/ClusterDetailView` | [cluster](./cluster.md) | `useClusterAgg` 소비 |
 | 백엔드 | `/fleet/summary`, `/clusters/{id}/summary` | [api-gateway](../services/gateway-api-gateway.md) | 대시보드 집계 API |
 
@@ -49,7 +49,10 @@ status: synced
 
 ## 소비 화면
 
-- `HomePage`(`/`)는 `useFleetSummary()`로 상단 집계 카드, treemap, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `pathFor('/clusters/:clusterId')` 로 이동해 `/console` base path를 보존한다.
+- `HomePage`(`/`)는 `useFleetSummary()`로 플릿 맵 treemap, KPI strip, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `pathFor('/clusters/:clusterId')` 로 이동해 `/console` base path를 보존한다.
+- 홈 플릿 맵은 `all`, `cpu`, `memory`, `incidents` 렌즈 탭을 제공한다. `all`은 health score 와 pod total, `cpu`/`memory`는 관측 사용률을 낮을수록 좋은 score 로, `incidents`는 open incident 수와 위험 score 로 매핑한다.
+- 홈 KPI strip 은 `FleetTotals`와 `FleetClusterSummary[]`에서 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 계산한다. CPU/MEM 관측값이 없으면 합성하지 않고 `—`로 표시한다.
+- 홈 dashboard grid 의 저장 위젯/CPU 추세 카드는 선택 클러스터 기준 `useMetricWidgets`, `useMetricQueryPresets`, `useClusterUsage` 결과를 사용한다. fleet API가 제공하지 않는 위젯/시계열을 여기서 만들어 넣지 않는다.
 - `ClusterDetailView`는 `useClusterAgg(clusterId)`로 `ClusterAggPanel`을 렌더한다. 이 보조 패널은 pending 이면 null, 실패하면 본문을 막지 않고 재시도 문구를 표시한다.
 
 ## 라우트

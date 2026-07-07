@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 01:09 KST (Plural 콘솔 아카이브 격리 + 실서비스 홈 복각 디자인 1차)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 01:47 KST (인증 가드 스켈레톤 정지 수정 + 다음 안정화 분석)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -12,7 +12,31 @@
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
 
-## 체크포인트 (현재) — `/console` 아카이브 격리 + `/` Plural 복각 홈 1차
+## 체크포인트 (현재) — 인증 가드 스켈레톤 정지 수정 + 다음 안정화 분석
+
+- 구현:
+  - `RequireSession`은 세션 조회가 실패(`isError`)하거나 인증 데이터가 없으면 즉시 `/login?returnTo=<현재 경로>`로 보낸다. 보호 경로 `/`에서 장시간 스켈레톤만 보이는 상태를 막는다.
+  - `RequireGuest`는 이미 인증된 세션이 확정된 경우만 안전한 `returnTo`로 보낸다. 세션 조회가 pending이거나 실패한 로그인/가입 화면은 막지 않고 렌더한다.
+  - API 클라이언트에 선택적 `AbortSignal/timeoutMs` 옵션을 추가했고, `useSession()`에만 `8_000ms` timeout을 적용했다. 일반 실데이터 API 호출에는 timeout 정책을 새로 강제하지 않았다.
+  - 홈 플릿 배열은 memoized reference로 고정해 선택 클러스터 보정 effect가 실제 fleet 변경에만 반응하도록 정리했다.
+  - 운영 화면에 mock/fake/hardcoded production data 추가 없음.
+- 검증:
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test -- --runInBand` → 10 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+  - local browser QA: `/` → `/login?returnTo=%2F`, email input 1개, password input 1개, submit button 1개, skeleton 0개.
+  - local browser QA: `/console/` archive shell 1개, `실서비스` 링크 1개, heatmap tile 19개.
+  - screenshots: `/tmp/k8s-root-local-login-guard.png`, `/tmp/k8s-console-archive-local.png`.
+- 병렬 분석 결과:
+  - frontend 구조 감사: `/console` archive와 `/` service 경계는 분리됐지만 `consoleChildren(basePath)`, `NotFoundPage`의 `/console` 흔적, `StatCard` dead export, cluster drilldown 대형 컴포넌트, metrics/workflow helper 중복이 다음 리팩토링 후보.
+  - backend 안정화 감사: `gateway_outbox_relay_error + nats.errors.MaxPayloadError`는 oversized evidence payload가 outbox poison row로 남아 반복 publish되는 구조가 핵심 후보. 최소 수정 방향은 raw evidence event 발행이 아니라 DB JSONB 보존 + event reference화, relay byte guard, oversized row park/archive다.
+- 다음:
+  1. 이 단위를 `fix: auth guard / session timeout / 로그인` 형식의 한국어+영어 키워드 커밋으로 저장·푸시·console 재배포한다.
+  2. live `/` 미인증 진입이 로그인으로 떨어지는지, `/console/` archive가 유지되는지 smoke 한다.
+  3. 다음 커밋은 route/archive 경계 dead code 정리 또는 backend evidence/outbox MaxPayload guard 중 하나를 의미 단위로 진행한다.
+
+## 체크포인트 — `/console` 아카이브 격리 + `/` Plural 복각 홈 1차
 
 - 구현:
   - `/console/*`를 실제 서비스 라우트와 분리된 `features/console-archive/ArchivedConsoleDemo`로 이동했다. 이 경로는 보존용 디자인 데모이며 실제 운영 데이터 경로가 아니다.
