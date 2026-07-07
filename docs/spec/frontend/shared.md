@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: b367da80
 status: synced
 ---
 
@@ -34,16 +34,18 @@ status: synced
 |---|---|---|
 | `ApiErrorKind` | `frontend/src/shared/lib/api.ts :: ApiErrorKind` | `'unauthorized' \| 'forbidden' \| 'not_found' \| 'invalid' \| 'rate_limited' \| 'server' \| 'network'` |
 | `ApiError` | `frontend/src/shared/lib/api.ts :: ApiError` | `class extends Error { kind; status; detail; constructor(status: number, detail: string) }` — kind 매핑: 401→unauthorized, 403→forbidden, 404→not_found, 422/409→invalid, 429→rate_limited, ≥500→server, 그 외→network |
+| `ApiOptions` | `frontend/src/shared/lib/api.ts :: ApiOptions` | `{ signal?: AbortSignal; timeoutMs?: number }` — 호출자가 parent signal 또는 request timeout 을 선택적으로 넘길 때만 사용 |
 | `setUnauthorizedHandler` | `frontend/src/shared/lib/api.ts :: setUnauthorizedHandler` | `(fn: () => void) => void` — 모듈 변수 `onUnauthorized` 등록 |
-| `api` | `frontend/src/shared/lib/api.ts :: api` | `async <T>(method: string, path: string, body?: unknown): Promise<T>` |
-| `get` / `post` / `put` / `del` | `frontend/src/shared/lib/api.ts :: get` 등 | `api` 의 메서드 커링 (`del` 은 DELETE) |
+| `api` | `frontend/src/shared/lib/api.ts :: api` | `async <T>(method: string, path: string, body?: unknown, options: ApiOptions = {}): Promise<T>` |
+| `get` / `post` / `put` / `del` | `frontend/src/shared/lib/api.ts :: get` 등 | `api` 의 메서드 커링. `get(p, options)`, `post(p, body, options)`, `put(p, body, options)`, `del(p, options)` |
 
 `api()` 동작:
 
-1. `fetch(`${BASE}${path}`, { method, credentials: 'include', headers: body ? {'content-type':'application/json'} : undefined, body: JSON.stringify(body) })`. `BASE = import.meta.env.VITE_API_BASE ?? '/api'`.
-2. fetch 예외 → `throw new ApiError(0, '네트워크 오류')`.
-3. `!res.ok`: 401 이면 `onUnauthorized?.()` 먼저 호출. detail 은 `res.json().detail ?? res.statusText`(파싱 실패 시 statusText). `throw new ApiError(res.status, String(detail))`.
-4. 204 → `undefined as T`, 그 외 → `res.json()`.
+1. `createRequestSignal(options)` 로 optional `AbortSignal`을 만든다. `timeoutMs`가 없으면 caller signal 을 그대로 쓰고, 있으면 새 `AbortController`를 만들고 timeout 또는 parent abort 중 먼저 온 이벤트로 abort 한다.
+2. `fetch(`${BASE}${path}`, { method, credentials: 'include', headers, body, signal })`. `BASE = import.meta.env.VITE_API_BASE ?? '/api'`. body 가 있으면 `content-type: application/json`, POST/PUT/PATCH/DELETE 는 CSRF intent header 를 붙인다.
+3. fetch 예외(네트워크 실패 또는 abort) → `throw new ApiError(0, '네트워크 오류')`. `finally`에서 timeout 과 parent abort listener 를 해제한다.
+4. `!res.ok`: 401 이면 `onUnauthorized?.()` 먼저 호출. detail 은 `res.json().detail ?? res.statusText`(파싱 실패 시 statusText). `throw new ApiError(res.status, String(detail))`.
+5. 204 → `undefined as T`, 그 외 → `res.json()`.
 
 **인증 토큰 처리**: Authorization 헤더 없음 — 세션 쿠키 기반(`credentials: 'include'`). 401 처리는 핸들러 콜백([app/providers](./app.md#providers--frontendsrcappproviderstsx--providers)가 세션 쿼리 무효화)으로 위임한다.
 
