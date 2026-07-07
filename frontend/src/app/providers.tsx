@@ -5,6 +5,7 @@ import { setUnauthorizedHandler } from '@/shared/lib/api';
 import { clearSessionHint, sessionKey } from '@/features/auth/api';
 import { installSessionRefresh } from '@/features/auth/sessionRefresh';
 import { Toasts } from '@/shared/ui';
+import { ToastProvider, ToastViewport } from '@/ui';
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -16,8 +17,11 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
-      <Toasts />
+      <ToastProvider>
+        {children}
+        <Toasts />
+        <ToastViewport />
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
