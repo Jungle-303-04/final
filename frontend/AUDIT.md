@@ -210,6 +210,7 @@
 - 목록 loading은 Skeleton 카드 그리드, empty는 "설치 항목 없음" + 새로고침 CTA, error는 "카탈로그 조회 실패" + 재시도 CTA로 분리했다.
 - 설치 mutation은 카드별 pending을 유지하고 성공/실패 toast를 제공한다. 기존 `{}` 요청 대신 `CatalogInstallRequest`의 필수 `application_name`을 item slug/name에서 생성해 함께 보낸다.
 - 검증(2026-07-08 08:50 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`, Tailwind arbitrary value) 0건. Playwright mock으로 `/catalog`를 1440/1024/390 폭에서 순회했고 카탈로그 카드/태그/설치 요청 toast, POST body `{application_name:"postgresql", values:{}}`, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/catalog-desktop.png`, `/tmp/catalog-tablet.png`, `/tmp/catalog-mobile.png`.
+- 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `b3c86e1c-catalog-ui-20260708085319`, `CatalogView-D9Tir7kG.js` lazy chunk 서빙 확인.
 
 ## 클러스터 제어 UX 변경 (2026-07-08)
 
