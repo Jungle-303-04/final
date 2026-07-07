@@ -7,7 +7,7 @@
 ## 목록 — ClusterListView (/clusters)
 
 ResourceTable: 이름, 환경 Badge, 연결 상태(●), 노드/팟 수, 열린 인시던트, 등록일.
-데이터: `GET /clusters` + 행별 summary lazy. [+ 클러스터 등록] → [resources 위저드](resources.md#클러스터-등록-위저드-실존-api--mock-불필요).
+데이터: `GET /clusters` + 행별 summary lazy. admin 의 [+ 클러스터 등록] → [resources 위저드](resources.md#클러스터-등록-위저드-실존-api--mock-불필요).
 
 ## 상세 — ClusterDetailView (/clusters/:clusterId)
 

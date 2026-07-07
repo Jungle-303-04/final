@@ -17,7 +17,7 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptCluster`, `adaptInventorySummary`, `adaptWorkloadResource`, `adaptServiceResource`, `adaptK8sEventResource`, `adaptInventoryResource`), `@/shared/lib/live`(`liveStore`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·실시간·UI (인벤토리 응답은 전부 adapt 경유) |
-| import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 스케일/재시작 버튼 활성 |
+| import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 등록 CTA 표시, 스케일/재시작 버튼 활성 |
 | import | `@/features/fleet/api`(`useClusterAgg`) | [fleet](./fleet.md) | 상세 상단 집계 요약 보조 패널 |
 | import | `@/features/notifications/api`(`useTimeline`) | [notifications](./notifications.md) | 캐시 공유용 참조(`void useTimeline`) |
 | import | `@/features/resources/RegisterClusterWizard` | [resources](./resources.md) | 목록 화면의 등록 위저드 |
@@ -47,10 +47,10 @@ status: synced
 ### `frontend/src/features/cluster/ClusterListView.tsx :: ClusterListView` (default export)
 
 - 라우트: `/clusters`.
-- state: `wizard: boolean`. 훅: `useClusters`, `useNavigate`, `useSearchFilter`(검색 대상 `` `${name} ${cluster_id} ${environment}` ``).
-- 트리: `PageHeader('클러스터', sub, actions=primary "+ 클러스터 등록" → wizard open)` → `SearchInput` → `Card > QueryBoundary > ResourceTable<Cluster>` → `RegisterClusterWizard(open, onClose)`.
+- state: `wizard: boolean`. 훅: `useClusters`, `useNavigate`, `useIsAdmin`, `useSearchFilter`(검색 대상 `` `${name} ${cluster_id} ${environment}` ``).
+- 트리: `PageHeader('클러스터', sub, actions=admin 일 때만 primary "+ 클러스터 등록" → wizard open)` → `SearchInput` → `Card > QueryBoundary > ResourceTable<Cluster>` → `RegisterClusterWizard(open, onClose)`.
 - 테이블 열: 이름(b) / 환경(`Badge tone=neutral`) / 연결(`Badge status`) / 노드 / 팟 / 인시던트(>0 이면 `Badge tone=danger`, 아니면 '—') / 등록(`timeAgo`). 행 클릭 → `/clusters/${cluster_id}`.
-- `ResourceTable.empty`: 검색어가 있으면 `EmptyState(GlobeIcon, "'<검색어>' 검색 결과가 없습니다", "이름·환경·cluster_id 로 검색합니다")`; 검색어가 없으면 `EmptyState(GlobeIcon, "등록된 클러스터가 없습니다", "클러스터를 등록하고 에이전트가 연결되면 실측 인벤토리가 표시됩니다", action=첫 클러스터 등록)`.
+- `ResourceTable.empty`: 검색어가 있으면 `EmptyState(GlobeIcon, "'<검색어>' 검색 결과가 없습니다", "이름·환경·cluster_id 로 검색합니다")`; 검색어가 없으면 admin 은 `EmptyState(..., "클러스터를 등록하고 에이전트가 연결되면 실측 인벤토리가 표시됩니다", action=첫 클러스터 등록)`, non-admin 은 `EmptyState(..., "접근 권한이 있는 클러스터가 연결되면 실측 인벤토리가 표시됩니다")`.
 
 ### `frontend/src/features/cluster/ClusterDetailView.tsx :: ClusterDetailView` (default export)
 
@@ -95,6 +95,7 @@ status: synced
 ## 불변식·오류 (Invariants & Errors)
 
 - 팟 hot 강조는 폴링을 기다리지 않고 WS 스냅샷 이름 매칭으로 즉시 반영한다.
+- 클러스터 등록 CTA와 빈 상태 등록 action은 admin 에게만 노출한다. 등록 API도 provider/target 라우터에서 admin 세션을 요구한다.
 - 스케일/재시작은 비동기 수락(202 성격) — 성공 토스트는 "큐 등록"을 의미하며 완료를 뜻하지 않는다.
 - 스케일/재시작 버튼 노출 자체는 항상, 활성화만 `useIsAdmin()` — 서버가 최종 검증. 서버 거부(403 policy/422 검증)는 `commandFailureMessage` 로 사유를 danger 토스트에 그대로 노출한다.
 - 인벤토리 응답(`resources[]` + `summary` envelope)은 반드시 shared/adapt 의 `adapt*Resource` 계열로 정규화해서 사용한다 — 뷰에서 raw 필드 직접 접근 금지.

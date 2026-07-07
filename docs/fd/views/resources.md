@@ -6,15 +6,15 @@
 
 ## 클러스터 등록 위저드 (실존 API — mock 불필요)
 
-진입: /clusters [+ 클러스터 등록], / 홈 빈 상태, 커맨드 팔레트(구현 예정).
+진입: admin 에서 /clusters [+ 클러스터 등록], / 홈 빈 상태의 등록 action.
 Modal(size lg) 내 Stepper 4단계. 백엔드 흐름은 Bruno `02-target-admin` 과 동일.
 
 | 단계 | 내용 | API |
 |---|---|---|
-| 1. 프로바이더 | 카드 그리드에서 cloud/deploy provider 조합 선택 | `GET /providers/catalog` |
-| 2. 검증 | credential ref 등 입력 → 유효성 | `POST /providers/validate` — errors/warnings 인라인 표시 |
-| 3. 설정 | cluster_id(slug 검증), name, environment, 관측 스택 URL 3종(기본값 채움), evidence 주기 | 로컬 |
-| 4. 발급 | 등록 실행 → install manifest + agent token 표시 | `POST /targets` (apply:false) |
+| 1. 프로바이더 | 등록 flow 선택 + import 후보 선택 | `GET /providers/cluster-discovery` |
+| 2. 설정 | cluster_id(slug 검증), name, 설치 방식/kube context | 로컬 |
+| 3. 사전 점검 | 중복 cluster_id, provider readiness, agent 상태 확인 | `POST /targets/preflight` — errors/warnings 인라인 표시 |
+| 4. 발급 | 등록 실행 → install manifest + agent token 표시 | `POST /targets` |
 
 4단계 결과 화면:
 

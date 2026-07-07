@@ -9,9 +9,9 @@
 ## 레이아웃
 
 ```text
-PageHeader("플릿 현황") [+ 레포 연결] [+ 클러스터 등록]
+PageHeader("플릿 현황") [+ 레포 연결] [+ 클러스터 등록(admin)]
 ├─ StatCard 5개: 클러스터 · 열린 인시던트 · 승인 대기 · 실행 중 워크플로우 · 처리 실패 이벤트(DLQ)
-├─ 클러스터 없으면 EmptyState + [첫 클러스터 등록]
+├─ 클러스터 없으면 EmptyState (admin 은 [첫 클러스터 등록], non-admin 은 접근 가능한 클러스터 안내)
 ├─ 클러스터 있으면 TreemapChart + 클러스터 Table
 ├─ 최근 인시던트 카드
 ├─ 승인 대기 배포 카드
@@ -40,13 +40,13 @@ PageHeader("플릿 현황") [+ 레포 연결] [+ 클러스터 등록]
 
 ## 인터랙션
 
-- `+ 레포 연결`은 `ConnectRepoWizard`, `+ 클러스터 등록`은 `RegisterClusterWizard`를 연다.
+- `+ 레포 연결`은 `ConnectRepoWizard`, admin 의 `+ 클러스터 등록`은 `RegisterClusterWizard`를 연다.
 - 클러스터 treemap tile 또는 테이블 row 클릭은 `/clusters/:clusterId`로 이동한다.
 - 최근 인시던트는 `/incidents/:incidentId`, 승인 대기는 notice link, AI 대화는 `/ai/:conversationId` 링크를 사용한다.
 
 ## AC
 
 - [ ] `/overview` 접속 시 `/`로 redirect 된다.
-- [ ] 클러스터가 0개면 HomePage가 등록 CTA를 제공한다.
+- [ ] 클러스터가 0개면 HomePage가 admin 에게만 등록 CTA를 제공한다.
 - [ ] `GET /fleet/summary` 값만으로 카드, treemap, 테이블을 그리며 프론트에서 집계 값을 합성하지 않는다.
 - [ ] treemap tile/cluster row 클릭이 클러스터 상세로 이어진다.

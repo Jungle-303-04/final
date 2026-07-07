@@ -29,7 +29,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/resources.md](views/resources.md) |
-| 클러스터 등록 | `GET /providers/catalog` → `POST /providers/validate` → `POST /targets` (install manifest + agent token 발급) → `GET /clusters/{id}/connection-status` 폴링 |
+| 클러스터 등록 | `GET /providers/cluster-discovery` → `POST /targets/preflight` → `POST /targets` (install manifest + agent token 발급) → `GET /clusters/{id}/connection-status` 폴링 |
 | 레포 등록 | `POST /github/webhook` 경로는 기계용. 사람용 등록은 catalog install(`POST /catalog/items/{item_id}/installs`) 또는 application 생성(`POST /applications`) 흐름으로 레포/워치타깃/바인딩이 함께 생성됨 |
 | 갭 | 레포 단독 CRUD 조회 API 부분적 — **G4**(repository/watch target 목록 조회) |
 

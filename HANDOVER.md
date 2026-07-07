@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:45 KST (실가입 인증 경로 보강 + DB 초기화 방침)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:58 KST (provider admin 경계 + DB 초기화 절차 재정렬)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -8,6 +8,25 @@
 - 화면 수치와 드릴다운은 실제 세션 권한으로 접근 가능한 DB/API/클러스터 관측값만 표시한다. 개발용/테스트용 격리 객체는 단위 테스트 내부에만 두고 운영 경로에 연결하지 않는다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (15:58 KST) — provider admin 경계 + 최종 DB 초기화 절차 재정렬
+
+- **작업 항목 수 정정**:
+  - 중간 추적에서 일부 항목을 묶어 5개처럼 보였으나 실제 범위는 9개다. 현재 기준: 안정화 코드, 배포/라이브 검증, 인증, 동적 등록, 프론트 폴리싱, DB 백업/스냅샷, DB 초기화/bootstrap, 실 클러스터/레포 재연결, 최종 E2E/HANDOVER/커밋·푸시.
+- **provider/cluster 등록 권한 경계 보강**:
+  - `GET /providers/catalog`, `GET /providers/cluster-discovery`, `POST /providers/validate` 는 모두 `require_admin_session` 가드 대상이다.
+  - 이유: cluster discovery 응답은 kube context, 외부 console handle, import 후보 등 운영 환경 메타데이터를 포함할 수 있어 비관리자에게 노출하면 안 된다.
+  - 프론트에서도 비관리자에게 cluster 등록 액션/빈 상태 등록 버튼을 노출하지 않도록 조정했다. 레포 연결은 유지하되, 배포 대상 클러스터가 없으면 관리자 권한 요청 안내만 보여준다.
+- **동적 레포/클러스터 등록 재분석 결과**:
+  - 레포 위저드는 실제 GitHub API 기반 probe → branch list → manifest candidate list → validation → app/deployment 생성 흐름이 구현되어 있다.
+  - 남은 생산화 과제: DB에 등록된 앱/브랜치/manifest watch target을 poller가 직접 순회하도록 확장, Helm/Kustomize render validation 실제 실행, app 생성 성공 후 deployment 생성 실패 시 보상 처리.
+  - 클러스터 위저드는 provider catalog/discovery/preflight/register/connection polling 흐름이 구현되어 있다.
+  - 남은 생산화 과제: env-derived 후보를 넘어 실제 Plural/API/kubeconfig discovery 확장, preflight에서 Kubernetes 연결성까지 검증.
+- **DB 초기화 방침 업데이트**:
+  - repo에는 안전한 prod DB reset 스크립트가 없다. 최종 초기화는 `aws-up.sh` 전체 실행이 아니라 별도 절차로 격리해야 한다.
+  - 필수 선행: Postgres dump, PVC/EBS snapshot, `postgresql-secret`, `management-runtime-secret`, `management-runtime-config`, `pgbouncer-config` 백업.
+  - 초기화 후 공식 schema/init 경로는 `Database().init()`이며, admin bootstrap은 raw SQL 대신 `Database.upsert_admin_account()` 를 사용한다.
+  - 초기화 뒤 `cluster-1`/`cluster-2`와 실제 repo/app을 다시 등록하고, `/clusters`, `/connection-status`, `/inventory/summary`, `/fleet/summary`, 로그인/session을 라이브로 검증한다.
 
 ## 최신 업데이트 (15:45 KST) — 실가입 인증 경로 보강 패스
 
@@ -104,7 +123,7 @@
 - **라이브 DB 관찰(배포 전)**:
   - `rca_timeline`: 11,965 rows, 대부분 `rca.followup.required`(10,590) / `approval.recommended`(1,256). 최근까지 증가 중이므로 이번 코드 배포 후 증가 멈춤 여부 확인 필수.
   - `event_dead_letters`: open 1,895. 원인 대부분 과거 `rca-fallback-worker`의 `EvidenceBundle: unexpected field(s): missing_evidence_checks`(1,891건, 2026-07-06 09~11 UTC) + 디스크 full 흔적 3건.
-  - 전체 DB 초기화는 하지 말 것. 배포 후 새 증가가 멈춘 것을 확인한 뒤, 위 과거 open DLQ만 `status='replayed'`, `replay_event_id='archived-20260707-stale-dlq'`, `replayed_at=now()`로 아카이브하는 부분 정리를 권장.
+  - 당시 기준 권장사항은 "전체 DB 초기화 금지, 원인 확인된 과거 DLQ만 아카이브"였음. 현재는 사용자 명시 지시로 최종 완료 후 1회 DB 초기화로 변경되었고, 백업/스냅샷 선행이 필수다.
 - **남은 즉시 작업**:
   1. 이 변경 커밋/푸시 → dev CI → Promote Dev To Main → AWS CD 확인.
   2. 배포 후 `rca_timeline`/`event_dead_letters` 증가율 5~10분 관찰.

@@ -159,6 +159,9 @@ Bruno는 응답 cookie를 보관하므로, 같은 Environment에서 다음 요�
 
 ### 01-providers
 
+이 폴더의 요청은 provider catalog와 cluster 등록 후보를 다루므로 admin 세션이 필요하다.
+먼저 `00-health-auth/06-login`으로 `service_admin` 계정에 로그인한다.
+
 `01-provider-catalog`는 현재 Gateway가 알고 있는 provider 선택지를 보여주는 API다.
 target 등록 전에 어떤 source, deploy, cloud, secret provider 조합을 쓸 수 있는지 확인한다.
 민정이 target/provider 쪽을 바꾸면 이 응답도 같이 확인해야 한다.
@@ -433,6 +436,7 @@ Bruno는 `service_session` httpOnly cookie를 cookie jar에 보관하고 다음 
 `01-providers/01-provider-catalog.bru`를 보낸다.
 
 정상 출력에는 `providers`가 있다.
+401/403이면 먼저 admin 계정으로 로그인했는지 확인한다.
 
 `01-providers/02-validate-provider-selection.bru`를 보낸다.
 
