@@ -975,9 +975,13 @@ class TargetClusterAgent:
         return ctx.fail(f"unsupported action: {ctx.action}")
 
     def command_payload(self, command: CommandRecord) -> JsonObject:
-        payload = command.get(Gateway.PAYLOAD) or {}
+        payload = command.get(Gateway.PAYLOAD)
         if not isinstance(payload, dict):
-            return {}
+            return dict(command)
+        if str(command.get(Gateway.ACTION, "")) == AgentConfig.APPLY_MANIFEST_ACTION and isinstance(
+            payload.get("diff"), dict
+        ):
+            return payload
         nested_payload = payload.get(Gateway.PAYLOAD)
         return nested_payload if isinstance(nested_payload, dict) else payload
 
