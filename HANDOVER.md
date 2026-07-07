@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 00:18 KST (metric query/widget API + service drilldown UI)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 00:52 KST (cluster registration 후보 검색/listbox + preflight 상태판)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,25 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
+
+## 체크포인트 (현재) — 클러스터 등록 후보 검색/listbox + 사전 점검 상태판
+
+- 구현:
+  - `RegisterClusterWizard`의 클러스터 import 후보를 select 한 칸이 아니라 `SearchInput` + listbox 카드로 바꿨다.
+  - 후보 검색은 실제 `GET /providers/cluster-discovery` 응답의 `cluster_id/name/source/cloud_provider/deploy_provider/kube_context/external_handle/console_url/labels`만 대상으로 한다. 운영 경로에 mock/fake/hardcoded 후보 없음.
+  - provider 카드는 실제 `cloud_provider`, 후보 수, 사용 가능한 설치 경로 수를 표시한다. 불필요한 긴 설명문은 줄여 SaaS 설정 화면처럼 판단 정보만 남겼다.
+  - 설치 방식도 select 대신 상태 badge가 있는 listbox 버튼으로 변경했다. `unavailable` 설치 방식은 disabled 상태로 남고, 선택 기본값은 `preferredDeployProvider()`가 실제 available 항목만 고른다.
+  - 직접 입력으로 전환하면 이전 import 후보의 `kube_context`가 남지 않도록 선택 상태를 명시적으로 해제한다.
+  - preflight 결과는 `cluster_id`, 프로바이더, 에이전트, 중복, kube context 허용 여부를 고정된 상태 행으로 보여준다. 오류/경고는 backend 응답 원문을 그대로 표시한다.
+  - UI 전용 CSS는 줄바꿈/폭 튐 방지를 위해 말줄임, 고정 grid, mobile 단일 컬럼 접힘을 추가했다.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test -- --runInBand` → 10 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+- 다음:
+  1. 이 단위를 `feat: 클러스터 등록 / 후보 검색 / 사전 점검`으로 커밋/푸시한다.
+  2. 이어서 AI 채팅 P1 리스크를 처리한다: 삭제된 waiting 대화의 늦은 worker 응답 차단, 대화 접근 범위(user/workspace 정책) 확정 및 구현.
+  3. console 이미지 배포 후 `/clusters` 등록 모달 live 브라우저 QA를 수행한다.
 
 ## 체크포인트 (현재) — metric query/widget 저장 API + service/namespace drilldown
 
