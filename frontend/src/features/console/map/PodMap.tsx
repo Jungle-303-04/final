@@ -58,7 +58,7 @@ export function PodMap({ clusterId, pods }: { clusterId: string; pods: PodMetric
     });
   }, [pods, lens]);
 
-  const rects = useMemo(() => layoutTreemap(cells, width || 1, HEIGHT), [cells, width]);
+  const rects = useMemo(() => layoutTreemap(cells, width || 1, HEIGHT), [cells, width, HEIGHT]);
 
   return (
     <section className="co-map">

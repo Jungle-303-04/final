@@ -165,6 +165,17 @@ const routes: [string, string, Handler][] = [
 
   ['GET', '/dashboard/rca/timeline', () => ({ items: fx.incidents })],
   ['GET', '/dashboard/rca/incidents/:id', (p) => ({ item: fx.incidents.find(i => i.incident_id === p.id) ?? err404() })],
+  // 범용 조회 API — 실 계약(EvidenceQueryResponse / RcaReportListResponse)과 동형
+  ['GET', '/evidence', (_p, _b, q) => {
+    const corr = q.get('correlation_id'); const kind = q.get('kind');
+    const items = fx.evidenceRecords.filter(e => (!corr || e.correlation_id === corr) && (!kind || e.kind === kind));
+    return { items, limit: Number(q.get('limit') ?? 50), offset: 0, has_more: false };
+  }],
+  ['GET', '/rca-reports', (_p, _b, q) => {
+    const corr = q.get('correlation_id');
+    const items = fx.rcaReports.filter(r => !corr || r.correlation_id === corr);
+    return { items, limit: Number(q.get('limit') ?? 50), offset: 0, has_more: false };
+  }],
   ['GET', '/dead-letters', () => ({ dead_letters: state.deadLetters })],
   ['POST', '/dead-letters/:id/replay', (p) => {
     const d = state.deadLetters.find(d => String(d.id) === p.id) ?? err404();

@@ -113,37 +113,33 @@ incident context가 없거나 symptom rule이 없거나 근거가 부족하면 a
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py -q
 ```
 
-## 6단계. RCA cause decorator를 확인한다
+## 6단계. RCA cause catalog를 확인한다
 
-이 파일을 연다.
+이 파일들을 연다.
 
 ```text
+src/services/ai/agent/causes/catalog/crashloop.yaml
+src/services/ai/agent/causes/loader.py
 src/services/ai/agent/playbooks/cause.py
 ```
 
-찾을 것은 `@rca.cause`와 `CauseCandidateSpec`이다.
+찾을 것은 YAML `rules` 항목과 `CauseCandidateSpec`으로 변환되는 필드다.
 
-새 RCA rule은 symptom과 후보를 같이 등록한다.
+새 RCA rule은 symptom과 후보를 같은 YAML rule에 등록한다.
 
-```python
-@rca.cause(
-    symptoms=("CrashLoopBackOff", "pod_restart_loop"),
-    required_sources=("kubernetes", "metrics", "logs"),
-    candidates=(
-        CauseCandidateSpec(
-            candidate_id="oom_killed",
-            title="컨테이너 OOMKilled",
-            description="컨테이너가 메모리 제한을 초과해 재시작됐을 가능성이 있습니다.",
-            expected_evidence=("kubernetes", "metrics", "logs"),
-            checks=(
-                "containerStatuses.lastState.terminated.reason == OOMKilled 확인",
-                "restartCount 증가와 memory usage가 limit 근처인지 확인",
-            ),
-        ),
-    ),
-)
-class CrashLoopBackOffProfile:
-    pass
+```yaml
+rules:
+  - id: "crashloop_backoff"
+    symptoms: ["CrashLoopBackOff", "pod_restart_loop"]
+    required_sources: ["kubernetes", "metrics", "logs"]
+    candidates:
+      - candidate_id: "oom_killed"
+        title: "컨테이너 OOMKilled"
+        description: "컨테이너가 메모리 제한을 초과해 재시작됐을 가능성이 있습니다."
+        expected_evidence: ["kubernetes", "metrics", "logs"]
+        checks:
+          - "containerStatuses.lastState.terminated.reason == OOMKilled 확인"
+          - "restartCount 증가와 memory usage가 limit 근처인지 확인"
 ```
 
 `symptoms`는 IncidentRecord symptom과 매칭할 이름이다.
@@ -173,7 +169,7 @@ src/services/ai/agent/causes/
 새 symptom rule을 어디에 추가할지 본다.
 
 첨부된 RCA symptom 자료는 symptom, 후보, Kubernetes API, metrics, logs, traces, metadata, 판단 기준으로 나뉜다.
-코드에서는 이 값을 `@rca.cause`의 symptoms, required_sources, candidate_id, expected_evidence, checks로 옮긴다.
+코드에서는 이 값을 catalog YAML의 `symptoms`, `required_sources`, `candidate_id`, `expected_evidence`, `checks`로 옮긴다.
 
 바로 확인할 테스트:
 
@@ -287,7 +283,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_event_golden_path.py tests/
 
 ## 12단계. 변경할 때 같이 고칠 곳을 확인한다
 
-새 symptom rule을 추가하면 `src/services/ai/agent/causes/*.py`, `@rca.cause`, 후보, required evidence, test를 같이 고친다.
+새 symptom rule을 추가하면 `src/services/ai/agent/causes/catalog/*.yaml`, 후보, required evidence, loader/schema test를 같이 고친다.
 
 새 recovery route를 추가하면 `src/services/ai/agent/recovery/*.py`, `@rca.recovery`, dispatch test를 같이 고친다.
 

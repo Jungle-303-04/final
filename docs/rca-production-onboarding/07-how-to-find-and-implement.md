@@ -155,8 +155,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 | RCA event 계약 | `src/domains/rca/events.py` |
 | evidence worker | `src/services/ai/evidence-worker/app.py` |
 | incident worker | `src/services/ai/incident-worker/app.py` |
-| cause decorator | `src/services/ai/agent/playbooks/cause.py` |
-| cause rules | `src/services/ai/agent/causes/` |
+| cause catalog | `src/services/ai/agent/causes/catalog/*.yaml` |
+| cause loader/decorator | `src/services/ai/agent/causes/loader.py`, `src/services/ai/agent/playbooks/cause.py` |
 | cause engine | `src/services/ai/agent/causes/engine.py` |
 | recovery decorator | `src/services/ai/agent/recovery/` |
 | dispatch worker | `src/services/ai/dispatch-worker/app.py` |
@@ -168,7 +168,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 ```text
 새 symptom 또는 recovery
   -> rca event/body 필드 확인
-  -> @rca.cause 또는 @rca.recovery 등록
+  -> cause catalog YAML 또는 @rca.recovery 등록
   -> evidence source와 missing evidence 기준 작성
   -> command 또는 safe_pr route 선택
   -> scm-worker/GithubScmProvider 경계 확인

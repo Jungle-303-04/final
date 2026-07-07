@@ -48,8 +48,8 @@
 
 ### 4. RCA 룰 설정화
 
-- 현재: `services/ai/agent/causes/` 하드코딩 6종.
-- 설계: 룰의 매칭 조건·expected_evidence·checks를 선언적 YAML 카탈로그로 추출, 로더가 기동 시 읽는다. 기존 6종을 YAML로 이관하되 동작 동일성을 스냅샷 테스트로 보장. 코드 룰 추가 경로도 유지(점진 전환).
+- 현재: `services/ai/agent/causes/catalog/*.yaml` 선언형 카탈로그와 `loader.py`가 rule을 로딩한다.
+- 설계: 룰의 매칭 조건·expected_evidence·checks는 YAML 카탈로그에 두고, 로더가 기동 시 읽는다. 코드 룰 추가 경로도 유지한다.
 - 완료 기준: 기존 RCA 테스트 전부 통과 + YAML만 추가해 새 룰이 활성화되는 테스트.
 
 ### 5. 실서비스 데이터 시나리오

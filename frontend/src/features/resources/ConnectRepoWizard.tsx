@@ -1,9 +1,10 @@
 // 레포 연결 위저드 — application(+watch target/binding) 생성 (docs/fd/views/resources)
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCreateApplication } from '@/features/repo/api';
 import { useClusters } from '@/features/cluster/api';
-import { Button, Field, KeyValue, Modal, Stepper } from '@/shared/ui';
+import { Button, Field, KeyValue, Modal, Skeleton, Stepper } from '@/shared/ui';
+import { uiStore } from '@/shared/lib/ui-store';
 
 const STEPS = ['레포', '배포 대상', '확인'];
 
@@ -18,9 +19,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const nav = useNavigate();
   const refOk = /^[\w.-]+\/[\w.-]+$/.test(repoRef);
   const name = repoRef.split('/')[1] ?? '';
+  const clusters = clustersQ.data ?? [];
+  // 닫을 때 입력 초기화 — 다음에 열면 항상 1단계부터(중간 상태 잔류 방지)
+  const reset = () => { setStep(0); setRepoRef(''); setBranch('main'); setManifestPath('deploy.yaml'); setClusterId(''); create.reset(); onClose(); };
 
   return (
-    <Modal open={open} title="레포 연결" onClose={onClose} size="lg">
+    <Modal open={open} title="레포 연결" onClose={reset} size="lg">
       <Stepper steps={STEPS} current={step} />
       {step === 0 && (
         <>
@@ -33,16 +37,25 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
             단일 YAML(문서 여러 개 <code>---</code> 구분 지원), 디렉터리(하위 .yaml/.yml/.json 전부),
             <code>kustomization.yaml</code>, Helm <code>Chart.yaml</code> 경로를 모두 지원합니다.
           </p>
-          <div style={{ textAlign: 'right' }}><Button variant="primary" disabled={!refOk} onClick={() => { setClusterId(clustersQ.data?.[0]?.cluster_id ?? ''); setStep(1); }}>다음</Button></div>
+          <div style={{ textAlign: 'right' }}><Button variant="primary" disabled={!refOk} onClick={() => { setClusterId(clusters[0]?.cluster_id ?? ''); setStep(1); }}>다음</Button></div>
         </>
       )}
       {step === 1 && (
         <>
-          <Field label="대상 클러스터">
-            <select className="input" value={clusterId} onChange={e => setClusterId(e.target.value)}>
-              {(clustersQ.data ?? []).map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
-            </select>
-          </Field>
+          {clustersQ.isPending ? <Skeleton lines={2} /> : clusters.length === 0 ? (
+            <div style={{ padding: '8px 0' }}>
+              <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', margin: '0 0 8px' }}>
+                배포 대상으로 지정할 클러스터가 없습니다 — 먼저 클러스터를 등록해주세요.
+              </p>
+              <Link to="/clusters" onClick={reset}><Button variant="primary">클러스터 등록하러 가기 →</Button></Link>
+            </div>
+          ) : (
+            <Field label="대상 클러스터">
+              <select className="input" value={clusterId} onChange={e => setClusterId(e.target.value)}>
+                {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
+              </select>
+            </Field>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Button onClick={() => setStep(0)}>이전</Button>
             <Button variant="primary" disabled={!clusterId} onClick={() => setStep(2)}>다음</Button>
@@ -57,9 +70,19 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
             <Button onClick={() => setStep(1)}>이전</Button>
             <Button variant="primary" loading={create.isPending}
               onClick={() => create.mutate({ name, repo_ref: repoRef, branch, manifest_path: manifestPath, cluster_id: clusterId },
-                { onSuccess: d => { onClose(); nav(`/repos/${d.application_id}`); } })}>연결</Button>
+                {
+                  onSuccess: d => {
+                    uiStore.getState().toast('ok', `${name} 연결 완료 — 첫 커밋이 감지되면 run 이 생성됩니다`);
+                    reset();
+                    nav(`/repos/${d.application_id}`);
+                  },
+                })}>연결</Button>
           </div>
-          {create.isError && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{(create.error as Error).message}</p>}
+          {create.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              연결 실패 — {(create.error as Error).message}. 입력을 확인한 뒤 다시 시도해주세요.
+            </p>
+          )}
         </>
       )}
     </Modal>

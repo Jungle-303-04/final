@@ -2,10 +2,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
 import { get, post } from '@/shared/lib/api';
-import type { DeadLetter, Notice, WorkflowRun } from '@/shared/lib/types';
+import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, WorkflowRun } from '@/shared/lib/types';
 import { adaptIncident, adaptIncidentDetail } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
+import { uiStore } from '@/shared/lib/ui-store';
 import { timeAgo } from '@/shared/lib/format';
 
 export const useTimeline = () =>
@@ -17,11 +18,32 @@ export const useIncident = (incidentId: string) =>
     enabled: !!incidentId, refetchInterval: 30_000,
     select: d => adaptIncidentDetail(d.item ?? {}),
   });
+// 인시던트 correlation 범위의 저장된 evidence — GET /evidence (세션 워크스페이스 스코프)
+export const useEvidence = (correlationId: string | undefined, kind?: string) =>
+  useQuery({
+    queryKey: ['evidence', correlationId ?? '', kind ?? 'all'],
+    queryFn: () => get<{ items: EvidenceRecord[]; has_more: boolean; limit: number; offset: number }>(
+      `/evidence?correlation_id=${encodeURIComponent(correlationId ?? '')}${kind ? `&kind=${encodeURIComponent(kind)}` : ''}&limit=100`),
+    enabled: !!correlationId, refetchInterval: 30_000,
+  });
+// 인시던트 correlation 범위의 RCA report 요약 — GET /rca-reports
+export const useRcaReports = (correlationId: string | undefined) =>
+  useQuery({
+    queryKey: ['rca-reports', correlationId ?? ''],
+    queryFn: () => get<{ items: RcaReportSummary[]; has_more: boolean; limit: number; offset: number }>(
+      `/rca-reports?correlation_id=${encodeURIComponent(correlationId ?? '')}&limit=50`),
+    enabled: !!correlationId, refetchInterval: 30_000,
+    select: d => d.items,
+  });
 export const useDeadLetters = (enabled: boolean) =>
   useQuery({ queryKey: ['dead-letters'], queryFn: () => get<{ dead_letters: DeadLetter[] }>('/dead-letters?limit=20'), refetchInterval: 60_000, enabled, select: d => d.dead_letters });
 export const useReplayDeadLetter = () => {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (id: number) => post(`/dead-letters/${id}/replay`), onSuccess: () => qc.invalidateQueries({ queryKey: ['dead-letters'] }) });
+  return useMutation({
+    mutationFn: (id: number) => post(`/dead-letters/${id}/replay`),
+    onSuccess: () => { uiStore.getState().toast('ok', '재처리 이벤트를 발행했습니다'); qc.invalidateQueries({ queryKey: ['dead-letters'] }); },
+    onError: err => uiStore.getState().toast('danger', `재처리 실패 — ${(err as Error).message}`),
+  });
 };
 
 const seenKey = (kind: string) => `notice:lastSeen:${kind}`;
@@ -39,7 +61,7 @@ export function useNotices(): { notices: Notice[]; unread: number; markAllSeen: 
 
   const notices = useMemo<Notice[]>(() => {
     const out: Notice[] = [];
-    runs.forEach(({ appId, runs: rs }) => rs.filter((r: WorkflowRun) => r.status === 'WAITING_FOR_APPROVAL').forEach((r: WorkflowRun) => out.push({
+    runs.items.forEach(({ appId, runs: rs }) => rs.filter((r: WorkflowRun) => r.status === 'WAITING_FOR_APPROVAL').forEach((r: WorkflowRun) => out.push({
       id: `apr-${r.run_id}`, kind: 'approval', tone: 'warn',
       title: `배포 승인 필요: ${appId} ${(r.commit_sha ?? '').slice(0, 7)}`, at: r.started_at ?? '', link: `/workflows/${r.run_id}`, read: false,
     })));

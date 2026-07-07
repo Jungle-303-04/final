@@ -1,0 +1,42 @@
+# fault: oom — 워크로드 대비 memory limit이 너무 낮아 컨테이너가 OOMKilled.
+# tail /dev/zero는 개행 없는 스트림을 계속 버퍼링해 메모리를 무한 점유한다.
+# 기대 증상: lastState.terminated.reason=OOMKilled, exitCode 137,
+# 이후 CrashLoopBackOff 반복, memory usage가 limit(64Mi)에 붙는 시계열.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-generator
+  namespace: sandbox
+  labels:
+    app: report-generator
+    scenario: oom
+    app.kubernetes.io/part-of: shop-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-generator
+  template:
+    metadata:
+      labels:
+        app: report-generator
+        scenario: oom
+        app.kubernetes.io/part-of: shop-demo
+    spec:
+      containers:
+        - name: report-generator
+          image: busybox:1.36.1
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "{\"ts\":\"$(date -Iseconds)\",\"level\":\"info\",\"service\":\"report-generator\",\"action\":\"loading monthly sales dataset into memory\"}"
+              sleep 5
+              tail /dev/zero
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
