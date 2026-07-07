@@ -5,19 +5,28 @@ import {
   useClusters,
   useClusterSummary,
   useInventoryResourceDetail,
+  useNodePodSummaries,
+  useNodeSummaries,
   usePods,
   useResources,
   useRestart,
   useScale,
   useServices,
+  useUnregisterCluster,
   useWorkloads,
+  type ClusterUnregisterResponse,
+  type NodeHeatmapSummary,
+  type PodHeatmapSummary,
   type InventoryResourceIdentity,
 } from '@/features/cluster/api';
 import { useClusterAgg, type ClusterAggIncident } from '@/features/fleet/api';
+import { DrilldownHeatmap, type DrilldownTile } from '@/features/fleet/DrilldownHeatmap';
+import { useApplications, useDeploymentsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
+import { ApiError } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { timeAgo } from '@/shared/lib/format';
-import type { ClusterSummary, InventoryResource, InventoryResourceDetail, K8sEvent, ServiceInfo, Workload, WorkloadResource } from '@/shared/lib/types';
+import type { Application, ClusterSummary, Deployment, InventoryResource, InventoryResourceDetail, K8sEvent, ServiceInfo, Workload, WorkloadResource } from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
 import { encodeChatContext } from '@/features/chat/context';
 import {
@@ -25,6 +34,7 @@ import {
   Breadcrumb,
   Button,
   Card,
+  CodeBlock,
   Drawer,
   EmptyState,
   Field,
@@ -67,14 +77,23 @@ export default function ClusterDetailView() {
   const summaryQ = useClusterSummary(clusterId);
   const podsQ = usePods(clusterId);
   const cluster = clustersQ.data?.find((item) => item.cluster_id === clusterId);
+  const managementCluster = cluster?.role === 'management';
   const snapshot = liveStore((state) => state.snapshot);
   const hotPods = useMemo(() => new Set(snapshot?.namespaces.flatMap((item) => item.pods.filter((row) => row.hot).map((row) => row.name)) ?? []), [snapshot]);
   const admin = useIsAdmin();
   const scale = useScale(clusterId);
   const restart = useRestart(clusterId);
+  const unregister = useUnregisterCluster(clusterId);
+  const appsQ = useApplications();
+  const deploymentsQ = useDeploymentsAll(appsQ.data ?? []);
+  const clusterDeployments = useMemo(
+    () => clusterDeploymentRows(appsQ.data ?? [], deploymentsQ.items, clusterId),
+    [appsQ.data, clusterId, deploymentsQ.items],
+  );
   const [scaleTarget, setScaleTarget] = useState<DeploymentTarget | null>(null);
   const [restartTarget, setRestartTarget] = useState<DeploymentTarget | null>(null);
   const [replicas, setReplicas] = useState(2);
+  const [unregisterOpen, setUnregisterOpen] = useState(false);
 
   const podRows = useMemo(() =>
     (podsQ.data ?? [])
@@ -152,8 +171,24 @@ export default function ClusterDetailView() {
         title={cluster?.name ?? clusterId}
         description="워크로드, 팟, 노드, 서비스, 이벤트를 같은 인벤토리 맥락에서 확인합니다"
         breadcrumb={<Breadcrumb items={[{ label: '클러스터', href: pathFor('/clusters') }, { label: cluster?.name ?? clusterId }]} />}
-        actions={<ContextActions clusterId={clusterId} subject="cluster" subjectName={clusterId} kind="Cluster" compact />}
+        actions={(
+          <>
+            <ContextActions clusterId={clusterId} subject="cluster" subjectName={clusterId} kind="Cluster" compact />
+            {admin && !managementCluster && (
+              <Button variant="danger" size="sm" onClick={() => setUnregisterOpen(true)}>등록 해제</Button>
+            )}
+          </>
+        )}
       />
+
+      {managementCluster && (
+        <Card>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <Badge tone="info">관리 클러스터</Badge>
+            <p className="text-body text-secondary">관리 클러스터는 콘솔에서 제어할 수 없습니다. 조회 화면만 제공하며 스케일, 재시작, 등록 해제 액션은 숨겨집니다.</p>
+          </div>
+        </Card>
+      )}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="클러스터 요약">
         <StatCard label="노드" value={statValue(summaryQ, summaryQ.data?.nodes.length)} spark={<MiniBars />} />
@@ -168,7 +203,25 @@ export default function ClusterDetailView() {
         <StatCard label="서비스" value={statValue(summaryQ, summaryQ.data?.services)} spark={<MiniBars />} />
       </section>
 
+      <ClusterDrilldownPanel
+        clusterId={clusterId}
+        clusterName={cluster?.name ?? clusterId}
+        selectedNode={sp.get('node') ?? ''}
+        onSelectNode={(node) => {
+          const next = new URLSearchParams(sp);
+          if (node) next.set('node', node);
+          else next.delete('node');
+          setSp(next);
+        }}
+      />
       <ClusterAggPanel clusterId={clusterId} />
+      <ClusterRepositoriesPanel
+        rows={clusterDeployments}
+        loading={appsQ.isPending || deploymentsQ.pending}
+        error={appsQ.isError ? appsQ.error : deploymentsQ.failed ? deploymentsQ.error : null}
+        onRetry={() => void appsQ.refetch()}
+        pathFor={pathFor}
+      />
       <ContextEvents clusterId={clusterId} title="최근 클러스터 이벤트" match="" compact />
 
       <Card title="인벤토리 탐색" description="검색어와 탭을 조합해 관련 리소스를 좁혀봅니다">
@@ -199,6 +252,7 @@ export default function ClusterDetailView() {
           <WorkloadsTab
             clusterId={clusterId}
             admin={admin}
+            readOnly={Boolean(managementCluster)}
             filter={filter}
             onInspect={(row) => openDetail('workload', row.name, row.namespace, row.kind)}
             onDrillPods={(row) => showTab('pods', row.name)}
@@ -244,6 +298,7 @@ export default function ClusterDetailView() {
         open={Boolean(selectedDetail)}
         onClose={closeResourceDetail}
         admin={admin}
+        readOnly={Boolean(managementCluster)}
         onShowPods={(name) => showTab('pods', name)}
         onShowResources={(name) => showTab('resources', name)}
         onScale={(target) => {
@@ -304,6 +359,18 @@ export default function ClusterDetailView() {
           파괴적 명령이므로 워크로드 상태를 확인한 뒤 실행합니다.
         </p>
       </Modal>
+
+      <ClusterUnregisterModal
+        open={unregisterOpen}
+        clusterId={clusterId}
+        clusterName={cluster?.name ?? clusterId}
+        deployments={clusterDeployments}
+        pending={unregister.isPending}
+        onOpenChange={setUnregisterOpen}
+        onConfirm={(handlers) => unregister.mutate(undefined, handlers)}
+        onDone={() => nav(pathFor('/clusters'))}
+        pathFor={pathFor}
+      />
     </div>
   );
 }
@@ -315,9 +382,238 @@ export function deploymentTargetFromWorkload(workload: WorkloadResource): Deploy
   return { ns: workload.namespace, name: workload.name, podCount: workload.ready || workload.desired };
 }
 
-function WorkloadsTab({ clusterId, admin, filter, onInspect, onDrillPods, onScale, onRestart }: {
+interface ClusterDeploymentRow {
+  appId: string;
+  appName: string;
+  repoRef: string;
+  branch: string;
+  manifestPath: string;
+  namespace: string;
+  status: string;
+}
+
+function ClusterDrilldownPanel({
+  clusterId,
+  clusterName,
+  selectedNode,
+  onSelectNode,
+}: {
+  clusterId: string;
+  clusterName: string;
+  selectedNode: string;
+  onSelectNode: (node: string) => void;
+}) {
+  const nodesQ = useNodeSummaries(clusterId);
+  const podsQ = useNodePodSummaries(clusterId, selectedNode || undefined);
+  const [selectedPod, setSelectedPod] = useState<PodHeatmapSummary | null>(null);
+  const nav = useNavigate();
+  const pathFor = useConsolePath();
+  const node = nodesQ.data?.find((item) => item.id === selectedNode || item.name === selectedNode);
+  const tiles = selectedNode ? podTiles(podsQ.data ?? []) : nodeTiles(nodesQ.data ?? []);
+  const loading = selectedNode ? podsQ.isPending : nodesQ.isPending;
+  const error = selectedNode ? podsQ.error : nodesQ.error;
+  return (
+    <>
+      <Card
+        title="히트맵 드릴다운"
+        description="클러스터에서 노드, 노드에서 팟까지 같은 레이아웃으로 확대합니다"
+      >
+        <DrilldownHeatmap
+          tiles={tiles}
+          loading={loading}
+          error={(selectedNode ? podsQ.isError : nodesQ.isError) ? error as Error : null}
+          onRetry={() => selectedNode ? void podsQ.refetch() : void nodesQ.refetch()}
+          empty={<EmptyState icon={<BoxIcon />} title={selectedNode ? '이 노드에 팟 없음' : '노드 없음'} description={selectedNode ? '선택한 노드에 표시할 팟이 없습니다' : '표시할 노드 요약이 없습니다'} />}
+          breadcrumb={[
+            { id: 'fleet', label: 'fleet', onClick: () => nav(pathFor('/')) },
+            { id: clusterId, label: clusterName, onClick: selectedNode ? () => onSelectNode('') : undefined },
+            ...(selectedNode ? [{ id: selectedNode, label: node?.name ?? selectedNode }] : []),
+          ]}
+          onTileClick={(tile) => {
+            if (!selectedNode) {
+              onSelectNode(tile.id);
+              return;
+            }
+            setSelectedPod((podsQ.data ?? []).find((pod) => pod.id === tile.id) ?? null);
+          }}
+        />
+      </Card>
+
+      <Drawer
+        open={Boolean(selectedPod)}
+        title={selectedPod ? `${selectedPod.namespace}/${selectedPod.name}` : '팟 상세'}
+        onOpenChange={(open) => !open && setSelectedPod(null)}
+      >
+        {selectedPod && (
+          <div className="grid gap-4">
+            <Card title="팟 상세">
+              <KeyValueList
+                items={[
+                  { label: 'phase', value: <StatusBadge status={selectedPod.phase} /> },
+                  { label: 'ready', value: selectedPod.ready || '없음' },
+                  { label: 'owner', value: `${selectedPod.owner_kind}/${selectedPod.owner || '없음'}` },
+                  { label: '재시작', value: selectedPod.restarts.toLocaleString() },
+                  { label: 'CPU', value: pctText(selectedPod.cpu_pct) },
+                  { label: '메모리', value: pctText(selectedPod.mem_pct) },
+                ]}
+              />
+            </Card>
+            {(selectedPod.incident_id || selectedPod.incident_correlation_id) && (
+              <Button
+                variant="primary"
+                onClick={() => nav(pathFor(`/incidents/${selectedPod.incident_id ?? selectedPod.incident_correlation_id}`))}
+              >
+                인시던트 보기
+              </Button>
+            )}
+          </div>
+        )}
+      </Drawer>
+    </>
+  );
+}
+
+function ClusterRepositoriesPanel({
+  rows,
+  loading,
+  error,
+  onRetry,
+  pathFor,
+}: {
+  rows: ClusterDeploymentRow[];
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  pathFor: (to: string) => string;
+}) {
+  const columns = useMemo<TableColumn<ClusterDeploymentRow>[]>(() => [
+    {
+      id: 'repo',
+      header: '레포',
+      width: 'lg',
+      sortValue: (row) => row.repoRef,
+      cell: (row) => (
+        <Link className="font-semibold text-accent hover:text-accent-hover" to={pathFor(`/repos/${row.appId}`)}>
+          {row.repoRef || row.appName}
+        </Link>
+      ),
+    },
+    { id: 'branch', header: '브랜치', sortValue: (row) => row.branch, cell: (row) => <CodeText>{row.branch || '없음'}</CodeText> },
+    { id: 'manifest', header: 'manifest', width: 'lg', sortValue: (row) => row.manifestPath, cell: (row) => row.manifestPath || '없음' },
+    { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => <NamespaceChip namespace={row.namespace} /> },
+    { id: 'status', header: '상태', sortValue: (row) => row.status, cell: (row) => <StatusBadge status={row.status} /> },
+  ], [pathFor]);
+  return (
+    <Card title="이 클러스터에 배포된 레포" description="배포 정의 기준으로 레포, 브랜치, manifest 관계를 확인합니다">
+      <Table
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => `${row.appId}/${row.namespace}`}
+        loading={loading}
+        error={error ? error as Error : null}
+        onRetry={onRetry}
+        empty={<EmptyState icon={<RepoIcon />} title="배포된 레포 없음" description="이 클러스터를 대상으로 하는 배포 정의가 없습니다" />}
+      />
+    </Card>
+  );
+}
+
+function ClusterUnregisterModal({
+  open,
+  clusterId,
+  clusterName,
+  deployments,
+  pending,
+  onOpenChange,
+  onConfirm,
+  onDone,
+  pathFor,
+}: {
+  open: boolean;
+  clusterId: string;
+  clusterName: string;
+  deployments: ClusterDeploymentRow[];
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (handlers: { onSuccess: (response: ClusterUnregisterResponse | undefined) => void; onError: (error: unknown) => void }) => void;
+  onDone: () => void;
+  pathFor: (to: string) => string;
+}) {
+  const [typed, setTyped] = useState('');
+  const [removeCommand, setRemoveCommand] = useState('');
+  const [blocked, setBlocked] = useState<ClusterDeploymentRow[]>([]);
+  const expected = clusterName || clusterId;
+  const ready = typed === expected;
+  const reset = (nextOpen: boolean) => {
+    onOpenChange(nextOpen);
+    if (!nextOpen) {
+      setTyped('');
+      setRemoveCommand('');
+      setBlocked([]);
+    }
+  };
+  return (
+    <Modal
+      open={open}
+      title={`${clusterName} 등록 해제`}
+      description="클러스터 등록만 해제합니다. 이력은 보존되며 에이전트는 클러스터에서 직접 제거해야 합니다."
+      onOpenChange={reset}
+    >
+      {removeCommand ? (
+        <div className="grid gap-4">
+          <EmptyState title="등록 해제 완료" description="아래 명령을 대상 클러스터에서 실행해 agent 리소스를 제거하세요" />
+          <CodeBlock label="에이전트 제거 명령" code={removeCommand} />
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={onDone}>클러스터 목록</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          <div className="rounded-panel border border-danger/40 bg-danger/10 p-4">
+            <p className="text-body font-semibold text-danger">위험 영역</p>
+            <p className="mt-2 text-body text-secondary">이력은 보존됩니다. 에이전트는 클러스터에서 직접 제거해야 합니다.</p>
+          </div>
+          <Field label="클러스터 이름 확인" help={`${expected} 를 정확히 입력하면 등록 해제가 활성화됩니다`}>
+            <Input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder={expected} />
+          </Field>
+          {blocked.length > 0 && (
+            <div className="grid gap-2 rounded-panel border border-border bg-bg p-3" role="alert">
+              <p className="text-body font-semibold text-danger">연결된 배포 정의가 있어 등록을 해제할 수 없습니다</p>
+              {blocked.map((row) => (
+                <Link key={`${row.appId}/${row.namespace}`} to={pathFor(`/repos/${row.appId}`)} className="flex min-w-0 items-center justify-between gap-3 rounded-control border border-border bg-raised px-3 py-2 text-body hover:bg-surface">
+                  <span className="min-w-0 truncate text-primary">{row.repoRef || row.appName}</span>
+                  <span className="shrink-0 text-caption text-accent">배포 보기</span>
+                </Link>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => reset(false)} disabled={pending}>취소</Button>
+            <Button
+              variant="danger"
+              disabled={!ready || pending}
+              loading={pending}
+              onClick={() => onConfirm({
+                onSuccess: (response) => {
+                  setRemoveCommand(clusterRemoveCommand(response, clusterId));
+                  setBlocked([]);
+                },
+                onError: (error) => setBlocked(clusterUnregisterBlockedRows(error, deployments)),
+              })}
+            >
+              등록 해제
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function WorkloadsTab({ clusterId, admin, readOnly, filter, onInspect, onDrillPods, onScale, onRestart }: {
   clusterId: string;
   admin: boolean;
+  readOnly: boolean;
   filter: string;
   onInspect: (row: WorkloadResource) => void;
   onDrillPods: (row: WorkloadResource) => void;
@@ -338,13 +634,17 @@ function WorkloadsTab({ clusterId, admin, filter, onInspect, onDrillPods, onScal
       width: 'lg',
       cell: (row) => (
         <div className="flex min-w-0 flex-wrap justify-end gap-2" onClick={(event) => event.stopPropagation()}>
-          <Button size="sm" disabled={!admin || row.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale(row)}>스케일</Button>
-          <Button size="sm" variant="danger" disabled={!admin || row.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart(row)}>재시작</Button>
+          {!readOnly && (
+            <>
+              <Button size="sm" disabled={!admin || row.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale(row)}>스케일</Button>
+              <Button size="sm" variant="danger" disabled={!admin || row.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart(row)}>재시작</Button>
+            </>
+          )}
           <Button size="sm" onClick={() => onDrillPods(row)}>팟</Button>
         </div>
       ),
     },
-  ], [admin, onDrillPods, onRestart, onScale]);
+  ], [admin, onDrillPods, onRestart, onScale, readOnly]);
   return (
     <Table
       columns={columns}
@@ -512,12 +812,13 @@ function EventsTab({ clusterId, filter }: { clusterId: string; filter: string })
   );
 }
 
-function ResourceDetailDrawer({ clusterId, identity, open, onClose, admin, onShowPods, onShowResources, onScale, onRestart }: {
+function ResourceDetailDrawer({ clusterId, identity, open, onClose, admin, readOnly, onShowPods, onShowResources, onScale, onRestart }: {
   clusterId: string;
   identity: InventoryResourceIdentity | null;
   open: boolean;
   onClose: () => void;
   admin: boolean;
+  readOnly: boolean;
   onShowPods: (name: string) => void;
   onShowResources: (name: string) => void;
   onScale: (target: DeploymentTarget) => void;
@@ -536,6 +837,7 @@ function ResourceDetailDrawer({ clusterId, identity, open, onClose, admin, onSho
           clusterId={clusterId}
           detail={q.data}
           admin={admin}
+          readOnly={readOnly}
           onShowPods={onShowPods}
           onShowResources={onShowResources}
           onScale={onScale}
@@ -548,10 +850,11 @@ function ResourceDetailDrawer({ clusterId, identity, open, onClose, admin, onSho
   );
 }
 
-function ResourceDetailBody({ clusterId, detail, admin, onShowPods, onShowResources, onScale, onRestart }: {
+function ResourceDetailBody({ clusterId, detail, admin, readOnly, onShowPods, onShowResources, onScale, onRestart }: {
   clusterId: string;
   detail: InventoryResourceDetail;
   admin: boolean;
+  readOnly: boolean;
   onShowPods: (name: string) => void;
   onShowResources: (name: string) => void;
   onScale: (target: DeploymentTarget) => void;
@@ -572,7 +875,7 @@ function ResourceDetailBody({ clusterId, detail, admin, onShowPods, onShowResour
       <div className="flex flex-wrap gap-2">
         {!isService && resource.resource_type !== 'pod' && detail.related_pods.length > 0 && <Button onClick={() => onShowPods(resource.name)}>팟 보기</Button>}
         {resource.resource_type === 'service' && <Button onClick={() => onShowResources(resource.name)}>리소스 보기</Button>}
-        {deploymentTarget && (
+        {deploymentTarget && !readOnly && (
           <>
             <Button disabled={!admin} onClick={() => onScale(deploymentTarget)}>스케일</Button>
             <Button variant="danger" disabled={!admin} onClick={() => onRestart(deploymentTarget)}>재시작</Button>
@@ -942,6 +1245,139 @@ function StatusBadge({ status, label }: { status: string; label?: string }) {
   return <Badge tone={meta.tone}>{label ?? meta.label}</Badge>;
 }
 
+function nodeTiles(nodes: NodeHeatmapSummary[]): DrilldownTile[] {
+  return nodes.map((node) => ({
+    id: node.id || node.name,
+    label: node.name || node.id,
+    size: node.pods_running || 1,
+    health: node.health,
+    meta: <NodeTileMeta node={node} />,
+    badge: node.conditions.length > 0 ? <Badge tone="warning">{node.conditions[0]}</Badge> : undefined,
+  }));
+}
+
+function podTiles(pods: PodHeatmapSummary[]): DrilldownTile[] {
+  return pods.map((pod) => ({
+    id: pod.id,
+    label: pod.name,
+    size: pod.cpu_pct ?? pod.mem_pct ?? 1,
+    health: pod.incident_correlation_id ? 'critical' : pod.health,
+    pulse: Boolean(pod.incident_correlation_id),
+    badge: pod.restarts > 0 ? <Badge tone="warning">재시작 {pod.restarts}</Badge> : undefined,
+    meta: <PodTileMeta pod={pod} />,
+  }));
+}
+
+function NodeTileMeta({ node }: { node: NodeHeatmapSummary }) {
+  return (
+    <>
+      <span>실행 팟 {node.pods_running.toLocaleString()}개</span>
+      <span className="grid gap-1">
+        <MiniGauge label="CPU" value={node.cpu_pct} />
+        <MiniGauge label="MEM" value={node.mem_pct} />
+      </span>
+      {node.conditions.length > 0 && (
+        <span className="flex flex-wrap gap-1">
+          {node.conditions.slice(0, 3).map((condition) => <Badge key={condition} tone="warning">{condition}</Badge>)}
+        </span>
+      )}
+    </>
+  );
+}
+
+function PodTileMeta({ pod }: { pod: PodHeatmapSummary }) {
+  return (
+    <>
+      <span className="min-w-0 truncate">{pod.namespace} · {pod.phase}</span>
+      <span className="grid gap-1">
+        <MiniGauge label="CPU" value={pod.cpu_pct} />
+        <MiniGauge label="MEM" value={pod.mem_pct} />
+      </span>
+      {pod.incident_correlation_id && <Badge tone="danger">인시던트</Badge>}
+    </>
+  );
+}
+
+function MiniGauge({ label, value }: { label: string; value: number | null }) {
+  if (value == null) return <span className="text-caption text-muted">{label} 없음</span>;
+  return (
+    <span className="grid gap-1">
+      <span className="flex items-center justify-between gap-2 text-caption text-muted">
+        <span>{label}</span>
+        <span>{Math.round(value)}%</span>
+      </span>
+      <span className="h-1.5 overflow-hidden rounded-control bg-raised">
+        <span className={cx('block h-full rounded-control', value >= 85 ? 'bg-danger' : value >= 70 ? 'bg-warning' : 'bg-success', gaugeWidthClass(value))} />
+      </span>
+    </span>
+  );
+}
+
+function gaugeWidthClass(value: number) {
+  if (value >= 95) return 'w-full';
+  if (value >= 85) return 'w-11/12';
+  if (value >= 75) return 'w-9/12';
+  if (value >= 60) return 'w-7/12';
+  if (value >= 45) return 'w-6/12';
+  if (value >= 30) return 'w-4/12';
+  if (value >= 15) return 'w-2/12';
+  return 'w-1/12';
+}
+
+function pctText(value: number | null) {
+  return value == null ? '없음' : `${Math.round(value)}%`;
+}
+
+function clusterDeploymentRows(apps: Application[], items: Array<{ appId: string; deployments: Deployment[] }>, clusterId: string): ClusterDeploymentRow[] {
+  const byId = new Map(apps.map((app) => [app.application_id, app]));
+  return items
+    .flatMap((item) => item.deployments.map((deployment) => ({ appId: item.appId, deployment })))
+    .filter(({ deployment }) => deployment.cluster_id === clusterId)
+    .map(({ appId, deployment }) => {
+      const app = byId.get(deployment.application_id ?? appId) ??
+        apps.find((candidate) => candidate.cluster_id === clusterId && candidate.name === deployment.name);
+      return {
+        appId: app?.application_id ?? appId,
+        appName: app?.name ?? deployment.name,
+        repoRef: app?.repo_ref ?? deployment.repo_ref ?? deployment.name,
+        branch: app?.branch ?? deployment.branch ?? '',
+        manifestPath: app?.manifest_path ?? deployment.manifest_path ?? '',
+        namespace: deployment.namespace,
+        status: deployment.status,
+      };
+    });
+}
+
+function clusterRemoveCommand(response: ClusterUnregisterResponse | undefined, clusterId: string) {
+  return response?.agent_remove_command || response?.remove_command || [
+    'kubectl delete deploy/cluster-agent -n target --ignore-not-found',
+    'kubectl delete serviceaccount/cluster-agent -n target --ignore-not-found',
+    'kubectl delete clusterrolebinding cluster-agent-read cluster-agent-self-manage cluster-agent-target-manage cluster-agent-sandbox-write --ignore-not-found',
+    'kubectl delete clusterrole cluster-agent-read cluster-agent-self-manage cluster-agent-target-manage cluster-agent-sandbox-write --ignore-not-found',
+    `# ${clusterId} 등록 이력은 콘솔에 보존됩니다`,
+  ].join('\n');
+}
+
+function clusterUnregisterBlockedRows(error: unknown, fallback: ClusterDeploymentRow[]) {
+  if (!(error instanceof ApiError) || !error.detail.includes('has_deployments')) return [];
+  const raw = error.rawDetail;
+  if (!raw || typeof raw !== 'object') return fallback;
+  const deployments = (raw as Record<string, unknown>).deployments;
+  if (!Array.isArray(deployments)) return fallback;
+  return deployments.map((item) => {
+    const row = item as Record<string, unknown>;
+    return {
+      appId: String(row.application_id ?? row.app_id ?? ''),
+      appName: String(row.name ?? row.app_name ?? row.repository ?? ''),
+      repoRef: String(row.repo_ref ?? row.repository ?? row.name ?? ''),
+      branch: String(row.branch ?? ''),
+      manifestPath: String(row.manifest_path ?? ''),
+      namespace: String(row.namespace ?? ''),
+      status: String(row.status ?? 'active'),
+    };
+  }).filter((row) => row.appId);
+}
+
 function statusMeta(status: string): { label: string; tone: BadgeTone } {
   const key = String(status || 'unknown').toLowerCase();
   if (['healthy', 'ok', 'ready', 'running', 'connected', 'online', 'normal', 'succeeded', 'available'].includes(key)) return { label: statusLabel(status, '정상'), tone: 'success' };
@@ -1060,6 +1496,14 @@ function FileIcon() {
   return (
     <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
       <path d="M4 2.5h5L12.5 6v7.5H4zM9 2.8V6h3.2" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function RepoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
+      <path d="M4 3.5h8A1.5 1.5 0 0 1 13.5 5v8H4A1.5 1.5 0 0 1 2.5 11.5v-7A1 1 0 0 1 3.5 3.5H4zM4 3.5v8M5 6h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
     </svg>
   );
 }

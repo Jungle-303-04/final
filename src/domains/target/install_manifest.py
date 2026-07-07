@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
 from packages.config.settings import env
 from packages.contracts.gateway.requests import DEFAULT_OTEL_SERVICE_NAME, TargetRegisterRequest
 from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
@@ -38,17 +39,20 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
     # native는 API가 즉시 apply 가능한 YAML을 생성, kustomize는 같은 산출물을 향후
     # renderer adapter/웹앱 preview/install 단계에서 교체할 수 있게 선택값으로 노출.
     target_install_renderer()
+    namespace = agent_namespace(payload)
+    role = payload.cluster_role
     return "\n---\n".join(
         block.strip()
         for block in [
-            namespace_manifest(TARGET_NAMESPACE),
-            namespace_manifest(SANDBOX_NAMESPACE),
-            service_account_manifest(),
-            target_rbac_manifest(),
-            sandbox_rbac_manifest(),
+            namespace_manifest(namespace),
+            namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            service_account_manifest(namespace),
+            cluster_read_rbac_manifest(namespace),
+            target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             runtime_config_manifest(payload),
-            runtime_secret_manifest(agent_token),
-            sample_workload_manifest(payload),
+            runtime_secret_manifest(agent_token, namespace),
+            sample_workload_manifest(payload) if role != MANAGEMENT_CLUSTER_ROLE else "",
             cluster_agent_manifest(payload),
         ]
         if block.strip()
@@ -64,17 +68,21 @@ metadata:
 """
 
 
-def service_account_manifest() -> str:
+def agent_namespace(payload: TargetRegisterRequest) -> str:
+    return "management" if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE else TARGET_NAMESPACE
+
+
+def service_account_manifest(namespace: str) -> str:
     return f"""
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: cluster-agent
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 """
 
 
-def target_rbac_manifest() -> str:
+def cluster_read_rbac_manifest(namespace: str) -> str:
     return f"""
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -92,10 +100,27 @@ rules:
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def target_write_rbac_manifest(namespace: str) -> str:
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cluster-agent-self-manage
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -110,7 +135,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: cluster-agent-self-manage
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -118,26 +143,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: {TARGET_NAMESPACE}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cluster-agent-read
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-agent-read
-subjects:
-  - kind: ServiceAccount
-    name: cluster-agent
-    namespace: {TARGET_NAMESPACE}
+    namespace: {namespace}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: cluster-agent-target-manage
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 rules:
   - apiGroups: ["apps"]
     resources: ["daemonsets"]
@@ -155,11 +167,11 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: {TARGET_NAMESPACE}
+    namespace: {namespace}
 """
 
 
-def sandbox_rbac_manifest() -> str:
+def sandbox_rbac_manifest(namespace: str) -> str:
     return f"""
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -186,7 +198,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
-    namespace: {TARGET_NAMESPACE}
+    namespace: {namespace}
 """
 
 
@@ -199,22 +211,31 @@ def control_namespaces_line(payload: TargetRegisterRequest) -> str:
 
 
 def runtime_config_manifest(payload: TargetRegisterRequest) -> str:
+    namespace = agent_namespace(payload)
+    node_collector_enabled = (
+        payload.install_node_collector if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE else False
+    )
+    bootstrap_mode = (
+        MANAGEMENT_BOOTSTRAP_MODE if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE else "target"
+    )
     return f"""
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: target-runtime-config
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 data:
   TARGET_CLUSTER_ID: {yaml_string(payload.cluster_id)}
+  CLUSTER_ROLE: {yaml_string(payload.cluster_role)}
+  BOOTSTRAP_MODE: {yaml_string(bootstrap_mode)}
   WORKSPACE_ID: {yaml_string(payload.workspace_id)}
   EVIDENCE_INTERVAL_SECONDS: {yaml_string(str(payload.evidence_interval_seconds))}
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
-  NODE_COLLECTOR_ENABLED: {yaml_string(str(payload.install_node_collector).lower())}{control_namespaces_line(payload)}
+  NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
-  NODE_COLLECTOR_NAMESPACE: {yaml_string(TARGET_NAMESPACE)}
+  NODE_COLLECTOR_NAMESPACE: {yaml_string(namespace)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"
   COMMAND_OUTBOX_DB_PATH: "/var/lib/target-agent/command-outbox.db"
   OTEL_SERVICE_NAME: {yaml_string(DEFAULT_OTEL_SERVICE_NAME)}
@@ -222,13 +243,13 @@ data:
 """
 
 
-def runtime_secret_manifest(agent_token: str) -> str:
+def runtime_secret_manifest(agent_token: str, namespace: str) -> str:
     return f"""
 apiVersion: v1
 kind: Secret
 metadata:
   name: target-runtime-secret
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 type: Opaque
 stringData:
   AGENT_TOKEN: {yaml_string(agent_token)}
@@ -271,12 +292,13 @@ spec:
 
 
 def cluster_agent_manifest(payload: TargetRegisterRequest) -> str:
+    namespace = agent_namespace(payload)
     return f"""
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cluster-agent
-  namespace: {TARGET_NAMESPACE}
+  namespace: {namespace}
 spec:
   replicas: 1
   selector:

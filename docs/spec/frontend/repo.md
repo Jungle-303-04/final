@@ -67,9 +67,10 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 ### `frontend/src/features/repo/RepoListView.tsx :: RepoListView` (default export)
 
 - 라우트: `/repos`. state: `wizard: boolean`.
-- 트리: `PageHeader('레포 (GitOps)', actions="+ 레포 연결")` → `Card > QueryBoundary(useApplications) > ResourceTable<Application>` → `ConnectRepoWizard`.
-- 빈 목록: `EmptyState(IconFile, '연결된 레포가 없습니다', 레포 연결 버튼)`.
-- 열: 앱(b) / 레포(`code {repo_ref}@{branch}`) / 클러스터 / 최근 run(`Badge status={last_run_status}`, 없으면 '—') / 마지막 배포(timeAgo, 없으면 '—'). 행 클릭 → `/repos/${application_id}`.
+- 트리: `PageHeader('배포', actions="배포 정의 추가")` → `Card('배포 정의')` → 배포 정의 카드 리스트 → `ConnectRepoWizard`.
+- 빈 목록: `EmptyState('배포 정의 없음', 배포 정의 추가 버튼)`.
+- 데이터: `useApplications`, `useDeploymentsAll(apps)`, `useClusters`. 카드에는 앱 이름, `repo_ref@branch`, manifest, 최근 run, 마지막 배포, 연결 클러스터 뱃지를 표시한다.
+- 연결 클러스터 뱃지는 `/clusters/${cluster_id}` 링크이며, 클러스터 `connection_status`가 connected/online 이면 success, 그 외는 warning tone이다. 카드 자체 클릭은 `/repos/${application_id}`로 이동한다.
 
 ### `frontend/src/features/repo/RepoDetailView.tsx :: RepoDetailView` (default export)
 

@@ -117,6 +117,8 @@ status: synced
 |---|---|---|---|
 | `GET /fleet/summary` (`gateway_routes.FLEET_SUMMARY_PATH`) | `src/domains/dashboard/fleet_router.py :: fleet_summary` | `FleetSummaryResponse(clusters=[FleetClusterSummaryItem...], totals=FleetTotals)` | `require_session` + `accessible_resource_ids(cluster, Permission.CLUSTER_READ)`로 클러스터 필터 |
 | `GET /clusters/{cluster_id}/summary` (`CLUSTER_SUMMARY_PATH`) | `src/domains/dashboard/fleet_router.py :: cluster_summary_detail` | `ClusterSummaryDetailResponse`; 미등록 클러스터면 404 `"cluster not found"` | `require_session` + cluster `Permission.CLUSTER_READ`(기존 클러스터 라우트와 동일 가드) |
+| `GET /clusters/{cluster_id}/nodes/summary` (`CLUSTER_NODES_SUMMARY_PATH`) | `src/domains/dashboard/fleet_router.py :: cluster_nodes_summary` | `ClusterNodesSummaryResponse(nodes=[NodeSummaryItem...])`; 미등록 클러스터면 404 | `require_session` + cluster `Permission.CLUSTER_READ` |
+| `GET /clusters/{cluster_id}/nodes/{node_name}/pods/summary` (`CLUSTER_NODE_PODS_SUMMARY_PATH`) | `src/domains/dashboard/fleet_router.py :: node_pods_summary` | `NodePodsSummaryResponse(pods=[PodSummaryItem...])`; 미등록 클러스터면 404, 노드 없음이면 404 `"node not found"` | `require_session` + cluster `Permission.CLUSTER_READ` |
 
 health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_router.py :: rollup_health`, 결정적·단위 테스트 고정):
 
@@ -133,9 +135,11 @@ health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_ro
 - `has_observations`(앵커: `src/domains/dashboard/fleet_router.py :: has_observations`) — inventory rollup 의 `pods_total`/`nodes_total`/`workloads_total` 또는 최신 usage 의 `pod_total`/`node_total` 중 하나라도 0보다 크면 true. false 면 health 는 `unknown`.
 - `usage_pct`(앵커: `src/domains/dashboard/fleet_router.py :: usage_pct`) — usage 롤업의 실측 pct/ratio(×100) 키만 추출, 없으면 None(합성 금지) → `cpu_pct`/`mem_pct`.
 - `build_cluster_summary_detail`(앵커: `src/domains/dashboard/fleet_router.py :: build_cluster_summary_detail`) — workload 를 health 값으로 그룹(`list_inventory_resources(resource_type="workload")`), 최근 Warning 이벤트(`list_recent_warning_events`, 최대 10건), 열린 인시던트(`list_open_rca_incidents`), 최신 usage 스냅샷(`usage_snapshot`).
+- `build_nodes_summary`(앵커: `src/domains/dashboard/fleet_router.py :: build_nodes_summary`) — `cluster_inventory_resources`의 node/pod 행을 읽어 node tile을 만든다. `pods_running`은 해당 nodeName에 배치된 Running pod 수, `pods_capacity`는 node summary의 `allocatable.pods` 또는 `capacity.pods`, `conditions`는 Ready를 제외한 `status=True` condition만. node별 `cpu_pct`/`mem_pct`는 usage 샘플에 node별 실측 map/list가 있을 때만 채우고 없으면 `null`.
+- `build_node_pods_summary`(앵커: `src/domains/dashboard/fleet_router.py :: build_node_pods_summary`) — node 존재를 `get_inventory_resource(resource_type="node", kind="Node")`로 확인한 뒤 pod summary의 `node_name`으로 필터. pod별 ready는 container ready 비율(`"1/1"`), owner는 summary의 `owner_kind`/`owner_name`, pod별 `cpu_mcores`/`mem_mib`는 inventory/usage에 있을 때만 채운다. 열린 incident 연결은 `latest_open_incidents_by_resource(resource_kind="Pod")`가 rca_timeline projection(`incident_namespace`, `incident_resource_kind`, `incident_resource_name`)에서 최신 correlation 1건을 찾는다.
 - pod/node 수는 inventory 롤업 우선, inventory 에 해당 행이 없으면 최신 usage 샘플로 대체. `last_seen_at`은 agent 상태 → inventory 최근 관측 → usage 샘플 순.
 
-응답 모델(`FleetSummaryResponse`, `FleetClusterSummaryItem`, `FleetTotals`, `ClusterSummaryDetailResponse`, `ClusterWorkloadHealthItem`, `ClusterWarningEventItem`, `ClusterOpenIncidentItem`, `ClusterUsageSnapshot`) 정의는 [contracts](../packages/contracts.md) 소유(`src/packages/contracts/gateway/responses.py`).
+응답 모델(`FleetSummaryResponse`, `FleetClusterSummaryItem`, `FleetTotals`, `ClusterSummaryDetailResponse`, `ClusterWorkloadHealthItem`, `ClusterWarningEventItem`, `ClusterOpenIncidentItem`, `ClusterUsageSnapshot`, `ClusterNodesSummaryResponse`, `NodeSummaryItem`, `NodePodsSummaryResponse`, `PodSummaryItem`) 정의는 [contracts](../packages/contracts.md) 소유(`src/packages/contracts/gateway/responses.py`).
 
 ## 데이터 모델 (Data Model)
 

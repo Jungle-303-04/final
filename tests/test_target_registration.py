@@ -23,6 +23,7 @@ from domains.target.router import (
     schedule_evidence_jobs,
     target_install_manifest,
     target_registration_preflight,
+    unregister_cluster,
     update_cluster_policy,
     validate_target_bootstrap_config,
     validate_target_install_providers,
@@ -126,6 +127,37 @@ class FakePolicyDb:
         self.current = policy
         self.saved.append(policy)
         return policy
+
+
+class FakeManagementPolicyDb(FakePolicyDb):
+    def __init__(self) -> None:
+        super().__init__(AgentPolicy(cluster_id="cluster-1", cluster_role="management"))
+
+    def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
+        assert workspace_id == "default"
+        assert cluster_id == "cluster-1"
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": {"cluster_role": "management"},
+        }
+
+
+class FakeUnregisterDb:
+    def __init__(self, *, cluster_role: str = "target") -> None:
+        self.cluster_role = cluster_role
+        self.unregistered: list[tuple[str, str]] = []
+
+    def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": {"cluster_role": self.cluster_role},
+        }
+
+    def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
+        self.unregistered.append((workspace_id, cluster_id))
+        return True
 
 
 class FakeClusterDb:
@@ -331,6 +363,22 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
     assert 'resources: ["services", "configmaps"]' in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' in manifest
+
+
+def test_management_install_manifest_is_read_only() -> None:
+    request = target_request().model_copy(update={"cluster_role": "management"})
+
+    manifest = target_install_manifest(request, "agent-secret")
+
+    assert "namespace: management" in manifest
+    assert 'CLUSTER_ROLE: "management"' in manifest
+    assert 'BOOTSTRAP_MODE: "management"' in manifest
+    assert 'NODE_COLLECTOR_ENABLED: "false"' in manifest
+    assert "cluster-agent-sandbox-write" not in manifest
+    assert "cluster-agent-target-manage" not in manifest
+    assert 'verbs: ["get", "update", "patch"]' not in manifest
+    assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
+    assert 'verbs: ["get", "list", "watch"]' in manifest
 
 
 def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
@@ -868,6 +916,70 @@ def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
     assert merged.evidence.providers["metrics"].interval_seconds == 10
     assert merged.evidence.providers["logs"].interval_seconds == 45
     assert merged.bootstrap.resources[0].resource_id == "target-agent-policy"
+
+
+def test_management_policy_update_rejects_write_policy() -> None:
+    write_update = AgentPolicy(
+        cluster_id="cluster-1",
+        generation=2,
+        cluster_role="management",
+        bootstrap=BootstrapPolicy(
+            mode="management",
+            resources=[
+                DesiredResource(
+                    resource_id="write-config",
+                    kind="ConfigMap",
+                    namespace="management",
+                    name="target-agent-policy",
+                    action="apply",
+                )
+            ],
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            update_cluster_policy(
+                "cluster-1",
+                write_update,
+                current=SimpleNamespace(workspace_id="default"),
+                db=FakeManagementPolicyDb(),
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "management_readonly"
+
+
+def test_management_cluster_unregister_is_rejected() -> None:
+    db = FakeUnregisterDb(cluster_role="management")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            unregister_cluster(
+                "cluster-1",
+                current=SimpleNamespace(workspace_id="default"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "management_readonly"
+    assert db.unregistered == []
+
+
+def test_target_cluster_unregister_updates_registration() -> None:
+    db = FakeUnregisterDb(cluster_role="target")
+
+    asyncio.run(
+        unregister_cluster(
+            "cluster-1",
+            current=SimpleNamespace(workspace_id="default"),
+            db=db,
+        )
+    )
+
+    assert db.unregistered == [("default", "cluster-1")]
 
 
 class TransactionalFakeDb(FakeDb):

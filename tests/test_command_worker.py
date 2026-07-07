@@ -18,6 +18,7 @@ from domains.command.handler import (
     APPROVAL_POLICY_DECISION_MISMATCH_REASON,
     APPROVAL_RECORD_MISSING_REASON,
     COMMAND_CONFIG,
+    MANAGEMENT_READONLY_REASON,
     MANIFEST_NAMESPACE_MISMATCH_REASON,
     MISSING_APPROVAL_REF_REASON,
     MISSING_POLICY_DECISION_REF_REASON,
@@ -55,6 +56,15 @@ class SpyAgentCommandStore:
 
     async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
         self.calls.append((correlation_id, plan, status))
+
+
+class ManagementClusterStore(SpyAgentCommandStore):
+    async def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> JsonObject:
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": {"cluster_role": "management"},
+        }
 
 
 def approval_record(
@@ -220,6 +230,21 @@ def test_command_handler_queues_plan_payload_in_runtime_uow_boundary() -> None:
     assert plan_payload["routing_constraint"]["cluster_id"] == Target.DEFAULT_CLUSTER_ID
     assert events[-1].approval_ref == "approval-1"
     assert events[-1].policy_decision_ref == "policy-decision-1"
+
+
+def test_command_handler_rejects_management_cluster_before_queue() -> None:
+    async def run() -> tuple[list[EventBody], ManagementClusterStore]:
+        store = ManagementClusterStore()
+        ctx = SimpleNamespace(correlation_id="corr-1", db=store)
+        events = await collect_events(handle_command_requested(command_request(), ctx))
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == MANAGEMENT_READONLY_REASON
+    assert store.calls == []
 
 
 def test_command_handler_allows_non_image_manifest_diff() -> None:

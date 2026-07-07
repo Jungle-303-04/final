@@ -223,6 +223,22 @@ class IdentityAccessRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
+        """target 등록 해제 — 감사/권한 이력은 남기고 agent 토큰만 폐기한다."""
+        table = ClusterRegistration.__table__
+        statement = (
+            update(table)
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .values(
+                status=ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+                agent_token_hash=None,
+                updated_at=func.now(),
+            )
+            .returning(table.c.cluster_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).first() is not None
+
     def get_user_by_email(self, email: str) -> JsonObject | None:
         table = UserAccount.__table__
         statement = (

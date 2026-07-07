@@ -495,6 +495,43 @@ class ClusterSummaryDetailResponse(StrictModel):
     usage: ClusterUsageSnapshot | None = None
 
 
+class NodeSummaryItem(StrictModel):
+    name: str
+    ready: bool
+    health: str
+    pods_running: int = 0
+    pods_capacity: int = 0
+    cpu_pct: float | None = None
+    mem_pct: float | None = None
+    restarts_recent: int = 0
+    conditions: list[str] = Field(default_factory=list)
+
+
+class ClusterNodesSummaryResponse(StrictModel):
+    cluster_id: str
+    nodes: list[NodeSummaryItem] = Field(default_factory=list)
+
+
+class PodSummaryItem(StrictModel):
+    name: str
+    namespace: str
+    phase: str
+    health: str
+    ready: str = "0/0"
+    restarts: int = 0
+    owner_kind: str | None = None
+    owner_name: str | None = None
+    cpu_mcores: float | None = None
+    mem_mib: float | None = None
+    incident_correlation_id: str | None = None
+
+
+class NodePodsSummaryResponse(StrictModel):
+    cluster_id: str
+    node_name: str
+    pods: list[PodSummaryItem] = Field(default_factory=list)
+
+
 class BootstrapStep(StrictModel):
     label: str
     command: str

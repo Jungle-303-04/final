@@ -256,17 +256,19 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 | `src/domains/target/install_manifest.py :: SUPPORTED_TARGET_INSTALL_RENDERERS` | `{"native", "kustomize"}` | 허용 renderer 집합 |
 | `src/domains/target/install_manifest.py :: target_install_renderer` | `() -> str` | env 값을 strip·lower 후 검증. 미지원 값이면 `ValueError("TARGET_INSTALL_RENDERER must be one of: ...")` |
 | `src/domains/target/install_manifest.py :: yaml_string` | `(value: str) -> str` | `json.dumps(value)` — YAML 안전 인용 |
-| `src/domains/target/install_manifest.py :: target_install_manifest` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | 아래 블록들을 순서대로 `"\n---\n"` join(빈 블록 제외): namespace(`target`) → namespace(`sandbox`) → ServiceAccount → target RBAC → sandbox RBAC → runtime ConfigMap → runtime Secret → (선택) sample workload → cluster-agent Deployment. renderer 검증만 수행(현재 두 renderer는 같은 contract 반환) |
+| `src/domains/target/install_manifest.py :: target_install_manifest` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | role=`target`이면 namespace(`target`) → namespace(`sandbox`) → ServiceAccount → read RBAC → target write RBAC → sandbox RBAC → runtime ConfigMap → runtime Secret → (선택) sample workload → cluster-agent Deployment. role=`management`이면 namespace(`management`) → ServiceAccount → read RBAC(get/list/watch) → runtime ConfigMap/Secret → cluster-agent Deployment만 렌더한다. renderer 검증만 수행(현재 두 renderer는 같은 contract 반환) |
 | `src/domains/target/install_manifest.py :: namespace_manifest` | `(name: str) -> str` | `v1/Namespace` |
-| `src/domains/target/install_manifest.py :: service_account_manifest` | `() -> str` | `cluster-agent` ServiceAccount(namespace=`target`) |
-| `src/domains/target/install_manifest.py :: target_rbac_manifest` | `() -> str` | `cluster-agent-read` ClusterRole(코어: pods/events/nodes/services/endpoints, discovery.k8s.io: endpointslices, apps: deployments/replicasets/daemonsets/statefulsets — get/list/watch) + `cluster-agent-self-manage` Role/RoleBinding(configmap `target-agent-policy` get/update/patch, deployment `cluster-agent` get/patch) + `cluster-agent-read` ClusterRoleBinding + `cluster-agent-target-manage` Role/RoleBinding(apps daemonsets 전체 CRUD, namespace=`target`) |
-| `src/domains/target/install_manifest.py :: sandbox_rbac_manifest` | `() -> str` | `cluster-agent-sandbox-write` Role/RoleBinding(namespace=`sandbox`: services/configmaps + deployments의 get/list/create/update/patch) |
+| `src/domains/target/install_manifest.py :: agent_namespace` | `(payload: TargetRegisterRequest) -> str` | role=`management`이면 `management`, 그 외 `target` |
+| `src/domains/target/install_manifest.py :: service_account_manifest` | `(namespace: str) -> str` | `cluster-agent` ServiceAccount |
+| `src/domains/target/install_manifest.py :: cluster_read_rbac_manifest` | `(namespace: str) -> str` | `cluster-agent-read` ClusterRole(코어: pods/events/nodes/services/endpoints, discovery.k8s.io: endpointslices, apps: deployments/replicasets/daemonsets/statefulsets — get/list/watch) + ClusterRoleBinding. create/update/patch/delete 동사 없음 |
+| `src/domains/target/install_manifest.py :: target_write_rbac_manifest` | `(namespace: str) -> str` | role=`target` 전용. `cluster-agent-self-manage` Role/RoleBinding(configmap `target-agent-policy` get/update/patch, deployment `cluster-agent` get/patch) + `cluster-agent-target-manage` Role/RoleBinding(apps daemonsets CRUD) |
+| `src/domains/target/install_manifest.py :: sandbox_rbac_manifest` | `(namespace: str) -> str` | role=`target` 전용. `cluster-agent-sandbox-write` Role/RoleBinding(namespace=`sandbox`: services/configmaps + deployments의 get/list/create/update/patch) |
 | `src/domains/target/install_manifest.py :: control_namespaces_line` | `(payload: TargetRegisterRequest) -> str` | `payload.control_namespaces`가 비어 있지 않으면 ConfigMap에 붙일 `CONTROL_ALLOWED_NAMESPACES: "<csv>"` 라인 반환, 빈 값이면 `""`(미지정 = 기존 manifest 동일 → agent 기본 sandbox만) |
-| `src/domains/target/install_manifest.py :: runtime_config_manifest` | `(payload: TargetRegisterRequest) -> str` | ConfigMap `target-runtime-config` — 키: `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `EVIDENCE_INTERVAL_SECONDS`, `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`, `NODE_COLLECTOR_ENABLED`(소문자 bool 문자열), (조건부) `CONTROL_ALLOWED_NAMESPACES`(`control_namespaces_line`), `NODE_COLLECTOR_IMAGE`, `NODE_COLLECTOR_NAMESPACE`, `AGENT_CONTROL_DB_PATH="/var/lib/target-agent/agent-control.db"`, `COMMAND_OUTBOX_DB_PATH="/var/lib/target-agent/command-outbox.db"`, `OTEL_SERVICE_NAME=DEFAULT_OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` |
-| `src/domains/target/install_manifest.py :: runtime_secret_manifest` | `(agent_token: str) -> str` | Secret `target-runtime-secret`(Opaque) — `stringData.AGENT_TOKEN=<원문 토큰>` |
+| `src/domains/target/install_manifest.py :: runtime_config_manifest` | `(payload: TargetRegisterRequest) -> str` | ConfigMap `target-runtime-config` — 키: `TARGET_CLUSTER_ID`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, `WORKSPACE_ID`, `EVIDENCE_INTERVAL_SECONDS`, `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`, `NODE_COLLECTOR_ENABLED`(management는 항상 `"false"`), (조건부) `CONTROL_ALLOWED_NAMESPACES`, `NODE_COLLECTOR_IMAGE`, `NODE_COLLECTOR_NAMESPACE`, `AGENT_CONTROL_DB_PATH`, `COMMAND_OUTBOX_DB_PATH`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` |
+| `src/domains/target/install_manifest.py :: runtime_secret_manifest` | `(agent_token: str, namespace: str) -> str` | Secret `target-runtime-secret`(Opaque) — `stringData.AGENT_TOKEN=<원문 토큰>` |
 | `src/domains/target/install_manifest.py :: sample_workload_manifest` | `(payload: TargetRegisterRequest) -> str` | `install_sample_workload=false`면 `""`. true인데 name/image 누락이면 `ValueError("sample workload install requires name and image")` |
 | `src/domains/target/install_manifest.py :: workload_manifest` | `(name: str, image: str) -> str` | `sandbox` namespace Deployment(replicas=1, `python -m http.server 8080`, containerPort 8080, imagePullPolicy IfNotPresent) |
-| `src/domains/target/install_manifest.py :: cluster_agent_manifest` | `(payload: TargetRegisterRequest) -> str` | `target` namespace Deployment `cluster-agent`(replicas=1, serviceAccountName=`cluster-agent`, command `["python", "src/services/target/cluster-agent/app.py"]`, envFrom ConfigMap+Secret, env `MANAGEMENT_BASE_URL`, emptyDir 볼륨 `/var/lib/target-agent`) |
+| `src/domains/target/install_manifest.py :: cluster_agent_manifest` | `(payload: TargetRegisterRequest) -> str` | role에 맞는 namespace의 Deployment `cluster-agent`(replicas=1, serviceAccountName=`cluster-agent`, command `["python", "src/services/target/cluster-agent/app.py"]`, envFrom ConfigMap+Secret, env `MANAGEMENT_BASE_URL`, emptyDir 볼륨 `/var/lib/target-agent`) |
 
 ## 데이터 모델 (Data Model)
 
@@ -518,7 +520,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 | 확정 | 실제 event_id | 종결 — 이후 요청은 항상 기존 event_id 반환(duplicate) |
 
 ### 4. agent 정책 배포
-1. 관리자: `PUT /clusters/{cluster_id}/policy` — path와 body의 `cluster_id` 불일치 시 409. 기존 정책(없으면 `default_agent_policy`)에 `merge_agent_policy`로 머지 후 `upsert_cluster_policy`. generation이 기존 이하이면 `ValueError` → 409.
+1. 관리자: `PUT /clusters/{cluster_id}/policy` — path와 body의 `cluster_id` 불일치 시 409. 기존 정책(없으면 `default_agent_policy`)에 `merge_agent_policy`로 머지 후 `upsert_cluster_policy`. generation이 기존 이하이면 `ValueError` → 409. registration settings 또는 기존 policy가 role=`management`이면 payload가 `cluster_role="management"`이고 bootstrap/desired_state resources가 비어 있을 때만 허용하며, 저장 직전 `freeze_management_policy`로 write/command policy를 빈 값으로 강제한다. role 변경 또는 리소스 추가 시 HTTP 400 `{code:"management_readonly"}`.
 2. agent: `GET /agent/policy?cluster_id&generation=N` — 토큰 identity의 cluster_id와 다르면 403. 저장 정책이 없거나 `generation <= N`이면 `policy=None`(변경 없음), 아니면 전체 정책 반환.
 3. agent 보고: `POST /agent/policy/status`·`POST /agent/reconcile/status` — body의 `cluster_id`는 **항상 토큰 identity의 값으로 덮어써서** append-only 저장.
 
@@ -526,6 +528,8 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 `GET /clusters`는 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS`에 걸리는 테스트 클러스터를 목록에서 제외하고, db가 `inventory_resource_counts`를 제공하면 `inventory_counts`로 합산한 `node_count`/`pod_count`(+`incident_count=0`)를 각 `ClusterSummary`에 채운다. `GET /clusters`·`GET /clusters/{id}`·`GET /clusters/{id}/connection-status`가 `cluster_agent_status`의 최신 행으로 판정:
 
 등록 직후 registration status는 `pending_install`이며, `TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS`(기본 1800초)로 `connect_expires_at`을 계산해 registration settings와 응답에 같이 담는다. `TARGET_REGISTRATION_AUTO_DELETE_EXPIRED`는 문서화된 운영 옵션이지만 기본은 `false`다. 기본 정책은 hard delete가 아니라 `install_expired` 상태 노출 + UI 삭제/재시도 흐름이다. 원본 agent token은 등록 응답/manifest Secret에만 1회 노출되고 DB에는 hash만 저장한다. `/agent/connect`가 최초 연결되면 cluster registration status는 `registered`로 승격된다.
+
+role=`management` 등록은 셀프 모니터링 전용이다. 서버가 `install_node_collector=false`, `install_sample_workload=false`, `control_namespaces=""`로 정규화하고, 최초 policy도 `cluster_role="management"`, `bootstrap.mode="management"`, resources 빈 배열로 저장한다. `DELETE /clusters/{cluster_id}` 등록 해제 API도 management role이면 HTTP 400 `{code:"management_readonly"}`로 거부한다. target role 등록 해제는 토큰 hash를 폐기하고 registration status를 `install_expired`로 바꿔 audit/권한 이력은 남긴다.
 
 | 상태 | 조건 |
 |---|---|
@@ -547,6 +551,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 - agent 토큰 원문은 DB에 저장하지 않는다(해시만). desired-state spec에도 secret 원문 없음.
 - kube context는 fail-closed: allowlist 미설정 시 명시 컨텍스트 전부 거부(컨텍스트 미지정 apply만 허용), 설정 시 목록 내 컨텍스트만 허용. allowlist가 설정돼 있으면 컨텍스트 미지정도 403.
 - 등록 트랜잭션(레지스트리+정책+desired state+이벤트)은 원자적 — 반쪽 등록 금지.
+- management 클러스터는 관측 전용이다. 설치 RBAC에는 get/list/watch만 존재하고, 정책 API·등록 해제 API·명령 경로가 모두 management 쓰기를 거부한다.
 - `services → domains → packages` 단방향 의존. 이 도메인은 `domains.identity`/`domains.providers`/`domains.rca`를 import한다(도메인 간 수평 의존).
 
 **오류:**
@@ -563,6 +568,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 | kubectl apply 타임아웃 | HTTP 504 (`KUBECTL_APPLY_TIMEOUT`) |
 | 클러스터 미존재(`GET /clusters/{id}`) | HTTP 404 (`"cluster not found"`) |
 | policy path/body cluster_id 불일치 | HTTP 409 (`"cluster_id does not match policy payload"`) |
+| management 클러스터 정책 write/open 또는 등록 해제 시도 | HTTP 400 (`{"code":"management_readonly","detail":"management 클러스터는 읽기 전용입니다"}`) |
 | policy generation 역행 | `ValueError` → HTTP 409 |
 | agent 토큰 identity와 cluster_id 불일치(`GET /agent/policy`) | HTTP 403 (`"cluster_id does not match agent identity"`) |
 | evidence job 결과 보고 대상 없음/리스 불일치 | HTTP 404 (`EVIDENCE_JOB_NOT_FOUND`) |

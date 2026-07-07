@@ -64,8 +64,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
     selectedCandidate?.source_type ?? '',
     open && Boolean(normalizedRepoRef && selectedBranch && manifestPath && selectedCandidate),
   );
-  const clusters = clustersQ.data ?? [];
-  const connectedClusters = useMemo(() => clusters.filter(isClusterConnected), [clusters]);
+  const clusters = useMemo(() => clustersQ.data ?? [], [clustersQ.data]);
+  const deployableClusters = useMemo(() => clusters.filter(isDeployableCluster), [clusters]);
   const selectedClusters = useMemo(
     () => selectedClusterIds.map((id) => clusters.find((cluster) => cluster.cluster_id === id)).filter((cluster): cluster is Cluster => Boolean(cluster)),
     [clusters, selectedClusterIds],
@@ -75,7 +75,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const manifestNamespace = firstManifestNamespace(validation?.resources ?? []);
   const manifestAccepted = Boolean(validation?.valid);
   const repoStepReady = Boolean(probeQ.data?.reachable && selectedBranch && manifestPath && manifestAccepted);
-  const allConnectedSelected = connectedClusters.length > 0 && selectedClusterIds.length === connectedClusters.length;
+  const allDeployableSelected = deployableClusters.length > 0 && selectedClusterIds.length === deployableClusters.length;
 
   const reset = () => {
     setStep(0);
@@ -115,12 +115,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   }, [candidates, manifestSelection, open]);
 
   useEffect(() => {
-    const connectedIds = new Set(connectedClusters.map((cluster) => cluster.cluster_id));
+    const connectedIds = new Set(deployableClusters.map((cluster) => cluster.cluster_id));
     setSelectedClusterIds((ids) => ids.filter((id) => connectedIds.has(id)));
-  }, [connectedClusters]);
+  }, [deployableClusters]);
 
   const toggleCluster = (cluster: Cluster) => {
-    if (!isClusterConnected(cluster)) return;
+    if (!isDeployableCluster(cluster)) return;
     setSubmitError('');
     setSelectedClusterIds((ids) => ids.includes(cluster.cluster_id)
       ? ids.filter((id) => id !== cluster.cluster_id)
@@ -129,7 +129,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 
   const toggleAllConnected = () => {
     setSubmitError('');
-    setSelectedClusterIds(allConnectedSelected ? [] : connectedClusters.map((cluster) => cluster.cluster_id));
+    setSelectedClusterIds(allDeployableSelected ? [] : deployableClusters.map((cluster) => cluster.cluster_id));
   };
 
   const submit = async () => {
@@ -257,12 +257,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
             <>
               <Card
                 title="배포 대상"
-                description="에이전트가 연결된 클러스터만 선택할 수 있습니다"
+                description="에이전트가 연결된 target 클러스터만 선택할 수 있습니다"
                 loading={clustersQ.isPending}
                 error={clustersQ.isError ? clustersQ.error : null}
                 onRetry={() => void clustersQ.refetch()}
               >
-                {clusters.length === 0 || connectedClusters.length === 0 ? (
+                {clusters.length === 0 || deployableClusters.length === 0 ? (
                   <EmptyState
                     title="배포하려면 연결된 클러스터가 필요합니다"
                     description={admin ? '클러스터를 등록하고 agent 연결이 완료되면 이 화면으로 돌아옵니다' : '관리자에게 연결된 클러스터 접근 권한을 요청하세요'}
@@ -273,12 +273,14 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <Badge tone="info">{selectedClusterIds.length.toLocaleString()}개 선택</Badge>
                       <Button size="sm" onClick={toggleAllConnected}>
-                        {allConnectedSelected ? '전체 해제' : '전체 선택'}
+                        {allDeployableSelected ? '전체 해제' : '전체 선택'}
                       </Button>
                     </div>
                     <div className="grid gap-2" role="list" aria-label="대상 클러스터">
                       {clusters.map((cluster) => {
                         const connected = isClusterConnected(cluster);
+                        const management = isManagementCluster(cluster);
+                        const deployable = isDeployableCluster(cluster);
                         const selected = selectedClusterIds.includes(cluster.cluster_id);
                         return (
                           <div
@@ -286,13 +288,13 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                             className={cx(
                               'flex min-w-0 flex-col gap-3 rounded-panel border border-border bg-bg p-3 sm:flex-row sm:items-center sm:justify-between',
                               selected && 'border-accent bg-raised',
-                              !connected && 'opacity-70',
+                              !deployable && 'opacity-70',
                             )}
                             role="listitem"
                           >
                             <button
                               type="button"
-                              disabled={!connected}
+                              disabled={!deployable}
                               aria-pressed={selected}
                               className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-not-allowed"
                               onClick={() => toggleCluster(cluster)}
@@ -306,8 +308,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                               </span>
                             </button>
                             <span className="flex shrink-0 flex-wrap items-center gap-2">
-                              <Badge tone={connected ? 'success' : 'warning'}>{connected ? '연결됨' : '에이전트 미연결'}</Badge>
-                              {!connected && (
+                              {management ? (
+                                <Badge tone="info">관리 클러스터</Badge>
+                              ) : (
+                                <Badge tone={connected ? 'success' : 'warning'}>{connected ? '연결됨' : '에이전트 미연결'}</Badge>
+                              )}
+                              {!connected && !management && (
                                 <Link className="text-label font-semibold text-accent hover:text-accent-hover" to={pathFor(`/clusters/${cluster.cluster_id}`)}>
                                   연결하러 가기
                                 </Link>
@@ -429,6 +435,14 @@ function StepRail({ current }: { current: number }) {
 
 function isClusterConnected(cluster: Cluster): boolean {
   return CONNECTED_STATUSES.has(cluster.connection_status);
+}
+
+function isManagementCluster(cluster: Cluster): boolean {
+  return cluster.role === 'management';
+}
+
+function isDeployableCluster(cluster: Cluster): boolean {
+  return isClusterConnected(cluster) && !isManagementCluster(cluster);
 }
 
 function deploymentSummary(clusters: Cluster[]): string {

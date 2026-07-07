@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+import json
 import subprocess
+from pathlib import Path
 from urllib import error
 
 import pytest
@@ -609,13 +612,17 @@ def test_render_respects_event_raw_json_source_type(monkeypatch, tmp_path) -> No
     assert outs[0].rendered_manifest.metadata.name == "json-config"
 
 
-def test_render_rejects_kustomize_source_type_without_checked_out_repo(monkeypatch) -> None:
+def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
     render = load_service("gitops/manifest-render-worker")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
     monkeypatch.setenv("GIT_REMOTE_MANIFEST_REQUIRED", "1")
     monkeypatch.setenv("GITHUB_API_BASE", "https://api.github.test")
+    calls: list[str] = []
 
     class Response:
+        def __init__(self, payload: bytes) -> None:
+            self.payload = payload
+
         def __enter__(self) -> Response:
             return self
 
@@ -623,9 +630,94 @@ def test_render_rejects_kustomize_source_type_without_checked_out_repo(monkeypat
             return None
 
         def read(self) -> bytes:
-            return b"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"
+            return self.payload
 
-    monkeypatch.setattr(render.request, "urlopen", lambda *_args, **_kwargs: Response())
+    def content_payload(source: str) -> bytes:
+        raw = source.encode("utf-8")
+        return json.dumps(
+            {
+                "type": "file",
+                "encoding": "base64",
+                "size": len(raw),
+                "content": base64.b64encode(raw).decode("ascii"),
+            }
+        ).encode("utf-8")
+
+    responses = {
+        "https://api.github.test/repos/owner/demo/commits/kustomize123": json.dumps(
+            {"commit": {"tree": {"sha": "tree123"}}}
+        ).encode("utf-8"),
+        "https://api.github.test/repos/owner/demo/git/trees/tree123?recursive=1": json.dumps(
+            {
+                "tree": [
+                    {"type": "blob", "path": "deploy/k8s/kustomization.yaml"},
+                    {"type": "blob", "path": "deploy/k8s/deployment.yaml"},
+                    {"type": "blob", "path": "README.md"},
+                ]
+            }
+        ).encode("utf-8"),
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/kustomization.yaml?ref=kustomize123": content_payload(
+            "\n".join(
+                [
+                    "apiVersion: kustomize.config.k8s.io/v1beta1",
+                    "kind: Kustomization",
+                    "resources:",
+                    "  - deployment.yaml",
+                ]
+            )
+        ),
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/deployment.yaml?ref=kustomize123": content_payload(
+            "\n".join(
+                [
+                    "apiVersion: apps/v1",
+                    "kind: Deployment",
+                    "metadata:",
+                    "  name: checkout-api",
+                    "  namespace: sandbox",
+                    "spec:",
+                    "  replicas: 2",
+                    "  template:",
+                    "    spec:",
+                    "      containers:",
+                    "        - name: checkout-api",
+                    "          image: ghcr.io/project/checkout-api:kustomize",
+                ]
+            )
+        ),
+    }
+
+    def fake_urlopen(req: object, timeout: float) -> Response:
+        url = req.full_url  # type: ignore[attr-defined]
+        calls.append(url)
+        return Response(responses[url])
+
+    rendered_paths: list[Path] = []
+
+    def fake_run_render_command(command: list[str], error_prefix: str) -> str:
+        assert error_prefix == "kustomize render failed"
+        source_path = Path(command[-1])
+        rendered_paths.append(source_path)
+        assert (source_path / "kustomization.yaml").is_file()
+        assert (source_path / "deployment.yaml").is_file()
+        return "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: checkout-api",
+                "  namespace: sandbox",
+                "spec:",
+                "  replicas: 2",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: checkout-api",
+                "          image: ghcr.io/project/checkout-api:kustomize",
+            ]
+        )
+
+    monkeypatch.setattr(render.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(render, "run_render_command", fake_run_render_command)
 
     outs = run_handler(
         render.on_git_changed,
@@ -634,14 +726,22 @@ def test_render_rejects_kustomize_source_type_without_checked_out_repo(monkeypat
             image="ignored",
             replicas=1,
             repo_ref="owner/demo",
-            manifest_path="deploy",
+            manifest_path="deploy/k8s",
             source_type="kustomize",
         ),
         db=SpyDb(),
     )
 
-    assert subjects_of(outs) == ["manifest.invalid"]
-    assert "requires a checked-out repo path" in outs[0].reason
+    assert subjects_of(outs) == ["manifest.rendered"]
+    assert outs[0].rendered_manifest.metadata.name == "checkout-api"
+    assert outs[0].rendered_manifest.spec.image == "ghcr.io/project/checkout-api:kustomize"
+    assert rendered_paths
+    assert calls == [
+        "https://api.github.test/repos/owner/demo/commits/kustomize123",
+        "https://api.github.test/repos/owner/demo/git/trees/tree123?recursive=1",
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/deployment.yaml?ref=kustomize123",
+        "https://api.github.test/repos/owner/demo/contents/deploy/k8s/kustomization.yaml?ref=kustomize123",
+    ]
 
 
 def test_render_reuses_cached_manifest_artifact_without_rerendering() -> None:

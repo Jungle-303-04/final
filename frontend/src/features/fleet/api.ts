@@ -12,6 +12,7 @@ export type FleetHealth = 'healthy' | 'warning' | 'critical' | 'stale' | 'unknow
 export interface FleetClusterSummary {
   cluster_id: string;
   name: string;
+  role?: string;
   health: FleetHealth;
   pods_running: number;
   pods_total: number;

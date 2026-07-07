@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import Select, case, delete, func, or_, select
+from sqlalchemy import Select, and_, case, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
@@ -407,6 +407,54 @@ class DashboardRepository(DatabaseConnection):
             if len(items) >= bounded_limit:
                 break
         return items
+
+    def latest_open_incidents_by_resource(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        resource_kind: str,
+        resources: set[tuple[str, str]],
+    ) -> dict[tuple[str, str], str]:
+        """리소스별 최신 열린 인시던트 correlation — 드릴다운 타일 링크용."""
+        if not resources:
+            return {}
+        bounded = sorted(resources)[:1000]
+        filters = [
+            and_(
+                RcaTimeline.incident_namespace == namespace,
+                RcaTimeline.incident_resource_name == name,
+            )
+            for namespace, name in bounded
+        ]
+        statement: Select[Any] = (
+            select(
+                RcaTimeline.incident_namespace,
+                RcaTimeline.incident_resource_name,
+                RcaTimeline.correlation_id,
+            )
+            .where(
+                RcaTimeline.workspace_id == workspace_id,
+                RcaTimeline.cluster_id == cluster_id,
+                func.lower(RcaTimeline.incident_resource_kind) == resource_kind.lower(),
+                RcaTimeline.incident_id.is_not(None),
+                RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
+                or_(*filters),
+            )
+            .order_by(
+                RcaTimeline.incident_namespace,
+                RcaTimeline.incident_resource_name,
+                RcaTimeline.updated_at.desc(),
+            )
+        )
+        statement = _exclude_non_incident_detection(statement)
+        latest: dict[tuple[str, str], str] = {}
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        for row in rows:
+            key = (str(row["incident_namespace"]), str(row["incident_resource_name"]))
+            latest.setdefault(key, str(row["correlation_id"]))
+        return latest
 
     def expire_stale_open_rca_incidents(
         self,

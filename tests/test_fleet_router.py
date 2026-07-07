@@ -76,8 +76,11 @@ class FleetApiDb:
         open_counts: dict[str, int] | None = None,
         agents: dict[str, dict[str, Any]] | None = None,
         workloads: list[dict[str, Any]] | None = None,
+        nodes: list[dict[str, Any]] | None = None,
+        pods: list[dict[str, Any]] | None = None,
         warning_events: list[dict[str, Any]] | None = None,
         open_incidents: list[dict[str, Any]] | None = None,
+        incident_lookup: dict[tuple[str, str], str] | None = None,
         pending_approvals: int = 0,
         running_workflows: int = 0,
         dead_letters: int = 0,
@@ -90,8 +93,11 @@ class FleetApiDb:
         self.open_counts = open_counts or {}
         self.agents = agents or {}
         self.workloads = workloads or []
+        self.nodes = nodes or []
+        self.pods = pods or []
         self.warning_events = warning_events or []
         self.open_incidents = open_incidents or []
+        self.incident_lookup = incident_lookup or {}
         self.pending_approvals = pending_approvals
         self.running_workflows = running_workflows
         self.dead_letters = dead_letters
@@ -161,8 +167,22 @@ class FleetApiDb:
         return self.dead_letters
 
     def list_inventory_resources(self, **kwargs: Any) -> list[dict[str, Any]]:
-        self.calls.append(("workloads", kwargs))
+        resource_type = kwargs.get("resource_type")
+        self.calls.append(("inventory", resource_type, kwargs))
+        if resource_type == "node":
+            return self.nodes
+        if resource_type == "pod":
+            return self.pods
         return self.workloads
+
+    def get_inventory_resource(self, **kwargs: Any) -> dict[str, Any] | None:
+        self.calls.append(("inventory_detail", kwargs))
+        if kwargs.get("resource_type") != "node":
+            return None
+        for node in self.nodes:
+            if node["name"] == kwargs["name"]:
+                return node
+        return None
 
     def list_recent_warning_events(
         self, workspace_id: str, cluster_id: str, *, limit: int = 10
@@ -175,6 +195,17 @@ class FleetApiDb:
     ) -> list[dict[str, Any]]:
         self.calls.append(("open_incidents", workspace_id, cluster_id, limit))
         return self.open_incidents
+
+    def latest_open_incidents_by_resource(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        resource_kind: str,
+        resources: set[tuple[str, str]],
+    ) -> dict[tuple[str, str], str]:
+        self.calls.append(("incident_lookup", workspace_id, cluster_id, resource_kind, resources))
+        return {key: value for key, value in self.incident_lookup.items() if key in resources}
 
 
 def make_client(db: FleetApiDb, *, session: Any | None = None) -> TestClient:
@@ -527,3 +558,160 @@ def test_cluster_summary_groups_workloads_and_lists_incidents() -> None:
     }
     assert ("warning_events", WORKSPACE_ID, CLUSTER_ID, 10) in db.calls
     assert ("open_incidents", WORKSPACE_ID, CLUSTER_ID, 20) in db.calls
+
+
+def test_nodes_summary_aggregates_node_tiles_from_inventory() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[
+            {
+                "name": "node-a",
+                "status": "Ready",
+                "health": "healthy",
+                "summary": {
+                    "ready": True,
+                    "capacity": {"pods": "110"},
+                    "conditions": [
+                        {"type": "Ready", "status": "True"},
+                        {"type": "MemoryPressure", "status": "True"},
+                        {"type": "DiskPressure", "status": "False"},
+                    ],
+                },
+            }
+        ],
+        pods=[
+            {
+                "name": "api-1",
+                "namespace": "default",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a", "restart_total": 2},
+            },
+            {
+                "name": "api-2",
+                "namespace": "default",
+                "status": "Pending",
+                "health": "degraded",
+                "summary": {"node_name": "node-a", "restart_total": 1},
+            },
+        ],
+        usage={
+            CLUSTER_ID: [
+                {
+                    "sampled_at": "2026-07-07T10:00:00+00:00",
+                    "usage": {
+                        "nodes": {
+                            "node-a": {"cpu_ratio": 0.42, "memory_pct": 73.4},
+                        }
+                    },
+                }
+            ]
+        },
+    )
+    client = make_client(db, session=_session())
+
+    response = client.get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["nodes"] == [
+        {
+            "name": "node-a",
+            "ready": True,
+            "health": "healthy",
+            "pods_running": 1,
+            "pods_capacity": 110,
+            "cpu_pct": 42.0,
+            "mem_pct": 73.4,
+            "restarts_recent": 3,
+            "conditions": ["MemoryPressure"],
+        }
+    ]
+
+
+def test_node_pods_summary_filters_node_and_links_incident() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[{"name": "node-a", "status": "Ready", "health": "healthy", "summary": {}}],
+        pods=[
+            {
+                "name": "api-1",
+                "namespace": "default",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {
+                    "node_name": "node-a",
+                    "phase": "Running",
+                    "restart_total": 4,
+                    "owner_kind": "ReplicaSet",
+                    "owner_name": "api-abc",
+                    "containers": [{"name": "api", "ready": True}],
+                },
+            },
+            {
+                "name": "api-other",
+                "namespace": "default",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-b"},
+            },
+        ],
+        usage={
+            CLUSTER_ID: [
+                {
+                    "sampled_at": "2026-07-07T10:00:00+00:00",
+                    "usage": {
+                        "pods": {
+                            "default/api-1": {"cpu_mcores": 120.5, "mem_mib": 256},
+                        }
+                    },
+                }
+            ]
+        },
+        incident_lookup={("default", "api-1"): "corr-incident-1"},
+    )
+    client = make_client(db, session=_session())
+
+    response = client.get(f"/clusters/{CLUSTER_ID}/nodes/node-a/pods/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["node_name"] == "node-a"
+    assert len(body["pods"]) == 1
+    assert body["pods"][0] == {
+        "name": "api-1",
+        "namespace": "default",
+        "phase": "Running",
+        "health": "healthy",
+        "ready": "1/1",
+        "restarts": 4,
+        "owner_kind": "ReplicaSet",
+        "owner_name": "api-abc",
+        "cpu_mcores": 120.5,
+        "mem_mib": 256.0,
+        "incident_correlation_id": "corr-incident-1",
+    }
+
+
+def test_node_pods_summary_returns_empty_for_node_without_pods() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[{"name": "node-empty", "status": "Ready", "health": "healthy", "summary": {}}],
+        pods=[],
+    )
+    client = make_client(db, session=_session())
+
+    response = client.get(f"/clusters/{CLUSTER_ID}/nodes/node-empty/pods/summary")
+
+    assert response.status_code == 200
+    assert response.json()["pods"] == []
+
+
+def test_node_pods_summary_returns_404_for_missing_node() -> None:
+    db = FleetApiDb(registrations=[_registration()], nodes=[])
+    client = make_client(db, session=_session())
+
+    response = client.get(f"/clusters/{CLUSTER_ID}/nodes/missing/pods/summary")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "node not found"

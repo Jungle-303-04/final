@@ -11,7 +11,7 @@ status: synced
 
 - React 앱 부트스트랩(`main.tsx`), 전역 provider(`providers.tsx`), 라우트 트리(`router.tsx`), 접근 가드(`guards.tsx`)를 담당한다.
 - 로그인 후 공통 레이아웃은 `features/console/ui.tsx :: ConsoleLayout`이다. 이 셸이 사이드바, 상단 프로젝트 라벨/알림/테마/로그아웃, 브레드크럼, 알림 flyover, `<Outlet />`을 조립한다.
-- 기본 랜딩은 `/`의 `features/console/pages/HomePage`이다. `/console` 하위에도 같은 콘솔 라우트 트리를 보존용 base path 로 제공하고, `/overview`와 구 UI 경로 계열은 호환 redirect 만 수행한다.
+- 기본 랜딩은 `/`의 `features/console/pages/HomePage`이다. `/console`과 `/console/*`는 루트 `/`로 회수하며, `/overview`와 구 UI 경로 계열은 호환 redirect 만 수행한다.
 - WebSocket 실시간 연결의 시작점은 `ConsoleLayout`이다. 세션의 `workspace_id`가 준비되면 해당 workspace 로 연결하고, workspace 가 사라지면 연결을 닫는다.
 
 ## 의존성 (Dependencies)
@@ -54,7 +54,7 @@ export const router = createBrowserRouter([...])
 ```
 
 - 내부 헬퍼 `L(f)` (비공개): `lazy(f)` 를 `<Suspense fallback={<Skeleton lines={6} />}>` 로 감싼 lazy 라우트 요소를 만든다.
-- 내부 헬퍼 `consoleChildren(basePath = '')` (비공개): `/`와 `/console`이 같은 콘솔 하위 IA를 공유하게 만든다. `settings` index redirect 는 base path 를 반영해 `/settings/members` 또는 `/console/settings/members`로 이동한다.
+- 내부 헬퍼 `consoleChildren(basePath = '')` (비공개): `/` 콘솔 하위 IA를 정의한다. `settings` index redirect 는 base path 를 반영할 수 있지만 현재 운영 라우트는 `/`만 사용한다.
 - 라우트 트리:
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
@@ -67,8 +67,8 @@ export const router = createBrowserRouter([...])
 | `/clusters` | `features/cluster/ClusterListView` (lazy) | `RequireSession` + `ConsoleLayout` | 클러스터 목록 |
 | `/clusters/:clusterId` | `features/cluster/ClusterDetailView` (lazy) | 〃 | 클러스터 상세(탭) |
 | `/clusters/:clusterId/pods/:namespace/:pod` | `features/cluster/ClusterDetailView` (lazy) | 〃 | 팟 상세 Drawer 딥링크 |
-| `/repos` | `features/repo/RepoListView` (lazy) | 〃 | 레포(애플리케이션) 목록 |
-| `/repos/:applicationId` | `features/repo/RepoDetailView` (lazy) | 〃 | 레포 상세(탭) |
+| `/repos` | `features/repo/RepoListView` (lazy) | 〃 | 배포 정의 목록 |
+| `/repos/:applicationId` | `features/repo/RepoDetailView` (lazy) | 〃 | 배포 정의 상세(탭) |
 | `/workflows` | `features/workflow/WorkflowListView` (lazy) | 〃 | 전체 run 목록 |
 | `/workflows/:runId` | `features/workflow/WorkflowGraphView` (lazy) | 〃 | run 단계 그래프 |
 | `/incidents` | `features/notifications/NotificationsView` (lazy) | 〃 | 알림/인시던트 합성 피드 |
@@ -84,7 +84,7 @@ export const router = createBrowserRouter([...])
 | `/settings/access` | `features/org/AccessView` (lazy) | 〃 | 리소스 권한 |
 | `/settings/ops` | `features/notifications/OpsView` (lazy) | 〃 | 운영(Dead Letter) |
 | `*` | `features/console/pages/NotFoundPage` (lazy) | `RequireSession` + `ConsoleLayout` | 알 수 없는 콘솔 경로 404 안내 |
-| `/console`, `/console/*` | `ConsoleLayout basePath="/console"` + `consoleChildren('/console')` | `RequireSession` | 보존용 콘솔 경로. `/console/clusters`, `/console/ai/:conversationId` 등은 같은 화면을 base path 유지 상태로 렌더 |
+| `/console`, `/console/*` | `<Navigate to="/" replace />` | 없음 | 아카이브 콘솔 데모 삭제 후 루트로 회수 |
 | 구 UI 경로 계열 | `<Navigate to="/" replace />` | 없음 | 구 UI 경로 호환 |
 | `/overview`, `/overview/*` | `<Navigate to="/" replace />` | 없음 | 구 오버뷰 경로 호환 |
 | `/notifications` | `<Navigate to="/incidents" replace />` | 없음 | 구 알림 경로 호환 |
@@ -124,7 +124,7 @@ ConsoleLayout (div.pl-app.co-app)
 - 상태 소스: local `collapsed`, `notifOpen`, `useIsAdmin()`, `useSession()`, `useLogout()`, `useNotices()`, `useLocation()`, `useNavigate()`. `ConsoleLayout`은 `liveStore` 값을 표시하지 않지만 `startLive(session?.workspace_id)`로 스트림 연결은 시작한다.
 - `basePath`가 있으면 `normalizeBasePath`와 `pathFor`가 내부 링크, sidebar `NavLink`, breadcrumb, 알림 이동, 홈/AI/인시던트 이동을 같은 base path 아래로 보정한다. 하위 뷰는 `useConsolePath()`로 `/clusters/...` 같은 절대 콘솔 경로를 현재 base path에 맞춘다.
 - `useEffect(() => { startLive(session?.workspace_id); }, [session?.workspace_id])` — WS 연결은 세션 workspace 기준으로 유지한다([shared/lib/live](./shared.md#실시간-livets)).
-- `MENU` (비공개): 홈(`/`), 클러스터(`/clusters`), 레포(`/repos`), 워크플로우(`/workflows`), 인시던트(`/incidents`), 메트릭(`/metrics`), AI 어시스턴트(`/ai`), 카탈로그(`/catalog`). admin 이면 `/settings` 추가.
+- `MENU` (비공개): 홈(`/`), 배포(`/repos`), 클러스터(`/clusters`), 워크플로우(`/workflows`), 인시던트(`/incidents`), 메트릭(`/metrics`), AI 채팅(`/ai`), 카탈로그(`/catalog`). admin 이면 `/settings` 추가.
 - `SECTION_LABEL` (비공개): 1뎁스 breadcrumb 라벨을 메뉴 어휘와 맞춘다.
 - 알림 flyover 의 항목 클릭은 `navigate(pathFor(n.link))` 하고, "인시던트로 이동"은 `pathFor('/incidents')` 로 이동한다.
 
@@ -134,7 +134,7 @@ ConsoleLayout (div.pl-app.co-app)
 - 데이터: `useFleetSummary`, `useTimeline`, `useNotices`, `useConversations`, `useIsAdmin`, 선택 클러스터 기준 `useClusterUsage`, `useMetricWidgets`, `useMetricQueryPresets`.
 - state: `clusterWizard`, `repoWizard`, `fleetLens`, `selectedClusterId`.
 - `fleetClusters = useMemo(() => fleetQ.data?.clusters ?? [], [fleetQ.data?.clusters])` 로 fleet 배열 참조를 고정한다. `useEffect`는 선택 클러스터가 비었거나 fleet 에 없으면 첫 클러스터로 보정한다.
-- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState('아직 등록된 클러스터가 없습니다', admin 이면 등록 action)` 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 쿼리 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, 사용량 추이 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
+- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState('아직 등록된 클러스터가 없습니다', admin 이면 등록 action)` 또는 dashboard toolbar(배포 정의 추가, admin 클러스터 등록, 쿼리 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + 공용 `DrilldownHeatmap`) → `FleetWidgetStrip` KPI 4개 → 최근 인시던트/승인 카드 → 클러스터 `Table` → 최근 AI 대화 카드.
 - `usageSeries`는 [metrics](./metrics.md)의 `buildUsageSeries()`를 재사용한다. `restart_total`은 누적값이 아니라 샘플 간 증가분(`재시작 증가`)으로 렌더하고, 시간 라벨 포맷은 [shared `TimeSeriesChart`](shared.md#차트-uichartstsx)가 담당한다.
 - `fleetHeatNode(cluster, lens)`는 모든 렌즈에서 tile 크기 `value=max(1,pods_total)`을 유지하고 score/label만 바꾼다. `all`: `score=healthScore(health)`. `cpu`: `score=ratioHealthScore(cpu_pct)`. `memory`: `score=ratioHealthScore(mem_pct)`. `incidents`: 인시던트가 있으면 `score=0.12`, 없으면 `healthScore(health)`. tile 라벨은 한국어 표시(`팟`, `인시던트`)를 쓴다.
 - `FleetWidgetStrip`은 fleet totals 와 cluster summary 만 사용한다. 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 표시하고 CPU/MEM 관측값이 없으면 `—`로 표시한다.
@@ -148,7 +148,7 @@ ConsoleLayout (div.pl-app.co-app)
 3. 세션 플로우: `RequireSession` 이 세션 확인 후 `ConsoleLayout` 렌더 → `startLive(session.workspace_id)` 호출로 해당 workspace 의 WS 시작. 최근 세션 hint 가 있으면 세션 확인 pending 동안에도 기존 콘솔 화면을 먼저 유지하고, 응답이 오면 성공/401 규칙으로 수렴한다.
 4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 hint 삭제 + 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재 path+query+hash>` 이동.
 5. 세션 확인 timeout/network/server 오류는 로그인 이동으로 위장하지 않고 세션 확인 실패 empty state 와 재시도 버튼을 렌더한다.
-5. `/console`과 `/console/*`는 같은 콘솔 IA를 base path 유지 상태로 렌더한다. `/overview`, `/notifications`, 구 UI 경로 계열은 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 해당 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
+5. `/console`과 `/console/*`는 `/`로 redirect한다. `/overview`, `/notifications`, 구 UI 경로 계열도 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 해당 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
 
 ## 불변식·오류 (Invariants & Errors)
 

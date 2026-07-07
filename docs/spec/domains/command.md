@@ -183,6 +183,8 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 `command_status`는 `db.get_agent_command(command_id, 세션 workspace_id)` 조회 후(None이면 404 `"command not found"`) 행의 `cluster_id`에 대한 읽기 권한을 검사한다 — 콘솔이 명령 진행 상태와 agent가 올린 실제 결과를 폴링하는 용도(가짜 완료 표시 제거).
 
+management 클러스터(role=`management`)는 제어 불가다. `commands`와 scale/restart wrapper는 cluster registration settings 또는 stored policy의 `cluster_role`이 management이면 이벤트 발행 전에 HTTP 400 `{"code":"management_readonly","detail":"management 클러스터는 읽기 전용입니다"}`로 거부한다. `POST /agent/debug/query`는 읽기성 telemetry query라 이 write guard 대상이 아니다.
+
 #### 에이전트 엔드포인트 (`agent_router` — `src/domains/command/router.py :: agent_router`, 마지막에 `router.include_router(agent_router)`)
 
 모두 `require_cluster_agent`(per-cluster 토큰)로 인증하며, `workspace_id`/`cluster_id`는 **토큰 identity에서만** 취한다(body/query 불신).
@@ -270,15 +272,16 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 ### `handle_command_requested` 흐름
 
-1. `evaluate_command_policy(evt)`:
+1. `evaluate_management_guard(evt, ctx.db)`: registration settings 또는 stored policy가 role=`management`이면 `CommandRejectedBody(reason="management_readonly")`를 남기고 queue 적재 없이 종료한다. gateway를 우회한 recovery dispatch/direct event도 여기서 차단된다.
+2. `evaluate_command_policy(evt)`:
    1. `evt.diff.is_image_only_noop()` → reject(`Sandbox.NO_DIFF_REASON` = `"desired and actual images already match"`).
    2. `evt.namespace != evt.diff.namespace` → reject(`NAMESPACE_MISMATCH_REASON`).
    3. `desired_manifest_namespace(evt)`가 있고 `evt.namespace`와 다르면 → reject(`MANIFEST_NAMESPACE_MISMATCH_REASON`).
    4. `POLICY.evaluate(ModelLookup(evt))` — 제어 네임스페이스 허용목록 룰(`NamespaceAllowlistRule`) + action allowlist 룰.
    5. 액션 spec의 `allows_namespace` 위반 → reject(`ACTION_NAMESPACE_REASON`).
    6. spec.requires_approval이고 `approval_exempt_for_environment(evt)`가 아닌데 `approval_ref`/`policy_decision_ref` 누락 → reject(각 사유). (기본값 기준 sandbox 환경의 deployment scale은 면제.)
-2. 거부 시 `CommandRejectedBody(reason, requested=evt.to_body())` yield 후 종료.
-3. `evaluate_recorded_approval(evt, ctx.db)`: 승인 필요 명령(`command_requires_recorded_approval` — 환경 면제 반영)이면 `db.get_workflow_approval(approval_ref, workspace_id)` 레코드 검증 — getter 없음/레코드 없음 → `APPROVAL_RECORD_MISSING_REASON`; `workflow_run_id` 불일치 → `APPROVAL_WORKFLOW_MISMATCH_REASON`; status가 `ApprovalStatus.GRANTED`/`NOT_REQUIRED`가 아니면 → `APPROVAL_NOT_GRANTED_REASON`; `details.policy_decision_ref`/`details.approval_ref`가 기록돼 있고 불일치 → `APPROVAL_POLICY_DECISION_MISMATCH_REASON`. 거부 시 `CommandRejectedBody` yield 후 종료.
+3. 거부 시 `CommandRejectedBody(reason, requested=evt.to_body())` yield 후 종료.
+4. `evaluate_recorded_approval(evt, ctx.db)`: 승인 필요 명령(`command_requires_recorded_approval` — 환경 면제 반영)이면 `db.get_workflow_approval(approval_ref, workspace_id)` 레코드 검증 — getter 없음/레코드 없음 → `APPROVAL_RECORD_MISSING_REASON`; `workflow_run_id` 불일치 → `APPROVAL_WORKFLOW_MISMATCH_REASON`; status가 `ApprovalStatus.GRANTED`/`NOT_REQUIRED`가 아니면 → `APPROVAL_NOT_GRANTED_REASON`; `details.policy_decision_ref`/`details.approval_ref`가 기록돼 있고 불일치 → `APPROVAL_POLICY_DECISION_MISMATCH_REASON`. 거부 시 `CommandRejectedBody` yield 후 종료.
 
 ### idempotency_key / build_plan
 
@@ -309,6 +312,7 @@ leased/running + 만료 후 grace 300s 경과 ──janitor──▶ failed
 - 리스 획득은 `FOR UPDATE SKIP LOCKED`로 에이전트 간 경합 안전.
 - 결과 기록과 `command.completed` 이벤트 스테이징(events+outbox)은 단일 트랜잭션(원자성).
 - 쓰기 명령(내장 3종)은 제어 허용 네임스페이스(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox만) 한정. 승인 레코드는 `apply_manifest`는 필수, `deployment_scale`은 sandbox 환경 면제(기본), `rollout_restart`는 비파괴라 불요.
+- management 클러스터 쓰기 명령은 gateway와 command-worker에서 각각 차단된다. target-agent도 management role이면 write action(`apply_manifest`, rollout restart, k8s patch/scale)을 Kubernetes API 호출 전 실패 결과(`message="management_readonly"`)로 무시한다.
 - 수동 명령은 diff 필수(422), 서버가 임의 리소스를 합성하지 않음. deployment 제어는 허용목록 외 네임스페이스 422(`"namespace is not allowed by control policy"`).
 - 정책 reject에는 반드시 reason이 있다(`Result.require_reason`).
 - 카탈로그 중복 등록(동일 action, 다른 spec) → `ValueError`.

@@ -25,6 +25,12 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.target.management_guard import (
+    cluster_role_from_policy,
+    is_management_registration,
+    is_management_role,
+    management_readonly_detail,
+)
 from packages.config.constants import Command, CommandStatus, Sandbox
 from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
@@ -101,6 +107,19 @@ def require_cluster_deploy_access(
     )
 
 
+def require_not_management_cluster(db: Any, workspace_id: str, cluster_id: str) -> None:
+    registration_getter = getattr(db, "get_cluster_registration", None)
+    registration = (
+        registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
+    )
+    policy_getter = getattr(db, "get_cluster_policy", None)
+    policy = policy_getter(workspace_id, cluster_id) if callable(policy_getter) else None
+    if is_management_registration(registration) or is_management_role(
+        cluster_role_from_policy(policy)
+    ):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+
+
 def deployment_control_diff(
     *,
     workspace_id: str,
@@ -140,6 +159,7 @@ async def accept_deployment_control(
     validate_control_namespace(namespace)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, cluster_id)
+    require_not_management_cluster(db, workspace_id, cluster_id)
     diff = deployment_control_diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
@@ -265,6 +285,7 @@ async def commands(
 ) -> AcceptedResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
+    require_not_management_cluster(db, workspace_id, payload.cluster_id)
     accepted = await events.accept_body(
         CommandRequestedBody(
             cluster_id=payload.cluster_id,

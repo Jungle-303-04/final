@@ -76,6 +76,8 @@ FLEET_SUMMARY_PATH = "/fleet/summary"
 # 클러스터 타일 클릭 드릴다운 — 워크로드 health 그룹/경고 이벤트/열린 인시던트/usage 스냅샷.
 CLUSTER_SUMMARY_PATH = "/clusters/{cluster_id}/summary"
 CLUSTER_CONNECTION_STATUS_PATH = "/clusters/{cluster_id}/connection-status"
+CLUSTER_NODES_SUMMARY_PATH = "/clusters/{cluster_id}/nodes/summary"
+CLUSTER_NODE_PODS_SUMMARY_PATH = "/clusters/{cluster_id}/nodes/{node_name}/pods/summary"
 CLUSTER_INVENTORY_RESOURCES_PATH = "/clusters/{cluster_id}/inventory/resources"
 CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH = "/clusters/{cluster_id}/inventory/resource-detail"
 CLUSTER_INVENTORY_SUMMARY_PATH = "/clusters/{cluster_id}/inventory/summary"

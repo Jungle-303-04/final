@@ -2,7 +2,7 @@
 export type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
 
 export interface Session { authenticated: boolean; user_id: string; email?: string; workspace_id: string; roles: string[] }
-export interface Cluster { cluster_id: string; name: string; environment: string; connection_status: 'online'|'stale'|'never_connected'|'connected'|'disconnected'|'unknown'; node_count: number; pod_count: number; incident_count: number; registered_at: string }
+export interface Cluster { cluster_id: string; name: string; environment: string; role: 'target'|'management'|string; connection_status: 'online'|'stale'|'never_connected'|'connected'|'disconnected'|'unknown'; node_count: number; pod_count: number; incident_count: number; registered_at: string }
 export interface ClusterSummary { cluster_id: string; namespaces: string[]; nodes: NodeInfo[]; pod_phases: Record<string, number>; services: number }
 export interface NodeInfo { name: string; ready: boolean; pod_count: number; version: string; cpu_ratio?: number; mem_ratio?: number }
 export interface Workload { name: string; kind: string; namespace: string; ready: string; restarts: number; image: string; node?: string; phase: string; hot?: boolean; workload_name?: string }
@@ -22,7 +22,7 @@ export interface PlanChange {
   after?: unknown;
 }
 export interface SafePr { status: string; pr_url?: string; explanation?: string; diff_before?: string; diff_after?: string; error?: string }
-export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string }
+export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string; application_id?: string; manifest_path?: string; branch?: string; repo_ref?: string }
 export interface ConversationSummary { conversation_id: string; title: string; status: 'idle'|'waiting'; updated_at: string }
 export interface Conversation extends ConversationSummary { messages: ChatMessage[] }
 export interface ChatToolCall { name: string; args: string; status: Tone }

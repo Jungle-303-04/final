@@ -62,13 +62,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: () => void })
 ```
 
-- `Modal(size 'lg', title '레포 연결')` + `Stepper(['레포','배포 대상','확인'])`.
-- state: `step`, `repoRef`, `branch`(초기 빈 값, probe/branch 응답의 default branch 로 자동 선택), `manifestSelection`(선택값은 `${source_type}:${path}`), `clusterId`.
+- `Modal(title '배포 정의 추가')` + `Stepper(['레포','배포 대상','확인'])`.
+- state: `step`, `repoRef`, `branch`(초기 빈 값, probe/branch 응답의 default branch 로 자동 선택), `manifestSelection`(선택값은 `${source_type}:${path}`), `selectedClusterIds`.
 - 검증: `refOk = /^([\w.-]+\/[\w.-]+|https?:\/\/[^/\s]+\/[^/\s]+\/[^/\s]+|git@[^:\s]+:[^/\s]+\/[^/\s]+(?:\.git)?)$/.test(repoRef.trim())`(실패 시 error `'owner/name 또는 GitHub URL 형식이어야 합니다'`, 다음 disabled). 앱 이름은 `normalized_repo_ref.split('/')[1]`.
 - 단계:
-  1. repo_ref 입력 → `useRepositoryProbe(POST /repositories/discovery/probe)` 로 `normalized_repo_ref`/default branch/reachability 를 확인한다. reachable 이면 `useRepositoryBranches(GET /repositories/discovery/branches?repo_ref=...)` 로 브랜치 select 를 채우고, 보호 브랜치는 `보호됨` 접미로 표시한다. 선택 branch 기준 `useRepositoryManifestCandidates(GET /repositories/discovery/manifests?repo_ref=...&branch=...)` 로 manifest 후보 select 를 채운다. 후보 value/key 는 `${source_type}:${path}` 이므로 같은 path 가 raw/kustomize/helm 등 여러 source type 으로 잡혀도 선택이 보존된다. 선택된 후보는 `useRepositoryManifestValidation(POST /repositories/discovery/validate)` body `{repo_ref, branch, manifest_path, source_type}` 로 검증하고, `valid` 일 때만 다음 가능하다. 다음 클릭 시 `clusterId`를 빈 값으로 두고 사용자가 대상 클러스터를 명시적으로 선택하게 한다.
-  2. 대상 클러스터 select(`useClusters`). 클러스터 조회 실패 시 danger 문구(`클러스터 조회 실패 — <message>`)를 먼저 보여준다. 성공했지만 클러스터가 없으면 admin 은 "먼저 클러스터를 등록" 안내와 `pathFor('/clusters')` 링크를 보고, non-admin 은 관리자에게 클러스터 접근 권한을 요청하라는 안내만 본다. 클러스터가 있으면 disabled placeholder `클러스터 선택`을 첫 option 으로 두며, 실제 클러스터를 골라야 다음으로 진행한다.
-  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터/네임스페이스/환경) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, source_type, cluster_id, namespace, environment})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 `POST /applications/connect` 1회 호출) — `namespace`는 validation resources 중 첫 non-empty namespace, 없으면 확인 단계에 `서버 정책`으로 표시하고 제출하지 않는다. `environment`는 선택 클러스터 environment 를 사용하며 없으면 확인 단계에 `서버 정책`으로 표시하고 보내지 않는다. 성공 시 `onClose()` 후 `nav(pathFor('/repos/${application_id}'))`, 실패 시 에러 메시지를 danger 로 표시.
+  1. repo_ref 입력 → `useRepositoryProbe(POST /repositories/discovery/probe)` 로 `normalized_repo_ref`/default branch/reachability 를 확인한다. reachable 이면 `useRepositoryBranches(GET /repositories/discovery/branches?repo_ref=...)` 로 브랜치 select 를 채우고, 보호 브랜치는 `보호됨` 접미로 표시한다. 선택 branch 기준 `useRepositoryManifestCandidates(GET /repositories/discovery/manifests?repo_ref=...&branch=...)` 로 manifest 후보 select 를 채운다. 후보 value/key 는 `${source_type}:${path}` 이므로 같은 path 가 raw/kustomize/helm 등 여러 source type 으로 잡혀도 선택이 보존된다. 선택된 후보는 `useRepositoryManifestValidation(POST /repositories/discovery/validate)` body `{repo_ref, branch, manifest_path, source_type}` 로 검증하고, `valid` 일 때만 다음 가능하다.
+  2. 배포 대상(`useClusters`). `connection_status in connected/online` 이고 `role !== 'management'` 인 target 클러스터만 선택 가능하다. 미연결 클러스터는 비활성 행 + `에이전트 미연결` 뱃지 + `연결하러 가기` 링크, 관리 클러스터는 비활성 행 + `관리 클러스터` 뱃지를 표시한다. "전체 선택"은 선택 가능한 target 클러스터만 대상으로 한다. 선택 가능한 클러스터가 0개면 리스트 대신 `EmptyState("배포하려면 연결된 클러스터가 필요합니다")`와 admin 전용 중첩 `RegisterClusterWizard` CTA를 렌더하고, 위저드 close 후 클러스터 목록을 refetch한다.
+  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/대상 요약/네임스페이스) + 선택 클러스터 뱃지 링크 → "배포 정의 생성": 선택된 각 클러스터마다 `useCreateApplication().mutateAsync({name, repo_ref, branch, manifest_path, source_type, cluster_id, namespace, environment})`([repo](./repo.md) 의 `CreateApplicationInput`)를 순차 호출한다. `namespace`는 validation resources 중 첫 non-empty namespace, 없으면 보내지 않는다. `environment`는 선택 클러스터 environment 를 사용한다. 성공 시 첫 application 상세로 이동하고, 400 `cluster_not_connected`는 danger 인라인 사유로 표시한다.
 
 ## 라우트
 
@@ -82,7 +82,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 
 - 클러스터 등록 API 호출 순서는 provider cluster-discovery → target preflight → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일). connection-status 는 수동 버튼이 아니라 발급 단계 진입 시 5초 간격 자동 폴링(connected/online 되면 중단).
 - 클러스터 등록은 수동 bootstrap 설치를 기본으로 하며 `deploy_provider`는 `manual-manifest`, `apply`는 `false`로 고정한다. provider별 접속 정보는 `provider_config`에만 담는다.
-- 레포 연결 API 호출 순서는 repository probe → branches → manifest candidates → manifest validate → applications/connect 로 고정한다.
+- 레포 연결 API 호출 순서는 repository probe → branches → manifest candidates → manifest validate → clusters target filtering → applications/connect 로 고정한다.
 - manifest 후보 선택값은 `source_type:path` 조합이다. connect API 제출에는 `manifest_path` 와 선택 후보의 `source_type`, 선택된 클러스터, validation resource 에서 얻은 namespace(있을 때), 클러스터 environment(있을 때)를 함께 보내며, 서버는 이를 재검증한 뒤 application metadata, deployment binding deploy_policy, git watch target settings 에 보존한다.
 - provider cluster-discovery 와 target 등록/preflight 는 admin 세션 라우트다. 클러스터 등록 위저드 진입 CTA 는 admin 화면에서만 노출한다.
 - agent token 과 `install_command` 는 발급 응답에서만 표시하고 어디에도 저장하지 않는다(위저드 닫으면 소실).

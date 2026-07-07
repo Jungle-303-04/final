@@ -4,7 +4,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RequireAdmin, RequireGuest, RequireSession } from '@/app/guards';
 import { ConsoleLayout } from '@/features/console/ui';
 import { HomePage } from '@/features/console/pages/HomePage';
-import { Skeleton } from '@/shared/ui';
+import { Skeleton } from '@/ui';
 
 const L = (f: () => Promise<{ default: React.ComponentType }>) => {
   const C = lazy(f);
@@ -57,7 +57,8 @@ export const router = createBrowserRouter([
       { path: '/verify-email', element: L(() => import('@/features/auth/VerifyEmailView')) },
     ],
   },
-  { path: '/console/*', element: L(() => import('@/features/console-archive/ArchivedConsoleDemo')) },
+  { path: '/console', element: <Navigate to="/" replace /> },
+  { path: '/console/*', element: <Navigate to="/" replace /> },
   {
     element: <RequireSession />,
     children: [
@@ -68,7 +69,7 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  // 구 경로 호환 — 실제 서비스는 /, /console 은 보존용 콘솔 데모 경로로 별도 라우팅
+  // 구 경로 호환 — 실제 서비스는 /
   { path: '/plural', element: <Navigate to="/" replace /> },
   { path: '/plural/*', element: <Navigate to="/" replace /> },
   { path: '/overview', element: <Navigate to="/" replace /> },
