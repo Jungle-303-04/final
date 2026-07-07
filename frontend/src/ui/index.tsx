@@ -72,7 +72,7 @@ export function Button({
     <button
       type="button"
       className={cx(
-        'inline-flex max-w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-control border font-semibold transition-colors duration-150 ease-standard disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex max-w-full shrink-0 items-center justify-center gap-2 overflow-hidden rounded-control border font-semibold transition-colors duration-[var(--ui-duration-fast)] ease-standard disabled:cursor-not-allowed disabled:opacity-50',
         focusRing,
         buttonVariants[variant],
         buttonSizes[size],
