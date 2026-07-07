@@ -21,10 +21,16 @@ LOGGER = get_logger(__name__)
 
 
 class EvidenceSource(Protocol):
-    async def collect(self, *evidence_keys: str) -> JsonObject: ...
+    """Describe the collector interface used by evidence jobs."""
+
+    async def collect(self, *evidence_keys: str) -> JsonObject:
+        """Collect evidence for selected provider keys."""
+        ...
 
 
 class EvidenceJobScheduler:
+    """Schedule, poll, run, and report provider evidence jobs."""
+
     def __init__(
         self,
         *,
@@ -37,6 +43,7 @@ class EvidenceJobScheduler:
         provider_worker_counts: Mapping[str, int],
         interval_seconds: int,
     ) -> None:
+        """Store scheduler config and prepare worker state."""
         self.cluster_id = cluster_id
         self.workspace_id = workspace_id
         self.agent_id = agent_id
@@ -61,6 +68,7 @@ class EvidenceJobScheduler:
         self._workers_started = False
 
     async def run(self, client: ManagementPlaneClient) -> None:
+        """Run provider workers and the schedule loop until cancelled."""
         self._client = client
         self._workers_started = True
         self.reconcile_worker_pools(client)
@@ -72,6 +80,7 @@ class EvidenceJobScheduler:
             await self.stop_workers()
 
     async def schedule_forever(self, client: ManagementPlaneClient) -> None:
+        """Keep scheduling due evidence jobs in a loop."""
         while True:
             try:
                 await self.schedule_once(client)
@@ -88,6 +97,7 @@ class EvidenceJobScheduler:
         client: ManagementPlaneClient,
         now: float | None = None,
     ) -> str | None:
+        """Schedule one evidence window when any provider is due."""
         now = time.time() if now is None else now
         due_provider_keys = self.due_provider_keys(now)
         if not due_provider_keys:
@@ -104,6 +114,7 @@ class EvidenceJobScheduler:
         return str(response.get(Gateway.EVIDENCE_KEY) or window_start)
 
     def due_provider_keys(self, now: float) -> tuple[str, ...]:
+        """Return enabled provider keys that are ready to run now."""
         return tuple(
             provider_key
             for provider_key in self.provider_keys
@@ -117,6 +128,7 @@ class EvidenceJobScheduler:
         provider_key: str,
         worker_id: str,
     ) -> None:
+        """Poll and process jobs for one provider forever."""
         while True:
             try:
                 processed = await self.work_once(client, provider_key, worker_id)
@@ -136,6 +148,7 @@ class EvidenceJobScheduler:
         provider_key: str,
         worker_id: str,
     ) -> bool:
+        """Poll one provider job, run it, and report the result."""
         job = await client.poll_evidence_job(
             provider_key,
             self.agent_id,
@@ -170,6 +183,7 @@ class EvidenceJobScheduler:
         return True
 
     async def collect_job(self, job: JsonObject, provider_key: str) -> JsonObject:
+        """Collect evidence for one leased provider job."""
         definitions = self.job_query_definitions(job, provider_key)
         if hasattr(self.collector, "collect_query_policy"):
             return await self.collector.collect_query_policy(provider_key, definitions)
@@ -180,6 +194,7 @@ class EvidenceJobScheduler:
         job: JsonObject,
         provider_key: str,
     ) -> tuple[TelemetryQueryDefinition, ...]:
+        """Build query definitions from the job provider policy."""
         source = telemetry.source_for_provider(provider_key)
         if source is None:
             return ()
@@ -204,6 +219,7 @@ class EvidenceJobScheduler:
         provider_intervals: Mapping[str, int],
         enabled_provider_keys: set[str],
     ) -> None:
+        """Update enabled providers and their schedule intervals."""
         unknown_keys = set(provider_intervals) - set(self.provider_keys)
         if unknown_keys:
             raise ValueError(f"unknown evidence providers in schedule: {sorted(unknown_keys)}")
@@ -220,6 +236,7 @@ class EvidenceJobScheduler:
         self,
         provider_worker_counts: Mapping[str, int],
     ) -> None:
+        """Update desired worker counts for each provider."""
         for provider_key in self.provider_keys:
             self.provider_worker_counts[provider_key] = max(
                 0,
@@ -229,6 +246,7 @@ class EvidenceJobScheduler:
                 self.reconcile_worker_pool(provider_key, self._client)
 
     def current_worker_counts(self) -> dict[str, int]:
+        """Return desired or running worker counts by provider."""
         self.prune_finished_workers()
         if not self._workers_started:
             return dict(self.provider_worker_counts)
@@ -238,6 +256,7 @@ class EvidenceJobScheduler:
         }
 
     def reconcile_worker_pools(self, client: ManagementPlaneClient) -> None:
+        """Make all provider worker pools match desired counts."""
         for provider_key in self.provider_keys:
             self.reconcile_worker_pool(provider_key, client)
 
@@ -246,6 +265,7 @@ class EvidenceJobScheduler:
         provider_key: str,
         client: ManagementPlaneClient,
     ) -> None:
+        """Start or stop workers for one provider."""
         self.prune_finished_workers()
         if not self._workers_started:
             return
@@ -265,10 +285,12 @@ class EvidenceJobScheduler:
             task.cancel()
 
     def prune_finished_workers(self) -> None:
+        """Remove completed worker tasks from local state."""
         for provider_key, tasks in self._worker_tasks.items():
             self._worker_tasks[provider_key] = [task for task in tasks if not task.done()]
 
     async def stop_workers(self) -> None:
+        """Cancel all running provider worker tasks."""
         tasks = [task for provider_tasks in self._worker_tasks.values() for task in provider_tasks]
         for task in tasks:
             task.cancel()
@@ -278,11 +300,13 @@ class EvidenceJobScheduler:
             self._worker_tasks[provider_key] = []
 
     def next_worker_id(self, provider_key: str) -> str:
+        """Return a new stable worker id for one provider."""
         worker_index = self._worker_serials[provider_key]
         self._worker_serials[provider_key] += 1
         return f"{provider_key}-worker-{worker_index}"
 
     def new_window_start(self, now: float) -> str:
+        """Round a timestamp down to the current evidence window."""
         interval = max(1, self.interval_seconds)
         current = int(now)
         window_start = current - (current % interval)
