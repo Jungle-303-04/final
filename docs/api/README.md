@@ -391,7 +391,7 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 프론트는 `details.resource`, `details.namespace`, `details.changes[]`를 사용해서 워크플로 단계별 리소스 이름과 필드 변경 미리보기를 그린다.
 `details.changes[]`는 diff-worker가 만든 3-way 비교 결과이며 `field_path`, `classification`, `before`, `after`를 읽으면 된다.
 
-### 10-repository-discovery
+### 14-repository-discovery
 
 `01-probe-repository`는 `repo_ref`가 탐색 가능한 저장소인지 확인하고 기본 branch와 metadata를 반환한다.
 `02-list-branches`는 repository branch 목록을 조회한다.

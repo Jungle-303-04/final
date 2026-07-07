@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:55 KST (repo atomic connect + live API OOM 분석)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:03 KST (api-gateway OOM 안정화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,21 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (20:03 KST) — api-gateway OOM 안정화
+
+- 원인:
+  - 라이브 `api-gateway` Pod가 `CrashLoopBackOff`, Last State `OOMKilled`, exit code 137, restart count 37 상태였다.
+  - 살아있는 순간에는 api-gateway LoadBalancer `/healthz`, `/api/healthz`가 200을 반환했고, console LoadBalancer `/api/healthz`는 gateway 재시작 타이밍에 502를 반환했다.
+  - 따라서 public `/api` 502의 직접 원인은 console 프록시 upstream이 재시작 중인 api-gateway를 만나는 안정성 문제다.
+- 구현:
+  - 1차로 `deploy/management/services.yaml`의 api-gateway resources를 requests `cpu=50m`, `memory=256Mi`, limits `cpu=1`, `memory=1Gi`로 상향했으나 새 Pod도 시작 직후 OOM/restart가 재현됐다.
+  - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했다.
+  - gateway `OUTBOX_RELAY_BATCH=50`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있기 때문이다.
+  - 이 변경은 OOM 완화용 안정화이며, evidence/result 폭증 및 incident/DLQ 증가 원인 분석은 별도 작업으로 계속한다.
+- 다음:
+  - 2Gi resources + `OUTBOX_RELAY_BATCH=50` live patch 후 rollout 안정화 확인.
+  - console LB `/api/healthz`, public `https://k8s.woonyong.org/api/healthz`, `kubectl get deploy api-gateway`, restart count 증가 여부를 확인.
 
 ## 체크포인트 (19:55 KST) — repo atomic connect + live API OOM 분석
 
