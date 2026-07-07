@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 06:30 KST (DB retention/keyset 커밋 및 콘솔 디자인 시스템 Phase 2 홈 대시보드 이관 메모 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:10 KST (콘솔 디자인 시스템 Phase 2 클러스터 목록 이관 메모 반영)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -140,6 +140,24 @@
 - 다음:
   1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
   2. 다음 화면 순서는 클러스터 목록/상세다. `features/cluster/*`의 `shared/ui`, inline style, legacy token 사용을 화면 단위로 제거한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 클러스터 목록 이관
+
+- 구현:
+  - `features/cluster/ClusterListView.tsx`를 `src/ui` PageHeader/StatCard/Card/Input/Table/Badge/EmptyState 기반으로 재구성했다.
+  - 목록 본체의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color, legacy `pl-`/`co-` class 의존을 제거했다.
+  - 클러스터 연결 상태 라벨을 `연결/지연/미연결/끊김/미확인`으로 고정하고, 검색 결과 없음/등록 없음/조회 실패+재시도 상태를 새 Table/EmptyState로 맞췄다.
+  - 등록 위저드는 별도 Phase 2 순서(`레포/클러스터 등록 위저드`)로 남아 있다. 목록 CTA는 기존 동작을 유지하되 위저드 본체 이관은 해당 단계에서 처리한다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test -- --runInBand` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright route mocking 검수: 인증 세션/알림/클러스터 목록 최소 응답으로 `/clusters`를 1440/1024/390 폭에서 캡처했고 horizontal overflow 0, unexpected console error 0, visible rows 4.
+  - screenshots: `/tmp/k8s-clusters-list-desktop.png`, `/tmp/k8s-clusters-list-tablet.png`, `/tmp/k8s-clusters-list-mobile.png`.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
+  2. 다음 화면은 클러스터 상세다. `ClusterDetailView.tsx`가 아직 `shared/ui`, `plural-ui`, inline style을 많이 포함하므로 탭/테이블/드릴다운을 작은 커밋으로 나눠 이관한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
