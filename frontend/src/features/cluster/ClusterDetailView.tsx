@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useClusterEvents, useClusters, useClusterSummary, useResources, useRestart, useScale, useServices, useWorkloads } from '@/features/cluster/api';
 import { useClusterAgg } from '@/features/fleet/api';
-import { useTimeline } from '@/features/notifications/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, QueryBoundary, ResourceTable, StatBox, Tabs } from '@/shared/ui';
 import { liveStore } from '@/shared/lib/live';
@@ -32,8 +31,8 @@ export default function ClusterDetailView() {
   const admin = useIsAdmin();
   const scale = useScale(clusterId);
   const restart = useRestart(clusterId);
-  const [scaleTarget, setScaleTarget] = useState<Workload | null>(null);
-  const [restartTarget, setRestartTarget] = useState<Workload | null>(null);
+  const [scaleTarget, setScaleTarget] = useState<DeploymentTarget | null>(null);
+  const [restartTarget, setRestartTarget] = useState<DeploymentTarget | null>(null);
   const [replicas, setReplicas] = useState(2);
 
   const podRows = useMemo(() =>
@@ -62,7 +61,7 @@ export default function ClusterDetailView() {
       </div>
       <ClusterAggPanel clusterId={clusterId} />
       <Tabs items={TABS} current={tab} onChange={k => setSp({ tab: k })} />
-      {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin} onScale={w => { setScaleTarget(w); setReplicas(2); }} onRestart={setRestartTarget} />}
+      {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin} onScale={d => { setScaleTarget(d); setReplicas(d.podCount); }} onRestart={setRestartTarget} />}
       {tab === 'pods' && (
         <Card>
           <ResourceTable<Workload>
@@ -111,28 +110,30 @@ export default function ClusterDetailView() {
         )}
       </Drawer>
 
-      <Modal open={!!scaleTarget} title={`${scaleTarget?.name.replace(/-pod-.*/, '')} 스케일`} onClose={() => setScaleTarget(null)}>
-        <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다.</p>
+      <Modal open={!!scaleTarget} title={`${scaleTarget?.name ?? ''} 스케일`} onClose={() => setScaleTarget(null)}>
+        <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>
+          현재 팟 {scaleTarget?.podCount ?? 0}개 — 비동기 명령입니다. command-worker 정책 확인 후 agent 가 실행합니다.
+        </p>
         <input className="input" type="number" min={0} max={100} value={replicas} onChange={e => setReplicas(Number(e.target.value))} />
         <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
           <Button onClick={() => setScaleTarget(null)}>취소</Button>
           <Button variant="primary" loading={scale.isPending} onClick={() => scaleTarget && scale.mutate(
-            { ns: scaleTarget.namespace, name: scaleTarget.name.replace(/-pod-.*/, ''), replicas },
+            { ns: scaleTarget.ns, name: scaleTarget.name, replicas },
             { onSuccess: () => setScaleTarget(null) },
           )}>실행</Button>
         </div>
       </Modal>
 
       {/* 재시작은 파괴적 명령 — 즉시 실행 대신 확인 단계를 둔다 */}
-      <Modal open={!!restartTarget} title={`${restartTarget?.name.replace(/-pod-.*/, '') ?? ''} 재시작`} onClose={() => setRestartTarget(null)}>
+      <Modal open={!!restartTarget} title={`${restartTarget?.name ?? ''} 재시작`} onClose={() => setRestartTarget(null)}>
         <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>
-          <code>{restartTarget?.namespace}/{restartTarget?.name.replace(/-pod-.*/, '')}</code> 의 팟이 순차 재시작됩니다.
+          <code>{restartTarget?.ns}/{restartTarget?.name}</code> 의 팟 {restartTarget?.podCount ?? 0}개가 순차 재시작됩니다.
           비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다.
         </p>
         <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
           <Button onClick={() => setRestartTarget(null)}>취소</Button>
           <Button variant="danger" loading={restart.isPending} onClick={() => restartTarget && restart.mutate(
-            { ns: restartTarget.namespace, name: restartTarget.name.replace(/-pod-.*/, '') },
+            { ns: restartTarget.ns, name: restartTarget.name },
             { onSettled: () => setRestartTarget(null) },
           )}>재시작 실행</Button>
         </div>
@@ -141,7 +142,10 @@ export default function ClusterDetailView() {
   );
 }
 
-function WorkloadsTab({ clusterId, admin, onScale, onRestart }: { clusterId: string; admin: boolean; onScale: (w: Workload) => void; onRestart: (w: Workload) => void }) {
+/* 제어 명령 대상 — 팟이 아니라 디플로이먼트(워크로드) 단위 */
+interface DeploymentTarget { ns: string; name: string; podCount: number }
+
+function WorkloadsTab({ clusterId, admin, onScale, onRestart }: { clusterId: string; admin: boolean; onScale: (d: DeploymentTarget) => void; onRestart: (d: DeploymentTarget) => void }) {
   const q = useWorkloads(clusterId);
   const deployments = useMemo(() => {
     const byDeploy = new Map<string, Workload[]>();
@@ -162,8 +166,8 @@ function WorkloadsTab({ clusterId, admin, onScale, onRestart }: { clusterId: str
           { key: 'restarts', label: '재시작 합', render: d => d.pods.reduce((a, p) => a + p.restarts, 0) },
           { key: 'act', label: '', render: d => (
             <span style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-              <Button size="sm" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale(d.pods[0])}>스케일</Button>
-              <Button size="sm" variant="danger" disabled={!admin} onClick={() => onRestart(d.pods[0])}>재시작</Button>
+              <Button size="sm" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale({ ns: d.ns, name: d.name, podCount: d.pods.length })}>스케일</Button>
+              <Button size="sm" variant="danger" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart({ ns: d.ns, name: d.name, podCount: d.pods.length })}>재시작</Button>
             </span>
           ) },
         ]} />
@@ -260,5 +264,3 @@ function ClusterAggPanel({ clusterId }: { clusterId: string }) {
   );
 }
 
-// timeline 폴링 공유(알림과 캐시 공유) — 사용 안 하는 화면에서 임포트 방지용 참조
-void useTimeline;

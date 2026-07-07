@@ -5,6 +5,7 @@ import { useApplications } from '@/features/repo/api';
 import { SettingsNav } from '@/features/org/SettingsNav';
 import { Badge, Button, Card, Field, Modal, QueryBoundary, ResourceTable } from '@/shared/ui';
 import { timeAgo } from '@/shared/lib/format';
+import type { AccessGrant } from '@/shared/lib/types';
 
 const ROLES = [
   ['observer', '읽기 전용'], ['release_operator', '배포 실행'], ['cluster_steward', '위험 명령 승인'],
@@ -22,6 +23,7 @@ export default function AccessView() {
   const [resourceType, setResourceType] = useState('cluster');
   const [resourceId, setResourceId] = useState('');
   const [role, setRole] = useState<string>('observer');
+  const [revoking, setRevoking] = useState<AccessGrant | null>(null);
 
   const subjects = subjectType === 'user' ? (usersQ.data ?? []).map(u => [u.user_id, u.email]) : (groupsQ.data ?? []).map(g => [g.group_id, g.name]);
   const targets = resourceType === 'cluster' ? (clustersQ.data ?? []).map(c => [c.cluster_id, c.name]) : (appsQ.data ?? []).map(a => [a.application_id, a.name]);
@@ -39,7 +41,7 @@ export default function AccessView() {
               { key: 'resource', label: '리소스', render: g => <code>{g.resource_type}/{g.resource_id}</code> },
               { key: 'role', label: '역할', render: g => <Badge tone="info">{g.role}</Badge> },
               { key: 'at', label: '부여', render: g => timeAgo(g.granted_at) },
-              { key: 'del', label: '', render: g => <Button size="sm" variant="danger" onClick={() => revoke.mutate(g.access_id)}>회수</Button> },
+              { key: 'del', label: '', render: g => <Button size="sm" variant="danger" onClick={() => setRevoking(g)}>회수</Button> },
             ]} />
         )}</QueryBoundary>
       </Card>
@@ -80,6 +82,18 @@ export default function AccessView() {
             <Button type="submit" variant="primary" loading={grant.isPending}>부여</Button>
           </div>
         </form>
+      </Modal>
+      {/* 권한 회수는 파괴적 — 다른 파괴 동작(삭제/재시작/재처리)과 동일하게 확인 단계를 둔다 */}
+      <Modal open={!!revoking} title="권한 회수" onClose={() => setRevoking(null)}>
+        <p style={{ fontSize: 'var(--fs-sm)' }}>
+          <b>{revoking?.subject_label}</b> 의 <code>{revoking?.resource_type}/{revoking?.resource_id}</code> 에 대한{' '}
+          <Badge tone="info">{revoking?.role}</Badge> 권한을 회수합니다. 대상은 즉시 접근을 잃습니다.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+          <Button onClick={() => setRevoking(null)}>취소</Button>
+          <Button variant="danger" loading={revoke.isPending}
+            onClick={() => revoking && revoke.mutate(revoking.access_id, { onSettled: () => setRevoking(null) })}>회수 실행</Button>
+        </div>
       </Modal>
     </SettingsNav>
   );
