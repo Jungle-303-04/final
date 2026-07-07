@@ -1,126 +1,166 @@
-// RCA 인시던트 파이프라인 그래프 — incident → evidence → analysis → actions (docs/fd/06 § dashboard/rca)
-// + 저장된 증거(/evidence)·RCA 리포트(/rca-reports) 실데이터 패널
-import { useMemo, useRef, useState } from 'react';
+// RCA 인시던트 파이프라인 그래프 + 저장된 증거/RCA 리포트 실데이터 패널.
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useEvidence, useIncident, useRcaReports, useRecoveryPlan } from '@/features/notifications/api';
-import { Badge, Breadcrumbs, Button, Card, CopyChip, EmptyState, KeyValue, QueryBoundary, Skeleton } from '@/shared/ui';
-import { toneColor, toneOf } from '@/shared/ui/status';
 import { FlowCanvas, useAutoLayout, type CollapsibleGroupData, type FlowEdgeData } from '@/shared/flow';
-import { AnimatePresence, FadeSlideIn } from '@/shared/motion';
-import { motion } from 'motion/react';
 import { fmtAbs, timeAgo } from '@/shared/lib/format';
-import type { EvidenceRecord, IncidentDetail, RcaCandidateScore, RcaEvidenceRef, RcaReportSummary, RecoveryActionCandidate, RecoveryPlanStatus, Tone } from '@/shared/lib/types';
-import { IconAlertTriangle, IconFile } from '@/shared/ui/icons';
+import type {
+  EvidenceRecord,
+  IncidentDetail,
+  RcaCandidateScore,
+  RcaEvidenceRef,
+  RcaReportSummary,
+  RecoveryActionCandidate,
+  RecoveryPlanStatus,
+  Tone,
+} from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
+import {
+  Badge,
+  Breadcrumb,
+  Button,
+  Card,
+  CodeBlock,
+  Collapsible,
+  EmptyState,
+  KeyValueList,
+  PageHeader,
+  Skeleton,
+  cx,
+  useToast,
+} from '@/ui';
 
-/* 파이프라인 단계 순서 — current_subject 를 방어적으로 매핑(백엔드 subject 네이밍 변화 흡수) */
 const STAGES = ['incident', 'evidence', 'analysis', 'actions'] as const;
 type Stage = typeof STAGES[number];
+type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+type FlowEdge = Edge<FlowEdgeData>;
+
 const STAGE_LABEL: Record<Stage, string> = { incident: '인시던트', evidence: '증거 수집', analysis: '원인 분석', actions: '복구 조치' };
+const TERMINAL = new Set(['completed', 'done', 'resolved', 'closed', 'failed', 'rejected']);
+const EVIDENCE_KINDS = ['kubernetes', 'prometheus', 'loki', 'tempo'] as const;
+const KIND_TONE: Record<string, Tone> = { kubernetes: 'info', prometheus: 'warn', loki: 'ok', tempo: 'neutral' };
+
+const trunc = (value: string, size = 44) => (value.length > size ? `${value.slice(0, size - 1)}...` : value);
+const kindTone = (kind: string): Tone => KIND_TONE[kind] ?? 'neutral';
+
 function stageOfSubject(subject: string): Stage {
-  const s = subject.toLowerCase();
-  if (/recovery|action|plan|command|execut|patch/.test(s)) return 'actions';
-  if (/evidence|collect/.test(s)) return 'evidence';
-  if (/analy|rca|root|diagnos/.test(s)) return 'analysis';
+  const value = subject.toLowerCase();
+  if (/recovery|action|plan|command|execut|patch/.test(value)) return 'actions';
+  if (/evidence|collect/.test(value)) return 'evidence';
+  if (/analy|rca|root|diagnos/.test(value)) return 'analysis';
   return 'incident';
 }
-const TERMINAL = new Set(['completed', 'done', 'resolved', 'closed', 'failed', 'rejected']);
-const trunc = (s: string, n = 44) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
-/* evidence kind → 색/라벨 — 백엔드 kind 어휘(kubernetes/prometheus/loki/tempo) */
-const KIND_TONE: Record<string, Tone> = { kubernetes: 'info', prometheus: 'warn', loki: 'ok', tempo: 'neutral' };
-const kindTone = (kind: string): Tone => KIND_TONE[kind] ?? 'neutral';
 
 function StageNode({ data }: NodeProps<Node<{ label: string; sub?: string; tone: Tone; active: boolean }>>) {
   return (
-    <div className={data.active ? 'flow-node--pulse' : undefined} style={{
-      padding: '10px 14px', borderRadius: 'var(--radius-md)', minWidth: 150, textAlign: 'center',
-      background: 'var(--surface-2)', border: `1.5px solid ${toneColor(data.tone)}`,
-      color: 'var(--text-1)', fontSize: 'var(--fs-sm)', fontWeight: 600,
-    }}>
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      {data.label}
-      {data.sub && <div style={{ fontWeight: 400, fontSize: 'var(--fs-xs)', color: 'var(--text-2)', marginTop: 2 }}>{data.sub}</div>}
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+    <div className={cx('min-w-40 rounded-panel border bg-surface px-4 py-3 text-center shadow-soft', flowToneClass(data.tone), data.active && 'flow-node--pulse')}>
+      <Handle type="target" position={Position.Left} className="opacity-0" />
+      <div className="text-body font-semibold text-primary">{data.label}</div>
+      {data.sub && <div className="mt-1 max-w-52 truncate text-caption font-normal text-secondary">{data.sub}</div>}
+      <Handle type="source" position={Position.Right} className="opacity-0" />
     </div>
   );
 }
 
 function ItemNode({ data }: NodeProps<Node<{ label: string; tone: Tone }>>) {
   return (
-    <div style={{
-      padding: '6px 10px', borderRadius: 'var(--radius-sm)', maxWidth: 240,
-      background: 'var(--surface-1)', border: '1px solid var(--border)',
-      borderLeft: `2px solid ${toneColor(data.tone)}`,
-      color: 'var(--text-2)', fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-mono)',
-    }}>
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      {data.label}
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+    <div className={cx('max-w-64 rounded-control border bg-bg px-3 py-2 font-mono text-caption text-secondary shadow-soft', flowToneClass(data.tone))}>
+      <Handle type="target" position={Position.Left} className="opacity-0" />
+      <span className="block truncate">{data.label}</span>
+      <Handle type="source" position={Position.Right} className="opacity-0" />
     </div>
   );
 }
-const nodeTypes = { stage: StageNode, item: ItemNode };
-type FlowEdge = Edge<FlowEdgeData>;
 
-/* 인시던트 상세 → 그래프 모델. 좌표는 useAutoLayout(dagre)이 계산 */
-function buildGraph(inc: IncidentDetail, collapsed: Record<string, boolean>, toggle: (id: string) => void) {
-  const running = !TERMINAL.has(inc.status.toLowerCase());
-  const cur = STAGES.indexOf(stageOfSubject(inc.current_subject));
-  const failed = inc.status.toLowerCase() === 'failed' || !!inc.error_reason;
-  const stageTone = (i: number): Tone => (i < cur ? 'ok' : i === cur ? (failed ? 'danger' : running ? 'info' : toneOf(inc.status)) : 'neutral');
+const nodeTypes = { stage: StageNode, item: ItemNode };
+
+function buildGraph(incident: IncidentDetail, collapsed: Record<string, boolean>, toggle: (id: string) => void) {
+  const running = !TERMINAL.has(incident.status.toLowerCase());
+  const current = STAGES.indexOf(stageOfSubject(incident.current_subject));
+  const failed = incident.status.toLowerCase() === 'failed' || Boolean(incident.error_reason);
+  const stageTone = (index: number): Tone => {
+    if (index < current) return 'ok';
+    if (index === current && failed) return 'danger';
+    if (index === current && running) return 'info';
+    if (index === current) return toneOfStatus(incident.status);
+    return 'neutral';
+  };
 
   const nodes: Node[] = [];
   const edges: FlowEdge[] = [];
   const groupChildren = (groupId: string, items: { id: string; label: string; tone: Tone }[], activeGroup: boolean) => {
     if (collapsed[groupId]) return;
-    items.forEach(it => {
-      nodes.push({ id: it.id, type: 'item', position: { x: 0, y: 0 }, data: { label: it.label, tone: it.tone } });
-      edges.push({ id: `e-${it.id}`, source: groupId, target: it.id, type: 'animated', data: { active: activeGroup && running } });
+    items.forEach((item) => {
+      nodes.push({ id: item.id, type: 'item', position: { x: 0, y: 0 }, data: { label: item.label, tone: item.tone } });
+      edges.push({ id: `e-${item.id}`, source: groupId, target: item.id, type: 'animated', data: { active: activeGroup && running } });
     });
   };
 
-  nodes.push({ id: 'incident', type: 'stage', position: { x: 0, y: 0 }, data: { label: STAGE_LABEL.incident, sub: trunc(inc.summary), tone: stageTone(0), active: running && cur === 0 } });
+  nodes.push({
+    id: 'incident',
+    type: 'stage',
+    position: { x: 0, y: 0 },
+    data: { label: STAGE_LABEL.incident, sub: trunc(incident.summary), tone: stageTone(0), active: running && current === 0 },
+  });
 
   const evidence = [
-    ...inc.supporting_evidence.map((e, i) => ({ id: `ev-${i}`, label: trunc(e), tone: 'ok' as Tone })),
-    ...inc.missing_evidence.map((e, i) => ({ id: `miss-${i}`, label: `미수집: ${trunc(e)}`, tone: 'warn' as Tone })),
+    ...incident.supporting_evidence.map((item, index) => ({ id: `ev-${index}`, label: trunc(item), tone: 'ok' as Tone })),
+    ...incident.missing_evidence.map((item, index) => ({ id: `miss-${index}`, label: `미수집: ${trunc(item)}`, tone: 'warn' as Tone })),
   ];
-  nodes.push({ id: 'evidence', type: 'group_collapsible', position: { x: 0, y: 0 }, data: {
-    label: STAGE_LABEL.evidence, count: evidence.length, collapsed: !!collapsed.evidence,
-    tone: stageTone(1) === 'neutral' ? undefined : stageTone(1), active: running && cur === 1,
-    onToggle: () => toggle('evidence'),
-  } satisfies CollapsibleGroupData });
-  groupChildren('evidence', evidence, cur === 1);
+  nodes.push({
+    id: 'evidence',
+    type: 'group_collapsible',
+    position: { x: 0, y: 0 },
+    data: {
+      label: STAGE_LABEL.evidence,
+      count: evidence.length,
+      collapsed: Boolean(collapsed.evidence),
+      tone: stageTone(1) === 'neutral' ? undefined : stageTone(1),
+      active: running && current === 1,
+      onToggle: () => toggle('evidence'),
+    } satisfies CollapsibleGroupData,
+  });
+  groupChildren('evidence', evidence, current === 1);
 
-  const confidence = inc.confidence != null ? `신뢰도 ${(inc.confidence * 100).toFixed(0)}%` : undefined;
-  nodes.push({ id: 'analysis', type: 'stage', position: { x: 0, y: 0 }, data: {
-    label: STAGE_LABEL.analysis, sub: inc.root_cause ? `${trunc(inc.root_cause)}${confidence ? ` · ${confidence}` : ''}` : confidence,
-    tone: stageTone(2), active: running && cur === 2,
-  } });
+  const confidence = incident.confidence != null ? `신뢰도 ${(incident.confidence * 100).toFixed(0)}%` : undefined;
+  nodes.push({
+    id: 'analysis',
+    type: 'stage',
+    position: { x: 0, y: 0 },
+    data: {
+      label: STAGE_LABEL.analysis,
+      sub: incident.root_cause ? `${trunc(incident.root_cause)}${confidence ? ` · ${confidence}` : ''}` : confidence,
+      tone: stageTone(2),
+      active: running && current === 2,
+    },
+  });
 
   const actions = [
-    ...(inc.action_route ? [{ id: 'act-route', label: `경로: ${trunc(inc.action_route)}`, tone: 'info' as Tone }] : []),
-    ...(inc.command_id ? [{ id: 'act-cmd', label: `커맨드: ${trunc(inc.command_id)}`, tone: 'info' as Tone }] : []),
-    ...(inc.pr_url ? [{ id: 'act-pr', label: `PR: ${trunc(inc.pr_url)}`, tone: 'ok' as Tone }] : []),
-    ...(inc.error_reason ? [{ id: 'act-err', label: `실패: ${trunc(inc.error_reason)}`, tone: 'danger' as Tone }] : []),
+    ...(incident.action_route ? [{ id: 'act-route', label: `경로: ${trunc(incident.action_route)}`, tone: 'info' as Tone }] : []),
+    ...(incident.command_id ? [{ id: 'act-cmd', label: `커맨드: ${trunc(incident.command_id)}`, tone: 'info' as Tone }] : []),
+    ...(incident.pr_url ? [{ id: 'act-pr', label: `PR: ${trunc(incident.pr_url)}`, tone: 'ok' as Tone }] : []),
+    ...(incident.error_reason ? [{ id: 'act-err', label: `실패: ${trunc(incident.error_reason)}`, tone: 'danger' as Tone }] : []),
   ];
-  nodes.push({ id: 'actions', type: 'group_collapsible', position: { x: 0, y: 0 }, data: {
-    label: STAGE_LABEL.actions, count: actions.length, collapsed: !!collapsed.actions,
-    tone: stageTone(3) === 'neutral' ? undefined : stageTone(3), active: running && cur === 3,
-    onToggle: () => toggle('actions'),
-  } satisfies CollapsibleGroupData });
-  groupChildren('actions', actions, cur === 3);
+  nodes.push({
+    id: 'actions',
+    type: 'group_collapsible',
+    position: { x: 0, y: 0 },
+    data: {
+      label: STAGE_LABEL.actions,
+      count: actions.length,
+      collapsed: Boolean(collapsed.actions),
+      tone: stageTone(3) === 'neutral' ? undefined : stageTone(3),
+      active: running && current === 3,
+      onToggle: () => toggle('actions'),
+    } satisfies CollapsibleGroupData,
+  });
+  groupChildren('actions', actions, current === 3);
 
-  // 메인 파이프라인 edge — 완료 ok / 현재 단계 진입 active / 실패 danger
-  (['evidence', 'analysis', 'actions'] as const).forEach((target, i) => {
-    const targetIdx = i + 1;
-    const tone: Tone | undefined = targetIdx < cur ? 'ok' : targetIdx === cur && failed ? 'danger' : targetIdx === cur && !running ? 'ok' : undefined;
-    edges.push({
-      id: `main-${i}`, source: STAGES[i], target, type: 'animated',
-      data: { active: running && targetIdx === cur, tone },
-    });
+  (['evidence', 'analysis', 'actions'] as const).forEach((target, index) => {
+    const targetIndex = index + 1;
+    const tone: Tone | undefined = targetIndex < current ? 'ok' : targetIndex === current && failed ? 'danger' : targetIndex === current && !running ? 'ok' : undefined;
+    edges.push({ id: `main-${index}`, source: STAGES[index], target, type: 'animated', data: { active: running && targetIndex === current, tone } });
   });
   return { nodes, edges };
 }
@@ -130,121 +170,154 @@ export default function IncidentDetailView() {
   const q = useIncident(incidentId);
   const pathFor = useConsolePath();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const toggle = (id: string) => setCollapsed(c => ({ ...c, [id]: !c[id] }));
+  const toggle = useCallback((id: string) => setCollapsed((value) => ({ ...value, [id]: !value[id] })), []);
   const evidenceRef = useRef<HTMLDivElement>(null);
+  const showEvidence = () => evidenceRef.current?.scrollIntoView({ block: 'start' });
 
   const raw = useMemo(
     () => (q.data ? buildGraph(q.data, collapsed, toggle) : { nodes: [] as Node[], edges: [] as FlowEdge[] }),
-    [q.data, collapsed],
+    [collapsed, q.data, toggle],
   );
   const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
-
-  // 타임라인 항목이 correlation_id 로 라우팅된 경우 상세 lookup(incident_id 기준)이 404 일 수 있다.
-  // 그래도 증거·리포트는 correlation 으로 조회 가능 — 흐름을 끊지 않고 확보된 데이터를 보여준다.
   const notFound = q.isError && (q.error as { kind?: string }).kind === 'not_found';
+
   if (notFound) {
     return (
-      <FadeSlideIn>
-        <Breadcrumbs items={[{ label: '인시던트', to: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px' }}>
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>인시던트 타임라인 상세를 찾을 수 없습니다</h1>
-          <CopyChip value={incidentId} display={trunc(incidentId, 22)} />
-        </div>
-        <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)', marginTop: 0 }}>
-          파이프라인 상태 행이 정리됐을 수 있습니다. 아래는 동일 correlation 으로 저장된 RCA 리포트·증거입니다.
-        </p>
-        <div className="split split--even">
-          <Card><RecoveryPlanPanel correlationId={incidentId} standalone /></Card>
-          <RcaReportsPanel correlationId={incidentId} onShowEvidence={() => evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-        </div>
-        <div ref={evidenceRef} style={{ marginTop: 16 }}>
+      <div className="grid gap-6">
+        <PageHeader
+          title="인시던트 타임라인 상세를 찾을 수 없습니다"
+          description="파이프라인 상태 행이 정리됐을 수 있습니다. 아래는 동일 correlation으로 저장된 RCA 리포트와 증거입니다"
+          breadcrumb={<Breadcrumb items={[{ label: '인시던트', href: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />}
+          actions={<CopyPill value={incidentId} display={trunc(incidentId, 22)} />}
+        />
+        <section className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <RecoveryPlanPanel correlationId={incidentId} standalone />
+          </Card>
+          <RcaReportsPanel correlationId={incidentId} onShowEvidence={showEvidence} />
+        </section>
+        <div ref={evidenceRef}>
           <EvidencePanel correlationId={incidentId} />
         </div>
-      </FadeSlideIn>
+      </div>
+    );
+  }
+
+  if (q.isPending) {
+    return (
+      <div className="grid gap-6">
+        <PageHeader title="인시던트" breadcrumb={<Breadcrumb items={[{ label: '인시던트', href: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />} />
+        <Card><Skeleton lines={6} /></Card>
+      </div>
+    );
+  }
+
+  if (q.isError) {
+    return (
+      <div className="grid gap-6">
+        <PageHeader title="인시던트 조회 실패" breadcrumb={<Breadcrumb items={[{ label: '인시던트', href: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />} />
+        <Card>
+          <EmptyState title="인시던트 조회 실패" description={(q.error as Error).message} action={<Button onClick={() => q.refetch()}>다시 시도</Button>} />
+        </Card>
+      </div>
+    );
+  }
+
+  const incident = q.data;
+  if (!incident) {
+    return (
+      <Card>
+        <EmptyState title="인시던트 없음" description="표시할 인시던트 상세가 없습니다" />
+      </Card>
     );
   }
 
   return (
-    <FadeSlideIn>
-      <Breadcrumbs items={[{ label: '인시던트', to: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />
-      <QueryBoundary query={q} skeletonLines={6}>{inc => (
-        <>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px', flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>{inc.summary}</h1>
-            <Badge status={inc.status} />
-            {inc.correlation_id && <CopyChip value={inc.correlation_id} display={`corr ${trunc(inc.correlation_id, 22)}`} />}
-          </div>
-          <div className="split split--side">
-            <Card style={{ height: 420, padding: 0 }}>
+    <div className="grid gap-6">
+      <PageHeader
+        title={incident.summary}
+        description={`${STAGE_LABEL[stageOfSubject(incident.current_subject)]} · ${incident.updated_at ? fmtAbs(incident.updated_at) : '갱신 시각 없음'}`}
+        breadcrumb={<Breadcrumb items={[{ label: '인시던트', href: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />}
+        actions={incident.correlation_id ? <CopyPill value={incident.correlation_id} display={`corr ${trunc(incident.correlation_id, 22)}`} /> : undefined}
+      />
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,0.75fr)]">
+        <Card title="RCA 파이프라인" description="단계와 근거 흐름을 그래프로 확인합니다">
+          <div className="max-w-full overflow-x-auto">
+            <div className="h-96 min-w-[42rem] overflow-hidden rounded-panel border border-border bg-bg">
               <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} />
-            </Card>
-            <Card title="상세">
-              <KeyValue pairs={[
-                ['클러스터', inc.cluster_id ? <Link key="c" to={pathFor(`/clusters/${inc.cluster_id}`)} style={{ color: 'var(--brand)' }}>{inc.cluster_id}</Link> : '—'],
-                ['현재 단계', inc.current_subject || '—'],
-                ['근본 원인', inc.root_cause ?? '분석 중'],
-                ['신뢰도', inc.confidence != null ? `${(inc.confidence * 100).toFixed(0)}%` : '—'],
-                ['correlation', inc.correlation_id ? <CopyChip key="corr" value={inc.correlation_id} display={trunc(inc.correlation_id, 18)} /> : '—'],
-                ['커맨드', inc.command_id ? <code key="cmd" style={{ fontSize: 'var(--fs-xs)' }}>{trunc(inc.command_id, 18)}</code> : '—'],
-                ['PR', inc.pr_url ? <a key="pr" href={inc.pr_url} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)' }}>{trunc(inc.pr_url, 28)}</a> : '—'],
-                ['갱신', inc.updated_at ? <span key="t" title={fmtAbs(inc.updated_at)}>{timeAgo(inc.updated_at)} · {fmtAbs(inc.updated_at)}</span> : '—'],
-              ]} />
-              {inc.error_reason && (
-                <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)', marginBottom: 0 }}>실패 사유: {inc.error_reason}</p>
-              )}
-              <RecoveryPlanPanel correlationId={inc.correlation_id} />
-            </Card>
+            </div>
           </div>
-          <div className="split split--even" style={{ marginTop: 16 }}>
-            <RcaReportsPanel correlationId={inc.correlation_id} onShowEvidence={() => evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-            <div ref={evidenceRef}><EvidencePanel correlationId={inc.correlation_id} /></div>
+        </Card>
+        <Card title="상세">
+          <div className="grid gap-4">
+            <KeyValueList items={[
+              { label: '상태', value: <StatusBadge status={incident.status} /> },
+              { label: '클러스터', value: incident.cluster_id ? <Link className="text-accent hover:text-accent-hover" to={pathFor(`/clusters/${incident.cluster_id}`)}>{incident.cluster_id}</Link> : '없음' },
+              { label: '현재 단계', value: incident.current_subject || '없음' },
+              { label: '근본 원인', value: incident.root_cause ?? '분석 중' },
+              { label: '신뢰도', value: incident.confidence != null ? `${(incident.confidence * 100).toFixed(0)}%` : '없음' },
+              { label: 'correlation', value: incident.correlation_id ? <CopyPill value={incident.correlation_id} display={trunc(incident.correlation_id, 18)} /> : '없음' },
+              { label: '커맨드', value: incident.command_id ? <CodeText>{trunc(incident.command_id, 18)}</CodeText> : '없음' },
+              { label: 'PR', value: incident.pr_url ? <a className="text-accent hover:text-accent-hover" href={incident.pr_url} target="_blank" rel="noreferrer">{trunc(incident.pr_url, 28)}</a> : '없음' },
+              { label: '갱신', value: incident.updated_at ? <span title={fmtAbs(incident.updated_at)}>{timeAgo(incident.updated_at)} · {fmtAbs(incident.updated_at)}</span> : '없음' },
+            ]} />
+            {incident.error_reason && <p className="text-caption font-medium text-danger">실패 사유: {incident.error_reason}</p>}
+            <RecoveryPlanPanel correlationId={incident.correlation_id} />
           </div>
-        </>
-      )}</QueryBoundary>
-    </FadeSlideIn>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <RcaReportsPanel correlationId={incident.correlation_id} onShowEvidence={showEvidence} />
+        <div ref={evidenceRef}><EvidencePanel correlationId={incident.correlation_id} /></div>
+      </section>
+    </div>
   );
 }
 
-/* ── Recovery plan 상태 — RCA 완료 후 selection/requested/selected 상태 노출 ── */
 function RecoveryPlanPanel({ correlationId, standalone = false }: { correlationId: string; standalone?: boolean }) {
   const q = useRecoveryPlan(correlationId || undefined);
   const missing = q.isError && (q.error as { kind?: string }).kind === 'not_found';
   const plan = q.data;
   return (
-    <div style={standalone ? undefined : { marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: 'var(--fs-sm)' }}>복구 계획</strong>
-        {plan && <Badge tone={recoveryPlanTone(plan)}>{plan.status}</Badge>}
+    <section className={standalone ? 'grid gap-3' : 'grid gap-3 border-t border-border pt-4'}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-title font-semibold text-primary">복구 계획</h2>
+        {plan && <Badge tone={toneToBadge(recoveryPlanTone(plan))}>{plan.status}</Badge>}
       </div>
-      {q.isPending ? <Skeleton lines={2} /> : missing ? (
-        <Badge tone="neutral">생성 전</Badge>
+      {q.isPending ? (
+        <Skeleton lines={2} />
+      ) : missing ? (
+        <Badge>생성 전</Badge>
       ) : q.isError ? (
-        <EmptyState icon={<IconAlertTriangle size={24} />} title="복구 계획을 불러오지 못했습니다"
-          description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
+        <EmptyState icon={<AlertIcon />} title="복구 계획 조회 실패" description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
       ) : plan ? (
         <RecoveryPlanSummary plan={plan} />
-      ) : null}
-    </div>
+      ) : (
+        <EmptyState title="복구 계획 없음" />
+      )}
+    </section>
   );
 }
 
 function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
   const selected = plan.selected_action;
-  const recommended = plan.candidates.find(c => c.action_id === plan.recommended_action_id) ?? null;
+  const recommended = plan.candidates.find((candidate) => candidate.action_id === plan.recommended_action_id) ?? null;
   const visible = [
     ...(selected ? [selected] : []),
-    ...plan.candidates.filter(c => c.action_id !== selected?.action_id).slice(0, selected ? 2 : 3),
+    ...plan.candidates.filter((candidate) => candidate.action_id !== selected?.action_id).slice(0, selected ? 2 : 3),
   ];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)', margin: 0 }}>{plan.summary}</p>
-      <KeyValue pairs={[
-        ['경로', plan.execution_route],
-        ['추천', recommended ? recommended.title : plan.recommended_action_id],
-        ['선택', selected ? selected.title : plan.selection_required ? '선택 대기' : '자동 진행'],
+    <div className="grid gap-3">
+      <p className="text-caption text-secondary">{plan.summary}</p>
+      <KeyValueList items={[
+        { label: '경로', value: plan.execution_route },
+        { label: '추천', value: recommended ? recommended.title : plan.recommended_action_id },
+        { label: '선택', value: selected ? selected.title : plan.selection_required ? '선택 대기' : '자동 진행' },
       ]} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {visible.map(candidate => (
+      <div className="grid gap-2">
+        {visible.map((candidate) => (
           <RecoveryCandidateRow
             key={candidate.action_id}
             candidate={candidate}
@@ -253,33 +326,25 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
           />
         ))}
       </div>
-      {plan.selected_by && (
-        <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>
-          선택자: <code>{plan.selected_by}</code>
-        </span>
-      )}
+      {plan.selected_by && <span className="text-caption text-muted">선택자: <CodeText>{plan.selected_by}</CodeText></span>}
     </div>
   );
 }
 
 function RecoveryCandidateRow({ candidate, recommended, selected }: { candidate: RecoveryActionCandidate; recommended: boolean; selected: boolean }) {
   return (
-    <div style={{ padding: '7px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', borderLeft: `2px solid ${selected ? 'var(--ok)' : recommended ? 'var(--brand)' : 'var(--border)'}` }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 'var(--fs-xs)', fontWeight: 600 }}>{candidate.title}</span>
-        {selected && <Badge tone="ok">선택됨</Badge>}
+    <div className={cx('grid gap-2 rounded-control border bg-raised p-3', selected ? 'border-success/50' : recommended ? 'border-info/50' : 'border-border')}>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="min-w-0 truncate text-label font-semibold text-primary">{candidate.title}</span>
+        {selected && <Badge tone="success">선택</Badge>}
         {recommended && !selected && <Badge tone="info">추천</Badge>}
-        {candidate.approval_required && <Badge tone="warn">승인 필요</Badge>}
-        <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>{candidate.route}</span>
+        {candidate.approval_required && <Badge tone="warning">승인 필요</Badge>}
+        <span className="ms-auto text-caption text-muted">{candidate.route}</span>
       </div>
-      <p style={{ margin: '4px 0 0', color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>
+      <p className="text-caption text-muted">
         {candidate.description} · 위험 {candidate.risk_level} · 영향 {candidate.blast_radius}
       </p>
-      {candidate.rollback_plan && (
-        <p style={{ margin: '4px 0 0', color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>
-          롤백: {candidate.rollback_plan}
-        </p>
-      )}
+      {candidate.rollback_plan && <p className="text-caption text-secondary">롤백: {candidate.rollback_plan}</p>}
     </div>
   );
 }
@@ -290,38 +355,37 @@ function recoveryPlanTone(plan: RecoveryPlanStatus): Tone {
   return plan.selection_required ? 'info' : 'neutral';
 }
 
-/* ── 저장된 증거 목록 — GET /evidence?correlation_id= ─────────────────────── */
-const EVIDENCE_KINDS = ['kubernetes', 'prometheus', 'loki', 'tempo'] as const;
-
 function EvidencePanel({ correlationId }: { correlationId: string }) {
   const q = useEvidence(correlationId || undefined);
-  const [kindFilter, setKindFilter] = useState<string>('all');
+  const [kindFilter, setKindFilter] = useState('all');
   if (!correlationId) {
-    return <Card title="증거"><EmptyState icon={<IconFile size={26} />} title="correlation id가 없어 증거를 조회할 수 없습니다" /></Card>;
+    return <Card title="증거" empty={<EmptyState icon={<FileIcon />} title="correlation 없음" description="correlation id가 없어 증거를 조회할 수 없습니다" />}><span /></Card>;
   }
   const items = q.data?.items ?? [];
-  const presentKinds = new Set(items.map(i => i.kind));
-  const rows = items.filter(i => kindFilter === 'all' || i.kind === kindFilter);
+  const presentKinds = new Set(items.map((item) => item.kind));
+  const rows = items.filter((item) => kindFilter === 'all' || item.kind === kindFilter);
+  const title = q.data ? `증거 ${items.length.toLocaleString()}건${q.data.has_more ? ' · 최근 100건' : ''}` : '증거';
   return (
-    <Card title={<span>증거 {q.data ? <span style={{ color: 'var(--text-3)', fontWeight: 400, fontSize: 'var(--fs-xs)' }}>({items.length}건{q.data.has_more ? ' · 최근 100건 표시' : ''})</span> : null}</span>}>
-      {q.isPending ? <Skeleton lines={4} /> : q.isError ? (
-        <EmptyState icon={<IconAlertTriangle size={26} />} title="증거를 불러오지 못했습니다"
-          description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
+    <Card title={title}>
+      {q.isPending ? (
+        <Skeleton lines={4} />
+      ) : q.isError ? (
+        <EmptyState icon={<AlertIcon />} title="증거 조회 실패" description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
       ) : items.length === 0 ? (
-        <EmptyState icon={<IconFile size={26} />} title="저장된 증거가 아직 없습니다" />
+        <EmptyState icon={<FileIcon />} title="저장된 증거 없음" description="이 correlation에 저장된 증거가 아직 없습니다" />
       ) : (
-        <>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            <button className={`btn btn--sm ${kindFilter === 'all' ? '' : 'btn--ghost'}`} onClick={() => setKindFilter('all')}>전체</button>
-            {EVIDENCE_KINDS.filter(k => presentKinds.has(k)).map(k => (
-              <button key={k} className={`btn btn--sm ${kindFilter === k ? '' : 'btn--ghost'}`} onClick={() => setKindFilter(k)}>{k}</button>
+        <div className="grid gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant={kindFilter === 'all' ? 'primary' : 'secondary'} onClick={() => setKindFilter('all')}>전체</Button>
+            {EVIDENCE_KINDS.filter((kind) => presentKinds.has(kind)).map((kind) => (
+              <Button key={kind} size="sm" variant={kindFilter === kind ? 'primary' : 'secondary'} onClick={() => setKindFilter(kind)}>{kind}</Button>
             ))}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {rows.map(e => <EvidenceRow key={e.id} record={e} />)}
-            {rows.length === 0 && <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-sm)', margin: 0 }}>선택한 종류의 증거가 없습니다</p>}
+          <div className="grid gap-2">
+            {rows.map((record) => <EvidenceRow key={record.id} record={record} />)}
+            {rows.length === 0 && <p className="text-body text-muted">선택한 종류의 증거가 없습니다</p>}
           </div>
-        </>
+        </div>
       )}
     </Card>
   );
@@ -330,59 +394,55 @@ function EvidencePanel({ correlationId }: { correlationId: string }) {
 function EvidenceRow({ record }: { record: EvidenceRecord }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="card" style={{ background: 'var(--surface-2)', padding: 10 }}>
-      <button type="button" style={{ width: '100%', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap', border: 0, background: 'transparent', color: 'inherit', padding: 0, textAlign: 'left' }}
-        onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <Badge tone={kindTone(record.kind)}>{record.kind}</Badge>
-        <code style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>#{record.id}</code>
-        <span style={{ flex: 1, fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-mono)', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {trunc(record.summary, 96)}
-        </span>
-        {record.created_at && (
-          <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }} title={fmtAbs(record.created_at)}>{timeAgo(record.created_at)}</span>
-        )}
-        <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{open ? '▾' : '▸'}</span>
+    <article className="rounded-panel border border-border bg-bg p-3">
+      <button
+        type="button"
+        className="flex w-full min-w-0 flex-wrap items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <Badge tone={toneToBadge(kindTone(record.kind))}>{record.kind}</Badge>
+        <CodeText>#{record.id}</CodeText>
+        <span className="min-w-0 flex-1 truncate text-caption font-mono text-secondary">{trunc(record.summary, 96)}</span>
+        {record.created_at && <span className="text-caption text-muted" title={fmtAbs(record.created_at)}>{timeAgo(record.created_at)}</span>}
+        <span className="text-caption text-muted">{open ? '접기' : '펼치기'}</span>
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} style={{ overflow: 'hidden' }}>
-            <div style={{ marginTop: 8 }}>
-              {record.created_at && <p style={{ margin: '0 0 6px', fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>수집 시각: {fmtAbs(record.created_at)}</p>}
-              {record.evidence_ref && <CopyChip value={record.evidence_ref} display={trunc(record.evidence_ref, 30)} />}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                {record.sources.map(src => (
-                  <div key={`${record.id}-${src.source}`} style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, fontSize: 'var(--fs-xs)' }}>
-                    <Badge tone="neutral">{src.source}</Badge>
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{src.summary}</span>
-                    {src.collector_version && <code style={{ marginLeft: 'auto' }}>{trunc(src.collector_version, 18)}</code>}
-                  </div>
-                ))}
+      <Collapsible open={open}>
+        <div className="mt-3 grid gap-3 border-t border-border pt-3">
+          {record.created_at && <p className="text-caption text-muted">수집 시각: {fmtAbs(record.created_at)}</p>}
+          {record.evidence_ref && <CopyPill value={record.evidence_ref} display={trunc(record.evidence_ref, 30)} />}
+          <div className="grid gap-2">
+            {record.sources.map((source) => (
+              <div key={`${record.id}-${source.source}`} className="flex min-w-0 flex-wrap items-center gap-2 rounded-control border border-border bg-raised px-3 py-2 text-caption">
+                <Badge>{source.source}</Badge>
+                <span className="min-w-0 flex-1 truncate text-secondary">{source.summary}</span>
+                {source.collector_version && <CodeText>{trunc(source.collector_version, 18)}</CodeText>}
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            ))}
+          </div>
+        </div>
+      </Collapsible>
+    </article>
   );
 }
 
-/* ── RCA 리포트 — GET /rca-reports?correlation_id= ────────────────────────── */
 function RcaReportsPanel({ correlationId, onShowEvidence }: { correlationId: string; onShowEvidence: () => void }) {
   const q = useRcaReports(correlationId || undefined);
   if (!correlationId) {
-    return <Card title="RCA 리포트"><EmptyState icon={<IconFile size={26} />} title="correlation id가 없어 리포트를 조회할 수 없습니다" /></Card>;
+    return <Card title="RCA 리포트" empty={<EmptyState icon={<FileIcon />} title="correlation 없음" description="correlation id가 없어 리포트를 조회할 수 없습니다" />}><span /></Card>;
   }
+  const reports = q.data ?? [];
   return (
     <Card title="RCA 리포트">
-      {q.isPending ? <Skeleton lines={4} /> : q.isError ? (
-        <EmptyState icon={<IconAlertTriangle size={26} />} title="리포트를 불러오지 못했습니다"
-          description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
-      ) : (q.data ?? []).length === 0 ? (
-        <EmptyState icon={<IconFile size={26} />} title="생성된 RCA 리포트가 아직 없습니다" />
+      {q.isPending ? (
+        <Skeleton lines={4} />
+      ) : q.isError ? (
+        <EmptyState icon={<AlertIcon />} title="리포트 조회 실패" description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
+      ) : reports.length === 0 ? (
+        <EmptyState icon={<FileIcon />} title="RCA 리포트 없음" description="생성된 RCA 리포트가 아직 없습니다" />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {(q.data ?? []).map(r => <RcaReportCard key={r.id} report={r} onShowEvidence={onShowEvidence} />)}
+        <div className="grid gap-3">
+          {reports.map((report) => <RcaReportCard key={report.id} report={report} onShowEvidence={onShowEvidence} />)}
         </div>
       )}
     </Card>
@@ -390,165 +450,208 @@ function RcaReportsPanel({ correlationId, onShowEvidence }: { correlationId: str
 }
 
 function RcaReportCard({ report, onShowEvidence }: { report: RcaReportSummary; onShowEvidence: () => void }) {
-  const sevTone: Tone = report.severity === 'critical' || report.severity === 'high' ? 'danger'
-    : report.severity === 'medium' ? 'warn' : report.severity ? 'info' : 'neutral';
+  const severityTone: BadgeTone = report.severity === 'critical' || report.severity === 'high' ? 'danger'
+    : report.severity === 'medium' ? 'warning' : report.severity ? 'info' : 'neutral';
   const candidates = report.candidates ?? [];
   const refs = report.supporting_evidence_refs ?? [];
-  const missingChecks = (report.missing_evidence_checks ?? []).filter(c => c.status !== 'collected');
+  const missingChecks = (report.missing_evidence_checks ?? []).filter((check) => check.status !== 'collected');
   const target = [report.namespace, report.resource_kind, report.resource_name].filter(Boolean).join('/');
   return (
-    <div className="card" style={{ background: 'var(--surface-2)', padding: 12 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-        {report.severity && <Badge tone={sevTone}>{report.severity}</Badge>}
-        <Badge status={report.action}>{report.action}</Badge>
-        {report.confidence != null && (
-          <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>신뢰도 <b>{(report.confidence * 100).toFixed(0)}%</b></span>
-        )}
-        {report.created_at && (
-          <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }} title={fmtAbs(report.created_at)}>
-            {timeAgo(report.created_at)}
-          </span>
-        )}
+    <article className="grid gap-3 rounded-panel border border-border bg-bg p-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {report.severity && <Badge tone={severityTone}>{report.severity}</Badge>}
+        <StatusBadge status={report.action} />
+        {report.confidence != null && <span className="text-caption text-secondary">신뢰도 <b>{(report.confidence * 100).toFixed(0)}%</b></span>}
+        {report.created_at && <span className="ms-auto text-caption text-muted" title={fmtAbs(report.created_at)}>{timeAgo(report.created_at)}</span>}
       </div>
-      <p style={{ margin: '0 0 6px', fontSize: 'var(--fs-sm)', fontWeight: 600 }}>{report.root_cause}</p>
-      {target && (
-        <p style={{ margin: '0 0 4px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>
-          대상: <code style={{ fontSize: 'var(--fs-xs)' }}>{target}</code>
-        </p>
-      )}
+      <h3 className="text-title font-semibold text-primary">{report.root_cause}</h3>
+      {target && <p className="text-caption text-secondary">대상: <CodeText>{target}</CodeText></p>}
       {report.symptom && (
-        <p style={{ margin: '0 0 4px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>
-          증상: {report.symptom}
-          {(report.secondary_symptoms ?? []).map(s => (
-            <span key={s} className="badge" style={{ marginLeft: 6, color: 'var(--text-3)' }}>{s}</span>
-          ))}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 text-caption text-secondary">
+          <span>증상: {report.symptom}</span>
+          {(report.secondary_symptoms ?? []).map((symptom) => <Badge key={symptom}>{symptom}</Badge>)}
+        </div>
       )}
-      {report.reason && <p style={{ margin: '0 0 8px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>판단 근거: {report.reason}</p>}
-
-      {candidates.length > 0 && (
-        <CandidateScores candidates={candidates} selectedId={report.selected_candidate_id ?? null} />
-      )}
-
-      {refs.length > 0 ? (
-        <EvidenceRefList refs={refs} />
-      ) : (
-        report.supporting_evidence.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
-            {report.supporting_evidence.map((e, i) => (
-              <span key={i} className="badge" style={{ color: 'var(--ok)' }}><span className="dot" />{trunc(e, 40)}</span>
-            ))}
-          </div>
-        )
-      )}
+      {report.reason && <p className="text-caption text-secondary">판단 근거: {report.reason}</p>}
+      {candidates.length > 0 && <CandidateScores candidates={candidates} selectedId={report.selected_candidate_id ?? null} />}
+      {refs.length > 0 ? <EvidenceRefList refs={refs} /> : <EvidenceFallbackChips items={report.supporting_evidence} tone="success" />}
       {missingChecks.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
-          {missingChecks.map(c => (
-            <span key={c.check_id} style={{ fontSize: 'var(--fs-xs)', color: 'var(--warn)' }}>
-              미수집 {c.source ? `[${c.source}] ` : ''}{c.check_id}{c.reason ? ` — ${c.reason}` : ''}
+        <div className="grid gap-1">
+          {missingChecks.map((check) => (
+            <span key={check.check_id} className="text-caption text-warning">
+              미수집 {check.source ? `[${check.source}] ` : ''}{check.check_id}{check.reason ? ` - ${check.reason}` : ''}
             </span>
           ))}
         </div>
       ) : (
-        report.missing_evidence.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
-            {report.missing_evidence.map((e, i) => (
-              <span key={i} className="badge" style={{ color: 'var(--warn)' }}><span className="dot" />미수집: {trunc(e, 36)}</span>
-            ))}
-          </div>
-        )
+        <EvidenceFallbackChips items={report.missing_evidence.map((item) => `미수집: ${item}`)} tone="warning" />
       )}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-        <Button size="sm" onClick={onShowEvidence}>증거 흐름 보기 →</Button>
-        {report.evidence_ref && <code style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>{trunc(report.evidence_ref, 30)}</code>}
-        <CopyChip value={report.correlation_id} display={trunc(report.correlation_id, 16)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={onShowEvidence}>증거 흐름 보기</Button>
+        {report.evidence_ref && <CodeText>{trunc(report.evidence_ref, 30)}</CodeText>}
+        <CopyPill value={report.correlation_id} display={trunc(report.correlation_id, 16)} />
       </div>
-    </div>
+    </article>
   );
 }
 
-/* 후보 평가 점수표 — rule/AI 출처, 점수 바, 충족/미충족 신호. 선정 후보는 좌측 강조. */
 function CandidateScores({ candidates, selectedId }: { candidates: RcaCandidateScore[]; selectedId: string | null }) {
   const [open, setOpen] = useState(false);
   const shown = open ? candidates : candidates.slice(0, 2);
   return (
-    <div style={{ margin: '2px 0 8px' }}>
-      <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginBottom: 4 }}>후보 평가 ({candidates.length})</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {shown.map(c => {
-          const selected = c.candidate_id === selectedId;
-          const score = c.score ?? 0;
-          return (
-            <div key={c.candidate_id} style={{
-              padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)',
-              borderLeft: `2px solid ${selected ? 'var(--ok)' : 'var(--border)'}`,
-            }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 'var(--fs-xs)', fontWeight: selected ? 700 : 500, color: selected ? 'var(--text-1)' : 'var(--text-2)' }}>
-                  {c.title ?? c.candidate_id}
-                </span>
-                {c.source === 'ai_fallback' && <Badge tone="info">AI</Badge>}
-                {selected && <Badge tone="ok">선정</Badge>}
-                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span aria-hidden style={{ width: 64, height: 4, borderRadius: 2, background: 'var(--surface-3, var(--border))', overflow: 'hidden', display: 'inline-block' }}>
-                    <span style={{ display: 'block', height: '100%', width: `${Math.round(Math.min(1, Math.max(0, score)) * 100)}%`,
-                      background: score >= 1 ? 'var(--ok)' : score >= 0.5 ? 'var(--warn)' : 'var(--text-3)' }} />
-                  </span>
-                  <b style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(2)}</b>
-                </span>
-              </div>
-              {(c.supporting_evidence.length > 0 || c.missing_evidence.length > 0) && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 3, fontSize: 'var(--fs-xs)' }}>
-                  {c.supporting_evidence.map(s => <span key={`s-${s}`} style={{ color: 'var(--ok)' }}>✓ {trunc(s, 36)}</span>)}
-                  {c.missing_evidence.map(m => <span key={`m-${m}`} style={{ color: 'var(--warn)' }}>✗ {trunc(m, 36)}</span>)}
-                </div>
-              )}
+    <section className="grid gap-2">
+      <div className="text-caption text-muted">후보 평가 ({candidates.length})</div>
+      {shown.map((candidate) => {
+        const selected = candidate.candidate_id === selectedId;
+        const score = candidate.score ?? 0;
+        return (
+          <div key={candidate.candidate_id} className={cx('grid gap-2 rounded-control border bg-raised p-3', selected ? 'border-success/50' : 'border-border')}>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className={selected ? 'text-label font-bold text-primary' : 'text-label font-medium text-secondary'}>
+                {candidate.title ?? candidate.candidate_id}
+              </span>
+              {candidate.source === 'ai_fallback' && <Badge tone="info">AI</Badge>}
+              {selected && <Badge tone="success">선정</Badge>}
+              <span className="ms-auto inline-flex items-center gap-2">
+                <ScoreBar score={score} />
+                <b className="text-caption tabular-nums text-secondary">{score.toFixed(2)}</b>
+              </span>
             </div>
-          );
-        })}
-      </div>
+            {(candidate.supporting_evidence.length > 0 || candidate.missing_evidence.length > 0) && (
+              <div className="flex flex-wrap gap-2 text-caption">
+                {candidate.supporting_evidence.map((item) => <span key={`s-${item}`} className="text-success">충족 {trunc(item, 36)}</span>)}
+                {candidate.missing_evidence.map((item) => <span key={`m-${item}`} className="text-warning">미충족 {trunc(item, 36)}</span>)}
+              </div>
+            )}
+          </div>
+        );
+      })}
       {candidates.length > 2 && (
-        <button className="btn btn--sm btn--ghost" style={{ marginTop: 4 }} onClick={() => setOpen(o => !o)}>
+        <Button size="sm" variant="ghost" onClick={() => setOpen((value) => !value)}>
           {open ? '접기' : `후보 ${candidates.length - 2}개 더 보기`}
-        </button>
+        </Button>
       )}
+    </section>
+  );
+}
+
+function EvidenceRefList({ refs }: { refs: RcaEvidenceRef[] }) {
+  return (
+    <section className="grid gap-2">
+      <div className="text-caption text-muted">판단에 사용된 근거 ({refs.length})</div>
+      {refs.map((ref, index) => (
+        <div key={`${ref.source}-${ref.name}-${index}`} className="grid gap-2 rounded-control border border-border bg-raised p-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Badge tone={toneToBadge(kindTone(ref.source))}>{ref.source}</Badge>
+            {ref.schema_version != null && <Badge>schema v{ref.schema_version}</Badge>}
+            <span className="text-caption text-secondary">{ref.name}</span>
+            {ref.summary && <span className="min-w-0 flex-1 truncate text-caption text-muted">{trunc(ref.summary, 60)}</span>}
+          </div>
+          {(ref.collector || ref.collector_version || ref.source_version || ref.query_version || ref.evidence_key || ref.source_id || ref.agent_id || ref.collected_at || ref.window_start) && (
+            <div className="flex flex-wrap gap-2 text-caption text-muted">
+              {ref.collector && <span>{ref.collector}</span>}
+              {ref.collector_version && <CodeText>{trunc(ref.collector_version, 18)}</CodeText>}
+              {ref.source_version && <span>{ref.source_version}</span>}
+              {ref.query_version && <CodeText>{trunc(ref.query_version, 18)}</CodeText>}
+              {ref.source_id && <span>{ref.source_id}</span>}
+              {ref.agent_id && <CodeText>{trunc(ref.agent_id, 18)}</CodeText>}
+              {ref.evidence_key && <CodeText>{trunc(ref.evidence_key, 28)}</CodeText>}
+              {ref.window_start && <span>{trunc(ref.window_start, 24)}</span>}
+              {ref.collected_at && <span title={fmtAbs(ref.collected_at)}>{fmtAbs(ref.collected_at)}</span>}
+            </div>
+          )}
+          {ref.query && <CodeBlock code={ref.query} label={ref.check_id ?? '근거 쿼리'} />}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function EvidenceFallbackChips({ items, tone }: { items: string[]; tone: BadgeTone }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item, index) => <Badge key={`${item}-${index}`} tone={tone}>{trunc(item, 40)}</Badge>)}
     </div>
   );
 }
 
-/* 근거 참조 트레일 — 어떤 소스에 어떤 쿼리를 던져 얻은 근거인지(운영자 재현 가능) */
-function EvidenceRefList({ refs }: { refs: RcaEvidenceRef[] }) {
+function StatusBadge({ status }: { status: string }) {
+  const meta = statusMeta(status);
+  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+}
+
+function statusMeta(status: string): { label: string; tone: BadgeTone } {
+  const key = String(status || 'unknown').toLowerCase();
+  if (['completed', 'done', 'resolved', 'closed', 'ok', 'success', 'selected', 'approved'].includes(key)) return { label: status || '완료', tone: 'success' };
+  if (['open', 'running', 'analysis', 'evidence', 'info', 'progressing'].includes(key)) return { label: status || '진행', tone: 'info' };
+  if (['pending', 'selection_requested', 'waiting', 'warn', 'warning'].includes(key)) return { label: status || '대기', tone: 'warning' };
+  if (['failed', 'rejected', 'critical', 'danger', 'error'].includes(key)) return { label: status || '실패', tone: 'danger' };
+  return { label: status || '미확인', tone: 'neutral' };
+}
+
+function toneOfStatus(status: string): Tone {
+  return statusMeta(status).tone === 'success' ? 'ok'
+    : statusMeta(status).tone === 'warning' ? 'warn'
+      : statusMeta(status).tone === 'danger' ? 'danger'
+        : statusMeta(status).tone === 'info' ? 'info'
+          : 'neutral';
+}
+
+function toneToBadge(tone: Tone): BadgeTone {
+  if (tone === 'ok') return 'success';
+  if (tone === 'warn') return 'warning';
+  if (tone === 'danger') return 'danger';
+  if (tone === 'info') return 'info';
+  return 'neutral';
+}
+
+function flowToneClass(tone: Tone) {
+  return {
+    ok: 'border-success/50',
+    warn: 'border-warning/50',
+    danger: 'border-danger/50',
+    info: 'border-info/50',
+    neutral: 'border-border',
+  }[tone];
+}
+
+function ScoreBar({ score }: { score: number }) {
+  const width = score >= 0.9 ? 'w-full' : score >= 0.75 ? 'w-4/5' : score >= 0.5 ? 'w-3/5' : score >= 0.25 ? 'w-2/5' : 'w-1/5';
+  const tone = score >= 0.9 ? 'bg-success' : score >= 0.5 ? 'bg-warning' : 'bg-muted';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-      <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>판단에 사용된 근거 ({refs.length})</div>
-      {refs.map((r, i) => (
-        <div key={`${r.source}-${r.name}-${i}`} style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Badge tone={kindTone(r.source)}>{r.source}</Badge>
-            {r.schema_version != null && <Badge tone="neutral">schema v{r.schema_version}</Badge>}
-            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>{r.name}</span>
-            {r.summary && <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{trunc(r.summary, 60)}</span>}
-          </div>
-          {(r.collector || r.collector_version || r.source_version || r.query_version || r.evidence_key || r.source_id || r.agent_id || r.collected_at || r.window_start) && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 3, fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>
-              {r.collector && <span>{r.collector}</span>}
-              {r.collector_version && <code>{trunc(r.collector_version, 18)}</code>}
-              {r.source_version && <span>{r.source_version}</span>}
-              {r.query_version && <code>{trunc(r.query_version, 18)}</code>}
-              {r.source_id && <span>{r.source_id}</span>}
-              {r.agent_id && <code>{trunc(r.agent_id, 18)}</code>}
-              {r.evidence_key && <code>{trunc(r.evidence_key, 28)}</code>}
-              {r.window_start && <span>{trunc(r.window_start, 24)}</span>}
-              {r.collected_at && <span title={fmtAbs(r.collected_at)}>{fmtAbs(r.collected_at)}</span>}
-            </div>
-          )}
-          {r.query && (
-            <code style={{ display: 'block', marginTop: 3, fontSize: 'var(--fs-xs)', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
-              {r.query}
-            </code>
-          )}
-        </div>
-      ))}
-    </div>
+    <span className="inline-flex h-1.5 w-16 overflow-hidden rounded-full bg-surface">
+      <span className={cx('h-full rounded-full', width, tone)} />
+    </span>
+  );
+}
+
+function CopyPill({ value, display }: { value: string; display?: string }) {
+  const { push } = useToast();
+  const copy = () => {
+    navigator.clipboard.writeText(value)
+      .then(() => push({ tone: 'success', title: '복사 완료', description: '값을 클립보드에 복사했습니다' }))
+      .catch(() => push({ tone: 'danger', title: '복사 실패', description: '브라우저 권한을 확인해주세요' }));
+  };
+  return <Button size="sm" variant="secondary" onClick={copy}>{display ?? value}</Button>;
+}
+
+function CodeText({ children }: { children: ReactNode }) {
+  return <code className="inline-flex max-w-full truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">{children}</code>;
+}
+
+function AlertIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
+      <path d="M8 2.5 14 13H2zM8 6v3M8 11.5h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true">
+      <path d="M4 2.5h5L12.5 6v7.5H4zM9 2.8V6h3.2" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.4" />
+    </svg>
   );
 }

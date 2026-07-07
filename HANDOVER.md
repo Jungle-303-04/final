@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:30 KST (콘솔 디자인 시스템 Phase 2 인시던트 목록 이관 메모 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:41 KST (콘솔 디자인 시스템 Phase 2 인시던트 상세 이관 메모 반영)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -194,6 +194,24 @@
 - 다음:
   1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
   2. 다음 화면은 인시던트 상세다. RCA 파이프라인 그래프, 후보 점수바, evidence trail, recovery plan 기능은 유지하고 `src/ui`/Motion preset으로 표현만 교체한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 인시던트 상세 이관
+
+- 구현:
+  - `features/notifications/IncidentDetailView.tsx`를 `src/ui` PageHeader/Breadcrumb/Card/KeyValueList/Badge/Button/Collapsible/EmptyState 기반으로 재구성했다.
+  - RCA 파이프라인 그래프, 복구 계획, evidence 목록, RCA 리포트 후보 점수바, evidence query trail, not_found fallback 기능은 유지했다.
+  - 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 의존을 제거했다.
+  - 모바일 RCA 그래프는 문서 전체 overflow 없이 그래프 영역 내부 가로 스크롤로 읽을 수 있게 고정했다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test -- --runInBand` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright route mocking 검수: 인증 세션/알림/인시던트 상세/RCA 리포트/복구 계획 최소 응답으로 `/incidents/inc-101`를 1440/1024/390 폭에서 캡처했고 horizontal overflow 0, legacy class 0, unexpected console error 0.
+  - screenshots: `/tmp/k8s-incident-detail-desktop.png`, `/tmp/k8s-incident-detail-tablet.png`, `/tmp/k8s-incident-detail-mobile.png`, `/tmp/k8s-incident-detail-mobile-fixed.png`.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
+  2. 다음 화면은 워크플로다. React Flow 노드/엣지 스타일과 목록/상세 화면을 token + `src/ui` 프리미티브로 정렬한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
