@@ -172,13 +172,19 @@ GET  /notifications?after=          → { notices: [Notice] }   (Notice 는 noti
 POST /notifications/read  {last_seen_at}
 ```
 
-### G10. AI 대화 목록 (P1 — ai-chat 목록 화면 차단 해소)
+### G10. AI 대화 API (P1 — ai-chat 화면 차단 해소)
 
 ```text
 GET /ai/conversations → { conversations: [{ conversation_id, title, status, updated_at }] }  🍪
+POST /ai/conversations {message, title?, agent?, context?}
+  → { accepted, conversation_id, message_id, event_id, correlation_id }  🍪
+GET /ai/conversations/{conversation_id}
+  → { conversation: {...}, messages: [{ message_id, role, status?, content, created_at, metadata?, tool_calls?, actions?, approval_ref? }] }  🍪
+POST /ai/conversations/{conversation_id}/messages {message, agent?, context?}
+  → { accepted, conversation_id, message_id, event_id, correlation_id }  🍪
 ```
 
-코드 반영 범위: 목록 조회. 프론트는 이 route를 실제 목록 데이터 소스로 사용한다.
+코드 반영 범위: 목록 조회, 새 대화/메시지 accepted response, 단건 `{conversation, messages}` envelope. 프론트는 단건 응답을 `adaptConversationDetail`로 `Conversation`에 정규화하고, `metadata.tool_trace`를 `tool_calls`로 렌더한다.
 
 ### G11. 클러스터 정책 조회 (P2)
 

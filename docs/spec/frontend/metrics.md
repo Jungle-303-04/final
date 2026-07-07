@@ -19,6 +19,7 @@ status: synced
 | import | `@/shared/lib/api`(`get`, `post`), `@/shared/lib/live`(`liveStore`), `@/shared/ui`, `@/shared/ui/charts`(`TimeSeriesChart`, `Series`), `@/shared/motion` | [shared](shared.md) | 실시간·차트 |
 | import | `@/features/cluster/api`(`useClusters`, `useClusterSummary`, `useClusterUsage`, `useWorkloads`) | [cluster](./cluster.md) | 클러스터 선택 셀렉트·인벤토리 폴백 스탯·usage 시계열 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 클러스터 없음 empty state 의 등록 CTA 표시 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | 백엔드 | POST `/agent/debug/query`, GET `/commands/:id` | [api-gateway](../services/gateway-api-gateway.md) | 온디맨드 PromQL(비동기 수락) + 명령 상태 폴링 |
 | 백엔드 | GET `/clusters/:id/usage` (cluster 훅 경유) | [api-gateway](../services/gateway-api-gateway.md) | usage 롤업 시계열 |
 | 실시간 | `liveStore.history`/`status`/`snapshot` | [realtime-gateway](../services/realtime-realtime-gateway.md) | 시계열·연결 배너·phase 스탯 |
@@ -57,7 +58,7 @@ status: synced
   2. `run.mutate({q, rangeSeconds})` → POST `/agent/debug/query` body `{cluster_id, query: {source:'prometheus', name:'console_promql', description:'Console PromQL query', query, range_seconds}}`.
   3. 성공: 카드에 `commandId` 기록(이후 상태는 `QueryCardRow` 가 폴링). 제출 실패: `submitFailed: true`.
 - 결과 포맷: `fmtValue(v, unit)` — ratio 는 `%`(소수 1자리), count 는 100 이상 정수/미만 소수 2자리. 카드에 `range 5m` 등 범위 표기, 평균·최대 표시.
-- 클러스터 목록이 비어 있으면 `PageHeader` 다음 `EmptyState` 만 렌더한다. admin 은 `/clusters` 등록 버튼을 보고, non-admin 은 접근 가능한 클러스터가 연결되면 표시된다는 안내만 본다.
+- 클러스터 목록이 비어 있으면 `PageHeader` 다음 `EmptyState` 만 렌더한다. admin 은 `pathFor('/clusters')` 등록 버튼을 보고, non-admin 은 접근 가능한 클러스터가 연결되면 표시된다는 안내만 본다.
 - 트리:
   ```
   FadeSlideIn

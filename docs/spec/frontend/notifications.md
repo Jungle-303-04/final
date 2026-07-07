@@ -21,6 +21,7 @@ status: synced
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`) | [repo](./repo.md) | 승인 대기 알림 소스 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | DLQ 쿼리는 admin 만 |
 | import | `@/features/org/SettingsNav` | [org](./org.md) | OpsView 레이아웃 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [app/ConsoleLayout](app.md)(unread 뱃지), [fleet](./fleet.md)·[cluster](./cluster.md)(useTimeline) | — | 소비자 |
 | 백엔드 | `/dashboard/rca/*`, `/dead-letters*` | [api-gateway](../services/gateway-api-gateway.md) | |
 
@@ -51,7 +52,7 @@ status: synced
 - 라우트: `/incidents`. 구 경로 `/notifications` 는 router 에서 `/incidents` 로 redirect.
 - 모듈 상수 `FILTERS`: `[['all','전체'],['approval','승인'],['incident','인시던트'],['dlq','운영(DLQ)'],['cluster','클러스터']]`.
 - state: `filter`(기본 'all'). 마운트 시 `markAllSeen()` 1회(진입 시 워터마크 갱신).
-- 트리: `PageHeader('인시던트 & 알림', sub='승인 대기·RCA 인시던트·처리 실패(DLQ) 이벤트를 한 곳에서')` → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가, flex wrap) → 비면 `EmptyState(IconBell, title=전체면 '알림이 없습니다'/필터면 '<라벨> 알림이 없습니다', description='승인 대기·RCA 인시던트·처리 실패 이벤트가 생기면 여기 모입니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, KIND_LABEL[kind] ?? kind)`(한국어 라벨 — 셸 플라이오버와 동일 어휘) + title(read 면 opacity 0.6) + timeAgo + `Link(n.link)` '바로가기 →'.
+- 트리: `PageHeader('인시던트 & 알림', sub='승인 대기·RCA 인시던트·처리 실패(DLQ) 이벤트를 한 곳에서')` → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가, flex wrap) → 비면 `EmptyState(IconBell, title=전체면 '알림이 없습니다'/필터면 '<라벨> 알림이 없습니다', description='승인 대기·RCA 인시던트·처리 실패 이벤트가 생기면 여기 모입니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, KIND_LABEL[kind] ?? kind)`(한국어 라벨 — 셸 플라이오버와 동일 어휘) + title(read 면 opacity 0.6) + timeAgo + `Link(pathFor(n.link))` '바로가기 →'.
 
 ### `frontend/src/features/notifications/IncidentDetailView.tsx :: IncidentDetailView` (default export)
 
@@ -69,7 +70,7 @@ status: synced
     - 그룹 자식은 collapsed 시 노드·edge 생략. 자식 edge 는 해당 그룹이 현재 단계이고 running 일 때 active.
     - 메인 edge(incident→evidence→analysis→actions): `targetIdx < cur`→ok, `=== cur && failed`→danger, `=== cur && !running`→ok, running && `=== cur`→active.
   - 좌표: `useAutoLayout(raw, 'LR')`.
-- 트리: Breadcrumbs [알림 → `인시던트 <id>`] → `QueryBoundary(skeleton 6)`: h1(summary)+Badge(status) → 그리드(1fr 300px): `Card(h 420) > FlowCanvas(nodes, edges, nodeTypes)` · `Card('상세') > KeyValue`(클러스터/현재 단계/근본 원인(null 은 '분석 중')/신뢰도 %/PR 링크/갱신 timeAgo) → 하단 2열 `RcaReportsPanel`/`EvidencePanel`.
+- 트리: Breadcrumbs [`pathFor('/incidents')` 알림 → `인시던트 <id>`] → `QueryBoundary(skeleton 6)`: h1(summary)+Badge(status) → 그리드(1fr 300px): `Card(h 420) > FlowCanvas(nodes, edges, nodeTypes)` · `Card('상세') > KeyValue`(클러스터는 있으면 `pathFor('/clusters/<id>')` 링크/현재 단계/근본 원인(null 은 '분석 중')/신뢰도 %/PR 링크/갱신 timeAgo) → 하단 2열 `RcaReportsPanel`/`EvidencePanel`.
 - 타임라인 상세가 404 여도 동일 문자열을 correlation id 로 보고 `RcaReportsPanel` 과 `EvidencePanel` 은 계속 렌더한다.
 - `RcaReportsPanel`: `useRcaReports(correlationId)` 결과를 카드 목록으로 표시한다. `RcaReportCard` 는 root cause, 대상(`namespace/resource_kind/resource_name`), 주 증상과 `secondary_symptoms`, reason, 후보 평가, 근거 참조, 미수집 체크를 보여준다.
 - `CandidateScores`: `report.candidates` 를 점수 내림차순 그대로 최대 2개 우선 표시하고, `selected_candidate_id` 와 같은 후보는 좌측 보더와 `선정` badge 로 강조한다. `source === 'ai_fallback'` 은 `AI` badge 로 표시한다.

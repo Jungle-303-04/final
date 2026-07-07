@@ -20,6 +20,7 @@ status: synced
 | import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 승인 버튼 활성 |
 | import | `@/features/resources/ConnectRepoWizard` | [resources](./resources.md) | 목록 화면 위저드 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [workflow](./workflow.md), [chat](./chat.md), [notifications](./notifications.md), [org](./org.md) | — | `useApplications`/`useRuns*`/`ApprovalCard` 소비 |
 | 백엔드 | `/applications/*`, `/approvals/*` | [api-gateway](../services/gateway-api-gateway.md) | |
 
@@ -85,14 +86,14 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   ├─ [runs] 비면 EmptyState(IconClock '첫 커밋 감지 대기 중' — webhook/poller 안내)
   │   아니면 Stagger(run별 Card):
   │     code(shortSha) · Badge(status) · 미니 스텝바(STEP_ORDER 별 14×5 칩 — SUCCEEDED ok/FAILED danger/PENDING surface-3/그 외 info)
-  │     · timeAgo(started_at) · "그래프 보기" → /workflows/${run_id}
+  │     · timeAgo(started_at) · "그래프 보기" → `pathFor('/workflows/${run_id}')`
   │     status===WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인', compact)
   │       + DIFFING step 의 changes 가 있으면 PlanDiff(changes, resource)
-  ├─ [deployments] ResourceTable: 클러스터(Link /clusters/:id?tab=workloads)/네임스페이스/이름/이미지(code)/Replicas/상태 Badge
+  ├─ [deployments] ResourceTable: 클러스터(Link `pathFor('/clusters/:id?tab=workloads')`)/네임스페이스/이름/이미지(code)/Replicas/상태 Badge
   ├─ [safe-pr] safePrRun 없으면 EmptyState('🤖 Safe PR 이력이 없습니다')
   │   있으면 Card('Safe PR — <sha>'): Badge(safe_pr.status) + pr_url 링크 'PR 열기 ↗' + explanation
   │     + diff_before 있으면 before(danger)/after(ok) CodeBlock 2열
-  │     + safe_pr.error 있으면 Link(/ai?prefill='Safe PR 실패 원인 분석: <error>') "✦ AI에게 원인 묻기"
+  │     + safe_pr.error 있으면 Link(`pathFor('/ai?prefill=Safe PR 실패 원인 분석: <error>')`) "✦ AI에게 원인 묻기"
   └─ [settings] KeyValue: application_id/manifest_path/대상 클러스터/브랜치
   ```
 

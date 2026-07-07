@@ -19,6 +19,7 @@ status: synced
 | import | `@/shared/lib/api`(`get/post/put/del`), `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/format`, `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useApproveUser`) | [auth](./auth.md) | 멤버 승인 |
 | import | `@/features/cluster/api`(`useClusters`), `@/features/repo/api`(`useApplications`) | [cluster](./cluster.md), [repo](./repo.md) | AccessView 리소스 선택지 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 설정 탭 |
 | import ← | [notifications/OpsView](./notifications.md) | — | `SettingsNav` 소비 |
 | 백엔드 | `/orgs*`, `/groups*`, `/users`, `/access*` | [api-gateway](../services/gateway-api-gateway.md) | 갭 API |
 
@@ -45,7 +46,7 @@ status: synced
 
 ### `frontend/src/features/org/SettingsNav.tsx :: SettingsNav`
 
-`{ title: string; children: ReactNode }` — `PageHeader(title='설정 — <title>', sub='조직·그룹·멤버·리소스 권한과 운영(DLQ) 관리')` + `.tabs` 탭 NavLink 5개(`/settings/members` 멤버, `/settings/orgs` 조직, `/settings/groups` 그룹, `/settings/access` 리소스 권한, `/settings/ops` 운영(DLQ)) + children. 탭 링크 스타일은 공통 `.tabs a` 규칙에 맡기며 active 색을 덮는 인라인 color 를 두지 않는다. `FadeSlideIn` 래핑. 설정 5개 화면이 모두 이 레이아웃을 사용.
+`{ title: string; children: ReactNode }` — `PageHeader(title='설정 — <title>', sub='조직·그룹·멤버·리소스 권한과 운영(DLQ) 관리')` + `.tabs` 탭 NavLink 5개(`pathFor('/settings/members')` 멤버, `pathFor('/settings/orgs')` 조직, `pathFor('/settings/groups')` 그룹, `pathFor('/settings/access')` 리소스 권한, `pathFor('/settings/ops')` 운영(DLQ)) + children. 탭 링크 스타일은 공통 `.tabs a` 규칙에 맡기며 active 색을 덮는 인라인 color 를 두지 않는다. `FadeSlideIn` 래핑. 설정 5개 화면이 모두 이 레이아웃을 사용.
 
 ### `frontend/src/features/org/MembersView.tsx :: MembersView` (default export) — `/settings/members`
 

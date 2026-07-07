@@ -21,6 +21,7 @@ status: synced
 | import | `@/features/fleet/api`(`useClusterAgg`) | [fleet](./fleet.md) | 상세 상단 집계 요약 보조 패널 |
 | import | `@/features/notifications/api`(`useTimeline`) | [notifications](./notifications.md) | 캐시 공유용 참조(`void useTimeline`) |
 | import | `@/features/resources/RegisterClusterWizard` | [resources](./resources.md) | 목록 화면의 등록 위저드 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | 백엔드 | `/clusters/*` | [api-gateway](../services/gateway-api-gateway.md) | 인벤토리·명령 API |
 | 실시간 | `liveStore.snapshot` | [realtime-gateway](../services/realtime-realtime-gateway.md) | hot 팟 강조(팟 탭) |
 
@@ -50,7 +51,7 @@ status: synced
 - 라우트: `/clusters`.
 - state: `wizard: boolean`. 훅: `useClusters`, `useNavigate`, `useIsAdmin`, `useSearchFilter`(검색 대상 `` `${name} ${cluster_id} ${environment}` ``).
 - 트리: `PageHeader('클러스터', sub, actions=admin 일 때만 primary "+ 클러스터 등록" → wizard open)` → `SearchInput` → `Card > QueryBoundary > ResourceTable<Cluster>` → `RegisterClusterWizard(open, onClose)`.
-- 테이블 열: 이름(b) / 환경(`Badge tone=neutral`) / 연결(`Badge status`) / 노드 / 팟 / 인시던트(>0 이면 `Badge tone=danger`, 아니면 '—') / 등록(`timeAgo`). 행 클릭 → `/clusters/${cluster_id}`.
+- 테이블 열: 이름(b) / 환경(`Badge tone=neutral`) / 연결(`Badge status`) / 노드 / 팟 / 인시던트(>0 이면 `Badge tone=danger`, 아니면 '—') / 등록(`timeAgo`). 행 클릭 → `pathFor('/clusters/${cluster_id}')`.
 - `ResourceTable.empty`: 검색어가 있으면 `EmptyState(GlobeIcon, "'<검색어>' 검색 결과가 없습니다", "이름·환경·cluster_id 로 검색합니다")`; 검색어가 없으면 admin 은 `EmptyState(..., "클러스터를 등록하고 에이전트가 연결되면 실측 인벤토리가 표시됩니다", action=첫 클러스터 등록)`, non-admin 은 `EmptyState(..., "접근 권한이 있는 클러스터가 연결되면 실측 인벤토리가 표시됩니다")`.
 
 ### `frontend/src/features/cluster/ClusterDetailView.tsx :: ClusterDetailView` (default export)
@@ -78,7 +79,7 @@ status: synced
   ├─ Drawer(workloadTarget) — KeyValue(ns/팟 수) + ContextActions(workload) + ContextEvents('워크로드 이벤트') + 팟 보기/스케일/재시작
   └─ Modal(scaleTarget/restartTarget) — 대상은 DeploymentTarget{ns,name,podCount}. 스케일: 현재 팟 수 안내 + replicas number input(0~100, 초기값=podCount) + 실행(scale.mutate). 재시작: 확인 모달(danger) 후 restart.mutate
   ```
-- 팟 탭 열: 이름(hot 이면 `IconFlame` warn) / 네임스페이스 / 상태 Badge / 재시작 / 노드. 행 클릭 → `/clusters/${clusterId}/pods/${ns}/${name}?tab=pods`. Drawer 닫기 → `/clusters/${clusterId}?tab=pods`.
+- 팟 탭 열: 이름(hot 이면 `IconFlame` warn) / 네임스페이스 / 상태 Badge / 재시작 / 노드. 행 클릭 → `pathFor('/clusters/${clusterId}/pods/${ns}/${name}?tab=pods')`. Drawer 닫기 → `pathFor('/clusters/${clusterId}?tab=pods')`.
 - 노드 탭 열: 이름 / Ready·NotReady Badge / 팟 수 / CPU·MEM(`(ratio*100).toFixed(0)%`, null 은 '—') / 버전. 행 클릭 → node Drawer.
 - 스케일/재시작 대상은 WorkloadsTab 의 그룹 키(디플로이먼트 실명 `workload_name || name`)에서 `DeploymentTarget{ns,name,podCount}` 로 전달 — 팟 이름에서 유도하지 않는다. 모달 안내문: "비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다."
 
@@ -86,11 +87,11 @@ status: synced
 
 - `WorkloadsTab { clusterId; admin; onInspect; onDrillPods; onScale; onRestart }` — workloads 를 `${namespace}/${workload_name || name}` 키로 그룹핑해 deployment 행 생성(`workload_name` 은 인벤토리 summary 의 owner_name — [shared/adapt](shared.md#어댑터-libadaptts) `adaptWorkloadResource` 가 채움). 행 클릭은 workload Drawer. 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작·팟 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
 - `ServicesTab { clusterId; onInspect }` — 이름/네임스페이스/타입/ClusterIP(code)/포트. 행 클릭은 service Drawer.
-- `ContextActions` — `Link(/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>])` "메트릭" + `Link(/ai?prefill=<cluster namespace/name subject 상태 분석>)` "AI 분석".
+- `ContextActions` — `Link(pathFor('/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]'))` "메트릭" + `Link(pathFor('/ai?prefill=<cluster namespace/name subject 상태 분석>'))` "AI 분석".
 - `ContextEvents` — `useClusterEvents(clusterId)` 결과를 target/message/reason lower-case includes 로 필터하고 compact 면 3개, 아니면 8개까지 표시한다. pending 이거나 결과가 없으면 null.
 - `ResourcesTab { clusterId; filter }` — `q`가 있으면 kind/namespace/name/status includes 로 필터. 열: Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
 - `EventsTab { clusterId; filter }` — `q`가 있으면 reason/target/message/type includes 로 필터. 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
-- `ClusterAggPanel` — `useClusterAgg(clusterId)` 결과가 pending 이면 null, error 면 회색 문구와 "다시 시도" 버튼. 성공 시 `Card('집계 요약 — 사용량 · 열린 인시던트')` 에 CPU/MEM/재시작 누적/열린 인시던트를 표시하고, 열린 인시던트는 최대 5개까지 `/incidents/<id>` 링크로 렌더한다.
+- `ClusterAggPanel` — `useClusterAgg(clusterId)` 결과가 pending 이면 null, error 면 회색 문구와 "다시 시도" 버튼. 성공 시 `Card('집계 요약 — 사용량 · 열린 인시던트')` 에 CPU/MEM/재시작 누적/열린 인시던트를 표시하고, 열린 인시던트는 최대 5개까지 `pathFor('/incidents/<id>')` 링크로 렌더한다.
 
 ## 라우트
 

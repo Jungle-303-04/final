@@ -18,6 +18,7 @@ status: synced
 |---|---|---|---|
 | import | `@/shared/lib/api`(`get/post`), `@/shared/lib/ui-store`, `@/shared/lib/query`(`queryClient`), `@/shared/lib/types`(`CatalogItem`), `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/repo/api`(`useCreateApplication`, `useRepositoryProbe`, `useRepositoryBranches`, `useRepositoryManifestCandidates`, `useRepositoryManifestValidation`), `@/features/cluster/api`(`useClusters`) | [repo](./repo.md), [cluster](./cluster.md) | 레포 연결 위저드 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [cluster](./cluster.md), [repo](./repo.md) | — | 위저드 소비자 |
 | 백엔드 | `/catalog/*`, `/providers/*`, `/targets`, `/clusters/:id/connection-status` | [api-gateway](../services/gateway-api-gateway.md) | Bruno 02-target-admin 흐름과 동일 API 순서 |
 
@@ -67,8 +68,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 - 검증: `refOk = /^([\w.-]+\/[\w.-]+|https?:\/\/[^/\s]+\/[^/\s]+\/[^/\s]+|git@[^:\s]+:[^/\s]+\/[^/\s]+(?:\.git)?)$/.test(repoRef.trim())`(실패 시 error `'owner/name 또는 GitHub URL 형식이어야 합니다'`, 다음 disabled). 앱 이름은 `normalized_repo_ref.split('/')[1]`.
 - 단계:
   1. repo_ref 입력 → `useRepositoryProbe(POST /repositories/discovery/probe)` 로 `normalized_repo_ref`/default branch/reachability 를 확인한다. reachable 이면 `useRepositoryBranches(GET /repositories/discovery/branches?repo_ref=...)` 로 브랜치 select 를 채우고, 선택 branch 기준 `useRepositoryManifestCandidates(GET /repositories/discovery/manifests?repo_ref=...&branch=...)` 로 manifest 후보 select 를 채운다. 후보 value/key 는 `${source_type}:${path}` 이므로 같은 path 가 raw/kustomize/helm 등 여러 source type 으로 잡혀도 선택이 보존된다. 선택된 후보는 `useRepositoryManifestValidation(POST /repositories/discovery/validate)` body `{repo_ref, branch, manifest_path, source_type}` 로 검증하고, `valid` 일 때만 다음 가능(다음 클릭 시 첫 클러스터로 `clusterId` 초기화).
-  2. 대상 클러스터 select(`useClusters`). 클러스터가 없으면 admin 은 "먼저 클러스터를 등록" 안내와 `/clusters` 링크를 보고, non-admin 은 관리자에게 클러스터 접근 권한을 요청하라는 안내만 본다.
-  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, cluster_id})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 앱 생성 + 배포 대상 등록 2단계) — 성공 시 `onClose()` 후 `nav('/repos/${application_id}')`, 실패 시 에러 메시지를 danger 로 표시.
+  2. 대상 클러스터 select(`useClusters`). 클러스터가 없으면 admin 은 "먼저 클러스터를 등록" 안내와 `pathFor('/clusters')` 링크를 보고, non-admin 은 관리자에게 클러스터 접근 권한을 요청하라는 안내만 본다.
+  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, cluster_id})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 앱 생성 + 배포 대상 등록 2단계) — 성공 시 `onClose()` 후 `nav(pathFor('/repos/${application_id}'))`, 실패 시 에러 메시지를 danger 로 표시.
 
 ## 라우트
 

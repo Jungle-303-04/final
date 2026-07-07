@@ -18,6 +18,7 @@ status: synced
 |---|---|---|---|
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`), `@/features/repo/ApprovalCard` | [repo](./repo.md) | 데이터·승인 카드 |
 | import | `@/shared/flow`(`FlowCanvas`, `useAutoLayout`, `FlowEdgeData`), `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/status`, `@/shared/ui/icons`, `@/shared/lib/format`, `@/shared/motion`, `@/shared/lib/types` | [shared](shared.md) | 그래프·UI |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | 외부 | `@xyflow/react`(`Handle`, `Position`, 타입) | — | 커스텀 노드 |
 | 백엔드 | (간접) GET `/applications`, GET `/applications/:id/runs` | [api-gateway](../services/gateway-api-gateway.md) | repo 훅 경유 |
 
@@ -41,11 +42,11 @@ status: synced
   - 노드: ORDER 각 이름에 대해 `run.steps` 에서 찾고 없으면 `{name, status:'PENDING'}`. `active = !TERMINAL.has(run.status) && step.name === run.status`.
   - edge(i→i+1, type 'animated'): `done = status==='SUCCEEDED' || targetIdx < statusIdx || 해당 스텝 status==='SUCCEEDED'` → `tone:'ok'`; `active = running && targetIdx === statusIdx`(현재 단계 진입 edge 만 dash-flow); 그 외 무톤.
   - `run.status === 'FAILED'` 이면 FAILED 노드 추가 + `실패 스텝(steps 중 status FAILED, 기본 'POLICY_CHECKING') → FAILED` danger edge.
-- run 미발견: `apps.isPending` 이면 `Skeleton(5)`, 아니면 `Card('run 을 찾을 수 없습니다: <runId>')`.
+- run 미발견: `apps.isPending` 이면 `Skeleton(5)`, 아니면 `Card('run 을 찾을 수 없습니다: <runId>')` + `pathFor('/workflows')` 목록 링크.
 - 트리:
   ```
   FadeSlideIn
-  ├─ Breadcrumbs [워크플로우 → '<appId> · <sha>']
+  ├─ Breadcrumbs [`pathFor('/workflows')` 워크플로우 → '<appId> · <sha>']
   ├─ 헤더: h1(appId) + code(sha) + Badge(status)
   ├─ WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인' — DIFFING step 에 detail 이 있을 때만 ' — diff: <detail>' 접미)
   │   + DIFFING step 의 changes 가 있으면 '적용될 변경 (plan)' 카드 안에 PlanDiff(changes, resource)

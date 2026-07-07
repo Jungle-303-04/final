@@ -49,7 +49,7 @@ status: synced
 
 ## 소비 화면
 
-- `HomePage`(`/`)는 `useFleetSummary()`로 상단 집계 카드, treemap, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `/clusters/:clusterId` 로 이동한다.
+- `HomePage`(`/`)는 `useFleetSummary()`로 상단 집계 카드, treemap, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `pathFor('/clusters/:clusterId')` 로 이동해 `/console` base path를 보존한다.
 - `ClusterDetailView`는 `useClusterAgg(clusterId)`로 `ClusterAggPanel`을 렌더한다. 이 보조 패널은 pending 이면 null, 실패하면 본문을 막지 않고 재시도 문구를 표시한다.
 
 ## 라우트
