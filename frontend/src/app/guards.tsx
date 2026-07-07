@@ -14,9 +14,8 @@ export function RequireSession() {
   return <Outlet />;
 }
 export function RequireGuest() {
-  const { data, isError, isPending } = useSession();
+  const { data, isError } = useSession();
   const loc = useLocation();
-  if (isPending) return null;
   if (!isError && data?.authenticated) return <Navigate to={safeReturnTo(new URLSearchParams(loc.search).get('returnTo'))} replace />;
   return <Outlet />;
 }
