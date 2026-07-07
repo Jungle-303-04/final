@@ -379,6 +379,7 @@ class FakeEvidenceJobDb:
                 "evidence_key": evidence_key,
                 "event_id": event_envelope.event_id,
                 "correlation_id": event_envelope.correlation_id,
+                "event_payload": event_envelope.payload,
                 "payload": payload,
                 "kwargs": kwargs,
             }
@@ -592,6 +593,12 @@ def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
     assert db.recorded[0]["payload"]["evidence_key"] == (
         "workspace-1:cluster-1:cluster-snapshot:window-1"
     )
+    event_payload = db.recorded[0]["event_payload"]
+    assert event_payload["evidence_key"] == "workspace-1:cluster-1:cluster-snapshot:window-1"
+    assert event_payload["kind"] == "cluster_evidence"
+    assert event_payload["payload_size"] > 0
+    assert event_payload["metrics"] == {}
+    assert event_payload["traces"] == {}
     assert events.body is None
 
 

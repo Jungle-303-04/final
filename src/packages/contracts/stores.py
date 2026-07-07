@@ -17,6 +17,10 @@ class RcaStore(Protocol):
         self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject
     ) -> None: ...
 
+    async def get_evidence_window(self, evidence_key: str) -> JsonObject | None: ...
+
+    async def get_evidence_window_payload(self, evidence_key: str) -> JsonObject | None: ...
+
     async def save_rca_report(
         self,
         correlation_id: str,

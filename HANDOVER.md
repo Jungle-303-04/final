@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 03:20 KST (프론트 재배포 + outbox oversized payload 안정화 진행)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 03:38 KST (evidence claim-check 원천 수정 로컬 검증)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -32,7 +32,12 @@
   - 코드 패치 진행: `OutboxRelay`가 `MaxPayloadError` 같은 비재시도 publish 오류를 DLQ로 격리하고 outbox 대상에서 제거하도록 변경했다. transient 오류는 기존처럼 재시도 유지.
   - DB 스키마 변경 없음. 기존 `event_dead_letters` 테이블을 사용해 `consumer="outbox-relay:<source>"`, `attempts=1`, original payload/error를 기록한다.
   - 검증: `uv run pytest tests/test_outbox.py` → 5 passed, `uv run pytest tests/test_database_unit.py -q` → 45 passed, `uv run ruff check ...` → passed.
-  - 아직 backend 이미지는 빌드/배포 전이다. 다음 단계는 backend 커밋/푸시 → service 이미지 빌드/push → `api-gateway` rollout → live logs에서 `gateway_outbox_relay_error` 재발 여부 확인.
+  - `262db708 fix: outbox 비재시도 오류 DLQ 처리`, `1aee8286 docs: handover / frontend 배포 / outbox 안정화`는 이미 push 됐다. 이후 backend image `1aee8286-service-20260708032238`를 `api-gateway`에 수동 rollout했고, `/api/healthz`/`/api/readyz`가 0.5초 안팎으로 회복됐다.
+  - 남은 원천 문제는 `evidence_windows.payload` 원문을 같은 크기로 `cluster.evidence.received` 이벤트/outbox에도 넣는 구조였다. 03:38 KST 현재 로컬 코드에서 claim-check 패턴으로 수정 완료: full evidence는 `evidence_windows.payload`에만 저장, outbox 이벤트는 `{workspace_id, cluster_id, evidence_key, correlation_id, kind, payload_size, summary}`와 빈 evidence 필드만 담는다.
+  - 하위 호환: `ClusterEvidenceReceivedBody`는 기존 full payload 이벤트도 계속 디코딩한다. `evidence-worker`는 inline evidence가 있으면 그대로 처리하고, reference 이벤트면 `get_evidence_window_payload(evidence_key)`로 DB 원문을 hydrate 한다.
+  - agent evidence에서 `evidence_key`가 없는 구형 요청도 더 이상 full outbox 경로(`stage_event_once`)로 보내지 않는다. 신뢰된 workspace/cluster + payload digest 기반 키를 합성해 `record_evidence_event_once`로 저장/발행한다.
+  - 로컬 검증: `uv run ruff check ...`, `uv run ruff format --check ...`, `PYTHONPATH=src uv run lint-imports --config .importlinter`, focused pytest 39 passed, schema/database/API 관련 120 passed, 전체 `uv run pytest -q` → 722 passed, 3 skipped.
+  - 다음 단계: claim-check 커밋/push → service image 빌드/push → `api-gateway`와 `evidence-worker`를 같은 image로 rollout → live logs에서 신규 `MaxPayloadError` 0 확인 → replay 가능한 open DLQ만 선별 replay/감소 확인.
 
 ## 체크포인트 — 요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성
 

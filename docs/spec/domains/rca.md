@@ -407,7 +407,7 @@ rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 
 #### `cluster.evidence.received` — `src/domains/rca/events.py :: ClusterEvidenceReceivedBody`
 
-`POST /agent/evidence` 처리 시 봉투로 만들어 outbox에 적재.
+`POST /agent/evidence` 처리 시 봉투로 만들어 outbox에 적재한다. outbox/NATS에는 원문 evidence를 싣지 않고 claim-check reference만 발행한다. 원문은 `evidence_windows.payload`에 저장되고, `evidence-worker`가 `evidence_key`로 hydrate 한다. 구형 full payload 이벤트도 rolling 배포 호환을 위해 계속 처리한다.
 
 | 필드 | 타입 | 기본값 |
 |---|---|---|
@@ -421,6 +421,10 @@ rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 | `source_id` | `str | None` | `None` |
 | `window_start` | `str | None` | `None` |
 | `evidence_key` | `str | None` | `None` |
+| `correlation_id` | `str | None` | `None` |
+| `kind` | `str | None` | `None` |
+| `payload_size` | `int | None` | `None` |
+| `summary` | `JsonObject` | `{}` |
 
 #### `recovery.action_selected` — `src/domains/rca/events.py :: RecoveryActionSelectedBody`
 
@@ -661,12 +665,10 @@ rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 ### 1. Agent evidence 수신 — `POST /agent/evidence`
 
 1. `require_cluster_agent`가 `x-agent-token`을 해시해 등록 레지스트리에서 `ClusterAgentIdentity(workspace_id, cluster_id)`를 얻는다(실패 시 401).
-2. `scoped_evidence_key`로 요청의 `evidence_key`를 `"{workspace_id}:{cluster_id}:{evidence_key}"`로 네임스페이스한다(없으면 `None`).
-3. `build_cluster_evidence_body` — 요청 body를 dump하되 `correlation_id`는 제외하고, `workspace_id`/`cluster_id`를 **토큰 identity로 강제 덮어쓴다**(body 값 신뢰 안 함).
-4. `packages.events.envelope :: event`로 봉투 생성: subject = `body.__subject__`(= `cluster.evidence.received`), source = `getattr(events, "source", "api-gateway")`, `payload.correlation_id` 전달.
-5. 멱등 처리 분기 (DB 호출은 전부 `db_call` = `asyncio.to_thread` 경유):
-   - `evidence_key` 있음: `db.get_evidence_window(evidence_key)`로 기존 창을 조회 — 존재하면 **기존 `event_id`/`correlation_id`로 즉시 응답**(중복 수신 무시). 없으면 `db.record_evidence_event_once(evidence_key=…, workspace_id=…, cluster_id=…, source_id=evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID, window_start=evidence_body.window_start or evidence_body.evidence_key or evidence_key, agent_id=…, event_envelope=…, payload=evidence_body.to_body())`로 원자적 기록.
-   - `evidence_key` 없음: `db.stage_event_once(event_envelope)`로 outbox 적재.
+2. `agent_evidence_key`로 윈도우 키를 만든다. 요청 `evidence_key`가 있으면 `"{workspace_id}:{cluster_id}:{evidence_key}"`로 네임스페이스하고, 없으면 신뢰된 identity와 payload digest 기반 키를 합성한다.
+3. `build_cluster_evidence_body` — 요청 body를 dump하되 `workspace_id`/`cluster_id`를 **토큰 identity로 강제 덮어쓴다**(body 값 신뢰 안 함). `correlation_id`와 계산된 `evidence_key`도 body에 넣는다.
+4. `compact_cluster_evidence_payload`로 claim-check payload를 만든 뒤 `packages.events.envelope :: event`로 봉투 생성: subject = `body.__subject__`(= `cluster.evidence.received`), source = `getattr(events, "source", "api-gateway")`, correlation_id = 요청 `payload.correlation_id`.
+5. `db.get_evidence_window(evidence_key)`로 기존 창을 조회 — 존재하면 **기존 `event_id`/`correlation_id`로 즉시 응답**(중복 수신 무시). 없으면 `db.record_evidence_event_once(evidence_key=…, workspace_id=…, cluster_id=…, source_id=evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID, window_start=evidence_body.window_start or evidence_body.evidence_key or evidence_key, agent_id=…, event_envelope=<compact reference>, payload=evidence_body.to_body())`로 원문 저장과 reference outbox 스테이징을 원자적으로 수행한다.
 6. `AcceptedResponse(accepted=True, event_id=…, correlation_id=…)` 반환.
 
 ### 1b. Alertmanager webhook 수신 — `POST /webhooks/alertmanager?cluster_id=`
@@ -674,7 +676,7 @@ rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 1. `require_alertmanager_token` — `ALERTMANAGER_WEBHOOK_TOKEN` 미설정이면 503 `WEBHOOK_NOT_CONFIGURED`(입구 자체를 잠금, fail-closed), Bearer 토큰 불일치/누락이면 401 `WEBHOOK_TOKEN_INVALID`.
 2. `db.get_cluster_registration(workspace_id, cluster_id)` — 미등록 클러스터면 404 `CLUSTER_NOT_REGISTERED`.
 3. firing 알림이 하나도 없으면(resolved만) 수락만 하고 인시던트를 열지 않는다 — `AcceptedResponse(accepted=True, event_id="", correlation_id="")`.
-4. `alertmanager_evidence_key`로 dedup 키 생성 → `build_alertmanager_evidence_body`로 `ClusterEvidenceReceivedBody`(source_id `alertmanager-webhook`) 구성 → envelope 생성.
+4. `alertmanager_evidence_key`로 dedup 키 생성 → `build_alertmanager_evidence_body`로 `ClusterEvidenceReceivedBody`(source_id `alertmanager-webhook`) 구성 → `compact_cluster_evidence_payload`로 reference envelope 생성.
 5. `db.get_evidence_window(evidence_key)` — 기존 창이 있으면 기존 `event_id`/`correlation_id`로 즉시 응답(중복 통지 무시). 없으면 `db.record_evidence_event_once(...)`로 윈도우 기록+outbox 스테이징(agent evidence와 동일한 멱등 경로, `agent_id=None`, `window_start=body.window_start or evidence_key`).
 6. `AcceptedResponse(accepted=True, event_id, correlation_id)` 반환.
 

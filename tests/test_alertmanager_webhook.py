@@ -138,6 +138,12 @@ def test_webhook_records_firing_alerts_as_cluster_evidence(monkeypatch) -> None:
     assert len(alerts) == 1  # resolved 는 제외, firing 만
     assert alerts[0]["labels"]["alertname"] == "PodCrashLooping"
     assert payload["source_id"] == ALERTMANAGER_SOURCE_ID
+    event_payload = recorded["event_envelope"].payload
+    assert event_payload["evidence_key"] == recorded["evidence_key"]
+    assert event_payload["kind"] == "cluster_evidence"
+    assert event_payload["payload_size"] > 0
+    assert event_payload["summary"]["metrics_keys"] == ["alertmanager"]
+    assert event_payload["metrics"] == {}
 
 
 def test_webhook_resolved_only_payload_does_not_open_incident(monkeypatch) -> None:
