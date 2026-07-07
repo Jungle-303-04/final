@@ -158,6 +158,10 @@ class CauseCandidate(EventBody):
     description: str
     expected_evidence: list[str]
     checks: list[str]
+    # 판별 신호 그룹(카탈로그 YAML `signals`) — 각 그룹은 {"id": str, "any_of": [matcher...]},
+    # matcher 는 fact/log_pattern/event_pattern 중 하나(services.ai.agent.causes.signals 참조).
+    # 그룹이 하나라도 미충족이면 해당 후보는 완결 점수(1.0)에 도달할 수 없다.
+    signals: list[JsonObject] = field(default_factory=list)
     # 후보 출처 — rule 엔진("rule") 또는 LLM fallback("ai_fallback").
     source: str = CAUSE_CANDIDATE_SOURCE_RULE
 

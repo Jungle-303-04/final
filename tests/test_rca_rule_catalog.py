@@ -7,8 +7,13 @@ from textwrap import dedent
 
 import pytest
 
-from domains.rca.events import CAUSE_CANDIDATE_SOURCE_RULE, EvidenceBundle, IncidentRecord
-from services.ai.agent.causes.engine import plan_causes, required_evidence_sources
+from domains.rca.events import (
+    CAUSE_CANDIDATE_SOURCE_RULE,
+    EvidenceBundle,
+    EvidenceItem,
+    IncidentRecord,
+)
+from services.ai.agent.causes.engine import evaluate_causes, plan_causes, required_evidence_sources
 from services.ai.agent.causes.loader import (
     CauseCatalogError,
     load_catalog_profiles,
@@ -165,6 +170,111 @@ def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
     ]
 
 
+def evidence_item(source: str, value: dict) -> EvidenceItem:
+    return EvidenceItem(source=source, name=f"{source}_item", value=value, summary=f"{source} 근거")
+
+
+def crashloop_bundle(*, log_lines: list[str], pods: list[dict]) -> EvidenceBundle:
+    return EvidenceBundle(
+        incident_id="inc-catalog",
+        items=[
+            evidence_item("kubernetes", {"pods": pods, "events": []}),
+            evidence_item("metrics", {"memory": "near-limit"}),
+            evidence_item("logs", {"entries": [{"line": line} for line in log_lines]}),
+        ],
+        missing_evidence=[],
+        complete=True,
+    )
+
+
+def crashloop_pod(**overrides: object) -> dict:
+    base: dict = {
+        "name": "checkout-api-1",
+        "namespace": "sandbox",
+        "waiting_reasons": ["CrashLoopBackOff"],
+        "terminated_reasons": [],
+        "containers": [],
+    }
+    base.update(overrides)
+    return base
+
+
+def evaluations_by_id(bundle: EvidenceBundle) -> dict:
+    plan = plan_for("CrashLoopBackOff")
+    return {e.candidate_id: e for e in evaluate_causes(plan.candidates, bundle)}
+
+
+def test_oom_killed_requires_positive_oom_evidence_for_full_score() -> None:
+    """exit 1 크래시(OOM 신호 없음) — oom_killed 는 1.0 불가 + signal 누락 토큰을 남긴다."""
+    bundle = crashloop_bundle(
+        log_lines=["FATAL: required environment variable DATABASE_URL is not set"],
+        pods=[crashloop_pod()],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["oom_killed"].score < 1.0
+    assert "signal:oom_evidence" in by_id["oom_killed"].missing_evidence
+    assert by_id["config_env_error"].score == 1.0
+    assert by_id["config_env_error"].missing_evidence == []
+
+
+def test_oom_killed_reaches_full_score_with_terminated_reason() -> None:
+    """terminated_reasons=OOMKilled 관측 시 oom_killed 가 1.0 으로 완결 가능하다."""
+    bundle = crashloop_bundle(
+        log_lines=["container restarted"],
+        pods=[crashloop_pod(terminated_reasons=["OOMKilled"])],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["oom_killed"].score == 1.0
+    assert by_id["oom_killed"].missing_evidence == []
+
+
+def test_oom_killed_reaches_full_score_with_exit_code_137() -> None:
+    """직전 컨테이너 종료 코드 137(lastState)도 양성 OOM 근거로 인정된다."""
+    bundle = crashloop_bundle(
+        log_lines=["container restarted"],
+        pods=[
+            crashloop_pod(
+                containers=[{"name": "app", "last_state": "terminated", "last_exit_code": 137}]
+            )
+        ],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["oom_killed"].score == 1.0
+
+
+def test_non_oom_exit_code_supports_app_startup_failure() -> None:
+    """exit 1(non_oom fact) + FATAL 로그는 app_startup_failure 를 1.0 으로 만든다."""
+    bundle = crashloop_bundle(
+        log_lines=["FATAL: boom during boot"],
+        pods=[
+            crashloop_pod(
+                containers=[{"name": "app", "last_state": "terminated", "last_exit_code": 1}]
+            )
+        ],
+    )
+
+    by_id = evaluations_by_id(bundle)
+
+    assert by_id["app_startup_failure"].score == 1.0
+    assert by_id["oom_killed"].score < 1.0
+
+
+def test_no_candidate_gets_full_score_without_distinguishing_evidence() -> None:
+    """판별 신호가 전혀 없는 근거(소스만 존재)로는 어떤 crashloop 후보도 1.0 이 될 수 없다."""
+    bundle = crashloop_bundle(log_lines=["container restarted"], pods=[crashloop_pod()])
+
+    by_id = evaluations_by_id(bundle)
+
+    assert all(evaluation.score < 1.0 for evaluation in by_id.values())
+    assert all(evaluation.missing_evidence for evaluation in by_id.values())
+
+
 def test_unmatched_symptom_still_reports_rule_missing() -> None:
     plan = plan_for("UnmappedSymptom")
 
@@ -208,6 +318,60 @@ def test_new_yaml_only_rule_becomes_active(tmp_path: Path) -> None:
     assert required_evidence_sources(
         incident_for("NodeNotReady"), rules=evidence_rules(profiles=profiles)
     ) == ["kubernetes", "metrics"]
+
+
+SIGNAL_RULE_YAML = dedent(
+    """\
+    rules:
+      - id: "node_disk_pressure"
+        symptoms: ["NodeDiskPressure"]
+        required_sources: ["kubernetes"]
+        candidates:
+          - candidate_id: "disk_full"
+            title: "노드 디스크 포화"
+            description: "노드 디스크가 가득 차 파드가 축출됐을 가능성이 있습니다."
+            expected_evidence: ["kubernetes"]
+            checks:
+              - "Node.status.conditions DiskPressure 확인"
+            signals:
+              - id: "disk_pressure_event"
+                any_of:
+                  - fact: "event_reason=Evicted"
+                  - event_pattern: "disk pressure"
+    """
+)
+
+
+def test_yaml_signals_load_into_candidate(tmp_path: Path) -> None:
+    """signals 블록이 스키마 검증을 거쳐 후보의 판별 신호로 로딩된다."""
+    (tmp_path / "node_disk.yaml").write_text(SIGNAL_RULE_YAML, encoding="utf-8")
+
+    profiles = load_catalog_profiles(tmp_path)
+    plan = plan_causes(
+        incident_for("NodeDiskPressure"),
+        empty_bundle(),
+        "object://evidence/catalog.json",
+        rules=cause_rules(profiles=profiles),
+    )
+
+    assert plan.candidates[0].signals == [
+        {
+            "id": "disk_pressure_event",
+            "any_of": [{"fact": "event_reason=Evicted"}, {"event_pattern": "disk pressure"}],
+        }
+    ]
+
+
+def test_signal_matcher_with_multiple_keys_fails_at_startup(tmp_path: Path) -> None:
+    """matcher 는 fact/log_pattern/event_pattern 중 정확히 하나 — 위반 시 기동 실패."""
+    broken = SIGNAL_RULE_YAML.replace(
+        '- fact: "event_reason=Evicted"',
+        '- {fact: "event_reason=Evicted", log_pattern: "disk"}',
+    )
+    (tmp_path / "broken_signal.yaml").write_text(broken, encoding="utf-8")
+
+    with pytest.raises(CauseCatalogError, match="RCA 룰 카탈로그 스키마 위반: broken_signal.yaml"):
+        load_catalog_profiles(tmp_path)
 
 
 def test_malformed_yaml_raises_clear_startup_error(tmp_path: Path) -> None:
