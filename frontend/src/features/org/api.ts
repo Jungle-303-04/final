@@ -1,4 +1,4 @@
-// 조직/그룹/멤버/권한 — G1·G2·G3·G5 실존 route. mock mode는 로컬 데모 fallback.
+// 조직/그룹/멤버/권한 — G1·G2·G3·G5 실존 route.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, post, put } from '@/shared/lib/api';
 import type { AccessGrant, Group, Org, User } from '@/shared/lib/types';

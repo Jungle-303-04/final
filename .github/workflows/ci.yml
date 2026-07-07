@@ -46,9 +46,8 @@ jobs:
 
       - name: No tracked env/secret files
         run: |
-          # frontend/.env.development / .env.production 은 vite 관례 파일 —
-          # 시크릿 없이 API 모드 플래그(VITE_API_MODE, VITE_API_BASE)만 담음(허용).
-          tracked=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.example$' | grep -v '^frontend/\.env\.development$' | grep -v '^frontend/\.env\.production$' || true)
+          # frontend/.env.production 은 vite 관례 파일 — 시크릿 없이 VITE_API_BASE 플래그만 담음(허용).
+          tracked=$(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -v '\.example$' | grep -v '^frontend/\.env\.production$' || true)
           if [ -n "$tracked" ]; then
             echo "추적 중인 env 파일 발견(시크릿 커밋 금지): $tracked"
             exit 1
