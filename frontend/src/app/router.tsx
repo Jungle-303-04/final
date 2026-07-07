@@ -52,6 +52,7 @@ export const router = createBrowserRouter([
       { path: '/verify-email', element: L(() => import('@/features/auth/VerifyEmailView')) },
     ],
   },
+  { path: '/console/*', element: L(() => import('@/features/console-archive/ArchivedConsoleDemo')) },
   {
     element: <RequireSession />,
     children: [
@@ -59,11 +60,6 @@ export const router = createBrowserRouter([
         path: '/',
         element: <ConsoleLayout />,
         children: consoleChildren(),
-      },
-      {
-        path: '/console',
-        element: <ConsoleLayout basePath="/console" />,
-        children: consoleChildren('/console'),
       },
     ],
   },

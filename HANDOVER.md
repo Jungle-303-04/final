@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 01:05 KST (AI 대화 삭제 레이스 + repo connect 422 안정화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 01:09 KST (Plural 콘솔 아카이브 격리 + 실서비스 홈 복각 디자인 1차)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,28 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
+
+## 체크포인트 (현재) — `/console` 아카이브 격리 + `/` Plural 복각 홈 1차
+
+- 구현:
+  - `/console/*`를 실제 서비스 라우트와 분리된 `features/console-archive/ArchivedConsoleDemo`로 이동했다. 이 경로는 보존용 디자인 데모이며 실제 운영 데이터 경로가 아니다.
+  - 실제 서비스 `/`는 기존 실데이터 API 훅을 유지한 채 Plural 콘솔 데모의 구조를 가져왔다: 상단 프로젝트 셀렉터, 짧은 topbar/subheader, LOGO 사이드바, `위젯 → 플릿 맵 → KPI → 저장 위젯/시계열/인시던트/승인 패널 → 클러스터 테이블`.
+  - 홈 플릿 맵은 `GET /fleet/summary` 응답만 사용한다. lens는 `전체/CPU/메모리/인시던트`이고, 각 렌즈의 색상·크기는 실제 `health/cpu_pct/mem_pct/open_incidents/pod_total`에서만 계산한다.
+  - 홈 위젯 패널은 새 localStorage 위젯을 만들지 않는다. 실제 `metric-widgets`, `metric-query-presets`, `cluster usage` API를 읽고, 추가/프리셋 액션은 `/metrics`의 실제 query/widget 등록 화면으로 이동한다.
+  - 레포 연결과 클러스터 등록 CTA는 홈 toolbar에 유지했다. 기존 `ConnectRepoWizard`, `RegisterClusterWizard`를 그대로 사용한다.
+  - `/console` 아카이브의 샘플 수치는 운영 경로 `/`와 완전히 분리했다. 운영 코드의 `/` 화면에는 mock/fake/hardcoded production data를 추가하지 않았다.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test -- --runInBand` → 10 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+  - local preview `/console/`: browser QA passed. home tiles 19개, `실서비스` 링크 1개, cluster archive rows 2개, console error 0, request failure 0.
+  - screenshots: `/tmp/k8s-console-archive-home.png`, `/tmp/k8s-console-archive-clusters.png`.
+- 검증 한계:
+  - local preview에서 실제 `/` 로그인 자동화는 live auth 401로 막혔다. 배포 후 실제 세션으로 `/` 홈 플릿 맵/위젯 패널/레포·클러스터 등록 CTA를 브라우저 QA 해야 한다.
+- 다음:
+  1. 이 단위를 `feat: Plural console archive / fleet widget home / real data` 형식의 한국어+영어 키워드 커밋으로 저장·푸시한다.
+  2. 배포 후 `/`, `/console/`, `/clusters`, `/metrics`, `/repos`를 live smoke 한다.
+  3. 이후 반복 게이트: dead code, 중복 CSS, shared widget 인터페이스, browser QA, HANDOVER 갱신을 매 커밋 단위로 수행한다.
 
 ## 체크포인트 (현재) — AI 대화 삭제 레이스 + repo connect 422 안정화
 
@@ -24,10 +46,25 @@
 - 검증:
   - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/ai/repository.py src/domains/ai/router.py src/domains/applications/router.py src/services/ai/chat-worker/app.py src/packages/contracts/stores.py tests/test_ai_conversation.py tests/test_applications_router.py` → passed.
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_ai_conversation.py tests/test_ai_chat_hardening.py tests/test_ai_platform_tools.py tests/test_applications_router.py tests/test_repository_discovery.py` → 44 passed.
+- 배포/live smoke:
+  - commit/push: `3e1beb02 fix: AI 대화 삭제 / 사용자 범위 / 레포 검증` → `origin/dev`.
+  - backend CodeBuild `kubernetes-ops-image-build:49978d3b-9b8c-4ac3-a718-8068849d3258` → succeeded.
+  - backend image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:3e1beb02-dev`, digest `sha256:503a56cd1827cfec3c1563b29db43dbcc367f451f505d8600909b312a33b06ee`.
+  - console CodeBuild `kubernetes-ops-console-build:b05c008e-e7ed-4c00-99d7-6e7f75eca283` → succeeded.
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:3e1beb02-dev`, digest `sha256:fed38fe6838f8b17a2d67fcf47e72e51a92b2aa5b784603523efbdc1f95d06d2`.
+  - rollout 완료: management namespace 모든 deployment rollout status passed. `github-poll-worker` CronJob도 container `poller`를 `3e1beb02-dev`로 교체했다.
+  - public smoke: `/` 200 `text/html`, `/console/` 200 `text/html`, `/api/healthz` 200 `{"status":"ok","service":"api-gateway"}`.
+  - authenticated smoke: login 200, session 200, `/clusters` 200, cluster-1/cluster-2 online, `/providers/cluster-discovery` 200, `/ai/conversations` 200.
+  - repo connect guard smoke: `POST /api/applications/connect` with invalid `source_type:"zip"` → 422 `"source_type must be raw-yaml, raw-json, kustomize, or helm"`, DB write 없음.
+  - AI delete smoke: create conversation 200 → delete 204 → get after delete 404. 이후 `ai-chat-worker` recent logs에 FK/record failure 없음.
+  - browser QA: login → `/clusters` → `클러스터 등록` modal, `GET /api/providers/cluster-discovery` 200, 후보 검색/listbox/direct input/provider cards 렌더 확인. Screenshot: `/tmp/k8s-cluster-register-modal-ready-3e1beb02.png`.
+- 관찰:
+  - 배포 직후 첫 인증 스모크에서 `user_accounts` lock timeout으로 login 500이 1회 발생했다. 이후 `/readyz`, login/session/clusters 모두 정상 회복. 전체 워커 동시 부팅 시 schema/access query 경합으로 보이며 장기 개선은 startup migration 단일화/재시도 처리.
+  - api-gateway outbox relay에서 `nats.errors.MaxPayloadError` 경고가 계속 보인다. 기존 DLQ/대형 evidence payload 안정화 항목과 연결해 다음 반복에서 처리 필요.
 - 다음:
-  1. 이 단위를 `fix: AI 대화 삭제 / 사용자 범위 / 레포 검증`으로 커밋/푸시한다.
-  2. 남은 repo UX 갭: namespace/environment 하드코딩 제거 또는 서버 정책 기본값 API화, 앱 이름 충돌 방지, repo probe debounce/warnings 표시.
-  3. 배포 후 AI 채팅 삭제, repo connect invalid source_type, 클러스터 등록 모달 live smoke를 진행한다.
+  1. 남은 repo UX 갭: namespace/environment 하드코딩 제거 또는 서버 정책 기본값 API화, 앱 이름 충돌 방지, repo probe debounce/warnings 표시.
+  2. Outbox MaxPayload / DLQ 대형 payload 재발 방지: relay publish 전 payload size guard, archive/retry 정책, evidence payload trim 경로 재점검.
+  3. protected route hard reload skeleton 장기 표시 재검증 및 session retry/Cloudflare headless 경로 정리.
 
 ## 체크포인트 (현재) — 클러스터 등록 후보 검색/listbox + 사전 점검 상태판
 
@@ -43,10 +80,13 @@
   - `cd frontend && npm run typecheck` → passed.
   - `cd frontend && npm test -- --runInBand` → 10 passed.
   - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+- 배포/live smoke:
+  - commit/push: `097ea811 feat: 클러스터 등록 / 후보 검색 / 사전 점검` → `origin/dev`.
+  - console image `3e1beb02-dev`에 포함되어 live 배포 완료.
+  - browser QA screenshot: `/tmp/k8s-cluster-register-modal-ready-3e1beb02.png`.
 - 다음:
-  1. 이 단위를 `feat: 클러스터 등록 / 후보 검색 / 사전 점검`으로 커밋/푸시한다.
-  2. 이어서 AI 채팅 P1 리스크를 처리한다: 삭제된 waiting 대화의 늦은 worker 응답 차단, 대화 접근 범위(user/workspace 정책) 확정 및 구현.
-  3. console 이미지 배포 후 `/clusters` 등록 모달 live 브라우저 QA를 수행한다.
+  1. import 후보가 0개일 때 직접 입력 flow를 더 빠르게 진행할 수 있도록 설정 단계 CTA/자동 이동 여부 검토.
+  2. 실제 provider discovery를 확장할 경우 Plural/external console은 토큰을 직접 노출하지 말고 backend adapter에서 검증 결과만 내려준다.
 
 ## 체크포인트 (현재) — metric query/widget 저장 API + service/namespace drilldown
 

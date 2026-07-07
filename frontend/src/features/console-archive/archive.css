@@ -1,0 +1,354 @@
+.archive-console {
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: var(--color-app-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.archive-sidebar {
+  width: 184px;
+  flex: none;
+  border-right: 1px solid var(--color-border);
+  background: #11141b;
+  padding: 8px 10px;
+}
+
+.archive-logo {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin-bottom: 12px;
+}
+
+.archive-sidebar nav {
+  display: grid;
+  gap: 2px;
+}
+
+.archive-sidebar nav a {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  border-radius: 3px;
+  color: var(--color-text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.archive-sidebar nav a.active,
+.archive-sidebar nav a:hover {
+  background: var(--color-fill-zero-hover);
+  color: var(--color-text);
+}
+
+.archive-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.archive-topbar,
+.archive-breadcrumb {
+  height: 38px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 24px;
+  background: var(--color-fill-zero);
+}
+
+.archive-project,
+.archive-chat,
+.archive-icon,
+.archive-theme,
+.archive-breadcrumb button,
+.archive-sectionbar button {
+  height: 28px;
+  border: 1px solid var(--color-border-input);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.archive-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-icon {
+  width: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.archive-icon i {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--color-text-danger);
+  color: white;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 14px;
+}
+
+.archive-chat,
+.archive-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.archive-theme {
+  border-radius: 999px;
+  padding: 2px;
+}
+
+.archive-theme span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-icon-xlight);
+}
+
+.archive-theme span.active {
+  background: var(--color-text);
+  color: var(--color-fill-zero);
+}
+
+.archive-user {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--color-fill-primary);
+  color: white;
+  font-weight: 700;
+}
+
+.archive-breadcrumb {
+  justify-content: flex-start;
+  gap: 14px;
+  color: var(--color-text-xlight);
+}
+
+.archive-breadcrumb a {
+  margin-left: auto;
+  color: var(--color-text-primary-accent);
+  font-size: 12px;
+}
+
+.archive-content {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 74px 32px 28px;
+}
+
+.archive-sectionbar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.archive-sectionbar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.archive-sectionbar .primary {
+  background: var(--color-fill-primary);
+  border-color: var(--color-fill-primary);
+  color: white;
+}
+
+.archive-card,
+.archive-table,
+.archive-kpis > div {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-fill-zero);
+}
+
+.archive-map {
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.archive-tabs {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.archive-tabs b {
+  margin-right: 10px;
+}
+
+.archive-tabs span {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-light);
+}
+
+.archive-tabs span.active {
+  color: var(--color-text);
+  background: var(--color-fill-one);
+}
+
+.archive-treemap {
+  height: 330px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 78px;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.archive-treemap .tile {
+  min-width: 0;
+  padding: 8px;
+  color: #f4f5f7;
+  overflow: hidden;
+}
+
+.archive-treemap .tile b,
+.archive-treemap .tile span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-treemap .good { background: #25846a; }
+.archive-treemap .mid { background: #8a762d; }
+.archive-treemap .bad { background: #954360; }
+.archive-treemap .none { background: #272d38; color: var(--color-text-xlight); }
+
+.archive-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.archive-kpis > div {
+  min-height: 112px;
+  padding: 18px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.archive-kpis span,
+.archive-kpis small {
+  color: var(--color-text-xlight);
+  font-size: 12px;
+}
+
+.archive-kpis b {
+  font-size: 28px;
+  line-height: 34px;
+}
+
+.archive-kpis .danger {
+  color: var(--color-text-danger);
+}
+
+.archive-table {
+  overflow-x: auto;
+}
+
+.archive-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.archive-table th,
+.archive-table td {
+  padding: 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.archive-table th {
+  background: var(--color-fill-one);
+  color: var(--color-text);
+}
+
+.archive-table td:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.archive-table small {
+  display: block;
+  color: var(--color-text-xlight);
+}
+
+.archive-table .chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--color-fill-two);
+  color: var(--color-text-light);
+  font-size: 12px;
+}
+
+.archive-table .chip.ok {
+  color: var(--color-text-success-light);
+}
+
+@media (max-width: 960px) {
+  .archive-sidebar {
+    width: 64px;
+  }
+
+  .archive-logo span,
+  .archive-sidebar nav a span {
+    display: none;
+  }
+
+  .archive-content {
+    padding: 28px 16px;
+  }
+
+  .archive-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+}
