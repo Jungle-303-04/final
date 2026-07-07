@@ -24,6 +24,7 @@
 - Phase 2 인시던트 목록(`features/notifications/NotificationsView.tsx`)은 `src/ui` PageHeader/Card/Tabs/Badge/Button/EmptyState 기반으로 이관했다. 목록 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 인시던트 상세(`features/notifications/IncidentDetailView.tsx`)는 `src/ui` PageHeader/Breadcrumb/Card/KeyValueList/Badge/Button/Collapsible/EmptyState 기반으로 이관했다. RCA 파이프라인 그래프, 후보 점수바, evidence trail, 복구 계획 기능은 유지하고 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 워크플로우(`features/workflow/WorkflowListView.tsx`, `features/workflow/WorkflowGraphView.tsx`)는 `src/ui` PageHeader/Breadcrumb/Card/Table/Badge/Button/Collapsible/Tooltip/EmptyState 기반으로 이관했다. React Flow 공용 wrapper(`shared/flow`)도 새 토큰과 reduced-motion 대응으로 정렬했고, 워크플로 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
+- Phase 2 메트릭(`features/metrics/MetricsView.tsx`)은 `src/ui` PageHeader/Card/StatCard/Field/Input/Select/Textarea/Badge/StatusChip/EmptyState 기반으로 이관했다. Nivo line chart wrapper는 `src/ui/charts.tsx`로 승격했고, 메트릭 feature의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - 아직 전 화면 이관 전이므로 `shared/ui/app.css`, `plural-ui/plural.css`, `shared/theme-bridge.css`는 남아 있다. 화면 이관 단위마다 해당 화면 전용 레거시 CSS를 제거한다.
 
 ## 사용 규칙
@@ -116,6 +117,17 @@
 - 진행 중 워크플로우 그래프는 현재 단계까지 표시해 과축소를 막고, 완료 run은 전체 단계 경로를 표시한다. 상세 검수 기준 그래프 node 5, edge 4.
 - screenshots: `/tmp/k8s-workflows-list-desktop.png`, `/tmp/k8s-workflows-list-tablet.png`, `/tmp/k8s-workflows-list-mobile.png`, `/tmp/k8s-workflow-detail-desktop-final2.png`, `/tmp/k8s-workflow-detail-tablet.png`, `/tmp/k8s-workflow-detail-mobile.png`.
 
+## Phase 2 메트릭 검증 (2026-07-08 07:20 KST)
+
+- `cd frontend && npm run typecheck` passed.
+- `cd frontend && npm run lint` passed.
+- `cd frontend && npm test` passed, 11 tests.
+- `cd frontend && npm run build` passed.
+- `features/metrics/*` grep: `plural-ui`, `shared/ui`, `shared/motion`, `shared/ui/charts`, inline `style=`, raw hex color, legacy `card`/`input`/`query-row`/`statbox` class 0건.
+- `POST /metrics/validate` dry-run을 debounce 검증과 실행 직전 재검증 양쪽에 연결했다. 저장/실행 버튼은 valid 상태에서만 활성화되고, 0건 결과는 "시간범위 넓히기" CTA로 이어진다.
+- Playwright route mocking 검수: 인증 세션/알림/클러스터/usage/metric preset/widget/metrics validate 최소 응답으로 `/metrics?cluster=cluster-1`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, button overflow 0, unexpected card overflow 0.
+- screenshots: `/tmp/k8s-metrics-desktop.png`, `/tmp/k8s-metrics-tablet.png`, `/tmp/k8s-metrics-mobile.png`.
+
 ## 전개형 검증 UX 패스 범위 (디자인 시스템 완료 후)
 
 원칙: 다음 단계는 서버 검증을 통과한 뒤에만 나타나며, 제출 버튼은 검증 통과 시에만 활성화한다. 이전 단계 값 변경 시 이후 단계 상태를 reset하고, 실패는 필드 밑 한국어 인라인 사유로 표시한다.
@@ -136,7 +148,7 @@
 | 역할 변경 | role 변경 -> membership/update API; `last_admin` 인라인 사유; 자기 강등 경고 | 대기 |
 | 조직/그룹 생성 | 이름 입력 -> 중복 검증 API; 생성 API | 대기 |
 | AI 채팅 | LLM 설정 상태 조회; 미설정/키 오류 -> 설정 안내 카드; 정상 -> 채팅 입력 | 대기 |
-| 메트릭 PromQL | 입력 -> dry-run 문법 검증; 실행 -> query API; 0건 -> 시간범위 확장 CTA | 대기 |
+| 메트릭 PromQL | 입력 debounce -> `POST /metrics/validate`; valid일 때만 저장/실행 활성; 실행 클릭 시 동일 dry-run 재검증 -> `POST /agent/debug/query` 또는 `POST /clusters/{id}/metric-query-presets/{preset_id}/run`; 결과는 `GET /commands/{id}` 폴링; 0건 -> 시간범위 확장 CTA | 완료 |
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
 | 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
 
@@ -200,7 +212,7 @@
 | `/workflows`, `/workflows/:runId` | run 목록 + React Flow 그래프(dash-flow·패킷 애니메이션, dagre 자동 배치) | `GET /applications/*/runs`(활성 run 10s 폴링), 승인 API |
 | `/incidents` | 알림/인시던트 피드 | timeline + DLQ(`GET /dead-letters`, admin) + 승인 대기 합성 |
 | `/incidents/:id` | RCA 파이프라인 그래프 + 증거/리포트 | `GET /dashboard/rca/incidents/{id}`, `GET /evidence?correlation_id=`, `GET /rca-reports?correlation_id=` |
-| `/metrics` | 실시간(WS)·스냅샷 시계열·온디맨드 PromQL | WS `/api/live/browser`, `GET /clusters/{id}/usage`, `POST /agent/debug/query` → `GET /commands/{id}` 폴링 |
+| `/metrics` | 실시간(WS)·스냅샷 시계열·온디맨드 PromQL | WS `/api/live/browser`, `GET /clusters/{id}/usage`, `POST /metrics/validate`, `POST /agent/debug/query` → `GET /commands/{id}` 폴링 |
 | `/ai`, `/ai/:id` | AI 채팅(도구 호출·복구 액션·승인 카드) | `GET/POST /ai/conversations*`, `POST /rca/recovery-plans/*/actions/*/select` |
 | `/catalog` | 서비스 카탈로그 | `GET /catalog/items`, `POST /catalog/items/{id}/installs` |
 | `/settings/{members,orgs,groups,access,ops}` | 조직/그룹/멤버/권한/DLQ (admin 가드) | `GET/POST/DELETE /users·/orgs·/groups·/access`, `POST /auth/users/{id}/approve`, `POST /dead-letters/{id}/replay` |

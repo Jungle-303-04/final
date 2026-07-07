@@ -1,7 +1,7 @@
 // 요청형 텔레메트리 쿼리 — 발행(POST /agent/debug/query) 후 실제 결과를
 // 명령 상태 조회 경로(GET /commands/{command_id})로 폴링한다. 가짜 완료 표시(고정 타이머·하드코딩 결과) 금지.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { del, get, post } from '@/shared/lib/api';
+import { del, get, post, type ApiOptions } from '@/shared/lib/api';
 import type { MetricQueryPreset, MetricWidget } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 
@@ -60,6 +60,39 @@ export interface CommandAcceptedResponse {
   accepted?: boolean;
   command_id: string;
   correlation_id?: string;
+}
+
+export interface MetricValidationInput {
+  query: string;
+  rangeSeconds: number;
+}
+
+export interface MetricValidationResponse {
+  valid: boolean;
+  code: string | null;
+  detail: string;
+  result_type?: string | null;
+}
+
+export function validateMetricQuery(input: MetricValidationInput, options?: ApiOptions) {
+  const rangeSeconds = Math.min(Math.max(input.rangeSeconds, 60), 3600);
+  return post<MetricValidationResponse>('/metrics/validate', {
+    source: 'prometheus',
+    query: input.query,
+    range_seconds: rangeSeconds,
+    step_seconds: Math.min(30, rangeSeconds),
+  }, { ...options, timeoutMs: METRIC_QUERY_TIMEOUT_MS });
+}
+
+export function useMetricValidation(input: MetricValidationInput & { enabled: boolean }) {
+  const query = input.query.trim();
+  return useQuery({
+    queryKey: ['metric-query-validation', query, Math.min(Math.max(input.rangeSeconds, 60), 3600)] as const,
+    queryFn: ({ signal }) => validateMetricQuery({ query, rangeSeconds: input.rangeSeconds }, { signal }),
+    enabled: input.enabled && !!query,
+    retry: false,
+    staleTime: 30_000,
+  });
 }
 
 export function useMetricQueryPresets(clusterId: string | undefined) {

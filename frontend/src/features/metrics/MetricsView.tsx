@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
+import { motion } from 'motion/react';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { useClusters, useClusterSummary, useClusterUsage, usePods } from '@/features/cluster/api';
@@ -14,35 +15,71 @@ import {
   useDeleteMetricQueryPreset,
   useDeleteMetricWidget,
   useMetricQueryPresets,
+  useMetricValidation,
   useMetricWidgets,
   useRunMetricQueryPreset,
   useUpsertMetricQueryPreset,
   useUpsertMetricWidget,
+  validateMetricQuery,
   type CommandAcceptedResponse,
   type MetricQueryPresetPayload,
+  type MetricValidationResponse,
   type MetricWidgetPayload,
 } from '@/features/metrics/api';
-import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui';
-import { PageHeader } from '@/plural-ui';
-import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
-import { AnimatedList, FadeSlideIn } from '@/shared/motion';
-import { IconClock, IconPause, IconPlay } from '@/shared/ui/icons';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  Skeleton,
+  StatCard,
+  StatusChip,
+  Textarea,
+  cx,
+  useToast,
+} from '@/ui';
+import { TimeSeriesChart, type Series } from '@/ui/charts';
+import { AnimatePresence, listItem, listStagger } from '@/ui/motion';
 import { useConsolePath } from '@/features/console/ui';
-import type { Tone } from '@/shared/lib/types';
 
 type Unit = 'ratio' | 'count' | string;
+type StatTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+type UiStatus = 'healthy' | 'warning' | 'critical' | 'pending' | 'running' | 'failed';
+
 const RANGES = [
   { label: '5분', seconds: 300 },
   { label: '15분', seconds: 900 },
   { label: '1시간', seconds: 3600 },
   { label: '6시간', seconds: 21600 },
 ];
-interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; presetId?: string; commandId?: string; submitFailed?: boolean }
-interface ContextPreset { promql: string; unit: Unit; label: string }
+const PROMQL_VALIDATE_DEBOUNCE_MS = 450;
+
+interface QueryCard {
+  id: string;
+  promql: string;
+  unit: Unit;
+  rangeSeconds: number;
+  presetId?: string;
+  commandId?: string;
+  submitFailed?: boolean;
+}
+
+type QueryRunInput = Pick<QueryCard, 'promql' | 'unit' | 'rangeSeconds'> & Partial<Pick<QueryCard, 'presetId'>>;
+
+interface ContextPreset {
+  promql: string;
+  unit: Unit;
+  label: string;
+}
 
 export default function MetricsView() {
   const [sp, setSp] = useSearchParams();
   const pathFor = useConsolePath();
+  const { push } = useToast();
   const clustersQ = useClusters();
   const clusters = useMemo(() => clustersQ.data ?? [], [clustersQ.data]);
   const admin = useIsAdmin();
@@ -61,12 +98,14 @@ export default function MetricsView() {
   const [widgetTitle, setWidgetTitle] = useState('');
   const [range, setRange] = useState(RANGES[0].seconds);
   const [cards, setCards] = useState<QueryCard[]>([]);
+  const [queryNotice, setQueryNotice] = useState<string | null>(null);
+  const debouncedPromql = useDebouncedValue(promql.trim(), PROMQL_VALIDATE_DEBOUNCE_MS);
   const summaryQ = useClusterSummary(clusterId);
   const usageQ = useClusterUsage(clusterId);
   const workloadsQ = usePods(clusterId);
-  const history = liveStore(s => s.history);
-  const status = liveStore(s => s.status);
-  const snapshot = liveStore(s => s.snapshot);
+  const history = liveStore((s) => s.history);
+  const status = liveStore((s) => s.status);
+  const snapshot = liveStore((s) => s.snapshot);
   const [frozen, setFrozen] = useState(history);
   const queryPresetsQ = useMetricQueryPresets(clusterId);
   const metricWidgetsQ = useMetricWidgets(clusterId);
@@ -75,27 +114,39 @@ export default function MetricsView() {
   const runPreset = useRunMetricQueryPreset(clusterId);
   const saveWidget = useUpsertMetricWidget(clusterId);
   const deleteWidget = useDeleteMetricWidget(clusterId);
+  const validateRun = useMutation({
+    mutationFn: (input: { query: string; rangeSeconds: number }) => validateMetricQuery(input),
+  });
+  const queryValidationQ = useMetricValidation({
+    query: debouncedPromql,
+    rangeSeconds: range,
+    enabled: Boolean(clusterId && debouncedPromql),
+  });
   const queryPresets = queryPresetsQ.data ?? [];
   const metricWidgets = metricWidgetsQ.data ?? [];
-  const selectedPreset = queryPresets.find(p => p.preset_id === selectedPresetId) ?? null;
-  const clusterKnown = clusters.some(c => c.cluster_id === clusterId);
+  const selectedPreset = queryPresets.find((p) => p.preset_id === selectedPresetId) ?? null;
+  const clusterKnown = clusters.some((c) => c.cluster_id === clusterId);
   const statPending = !clusterId || summaryQ.isPending || workloadsQ.isPending;
+  const queryIsCurrent = debouncedPromql === promql.trim();
+  const queryValidationPending = Boolean(promql.trim()) && (!queryIsCurrent || queryValidationQ.isFetching);
+  const currentValidationValid = Boolean(promql.trim()) && queryIsCurrent && queryValidationQ.data?.valid === true && !queryValidationQ.isFetching;
+  const validationState = describeValidationState({
+    promql,
+    clusterId,
+    pending: queryValidationPending,
+    data: queryValidationQ.data,
+    error: queryValidationQ.error,
+    valid: currentValidationValid,
+  });
+  const canSavePreset = Boolean(clusterId && presetName.trim() && currentValidationValid);
+  const canExecuteCurrent = Boolean(clusterId && currentValidationValid && !validateRun.isPending);
 
   useEffect(() => {
     if (!clusters.length) return;
-    if (!clusterId || !clusters.some(c => c.cluster_id === clusterId)) {
+    if (!clusterId || !clusters.some((c) => c.cluster_id === clusterId)) {
       setClusterId(clusters[0].cluster_id);
     }
   }, [clusterId, clusters]);
-
-  const selectCluster = (nextClusterId: string) => {
-    setClusterId(nextClusterId);
-    setSelectedPresetId('');
-    setWidgetTitle('');
-    const next = new URLSearchParams(sp);
-    next.set('cluster', nextClusterId);
-    setSp(next, { replace: true });
-  };
 
   useEffect(() => {
     if (!paused) setFrozen(history);
@@ -108,6 +159,19 @@ export default function MetricsView() {
     setPresetName(contextPreset.label);
   }, [contextPreset]);
 
+  useEffect(() => {
+    setQueryNotice(null);
+  }, [clusterId, promql, range]);
+
+  const selectCluster = (nextClusterId: string) => {
+    setClusterId(nextClusterId);
+    setSelectedPresetId('');
+    setWidgetTitle('');
+    const next = new URLSearchParams(sp);
+    next.set('cluster', nextClusterId);
+    setSp(next, { replace: true });
+  };
+
   const summary = summaryQ.data;
   const workloads = workloadsQ.data ?? [];
   const inventoryPhases = summary?.pod_phases ?? {};
@@ -116,19 +180,24 @@ export default function MetricsView() {
     return acc;
   }, {});
   const livePhases = snapshot
-    ? snapshot.namespaces.flatMap(n => n.pods).reduce<Record<string, number>>((a, p) => ({ ...a, [p.phase]: (a[p.phase] ?? 0) + 1 }), {})
+    ? snapshot.namespaces.flatMap((n) => n.pods).reduce<Record<string, number>>((acc, pod) => {
+      acc[pod.phase] = (acc[pod.phase] ?? 0) + 1;
+      return acc;
+    }, {})
     : {};
-  const phases = Object.keys(livePhases).length ? livePhases : Object.keys(inventoryPhases).length ? inventoryPhases : workloadPhases;
+  const phases = Object.keys(livePhases).length
+    ? livePhases
+    : Object.keys(inventoryPhases).length
+      ? inventoryPhases
+      : workloadPhases;
   const series: Series[] = useMemo(() => {
     const base = paused ? frozen : history;
-    const pts = base.filter(p => !p.clusterId || p.clusterId === clusterId).slice(-120);
+    const pts = base.filter((p) => !p.clusterId || p.clusterId === clusterId).slice(-120);
     return [
-      { id: '재시작', data: pts.map(p => ({ x: p.at, y: p.restarts })) },
-      { id: '실행 팟', data: pts.map(p => ({ x: p.at, y: p.running })) },
+      { id: '재시작', data: pts.map((p) => ({ x: p.at, y: p.restarts })) },
+      { id: '실행 팟', data: pts.map((p) => ({ x: p.at, y: p.running })) },
     ];
   }, [clusterId, paused, frozen, history]);
-
-  // 스냅샷 기반 실측 추이 — restart_total 은 증가분으로 변환해 y축 왜곡을 막는다.
   const usageSeries: Series[] = useMemo(() => buildUsageSeries(usageQ.data ?? []), [usageQ.data]);
 
   const run = useMutation({
@@ -143,24 +212,52 @@ export default function MetricsView() {
       },
     }),
   });
-  // 재시도 시 '그 카드의' 쿼리·범위를 다시 실행(현재 입력값과 무관)
-  const execute = (card?: Pick<QueryCard, 'promql' | 'unit' | 'rangeSeconds'>) => {
+
+  const execute = (card?: QueryRunInput) => {
     const q = (card?.promql ?? promql).trim();
-    if (!q) return;
+    if (!clusterId) {
+      setQueryNotice('클러스터를 먼저 선택하세요');
+      return;
+    }
+    if (!q) {
+      setQueryNotice('PromQL을 입력하세요');
+      return;
+    }
     const unit = card?.unit ?? unitForCurrentQuery(q, selectedPreset, contextPreset);
     const rangeSeconds = card?.rangeSeconds ?? range;
-    const presetId = 'presetId' in (card ?? {}) ? (card as QueryCard).presetId : presetIdForCurrentQuery(q, rangeSeconds, selectedPreset);
+    const presetId = card?.presetId ?? presetIdForCurrentQuery(q, rangeSeconds, selectedPreset);
+    validateRun.mutate({ query: q, rangeSeconds }, {
+      onSuccess: (validation) => {
+        if (!validation.valid) {
+          setQueryNotice(metricValidationMessage(validation));
+          return;
+        }
+        queuePromqlRun({ q, unit, rangeSeconds, presetId });
+      },
+      onError: (error) => {
+        setQueryNotice((error as Error).message || 'PromQL dry-run 검증에 실패했습니다');
+      },
+    });
+  };
+
+  const queuePromqlRun = ({ q, unit, rangeSeconds, presetId }: { q: string; unit: Unit; rangeSeconds: number; presetId?: string }) => {
     const id = newQueryCardId();
-    setCards(cs => [{ id, promql: q, unit, rangeSeconds, presetId }, ...cs]);
-    const onSuccess = (d: CommandAcceptedResponse) => setCards(cs => cs.map(c => c.id === id ? { ...c, commandId: d.command_id } : c));
-    const onError = () => setCards(cs => cs.map(c => c.id === id ? { ...c, submitFailed: true } : c));
+    setCards((items) => [{ id, promql: q, unit, rangeSeconds, presetId }, ...items]);
+    const onSuccess = (data: CommandAcceptedResponse) => {
+      setCards((items) => items.map((item) => (item.id === id ? { ...item, commandId: data.command_id } : item)));
+      push({ tone: 'success', title: '쿼리 실행 요청 완료', description: '명령 상태를 인라인으로 추적합니다' });
+    };
+    const onError = (error: unknown) => {
+      setCards((items) => items.map((item) => (item.id === id ? { ...item, submitFailed: true } : item)));
+      setQueryNotice((error as Error).message || '쿼리 실행 요청에 실패했습니다');
+    };
     if (presetId) runPreset.mutate(presetId, { onSuccess, onError });
     else run.mutate({ q, rangeSeconds }, { onSuccess, onError });
   };
 
   const selectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
-    const preset = queryPresets.find(p => p.preset_id === presetId);
+    const preset = queryPresets.find((p) => p.preset_id === presetId);
     if (!preset) return;
     setPromql(preset.query);
     setPresetName(preset.name);
@@ -179,7 +276,7 @@ export default function MetricsView() {
     });
     if (!payload) return;
     savePreset.mutate(payload, {
-      onSuccess: response => {
+      onSuccess: (response) => {
         setSelectedPresetId(response.item.preset_id);
         setPresetName(response.item.name);
         setWidgetTitle(response.item.name);
@@ -200,168 +297,285 @@ export default function MetricsView() {
     saveWidget.mutate(payload);
   };
 
-  // 클러스터가 하나도 없으면 차트가 의미 없다 — 등록 유도(정직한 빈 상태)
   if (clustersQ.isSuccess && clusters.length === 0) {
     return (
-      <FadeSlideIn>
-        <PageHeader title="메트릭" />
+      <section>
+        <PageHeader title="메트릭" description="클러스터 사용량, 저장 쿼리, 온디맨드 PromQL을 한 화면에서 확인합니다" />
         <Card>
-          <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
-            action={admin ? <Link to={pathFor('/clusters')}><Button variant="primary">클러스터 등록</Button></Link> : undefined} />
+          <EmptyState
+            title="등록된 클러스터가 없습니다"
+            description="메트릭을 보려면 먼저 대상 클러스터를 등록하세요"
+            action={admin ? <Link to={pathFor('/clusters')}><Button variant="primary">클러스터 등록</Button></Link> : undefined}
+          />
         </Card>
-      </FadeSlideIn>
+      </section>
     );
   }
 
   if (clustersQ.isError) {
     return (
-      <FadeSlideIn>
-        <PageHeader title="메트릭" />
+      <section>
+        <PageHeader title="메트릭" description="클러스터 사용량, 저장 쿼리, 온디맨드 PromQL을 한 화면에서 확인합니다" />
         <Card>
-          <EmptyState icon={<IconClock size={26} />} title={(clustersQ.error as Error).message}
-            action={<Button size="sm" onClick={() => clustersQ.refetch()}>다시 시도</Button>} />
+          <EmptyState
+            title="클러스터 조회 실패"
+            description={(clustersQ.error as Error).message}
+            action={<Button size="sm" onClick={() => clustersQ.refetch()}>다시 시도</Button>}
+          />
         </Card>
-      </FadeSlideIn>
+      </section>
     );
   }
 
   return (
-    <FadeSlideIn>
-      <PageHeader title="메트릭"
-        actions={
+    <section>
+      <PageHeader
+        title="메트릭"
+        description="스트림과 스냅샷 추이를 확인하고, PromQL은 dry-run 검증 후 실행합니다"
+        actions={(
           <>
-            <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => selectCluster(e.target.value)}>
+            <Select className="w-full md:w-56" value={clusterId} onChange={(event) => selectCluster(event.target.value)}>
               {!clusterKnown && (
                 <option value={clusterId}>{clusterId || (clustersQ.isPending ? '클러스터 확인 중' : '클러스터 없음')}</option>
               )}
-              {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
-            </select>
-            <Button onClick={() => setPaused(p => !p)} aria-pressed={paused} title={paused ? '재개' : '일시정지'}>
-              {paused ? <IconPlay size={15} /> : <IconPause size={15} />}{paused ? '재개' : '일시정지'}
+              {clusters.map((cluster) => (
+                <option key={cluster.cluster_id} value={cluster.cluster_id}>{cluster.name || cluster.cluster_id}</option>
+              ))}
+            </Select>
+            <Button onClick={() => setPaused((value) => !value)} aria-pressed={paused}>
+              {paused ? '재개' : '일시정지'}
             </Button>
           </>
-        } />
-      {(subject || subjectName) && (
-        <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, padding: 10, minWidth: 0 }}>
-          <Badge tone="info">{subject || 'resource'}</Badge>
-          {namespace && <code>{namespace}</code>}
-          {subjectName && <code style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subjectName}</code>}
-          {contextPreset && (
-            <span style={{ marginLeft: 'auto' }}>
-              <Button size="sm" onClick={() => execute({ ...contextPreset, rangeSeconds: range })}>쿼리 실행</Button>
-            </span>
-          )}
-        </div>
-      )}
-      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>수집 지연</div>}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <MetricStatBox label="실행" value={phases.Running ?? 0} tone="ok" loading={statPending} />
-        <MetricStatBox label="대기" value={phases.Pending ?? 0} tone="warn" loading={statPending} />
-        <MetricStatBox label="재시작 오류" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} />
-        <MetricStatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
-        {snapshot?.rollout && <StatBox label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
-      </div>
-      <Card title="실시간 추이" style={{ marginBottom: 16 }}>
-        <TimeSeriesChart series={series} />
-      </Card>
-      <Card title="사용량 추이" style={{ marginBottom: 16 }}>
-        {usageQ.isPending ? <Skeleton lines={4} /> /* 클러스터 선택 전(비활성)에도 스켈레톤 — 성급한 '없음' 금지 */
-          : usageQ.isError ? (
-            <EmptyState icon={<IconClock size={26} />} title="추이 데이터를 불러오지 못했습니다"
-              description={(usageQ.error as Error).message}
-              action={<Button size="sm" onClick={() => usageQ.refetch()}>다시 시도</Button>} />
-          ) : usageSeries.length === 0 ? (
-            <EmptyState icon={<IconClock size={26} />} title="수집된 사용량 추이가 없습니다" />
-          ) : <TimeSeriesChart series={usageSeries} />}
-      </Card>
-      <Card title="저장 위젯" style={{ marginBottom: 16 }}>
-        {metricWidgetsQ.isPending ? <Skeleton lines={3} />
-          : metricWidgetsQ.isError ? (
-            <EmptyState icon={<IconClock size={26} />} title="위젯을 불러오지 못했습니다"
-              description={(metricWidgetsQ.error as Error).message}
-              action={<Button size="sm" onClick={() => metricWidgetsQ.refetch()}>다시 시도</Button>} />
-          ) : metricWidgets.length === 0 ? (
-            <EmptyState icon={<IconClock size={26} />} title="저장된 위젯이 없습니다" />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <AnimatedList items={metricWidgets} getKey={w => w.widget_id}>
-                {widget => {
-                  const preset = queryPresets.find(p => p.preset_id === widget.query_preset_id);
-                  return (
-                    <div className="query-row">
-                      <Badge tone="info">{widget.kind}</Badge>
-                      <strong style={{ minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{widget.title}</strong>
-                      <code>{preset?.name ?? widget.query_preset_id}</code>
-                      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6 }}>
-                        <Button size="sm" disabled={!preset} onClick={() => preset && execute({
-                          promql: preset.query,
-                          unit: preset.unit || 'count',
-                          rangeSeconds: preset.range_seconds ?? range,
-                          presetId: preset.preset_id,
-                        } as QueryCard)}>실행</Button>
-                        <Button size="sm" variant="danger" onClick={() => deleteWidget.mutate(widget.widget_id)}>삭제</Button>
-                      </span>
-                    </div>
-                  );
-                }}
-              </AnimatedList>
+        )}
+      />
+
+      <div className="grid gap-4">
+        {(subject || subjectName) && (
+          <Card className="p-3">
+            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Badge tone="info">{subject || 'resource'}</Badge>
+                {namespace && <code className="min-w-0 truncate rounded-control bg-bg px-2 py-1 font-mono text-caption text-secondary">{namespace}</code>}
+                {subjectName && <code className="min-w-0 truncate rounded-control bg-bg px-2 py-1 font-mono text-caption text-secondary">{subjectName}</code>}
+              </div>
+              {contextPreset && (
+                <div className="md:ml-auto">
+                  <Button size="sm" onClick={() => execute({ ...contextPreset, rangeSeconds: range })} loading={validateRun.isPending}>
+                    쿼리 실행
+                  </Button>
+                </div>
+              )}
             </div>
+          </Card>
+        )}
+
+        {status !== 'open' && (
+          <Card className="border-warning/40 bg-warning/10 p-3">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <p className="text-body font-semibold text-warning">수집 지연</p>
+              <p className="text-label text-secondary">실시간 스트림이 닫혀 있어 스냅샷 데이터로 화면을 유지합니다</p>
+            </div>
+          </Card>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricStatCard label="실행" value={phases.Running ?? 0} tone="success" loading={statPending} />
+          <MetricStatCard label="대기" value={phases.Pending ?? 0} tone="warning" loading={statPending} />
+          <MetricStatCard label="재시작 오류" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} />
+          <MetricStatCard label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
+          {snapshot?.rollout && <StatCard label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" spark={<MiniBars tone="info" />} />}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card title="실시간 추이" description={paused ? '일시정지된 스트림 기록입니다' : '브라우저 스트림의 최근 기록입니다'}>
+            <TimeSeriesChart series={series} />
+          </Card>
+          <Card title="사용량 추이" description="인벤토리 스냅샷 기준의 장기 추이입니다">
+            {usageQ.isPending ? (
+              <Skeleton lines={5} />
+            ) : usageQ.isError ? (
+              <EmptyState
+                title="추이 데이터 조회 실패"
+                description={(usageQ.error as Error).message}
+                action={<Button size="sm" onClick={() => usageQ.refetch()}>다시 시도</Button>}
+              />
+            ) : usageSeries.length === 0 ? (
+              <EmptyState title="수집된 사용량 추이가 없습니다" description="target agent가 usage 샘플을 적재하면 이 카드에 표시됩니다" />
+            ) : (
+              <TimeSeriesChart series={usageSeries} />
+            )}
+          </Card>
+        </div>
+
+        <Card title="저장 위젯" description="저장된 PromQL 정의를 대시보드 위젯으로 실행합니다">
+          {metricWidgetsQ.isPending ? (
+            <Skeleton lines={4} />
+          ) : metricWidgetsQ.isError ? (
+            <EmptyState
+              title="위젯 조회 실패"
+              description={(metricWidgetsQ.error as Error).message}
+              action={<Button size="sm" onClick={() => metricWidgetsQ.refetch()}>다시 시도</Button>}
+            />
+          ) : metricWidgets.length === 0 ? (
+            <EmptyState title="저장된 위젯이 없습니다" description="검증된 쿼리를 저장한 뒤 위젯으로 고정하세요" />
+          ) : (
+            <motion.div variants={listStagger} initial="initial" animate="animate" className="grid gap-2">
+              <AnimatePresence initial={false}>
+                {metricWidgets.map((widget) => {
+                  const preset = queryPresets.find((item) => item.preset_id === widget.query_preset_id);
+                  return (
+                    <RowShell key={widget.widget_id}>
+                      <Badge tone="info">{widget.kind}</Badge>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-body font-semibold text-primary">{widget.title}</p>
+                        <code className="mt-1 block truncate font-mono text-caption text-muted">{preset?.name ?? widget.query_preset_id}</code>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          disabled={!preset || validateRun.isPending}
+                          loading={validateRun.isPending}
+                          onClick={() => preset && execute({
+                            promql: preset.query,
+                            unit: preset.unit || 'count',
+                            rangeSeconds: preset.range_seconds ?? range,
+                            presetId: preset.preset_id,
+                          })}
+                        >
+                          실행
+                        </Button>
+                        <Button size="sm" variant="danger" loading={deleteWidget.isPending} onClick={() => deleteWidget.mutate(widget.widget_id)}>
+                          삭제
+                        </Button>
+                      </div>
+                    </RowShell>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
           )}
-      </Card>
-      <Card title="쿼리">
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-          <select className="input" style={{ width: 220 }}
-            value={selectedPresetId}
-            onChange={e => selectPreset(e.target.value)}>
-            <option value="">저장 쿼리</option>
-            {queryPresets.map(p => <option key={p.preset_id} value={p.preset_id}>{p.name}</option>)}
-          </select>
-          <input className="input" style={{ width: 180 }} value={presetName} placeholder="쿼리 이름" onChange={e => setPresetName(e.target.value)} />
-          <input className="input" style={{ fontFamily: 'var(--font-mono)', flex: 1, minWidth: 220 }} value={promql} onChange={e => setPromql(e.target.value)} />
-          <select className="input" style={{ width: 92 }} value={range} onChange={e => setRange(Number(e.target.value))}
-            title="조회 범위">
-            {RANGES.map(r => <option key={r.seconds} value={r.seconds}>{r.label}</option>)}
-          </select>
-          <Button onClick={saveCurrentPreset} loading={savePreset.isPending} disabled={!clusterId || !promql.trim() || !presetName.trim()}>저장</Button>
-          <input className="input" style={{ width: 180 }} value={widgetTitle} placeholder="위젯 제목" onChange={e => setWidgetTitle(e.target.value)} />
-          <Button onClick={saveCurrentWidget} loading={saveWidget.isPending} disabled={!selectedPreset || !widgetTitle.trim()}>위젯 저장</Button>
-          <Button variant="primary" onClick={() => execute()} disabled={!clusterId || !promql.trim()}
-            title={clusterId ? '' : '클러스터를 먼저 선택해주세요'}>실행</Button>
-        </div>
-        {queryPresetsQ.isError && (
-          <div className="query-row" style={{ marginBottom: 8 }}>
-            <Badge tone="danger">오류</Badge>
-            <span style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{(queryPresetsQ.error as Error).message}</span>
-            <Button size="sm" onClick={() => queryPresetsQ.refetch()}>다시 시도</Button>
+        </Card>
+
+        <Card title="PromQL 실행" description="문법 dry-run 검증이 성공해야 저장과 실행이 가능합니다">
+          <div className="grid gap-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Field label="저장 쿼리">
+                <Select value={selectedPresetId} onChange={(event) => selectPreset(event.target.value)}>
+                  <option value="">{queryPresetsQ.isPending ? '저장 쿼리 확인 중' : '저장 쿼리 선택'}</option>
+                  {queryPresets.map((preset) => (
+                    <option key={preset.preset_id} value={preset.preset_id}>{preset.name}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="쿼리 이름" help="저장할 때 사용하는 이름입니다">
+                <Input value={presetName} placeholder="CPU 사용률" onChange={(event) => setPresetName(event.target.value)} />
+              </Field>
+              <Field label="조회 범위">
+                <Select value={range} onChange={(event) => setRange(Number(event.target.value))}>
+                  {RANGES.map((item) => (
+                    <option key={item.seconds} value={item.seconds}>{item.label}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+
+            <Field label="PromQL" help={validationState.help} error={validationState.error}>
+              <Textarea
+                className="min-h-28 font-mono"
+                value={promql}
+                placeholder="sum by (namespace) (kube_pod_info)"
+                onChange={(event) => setPromql(event.target.value)}
+              />
+            </Field>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <Field label="위젯 제목" help="선택된 저장 쿼리를 위젯으로 고정합니다">
+                <Input value={widgetTitle} placeholder="네임스페이스별 팟 수" onChange={(event) => setWidgetTitle(event.target.value)} />
+              </Field>
+              <div className="flex flex-wrap items-end gap-2">
+                <Button onClick={saveCurrentPreset} loading={savePreset.isPending} disabled={!canSavePreset}>
+                  저장
+                </Button>
+                <Button onClick={saveCurrentWidget} loading={saveWidget.isPending} disabled={!selectedPreset || !widgetTitle.trim()}>
+                  위젯 저장
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => execute()}
+                  loading={validateRun.isPending || run.isPending || runPreset.isPending}
+                  disabled={!canExecuteCurrent}
+                >
+                  실행
+                </Button>
+              </div>
+            </div>
+
+            {queryNotice && (
+              <InlineNotice tone="danger">{queryNotice}</InlineNotice>
+            )}
+            {queryPresetsQ.isError && (
+              <InlineNotice tone="danger" action={<Button size="sm" onClick={() => queryPresetsQ.refetch()}>다시 시도</Button>}>
+                {(queryPresetsQ.error as Error).message}
+              </InlineNotice>
+            )}
+            {selectedPreset && (
+              <InlineNotice
+                tone="neutral"
+                action={(
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    loading={deletePreset.isPending}
+                    onClick={() => {
+                      deletePreset.mutate(selectedPreset.preset_id);
+                      setSelectedPresetId('');
+                    }}
+                  >
+                    삭제
+                  </Button>
+                )}
+              >
+                저장됨 · {selectedPreset.unit || 'count'} · 범위 {fmtRange(selectedPreset.range_seconds ?? range)}
+              </InlineNotice>
+            )}
+
+            <motion.div variants={listStagger} initial="initial" animate="animate" className="grid gap-2">
+              <AnimatePresence initial={false}>
+                {cards.map((card) => (
+                  <QueryCardRow
+                    key={card.id}
+                    card={card}
+                    onRetry={() => execute(card)}
+                    onExpandRange={(nextRange) => execute({ promql: card.promql, unit: card.unit, rangeSeconds: nextRange })}
+                  />
+                ))}
+              </AnimatePresence>
+              {cards.length === 0 && (
+                <EmptyState title="실행한 쿼리가 없습니다" description="검증이 끝난 PromQL을 실행하면 상태와 결과 요약이 여기에 쌓입니다" />
+              )}
+            </motion.div>
           </div>
-        )}
-        {selectedPreset && (
-          <div className="query-row" style={{ marginBottom: 8 }}>
-            <Badge tone="neutral">저장됨</Badge>
-            <span style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>{selectedPreset.unit || 'count'} · 범위 {fmtRange(selectedPreset.range_seconds ?? range)}</span>
-            <Button size="sm" variant="danger" onClick={() => {
-              deletePreset.mutate(selectedPreset.preset_id);
-              setSelectedPresetId('');
-            }}>삭제</Button>
-          </div>
-        )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <AnimatedList items={cards} getKey={c => c.id}>
-            {c => <QueryCardRow card={c} onRetry={() => execute(c)} />}
-          </AnimatedList>
-        </div>
-      </Card>
-    </FadeSlideIn>
+        </Card>
+      </div>
+    </section>
   );
 }
 
-// 단위별 값 포맷 — ratio 는 % 로, count 는 유효자리 축약
-const fmtValue = (v: number, unit: Unit) => (unit === 'ratio' ? `${(v * 100).toFixed(1)}%` : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
-const fmtRange = (s: number) => (s >= 3600 ? `${s / 3600}h` : `${s / 60}m`);
-const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+const fmtValue = (value: number, unit: Unit) => (unit === 'ratio' ? `${(value * 100).toFixed(1)}%` : Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(2));
+const fmtRange = (seconds: number) => (seconds >= 3600 ? `${seconds / 3600}h` : `${seconds / 60}m`);
+const esc = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 function newQueryCardId() {
   return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [delayMs, value]);
+  return debounced;
 }
 
 function unitForCurrentQuery(q: string, selectedPreset: { query: string; unit: string } | null, contextPreset: ContextPreset | null): Unit {
@@ -422,9 +636,106 @@ export function metricWidgetPayload(input: {
   };
 }
 
-function MetricStatBox({ label, value, tone, loading }: { label: string; value: number; tone?: Tone; loading: boolean }) {
-  if (!loading) return <StatBox label={label} value={value} tone={tone} />;
-  return <div className="statbox"><b>—</b><span>{label}</span></div>;
+function MetricStatCard({ label, value, tone, loading }: { label: string; value: number; tone: StatTone; loading: boolean }) {
+  return (
+    <StatCard
+      label={label}
+      value={loading ? '확인 중' : value.toLocaleString('ko-KR')}
+      tone={tone}
+      spark={<MiniBars tone={tone} muted={loading} />}
+    />
+  );
+}
+
+function MiniBars({ tone, muted = false }: { tone: StatTone; muted?: boolean }) {
+  return (
+    <div className="flex h-full items-end justify-center gap-1 p-2" aria-hidden="true">
+      <span className={cx('h-3 w-2 rounded-control', barToneClass(tone, muted))} />
+      <span className={cx('h-5 w-2 rounded-control', barToneClass(tone, muted))} />
+      <span className={cx('h-7 w-2 rounded-control', barToneClass(tone, muted))} />
+      <span className={cx('h-4 w-2 rounded-control', barToneClass(tone, muted))} />
+    </div>
+  );
+}
+
+function barToneClass(tone: StatTone, muted: boolean) {
+  if (muted) return 'bg-muted/30';
+  return {
+    neutral: 'bg-muted/60',
+    success: 'bg-success/60',
+    warning: 'bg-warning/60',
+    danger: 'bg-danger/60',
+    info: 'bg-info/60',
+  }[tone];
+}
+
+function RowShell({ children, className, testId }: { children: ReactNode; className?: string; testId?: string }) {
+  return (
+    <motion.div
+      layout
+      variants={listItem}
+      data-testid={testId}
+      className={cx('flex min-w-0 flex-col gap-3 rounded-panel border border-border bg-bg p-3 text-body md:flex-row md:items-center', className)}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function InlineNotice({ tone, children, action }: { tone: StatTone; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className={cx('flex min-w-0 flex-col gap-3 rounded-panel border bg-bg p-3 text-body md:flex-row md:items-center', noticeToneClass(tone))}>
+      <Badge tone={tone === 'success' ? 'success' : tone === 'warning' ? 'warning' : tone === 'danger' ? 'danger' : tone === 'info' ? 'info' : 'neutral'}>
+        {tone === 'danger' ? '오류' : tone === 'success' ? '완료' : tone === 'warning' ? '주의' : '정보'}
+      </Badge>
+      <div className="min-w-0 flex-1 text-secondary">{children}</div>
+      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+    </div>
+  );
+}
+
+function noticeToneClass(tone: StatTone) {
+  return {
+    neutral: 'border-border',
+    success: 'border-success/40',
+    warning: 'border-warning/40',
+    danger: 'border-danger/40',
+    info: 'border-info/40',
+  }[tone];
+}
+
+function describeValidationState(input: {
+  promql: string;
+  clusterId: string;
+  pending: boolean;
+  data?: MetricValidationResponse;
+  error: unknown;
+  valid: boolean;
+}): { help?: ReactNode; error?: ReactNode } {
+  if (!input.clusterId) return { help: '클러스터를 선택하면 dry-run 검증을 시작합니다' };
+  if (!input.promql.trim()) return { help: 'PromQL을 입력하면 자동으로 dry-run 검증합니다' };
+  if (input.pending) {
+    return {
+      help: (
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full border-2 border-info border-t-transparent motion-safe:animate-spin" aria-hidden="true" />
+          PromQL dry-run 검증 중
+        </span>
+      ),
+    };
+  }
+  if (input.error) return { error: (input.error as Error).message || 'PromQL dry-run 검증에 실패했습니다' };
+  if (input.data && !input.data.valid) return { error: metricValidationMessage(input.data) };
+  if (input.valid) return { help: `검증 완료${input.data?.result_type ? ` · ${input.data.result_type}` : ''}` };
+  return { help: 'PromQL을 입력하면 자동으로 dry-run 검증합니다' };
+}
+
+function metricValidationMessage(response: MetricValidationResponse): string {
+  if (response.detail) return response.detail;
+  if (response.code === 'prometheus_base_url_required') return 'Prometheus 검증 URL 설정이 필요합니다';
+  if (response.code === 'promql_invalid') return 'PromQL 문법이 올바르지 않습니다';
+  if (response.code === 'prometheus_timeout') return 'Prometheus dry-run 응답이 지연되고 있습니다';
+  return 'PromQL dry-run 검증을 통과하지 못했습니다';
 }
 
 export function buildContextPreset(subject: string, name: string, namespace: string): ContextPreset | null {
@@ -466,30 +777,63 @@ export function buildContextPreset(subject: string, name: string, namespace: str
   return null;
 }
 
-// 쿼리 카드 1개 — 명령 상태를 폴링해 agent 가 올린 실측 결과만 표시한다.
-function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void }) {
+function QueryCardRow({ card, onRetry, onExpandRange }: { card: QueryCard; onRetry: () => void; onExpandRange: (rangeSeconds: number) => void }) {
   const statusQ = useCommandStatus(card.commandId);
   const status = card.submitFailed ? 'failed' : statusQ.data?.status ?? 'queued';
-  const badge = status === 'completed' ? 'done' : status === 'leased' ? 'running' : status;
   const result = statusQ.data?.result ?? {};
   const summary = status === 'completed' ? summarizeTelemetryResult(result) : null;
   const failMessage = status === 'failed' && !card.submitFailed ? commandResultMessage(result) : null;
+  const expandedRange = nextRange(card.rangeSeconds);
+  const zeroResult = status === 'completed' && summary !== null && summary.points === 0;
+
   return (
-    <div className="query-row" data-testid="query-card">
-      <Badge status={badge} />
-      <code style={{ fontSize: 'var(--fs-xs)', flex: 1, minWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.promql}</code>
-      <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>범위 {fmtRange(card.rangeSeconds)}</span>
-      {summary && (
-        <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)', fontVariantNumeric: 'tabular-nums' }}>
-          {summary.series} series · {summary.points} pts
-          {summary.avg !== null ? ` · 평균 ${fmtValue(summary.avg, card.unit)}` : ''}
-          {summary.max !== null && summary.max !== summary.avg ? ` · 최대 ${fmtValue(summary.max, card.unit)}` : ''}
-        </span>
-      )}
-      {status === 'completed' && !summary && <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>{commandResultMessage(result) ?? '완료'}</span>}
-      {failMessage && <span style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)' }}>{failMessage}</span>}
-      {!isTerminal(status) && card.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>실행 대기·수행 중</span>}
-      {status === 'failed' && <Button size="sm" onClick={onRetry}>재시도</Button>}
-    </div>
+    <RowShell testId="query-card">
+      <StatusChip status={commandStatus(status)} label={commandStatusLabel(status)} />
+      <div className="min-w-0 flex-1">
+        <code className="block truncate font-mono text-caption text-primary">{card.promql}</code>
+        <p className="mt-1 text-caption text-muted">범위 {fmtRange(card.rangeSeconds)}</p>
+      </div>
+      <div className="min-w-0 md:text-right">
+        {summary && !zeroResult && (
+          <p className="text-label font-medium tabular-nums text-success">
+            {summary.series} series · {summary.points} pts
+            {summary.avg !== null ? ` · 평균 ${fmtValue(summary.avg, card.unit)}` : ''}
+            {summary.max !== null && summary.max !== summary.avg ? ` · 최대 ${fmtValue(summary.max, card.unit)}` : ''}
+          </p>
+        )}
+        {zeroResult && (
+          <p className="text-label font-medium text-warning">결과 0건</p>
+        )}
+        {status === 'completed' && !summary && <p className="text-label font-medium text-success">{commandResultMessage(result) ?? '완료'}</p>}
+        {failMessage && <p className="text-caption font-medium text-danger">{failMessage}</p>}
+        {!isTerminal(status) && card.commandId && <p className="text-caption text-muted">실행 대기 중</p>}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {zeroResult && expandedRange && (
+          <Button size="sm" onClick={() => onExpandRange(expandedRange)}>시간범위 넓히기</Button>
+        )}
+        {status === 'failed' && <Button size="sm" onClick={onRetry}>재시도</Button>}
+      </div>
+    </RowShell>
   );
+}
+
+function commandStatus(status: string): UiStatus {
+  if (status === 'completed') return 'healthy';
+  if (status === 'failed') return 'failed';
+  if (status === 'leased' || status === 'running') return 'running';
+  return 'pending';
+}
+
+function commandStatusLabel(status: string): string {
+  if (status === 'completed') return '완료';
+  if (status === 'failed') return '실패';
+  if (status === 'leased' || status === 'running') return '실행 중';
+  return '대기';
+}
+
+function nextRange(current: number): number | null {
+  const index = RANGES.findIndex((item) => item.seconds === current);
+  if (index < 0 || index >= RANGES.length - 1) return null;
+  return RANGES[index + 1].seconds;
 }

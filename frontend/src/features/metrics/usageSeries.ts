@@ -1,5 +1,5 @@
 import type { UsageSample } from '@/features/cluster/api';
-import type { Series } from '@/shared/ui/charts';
+import type { Series } from '@/ui/charts';
 
 type UsageMetricKey = 'pod_running' | 'node_ready' | 'restart_total';
 
