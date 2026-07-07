@@ -162,6 +162,7 @@
 - `VerifyEmailView`는 성공/만료/이미인증 query 상태를 구분하고, 만료 상태에서 같은 자리 재발송 폼을 제공한다. token이 있으면 `/api/auth/verify-email?token=&redirect=/verify-email?status=success`로 넘겨 서버 검증을 먼저 수행한다.
 - `app/guards.tsx`는 `@/ui` 프리미티브와 Tailwind token으로 이관해 인증 계열의 `@/shared/ui`, inline style 의존을 제거했다.
 - 검증(2026-07-08 08:16 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`을 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
+- 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `3e56fe39-auth-validation-ui-20260708081840`, 인증 lazy chunk 5종 서빙 확인.
 
 ## 클러스터 등록 위저드 UX 변경 (2026-07-08)
 

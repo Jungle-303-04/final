@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:16 KST (인증 전개형 검증 UX 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:19 KST (인증 전개형 검증 UX 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -24,8 +24,13 @@
   - `cd frontend && npm run build` passed.
   - grep: `features/auth`와 `app/guards.tsx`의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var 0건.
   - Playwright mock: `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`를 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
-- 남은 확인:
-  - 커밋/push 후 Actions 확인. Actions `steps: []` 실패가 반복되면 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
+- CI/CD:
+  - `3e56fe39` push 후 GitHub Actions `28905419400`(CI), `28905419397`(AWS CD), `28905419408`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:3e56fe39-auth-validation-ui-20260708081840`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-B8uVOTho.js`에서 `AuthLayout-5GYKvYnc.js`, `LoginView-CSmbeTNd.js`, `PendingView-Bk3eN8Da.js`, `SignupView-CD9vmA_i.js`, `VerifyEmailView-CLCj4V4h.js` 참조 확인. lazy chunk 본문에서 `이미 가입된 이메일입니다`, `검증 메일 재전송`, `자동 확인`, `인증 링크 만료`, `이미 인증됨`, `이메일 또는 비밀번호가 올바르지 않습니다`, `KubeHeal Console` 문구 확인.
 
 ## 체크포인트 — 설정/조직 디자인 시스템 이관
 
