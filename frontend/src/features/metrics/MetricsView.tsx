@@ -138,13 +138,15 @@ export default function MetricsView() {
 
   return (
     <FadeSlideIn>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
-        <h1 className="pl-h1" style={{ margin: 0, flex: 1 }}>메트릭</h1>
-        <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => setClusterId(e.target.value)}>
-          {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
-        </select>
-        <Button onClick={() => setPaused(p => !p)}>{paused ? '▶ 재개' : '⏸ 일시정지'}</Button>
-      </div>
+      <PageHeader title="메트릭" sub="실시간 스트림 · 스냅샷 실측 시계열 · 온디맨드 PromQL"
+        actions={
+          <>
+            <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => setClusterId(e.target.value)}>
+              {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
+            </select>
+            <Button onClick={() => setPaused(p => !p)}>{paused ? '▶ 재개' : '⏸ 일시정지'}</Button>
+          </>
+        } />
       {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
         <StatBox label="Running" value={phases.Running ?? 0} tone="ok" />

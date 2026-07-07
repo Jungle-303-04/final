@@ -27,6 +27,14 @@ tests {
         expect(item).to.have.property("root_cause");
         expect(item).to.have.property("action");
         expect(item).to.not.have.property("payload");
+        // 분석 심화 필드 — 후보 점수/근거 쿼리 트레일/미수집 체크 (화이트리스트)
+        expect(item.candidates).to.be.an("array");
+        expect(item.supporting_evidence_refs).to.be.an("array");
+        expect(item.missing_evidence_checks).to.be.an("array");
+        item.candidates.forEach((c) => {
+          expect(c).to.have.property("candidate_id");
+          expect(c).to.not.have.property("signals");
+        });
       });
     }
   });
