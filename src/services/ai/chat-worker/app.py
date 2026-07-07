@@ -107,9 +107,11 @@ async def on_ai_message_received(
                 "correlation_id": ctx.correlation_id,
             },
         )
-        await ctx.db.record_ai_response(
+        stored = await ctx.db.record_ai_response(
             {**response.to_body(), "correlation_id": ctx.correlation_id}
         )
+        if not stored:
+            return
         yield response
     except Exception as exc:
         reason = (
@@ -125,7 +127,9 @@ async def on_ai_message_received(
             workspace_id=evt.workspace_id,
             metadata={"request_event_id": ctx.event_id, "correlation_id": ctx.correlation_id},
         )
-        await ctx.db.record_ai_failure(failure.to_body())
+        stored = await ctx.db.record_ai_failure(failure.to_body())
+        if not stored:
+            return
         yield failure
 
 

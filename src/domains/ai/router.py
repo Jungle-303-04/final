@@ -139,7 +139,7 @@ async def append_message(
     events: Any = Depends(get_events),
 ) -> AiConversationAcceptedResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    conversation = db.get_ai_conversation(workspace_id, conversation_id)
+    conversation = db.get_ai_conversation(workspace_id, conversation_id, user_id=current.user_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     agent = payload.agent or str(conversation["agent"])
@@ -186,7 +186,9 @@ async def list_conversations(
     db: Any = Depends(get_db),
 ) -> AiConversationListResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    return AiConversationListResponse(conversations=db.list_ai_conversations(workspace_id))
+    return AiConversationListResponse(
+        conversations=db.list_ai_conversations(workspace_id, user_id=current.user_id)
+    )
 
 
 @router.get(
@@ -199,7 +201,7 @@ async def get_conversation(
     db: Any = Depends(get_db),
 ) -> AiConversationResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    conversation = db.get_ai_conversation(workspace_id, conversation_id)
+    conversation = db.get_ai_conversation(workspace_id, conversation_id, user_id=current.user_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     messages = db.list_ai_messages(workspace_id, conversation_id)
@@ -213,7 +215,7 @@ async def delete_conversation(
     db: Any = Depends(get_db),
 ) -> Response:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    deleted = db.delete_ai_conversation(workspace_id, conversation_id)
+    deleted = db.delete_ai_conversation(workspace_id, conversation_id, user_id=current.user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     return Response(status_code=204)

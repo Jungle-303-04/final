@@ -142,13 +142,18 @@ async def connect_application(
         )
     except RepositoryDiscoveryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not validation.valid:
         detail = validation.errors[0] if validation.errors else MANIFEST_VALIDATION_FAILED
         raise HTTPException(status_code=422, detail=detail)
 
-    source_type = normalize_source_type(payload.source_type) or source_type_from_path(
-        validation.manifest_path
-    )
+    try:
+        source_type = normalize_source_type(payload.source_type) or source_type_from_path(
+            validation.manifest_path
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     metadata = {
         **payload.metadata,
         "branch": validation.branch,
