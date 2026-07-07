@@ -78,15 +78,6 @@ export function CloseIcon({ size = 16, ...p }: P) {
   );
 }
 
-export function SearchIcon({ size = 16, ...p }: P) {
-  return (
-    <svg {...base(size)} {...p}>
-      <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.3" />
-      <path d="m10.5 10.5 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function GearIcon({ size = 16, ...p }: P) {
   return (
     <svg {...base(size)} {...p}>

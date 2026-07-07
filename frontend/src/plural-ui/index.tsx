@@ -6,10 +6,10 @@ import {
   type ReactNode,
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { flyoverSlide, modalPop, overlayFade } from './motion';
+import { flyoverSlide, overlayFade } from './motion';
 import './tokens.css';
 import './plural.css';
-import { CloseIcon, SearchIcon } from './icons';
+import { CloseIcon } from './icons';
 
 /* ── 테마 ─────────────────────────────── */
 export type ThemeMode = 'dark' | 'light';
@@ -90,70 +90,6 @@ export function Table({ headers, children }: { headers: ReactNode[]; children: R
   );
 }
 
-export function SearchInput({
-  value,
-  onChange,
-  placeholder = '검색',
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="pl-search">
-      <SearchIcon size={14} />
-      <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-/* ── 모달 ─────────────────────────────── */
-export function Modal({
-  open,
-  title,
-  onClose,
-  actions,
-  size = 'medium',
-  children,
-}: {
-  open: boolean;
-  title: ReactNode;
-  onClose: () => void;
-  actions?: ReactNode;
-  size?: 'medium' | 'large';
-  children: ReactNode;
-}) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="pl-modal-overlay"
-          variants={overlayFade}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          onClick={onClose}
-        >
-          <motion.div
-            className={`pl-modal pl-modal--${size}`}
-            variants={modalPop}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="pl-modal-head">
-              <span className="pl-modal-title">{title}</span>
-              <button type="button" className="pl-caretbtn" onClick={onClose} aria-label="닫기">
-                <CloseIcon size={14} />
-              </button>
-            </div>
-            <div className="pl-modal-body">{children}</div>
-            {actions && <div className="pl-modal-actions">{actions}</div>}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
 /* ── 플라이오버 (우측 슬라이드 패널) ──── */
 export function Flyover({
   open,
@@ -192,25 +128,6 @@ export function Flyover({
         </motion.div>
       )}
     </AnimatePresence>
-  );
-}
-
-/* ── 빈 상태 / 페이지 헤더 ────────────── */
-export function EmptyState({
-  title,
-  message,
-  children,
-}: {
-  title: string;
-  message?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="pl-empty">
-      <div className="pl-empty-title">{title}</div>
-      {message && <div className="pl-empty-msg">{message}</div>}
-      {children}
-    </div>
   );
 }
 
