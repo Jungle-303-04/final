@@ -82,6 +82,8 @@ management rollout 대상 목록 조회와 각 rollout status를 3번 재시도�
 | `SMOKE_MANIFEST_PATH` | repository variable, 기본 `src/samples/smoke/deploy.yaml` | `run_smoke=true`인데 `MANIFEST_PATH`가 비어 있을 때만 쓰는 smoke 전용 manifest |
 | `SMOKE_GATEWAY_ATTEMPTS` | env, 기본 `60` | LoadBalancer DNS/health가 준비될 때까지 smoke가 `/healthz`를 확인하는 횟수 |
 | `SMOKE_GATEWAY_INTERVAL_SECONDS` | env, 기본 `5` | smoke gateway health 재시도 간격 |
+| `AUTH_LOGIN_ATTEMPTS` | env, 기본 `12` | rollout 직후 연결 리셋 같은 일시 오류가 있어도 smoke login을 재시도하는 횟수 |
+| `AUTH_LOGIN_RETRY_INTERVAL_SECONDS` | env, 기본 `5` | smoke login 재시도 간격 |
 | `MGMT_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Management` | dashboard/API 표시 이름 |
 | `TARGET_1_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target A` | target 1 표시 이름 |
 | `TARGET_2_DISPLAY_NAME` | repository variable, workflow 기본 `KubeHeal Target B` | target 2 표시 이름 |
@@ -250,6 +252,9 @@ gh run watch "$RUN_ID" --repo Jungle-303-04/final --exit-status
 AWS LoadBalancer hostname은 service에 붙은 직후 몇 분 동안 runner DNS에서 아직 resolve되지 않을 수 있다.
 그래서 smoke는 기본적으로 `SMOKE_GATEWAY_ATTEMPTS=60`, `SMOKE_GATEWAY_INTERVAL_SECONDS=5` 기준으로
 최대 5분까지 기다린 뒤 로그인, webhook, event flow 검증으로 넘어간다.
+게이트웨이 health가 막 정상으로 바뀐 직후에는 LoadBalancer 또는 새 gateway pod 전환 타이밍 때문에
+로그인 요청만 연결 리셋될 수 있다. 이 경우 `AUTH_LOGIN_ATTEMPTS=12`,
+`AUTH_LOGIN_RETRY_INTERVAL_SECONDS=5` 기준으로 login 단계도 재시도한다.
 
 `manifest-render-worker`는 `git.changed`를 처리하면서 원격 repository에서 `MANIFEST_PATH` manifest를 읽는다.
 AWS smoke 전용 기본값은 `SMOKE_MANIFEST_PATH=src/samples/smoke/deploy.yaml`이다. 이 파일은 `apps/v1 Deployment`라서
