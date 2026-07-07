@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:55 KST (최신 HEAD 확인 방식)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:57 KST (Actions 재실행도 runner 배정 실패)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -9,6 +9,34 @@
 - 실제 토큰/비밀번호/세션 쿠키/API key는 사용자 요청이 있어도 커밋하지 않는다. Git 히스토리에서 완전 삭제가 어렵기 때문에 GitHub Actions secrets, 로컬 env, 승인된 secret store만 사용한다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (16:57 KST) — failed workflows 재실행도 runner 배정 실패
+
+- 이 체크포인트 작성 전 local/origin dev HEAD: `f8364e02 docs: 최신 HEAD 확인 / runner 장애 / 인수인계`. 이 문서 커밋 후 정확한 최신 SHA는 `git log --oneline --decorate -6`로 확인한다.
+- 워크트리 상태: tracked 변경 없음. untracked `아카이브/`만 있으며 `.env*` 포함 가능성이 높으므로 커밋 금지.
+- live public smoke 재확인:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+- `f8364e02` dev push의 failed workflows를 REST API로 재실행했다.
+  - CI run `28850399699` → rerun failed jobs `201`, attempt 2도 failure.
+  - AWS CD run `28850399698` → rerun failed jobs `201`, attempt 2도 failure.
+  - Promote Dev To Main run `28850399688` → rerun failed jobs `201`, attempt 2도 failure.
+- attempt 2 job 증거:
+  - CI jobs `85565162752`, `85565162770`, `85565162791` 모두 `runner_id=0`, `steps=0`, logs endpoint `404`.
+  - AWS CD `Test before deploy` job `85565171025`도 `runner_id=0`, `steps=0`, logs endpoint `404`; deploy job skipped.
+  - Promote `Verify dev before promotion` job `85565167194`도 `runner_id=0`, `steps=0`, logs endpoint `404`; merge job skipped.
+- repo-side 점검:
+  - `.github/workflows/*`는 `ef65c770` 이후 변경 없음.
+  - CI/AWS CD/Promote는 모두 GitHub-hosted `ubuntu-latest`를 사용한다.
+  - repository Actions permissions: enabled `true`, allowed actions `all`, sha pinning required `false`.
+  - repository self-hosted runners: total `0`(현재 워크플로는 self-hosted를 쓰지 않음).
+  - GitHub Status API: Actions/API/Git Operations/Webhooks 모두 operational.
+- 결론: 코드/워크플로 실패가 아니라 GitHub-hosted runner 배정, 계정/org quota, repo/org Actions 정책, 또는 GitHub Actions control-plane 계층 문제로 계속 보는 것이 맞다. 다음에는 GitHub UI의 org/billing quota와 Actions policy를 확인하거나 시간이 지난 뒤 같은 latest dev run을 재실행한다.
+- 병렬 확인:
+  - 로그인 세션 2시간 sliding refresh는 이미 구현/와이어링되어 있다. 기본 TTL `7200`, `POST /auth/session/refresh`가 Redis `EXPIRE`와 httpOnly cookie max-age를 갱신하며, 프론트 `sessionRefresh.ts`는 사용자 interaction 기반으로 5분 throttle refresh를 수행한다.
+  - auth/session 관련 focused test: `python -m pytest -q tests/test_identity_auth_routes.py tests/test_session_store.py tests/test_auth_security.py tests/test_gateway_error_handler.py` → 22 passed, 1 warning.
+  - DLQ/incident 증가는 live DB를 건드리지 않고 AWS SSO 가능 시 SELECT-only로 측정한다. `event_dead_letters` status/count, 최근 60분 minute bucket, consumer/subject/error 상위 그룹, `events` subject count, `rca.followup.required`, `rca_timeline`, 주요 테이블 크기를 5~10분 간격으로 비교한다.
+  - DLQ 측정 중 `scripts/smoke.sh`, DLQ replay, `scripts/aws-up.sh`, `scripts/aws-down.sh`는 사용하지 않는다. 특히 raw failed payload는 문서/로그에 붙이지 않는다.
 
 ## 최신 업데이트 (16:50 KST) — dev 푸시 후 Actions runner 장애 확인
 
