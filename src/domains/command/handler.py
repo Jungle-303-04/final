@@ -133,7 +133,7 @@ def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
     기본값: k8s deployment scale 만 sandbox 환경 면제.
     production 등 다른 환경은 environment 불일치로 면제되지 않으며,
     COMMAND_AUTO_APPROVE_ACTIONS / COMMAND_AUTO_APPROVE_ENVIRONMENTS 로 조정한다.
-    카탈로그 allowed_namespaces·에이전트 name-scoped 정책은 그대로 적용된다.
+    카탈로그 allowed_namespaces·에이전트 namespace/resource 정책은 그대로 적용된다.
     """
     actions = _csv_values(env(AUTO_APPROVE_ACTIONS_ENV, DEFAULT_AUTO_APPROVE_ACTIONS))
     environments = {

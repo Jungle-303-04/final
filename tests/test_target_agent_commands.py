@@ -207,8 +207,8 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
                 "approval_ref": "approval-1",
                 "policy_decision_ref": "policy-decision-1",
                 "payload": {
-                    "namespace": "target",
-                    "name": "cluster-agent",
+                    "namespace": "sandbox",
+                    "name": "checkout-api",
                     "replicas": 3,
                 },
             }
@@ -234,8 +234,8 @@ def test_kubernetes_scale_requires_approval_evidence() -> None:
             {
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
                 "payload": {
-                    "namespace": "target",
-                    "name": "cluster-agent",
+                    "namespace": "sandbox",
+                    "name": "checkout-api",
                     "replicas": 3,
                 },
             }
@@ -249,7 +249,7 @@ def test_kubernetes_scale_requires_approval_evidence() -> None:
 
 def test_kubernetes_scale_exempts_approval_in_sandbox_environment() -> None:
     # sandbox 허용 rule — plan 메타데이터 environment=sandbox 면 승인 증적 없이 실행.
-    # namespace·name-scoped 가드는 그대로 적용된다.
+    # namespace/resource 가드는 그대로 적용된다.
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
@@ -263,8 +263,8 @@ def test_kubernetes_scale_exempts_approval_in_sandbox_environment() -> None:
                 "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
                 "environment": "sandbox",
                 "payload": {
-                    "namespace": "target",
-                    "name": "cluster-agent",
+                    "namespace": "sandbox",
+                    "name": "checkout-api",
                     "replicas": 3,
                 },
             }
@@ -276,7 +276,7 @@ def test_kubernetes_scale_exempts_approval_in_sandbox_environment() -> None:
     assert len(agent.kubernetes.patches) == 1
 
 
-def test_kubernetes_command_rejects_non_agent_resource() -> None:
+def test_kubernetes_scale_rejects_namespace_outside_control_policy() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
@@ -291,8 +291,8 @@ def test_kubernetes_command_rejects_non_agent_resource() -> None:
                 "approval_ref": "approval-1",
                 "policy_decision_ref": "policy-decision-1",
                 "payload": {
-                    "namespace": "target",
-                    "name": "other-deployment",
+                    "namespace": "kube-system",
+                    "name": "checkout-api",
                     "replicas": 3,
                 },
             }
@@ -300,5 +300,5 @@ def test_kubernetes_command_rejects_non_agent_resource() -> None:
     )
 
     assert result["status"] == "failed"
-    assert "name-scoped" in result["message"]
+    assert result["message"] == "namespace is not allowed by control policy"
     assert agent.kubernetes.patches == []

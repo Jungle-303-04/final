@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:06 KST (운영 UI 표면 정리 + 병렬 감사 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:12 KST (workload scale 실행 정책 정합성)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,21 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (19:12 KST) — workload scale 실행 정책 정합성
+
+- 구현:
+  - target-agent Kubernetes command policy에 `user-workload` scope를 추가했다.
+  - `k8s.apps.v1.deployments.scale` handler는 `target-agent` 자체 deployment 전용 정책이 아니라 실제 workload deployment 정책으로 실행된다.
+  - 허용 조건은 target cluster, `patch` verb, `deployments` resource, `CONTROL_ALLOWED_NAMESPACES` 안의 namespace로 제한했다.
+  - API의 `/clusters/{cluster}/namespaces/{namespace}/deployments/{deployment}/scale` 검증과 agent 실행 정책이 같은 namespace allowlist를 보게 되었다.
+  - 운영 데이터/명령 경로에 mock/fake/hardcoded data 추가 없음.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_target_agent_commands.py tests/test_command_worker.py tests/test_command_router.py` → 40 passed.
+  - `.venv/bin/ruff check src/services/target/cluster-agent/commands/kubernetes.py src/services/target/cluster-agent/agent.py src/domains/command/handler.py tests/test_target_agent_commands.py` → passed.
+- 남은 관련 작업:
+  - rollout restart는 기존 `apply_manifest` 계열 handler와 `CONTROL_ALLOWED_NAMESPACES`로 이미 guarded 되어 있지만, 명령 결과 UI에서 실패 사유를 더 명확히 보여주는 polish는 남아 있다.
+  - P0 telemetry truthfulness와 RCA/realtime cluster RBAC를 다음 백엔드 안정화 단위로 진행한다.
 
 ## 체크포인트 (19:06 KST) — 운영 UI 표면 정리 + 병렬 감사 반영
 
