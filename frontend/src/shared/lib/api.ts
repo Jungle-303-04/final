@@ -11,6 +11,9 @@ export class ApiError extends Error {
 }
 
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
+const CSRF_INTENT_HEADER = 'x-service-csrf';
+const CSRF_INTENT_VALUE = 'same-origin';
+const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
@@ -18,9 +21,12 @@ export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
+    const headers: Record<string, string> = {};
+    if (body) headers['content-type'] = 'application/json';
+    if (STATE_CHANGING_METHODS.has(method)) headers[CSRF_INTENT_HEADER] = CSRF_INTENT_VALUE;
     res = await fetch(`${BASE}${path}`, {
       method, credentials: 'include',
-      headers: body ? { 'content-type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch { throw new ApiError(0, '네트워크 오류'); }

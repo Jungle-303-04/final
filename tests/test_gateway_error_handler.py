@@ -105,6 +105,41 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
     assert "event_dead_letters_open_total 0" in response.text
 
 
+def test_session_cookie_state_changes_require_same_origin_intent(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    app = gateway.create_app()
+
+    @app.post("/protected")
+    async def protected() -> dict[str, bool]:
+        return {"ok": True}
+
+    client = TestClient(app)
+    client.cookies.set(gateway.Auth.SESSION_COOKIE_NAME, "session-token")
+
+    missing = client.post("/protected")
+    assert missing.status_code == 403
+    assert missing.json() == {"detail": "same-origin session request required"}
+
+    with_header = client.post(
+        "/protected",
+        headers={"x-service-csrf": "same-origin"},
+    )
+    assert with_header.status_code == 200
+
+    with_origin = client.post(
+        "/protected",
+        headers={"origin": "http://testserver"},
+    )
+    assert with_origin.status_code == 200
+
+    cross_site = client.post(
+        "/protected",
+        headers={"origin": "https://evil.example.test"},
+    )
+    assert cross_site.status_code == 403
+
+
 def test_agent_connect_event_uses_identity_cluster_id() -> None:
     gateway = load_gateway_module()
 
