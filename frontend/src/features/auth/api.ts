@@ -6,6 +6,24 @@ import { uiStore } from '@/shared/lib/ui-store';
 export const sessionKey = ['session'] as const;
 const SESSION_CHECK_TIMEOUT_MS = 20_000;
 const SESSION_STALE_MS = 120_000;
+const SESSION_HINT_KEY = 'k8s-console-session-seen-at';
+const SESSION_HINT_TTL_MS = 2 * 60 * 60 * 1000;
+
+export function markSessionSeen() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SESSION_HINT_KEY, String(Date.now()));
+}
+
+export function clearSessionHint() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(SESSION_HINT_KEY);
+}
+
+export function hasRecentSessionHint() {
+  if (typeof window === 'undefined') return false;
+  const seenAt = Number(window.localStorage.getItem(SESSION_HINT_KEY) ?? 0);
+  return Number.isFinite(seenAt) && Date.now() - seenAt < SESSION_HINT_TTL_MS;
+}
 
 export function useSession() {
   return useQuery({
@@ -23,12 +41,21 @@ export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (b: { email: string; password: string }) => post<Session>('/auth/login', b),
-    onSuccess: session => qc.setQueryData(sessionKey, session),
+    onSuccess: session => {
+      if (session.authenticated) markSessionSeen();
+      qc.setQueryData(sessionKey, session);
+    },
   });
 }
 export function useLogout() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: () => post('/auth/logout'), onSuccess: () => qc.clear() });
+  return useMutation({
+    mutationFn: () => post('/auth/logout'),
+    onSuccess: () => {
+      clearSessionHint();
+      qc.clear();
+    },
+  });
 }
 export const useSignup = () => useMutation({ mutationFn: (b: { email: string; password: string; password_confirm: string }) => post('/auth/signup', b) });
 export const useApproveUser = () => {
