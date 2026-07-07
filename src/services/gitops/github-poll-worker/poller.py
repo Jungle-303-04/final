@@ -19,6 +19,8 @@ import hashlib
 import hmac
 import json
 import random
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 from settings import Settings
@@ -26,6 +28,8 @@ from settings import Settings
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.security import SecretRef
+from packages.security import SecretNotFound, build_token_vault
 
 LOGGER = get_logger(__name__)
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
@@ -35,8 +39,61 @@ def env_truthy(name: str) -> bool:
     return env(name, "").strip().lower() in TRUTHY_VALUES
 
 
+@dataclass(frozen=True)
+class GitHubPollTarget:
+    workspace_id: str
+    repository_id: str
+    repo_ref: str
+    branch: str
+    watch_target_id: str
+    binding_id: str
+    application_id: str
+    environment: str
+    cluster_id: str
+    manifest_path: str
+    credential_ref: str = ""
+
+    @property
+    def key(self) -> str:
+        return "|".join(
+            (
+                self.workspace_id,
+                self.repository_id,
+                self.watch_target_id,
+                self.binding_id,
+                self.application_id,
+                self.environment,
+                self.repo_ref,
+                self.branch,
+                self.manifest_path,
+            )
+        )
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> GitHubPollTarget:
+        return cls(
+            workspace_id=str(row.get("workspace_id") or Settings.DEFAULT_WORKSPACE_ID),
+            repository_id=str(row.get("repository_id") or ""),
+            repo_ref=str(row.get("repo_ref") or ""),
+            branch=str(row.get("branch") or Settings.DEFAULT_GITHUB_BRANCH),
+            watch_target_id=str(row.get("watch_target_id") or ""),
+            binding_id=str(row.get("binding_id") or ""),
+            application_id=str(row.get("application_id") or Settings.DEFAULT_APPLICATION_ID),
+            environment=str(row.get("environment") or Settings.DEFAULT_ENVIRONMENT),
+            cluster_id=str(row.get("cluster_id") or Settings.DEFAULT_TARGET_CLUSTER_ID),
+            manifest_path=str(row.get("manifest_path") or Settings.DEFAULT_MANIFEST_PATH),
+            credential_ref=str(row.get("credential_ref") or ""),
+        )
+
+
 class GitHubPoller:
-    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        *,
+        db: Any | None = None,
+        token_vault: Any | None = None,
+    ) -> None:
         self.base_url = env(
             Settings.MANAGEMENT_BASE_URL_ENV, Settings.DEFAULT_MANAGEMENT_BASE_URL
         ).rstrip("/")
@@ -52,6 +109,7 @@ class GitHubPoller:
         self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Settings.DEFAULT_TARGET_CLUSTER_ID)
         self.manifest_path = env(Settings.MANIFEST_PATH_ENV, Settings.DEFAULT_MANIFEST_PATH)
         self.interval = int(env(Settings.POLL_INTERVAL_ENV, Settings.DEFAULT_POLL_INTERVAL_SECONDS))
+        self.token_ref = env(Settings.GITHUB_TOKEN_REF_ENV, "").strip()
         self.token = env(Settings.GITHUB_TOKEN_ENV, "")
         self.github_api_base = env(
             Settings.GITHUB_API_BASE_ENV, Settings.DEFAULT_GITHUB_API_BASE
@@ -60,10 +118,12 @@ class GitHubPoller:
         self.image = env(Settings.WEBHOOK_IMAGE_ENV, Settings.DEFAULT_IMAGE)
         self.once = env_truthy(Settings.POLL_ONCE_ENV)  # CronJob 모드면 1회 후 종료.
         self._client = client
-        self._last_sha: str | None = None  # 같은 커밋 중복 POST 만 줄이는 메모리 가드(최소)
+        self.db = db
+        self.token_vault = token_vault or build_token_vault()
+        self._last_sha_by_target: dict[str, str] = {}
         # ETag 조건부 요청 — 변경 없으면 304 로 응답받아 GitHub rate limit 을 소모하지 않음
         # (SCM provider 를 압박하지 않는 폴링 원칙).
-        self._etag: str | None = None
+        self._etag_by_target: dict[str, str] = {}
 
     async def run(self) -> None:
         if self._client is not None:
@@ -97,7 +157,6 @@ class GitHubPoller:
                     "github_poll_failed",
                     extra={
                         CONTEXT_KEY: {
-                            "repo": self.repo,
                             "exception_type": type(exc).__name__,
                             "failures": failures,
                             "backoff_seconds": round(backoff, 1),
@@ -110,22 +169,62 @@ class GitHubPoller:
             await asyncio.sleep(self.interval)
 
     async def poll_once(self, client: httpx.AsyncClient) -> None:
-        commit_sha = await self.latest_commit_sha(client)
-        if commit_sha is None or commit_sha == self._last_sha:
-            return  # 새 커밋 없음 → webhook 안 쏨(dedup 은 ledger 가 최종 보장).
-        await self.emit_webhook(client, commit_sha)
-        self._last_sha = commit_sha
-        LOGGER.info(
-            "github_change_detected",
-            extra={CONTEXT_KEY: {"repo": self.repo, "commit_sha": commit_sha}},
-        )
+        for target in self.poll_targets():
+            commit_sha = await self.latest_commit_sha(client, target)
+            if commit_sha is None or commit_sha == self._last_sha_by_target.get(target.key):
+                continue  # 새 커밋 없음 → webhook 안 쏨(dedup 은 ledger 가 최종 보장).
+            await self.emit_webhook(client, target, commit_sha)
+            self._last_sha_by_target[target.key] = commit_sha
+            LOGGER.info(
+                "github_change_detected",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                        "binding_id": target.binding_id,
+                        "application_id": target.application_id,
+                        "commit_sha": commit_sha,
+                    }
+                },
+            )
 
-    async def latest_commit_sha(self, client: httpx.AsyncClient) -> str | None:
-        self.require_poll_config()
+    def poll_targets(self) -> list[GitHubPollTarget]:
+        db_targets = self.db_poll_targets()
+        if db_targets:
+            return db_targets
+        if self.repo:
+            return [
+                GitHubPollTarget(
+                    workspace_id=self.workspace_id,
+                    repository_id=self.repository_id,
+                    repo_ref=self.repo,
+                    branch=self.branch,
+                    watch_target_id=self.watch_target_id,
+                    binding_id=self.binding_id,
+                    application_id=Settings.DEFAULT_APPLICATION_ID,
+                    environment=Settings.DEFAULT_ENVIRONMENT,
+                    cluster_id=self.cluster_id,
+                    manifest_path=self.manifest_path,
+                )
+            ]
+        return []
+
+    def db_poll_targets(self) -> list[GitHubPollTarget]:
+        list_targets = getattr(self.db, "list_active_github_poll_targets", None)
+        if not callable(list_targets):
+            return []
+        rows = list_targets()
+        return [GitHubPollTarget.from_row(dict(row)) for row in rows]
+
+    async def latest_commit_sha(
+        self, client: httpx.AsyncClient, target: GitHubPollTarget
+    ) -> str | None:
+        self.require_poll_config(target)
         response = await client.get(
-            f"{self.github_api_base}/repos/{self.repo}/commits",
-            params={"per_page": 1, "sha": self.branch},
-            headers=self._github_headers(),
+            f"{self.github_api_base}/repos/{target.repo_ref}/commits",
+            params={"per_page": 1, "sha": target.branch},
+            headers=self._github_headers(target),
         )
         if response.status_code == Settings.NOT_MODIFIED_STATUS_CODE:
             return None  # ETag 일치 — 새 커밋 없음(rate limit 미소모).
@@ -134,7 +233,9 @@ class GitHubPoller:
                 "github_poll_skipped",
                 extra={
                     CONTEXT_KEY: {
-                        "repo": self.repo,
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
                         "status_code": response.status_code,
                     }
                 },
@@ -146,8 +247,9 @@ class GitHubPoller:
                 "github_poll_access_denied",
                 extra={
                     CONTEXT_KEY: {
-                        "repo": self.repo,
-                        "branch": self.branch,
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
                         "status_code": response.status_code,
                         "hint": "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요",
                     }
@@ -155,11 +257,18 @@ class GitHubPoller:
             )
             return None
         response.raise_for_status()
-        self._etag = response.headers.get("etag") or self._etag
+        etag = response.headers.get("etag")
+        if etag:
+            self._etag_by_target[target.key] = etag
         commits = response.json()
         return commits[0]["sha"] if commits else None
 
-    async def emit_webhook(self, client: httpx.AsyncClient, commit_sha: str) -> None:
+    async def emit_webhook(
+        self,
+        client: httpx.AsyncClient,
+        target: GitHubPollTarget,
+        commit_sha: str,
+    ) -> None:
         if not self.image:
             raise ValueError(f"{Settings.WEBHOOK_IMAGE_ENV} is required")
         # 서명은 전송 바이트와 정확히 일치 필요 → json= 대신 직접 직렬화한 content 전송
@@ -168,14 +277,16 @@ class GitHubPoller:
                 "commit_sha": commit_sha,
                 "image": self.image,
                 "replicas": Settings.DEFAULT_REPLICAS,
-                "workspace_id": self.workspace_id,
-                "repository_id": self.repository_id,
-                "repo_ref": self.repo,
-                "branch": self.branch,
-                "watch_target_id": self.watch_target_id,
-                "binding_id": self.binding_id,
-                "cluster_id": self.cluster_id,
-                "manifest_path": self.manifest_path,
+                "workspace_id": target.workspace_id,
+                "repository_id": target.repository_id,
+                "repo_ref": target.repo_ref,
+                "branch": target.branch,
+                "watch_target_id": target.watch_target_id,
+                "binding_id": target.binding_id,
+                "application_id": target.application_id,
+                "environment": target.environment,
+                "cluster_id": target.cluster_id,
+                "manifest_path": target.manifest_path,
             }
         ).encode()
         response = await client.post(
@@ -185,8 +296,8 @@ class GitHubPoller:
         )
         response.raise_for_status()
 
-    def require_poll_config(self) -> None:
-        if not self.repo or "/" not in self.repo:
+    def require_poll_config(self, target: GitHubPollTarget) -> None:
+        if not target.repo_ref or "/" not in target.repo_ref:
             raise ValueError(f"{Settings.GITHUB_REPO_ENV} must be set to owner/repo")
 
     def _webhook_headers(self, body: bytes) -> dict[str, str]:
@@ -196,10 +307,35 @@ class GitHubPoller:
             headers[Settings.SIGNATURE_HEADER] = f"{Settings.SIGNATURE_PREFIX}{digest}"
         return headers
 
-    def _github_headers(self) -> dict[str, str]:
+    def _github_headers(self, target: GitHubPollTarget) -> dict[str, str]:
         headers: dict[str, str] = {}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
-        if self._etag:  # 조건부 요청 — 변경 없으면 304.
-            headers["If-None-Match"] = self._etag
+        token = self._github_token(target)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        etag = self._etag_by_target.get(target.key)
+        if etag:  # 조건부 요청 — 변경 없으면 304.
+            headers["If-None-Match"] = etag
         return headers
+
+    def _github_token(self, target: GitHubPollTarget) -> str:
+        if target.credential_ref:
+            return self._read_token_ref(target.credential_ref, target)
+        if self.token_ref:
+            return self._read_token_ref(self.token_ref, target)
+        return self.token
+
+    def _read_token_ref(self, ref: str, target: GitHubPollTarget) -> str:
+        try:
+            return self.token_vault.read_token(SecretRef(ref))
+        except SecretNotFound:
+            LOGGER.warning(
+                "github_poll_token_ref_not_found",
+                extra={
+                    CONTEXT_KEY: {
+                        "repo": target.repo_ref,
+                        "branch": target.branch,
+                        "watch_target_id": target.watch_target_id,
+                    }
+                },
+            )
+            return ""

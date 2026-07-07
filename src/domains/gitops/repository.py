@@ -540,6 +540,89 @@ class RepoChangeRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [serialize_deployment_binding(dict(row)) for row in rows]
 
+    def list_active_github_poll_targets(
+        self,
+        workspace_id: str | None = None,
+        *,
+        limit: int = 500,
+    ) -> list[JsonObject]:
+        """GitHub polling 대상 — DB에 등록된 앱/바인딩/watch target 기준.
+
+        과거 바인딩에는 watch target row가 없을 수 있으므로 binding의 derived
+        watch_target_id와 manifest_path를 fallback으로 사용한다.
+        """
+        repo_table = GitRepository.__table__
+        watch_table = GitWatchTarget.__table__
+        binding_table = DeploymentBinding.__table__
+        app_table = Application.__table__
+        branch = func.coalesce(watch_table.c.branch, repo_table.c.default_branch).label("branch")
+        manifest_path = func.coalesce(
+            watch_table.c.manifest_path,
+            binding_table.c.manifest_path,
+            app_table.c.manifest_path,
+        ).label("manifest_path")
+        watch_target_id = func.coalesce(
+            watch_table.c.watch_target_id,
+            binding_table.c.watch_target_id,
+        ).label("watch_target_id")
+        statement = (
+            select(
+                binding_table.c.workspace_id,
+                app_table.c.application_id,
+                repo_table.c.repository_id,
+                repo_table.c.repo_ref,
+                repo_table.c.credential_ref,
+                branch,
+                watch_target_id,
+                binding_table.c.binding_id,
+                binding_table.c.environment,
+                binding_table.c.cluster_id,
+                manifest_path,
+                watch_table.c.last_seen_commit_sha,
+            )
+            .select_from(binding_table)
+            .join(
+                repo_table,
+                and_(
+                    repo_table.c.workspace_id == binding_table.c.workspace_id,
+                    repo_table.c.repository_id == binding_table.c.repository_id,
+                ),
+            )
+            .join(
+                app_table,
+                and_(
+                    app_table.c.workspace_id == binding_table.c.workspace_id,
+                    app_table.c.repository_id == binding_table.c.repository_id,
+                    app_table.c.name == binding_table.c.app_name,
+                ),
+            )
+            .outerjoin(
+                watch_table,
+                and_(
+                    watch_table.c.workspace_id == binding_table.c.workspace_id,
+                    watch_table.c.repository_id == binding_table.c.repository_id,
+                    watch_table.c.watch_target_id == binding_table.c.watch_target_id,
+                ),
+            )
+            .where(
+                repo_table.c.provider == GitProvider.GITHUB.value,
+                repo_table.c.status == RepositoryStatus.ACTIVE.value,
+                app_table.c.status == ApplicationStatus.ACTIVE.value,
+                binding_table.c.status == DeploymentBindingStatus.ACTIVE.value,
+                or_(
+                    watch_table.c.watch_target_id.is_(None),
+                    watch_table.c.status == WatchTargetStatus.ACTIVE.value,
+                ),
+            )
+            .order_by(repo_table.c.repo_ref, branch, binding_table.c.cluster_id)
+            .limit(max(1, min(limit, 1000)))
+        )
+        if workspace_id is not None:
+            statement = statement.where(binding_table.c.workspace_id == workspace_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [row_dict(row) for row in rows]
+
     def get_workflow_run(self, workflow_run_id: str) -> JsonObject | None:
         table = WorkflowRun.__table__
         statement = select(table).where(table.c.workflow_run_id == workflow_run_id).limit(1)

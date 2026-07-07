@@ -201,7 +201,7 @@ admin 확인은 로그인 cookie jar를 사용한다. secret 출력 금지.
 
 ### D. 레포 등록 동적화
 
-상태: 기본 동적 flow 구현됨, 생산화 gap 남음.
+상태: 기본 동적 flow 구현됨. GitHub poller DB watch target 순회는 코드 구현/로컬 검증 완료, 배포 대기.
 
 이미 구현된 것:
 
@@ -222,9 +222,9 @@ admin 확인은 로그인 cookie jar를 사용한다. secret 출력 금지.
 
 남은 생산화 gap:
 
-1. GitHub poller가 env `GITHUB_REPO/GITHUB_BRANCH/MANIFEST_PATH` 한 세트만 보는 구조라면 DB에 등록된 app/watch target을 순회하도록 바꾼다.
-2. `/applications` 생성 성공 뒤 deployment 생성 실패 시 보상 처리 또는 transaction 경계를 명확히 한다.
-3. Helm/Kustomize validation이 placeholder라면 실제 render/validate로 바꾼다.
+1. GitHub poller DB target 순회 — 구현 완료. `list_active_github_poll_targets`가 DB의 active repo/application/binding/watch target을 읽고, poller는 DB target을 우선 사용하며 env target은 fallback으로만 유지한다.
+2. `/applications` deployment 생성은 `register_watch_target` 후 `register_deployment_binding` 순서로 한 트랜잭션에서 처리한다.
+3. 남은 gap: Helm/Kustomize validation이 placeholder라면 실제 render/validate로 바꾼다.
 
 병렬 explorer 결과:
 
@@ -250,7 +250,7 @@ admin 확인은 로그인 cookie jar를 사용한다. secret 출력 금지.
 - `src/services/gitops/manifest-render-worker/app.py`
   - downstream은 `git_watch_targets.last_seen_commit_sha`를 갱신한다.
 
-현재 동작:
+구현 전 동작:
 
 - poller는 `GET /repos/{repo}/commits?per_page=1&sha={branch}`로 env 단일 repo의 최신 commit을 가져온다.
 - poller는 `/github/webhook`으로 단일 webhook body를 보낸다.
@@ -300,6 +300,27 @@ admin 확인은 로그인 cookie jar를 사용한다. secret 출력 금지.
 - 기존 deployment binding에는 `git_watch_targets` row가 없을 수 있다. 따라서 query fallback을 먼저 넣고, 실제 row 관찰 후 필요하면 one-time backfill을 별도 작업으로 둔다.
 - GitHub API 호출량은 env 한 repo에서 등록된 watch target 수만큼 늘어난다. 가능하면 `(repo_ref, branch, credential_ref)` 단위로 묶거나, access error는 기존처럼 soft-skip한다.
 - `credential_ref=k8s-secret:...`를 poller CronJob이 읽으려면 service account/RBAC가 필요할 수 있다. env/AWS ref는 manifest 변경 없이 가능하다.
+
+구현 결과:
+
+- `src/domains/gitops/repository.py`
+  - `list_active_github_poll_targets(workspace_id=None, limit=500)` 추가.
+  - active GitHub repo, active application, active deployment binding, optional watch target을 join한다.
+  - 기존 binding에 watch target row가 없어도 binding의 derived watch_target_id/manifest_path로 fallback한다.
+- `src/domains/applications/router.py`
+  - deployment 생성 시 application default branch를 body에 넣고, watch target을 먼저 upsert한 뒤 deployment binding을 upsert한다.
+- `src/services/gitops/github-poll-worker/poller.py`
+  - `GitHubPollTarget` dataclass 추가.
+  - DB target을 우선 순회, DB target이 없고 `GITHUB_REPO`가 있을 때만 env fallback.
+  - target별 `_last_sha_by_target`/`_etag_by_target` 유지.
+  - DB `credential_ref` 또는 env `GITHUB_TOKEN_REF`를 token vault로 해석해 GitHub Authorization header에 반영.
+  - webhook body에 실제 `application_id`와 `environment`까지 포함한다.
+- `src/services/gitops/github-poll-worker/app.py`
+  - `DATABASE_URL`이 있으면 `Database()`를 poller에 주입한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_github_poller.py tests/test_applications_router.py tests/test_database_unit.py` → 56 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q` → 678 passed, 3 skipped.
+  - `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check` → 통과.
 
 ### E. 클러스터 등록 동적화
 

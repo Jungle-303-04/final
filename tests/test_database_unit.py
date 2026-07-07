@@ -800,6 +800,70 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
     assert compiled[2].params["binding_id"] == binding["binding_id"]
 
 
+def test_gitops_poll_targets_join_active_repository_application_binding() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "workspace_id": "workspace-b",
+                    "application_id": "app-1",
+                    "repository_id": "repo-1",
+                    "repo_ref": "org/checkout",
+                    "credential_ref": "env:GITHUB_TOKEN",
+                    "branch": "release",
+                    "watch_target_id": "watch-1",
+                    "binding_id": "binding-1",
+                    "environment": "prod",
+                    "cluster_id": "cluster-1",
+                    "manifest_path": "k8s/deploy.yaml",
+                    "last_seen_commit_sha": "old-sha",
+                }
+            ]
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    targets = repository.list_active_github_poll_targets("workspace-b", limit=20)
+
+    assert targets == [
+        {
+            "workspace_id": "workspace-b",
+            "application_id": "app-1",
+            "repository_id": "repo-1",
+            "repo_ref": "org/checkout",
+            "credential_ref": "env:GITHUB_TOKEN",
+            "branch": "release",
+            "watch_target_id": "watch-1",
+            "binding_id": "binding-1",
+            "environment": "prod",
+            "cluster_id": "cluster-1",
+            "manifest_path": "k8s/deploy.yaml",
+            "last_seen_commit_sha": "old-sha",
+        }
+    ]
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "FROM deployment_bindings" in sql
+    assert "JOIN git_repositories" in sql
+    assert "JOIN applications" in sql
+    assert "LEFT OUTER JOIN git_watch_targets" in sql
+    assert compiled.params["workspace_id_1"] == "workspace-b"
+
+
 def test_evidence_job_lease_uses_skip_locked_candidate_update() -> None:
     recorded: list[Any] = []
 
