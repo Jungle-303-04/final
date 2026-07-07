@@ -9,7 +9,7 @@ status: synced
 
 ## 책임 (Responsibility)
 
-- `git.changed` 이벤트 1종을 구독해, 해당 커밋의 manifest 소스를 (git checkout cache / GitHub Contents API / 로컬 git repo / 로컬 파일) 중 하나에서 로드하고, 소스 타입(raw-yaml / kustomize / helm)에 따라 Kubernetes 객체 목록으로 렌더한다.
+- `git.changed` 이벤트 1종을 구독해, 해당 커밋의 manifest 소스를 (git checkout cache / GitHub Contents API / 로컬 git repo / 로컬 파일) 중 하나에서 로드하고, 소스 타입(raw-yaml / raw-json / kustomize / helm)에 따라 Kubernetes 객체 목록으로 렌더한다.
 - 렌더 성공 시 리소스마다 `repo_change` 저장 + `manifest_artifact` 기록(`rendered`) + `manifest.rendered` 발행. 실패 시 `manifest_artifact` 기록(`invalid_config`) + `manifest.invalid` 발행.
 - 같은 (workspace, binding, commit, manifest_path, renderer_version)의 렌더 결과가 이미 저장돼 있으면 재렌더 없이 캐시된 artifact를 재발행한다(멱등 재처리).
 - 소스가 어디에도 없으면 manifest를 합성하지 않고 `manifest.invalid`로 정직하게 실패한다.
@@ -44,8 +44,8 @@ status: synced
 | `METADATA_FIELD` / `SPEC_FIELD` / `TEMPLATE_FIELD` / `CONTAINERS_FIELD` | `"metadata"` / `"spec"` / `"template"` / `"containers"` | `src/services/gitops/manifest-render-worker/app.py :: METADATA_FIELD` |
 | `DEFAULT_NAMESPACED_KINDS` | 네임스페이스 기본값을 부여할 kind 집합: `ConfigMap, CronJob, DaemonSet, Deployment, HorizontalPodAutoscaler, Ingress, Job, Pod, PersistentVolumeClaim, ReplicaSet, Role, RoleBinding, Secret, Service, ServiceAccount, StatefulSet` | `src/services/gitops/manifest-render-worker/app.py :: DEFAULT_NAMESPACED_KINDS` |
 | `RENDERER_VERSION` | `"manifest-render-v2"` — artifact 캐시 매칭 키 | `src/services/gitops/manifest-render-worker/app.py :: RENDERER_VERSION` |
-| `SOURCE_TYPE_RAW_YAML` / `SOURCE_TYPE_KUSTOMIZE` / `SOURCE_TYPE_HELM` | `"raw-yaml"` / `"kustomize"` / `"helm"` | `src/services/gitops/manifest-render-worker/app.py :: SOURCE_TYPE_RAW_YAML` |
-| `SUPPORTED_SOURCE_TYPES` | 위 3종 집합 | `src/services/gitops/manifest-render-worker/app.py :: SUPPORTED_SOURCE_TYPES` |
+| `SOURCE_TYPE_RAW_YAML` / `SOURCE_TYPE_RAW_JSON` / `SOURCE_TYPE_KUSTOMIZE` / `SOURCE_TYPE_HELM` | `"raw-yaml"` / `"raw-json"` / `"kustomize"` / `"helm"` | `src/services/gitops/manifest-render-worker/app.py :: SOURCE_TYPE_RAW_YAML` |
+| `SUPPORTED_SOURCE_TYPES` | 위 4종 집합 | `src/services/gitops/manifest-render-worker/app.py :: SUPPORTED_SOURCE_TYPES` |
 | `KUSTOMIZATION_FILES` | `("kustomization.yaml", "kustomization.yml", "Kustomization")` | `src/services/gitops/manifest-render-worker/app.py :: KUSTOMIZATION_FILES` |
 | `HELM_CHART_FILE` | `"Chart.yaml"` | `src/services/gitops/manifest-render-worker/app.py :: HELM_CHART_FILE` |
 | `MANIFEST_EXTENSIONS` | `(".yaml", ".yml", ".json")` | `src/services/gitops/manifest-render-worker/app.py :: MANIFEST_EXTENSIONS` |
@@ -99,7 +99,7 @@ def manifest_path_for(evt: GitChangedBody) -> str   # env GIT_MANIFEST_PATH 우�
 def github_token() -> str
 def github_auth_header() -> str | None     # "Authorization: Bearer <token>" 또는 None
 def repo_remote_url(repo_ref: str) -> str
-def source_type_override() -> str | None   # GIT_MANIFEST_SOURCE_TYPE; 미지원 값이면 ManifestSourceError
+def source_type_override(event_source_type: str = "") -> str | None   # GIT_MANIFEST_SOURCE_TYPE 우선, 없으면 evt.source_type; 미지원 값이면 ManifestSourceError
 def kubectl_bin() -> str
 def helm_bin() -> str
 def render_namespace() -> str              # GITOPS_HELM_NAMESPACE, 기본 Sandbox.NAMESPACE("sandbox")
@@ -117,8 +117,8 @@ def render_namespace() -> str              # GITOPS_HELM_NAMESPACE, 기본 Sandb
 
 ```python
 def detect_source_type(path: Path, override: str | None) -> str
-def render_source_from_path(path: Path, manifest_path: str, origin: str) -> RenderSource
-def render_source_from_text(source: str, manifest_path: str, origin: str) -> RenderSource
+def render_source_from_path(path: Path, manifest_path: str, origin: str, override: str | None = None) -> RenderSource
+def render_source_from_text(source: str, manifest_path: str, origin: str, override: str | None = None) -> RenderSource
 def read_checkout_cache_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None
 def export_checkout_cache_manifest_path(evt: GitChangedBody, manifest_path: str, destination: Path) -> Path | None
 def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> str
@@ -133,8 +133,9 @@ def read_manifest_source(evt: GitChangedBody) -> str | None
 
 앵커: `src/services/gitops/manifest-render-worker/app.py :: detect_source_type` 외 각 함수명 동일.
 
+- `source_type_override`: `GIT_MANIFEST_SOURCE_TYPE` 환경변수가 있으면 이를 최우선으로 사용하고, 없으면 `GitChangedBody.source_type`을 사용한다. 지원값은 `raw-yaml`, `raw-json`, `kustomize`, `helm`이다.
 - `detect_source_type`: override가 있으면 그대로. path가 디렉터리이고 `Chart.yaml` 존재 → `helm`, kustomization 파일 존재 → `kustomize`, 그 외 → `raw-yaml`.
-- `render_source_from_text`: override가 `raw-yaml` 이외이면 `ManifestSourceError` ("`{override}` rendering requires a checked-out repo path...").
+- `render_source_from_text`: GitHub Contents 같은 단일 raw 응답은 `raw-yaml`/`raw-json`만 허용한다. 이벤트가 `kustomize`/`helm`이면 checkout cache 또는 local repo path로 디렉터리/차트가 확보돼야 하므로 `ManifestSourceError`를 낸다.
 - `read_github_manifest_source`: `GIT_REMOTE_MANIFEST_ENABLED`이 꺼져 있거나 repo_ref/commit_sha/manifest_path 중 하나라도 비면 None. 헤더 `Accept: application/vnd.github.raw`(+토큰 있으면 `Authorization: Bearer`). HTTP/URL/Timeout 오류 시 `GIT_REMOTE_MANIFEST_REQUIRED`(기본 truthy `"1"`)면 `ManifestSourceError`, 아니면 None. 토큰 로드에서 `SecretNotFound`면 `ManifestSourceError`.
 - `read_local_manifest_source`: `GIT_REPO_PATH` 설정 시 `git -C {repo} show {sha}:{path}` (check=True, timeout=`GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS`). 미설정 시 `manifest_path`를 파일시스템 경로로 읽고, 없으면 None.
 - `export_local_git_path`: `git -C {repo} archive --format=tar {sha} {path}` 출력 tar를 `extract_git_archive`로 풀어 경로 반환.
@@ -220,7 +221,7 @@ def extract_git_archive(archive: bytes, destination: Path, manifest_path: str) -
 
 | 이벤트 | 라우팅 키(NATS subject) | body | 앵커 |
 |---|---|---|---|
-| `GitChangedBody` | `git.changed` | `commit_sha: str`, `image: str`, `replicas: int`, `workspace_id: str = "default"`, `repository_id: str = ""`, `repo_ref: str = ""`, `branch: str = "main"`, `watch_target_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `cluster_id: str = "default-target-cluster"`, `manifest_path: str = "deploy.yaml"` | `src/domains/gitops/events.py :: GitChangedBody` |
+| `GitChangedBody` | `git.changed` | `commit_sha: str`, `image: str`, `replicas: int`, `workspace_id: str = "default"`, `repository_id: str = ""`, `repo_ref: str = ""`, `branch: str = "main"`, `watch_target_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `cluster_id: str = "default-target-cluster"`, `manifest_path: str = "deploy.yaml"`, `source_type: str = ""` | `src/domains/gitops/events.py :: GitChangedBody` |
 
 ### 발행 (Publishes)
 

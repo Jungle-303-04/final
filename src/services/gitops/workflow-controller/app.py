@@ -800,6 +800,11 @@ def binding_policy(binding: JsonObject) -> JsonObject:
     return dict(binding.get("deploy_policy") or {})
 
 
+def binding_source_type(binding: JsonObject) -> str:
+    policy = binding_policy(binding)
+    return str(policy.get("manifest_source") or policy.get("source_type") or "").strip()
+
+
 async def promoted_image_and_replicas(
     ctx: EventContext[WorkflowStore], workflow_run_id: str
 ) -> tuple[str, int]:
@@ -841,6 +846,7 @@ def entry_webhook_for_binding(
         environment=str(binding["environment"]),
         cluster_id=str(binding["cluster_id"]),
         manifest_path=str(binding["manifest_path"]),
+        source_type=binding_source_type(binding),
     )
 
 

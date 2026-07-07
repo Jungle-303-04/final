@@ -69,7 +69,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 - 단계:
   1. repo_ref 입력 → `useRepositoryProbe(POST /repositories/discovery/probe)` 로 `normalized_repo_ref`/default branch/reachability 를 확인한다. reachable 이면 `useRepositoryBranches(GET /repositories/discovery/branches?repo_ref=...)` 로 브랜치 select 를 채우고, 선택 branch 기준 `useRepositoryManifestCandidates(GET /repositories/discovery/manifests?repo_ref=...&branch=...)` 로 manifest 후보 select 를 채운다. 후보 value/key 는 `${source_type}:${path}` 이므로 같은 path 가 raw/kustomize/helm 등 여러 source type 으로 잡혀도 선택이 보존된다. 선택된 후보는 `useRepositoryManifestValidation(POST /repositories/discovery/validate)` body `{repo_ref, branch, manifest_path, source_type}` 로 검증하고, `valid` 일 때만 다음 가능(다음 클릭 시 첫 클러스터로 `clusterId` 초기화).
   2. 대상 클러스터 select(`useClusters`). 클러스터가 없으면 admin 은 "먼저 클러스터를 등록" 안내와 `pathFor('/clusters')` 링크를 보고, non-admin 은 관리자에게 클러스터 접근 권한을 요청하라는 안내만 본다.
-  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, cluster_id})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 앱 생성 + 배포 대상 등록 2단계) — 성공 시 `onClose()` 후 `nav(pathFor('/repos/${application_id}'))`, 실패 시 에러 메시지를 danger 로 표시.
+  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, source_type, cluster_id})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 `POST /applications/connect` 1회 호출) — 성공 시 `onClose()` 후 `nav(pathFor('/repos/${application_id}'))`, 실패 시 에러 메시지를 danger 로 표시.
 
 ## 라우트
 
@@ -84,7 +84,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 - 클러스터 등록 API 호출 순서는 provider cluster-discovery → target preflight → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일). connection-status 는 수동 버튼이 아니라 발급 단계 진입 시 5초 간격 자동 폴링(connected/online 되면 중단).
 - 클러스터 등록은 unavailable deploy provider 를 기본 선택하지 않는다. flow 의 기본 deploy provider 가 unavailable 이면 첫 available 항목으로 대체하고, available deploy provider 가 없으면 provider 단계에서 다음으로 진행하지 않는다.
 - 레포 연결 API 호출 순서는 repository probe → branches → manifest candidates → manifest validate → applications → application deployment 로 고정한다.
-- manifest 후보 선택값은 `source_type:path` 조합이다. API 제출에는 `manifest_path` 만 저장하지만 validate 요청에는 선택 후보의 `source_type` 을 함께 보낸다.
+- manifest 후보 선택값은 `source_type:path` 조합이다. connect API 제출에는 `manifest_path` 와 선택 후보의 `source_type` 을 함께 보내며, 서버는 이를 재검증한 뒤 application metadata, deployment binding deploy_policy, git watch target settings 에 보존한다.
 - provider cluster-discovery 와 target 등록/preflight 는 admin 세션 라우트다. 클러스터 등록 위저드 진입 CTA 는 admin 화면에서만 노출한다.
 - agent token 과 `install_command` 는 발급 응답에서만 표시하고 어디에도 저장하지 않는다(위저드 닫으면 소실).
 - `cluster_id` 는 소문자 slug, `repo_ref` 는 `owner/name` 또는 Git URL 형식을 클라이언트에서 선검증한다.

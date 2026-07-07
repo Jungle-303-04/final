@@ -44,8 +44,29 @@
 - 다음 커밋 후보:
   1. `/console` 경로 보존 누락 수정: `ClusterListView.tsx`, `RepoListView.tsx`, `WorkflowListView.tsx`.
   2. 클러스터 discovery UX 정직화: “discovered”가 아니라 configured import candidates로 라벨/상태를 명확히 하고, Plural/external은 실제 API 검증 전 `available` 표현을 낮춘다.
-  3. repo render parity: `source_type`을 application/watch target/event/render-worker까지 보존해 kustomize/helm 검증과 실행 경로를 일치시킨다.
+  3. repo render parity: `source_type`을 application/watch target/event/render-worker까지 보존해 kustomize/helm 검증과 실행 경로를 일치시킨다. → 아래 "repo source_type 런타임 parity" 체크포인트에서 구현/검증 완료, 배포 필요.
   4. 저장형 쿼리/위젯 API: 현재 `MetricsView` local state를 실제 backend 저장 모델로 승격한다.
+
+## 체크포인트 (현재) — repo source_type 런타임 parity / 다음 프론트 갭
+
+- 구현:
+  - `/applications/connect`에서 검증한 `source_type`을 watch target `settings.source_type`에도 저장한다.
+  - github-poll-worker DB target 조회는 `settings.source_type` → binding `deploy_policy.manifest_source/source_type` → application `metadata.source_type` 순으로 fallback한다.
+  - github-poll-worker webhook body, `GitHubWebhookRequest`, `GitWebhookReceivedBody`, git-pull-worker의 `GitChangedBody`, workflow-controller fan-out body가 모두 `source_type`을 보존한다.
+  - manifest-render-worker는 `GIT_MANIFEST_SOURCE_TYPE` env를 최우선으로, 없으면 `GitChangedBody.source_type`을 사용한다. `raw-yaml`/`raw-json`은 raw response 렌더를 허용하고, `kustomize`/`helm`은 checkout cache/local repo path가 없으면 invalid 처리한다.
+  - env fallback github-poll-worker도 `GIT_MANIFEST_SOURCE_TYPE`을 webhook body에 싣는다.
+  - 운영 데이터 mock/fake/hardcoded 추가 없음.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m ruff check ...` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_applications_router.py tests/test_github_poller.py tests/test_git_pull_worker.py tests/test_manifest_render_worker.py tests/test_promotion_and_global.py tests/test_database_unit.py tests/test_schemas.py tests/test_docs_index.py` → 112 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_event_golden_path.py tests/test_workflow_controller.py tests/test_platform_foundation_openapi.py tests/test_schemas.py tests/test_docs_index.py` → 41 passed.
+- 배포 필요:
+  - 이 커밋은 backend image 재빌드 후 최소 `api-gateway`, `github-poll-worker`, `git-pull-worker`, `manifest-render-worker`, `workflow-controller` rollout이 필요하다.
+- 병렬 감사(Avicenna, 읽기 전용)로 확인한 다음 프론트 1순위:
+  - 드릴다운 drawer가 아직 백엔드 `GET /clusters/{cluster_id}/inventory/resource-detail` 계약을 충분히 쓰지 않고, 프론트 문자열 필터/팟 그룹핑으로 관련 이벤트를 구성한다. 다음 프론트 커밋은 `useInventoryResourceDetail()` 훅을 추가하고 클러스터/노드/서비스/워크로드/팟 drawer의 이벤트/related pods를 `resource-detail` 응답 기준으로 전환해야 한다.
+  - 엔티티별 AI 분석 버튼은 `prefill` 문자열만 넘기지 말고 `{cluster_id, resource_type, kind, namespace, name, uid}` context를 대화 생성/전송 API에 싣고, chat-worker/tool layer에서 inventory detail/readonly telemetry/RCA 조회를 도구화해야 한다.
+  - 위젯/쿼리 등록은 아직 브라우저 local state라 운영자 화면으로는 부족하다. DB 저장형 widget/query preset API가 필요하다.
+  - workspace 단일 realtime summary는 멀티클러스터 화면에서 live 데이터가 섞일 수 있다. live store를 `byCluster`로 분리하거나 cluster별 WS subscription을 사용해야 한다.
 
 ## 체크포인트 (21:21 KST) — `/console` 데모 보존 + AI chat 실제 계약 수정
 

@@ -188,8 +188,12 @@ def test_webhook_fans_out_to_global_bindings_once() -> None:
     module = load_controller()
     db = FakeGitopsDb()
     db.bindings["bind-main"] = binding("bind-main", "cluster-a")
-    db.bindings["bind-g1"] = binding("bind-g1", "cluster-b", deploy_policy={"global": True})
-    db.bindings["bind-g2"] = binding("bind-g2", "cluster-c", deploy_policy={"global": True})
+    db.bindings["bind-g1"] = binding(
+        "bind-g1", "cluster-b", deploy_policy={"global": True, "manifest_source": "helm"}
+    )
+    db.bindings["bind-g2"] = binding(
+        "bind-g2", "cluster-c", deploy_policy={"global": True, "manifest_source": "helm"}
+    )
 
     evt = GitWebhookReceivedBody(
         commit_sha="sha-1",
@@ -210,6 +214,7 @@ def test_webhook_fans_out_to_global_bindings_once() -> None:
 
     assert {b.binding_id for b in bodies} == {"bind-g1", "bind-g2"}
     assert all(b.commit_sha == "sha-1" and b.image == "ghcr.io/acme/agent:v1" for b in bodies)
+    assert {b.source_type for b in bodies} == {"helm"}
 
     # 자식(global 바인딩 대상) 웹훅은 재확장하지 않는다 — 증폭 1단 종결
     child = bodies[0]

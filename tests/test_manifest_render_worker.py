@@ -589,6 +589,61 @@ def test_render_reads_raw_manifest_directory(monkeypatch, tmp_path) -> None:
     assert [out.rendered_manifest.kind for out in outs] == ["ConfigMap", "Service"]
 
 
+def test_render_respects_event_raw_json_source_type(monkeypatch, tmp_path) -> None:
+    manifest = tmp_path / "config.json"
+    manifest.write_text(
+        '{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"json-config"},"data":{"A":"B"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_MANIFEST_PATH", str(manifest))
+
+    render = load_service("gitops/manifest-render-worker")
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(commit_sha="json123", image="ignored", replicas=1, source_type="raw-json"),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["manifest.rendered"]
+    assert outs[0].rendered_manifest.kind == "ConfigMap"
+    assert outs[0].rendered_manifest.metadata.name == "json-config"
+
+
+def test_render_rejects_kustomize_source_type_without_checked_out_repo(monkeypatch) -> None:
+    render = load_service("gitops/manifest-render-worker")
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_ENABLED", "1")
+    monkeypatch.setenv("GIT_REMOTE_MANIFEST_REQUIRED", "1")
+    monkeypatch.setenv("GITHUB_API_BASE", "https://api.github.test")
+
+    class Response:
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\n"
+
+    monkeypatch.setattr(render.request, "urlopen", lambda *_args, **_kwargs: Response())
+
+    outs = run_handler(
+        render.on_git_changed,
+        GitChangedBody(
+            commit_sha="kustomize123",
+            image="ignored",
+            replicas=1,
+            repo_ref="owner/demo",
+            manifest_path="deploy",
+            source_type="kustomize",
+        ),
+        db=SpyDb(),
+    )
+
+    assert subjects_of(outs) == ["manifest.invalid"]
+    assert "requires a checked-out repo path" in outs[0].reason
+
+
 def test_render_reuses_cached_manifest_artifact_without_rerendering() -> None:
     render = load_service("gitops/manifest-render-worker")
     rendered = RenderedManifest(
