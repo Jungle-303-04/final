@@ -16,6 +16,24 @@ DEFAULT_INCIDENT_LIMIT = 5
 DEFAULT_MESSAGE_LIMIT = 10
 MAX_ROWS = 20
 CONTENT_PREVIEW_CHARS = 300
+INVENTORY_PUBLIC_FIELDS = (
+    "inventory_key",
+    "workspace_id",
+    "cluster_id",
+    "resource_type",
+    "api_version",
+    "kind",
+    "namespace",
+    "name",
+    "uid",
+    "status",
+    "health",
+    "labels",
+    "annotations",
+    "summary",
+    "observed_at",
+    "last_seen_at",
+)
 
 
 def _clamp(value: Any, default: int) -> int:
@@ -23,6 +41,38 @@ def _clamp(value: Any, default: int) -> int:
         return max(1, min(int(value), MAX_ROWS))
     except (TypeError, ValueError):
         return default
+
+
+def _ctx_or_arg(value: str | None, fallback: str | None) -> str:
+    return str(value or fallback or "").strip()
+
+
+def _public_inventory_resource(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: row.get(key) for key in INVENTORY_PUBLIC_FIELDS if key in row}
+
+
+def _row_payload(row: dict[str, Any]) -> dict[str, Any]:
+    payload = row.get("payload")
+    return payload if isinstance(payload, dict) else {}
+
+
+def _report_matches_context(row: dict[str, Any], context: ToolContext) -> bool:
+    payload = _row_payload(row)
+    cluster_id = row.get("cluster_id") or payload.get("cluster_id")
+    if context.cluster_id and cluster_id and str(cluster_id) != context.cluster_id:
+        return False
+    if not context.name:
+        return True
+    incident = payload.get("incident") if isinstance(payload.get("incident"), dict) else {}
+    detail = payload.get("rca_detail") if isinstance(payload.get("rca_detail"), dict) else {}
+    candidates = [
+        row.get("resource_name"),
+        row.get("resource"),
+        incident.get("resource_name"),
+        incident.get("resource"),
+        detail.get("resource_name"),
+    ]
+    return any(str(candidate) == context.name for candidate in candidates if candidate)
 
 
 @ai.tool(
@@ -47,6 +97,108 @@ async def list_recent_incidents(
                 "created_at": str(row.get("created_at") or ""),
             }
             for row in rows
+        ]
+    }
+
+
+@ai.tool(
+    name="get_inventory_resource_detail",
+    description="Kubernetes inventory detail for the current or requested resource, including related pods and involvedObject events.",
+    parameters={
+        "cluster_id": {"type": "string", "description": "cluster id; defaults to chat context"},
+        "resource_type": {
+            "type": "string",
+            "description": "pod/node/service/workload; defaults to chat context",
+        },
+        "kind": {"type": "string", "description": "Kubernetes kind; defaults to chat context"},
+        "name": {"type": "string", "description": "resource name; defaults to chat context"},
+        "namespace": {"type": "string", "description": "namespace for namespaced resources"},
+    },
+)
+async def get_inventory_resource_detail(
+    context: ToolContext,
+    cluster_id: str = "",
+    resource_type: str = "",
+    kind: str = "",
+    name: str = "",
+    namespace: str = "",
+) -> dict[str, Any]:
+    resolved_cluster = _ctx_or_arg(cluster_id, context.cluster_id)
+    resolved_type = _ctx_or_arg(resource_type, context.resource_type)
+    resolved_kind = _ctx_or_arg(kind, context.kind)
+    resolved_name = _ctx_or_arg(name, context.name)
+    resolved_namespace = _ctx_or_arg(namespace, context.namespace) or None
+    if not all((resolved_cluster, resolved_type, resolved_kind, resolved_name)):
+        return {
+            "found": False,
+            "error": "cluster_id, resource_type, kind and name are required",
+        }
+    resource = await context.db.get_inventory_resource(
+        workspace_id=context.workspace_id,
+        cluster_id=resolved_cluster,
+        resource_type=resolved_type,
+        kind=resolved_kind,
+        namespace=resolved_namespace,
+        name=resolved_name,
+    )
+    if resource is None:
+        return {
+            "found": False,
+            "identity": {
+                "cluster_id": resolved_cluster,
+                "resource_type": resolved_type,
+                "kind": resolved_kind,
+                "namespace": resolved_namespace,
+                "name": resolved_name,
+            },
+        }
+    related = await context.db.list_related_inventory_resources(
+        workspace_id=context.workspace_id,
+        cluster_id=resolved_cluster,
+        resource=resource,
+        limit=20,
+    )
+    events = await context.db.list_resource_events(
+        workspace_id=context.workspace_id,
+        cluster_id=resolved_cluster,
+        resource=resource,
+        limit=20,
+    )
+    return {
+        "found": True,
+        "resource": _public_inventory_resource(dict(resource)),
+        "related": {
+            group: [_public_inventory_resource(dict(item)) for item in rows[:20]]
+            for group, rows in related.items()
+        },
+        "events": [_public_inventory_resource(dict(item)) for item in events[:20]],
+    }
+
+
+@ai.tool(
+    name="list_resource_rca_reports",
+    description="Recent RCA reports filtered to the chat resource context when possible.",
+    parameters={
+        "limit": {"type": "integer", "description": f"max rows (1-{MAX_ROWS}, default 5)"},
+    },
+)
+async def list_resource_rca_reports(
+    context: ToolContext, limit: int = DEFAULT_INCIDENT_LIMIT
+) -> dict[str, Any]:
+    rows = await context.db.list_rca_reports(
+        context.workspace_id, limit=_clamp(limit, DEFAULT_INCIDENT_LIMIT)
+    )
+    filtered = [dict(row) for row in rows if _report_matches_context(dict(row), context)]
+    return {
+        "reports": [
+            {
+                "root_cause": row.get("root_cause"),
+                "action": row.get("action"),
+                "correlation_id": row.get("correlation_id"),
+                "created_at": str(row.get("created_at") or ""),
+                "cluster_id": row.get("cluster_id") or _row_payload(row).get("cluster_id"),
+            }
+            for row in filtered[:MAX_ROWS]
         ]
     }
 

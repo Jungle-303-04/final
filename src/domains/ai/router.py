@@ -28,6 +28,16 @@ from packages.storage.engine import unit_of_work_or_null
 router = APIRouter()
 DEFAULT_AGENT = "operations-chat"
 NOT_FOUND = "conversation not found"
+CONTEXT_STRING_FIELDS = (
+    "cluster_id",
+    "resource_type",
+    "kind",
+    "namespace",
+    "name",
+    "uid",
+    "locale",
+)
+MAX_CONTEXT_VALUE_LENGTH = 253
 
 
 def new_id(prefix: str) -> str:
@@ -39,6 +49,20 @@ def title_for(payload: AiConversationCreateRequest) -> str:
         return payload.title
     collapsed = " ".join(payload.message.split())
     return collapsed[:80] if collapsed else "AI conversation"
+
+
+def normalize_context(raw: dict[str, Any] | None) -> dict[str, str]:
+    if not raw:
+        return {}
+    context: dict[str, str] = {}
+    for key in CONTEXT_STRING_FIELDS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            context[key] = text[:MAX_CONTEXT_VALUE_LENGTH]
+    return context
 
 
 @router.post(
@@ -53,6 +77,7 @@ async def create_conversation(
 ) -> AiConversationAcceptedResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     agent = payload.agent or DEFAULT_AGENT
+    request_context = normalize_context(payload.context)
     conversation_id = new_id("aic")
     message_id = new_id("aim")
     title = title_for(payload)
@@ -67,7 +92,7 @@ async def create_conversation(
                 "title": title,
                 "agent": agent,
                 "status": STATUS_WAITING,
-                "context": payload.context,
+                "context": request_context,
             }
         )
         db.append_ai_message(
@@ -89,7 +114,7 @@ async def create_conversation(
                 agent=agent,
                 user_id=current.user_id,
                 workspace_id=workspace_id,
-                context=payload.context,
+                context=request_context,
             ),
             actor=Actor(current.user_id, tuple(current.roles)),
         )
@@ -118,6 +143,7 @@ async def append_message(
     if conversation is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     agent = payload.agent or str(conversation["agent"])
+    request_context = normalize_context(payload.context or conversation.get("context") or {})
     message_id = new_id("aim")
     # 메시지 추가·상태 갱신·이벤트 스테이징을 한 트랜잭션으로(부분 실패 고아 방지).
     with unit_of_work_or_null(db):
@@ -141,7 +167,7 @@ async def append_message(
                 agent=agent,
                 user_id=current.user_id,
                 workspace_id=workspace_id,
-                context=payload.context or conversation.get("context") or {},
+                context=request_context,
             ),
             actor=Actor(current.user_id, tuple(current.roles)),
         )

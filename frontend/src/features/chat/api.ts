@@ -13,6 +13,13 @@ import type {
 } from '@/shared/lib/types';
 import { adaptConversationSummary } from '@/shared/lib/adapt';
 import { uiStore } from '@/shared/lib/ui-store';
+import type { AiChatContext } from '@/features/chat/context';
+
+export interface AiMessagePayload {
+  message: string;
+  title?: string;
+  context?: AiChatContext;
+}
 
 export const chatKeys = {
   list: () => ['ai', 'conversations'] as const,
@@ -32,19 +39,30 @@ export const useConversation = (id: string | undefined) =>
 export function useCreateConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) => post<AiConversationAcceptedResponse>('/ai/conversations', { message }),
+    mutationFn: (input: string | AiMessagePayload) =>
+      post<AiConversationAcceptedResponse>('/ai/conversations', aiMessagePayload(input, { includeTitle: true })),
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.list() }),
   });
 }
 export function useSendMessage(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) => post<AiConversationAcceptedResponse>(`/ai/conversations/${id}/messages`, { message }),
+    mutationFn: (input: string | AiMessagePayload) =>
+      post<AiConversationAcceptedResponse>(`/ai/conversations/${id}/messages`, aiMessagePayload(input)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: chatKeys.one(id) });
       qc.invalidateQueries({ queryKey: chatKeys.list() });
     },
   });
+}
+
+export function aiMessagePayload(input: string | AiMessagePayload, options: { includeTitle?: boolean } = {}): AiMessagePayload {
+  if (typeof input === 'string') return { message: input };
+  return {
+    message: input.message,
+    ...(options.includeTitle && input.title ? { title: input.title } : {}),
+    ...(input.context ? { context: input.context } : {}),
+  };
 }
 export function useDeleteConversation() {
   const qc = useQueryClient();

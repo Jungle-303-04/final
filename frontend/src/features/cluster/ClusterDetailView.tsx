@@ -10,6 +10,7 @@ import { FadeSlideIn } from '@/shared/motion';
 import { IconFile, IconFlame } from '@/shared/ui/icons';
 import type { InventoryResource, InventoryResourceDetail, K8sEvent, ServiceInfo, Workload, WorkloadResource } from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
+import { encodeChatContext } from '@/features/chat/context';
 
 const TABS = [
   { key: 'workloads', label: '워크로드' }, { key: 'pods', label: '팟' }, { key: 'nodes', label: '노드' },
@@ -106,7 +107,7 @@ export default function ClusterDetailView() {
           {cluster && <Badge tone="neutral">{cluster.environment}</Badge>}
           {cluster && <Badge status={cluster.connection_status} />}
         </h1>
-        <ContextActions clusterId={clusterId} subject="cluster" subjectName={clusterId} />
+        <ContextActions clusterId={clusterId} subject="cluster" subjectName={clusterId} kind="Cluster" />
       </div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <StatBox label="노드" value={summaryQ.data?.nodes.length ?? 0} />
@@ -299,7 +300,7 @@ function ResourceDetailBody({ clusterId, detail, admin, onShowPods, onShowResour
   return (
     <>
       <KeyValue pairs={resourcePairs(resource)} />
-      <ContextActions clusterId={clusterId} subject={resource.resource_type || resource.kind.toLowerCase()} subjectName={resource.name} namespace={resource.namespace ?? undefined} />
+      <ContextActions clusterId={clusterId} subject={resource.resource_type || resource.kind.toLowerCase()} subjectName={resource.name} namespace={resource.namespace ?? undefined} kind={resource.kind} uid={resource.uid ?? undefined} />
       <DetailEvents title={`${resource.kind} 이벤트`} rows={detail.events} />
       {detail.related_pods.length > 0 && <RelatedPods rows={detail.related_pods} />}
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -412,10 +413,10 @@ function RelatedPods({ rows }: { rows: Workload[] }) {
   );
 }
 
-function ContextActions({ clusterId, subject, subjectName, namespace }: {
-  clusterId: string; subject: string; subjectName: string; namespace?: string
+function ContextActions({ clusterId, subject, subjectName, namespace, kind, uid }: {
+  clusterId: string; subject: string; subjectName: string; namespace?: string; kind?: string; uid?: string
 }) {
-  const hrefs = contextActionHrefs(clusterId, subject, subjectName, namespace);
+  const hrefs = contextActionHrefs(clusterId, subject, subjectName, namespace, kind, uid);
   const pathFor = useConsolePath();
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
@@ -426,16 +427,26 @@ function ContextActions({ clusterId, subject, subjectName, namespace }: {
   );
 }
 
-export function contextActionHrefs(clusterId: string, subject: string, subjectName: string, namespace?: string) {
+export function contextActionHrefs(clusterId: string, subject: string, subjectName: string, namespace?: string, kind?: string, uid?: string) {
   const prefill = `${clusterId} ${namespace ? `${namespace}/` : ''}${subjectName} ${subject} 상태 분석`;
   const metricParams = new URLSearchParams({ cluster: clusterId, subject, name: subjectName });
   if (namespace) metricParams.set('namespace', namespace);
   const eventParams = new URLSearchParams({ tab: 'events' });
   if (subject !== 'cluster') eventParams.set('q', subjectName);
+  const aiParams = new URLSearchParams({ prefill });
+  const context = encodeChatContext({
+    cluster_id: clusterId,
+    resource_type: subject,
+    kind,
+    namespace,
+    name: subjectName,
+    uid,
+  });
+  if (context) aiParams.set('context', context);
   return {
     events: `/clusters/${clusterId}?${eventParams.toString()}`,
     metrics: `/metrics?${metricParams.toString()}`,
-    ai: `/ai?prefill=${encodeURIComponent(prefill)}`,
+    ai: `/ai?${aiParams.toString()}`,
   };
 }
 

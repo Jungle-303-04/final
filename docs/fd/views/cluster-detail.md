@@ -40,7 +40,7 @@ pods 탭의 hot 표시는 liveStore(WS) — 구조는 inventory 정본([fleet-he
 `ContextActions`는 동일한 리소스 맥락을 메트릭과 AI로 넘긴다.
 
 - 메트릭: `/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]`
-- AI: `/ai?prefill=<cluster namespace/name subject 상태 분석>`
+- AI: `/ai?prefill=<cluster namespace/name subject 상태 분석>&context=<json>` (`cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid` 문자열 컨텍스트)
 
 팟 Drawer는 `/clusters/:id/pods/:namespace/:pod` URL 오버레이를 유지한다.
 노드/서비스/워크로드 Drawer는 URL search state(`detail`, `name`, `namespace`, `kind`)로 복원 가능하다.

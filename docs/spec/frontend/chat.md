@@ -29,20 +29,32 @@ status: synced
 | `chatKeys` | `frontend/src/features/chat/api.ts :: chatKeys` | — | `list() = ['ai','conversations']`, `one(id) = ['ai','conversations', id]` |
 | `useConversations` | `frontend/src/features/chat/api.ts :: useConversations` | GET `/ai/conversations` | 15s, select `d.conversations.map(adaptConversationSummary)` |
 | `useConversation` | `frontend/src/features/chat/api.ts :: useConversation` | GET `/ai/conversations/${id}` → `AiConversationDetailResponse` envelope | `(id: string \| undefined)`, `enabled: !!id`, `select: adaptConversationDetail`. **적응 폴링**: raw `conversation.status === 'waiting'` 이면 2s, 아니면 15s(status 만으로 파생) |
-| `useCreateConversation` | `frontend/src/features/chat/api.ts :: useCreateConversation` | POST `/ai/conversations` body `{message}` → `AiConversationAcceptedResponse` | 성공 시 list invalidate |
-| `useSendMessage` | `frontend/src/features/chat/api.ts :: useSendMessage` | POST `/ai/conversations/${id}/messages` body `{message}` → `AiConversationAcceptedResponse` | `(id: string)`, 성공 시 `one(id)` invalidate |
+| `AiMessagePayload` | `frontend/src/features/chat/api.ts :: AiMessagePayload` | `{message, title?, context?}` | `context`는 `AiChatContext` |
+| `aiMessagePayload` | `frontend/src/features/chat/api.ts :: aiMessagePayload` | `string \| AiMessagePayload`, `{includeTitle?: boolean}` → `AiMessagePayload` | 문자열 입력은 `{message}`로 보정한다. `title`은 새 대화 생성에서 `includeTitle`일 때만 포함하고, 기존 대화 메시지 전송에는 보내지 않는다 |
+| `useCreateConversation` | `frontend/src/features/chat/api.ts :: useCreateConversation` | POST `/ai/conversations` body `{message, title?, context?}` → `AiConversationAcceptedResponse` | 성공 시 list invalidate |
+| `useSendMessage` | `frontend/src/features/chat/api.ts :: useSendMessage` | POST `/ai/conversations/${id}/messages` body `{message, context?}` → `AiConversationAcceptedResponse` | `(id: string)`, 성공 시 `one(id)` + list invalidate |
 | `useDeleteConversation` | `frontend/src/features/chat/api.ts :: useDeleteConversation` | DELETE `/ai/conversations/${id}` | 성공 시 list invalidate + `one(id)` cache remove |
 | `useSelectAction` | `frontend/src/features/chat/api.ts :: useSelectAction` | POST `/rca/recovery-plans/${planId}/actions/${actionId}/select` | mutation `({planId, actionId})`, 성공 시 list invalidate |
 | `adaptConversationDetail` | `frontend/src/features/chat/api.ts :: adaptConversationDetail` | `AiConversationDetailResponse` → `Conversation` | `conversation`은 `adaptConversationSummary`, `messages[]`는 `adaptChatMessage`로 정규화. `metadata.tool_trace`/`metadata.tool_calls`/top-level `tool_calls`, `actions`, `approval_ref`를 렌더 타입으로 보정 |
 | `MAX_AI_MESSAGE_LENGTH` | `frontend/src/features/chat/api.ts :: MAX_AI_MESSAGE_LENGTH` | — | `16_000` |
 
+## 컨텍스트 헬퍼 — `context.ts`
+
+| 심볼 | 앵커 | API | 설명 |
+|---|---|---|---|
+| `AiChatContext` | `frontend/src/features/chat/context.ts :: AiChatContext` | `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `locale` 선택 필드 | AI 요청에 함께 보내는 리소스 컨텍스트 |
+| `compactContext` | `frontend/src/features/chat/context.ts :: compactContext` | `AiChatContext` → `AiChatContext \| undefined` | 문자열 trim, 빈 값 제거. `resource_type`만 있고 `kind`가 없으면 cluster/node/pod/service 기본 kind 보정 |
+| `encodeChatContext` | `frontend/src/features/chat/context.ts :: encodeChatContext` | `AiChatContext` → JSON 문자열 \| undefined | `ContextActions`가 `/ai?context=...` 링크를 만들 때 사용 |
+| `chatContextFromSearchParams` | `frontend/src/features/chat/context.ts :: chatContextFromSearchParams` | `URLSearchParams` → `AiChatContext \| undefined` | `context` JSON을 우선 파싱하고, 없으면 `cluster_id`/`cluster`, `resource_type`/`subject`, `kind`, `namespace`, `name`, `uid`, `locale` query를 보정 |
+
 ## 컴포넌트
 
 ### `frontend/src/features/chat/ChatView.tsx :: ChatView` (default export)
 
-- 라우트: `/ai`(새 대화), `/ai/:conversationId`. 쿼리스트링 `prefill` — draft 초기값(타 화면의 "✦ 분석" 딥링크용).
+- 라우트: `/ai`(새 대화), `/ai/:conversationId`. 쿼리스트링 `prefill` — draft 초기값(타 화면의 "✦ 분석" 딥링크용), `context` — JSON 직렬화된 `AiChatContext`.
 - state: `draft: string`. ref: `bottomRef` — `conv.messages.length` 변경 시 `scrollIntoView({behavior:'smooth'})`.
-- `submit()`: trim 후 빈 문자열/16,000자 초과면 무시. `conversationId` 있으면 `send.mutate(text)`, 없으면 `create.mutate(text, { onSuccess: d => nav(pathFor('/ai/'+d.conversation_id)) })`. 이후 draft 비움.
+- `chatContext = chatContextFromSearchParams(sp)` 를 `useMemo`로 파생한다. `context` JSON이 깨졌거나 비어 있으면 `undefined`.
+- `submit()`: trim 후 빈 문자열/16,000자 초과면 무시. payload는 `{message: text, context: chatContext}`. `conversationId` 있으면 `send.mutate(payload, {onSuccess: clearPrefill})`, 없으면 `create.mutate(payload, { onSuccess: d => nav(pathFor('/ai/'+d.conversation_id)) })`. 이후 draft 비움, 실패 시 draft 복원.
 - `deleteConversation(id)`: DELETE 성공 시 ok toast. 현재 열린 대화면 `pathFor('/ai')`로 replace 이동한다. 실패는 danger toast.
 - 트리:
   ```
@@ -80,11 +92,12 @@ status: synced
 
 ## 동작 (Behavior)
 
-1. 새 대화: 입력 → POST `/ai/conversations` → `AiConversationAcceptedResponse.conversation_id` 로 이동 → 단건 폴링 시작. `/console` 아래에서 열린 경우 `useConsolePath`로 `/console/ai/:id`를 유지한다.
+1. 새 대화: 입력 → POST `/ai/conversations` `{message, context?}` → `AiConversationAcceptedResponse.conversation_id` 로 이동 → 단건 폴링 시작. `/console` 아래에서 열린 경우 `useConsolePath`로 `/console/ai/:id`를 유지한다.
 2. waiting 동안 2s 폴링 + "분석 중" 인디케이터 → assistant 응답이 오면 status idle → 15s 로 완화.
 3. 복구 액션: assistant `actions` 카드에서 radio 선택 → 선택 실행 → 서버가 `selected` 를 채우면 카드 잠금.
 4. 승인: assistant `approval_ref` 는 [repo](./repo.md) 의 `ApprovalCard` 로 처리(승인 성공 시 repo 쪽 훅이 `['ai']` 캐시도 invalidate).
 5. 대화 삭제: 좌측 행 또는 우측 헤더 삭제 → DELETE `/ai/conversations/:id` → 목록 갱신. 현재 대화 삭제 시 `pathFor('/ai')`로 이동.
+6. 타 화면에서 들어온 리소스 컨텍스트는 `/ai?prefill=...&context=<json>`으로만 전달하고, 전송 버튼을 누른 시점의 POST body에 포함한다(자동 전송 없음).
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -93,3 +106,4 @@ status: synced
 - 대화 목록 응답에는 `messages` 가 없다(`adaptConversationSummary` 로 요약 정규화).
 - 대화 단건 응답은 `{conversation, messages}` envelope 이며, `ChatView`는 `adaptConversationDetail`이 만든 `Conversation`만 소비한다. assistant 도구 표시는 message top-level `tool_calls`, `metadata.tool_calls`, `metadata.tool_trace`를 모두 허용한다.
 - 삭제는 workspace 범위 서버 검증에 의존한다. 클라이언트는 성공 후 해당 detail cache만 제거한다.
+- context 는 리소스 식별자만 담는다. 리소스 상세·이벤트·RCA report 는 백엔드 AI 도구가 세션 workspace 범위에서 다시 읽는다.

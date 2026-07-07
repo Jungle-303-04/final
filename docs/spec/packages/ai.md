@@ -170,7 +170,7 @@ class ConversationEngine:
 `@ai.tool` 이 "LLM 이 호출 가능한 플랫폼 능력"의 단일 출처. 대화 엔진은 레지스트리만 읽음 — 새 도구 추가 = 도구 파일 1개(엔진 수정 없음). `__all__ = ["ToolContext", "ToolHandler", "ToolRegistry", "ToolSpec", "ai", "registered_ai_tools"]`.
 
 - `src/packages/ai/tools.py :: ToolHandler` — `Callable[..., Awaitable[Any]]`. 시그니처 규약: `(context: ToolContext, **검증된 kwargs) -> JSON 직렬화 가능 값`.
-- `src/packages/ai/tools.py :: ToolContext` — `@dataclass(frozen=True)`: `db: Any`, `workspace_id: str`, `cluster_id: str | None = None`, `locale: str | None = None`. 도구는 이 외의 전역에 의존하지 않음.
+- `src/packages/ai/tools.py :: ToolContext` — `@dataclass(frozen=True)`: `db: Any`, `workspace_id: str`, `cluster_id: str | None = None`, `resource_type: str | None = None`, `kind: str | None = None`, `namespace: str | None = None`, `name: str | None = None`, `uid: str | None = None`, `resource_context: dict[str, Any] | None = None`, `locale: str | None = None`. 도구는 이 외의 전역에 의존하지 않음.
 - `src/packages/ai/tools.py :: ToolSpec` — `@dataclass(frozen=True)`
 
 | 필드 | 타입 | 기본값 | 설명 |
@@ -216,7 +216,7 @@ def registered_ai_tools() -> tuple[ToolSpec, ...]   # 조회 관례(registered_*
 ## 동작 (Behavior)
 
 1. 서비스 부팅: `build_llm_client()` 로 gateway 획득, `domains.registry.load_domain_tools()`([storage](storage.md#도메인-자동발견registry-연동) 의 registry) 로 `@ai.tool` 자동 등록.
-2. 대화 1턴: 서비스가 `ConversationEngine.respond(system_prompt, history, user_message, ToolContext(db=AsyncDb(...), workspace_id, ...))` 호출 → 도구 루프(상한 4) → `EngineResult`.
+2. 대화 1턴: 서비스가 `ConversationEngine.respond(system_prompt, history, user_message, ToolContext(db=AsyncDb(...), workspace_id, cluster_id?, resource_type?, kind?, namespace?, name?, uid?, locale?))` 호출 → 도구 루프(상한 4) → `EngineResult`.
 3. 단발 에이전트: `AiAgent` 하위 클래스의 `run(evt)` = 프롬프트 생성 → `llm.complete` → 결과 파싱.
 
 ## 불변식·오류 (Invariants & Errors)

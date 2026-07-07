@@ -86,7 +86,7 @@ status: synced
 - `WorkloadsTab { clusterId; admin; onInspect; onDrillPods; onScale; onRestart }` — `/inventory/workloads`의 실제 workload read model을 그대로 표시한다. 행 클릭은 workload `ResourceDetailDrawer`. 열: 워크로드 / Kind / 네임스페이스 / Ready(status 또는 ready/desired) / health Badge / 액션(Deployment만 스케일·재시작 가능, 팟 sm 버튼은 관련 팟 필터).
 - `ServicesTab { clusterId; onInspect }` — 이름/네임스페이스/타입/ClusterIP(code)/포트. 행 클릭은 service Drawer.
 - `ResourceDetailDrawer` — `resource-detail` 응답을 정본으로 사용한다. KeyValue는 resource_type별 summary를 보여주고, 이벤트는 `detail.events`만 렌더한다. `related.pods`가 있으면 관련 팟 테이블을 보여준다.
-- `ContextActions` — `Link(pathFor('/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]'))` "메트릭" + `Link(pathFor('/ai?prefill=<cluster namespace/name subject 상태 분석>'))` "AI 분석".
+- `ContextActions` — `Link(pathFor('/events...'))` "이벤트" + `Link(pathFor('/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]'))` "메트릭" + `Link(pathFor('/ai?prefill=<cluster namespace/name subject 상태 분석>&context=<json>'))` "AI 분석". `context`는 [chat](./chat.md)의 `encodeChatContext`로 만든 `{cluster_id, resource_type, kind?, namespace?, name, uid?}` JSON이며, cluster 상단은 `kind="Cluster"`, Drawer 리소스는 실제 `resource.kind`/`resource.uid`를 사용한다.
 - `ContextEvents` — 클러스터 상단 compact 이벤트와 events 탭용 보조 필터만 담당한다. 단일 리소스 Drawer 이벤트는 문자열 필터가 아니라 `ResourceDetailDrawer`의 `detail.events`를 사용한다.
 - `ResourcesTab { clusterId; filter }` — `q`가 있으면 kind/namespace/name/status includes 로 필터. 열: Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
 - `EventsTab { clusterId; filter }` — `q`가 있으면 reason/target/message/type includes 로 필터. 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
