@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:58 KST (DLQ archive + no-signal incident payload 정리)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:06 KST (singleton worker Recreate 전략 추가)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -23,14 +23,15 @@
 - 구현:
   - DLQ 상태 어휘에 `archived`를 추가했고, `/dead-letters/{id}/replay`는 `status=open`만 재발행하도록 막았다.
   - no-signal `incident.detected(detected=false)` payload에서 `Unknown unknown has unknown` 가짜 incident/affected를 제거했다. 이제 정상 샘플은 `severity=None`, `affected=[]`, `incident=None`이다.
+  - DB/NATS를 소비하는 singleton worker Deployment는 `strategy.type=Recreate`로 바꿨다. RollingUpdate 중 신규 Pod의 schema compatibility DDL과 기존 worker의 evidence/outbox write가 겹치며 `evidence`/`outbox` lock deadlock DLQ를 만든 것을 차단하기 위함이다. `api-gateway`, `console`, `realtime-gateway`는 무중단 교체가 필요해 RollingUpdate 유지.
 - 검증:
   - `python -m ruff check ...` → passed.
   - `.venv/bin/pytest tests/test_gateway_error_handler.py tests/test_database_unit.py tests/test_docs_index.py -q` → 61 passed.
   - `.venv/bin/pytest tests/test_rca_evidence.py tests/test_incident_symptom_derivation.py tests/test_dashboard_projection.py -q` → 31 passed.
 - 다음:
-  1. no-signal payload 정리 커밋/푸시 후 새 이미지로 롤아웃한다.
-  2. live `incident.detected` 최근 payload에서 `detected=false` 행의 `incident`가 null인지 확인한다.
-  3. 남은 open DLQ 13건은 신규 증가가 멈춘 뒤 replay 가능/아카이브 가능을 개별 판단한다.
+  1. singleton worker Recreate 전략 커밋/푸시 후 live Deployment strategy만 `kubectl patch`로 반영한다(매니페스트 직접 apply 금지: 이미지 placeholder가 live image를 덮을 수 있음).
+  2. live `incident.detected` 최근 payload에서 `detected=false` 행의 `incident`가 null인지 확인 완료 상태를 유지한다.
+  3. 남은 open DLQ 14건은 신규 증가가 멈춘 뒤 replay 가능/아카이브 가능을 개별 판단한다.
   4. 그 다음 프론트 우선순위로 `/console` 데모 보존과 `/` 실제 드릴다운 UI 작업을 진행한다.
 
 ## 체크포인트 (20:35 KST) — outbox relay batch 영구 안정화

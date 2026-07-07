@@ -5,6 +5,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: ai-chat-worker
@@ -47,6 +49,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: evidence-worker
@@ -89,6 +93,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: incident-worker
@@ -131,6 +137,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: plan-worker
@@ -173,6 +181,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: analyze-worker
@@ -215,6 +225,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: recovery-worker
@@ -257,6 +269,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: select-worker
@@ -299,6 +313,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: dispatch-worker
@@ -341,6 +357,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: backlog-worker
@@ -383,6 +401,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: ai-diff-worker
@@ -425,6 +445,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: rollout-worker
@@ -467,6 +489,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: approval-worker
@@ -509,6 +533,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: ai-fallback-worker
@@ -551,6 +577,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: rca-feedback-worker
