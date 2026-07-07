@@ -21,7 +21,7 @@ status: synced
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`) | [repo](./repo.md) | 승인 대기 알림 소스 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | DLQ 쿼리는 admin 만 |
 | import | `@/features/org/SettingsNav` | [org](./org.md) | OpsView 레이아웃 |
-| import ← | [app/AppShell](app.md)(unread 뱃지), [fleet](./fleet.md)·[cluster](./cluster.md)(useTimeline) | — | 소비자 |
+| import ← | [app/ConsoleLayout](app.md)(unread 뱃지), [fleet](./fleet.md)·[cluster](./cluster.md)(useTimeline) | — | 소비자 |
 | 백엔드 | `/dashboard/rca/*`, `/dead-letters*` | [api-gateway](../services/gateway-api-gateway.md) | |
 
 ## 공개 인터페이스 (Public API) — `api.ts`
@@ -48,10 +48,10 @@ status: synced
 
 ### `frontend/src/features/notifications/NotificationsView.tsx :: NotificationsView` (default export)
 
-- 라우트: `/notifications`.
+- 라우트: `/incidents`. 구 경로 `/notifications` 는 router 에서 `/incidents` 로 redirect.
 - 모듈 상수 `FILTERS`: `[['all','전체'],['approval','승인'],['incident','인시던트'],['dlq','운영(DLQ)'],['cluster','클러스터']]`.
 - state: `filter`(기본 'all'). 마운트 시 `markAllSeen()` 1회(진입 시 워터마크 갱신).
-- 트리: h1 '알림' → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가) → 비면 `EmptyState(IconBell '알림이 없습니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, KIND_LABEL[kind] ?? kind)`(한국어 라벨 — 셸 플라이오버와 동일 어휘) + title(read 면 opacity 0.6) + timeAgo + `Link(n.link)` '바로가기 →'.
+- 트리: `PageHeader('인시던트 & 알림', sub='승인 대기·RCA 인시던트·처리 실패(DLQ) 이벤트를 한 곳에서')` → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가, flex wrap) → 비면 `EmptyState(IconBell, title=전체면 '알림이 없습니다'/필터면 '<라벨> 알림이 없습니다', description='승인 대기·RCA 인시던트·처리 실패 이벤트가 생기면 여기 모입니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, KIND_LABEL[kind] ?? kind)`(한국어 라벨 — 셸 플라이오버와 동일 어휘) + title(read 면 opacity 0.6) + timeAgo + `Link(n.link)` '바로가기 →'.
 
 ### `frontend/src/features/notifications/IncidentDetailView.tsx :: IncidentDetailView` (default export)
 
@@ -87,9 +87,10 @@ status: synced
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/notifications` | `NotificationsView` | `RequireSession`+`AppShell` | 합성 피드 + kind 필터 |
-| `/incidents/:incidentId` | `IncidentDetailView` | `RequireSession`+`AppShell` | RCA 파이프라인 그래프 |
-| `/settings/ops` | `OpsView` | `RequireSession`+`AppShell`+`RequireAdmin` | DLQ 목록·재처리 |
+| `/incidents` | `NotificationsView` | `RequireSession`+`ConsoleLayout` | 합성 피드 + kind 필터 |
+| `/notifications` | `<Navigate to="/incidents" replace />` | 없음 | 구 알림 경로 호환 redirect |
+| `/incidents/:incidentId` | `IncidentDetailView` | `RequireSession`+`ConsoleLayout` | RCA 파이프라인 그래프 |
+| `/settings/ops` | `OpsView` | `RequireSession`+`ConsoleLayout`+`RequireAdmin` | DLQ 목록·재처리 |
 
 ## 불변식·오류 (Invariants & Errors)
 

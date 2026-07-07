@@ -465,8 +465,11 @@ frontend/
       router.tsx
       providers.tsx
       guards.tsx
-      shell/
-        AppShell.tsx
+    features/
+      console/
+        ui.tsx
+        pages/HomePage.tsx
+        console.css
     shared/
       lib/
         api.ts

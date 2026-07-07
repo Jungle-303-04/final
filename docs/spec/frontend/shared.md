@@ -170,9 +170,9 @@ export const queryClient = new QueryClient({
 | `StatBox` | `{ label: string; value: number; tone?: Tone }` | 값은 `CountUp` 애니메이션 |
 | `Column<T>` (interface) | `{ key: string; label: string; render: (row: T) => ReactNode; width?: string }` | `ResourceTable` 열 정의 |
 | `ResourceTable<T>` | `{ columns: Column<T>[]; rows: T[]; rowKey: (r) => string; onRowClick?; empty?: ReactNode }` | rows 비면 `empty ?? EmptyState(IconFile)`. 바디는 `AnimatePresence` + `AnimatedRow`(키 기반 layout 애니메이션). onRowClick 있으면 `.clickable` |
-| `Tabs` | `{ items: {key; label; badge?: number}[]; current: string; onChange: (k) => void }` | `role="tablist"`, badge 는 `(n)` 접미 |
-| `Modal` | `{ open: boolean; title: string; onClose; children; size?: 'lg' }` | Escape 로 닫기, 백드롭 클릭 닫기, 내부 클릭 stopPropagation. open false 면 null |
-| `Drawer` | `{ open; title: ReactNode; onClose; children }` | 우측 고정 aside + 반투명 백드롭 |
+| `Tabs` | `{ items: {key; label; badge?: number}[]; current: string; onChange: (k) => void }` | `role="tablist"`, badge 는 `(n)` 접미. 탭 행은 가로 스크롤 가능하고 버튼은 줄바꿈하지 않는다. |
+| `Modal` | `{ open: boolean; title: string; onClose; children; size?: 'lg' }` | Escape 로 닫기, 백드롭 클릭 닫기, 내부 클릭 stopPropagation. `AnimatePresence` + `overlayFade`/`modalPop` 으로 열림·닫힘 전환. |
+| `Drawer` | `{ open; title: ReactNode; onClose; children }` | 우측 고정 aside + 반투명 백드롭. `AnimatePresence` + `overlayFade`/`flyoverSlide` 로 열림·닫힘 전환. |
 | `EmptyState` | `{ icon: ReactNode; title: string; description?: string; action?: ReactNode }` | |
 | `Skeleton` | `{ lines?: number }` (기본 3) | 줄별 width `90 - i*12`% |
 | `QueryBoundary<T>` | `{ query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }` | isPending→Skeleton(기본 4줄); isError→`EmptyState`(kind 별 메시지: forbidden '접근 권한이 없습니다' / unauthorized '다시 로그인해주세요' / network '네트워크 오류' / 기타 `detail`) + "다시 시도" refetch 버튼 |
@@ -182,7 +182,7 @@ export const queryClient = new QueryClient({
 | `Avatar` | `{ name: string }` | 문자코드 합 % 360 → `oklch(75% 0.14 hue)` 배경, 앞 2자 대문자 |
 | `Breadcrumbs` | `{ items: { label: string; to?: string }[] }` | to 있으면 Link |
 | `Stepper` | `{ steps: string[]; current: number }` | `i < current` done / `i === current` now |
-| `Toasts` | (없음) | `uiStore.toasts` 구독, `aria-live="polite"`, 좌측 보더 `toneColor(tone)` |
+| `Toasts` | (없음) | `uiStore.toasts` 구독, `aria-live="polite"`, 좌측 보더 `toneColor(tone)`, `AnimatePresence` layout slide-up/fade 전환 |
 | `SearchInput` | `{ value: string; onChange: (v) => void; placeholder? }` | `/` 키(포커스가 body 일 때)로 포커스. 기본 placeholder `'검색 ( / )'`, maxWidth 320 |
 | `useSearchFilter<T>` (훅) | `(rows: T[], pick: (r) => string) => [T[], string, (v) => void]` | 소문자 includes 필터 |
 
@@ -228,9 +228,9 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 |---|---|---|
 | `HeatNode` | `frontend/src/shared/ui/charts.tsx :: HeatNode` | `{ id: string; label: string; value: number; score: number }` |
 | `heatColor` | `frontend/src/shared/ui/charts.tsx :: heatColor` | `(score: number) => string` — 0(위험)~1(건강)을 `color-mix(in oklab, …)` 로 `--heat-bad → --heat-mid → --heat-good` 보간(0.5 기준 2구간) |
-| `TreemapChart` | `frontend/src/shared/ui/charts.tsx :: TreemapChart` | `{ nodes: HeatNode[]; onTileClick?: (id: string) => void }` — `ResponsiveTreeMap`, `leavesOnly`, 타일색 `heatColor(score)`, 커스텀 tooltip `"{label} · 건강도 N%"`, 컨테이너 `data-testid="treemap"` minHeight 320 |
+| `TreemapChart` | `frontend/src/shared/ui/charts.tsx :: TreemapChart` | `{ nodes: HeatNode[]; onTileClick?: (id: string) => void }` — `ResponsiveTreeMap`, `leavesOnly`, 타일색 `heatColor(score)`, 공통 tooltip style(`surface-2`+border+shadow), `useReducedMotion()` 이 true 면 `animate=false`, 컨테이너 `data-testid="treemap"` minHeight 300 |
 | `Series` | `frontend/src/shared/ui/charts.tsx :: Series` | `{ id: string; data: { x: number\|string; y: number }[] }` |
-| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — `ResponsiveLine`, point scale, 색 `[--info, --ok, --warn]`, `animate={false}`, useMesh |
+| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — `ResponsiveLine`, point scale, 색 `[--info, --ok, --warn]`, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
 
 ## 모션 (`motion/index.tsx`)
 
@@ -258,7 +258,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `AnimatedEdge` | `frontend/src/shared/flow/index.tsx :: AnimatedEdge` | `(props: EdgeProps<AnimatedFlowEdge>)` — smoothstep path(radius 8). active 면 `strokeDasharray '6 4'` + `flow-dash 0.7s linear infinite`, stroke = `tone ? toneColor(tone) : active ? toneColor('info') : var(--border)` |
 | `CollapsibleGroupData` | `frontend/src/shared/flow/index.tsx :: CollapsibleGroupData` | `{ label: string; count: number; collapsed: boolean; tone?: Tone; active?: boolean; onToggle?: () => void }` |
 | `CollapsibleGroupNode` | `frontend/src/shared/flow/index.tsx :: CollapsibleGroupNode` | 접기/펼치기 그룹 노드 — 클릭 시 `onToggle`(자식 표시/숨김은 부모가 제어), `aria-expanded`, chevron 회전(`.flow-group__chev--open`), count pill |
-| `FlowCanvas` | `frontend/src/shared/flow/index.tsx :: FlowCanvas` | `{ nodes; edges; nodeTypes?; onNodeClick?: (id) => void; children? }` — `ReactFlowProvider` 래핑. 기본 nodeTypes `{ group_collapsible: CollapsibleGroupNode }` 병합, edgeTypes `{ animated: AnimatedEdge }`. fitView(padding 0.15), zoom 0.3~1.6, panOnScroll, 드래그/연결 비활성, `colorMode="dark"`, attribution 숨김, `Background gap 20`. 내부 `FitOnChange` 가 노드 id 시그니처 변경 시 rAF 후 `fitView({duration:300})` 재실행 |
+| `FlowCanvas` | `frontend/src/shared/flow/index.tsx :: FlowCanvas` | `{ nodes; edges; nodeTypes?; onNodeClick?: (id) => void; children? }` — `ReactFlowProvider` 래핑. 기본 nodeTypes `{ group_collapsible: CollapsibleGroupNode }` 병합, edgeTypes `{ animated: AnimatedEdge }`. fitView(padding 0.15), zoom 0.3~1.6, panOnScroll, 드래그/연결 비활성, attribution 숨김, `Background gap 20`. `colorMode` 는 `document.documentElement[data-theme-mode]` 를 `MutationObserver` 로 따라간다. 내부 `FitOnChange` 가 노드 id 시그니처 변경 시 rAF 후 `fitView({duration:300})` 재실행 |
 
 `flow.css`: `@keyframes flow-dash`(stroke-dashoffset -20), `flow-pulse`(opacity 1↔0.55), `.flow-node--pulse`(1.4s infinite), `.flow-group*` 스타일. `prefers-reduced-motion: reduce` 에서 애니메이션 제거.
 
@@ -274,6 +274,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 - 간격 `--sp-1 4px ~ --sp-8 32px`, radius `--radius-sm 6px / md 10px / lg 14px`, shadow 2종
 - 모션: `--ease-out cubic-bezier(.16,1,.3,1)`, `--ease-in-out cubic-bezier(.65,0,.35,1)`, `--dur-fast 120ms / base 200ms / slow 350ms`
 - 전역 리셋: box-sizing, 높이 100%, body 배경 `--surface-0`, 스크롤바 스타일.
+- 클릭 가능한 `button.card` 는 hover/active 어포던스가 있고, `.tabs` 는 좁은 화면에서 가로 스크롤된다.
 
 ## 컴포넌트 스타일 (`ui/app.css`)
 
