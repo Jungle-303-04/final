@@ -198,11 +198,12 @@ def test_password_login_creates_session() -> None:
         sessions = FakeSessionStore(auth)
         service = auth.PasswordAuthService(users, sessions)
 
-        session = await service.login("local@example.com", "local-password")
+        session = await service.login("local@example.com", "local-password", "127.0.0.1")
 
         assert session.user_id == "local-user"
         assert session.roles == ["user"]
         assert await sessions.get_session(session.token) == session
+        assert len(sessions.rate_checks) == 2
 
     asyncio.run(run())
 
@@ -320,6 +321,33 @@ def test_password_signup_rate_limit_blocks_before_user_lookup() -> None:
     asyncio.run(run())
 
 
+def test_password_login_rate_limit_blocks_before_password_check() -> None:
+    async def run() -> None:
+        auth = load_auth_module()
+        users = FakeUserStore(
+            {
+                "local@example.com": {
+                    "user_id": "local-user",
+                    "email": "local@example.com",
+                    "password_hash": auth.hash_password("local-password"),
+                    "display_name": "Local User",
+                    "status": "active",
+                    "role": "service_admin",
+                }
+            }
+        )
+        sessions = FakeSessionStore(auth)
+        sessions.block_rate_limit = True
+        service = auth.PasswordAuthService(users, sessions)
+
+        with pytest.raises(HTTPException) as exc:
+            await service.login("local@example.com", "local-password", "127.0.0.1")
+        assert exc.value.status_code == 429
+        assert sessions.sessions == {}
+
+    asyncio.run(run())
+
+
 def test_resend_verification_requires_pending_password_and_issues_new_token() -> None:
     async def run() -> None:
         auth = load_auth_module()
@@ -367,7 +395,7 @@ def test_password_login_rejects_pending_email_verification() -> None:
         service = auth.PasswordAuthService(users, FakeSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
-            await service.login("local@example.com", "local-password")
+            await service.login("local@example.com", "local-password", "127.0.0.1")
         assert exc.value.status_code == 403
         assert exc.value.detail == "email verification required"
 
@@ -465,7 +493,7 @@ def test_password_login_rejects_pending_approval() -> None:
         service = auth.PasswordAuthService(users, FakeSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
-            await service.login("local@example.com", "local-password")
+            await service.login("local@example.com", "local-password", "127.0.0.1")
         assert exc.value.status_code == 403
         assert exc.value.detail == "account approval required"
 
@@ -516,7 +544,7 @@ def test_password_login_rejects_wrong_password() -> None:
         service = auth.PasswordAuthService(users, FakeSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
-            await service.login("local@example.com", "wrong-password")
+            await service.login("local@example.com", "wrong-password", "127.0.0.1")
         assert exc.value.status_code == 401
         assert exc.value.detail == "invalid email or password"
 

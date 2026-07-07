@@ -47,8 +47,8 @@ class FakePasswordAuth:
             expires_in_seconds=3600,
         )
 
-    async def login(self, email: str, password: str) -> Any:
-        self.calls.append(("login", (email, password)))
+    async def login(self, email: str, password: str, client_key: str) -> Any:
+        self.calls.append(("login", (email, password, client_key)))
         return SimpleNamespace(
             token="login-token",
             user_id="user-1",
@@ -118,7 +118,7 @@ def test_signup_requests_email_verification_without_session_cookie(monkeypatch) 
     assert body.email == "local@example.com"
     assert events.bodies[0].email == "local@example.com"
     assert events.bodies[0].verification_url.startswith(
-        "https://app.example.test/auth/verify-email?token="
+        "https://app.example.test/api/auth/verify-email?token="
     )
     assert events.bodies[0].expires_in_seconds == 3600
 
@@ -145,7 +145,7 @@ def test_resend_verification_requests_email_without_session_cookie(monkeypatch) 
     assert body.accepted is True
     assert body.verification_required is True
     assert events.bodies[0].verification_url.startswith(
-        "https://app.example.test/auth/verify-email?token=email-token-2"
+        "https://app.example.test/api/auth/verify-email?token=email-token-2"
     )
 
 
@@ -154,10 +154,12 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     monkeypatch.delenv("SESSION_TTL_SECONDS", raising=False)
     response = Response()
     password_auth = FakePasswordAuth()
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
 
     async def run() -> Any:
         return await identity_router.login(
             LoginRequest(email="local@example.com", password="local-password"),
+            request=request,
             response=response,
             password_auth=password_auth,
         )
@@ -167,6 +169,7 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
 
     assert body.authenticated is True
     assert body.workspace_id == "default"
+    assert password_auth.calls == [("login", ("local@example.com", "local-password", "127.0.0.1"))]
     assert "service_session=login-token" in cookie
     assert "httponly" in cookie
     assert "max-age=7200" in cookie

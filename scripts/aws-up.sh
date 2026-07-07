@@ -107,6 +107,8 @@ GEMINI_MODEL="${GEMINI_MODEL:-}"
 
 AUTH_EMAIL="${AUTH_EMAIL:-}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
+PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-}"
+PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-}"
 PRINT_GENERATED_ADMIN_PASSWORD="${PRINT_GENERATED_ADMIN_PASSWORD:-0}"
 RUN_SMOKE="${RUN_SMOKE:-0}"
 SKIP_LB_HEALTH_WAIT="${SKIP_LB_HEALTH_WAIT:-0}"
@@ -577,10 +579,21 @@ EOF
     --from-file=userlist.txt="${RUNTIME_DIR}/userlist.txt" \
     --dry-run=client -o yaml | kubectl --context "${context}" apply -f -
 
+  local effective_public_base_url="${PUBLIC_BASE_URL}"
+  if [[ -z "${effective_public_base_url}" && -n "${CUSTOM_DOMAIN}" ]]; then
+    local public_scheme="http"
+    case "${CLOUDFLARE_PROXIED}" in
+      1|true|TRUE|yes|YES|on|ON) public_scheme="https" ;;
+    esac
+    effective_public_base_url="${public_scheme}://${CUSTOM_DOMAIN}"
+  fi
+
   kubectl --context "${context}" -n management create configmap management-runtime-config \
     --from-literal=NATS_URL="${NATS_URL}" \
     --from-literal=REDIS_URL="${REDIS_URL}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
+    --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \
+    --from-literal=PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL}" \
     --from-literal=GITHUB_REPO="${GITHUB_REPO}" \
     --from-literal=GITHUB_BRANCH="${GITHUB_BRANCH}" \
     --from-literal=MANIFEST_PATH="${MANIFEST_PATH}" \
@@ -1124,89 +1137,33 @@ bootstrap_admin() {
   sleep 5
 
   BOOTSTRAP_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:15432/${POSTGRES_DB}" \
+  PYTHONPATH="${ROOT_DIR}/src:${ROOT_DIR}/src/services/gateway/api-gateway" \
   AUTH_EMAIL="${AUTH_EMAIL}" \
   AUTH_PASSWORD="${AUTH_PASSWORD}" \
   PROJECT_SLUG="${PROJECT_SLUG}" \
   uv run python - <<'PY'
 from __future__ import annotations
 
-import base64
-import hashlib
 import os
-import secrets
 import uuid
 
-import psycopg
-
-PASSWORD_HASH_ITERATIONS = 260000
-
-
-def encode_token(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+from packages.storage.database import Database
+from passwords import default_display_name, hash_password, normalize_email
 
 
-def hash_password(password: str) -> str:
-    salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        PASSWORD_HASH_ITERATIONS,
-    )
-    return (
-        f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}"
-        f"${encode_token(salt)}"
-        f"${encode_token(digest)}"
-    )
-
-
-email = os.environ["AUTH_EMAIL"].strip().lower()
-password_hash = hash_password(os.environ["AUTH_PASSWORD"])
+os.environ["DATABASE_URL"] = os.environ["BOOTSTRAP_DATABASE_URL"]
+email = normalize_email(os.environ["AUTH_EMAIL"])
 project_slug = os.environ["PROJECT_SLUG"]
 user_id = "user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{email}"))
 
-with psycopg.connect(os.environ["BOOTSTRAP_DATABASE_URL"]) as conn:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            insert into workspaces (workspace_id, name, slug, status, updated_at)
-            values ('default', 'Default Workspace', 'default', 'active', now())
-            on conflict (workspace_id)
-            do update set status = 'active', updated_at = now()
-            """
-        )
-        cur.execute(
-            """
-            insert into user_accounts
-              (user_id, email, password_hash, display_name, status, role, updated_at)
-            values
-              (%s, %s, %s, %s, 'active', 'admin', now())
-            on conflict (email)
-            do update set
-              password_hash = excluded.password_hash,
-              status = 'active',
-              role = 'admin',
-              updated_at = now()
-            returning user_id
-            """,
-            (user_id, email, password_hash, email.split("@", 1)[0]),
-        )
-        stored_user_id = cur.fetchone()[0]
-        cur.execute(
-            """
-            insert into workspace_members
-              (workspace_id, user_id, role, permissions, status, updated_at)
-            values
-              ('default', %s, 'owner', '{"target":["register","install"]}'::jsonb, 'active', now())
-            on conflict (workspace_id, user_id)
-            do update set
-              role = 'owner',
-              permissions = excluded.permissions,
-              status = 'active',
-              updated_at = now()
-            """,
-            (stored_user_id,),
-        )
+db = Database()
+db.init()
+db.upsert_admin_account(
+    user_id=user_id,
+    email=email,
+    password_hash=hash_password(os.environ["AUTH_PASSWORD"]),
+    display_name=default_display_name(email),
+)
 PY
 
   kill "${PORT_FORWARD_PID}" >/dev/null 2>&1 || true
