@@ -64,6 +64,10 @@ status: synced
 | `src/domains/inventory/repository.py :: HEALTH_RESOURCE_TYPE` | `"health"` | 합성 클러스터 health 리소스 타입 |
 | `src/domains/inventory/repository.py :: USAGE_RESOURCE_TYPE` | `"usage"` | 합성 클러스터 usage 리소스 타입 |
 | `src/domains/inventory/repository.py :: UNKNOWN_STATUS` | `"unknown"` | status/health 미지정 시 기본값 |
+| `src/domains/inventory/repository.py :: FLEET_ROLLUP_RESOURCE_TYPES` | `("pod", "node", "workload")` | fleet 롤업 집계 대상 리소스 타입 |
+| `src/domains/inventory/repository.py :: POD_RUNNING_STATUS` | `"Running"` | pods_running 판정 기준 status |
+| `src/domains/inventory/repository.py :: NODE_READY_STATUS` | `"Ready"` | nodes_ready 판정 기준 status |
+| `src/domains/inventory/repository.py :: DEGRADED_HEALTH` | `"degraded"` | degraded workload/Warning 이벤트 판정 기준 health |
 
 모듈 함수:
 
@@ -131,6 +135,21 @@ status: synced
     def list_cluster_usage_samples(self, workspace_id: str, cluster_id: str, *, limit: int = 288) -> list[JsonObject]
     ```
     `cluster_usage_samples`에서 최신 `limit`개(1..2000 clamp)를 뽑아 시간 오름차순으로 반환(차트용). 원소: `{"sampled_at": ISO 문자열, "usage": dict}`.
+  - `src/domains/inventory/repository.py :: InventoryRepository.fleet_inventory_rollup`
+    ```python
+    def fleet_inventory_rollup(self, workspace_id: str, cluster_ids: set[str] | None = None) -> dict[str, JsonObject]
+    ```
+    fleet 화면용 클러스터별 pod/node/workload 상태 롤업(GROUP BY 1 쿼리). `cluster_ids`가 빈 집합이면 즉시 `{}`(권한 0), `None`이면 워크스페이스 전체. 반환 값: `{cluster_id: {pods_running, pods_total, nodes_ready, nodes_total, workloads_degraded, workloads_total, last_seen_at(ISO|None)}}` — pods_running은 `status == "Running"`, nodes_ready는 `status == "Ready"`, workloads_degraded는 `health == "degraded"` 기준.
+  - `src/domains/inventory/repository.py :: InventoryRepository.latest_cluster_usage_rollups`
+    ```python
+    def latest_cluster_usage_rollups(self, workspace_id: str, cluster_ids: set[str] | None = None, *, samples_per_cluster: int = 2) -> dict[str, list[JsonObject]]
+    ```
+    클러스터별 최신 usage 샘플 N개(1..10 clamp)를 window function(row_number)으로 뽑아 시간 오름차순으로 반환 — fleet `restarts_recent` 델타 계산·usage 스냅샷용. 빈 허용 집합이면 즉시 `{}`. 원소는 `list_cluster_usage_samples`와 동일한 `{"sampled_at", "usage"}`.
+  - `src/domains/inventory/repository.py :: InventoryRepository.list_recent_warning_events`
+    ```python
+    def list_recent_warning_events(self, workspace_id: str, cluster_id: str, *, limit: int = 10) -> list[JsonObject]
+    ```
+    드릴다운용 최근 경고 이벤트 — `resource_type="event"` + `health="degraded"`(Warning) + `deleted_at IS NULL`을 `observed_at DESC`로 최대 `limit`(1..100 clamp)개, `serialize_inventory_resource` 적용.
   - `src/domains/inventory/repository.py :: InventoryRepository.latest_inventory_snapshot`
     ```python
     def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None
