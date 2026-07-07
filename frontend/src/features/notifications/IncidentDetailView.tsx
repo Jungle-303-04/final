@@ -137,6 +137,28 @@ export default function IncidentDetailView() {
   );
   const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
 
+  // 타임라인 항목이 correlation_id 로 라우팅된 경우 상세 lookup(incident_id 기준)이 404 일 수 있다.
+  // 그래도 증거·리포트는 correlation 으로 조회 가능 — 흐름을 끊지 않고 확보된 데이터를 보여준다.
+  const notFound = q.isError && (q.error as { kind?: string }).kind === 'not_found';
+  if (notFound) {
+    return (
+      <FadeSlideIn>
+        <Breadcrumbs items={[{ label: '알림', to: '/notifications' }, { label: `인시던트 ${incidentId}` }]} />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px' }}>
+          <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>인시던트 타임라인 상세를 찾을 수 없습니다</h1>
+          <CopyChip value={incidentId} display={trunc(incidentId, 22)} />
+        </div>
+        <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)', marginTop: 0 }}>
+          파이프라인 상태 행이 정리됐을 수 있습니다. 아래는 동일 correlation 으로 저장된 RCA 리포트·증거입니다.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+          <RcaReportsPanel correlationId={incidentId} onShowEvidence={() => evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+          <div ref={evidenceRef}><EvidencePanel correlationId={incidentId} /></div>
+        </div>
+      </FadeSlideIn>
+    );
+  }
+
   return (
     <FadeSlideIn>
       <Breadcrumbs items={[{ label: '알림', to: '/notifications' }, { label: `인시던트 ${incidentId}` }]} />
