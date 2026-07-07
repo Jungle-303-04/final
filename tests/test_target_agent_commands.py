@@ -136,6 +136,54 @@ def test_agent_unwraps_queued_command_payload() -> None:
     assert payload["query"]["source"] == "prometheus"
 
 
+def test_apply_manifest_keeps_plan_diff_payload() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = FakeKubernetesClient()
+    applied: dict[str, object] = {}
+
+    async def fake_apply(manifest: dict[str, object], namespace: str) -> tuple[bool, str, dict]:
+        applied["manifest"] = manifest
+        applied["namespace"] = namespace
+        return True, "manifest applied", {}
+
+    agent.apply_kubernetes_manifest = fake_apply
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.APPLY_MANIFEST_ACTION,
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
+                "payload": {
+                    "diff": {
+                        "resource": "configmap/demo-target-config",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "v1",
+                            "kind": "ConfigMap",
+                            "metadata": {
+                                "name": "demo-target-config",
+                                "namespace": "sandbox",
+                            },
+                            "data": {"DEMO_MODE": "normal"},
+                        },
+                    },
+                    "payload": {},
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert applied["namespace"] == "sandbox"
+    assert applied["manifest"]["kind"] == "ConfigMap"
+
+
 def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
