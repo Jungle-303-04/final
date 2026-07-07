@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:28 KST (알림 채널 전개형 검증 UX 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:33 KST (알림 채널 전개형 검증 UX 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -24,8 +24,13 @@
   - `cd frontend && npm run build` passed.
   - grep: 알림 채널 변경 범위의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, feature `.css` 0건. `frontend/src/ui/index.tsx`의 `duration-[var(--ui-duration-fast)]`는 UI primitive token 사용이다.
   - Playwright mock: `/settings/alerts`를 1440/1024/390 폭에서 순회했다. 초기 저장 비활성, 테스트 전 저장 비활성, 테스트 성공 후 저장 활성, 입력 변경 후 저장 재비활성, horizontal overflow 0, console error 0 확인.
-- 남은 확인:
-  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
+- CI/CD:
+  - `cb10b438` push 후 GitHub Actions `28906019654`(CI), `28906019660`(AWS CD), `28906019661`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:cb10b438-alert-channels-ui-20260708083237`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-5bhYffWU.js`에서 `AlertChannelsView-DACvgMIP.js`, `SettingsNav-Br9x1klQ.js` 참조 확인. lazy chunk 본문에서 `테스트 발송`, `알림 채널`, `현재 입력값`, `Webhook URL`, `채널 활성`, `운영(DLQ)` 문구 확인.
 
 ## 체크포인트 — 인증 전개형 검증 UX
 

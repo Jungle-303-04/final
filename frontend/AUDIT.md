@@ -173,6 +173,7 @@
 - 저장은 `POST /alert-channels`, 삭제는 `DELETE /alert-channels/{id}`를 사용하고 성공/실패 toast와 삭제 확인 모달을 제공한다.
 - `features/notifications/AlertChannelsView.tsx`, `features/notifications/api.ts`, `features/org/SettingsNav.tsx`, `app/router.tsx`의 알림 채널 범위는 `@/ui` 프리미티브와 Tailwind token만 사용한다. `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, feature `.css` 의존은 0건이다.
 - 검증(2026-07-08 08:27 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/settings/alerts`를 1440/1024/390 폭에서 순회했고, 초기 저장 비활성, 테스트 전 저장 비활성, 테스트 성공 후 저장 활성, 입력 변경 후 저장 재비활성, horizontal overflow 0, unexpected console error 0 확인.
+- 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `cb10b438-alert-channels-ui-20260708083237`, `AlertChannelsView-DACvgMIP.js`와 `SettingsNav-Br9x1klQ.js` lazy chunk 서빙 확인.
 
 ## 클러스터 등록 위저드 UX 변경 (2026-07-08)
 
