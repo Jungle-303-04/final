@@ -23,8 +23,10 @@ docs/api
 
 ## 전체 Runner 실행
 
-보호 API는 로그인 쿠키가 필요하므로 개별 요청을 바로 누르면 `{"detail":"authentication required"}`가 정상적으로 나올 수 있다.
-전체 확인은 `06 로그인`을 먼저 실행하고 `10 로그아웃`을 맨 마지막에 실행하는 Runner 순서로 돌린다.
+보호 API는 로그인 쿠키가 필요하지만 collection 기본값 `auto_login: true`가 켜져 있다.
+그래서 개별 보호 API를 바로 눌러도 Bruno pre-request script가 `auth_email`/`auth_password`로 먼저 로그인하고 `service_session` cookie를 저장한다.
+401/403 동작을 일부러 확인하려면 Environment의 `auto_login`을 `false`로 바꾼 뒤 요청한다.
+전체 확인은 기존처럼 `06 로그인`을 포함한 Runner 순서로 돌려도 되고, `10 로그아웃`은 맨 마지막에 실행한다.
 
 로컬에 실제 AWS 값이 들어간 `docs/api/environments/aws-live.local.bru`가 있으면 아래 명령으로 전체 과정을 한 번에 실행한다.
 이 파일은 `*.local.bru`로 ignore되어 Git에 올라가지 않는다.
@@ -33,9 +35,10 @@ docs/api
 bash scripts/run-bruno-aws.sh
 ```
 
-같은 순서를 Bruno 앱에서 실행할 때도 `00-health-auth/01`부터 `00-health-auth/07`까지 먼저 실행하고,
+같은 순서를 Bruno 앱에서 실행할 때도 `00-health-auth/01`부터 `00-health-auth/07`까지 실행하고,
 그 다음 `01`부터 `13` 폴더를 실행한 뒤 `00-health-auth/10 로그아웃`을 마지막에 실행한다.
-`00-health-auth/10 로그아웃`을 중간에 실행하면 이후 보호 API는 다시 로그인 전까지 401을 반환한다.
+`00-health-auth/10 로그아웃`을 중간에 실행해도 `auto_login`이 켜져 있으면 다음 보호 API에서 다시 로그인한다.
+로그아웃 이후 401 상태를 확인하려면 `auto_login`을 먼저 꺼 둔다.
 
 ## 2단계. 변수 채우기
 
@@ -43,13 +46,14 @@ bash scripts/run-bruno-aws.sh
 
 직접 채워야 하는 값은 처음 한 번만 본다.
 
-1. `base_url`은 Gateway 직접 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/`로 이미 채워져 있다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
-2. `auth_email`/`auth_password`는 로그인할 계정이다. collection 기본값은 로컬 bootstrap 계정인 `admin.local@example.com` / `local-test-password-1234`다. AWS에 다른 admin 계정으로 bootstrap되어 있으면 `aws-test` Environment에서 두 값을 그 계정으로 바꾼다.
-3. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
-4. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
-5. `alertmanager_token`은 외부 Alertmanager webhook 입구가 켜진 배포에서만 넣는다. 배포의 `ALERTMANAGER_WEBHOOK_TOKEN`과 같아야 한다.
-6. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
-7. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
+1. `base_url`은 Gateway API 주소다. `local`은 `http://localhost:18080/`, `aws-test`는 `https://k8s.woonyong.org/api/`로 이미 채워져 있다. Bruno 요청 파일은 `{{base_url}}providers/validate`처럼 붙기 때문에 값이 반드시 `/`로 끝나야 한다.
+2. `auto_login`은 보호 API 호출 전에 Bruno가 자동 로그인할지 정한다. 기본값은 `true`다.
+3. `auth_email`/`auth_password`는 자동 로그인과 `06-login` 요청에 쓸 계정이다. collection 기본값은 로컬 bootstrap 계정인 `admin.local@example.com` / `local-test-password-1234`다. AWS에 다른 admin 계정으로 bootstrap되어 있으면 `aws-test` Environment에서 두 값을 그 계정으로 바꾼다.
+4. `github_webhook_secret`은 배포에 설정된 `GITHUB_WEBHOOK_SECRET` 값이다. 이 값을 채우면 webhook signature를 Bruno가 요청 직전에 자동 계산한다.
+5. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
+6. `alertmanager_token`은 외부 Alertmanager webhook 입구가 켜진 배포에서만 넣는다. 배포의 `ALERTMANAGER_WEBHOOK_TOKEN`과 같아야 한다.
+7. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
+8. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
@@ -66,17 +70,22 @@ bash scripts/run-bruno-aws.sh
 
 아래는 각 값의 의미 설명이다.
 
-`base_url`은 Gateway 직접 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/`를 쓴다.
-현재 AWS CD smoke와 Cloudflare DNS는 `api-gateway` LoadBalancer를 `k8s.woonyong.org`로 연결한다. 그래서 Bruno에서는 `/healthz`, `/providers/validate`, `/agent/debug/query`처럼 Gateway route를 그대로 붙여 호출한다.
+`base_url`은 Gateway API 주소다. `aws-test` Environment와 collection 기본 변수는 `https://k8s.woonyong.org/api/`를 쓴다.
+현재 AWS/CDN 라우팅은 프론트 콘솔을 `https://k8s.woonyong.org/`에 두고, Gateway API를 같은 origin의 `/api/*` 프록시로 연결한다. 그래서 Bruno에서는 `{{base_url}}healthz`, `{{base_url}}providers/validate`, `{{base_url}}agent/debug/query`처럼 Gateway route를 붙여 호출한다.
 
-프론트 콘솔의 nginx는 브라우저 same-origin 요청을 위해 `/api/*`를 내부 `api-gateway`로 proxy한다. 이 경로는 프론트 화면에서 쓰는 경로이고, Bruno collection의 `base_url`에는 넣지 않는다.
+프론트 콘솔을 직접 여는 주소는 `https://k8s.woonyong.org/`지만, Bruno collection의 AWS `base_url`에는 `/api/`까지 포함한다.
 
-Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/`로 풀린다.
+Bruno 화면에서 Environment를 아직 고르지 않았더라도 `docs/api/collection.bru`의 기본 변수 때문에 `{{base_url}}`이 `https://k8s.woonyong.org/api/`로 풀린다.
 그래도 실제 AWS 테스트를 할 때는 오른쪽 위 Environment에서 `aws-test`를 선택한다.
 
 `auth_email`과 `auth_password`는 로그인할 운영자 계정이다.
 collection 기본값은 `admin.local@example.com` / `local-test-password-1234`이고, 로컬 bootstrap smoke에서 바로 쓸 수 있는 값이다.
 AWS 라이브에서 `AUTH_EMAIL`/`AUTH_PASSWORD` secret으로 다른 admin을 bootstrap했다면 `aws-test` Environment의 두 값을 그 계정으로 바꾼다.
+
+`auto_login`은 Bruno에서 보호 API를 바로 눌렀을 때 collection pre-request script가 자동으로 `/auth/login`을 호출할지 정한다.
+기본값은 `true`라서 `01-providers`, `02-target-admin`, `05-rca-dashboard`, `07-ai`, `09-management-console` 같은 세션 API를 먼저 로그인 요청 없이 실행할 수 있다.
+자동 로그인은 `service_session` cookie가 없을 때만 동작하며, `x-agent-token` API, install 링크, GitHub/Alertmanager webhook, `/metrics`, health/openapi/auth 흐름에는 붙지 않는다.
+인증 실패 응답을 직접 보고 싶으면 Environment에서 `auto_login`을 `false`로 바꾼다.
 
 `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 id다. 기본값은 `cluster-1`/`cluster-2`다.
 단, 두 클러스터에 cluster-agent가 아직 배포되지 않았다면 `clusters` 목록/인벤토리는 비어 있을 수 있다 —
@@ -113,7 +122,7 @@ collection 기본 생성 요청은 `enabled: false`로 보내므로 기본값 `h
 
 권한 기준은 세 가지로 보면 된다.
 인증 없이 보는 상태 확인 API, 로그인 세션이 필요한 운영자/사용자 API, `x-agent-token`이 필요한 target agent API다.
-로그인 세션 API는 Bruno가 `service_session` cookie를 자동으로 들고 간다.
+로그인 세션 API는 `auto_login`이 켜져 있으면 Bruno가 먼저 세션을 만들고, 이후 `service_session` cookie를 자동으로 들고 간다.
 target agent API는 Environment의 `agent_token`이 맞아야 한다.
 
 ### 00-health-auth
@@ -139,7 +148,7 @@ Bruno collection을 수정할 때도 이 API로 route가 실제 배포에 있는
 이미 검증이 끝난 계정이면 다시 검증할 필요가 없다는 형태로 응답할 수 있다.
 
 `06-login`은 운영자 또는 팀원 계정으로 로그인하고 `service_session` cookie를 받는 API다.
-이 요청이 성공해야 dashboard, command, approval, AI conversation 같은 세션 API를 이어서 테스트할 수 있다.
+`auto_login`이 켜져 있으면 세션 API를 먼저 눌러도 같은 로그인을 pre-request에서 자동 수행한다.
 Bruno는 응답 cookie를 보관하므로, 같은 Environment에서 다음 요청을 그대로 보내면 된다.
 
 `07-session`은 현재 cookie가 어떤 사용자, workspace, roles로 인식되는지 확인하는 API다.
@@ -160,7 +169,7 @@ Bruno는 응답 cookie를 보관하므로, 같은 Environment에서 다음 요�
 ### 01-providers
 
 이 폴더의 요청은 provider catalog와 cluster 등록 후보를 다루므로 admin 세션이 필요하다.
-먼저 `00-health-auth/06-login`으로 `service_admin` 계정에 로그인한다.
+`auto_login` 기본값이면 바로 보낼 수 있다. 수동 흐름으로 확인하려면 먼저 `00-health-auth/06-login`으로 `service_admin` 계정에 로그인한다.
 
 `01-provider-catalog`는 현재 Gateway가 알고 있는 provider 선택지를 보여주는 API다.
 target 등록 전에 어떤 source, deploy, cloud, secret provider 조합을 쓸 수 있는지 확인한다.
@@ -417,9 +426,12 @@ alert-worker가 `alert.requested`를 받았을 때 이 목록을 기준으로 �
 
 이 세 개가 실패하면 이후 요청은 보지 않는다. 먼저 Gateway 주소와 AWS CD 상태를 확인한다.
 
-## 4단계. 로그인 확인
+## 4단계. 자동 로그인 확인
 
-`00-health-auth/06-login.bru`를 보낸다.
+세션 API를 바로 확인하려면 `00-health-auth/07-session.bru`를 보낸다.
+cookie가 없으면 Bruno가 먼저 `/auth/login`을 호출하므로 정상 출력은 `authenticated: true`, `user_id`, `workspace_id`, `roles`다.
+
+수동 로그인 API 자체를 확인하려면 `00-health-auth/06-login.bru`를 보낸다.
 
 정상 출력은 `authenticated: true`, `user_id`, `workspace_id`, `roles`다.
 Bruno는 `service_session` httpOnly cookie를 cookie jar에 보관하고 다음 요청에 자동으로 보낸다.
