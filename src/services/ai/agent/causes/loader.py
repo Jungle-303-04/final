@@ -10,8 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from services.ai.agent.causes.signals import MATCHER_KEYS
 from services.ai.agent.playbooks.cause import (
     CAUSE_PROFILES,
     CauseCandidateSpec,
@@ -26,6 +27,41 @@ class CauseCatalogError(RuntimeError):
     """RCA 룰 카탈로그 로딩 실패 — 기동 시점에 즉시 중단시키는 오류."""
 
 
+class CatalogSignalMatcherModel(BaseModel):
+    """판별 신호 matcher 스키마 — fact/log_pattern/event_pattern 중 정확히 하나."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fact: str | None = Field(default=None, min_length=1)
+    log_pattern: str | None = Field(default=None, min_length=1)
+    event_pattern: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def exactly_one_matcher(self) -> CatalogSignalMatcherModel:
+        provided = [key for key in MATCHER_KEYS if getattr(self, key) is not None]
+        if len(provided) != 1:
+            raise ValueError(
+                f"signal matcher 는 {'/'.join(MATCHER_KEYS)} 중 정확히 하나여야 합니다"
+            )
+        return self
+
+    def to_payload(self) -> dict[str, str]:
+        key = next(key for key in MATCHER_KEYS if getattr(self, key) is not None)
+        return {key: str(getattr(self, key))}
+
+
+class CatalogSignalGroupModel(BaseModel):
+    """판별 신호 그룹 스키마 — any_of 중 하나라도 매칭되면 그룹 충족."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    any_of: list[CatalogSignalMatcherModel] = Field(min_length=1)
+
+    def to_payload(self) -> dict[str, object]:
+        return {"id": self.id, "any_of": [matcher.to_payload() for matcher in self.any_of]}
+
+
 class CatalogCandidateModel(BaseModel):
     """YAML 원인 후보 스키마 — `CauseCandidateSpec` 과 1:1 대응."""
 
@@ -36,6 +72,8 @@ class CatalogCandidateModel(BaseModel):
     description: str = Field(min_length=1)
     expected_evidence: list[str] = Field(min_length=1)
     checks: list[str] = Field(min_length=1)
+    # 판별 신호 그룹(선택) — 선언하면 모든 그룹이 충족돼야 완결 점수(1.0)에 도달한다.
+    signals: list[CatalogSignalGroupModel] = Field(default_factory=list)
 
     def to_spec(self) -> CauseCandidateSpec:
         return CauseCandidateSpec(
@@ -44,6 +82,7 @@ class CatalogCandidateModel(BaseModel):
             description=self.description,
             expected_evidence=tuple(self.expected_evidence),
             checks=tuple(self.checks),
+            signals=tuple(group.to_payload() for group in self.signals),
         )
 
 
