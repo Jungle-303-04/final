@@ -127,7 +127,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `dashboard`를 찾을 때는 [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md), [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md)을 본다.
 
-`frontend`를 찾을 때는 [Frontend Framework Design Plan](frontend-framework-design.md), [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md)을 본다.
+`frontend`를 찾을 때는 [Frontend Framework Design Plan](frontend-framework-design.md), [찬빈 온보딩](onboarding/chanbin-frontend.md), [찬빈 Frontend + Projection 구현 흐름](rca-production-onboarding/03-chanbin-frontend-projection.md), [콘솔 메트릭·쿼리 카탈로그](frontend-metrics-queries.md)을 본다.
 
 `permission`을 찾을 때는 [찬빈 권한 시스템과 대시보드 적용](rca-production-onboarding/06-chanbin-permission-dashboard.md), [찬빈 권한 모델 상세](team/member-guides/chanbin-permission-model.md), [Secrets](secrets.md)를 본다.
 
@@ -161,6 +161,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
 - [frontend-framework-design](frontend-framework-design.md)
+- [frontend-metrics-queries](frontend-metrics-queries.md)
 - [local-testing](local-testing.md)
 - [operations-deployment](operations-deployment.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
@@ -288,6 +289,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [fd/views/resources](fd/views/resources.md)
 - [fd/views/workflow](fd/views/workflow.md)
 - [frontend-framework-design](frontend-framework-design.md)
+- [frontend-metrics-queries](frontend-metrics-queries.md)
 - [local-testing](local-testing.md)
 - [onboarding/README](onboarding/README.md)
 - [onboarding/chanbin-frontend](onboarding/chanbin-frontend.md)
