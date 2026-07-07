@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: c8d21d6d
 status: synced
 ---
 
@@ -61,8 +61,8 @@ status: synced
   FadeSlideIn > 그리드(260px 1fr, 높이 calc(100vh - 140px))
   ├─ Card('대화', actions="새 대화" → nav(pathFor('/ai'))) ← 좌측 목록 (성공+0건이면 '대화 없음')
   │   AnimatedList(listQ.data)
-  │   대화별 행: status==='waiting' 이면 info 점, title(ellipsis), timeAgo(updated_at), 삭제 버튼
-  │   현재 대화는 data-active=true 배경. 행 클릭 → /ai/:id, 삭제 버튼은 stopPropagation
+  │   대화별 행: 열기 button(status==='waiting' 이면 info 점, title ellipsis, timeAgo(updated_at)) + 삭제 button
+  │   현재 대화는 data-active=true 배경. 열기 button 클릭 → /ai/:id, 삭제 button 클릭 → deleteConversation
   └─ Card(flex column, padding 0, overflow hidden)     ← 우측 스레드
      ├─ 헤더: 제목 또는 'AI 운영 어시스턴트' + status, 현재 대화면 삭제 버튼
      ├─ 메시지 영역(.chat-messages):
@@ -70,7 +70,7 @@ status: synced
      │   conv.messages.map(MessageRenderer)
      │   conv.status==='waiting' → "분석 중" + skeleton (data-testid="typing")
      └─ 입력줄(.chat-composer): 16,000자 초과 시 role="alert" 경고 · textarea(rows 2, ⌘/Ctrl+Enter 전송,
-        data-testid="chat-input") · 전송 Button(primary, loading=create||send, data-testid="chat-send")
+        data-testid="chat-input") · 전송 Button(primary, loading=create||send, disabled=빈 draft/16,000자 초과/pending, data-testid="chat-send")
   ```
 
 내부(비공개) 서브컴포넌트:

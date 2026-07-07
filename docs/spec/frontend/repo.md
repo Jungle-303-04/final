@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: c8d21d6d
 status: synced
 ---
 
@@ -43,8 +43,8 @@ status: synced
 | `useRepositoryManifestCandidates` | `frontend/src/features/repo/api.ts :: useRepositoryManifestCandidates` | GET `/repositories/discovery/manifests?repo_ref=...&branch=...` | 쿼리키 `repoKeys.manifests(repoRef, branch)`, `enabled`, `retry:false`, `staleTime:30s` |
 | `useRepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: useRepositoryManifestValidation` | POST `/repositories/discovery/validate` body `{repo_ref, branch, manifest_path, source_type}` | 쿼리키 `repoKeys.validation(repoRef, branch, manifestPath, sourceType)`, `enabled`, `retry:false`, `staleTime:30s` |
 | `useApproval` | `frontend/src/features/repo/api.ts :: useApproval` | POST `/approvals/${approvalId}/${action}` (`action: 'grant'\|'reject'`) | 성공: toast(`grant → ok '승인 완료 — 배포가 진행됩니다'` / `reject → warn '거절했습니다'`) + `['applications']`·`applications*` predicate·`ai*` predicate invalidate |
-| `CreateApplicationInput` | `frontend/src/features/repo/api.ts :: CreateApplicationInput` | — | `{ name; repo_ref; branch; manifest_path; cluster_id }` — 레포 연결 위저드 입력 계약 |
-| `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | ① POST `/applications` body `{name, repo_ref, default_branch: branch, manifest_path}` → `{application: raw}` ② POST `/applications/${id}/deployments` body `{cluster_id, namespace:'sandbox', environment:'sandbox', manifest_path}` | `(input: CreateApplicationInput)` — 앱 생성 후 배포 대상 등록까지 2단계 순차 실행. 반환은 `adaptApplication` 결과에 `branch`/`cluster_id` 를 덮어쓴 값. 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
+| `CreateApplicationInput` | `frontend/src/features/repo/api.ts :: CreateApplicationInput` | — | `{ name; repo_ref; branch; manifest_path; source_type; cluster_id; namespace?; environment? }` — 레포 연결 위저드 입력 계약 |
+| `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | POST `/applications/connect` body `{name, repo_ref, branch, manifest_path, source_type, cluster_id, namespace?, environment?}` → `{application: raw}` | `(input: CreateApplicationInput)` — 앱과 배포 대상 연결을 서버 재검증 경로에 위임한다. `namespace`와 `environment`는 입력이 있을 때만 보낸다. 반환은 `adaptApplication` 결과에 `branch`/`cluster_id` 를 덮어쓴 값. 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
 
 `ACTIVE`(모듈 상수, 비공개): `{'STARTED','RENDERING','DIFFING','POLICY_CHECKING','WAITING_FOR_APPROVAL','APPLYING','ROLLOUT_WAITING'}`.
 
@@ -111,4 +111,4 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 - 승인 성공 시 chat 캐시(`['ai']` prefix)도 무효화해 대화 속 `approval_ref` 상태를 동기화한다.
 - run 상태 문자열은 `adaptRun` 이 대문자로 정규화한 값으로만 비교한다(실백엔드 step 이름 매핑 포함 — [shared/adapt](shared.md#어댑터-libadaptts)).
 - manifest 는 Git 이 원본 — 콘솔은 링크("manifest 수정 ↗")만 제공하고 직접 편집 UI 를 만들지 않는다.
-- 앱 생성은 `/applications` → `/applications/:id/deployments` 2단계 순차 호출 — 백엔드 필드명(`default_branch`) 변환은 `useCreateApplication` 내부에서만 한다.
+- 앱 연결은 `/applications/connect` 단일 호출로 수행한다. 프론트는 `namespace`/`environment`를 하드코딩하지 않고 manifest validation 결과와 선택 클러스터 환경에서 얻은 값이 있을 때만 보낸다.

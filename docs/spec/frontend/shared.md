@@ -1,5 +1,5 @@
 ---
-source_commit: b367da80
+source_commit: c8d21d6d
 status: synced
 ---
 
@@ -156,7 +156,7 @@ export const queryClient = new QueryClient({
 | `adaptK8sEventResource` | `frontend/src/shared/lib/adapt.ts :: adaptK8sEventResource` | `=> K8sEvent`. `at = last_timestamp ?? first_timestamp ?? observed_at ?? created_at`, `target = '<involved_kind>/<involved_name>'` |
 | `adaptInventoryResource` | `frontend/src/shared/lib/adapt.ts :: adaptInventoryResource` | `=> InventoryResource`. `status ?? health ?? 'unknown'`, `age = observed_at ?? created_at`, `raw = raw ?? summary` |
 | `adaptApplication` | `frontend/src/shared/lib/adapt.ts :: adaptApplication` | `=> Application`. `name ?? application_id`, `repo_ref ?? metadata.repo_ref`, `branch ?? default_branch ?? metadata.branch ?? 'main'` |
-| `adaptDeployment` | `frontend/src/shared/lib/adapt.ts :: adaptDeployment` | `=> Deployment`. `namespace ?? 'sandbox'`, `name ?? app_name`, 수치 기본 0, `status ?? 'unknown'` |
+| `adaptDeployment` | `frontend/src/shared/lib/adapt.ts :: adaptDeployment` | `=> Deployment`. `namespace ?? 'unknown'`, `name ?? app_name`, 수치 기본 0, `status ?? 'unknown'` |
 | `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. mock 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 비공개 `STEP_NAME_MAP` 으로 콘솔 단계 이름에 매핑한다(git→STARTED, render→RENDERING, diff→DIFFING, policy→POLICY_CHECKING, approval/safe_pr→WAITING_FOR_APPROVAL, apply→APPLYING, health→ROLLOUT_WAITING, 미등록 이름은 대문자화). `details.resource`(+`details.namespace` 접미)는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
 | `adaptIncident` | `frontend/src/shared/lib/adapt.ts :: adaptIncident` | `=> Incident`. summary 우선순위: `root_cause`(단 `'unknown'` 제외) → `error_reason` → `current_subject` → `'인시던트'`. `incident_id ?? correlation_id`, `stage = current_subject ?? status`, `at = at ?? updated_at` |
 | `adaptIncidentDetail` | `frontend/src/shared/lib/adapt.ts :: adaptIncidentDetail` | `=> IncidentDetail`. `adaptIncident` 기반 + `status ?? stage ?? 'open'`, null 정규화(`''`→null), `confidence` 는 number 일 때만, evidence 배열은 `Array.isArray` 검사 후 `map(String)` |
@@ -182,8 +182,8 @@ export const queryClient = new QueryClient({
 | `Column<T>` (interface) | `{ key: string; label: string; render: (row: T) => ReactNode; width?: string }` | `ResourceTable` 열 정의 |
 | `ResourceTable<T>` | `{ columns: Column<T>[]; rows: T[]; rowKey: (r) => string; onRowClick?; empty?: ReactNode }` | rows 비면 `empty ?? EmptyState(IconFile)`. 바디는 `AnimatePresence` + `AnimatedRow`(키 기반 layout 애니메이션). onRowClick 있으면 `.clickable` |
 | `Tabs` | `{ items: {key; label; badge?: number}[]; current: string; onChange: (k) => void }` | `role="tablist"`, badge 는 `(n)` 접미. 탭 행은 가로 스크롤 가능하고 버튼은 줄바꿈하지 않는다. |
-| `Modal` | `{ open: boolean; title: string; onClose; children; size?: 'lg' }` | Escape 로 닫기, 백드롭 클릭 닫기, 내부 클릭 stopPropagation. `AnimatePresence` + `overlayFade`/`modalPop` 으로 열림·닫힘 전환. |
-| `Drawer` | `{ open; title: ReactNode; onClose; children }` | 우측 고정 aside + 반투명 백드롭. `AnimatePresence` + `overlayFade`/`flyoverSlide` 로 열림·닫힘 전환. |
+| `Modal` | `{ open: boolean; title: string; onClose; children; size?: 'lg' }` | Escape 로 닫기, 백드롭 클릭 닫기, 내부 클릭 stopPropagation. 열리면 첫 focusable 또는 dialog 자체로 focus, Tab focus trap, 닫히면 이전 focus 복원. `role="dialog"`, `aria-modal="true"`, `AnimatePresence` + `overlayFade`/`modalPop` 으로 열림·닫힘 전환. |
+| `Drawer` | `{ open; title: ReactNode; onClose; children }` | 우측 고정 aside + 반투명 백드롭. 열리면 첫 focusable 또는 drawer 자체로 focus, Tab focus trap, 닫히면 이전 focus 복원. `role="dialog"`, `aria-modal="true"`, `AnimatePresence` + `overlayFade`/`flyoverSlide` 로 열림·닫힘 전환. |
 | `EmptyState` | `{ icon: ReactNode; title: string; description?: string; action?: ReactNode }` | |
 | `Skeleton` | `{ lines?: number }` (기본 3) | 줄별 width `90 - i*12`% |
 | `QueryBoundary<T>` | `{ query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }` | isPending→Skeleton(기본 4줄); isError→`EmptyState`(kind 별 메시지: forbidden '접근 권한이 없습니다' / unauthorized '다시 로그인해주세요' / network '네트워크 오류' / 기타 `detail`) + "다시 시도" refetch 버튼 |
@@ -241,7 +241,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `heatColor` | `frontend/src/shared/ui/charts.tsx :: heatColor` | `(score: number) => string` — 0(위험)~1(건강)을 `color-mix(in oklab, …)` 로 `--heat-bad → --heat-mid → --heat-good` 보간(0.5 기준 2구간) |
 | `TreemapChart` | `frontend/src/shared/ui/charts.tsx :: TreemapChart` | `{ nodes: HeatNode[]; onTileClick?: (id: string) => void }` — `ResponsiveTreeMap`, `leavesOnly`, 타일색 `heatColor(score)`, 공통 tooltip style(`surface-2`+border+shadow), `useReducedMotion()` 이 true 면 `animate=false`, 컨테이너 `data-testid="treemap"` minHeight 300 |
 | `Series` | `frontend/src/shared/ui/charts.tsx :: Series` | `{ id: string; data: { x: number\|string; y: number }[] }` |
-| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — 빈 `data` 시리즈는 제외하고, 표시 가능한 포인트가 없으면 고정 높이 empty state 를 렌더한다. 데이터가 있으면 `ResponsiveLine`, point scale, 색 `[--info, --ok, --warn]`, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
+| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — 빈 `data` 시리즈는 제외하고, 표시 가능한 포인트가 없으면 고정 높이 empty state 를 렌더한다. 모든 x값이 number면 linear scale, 하나라도 string이면 point scale. 가장 긴 시리즈에서 최대 5개 tick을 샘플링하고 number tick은 epoch ms면 `fmtHms`, 작은 숫자면 그대로 표시한다. 데이터가 있으면 `ResponsiveLine`, 색 `[--info, --ok, --warn]`, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
 
 ## 모션 (`motion/index.tsx`)
 
