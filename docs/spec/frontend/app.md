@@ -1,5 +1,5 @@
 ---
-source_commit: 0b4058dd
+source_commit: b367da80
 status: synced
 ---
 
@@ -143,7 +143,7 @@ ConsoleLayout (div.pl-app.co-app)
 ## 동작 (Behavior)
 
 1. 부팅: `main.tsx` → `Providers`(QueryClient + 401 핸들러 + Toasts) → `RouterProvider`.
-2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 이미 로그인된 사용자가 게스트 라우트에 들어오면 안전한 `returnTo` query 로 이동하고, 없거나 외부 URL 형태면 `/` 로 이동한다. 세션 조회 자체가 실패하면 게스트 화면을 그대로 렌더한다.
+2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 이미 로그인된 사용자가 게스트 라우트에 들어오면 안전한 `returnTo` query 로 이동하고, 없거나 외부 URL 형태면 `/` 로 이동한다. 세션 조회가 pending 이거나 실패하면 게스트 화면을 그대로 렌더한다.
 3. 세션 플로우: `RequireSession` 이 세션 확인 후 `ConsoleLayout` 렌더 → `startLive()` 1회 호출로 WS 시작.
 4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재 path+query+hash>` 이동.
 5. `/console`과 `/console/*`는 같은 콘솔 IA를 base path 유지 상태로 렌더한다. `/overview`, `/notifications`, 구 UI 경로 계열은 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 해당 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.

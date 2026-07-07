@@ -1,5 +1,5 @@
 ---
-source_commit: 8c8b3b02
+source_commit: b367da80
 status: synced
 ---
 
@@ -25,7 +25,7 @@ status: synced
 | 심볼 | 앵커 | 시그니처 | API (메서드+경로) | 비고 |
 |---|---|---|---|---|
 | `sessionKey` | `frontend/src/features/auth/api.ts :: sessionKey` | `['session'] as const` | — | 세션 쿼리 키 |
-| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` | `staleTime: 60_000`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다 |
+| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` via `get(..., { timeoutMs: 8_000 })` | `staleTime: 60_000`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다. 8초 안에 응답이 없으면 API 클라이언트가 요청을 abort 하고 network 오류로 다룬다 |
 | `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 시 `sessionKey` invalidate |
 | `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `qc.clear()` (캐시 전체 삭제) |
 | `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
@@ -87,4 +87,5 @@ status: synced
 
 - 로그아웃 성공 시 React Query 캐시 전체 clear — 이전 사용자 데이터 잔존 금지.
 - 로그인 성공은 `sessionKey` invalidate 로 전파(가드가 자동으로 재평가).
+- 세션 확인 timeout 은 `useSession()`에만 적용한다. 다른 인증 mutation 에 새 timeout 정책을 강제하지 않는다.
 - 오류 표시는 `ApiError.status`/`detail` 기반 — 상태코드별 한국어 메시지는 위 명세 그대로.
