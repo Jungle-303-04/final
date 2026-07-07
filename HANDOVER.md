@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:19 KST (히트맵 드릴다운 팟 URL 동기화 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:27 KST (히트맵 드릴다운 라이브 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -20,6 +20,14 @@
   - `cd frontend && npm run build` passed.
   - Playwright mock: `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8`를 1440/1024/390 폭에서 직접 열어 팟 Drawer 복원, critical/인시던트 상태, "인시던트 보기" CTA, horizontal overflow 0 확인.
   - Playwright mock: `/clusters/cluster-1`에서 노드 타일 클릭 → 팟 타일 클릭 → 브라우저 뒤로가기 2회로 `?node`/base 상태 복귀 확인. 세션 refresh API를 목킹한 뒤 unexpected console error 0.
+- CI/CD:
+  - `eb12c248` push 후 GitHub Actions `28902916705`(CI), `28902916711`(Promote Dev To Main), `28902916699`(AWS CD)는 모두 실패. 각 job `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+- 라이브 배포:
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:eb12c248-heatmap-ui-20260708072625`, digest `sha256:a64a4643384976e8fe07d8c1b57e7919a1f6addacf513fb210ee156b56b62bc0`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset 확인: `/assets/ClusterDetailView-CF_fLVxG.js` 200, chunk 안에 `selectedPodId`, `pod`, `팟 상세 없음`, `인시던트 보기` 포함.
 
 ## 체크포인트 — 콘솔 디자인 시스템 Phase 2 메트릭 이관 완료
 
