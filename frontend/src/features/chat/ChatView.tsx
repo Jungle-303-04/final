@@ -40,6 +40,9 @@ export default function ChatView() {
     <FadeSlideIn>
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, height: 'calc(100vh - 140px)' }}>
         <Card style={{ overflow: 'auto' }} title="대화" actions={<Button size="sm" onClick={() => nav('/ai')}>+ 새 대화</Button>}>
+          {listQ.isSuccess && (listQ.data ?? []).length === 0 && (
+            <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>대화 이력이 없습니다 — 오른쪽에 입력하면 새 대화가 시작됩니다.</p>
+          )}
           {(listQ.data ?? []).map(c => (
             <div key={c.conversation_id} onClick={() => nav(`/ai/${c.conversation_id}`)}
               style={{ padding: '8px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 'var(--fs-sm)',
