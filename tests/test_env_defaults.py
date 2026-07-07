@@ -11,6 +11,7 @@ from conftest import ROOT, load_file
 from domains.command import policy as command_policy
 from domains.command import router as command_router
 from domains.target import evidence_jobs
+from packages.config import control as config_control
 from packages.config import retry as config_retry
 from packages.runtime import relay as runtime_relay
 from packages.runtime import worker as runtime_worker
@@ -70,6 +71,22 @@ def test_command_long_poll_env_defaults_remain_unchanged() -> None:
     assert command_router.POLL_SLEEP_SECONDS == 1
     assert command_policy.DEFAULT_COMMAND_LEASE_SECONDS == 60
     assert command_policy.DEFAULT_COMMAND_LEASE_SECONDS_ENV == "COMMAND_LEASE_SECONDS"
+
+
+def test_management_namespace_is_never_control_allowed(monkeypatch) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,management,prod-web")
+
+    assert config_control.control_allowed_namespaces() == ("sandbox", "prod-web")
+    assert config_control.control_namespace_allowed("sandbox") is True
+    assert config_control.control_namespace_allowed("management") is False
+
+
+def test_control_allowlist_all_protected_namespaces_becomes_empty(monkeypatch) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "management")
+
+    assert config_control.control_allowed_namespaces() == ()
+    assert config_control.control_namespace_allowed("management") is False
+    assert config_control.control_namespace_allowed("sandbox") is False
 
 
 def test_evidence_job_env_defaults_remain_unchanged() -> None:

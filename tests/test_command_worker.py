@@ -92,16 +92,17 @@ def command_request(
     policy_decision_ref: str | None = "policy-decision-1",
     payload: JsonObject | None = None,
     environment: str = "production",
+    namespace: str = Sandbox.NAMESPACE,
 ) -> CommandRequestedBody:
     return CommandRequestedBody(
         cluster_id=Target.DEFAULT_CLUSTER_ID,
         action=action,
-        namespace=Sandbox.NAMESPACE,
+        namespace=namespace,
         environment=environment,
         reason="test",
         diff=Diff(
             resource="deployment/checkout-api",
-            namespace=Sandbox.NAMESPACE,
+            namespace=namespace,
             desired_image="checkout:new",
             actual_image="checkout:old",
             risk=Sandbox.RISK_TAG,
@@ -244,6 +245,27 @@ def test_command_handler_rejects_management_cluster_before_queue() -> None:
     assert len(events) == 1
     assert isinstance(events[0], CommandRejectedBody)
     assert events[0].reason == MANAGEMENT_READONLY_REASON
+    assert store.calls == []
+
+
+def test_command_handler_rejects_management_namespace_even_if_allowlisted(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,management")
+    store = SpyAgentCommandStore()
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                command_request(namespace="management"),
+                SimpleNamespace(db=store, correlation_id="corr-1"),
+            )
+        )
+    )
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == "namespace is not allowed by control policy"
     assert store.calls == []
 
 

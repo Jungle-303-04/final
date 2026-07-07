@@ -1942,6 +1942,8 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 
 - 단 evidence provider 주기 같은 읽기성 정책 변경은 허용된다. 저장 시 `cluster_role=management`, `bootstrap.resources=[]`, `desired_state.resources=[]`로 다시 고정된다.
 - scale/restart/manual command/recovery dispatch는 gateway와 command-worker에서 각각 차단한다. target-agent도 `CLUSTER_ROLE=management`면 Kubernetes API 호출 전에 write action을 실패 결과(`message="management_readonly"`)로 무시한다.
+- `management` 네임스페이스는 보호 네임스페이스다. `CONTROL_ALLOWED_NAMESPACES`에 명시돼도 `src/packages/config/control.py`가 제거하므로 gateway/command-worker/target-agent 모두 `namespace=management` 쓰기 명령을 거부한다.
+- management role agent의 self-control(`cluster-agent` Deployment, `target-agent-policy` ConfigMap patch/apply/scale)도 금지다. 상위 `management_readonly` 가드가 우회돼도 `KubernetesCommandPolicy`가 `"management agent cannot control management workloads"`로 Kubernetes API 호출 전에 막는다.
 - `DELETE /clusters/{cluster_id}`는 management registration에 대해 같은 `management_readonly` 400을 반환한다.
 
 ### Heatmap Drilldown API 계약

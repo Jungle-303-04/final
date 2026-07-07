@@ -58,11 +58,13 @@ def now_iso() -> str                             # datetime.now(UTC).isoformat()
 
 - `src/packages/config/control.py :: CONTROL_ALLOWED_NAMESPACES_ENV` — `"CONTROL_ALLOWED_NAMESPACES"` (CSV; 기본은 `Sandbox.NAMESPACE` 하나 — env 미설정 시 기존 동작과 동일).
 - `src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE` — `"namespace is not allowed by control policy"` (3계층 공통 거부 사유 문구).
+- `src/packages/config/control.py :: CONTROL_PROTECTED_NAMESPACES` — `("management",)`. 보호 네임스페이스는 `CONTROL_ALLOWED_NAMESPACES`에 명시돼도 제어 허용목록에서 제거된다.
 ```python
-def control_allowed_namespaces() -> tuple[str, ...]   # CSV 파싱(trim·순서 보존 중복 제거), 비면 ("sandbox",)
+def control_namespace_protected(namespace: str) -> bool
+def control_allowed_namespaces() -> tuple[str, ...]   # CSV 파싱(trim·순서 보존 중복 제거), 보호 namespace 제거, env 비면 ("sandbox",)
 def control_namespace_allowed(namespace: str) -> bool # namespace in control_allowed_namespaces()
 ```
-앵커: `src/packages/config/control.py :: control_allowed_namespaces`, `src/packages/config/control.py :: control_namespace_allowed`.
+앵커: `src/packages/config/control.py :: control_namespace_protected`, `src/packages/config/control.py :: control_allowed_namespaces`, `src/packages/config/control.py :: control_namespace_allowed`.
 
 소비자: api-gateway command 라우터의 `validate_control_namespace`, command-worker 정책 룰 `NamespaceAllowlistRule`(`src/domains/command/policy.py`), cluster-agent 쓰기 가드. 관리 플레인은 프로세스 env, 대상 클러스터 agent 는 설치 manifest ConfigMap 의 `CONTROL_ALLOWED_NAMESPACES` 로 주입받는다(클러스터별로 다르게 설정 가능).
 
@@ -123,5 +125,5 @@ async def retry_dependency(attempt: Callable[[], Awaitable[None]], *, label: str
 | `DEPENDENCY_RETRY_DELAY_SECONDS` | int | `2` | 재시도 간격 초 |
 | `SERVICE_NAME` | str | `service` | 서비스 이름(이름만 정의; 소비는 runtime/events) |
 | `SESSION_TTL_SECONDS` | int | `86400` | 세션 TTL(이름만 정의; 소비는 api-gateway) |
-| `CONTROL_ALLOWED_NAMESPACES` | csv | `sandbox` | 제어(쓰기) 명령 허용 네임스페이스 — 게이트웨이·command-worker·cluster-agent 공유 단일 기준 |
+| `CONTROL_ALLOWED_NAMESPACES` | csv | `sandbox` | 제어(쓰기) 명령 허용 네임스페이스 — 게이트웨이·command-worker·cluster-agent 공유 단일 기준. `management`는 보호 네임스페이스라 값에 넣어도 항상 제거 |
 | `COOKIE_SECURE` | bool-ish | 운영 on | 세션 쿠키 Secure(이름만 정의) |

@@ -88,7 +88,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | `Rule` | `Protocol`: 속성 `reason: str`, `def allows(self, target: Lookup) -> bool` | `src/domains/command/policy.py :: Rule` |
 | `EqualsRule` | frozen dataclass(name, field, expected, reason, default=None); `allows` = `target.value(field, default) == expected`; `@classmethod build(config) -> EqualsRule` | `src/domains/command/policy.py :: EqualsRule` |
 | `AllowedValuesRule` | frozen dataclass(name, field, allowed_values, reason, default=None); `allows` = `target.value(field, default) in allowed_values`; `build` 동일 | `src/domains/command/policy.py :: AllowedValuesRule` |
-| `NamespaceAllowlistRule` | frozen dataclass(`field: str`, `default_namespace: str`, `reason: str`); `allows` = `control_namespace_allowed(str(target.value(field, default_namespace)))` — 기준은 `src/packages/config/control.py`의 `CONTROL_ALLOWED_NAMESPACES` 단일 소스(기본 sandbox만). env를 평가 시점마다 읽어 재기동 없이 반영 | `src/domains/command/policy.py :: NamespaceAllowlistRule` |
+| `NamespaceAllowlistRule` | frozen dataclass(`field: str`, `default_namespace: str`, `reason: str`); `allows` = `control_namespace_allowed(str(target.value(field, default_namespace)))` — 기준은 `src/packages/config/control.py`의 `CONTROL_ALLOWED_NAMESPACES` 단일 소스(기본 sandbox만). `management` 보호 네임스페이스는 allowlist에 들어와도 항상 제거된다. env를 평가 시점마다 읽어 재기동 없이 반영 | `src/domains/command/policy.py :: NamespaceAllowlistRule` |
 | `Result` | frozen dataclass(`allowed: bool`, `reason: str \| None = None`); `Result.allow()`, `Result.reject(reason)`, `require_reason() -> str`(reason 없으면 `require(...)` 실패) | `src/domains/command/policy.py :: Result` |
 | `Policy` | `__init__(rules: Sequence[Rule])`; `Policy.build(configs)` — `allowed_values` 있으면 `AllowedValuesRule`, 아니면 `EqualsRule`; `evaluate(target) -> Result` — 첫 위반 룰의 reason으로 reject, 전부 통과 시 allow | `src/domains/command/policy.py :: Policy` |
 
@@ -114,7 +114,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | `sweep_expired_agent_commands` | `async def sweep_expired_agent_commands(ctx: EventContext[AgentCommandStore]) -> AsyncIterator[EventBody]` | `src/domains/command/handler.py :: sweep_expired_agent_commands` |
 | `handle_command_requested` | `async def handle_command_requested(evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]) -> AsyncIterator[EventBody]` | `src/domains/command/handler.py :: handle_command_requested` |
 
-`POLICY` 룰 2종: ① 네임스페이스 허용목록 — `NamespaceAllowlistRule(Gateway.NAMESPACE)` — namespace가 `control_allowed_namespaces()`(env `CONTROL_ALLOWED_NAMESPACES`, 기본 `("sandbox",)`) 안에 있어야 함, reason `CONTROL_NAMESPACE_DENIED_MESSAGE` = `"namespace is not allowed by control policy"` (`src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE`), ② `command_action_allowlist`(`COMMAND_CONFIG.policy_rules` 유일 룰) — `Gateway.ACTION` 필드가 `allowed_command_actions()` 안에 있어야 함(default `Command.DEFAULT_ACTION`, reason `"unsupported command action"`). 기존 정적 `sandbox_namespace` 룰은 제거되고 `packages.config.control` 단일 기준으로 대체됐다.
+`POLICY` 룰 2종: ① 네임스페이스 허용목록 — `NamespaceAllowlistRule(Gateway.NAMESPACE)` — namespace가 `control_allowed_namespaces()`(env `CONTROL_ALLOWED_NAMESPACES`, 기본 `("sandbox",)`) 안에 있어야 함. `management`는 보호 네임스페이스라 env에 명시돼도 제거된다. reason `CONTROL_NAMESPACE_DENIED_MESSAGE` = `"namespace is not allowed by control policy"` (`src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE`), ② `command_action_allowlist`(`COMMAND_CONFIG.policy_rules` 유일 룰) — `Gateway.ACTION` 필드가 `allowed_command_actions()` 안에 있어야 함(default `Command.DEFAULT_ACTION`, reason `"unsupported command action"`). 기존 정적 `sandbox_namespace` 룰은 제거되고 `packages.config.control` 단일 기준으로 대체됐다.
 
 거부 사유 상수(모두 `src/domains/command/handler.py :: <이름>` 앵커):
 
@@ -311,7 +311,7 @@ leased/running + 만료 후 grace 300s 경과 ──janitor──▶ failed
 - 리스 프로토콜: start/heartbeat/result는 `lease_id + agent_id + 상태 + leased_until >= now()`가 모두 일치해야 성공 — 불일치는 404 `"command not found"`.
 - 리스 획득은 `FOR UPDATE SKIP LOCKED`로 에이전트 간 경합 안전.
 - 결과 기록과 `command.completed` 이벤트 스테이징(events+outbox)은 단일 트랜잭션(원자성).
-- 쓰기 명령(내장 3종)은 제어 허용 네임스페이스(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox만) 한정. 승인 레코드는 `apply_manifest`는 필수, `deployment_scale`은 sandbox 환경 면제(기본), `rollout_restart`는 비파괴라 불요.
+- 쓰기 명령(내장 3종)은 제어 허용 네임스페이스(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox만) 한정. `management` 네임스페이스는 보호 네임스페이스라 allowlist에 있어도 gateway/command-worker/target-agent 모두에서 거부된다. 승인 레코드는 `apply_manifest`는 필수, `deployment_scale`은 sandbox 환경 면제(기본), `rollout_restart`는 비파괴라 불요.
 - management 클러스터 쓰기 명령은 gateway와 command-worker에서 각각 차단된다. target-agent도 management role이면 write action(`apply_manifest`, rollout restart, k8s patch/scale)을 Kubernetes API 호출 전 실패 결과(`message="management_readonly"`)로 무시한다.
 - 수동 명령은 diff 필수(422), 서버가 임의 리소스를 합성하지 않음. deployment 제어는 허용목록 외 네임스페이스 422(`"namespace is not allowed by control policy"`).
 - 정책 reject에는 반드시 reason이 있다(`Result.require_reason`).

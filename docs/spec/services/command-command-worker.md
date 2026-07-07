@@ -111,6 +111,6 @@ body 스키마는 [command 도메인](../domains/command.md) 참조.
 | `COMMAND_RETRY_DELAY_SECONDS` | int | `5` | 재시도 간격 |
 | `COMMAND_AUTO_APPROVE_ACTIONS` | csv | `k8s.apps.v1.deployments.scale` | 승인 기록 면제 대상 액션(요청마다 재평가) |
 | `COMMAND_AUTO_APPROVE_ENVIRONMENTS` | csv | `sandbox` | 승인 기록 면제 허용 환경(소문자 비교) |
-| `CONTROL_ALLOWED_NAMESPACES` | csv | `sandbox` | 제어(쓰기) 허용 네임스페이스([config](../packages/config.md) 단일 기준, 요청마다 재평가) |
+| `CONTROL_ALLOWED_NAMESPACES` | csv | `sandbox` | 제어(쓰기) 허용 네임스페이스([config](../packages/config.md) 단일 기준, 요청마다 재평가). `management`는 보호 네임스페이스라 값에 넣어도 제거 |
 
-(모두 `src/domains/command/policy.py` 에서 import 시 1회 평가.) 만료 유예 `EXPIRED_COMMAND_GRACE_SECONDS = 300` 은 `src/domains/command/repository.py` 상수(env 아님). WorkerRuntime 공통 env 는 [../../packages/runtime.md](../packages/runtime.md) 참조.
+`COMMAND_*` 재시도·리스 기본값은 `src/domains/command/policy.py` 에서 import 시 1회 평가한다. `COMMAND_AUTO_APPROVE_*`와 `CONTROL_ALLOWED_NAMESPACES`는 요청 처리 중 함수가 env를 다시 읽어 재평가한다. 만료 유예 `EXPIRED_COMMAND_GRACE_SECONDS = 300` 은 `src/domains/command/repository.py` 상수(env 아님). WorkerRuntime 공통 env 는 [../../packages/runtime.md](../packages/runtime.md) 참조.

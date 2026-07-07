@@ -305,7 +305,7 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 - 패스워드 해시 형식/알고리즘 불일치는 예외 없이 `False`(fail-closed).
 - 이메일 인증 토큰은 1회용(GETDEL).
 - dead letter 조회/재발행은 admin 전용 — 임의 이벤트 재발행 권한이기 때문.
-- 제어(쓰기) 명령 라우트는 `validate_control_namespace`(`src/domains/command/router.py :: validate_control_namespace`)로 [config control 허용목록](../packages/config.md)을 검사 — 허용목록 밖 네임스페이스는 422 `"namespace is not allowed by control policy"`.
+- 제어(쓰기) 명령 라우트는 `validate_control_namespace`(`src/domains/command/router.py :: validate_control_namespace`)로 [config control 허용목록](../packages/config.md)을 검사 — 허용목록 밖 네임스페이스는 422 `"namespace is not allowed by control policy"`. `management` 네임스페이스는 보호 네임스페이스라 env allowlist에 있어도 항상 제거된다.
 - `limit` 쿼리는 `1..MAX_DEAD_LETTER_LIMIT(100)` 로 클램프.
 - HTTP 오류 코드: 400(확인 불일치/무효 토큰), 401(자격/세션/agent 토큰), 403(이메일 미인증·승인 대기·admin/리소스 권한), 404(user/dead letter/command), 409(중복 가입/replay 경합), 429(레이트리밋), 500(전역 핸들러).
 

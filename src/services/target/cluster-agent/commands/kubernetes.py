@@ -71,6 +71,8 @@ class KubernetesCommandPolicy:
         self.ensure_target_agent_allowed(spec, payload)
 
     def ensure_target_agent_allowed(self, spec: KubernetesCommandSpec, payload: object) -> None:
+        if self.cluster_role == MANAGEMENT_CLUSTER_ROLE and spec.verb != "get":
+            raise PermissionError("management agent cannot control management workloads")
         if spec.verb not in TARGET_AGENT_ALLOWED_VERBS:
             raise PermissionError(f"{spec.verb} Kubernetes commands are not enabled")
         if spec.resource not in {"deployments", "configmaps"}:

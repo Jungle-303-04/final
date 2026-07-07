@@ -578,6 +578,32 @@ def test_control_namespace_allowlist_env_extends_beyond_sandbox(monkeypatch) -> 
     asyncio.run(run())
 
 
+def test_control_namespace_allowlist_cannot_open_management_namespace(monkeypatch) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,management")
+
+    async def run() -> None:
+        events = SpyEvents()
+        try:
+            await scale_deployment(
+                "cluster-1",
+                "management",
+                "api-gateway",
+                DeploymentScaleRequest(replicas=3),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert "control policy" in exc.detail
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert events.body is None
+
+    asyncio.run(run())
+
+
 def test_control_namespace_allowlist_defaults_to_sandbox_only(monkeypatch) -> None:
     monkeypatch.delenv("CONTROL_ALLOWED_NAMESPACES", raising=False)
 
