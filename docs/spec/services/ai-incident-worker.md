@@ -35,11 +35,11 @@ status: synced
 
 | 이벤트 | 라우팅 키 | body |
 |---|---|---|
-| `EvidenceBuiltBody` | `evidence.built` | `evidence: Evidence` |
+| `EvidenceBuiltBody` | `evidence.built` | full `evidence` 또는 claim-check reference(`correlation_id`, `kind`) |
 
 ### 발행 (Publishes)
 
-핸들러 1회 호출당 항상 **2개** body를 순서대로 yield 한다.
+핸들러는 먼저 `EvidenceBuiltBody.evidence`가 비어 있는 reference 이벤트인지 확인한다. inline evidence가 없으면 `get_evidence_payload(workspace_id, correlation_id, kind)`로 `evidence` 테이블의 full payload를 hydrate 한 뒤 기존 파이프라인을 실행한다. 핸들러 1회 호출당 감지 여부에 따라 body를 순서대로 yield 한다.
 
 | 순서 | 이벤트 | 라우팅 키 | 조건 |
 |---|---|---|---|

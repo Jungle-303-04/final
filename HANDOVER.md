@@ -1,6 +1,29 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 03:38 KST (evidence claim-check 원천 수정 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 03:50 KST (콘솔 디자인 시스템 Phase 0/1 착수)
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 0/1 착수
+
+- 브랜치/주의:
+  - 현재 브랜치: `dev`.
+  - 프론트 작업 시작 전부터 백엔드 파일 다수가 modified 상태였다. 이 변경은 건드리지 말고 프론트 변경만 별도 stage/commit 한다.
+- 구현:
+  - Tailwind CSS v4 + `@tailwindcss/vite` 설치, Vite 플러그인 연결.
+  - 새 정본 토큰: `frontend/src/ui/theme.css`. Tailwind CSS-first `@theme inline`으로 `bg/surface/raised`, `border/border-strong`, `primary/secondary/muted`, `accent/success/warning/danger/info`, `control/panel`, `soft/elevated` semantic utility를 제공한다.
+  - dark mode는 class 전략을 추가했다. 기존 `data-theme-mode`와 함께 `html.dark/html.light`를 동기화한다.
+  - 새 Motion 정본: `frontend/src/ui/motion.ts`. `durations`, `easing`, `fadeInUp`, `scaleIn`, `listStagger`, `drawerSlide`, `collapse`, `AnimatePresence` export.
+  - 새 프리미티브 정본: `frontend/src/ui/index.tsx`. Button, IconButton, Card, StatCard, Table, Tabs, Badge/StatusChip, Modal, Drawer, Dropdown/Menu, Field/Input/Select/Textarea, Toast, Tooltip, Skeleton, EmptyState, PageHeader, Breadcrumb, CodeBlock, KeyValueList, ConfirmDialog 포함.
+  - 개발 전용 검수 라우트 `GET /dev/ui` 추가. `import.meta.env.DEV`일 때만 라우터에 등록되어 production build chunk에 포함되지 않는다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm run build` passed. 기존 large chunk warning만 있음.
+  - Playwright Chromium 설치 후 `/dev/ui` 1440/1024/390 폭 스크린샷 검증: console error 0, document horizontal overflow 0.
+  - screenshots: `/tmp/k8s-ui-desktop-1440.png`, `/tmp/k8s-ui-tablet-1024.png`, `/tmp/k8s-ui-mobile-390.png`.
+- 다음:
+  1. 이 프론트 단위를 커밋/푸시한다.
+  2. Phase 2 첫 화면은 로그인/가입이다. `features/auth/*`의 inline style과 `shared/ui` 의존을 `src/ui` 프리미티브로 이관하고, 화면 이관 완료 후 관련 레거시 스타일 사용을 제거한다.
+  3. 앱 셸 이관 전까지 `plural-ui`/`shared/ui`/`theme-bridge`는 유지한다. 화면 단위로 공존 기간을 줄인다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -35,9 +58,10 @@
   - `262db708 fix: outbox 비재시도 오류 DLQ 처리`, `1aee8286 docs: handover / frontend 배포 / outbox 안정화`는 이미 push 됐다. 이후 backend image `1aee8286-service-20260708032238`를 `api-gateway`에 수동 rollout했고, `/api/healthz`/`/api/readyz`가 0.5초 안팎으로 회복됐다.
   - 남은 원천 문제는 `evidence_windows.payload` 원문을 같은 크기로 `cluster.evidence.received` 이벤트/outbox에도 넣는 구조였다. 03:38 KST 현재 로컬 코드에서 claim-check 패턴으로 수정 완료: full evidence는 `evidence_windows.payload`에만 저장, outbox 이벤트는 `{workspace_id, cluster_id, evidence_key, correlation_id, kind, payload_size, summary}`와 빈 evidence 필드만 담는다.
   - 하위 호환: `ClusterEvidenceReceivedBody`는 기존 full payload 이벤트도 계속 디코딩한다. `evidence-worker`는 inline evidence가 있으면 그대로 처리하고, reference 이벤트면 `get_evidence_window_payload(evidence_key)`로 DB 원문을 hydrate 한다.
+  - 03:44 KST live compact replay 중 후속 원인도 확인됨: `evidence-worker`가 `evidence.built`에 full Evidence를 다시 실어 `outbox-relay:evidence-worker` MaxPayload DLQ가 새로 생겼다. 로컬 추가 수정 완료: `evidence.built`도 `save_evidence(correlation_id, kind, payload)` 저장본을 claim-check로 참조하고, `incident-worker`가 `get_evidence_payload(workspace_id, correlation_id, kind)`로 hydrate 한다. 기존 full `evidence.built` 이벤트도 계속 처리한다.
   - agent evidence에서 `evidence_key`가 없는 구형 요청도 더 이상 full outbox 경로(`stage_event_once`)로 보내지 않는다. 신뢰된 workspace/cluster + payload digest 기반 키를 합성해 `record_evidence_event_once`로 저장/발행한다.
-  - 로컬 검증: `uv run ruff check ...`, `uv run ruff format --check ...`, `PYTHONPATH=src uv run lint-imports --config .importlinter`, focused pytest 39 passed, schema/database/API 관련 120 passed, 전체 `uv run pytest -q` → 722 passed, 3 skipped.
-  - 다음 단계: claim-check 커밋/push → service image 빌드/push → `api-gateway`와 `evidence-worker`를 같은 image로 rollout → live logs에서 신규 `MaxPayloadError` 0 확인 → replay 가능한 open DLQ만 선별 replay/감소 확인.
+  - 로컬 검증: `uv run ruff check ...`, `uv run ruff format --check ...`, `PYTHONPATH=src uv run lint-imports --config .importlinter`, focused pytest 39 passed, schema/database/API 관련 120 passed, 전체 `uv run pytest -q` → 722 passed, 3 skipped. `evidence.built` 추가 수정 후 focused pytest 89 passed.
+  - 다음 단계: `evidence.built` claim-check 커밋/push → service image 빌드/push → `api-gateway`, `evidence-worker`, `incident-worker`를 같은 image로 rollout → live logs에서 신규 `MaxPayloadError` 0 확인 → replay 가능한 open DLQ만 선별 compact replay/감소 확인.
 
 ## 체크포인트 — 요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성
 

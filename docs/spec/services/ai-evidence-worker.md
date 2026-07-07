@@ -45,7 +45,7 @@ status: synced
 
 | 이벤트 | 라우팅 키 | body |
 |---|---|---|
-| `EvidenceBuiltBody` | `evidence.built` | `evidence: Evidence` |
+| `EvidenceBuiltBody` | `evidence.built` | `evidence: Evidence`(object_ref 중심 reference), `correlation_id`, `kind`, `payload_size`, `summary` |
 
 ## 동작 (Behavior)
 
@@ -53,8 +53,8 @@ status: synced
    `object_ref = "object://evidence/{correlation_id}.json"` 부여, 나머지 필드 복사.
 2. `await ctx.db.save_evidence(ctx.correlation_id, evidence.workspace_id, pipeline.kind, evidence.to_body())`
    — `kind` 는 `"rca_bundle"` (`EvidenceDefaults.kind`).
-3. `yield EvidenceBuiltBody(evidence=evidence)` — 런타임이 outbox 트랜잭션으로 발행
-   (correlation_id 승계, causation=수신 event_id).
+3. `yield compact_evidence_built_body(evidence, ctx.correlation_id, pipeline.kind)` — 런타임이 outbox 트랜잭션으로 발행
+   (correlation_id 승계, causation=수신 event_id). full `Evidence` 원문은 DB 저장본만 사용하고 NATS에는 claim-check reference만 싣는다.
 
 ## 불변식·오류 (Invariants & Errors)
 
