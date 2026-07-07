@@ -120,12 +120,12 @@ export default function MetricsView() {
   const phases = Object.keys(livePhases).length ? livePhases : Object.keys(inventoryPhases).length ? inventoryPhases : workloadPhases;
   const series: Series[] = useMemo(() => {
     const base = paused ? frozen : history;
-    const pts = base.slice(-120);
+    const pts = base.filter(p => !p.clusterId || p.clusterId === clusterId).slice(-120);
     return [
-      { id: '재시작 합', data: pts.map(p => ({ x: p.at, y: p.restarts })) },
+      { id: '재시작', data: pts.map(p => ({ x: p.at, y: p.restarts })) },
       { id: '실행 팟', data: pts.map(p => ({ x: p.at, y: p.running })) },
     ];
-  }, [paused, frozen, history]);
+  }, [clusterId, paused, frozen, history]);
 
   // 스냅샷 기반 실측 추이 — cluster_usage_samples 시계열(실 시각 라벨)
   const usageSeries: Series[] = useMemo(() => {

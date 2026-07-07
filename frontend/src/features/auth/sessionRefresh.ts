@@ -37,7 +37,7 @@ export function createSessionRefreshController(
         queryClient.setQueryData(sessionKey, nextSession);
       })
       .catch((): void => {
-        // Failed refresh keeps the current cache; 401 handling already invalidates globally.
+        // 갱신 실패 시 기존 캐시를 유지한다. 401 처리는 전역 핸들러가 세션 쿼리를 무효화한다.
       })
       .finally(() => {
         inFlight = null;
