@@ -17,6 +17,7 @@ from sqlalchemy.dialects import postgresql
 
 from domains import registry
 from domains.audit.repository import AuditLogRepository
+from domains.dashboard.repository import DashboardRepository
 from domains.gitops.repository import (
     RepoChangeRepository,
     derive_application_id,
@@ -1271,6 +1272,113 @@ def test_rca_query_without_cursor_keeps_offset_compatibility() -> None:
     sql = str(compiled)
     assert "FROM rca_reports" in sql
     assert "OFFSET" in sql
+
+
+def test_rca_report_query_omits_payload_from_select_list() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(RcaRepository, recorded)
+
+    repository.list_rca_report_records("workspace-1", limit=11, offset=0, cursor=None)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    select_list = sql.split("\nFROM rca_reports", maxsplit=1)[0]
+    assert "rca_reports.payload" not in select_list
+    assert "rca_reports.candidates" in select_list
+    assert "rca_reports.supporting_evidence_refs" in select_list
+
+
+def test_rca_report_save_writes_projection_columns() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(RcaRepository, recorded)
+    body = {
+        "evidence_ref": "evidence://cluster-1/incident-1",
+        "incident": {
+            "incident_id": "incident-1",
+            "cluster_id": "cluster-1",
+            "resource_kind": "Deployment",
+            "resource_name": "checkout-api",
+            "namespace": "sandbox",
+            "symptom": "ImagePullBackOff",
+            "severity": "high",
+            "secondary_symptoms": ["restart_spike"],
+        },
+        "candidates": [{"candidate_id": "image-pull-backoff", "title": "이미지 풀 실패"}],
+        "evaluations": [{"candidate_id": "image-pull-backoff", "score": 1.0}],
+        "rca_detail": {
+            "confidence": 0.91,
+            "reason": "필요한 근거가 모두 수집되었습니다.",
+            "selected_candidate_id": "image-pull-backoff",
+            "supporting_evidence": ["kubernetes"],
+            "missing_evidence": [],
+        },
+    }
+
+    repository.save_rca_report(
+        correlation_id="corr-1",
+        workspace_id="workspace-1",
+        root_cause="image_pull_backoff",
+        action="restart deployment",
+        body=body,
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    assert compiled.params["incident_id"] == "incident-1"
+    assert compiled.params["cluster_id"] == "cluster-1"
+    assert compiled.params["confidence"] == 0.91
+    assert compiled.params["supporting_evidence"] == ["kubernetes"]
+    assert compiled.params["candidates"][0]["candidate_id"] == "image-pull-backoff"
+
+
+def test_rca_report_dedup_reads_projection_without_payload() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(
+        RcaRepository,
+        recorded,
+        rows=[
+            {
+                "id": 7,
+                "correlation_id": "corr-7",
+                "cluster_id": "cluster-1",
+                "namespace": "sandbox",
+                "resource_kind": "Deployment",
+                "resource_name": "checkout-api",
+                "created_at": datetime(2026, 7, 8, tzinfo=UTC),
+            }
+        ],
+    )
+
+    row = repository.find_recent_rca_report(
+        "workspace-1",
+        "image_pull_backoff",
+        "sandbox/Deployment/checkout-api",
+        300,
+    )
+
+    assert row == {
+        "id": 7,
+        "correlation_id": "corr-7",
+        "created_at": "2026-07-08T00:00:00+00:00",
+    }
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    select_list = str(compiled).split("\nFROM rca_reports", maxsplit=1)[0]
+    assert "rca_reports.payload" not in select_list
+    assert "rca_reports.resource_name" in select_list
+
+
+def test_dashboard_timeline_query_omits_payload_from_select_list() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(DashboardRepository, recorded)
+
+    repository.list_rca_timeline("workspace-1", allowed_cluster_ids=None, limit=10)
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    select_list = sql.split("\nFROM rca_timeline", maxsplit=1)[0]
+    assert "rca_timeline.payload" not in select_list
+    assert "rca_timeline.last_event_id" not in select_list
+    assert "rca_timeline.last_event_at" not in select_list
+    assert "rca_timeline.updated_at" in select_list
 
 
 def test_rca_backlog_resolve_updates_open_missing_rule_item() -> None:

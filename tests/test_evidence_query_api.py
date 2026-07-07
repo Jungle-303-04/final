@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from domains.rca.query_router import next_page_cursor
 from domains.rca.query_router import router as query_router
+from domains.rca.report_projection import rca_report_projection
 
 WORKSPACE_ID = "workspace-1"
 SECRET_MARKER = "raw-secret-token-do-not-leak"
@@ -388,6 +389,26 @@ def test_rca_reports_return_summary_without_raw_payload() -> None:
     assert name == "reports"
     assert kwargs["workspace_id"] == WORKSPACE_ID
     assert kwargs["correlation_id"] == "corr-1"
+
+
+def test_rca_reports_return_summary_from_projection_without_payload() -> None:
+    row = report_row(1)
+    payload = row.pop("payload")
+    row.update(rca_report_projection(payload))
+    db = QueryApiDb(report_rows=[row])
+    client = make_client(db, session=_session())
+
+    response = client.get("/rca-reports", params={"correlation_id": "corr-1"})
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["incident_id"] == "incident-1"
+    assert item["cluster_id"] == "cluster-1"
+    assert item["confidence"] == 0.91
+    assert item["supporting_evidence"] == ["kubernetes"]
+    assert item["candidates"][0]["candidate_id"] == "image-pull-backoff"
+    assert "payload" not in item
+    assert SECRET_MARKER not in response.text
 
 
 def test_rca_reports_pagination_and_empty() -> None:

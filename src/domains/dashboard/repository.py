@@ -63,6 +63,30 @@ DEFAULT_OPEN_INCIDENT_EXPIRE_DAYS = 3
 DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT = 500
 
 
+def _rca_timeline_response_columns() -> tuple[Any, ...]:
+    """화면 응답에 필요한 컬럼만 읽어 큰 payload 전송을 피한다."""
+    table = RcaTimeline.__table__
+    return (
+        table.c.id,
+        table.c.workspace_id,
+        table.c.correlation_id,
+        table.c.cluster_id,
+        table.c.incident_id,
+        table.c.evidence_ref,
+        table.c.current_subject,
+        table.c.status,
+        table.c.root_cause,
+        table.c.confidence,
+        table.c.supporting_evidence,
+        table.c.missing_evidence,
+        table.c.action_route,
+        table.c.command_id,
+        table.c.pr_url,
+        table.c.error_reason,
+        table.c.updated_at,
+    )
+
+
 class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
 
@@ -286,7 +310,7 @@ class DashboardRepository(DatabaseConnection):
         if allowed_cluster_ids == set():
             return []
         statement: Select[Any] = (
-            select(RcaTimeline.__table__)
+            select(*_rca_timeline_response_columns())
             .where(RcaTimeline.workspace_id == workspace_id)
             .order_by(RcaTimeline.updated_at.desc())
             .limit(limit)
@@ -306,7 +330,7 @@ class DashboardRepository(DatabaseConnection):
         if allowed_cluster_ids == set():
             return None
         statement: Select[Any] = (
-            select(RcaTimeline.__table__)
+            select(*_rca_timeline_response_columns())
             .where(
                 RcaTimeline.workspace_id == workspace_id,
                 RcaTimeline.incident_id == incident_id,

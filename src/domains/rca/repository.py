@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -9,6 +10,7 @@ from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.rca.models import Evidence, RcaBacklogItem, RcaReport, RecoveryPlanRecord
+from domains.rca.report_projection import rca_report_projection
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
@@ -18,6 +20,36 @@ BACKLOG_STATUS_OPEN = "open"
 BACKLOG_STATUS_RESOLVED = "resolved"
 BACKLOG_RULE_RESOLVED_REASON = "matching RCA rule is now available"
 OPEN_RECOVERY_PLAN_STATUSES = (RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,)
+
+
+def _rca_report_summary_columns() -> tuple[Any, ...]:
+    """목록 API 에 필요한 작은 projection 만 읽어 payload DB I/O 를 피한다."""
+    table = RcaReport.__table__
+    return (
+        table.c.id,
+        table.c.workspace_id,
+        table.c.correlation_id,
+        table.c.root_cause,
+        table.c.action,
+        table.c.incident_id,
+        table.c.cluster_id,
+        table.c.symptom,
+        table.c.severity,
+        table.c.confidence,
+        table.c.reason,
+        table.c.evidence_ref,
+        table.c.supporting_evidence,
+        table.c.missing_evidence,
+        table.c.resource_kind,
+        table.c.resource_name,
+        table.c.namespace,
+        table.c.secondary_symptoms,
+        table.c.selected_candidate_id,
+        table.c.candidates,
+        table.c.supporting_evidence_refs,
+        table.c.missing_evidence_checks,
+        table.c.created_at,
+    )
 
 
 class RcaRepository(DatabaseConnection):
@@ -173,7 +205,7 @@ class RcaRepository(DatabaseConnection):
         """
         table = RcaReport.__table__
         statement: Select[Any] = (
-            select(table)
+            select(*_rca_report_summary_columns())
             .where(table.c.workspace_id == workspace_id)
             .order_by(table.c.created_at.desc(), table.c.id.desc())
             .limit(limit)
@@ -307,11 +339,13 @@ class RcaRepository(DatabaseConnection):
         body: JsonObject,
     ) -> None:
         table = RcaReport.__table__
+        projection = rca_report_projection(body)
         statement = pg_insert(table).values(
             workspace_id=workspace_id,
             correlation_id=correlation_id,
             root_cause=root_cause,
             action=action,
+            **projection,
             payload=body,
         )
         with self.connection() as conn:
@@ -328,13 +362,21 @@ class RcaRepository(DatabaseConnection):
 
         장애가 지속되는 동안 evidence 주기(~10s)마다 동일 리포트가 무한 적재되는 것을
         막는 dedup 조회 — rca-worker 가 저장 전에 호출한다(있으면 저장 생략).
-        리소스 비교는 payload.incident 를 Python 에서 `rca_report_resource_key` 로
-        비교한다(JSONB 경로 연산자 없이 DB 방언 중립 유지).
+        리소스 비교는 저장 시 만든 projection 컬럼을 Python 에서
+        `rca_report_resource_key` 로 비교한다(JSONB 원문 읽기 방지).
         """
         table = RcaReport.__table__
         threshold = datetime.now(UTC) - timedelta(seconds=window_seconds)
         statement = (
-            select(table.c.id, table.c.correlation_id, table.c.payload, table.c.created_at)
+            select(
+                table.c.id,
+                table.c.correlation_id,
+                table.c.cluster_id,
+                table.c.namespace,
+                table.c.resource_kind,
+                table.c.resource_name,
+                table.c.created_at,
+            )
             .where(
                 table.c.workspace_id == workspace_id,
                 table.c.root_cause == root_cause,
@@ -346,9 +388,7 @@ class RcaRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         for row in rows:
-            payload = row.get("payload") or {}
-            incident = payload.get("incident") if isinstance(payload, dict) else None
-            if rca_report_resource_key(incident) == resource_key:
+            if rca_report_resource_key(row) == resource_key:
                 return {
                     "id": row["id"],
                     "correlation_id": row["correlation_id"],
@@ -357,9 +397,9 @@ class RcaRepository(DatabaseConnection):
         return None
 
 
-def rca_report_resource_key(incident: JsonObject | None) -> str:
+def rca_report_resource_key(incident: Mapping[str, Any] | None) -> str:
     """리포트 dedup 용 대상 리소스 키 — `namespace/kind/name` (incident 없으면 "unknown")."""
-    if not isinstance(incident, dict):
+    if not isinstance(incident, Mapping):
         return "unknown"
     return (
         f"{incident.get('namespace') or 'unknown'}"
