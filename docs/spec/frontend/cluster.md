@@ -67,15 +67,15 @@ status: synced
   ├─ Tabs (setSp({tab}))
   ├─ 탭 콘텐츠: WorkloadsTab | 팟 테이블 | 노드 테이블 | ServicesTab | ResourcesTab | EventsTab
   ├─ Drawer(openPod) — KeyValue(상태/네임스페이스/재시작/노드/이미지/Ready) + Link(/ai?prefill=<ns/pod 팟 상태를 분석해줘>) "✦ 이 팟 분석"
-  └─ Modal(scaleTarget) — replicas number input(0~100) + 실행(scale.mutate)
+  └─ Modal(scaleTarget/restartTarget) — 대상은 DeploymentTarget{ns,name,podCount}. 스케일: 현재 팟 수 안내 + replicas number input(0~100, 초기값=podCount) + 실행(scale.mutate). 재시작: 확인 모달(danger) 후 restart.mutate
   ```
 - 팟 탭 열: 이름(hot 이면 `IconFlame` warn) / 네임스페이스 / 상태 Badge / 재시작 / 노드. 행 클릭 → `/clusters/${clusterId}/pods/${ns}/${name}?tab=pods`. Drawer 닫기 → `/clusters/${clusterId}?tab=pods`.
 - 노드 탭 열: 이름 / Ready·NotReady Badge / 팟 수 / CPU·MEM(`(ratio*100).toFixed(0)%`, null 은 '—') / 버전.
-- 스케일/재시작 시 deployment 이름은 `w.name.replace(/-pod-.*/, '')` 로 유도. 모달 안내문: "비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다."
+- 스케일/재시작 대상은 WorkloadsTab 의 그룹 키(디플로이먼트 실명 `workload_name || name`)에서 `DeploymentTarget{ns,name,podCount}` 로 전달 — 팟 이름에서 유도하지 않는다. 모달 안내문: "비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다."
 
 내부(비공개) 서브컴포넌트:
 
-- `WorkloadsTab { clusterId; admin; onScale: (w) => void; onRestart: (w) => void }` — workloads 를 `${namespace}/${workload_name || name}` 키로 그룹핑해 deployment 행 생성(`workload_name` 은 인벤토리 summary 의 owner_name — [shared/adapt](shared.md#어댑터-libadaptts) `adaptWorkloadResource` 가 채움). 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
+- `WorkloadsTab { clusterId; admin; onScale: (d: DeploymentTarget) => void; onRestart: (d: DeploymentTarget) => void }` — workloads 를 `${namespace}/${workload_name || name}` 키로 그룹핑해 deployment 행 생성(`workload_name` 은 인벤토리 summary 의 owner_name — [shared/adapt](shared.md#어댑터-libadaptts) `adaptWorkloadResource` 가 채움). 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
 - `ServicesTab` — 이름/네임스페이스/타입/ClusterIP(code)/포트.
 - `ResourcesTab` — Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
 - `EventsTab` — 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
