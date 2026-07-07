@@ -489,8 +489,7 @@ class TargetClusterAgent:
         providers = {
             provider_key: EvidenceProviderPolicy(
                 enabled=(
-                    self.cluster_role != MANAGEMENT_CLUSTER_ROLE
-                    or provider_key == "kubernetes"
+                    self.cluster_role != MANAGEMENT_CLUSTER_ROLE or provider_key == "kubernetes"
                 ),
                 interval_seconds=self.interval,
                 min_workers=self.evidence_provider_worker_counts.get(provider_key, 1),

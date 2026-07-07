@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, post, put } from '@/shared/lib/api';
 import type { AccessGrant, Group, Org, User } from '@/shared/lib/types';
-import { uiStore } from '@/shared/lib/ui-store';
+import { useToast } from '@/ui';
 
 const ORG_QUERY_TIMEOUT_MS = 8_000;
 
@@ -17,31 +17,32 @@ function useInvalidator(keys: string[][]) {
   const qc = useQueryClient();
   return () => keys.forEach(k => qc.invalidateQueries({ queryKey: k }));
 }
-const failToast = (action: string) => (err: unknown) =>
-  uiStore.getState().toast('danger', `${action} 실패 — ${(err as Error).message || '잠시 후 다시 시도해주세요'}`);
 
 export function useCreateOrg() {
   const inv = useInvalidator([['orgs']]);
+  const { push } = useToast();
   return useMutation({
     mutationFn: (b: { name: string; description?: string }) => post<Org>('/orgs', b),
-    onSuccess: () => { inv(); uiStore.getState().toast('ok', '조직을 만들었습니다'); },
-    onError: failToast('조직 생성'),
+    onSuccess: () => { inv(); push({ tone: 'success', title: '조직 생성 완료', description: '새 조직을 만들었습니다' }); },
+    onError: (err) => push({ tone: 'danger', title: '조직 생성 실패', description: mutationError(err) }),
   });
 }
 export function useDeleteOrg() {
   const inv = useInvalidator([['orgs']]);
+  const { push } = useToast();
   return useMutation({
     mutationFn: (id: string) => del(`/orgs/${id}`),
-    onSuccess: inv,
-    onError: () => uiStore.getState().toast('danger', '소속 그룹을 먼저 정리해야 합니다'),
+    onSuccess: () => { inv(); push({ tone: 'success', title: '조직 삭제 완료', description: '조직을 정리했습니다' }); },
+    onError: (err) => push({ tone: 'danger', title: '조직 삭제 실패', description: orgDeleteError(err) }),
   });
 }
 export function useCreateGroup() {
   const inv = useInvalidator([['groups'], ['orgs']]);
+  const { push } = useToast();
   return useMutation({
     mutationFn: (b: { org_id: string; name: string }) => post<Group>('/groups', b),
-    onSuccess: () => { inv(); uiStore.getState().toast('ok', '그룹을 만들었습니다'); },
-    onError: failToast('그룹 생성'),
+    onSuccess: () => { inv(); push({ tone: 'success', title: '그룹 생성 완료', description: '새 그룹을 만들었습니다' }); },
+    onError: (err) => push({ tone: 'danger', title: '그룹 생성 실패', description: mutationError(err) }),
   });
 }
 export function useGroupMembers(groupId: string) {
@@ -55,28 +56,64 @@ export function useGroupMembers(groupId: string) {
 }
 export function useToggleMembership(groupId: string) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: ({ userId, add }: { userId: string; add: boolean }) =>
       add ? put(`/groups/${groupId}/members/${userId}`) : del(`/groups/${groupId}/members/${userId}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['users'] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+      push({ tone: 'success', title: '멤버십 변경 완료', description: '그룹 멤버를 갱신했습니다' });
+    },
     // 실패 시 체크박스가 실제 상태로 되돌아가도록 서버 상태 재조회
-    onError: (err) => { failToast('멤버십 변경')(err); qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['users'] }); },
+    onError: (err) => {
+      push({ tone: 'danger', title: '멤버십 변경 실패', description: membershipError(err) });
+      qc.invalidateQueries({ queryKey: ['groups'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
   });
 }
 export interface GrantPayload { subject_type: 'user' | 'group'; subject_id: string; subject_label?: string; resource_type: string; resource_id: string; role: string }
 export function useGrantAccess() {
   const inv = useInvalidator([['access']]);
+  const { push } = useToast();
   return useMutation({
     mutationFn: (b: GrantPayload) => post('/access', b),
-    onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 부여했습니다'); },
-    onError: failToast('권한 부여'),
+    onSuccess: () => { inv(); push({ tone: 'success', title: '권한 부여 완료', description: '리소스 권한을 부여했습니다' }); },
+    onError: (err) => push({ tone: 'danger', title: '권한 부여 실패', description: mutationError(err) }),
   });
 }
 export function useRevokeAccess() {
   const inv = useInvalidator([['access']]);
+  const { push } = useToast();
   return useMutation({
     mutationFn: (id: string) => del(`/access/${id}`),
-    onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 회수했습니다'); },
-    onError: failToast('권한 회수'),
+    onSuccess: () => { inv(); push({ tone: 'success', title: '권한 회수 완료', description: '리소스 권한을 회수했습니다' }); },
+    onError: (err) => push({ tone: 'danger', title: '권한 회수 실패', description: mutationError(err) }),
   });
+}
+
+function mutationError(err: unknown) {
+  const candidate = err as { detail?: string; message?: string; rawDetail?: unknown };
+  if (candidate?.detail) return candidate.detail;
+  if (candidate?.message) return candidate.message;
+  if (candidate?.rawDetail) {
+    try {
+      return JSON.stringify(candidate.rawDetail);
+    } catch {
+      return String(candidate.rawDetail);
+    }
+  }
+  return '잠시 후 다시 시도해주세요';
+}
+
+function orgDeleteError(err: unknown) {
+  const message = mutationError(err);
+  return message === 'groups_exist' ? '소속 그룹을 먼저 정리해야 합니다' : message;
+}
+
+function membershipError(err: unknown) {
+  const raw = (err as { rawDetail?: unknown })?.rawDetail;
+  if (raw && typeof raw === 'object' && (raw as { code?: unknown }).code === 'last_admin') return '최소 1명의 관리자 필요';
+  return mutationError(err);
 }

@@ -428,7 +428,9 @@ def test_management_agent_policy_rejects_self_patch_if_top_guard_is_bypassed() -
         patch={"spec": {"replicas": 0}},
     )
 
-    with pytest.raises(PermissionError, match="management agent cannot control management workloads"):
+    with pytest.raises(
+        PermissionError, match="management agent cannot control management workloads"
+    ):
         agent.command_registry.kubernetes_policy.ensure_allowed(registered.spec.kubernetes, payload)
 
     assert agent.kubernetes.patches == []

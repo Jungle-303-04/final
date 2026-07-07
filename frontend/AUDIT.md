@@ -143,10 +143,10 @@
 | 이메일 인증 랜딩 | token 검증 -> 성공/만료/이미인증 분기; 만료 -> 재발송 | 대기 |
 | 승인 대기 화면 | 세션/승인 상태 폴링 -> 승인 시 returnTo 자동 입장 | 대기 |
 | 스케일 | 현재값 조회 -> 변경 미리보기; 정책 불가 선표시; 실행 -> scale command 상태 추적 | 대기 |
-| 재시작/DLQ replay | 확인 모달 대상 요약; 실행 중 행 pending; replay -> `POST /dead-letters/{id}/replay` | 대기 |
+| 재시작/DLQ replay | DLQ: 확인 모달 대상 요약; 실행 중 행 pending; replay -> `POST /dead-letters/{id}/replay`. 재시작 행 pending은 클러스터 운영 액션 패스에서 진행 | 부분 완료 |
 | 복구 승인 | 명령/PR diff 접이식 preview; 권한 없으면 tooltip; 승인/거절 API | 대기 |
 | 역할 변경 | role 변경 -> membership/update API; `last_admin` 인라인 사유; 자기 강등 경고 | 대기 |
-| 조직/그룹 생성 | 이름 입력 -> 중복 검증 API; 생성 API | 대기 |
+| 조직/그룹 생성 | 이름 입력 -> 현재 목록 기준 실시간 중복 검증; 유효할 때만 `POST /orgs` 또는 `POST /groups`; 성공/실패 toast | 완료 |
 | AI 채팅 | `GET /ai/conversations`, `GET /ai/conversations/:id`, create/send mutation 오류에서 LLM provider/API key/quota 계열 사유 감지; `conversation.status=failed`도 설정 안내 카드 선행; 정상일 때만 채팅 입력 표시 | 완료 |
 | 메트릭 PromQL | 입력 debounce -> `POST /metrics/validate`; valid일 때만 저장/실행 활성; 실행 클릭 시 동일 dry-run 재검증 -> `POST /agent/debug/query` 또는 `POST /clusters/{id}/metric-query-presets/{preset_id}/run`; 결과는 `GET /commands/{id}` 폴링; 0건 -> 시간범위 확장 CTA | 완료 |
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
@@ -197,6 +197,15 @@
 - `ApprovalCard`는 repo·workflow·chat·notifications 공유 단일 구현을 유지하되 `@/ui` 프리미티브와 `useSession` 역할 체크로 정리했다.
 - 검증(2026-07-08 07:58 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/ai/aic-1` 1440/1024/390 폭에서 메시지/도구 호출/복구 조치/승인 카드/빈 draft 전송 차단/복구 조치 선택 활성 전환/horizontal overflow 0을 확인했다. `/ai` LLM 설정 오류 mock(503 raw detail `LLM_PROVIDER is not configured`)에서는 composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다.
 - 배포(2026-07-08 08:00 KST): Actions가 `steps: []`로 실패해 수동 console image `ce75d57c-ai-chat-ui-20260708074225`를 `mgmt/management` console deployment에 롤아웃했다. `https://k8s.woonyong.org/` 200, `/api/healthz` 200, live chunks `ChatView-RjgESk8p.js`와 `ApprovalCard-DlHhFo68.js`에서 새 LLM 안내/권한/승인 문구를 확인했다.
+
+## 설정/조직 디자인 시스템 이관 (2026-07-08)
+
+- `SettingsNav`, `MembersView`, `OrganizationsView`, `GroupsView`, `AccessView`, `OpsView`를 `@/ui` PageHeader/Card/Table/Field/Input/Select/Modal/Drawer/Badge/EmptyState/Skeleton/Toast 기반으로 재구성했다. 설정/조직 범위의 `@/shared/ui`, `@/shared/motion`, 레거시 UI 계층, inline style, raw hex 의존은 0건이다.
+- 멤버 목록은 검색 0건 시 `필터 초기화` CTA를 제공하고, 가입 승인 pending/성공/실패 toast를 `@/ui` ToastProvider로 표시한다.
+- 조직/그룹 생성은 현재 목록 기준 이름 중복을 입력 중 인라인으로 차단하고, 유효할 때만 제출 버튼이 활성화된다.
+- 그룹 멤버 Drawer는 멤버 목록 로딩/빈/오류+재시도 상태를 갖고, `last_admin` 응답은 "최소 1명의 관리자 필요" 인라인 사유로 표시한다.
+- 권한 부여/회수와 DLQ 재처리는 확인 모달에 대상 요약을 표시하고, 실행 중 해당 버튼만 pending 상태가 된다.
+- 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q`, `make check`, `make manifest-check` 통과.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
