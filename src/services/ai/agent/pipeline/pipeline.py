@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
@@ -43,9 +43,10 @@ class IncidentPipeline:
 
     def build_bodies(self, evidence: Evidence, correlation_id: str) -> IncidentPipelineBodies:
         detected = self.detector.detect_body(evidence, correlation_id)
+        next_context = replace(detected, evidence=evidence)
         return IncidentPipelineBodies(
             detected_body=detected,
-            next_body=self.bundler.build_body(detected),
+            next_body=self.bundler.build_body(next_context),
         )
 
 

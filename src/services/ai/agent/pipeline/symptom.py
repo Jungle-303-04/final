@@ -15,6 +15,7 @@ endpoints)에서 장애 신호를 찾아 causes/catalog/*.yaml 이 매칭하는 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 from packages.contracts.event_bus.bodies import JsonObject
 
@@ -57,6 +58,7 @@ SIGNAL_FAILED_SCHEDULING = "FailedScheduling"
 SIGNAL_POD_NOT_READY = "PodNotReady"
 SIGNAL_PROBE_FAILED = "ProbeFailed"
 SIGNAL_SERVICE_ENDPOINTS_EMPTY = "ServiceEndpointsEmpty"
+EVENT_SIGNAL_MAX_AGE = timedelta(minutes=10)
 
 
 # 같은 우선순위 안에서의 근거 출처 순위 — 파드 상태가 1차 근거, 이벤트는 정황 보강,
@@ -149,10 +151,45 @@ def collect_signals(kubernetes: JsonObject) -> list[SymptomSignal]:
     signals: list[SymptomSignal] = []
     for pod in snapshot_items(kubernetes, "pods"):
         signals.extend(pod_signals(pod))
+    collected_at = collected_at_time(kubernetes)
     for event in snapshot_items(kubernetes, "events"):
+        if not event_is_current_warning(event, collected_at):
+            continue
         signals.extend(event_signals(event))
     signals.extend(service_endpoint_signals(kubernetes))
     return signals
+
+
+def collected_at_time(kubernetes: JsonObject) -> datetime | None:
+    cluster = kubernetes.get("cluster")
+    if not isinstance(cluster, dict):
+        return None
+    return parse_event_time(cluster.get("collected_at"))
+
+
+def event_is_current_warning(event: JsonObject, collected_at: datetime | None) -> bool:
+    """Kubernetes Event 객체는 해결 뒤에도 남으므로 오래된 Warning은 신호에서 제외한다."""
+    if str(event.get("type") or "") not in {"", "Warning"}:
+        return False
+    if collected_at is None:
+        return True
+    last_seen = parse_event_time(event.get("last_timestamp") or event.get("first_timestamp"))
+    if last_seen is None:
+        return True
+    return collected_at - last_seen <= EVENT_SIGNAL_MAX_AGE
+
+
+def parse_event_time(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        normalized = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def snapshot_items(kubernetes: JsonObject, key: str) -> list[JsonObject]:

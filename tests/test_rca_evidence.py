@@ -15,6 +15,7 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
 )
 from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EvidenceBuilder
+from services.ai.agent.pipeline.evidence_bundle import MAX_LOG_ENTRIES, MAX_TEXT_LENGTH
 
 PR_URL_PREFIX = "https://github.test.local/project/repo/pull"
 PR_HTML_URL = f"{PR_URL_PREFIX}/7"
@@ -298,6 +299,45 @@ def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_er
         ],
         "line_count": 1,
     }
+
+
+def test_incident_events_use_compact_evidence_reference_and_bounded_bundle() -> None:
+    """이벤트 버스에는 원본 evidence 전체가 아니라 RCA에 필요한 축약 근거만 싣는다."""
+    db = SpyDb()
+    long_line = "OOMKilled " + ("x" * (MAX_TEXT_LENGTH + 200))
+    payload = crashloop_payload(
+        source_id="cluster-snapshot",
+        window_start="window-large",
+        metrics={
+            "source": "prometheus",
+            "results": {f"query-{idx}": {"values": list(range(30))} for idx in range(30)},
+        },
+        logs=[
+            loki_log_entry("sandbox", long_line, query_name=f"namespace_errors_{idx}")
+            for idx in range(MAX_LOG_ENTRIES + 5)
+        ],
+        traces={
+            "source": "tempo",
+            "results": {
+                f"trace-{idx}": {"spans": [{"name": "span", "detail": long_line}]}
+                for idx in range(20)
+            },
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-compact-bundle")
+
+    detected = event_by_subject(rca_events, "incident.detected")
+    assert detected.evidence.object_ref == "object://evidence/corr-compact-bundle.json"
+    assert detected.evidence.logs == []
+    assert "pods" not in detected.evidence.kubernetes
+
+    bundle_event = event_by_subject(rca_events, "evidence.bundle.built")
+    assert bundle_event.evidence.logs == []
+    logs_item = next(item for item in bundle_event.evidence_bundle.items if item.source == "logs")
+    assert len(logs_item.value["entries"]) == MAX_LOG_ENTRIES
+    sample = logs_item.value["entries"][0]["streams"][0]["values"][0]["line"]
+    assert len(sample) == MAX_TEXT_LENGTH + 3
 
 
 def test_evidence_bundle_keeps_only_incident_namespace_log_streams() -> None:

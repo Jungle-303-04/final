@@ -396,6 +396,13 @@ class EvidenceJobResultRequest(StrictModel):
     result: dict[str, Any] = Field(default_factory=dict)
     error: str = ""
 
+    @model_validator(mode="after")
+    def _bound_result_size(self) -> EvidenceJobResultRequest:
+        size = len(json.dumps({"result": self.result}, default=str).encode())
+        if size > MAX_EVIDENCE_PAYLOAD_BYTES:
+            raise ValueError(EVIDENCE_PAYLOAD_TOO_LARGE_MESSAGE)
+        return self
+
 
 class EvidenceProviderPolicy(StrictModel):
     enabled: bool = True

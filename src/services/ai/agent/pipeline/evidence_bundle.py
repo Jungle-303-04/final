@@ -16,6 +16,17 @@ from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
 
 EvidenceSource = ClusterEvidenceReceivedBody | Evidence
 
+MAX_KUBERNETES_PODS = 16
+MAX_KUBERNETES_EVENTS = 24
+MAX_KUBERNETES_NODES = 12
+MAX_LOG_ENTRIES = 8
+MAX_LOG_STREAMS = 4
+MAX_LOG_VALUES = 20
+MAX_TEXT_LENGTH = 1600
+MAX_METRIC_RESULTS = 12
+MAX_METRIC_SERIES = 8
+MAX_TRACE_RESULTS = 12
+
 
 def extract_resource(kubernetes: dict) -> tuple[str, str, str | None]:
     # incident 분류(pipeline/incident.py)와 같은 규칙 — 명시 resource > 유도 신호의 리소스.
@@ -42,6 +53,34 @@ def build_incident_evidence_bundle(
         complete=not missing_evidence,
         missing_evidence_checks=missing_source_checks(missing_evidence),
     )
+
+
+def compact_evidence_reference(evidence: Evidence) -> Evidence:
+    """Downstream 이벤트에는 원본 중복 대신 object_ref 중심의 얇은 참조만 싣는다."""
+    return Evidence(
+        cluster_id=evidence.cluster_id,
+        kubernetes=compact_reference_payload(evidence.kubernetes),
+        metrics=compact_reference_payload(evidence.metrics),
+        logs=[],
+        traces=compact_reference_payload(evidence.traces),
+        object_ref=evidence.object_ref,
+        workspace_id=evidence.workspace_id,
+    )
+
+
+def compact_reference_payload(payload: dict) -> dict:
+    reference: dict = {}
+    lineage = payload.get(EVIDENCE_LINEAGE_KEY) if isinstance(payload, dict) else None
+    if isinstance(lineage, dict):
+        reference[EVIDENCE_LINEAGE_KEY] = dict(lineage)
+    cluster = payload.get("cluster") if isinstance(payload, dict) else None
+    if isinstance(cluster, dict):
+        reference["cluster"] = {
+            key: cluster.get(key)
+            for key in ("cluster_id", "namespace", "collected_at")
+            if cluster.get(key) is not None
+        }
+    return reference
 
 
 def evidence_ref_for(evt: EvidenceSource, source: str, name: str) -> str:
@@ -262,7 +301,12 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 evt,
                 source="kubernetes",
                 name="cluster_resource_state",
-                value=evt.kubernetes,
+                value=compact_kubernetes_value(
+                    evt.kubernetes,
+                    namespace=namespace,
+                    resource_kind=resource_kind,
+                    resource_name=resource_name,
+                ),
                 summary=f"{target_summary} Kubernetes 상태 근거입니다.",
             )
         )
@@ -272,7 +316,7 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 evt,
                 source="metrics",
                 name="telemetry_metrics",
-                value=evt.metrics,
+                value=compact_metrics_value(evt.metrics),
                 summary=f"{target_summary} Metric snapshot 근거입니다.",
             )
         )
@@ -283,7 +327,7 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 evt,
                 source="logs",
                 name="related_logs",
-                value={"entries": log_entries},
+                value={"entries": compact_log_entries(log_entries)},
                 summary=f"{target_summary} Log tail 근거입니다.",
             )
         )
@@ -293,8 +337,232 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 evt,
                 source="traces",
                 name="related_traces",
-                value=evt.traces,
+                value=compact_traces_value(evt.traces),
                 summary=f"{target_summary} Trace 근거입니다.",
             )
         )
     return items
+
+
+def compact_kubernetes_value(
+    kubernetes: dict,
+    *,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
+) -> dict:
+    selected_pods = select_related_pods(kubernetes, namespace, resource_name)
+    selected_pod_names = {
+        str(pod.get("name")) for pod in selected_pods if pod.get("name") not in (None, "")
+    }
+    selected_events = select_related_events(
+        kubernetes,
+        namespace=namespace,
+        resource_name=resource_name,
+        selected_pod_names=selected_pod_names,
+    )
+    value: dict = {}
+    for key in ("cluster", "resource", "symptom", "severity", EVIDENCE_LINEAGE_KEY):
+        item = kubernetes.get(key)
+        if item not in (None, "", [], {}):
+            value[key] = item
+    value["pods"] = selected_pods[:MAX_KUBERNETES_PODS]
+    value["events"] = selected_events[:MAX_KUBERNETES_EVENTS]
+    value["nodes"] = select_not_ready_nodes(kubernetes)[:MAX_KUBERNETES_NODES]
+    value["workloads"] = select_related_workloads(
+        kubernetes,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+    )
+    value["services"] = select_related_named_items(kubernetes, "services", namespace, resource_name)
+    value["endpoints"] = select_related_named_items(
+        kubernetes, "endpoints", namespace, resource_name
+    )
+    return {key: item for key, item in value.items() if item not in (None, "", [], {})}
+
+
+def select_related_pods(kubernetes: dict, namespace: str | None, resource_name: str) -> list[dict]:
+    pods = [
+        pod for pod in snapshot_dict_items(kubernetes, "pods") if same_namespace(pod, namespace)
+    ]
+    selected = [
+        pod
+        for pod in pods
+        if str(pod.get("name") or "") == resource_name
+        or str(pod.get("owner_name") or "") == resource_name
+        or str(pod.get("workload_key") or "").endswith(f"/{resource_name}")
+    ]
+    return selected or pods[:MAX_KUBERNETES_PODS]
+
+
+def select_related_events(
+    kubernetes: dict,
+    *,
+    namespace: str | None,
+    resource_name: str,
+    selected_pod_names: set[str],
+) -> list[dict]:
+    events = [
+        item
+        for item in snapshot_dict_items(kubernetes, "events")
+        if same_namespace(item, namespace)
+    ]
+    selected = [
+        item
+        for item in events
+        if str(item.get("involved_name") or "") in selected_pod_names
+        or str(item.get("involved_name") or "") == resource_name
+    ]
+    return selected or events[:MAX_KUBERNETES_EVENTS]
+
+
+def select_not_ready_nodes(kubernetes: dict) -> list[dict]:
+    return [
+        node
+        for node in snapshot_dict_items(kubernetes, "nodes")
+        if node.get("ready") is False or node.get("ready") == "False"
+    ]
+
+
+def select_related_workloads(
+    kubernetes: dict,
+    *,
+    namespace: str | None,
+    resource_kind: str,
+    resource_name: str,
+) -> list[dict]:
+    workloads = [
+        item
+        for item in snapshot_dict_items(kubernetes, "workloads")
+        if same_namespace(item, namespace)
+    ]
+    selected = [
+        item
+        for item in workloads
+        if str(item.get("kind") or "").casefold() == resource_kind.casefold()
+        and str(item.get("name") or "") == resource_name
+    ]
+    return selected[:4]
+
+
+def select_related_named_items(
+    kubernetes: dict, key: str, namespace: str | None, resource_name: str
+) -> list[dict]:
+    items = [
+        item for item in snapshot_dict_items(kubernetes, key) if same_namespace(item, namespace)
+    ]
+    selected = [item for item in items if str(item.get("name") or "").startswith(resource_name)]
+    return selected[:8]
+
+
+def snapshot_dict_items(kubernetes: dict, key: str) -> list[dict]:
+    value = kubernetes.get(key)
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def same_namespace(item: dict, namespace: str | None) -> bool:
+    if not namespace:
+        return True
+    value = item.get("namespace")
+    return value in (None, namespace)
+
+
+def compact_metrics_value(metrics: dict) -> dict:
+    return compact_mapping_results(
+        metrics, max_results=MAX_METRIC_RESULTS, max_series=MAX_METRIC_SERIES
+    )
+
+
+def compact_traces_value(traces: dict) -> dict:
+    return compact_mapping_results(
+        traces, max_results=MAX_TRACE_RESULTS, max_series=MAX_METRIC_SERIES
+    )
+
+
+def compact_mapping_results(payload: dict, *, max_results: int, max_series: int) -> dict:
+    value: dict = {}
+    for key in (EVIDENCE_LINEAGE_KEY, "source", "status", "query_count", "result_count"):
+        item = payload.get(key)
+        if item not in (None, "", [], {}):
+            value[key] = item
+    results = payload.get("results")
+    if isinstance(results, dict):
+        value["results"] = {
+            str(name): compact_result(result, max_series=max_series)
+            for name, result in list(results.items())[:max_results]
+        }
+    return value or {"summary": summarize_payload(payload)}
+
+
+def compact_result(result: object, *, max_series: int) -> object:
+    if isinstance(result, dict):
+        compacted: dict = {}
+        for key, value in result.items():
+            if key in {"data", "result", "values", "streams"} and isinstance(value, list):
+                compacted[key] = [
+                    compact_result(item, max_series=max_series) for item in value[:max_series]
+                ]
+            elif isinstance(value, str):
+                compacted[key] = trim_text(value)
+            elif isinstance(value, (dict, list)):
+                compacted[key] = summarize_payload(value)
+            else:
+                compacted[key] = value
+        return compacted
+    if isinstance(result, list):
+        return [compact_result(item, max_series=max_series) for item in result[:max_series]]
+    if isinstance(result, str):
+        return trim_text(result)
+    return result
+
+
+def compact_log_entries(entries: list[dict]) -> list[dict]:
+    return [compact_log_entry(entry) for entry in entries[:MAX_LOG_ENTRIES]]
+
+
+def compact_log_entry(entry: dict) -> dict:
+    compacted = {
+        key: trim_text(value) if isinstance(value, str) else value
+        for key, value in entry.items()
+        if key not in {"streams"}
+    }
+    streams = entry.get("streams")
+    if isinstance(streams, list):
+        compacted["streams"] = [
+            compact_log_stream(stream)
+            for stream in streams[:MAX_LOG_STREAMS]
+            if isinstance(stream, dict)
+        ]
+    return compacted
+
+
+def compact_log_stream(stream: dict) -> dict:
+    compacted = {key: value for key, value in stream.items() if key != "values"}
+    values = stream.get("values")
+    if isinstance(values, list):
+        compacted["values"] = [
+            {
+                **{key: value for key, value in sample.items() if key != "line"},
+                "line": trim_text(str(sample.get("line") or "")),
+            }
+            for sample in values[:MAX_LOG_VALUES]
+            if isinstance(sample, dict)
+        ]
+    return compacted
+
+
+def trim_text(value: str) -> str:
+    if len(value) <= MAX_TEXT_LENGTH:
+        return value
+    return f"{value[:MAX_TEXT_LENGTH]}..."
+
+
+def summarize_payload(payload: object) -> dict:
+    if isinstance(payload, dict):
+        return {"type": "object", "keys": sorted(str(key) for key in payload.keys())[:20]}
+    if isinstance(payload, list):
+        return {"type": "list", "count": len(payload)}
+    return {"type": type(payload).__name__}

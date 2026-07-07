@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:07 KST (api-gateway OOM + evidence 정책 완화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:25 KST (RCA/DLQ 폭증 안정화 패치)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,30 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+- 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+
+## 체크포인트 (20:25 KST) — RCA/DLQ 폭증 안정화 패치
+
+- 라이브 진단:
+  - DLQ `open` 1,898건 중 1,891건은 `rca-fallback-worker`가 구버전 payload(`missing_evidence_checks`)를 디코드하지 못한 과거 호환성 DLQ였다.
+  - 최근 evidence window에서도 `cluster.evidence.received` 100건 중 `incident.detected` 95건이 생성되어, UI 숫자가 실제 장애 수가 아니라 evidence window 단위 폭증을 반영하는 구조였다.
+  - `incident-worker` 로그에서 `nats.errors.MaxPayloadError: maximum payload exceeded`가 반복됐다. 원인은 `incident.detected`/`evidence.bundle.built` 이벤트에 원본 evidence와 bundle이 중복 포함되어 NATS 기본 payload 한계를 넘는 경우가 있었기 때문이다.
+  - Kubernetes Event는 해결 뒤에도 목록에 남을 수 있어, 현재 pod가 정상이어도 오래된 Warning event가 매 window마다 새 incident로 승격될 수 있었다.
+- 구현:
+  - `pipeline/symptom.py`에 Kubernetes Warning event freshness 필터를 추가했다. `cluster.collected_at`이 있으면 `last_timestamp`/`first_timestamp`가 10분보다 오래된 Warning event는 symptom 신호에서 제외한다.
+  - `incident.detected`와 `evidence.bundle.built` 이벤트에 실리는 `Evidence`는 원본 payload 전체가 아니라 `object_ref`, lineage, cluster 식별자만 보존하는 compact reference로 줄였다. 원본은 기존처럼 evidence store에 저장된다.
+  - `EvidenceBundle.items[].value`는 RCA 판별에 필요한 관련 리소스/로그/메트릭/트레이스만 bounded 형태로 싣는다. pods/events/nodes/log entries/streams/values/metric results/trace results/문자열 길이를 제한했다.
+  - `EvidenceJobResultRequest`에도 `AgentEvidenceRequest`와 같은 1MiB 직렬화 상한을 추가해 provider job result가 DB/NATS/LLM 경로를 압박하지 못하게 했다.
+  - 관련 스펙 문서(`docs/spec/services/ai-agent.md`, `docs/spec/packages/contracts.md`, `docs/spec/services/target-cluster-agent.md`)를 계약과 맞췄다.
+- 검증:
+  - `python -m ruff check ...` → passed.
+  - `.venv/bin/pytest tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py tests/test_target_evidence_jobs.py tests/test_agent_evidence_ingest.py -q` → 43 passed.
+  - `.venv/bin/pytest tests/test_dashboard_projection.py tests/test_schemas.py tests/test_docs_index.py -q` → 31 passed.
+- 다음 즉시 할 일:
+  1. 안정화 패치 커밋/푸시 후 CI/CD 또는 직접 이미지 빌드로 management 워커를 롤아웃한다.
+  2. 배포 후 `incident-worker` 로그에서 `MaxPayloadError`가 사라졌는지, `outbox where source='incident-worker' and sent_at is null`가 감소하는지 확인한다.
+  3. 옛 oversized outbox가 relay 앞단을 계속 막으면, 백업 후 특정 `event_id`/`source='incident-worker'`/oversized 조건으로만 격리 처리한다. 전체 DB 초기화는 아직 금지.
+  4. 그 다음 프론트 우선순위: `/console` redirect 제거 및 demo 보존, `/` 실제 서비스 드릴다운을 inventory `resource-detail` API 중심으로 재구성, AI chat 상세 response shape 불일치 수정, repo/cluster 등록 UI 실API 검증 플로우 폴리싱.
 
 ## 체크포인트 (20:07 KST) — api-gateway OOM + evidence 정책 완화
 

@@ -11,7 +11,10 @@ from domains.rca.events import (
 )
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from services.ai.agent.defaults import IncidentMessages, RcaMessages
-from services.ai.agent.pipeline.evidence_bundle import build_incident_evidence_bundle
+from services.ai.agent.pipeline.evidence_bundle import (
+    build_incident_evidence_bundle,
+    compact_evidence_reference,
+)
 from services.ai.agent.pipeline.symptom import UNKNOWN_SYMPTOM, derive_symptom, resolve_resource
 
 
@@ -29,7 +32,7 @@ class IncidentDetector:
             workspace_id=evidence.workspace_id,
             severity=incident.severity,
             affected=self.affected_resources(incident),
-            evidence=evidence,
+            evidence=compact_evidence_reference(evidence),
             incident=incident,
         )
 
@@ -108,7 +111,7 @@ class EvidenceBundler:
                 workspace_id=evidence.workspace_id,
             )
         return EvidenceBundleBuiltBody(
-            evidence=evidence,
+            evidence=compact_evidence_reference(evidence),
             incident=incident,
             evidence_bundle=build_incident_evidence_bundle(evidence, incident),
         )

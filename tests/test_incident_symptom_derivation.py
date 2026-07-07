@@ -548,6 +548,35 @@ def test_ambiguous_snapshot_does_not_open_incident() -> None:
     assert detected.incident.secondary_symptoms == []
 
 
+def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> None:
+    """과거 Warning Event가 남아 있어도 현재 정상 snapshot이면 incident로 승격하지 않는다."""
+    healthy_with_old_warning = snapshot(
+        pods=(pod("checkout-api-1", labels={"app": "checkout-api"}),),
+        events=(
+            warning_event(
+                "BackOff",
+                "Back-off restarting failed container checkout-api in pod checkout-api-1_sandbox",
+                involved=("Pod", "checkout-api-1"),
+                count=30,
+            ),
+        ),
+    )
+    healthy_with_old_warning["cluster"]["collected_at"] = "2026-07-07T09:30:30+00:00"
+
+    events = run_to_plan(
+        evidence_payload(healthy_with_old_warning),
+        correlation_id="corr-stale-warning",
+    )
+
+    assert subjects_of(events) == [
+        "evidence.built",
+        "incident.detected",
+    ]
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is False
+    assert detected.incident.symptom == "unknown"
+
+
 def test_multiple_failing_pods_pick_dominant_signal_and_keep_the_rest() -> None:
     """다중 장애 — 우선순위(imagepull > crashloop > oom)가 대표를 정하고 나머지는 보존."""
     mixed = snapshot(

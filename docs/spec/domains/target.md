@@ -184,7 +184,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 - `AgentPolicy`: `cluster_id`, `generation`(≥1), `cluster_role`(`"management"|"target"`), `evidence: EvidenceRuntimePolicy`(`failure_policy: "allow_partial"|"strict"`, `max_attempts`, `providers: dict[str, EvidenceProviderPolicy]`), `bootstrap: BootstrapPolicy`, `desired_state: DesiredStatePolicy`.
 - `EvidenceProviderPolicy`: `enabled: bool = True`, `interval_seconds`, `min_workers`, `max_workers`, `queue_age_target_seconds`, `queries: list[dict]`.
 - `EvidenceJobScheduleRequest`: `source_id: str = "cluster-snapshot"`, `window_start: str`, `provider_keys: list[str]`(min_length=1).
-- `EvidenceJobResultRequest`: `agent_id: str`, `lease_id: str`, `status: Literal["completed","failed"]`, `result: dict = {}`, `error: str = ""`.
+- `EvidenceJobResultRequest`: `agent_id: str`, `lease_id: str`, `status: Literal["completed","failed"]`, `result: dict = {}`, `error: str = ""`. `{"result": result}` 직렬화 크기가 `MAX_EVIDENCE_PAYLOAD_BYTES`(1MiB)를 넘으면 `evidence payload exceeds size limit` 검증 오류가 난다.
 - `TargetInstallResponse`: `registered: bool`, `cluster_id: str`, `status: str`, `applied: bool`, `apply_output: str | None`, `install_manifest: str`, `agent_token: str`(원문 1회 반환, 서버는 해시만 저장), `install_command: str = ""`(원라인 설치 명령 — `curl -fsSL <base>/install/<token> | kubectl apply -f -`).
 - `EvidenceJobScheduleResponse`: `accepted: bool`, `evidence_key: str`, `queued: int`, `job_ids: list[str]`. / `EvidenceJobPollResponse`: `job: JsonMap | None`. / `EvidenceJobResultResponse`: `accepted: bool`, `evidence_key/event_id/correlation_id: str | None`.
 
