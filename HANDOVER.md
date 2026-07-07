@@ -1,6 +1,18 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 10:55 KST (커밋 8f478552 기준)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 11:25 KST (커밋 2530884e 기준)
+
+## 최신 업데이트 (11:25)
+
+- **GitHub Actions CD가 재가동됨**: dev push → Promote Dev To Main → AWS CD 자동 배포 체인이 살아있음. main 41b7d04c(우리 작업 전부 포함)가 CI 이미지로 배포됨. **내 수동 CodeBuild 롤아웃과 경합했으므로 이후 배포는 CI 경로만 사용할 것.**
+- dev CI 실패 원인 해결: env 가드가 frontend/.env.production(시크릿 아닌 vite 플래그)을 거부 → 허용 목록 추가(2530884e). dev CI 그린 확인.
+- **repo Actions 변수 `CONFIGURE_CLOUDFLARE=0`으로 변경** — CD가 배포마다 DNS를 api-gateway ELB로 덮어써 콘솔이 사라지는 문제 차단. 도메인은 console ELB로 수동 유지(아래 참고). 되돌리려면 GitHub 변수에서 1로.
+- **RCA 정확도 라이브 검증 완료**: exit-1 크래시(payment-gateway)가 배포 전 `oom_killed` 오판 → 배포 후 `config_env_error` 정답 판정. 주입 장애는 전부 정리됨(sandbox clean).
+- **주의**: CD의 aws-up.sh가 배포마다 `GITHUB_TOKEN` 시크릿을 1시간짜리 임시 토큰으로 덮어씀. 마지막 CD 후 PAT 재주입 필요(아래 명령). 영구 해결은 GitHub Actions secret `GH_APP_TOKEN` 등록.
+  ```
+  kubectl -n management patch secret management-runtime-secret --type merge -p '{"stringData":{"GITHUB_TOKEN":"<PAT>"}}'
+  kubectl -n management rollout restart deploy scm-worker manifest-render-worker git-pull-worker
+  ```
 
 ## 서비스 현재 상태 (라이브)
 
