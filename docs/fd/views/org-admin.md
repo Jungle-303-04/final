@@ -48,12 +48,11 @@
 ## 상태·모션
 
 - 목록 Stagger 등장, Drawer 는 radix 기본 슬라이드
-- mock 모드 표시: Topbar 에 "MOCK" Badge(neutral) — `VITE_API_MODE=mock`일 때만
 - 빈 상태: "아직 조직이 없습니다" + [첫 조직 만들기]
 
 ## AC
 
 - [ ] 승인 대기 멤버 승인이 실존 API 로 동작(mock 아님)
 - [ ] 그룹 멤버 추가/제거가 Drawer 닫지 않고 낙관적 갱신(onMutate) + 실패 롤백
-- [ ] mock ↔ real 전환 시 뷰 코드 무변경 증명 — `VITE_API_MODE` 스위치 테스트
+- [ ] 뷰 코드는 실 API 훅만 사용하고, 테스트는 네트워크 스텁 또는 백엔드 테스트 세션으로 경계를 검증
 - [ ] 조직 삭제는 소속 그룹 존재 시 409 안내("그룹을 먼저 정리")— 실제 router와 일치

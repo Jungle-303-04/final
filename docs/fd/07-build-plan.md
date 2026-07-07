@@ -7,7 +7,7 @@ Claude(Fable5)가 이 문서 세트만으로 `frontend/`를 한 번에 구현하
 
 ## 사전 조건
 
-1. Node 22+, 백엔드 로컬 기동(또는 `VITE_API_MODE=mock` 데모 fallback)
+1. Node 22+, 백엔드 로컬 기동(로컬 vite dev/preview 는 `/api` proxy 로 Gateway에 연결)
 2. `GET {BASE_URL}/openapi.json` 접근 가능 — 코드젠 입력
 3. 이 문서 세트 링크 무결성 통과(`bash scripts/fd-link-check.sh` — 아래 정의)
 
@@ -17,8 +17,8 @@ Claude(Fable5)가 이 문서 세트만으로 `frontend/`를 한 번에 구현하
 |---|---|---|---|
 | S0 스캐폴드 | Vite+TS+eslint+prettier+vitest, 폴더 골격, tsconfig paths | [03](03-architecture.md) | `tsc --noEmit` 통과, 빈 앱 렌더 |
 | S1 토큰·프리미티브 | tokens.css, shared/ui 인벤토리 전부(스토리 없는 단순 구현), shared/motion 5종, status.ts | [04](04-design-system.md) | ui 단위 테스트(각 컴포넌트 스모크 렌더), reduced-motion 폴백 테스트 |
-| S2 데이터 계층 | openapi 코드젠, api.ts(에러 정규화·401 인터셉터), query.ts, mock router fallback, live.ts | [03](03-architecture.md), [06](06-api-map.md) | mock/real 스위치 단위 테스트, 코드젠 산출물 커밋 |
-| S3 쉘·인증 | AppShell(Sidebar/Topbar/팔레트), guards, /login·/signup·/pending·/verify-email | [05](05-routes-ia.md), [views/auth](views/auth.md) | Playwright: 로그인→/overview 리다이렉트(mock 세션) |
+| S2 데이터 계층 | openapi 코드젠, api.ts(에러 정규화·401 인터셉터), query.ts, live.ts | [03](03-architecture.md), [06](06-api-map.md) | API 에러·401 핸들러 단위 테스트, 코드젠 산출물 커밋 |
+| S3 쉘·인증 | AppShell(Sidebar/Topbar/팔레트), guards, /login·/signup·/pending·/verify-email | [05](05-routes-ia.md), [views/auth](views/auth.md) | Playwright: 로그인→/overview 리다이렉트(테스트 백엔드 세션) |
 | S4 플릿·클러스터 | fleet-heatmap(3레벨), ClusterList/Detail(7탭), PodDrawer, 위저드(클러스터) | [views/fleet-heatmap](views/fleet-heatmap.md), [views/cluster-detail](views/cluster-detail.md), [views/resources](views/resources.md) | 탭·드릴다운 딥링크 e2e, 5000행 렌더 성능 확인 |
 | S5 레포·워크플로우 | RepoList/Detail(4탭), WorkflowList/Graph, ApprovalCard(공유 1개) | [views/repo](views/repo.md), [views/workflow](views/workflow.md) | 승인 카드 공유 검증(임포트 경로 1개), 활성 run 10s/비활성 30s 폴링 전환 테스트 |
 | S6 AI·메트릭 | ChatList/ChatView(카드 3종), MetricsView(실시간+쿼리 카드) | [views/ai-chat](views/ai-chat.md), [views/metrics](views/metrics.md) | 폴링 간격 파생 테스트, ActionSelectCard 잠금 테스트 |
