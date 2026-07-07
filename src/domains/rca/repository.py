@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Select, case, func, select
@@ -239,6 +239,56 @@ class RcaRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def find_recent_rca_report(
+        self,
+        workspace_id: str,
+        root_cause: str,
+        resource_key: str,
+        window_seconds: int,
+    ) -> JsonObject | None:
+        """같은 (workspace, root_cause, 대상 리소스) 리포트가 최근 window 안에 있는지 조회.
+
+        장애가 지속되는 동안 evidence 주기(~10s)마다 동일 리포트가 무한 적재되는 것을
+        막는 dedup 조회 — rca-worker 가 저장 전에 호출한다(있으면 저장 생략).
+        리소스 비교는 payload.incident 를 Python 에서 `rca_report_resource_key` 로
+        비교한다(JSONB 경로 연산자 없이 DB 방언 중립 유지).
+        """
+        table = RcaReport.__table__
+        threshold = datetime.now(UTC) - timedelta(seconds=window_seconds)
+        statement = (
+            select(table.c.id, table.c.correlation_id, table.c.payload, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.root_cause == root_cause,
+                table.c.created_at >= threshold,
+            )
+            .order_by(table.c.created_at.desc(), table.c.id.desc())
+            .limit(20)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        for row in rows:
+            payload = row.get("payload") or {}
+            incident = payload.get("incident") if isinstance(payload, dict) else None
+            if rca_report_resource_key(incident) == resource_key:
+                return {
+                    "id": row["id"],
+                    "correlation_id": row["correlation_id"],
+                    "created_at": iso_or_none(row.get("created_at")),
+                }
+        return None
+
+
+def rca_report_resource_key(incident: JsonObject | None) -> str:
+    """리포트 dedup 용 대상 리소스 키 — `namespace/kind/name` (incident 없으면 "unknown")."""
+    if not isinstance(incident, dict):
+        return "unknown"
+    return (
+        f"{incident.get('namespace') or 'unknown'}"
+        f"/{incident.get('resource_kind') or 'unknown'}"
+        f"/{incident.get('resource_name') or 'unknown'}"
+    )
 
 
 def _apply_created_at_window(
