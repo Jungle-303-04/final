@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:34 KST (evidence/inventory 공개 응답 raw 차단)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:40 KST (클러스터 드릴 URL state/컨텍스트 액션)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,24 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (18:40 KST) — 클러스터 드릴 URL state/컨텍스트 액션
+
+- 구현:
+  - 클러스터 상세에서 노드/서비스/워크로드 drawer를 local React state가 아니라 URL search state로 복원 가능하게 만들었다.
+  - URL 형식: `/clusters/{cluster_id}?tab=nodes&detail=node&name={node}`, `/clusters/{cluster_id}?tab=services&detail=service&namespace={ns}&name={service}`, `/clusters/{cluster_id}?tab=workloads&detail=workload&namespace={ns}&name={workload}`.
+  - 새로고침/공유 링크 후에도 실제 `inventory/summary`, `inventory/services`, `inventory/resources?resource_type=pod` 응답에서 해당 리소스를 다시 찾아 drawer를 연다.
+  - cluster/node/service/workload/pod ContextActions에 `이벤트`, `메트릭`, `AI 분석`을 모두 제공한다.
+  - `이벤트`는 같은 클러스터의 `tab=events&q={target}`로, `메트릭`은 `/metrics?cluster=...&subject=...&name=...&namespace=...`로, `AI 분석`은 `/ai?prefill=...`로 연결한다.
+  - 워크로드 target은 실제 pod inventory의 `workload_name || pod.name`으로 묶어 산출한다. mock/fake/hardcoded data 없음.
+- 검증:
+  - `cd frontend && npm test` → 5 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 다음:
+  - AI chat prefill/session 연결 품질, 대화 UX polish, 실제 recovery/action context 연결을 다음 의미 단위로 진행한다.
 
 ## 체크포인트 (18:34 KST) — evidence/inventory 공개 응답 raw 차단
 
