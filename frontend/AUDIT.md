@@ -1,7 +1,8 @@
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
-기준: `VITE_API_MODE=real` 프로덕션 빌드 — 서빙되는 앱에서 mock/fixture/하드코딩 수치는 전부 결함.
+기준: 프로덕션 빌드에서 mock/fixture/하드코딩 수치는 전부 결함.
 이번 패스: **Plural 스타일 콘솔이 루트(`/`) 앱으로 승격**, 구 베이스 앱 셸/화면 삭제, 전 화면 실데이터화.
+후속 패스(2026-07-07 오후): **mock 레이어 자체를 삭제** — 코드베이스에 페이크 데이터 경로가 아예 없음(섹션 D).
 
 ## A. 아키텍처 결정
 
@@ -50,12 +51,15 @@
 
 삭제 파일: `features/plural/**`(5), `features/console/{mock,metrics,flows,popups,viewer,ChatPanel,live,routes,api/**,map/**,widgets/**,pages/{AiMisc,Cd,Drill,Settings,StacksK8s}Pages}`(29), `app/shell/**`(2), `features/fleet/{FleetHeatmapView,score}`(2), plural-ui 데드 코드(`PluralLayout/PluralShell/SaveButton` — mock 저장 버튼 포함) = **38개 파일 + 데드 익스포트 제거**.
 
-## D. mock 격리 증명
+## D. mock 완전 삭제 (2026-07-07 후속 패스)
 
-- `API_MODE` 기본 `real`; fixture(`shared/lib/mock/*`)는 `VITE_API_MODE=mock` 명시 빌드에서만 라우팅됨(`shared/lib/api.ts` 단일 분기).
-- grep 검증: `mock/fixtures|mock/router` 임포트는 `shared/lib/api.ts`(모드 분기)·`shared/lib/live.ts`(mock 분기)·`shared/lib/mock/router.ts` 뿐.
-- 신규 집계 계약도 mock 라우터에 동형 핸들러 추가(데모 모드 무결성) — real 경로와 무관.
-- 하드코딩 제거: 로그인 이메일 prefill(`admin.local@example.com`) 삭제.
+- `shared/lib/mock/{fixtures,router}.ts`(463줄 페이크 데이터/라우터) **삭제**. `API_MODE`/`VITE_API_MODE` 개념 자체 제거 —
+  `shared/lib/api.ts` 는 무조건 실 fetch, `shared/lib/live.ts` 는 무조건 실 WS.
+- `frontend/.env.development` 삭제(mock 플래그만 담던 파일). 로컬 개발은 vite proxy(`VITE_BACKEND`, 기본 127.0.0.1:8000)로 실 백엔드에 붙는다.
+- 콘솔 헤더의 "MOCK 모드" 칩 제거(도달 불가 상태였음).
+- CI env 가드(.github/workflows/ci.yml)·scripts/frontend-check.sh 의 mock 관련 예외/플래그 정리.
+- grep 검증: `mock` 참조 0건(src 전체).
+- 하드코딩 제거: 로그인 이메일 prefill(`admin.local@example.com`) 삭제(이전 패스).
 
 ## E. 애니메이션/모션 일관성
 

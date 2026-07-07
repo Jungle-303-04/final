@@ -8,7 +8,7 @@ export const chatKeys = {
   list: () => ['ai', 'conversations'] as const,
   one: (id: string) => ['ai', 'conversations', id] as const,
 };
-// G10 — AI 대화 목록 route. real mode는 Gateway, mock mode는 로컬 fallback.
+// G10 — AI 대화 목록 route (Gateway /conversations).
 export const useConversations = () =>
   useQuery({ queryKey: chatKeys.list(), queryFn: () => get<{ conversations: Record<string, unknown>[] }>('/ai/conversations'), select: d => d.conversations.map(adaptConversationSummary), refetchInterval: 15_000 });
 export const useConversation = (id: string | undefined) =>
