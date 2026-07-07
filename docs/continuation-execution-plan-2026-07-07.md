@@ -16,9 +16,27 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 17:14 KST 체크포인트
+### 2026-07-07 17:16 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
+
+- `c5f81982 fix: repo manifest 검증 gate 강화`는 origin/dev push 완료.
+- 해당 push의 dev workflows도 runner 배정 없이 실패:
+  - CI run `28851760498`: failure.
+  - Promote Dev To Main run `28851760555`: failure.
+  - AWS CD run `28851760534`: failure.
+  - 기존과 같은 runner allocation 계층 문제로 본다.
+- 프론트 테스트 추가:
+  - `frontend/tests/incident_detail_recovery_fallback.test.mjs`: Vite SSR + React Query cache로 incident detail `not_found` fallback이 real recovery-plan payload를 표시하는지 검증.
+  - `frontend/package.json`: `npm test` script 추가.
+  - `frontend/tests/README.md`: mock 중심 설명 제거, component smoke와 real-backend smoke(`E2E_MUTATE=0`) 원칙 문서화.
+- 검증:
+  - `cd frontend && npm test` → 1 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `git diff --check` → passed.
+
+### 2026-07-07 17:14 KST 체크포인트
 
 - `ec00ea77 feat: target preflight 연결성 확인`은 origin/dev push 완료.
 - 해당 push의 dev workflows도 runner 배정 없이 실패:
