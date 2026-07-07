@@ -88,6 +88,68 @@ def missing_source_checks(missing_evidence: list[str]) -> list[MissingEvidenceCh
     ]
 
 
+# Loki 정규화 payload 의 stream 라벨 중 네임스페이스로 인정하는 키.
+LOG_STREAM_NAMESPACE_LABELS = ("k8s_namespace_name", "namespace")
+
+
+def select_incident_log_entries(
+    logs: list[dict],
+    namespace: str | None,
+) -> list[dict]:
+    """incident 네임스페이스의 로그만 근거로 채택한다(다른 네임스페이스 노이즈 제외).
+
+    에이전트 정책의 로그 쿼리는 네임스페이스별로 여러 개(target/sandbox) 실행되는데,
+    RCA 근거·판별 신호에는 incident 리소스가 속한 네임스페이스의 로그만 의미가 있다.
+    (예: sandbox 워크로드 장애 리포트에 target 네임스페이스 loki 자체 ERROR 로그가
+    섞여 들어가던 문제.) 판정 규칙:
+    - Loki 정규화 entry(streams 보유): 네임스페이스 라벨이 incident 와 일치하는 stream 만
+      남기고, 남는 stream 이 없으면 entry 자체를 제외한다. 라벨이 없는 stream 은
+      귀속 불가라 보수적으로 유지한다.
+    - streams 가 없는 entry(단순 {"line": ...} fixture/webhook 형태): 귀속 불가 → 유지.
+    - incident 네임스페이스를 모르면 필터하지 않는다.
+
+    참고: 여기서 걸러도 원본 `Evidence.logs`(수집 원문)에는 전체 네임스페이스 로그가
+    남는다. 리포트가 소비하는 근거 번들(evidence_bundle)만 정제하는 최소 수정이며,
+    수집 시점 분리(incident 별 로그 쿼리 실행)는 evidence 수집 파이프라인 후속 과제다.
+    """
+    if not namespace:
+        return list(logs)
+    selected: list[dict] = []
+    for entry in logs:
+        if not isinstance(entry, dict):
+            continue
+        streams = entry.get("streams")
+        if not isinstance(streams, list):
+            selected.append(entry)
+            continue
+        kept = [
+            stream
+            for stream in streams
+            if isinstance(stream, dict) and stream_matches_namespace(stream, namespace)
+        ]
+        if not kept:
+            continue
+        selected.append(
+            {
+                **entry,
+                "streams": kept,
+                "line_count": sum(len(stream.get("values") or []) for stream in kept),
+            }
+        )
+    return selected
+
+
+def stream_matches_namespace(stream: dict, namespace: str) -> bool:
+    labels = stream.get("stream")
+    if not isinstance(labels, dict):
+        return True  # 라벨 없음 → 귀속 불가, 보수적으로 유지
+    for key in LOG_STREAM_NAMESPACE_LABELS:
+        value = labels.get(key)
+        if value is not None:
+            return str(value) == namespace
+    return True
+
+
 def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
     resource_kind, resource_name, namespace = extract_resource(evt.kubernetes)
@@ -117,13 +179,14 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 summary=f"{target_summary} Metric snapshot 근거입니다.",
             )
         )
-    if evt.logs:
+    log_entries = select_incident_log_entries(evt.logs, namespace)
+    if log_entries:
         items.append(
             evidence_item(
                 evt,
                 source="logs",
                 name="related_logs",
-                value={"entries": evt.logs},
+                value={"entries": log_entries},
                 summary=f"{target_summary} Log tail 근거입니다.",
             )
         )
