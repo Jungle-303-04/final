@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from domains.alert.delivery import post_alert_webhook
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
 from domains.alert.repository import severity_matches
 from packages.config.logs import get_logger
@@ -141,10 +142,9 @@ async def dispatch_to_channel(
     alert: AlertRequestedBody, channel: dict[str, object]
 ) -> AlertDispatchedBody:
     """워크스페이스 채널 1개로 webhook 발송 — 채널 이름이 dispatched.channel 이 된다."""
-    timeout = float(env(ALERT_HTTP_TIMEOUT_SECONDS_ENV, DEFAULT_ALERT_HTTP_TIMEOUT_SECONDS))
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(str(channel["url"]), json=alert.to_body())
-        response.raise_for_status()
+    result = await post_alert_webhook(str(channel["url"]), alert)
+    if not result.delivered:
+        raise RuntimeError(result.error or "alert webhook failed")
     return dispatched_body(alert, channel=str(channel["name"]), mode=WEBHOOK_PROVIDER_NAME)
 
 

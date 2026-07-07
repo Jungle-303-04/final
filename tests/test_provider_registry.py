@@ -66,6 +66,13 @@ def test_provider_catalog_groups_runtime_choices() -> None:
     assert any(
         item["key"] == "gitlab" and item["status"] == "unavailable" for item in grouped["source"]
     )
+    eks = next(item for item in grouped["cloud"] if item["key"] == "eks")
+    assert eks["status"] == "available"
+    assert [field["key"] for field in eks["config_fields"]] == [
+        "region",
+        "eks_cluster_name",
+        "context_alias",
+    ]
     assert any(item["key"] == "k8s-secret" for item in grouped["secret"])
 
 
@@ -95,6 +102,11 @@ def test_cluster_registration_discovery_imports_env_candidates_without_tokens(
     flows = {item["cloud_provider"]: item for item in discovery["flows"]}
 
     assert flows["existing-k8s"]["status"] == "available"
+    assert flows["eks"]["supports_import"] is False
+    assert flows["gke"]["supports_import"] is False
+    assert flows["aks"]["supports_import"] is False
+    assert flows["kind"]["supports_import"] is False
+    assert flows["minikube"]["supports_import"] is False
     assert flows["plural"]["status"] == "available"
     assert flows["external-console"]["status"] == "available"
     existing_candidate = next(

@@ -52,7 +52,7 @@ from packages.contracts.gateway.responses import (
     DeadLettersResponse,
     HealthResponse,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ServiceRole
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ClusterRegistrationStatus, ServiceRole
 from packages.events.bus import NatsEventBus
 from packages.runtime.command_wakeup import COMMAND_NOTIFY_DATABASE_URL_ENV, WAKEUP
 from packages.runtime.gateway import ApiEventGateway
@@ -406,6 +406,13 @@ class ApiGateway:
                     capabilities=payload.capabilities,
                     details={},
                 )
+                status_updater = getattr(self.db, "update_cluster_registration_status", None)
+                if callable(status_updater):
+                    status_updater(
+                        identity.workspace_id,
+                        identity.cluster_id,
+                        ClusterRegistrationStatus.REGISTERED.value,
+                    )
                 accepted = await self.events.accept_body(
                     agent_connected_body_from_request(payload, identity)
                 )

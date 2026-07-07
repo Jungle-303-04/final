@@ -1,0 +1,38 @@
+meta {
+  name: 08 PromQL dry-run 검증
+  type: http
+  seq: 8
+  tags: [metrics, wizard, validation]
+}
+
+post {
+  url: {{base_url}}metrics/validate
+  body: json
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "source": "prometheus",
+    "query": "up",
+    "range_seconds": 300,
+    "step_seconds": 30
+  }
+}
+
+tests {
+  test("session can validate promql or auth/config blocks clearly", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("success body has validation result", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("valid");
+      expect(body).to.have.property("detail");
+    }
+  });
+}

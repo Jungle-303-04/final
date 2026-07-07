@@ -8,10 +8,19 @@ from types import SimpleNamespace
 from conftest import ROOT, load_file
 from fastapi import HTTPException
 
+import domains.alert.router as alert_router
+from domains.alert.delivery import AlertDeliveryResult
 from domains.alert.events import AlertRequestedBody
 from domains.alert.repository import severity_matches
-from domains.alert.router import delete_alert_channel, list_alert_channels, upsert_alert_channel
-from packages.contracts.gateway.requests import AlertChannelUpsertRequest
+from domains.alert.router import (
+    delete_alert_channel,
+    list_alert_channels,
+    upsert_alert_channel,
+)
+from domains.alert.router import (
+    test_alert_channel as send_alert_channel_test,
+)
+from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
 
 
 def load_alert_worker():
@@ -215,6 +224,54 @@ def test_alert_channel_delete_missing_is_404() -> None:
             assert exc.status_code == 404
         else:
             raise AssertionError("expected HTTPException")
+
+    asyncio.run(run())
+
+
+def test_alert_channel_test_sends_real_validation_payload(monkeypatch) -> None:
+    calls: list[tuple[str, AlertRequestedBody]] = []
+
+    async def fake_post(url: str, body: AlertRequestedBody) -> AlertDeliveryResult:
+        calls.append((url, body))
+        return AlertDeliveryResult(delivered=True, status_code=204)
+
+    monkeypatch.setattr(alert_router, "post_alert_webhook", fake_post)
+
+    async def run() -> None:
+        response = await send_alert_channel_test(
+            AlertChannelTestRequest(
+                url="https://hooks.example/test",
+                severity="critical",
+                message="검증 알림",
+            ),
+            ADMIN,
+        )
+        assert response.valid is True
+        assert response.delivered is True
+        assert response.status_code == 204
+
+    asyncio.run(run())
+
+    assert calls[0][0] == "https://hooks.example/test"
+    assert calls[0][1].workspace_id == "workspace-1"
+    assert calls[0][1].severity == "critical"
+
+
+def test_alert_channel_test_returns_human_readable_failure(monkeypatch) -> None:
+    async def fake_post(_url: str, _body: AlertRequestedBody) -> AlertDeliveryResult:
+        return AlertDeliveryResult(delivered=False, error="timeout")
+
+    monkeypatch.setattr(alert_router, "post_alert_webhook", fake_post)
+
+    async def run() -> None:
+        response = await send_alert_channel_test(
+            AlertChannelTestRequest(url="https://hooks.example/test"),
+            ADMIN,
+        )
+        assert response.valid is False
+        assert response.delivered is False
+        assert response.code == "timeout"
+        assert response.detail == "테스트 알림 전송에 실패했습니다."
 
     asyncio.run(run())
 

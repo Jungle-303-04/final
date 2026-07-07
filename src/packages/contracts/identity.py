@@ -104,6 +104,8 @@ class AccessStatus(StrEnum):
 
 class ClusterRegistrationStatus(StrEnum):
     REGISTERED = "registered"
+    PENDING_INSTALL = "pending_install"
+    INSTALL_EXPIRED = "install_expired"
 
 
 @dataclass(frozen=True)

@@ -40,6 +40,7 @@ status: synced
 - `src/domains/alert/router.py :: router` — 오류 상수: `NOT_FOUND_CODE = 404` (`src/domains/alert/router.py :: NOT_FOUND_CODE`), `CHANNEL_NOT_FOUND = "alert channel not found"` (`src/domains/alert/router.py :: CHANNEL_NOT_FOUND`).
   - `GET /alert-channels` (`ALERT_CHANNELS_PATH`) — 핸들러 `src/domains/alert/router.py :: list_alert_channels` — admin 세션의 workspace 채널 목록 (`AlertChannelListResponse`).
   - `POST /alert-channels` (`ALERT_CHANNELS_PATH`) — 핸들러 `src/domains/alert/router.py :: upsert_alert_channel` — admin 세션의 workspace 채널 생성/수정 (`AlertChannelUpsertRequest` → `AlertChannelResponse`). 리포지토리 `LookupError`는 404 `CHANNEL_NOT_FOUND`로 변환.
+  - `POST /alert-channels/test` (`ALERT_CHANNEL_TEST_PATH`) — 핸들러 `src/domains/alert/router.py :: test_alert_channel` — 저장 전 webhook 테스트 알림 1건을 실제 전송하고 `AlertChannelTestResponse`로 성공/실패 사유를 반환한다.
   - `DELETE /alert-channels/{channel_id}` (`ALERT_CHANNEL_PATH`) — 핸들러 `src/domains/alert/router.py :: delete_alert_channel` — admin 세션의 workspace 채널 삭제(204). 대상 없으면 404 `CHANNEL_NOT_FOUND`.
 
 ## 데이터 모델 (Data Model)
@@ -117,8 +118,9 @@ status: synced
 
 1. 사용자가 admin 세션으로 로그인한다.
 2. `GET /alert-channels`로 현재 workspace 채널을 본다.
-3. `POST /alert-channels`에 `name`, `url`, `kind="webhook"`, `min_severity`, `enabled`를 보낸다. `channel_id`를 비우면 신규 생성이고, 기존 ID를 보내면 같은 workspace 안에서 수정한다.
-4. `DELETE /alert-channels/{channel_id}`로 채널을 삭제한다. 같은 workspace 채널이 아니면 404다.
+3. `POST /alert-channels/test`로 저장 전 알림을 1건 보내 URL·네트워크·수신기 오류를 먼저 확인한다.
+4. `POST /alert-channels`에 `name`, `url`, `kind="webhook"`, `min_severity`, `enabled`를 보낸다. `channel_id`를 비우면 신규 생성이고, 기존 ID를 보내면 같은 workspace 안에서 수정한다.
+5. `DELETE /alert-channels/{channel_id}`로 채널을 삭제한다. 같은 workspace 채널이 아니면 404다.
 
 alert-worker와 연결되는 실행 흐름은 [alert-worker 서비스 스펙](../services/alert-alert-worker.md)을 따른다. 요약하면 `alert.requested` 수신 → 정책 게이트 → workspace 채널 조회/전송 → 성공 시 `alert.dispatched`(+`next_command`가 있으면 `command.requested`) 또는 실패 시 `alert.rejected`다.
 
@@ -132,4 +134,5 @@ alert-worker와 연결되는 실행 흐름은 [alert-worker 서비스 스펙](..
 
 ## 설정 (Settings)
 
-도메인 자체 환경변수는 없다. 발송 타임아웃과 전역 provider 폴백 설정은 [alert-worker 서비스 스펙](../services/alert-alert-worker.md#설정-settings)을 본다.
+- `ALERT_HTTP_TIMEOUT_SECONDS` — `domains.alert.delivery.post_alert_webhook`이 쓰는 HTTP timeout. 기본 `"10"`. `/alert-channels/test`와 alert-worker 실제 발송이 같은 값을 사용한다.
+- 전역 provider 폴백 설정은 [alert-worker 서비스 스펙](../services/alert-alert-worker.md#설정-settings)을 본다.

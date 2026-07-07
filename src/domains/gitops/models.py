@@ -33,6 +33,21 @@ class GitRepository(Base):
     updated_at: Mapped[Any] = updated_at_column()
 
 
+class WorkspaceCredential(Base):
+    __tablename__ = "workspace_credentials"
+    __table_args__ = (UniqueConstraint("workspace_id", "provider", "scope"),)
+
+    credential_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
+    provider: Mapped[str] = text_column()
+    scope: Mapped[str] = text_column()
+    encrypted_value: Mapped[str] = text_column()
+    status: Mapped[str] = text_column()
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
 class GitWatchTarget(Base):
     __tablename__ = "git_watch_targets"
     __table_args__ = (UniqueConstraint("workspace_id", "repository_id", "branch", "manifest_path"),)

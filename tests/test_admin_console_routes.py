@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException, Response
+
+from domains.identity.admin_router import remove_group_member
 from domains.identity.admin_router import router as admin_router
 from packages.contracts.gateway import routes as gateway_routes
 
@@ -37,3 +44,50 @@ def test_gap_paths_do_not_collide_with_existing() -> None:
         gateway_routes.AI_CONVERSATIONS_PATH,
     }
     assert new.isdisjoint(existing)
+
+
+class LastAdminDb:
+    def __init__(self, *, last_admin: bool) -> None:
+        self.last_admin = last_admin
+        self.removed: list[tuple[str, str]] = []
+
+    def is_last_active_service_admin(self, user_id: str) -> bool:
+        return user_id == "admin-1" and self.last_admin
+
+    def remove_group_member(self, group_id: str, user_id: str) -> None:
+        self.removed.append((group_id, user_id))
+
+
+def test_remove_group_member_rejects_last_active_admin() -> None:
+    db = LastAdminDb(last_admin=True)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            remove_group_member(
+                "group-1",
+                "admin-1",
+                Response(),
+                _current=SimpleNamespace(user_id="admin-1"),
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "last_admin"
+    assert db.removed == []
+
+
+def test_remove_group_member_allows_non_last_admin() -> None:
+    db = LastAdminDb(last_admin=False)
+    response = asyncio.run(
+        remove_group_member(
+            "group-1",
+            "admin-1",
+            Response(),
+            _current=SimpleNamespace(user_id="admin-1"),
+            db=db,
+        )
+    )
+
+    assert response.status_code == 204
+    assert db.removed == [("group-1", "admin-1")]

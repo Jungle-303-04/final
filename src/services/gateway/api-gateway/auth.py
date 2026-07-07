@@ -7,7 +7,9 @@ from fastapi import HTTPException, Request
 from passwords import default_display_name, hash_password, normalize_email, verify_password
 from rate_limits import (
     AuthRateLimiter,
+    check_email_rate_limit_policy,
     login_rate_limit_policy,
+    resend_verification_cooldown_policy,
     resend_verification_rate_limit_policy,
     signup_rate_limit_policy,
 )
@@ -101,22 +103,30 @@ class PasswordAuthService:
             expires_in_seconds=Settings.EMAIL_VERIFICATION_TTL_SECONDS,
         )
 
+    async def check_email_available(self, email: str, client_key: str) -> bool:
+        await self.rate_limiter.check(check_email_rate_limit_policy(), email, client_key)
+        return self.db.get_user_by_email(normalize_email(email)) is None
+
     async def login(self, email: str, password: str, client_key: str) -> AuthSession:
         await self.rate_limiter.check(login_rate_limit_policy(), email, client_key)
         user = self.db.get_user_by_email(normalize_email(email))
         if user is None:
-            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+            raise auth_http_error(
+                401, "invalid_credentials", "이메일 또는 비밀번호가 올바르지 않습니다."
+            )
         if not verify_password(password, str(user["password_hash"])):
-            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+            raise auth_http_error(
+                401, "invalid_credentials", "이메일 또는 비밀번호가 올바르지 않습니다."
+            )
         status = str(user["status"])
         if status == UserStatus.PENDING_EMAIL_VERIFICATION.value:
-            raise HTTPException(
-                status_code=403, detail=Settings.EMAIL_VERIFICATION_REQUIRED_MESSAGE
-            )
+            raise auth_http_error(403, "email_unverified", "이메일 인증이 필요합니다.")
         if status == UserStatus.PENDING_APPROVAL.value:
-            raise HTTPException(status_code=403, detail=Settings.ACCOUNT_APPROVAL_REQUIRED_MESSAGE)
+            raise auth_http_error(403, "approval_pending", "관리자 승인을 기다리는 계정입니다.")
         if status != UserStatus.ACTIVE.value:
-            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+            raise auth_http_error(
+                401, "invalid_credentials", "이메일 또는 비밀번호가 올바르지 않습니다."
+            )
         user_id = user_id_from_record(user)
         return await self.sessions.create_session(
             user_id,
@@ -139,6 +149,21 @@ class PasswordAuthService:
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
 
         user_id = user_id_from_record(user)
+        try:
+            await self.rate_limiter.check(
+                resend_verification_cooldown_policy(), normalized_email, client_key
+            )
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            retry_after = detail.get("retry_after") or Settings.RESEND_EMAIL_COOLDOWN_SECONDS
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "resend_cooldown",
+                    "detail": "인증 메일은 잠시 후 다시 보낼 수 있습니다.",
+                    "retry_after": retry_after,
+                },
+            ) from None
         token = await self.sessions.create_email_verification_token(user_id, normalized_email)
         return EmailVerificationChallenge(
             user_id=user_id,
@@ -198,3 +223,7 @@ def roles_from_record(user: dict[str, object]) -> list[str]:
 def workspace_id_from_record(user: dict[str, object]) -> str | None:
     workspace_id = user.get("workspace_id")
     return str(workspace_id) if workspace_id else None
+
+
+def auth_http_error(status_code: int, code: str, detail: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"code": code, "detail": detail})

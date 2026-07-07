@@ -15,10 +15,13 @@ from domains.gitops.repository_discovery import (
     RepositoryDiscoveryError,
     RepositoryDiscoveryService,
     manifest_candidates_from_tree,
+    normalize_github_repo_ref,
 )
+from domains.gitops.repository_discovery_router import validate_repo_for_wizard
 from packages.contracts.gateway.requests import (
     RepositoryManifestValidationRequest,
     RepositoryProbeRequest,
+    RepoValidateRequest,
 )
 
 
@@ -111,6 +114,92 @@ def test_probe_and_branch_list_use_normalized_repo_ref() -> None:
         ("trunk", True),
         ("release/2026-07", False),
     ]
+
+
+def test_github_repo_url_normalization_accepts_wizard_inputs() -> None:
+    assert normalize_github_repo_ref(" owner/service ") == "owner/service"
+    assert normalize_github_repo_ref("github.com/owner/service.git/") == "owner/service"
+    assert normalize_github_repo_ref("https://github.com/owner/service.git") == "owner/service"
+    assert normalize_github_repo_ref("git@github.com:owner/service.git") == "owner/service"
+
+
+def test_github_repo_url_normalization_rejects_other_hosts() -> None:
+    with pytest.raises(RepositoryDiscoveryError) as exc:
+        normalize_github_repo_ref("https://gitlab.com/owner/service")
+
+    assert exc.value.detail == "unsupported_host"
+
+
+def test_attachable_manifest_files_parse_kubernetes_kinds_only() -> None:
+    client = FakeGitHubClient(
+        contents={
+            "deploy.yaml": b"""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+""",
+            "notes.yaml": b"title: no k8s kind\n",
+        },
+        tree_items=[
+            {"type": "blob", "path": "deploy.yaml"},
+            {"type": "blob", "path": "notes.yaml"},
+            {"type": "blob", "path": "README.md"},
+        ],
+    )
+    service = RepositoryDiscoveryService(client)
+
+    async def run():
+        return await service.list_attachable_manifest_files("owner/service", "trunk")
+
+    response = asyncio.run(run())
+
+    assert response.repo == "owner/service"
+    assert [(item.path, item.kinds) for item in response.manifests] == [
+        ("deploy.yaml", ["Deployment", "Service"])
+    ]
+
+
+def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatch) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
+
+    class FakeClient(FakeGitHubClient):
+        def __init__(self, *, token=None, **_kwargs):
+            super().__init__()
+            self.token = token
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.saved: list[dict[str, object]] = []
+
+        def upsert_workspace_credential(self, payload: dict[str, object]) -> dict[str, object]:
+            self.saved.append(payload)
+            return {**payload, "credential_id": "cred-1"}
+
+    monkeypatch.setattr(
+        "domains.gitops.repository_discovery_router.GitHubRepositoryClient", FakeClient
+    )
+    db = FakeDb()
+
+    async def run():
+        return await validate_repo_for_wizard(
+            RepoValidateRequest(url="https://github.com/owner/service.git", token="ghp_secret"),
+            current=type("Session", (), {"workspace_id": "workspace-1"})(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.accessible is True
+    assert response.normalized == "owner/service"
+    assert response.credential_ref == "db:github:github"
+    assert db.saved[0]["workspace_id"] == "workspace-1"
+    assert "ghp_secret" not in str(db.saved[0]["encrypted_value"])
 
 
 def test_manifest_validation_counts_static_yaml_resources() -> None:

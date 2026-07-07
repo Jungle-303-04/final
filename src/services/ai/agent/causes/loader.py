@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
-from services.ai.agent.causes.signals import MATCHER_KEYS
+from packages.ai.rule_catalog import (
+    CatalogCandidateSpec as CatalogCandidateRuleSpec,
+)
+from packages.ai.rule_catalog import (
+    CatalogRuleSpec,
+    validate_catalog_yaml,
+)
 from services.ai.agent.playbooks.cause import (
     CAUSE_PROFILES,
     CauseCandidateSpec,
@@ -27,103 +30,40 @@ class CauseCatalogError(RuntimeError):
     """RCA 룰 카탈로그 로딩 실패 — 기동 시점에 즉시 중단시키는 오류."""
 
 
-class CatalogSignalMatcherModel(BaseModel):
-    """판별 신호 matcher 스키마 — fact/log_pattern/event_pattern 중 정확히 하나."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    fact: str | None = Field(default=None, min_length=1)
-    log_pattern: str | None = Field(default=None, min_length=1)
-    event_pattern: str | None = Field(default=None, min_length=1)
-
-    @model_validator(mode="after")
-    def exactly_one_matcher(self) -> CatalogSignalMatcherModel:
-        provided = [key for key in MATCHER_KEYS if getattr(self, key) is not None]
-        if len(provided) != 1:
-            raise ValueError(
-                f"signal matcher 는 {'/'.join(MATCHER_KEYS)} 중 정확히 하나여야 합니다"
-            )
-        return self
-
-    def to_payload(self) -> dict[str, str]:
-        key = next(key for key in MATCHER_KEYS if getattr(self, key) is not None)
-        return {key: str(getattr(self, key))}
+def cause_candidate_from_catalog(spec: CatalogCandidateRuleSpec) -> CauseCandidateSpec:
+    return CauseCandidateSpec(
+        candidate_id=spec.candidate_id,
+        title=spec.title,
+        description=spec.description,
+        expected_evidence=spec.expected_evidence,
+        checks=spec.checks,
+        signals=spec.signals,
+    )
 
 
-class CatalogSignalGroupModel(BaseModel):
-    """판별 신호 그룹 스키마 — any_of 중 하나라도 매칭되면 그룹 충족."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    any_of: list[CatalogSignalMatcherModel] = Field(min_length=1)
-
-    def to_payload(self) -> dict[str, object]:
-        return {"id": self.id, "any_of": [matcher.to_payload() for matcher in self.any_of]}
-
-
-class CatalogCandidateModel(BaseModel):
-    """YAML 원인 후보 스키마 — `CauseCandidateSpec` 과 1:1 대응."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    candidate_id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    expected_evidence: list[str] = Field(min_length=1)
-    checks: list[str] = Field(min_length=1)
-    # 판별 신호 그룹(선택) — 선언하면 모든 그룹이 충족돼야 완결 점수(1.0)에 도달한다.
-    signals: list[CatalogSignalGroupModel] = Field(default_factory=list)
-
-    def to_spec(self) -> CauseCandidateSpec:
-        return CauseCandidateSpec(
-            candidate_id=self.candidate_id,
-            title=self.title,
-            description=self.description,
-            expected_evidence=tuple(self.expected_evidence),
-            checks=tuple(self.checks),
-            signals=tuple(group.to_payload() for group in self.signals),
-        )
-
-
-class CatalogRuleModel(BaseModel):
-    """YAML 룰 스키마 — 증상 매칭 조건 + 필수 근거 소스 + 원인 후보 목록."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    symptoms: list[str] = Field(min_length=1)
-    required_sources: list[str] = Field(min_length=1)
-    candidates: list[CatalogCandidateModel] = Field(min_length=1)
-
-    def to_profile(self) -> CauseProfile:
-        return CauseProfile(
-            symptoms=tuple(self.symptoms),
-            required_sources=tuple(self.required_sources),
-            candidate_specs=tuple(candidate.to_spec() for candidate in self.candidates),
-            rule_id=self.id,
-        )
-
-
-class CatalogFileModel(BaseModel):
-    """카탈로그 파일 루트 스키마 — `rules` 목록 하나."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    rules: list[CatalogRuleModel] = Field(min_length=1)
+def cause_profile_from_catalog(rule: CatalogRuleSpec) -> CauseProfile:
+    return CauseProfile(
+        symptoms=rule.symptoms,
+        required_sources=rule.required_sources,
+        candidate_specs=tuple(
+            cause_candidate_from_catalog(candidate) for candidate in rule.candidates
+        ),
+        rule_id=rule.rule_id,
+    )
 
 
 def parse_catalog_file(path: Path) -> tuple[CauseProfile, ...]:
     """카탈로그 파일 1개를 파싱·검증해 프로파일 튜플로 변환한다."""
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as error:
-        raise CauseCatalogError(f"RCA 룰 카탈로그 YAML 파싱 실패: {path.name} — {error}") from error
-    try:
-        model = CatalogFileModel.model_validate(raw)
-    except ValidationError as error:
-        raise CauseCatalogError(f"RCA 룰 카탈로그 스키마 위반: {path.name} — {error}") from error
-    return tuple(rule.to_profile() for rule in model.rules)
+    result = validate_catalog_yaml(path.read_text(encoding="utf-8"))
+    if not result.valid:
+        issue = result.errors[0]
+        prefix = (
+            "RCA 룰 카탈로그 YAML 파싱 실패"
+            if issue.code == "yaml_parse_error"
+            else "RCA 룰 카탈로그 스키마 위반"
+        )
+        raise CauseCatalogError(f"{prefix}: {path.name} — {issue.detail}")
+    return tuple(cause_profile_from_catalog(rule) for rule in result.rules)
 
 
 def load_catalog_profiles(catalog_dir: Path | None = None) -> tuple[CauseProfile, ...]:

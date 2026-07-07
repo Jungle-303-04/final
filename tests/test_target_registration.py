@@ -24,6 +24,7 @@ from domains.target.router import (
     target_install_manifest,
     target_registration_preflight,
     update_cluster_policy,
+    validate_target_bootstrap_config,
     validate_target_install_providers,
 )
 from packages.contracts.gateway.requests import (
@@ -201,6 +202,25 @@ class FakeClusterDb:
             {"resource_type": "pod", "health": "healthy", "count": 9},
         ]
 
+    def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, object] | None:
+        assert workspace_id == "default"
+        if cluster_id != "cluster-1":
+            return None
+        return {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "prod",
+            "environment": "production",
+            "status": "registered",
+            "settings": {"cloud_provider": "existing-k8s"},
+            "created_at": "2026-07-05T00:00:00+00:00",
+            "updated_at": "2026-07-05T00:00:00+00:00",
+        }
+
     def can_access(
         self,
         _user_id: str,
@@ -243,6 +263,41 @@ class FakePreflightDb(FakeClusterDb):
         cluster_id: str,
     ) -> list[dict[str, object]]:
         return [self.agent] if cluster_id == "cluster-1" else []
+
+
+class FakePendingClusterDb(FakeClusterDb):
+    def __init__(self, expires_at: str) -> None:
+        super().__init__()
+        self.expires_at = expires_at
+
+    def list_cluster_agent_statuses(
+        self,
+        _workspace_id: str,
+        _cluster_id: str,
+    ) -> list[dict[str, object]]:
+        return []
+
+    def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, object] | None:
+        assert workspace_id == "default"
+        assert cluster_id == "cluster-1"
+        return {
+            "workspace_id": "default",
+            "cluster_id": "cluster-1",
+            "name": "prod",
+            "environment": "production",
+            "status": "pending_install",
+            "settings": {
+                "cloud_provider": "existing-k8s",
+                "connect_timeout_seconds": 1800,
+                "connect_expires_at": self.expires_at,
+            },
+            "created_at": "2026-07-05T00:00:00+00:00",
+            "updated_at": "2026-07-05T00:00:00+00:00",
+        }
 
 
 def target_request() -> TargetRegisterRequest:
@@ -336,6 +391,107 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert db.policy["cluster_id"] == "target-cluster-01"
     # 응답의 agent_token 은 매니페스트에 주입된 원문과 동일(대시보드가 x-agent-token 으로 사용)
     assert response.agent_token == match.group(1)
+    assert response.status == "pending_install"
+    assert response.connect_timeout_seconds == 1800
+    assert response.connect_expires_at is not None
+    assert db.registered[0]["status"] == "pending_install"
+    assert db.registered[0]["settings"]["connect_timeout_seconds"] == 1800
+    assert db.registered[0]["settings"]["connect_expires_at"] == response.connect_expires_at
+
+
+def test_target_registration_generates_cluster_id_when_missing(monkeypatch) -> None:
+    monkeypatch.setattr("domains.target.router.secrets.randbelow", lambda _max: 42)
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(update={"cluster_id": None, "name": "Customer Prod"})
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.cluster_id == "customer-prod-0042"
+    assert db.registered[0]["cluster_id"] == "customer-prod-0042"
+
+
+def test_target_registration_returns_provider_bootstrap_command() -> None:
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(
+        update={
+            "cloud_provider": "eks",
+            "provider_config": {
+                "region": "ap-northeast-2",
+                "eks_cluster_name": "prod cluster",
+                "context_alias": "prod ctx",
+            },
+        }
+    )
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.bootstrap_command.startswith("aws eks update-kubeconfig")
+    assert "--name 'prod cluster'" in response.bootstrap_command
+    assert "kubectl --context 'prod ctx' get nodes" in response.bootstrap_command
+    assert response.agent_token in response.bootstrap_command
+    assert response.bootstrap_steps[1].command == response.bootstrap_command
+
+
+def test_target_registration_rejects_missing_provider_config_before_write() -> None:
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(
+        update={"cloud_provider": "eks", "provider_config": {"region": "ap-northeast-2"}}
+    )
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 422
+    assert "eks_cluster_name" in exc.value.detail
+    assert db.registered == []
+    assert events.accepted == []
+
+
+def test_target_bootstrap_config_rejects_invalid_gke_location_type() -> None:
+    request = target_request().model_copy(
+        update={
+            "cloud_provider": "gke",
+            "provider_config": {
+                "project_id": "project-1",
+                "location_type": "metro",
+                "location": "asia-northeast3",
+                "gke_cluster_name": "prod",
+            },
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        validate_target_bootstrap_config(request)
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "provider_config.location_type must be region or zone"
 
 
 def test_target_registration_apply_failure_does_not_record_state(monkeypatch) -> None:
@@ -491,6 +647,38 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
     assert response.connection_status == "online"
     assert response.last_agent_id == "agent-1"
     assert response.agents[0].capabilities == ["inventory", "commands"]
+
+
+def test_cluster_connection_status_reports_pending_install_before_ttl() -> None:
+    expires_at = (datetime.now(UTC) + timedelta(minutes=20)).isoformat()
+
+    async def run():
+        return await get_cluster_connection_status(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePendingClusterDb(expires_at),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.connection_status == "pending_install"
+    assert response.connect_timeout_seconds == 1800
+    assert response.connect_expires_at == expires_at
+
+
+def test_cluster_connection_status_reports_install_expired_after_ttl() -> None:
+    expires_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+
+    async def run():
+        return await get_cluster_connection_status(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePendingClusterDb(expires_at),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.connection_status == "install_expired"
 
 
 def test_target_registration_preflight_reports_duplicate_and_agent_status(monkeypatch) -> None:

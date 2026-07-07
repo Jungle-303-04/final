@@ -6,12 +6,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.alert.delivery import post_alert_webhook
+from domains.alert.events import AlertRequestedBody
 from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import AlertChannelUpsertRequest
+from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
 from packages.contracts.gateway.responses import (
     AlertChannelListResponse,
     AlertChannelResponse,
+    AlertChannelTestResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.runtime.dependencies import get_db
@@ -51,6 +54,38 @@ async def upsert_alert_channel(
     except LookupError as exc:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=CHANNEL_NOT_FOUND) from exc
     return AlertChannelResponse(**saved)
+
+
+@router.post(gateway_routes.ALERT_CHANNEL_TEST_PATH, response_model=AlertChannelTestResponse)
+async def test_alert_channel(
+    payload: AlertChannelTestRequest,
+    current: Any = Depends(require_admin_session),
+) -> AlertChannelTestResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    alert = AlertRequestedBody(
+        cluster_id="validation",
+        namespace="validation",
+        severity=payload.severity,
+        message=payload.message,
+        reason="alert channel validation",
+        workspace_id=workspace_id,
+    )
+    result = await post_alert_webhook(payload.url, alert)
+    if result.delivered:
+        return AlertChannelTestResponse(
+            valid=True,
+            delivered=True,
+            detail="테스트 알림을 전송했습니다.",
+            status_code=result.status_code,
+        )
+    code = "timeout" if result.error == "timeout" else "delivery_failed"
+    return AlertChannelTestResponse(
+        valid=False,
+        delivered=False,
+        code=code,
+        detail="테스트 알림 전송에 실패했습니다.",
+        status_code=result.status_code,
+    )
 
 
 @router.delete(gateway_routes.ALERT_CHANNEL_PATH, status_code=204, response_model=None)

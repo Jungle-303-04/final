@@ -10,6 +10,7 @@ from fastapi.routing import APIRoute
 from domains.identity import router as identity_router
 from domains.identity.dependencies import require_session
 from packages.contracts.gateway.requests import (
+    EmailCheckRequest,
     LoginRequest,
     ResendEmailVerificationRequest,
     SignupRequest,
@@ -35,6 +36,7 @@ class FakePasswordAuth:
             return bool(token)
 
         self.sessions.touch_session = touch_session
+        self.email_available = True
 
     async def signup(
         self, email: str, password: str, password_confirm: str, client_key: str
@@ -55,6 +57,10 @@ class FakePasswordAuth:
             roles=["service_admin"],
             workspace_id="default",
         )
+
+    async def check_email_available(self, email: str, client_key: str) -> bool:
+        self.calls.append(("check_email_available", (email, client_key)))
+        return self.email_available
 
     async def resend_email_verification(self, email: str, password: str, client_key: str) -> Any:
         self.calls.append(("resend_email_verification", (email, password, client_key)))
@@ -147,6 +153,42 @@ def test_resend_verification_requests_email_without_session_cookie(monkeypatch) 
     assert events.bodies[0].verification_url.startswith(
         "https://app.example.test/api/auth/verify-email?token=email-token-2"
     )
+
+
+def test_check_email_reports_availability_without_session() -> None:
+    password_auth = FakePasswordAuth()
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+    async def run() -> Any:
+        return await identity_router.check_email(
+            EmailCheckRequest(email="local@example.com"),
+            request=request,
+            password_auth=password_auth,
+        )
+
+    body = asyncio.run(run())
+
+    assert body.available is True
+    assert password_auth.calls == [("check_email_available", ("local@example.com", "127.0.0.1"))]
+
+
+def test_check_email_reports_existing_account() -> None:
+    password_auth = FakePasswordAuth()
+    password_auth.email_available = False
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+    async def run() -> Any:
+        return await identity_router.check_email(
+            EmailCheckRequest(email="local@example.com"),
+            request=request,
+            password_auth=password_auth,
+        )
+
+    body = asyncio.run(run())
+
+    assert body.available is False
+    assert body.reason_code == "already_registered"
+    assert body.detail == "이미 가입된 이메일입니다."
 
 
 def test_login_sets_httponly_session_cookie(monkeypatch) -> None:

@@ -36,6 +36,13 @@ class AuthSessionResponse(StrictModel):
     workspace_id: str
 
 
+class EmailCheckResponse(StrictModel):
+    available: bool
+    reason_code: str = ""
+    detail: str = ""
+    retry_after: int | None = None
+
+
 class EmailVerificationResponse(StrictModel):
     accepted: bool
     verification_required: bool
@@ -488,6 +495,11 @@ class ClusterSummaryDetailResponse(StrictModel):
     usage: ClusterUsageSnapshot | None = None
 
 
+class BootstrapStep(StrictModel):
+    label: str
+    command: str
+
+
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str
@@ -500,6 +512,11 @@ class TargetInstallResponse(StrictModel):
     agent_token: str
     # 원라인 설치 명령 — curl <base>/install/<token> | kubectl apply -f -
     install_command: str = ""
+    # provider별 설치 명령. 새 UI는 이 값을 우선 사용하고 없으면 install_command로 fallback.
+    bootstrap_command: str = ""
+    bootstrap_steps: list[BootstrapStep] = Field(default_factory=list)
+    connect_timeout_seconds: int | None = None
+    connect_expires_at: str | None = None
 
 
 class ClusterAgentStatus(StrictModel):
@@ -546,6 +563,8 @@ class ClusterConnectionStatusResponse(StrictModel):
     last_agent_id: str | None = None
     last_seen_at: str | None = None
     agents: list[ClusterAgentStatus] = Field(default_factory=list)
+    connect_timeout_seconds: int | None = None
+    connect_expires_at: str | None = None
 
 
 class AlertChannelResponse(StrictModel):
@@ -562,6 +581,34 @@ class AlertChannelResponse(StrictModel):
 
 class AlertChannelListResponse(StrictModel):
     channels: list[AlertChannelResponse] = Field(default_factory=list)
+
+
+class ValidationErrorItem(StrictModel):
+    code: str
+    detail: str
+    line: int | None = None
+
+
+class AlertChannelTestResponse(StrictModel):
+    valid: bool
+    delivered: bool = False
+    code: str | None = None
+    detail: str = ""
+    status_code: int | None = None
+
+
+class RcaRuleValidateResponse(StrictModel):
+    valid: bool
+    errors: list[ValidationErrorItem] = Field(default_factory=list)
+    matched_symptom: str | None = None
+    candidates_count: int = 0
+
+
+class MetricsValidateResponse(StrictModel):
+    valid: bool
+    code: str | None = None
+    detail: str = ""
+    result_type: str | None = None
 
 
 class DeadLettersResponse(StrictModel):
@@ -611,6 +658,16 @@ class RepositoryProbeResponse(StrictModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class RepoValidateResponse(StrictModel):
+    accessible: bool
+    private: bool | None = None
+    default_branch: str | None = None
+    normalized: str
+    reason: str | None = None
+    code: str | None = None
+    credential_ref: str | None = None
+
+
 class RepositoryBranchItem(StrictModel):
     name: str
     protected: bool = False
@@ -635,6 +692,18 @@ class RepositoryManifestCandidateListResponse(StrictModel):
     repo_ref: str
     branch: str
     candidates: list[RepositoryManifestCandidate] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RepoManifestFile(StrictModel):
+    path: str
+    kinds: list[str] = Field(default_factory=list)
+
+
+class RepoManifestFileListResponse(StrictModel):
+    repo: str
+    branch: str
+    manifests: list[RepoManifestFile] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 

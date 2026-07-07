@@ -17,6 +17,7 @@ from domains.identity.dependencies import (
     require_resource_access,
     require_session,
 )
+from domains.target.router import cluster_connection_status
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     ApplicationConnectRequest,
@@ -48,6 +49,8 @@ NO_CLUSTERS_FOR_GLOBAL_BINDING = "no registered clusters to expand global bindin
 HTTP_NOT_FOUND = 404
 APPLICATION_NOT_FOUND = "application not found"
 MANIFEST_VALIDATION_FAILED = "manifest validation failed"
+CLUSTER_NOT_CONNECTED_CODE = "cluster_not_connected"
+CLUSTER_NOT_CONNECTED_DETAIL = "에이전트가 연결되지 않은 클러스터입니다"
 
 
 def repository_discovery_service() -> RepositoryDiscoveryService:
@@ -76,6 +79,43 @@ def get_application_or_404(db: Any, workspace_id: str, application_id: str) -> d
     if application is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=APPLICATION_NOT_FOUND)
     return application
+
+
+def latest_agents_for_clusters(
+    db: Any,
+    workspace_id: str,
+    cluster_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    getter = getattr(db, "latest_cluster_agent_statuses", None)
+    if callable(getter):
+        return getter(workspace_id, set(cluster_ids))
+    lister = getattr(db, "list_cluster_agent_statuses", None)
+    if not callable(lister):
+        return {}
+    latest: dict[str, dict[str, Any]] = {}
+    for cluster_id in cluster_ids:
+        rows = lister(workspace_id, cluster_id)
+        if rows:
+            latest[cluster_id] = rows[0]
+    return latest
+
+
+def require_connected_clusters(db: Any, workspace_id: str, cluster_ids: list[str]) -> None:
+    latest_agents = latest_agents_for_clusters(db, workspace_id, cluster_ids)
+    disconnected = [
+        cluster_id
+        for cluster_id in cluster_ids
+        if cluster_connection_status(latest_agents.get(cluster_id)) != "online"
+    ]
+    if disconnected:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": CLUSTER_NOT_CONNECTED_CODE,
+                "detail": CLUSTER_NOT_CONNECTED_DETAIL,
+                "clusters": disconnected,
+            },
+        )
 
 
 @router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationListResponse)
@@ -131,6 +171,7 @@ async def connect_application(
         payload.cluster_id,
         Permission.DEPLOY_RUN.value,
     )
+    require_connected_clusters(db, workspace_id, [payload.cluster_id])
     try:
         validation = await discovery.validate_manifest(
             RepositoryManifestValidationRequest(
@@ -295,6 +336,11 @@ async def upsert_application_deployment(
                 str(cluster["cluster_id"]),
                 Permission.DEPLOY_RUN.value,
             )
+        require_connected_clusters(
+            db,
+            workspace_id,
+            [str(cluster["cluster_id"]) for cluster in clusters],
+        )
         stored_list = []
         for cluster in clusters:
             cluster_body = {
@@ -305,6 +351,7 @@ async def upsert_application_deployment(
             db.register_watch_target(cluster_body)
             stored_list.append(db.register_deployment_binding(cluster_body))
         return DeploymentBindingResponse(deployment=stored_list[0])
+    require_connected_clusters(db, workspace_id, [payload.cluster_id])
     db.register_watch_target(body)
     stored = db.register_deployment_binding(body)
     return DeploymentBindingResponse(deployment=stored)

@@ -44,8 +44,10 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
   finally { requestSignal.cancel(); }
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
-    const detail = await res.json().then(j => j.detail ?? res.statusText).catch(() => res.statusText);
-    throw new ApiError(res.status, normalizeApiDetail(res.status, String(detail)));
+    const detail = await res.json()
+      .then(j => apiDetailToString(j?.detail ?? j ?? res.statusText))
+      .catch(() => res.statusText);
+    throw new ApiError(res.status, normalizeApiDetail(res.status, detail));
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
@@ -92,4 +94,24 @@ function normalizeApiDetail(status: number, detail: string): string {
     return '서버 응답이 불안정합니다';
   }
   return detail;
+}
+
+function apiDetailToString(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object') {
+    const value = detail as Record<string, unknown>;
+    if (value.code === 'cluster_not_connected') {
+      const clusters = Array.isArray(value.clusters) ? value.clusters.map(String).join(', ') : '';
+      const message = String(value.detail ?? '에이전트가 연결되지 않은 클러스터입니다');
+      return clusters ? `cluster_not_connected: ${message} (${clusters})` : `cluster_not_connected: ${message}`;
+    }
+    const message = value.detail ?? value.message;
+    if (typeof message === 'string') return message;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(detail || '요청 처리에 실패했습니다');
 }

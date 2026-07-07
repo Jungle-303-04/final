@@ -131,6 +131,7 @@ status: synced
 | 메서드 | 경로 | 대상 | 인증 | 권한 |
 |---|---|---|---|---|
 | GET | `/auth/session` | `src/domains/identity/router.py :: session` | 세션 | — |
+| POST | `/auth/check-email` | `src/domains/identity/router.py :: check_email` | 공개 | 이메일+client rate limit |
 | POST | `/auth/signup` | `src/domains/identity/router.py :: signup` | 공개 | escalating 레이트리밋(email+client) |
 | POST | `/auth/resend-verification` | `src/domains/identity/router.py :: resend_verification` | 공개(이메일+패스워드 검증) | escalating 레이트리밋 |
 | POST | `/auth/login` | `src/domains/identity/router.py :: login` | 공개 | — |
@@ -159,12 +160,16 @@ status: synced
 |---|---|---|---|
 | GET | `/alert-channels` | 세션 | admin |
 | POST | `/alert-channels` | 세션 | admin |
+| POST | `/alert-channels/test` | 세션 | admin |
 | DELETE | `/alert-channels/{channel_id}` (204) | 세션 | admin |
 | GET | `/providers/catalog` | admin | — |
 | GET | `/providers/cluster-discovery` | admin | — |
 | POST | `/providers/validate` | admin | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
 | POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access` |
+| POST | `/repos/validate` | 세션 | admin |
+| GET | `/repos/branches` | 세션 | admin |
+| GET | `/repos/manifests` | 세션 | admin |
 | POST/GET | `/ai/conversations` | 세션 | — |
 | GET | `/ai/conversations/{conversation_id}` | 세션 | — |
 | DELETE | `/ai/conversations/{conversation_id}` (204) | 세션 | — |
@@ -211,6 +216,7 @@ status: synced
 | POST | `/webhooks/alertmanager` | Bearer `ALERTMANAGER_WEBHOOK_TOKEN` | `cluster_id` 등록 확인 후 evidence 입구 |
 | GET | `/evidence` | 세션 | 세션 workspace 범위 evidence query(`limit`/`offset`/`cursor`) |
 | GET | `/rca-reports` | 세션 | 세션 workspace 범위 RCA report query(`limit`/`offset`/`cursor`) |
+| POST | `/rca/rules/validate` | 세션 | RCA 룰 YAML 저장 전 검증 |
 | POST | `/rca/recovery-plans/{plan_id}/actions/{action_id}/select` | 세션 | `require_cluster_access` |
 
 ### command / dashboard (`src/domains/command/router.py`, `router.include_router(agent_router)`)
@@ -228,6 +234,7 @@ status: synced
 | POST | `/agent/commands/{command_id}/result` | agent | — |
 | GET | `/dashboard/rca/timeline` | 세션 | cluster read 필터 |
 | GET | `/dashboard/rca/incidents/{incident_id}` | 세션 | cluster read 필터 |
+| POST | `/metrics/validate` | 세션 | PromQL dry-run 검증 |
 | GET | `/fleet/summary` | 세션 | `accessible_resource_ids`(cluster read)로 클러스터 필터 — `src/domains/dashboard/fleet_router.py :: fleet_summary` |
 | GET | `/clusters/{cluster_id}/summary` | 세션 | cluster read 접근 — `src/domains/dashboard/fleet_router.py :: cluster_summary_detail` |
 

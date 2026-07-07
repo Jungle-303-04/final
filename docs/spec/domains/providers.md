@@ -62,16 +62,19 @@ Enum·상수:
 - `class ProviderStatus(StrEnum)` — `src/domains/providers/catalog.py :: ProviderStatus`
   값: `AVAILABLE = "available"`, `UNAVAILABLE = "unavailable"`.
 - `PROVIDER_DISABLED_ENV = "KUBEHEAL_DISABLED_PROVIDERS"` — `src/domains/providers/catalog.py :: PROVIDER_DISABLED_ENV`
-- `CATALOG: tuple[ProviderDefinition, ...]` — `src/domains/providers/catalog.py :: CATALOG` — 전체 19개 항목(아래 데이터 모델의 카탈로그 표).
+- `CATALOG: tuple[ProviderDefinition, ...]` — `src/domains/providers/catalog.py :: CATALOG` — source/deploy/cloud/secret provider 항목. 클러스터 등록 UX는 `existing-k8s`, `eks`, `gke`, `aks`, `kind`, `minikube`, 외부 콘솔 import provider를 노출한다.
 
 데이터클래스:
 
 - `@dataclass(frozen=True) class CredentialRequirement` — `src/domains/providers/catalog.py :: CredentialRequirement`
   - 필드: `key: str`, `ref_prefixes: tuple[str, ...]`, `required_for: tuple[str, ...] = ()`, `description: str = ""`
   - `to_body(self) -> dict[str, object]`: `{"key", "ref_prefixes"(list), "required_for"(list), "description"}`.
+- `@dataclass(frozen=True) class ProviderConfigField` — `src/domains/providers/catalog.py :: ProviderConfigField`
+  - 필드: `key`, `label`, `required`, `kind`, `options`, `description`
+  - `to_body(self) -> dict[str, object]`: 프론트 동적 폼이 provider별 입력 필드와 필수 여부를 하드코딩 없이 그리는 metadata.
 - `@dataclass(frozen=True) class ProviderDefinition` — `src/domains/providers/catalog.py :: ProviderDefinition`
-  - 필드: `category: ProviderCategory`, `key: str`, `label: str`, `status: ProviderStatus`, `adapter: str | None`, `capabilities: tuple[str, ...] = ()`, `credential_requirements: tuple[CredentialRequirement, ...] = ()`, `config_keys: tuple[str, ...] = ()`, `unavailable_reason: str | None = None`
-  - `to_body(self) -> dict[str, object]`: `{"category"(값 문자열), "key", "label", "status"(값 문자열), "adapter", "capabilities"(list), "credential_requirements"(list of body), "config_keys"(list), "unavailable_reason"}`.
+  - 필드: `category: ProviderCategory`, `key: str`, `label: str`, `status: ProviderStatus`, `adapter: str | None`, `capabilities: tuple[str, ...] = ()`, `credential_requirements: tuple[CredentialRequirement, ...] = ()`, `config_keys: tuple[str, ...] = ()`, `config_fields: tuple[ProviderConfigField, ...] = ()`, `unavailable_reason: str | None = None`
+  - `to_body(self) -> dict[str, object]`: `{"category"(값 문자열), "key", "label", "status"(값 문자열), "adapter", "capabilities"(list), "credential_requirements"(list of body), "config_keys"(list), "config_fields"(list), "unavailable_reason"}`.
 
 예외:
 
@@ -84,6 +87,8 @@ Enum·상수:
   `disabled_provider_keys()` 가 비어 있으면 `CATALOG` 그대로. 아니면 비활성 키(`"{category}:{key}"`)에 해당하는 항목을 `status=UNAVAILABLE`, `unavailable_reason="disabled by KUBEHEAL_DISABLED_PROVIDERS"` 로 치환한 복사본 반환(그 외 필드는 원본 유지).
 - `catalog_body() -> dict[str, list[dict[str, object]]]` — `src/domains/providers/catalog.py :: catalog_body`
   4개 카테고리 값 전부를 키로 초기화한 뒤 `provider_catalog()` 각 항목의 `to_body()` 를 카테고리별로 그룹핑.
+- `cluster_registration_discovery() -> dict[str, object]` — `src/domains/providers/catalog.py :: cluster_registration_discovery`
+  `existing-k8s`, `eks`, `gke`, `aks`, `kind`, `minikube`, 외부 콘솔 import provider의 등록 flow를 반환한다. 각 flow에는 `deploy_providers`, `default_deploy_provider`, `supports_import`, `import_candidates`와 provider `config_fields`가 포함된다.
 - `get_provider(category: ProviderCategory | str, key: str) -> ProviderDefinition` — `src/domains/providers/catalog.py :: get_provider`
   category 를 `ProviderCategory(str(category))` 로, key 를 `normalize_key` 로 정규화해 탐색. 없으면 `UnknownProvider("unknown {category} provider: {key}; supported: {해당 카테고리 키 목록}")`.
 - `require_available_provider(category: ProviderCategory | str, key: str) -> ProviderDefinition` — `src/domains/providers/catalog.py :: require_available_provider`
@@ -117,6 +122,7 @@ DB 테이블 없음. 카탈로그는 코드 상수 `CATALOG` (frozen dataclass �
 | capabilities | tuple[str, ...] | 기본 `()` | 제공 capability 키 |
 | credential_requirements | tuple[CredentialRequirement, ...] | 기본 `()` | 자격증명 요구 목록 |
 | config_keys | tuple[str, ...] | 기본 `()` | 관련 환경변수/설정 키 |
+| config_fields | tuple[ProviderConfigField, ...] | 기본 `()` | 프론트 위저드 provider별 입력 필드 metadata |
 | unavailable_reason | str \| None | 기본 None | unavailable 사유 |
 
 ### `CredentialRequirement`

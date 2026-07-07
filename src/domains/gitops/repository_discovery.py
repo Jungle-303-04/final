@@ -23,6 +23,8 @@ from packages.contracts.gateway.requests import (
     RepositoryProbeRequest,
 )
 from packages.contracts.gateway.responses import (
+    RepoManifestFile,
+    RepoManifestFileListResponse,
     RepositoryBranchItem,
     RepositoryBranchListResponse,
     RepositoryManifestCandidate,
@@ -43,6 +45,7 @@ from packages.security import SecretNotFound, build_token_vault
 
 REPO_REF_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 GIT_SSH_PATTERN = re.compile(r"^git@[^:]+:(?P<repo>[^/]+/[^/]+?)(?:\.git)?$")
+GITHUB_HOST = "github.com"
 KUSTOMIZATION_FILES = {"kustomization.yaml", "kustomization.yml", "Kustomization"}
 HELM_CHART_FILE = "Chart.yaml"
 MANIFEST_EXTENSIONS = {".yaml", ".yml", ".json"}
@@ -283,6 +286,40 @@ class RepositoryDiscoveryService:
             branch=normalized_branch,
             candidates=candidates,
             warnings=warnings,
+        )
+
+    async def list_attachable_manifest_files(
+        self, repo_ref: str, branch: str
+    ) -> RepoManifestFileListResponse:
+        normalized = normalize_github_repo_ref(repo_ref)
+        normalized_branch = normalize_branch(branch)
+        tree, warnings = await self.client.tree(normalized, normalized_branch)
+        paths = [
+            path
+            for item in tree
+            if str(item.get("type") or "") == "blob"
+            for path in [normalize_tree_path(str(item.get("path") or ""))]
+            if manifest_extension(path) in {".yaml", ".yml"}
+        ][:MAX_CANDIDATES]
+        manifests: list[RepoManifestFile] = []
+        for path in paths:
+            try:
+                content = await self.client.content(normalized, normalized_branch, path)
+                text = content.decode("utf-8")
+                kinds = manifest_kinds(text, "raw-yaml")
+            except (RepositoryDiscoveryError, UnicodeDecodeError, ValueError, yaml.YAMLError):
+                continue
+            if kinds:
+                manifests.append(RepoManifestFile(path=path, kinds=kinds))
+        if len(paths) >= MAX_CANDIDATES:
+            warnings.append("manifest scan was limited; narrow the repository layout if needed")
+        if not manifests:
+            warnings.append("첨부 가능한 Kubernetes YAML 파일을 찾지 못했습니다.")
+        return RepoManifestFileListResponse(
+            repo=normalized,
+            branch=normalized_branch,
+            manifests=manifests,
+            warnings=dedupe(warnings),
         )
 
     async def validate_manifest(
@@ -630,6 +667,37 @@ def normalize_repo_ref(value: str) -> str:
     return repo
 
 
+def normalize_github_repo_ref(value: str) -> str:
+    raw = value.strip()
+    if not raw:
+        raise ValueError("저장소 URL을 입력해 주세요.")
+    host = ""
+    repo = raw
+    if raw.startswith("git@"):
+        match = re.match(r"^git@(?P<host>[^:]+):(?P<repo>[^/]+/[^/]+?)(?:\.git)?/?$", raw)
+        if not match:
+            raise ValueError("GitHub SSH 저장소 주소 형식이 올바르지 않습니다.")
+        host = match.group("host").lower()
+        repo = match.group("repo")
+    elif "://" in raw:
+        parsed = urlparse(raw)
+        host = parsed.netloc.lower()
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        repo = "/".join(parts[:2]) if len(parts) >= 2 else ""
+    elif raw.lower().startswith(f"{GITHUB_HOST}/"):
+        host = GITHUB_HOST
+        parts = [part for part in raw.split("/", 1)[1].strip("/").split("/") if part]
+        repo = "/".join(parts[:2]) if len(parts) >= 2 else ""
+    else:
+        repo = raw
+    if host and host != GITHUB_HOST:
+        raise RepositoryDiscoveryError(422, "unsupported_host")
+    try:
+        return normalize_repo_ref(repo)
+    except ValueError as exc:
+        raise ValueError("GitHub 저장소는 owner/repo 형식이어야 합니다.") from exc
+
+
 def normalize_branch(value: str) -> str:
     branch = value.strip()
     if (
@@ -844,6 +912,22 @@ def validate_manifest_text(
         warnings=dedupe(warnings),
         errors=errors,
     )
+
+
+def manifest_kinds(text: str, source_type: str) -> list[str]:
+    kinds: list[str] = []
+    for doc in parse_manifest_documents(text, source_type):
+        if isinstance(doc, Mapping):
+            kind = str(doc.get("kind") or "").strip()
+            if kind:
+                kinds.append(kind)
+            if kind == "List" and isinstance(doc.get("items"), list):
+                for item in doc["items"]:
+                    if isinstance(item, Mapping):
+                        item_kind = str(item.get("kind") or "").strip()
+                        if item_kind:
+                            kinds.append(item_kind)
+    return dedupe(kinds)
 
 
 def parse_manifest_documents(text: str, source_type: str) -> list[Any]:
