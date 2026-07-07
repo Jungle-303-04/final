@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Select, case, delete, func, or_, select
+from sqlalchemy import Select, Text, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
@@ -320,15 +320,10 @@ class DashboardRepository(DatabaseConnection):
         if allowed_cluster_ids is not None and not allowed_cluster_ids:
             return {}
         table = RcaTimeline.__table__
+        logical_key = rca_timeline_logical_incident_key_expression()
         statement: Select[Any] = select(
-            table.c.id,
             table.c.cluster_id,
-            table.c.incident_id,
-            table.c.correlation_id,
-            table.c.payload["incident"]["namespace"].astext.label("incident_namespace"),
-            table.c.payload["incident"]["resource_kind"].astext.label("incident_resource_kind"),
-            table.c.payload["incident"]["resource_name"].astext.label("incident_resource_name"),
-            table.c.payload["incident"]["symptom"].astext.label("incident_symptom"),
+            func.count(func.distinct(logical_key)).label("open_incidents"),
         ).where(
             table.c.workspace_id == workspace_id,
             table.c.incident_id.is_not(None),
@@ -337,15 +332,10 @@ class DashboardRepository(DatabaseConnection):
         )
         statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
+        statement = statement.group_by(table.c.cluster_id)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        grouped: dict[str, set[str]] = {}
-        for row in rows:
-            cluster_id = str(row["cluster_id"])
-            grouped.setdefault(cluster_id, set()).add(
-                incident_logical_key_from_projection(dict(row))
-            )
-        return {cluster_id: len(keys) for cluster_id, keys in grouped.items()}
+        return {str(row["cluster_id"]): int(row["open_incidents"]) for row in rows}
 
     def list_open_rca_incidents(
         self,
@@ -444,6 +434,44 @@ def incident_logical_key_from_projection(row: JsonObject) -> str:
     if any(part not in (None, "") for part in parts[1:]):
         return "|".join(str(part or "unknown") for part in parts)
     return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
+
+
+def rca_timeline_logical_incident_key_expression() -> Any:
+    """SQL 집계용 logical incident key — Python helper와 같은 묶음 규칙."""
+    table = RcaTimeline.__table__
+    incident_namespace = func.nullif(table.c.payload["incident"]["namespace"].astext, "")
+    incident_resource_kind = func.nullif(
+        table.c.payload["incident"]["resource_kind"].astext,
+        "",
+    )
+    incident_resource_name = func.nullif(
+        table.c.payload["incident"]["resource_name"].astext,
+        "",
+    )
+    incident_symptom = func.nullif(table.c.payload["incident"]["symptom"].astext, "")
+    has_incident_projection = or_(
+        incident_namespace.is_not(None),
+        incident_resource_kind.is_not(None),
+        incident_resource_name.is_not(None),
+        incident_symptom.is_not(None),
+    )
+    return case(
+        (
+            has_incident_projection,
+            func.concat(
+                table.c.cluster_id,
+                "|",
+                func.coalesce(incident_namespace, "unknown"),
+                "|",
+                func.coalesce(incident_resource_kind, "unknown"),
+                "|",
+                func.coalesce(incident_resource_name, "unknown"),
+                "|",
+                func.coalesce(incident_symptom, "unknown"),
+            ),
+        ),
+        else_=func.coalesce(table.c.incident_id, table.c.correlation_id, cast(table.c.id, Text)),
+    )
 
 
 def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
