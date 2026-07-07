@@ -46,3 +46,11 @@ export const IconCheck = (p: IconProps) => (
 export const IconLock = (p: IconProps) => (
   <svg {...base(p)}><rect x="5" y="11" width="14" height="9" rx="1.5" /><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3" /><path d="M12 15v2" /></svg>
 );
+
+export const IconTrash = (p: IconProps) => (
+  <svg {...base(p)}><path d="M4 7h16" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M6.5 7 7.3 19.5A1.6 1.6 0 0 0 8.9 21h6.2a1.6 1.6 0 0 0 1.6-1.5L17.5 7" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>
+);
+
+export const IconSend = (p: IconProps) => (
+  <svg {...base(p)}><path d="M21 3 10.5 13.5" /><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>
+);
