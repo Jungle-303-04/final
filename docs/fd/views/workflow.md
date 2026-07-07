@@ -1,6 +1,6 @@
 # 뷰: 워크플로우 노드 그래프
 
-[← 지도](../README.md) · 요구사항 [R9](../01-requirements.md#r9-워크플로우-생성-노드뷰) · 참조: Argo Workflows DAG, 외부 기준 콘솔 Pipelines([02](../02-reference-map.md))
+[← 지도](../README.md) · 요구사항 [R9](../01-requirements.md#r9-워크플로우-생성-노드뷰) · 참조: 외부 기준 워크플로우 DAG, 외부 기준 콘솔 Pipelines([02](../02-reference-map.md))
 
 **범위 정의(모순 방지)**: 백엔드 실행 모델은 고정 파이프라인(이벤트 체인)이다.
 따라서 "생성" = [레포 연결 위저드](resources.md#레포-연결-위저드)이고, 이 뷰는

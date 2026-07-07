@@ -30,9 +30,10 @@ frontend/
     main.tsx                    # 엔트리
     app/
       router.tsx                # 라우트 트리(05 문서와 1:1)
-      shell/                    # AppShell, Sidebar, Topbar, CommandPalette
       providers.tsx             # QueryClient, Theme, Toast, ErrorBoundary
       guards.tsx                # RequireSession, RequireAdmin, RequirePermission
+    features/
+      console/                  # ConsoleLayout, HomePage, console.css
     shared/
       tokens.css                # 디자인 토큰(04 문서와 1:1)
       ui/                       # Button, Card, Table, Modal, … (04 인벤토리와 1:1)
@@ -109,7 +110,7 @@ useLiveSocket({
 });
 ```
 
-- 연결은 AppShell 에서 1개만. 뷰는 `liveStore` selector 로 구독
+- 연결은 ConsoleLayout 에서 1개만. 뷰는 `liveStore` selector 로 구독
 - 메시지 스키마는 [06-api-map.md § WS](06-api-map.md#websocket)
 - 오프라인 표시: 연결 상태를 `liveStore.status` 로 노출 → Topbar 인디케이터
 

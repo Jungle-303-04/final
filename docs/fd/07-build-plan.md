@@ -2,7 +2,7 @@
 
 [← 문서 지도](README.md)
 
-Claude(Fable5)가 이 문서 세트만으로 `frontend/`를 한 번에 구현하기 위한 순서와 게이트.
+구현자가 이 문서 세트만으로 `frontend/`를 한 번에 구현하기 위한 순서와 게이트.
 원칙: **각 단계는 이전 단계 산출물만 의존, 단계 말미마다 게이트 통과 후 커밋**(최소 단위 커밋 유지).
 
 ## 사전 조건
@@ -18,8 +18,8 @@ Claude(Fable5)가 이 문서 세트만으로 `frontend/`를 한 번에 구현하
 | S0 스캐폴드 | Vite+TS+eslint+prettier+vitest, 폴더 골격, tsconfig paths | [03](03-architecture.md) | `tsc --noEmit` 통과, 빈 앱 렌더 |
 | S1 토큰·프리미티브 | tokens.css, shared/ui 인벤토리 전부(스토리 없는 단순 구현), shared/motion 5종, status.ts | [04](04-design-system.md) | ui 단위 테스트(각 컴포넌트 스모크 렌더), reduced-motion 폴백 테스트 |
 | S2 데이터 계층 | openapi 코드젠, api.ts(에러 정규화·401 인터셉터), query.ts, live.ts | [03](03-architecture.md), [06](06-api-map.md) | API 에러·401 핸들러 단위 테스트, 코드젠 산출물 커밋 |
-| S3 쉘·인증 | AppShell(Sidebar/Topbar/팔레트), guards, /login·/signup·/pending·/verify-email | [05](05-routes-ia.md), [views/auth](views/auth.md) | Playwright: 로그인→/overview 리다이렉트(테스트 백엔드 세션) |
-| S4 플릿·클러스터 | fleet-heatmap(3레벨), ClusterList/Detail(7탭), PodDrawer, 위저드(클러스터) | [views/fleet-heatmap](views/fleet-heatmap.md), [views/cluster-detail](views/cluster-detail.md), [views/resources](views/resources.md) | 탭·드릴다운 딥링크 e2e, 5000행 렌더 성능 확인 |
+| S3 쉘·인증 | ConsoleLayout(Sidebar/Header/Flyover), guards, /login·/signup·/pending·/verify-email | [05](05-routes-ia.md), [views/auth](views/auth.md) | Playwright: 로그인→/ 리다이렉트(테스트 백엔드 세션) |
+| S4 플릿·클러스터 | HomePage(플릿 현황), ClusterList/Detail(6탭), PodDrawer, 위저드(클러스터) | [views/fleet-heatmap](views/fleet-heatmap.md), [views/cluster-detail](views/cluster-detail.md), [views/resources](views/resources.md) | 탭·드릴다운 딥링크 e2e, 5000행 렌더 성능 확인 |
 | S5 레포·워크플로우 | RepoList/Detail(4탭), WorkflowList/Graph, ApprovalCard(공유 1개) | [views/repo](views/repo.md), [views/workflow](views/workflow.md) | 승인 카드 공유 검증(임포트 경로 1개), 활성 run 10s/비활성 30s 폴링 전환 테스트 |
 | S6 AI·메트릭 | ChatList/ChatView(카드 3종), MetricsView(실시간+쿼리 카드) | [views/ai-chat](views/ai-chat.md), [views/metrics](views/metrics.md) | 폴링 간격 파생 테스트, ActionSelectCard 잠금 테스트 |
 | S7 조직·알림·설정 | org-admin 3화면(mock), AccessPanel, Notifications+벨, OpsView | [views/org-admin](views/org-admin.md), [views/notifications](views/notifications.md) | mock↔real 어댑터 경계 테스트, 벨 배지=미읽음 일치 테스트 |
@@ -33,7 +33,7 @@ npm run typecheck     # tsc --noEmit 0 오류
 npm run lint          # eslint 0 오류
 npm run test          # vitest 전부 통과
 npm run build         # 프로덕션 번들 성공, 초기 청크 < 350KB gzip(코드 스플릿: 뷰 lazy)
-npm run e2e:smoke     # Playwright: 로그인→fleet→클러스터→AI 1왕복 (mock)
+npm run e2e:smoke     # Playwright: 로그인→홈→클러스터→AI 1왕복 (mock)
 ```
 
 추가 수동 점검표:

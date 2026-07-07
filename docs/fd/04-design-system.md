@@ -105,7 +105,7 @@
 | `CodeBlock` | code, lang(yaml·json·diff), copy | highlight.js |
 | `DiffView` | before, after | react-diff-viewer-continued |
 | `SearchInput` | value, onChange, shortcut="/" | — |
-| `CommandPalette` | actions[], recent | cmdk |
+| `CommandPalette` (계획) | actions[], recent | cmdk — 현재 코드에는 없음 |
 | `Breadcrumbs` | items[{label,to}] | — |
 | `Avatar` / `AvatarGroup` | name → 색 해시 | — |
 | `KeyValue` | pairs — 메타데이터 표시 | — |
@@ -116,14 +116,14 @@
 
 추가가 필요하면: 이 표에 행 추가 → 뷰 문서에서 참조 (역순 금지).
 
-## 레이아웃 (AppShell)
+## 레이아웃 (ConsoleLayout)
 
 ```text
 ┌────────┬──────────────────────────────────────────────┐
-│        │ Topbar: Breadcrumbs · 검색(⌘K) · Live● · 알림 · Avatar │
+│        │ Header: Live● · 알림 · AI 채팅 · 테마 · 로그아웃       │
 │ Side   ├──────────────────────────────────────────────┤
 │ bar    │                                              │
-│ 64/240 │              라우트 아웃렛                    │
+│ 64/208 │              라우트 아웃렛                    │
 │ px     │        (max-width 1440, 패딩 --sp-6)          │
 │        │                                              │
 └────────┴──────────────────────────────────────────────┘
