@@ -16,26 +16,39 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 16:50 KST 체크포인트
+### 2026-07-07 16:57 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
 
+- 이 체크포인트 작성 전 local/origin dev HEAD: `f8364e02 docs: 최신 HEAD 확인 / runner 장애 / 인수인계`. 이 문서 커밋 후 정확한 최신 SHA는 `git log --oneline --decorate -6`로 확인한다.
+- 워크트리는 tracked clean이어야 한다. untracked `아카이브/`는 `.env*` 포함 가능성이 높으므로 커밋하지 않는다.
 - 정확한 현재 local/origin dev HEAD는 `git log --oneline --decorate -6`와 `git status --short --branch`로 확인한다. 이 문서가 자기 자신을 커밋할 때마다 SHA가 바뀌므로 문서 안의 SHA는 체크포인트 예시로만 본다.
 - 최신 production code 기준 dev HEAD: `ef65c770 fix: 레포 discovery render 검증 전환`.
 - `ef65c770` 이후 커밋은 시크릿 제외, local artifact ignore, runner 상태, 인수인계 갱신 성격이다.
-- `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`.
-- `24e47e53 docs: Actions runner 상태 / 인수인계 갱신`.
-- `9b1eedbf`는 origin/dev에 push 완료.
-- `24e47e53`도 origin/dev에 push 완료했고 동일하게 새 dev workflows가 runner 배정 없이 실패했다.
+- 최신 dev failed workflows를 REST API로 재실행했지만 attempt 2도 같은 형태로 실패했다:
+  - CI run `28850399699`: rerun failed jobs `201`, attempt 2 failure. Jobs `85565162752`, `85565162770`, `85565162791` all `runner_id=0`, `steps=0`, logs `404`.
+  - AWS CD run `28850399698`: rerun failed jobs `201`, attempt 2 failure. `Test before deploy` job `85565171025` `runner_id=0`, `steps=0`, logs `404`; deploy skipped.
+  - Promote Dev To Main run `28850399688`: rerun failed jobs `201`, attempt 2 failure. `Verify dev before promotion` job `85565167194` `runner_id=0`, `steps=0`, logs `404`; merge skipped.
+- repo-side 점검:
+  - `.github/workflows/*`는 `ef65c770` 이후 변경 없음.
+  - CI/AWS CD/Promote는 모두 GitHub-hosted `ubuntu-latest`를 사용한다.
+  - repository Actions permissions: enabled `true`, allowed actions `all`, sha pinning required `false`.
+  - repository self-hosted runners: total `0`; 현재 워크플로는 self-hosted를 쓰지 않는다.
+  - GitHub Status API: Actions/API/Git Operations/Webhooks all operational.
+- 판단: 코드/워크플로 실패가 아니라 GitHub-hosted runner 배정, 계정/org quota, repo/org Actions 정책, 또는 GitHub Actions control-plane 계층 문제로 계속 본다.
+- 다음 조치: GitHub UI에서 org/billing quota와 Actions policy를 확인하거나 시간이 지난 뒤 latest dev run failed jobs를 다시 rerun한다. 성공하면 Promote Dev To Main 및 main AWS CD를 재확인한다.
+- live public smoke:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+
+### 2026-07-07 16:50 KST 체크포인트
+
+- `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`는 origin/dev에 push 완료.
+- `24e47e53 docs: Actions runner 상태 / 인수인계 갱신`도 origin/dev에 push 완료했고 동일하게 새 dev workflows가 runner 배정 없이 실패했다.
 - 대표 dev workflow failure:
   - CI run `28850238246`: failure. 모든 job이 steps/log 없음, runner 배정 없음.
   - AWS CD run `28850238259`: failure. test job이 steps/log 없음, runner 배정 없음. deploy skipped.
   - Promote Dev To Main run `28850238255`: failure. verify job이 steps/log 없음, runner 배정 없음. merge skipped.
-- 판단: main manual dispatch뿐 아니라 dev push workflows도 같은 형태이므로 코드/테스트 실패가 아니라 GitHub Actions hosted runner 배정, quota, repo/org Actions 상태, 또는 GitHub 측 일시 장애를 먼저 확인한다.
-- runner 문제가 풀리면 위 failed workflows를 rerun하고, 그 뒤 main promotion/deploy를 재확인한다.
-- live public smoke:
-  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
-  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
 
 ### 2026-07-07 16:45 KST 체크포인트
 
