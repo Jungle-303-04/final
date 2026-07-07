@@ -1,5 +1,5 @@
 // 홈 대시보드 — 플릿 집계(/fleet/summary) + 인시던트 타임라인 + 승인 대기 + 최근 AI 대화 (전부 실데이터)
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Chip, Table, type ChipSeverity } from '@/plural-ui';
 import { CaretRightIcon, GlobeIcon, PlusIcon, SendIcon, ShieldIcon } from '@/plural-ui/icons';
@@ -81,6 +81,12 @@ export function HomePage() {
   const widgetsQ = useMetricWidgets(selectedCluster?.cluster_id);
   const presetsQ = useMetricQueryPresets(selectedCluster?.cluster_id);
   const usageSeries = useMemo(() => buildUsageSeries(usageQ.data ?? []), [usageQ.data]);
+  const openCluster = (clusterId: string) => navigate(pathFor(`/clusters/${clusterId}`));
+  const openClusterByKeyboard = (event: KeyboardEvent<HTMLTableRowElement>, clusterId: string) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openCluster(clusterId);
+  };
 
   return (
     <>
@@ -128,7 +134,7 @@ export function HomePage() {
                 <div className="co-treemap-frame">
                   <TreemapChart
                     nodes={fleet.clusters.map(c => fleetHeatNode(c, fleetLens))}
-                    onTileClick={id => navigate(pathFor(`/clusters/${id}`))}
+                    onTileClick={openCluster}
                   />
                 </div>
               </div>
@@ -160,7 +166,7 @@ export function HomePage() {
 
                 <Card className="pl-stack co-widget-panel">
                   <div className="pl-row pl-row--between">
-                    <b>스냅샷 추이</b>
+                    <b>사용량 추이</b>
                     <Button size="small" onClick={() => navigate(pathFor(`/metrics?cluster=${selectedCluster?.cluster_id ?? ''}`))}>메트릭</Button>
                   </div>
                   {usageQ.isPending ? <Skeleton lines={4} /> : usageSeries.length === 0 ? (
@@ -189,7 +195,14 @@ export function HomePage() {
 
               <Table headers={['클러스터', '건강', '팟', '노드', 'CPU', 'MEM', '인시던트', '최근 재시작', '마지막 확인', '']}>
                 {fleet.clusters.map(c => (
-                  <tr key={c.cluster_id} className="clickable" onClick={() => navigate(pathFor(`/clusters/${c.cluster_id}`))}>
+                  <tr
+                    key={c.cluster_id}
+                    className="clickable"
+                    tabIndex={0}
+                    role="button"
+                    onClick={() => openCluster(c.cluster_id)}
+                    onKeyDown={event => openClusterByKeyboard(event, c.cluster_id)}
+                  >
                     <td><b style={{ color: 'var(--color-text)' }}>{c.name}</b></td>
                     <td><Chip severity={HEALTH_SEVERITY[c.health] ?? 'neutral'}>{healthLabel(c.health)}</Chip></td>
                     <td>{c.pods_running}/{c.pods_total}</td>
@@ -268,14 +281,14 @@ function fleetHeatNode(cluster: FleetClusterSummary, lens: FleetLens): HeatNode 
   if (lens === 'incidents') {
     return {
       id: cluster.cluster_id,
-      label: `${cluster.name} · ${cluster.open_incidents} incidents`,
+      label: `${cluster.name} · 인시던트 ${cluster.open_incidents}`,
       value: size,
       score: cluster.open_incidents > 0 ? 0.12 : healthScore(cluster.health),
     };
   }
   return {
     id: cluster.cluster_id,
-    label: `${cluster.name} · ${cluster.pods_running}/${cluster.pods_total} pods`,
+    label: `${cluster.name} · 팟 ${cluster.pods_running}/${cluster.pods_total}`,
     value: size,
     score: healthScore(cluster.health),
   };

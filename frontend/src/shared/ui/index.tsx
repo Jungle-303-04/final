@@ -299,14 +299,14 @@ export function Toasts() {
   );
 }
 
-export function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+export function SearchInput({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (v: string) => void; placeholder?: string; ariaLabel?: string }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const h = (e: globalThis.KeyboardEvent) => { if (e.key === '/' && document.activeElement === document.body) { e.preventDefault(); ref.current?.focus(); } };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
-  return <input ref={ref} className="input" style={{ maxWidth: 320 }} value={value} placeholder={placeholder ?? '검색 ( / )'} onChange={e => onChange(e.target.value)} />;
+  return <input ref={ref} className="input" style={{ maxWidth: 320 }} value={value} placeholder={placeholder ?? '검색'} aria-label={ariaLabel ?? placeholder ?? '검색'} onChange={e => onChange(e.target.value)} />;
 }
 
 export function useSearchFilter<T>(rows: T[], pick: (r: T) => string): [T[], string, (v: string) => void] {

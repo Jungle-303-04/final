@@ -96,6 +96,18 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const selectedDeployOption = deployOptions.find(option => option.key === deployProvider);
   const selectedCandidate = selectedFlow?.import_candidates.find(candidate => candidateKey(candidate) === selectedImportKey);
   const selectedEnvironment = selectedCandidate?.labels.environment || selectedCandidate?.labels.env || '';
+  const observabilityStack =
+    selectedCandidate?.labels.observability_stack ||
+    selectedCandidate?.labels.observability ||
+    selectedCandidate?.labels.monitoring_stack ||
+    selectedCandidate?.labels.monitoring ||
+    '';
+  const registrationSummaryPairs: [string, string][] = [
+    ['프로바이더', activeProvider],
+    ['설치 방식', deployProvider],
+    ['환경', selectedEnvironment || '서버 기본 정책'],
+  ];
+  if (observabilityStack) registrationSummaryPairs.push(['관측', observabilityStack]);
   const filteredImportCandidates = useMemo(
     () => (selectedFlow?.import_candidates ?? []).filter(candidate => clusterImportCandidateMatches(candidate, candidateQuery)),
     [candidateQuery, selectedFlow],
@@ -290,7 +302,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
       {step === 1 && selectedFlow && (
         <>
           <Field label="cluster_id (소문자 slug)" error={clusterId && !slugOk ? '소문자·숫자·하이픈만 가능합니다' : undefined}>
-            <input className="input" value={clusterId} onChange={e => { setClusterId(e.target.value); preflight.reset(); }} placeholder="prod-seoul" data-testid="cluster-id" />
+            <input className="input" value={clusterId} onChange={e => { setClusterId(e.target.value); preflight.reset(); }} placeholder="cluster-id" data-testid="cluster-id" />
           </Field>
           <Field label="표시 이름">
             <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={clusterId} />
@@ -322,19 +334,14 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           {directApply && (
             <Field label="kube context">
               <select className="input" value={kubeContext} onChange={e => { setKubeContext(e.target.value); preflight.reset(); }}>
-                <option value="">api-gateway 현재 context</option>
+                <option value="">현재 context</option>
                 {selectedFlow.import_candidates.filter(candidate => candidate.kube_context).map(candidate => (
                   <option key={candidateKey(candidate)} value={candidate.kube_context ?? ''}>{candidate.kube_context}</option>
                 ))}
               </select>
             </Field>
           )}
-          <KeyValue pairs={[
-            ['프로바이더', activeProvider],
-            ['설치 방식', deployProvider],
-            ['환경', selectedEnvironment || '서버 기본 정책'],
-            ['관측 스택', 'prometheus/loki/tempo target service'],
-          ]} />
+          <KeyValue pairs={registrationSummaryPairs} />
           <Footer onPrev={() => setStep(0)} onNext={runPreflight}
             nextDisabled={!canPreflight} nextLabel="사전 점검" loading={preflight.isPending} />
           {preflight.isError && (

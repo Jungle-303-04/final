@@ -162,14 +162,30 @@ function MessageRenderer({ m }: { m: ChatMessage }) {
         {m.content.split('**').map((part, i) => i % 2 ? <b key={i}>{part}</b> : <span key={i}>{part}</span>)}
       </div>
       {m.tool_calls?.map((t, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 'var(--fs-xs)', color: 'var(--text-2)', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px' }}>
-          <Badge tone={t.status}>도구</Badge><code>{t.name}</code><span>{t.args}</span>
-        </div>
+        <ToolTraceRow key={i} trace={t} />
       ))}
       {m.actions && <ActionSelectCard actions={m.actions} />}
       {m.approval_ref && <ApprovalCard approvalId={m.approval_ref.approval_id} summary={m.approval_ref.summary} resolved={m.approval_ref.resolved} compact />}
     </FadeSlideIn>
   );
+}
+
+function ToolTraceRow({ trace }: { trace: NonNullable<ChatMessage['tool_calls']>[number] }) {
+  return (
+    <details className="chat-tool-trace">
+      <summary>
+        <Badge tone={trace.status}>도구</Badge>
+        <code>{trace.name}</code>
+      </summary>
+      {trace.args && <code className="chat-tool-args">{compactToolArgs(trace.args)}</code>}
+    </details>
+  );
+}
+
+function compactToolArgs(args: string): string {
+  const text = args.trim();
+  if (text.length <= 900) return text;
+  return `${text.slice(0, 900)}…`;
 }
 
 function ActionSelectCard({ actions }: { actions: NonNullable<ChatMessage['actions']> }) {
