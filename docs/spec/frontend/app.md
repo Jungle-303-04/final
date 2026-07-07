@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: 32330d7c
 status: synced
 ---
 
@@ -93,7 +93,7 @@ export const router = createBrowserRouter([...])
 
 | 심볼 | 앵커 | 동작 |
 |---|---|---|
-| `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | `useSession()` pending 이면 `<div style={{padding:48}}><Skeleton lines={5}/></div>`. `isError` 이거나 `data?.authenticated` 가 falsy 면 `returnTo = loc.pathname + loc.search + loc.hash` 를 인코딩해 `<Navigate to={"/login?returnTo=" + encodeURIComponent(returnTo)} replace />`. 아니면 `<Outlet />` |
+| `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | `useSession()` pending 이면 `<div style={{padding:48}}><Skeleton lines={5}/></div>`. 세션 조회가 실패했지만 `unauthorized`/401이 아니면 `EmptyState(IconAlertTriangle, detail 또는 '세션을 확인하지 못했습니다')` + "다시 시도" 버튼을 보여준다. 401 또는 unauthenticated 는 `returnTo = loc.pathname + loc.search + loc.hash` 를 인코딩해 `<Navigate to={"/login?returnTo=" + encodeURIComponent(returnTo)} replace />`. 아니면 `<Outlet />` |
 | `RequireGuest` | `frontend/src/app/guards.tsx :: RequireGuest` | `!isError && data?.authenticated` 면 `returnTo` query 를 `safeReturnTo` 로 검증한 뒤 replace 이동한다. 세션 조회가 pending 이거나 실패한 게스트 화면은 막지 않고 `<Outlet />`을 렌더한다. `safeReturnTo` 는 값이 없거나 `/`로 시작하지 않거나 `//`/`://`를 포함하면 `/`로 폴백한다. |
 | `RequireAdmin` | `frontend/src/app/guards.tsx :: RequireAdmin` | `useIsAdmin()` 가 false 면 `<EmptyState icon={<IconLock size={26} />} title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />` 렌더(리다이렉트 아님). true 면 `<Outlet />` |
 
@@ -134,8 +134,8 @@ ConsoleLayout (div.pl-app.co-app)
 - 데이터: `useFleetSummary`, `useTimeline`, `useNotices`, `useConversations`, `useIsAdmin`, 선택 클러스터 기준 `useClusterUsage`, `useMetricWidgets`, `useMetricQueryPresets`.
 - state: `clusterWizard`, `repoWizard`, `fleetLens`, `selectedClusterId`.
 - `fleetClusters = useMemo(() => fleetQ.data?.clusters ?? [], [fleetQ.data?.clusters])` 로 fleet 배열 참조를 고정한다. `useEffect`는 선택 클러스터가 비었거나 fleet 에 없으면 첫 클러스터로 보정한다.
-- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState('아직 등록된 클러스터가 없습니다', admin 이면 등록 action)` 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 메트릭 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, 스냅샷 추이 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
-- `usageSeries`는 `sampled_at`을 `Date.parse()` 숫자 x값으로 넘기고, 파싱할 수 없으면 1부터 시작하는 index를 쓴다. 시간 라벨 포맷은 [shared `TimeSeriesChart`](shared.md#차트-uichartstsx)가 담당한다.
+- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState('아직 등록된 클러스터가 없습니다', admin 이면 등록 action)` 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 쿼리 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, 스냅샷 추이 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
+- `usageSeries`는 [metrics](./metrics.md)의 `buildUsageSeries()`를 재사용한다. `restart_total`은 누적값이 아니라 샘플 간 증가분(`재시작 증가`)으로 렌더하고, 시간 라벨 포맷은 [shared `TimeSeriesChart`](shared.md#차트-uichartstsx)가 담당한다.
 - `fleetHeatNode(cluster, lens)`는 모든 렌즈에서 tile 크기 `value=max(1,pods_total)`을 유지하고 score/label만 바꾼다. `all`: `score=healthScore(health)`. `cpu`: `score=ratioHealthScore(cpu_pct)`. `memory`: `score=ratioHealthScore(mem_pct)`. `incidents`: 인시던트가 있으면 `score=0.12`, 없으면 `healthScore(health)`.
 - `FleetWidgetStrip`은 fleet totals 와 cluster summary 만 사용한다. 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 표시하고 CPU/MEM 관측값이 없으면 `—`로 표시한다.
 - `StoredWidgetSummary`는 선택 클러스터의 `/metric-widgets`와 `/metric-query-presets` 결과 개수와 최대 4개 저장 위젯을 보여준다. 저장 위젯이 없으면 `저장된 위젯 없음`을 표시한다.
@@ -147,6 +147,7 @@ ConsoleLayout (div.pl-app.co-app)
 2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 이미 로그인된 사용자가 게스트 라우트에 들어오면 안전한 `returnTo` query 로 이동하고, 없거나 외부 URL 형태면 `/` 로 이동한다. 세션 조회가 pending 이거나 실패하면 게스트 화면을 그대로 렌더한다.
 3. 세션 플로우: `RequireSession` 이 세션 확인 후 `ConsoleLayout` 렌더 → `startLive()` 1회 호출로 WS 시작.
 4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재 path+query+hash>` 이동.
+5. 세션 확인 timeout/network/server 오류는 로그인 이동으로 위장하지 않고 세션 확인 실패 empty state 와 재시도 버튼을 렌더한다.
 5. `/console`과 `/console/*`는 같은 콘솔 IA를 base path 유지 상태로 렌더한다. `/overview`, `/notifications`, 구 UI 경로 계열은 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 해당 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
 
 ## 불변식·오류 (Invariants & Errors)

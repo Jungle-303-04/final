@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: f91a4def
 status: synced
 ---
 
@@ -29,19 +29,21 @@ status: synced
 | 심볼 | 앵커 | API | 폴링/옵션 |
 |---|---|---|---|
 | `repoKeys` | `frontend/src/features/repo/api.ts :: repoKeys` | — | `apps() = ['applications']`, `runs(id) = ['applications', id, 'runs']`, `deployments(id) = ['applications', id, 'deployments']`, `probe(repoRef)`, `branches(repoRef)`, `manifests(repoRef, branch)`, `validation(repoRef, branch, manifestPath, sourceType)` |
-| `useApplications` | `frontend/src/features/repo/api.ts :: useApplications` | GET `/applications` | 30s, select `d.applications.map(adaptApplication)` |
-| `useApplication` | `frontend/src/features/repo/api.ts :: useApplication` | GET `/applications/${id}` → `{application: raw}` | 쿼리키 `['applications', id]`, `select: d => adaptApplication(d.application)` |
-| `useRuns` | `frontend/src/features/repo/api.ts :: useRuns` | GET `/applications/${appId}/runs` | select `d.runs.map(adaptRun)`. **적응 폴링**: raw runs 중 상태(대문자화)가 ACTIVE 집합에 있으면 10s, 아니면 60s |
-| `useRunsAll` | `frontend/src/features/repo/api.ts :: useRunsAll` | 앱별 GET `/applications/${id}/runs` (useQueries) | `(apps: Application[])` → `combine` 으로 `{ appId, runs: adaptRun[] }[]` 반환. 활성 run 있으면 10s, 아니면 30s |
-| `useDeployments` | `frontend/src/features/repo/api.ts :: useDeployments` | GET `/applications/${appId}/deployments` | select `d.deployments.map(adaptDeployment)` |
+| `REPO_QUERY_TIMEOUT_MS` | `frontend/src/features/repo/api.ts :: REPO_QUERY_TIMEOUT_MS` | — | `8_000` — 애플리케이션/run/deployment 조회 |
+| `REPO_DISCOVERY_TIMEOUT_MS` | `frontend/src/features/repo/api.ts :: REPO_DISCOVERY_TIMEOUT_MS` | — | `15_000` — repository discovery/probe/validation 조회 |
+| `useApplications` | `frontend/src/features/repo/api.ts :: useApplications` | GET `/applications` with `{timeoutMs: 8_000}` | 30s, `retry:false`, select `d.applications.map(adaptApplication)` |
+| `useApplication` | `frontend/src/features/repo/api.ts :: useApplication` | GET `/applications/${id}` with `{timeoutMs: 8_000}` → `{application: raw}` | 쿼리키 `['applications', id]`, `retry:false`, `select: d => adaptApplication(d.application)` |
+| `useRuns` | `frontend/src/features/repo/api.ts :: useRuns` | GET `/applications/${appId}/runs` with `{timeoutMs: 8_000}` | `retry:false`, select `d.runs.map(adaptRun)`. **적응 폴링**: raw runs 중 상태(대문자화)가 ACTIVE 집합에 있으면 10s, 아니면 60s |
+| `useRunsAll` | `frontend/src/features/repo/api.ts :: useRunsAll` | 앱별 GET `/applications/${id}/runs` with `{timeoutMs: 8_000}` (useQueries) | `(apps: Application[])` → `combine` 으로 `{ pending; failed; error; items: { appId, runs: adaptRun[] }[] }` 반환. 각 쿼리는 `retry:false`. 활성 run 있으면 10s, 아니면 30s |
+| `useDeployments` | `frontend/src/features/repo/api.ts :: useDeployments` | GET `/applications/${appId}/deployments` with `{timeoutMs: 8_000}` | `retry:false`, select `d.deployments.map(adaptDeployment)` |
 | `RepositoryProbe` | `frontend/src/features/repo/api.ts :: RepositoryProbe` | — | `{repo_ref, normalized_repo_ref, valid, reachable, default_branch?, private?, html_url?, warnings, errors}` |
 | `RepositoryBranch` | `frontend/src/features/repo/api.ts :: RepositoryBranch` | — | `{name, protected, default}` |
 | `RepositoryManifestCandidate` | `frontend/src/features/repo/api.ts :: RepositoryManifestCandidate` | — | `{path, source_type, display_name, reason}`. `source_type` 은 raw-yaml/raw-json/kustomize/helm 등 문자열 |
 | `RepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: RepositoryManifestValidation` | — | `{repo_ref, branch, manifest_path, valid, status, validation_mode, resource_count, resources[], warnings, errors}` |
-| `useRepositoryProbe` | `frontend/src/features/repo/api.ts :: useRepositoryProbe` | POST `/repositories/discovery/probe` body `{repo_ref}` | 쿼리키 `repoKeys.probe(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
-| `useRepositoryBranches` | `frontend/src/features/repo/api.ts :: useRepositoryBranches` | GET `/repositories/discovery/branches?repo_ref=...` | 쿼리키 `repoKeys.branches(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
-| `useRepositoryManifestCandidates` | `frontend/src/features/repo/api.ts :: useRepositoryManifestCandidates` | GET `/repositories/discovery/manifests?repo_ref=...&branch=...` | 쿼리키 `repoKeys.manifests(repoRef, branch)`, `enabled`, `retry:false`, `staleTime:30s` |
-| `useRepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: useRepositoryManifestValidation` | POST `/repositories/discovery/validate` body `{repo_ref, branch, manifest_path, source_type}` | 쿼리키 `repoKeys.validation(repoRef, branch, manifestPath, sourceType)`, `enabled`, `retry:false`, `staleTime:30s` |
+| `useRepositoryProbe` | `frontend/src/features/repo/api.ts :: useRepositoryProbe` | POST `/repositories/discovery/probe` body `{repo_ref}` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.probe(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
+| `useRepositoryBranches` | `frontend/src/features/repo/api.ts :: useRepositoryBranches` | GET `/repositories/discovery/branches?repo_ref=...` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.branches(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
+| `useRepositoryManifestCandidates` | `frontend/src/features/repo/api.ts :: useRepositoryManifestCandidates` | GET `/repositories/discovery/manifests?repo_ref=...&branch=...` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.manifests(repoRef, branch)`, `enabled`, `retry:false`, `staleTime:30s` |
+| `useRepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: useRepositoryManifestValidation` | POST `/repositories/discovery/validate` body `{repo_ref, branch, manifest_path, source_type}` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.validation(repoRef, branch, manifestPath, sourceType)`, `enabled`, `retry:false`, `staleTime:30s` |
 | `useApproval` | `frontend/src/features/repo/api.ts :: useApproval` | POST `/approvals/${approvalId}/${action}` (`action: 'grant'\|'reject'`) | 성공: toast(`grant → ok '승인 완료 — 배포가 진행됩니다'` / `reject → warn '거절했습니다'`) + `['applications']`·`applications*` predicate·`ai*` predicate invalidate |
 | `CreateApplicationInput` | `frontend/src/features/repo/api.ts :: CreateApplicationInput` | — | `{ name; repo_ref; branch; manifest_path; source_type; cluster_id; namespace?; environment? }` — 레포 연결 위저드 입력 계약 |
 | `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | POST `/applications/connect` body `{name, repo_ref, branch, manifest_path, source_type, cluster_id, namespace?, environment?}` → `{application: raw}` | `(input: CreateApplicationInput)` — 앱과 배포 대상 연결을 서버 재검증 경로에 위임한다. `namespace`와 `environment`는 입력이 있을 때만 보낸다. 반환은 `adaptApplication` 결과에 `branch`/`cluster_id` 를 덮어쓴 값. 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
@@ -106,6 +108,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 ## 불변식·오류 (Invariants & Errors)
 
 - run 폴링 주기는 활성 run 존재 여부에서만 파생(수동 refetch 트리거 금지): 단일 앱 10s/60s, 전체 10s/30s.
+- `useRunsAll`은 개별 앱 run 쿼리 실패를 `failed/error`로 combine 결과에 포함한다. workflow 화면은 이 값을 사용해 실패를 "run 없음"으로 오해하지 않고 재시도 UI를 렌더한다.
 - 승인 UI 는 `ApprovalCard` 하나만 존재 — 다른 feature 에서 재구현 금지.
 - 승인 성공 시 chat 캐시(`['ai']` prefix)도 무효화해 대화 속 `approval_ref` 상태를 동기화한다.
 - run 상태 문자열은 `adaptRun` 이 대문자로 정규화한 값으로만 비교한다(실백엔드 step 이름 매핑 포함 — [shared/adapt](shared.md#어댑터-libadaptts)).

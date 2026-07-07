@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: f91a4def
 status: synced
 ---
 
@@ -29,7 +29,7 @@ status: synced
 - 라우트: `/workflows`.
 - 모듈 상수 `ACTIVE`(비공개): repo 와 동일한 활성 상태 7종 Set.
 - 데이터: `useApplications()` → `useRunsAll(apps.data ?? [])`. 행 = 모든 run 에 `appId` 부착 후 정렬: **활성 run 우선**, 그다음 `started_at` 내림차순(localeCompare).
-- 트리: `PageHeader('워크플로우')` → `Card` → 비면 `EmptyState(IconFile, '실행된 워크플로우가 없습니다')`, 아니면 `ResourceTable` 열: 앱(b appId) / 커밋(code shortSha) / 상태(Badge) / 현재 단계(current_step) / 시작(timeAgo). 행 클릭 → `/workflows/${run_id}`.
+- 트리: `PageHeader('워크플로우')` → `Card` → `apps.isError || all.failed`면 `EmptyState(error message, 다시 시도)`, 로딩이면 `Skeleton(4)`, 비면 `EmptyState(IconFile, '실행된 워크플로우가 없습니다')`, 아니면 `ResourceTable` 열: 앱(b appId) / 커밋(code shortSha) / 상태(Badge) / 현재 단계(current_step) / 시작(timeAgo). 행 클릭 → `/workflows/${run_id}`.
 
 ### `frontend/src/features/workflow/WorkflowGraphView.tsx :: WorkflowGraphView` (default export)
 
@@ -42,7 +42,7 @@ status: synced
   - 노드: ORDER 각 이름에 대해 `run.steps` 에서 찾고 없으면 `{name, status:'PENDING'}`. `active = !TERMINAL.has(run.status) && step.name === run.status`.
   - edge(i→i+1, type 'animated'): `done = status==='SUCCEEDED' || targetIdx < statusIdx || 해당 스텝 status==='SUCCEEDED'` → `tone:'ok'`; `active = running && targetIdx === statusIdx`(현재 단계 진입 edge 만 dash-flow); 그 외 무톤.
   - `run.status === 'FAILED'` 이면 FAILED 노드 추가 + `실패 스텝(steps 중 status FAILED, 기본 'POLICY_CHECKING') → FAILED` danger edge.
-- run 미발견: `apps.isPending` 이면 `Skeleton(5)`, 아니면 `Card('run 을 찾을 수 없습니다: <runId>')` + `pathFor('/workflows')` 목록 링크.
+- run 미발견: `apps.isError || all.failed`면 `Card > EmptyState(error message, 다시 시도)`, `apps.isPending` 또는 앱이 있는데 runs 쿼리가 pending이면 `Skeleton(5)`, 아니면 `Card('run 을 찾을 수 없습니다: <runId>')` + `pathFor('/workflows')` 목록 링크.
 - 트리:
   ```
   FadeSlideIn
@@ -71,3 +71,4 @@ status: synced
 - dash-flow(active) edge 는 진행 중 run 의 "현재 단계 진입 edge" 하나뿐이다.
 - 단계 어휘는 `ORDER` 8단계 + FAILED 로 고정 — [repo](./repo.md) 의 미니 스텝바와 동일 순서를 유지한다. 실백엔드 run 의 steps[](`git/render/diff/policy/approval/...`)는 [shared/adapt](shared.md#어댑터-libadaptts) 의 `adaptRun` 이 이 어휘로 매핑해서 도착한다 — 뷰에서 재매핑 금지.
 - plan 미리보기는 `RunStep.changes` 를 `PlanDiff` 에 그대로 전달 — 프론트에서 diff 를 만들지 않는다.
+- 앱/run 조회 실패는 빈 워크플로우나 미발견 run 으로 표시하지 않는다. `useRunsAll`의 `failed/error` combine 값을 보고 재시도 UI를 먼저 렌더한다.

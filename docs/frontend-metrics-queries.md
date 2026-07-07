@@ -20,7 +20,7 @@ agent 가 실제 관측한 pod phase·재시작 수·node ready 만 집계한다
 | 필드 | 의미 | 콘솔 표기 |
 |---|---|---|
 | `pod_total` / `pod_running` / `pod_pending` / `pod_failed` | phase 별 팟 수 | 실행 팟 시계열, StatBox |
-| `restart_total` | 컨테이너 재시작 누적 합 | 재시작 누적 시계열, 홈 `restarts_recent`(최근 샘플 2개 델타) |
+| `restart_total` | 컨테이너 재시작 누적 합 | 메트릭/홈 스냅샷 차트에서는 샘플 간 증가분(`재시작 증가`)으로 표시, 홈 `restarts_recent`는 최근 샘플 2개 델타 |
 | `node_total` / `node_ready` | 노드 수/Ready 수 | 준비 노드 시계열, 클러스터 헬스 롤업 |
 | `cpu_pct` / `mem_pct` | 실측 값이 있을 때만(없으면 None — 합성 금지) | 클러스터 상세 CPU/MEM % |
 

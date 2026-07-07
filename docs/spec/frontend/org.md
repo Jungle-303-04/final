@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: f91a4def
 status: synced
 ---
 
@@ -27,14 +27,15 @@ status: synced
 
 | 심볼 | 앵커 | API | 비고 |
 |---|---|---|---|
-| `useOrgs` | `frontend/src/features/org/api.ts :: useOrgs` | GET `/orgs` | 키 `['orgs']`, select `.orgs` |
-| `useGroups` | `frontend/src/features/org/api.ts :: useGroups` | GET `/groups` | 키 `['groups']`, select `.groups` |
-| `useUsers` | `frontend/src/features/org/api.ts :: useUsers` | GET `/users` | 키 `['users']`, select `.users` |
-| `useGrants` | `frontend/src/features/org/api.ts :: useGrants` | GET `/access[?resource_id=]` | `(resourceId?)`, 키 `['access', resourceId ?? 'all']`, select `.grants` |
+| `ORG_QUERY_TIMEOUT_MS` | `frontend/src/features/org/api.ts :: ORG_QUERY_TIMEOUT_MS` | — | `8_000` — 설정 조회 훅 전용 |
+| `useOrgs` | `frontend/src/features/org/api.ts :: useOrgs` | GET `/orgs` with `{timeoutMs: 8_000}` | 키 `['orgs']`, `retry:false`, select `.orgs` |
+| `useGroups` | `frontend/src/features/org/api.ts :: useGroups` | GET `/groups` with `{timeoutMs: 8_000}` | 키 `['groups']`, `retry:false`, select `.groups` |
+| `useUsers` | `frontend/src/features/org/api.ts :: useUsers` | GET `/users` with `{timeoutMs: 8_000}` | 키 `['users']`, `retry:false`, select `.users` |
+| `useGrants` | `frontend/src/features/org/api.ts :: useGrants` | GET `/access[?resource_id=]` with `{timeoutMs: 8_000}` | `(resourceId?)`, 키 `['access', resourceId ?? 'all']`, `retry:false`, select `.grants` |
 | `useCreateOrg` | `frontend/src/features/org/api.ts :: useCreateOrg` | POST `/orgs` body `{name; description?}` | 성공: `['orgs']` invalidate + toast ok `'조직을 만들었습니다'` |
 | `useDeleteOrg` | `frontend/src/features/org/api.ts :: useDeleteOrg` | DELETE `/orgs/${id}` | 실패(onError): toast danger `'소속 그룹을 먼저 정리해야 합니다'`(422 `groups_exist`) |
 | `useCreateGroup` | `frontend/src/features/org/api.ts :: useCreateGroup` | POST `/groups` body `{org_id; name}` | 성공: `['groups']`+`['orgs']` invalidate + toast ok `'그룹을 만들었습니다'` |
-| `useGroupMembers` | `frontend/src/features/org/api.ts :: useGroupMembers` | GET `/groups/${groupId}/members` → `{members: {user_id; email}[]}` | `enabled: !!groupId`, 키 `['groups', id, 'members']` |
+| `useGroupMembers` | `frontend/src/features/org/api.ts :: useGroupMembers` | GET `/groups/${groupId}/members` with `{timeoutMs: 8_000}` → `{members: {user_id; email}[]}` | `enabled: !!groupId`, `retry:false`, 키 `['groups', id, 'members']` |
 | `useToggleMembership` | `frontend/src/features/org/api.ts :: useToggleMembership` | PUT / DELETE `/groups/${groupId}/members/${userId}` | mutation `({userId, add: boolean})` — add 면 PUT, 아니면 DELETE. 성공: `['groups']`+`['users']` invalidate |
 | `GrantPayload` | `frontend/src/features/org/api.ts :: GrantPayload` | — | `{ subject_type: 'user'\|'group'; subject_id: string; subject_label?: string; resource_type: string; resource_id: string; role: string }` |
 | `useGrantAccess` | `frontend/src/features/org/api.ts :: useGrantAccess` | POST `/access` body `GrantPayload` | 성공: `['access']` invalidate + toast ok `'권한을 부여했습니다'` |
