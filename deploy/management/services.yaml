@@ -102,6 +102,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: alert-worker
@@ -156,6 +158,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mail-worker
@@ -210,6 +214,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: command-worker
@@ -264,6 +270,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: command-janitor
@@ -318,6 +326,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: workflow-controller
@@ -372,6 +382,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: target-reconcile-worker
@@ -426,6 +438,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: rca-worker
@@ -480,6 +494,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: audit-worker
@@ -534,6 +550,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: dashboard-worker
@@ -588,6 +606,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: git-pull-worker
@@ -642,6 +662,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: manifest-render-worker
@@ -696,6 +718,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: diff-worker
@@ -750,6 +774,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: diff-analyze-worker
@@ -804,6 +830,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: safe-pr-worker
@@ -858,6 +886,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: scm-worker
@@ -912,6 +942,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: dead-letter-monitor
@@ -1044,6 +1076,8 @@ metadata:
   namespace: management
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: drift-worker
