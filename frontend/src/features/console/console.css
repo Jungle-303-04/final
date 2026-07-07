@@ -236,6 +236,17 @@
 }
 .co-avatarbtn:hover { outline: 2px solid var(--color-border-outline-focused); }
 
+/* ── 반응형 — 1024 이하에선 아이콘 레일, 모바일에선 여백 축소 ── */
+@media (max-width: 1100px) {
+  .co-sidebar { width: 64px; align-items: center; padding: var(--sp-sm) var(--sp-xs); }
+  .co-sidebar .co-menuitem span,
+  .co-sidebar .co-logo .word { display: none; }
+}
+@media (max-width: 760px) {
+  .co-content { padding: var(--sp-md); }
+  .co-header, .co-subheader { padding: 0 var(--sp-sm); }
+}
+
 /* 터미널 룩 */
 .co-terminal {
   background: #0b0d11;

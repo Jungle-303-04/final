@@ -69,7 +69,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           {catalog.isSuccess && cloudProviders.length === 0 && (
             <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>사용 가능한 프로바이더가 없습니다 — 관리자에게 문의해주세요.</p>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="split split--even" style={{ gap: 10 }}>
             {cloudProviders.map(p => (
               <button key={p.key} className="card" style={{ cursor: 'pointer', textAlign: 'left', borderColor: provider === p.key ? 'var(--brand)' : 'var(--border)' }}
                 onClick={() => setProvider(p.key)}>
