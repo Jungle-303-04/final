@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from domains.rca.events import CauseCandidate, EvidenceBundle, IncidentRecord
+from packages.contracts.event_bus.bodies import JsonObject
 
 
 class EvidenceRequirementRule(Protocol):
@@ -30,6 +31,9 @@ class CauseCandidateSpec:
     description: str
     expected_evidence: tuple[str, ...]
     checks: tuple[str, ...]
+    # 판별 신호 그룹 — {"id": str, "any_of": [{"fact"|"log_pattern"|"event_pattern": str}...]}.
+    # 스키마 검증은 카탈로그 로더(causes/loader.py)가, 평가는 causes/signals.py 가 담당한다.
+    signals: tuple[JsonObject, ...] = ()
 
     def to_candidate(self) -> CauseCandidate:
         return CauseCandidate(
@@ -38,6 +42,7 @@ class CauseCandidateSpec:
             description=self.description,
             expected_evidence=list(self.expected_evidence),
             checks=list(self.checks),
+            signals=[dict(group) for group in self.signals],
         )
 
 
