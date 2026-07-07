@@ -14,7 +14,7 @@ import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
 import { AnimatedList } from '@/shared/motion';
 import { StatCard } from '../ui';
 
-const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger' };
+const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger', stale: 'warning', unknown: 'neutral' };
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v)}%`);
 
 export function HomePage() {

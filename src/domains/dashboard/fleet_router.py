@@ -3,6 +3,8 @@
 health 판정 규칙(결정적, 단위 테스트로 고정):
 - critical: degraded workload 수 > FLEET_DEGRADED_WORKLOAD_THRESHOLD(0) 또는 not-ready node 존재
 - warning : restarts_recent > 0 또는 open_incidents > 0
+- stale   : 관측값은 있으나 agent 가 online 이 아님
+- unknown : pod/node/usage 관측값이 아직 없음
 - healthy : 그 외
 
 집계 원천:
@@ -22,7 +24,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from domains.identity.dependencies import require_cluster_access, require_session
-from domains.target.router import BLOCKED_TEST_CLUSTER_IDS, BLOCKED_TEST_CLUSTER_NAME_PARTS
+from domains.target.router import (
+    BLOCKED_TEST_CLUSTER_IDS,
+    BLOCKED_TEST_CLUSTER_NAME_PARTS,
+    cluster_connection_status,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -43,6 +49,8 @@ FLEET_DEGRADED_WORKLOAD_THRESHOLD = 0
 HEALTH_HEALTHY = "healthy"
 HEALTH_WARNING = "warning"
 HEALTH_CRITICAL = "critical"
+HEALTH_STALE = "stale"
+HEALTH_UNKNOWN = "unknown"
 UNKNOWN_WORKLOAD_HEALTH = "unknown"
 
 FLEET_CLUSTER_LIMIT = 200
@@ -120,7 +128,13 @@ def build_fleet_summary(
         )
         for cluster in registrations
     ]
-    health_counts = {HEALTH_HEALTHY: 0, HEALTH_WARNING: 0, HEALTH_CRITICAL: 0}
+    health_counts = {
+        HEALTH_HEALTHY: 0,
+        HEALTH_WARNING: 0,
+        HEALTH_CRITICAL: 0,
+        HEALTH_STALE: 0,
+        HEALTH_UNKNOWN: 0,
+    }
     for item in items:
         health_counts[item.health] = health_counts.get(item.health, 0) + 1
     totals = FleetTotals(
@@ -128,6 +142,8 @@ def build_fleet_summary(
         healthy=health_counts[HEALTH_HEALTHY],
         warning=health_counts[HEALTH_WARNING],
         critical=health_counts[HEALTH_CRITICAL],
+        stale=health_counts[HEALTH_STALE],
+        unknown=health_counts[HEALTH_UNKNOWN],
         open_incidents=sum(item.open_incidents for item in items),
         pending_approvals=int(db.count_open_workflow_approvals(workspace_id)),
         running_workflows=int(db.count_running_workflow_runs(workspace_id)),
@@ -179,6 +195,10 @@ def build_cluster_summary_detail(
         nodes_total=nodes_total,
         restarts_recent=restarts_recent,
         open_incidents=len(open_incidents),
+        has_observations=has_observations(rollup, samples),
+        connection_status=cluster_connection_status(
+            db.latest_cluster_agent_statuses(workspace_id, {cluster_id}).get(cluster_id)
+        ),
     )
     return ClusterSummaryDetailResponse(
         cluster_id=cluster_id,
@@ -198,14 +218,20 @@ def rollup_health(
     nodes_total: int,
     restarts_recent: int,
     open_incidents: int,
+    has_observations: bool = True,
+    connection_status: str = "online",
 ) -> str:
     """결정적 health 롤업 — 모듈 docstring 의 규칙 그대로(순서: critical → warning → healthy)."""
+    if not has_observations:
+        return HEALTH_UNKNOWN
     if workloads_degraded > FLEET_DEGRADED_WORKLOAD_THRESHOLD:
         return HEALTH_CRITICAL
     if nodes_total > 0 and nodes_ready < nodes_total:
         return HEALTH_CRITICAL
     if restarts_recent > 0 or open_incidents > 0:
         return HEALTH_WARNING
+    if connection_status != "online":
+        return HEALTH_STALE
     return HEALTH_HEALTHY
 
 
@@ -229,6 +255,7 @@ def fleet_cluster_item(
     pods_running, pods_total = _pod_counts(rollup, latest_usage)
     nodes_ready, nodes_total = _node_counts(rollup, latest_usage)
     restarts_recent = restarts_recent_from_samples(samples)
+    connection_status = cluster_connection_status(agent)
     return FleetClusterSummaryItem(
         cluster_id=str(cluster["cluster_id"]),
         name=str(cluster.get("name") or cluster["cluster_id"]),
@@ -238,6 +265,8 @@ def fleet_cluster_item(
             nodes_total=nodes_total,
             restarts_recent=restarts_recent,
             open_incidents=open_incidents,
+            has_observations=has_observations(rollup, samples),
+            connection_status=connection_status,
         ),
         pods_running=pods_running,
         pods_total=pods_total,
@@ -335,6 +364,13 @@ def _latest_usage(samples: list[JsonObject]) -> JsonObject:
         return {}
     usage = samples[-1].get("usage")
     return dict(usage) if isinstance(usage, dict) else {}
+
+
+def has_observations(rollup: JsonObject, samples: list[JsonObject]) -> bool:
+    if any(_int_or_zero(rollup.get(key)) > 0 for key in ("pods_total", "nodes_total", "workloads_total")):
+        return True
+    latest_usage = _latest_usage(samples)
+    return any(_int_or_zero(latest_usage.get(key)) > 0 for key in ("pod_total", "node_total"))
 
 
 def _last_seen_at(

@@ -337,7 +337,7 @@ class InventorySummaryResponse(StrictModel):
 
 
 class FleetClusterSummaryItem(StrictModel):
-    """fleet 화면 클러스터 1개 롤업 — health 는 healthy|warning|critical."""
+    """fleet 화면 클러스터 1개 롤업 — health 는 healthy|warning|critical|stale|unknown."""
 
     cluster_id: str
     name: str
@@ -361,6 +361,8 @@ class FleetTotals(StrictModel):
     healthy: int = 0
     warning: int = 0
     critical: int = 0
+    stale: int = 0
+    unknown: int = 0
     open_incidents: int = 0
     pending_approvals: int = 0
     running_workflows: int = 0

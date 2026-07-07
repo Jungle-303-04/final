@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -212,7 +213,7 @@ def test_fleet_summary_scopes_to_accessible_clusters() -> None:
             ]
         },
         open_counts={CLUSTER_ID: 0},
-        agents={CLUSTER_ID: {"last_seen_at": "2026-07-07T10:06:00+00:00"}},
+        agents={CLUSTER_ID: {"last_seen_at": datetime.now(UTC).isoformat()}},
         pending_approvals=2,
         running_workflows=1,
         dead_letters=3,
@@ -238,7 +239,7 @@ def test_fleet_summary_scopes_to_accessible_clusters() -> None:
     assert item["restarts_recent"] == 0
     assert item["open_incidents"] == 0
     # agent 상태가 있으면 last_seen_at 은 agent 기준.
-    assert item["last_seen_at"] == "2026-07-07T10:06:00+00:00"
+    assert item["last_seen_at"] is not None
     # 현재 usage 롤업에 cpu/mem 실측이 없으므로 None(합성 금지).
     assert item["cpu_pct"] is None
     assert item["mem_pct"] is None
@@ -248,6 +249,8 @@ def test_fleet_summary_scopes_to_accessible_clusters() -> None:
         "healthy": 1,
         "warning": 0,
         "critical": 0,
+        "stale": 0,
+        "unknown": 0,
         "open_incidents": 0,
         "pending_approvals": 2,
         "running_workflows": 1,
@@ -291,6 +294,8 @@ def test_fleet_summary_marks_warning_and_critical_clusters() -> None:
     assert body["totals"]["healthy"] == 0
     assert body["totals"]["warning"] == 1
     assert body["totals"]["critical"] == 1
+    assert body["totals"]["stale"] == 0
+    assert body["totals"]["unknown"] == 0
     assert body["totals"]["open_incidents"] == 2
 
 
@@ -332,14 +337,54 @@ def test_rollup_health_rules_are_deterministic() -> None:
         "open_incidents": 0,
     }
     assert rollup_health(**healthy) == "healthy"
+    assert rollup_health(**{**healthy, "has_observations": False}) == "unknown"
+    assert rollup_health(**{**healthy, "connection_status": "stale"}) == "stale"
     # warning: 최근 재시작 또는 열린 인시던트.
     assert rollup_health(**{**healthy, "restarts_recent": 1}) == "warning"
     assert rollup_health(**{**healthy, "open_incidents": 1}) == "warning"
     # critical: degraded workload 1개 이상 또는 not-ready node — warning 조건보다 우선.
     assert rollup_health(**{**healthy, "workloads_degraded": 1}) == "critical"
     assert rollup_health(**{**healthy, "nodes_ready": 2, "restarts_recent": 9}) == "critical"
-    # node 관측이 아예 없으면(nodes_total=0) node 조건은 판정에서 제외.
-    assert rollup_health(**{**healthy, "nodes_ready": 0, "nodes_total": 0}) == "healthy"
+    # node 관측이 아예 없으면(nodes_total=0) node 조건은 판정에서 제외되지만 관측값 존재 여부는 별도로 판단한다.
+    assert rollup_health(**{**healthy, "nodes_ready": 0, "nodes_total": 0, "has_observations": True}) == "healthy"
+
+
+def test_fleet_summary_marks_unknown_when_cluster_has_no_observations() -> None:
+    db = FleetApiDb(
+        allowed=None,
+        registrations=[_registration()],
+        rollup={},
+        usage={},
+    )
+    client = make_client(db, session=_session())
+
+    body = client.get("/fleet/summary").json()
+
+    assert body["clusters"][0]["health"] == "unknown"
+    assert body["totals"]["unknown"] == 1
+    assert body["totals"]["healthy"] == 0
+
+
+def test_fleet_summary_marks_stale_when_agent_is_not_online() -> None:
+    db = FleetApiDb(
+        allowed=None,
+        registrations=[_registration()],
+        rollup={
+            CLUSTER_ID: {
+                "pods_running": 2,
+                "pods_total": 2,
+                "nodes_ready": 1,
+                "nodes_total": 1,
+            }
+        },
+        agents={CLUSTER_ID: {"last_seen_at": None}},
+    )
+    client = make_client(db, session=_session())
+
+    body = client.get("/fleet/summary").json()
+
+    assert body["clusters"][0]["health"] == "stale"
+    assert body["totals"]["stale"] == 1
 
 
 def test_restarts_recent_is_delta_of_last_two_samples() -> None:

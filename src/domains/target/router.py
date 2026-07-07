@@ -632,6 +632,11 @@ async def list_clusters(
         workspace_id,
         {cluster["cluster_id"] for cluster in clusters},
     )
+    open_incident_counts = (
+        db.count_open_rca_incidents(workspace_id, {cluster["cluster_id"] for cluster in clusters})
+        if hasattr(db, "count_open_rca_incidents")
+        else {}
+    )
     summaries = [
         cluster_summary(cluster, latest_agents.get(cluster["cluster_id"]))
         for cluster in clusters
@@ -647,7 +652,7 @@ async def list_clusters(
             )
             summary.node_count = counts.get("node", 0)
             summary.pod_count = counts.get("pod", 0)
-            summary.incident_count = 0
+        summary.incident_count = int(open_incident_counts.get(summary.cluster_id, 0))
     return ClusterListResponse(clusters=summaries)
 
 

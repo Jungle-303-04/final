@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:12 KST (workload scale 실행 정책 정합성)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:16 KST (fleet health truthfulness)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,25 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (19:16 KST) — fleet health truthfulness
+
+- 구현:
+  - `/fleet/summary` health에 `stale`, `unknown` 상태를 추가했다.
+  - pod/node/usage 관측값이 없으면 더 이상 `healthy`가 아니라 `unknown`으로 표시된다.
+  - 관측값은 있으나 agent connection status가 online이 아니면 `stale`로 표시된다. 단 critical/warning 조건이 있으면 그 상태가 우선이다.
+  - Fleet totals에 `stale`, `unknown` 카운트를 추가했다.
+  - `/clusters` 목록의 `incident_count`를 0으로 하드코딩하지 않고 `count_open_rca_incidents` projection 값을 사용한다.
+  - 프론트 fleet health 타입/라벨/heatmap score/severity를 `stale`, `unknown`까지 확장했다.
+  - mock/fake/hardcoded production data 추가 없음.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_fleet_router.py tests/test_target_registration.py tests/test_platform_foundation_openapi.py` → 37 passed.
+  - `.venv/bin/ruff check src/domains/dashboard/fleet_router.py src/domains/target/router.py src/packages/contracts/gateway/responses.py tests/test_fleet_router.py tests/test_target_registration.py` → passed.
+  - `cd frontend && npm run typecheck` → passed.
+- 남은 관련 작업:
+  - cluster-agent provider failure 자체를 evidence payload/status에 명시하는 source-level provider_error 저장.
+  - service/endpoint health read model(서비스 selector/endpoints/pod readiness 조인).
+  - CPU/MEM metrics-to-usage projection.
 
 ## 체크포인트 (19:12 KST) — workload scale 실행 정책 정합성
 
