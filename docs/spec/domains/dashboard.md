@@ -11,6 +11,7 @@ status: synced
 
 - 이미 흐른 RCA/command/safe_pr 이벤트를 화면에서 바로 읽기 좋은 `rca_timeline` row로 투영하는 read model 테이블·리포지토리·투영 함수를 소유한다.
 - 권한이 적용된 RCA timeline 조회 HTTP API 2종을 제공한다.
+- 콘솔 루트 화면용 fleet 롤업 API 2종(`/fleet/summary`, `/clusters/{cluster_id}/summary`)을 제공한다 — `src/domains/dashboard/fleet_router.py`.
 - 이 도메인은 **이벤트를 새로 발행하지 않는다**. 투영 트리거(이벤트 소비 루프)는 projection 워커가 담당한다.
 
 ## 의존성 (Dependencies)
@@ -74,6 +75,10 @@ status: synced
 | `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① `preserve_when_missing` 컬럼(cluster_id, incident_id, evidence_ref, root_cause, confidence, supporting_evidence, missing_evidence, action_route, command_id, pr_url)은 `coalesce(EXCLUDED.<col>, 기존값)` — 새 값이 NULL이면 기존값 보존. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
 | `list_rca_timeline` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None, limit: int = 50) -> list[JsonObject]` | `allowed_cluster_ids == set()`이면 빈 리스트 즉시 반환(권한 0). `WHERE workspace_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT ?` 후 `serialize_timeline_row`. `None`은 필터 없음(전체 허용) |
 | `get_rca_timeline_item` | `(self, workspace_id: str, incident_id: str, allowed_cluster_ids: set[str] \| None) -> JsonObject \| None` | `WHERE workspace_id=? AND incident_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT 1` |
+| `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 인시던트 수. `WHERE workspace_id=? AND incident_id IS NOT NULL AND cluster_id IS NOT NULL AND status NOT IN CLOSED_INCIDENT_STATUSES [AND cluster_id IN allowed] GROUP BY cluster_id`. 빈 허용 집합이면 `{}` |
+| `list_open_rca_incidents` | `(self, workspace_id: str, cluster_id: str, *, limit: int = 20) -> list[JsonObject]` | 드릴다운용 — 같은 open 판정으로 `updated_at DESC LIMIT`(1..100 clamp) 후 `open_incident_summary` 적용 |
+
+열린 인시던트 판정 상수 `CLOSED_INCIDENT_STATUSES`(앵커: `src/domains/dashboard/repository.py :: CLOSED_INCIDENT_STATUSES`) = `("command_completed", "command_rejected", "pr_created", "pr_failed")` — 이 종결 status 에 도달하지 않았고 `incident_id`가 있는 row 가 open. 모듈 함수 `open_incident_summary`(앵커: `src/domains/dashboard/repository.py :: open_incident_summary`)는 timeline row 를 `{incident_id, correlation_id, symptom(payload `incident.symptom` → `symptom`), root_cause, status, created_at}` 화이트리스트 요약으로 변환한다(payload 원문 비노출).
 
 #### `timeline_update_from_event(evt)` 투영 규칙
 
@@ -92,6 +97,31 @@ status: synced
 | `GET /dashboard/rca/incidents/{incident_id}` (`DASHBOARD_RCA_INCIDENT_PATH`) | `src/domains/dashboard/router.py :: rca_incident` | query `cluster_id: str \| None = None` | `RcaIncidentResponse(item=RcaTimelineItem)`; 없으면 404 `"RCA incident not found"` | 동일 |
 
 공개 헬퍼: `timeline_item(row: JsonObject) -> RcaTimelineItem` (`src/domains/dashboard/router.py :: timeline_item`) — `TIMELINE_ITEM_FIELDS`만 추출, supporting/missing_evidence는 `or []`.
+
+### fleet 라우터 — `src/domains/dashboard/fleet_router.py`
+
+콘솔 루트(fleet) 화면용 워크스페이스 전체 롤업. `router = APIRouter()`(앵커: `src/domains/dashboard/fleet_router.py :: router`), 테스트: `tests/test_fleet_router.py`.
+
+| 메서드+경로 | 핸들러(앵커) | 응답 | 권한 |
+|---|---|---|---|
+| `GET /fleet/summary` (`gateway_routes.FLEET_SUMMARY_PATH`) | `src/domains/dashboard/fleet_router.py :: fleet_summary` | `FleetSummaryResponse(clusters=[FleetClusterSummaryItem...], totals=FleetTotals)` | `require_session` + `accessible_resource_ids(cluster, Permission.CLUSTER_READ)`로 클러스터 필터 |
+| `GET /clusters/{cluster_id}/summary` (`CLUSTER_SUMMARY_PATH`) | `src/domains/dashboard/fleet_router.py :: cluster_summary_detail` | `ClusterSummaryDetailResponse`; 미등록 클러스터면 404 `"cluster not found"` | `require_session` + cluster `Permission.CLUSTER_READ`(기존 클러스터 라우트와 동일 가드) |
+
+health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_router.py :: rollup_health`, 결정적·단위 테스트 고정):
+
+1. `critical`: degraded workload 수 > `FLEET_DEGRADED_WORKLOAD_THRESHOLD`(0, 앵커: `src/domains/dashboard/fleet_router.py :: FLEET_DEGRADED_WORKLOAD_THRESHOLD`) **또는** `nodes_total > 0`이면서 `nodes_ready < nodes_total`.
+2. `warning`: `restarts_recent > 0` **또는** `open_incidents > 0`.
+3. 그 외 `healthy`. (node 관측이 없으면(nodes_total=0) node 조건은 판정에서 제외)
+
+집계 원천(공개 헬퍼):
+
+- `build_fleet_summary`(앵커: `src/domains/dashboard/fleet_router.py :: build_fleet_summary`) — `list_cluster_registrations`(허용 집합) → 테스트 클러스터 숨김(target 라우터의 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS` 재사용) → `fleet_inventory_rollup` + `latest_cluster_usage_rollups` + `count_open_rca_incidents` + `latest_cluster_agent_statuses`(클러스터가 있을 때만 호출) → totals 에 `count_open_workflow_approvals`/`count_running_workflow_runs`(gitops)·`open_dead_letter_count`(플랫폼 전역, 개수만) 합산.
+- `restarts_recent_from_samples`(앵커: `src/domains/dashboard/fleet_router.py :: restarts_recent_from_samples`) — 최신 usage 샘플 2개의 `restart_total` 델타(샘플<2 또는 음수면 0).
+- `usage_pct`(앵커: `src/domains/dashboard/fleet_router.py :: usage_pct`) — usage 롤업의 실측 pct/ratio(×100) 키만 추출, 없으면 None(합성 금지) → `cpu_pct`/`mem_pct`.
+- `build_cluster_summary_detail`(앵커: `src/domains/dashboard/fleet_router.py :: build_cluster_summary_detail`) — workload 를 health 값으로 그룹(`list_inventory_resources(resource_type="workload")`), 최근 Warning 이벤트(`list_recent_warning_events`, 최대 10건), 열린 인시던트(`list_open_rca_incidents`), 최신 usage 스냅샷(`usage_snapshot`).
+- pod/node 수는 inventory 롤업 우선, inventory 에 해당 행이 없으면 최신 usage 샘플로 대체. `last_seen_at`은 agent 상태 → inventory 최근 관측 → usage 샘플 순.
+
+응답 모델(`FleetSummaryResponse`, `FleetClusterSummaryItem`, `FleetTotals`, `ClusterSummaryDetailResponse`, `ClusterWorkloadHealthItem`, `ClusterWarningEventItem`, `ClusterOpenIncidentItem`, `ClusterUsageSnapshot`) 정의는 [contracts](../packages/contracts.md) 소유(`src/packages/contracts/gateway/responses.py`).
 
 ## 데이터 모델 (Data Model)
 
