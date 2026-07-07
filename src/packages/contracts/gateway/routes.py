@@ -79,6 +79,11 @@ CLUSTER_INVENTORY_SERVICES_PATH = "/clusters/{cluster_id}/inventory/services"
 CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
 # 스냅샷 기반 실측 활용 시계열(usage rollup) — 콘솔 추이 차트용.
 CLUSTER_USAGE_PATH = "/clusters/{cluster_id}/usage"
+CLUSTER_METRIC_QUERY_PRESETS_PATH = "/clusters/{cluster_id}/metric-query-presets"
+CLUSTER_METRIC_QUERY_PRESET_PATH = "/clusters/{cluster_id}/metric-query-presets/{preset_id}"
+CLUSTER_METRIC_QUERY_PRESET_RUN_PATH = "/clusters/{cluster_id}/metric-query-presets/{preset_id}/run"
+CLUSTER_METRIC_WIDGETS_PATH = "/clusters/{cluster_id}/metric-widgets"
+CLUSTER_METRIC_WIDGET_PATH = "/clusters/{cluster_id}/metric-widgets/{widget_id}"
 CLUSTER_DEPLOYMENT_SCALE_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale"
 )

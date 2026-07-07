@@ -86,6 +86,53 @@ class CommandStatusResponse(StrictModel):
     completed_at: str | None = None
 
 
+class MetricQueryPresetItem(StrictModel):
+    preset_id: str
+    workspace_id: str
+    cluster_id: str
+    name: str
+    description: str = ""
+    source: str
+    query: str
+    range_seconds: int | None = None
+    step_seconds: int | None = None
+    unit: str = ""
+    metadata: JsonMap = Field(default_factory=dict)
+    created_by: str
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class MetricQueryPresetListResponse(StrictModel):
+    items: list[MetricQueryPresetItem] = Field(default_factory=list)
+
+
+class MetricQueryPresetResponse(StrictModel):
+    item: MetricQueryPresetItem
+
+
+class MetricWidgetItem(StrictModel):
+    widget_id: str
+    workspace_id: str
+    cluster_id: str
+    query_preset_id: str
+    title: str
+    kind: str
+    position: JsonMap = Field(default_factory=dict)
+    settings: JsonMap = Field(default_factory=dict)
+    created_by: str
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class MetricWidgetListResponse(StrictModel):
+    items: list[MetricWidgetItem] = Field(default_factory=list)
+
+
+class MetricWidgetResponse(StrictModel):
+    item: MetricWidgetItem
+
+
 class RcaTimelineItem(StrictModel):
     workspace_id: str
     correlation_id: str

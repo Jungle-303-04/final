@@ -4,11 +4,58 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Float, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Float, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.storage.base import Base, created_at_column, text_column, updated_at_column
+from packages.storage.base import (
+    Base,
+    created_at_column,
+    jsonb_column,
+    text_column,
+    updated_at_column,
+)
+
+
+class MetricQueryPreset(Base):
+    __tablename__ = "metric_query_presets"
+    __table_args__ = (UniqueConstraint("workspace_id", "cluster_id", "name"),)
+
+    preset_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
+    cluster_id: Mapped[str] = text_column()
+    name: Mapped[str] = text_column()
+    description: Mapped[str] = text_column()
+    source: Mapped[str] = text_column()
+    query: Mapped[str] = text_column()
+    range_seconds: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    step_seconds: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    unit: Mapped[str] = text_column()
+    created_by: Mapped[str] = text_column()
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class MetricWidget(Base):
+    __tablename__ = "metric_widgets"
+    __table_args__ = (UniqueConstraint("workspace_id", "cluster_id", "title"),)
+
+    widget_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
+    cluster_id: Mapped[str] = text_column()
+    query_preset_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("metric_query_presets.preset_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = text_column()
+    kind: Mapped[str] = text_column()
+    position: Mapped[dict[str, Any]] = jsonb_column()
+    settings: Mapped[dict[str, Any]] = jsonb_column()
+    created_by: Mapped[str] = text_column()
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
 
 
 class RcaTimeline(Base):

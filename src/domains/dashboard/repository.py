@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, case, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from domains.dashboard.models import RcaTimeline
+from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
@@ -61,6 +61,163 @@ CLOSED_INCIDENT_STATUSES: tuple[str, ...] = (
 
 class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
+
+    def list_metric_query_presets(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
+        table = MetricQueryPreset.__table__
+        statement: Select[Any] = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .order_by(table.c.updated_at.desc(), table.c.name.asc())
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_metric_query_preset(row) for row in rows]
+
+    def get_metric_query_preset(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        preset_id: str,
+    ) -> JsonObject | None:
+        table = MetricQueryPreset.__table__
+        statement: Select[Any] = select(table).where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.preset_id == preset_id,
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_metric_query_preset(row) if row is not None else None
+
+    def upsert_metric_query_preset(
+        self,
+        row: JsonObject,
+        *,
+        conflict_by_name: bool = False,
+    ) -> JsonObject:
+        table = MetricQueryPreset.__table__
+        insert = pg_insert(table).values(**row, updated_at=func.now())
+        excluded = insert.excluded
+        updates = {
+            "description": excluded.description,
+            "source": excluded.source,
+            "query": excluded.query,
+            "range_seconds": excluded.range_seconds,
+            "step_seconds": excluded.step_seconds,
+            "unit": excluded.unit,
+            "created_by": excluded.created_by,
+            "metadata": excluded["metadata"],
+            "updated_at": func.now(),
+        }
+        if not conflict_by_name:
+            updates["name"] = excluded.name
+        statement = insert.on_conflict_do_update(
+            index_elements=(
+                [table.c.workspace_id, table.c.cluster_id, table.c.name]
+                if conflict_by_name
+                else [table.c.preset_id]
+            ),
+            set_=updates,
+        ).returning(table)
+        with self.connection() as conn:
+            saved = conn.execute(statement).mappings().one()
+        return serialize_metric_query_preset(saved)
+
+    def delete_metric_query_preset(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        preset_id: str,
+    ) -> bool:
+        table = MetricQueryPreset.__table__
+        statement = (
+            delete(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.preset_id == preset_id,
+            )
+            .returning(table.c.preset_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).first() is not None
+
+    def list_metric_widgets(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
+        table = MetricWidget.__table__
+        statement: Select[Any] = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .order_by(table.c.updated_at.desc(), table.c.title.asc())
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_metric_widget(row) for row in rows]
+
+    def get_metric_widget(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        widget_id: str,
+    ) -> JsonObject | None:
+        table = MetricWidget.__table__
+        statement: Select[Any] = select(table).where(
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.widget_id == widget_id,
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return serialize_metric_widget(row) if row is not None else None
+
+    def upsert_metric_widget(
+        self,
+        row: JsonObject,
+        *,
+        conflict_by_title: bool = False,
+    ) -> JsonObject:
+        table = MetricWidget.__table__
+        insert = pg_insert(table).values(**row, updated_at=func.now())
+        excluded = insert.excluded
+        updates = {
+            "query_preset_id": excluded.query_preset_id,
+            "kind": excluded.kind,
+            "position": excluded.position,
+            "settings": excluded.settings,
+            "created_by": excluded.created_by,
+            "updated_at": func.now(),
+        }
+        if not conflict_by_title:
+            updates["title"] = excluded.title
+        statement = insert.on_conflict_do_update(
+            index_elements=(
+                [table.c.workspace_id, table.c.cluster_id, table.c.title]
+                if conflict_by_title
+                else [table.c.widget_id]
+            ),
+            set_=updates,
+        ).returning(table)
+        with self.connection() as conn:
+            saved = conn.execute(statement).mappings().one()
+        return serialize_metric_widget(saved)
+
+    def delete_metric_widget(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        widget_id: str,
+    ) -> bool:
+        table = MetricWidget.__table__
+        statement = (
+            delete(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.widget_id == widget_id,
+            )
+            .returning(table.c.widget_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).first() is not None
 
     def upsert_rca_timeline(self, row: JsonObject) -> None:
         """correlation_id 단위로 최신 RCA 흐름 상태 갱신."""
@@ -233,6 +390,23 @@ def open_incident_summary(row: JsonObject) -> JsonObject:
         "status": row.get("status"),
         "created_at": row.get("created_at"),
     }
+
+
+def serialize_metric_query_preset(row: Any) -> JsonObject:
+    item = dict(row)
+    item["metadata"] = dict(item.get("metadata") or item.get("metadata_") or {})
+    for key in ("created_at", "updated_at"):
+        item[key] = _iso_or_none(item.get(key))
+    return item
+
+
+def serialize_metric_widget(row: Any) -> JsonObject:
+    item = dict(row)
+    item["position"] = dict(item.get("position") or {})
+    item["settings"] = dict(item.get("settings") or {})
+    for key in ("created_at", "updated_at"):
+        item[key] = _iso_or_none(item.get(key))
+    return item
 
 
 def incident_logical_key(row: JsonObject) -> str:

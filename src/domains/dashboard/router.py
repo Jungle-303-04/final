@@ -3,18 +3,33 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from domains.command.router import debug_query_plan
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
     require_cluster_access,
     require_session,
 )
+from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.requests import (
+    AgentDebugQueryRequest,
+    MetricQueryPresetUpsertRequest,
+    MetricWidgetUpsertRequest,
+)
 from packages.contracts.gateway.responses import (
+    AgentDebugQueryResponse,
+    MetricQueryPresetItem,
+    MetricQueryPresetListResponse,
+    MetricQueryPresetResponse,
+    MetricWidgetItem,
+    MetricWidgetListResponse,
+    MetricWidgetResponse,
     RcaIncidentResponse,
     RcaTimelineItem,
     RcaTimelineResponse,
@@ -26,8 +41,195 @@ DEFAULT_TIMELINE_LIMIT = 50
 MAX_TIMELINE_LIMIT = 100
 NOT_FOUND_CODE = 404
 TIMELINE_ITEM_FIELDS = set(RcaTimelineItem.model_fields)
+METRIC_QUERY_FIELDS = set(MetricQueryPresetItem.model_fields)
+METRIC_WIDGET_FIELDS = set(MetricWidgetItem.model_fields)
+METRIC_PRESET_NOT_FOUND = "metric query preset not found"
+METRIC_WIDGET_NOT_FOUND = "metric widget not found"
 
 router = APIRouter()
+
+
+@router.get(
+    gateway_routes.CLUSTER_METRIC_QUERY_PRESETS_PATH,
+    response_model=MetricQueryPresetListResponse,
+)
+async def list_metric_query_presets(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> MetricQueryPresetListResponse:
+    workspace_id = _workspace_id(current)
+    _require_dashboard_access(db, current, workspace_id, cluster_id)
+    rows = await asyncio.to_thread(db.list_metric_query_presets, workspace_id, cluster_id)
+    return MetricQueryPresetListResponse(items=[metric_query_item(row) for row in rows])
+
+
+@router.post(
+    gateway_routes.CLUSTER_METRIC_QUERY_PRESETS_PATH,
+    response_model=MetricQueryPresetResponse,
+)
+async def upsert_metric_query_preset(
+    cluster_id: str,
+    payload: MetricQueryPresetUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> MetricQueryPresetResponse:
+    workspace_id = _workspace_id(current)
+    _require_dashboard_manage_access(db, current, workspace_id, cluster_id)
+    row = {
+        "preset_id": payload.preset_id or f"metric-query-{uuid.uuid4()}",
+        "workspace_id": workspace_id,
+        "cluster_id": cluster_id,
+        "name": payload.name,
+        "description": payload.description,
+        "source": payload.source,
+        "query": payload.query,
+        "range_seconds": payload.range_seconds,
+        "step_seconds": payload.step_seconds,
+        "unit": payload.unit,
+        "created_by": current.user_id,
+        "metadata": payload.metadata,
+    }
+    saved = await asyncio.to_thread(
+        db.upsert_metric_query_preset,
+        row,
+        conflict_by_name=payload.preset_id is None,
+    )
+    return MetricQueryPresetResponse(item=metric_query_item(saved))
+
+
+@router.delete(gateway_routes.CLUSTER_METRIC_QUERY_PRESET_PATH, status_code=204)
+async def delete_metric_query_preset(
+    cluster_id: str,
+    preset_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = _workspace_id(current)
+    _require_dashboard_manage_access(db, current, workspace_id, cluster_id)
+    deleted = await asyncio.to_thread(
+        db.delete_metric_query_preset,
+        workspace_id,
+        cluster_id,
+        preset_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=METRIC_PRESET_NOT_FOUND)
+    return Response(status_code=204)
+
+
+@router.post(
+    gateway_routes.CLUSTER_METRIC_QUERY_PRESET_RUN_PATH,
+    response_model=AgentDebugQueryResponse,
+)
+async def run_metric_query_preset(
+    cluster_id: str,
+    preset_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> AgentDebugQueryResponse:
+    workspace_id = _workspace_id(current)
+    _require_evidence_access(db, current, workspace_id, cluster_id)
+    preset = await asyncio.to_thread(
+        db.get_metric_query_preset,
+        workspace_id,
+        cluster_id,
+        preset_id,
+    )
+    if preset is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=METRIC_PRESET_NOT_FOUND)
+    correlation_id = f"corr-debug-{uuid.uuid4()}"
+    query_request = AgentDebugQueryRequest(
+        cluster_id=cluster_id,
+        query=metric_query_payload(preset),
+        reason=f"metric query preset: {preset['name']}",
+    )
+    plan = debug_query_plan(
+        query_request,
+        workspace_id=workspace_id,
+        requested_by=current.user_id,
+        correlation_id=correlation_id,
+    )
+    await asyncio.to_thread(db.queue_agent_command, correlation_id, plan, CommandStatus.QUEUED)
+    return AgentDebugQueryResponse(
+        accepted=True,
+        command_id=str(plan["command_id"]),
+        correlation_id=correlation_id,
+    )
+
+
+@router.get(
+    gateway_routes.CLUSTER_METRIC_WIDGETS_PATH,
+    response_model=MetricWidgetListResponse,
+)
+async def list_metric_widgets(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> MetricWidgetListResponse:
+    workspace_id = _workspace_id(current)
+    _require_dashboard_access(db, current, workspace_id, cluster_id)
+    rows = await asyncio.to_thread(db.list_metric_widgets, workspace_id, cluster_id)
+    return MetricWidgetListResponse(items=[metric_widget_item(row) for row in rows])
+
+
+@router.post(
+    gateway_routes.CLUSTER_METRIC_WIDGETS_PATH,
+    response_model=MetricWidgetResponse,
+)
+async def upsert_metric_widget(
+    cluster_id: str,
+    payload: MetricWidgetUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> MetricWidgetResponse:
+    workspace_id = _workspace_id(current)
+    _require_dashboard_manage_access(db, current, workspace_id, cluster_id)
+    preset = await asyncio.to_thread(
+        db.get_metric_query_preset,
+        workspace_id,
+        cluster_id,
+        payload.query_preset_id,
+    )
+    if preset is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=METRIC_PRESET_NOT_FOUND)
+    row = {
+        "widget_id": payload.widget_id or f"metric-widget-{uuid.uuid4()}",
+        "workspace_id": workspace_id,
+        "cluster_id": cluster_id,
+        "query_preset_id": payload.query_preset_id,
+        "title": payload.title,
+        "kind": payload.kind,
+        "position": payload.position,
+        "settings": payload.settings,
+        "created_by": current.user_id,
+    }
+    saved = await asyncio.to_thread(
+        db.upsert_metric_widget,
+        row,
+        conflict_by_title=payload.widget_id is None,
+    )
+    return MetricWidgetResponse(item=metric_widget_item(saved))
+
+
+@router.delete(gateway_routes.CLUSTER_METRIC_WIDGET_PATH, status_code=204)
+async def delete_metric_widget(
+    cluster_id: str,
+    widget_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = _workspace_id(current)
+    _require_dashboard_manage_access(db, current, workspace_id, cluster_id)
+    deleted = await asyncio.to_thread(
+        db.delete_metric_widget,
+        workspace_id,
+        cluster_id,
+        widget_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=METRIC_WIDGET_NOT_FOUND)
+    return Response(status_code=204)
 
 
 @router.get(
@@ -104,6 +306,71 @@ def timeline_item(row: JsonObject) -> RcaTimelineItem:
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaTimelineItem(**data)
+
+
+def metric_query_item(row: JsonObject) -> MetricQueryPresetItem:
+    data = {key: row.get(key) for key in METRIC_QUERY_FIELDS}
+    data["metadata"] = row.get("metadata") or {}
+    return MetricQueryPresetItem(**data)
+
+
+def metric_widget_item(row: JsonObject) -> MetricWidgetItem:
+    data = {key: row.get(key) for key in METRIC_WIDGET_FIELDS}
+    data["position"] = row.get("position") or {}
+    data["settings"] = row.get("settings") or {}
+    return MetricWidgetItem(**data)
+
+
+def metric_query_payload(row: JsonObject) -> JsonObject:
+    payload: JsonObject = {
+        "source": str(row["source"]),
+        "name": str(row["name"]),
+        "description": str(row.get("description") or ""),
+        "query": str(row["query"]),
+    }
+    if row.get("range_seconds") is not None:
+        payload["range_seconds"] = int(row["range_seconds"])
+    if row.get("step_seconds") is not None:
+        payload["step_seconds"] = int(row["step_seconds"])
+    return payload
+
+
+def _require_dashboard_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.DASHBOARD_READ.value,
+        detail=RESOURCE_ACCESS_DENIED_MESSAGE,
+    )
+
+
+def _require_dashboard_manage_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> None:
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.DASHBOARD_MANAGE.value,
+        detail=RESOURCE_ACCESS_DENIED_MESSAGE,
+    )
+
+
+def _require_evidence_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.EVIDENCE_READ.value,
+        detail=RESOURCE_ACCESS_DENIED_MESSAGE,
+    )
 
 
 def _workspace_id(current: Any) -> str:
