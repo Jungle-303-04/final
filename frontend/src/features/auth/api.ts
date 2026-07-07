@@ -5,7 +5,7 @@ import { uiStore } from '@/shared/lib/ui-store';
 
 export const sessionKey = ['session'] as const;
 export function useSession() {
-  return useQuery({ queryKey: sessionKey, queryFn: () => get<Session>('/auth/session'), staleTime: 60_000 });
+  return useQuery({ queryKey: sessionKey, queryFn: () => get<Session>('/auth/session'), staleTime: 60_000, retry: false });
 }
 export function refreshSession() {
   return post<Session>('/auth/session/refresh');

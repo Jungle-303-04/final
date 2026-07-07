@@ -25,7 +25,7 @@ status: synced
 | 심볼 | 앵커 | 시그니처 | API (메서드+경로) | 비고 |
 |---|---|---|---|---|
 | `sessionKey` | `frontend/src/features/auth/api.ts :: sessionKey` | `['session'] as const` | — | 세션 쿼리 키 |
-| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` | `staleTime: 60_000` |
+| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` | `staleTime: 60_000`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다 |
 | `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 시 `sessionKey` invalidate |
 | `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `qc.clear()` (캐시 전체 삭제) |
 | `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
