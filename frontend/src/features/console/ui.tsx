@@ -2,7 +2,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { API_MODE } from '@/shared/lib/api';
 import { liveStore, startLive } from '@/shared/lib/live';
 import { uiStore } from '@/shared/lib/ui-store';
 import { useIsAdmin, useLogout, useSession } from '@/features/auth/api';
@@ -129,7 +128,6 @@ export function ConsoleLayout() {
                   ● LIVE
                 </span>
               </PulseOnChange>
-              {API_MODE === 'mock' && <Chip severity="warning">MOCK 모드</Chip>}
             </div>
             <div className="co-header-right">
               <button
