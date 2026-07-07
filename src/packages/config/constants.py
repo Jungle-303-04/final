@@ -25,7 +25,7 @@ class Target:
 
 class Auth:
     LOCAL_USER_ID: Final[str] = "local-user"
-    DEFAULT_SESSION_TTL_SECONDS: Final[str] = "86400"
+    DEFAULT_SESSION_TTL_SECONDS: Final[str] = "7200"
     SESSION_TTL_ENV: Final[str] = "SESSION_TTL_SECONDS"
     SESSION_COOKIE_NAME: Final[str] = "service_session"
     # 세션 쿠키 httpOnly 설정으로 JS 토큰 접근 차단(XSS 탈취 차단). Secure 는 운영 기본 on,

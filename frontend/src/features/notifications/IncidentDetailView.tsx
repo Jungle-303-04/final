@@ -3,14 +3,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
-import { useEvidence, useIncident, useRcaReports } from '@/features/notifications/api';
+import { useEvidence, useIncident, useRcaReports, useRecoveryPlan } from '@/features/notifications/api';
 import { Badge, Breadcrumbs, Button, Card, CodeBlock, CopyChip, EmptyState, KeyValue, QueryBoundary, Skeleton } from '@/shared/ui';
 import { toneColor, toneOf } from '@/shared/ui/status';
 import { FlowCanvas, useAutoLayout, type CollapsibleGroupData, type FlowEdgeData } from '@/shared/flow';
 import { AnimatePresence, FadeSlideIn } from '@/shared/motion';
 import { motion } from 'motion/react';
 import { fmtAbs, timeAgo } from '@/shared/lib/format';
-import type { EvidenceRecord, IncidentDetail, RcaCandidateScore, RcaEvidenceRef, RcaReportSummary, Tone } from '@/shared/lib/types';
+import type { EvidenceRecord, IncidentDetail, RcaCandidateScore, RcaEvidenceRef, RcaReportSummary, RecoveryActionCandidate, RecoveryPlanStatus, Tone } from '@/shared/lib/types';
 import { IconAlertTriangle, IconFile } from '@/shared/ui/icons';
 
 /* 파이프라인 단계 순서 — current_subject 를 방어적으로 매핑(백엔드 subject 네이밍 변화 흡수) */
@@ -187,6 +187,7 @@ export default function IncidentDetailView() {
               {inc.error_reason && (
                 <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)', marginBottom: 0 }}>실패 사유: {inc.error_reason}</p>
               )}
+              <RecoveryPlanPanel correlationId={inc.correlation_id} />
             </Card>
           </div>
           <div className="split split--even" style={{ marginTop: 16 }}>
@@ -197,6 +198,88 @@ export default function IncidentDetailView() {
       )}</QueryBoundary>
     </FadeSlideIn>
   );
+}
+
+/* ── Recovery plan 상태 — RCA 완료 후 selection/requested/selected 상태 노출 ── */
+function RecoveryPlanPanel({ correlationId }: { correlationId: string }) {
+  const q = useRecoveryPlan(correlationId || undefined);
+  const missing = q.isError && (q.error as { kind?: string }).kind === 'not_found';
+  const plan = q.data;
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 'var(--fs-sm)' }}>복구 계획</strong>
+        {plan && <Badge tone={recoveryPlanTone(plan)}>{plan.status}</Badge>}
+      </div>
+      {q.isPending ? <Skeleton lines={2} /> : missing ? (
+        <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>
+          RCA 완료 후 복구 후보가 생성되면 여기에 표시됩니다.
+        </p>
+      ) : q.isError ? (
+        <EmptyState icon={<IconAlertTriangle size={24} />} title="복구 계획을 불러오지 못했습니다"
+          description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
+      ) : plan ? (
+        <RecoveryPlanSummary plan={plan} />
+      ) : null}
+    </div>
+  );
+}
+
+function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
+  const selected = plan.selected_action;
+  const recommended = plan.candidates.find(c => c.action_id === plan.recommended_action_id) ?? null;
+  const visible = [
+    ...(selected ? [selected] : []),
+    ...plan.candidates.filter(c => c.action_id !== selected?.action_id).slice(0, selected ? 2 : 3),
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)', margin: 0 }}>{plan.summary}</p>
+      <KeyValue pairs={[
+        ['경로', plan.execution_route],
+        ['추천', recommended ? recommended.title : plan.recommended_action_id],
+        ['선택', selected ? selected.title : plan.selection_required ? '선택 대기' : '자동 진행'],
+      ]} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {visible.map(candidate => (
+          <RecoveryCandidateRow
+            key={candidate.action_id}
+            candidate={candidate}
+            recommended={candidate.action_id === plan.recommended_action_id}
+            selected={candidate.action_id === plan.selected_action_id}
+          />
+        ))}
+      </div>
+      {plan.selected_by && (
+        <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>
+          선택자: <code>{plan.selected_by}</code>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function RecoveryCandidateRow({ candidate, recommended, selected }: { candidate: RecoveryActionCandidate; recommended: boolean; selected: boolean }) {
+  return (
+    <div style={{ padding: '7px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', borderLeft: `2px solid ${selected ? 'var(--ok)' : recommended ? 'var(--brand)' : 'var(--border)'}` }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 'var(--fs-xs)', fontWeight: 600 }}>{candidate.title}</span>
+        {selected && <Badge tone="ok">선택됨</Badge>}
+        {recommended && !selected && <Badge tone="info">추천</Badge>}
+        {candidate.approval_required && <Badge tone="warn">승인 필요</Badge>}
+        <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>{candidate.route}</span>
+      </div>
+      <p style={{ margin: '4px 0 0', color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>
+        {candidate.description} · 위험 {candidate.risk_level} · 영향 {candidate.blast_radius}
+      </p>
+    </div>
+  );
+}
+
+function recoveryPlanTone(plan: RecoveryPlanStatus): Tone {
+  if (plan.status === 'selected') return 'ok';
+  if (plan.status === 'selection_requested') return 'warn';
+  return plan.selection_required ? 'info' : 'neutral';
 }
 
 /* ── 저장된 증거 목록 — GET /evidence?correlation_id= ─────────────────────── */

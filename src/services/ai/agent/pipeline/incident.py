@@ -12,7 +12,7 @@ from domains.rca.events import (
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from services.ai.agent.defaults import IncidentMessages, RcaMessages
 from services.ai.agent.pipeline.evidence_bundle import build_incident_evidence_bundle
-from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
+from services.ai.agent.pipeline.symptom import UNKNOWN_SYMPTOM, derive_symptom, resolve_resource
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,22 @@ class IncidentDetector:
         )
 
     def has_signal(self, evidence: Evidence) -> bool:
-        return bool(evidence.logs or evidence.kubernetes.get("pods") or evidence.metrics)
+        derived = derive_symptom(evidence.kubernetes)
+        if derived.signal is not None or derived.symptom != UNKNOWN_SYMPTOM:
+            return True
+
+        # Alertmanager webhook evidence arrives through metrics, not the Kubernetes
+        # snapshot. Keep firing alert groups incident-worthy without treating every
+        # normal metrics sample as an incident.
+        alertmanager = (
+            evidence.metrics.get("alertmanager") if isinstance(evidence.metrics, dict) else None
+        )
+        if isinstance(alertmanager, dict):
+            alerts = alertmanager.get("alerts")
+            return isinstance(alerts, list) and any(
+                isinstance(alert, dict) and alert.get("status") == "firing" for alert in alerts
+            )
+        return False
 
     def classify(self, evidence: Evidence, incident_id: str) -> IncidentRecord:
         # 명시 symptom(webhook/fixture)이 있으면 그대로, 없으면 snapshot 신호에서 유도.

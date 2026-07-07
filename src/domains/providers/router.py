@@ -2,10 +2,22 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from domains.providers.catalog import catalog_body, validate_provider_selection
+from domains.providers.catalog import (
+    catalog_body,
+    cluster_registration_discovery,
+    validate_provider_selection,
+)
 from packages.contracts.gateway.requests import ProviderSelectionRequest
-from packages.contracts.gateway.responses import ProviderCatalogResponse, ProviderValidationResponse
-from packages.contracts.gateway.routes import PROVIDERS_CATALOG_PATH, PROVIDERS_VALIDATE_PATH
+from packages.contracts.gateway.responses import (
+    ProviderCatalogResponse,
+    ProviderClusterDiscoveryResponse,
+    ProviderValidationResponse,
+)
+from packages.contracts.gateway.routes import (
+    PROVIDERS_CATALOG_PATH,
+    PROVIDERS_CLUSTER_DISCOVERY_PATH,
+    PROVIDERS_VALIDATE_PATH,
+)
 
 router = APIRouter()
 
@@ -13,6 +25,14 @@ router = APIRouter()
 @router.get(PROVIDERS_CATALOG_PATH, response_model=ProviderCatalogResponse)
 async def provider_catalog() -> ProviderCatalogResponse:
     return ProviderCatalogResponse(providers=catalog_body())
+
+
+@router.get(
+    PROVIDERS_CLUSTER_DISCOVERY_PATH,
+    response_model=ProviderClusterDiscoveryResponse,
+)
+async def provider_cluster_discovery() -> ProviderClusterDiscoveryResponse:
+    return ProviderClusterDiscoveryResponse(**cluster_registration_discovery())
 
 
 @router.post(PROVIDERS_VALIDATE_PATH, response_model=ProviderValidationResponse)

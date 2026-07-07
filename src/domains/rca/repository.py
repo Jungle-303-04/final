@@ -194,6 +194,33 @@ class RcaRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row else None
 
+    def get_recovery_plan_by_correlation(
+        self, correlation_id: str, workspace_id: str
+    ) -> JsonObject | None:
+        table = RecoveryPlanRecord.__table__
+        statement = (
+            select(
+                table.c.plan_id,
+                table.c.workspace_id,
+                table.c.correlation_id,
+                table.c.incident_id,
+                table.c.evidence_ref,
+                table.c.status,
+                table.c.selected_action_id,
+                table.c.selected_by,
+                table.c.payload,
+            )
+            .where(
+                table.c.correlation_id == correlation_id,
+                table.c.workspace_id == workspace_id,
+            )
+            .order_by(table.c.updated_at.desc(), table.c.id.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row else None
+
     def select_recovery_plan_action_if_open(
         self,
         plan_id: str,

@@ -52,5 +52,16 @@ export interface RcaReportSummary { id: number; correlation_id: string; root_cau
   resource_kind?: string | null; resource_name?: string | null; namespace?: string | null;
   secondary_symptoms?: string[]; selected_candidate_id?: string | null;
   candidates?: RcaCandidateScore[]; supporting_evidence_refs?: RcaEvidenceRef[]; missing_evidence_checks?: RcaMissingCheck[] }
+export interface RecoveryActionCandidate {
+  action_id: string; title: string; description: string; route: string; rank: number; score: number;
+  risk_level: string; blast_radius: string; approval_required: boolean; prerequisites: string[];
+  validation_checks: string[]; rollback_plan: string; evidence_refs: string[]
+}
+export interface RecoveryPlanStatus {
+  plan_id: string; correlation_id: string; incident_id: string; evidence_ref: string; status: string;
+  summary: string; target: Record<string, unknown>; recommended_action_id: string; execution_route: string;
+  selection_required: boolean; selected_action_id: string | null; selected_by: string | null;
+  selected_action: RecoveryActionCandidate | null; candidates: RecoveryActionCandidate[]
+}
 export interface LiveSnapshot { at: string; connected: boolean; namespaces: { namespace: string; pods: { name: string; phase: string; restarts: number; hot: boolean }[] }[]; rollout?: { name: string; progress: number } }
 export interface CatalogItem { item_id: string; name: string; description: string; category: string }

@@ -157,23 +157,29 @@ class DashboardRepository(DatabaseConnection):
         workspace_id: str,
         allowed_cluster_ids: set[str] | None = None,
     ) -> dict[str, int]:
-        """fleet 롤업용 — 클러스터별 열린(종결 전) 인시던트 수. 빈 허용 집합이면 {}."""
+        """fleet 롤업용 — 클러스터별 열린 logical incident 수. 빈 허용 집합이면 {}."""
         if allowed_cluster_ids is not None and not allowed_cluster_ids:
             return {}
-        statement: Select[Any] = (
-            select(RcaTimeline.cluster_id, func.count().label("count"))
-            .where(
-                RcaTimeline.workspace_id == workspace_id,
-                RcaTimeline.incident_id.is_not(None),
-                RcaTimeline.cluster_id.is_not(None),
-                RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
-            )
-            .group_by(RcaTimeline.cluster_id)
+        table = RcaTimeline.__table__
+        statement: Select[Any] = select(
+            table.c.cluster_id,
+            table.c.incident_id,
+            table.c.correlation_id,
+            table.c.payload,
+        ).where(
+            table.c.workspace_id == workspace_id,
+            table.c.incident_id.is_not(None),
+            table.c.cluster_id.is_not(None),
+            table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
         )
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        return {str(row["cluster_id"]): int(row["count"]) for row in rows}
+        grouped: dict[str, set[str]] = {}
+        for row in rows:
+            cluster_id = str(row["cluster_id"])
+            grouped.setdefault(cluster_id, set()).add(incident_logical_key(dict(row)))
+        return {cluster_id: len(keys) for cluster_id, keys in grouped.items()}
 
     def list_open_rca_incidents(
         self,
@@ -182,7 +188,9 @@ class DashboardRepository(DatabaseConnection):
         *,
         limit: int = 20,
     ) -> list[JsonObject]:
-        """드릴다운용 — 한 클러스터의 열린 인시던트 요약(최신 갱신순)."""
+        """드릴다운용 — 한 클러스터의 열린 logical incident 요약(최신 갱신순)."""
+        bounded_limit = max(1, min(limit, 100))
+        scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
         statement: Select[Any] = (
             select(RcaTimeline.__table__)
             .where(
@@ -192,11 +200,22 @@ class DashboardRepository(DatabaseConnection):
                 RcaTimeline.status.not_in(CLOSED_INCIDENT_STATUSES),
             )
             .order_by(RcaTimeline.updated_at.desc())
-            .limit(max(1, min(limit, 100)))
+            .limit(scan_limit)
         )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        return [open_incident_summary(serialize_timeline_row(row)) for row in rows]
+        seen: set[str] = set()
+        items: list[JsonObject] = []
+        for row in rows:
+            item = serialize_timeline_row(row)
+            key = incident_logical_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(open_incident_summary(item))
+            if len(items) >= bounded_limit:
+                break
+        return items
 
 
 def open_incident_summary(row: JsonObject) -> JsonObject:
@@ -210,6 +229,23 @@ def open_incident_summary(row: JsonObject) -> JsonObject:
         "status": row.get("status"),
         "created_at": row.get("created_at"),
     }
+
+
+def incident_logical_key(row: JsonObject) -> str:
+    """같은 실제 장애를 묶는 key — evidence correlation 폭증을 fleet 수치에서 제거."""
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    incident = payload.get("incident") if isinstance(payload, dict) else None
+    if isinstance(incident, dict):
+        parts = (
+            row.get("cluster_id"),
+            incident.get("namespace"),
+            incident.get("resource_kind"),
+            incident.get("resource_name"),
+            incident.get("symptom"),
+        )
+        if any(part not in (None, "") for part in parts[1:]):
+            return "|".join(str(part or "unknown") for part in parts)
+    return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
 
 
 def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
