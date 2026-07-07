@@ -84,6 +84,8 @@ DEFAULT_KUBECTL_APPLY_TIMEOUT_SECONDS = "30"
 # 미설정 시 컨텍스트 미지정(현재 kubeconfig)만 허용 — 페이로드로 임의 컨텍스트 지정 불가.
 KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
 KUBE_CONTEXT_NOT_ALLOWED = "kube context is not in the allowlist"
+KUBE_CONTEXT_CONNECTION_FAILED = "kubernetes preflight connection failed"
+KUBE_CONTEXT_CONNECTION_TIMEOUT = "kubernetes preflight connection timed out"
 DIRECT_APPLY_DEPLOY_PROVIDER = "kube-context"
 MANUAL_MANIFEST_DEPLOY_PROVIDER = "manual-manifest"
 TARGET_PROVIDER_INVALID = "target install provider selection is invalid"
@@ -281,7 +283,42 @@ def target_preflight_provider_checks(
         errors.append(TARGET_AGENT_IMAGE_NOT_CONFIGURED)
         provider_errors += 1
 
+    if (
+        payload.deploy_provider == DIRECT_APPLY_DEPLOY_PROVIDER
+        and payload.apply
+        and kube_context_allowed is not False
+        and provider_errors == 0
+    ):
+        connection_error = kube_context_connectivity_error(payload.kube_context)
+        if connection_error:
+            errors.append(connection_error)
+            provider_errors += 1
+
     return provider_errors == 0, errors, warnings, selected, kube_context_allowed
+
+
+def kube_context_connectivity_error(kube_context: str | None) -> str | None:
+    if not shutil.which("kubectl"):
+        return KUBECTL_NOT_AVAILABLE
+    command = ["kubectl"]
+    if kube_context:
+        command.extend(["--context", kube_context])
+    command.extend(["get", "--raw=/version", "--request-timeout=5s"])
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=6,
+        )
+    except subprocess.TimeoutExpired:
+        return KUBE_CONTEXT_CONNECTION_TIMEOUT
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        suffix = f": {detail[0][:160]}" if detail else ""
+        return f"{KUBE_CONTEXT_CONNECTION_FAILED}{suffix}"
+    return None
 
 
 def apply_manifest_with_kubectl(manifest: str, kube_context: str | None) -> str:
