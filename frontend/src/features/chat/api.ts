@@ -1,6 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, post } from '@/shared/lib/api';
-import type { Conversation } from '@/shared/lib/types';
+import type {
+  AiConversationAcceptedResponse,
+  AiConversationDetailResponse,
+  ChatActions,
+  ChatApprovalRef,
+  ChatMessage,
+  ChatToolCall,
+  Conversation,
+  ConversationSummary,
+  Tone,
+} from '@/shared/lib/types';
 import { adaptConversationSummary } from '@/shared/lib/adapt';
 import { uiStore } from '@/shared/lib/ui-store';
 
@@ -14,21 +24,22 @@ export const useConversations = () =>
 export const useConversation = (id: string | undefined) =>
   useQuery({
     queryKey: chatKeys.one(id ?? ''), enabled: !!id,
-    queryFn: () => get<Conversation>(`/ai/conversations/${id}`),
+    queryFn: () => get<AiConversationDetailResponse>(`/ai/conversations/${id}`),
+    select: adaptConversationDetail,
     // waiting 중 2s, idle 15s (docs/fd/views/ai-chat AC — status 만으로 파생)
-    refetchInterval: q => (q.state.data?.status === 'waiting' ? 2_000 : 15_000),
+    refetchInterval: q => (q.state.data?.conversation?.status === 'waiting' ? 2_000 : 15_000),
   });
 export function useCreateConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) => post<{ conversation_id: string }>('/ai/conversations', { message }),
+    mutationFn: (message: string) => post<AiConversationAcceptedResponse>('/ai/conversations', { message }),
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.list() }),
   });
 }
 export function useSendMessage(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) => post(`/ai/conversations/${id}/messages`, { message }),
+    mutationFn: (message: string) => post<AiConversationAcceptedResponse>(`/ai/conversations/${id}/messages`, { message }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: chatKeys.one(id) });
       qc.invalidateQueries({ queryKey: chatKeys.list() });
@@ -65,3 +76,116 @@ export function useSelectAction() {
   });
 }
 export const MAX_AI_MESSAGE_LENGTH = 16_000;
+
+type RawRecord = Record<string, unknown>;
+
+const TONES = new Set<Tone>(['ok', 'warn', 'danger', 'info', 'neutral']);
+
+export function adaptConversationDetail(raw: AiConversationDetailResponse): Conversation {
+  const summary = adaptConversationSummary(raw.conversation) as ConversationSummary;
+  return {
+    ...summary,
+    messages: asRecordArray(raw.messages).map(adaptChatMessage),
+  };
+}
+
+function adaptChatMessage(raw: RawRecord): ChatMessage {
+  const metadata = recordOrUndefined(raw.metadata);
+  const toolCalls = adaptToolCalls(raw, metadata);
+  const actions = adaptActions(raw.actions) ?? adaptActions(metadata?.actions);
+  const approvalRef = adaptApprovalRef(raw.approval_ref) ?? adaptApprovalRef(metadata?.approval_ref);
+  return {
+    message_id: String(raw.message_id ?? ''),
+    role: raw.role === 'assistant' ? 'assistant' : 'user',
+    status: typeof raw.status === 'string' ? raw.status : undefined,
+    content: String(raw.content ?? ''),
+    created_at: String(raw.created_at ?? ''),
+    metadata,
+    tool_calls: toolCalls,
+    actions,
+    approval_ref: approvalRef,
+  };
+}
+
+function adaptToolCalls(raw: RawRecord, metadata: RawRecord | undefined): ChatToolCall[] | undefined {
+  const calls = [
+    ...asRecordArray(raw.tool_calls),
+    ...asRecordArray(metadata?.tool_calls),
+    ...asRecordArray(metadata?.tool_trace),
+  ].map(adaptToolCall).filter(call => call.name);
+  return calls.length ? calls : undefined;
+}
+
+function adaptToolCall(raw: RawRecord): ChatToolCall {
+  return {
+    name: String(raw.name ?? raw.tool ?? ''),
+    args: stringifyArgs(raw.args ?? raw.arguments ?? {}),
+    status: toneFromStatus(raw.status, raw.ok, raw.error),
+  };
+}
+
+function adaptActions(value: unknown): ChatActions | undefined {
+  const raw = recordOrUndefined(value);
+  if (!raw) return undefined;
+  const optionRows = Array.isArray(raw.options) ? raw.options : raw.candidates;
+  const options = asRecordArray(optionRows).map(option => ({
+    action_id: String(option.action_id ?? ''),
+    label: String(option.label ?? option.title ?? option.action ?? ''),
+    risk: toneFromStatus(option.risk ?? option.risk_level, undefined, undefined),
+    impact: String(option.impact ?? option.blast_radius ?? option.description ?? ''),
+  })).filter(option => option.action_id && option.label);
+  const planId = String(raw.plan_id ?? '');
+  if (!planId || options.length === 0) return undefined;
+  const selected = raw.selected ?? raw.selected_action_id;
+  return {
+    plan_id: planId,
+    options,
+    selected: selected == null || selected === '' ? undefined : String(selected),
+  };
+}
+
+function adaptApprovalRef(value: unknown): ChatApprovalRef | undefined {
+  const raw = recordOrUndefined(value);
+  if (!raw) return undefined;
+  const approvalId = String(raw.approval_id ?? raw.approval_ref ?? '');
+  if (!approvalId) return undefined;
+  const resolved = raw.resolved === 'granted' || raw.resolved === 'rejected' ? raw.resolved : undefined;
+  return {
+    approval_id: approvalId,
+    summary: String(raw.summary ?? ''),
+    resolved,
+  };
+}
+
+function toneFromStatus(status: unknown, ok: unknown, error: unknown): Tone {
+  if (typeof status === 'string') {
+    const normalized = status.toLowerCase();
+    if (TONES.has(normalized as Tone)) return normalized as Tone;
+    if (['success', 'succeeded', 'complete', 'completed', 'low'].includes(normalized)) return 'ok';
+    if (['failed', 'failure', 'error', 'errored', 'high', 'critical'].includes(normalized)) return 'danger';
+    if (['warning', 'warn', 'medium'].includes(normalized)) return 'warn';
+    if (['running', 'pending', 'active'].includes(normalized)) return 'info';
+  }
+  if (ok === true) return 'ok';
+  if (ok === false || error) return 'danger';
+  return 'neutral';
+}
+
+function stringifyArgs(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return String(value);
+  }
+}
+
+function recordOrUndefined(value: unknown): RawRecord | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as RawRecord
+    : undefined;
+}
+
+function asRecordArray(value: unknown): RawRecord[] {
+  return Array.isArray(value) ? value.filter((item): item is RawRecord => !!recordOrUndefined(item)) : [];
+}

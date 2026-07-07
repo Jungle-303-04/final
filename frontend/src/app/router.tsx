@@ -11,6 +11,37 @@ const L = (f: () => Promise<{ default: React.ComponentType }>) => {
   return <Suspense fallback={<Skeleton lines={6} />}><C /></Suspense>;
 };
 
+const consoleChildren = (basePath = '') => [
+  { index: true, element: <HomePage /> },
+  { path: 'clusters', element: L(() => import('@/features/cluster/ClusterListView')) },
+  { path: 'clusters/:clusterId', element: L(() => import('@/features/cluster/ClusterDetailView')) },
+  { path: 'clusters/:clusterId/pods/:namespace/:pod', element: L(() => import('@/features/cluster/ClusterDetailView')) },
+  { path: 'repos', element: L(() => import('@/features/repo/RepoListView')) },
+  { path: 'repos/:applicationId', element: L(() => import('@/features/repo/RepoDetailView')) },
+  { path: 'workflows', element: L(() => import('@/features/workflow/WorkflowListView')) },
+  { path: 'workflows/:runId', element: L(() => import('@/features/workflow/WorkflowGraphView')) },
+  { path: 'incidents', element: L(() => import('@/features/notifications/NotificationsView')) },
+  { path: 'incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
+  { path: 'metrics', element: L(() => import('@/features/metrics/MetricsView')) },
+  { path: 'ai', element: L(() => import('@/features/chat/ChatView')) },
+  { path: 'ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
+  { path: 'catalog', element: L(() => import('@/features/resources/CatalogView')) },
+  {
+    path: 'settings',
+    element: <RequireAdmin />,
+    children: [
+      { index: true, element: <Navigate to={`${basePath}/settings/members`} replace /> },
+      { path: 'members', element: L(() => import('@/features/org/MembersView')) },
+      { path: 'orgs', element: L(() => import('@/features/org/OrganizationsView')) },
+      { path: 'groups', element: L(() => import('@/features/org/GroupsView')) },
+      { path: 'access', element: L(() => import('@/features/org/AccessView')) },
+      { path: 'ops', element: L(() => import('@/features/notifications/OpsView')) },
+    ],
+  },
+  // 알 수 없는 경로 — 콘솔 셸 안에서 정직한 404 (몰래 홈 리다이렉트 금지)
+  { path: '*', element: L(() => import('@/features/console/pages/NotFoundPage')) },
+];
+
 export const router = createBrowserRouter([
   {
     element: <RequireGuest />,
@@ -23,44 +54,20 @@ export const router = createBrowserRouter([
   },
   {
     element: <RequireSession />,
-    children: [{
-      path: '/',
-      element: <ConsoleLayout />,
-      children: [
-        { index: true, element: <HomePage /> },
-        { path: 'clusters', element: L(() => import('@/features/cluster/ClusterListView')) },
-        { path: 'clusters/:clusterId', element: L(() => import('@/features/cluster/ClusterDetailView')) },
-        { path: 'clusters/:clusterId/pods/:namespace/:pod', element: L(() => import('@/features/cluster/ClusterDetailView')) },
-        { path: 'repos', element: L(() => import('@/features/repo/RepoListView')) },
-        { path: 'repos/:applicationId', element: L(() => import('@/features/repo/RepoDetailView')) },
-        { path: 'workflows', element: L(() => import('@/features/workflow/WorkflowListView')) },
-        { path: 'workflows/:runId', element: L(() => import('@/features/workflow/WorkflowGraphView')) },
-        { path: 'incidents', element: L(() => import('@/features/notifications/NotificationsView')) },
-        { path: 'incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
-        { path: 'metrics', element: L(() => import('@/features/metrics/MetricsView')) },
-        { path: 'ai', element: L(() => import('@/features/chat/ChatView')) },
-        { path: 'ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
-        { path: 'catalog', element: L(() => import('@/features/resources/CatalogView')) },
-        {
-          path: 'settings',
-          element: <RequireAdmin />,
-          children: [
-            { index: true, element: <Navigate to="/settings/members" replace /> },
-            { path: 'members', element: L(() => import('@/features/org/MembersView')) },
-            { path: 'orgs', element: L(() => import('@/features/org/OrganizationsView')) },
-            { path: 'groups', element: L(() => import('@/features/org/GroupsView')) },
-            { path: 'access', element: L(() => import('@/features/org/AccessView')) },
-            { path: 'ops', element: L(() => import('@/features/notifications/OpsView')) },
-          ],
-        },
-        // 알 수 없는 경로 — 콘솔 셸 안에서 정직한 404 (몰래 홈 리다이렉트 금지)
-        { path: '*', element: L(() => import('@/features/console/pages/NotFoundPage')) },
-      ],
-    }],
+    children: [
+      {
+        path: '/',
+        element: <ConsoleLayout />,
+        children: consoleChildren(),
+      },
+      {
+        path: '/console',
+        element: <ConsoleLayout basePath="/console" />,
+        children: consoleChildren('/console'),
+      },
+    ],
   },
-  // 구 경로 호환 — 실제 서비스는 /, /console 은 별도 데모 archive 가 붙기 전까지 기존 앱으로 흡수
-  { path: '/console', element: <Navigate to="/" replace /> },
-  { path: '/console/*', element: <Navigate to="/" replace /> },
+  // 구 경로 호환 — 실제 서비스는 /, /console 은 보존용 콘솔 데모 경로로 별도 라우팅
   { path: '/plural', element: <Navigate to="/" replace /> },
   { path: '/plural/*', element: <Navigate to="/" replace /> },
   { path: '/overview', element: <Navigate to="/" replace /> },

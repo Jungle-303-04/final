@@ -16,8 +16,8 @@
 
 좌측 대화 목록(제목·시각·상태 dot·삭제 버튼) + [새 대화]를 `ChatView`가 함께 렌더한다.
 데이터: `GET /ai/conversations` (G10 코드 반영).
-새 대화: 첫 메시지 입력 → `POST /ai/conversations` → /ai/:id 이동.
-삭제: 행 삭제 버튼 또는 우측 헤더 삭제 → `DELETE /ai/conversations/{id}` → 목록 갱신. 현재 열린 대화면 `/ai`로 이동.
+새 대화: 첫 메시지 입력 → `POST /ai/conversations` → `AiConversationAcceptedResponse.conversation_id` 기준으로 /ai/:id 이동.
+삭제: 행 삭제 버튼 또는 우측 헤더 삭제 → `DELETE /ai/conversations/{id}` → 목록 갱신. 현재 열린 대화면 `/ai`로 이동. `/console` 하위에서 열린 경우 이동 경로는 `useConsolePath()`로 `/console/ai...`를 유지한다.
 
 ## 대화 — ChatView (/ai/:conversationId)
 
@@ -37,7 +37,7 @@
 ## 데이터 흐름 (폴링 기반 — G8 스트리밍은 선택)
 
 1. 전송: `POST /ai/conversations/{id}/messages` → 대화 상태 waiting
-2. 폴링: `GET /ai/conversations/{id}` — waiting 동안 2s, idle 시 15s (conversation.status 로 파생)
+2. 폴링: `GET /ai/conversations/{id}` → `{conversation, messages}` envelope — raw `conversation.status`가 waiting 이면 2s, 아니면 15s
 3. 새 assistant 메시지 도착 → 메시지 `FadeSlideIn` 등장 + 하단 스크롤
 4. 삭제: `DELETE /ai/conversations/{id}` 성공 시 list invalidate/detail cache remove
 
@@ -47,6 +47,7 @@
 |---|---|
 | text | 일반 말풍선. `**` 구분자는 assistant 쪽에서 홀수 조각만 `<b>` 처리 |
 | `tool_calls` 존재 | Badge(`도구`) + code(name) + args |
+| `metadata.tool_calls` 또는 `metadata.tool_trace` 존재 | `adaptConversationDetail`이 `tool_calls`로 정규화한 뒤 위와 동일 렌더 |
 | `actions` 존재 | ActionSelectCard (아래) |
 | `approval_ref` 존재 | ApprovalCard |
 

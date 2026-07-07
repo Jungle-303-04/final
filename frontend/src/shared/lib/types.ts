@@ -21,11 +21,27 @@ export interface PlanChange {
 }
 export interface SafePr { status: string; pr_url?: string; explanation?: string; diff_before?: string; diff_after?: string; error?: string }
 export interface Deployment { cluster_id: string; namespace: string; name: string; image: string; replicas: number; status: string }
-export interface Conversation { conversation_id: string; title: string; status: 'idle'|'waiting'; updated_at: string; messages: ChatMessage[] }
+export interface ConversationSummary { conversation_id: string; title: string; status: 'idle'|'waiting'; updated_at: string }
+export interface Conversation extends ConversationSummary { messages: ChatMessage[] }
+export interface ChatToolCall { name: string; args: string; status: Tone }
+export interface ChatActionOption { action_id: string; label: string; risk: Tone; impact: string }
+export interface ChatActions { plan_id: string; options: ChatActionOption[]; selected?: string }
+export interface ChatApprovalRef { approval_id: string; summary: string; resolved?: 'granted'|'rejected' }
+export interface ChatToolTrace { tool?: string; name?: string; arguments?: unknown; args?: unknown; ok?: boolean; error?: string; result?: unknown }
+export interface ChatMessageMetadata {
+  tool_trace?: ChatToolTrace[];
+  tool_calls?: ChatToolCall[];
+  actions?: ChatActions;
+  approval_ref?: ChatApprovalRef;
+  [key: string]: unknown;
+}
 export interface ChatMessage { message_id: string; role: 'user'|'assistant'; status?: string; content: string; created_at: string;
-  tool_calls?: { name: string; args: string; status: Tone }[];
-  actions?: { plan_id: string; options: { action_id: string; label: string; risk: Tone; impact: string }[]; selected?: string };
-  approval_ref?: { approval_id: string; summary: string; resolved?: 'granted'|'rejected' } }
+  metadata?: ChatMessageMetadata;
+  tool_calls?: ChatToolCall[];
+  actions?: ChatActions;
+  approval_ref?: ChatApprovalRef }
+export interface AiConversationDetailResponse { conversation: Record<string, unknown>; messages: Record<string, unknown>[] }
+export interface AiConversationAcceptedResponse { accepted: boolean; conversation_id: string; message_id: string; event_id: string; correlation_id: string }
 export interface Incident { incident_id: string; correlation_id: string; cluster_id: string; summary: string; stage: string; at: string }
 export interface DeadLetter { id: number; original_subject: string; consumer: string; error: string; status: string; created_at: string }
 export interface Org { org_id: string; name: string; description: string; member_count: number; group_count: number; created_at: string }

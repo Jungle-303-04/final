@@ -36,7 +36,9 @@
     ├─ /settings/access     AccessView         (GET/POST/DELETE /access)
     └─ /settings/ops        OpsView (DLQ 관리 — /dead-letters)
 
-구 경로 호환 redirect: `/overview`, `/overview/*`, `/console`, `/console/*`, 구 UI 경로 계열 → `/`; `/notifications` → `/incidents`.
+보존용 콘솔 경로: `/console`, `/console/*`는 같은 IA를 `ConsoleLayout basePath="/console"`으로 렌더한다. 내부 링크는 `useConsolePath()`로 `/console` base path를 유지한다.
+
+구 경로 호환 redirect: `/overview`, `/overview/*`, 구 UI 경로 계열 → `/`; `/notifications` → `/incidents`.
 ```
 
 뷰 상세는 각 [views/](README.md#뷰-명세-views) 문서.

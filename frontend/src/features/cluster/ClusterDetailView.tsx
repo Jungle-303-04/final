@@ -9,6 +9,7 @@ import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import { IconFile, IconFlame } from '@/shared/ui/icons';
 import type { K8sEvent, ServiceInfo, Workload } from '@/shared/lib/types';
+import { useConsolePath } from '@/features/console/ui';
 
 const TABS = [
   { key: 'workloads', label: '워크로드' }, { key: 'pods', label: '팟' }, { key: 'nodes', label: '노드' },
@@ -19,6 +20,7 @@ export default function ClusterDetailView() {
   const { clusterId = '', namespace, pod } = useParams();
   const [sp, setSp] = useSearchParams();
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const tab = sp.get('tab') ?? 'workloads';
   const filter = sp.get('q') ?? '';
   const detailSubject = sp.get('detail') ?? '';
@@ -89,7 +91,7 @@ export default function ClusterDetailView() {
 
   return (
     <FadeSlideIn>
-      <Breadcrumbs items={[{ label: '클러스터', to: '/clusters' }, { label: cluster?.name ?? clusterId }]} />
+      <Breadcrumbs items={[{ label: '클러스터', to: pathFor('/clusters') }, { label: cluster?.name ?? clusterId }]} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px', flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {cluster?.name ?? clusterId}
@@ -122,7 +124,7 @@ export default function ClusterDetailView() {
         <Card>
           <ResourceTable<Workload>
             rows={podRows} rowKey={w => `${w.namespace}/${w.name}`}
-            onRowClick={w => nav(`/clusters/${clusterId}/pods/${w.namespace}/${w.name}?tab=pods`)}
+            onRowClick={w => nav(pathFor(`/clusters/${clusterId}/pods/${w.namespace}/${w.name}?tab=pods`))}
             columns={[
               { key: 'name', label: '이름', render: w => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{w.hot && <IconFlame size={13} style={{ color: 'var(--warn)' }} />}{w.name}</span> },
               { key: 'ns', label: '네임스페이스', render: w => w.namespace },
@@ -151,7 +153,7 @@ export default function ClusterDetailView() {
       {tab === 'resources' && <ResourcesTab clusterId={clusterId} filter={filter} />}
       {tab === 'events' && <EventsTab clusterId={clusterId} filter={filter} />}
 
-      <Drawer open={!!openPod} title={openPod?.name ?? ''} onClose={() => nav(`/clusters/${clusterId}?tab=pods`)}>
+      <Drawer open={!!openPod} title={openPod?.name ?? ''} onClose={() => nav(pathFor(`/clusters/${clusterId}?tab=pods`))}>
         {openPod && (
           <>
             <KeyValue pairs={[
@@ -321,11 +323,12 @@ function ContextActions({ clusterId, subject, subjectName, namespace }: {
   clusterId: string; subject: string; subjectName: string; namespace?: string
 }) {
   const hrefs = contextActionHrefs(clusterId, subject, subjectName, namespace);
+  const pathFor = useConsolePath();
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
-      <Link to={hrefs.events}><Button>이벤트</Button></Link>
-      <Link to={hrefs.metrics}><Button>메트릭</Button></Link>
-      <Link to={hrefs.ai}><Button variant="primary">AI 분석</Button></Link>
+      <Link to={pathFor(hrefs.events)}><Button>이벤트</Button></Link>
+      <Link to={pathFor(hrefs.metrics)}><Button>메트릭</Button></Link>
+      <Link to={pathFor(hrefs.ai)}><Button variant="primary">AI 분석</Button></Link>
     </div>
   );
 }
@@ -402,6 +405,7 @@ function EventsTab({ clusterId, filter }: { clusterId: string; filter: string })
 /* 집계 요약 — GET /clusters/{id}/summary (사용량 + 열린 인시던트). 실패해도 화면 흐름을 막지 않는다 */
 function ClusterAggPanel({ clusterId }: { clusterId: string }) {
   const aggQ = useClusterAgg(clusterId);
+  const pathFor = useConsolePath();
   if (aggQ.isPending) return null; // 보조 패널 — 첫 로딩은 조용히(본문 스켈레톤과 중복 방지)
   if (aggQ.isError) {
     return (
@@ -435,7 +439,7 @@ function ClusterAggPanel({ clusterId }: { clusterId: string }) {
           {incidents.slice(0, 5).map(i => (
             <div key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
               <Badge status={i.status} />
-              <Link to={`/incidents/${i.id}`} style={{ color: 'var(--brand)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Link to={pathFor(`/incidents/${i.id}`)} style={{ color: 'var(--brand)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {i.symptom}{i.root_cause ? ` — ${i.root_cause}` : ''}
               </Link>
               <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 'var(--fs-xs)', flex: 'none' }}>

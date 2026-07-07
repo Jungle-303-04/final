@@ -10,11 +10,13 @@ import { timeAgo } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import type { ChatMessage } from '@/shared/lib/types';
 import { IconFile, IconSend, IconTrash } from '@/shared/ui/icons';
+import { useConsolePath } from '@/features/console/ui';
 
 export default function ChatView() {
   const { conversationId } = useParams();
   const [sp, setSp] = useSearchParams();
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const listQ = useConversations();
   const convQ = useConversation(conversationId);
   const create = useCreateConversation();
@@ -46,14 +48,14 @@ export default function ChatView() {
       uiStore.getState().toast('danger', `전송 실패 — ${(err as Error).message || '네트워크를 확인해주세요'}`);
     };
     if (conversationId) send.mutate(text, { onSuccess: clearPrefill, onError: restore });
-    else create.mutate(text, { onSuccess: d => nav(`/ai/${d.conversation_id}`), onError: restore });
+    else create.mutate(text, { onSuccess: d => nav(pathFor(`/ai/${d.conversation_id}`)), onError: restore });
   };
 
   const deleteConversation = (id: string) => {
     remove.mutate(id, {
       onSuccess: () => {
         uiStore.getState().toast('ok', '대화를 삭제했습니다');
-        if (id === conversationId) nav('/ai', { replace: true });
+        if (id === conversationId) nav(pathFor('/ai'), { replace: true });
       },
       onError: err => uiStore.getState().toast('danger', `삭제 실패 — ${(err as Error).message}`),
     });
@@ -62,7 +64,7 @@ export default function ChatView() {
   return (
     <FadeSlideIn>
       <div className="chat-layout">
-        <Card style={{ overflow: 'auto' }} title="대화" actions={<Button size="sm" onClick={() => nav('/ai')}>새 대화</Button>}>
+        <Card style={{ overflow: 'auto' }} title="대화" actions={<Button size="sm" onClick={() => nav(pathFor('/ai'))}>새 대화</Button>}>
           {listQ.isSuccess && (listQ.data ?? []).length === 0 && (
             <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>대화 없음</p>
           )}
@@ -71,7 +73,7 @@ export default function ChatView() {
               <div
                 className="chat-thread-row"
                 data-active={c.conversation_id === conversationId ? 'true' : 'false'}
-                onClick={() => nav(`/ai/${c.conversation_id}`)}
+                onClick={() => nav(pathFor(`/ai/${c.conversation_id}`))}
               >
                 <div className="chat-thread-row__main">
                   <span className={`chat-thread-dot ${c.status === 'waiting' ? 'is-waiting' : ''}`} />

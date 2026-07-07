@@ -11,6 +11,7 @@ import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
 import { shortSha } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { RunStep, WorkflowRun } from '@/shared/lib/types';
+import { useConsolePath } from '@/features/console/ui';
 
 const ORDER = ['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING', 'SUCCEEDED'];
 const TERMINAL = new Set(['SUCCEEDED', 'FAILED']);
@@ -38,6 +39,7 @@ type FlowEdge = Edge<FlowEdgeData>;
 
 export default function WorkflowGraphView() {
   const { runId = '' } = useParams();
+  const pathFor = useConsolePath();
   const apps = useApplications();
   const all = useRunsAll(apps.data ?? []); // 활성 run 있으면 10s polling (repo/api)
   const found = all.items.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId }))).find(r => r.run_id === runId);
@@ -79,7 +81,7 @@ export default function WorkflowGraphView() {
       <Card>
         <p style={{ margin: '0 0 10px' }}>run 을 찾을 수 없습니다: <code>{runId}</code></p>
         <p style={{ margin: '0 0 10px', color: 'var(--text-3)', fontSize: 'var(--fs-sm)' }}>이미 정리됐거나 접근 권한이 없는 run 일 수 있습니다.</p>
-        <Link to="/workflows"><Button>워크플로우 목록으로 →</Button></Link>
+        <Link to={pathFor('/workflows')}><Button>워크플로우 목록으로 →</Button></Link>
       </Card>
     );
   }
@@ -88,7 +90,7 @@ export default function WorkflowGraphView() {
 
   return (
     <FadeSlideIn>
-      <Breadcrumbs items={[{ label: '워크플로우', to: '/workflows' }, { label: `${found.appId} · ${shortSha(found.commit_sha)}` }]} />
+      <Breadcrumbs items={[{ label: '워크플로우', to: pathFor('/workflows') }, { label: `${found.appId} · ${shortSha(found.commit_sha)}` }]} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px', flexWrap: 'wrap', minWidth: 0 }}>
         <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', overflowWrap: 'anywhere' }}>{found.appId}</h1>
         <code>{shortSha(found.commit_sha)}</code><Badge status={found.status} />

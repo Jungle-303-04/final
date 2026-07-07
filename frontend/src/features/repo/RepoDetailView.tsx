@@ -6,6 +6,7 @@ import { PlanDiff } from '@/shared/ui/plan-diff';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
 import { IconClock } from '@/shared/ui/icons';
+import { useConsolePath } from '@/features/console/ui';
 
 const STEP_ORDER = ['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING', 'SUCCEEDED'];
 
@@ -14,6 +15,7 @@ export default function RepoDetailView() {
   const [sp, setSp] = useSearchParams();
   const tab = sp.get('tab') ?? 'runs';
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const appQ = useApplication(applicationId);
   const runsQ = useRuns(applicationId);
   const depsQ = useDeployments(applicationId);
@@ -22,7 +24,7 @@ export default function RepoDetailView() {
 
   return (
     <FadeSlideIn>
-      <Breadcrumbs items={[{ label: '레포', to: '/repos' }, { label: appQ.data?.name ?? applicationId }]} />
+      <Breadcrumbs items={[{ label: '레포', to: pathFor('/repos') }, { label: appQ.data?.name ?? applicationId }]} />
       <QueryBoundary query={appQ}>{app => (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px', flexWrap: 'wrap', gap: 8 }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', overflowWrap: 'anywhere' }}>{app.name} <code style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{app.repo_ref}@{app.branch}</code></h1>
@@ -60,7 +62,7 @@ export default function RepoDetailView() {
                   </span>
                   <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{timeAgo(r.started_at)}</span>
                   <span style={{ marginLeft: 'auto' }}>
-                    <Button size="sm" onClick={() => nav(`/workflows/${r.run_id}`)}>그래프 보기</Button>
+                    <Button size="sm" onClick={() => nav(pathFor(`/workflows/${r.run_id}`))}>그래프 보기</Button>
                   </span>
                 </div>
                 {r.status === 'WAITING_FOR_APPROVAL' && r.approval_id && (() => {
@@ -82,7 +84,7 @@ export default function RepoDetailView() {
         <Card><QueryBoundary query={depsQ}>{deps => (
           <ResourceTable rows={deps} rowKey={d => `${d.cluster_id}/${d.namespace}/${d.name}`}
             columns={[
-              { key: 'cluster', label: '클러스터', render: d => <Link to={`/clusters/${d.cluster_id}?tab=workloads`} style={{ color: 'var(--brand)' }}>{d.cluster_id}</Link> },
+              { key: 'cluster', label: '클러스터', render: d => <Link to={pathFor(`/clusters/${d.cluster_id}?tab=workloads`)} style={{ color: 'var(--brand)' }}>{d.cluster_id}</Link> },
               { key: 'ns', label: '네임스페이스', render: d => d.namespace },
               { key: 'name', label: '이름', render: d => <b>{d.name}</b> },
               { key: 'image', label: '이미지', render: d => <code>{d.image}</code> },
@@ -107,7 +109,7 @@ export default function RepoDetailView() {
                 </div>
               )}
               {safePrRun.safe_pr.error && (
-                <Link to={`/ai?prefill=${encodeURIComponent(`Safe PR 실패 원인 분석: ${safePrRun.safe_pr.error}`)}`}><Button>✦ AI에게 원인 묻기</Button></Link>
+                <Link to={pathFor(`/ai?prefill=${encodeURIComponent(`Safe PR 실패 원인 분석: ${safePrRun.safe_pr.error}`)}`)}><Button>✦ AI에게 원인 묻기</Button></Link>
               )}
             </Card>
       )}

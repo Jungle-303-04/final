@@ -114,8 +114,17 @@ export const queryClient = new QueryClient({
 | `PlanChange` | `field_path; classification; before?; after?` — diff-worker 3-way 비교 결과를 워크플로 단계 미리보기에 표시할 때 사용 |
 | `SafePr` | `status; pr_url?; explanation?; diff_before?; diff_after?; error?` |
 | `Deployment` | `cluster_id; namespace; name; image; replicas: number; status` |
-| `Conversation` | `conversation_id; title; status: 'idle'\|'waiting'; updated_at; messages: ChatMessage[]` |
-| `ChatMessage` | `message_id; role: 'user'\|'assistant'; status?; content; created_at; tool_calls?: {name; args; status: Tone}[]; actions?: {plan_id; options: {action_id; label; risk: Tone; impact}[]; selected?}; approval_ref?: {approval_id; summary; resolved?: 'granted'\|'rejected'}` |
+| `ConversationSummary` | `conversation_id; title; status: 'idle'\|'waiting'; updated_at` |
+| `Conversation` | `ConversationSummary + messages: ChatMessage[]` |
+| `ChatToolCall` | `name; args; status: Tone` |
+| `ChatActionOption` | `action_id; label; risk: Tone; impact` |
+| `ChatActions` | `plan_id; options: ChatActionOption[]; selected?` |
+| `ChatApprovalRef` | `approval_id; summary; resolved?: 'granted'\|'rejected'` |
+| `ChatToolTrace` | optional `tool/name/arguments/args/ok/error/result` 원본 metadata 도구 기록 |
+| `ChatMessageMetadata` | optional `tool_trace`, `tool_calls`, `actions`, `approval_ref`, plus `[key: string]: unknown` |
+| `ChatMessage` | `message_id; role: 'user'\|'assistant'; status?; content; created_at; metadata?: ChatMessageMetadata; tool_calls?: ChatToolCall[]; actions?: ChatActions; approval_ref?: ChatApprovalRef` |
+| `AiConversationDetailResponse` | `conversation: Record<string, unknown>; messages: Record<string, unknown>[]` |
+| `AiConversationAcceptedResponse` | `accepted; conversation_id; message_id; event_id; correlation_id` |
 | `Incident` | `incident_id; correlation_id; cluster_id; summary; stage; at` |
 | `DeadLetter` | `id: number; original_subject; consumer; error; status; created_at` |
 | `Org` | `org_id; name; description; member_count; group_count; created_at` |
@@ -149,7 +158,7 @@ export const queryClient = new QueryClient({
 | `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. mock 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 비공개 `STEP_NAME_MAP` 으로 콘솔 단계 이름에 매핑한다(git→STARTED, render→RENDERING, diff→DIFFING, policy→POLICY_CHECKING, approval/safe_pr→WAITING_FOR_APPROVAL, apply→APPLYING, health→ROLLOUT_WAITING, 미등록 이름은 대문자화). `details.resource`(+`details.namespace` 접미)는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
 | `adaptIncident` | `frontend/src/shared/lib/adapt.ts :: adaptIncident` | `=> Incident`. summary 우선순위: `root_cause`(단 `'unknown'` 제외) → `error_reason` → `current_subject` → `'인시던트'`. `incident_id ?? correlation_id`, `stage = current_subject ?? status`, `at = at ?? updated_at` |
 | `adaptIncidentDetail` | `frontend/src/shared/lib/adapt.ts :: adaptIncidentDetail` | `=> IncidentDetail`. `adaptIncident` 기반 + `status ?? stage ?? 'open'`, null 정규화(`''`→null), `confidence` 는 number 일 때만, evidence 배열은 `Array.isArray` 검사 후 `map(String)` |
-| `adaptConversationSummary` | `frontend/src/shared/lib/adapt.ts :: adaptConversationSummary` | `=> Omit<Conversation,'messages'>`. `title ?? '대화'`, `status` 는 `'waiting'` 만 인정, 아니면 `'idle'` |
+| `adaptConversationSummary` | `frontend/src/shared/lib/adapt.ts :: adaptConversationSummary` | `=> ConversationSummary`. `title ?? '대화'`, `status` 는 `'waiting'` 만 인정, 아니면 `'idle'` |
 
 ## 포맷터 (`lib/format.ts`)
 

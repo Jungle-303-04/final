@@ -13,6 +13,7 @@ import { useClusters } from '@/features/cluster/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { Button, Field, KeyValue, Modal, Skeleton, Stepper } from '@/shared/ui';
 import { uiStore } from '@/shared/lib/ui-store';
+import { useConsolePath } from '@/features/console/ui';
 
 const STEPS = ['레포', '배포 대상', '확인'];
 const PROBEABLE_REPO = /^([\w.-]+\/[\w.-]+|https?:\/\/[^/\s]+\/[^/\s]+\/[^/\s]+|git@[^:\s]+:[^/\s]+\/[^/\s]+(?:\.git)?)$/;
@@ -26,6 +27,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const clustersQ = useClusters();
   const create = useCreateApplication();
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const admin = useIsAdmin();
   const trimmedRepoRef = repoRef.trim();
   const refOk = PROBEABLE_REPO.test(trimmedRepoRef);
@@ -180,7 +182,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                   ? '배포 대상으로 지정할 클러스터가 없습니다 — 먼저 클러스터를 등록해주세요.'
                   : '배포 대상으로 지정할 수 있는 클러스터가 없습니다 — 관리자에게 클러스터 접근 권한을 요청해주세요.'}
               </p>
-              {admin && <Link to="/clusters" onClick={reset}><Button variant="primary">클러스터 등록하러 가기 →</Button></Link>}
+              {admin && <Link to={pathFor('/clusters')} onClick={reset}><Button variant="primary">클러스터 등록하러 가기 →</Button></Link>}
             </div>
           ) : (
             <Field label="대상 클러스터">
@@ -213,7 +215,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                   onSuccess: d => {
                     uiStore.getState().toast('ok', `${name} 연결 완료 — 첫 커밋이 감지되면 run 이 생성됩니다`);
                     reset();
-                    nav(`/repos/${d.application_id}`);
+                    nav(pathFor(`/repos/${d.application_id}`));
                   },
                 })}>연결</Button>
           </div>

@@ -32,6 +32,41 @@ test('adapters do not synthesize current timestamps when backend omits them', as
   assert.equal(adaptConversationSummary({ conversation_id: 'aic-1' }).updated_at, '');
 });
 
+test('ai conversation detail adapter unwraps real backend envelope and message metadata', async () => {
+  const { adaptConversationDetail } = await vite.ssrLoadModule('/src/features/chat/api.ts');
+
+  const detail = adaptConversationDetail({
+    conversation: {
+      conversation_id: 'aic-1',
+      title: 'checkout incident',
+      status: 'completed',
+      updated_at: '2026-07-07T10:00:00Z',
+    },
+    messages: [
+      {
+        message_id: 'aim-1',
+        role: 'assistant',
+        content: 'restart is allowed',
+        created_at: '2026-07-07T10:00:01Z',
+        metadata: {
+          tool_trace: [
+            { tool: 'list_command_actions', arguments: { limit: 2 }, ok: true },
+            { tool: 'missing_tool', arguments: {}, ok: false, error: 'unknown ai tool' },
+          ],
+        },
+      },
+    ],
+  });
+
+  assert.equal(detail.conversation_id, 'aic-1');
+  assert.equal(detail.status, 'idle');
+  assert.equal(detail.messages[0].role, 'assistant');
+  assert.deepEqual(detail.messages[0].tool_calls, [
+    { name: 'list_command_actions', args: '{"limit":2}', status: 'ok' },
+    { name: 'missing_tool', args: '{}', status: 'danger' },
+  ]);
+});
+
 test('metrics context preset narrows PromQL by real drilldown subject', async () => {
   const { buildContextPreset } = await vite.ssrLoadModule('/src/features/metrics/MetricsView.tsx');
 

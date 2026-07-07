@@ -12,6 +12,7 @@ import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
 import { fmtHms } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconClock, IconPause, IconPlay } from '@/shared/ui/icons';
+import { useConsolePath } from '@/features/console/ui';
 
 // 프리셋은 실제 스크레이프되는 계열만 사용 — node-exporter/kube-state-metrics/node-collector.
 // 전체 카탈로그·근거는 docs/frontend-metrics-queries.md 참조.
@@ -35,6 +36,7 @@ interface ContextPreset { promql: string; unit: Unit; label: string }
 
 export default function MetricsView() {
   const [sp, setSp] = useSearchParams();
+  const pathFor = useConsolePath();
   const clustersQ = useClusters();
   const clusters = useMemo(() => clustersQ.data ?? [], [clustersQ.data]);
   const admin = useIsAdmin();
@@ -151,7 +153,7 @@ export default function MetricsView() {
         <Card>
           <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
             description={admin ? '클러스터를 등록하고 에이전트가 연결되면 실시간·스냅샷 메트릭이 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 실시간·스냅샷 메트릭이 표시됩니다'}
-            action={admin ? <Link to="/clusters"><Button variant="primary">클러스터 등록</Button></Link> : undefined} />
+            action={admin ? <Link to={pathFor('/clusters')}><Button variant="primary">클러스터 등록</Button></Link> : undefined} />
         </Card>
       </FadeSlideIn>
     );
