@@ -44,6 +44,7 @@ class Permission(StrEnum):
     CLUSTER_READ = "cluster.read"
     INVENTORY_READ = "inventory.read"
     DASHBOARD_READ = "dashboard.read"
+    DASHBOARD_MANAGE = "dashboard.manage"
     EVIDENCE_READ = "evidence.read"
     RCA_READ = "rca.read"
     MANIFEST_READ = "manifest.read"
@@ -149,6 +150,7 @@ OBSERVABILITY_PERMISSIONS: frozenset[str] = frozenset(
 )
 RELEASE_PERMISSIONS: frozenset[str] = OBSERVABILITY_PERMISSIONS | frozenset(
     {
+        Permission.DASHBOARD_MANAGE.value,
         Permission.APPLICATION_MANAGE.value,
         Permission.DEPLOY_RUN.value,
         Permission.WORKLOAD_SCALE.value,

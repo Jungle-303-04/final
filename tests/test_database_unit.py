@@ -126,6 +126,8 @@ def test_schema_defines_expected_tables() -> None:
         "evidence_windows",
         "target_desired_states",
         "target_reconcile_records",
+        "metric_query_presets",
+        "metric_widgets",
     }
     assert expected <= set(metadata.tables)
 

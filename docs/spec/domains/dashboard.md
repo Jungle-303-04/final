@@ -32,7 +32,9 @@ status: synced
 |---|---|---|
 | `Path` | `tuple[str, ...]` 타입 별칭 | `src/domains/dashboard/repository.py :: Path` |
 | `RCA_TIMELINE_STATUS_BY_SUBJECT` | `dict[str, str]` — subject → status 매핑(아래 표) | `src/domains/dashboard/repository.py :: RCA_TIMELINE_STATUS_BY_SUBJECT` |
-| `DashboardRepository` | `class DashboardRepository(DatabaseConnection)` — `table = RcaTimeline.__table__` | `src/domains/dashboard/repository.py :: DashboardRepository` |
+| `DashboardRepository` | `class DashboardRepository(DatabaseConnection)` — RCA timeline + metric query/widget 저장소 | `src/domains/dashboard/repository.py :: DashboardRepository` |
+| `list_metric_query_presets` / `upsert_metric_query_preset` / `delete_metric_query_preset` | cluster 단위 저장형 PromQL 정의 CRUD. 결과 payload는 저장하지 않는다 | `src/domains/dashboard/repository.py :: DashboardRepository` |
+| `list_metric_widgets` / `upsert_metric_widget` / `delete_metric_widget` | 저장형 metric query를 참조하는 widget 정의 CRUD. 위치·표시 설정만 저장한다 | `src/domains/dashboard/repository.py :: DashboardRepository` |
 | `timeline_update_from_event` | `def timeline_update_from_event(evt: EventEnvelope) -> JsonObject \| None` | `src/domains/dashboard/repository.py :: timeline_update_from_event` |
 | `serialize_timeline_row` | `def serialize_timeline_row(row: Any) -> JsonObject` — created_at/updated_at ISO화(`isoformat` 없으면 None), supporting/missing_evidence `or []` | `src/domains/dashboard/repository.py :: serialize_timeline_row` |
 
@@ -95,6 +97,13 @@ status: synced
 |---|---|---|---|---|
 | `GET /dashboard/rca/timeline` (`gateway_routes.DASHBOARD_RCA_TIMELINE_PATH`) | `src/domains/dashboard/router.py :: rca_timeline` | query `cluster_id: str \| None = None`, `limit: int = 50 (ge=1, le=100)` | `RcaTimelineResponse(items=[RcaTimelineItem...])` | `require_session` + cluster `Permission.RCA_READ` |
 | `GET /dashboard/rca/incidents/{incident_id}` (`DASHBOARD_RCA_INCIDENT_PATH`) | `src/domains/dashboard/router.py :: rca_incident` | query `cluster_id: str \| None = None` | `RcaIncidentResponse(item=RcaTimelineItem)`; 없으면 404 `"RCA incident not found"` | 동일 |
+| `GET /clusters/{cluster_id}/metric-query-presets` | `list_metric_query_presets` | cluster path | `MetricQueryPresetListResponse` | cluster `Permission.DASHBOARD_READ` |
+| `POST /clusters/{cluster_id}/metric-query-presets` | `upsert_metric_query_preset` | `MetricQueryPresetUpsertRequest` | `MetricQueryPresetResponse` | cluster `Permission.DASHBOARD_MANAGE` |
+| `DELETE /clusters/{cluster_id}/metric-query-presets/{preset_id}` | `delete_metric_query_preset` | path | 204 / 404 | cluster `Permission.DASHBOARD_MANAGE` |
+| `POST /clusters/{cluster_id}/metric-query-presets/{preset_id}/run` | `run_metric_query_preset` | path | `AgentDebugQueryResponse` | cluster `Permission.EVIDENCE_READ`; 내부는 `debug_query_plan` + `queue_agent_command` |
+| `GET /clusters/{cluster_id}/metric-widgets` | `list_metric_widgets` | cluster path | `MetricWidgetListResponse` | cluster `Permission.DASHBOARD_READ` |
+| `POST /clusters/{cluster_id}/metric-widgets` | `upsert_metric_widget` | `MetricWidgetUpsertRequest` | `MetricWidgetResponse` | cluster `Permission.DASHBOARD_MANAGE` |
+| `DELETE /clusters/{cluster_id}/metric-widgets/{widget_id}` | `delete_metric_widget` | path | 204 / 404 | cluster `Permission.DASHBOARD_MANAGE` |
 
 공개 헬퍼: `timeline_item(row: JsonObject) -> RcaTimelineItem` (`src/domains/dashboard/router.py :: timeline_item`) — `TIMELINE_ITEM_FIELDS`만 추출, supporting/missing_evidence는 `or []`.
 
@@ -154,6 +163,32 @@ health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_ro
 | last_event_at | Text | NOT NULL | 마지막 이벤트 시각 문자열(순서 비교 키) |
 | payload | JSONB | NOT NULL | 마지막 이벤트 payload 전문 |
 | created_at / updated_at | TIMESTAMP(timezone=True) | NOT NULL, server_default now() | 시각 |
+
+### `metric_query_presets` — `src/domains/dashboard/models.py :: MetricQueryPreset`
+
+cluster별 저장형 PromQL 정의. `UNIQUE(workspace_id, cluster_id, name)`. 결과값은 저장하지 않고, 실행은 `metric-query-presets/{preset_id}/run`이 기존 agent command 경로에 위임한다.
+
+| 필드 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| preset_id | Text | PK | preset 식별자 |
+| workspace_id / cluster_id | Text | workspace FK / NOT NULL | 범위 |
+| name / description / source / query / unit | Text | NOT NULL | 표시명·출처·PromQL 정의 |
+| range_seconds / step_seconds | BigInteger | nullable | 실행 범위와 step 상한 |
+| metadata | JSONB | NOT NULL | UI/스코프 메타데이터 |
+| created_by / created_at / updated_at | Text/TIMESTAMP | NOT NULL | 감사용 |
+
+### `metric_widgets` — `src/domains/dashboard/models.py :: MetricWidget`
+
+저장형 query preset을 참조하는 화면 widget 정의. `UNIQUE(workspace_id, cluster_id, title)`.
+
+| 필드 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| widget_id | Text | PK | widget 식별자 |
+| workspace_id / cluster_id | Text | workspace FK / NOT NULL | 범위 |
+| query_preset_id | Text | FK(metric_query_presets.preset_id) | 실행 query 참조 |
+| title / kind | Text | NOT NULL | 표시명, line/stat/table/heatmap 등 |
+| position / settings | JSONB | NOT NULL | 레이아웃·표시 설정 |
+| created_by / created_at / updated_at | Text/TIMESTAMP | NOT NULL | 감사용 |
 
 ## 이벤트 (Events)
 

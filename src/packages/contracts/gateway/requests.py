@@ -47,6 +47,12 @@ DEFAULT_PROVIDER_MAX_WORKERS = 3
 DEFAULT_QUEUE_AGE_TARGET_SECONDS = 15
 DEFAULT_AI_AGENT = "operations-chat"
 MAX_AI_MESSAGE_LENGTH = 16_000
+MAX_METRIC_QUERY_LENGTH = 4_000
+MAX_METRIC_DEFINITION_JSON_BYTES = 16_384
+MIN_METRIC_RANGE_SECONDS = 60
+MAX_METRIC_RANGE_SECONDS = 86_400
+MIN_METRIC_STEP_SECONDS = 1
+MAX_METRIC_STEP_SECONDS = 3_600
 
 # agent evidence 페이로드 상한 — 무한 크기 수집물이 DB/NATS/LLM 컨텍스트를 압박하지 않도록.
 MAX_EVIDENCE_LOG_ENTRIES = 2000
@@ -251,6 +257,57 @@ class AgentDebugQueryRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     query: dict[str, Any]
     reason: str | None = None
+
+
+class MetricQueryPresetUpsertRequest(StrictModel):
+    preset_id: str | None = Field(default=None, min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    source: Literal["prometheus"] = "prometheus"
+    query: str = Field(min_length=1, max_length=MAX_METRIC_QUERY_LENGTH)
+    range_seconds: int | None = Field(
+        default=900,
+        ge=MIN_METRIC_RANGE_SECONDS,
+        le=MAX_METRIC_RANGE_SECONDS,
+    )
+    step_seconds: int | None = Field(
+        default=30,
+        ge=MIN_METRIC_STEP_SECONDS,
+        le=MAX_METRIC_STEP_SECONDS,
+    )
+    unit: str = Field(default="", max_length=40)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_bounds(self) -> MetricQueryPresetUpsertRequest:
+        if (
+            self.range_seconds is not None
+            and self.step_seconds is not None
+            and self.step_seconds > self.range_seconds
+        ):
+            raise ValueError("step_seconds must be less than or equal to range_seconds")
+        _ensure_metric_json_bound({"metadata": self.metadata})
+        return self
+
+
+class MetricWidgetUpsertRequest(StrictModel):
+    widget_id: str | None = Field(default=None, min_length=1, max_length=120)
+    query_preset_id: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=120)
+    kind: Literal["line", "area", "bar", "stat", "table", "heatmap"] = "line"
+    position: dict[str, Any] = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_json_bounds(self) -> MetricWidgetUpsertRequest:
+        _ensure_metric_json_bound({"position": self.position, "settings": self.settings})
+        return self
+
+
+def _ensure_metric_json_bound(value: dict[str, Any]) -> None:
+    size = len(json.dumps(value, sort_keys=True, default=str).encode())
+    if size > MAX_METRIC_DEFINITION_JSON_BYTES:
+        raise ValueError("metric definition JSON exceeds size limit")
 
 
 class AiConversationCreateRequest(StrictModel):
