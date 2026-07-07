@@ -217,9 +217,7 @@ function RecoveryPlanPanel({ correlationId, standalone = false }: { correlationI
         {plan && <Badge tone={recoveryPlanTone(plan)}>{plan.status}</Badge>}
       </div>
       {q.isPending ? <Skeleton lines={2} /> : missing ? (
-        <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>
-          RCA 완료 후 복구 후보가 생성되면 여기에 표시됩니다.
-        </p>
+        <Badge tone="neutral">생성 전</Badge>
       ) : q.isError ? (
         <EmptyState icon={<IconAlertTriangle size={24} />} title="복구 계획을 불러오지 못했습니다"
           description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
@@ -310,8 +308,7 @@ function EvidencePanel({ correlationId }: { correlationId: string }) {
         <EmptyState icon={<IconAlertTriangle size={26} />} title="증거를 불러오지 못했습니다"
           description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
       ) : items.length === 0 ? (
-        <EmptyState icon={<IconFile size={26} />} title="저장된 증거가 아직 없습니다"
-          description="에이전트가 증거를 수집·업로드하면 여기 표시됩니다" />
+        <EmptyState icon={<IconFile size={26} />} title="저장된 증거가 아직 없습니다" />
       ) : (
         <>
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -334,8 +331,8 @@ function EvidenceRow({ record }: { record: EvidenceRecord }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="card" style={{ background: 'var(--surface-2)', padding: 10 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap' }}
-        onClick={() => setOpen(o => !o)} role="button" aria-expanded={open}>
+      <button type="button" style={{ width: '100%', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap', border: 0, background: 'transparent', color: 'inherit', padding: 0, textAlign: 'left' }}
+        onClick={() => setOpen(o => !o)} aria-expanded={open}>
         <Badge tone={kindTone(record.kind)}>{record.kind}</Badge>
         <code style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>#{record.id}</code>
         <span style={{ flex: 1, fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-mono)', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -345,7 +342,7 @@ function EvidenceRow({ record }: { record: EvidenceRecord }) {
           <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }} title={fmtAbs(record.created_at)}>{timeAgo(record.created_at)}</span>
         )}
         <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{open ? '▾' : '▸'}</span>
-      </div>
+      </button>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
@@ -382,8 +379,7 @@ function RcaReportsPanel({ correlationId, onShowEvidence }: { correlationId: str
         <EmptyState icon={<IconAlertTriangle size={26} />} title="리포트를 불러오지 못했습니다"
           description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
       ) : (q.data ?? []).length === 0 ? (
-        <EmptyState icon={<IconFile size={26} />} title="생성된 RCA 리포트가 아직 없습니다"
-          description="원인 분석이 완료되면 리포트가 저장됩니다" />
+        <EmptyState icon={<IconFile size={26} />} title="생성된 RCA 리포트가 아직 없습니다" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(q.data ?? []).map(r => <RcaReportCard key={r.id} report={r} onShowEvidence={onShowEvidence} />)}
