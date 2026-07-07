@@ -5,9 +5,11 @@ import re
 import subprocess
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from fastapi import HTTPException
 
 from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
@@ -379,6 +381,30 @@ def test_management_install_manifest_is_read_only() -> None:
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
+
+
+def test_static_management_agent_manifest_is_read_only() -> None:
+    manifest_path = Path(__file__).resolve().parents[1] / "deploy/management/target-agent.yaml"
+    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
+    forbidden_verbs = {"create", "update", "patch", "delete", "deletecollection", "apply"}
+
+    for doc in docs:
+        if doc.get("kind") not in {"Role", "ClusterRole"}:
+            continue
+        verbs = {
+            verb
+            for rule in doc.get("rules", [])
+            for verb in rule.get("verbs", [])
+        }
+        assert verbs.isdisjoint(forbidden_verbs)
+
+    deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
+    env = {
+        item["name"]: item.get("value")
+        for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["CLUSTER_ROLE"] == "management"
+    assert env["NODE_COLLECTOR_ENABLED"] == "false"
 
 
 def test_target_install_manifest_can_include_explicit_sample_workload() -> None:

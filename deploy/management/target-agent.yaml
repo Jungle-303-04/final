@@ -28,36 +28,6 @@ subjects:
   - kind: ServiceAccount
     name: cluster-agent
     namespace: management
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: management-target-agent-self-manage
-  namespace: management
-rules:
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    resourceNames: ["target-agent-policy"]
-    verbs: ["get", "update", "patch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    resourceNames: ["cluster-agent"]
-    verbs: ["get", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: management-target-agent-self-manage
-  namespace: management
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: management-target-agent-self-manage
-subjects:
-  - kind: ServiceAccount
-    name: cluster-agent
-    namespace: management
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -96,6 +66,8 @@ spec:
               value: "management"
             - name: BOOTSTRAP_MODE
               value: "management"
+            - name: NODE_COLLECTOR_ENABLED
+              value: "false"
             - name: OTEL_SERVICE_NAME
               value: "target-cluster-agent"
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
