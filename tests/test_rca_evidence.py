@@ -13,6 +13,7 @@ from domains.rca.events import (
     RcaCompletedBody,
     RcaReportDetail,
     RecoveryActionSelectedBody,
+    compact_cluster_evidence_payload,
 )
 from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EvidenceBuilder
 from services.ai.agent.pipeline.evidence_bundle import MAX_LOG_ENTRIES, MAX_TEXT_LENGTH
@@ -111,6 +112,57 @@ def run_to_rca(
         correlation_id=correlation_id,
     )
     return evidence_outs + incident_outs + plan_outs + analyze_outs + rca_outs
+
+
+def test_evidence_worker_hydrates_reference_event_from_window_payload() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    full_payload = crashloop_payload(
+        source_id="cluster-snapshot",
+        window_start="window-1",
+    )
+    full_payload = ClusterEvidenceReceivedBody.from_body(
+        {
+            **full_payload.to_body(),
+            "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+        }
+    )
+    reference_payload = ClusterEvidenceReceivedBody.from_body(
+        compact_cluster_evidence_payload(full_payload, "corr-ref")
+    )
+    db = SpyDb(get_evidence_window_payload=full_payload.to_body())
+
+    outs = run_handler(
+        evidence_worker.on_cluster_evidence,
+        reference_payload,
+        db=db,
+        correlation_id="corr-ref",
+    )
+
+    assert subjects_of(outs) == ["evidence.built"]
+    evidence = outs[0].evidence
+    assert evidence.kubernetes["resource"]["name"] == "checkout-api"
+    assert evidence.metrics["memory"] == "near-limit"
+    assert evidence.logs[0]["line"] == "OOMKilled"
+    assert db.called("get_evidence_window_payload")
+
+
+def test_evidence_worker_accepts_legacy_full_payload_event() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    full_payload = crashloop_payload()
+    db = SpyDb()
+
+    outs = run_handler(
+        evidence_worker.on_cluster_evidence,
+        full_payload,
+        db=db,
+        correlation_id="corr-full",
+    )
+
+    assert subjects_of(outs) == ["evidence.built"]
+    evidence = outs[0].evidence
+    assert evidence.kubernetes["resource"]["name"] == "checkout-api"
+    assert evidence.metrics["memory"] == "near-limit"
+    assert not db.called("get_evidence_window_payload")
 
 
 def report_for(root_cause: str) -> RcaCompletedBody:

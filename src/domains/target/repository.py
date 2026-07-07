@@ -574,12 +574,21 @@ class TargetAgentRepository(DatabaseConnection):
 
     def get_evidence_window(self, evidence_key: str) -> JsonObject | None:
         table = EvidenceWindow.__table__
-        statement = select(table.c.event_id, table.c.correlation_id, table.c.updated_at).where(
-            table.c.evidence_key == evidence_key
-        )
+        statement = select(
+            table.c.event_id,
+            table.c.correlation_id,
+            table.c.updated_at,
+        ).where(table.c.evidence_key == evidence_key)
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return dict(row) if row else None
+
+    def get_evidence_window_payload(self, evidence_key: str) -> JsonObject | None:
+        table = EvidenceWindow.__table__
+        statement = select(table.c.payload).where(table.c.evidence_key == evidence_key)
+        with self.connection() as conn:
+            payload = conn.execute(statement).scalar_one_or_none()
+        return payload if isinstance(payload, dict) else None
 
     def record_evidence_window(
         self,

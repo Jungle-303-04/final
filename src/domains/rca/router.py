@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import secrets
 from dataclasses import replace
 from typing import Any
@@ -21,6 +22,7 @@ from domains.rca.events import (
     RecoveryActionCandidate,
     RecoveryActionSelectedBody,
     RecoveryPlan,
+    compact_cluster_evidence_payload,
 )
 from packages.config.settings import env
 from packages.contracts.auth import Actor
@@ -70,6 +72,23 @@ def scoped_evidence_key(identity: ClusterAgentIdentity, evidence_key: str | None
     return f"{identity.workspace_id}:{identity.cluster_id}:{evidence_key}"
 
 
+def agent_evidence_key(identity: ClusterAgentIdentity, payload: AgentEvidenceRequest) -> str:
+    scoped_key = scoped_evidence_key(identity, payload.evidence_key)
+    if scoped_key:
+        return scoped_key
+    # 구형 agent 가 evidence_key 를 보내지 않아도 full payload 이벤트 발행은 금지한다.
+    # 신뢰된 identity + payload digest 로 안정 키를 만들고 원문은 evidence_windows 에만 둔다.
+    data = payload.model_dump(exclude={"correlation_id"})
+    data["workspace_id"] = identity.workspace_id
+    data["cluster_id"] = identity.cluster_id
+    data["evidence_key"] = None
+    encoded = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(encoded.encode()).hexdigest()[:32]
+    source_id = payload.source_id or DEFAULT_EVIDENCE_SOURCE_ID
+    window_start = payload.window_start or payload.correlation_id or "adhoc"
+    return f"{identity.workspace_id}:{identity.cluster_id}:{source_id}:{window_start}:{digest}"
+
+
 def build_cluster_evidence_body(
     payload: AgentEvidenceRequest, identity: ClusterAgentIdentity
 ) -> ClusterEvidenceReceivedBody:
@@ -77,7 +96,8 @@ def build_cluster_evidence_body(
     data = payload.model_dump(exclude={"correlation_id"})
     data["workspace_id"] = identity.workspace_id
     data["cluster_id"] = identity.cluster_id
-    data["evidence_key"] = scoped_evidence_key(identity, payload.evidence_key)
+    data["evidence_key"] = agent_evidence_key(identity, payload)
+    data["correlation_id"] = payload.correlation_id
     return ClusterEvidenceReceivedBody(**data)
 
 
@@ -88,39 +108,32 @@ async def agent_evidence(
     events: Any = Depends(get_events),
     db: Any = Depends(get_db),
 ) -> AcceptedResponse:
-    evidence_key = scoped_evidence_key(identity, payload.evidence_key)
+    evidence_key = agent_evidence_key(identity, payload)
     evidence_body = build_cluster_evidence_body(payload, identity)
     event_envelope = event(
         evidence_body.__subject__,
         getattr(events, "source", "api-gateway"),
-        evidence_body.to_body(),
+        compact_cluster_evidence_payload(evidence_body, payload.correlation_id),
         payload.correlation_id,
     )
-    if evidence_key:
-        existing = await db_call(db.get_evidence_window, evidence_key)
-        if existing:
-            return AcceptedResponse(
-                accepted=True,
-                event_id=existing["event_id"],
-                correlation_id=existing["correlation_id"],
-            )
-        recorded = await db_call(
-            db.record_evidence_event_once,
-            evidence_key=evidence_key,
-            workspace_id=identity.workspace_id,
-            cluster_id=identity.cluster_id,
-            source_id=evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
-            window_start=evidence_body.window_start or evidence_body.evidence_key or evidence_key,
-            agent_id=evidence_body.agent_id,
-            event_envelope=event_envelope,
-            payload=evidence_body.to_body(),
-        )
+    existing = await db_call(db.get_evidence_window, evidence_key)
+    if existing:
         return AcceptedResponse(
             accepted=True,
-            event_id=recorded["event_id"],
-            correlation_id=recorded["correlation_id"],
+            event_id=existing["event_id"],
+            correlation_id=existing["correlation_id"],
         )
-    recorded = await db_call(db.stage_event_once, event_envelope)
+    recorded = await db_call(
+        db.record_evidence_event_once,
+        evidence_key=evidence_key,
+        workspace_id=identity.workspace_id,
+        cluster_id=identity.cluster_id,
+        source_id=evidence_body.source_id or DEFAULT_EVIDENCE_SOURCE_ID,
+        window_start=evidence_body.window_start or evidence_body.evidence_key or evidence_key,
+        agent_id=evidence_body.agent_id,
+        event_envelope=event_envelope,
+        payload=evidence_body.to_body(),
+    )
     return AcceptedResponse(
         accepted=True,
         event_id=recorded["event_id"],
@@ -220,7 +233,7 @@ async def alertmanager_webhook(
     event_envelope = event(
         evidence_body.__subject__,
         getattr(events, "source", "api-gateway"),
-        evidence_body.to_body(),
+        compact_cluster_evidence_payload(evidence_body),
         None,
     )
     existing = await db_call(db.get_evidence_window, evidence_key)

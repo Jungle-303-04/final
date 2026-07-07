@@ -425,7 +425,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 | workspace_id | `str` | `DEFAULT_WORKSPACE_ID` |
 | requested_by | `str \| None` | `None` |
 
-**`cluster.evidence.received`** — `ClusterEvidenceReceivedBody`(정의는 rca 도메인): `cluster_id: str`, `kubernetes: JsonObject`, `metrics: JsonObject`, `logs: list[JsonObject]`, `traces: JsonObject`, `workspace_id: str = DEFAULT_WORKSPACE_ID`, `agent_id: str | None = None`, `source_id: str | None = None`, `window_start: str | None = None`, `evidence_key: str | None = None`.
+**`cluster.evidence.received`** — `ClusterEvidenceReceivedBody`(정의는 rca 도메인): `cluster_id: str`, `kubernetes: JsonObject`, `metrics: JsonObject`, `logs: list[JsonObject]`, `traces: JsonObject`, `workspace_id: str = DEFAULT_WORKSPACE_ID`, `agent_id: str | None = None`, `source_id: str | None = None`, `window_start: str | None = None`, `evidence_key: str | None = None`, `correlation_id: str | None = None`, `kind: str | None = None`, `payload_size: int | None = None`, `summary: JsonObject = {}`. 신규 발행 경로는 claim-check reference만 outbox에 싣고 원문은 `evidence_windows.payload`에 저장한다.
 
 ### 계약 정의 (이 도메인이 body를 정의하지만 발행/구독은 services 계층)
 
@@ -504,7 +504,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 **(d) 집계·발행** — `emit_evidence_if_ready`:
 1. `get_evidence_window`: 윈도우가 이미 있고 event_id가 `pending:`이 아니면 기존 event_id/correlation_id로 즉시 응답(중복 발행 방지). `pending:`이면 `release_stale_pending_evidence_window`로 TTL(120초) 지난 것만 회수, 아니면 `None`(다른 요청이 발행 중).
 2. `evidence_payload_if_ready` → `aggregate_evidence_payload(rows)`: 행이 없거나, 하나라도 비종결(`queued`/`leased`) 상태면 `None`(아직 준비 안 됨). `failure_policy="strict"`인 행이 `failed`면 `None`(발행 포기). 그 외에는 첫 행에서 `workspace_id`/`cluster_id`/`source_id`/`window_start`/`evidence_key`/`agent_id`를 취하고 `kubernetes: {}`를 시드로, `completed` 잡의 `result` dict를 순서대로 merge, `failed` 잡은 provider 키에 `empty_provider_payload`(logs는 `[]`, 그 외 `{}`)를 `setdefault`.
-3. payload로 `ClusterEvidenceReceivedBody` 구성 → `packages.events.envelope :: event(subject, source, body, correlation_id)` envelope 생성 → `record_evidence_event_once`가 한 트랜잭션에서 윈도우 기록+`events`/`outbox` 스테이징(경쟁 시 먼저 넣은 쪽 승리).
+3. payload로 `ClusterEvidenceReceivedBody` 구성 → `compact_cluster_evidence_payload`로 `{evidence_key, workspace_id, correlation_id, kind, payload_size, summary}` 중심 reference envelope 생성 → `record_evidence_event_once`가 한 트랜잭션에서 윈도우 원문 기록+`events`/`outbox` reference 스테이징(경쟁 시 먼저 넣은 쪽 승리).
 4. 반환된 event_id가 `pending:`이면 `None`, 아니면 `EvidenceJobResultResponse(accepted=True, evidence_key, event_id, correlation_id)`.
 
 **evidence window 상태(사실상 상태 머신):**

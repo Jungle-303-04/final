@@ -122,6 +122,13 @@ def test_agent_evidence_records_window_and_outbox_without_direct_emit() -> None:
     assert stored_payload["workspace_id"] == "trusted-workspace"
     assert stored_payload["cluster_id"] == "trusted-cluster"
     assert stored_payload["evidence_key"] == claimed_key
+    event_payload = db.recorded[0]["event_envelope"].payload
+    assert event_payload["evidence_key"] == claimed_key
+    assert event_payload["kind"] == "cluster_evidence"
+    assert event_payload["payload_size"] > 0
+    assert event_payload["kubernetes"] == {}
+    assert event_payload["metrics"] == {}
+    assert event_payload["logs"] == []
 
 
 def test_agent_evidence_reuses_existing_window_without_outbox_duplicate() -> None:
@@ -137,7 +144,7 @@ def test_agent_evidence_reuses_existing_window_without_outbox_duplicate() -> Non
     assert db.released == []
 
 
-def test_agent_evidence_without_key_stages_event_outbox() -> None:
+def test_agent_evidence_without_key_records_window_reference_outbox() -> None:
     events = SpyEvents()
     db = DedupeDb()
     request = evidence_request().model_copy(update={"evidence_key": None})
@@ -147,7 +154,16 @@ def test_agent_evidence_without_key_stages_event_outbox() -> None:
     assert response.event_id
     assert response.correlation_id
     assert events.accepted == 0
-    assert len(db.staged) == 1
+    assert db.staged == []
+    assert len(db.recorded) == 1
+    recorded = db.recorded[0]
+    claimed_key = recorded["evidence_key"]
+    assert claimed_key.startswith("trusted-workspace:trusted-cluster:cluster-snapshot:")
+    assert recorded["payload"]["evidence_key"] == claimed_key
+    event_payload = recorded["event_envelope"].payload
+    assert event_payload["evidence_key"] == claimed_key
+    assert event_payload["kind"] == "cluster_evidence"
+    assert event_payload["kubernetes"] == {}
 
 
 def test_agent_evidence_key_is_namespaced_by_trusted_identity() -> None:

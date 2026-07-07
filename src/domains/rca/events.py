@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
@@ -16,6 +17,8 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+
+MAX_EVIDENCE_EVENT_SUMMARY_BYTES = 2048
 
 
 @event(EventSubject.CLUSTER_EVIDENCE_RECEIVED)
@@ -33,6 +36,71 @@ class ClusterEvidenceReceivedBody(EventBody):
     source_id: str | None = None
     window_start: str | None = None
     evidence_key: str | None = None
+    correlation_id: str | None = None
+    kind: str | None = None
+    payload_size: int | None = None
+    summary: JsonObject = field(default_factory=dict)
+
+
+def compact_cluster_evidence_payload(
+    evidence_body: ClusterEvidenceReceivedBody,
+    correlation_id: str | None = None,
+) -> JsonObject:
+    """이벤트 버스에는 evidence 원문 대신 claim-check 참조만 싣는다."""
+    payload = evidence_body.to_body()
+    return {
+        "workspace_id": evidence_body.workspace_id,
+        "cluster_id": evidence_body.cluster_id,
+        "agent_id": evidence_body.agent_id,
+        "source_id": evidence_body.source_id,
+        "window_start": evidence_body.window_start,
+        "evidence_key": evidence_body.evidence_key,
+        "correlation_id": correlation_id or evidence_body.correlation_id,
+        "kind": "cluster_evidence",
+        "payload_size": evidence_payload_size(payload),
+        "summary": evidence_summary(evidence_body),
+        "kubernetes": {},
+        "metrics": {},
+        "logs": [],
+        "traces": {},
+    }
+
+
+def evidence_payload_size(payload: JsonObject) -> int:
+    """NATS 로 보내지 않을 원문 payload 크기를 byte 단위로 기록한다."""
+    return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode())
+
+
+def evidence_summary(evidence_body: ClusterEvidenceReceivedBody) -> JsonObject:
+    """대시보드·운영 로그에 필요한 핵심만 2KB 이하로 축약한다."""
+    raw_summary: JsonObject = {
+        "resource": _kubernetes_resource(evidence_body.kubernetes),
+        "symptom": evidence_body.kubernetes.get("symptom"),
+        "severity": evidence_body.kubernetes.get("severity"),
+        "kubernetes_keys": sorted(str(key) for key in evidence_body.kubernetes.keys())[:20],
+        "metrics_keys": sorted(str(key) for key in evidence_body.metrics.keys())[:20],
+        "logs_count": len(evidence_body.logs),
+        "traces_keys": sorted(str(key) for key in evidence_body.traces.keys())[:20],
+    }
+    summary = {key: value for key, value in raw_summary.items() if value not in (None, {}, [])}
+    encoded = json.dumps(summary, ensure_ascii=False, separators=(",", ":")).encode()
+    if len(encoded) <= MAX_EVIDENCE_EVENT_SUMMARY_BYTES:
+        return summary
+    return {
+        "resource": summary.get("resource"),
+        "symptom": summary.get("symptom"),
+        "severity": summary.get("severity"),
+        "logs_count": summary.get("logs_count", 0),
+        "truncated": True,
+    }
+
+
+def _kubernetes_resource(kubernetes: JsonObject) -> JsonObject:
+    resource = kubernetes.get("resource")
+    if isinstance(resource, dict):
+        allowed = {"kind", "name", "namespace"}
+        return {key: value for key, value in resource.items() if key in allowed}
+    return {}
 
 
 @dataclass(frozen=True)

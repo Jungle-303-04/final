@@ -24,7 +24,7 @@ from domains.identity.dependencies import (
 )
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.providers.catalog import ProviderCategory, require_available_provider
-from domains.rca.events import ClusterEvidenceReceivedBody
+from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
 from domains.target.events import ClusterDesiredStateChangedBody, TargetDesiredComponent
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
@@ -906,11 +906,15 @@ async def emit_evidence_if_ready(
         return None
 
     evidence_body = ClusterEvidenceReceivedBody(**payload)
+    correlation_id = payload.get("correlation_id")
     event_envelope = event(
         evidence_body.__subject__,
         getattr(events, "source", "api-gateway"),
-        evidence_body.to_body(),
-        payload.get("correlation_id"),
+        compact_cluster_evidence_payload(
+            evidence_body,
+            correlation_id if isinstance(correlation_id, str) else None,
+        ),
+        correlation_id if isinstance(correlation_id, str) else None,
     )
     recorded = await db_call(
         db.record_evidence_event_once,
