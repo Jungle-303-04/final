@@ -35,6 +35,9 @@
 8. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
    실제 서비스 smoke 기준을 확인한다.
 
+9. [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)을 본다.
+   현재 밤샘 안정화 작업을 대화 맥락 없이 이어받을 때 필요한 SHA, run ID, 게이트, 다음 명령을 확인한다.
+
 ## 민정이 먼저 볼 문서
 
 민정은 Command + Target + Evidence를 맡는다.
@@ -135,6 +138,8 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `AWS`를 찾을 때는 [AWS CI/CD](aws-cicd.md), [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
 
+`continuation` 또는 `handover`를 찾을 때는 [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)과 repo root의 `HANDOVER.md`를 본다.
+
 `event`를 찾을 때는 [이벤트 흐름](events.md), [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md), [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)을 본다.
 
 `provider`를 찾을 때는 [민정 온보딩](onboarding/minjeong-command-target-evidence.md), [Target / Telemetry 선형 작업](team/target-telemetry-tasks/README.md), [Target Agent Command / Evidence 구현 가이드](team/member-guides/target-agent-command-evidence-flow.md)를 본다.
@@ -157,6 +162,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
+- [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
 - [events](events.md)
 - [external-console-cluster-interactions](external-console-cluster-interactions.md)
 - [external-console-instances](external-console-instances.md)
