@@ -218,6 +218,7 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [rca-production-onboarding/05-production-completion-scope](rca-production-onboarding/05-production-completion-scope.md)
 - [rca-production-onboarding/06-chanbin-permission-dashboard](rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [rca-production-onboarding/07-how-to-find-and-implement](rca-production-onboarding/07-how-to-find-and-implement.md)
+- [rca-production-onboarding/08-provider-evidence-field-guide](rca-production-onboarding/08-provider-evidence-field-guide.md)
 
 팀 문서는 아래에 있다.
 
