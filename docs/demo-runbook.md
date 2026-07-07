@@ -105,6 +105,7 @@ kubectl --context cluster-1 -n sandbox get svc storefront-web
 ```
 
 콘솔에서 `storefront-web` 서비스의 external hostname이 클릭 가능한 링크로 보여야 한다.
+2026-07-08 실측 기준 inventory API도 `summary.external_url`에 storefront LoadBalancer URL을 노출한다.
 
 예상 대기시간:
 
@@ -172,8 +173,8 @@ kubectl --context cluster-1 -n sandbox get pods -o wide
 
 | 회차 | 리셋 | 연결 | 배포 | 장애 감지 | 복구 승인 | 총 소요 | 결과 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| 2 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| 1 | 기존 연결 유지 | 기존 연결 유지 | 76초(webhook -> 5개 command 완료) | 미실행 | 미실행 | 76초 | 성공: Service 2개, ConfigMap 1개, Deployment 2개가 리소스별 approval/command로 모두 적용됨. `https://target-01.woonyong.org/?demo=true` 200 |
+| 2 | TBD | TBD | TBD | TBD | TBD | TBD | 전체 장애/RCA/복구 리허설 필요 |
 
 ## 실패 시 즉시 전환
 
