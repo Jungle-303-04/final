@@ -49,7 +49,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 ```
 
 - `resolved` 있으면 `<Badge status={resolved} />` 만 렌더.
-- 아니면 `.card`(surface-2, compact 시 padding 10): `Badge(warn '승인 대기')` + summary + 승인(primary sm, `approval.isPending` loading)/거절(danger sm) 버튼.
+- 아니면 `.card`(surface-2, compact 시 padding 10): `Badge(warn '승인 대기')` + summary + 승인(primary sm)/거절(danger sm) 버튼 — 진행 중엔 둘 다 disabled, 로딩 스피너는 `approval.variables.action` 이 일치하는(클릭한) 버튼에만.
 - `canDeploy = useIsAdmin()` — false 면 두 버튼 disabled + title `'deploy 권한 필요'` (mock 단계 단순화, 서버가 최종 검증. G5 도입 시 리소스 권한으로 대체).
 - 클릭 → `useApproval().mutate({ approvalId, action })`.
 
