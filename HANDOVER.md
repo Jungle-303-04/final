@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:37 KST (세션 확인 retry 제거)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:45 KST (`LoginView` 보호 경로 fallback)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -48,6 +48,12 @@
 - 원인: 비로그인 진입 때 `GET /auth/session` 401이 TanStack Query 기본 retry를 타면서, 로그인/새로고침 이후까지 지연 재시도가 남았다.
 - 수정: `useSession()`에 `retry:false`를 명시했다. 세션 확인의 401은 정상적인 unauth 신호이므로 재시도하지 않고 `RequireSession`이 즉시 `/login?returnTo=...`로 보낸다.
 - 다음 검증: typecheck/test/build → 커밋/푸시 → 새 console 이미지 배포 → `/console` 로그인/새로고침 브라우저 smoke 재실행.
+
+### 21:45 KST follow-up — 보호 경로 위 로그인 폼 fallback
+
+- live smoke에서 비로그인 `/console`이 주소는 `/console`인 채 로그인 폼을 렌더하는 케이스를 확인했다. 이 경우 `LoginView`가 query `returnTo`를 못 읽으면 성공 후 `/`로 이동할 수 있다.
+- 수정: `LoginView`가 `/login`, `/signup`, `/pending`, `/verify-email`이 아닌 경로 위에서 렌더되면 현재 `pathname+search+hash`를 fallback returnTo로 사용한다. 외부 URL 방어(`safeReturnTo`)는 유지한다.
+- 다음 검증: typecheck/test/docs/build → 커밋/푸시 → 새 console 이미지 배포 → focused browser smoke 재실행.
 
 ## 체크포인트 (20:58 KST) — DLQ archive + no-signal incident payload 정리
 
