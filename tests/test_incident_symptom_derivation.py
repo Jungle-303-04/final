@@ -36,6 +36,7 @@ def pod(
     ready: bool = True,
     node: str | None = "node-a",
     labels: dict[str, str] | None = None,
+    containers: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
     """kubernetes_providers.pod_summary 출력과 같은 모양의 pod 요약."""
     owner_kind, owner_name = owner if owner else (None, None)
@@ -55,10 +56,29 @@ def pod(
         "pod_ip": "10.1.0.7",
         "host_ip": "10.0.0.1",
         "conditions": [{"type": "Ready", "status": "True" if ready else "False"}],
-        "containers": [],
+        "containers": list(containers),
         "restart_total": restarts,
         "waiting_reasons": list(waiting),
         "terminated_reasons": list(terminated),
+    }
+
+
+def crashed_container(name: str, *, last_exit_code: int, last_reason: str = "Error") -> dict:
+    """crashloop 컨테이너 요약 — 현재 waiting, 직전 크래시 종료 코드는 lastState 에 보존."""
+    return {
+        "name": name,
+        "image": f"ghcr.io/shop-demo/{name}:v1",
+        "ready": False,
+        "restart_count": 7,
+        "state": "waiting",
+        "state_reason": "CrashLoopBackOff",
+        "state_message": "back-off 5m0s restarting failed container",
+        "exit_code": None,
+        "started_at": None,
+        "finished_at": None,
+        "last_state": "terminated",
+        "last_state_reason": last_reason,
+        "last_exit_code": last_exit_code,
     }
 
 
@@ -351,16 +371,13 @@ def test_derived_incident_targets_dominant_pod_owner() -> None:
     assert incident.summary == "ReplicaSet payment-gateway-7d9f8c5b6 has CrashLoopBackOff"
 
 
-def test_crashloop_snapshot_reaches_rca_completed_golden_path() -> None:
-    """(c) — crashloop snapshot + metrics/logs 가 rca.completed 까지 도달한다."""
-    payload = evidence_payload(
-        CRASHLOOP_SNAPSHOT,
-        metrics={"container_memory_working_set_bytes": "near-limit"},
-        logs=[{"line": "FATAL: required environment variable DATABASE_URL is not set"}],
-    )
-    db = SpyDb()
-    events = run_to_plan(payload, correlation_id="corr-golden")
-
+def run_to_rca_completion(
+    payload: ClusterEvidenceReceivedBody,
+    *,
+    db: SpyDb,
+    correlation_id: str,
+) -> list[Any]:
+    events = run_to_plan(payload, correlation_id=correlation_id)
     analyze_worker = load_service("ai/analyze-worker")
     rca_worker = load_service("ai/rca-worker")
     analyze_outs = run_handler(
@@ -368,23 +385,112 @@ def test_crashloop_snapshot_reaches_rca_completed_golden_path() -> None:
         event_by_subject(events, "rca.candidates.planned"),
     )
     rca_outs = run_handler(
-        rca_worker.on_candidates_evaluated, analyze_outs[0], db=db, correlation_id="corr-golden"
+        rca_worker.on_candidates_evaluated, analyze_outs[0], db=db, correlation_id=correlation_id
     )
+    return events + analyze_outs + rca_outs
 
-    assert subjects_of(events + analyze_outs + rca_outs) == [
-        "evidence.built",
-        "incident.detected",
-        "evidence.bundle.built",
-        "rca.candidates.planned",
-        "rca.candidates.evaluated",
-        "rca.completed",
-    ]
-    completed = rca_outs[-1]
-    # 결정적 점수화 — kubernetes/metrics/logs 근거가 모두 있는 oom_killed 후보가 1.0 으로 선택됨.
-    assert completed.root_cause == "oom_killed"
+
+GOLDEN_PATH_SUBJECTS = [
+    "evidence.built",
+    "incident.detected",
+    "evidence.bundle.built",
+    "rca.candidates.planned",
+    "rca.candidates.evaluated",
+    "rca.completed",
+]
+
+
+def evaluation_by_id(completed: Any, candidate_id: str) -> Any:
+    return next(e for e in completed.evaluations if e.candidate_id == candidate_id)
+
+
+def test_exit1_crashloop_with_config_log_completes_as_config_env_error() -> None:
+    """(c) — exit 1 크래시(환경변수 누락 FATAL 로그, OOM 신호 없음)는 oom_killed 가 아니라
+    설정 오류 후보로 완결된다(운영에서 관측된 오판의 회귀 테스트)."""
+    payload = evidence_payload(
+        CRASHLOOP_SNAPSHOT,
+        metrics={"container_memory_working_set_bytes": "near-limit"},
+        logs=[{"line": "FATAL: required environment variable DATABASE_URL is not set"}],
+    )
+    db = SpyDb()
+
+    events = run_to_rca_completion(payload, db=db, correlation_id="corr-golden")
+
+    assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
+    completed = events[-1]
+    assert completed.root_cause == "config_env_error"
     assert completed.rca_detail.confidence == 1.0
     assert completed.incident.symptom == "CrashLoopBackOff"
     assert db.called("save_rca_report")
+    # oom_killed 는 양성 OOM 근거(signal) 미충족으로 완결 점수에 도달하지 못한다.
+    oom = evaluation_by_id(completed, "oom_killed")
+    assert oom.score < 1.0
+    assert "signal:oom_evidence" in oom.missing_evidence
+
+
+def test_true_oom_crashloop_completes_as_oom_killed() -> None:
+    """(c) — 진짜 OOM(terminated=OOMKilled + exit 137 + OOM 로그)은 oom_killed 로 완결된다."""
+    oom_snapshot = snapshot(
+        pods=(
+            pod(
+                "report-generator-6c4b7d9f4-r8m2s",
+                owner=("ReplicaSet", "report-generator-6c4b7d9f4"),
+                restarts=5,
+                terminated=("OOMKilled",),
+                ready=False,
+                containers=(
+                    crashed_container(
+                        "report-generator", last_exit_code=137, last_reason="OOMKilled"
+                    ),
+                ),
+            ),
+        ),
+    )
+    payload = evidence_payload(
+        oom_snapshot,
+        metrics={"container_memory_working_set_bytes": "near-limit"},
+        logs=[{"line": "java.lang.OutOfMemoryError: Java heap space"}],
+    )
+    db = SpyDb()
+
+    events = run_to_rca_completion(payload, db=db, correlation_id="corr-oom")
+
+    assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
+    completed = events[-1]
+    assert completed.root_cause == "oom_killed"
+    assert completed.rca_detail.confidence == 1.0
+    assert db.called("save_rca_report")
+
+
+def test_generic_exit1_crash_without_config_log_selects_app_startup_failure() -> None:
+    """(c) — 설정 오류 로그 패턴이 없는 일반 exit 1 크래시(FATAL 로그)는
+    app_startup_failure 로 판별된다(exit_code=non_oom fact 기반)."""
+    exit1_snapshot = snapshot(
+        pods=(
+            pod(
+                "payment-gateway-7d9f8c5b6-x2k4p",
+                owner=("ReplicaSet", "payment-gateway-7d9f8c5b6"),
+                restarts=7,
+                waiting=("CrashLoopBackOff",),
+                ready=False,
+                containers=(crashed_container("payment-gateway", last_exit_code=1),),
+            ),
+        ),
+    )
+    payload = evidence_payload(
+        exit1_snapshot,
+        logs=[{"line": "FATAL: unexpected failure during startup"}],
+    )
+    db = SpyDb()
+
+    events = run_to_rca_completion(payload, db=db, correlation_id="corr-exit1")
+
+    assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
+    completed = events[-1]
+    assert completed.root_cause == "app_startup_failure"
+    assert completed.root_cause != "oom_killed"
+    oom = evaluation_by_id(completed, "oom_killed")
+    assert "signal:oom_evidence" in oom.missing_evidence
 
 
 def test_explicit_symptom_always_beats_derived_signals() -> None:
