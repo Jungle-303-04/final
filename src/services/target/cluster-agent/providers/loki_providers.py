@@ -21,6 +21,10 @@ from providers.base import TRACER, ConfigReader
     empty_payload=list,  # 로그 payload 는 목록 형태
 )
 class LokiLogsProvider:
+    """Collect log data from Loki.
+    It builds the logs evidence bucket.
+    """
+
     span_name = "loki.collect"
     query_count_attribute = "loki.query_count"
     result_count_attribute = "loki.result_count"
@@ -29,10 +33,12 @@ class LokiLogsProvider:
     queries: tuple[LokiLogQuery, ...] = ()
 
     def __init__(self, base_url: str) -> None:
+        """Store the Loki base URL without a trailing slash."""
         self.base_url = base_url.rstrip("/")
 
     @classmethod
     def from_config(cls, read_config: ConfigReader) -> LokiLogsProvider:
+        """Create the provider from agent config values."""
         return cls(read_config(LOKI_BASE_URL_ENV, DEFAULT_LOKI_BASE_URL))
 
     async def query(
@@ -40,6 +46,7 @@ class LokiLogsProvider:
         client: httpx.AsyncClient,
         telemetry_query: LokiLogQuery,
     ) -> JsonObject:
+        """Run one Loki query and return the raw API result."""
         with TRACER.start_as_current_span("loki.query_range") as span:
             span.attr("loki.query", telemetry_query.logql)
             response = await client.get(
@@ -51,6 +58,7 @@ class LokiLogsProvider:
             return response.json()
 
     def empty_results(self) -> list[JsonObject]:
+        """Create an empty logs evidence bucket."""
         return []
 
     def append_result(
@@ -59,6 +67,7 @@ class LokiLogsProvider:
         telemetry_query: LokiLogQuery,
         payload: JsonObject,
     ) -> None:
+        """Normalize one Loki result and add it to the bucket."""
         results.append(
             {
                 "source": self.source,
@@ -69,9 +78,11 @@ class LokiLogsProvider:
         )
 
     def build_response(self, results: list[JsonObject]) -> list[JsonObject]:
+        """Return the finished logs evidence bucket."""
         return results
 
     def normalize_payload(self, payload: JsonObject) -> JsonObject:
+        """Turn a Loki response into stream and line summaries."""
         data = payload.get("data", {})
         result_type = data.get("resultType")
         result = data.get("result", [])
