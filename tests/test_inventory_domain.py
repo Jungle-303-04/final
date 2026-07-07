@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -10,8 +11,10 @@ from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_invento
 from domains.inventory.repository import (
     HEALTH_RESOURCE_TYPE,
     USAGE_RESOURCE_TYPE,
+    dedupe_inventory_rows,
     first_container_image,
     inventory_resource_key,
+    normalize_inventory_resource,
     snapshot_resources,
 )
 from domains.inventory.router import (
@@ -161,6 +164,53 @@ def test_snapshot_resources_adds_health_and_usage_rollups() -> None:
     ]
     assert resources[1]["kind"] == "ClusterHealth"
     assert resources[2]["kind"] == "ClusterUsage"
+
+
+def test_duplicate_inventory_keys_are_deduped_last_wins_before_upsert() -> None:
+    """kubernetes provider 의 namespace 별 쿼리 병합으로 node 가 중복되는 입력 재현.
+
+    같은 conflict key(inventory_key)가 배치 upsert VALUES 에 두 번 들어가면 postgres 가
+    CardinalityViolation(ON CONFLICT DO UPDATE cannot affect row a second time)으로
+    실패하므로, upsert 전에 키당 1행(마지막 관측 승리)으로 줄어야 한다.
+    """
+    observed_at = datetime(2026, 7, 7, 9, 0, tzinfo=UTC)
+
+    def node_row(status: str) -> dict[str, object]:
+        return normalize_inventory_resource(
+            {
+                "resource_type": "node",
+                "kind": "Node",
+                "namespace": None,
+                "name": "n1",
+                "status": status,
+                "health": "healthy",
+            },
+            workspace_id="ws-1",
+            cluster_id="cluster-1",
+            snapshot_id="snapshot-1",
+            observed_at=observed_at,
+        )
+
+    first = node_row("Ready")
+    second = node_row("NotReady")
+    assert first["inventory_key"] == second["inventory_key"]  # 동일 identity → 동일 conflict key
+
+    deduped = dedupe_inventory_rows([first, second])
+
+    assert len(deduped) == 1
+    assert deduped[0]["status"] == "NotReady"  # last-wins
+    # 중복이 없는 행은 순서 그대로 보존된다.
+    other = normalize_inventory_resource(
+        {"resource_type": "pod", "kind": "Pod", "namespace": "sandbox", "name": "p1"},
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-1",
+        observed_at=observed_at,
+    )
+    assert [row["kind"] for row in dedupe_inventory_rows([first, other, second])] == [
+        "Node",
+        "Pod",
+    ]
 
 
 def test_inventory_snapshot_route_uses_agent_identity_scope() -> None:
