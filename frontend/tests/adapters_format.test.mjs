@@ -81,19 +81,20 @@ test('metrics context preset narrows PromQL by real drilldown subject', async ()
 });
 
 test('cluster drill actions keep real subject context across events metrics and ai', async () => {
-  const { contextActionHrefs, deploymentTargetsFromPods } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
+  const { contextActionHrefs, deploymentTargetFromWorkload } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
+  const { adaptWorkloadResource } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');
 
-  assert.deepEqual(
-    deploymentTargetsFromPods([
-      { namespace: 'prod', name: 'checkout-abc', workload_name: 'checkout', phase: 'Running', restarts: 0 },
-      { namespace: 'prod', name: 'checkout-def', workload_name: 'checkout', phase: 'Running', restarts: 1 },
-      { namespace: 'ops', name: 'agent-1', phase: 'Running', restarts: 0 },
-    ]),
-    [
-      { ns: 'prod', name: 'checkout', podCount: 2 },
-      { ns: 'ops', name: 'agent-1', podCount: 1 },
-    ],
-  );
+  const workload = adaptWorkloadResource({
+    resource_type: 'workload',
+    kind: 'Deployment',
+    namespace: 'prod',
+    name: 'checkout',
+    status: '2/3',
+    health: 'degraded',
+    summary: { desired_replicas: 3, ready_replicas: 2, available_replicas: 2, updated_replicas: 3 },
+  });
+  assert.equal(workload.ready, 2);
+  assert.deepEqual(deploymentTargetFromWorkload(workload), { ns: 'prod', name: 'checkout', podCount: 2 });
 
   const hrefs = contextActionHrefs('cluster-1', 'pod', 'checkout-abc', 'prod');
   assert.equal(hrefs.events, '/clusters/cluster-1?tab=events&q=checkout-abc');

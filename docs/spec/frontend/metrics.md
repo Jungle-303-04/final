@@ -17,7 +17,7 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `@/shared/lib/api`(`get`, `post`), `@/shared/lib/live`(`liveStore`), `@/shared/ui`, `@/shared/ui/charts`(`TimeSeriesChart`, `Series`), `@/shared/motion` | [shared](shared.md) | 실시간·차트 |
-| import | `@/features/cluster/api`(`useClusters`, `useClusterSummary`, `useClusterUsage`, `useWorkloads`) | [cluster](./cluster.md) | 클러스터 선택 셀렉트·인벤토리 폴백 스탯·usage 시계열 |
+| import | `@/features/cluster/api`(`useClusters`, `useClusterSummary`, `useClusterUsage`, `usePods`) | [cluster](./cluster.md) | 클러스터 선택 셀렉트·인벤토리 폴백 스탯·usage 시계열 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 클러스터 없음 empty state 의 등록 CTA 표시 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | 백엔드 | POST `/agent/debug/query`, GET `/commands/:id` | [api-gateway](../services/gateway-api-gateway.md) | 온디맨드 PromQL(비동기 수락) + 명령 상태 폴링 |
@@ -48,7 +48,7 @@ status: synced
   - `RANGES`: 5분/15분/1시간/6시간 → `range_seconds` 300/900/3600/21600.
   - `interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; commandId?: string; submitFailed?: boolean }` — 실행 상태는 카드에 저장하지 않고 명령 폴링에서 파생.
 - state: `clusterId`, `paused: boolean`, `promql`(초기 PRESETS[0]), `range`(초기 RANGES[0]=300), `cards: QueryCard[]`, `frozen`(일시정지 시점의 history 사본 — `paused` 아닐 때만 effect 로 최신 history 동기화).
-- 데이터: `useClusters` + `useClusterSummary(clusterId)` + `useClusterUsage(clusterId)` + `useWorkloads(clusterId)` + `useIsAdmin()` + `liveStore(history/status/snapshot)`.
+- 데이터: `useClusters` + `useClusterSummary(clusterId)` + `useClusterUsage(clusterId)` + `usePods(clusterId)` + `useIsAdmin()` + `liveStore(history/status/snapshot)`.
 - 파생:
   - `phases`: 우선순위 — live 스냅샷 phase 카운트 → 인벤토리 summary `pod_phases` → workloads 집계(스트림 끊겨도 인벤토리로 스탯 유지).
   - `series`: `paused ? frozen : history` 마지막 120포인트 → `[{id:'재시작 합'}, {id:'실행 팟'}]`. history 가 비어 있으면 인벤토리 기반 1포인트(재시작 합·Running 수)로 대체.

@@ -68,10 +68,27 @@
   - `github-poll-worker` CronJob image도 `9cb55b46-dev`로 교체했다. 새 배포 이후 최근 jobs `github-poll-worker-29723847`, `github-poll-worker-29723848`, `github-poll-worker-29723849`가 Complete 상태다.
   - live smoke: `https://k8s.woonyong.org/api/healthz` → 200 `{"status":"ok","service":"api-gateway"}`.
 - 병렬 감사(Avicenna, 읽기 전용)로 확인한 다음 프론트 1순위:
-  - 드릴다운 drawer가 아직 백엔드 `GET /clusters/{cluster_id}/inventory/resource-detail` 계약을 충분히 쓰지 않고, 프론트 문자열 필터/팟 그룹핑으로 관련 이벤트를 구성한다. 다음 프론트 커밋은 `useInventoryResourceDetail()` 훅을 추가하고 클러스터/노드/서비스/워크로드/팟 drawer의 이벤트/related pods를 `resource-detail` 응답 기준으로 전환해야 한다.
+  - 드릴다운 drawer가 아직 백엔드 `GET /clusters/{cluster_id}/inventory/resource-detail` 계약을 충분히 쓰지 않고, 프론트 문자열 필터/팟 그룹핑으로 관련 이벤트를 구성한다. → 아래 "resource-detail 기반 드릴다운" 체크포인트에서 구현/검증 완료, 배포 필요.
   - 엔티티별 AI 분석 버튼은 `prefill` 문자열만 넘기지 말고 `{cluster_id, resource_type, kind, namespace, name, uid}` context를 대화 생성/전송 API에 싣고, chat-worker/tool layer에서 inventory detail/readonly telemetry/RCA 조회를 도구화해야 한다.
   - 위젯/쿼리 등록은 아직 브라우저 local state라 운영자 화면으로는 부족하다. DB 저장형 widget/query preset API가 필요하다.
   - workspace 단일 realtime summary는 멀티클러스터 화면에서 live 데이터가 섞일 수 있다. live store를 `byCluster`로 분리하거나 cluster별 WS subscription을 사용해야 한다.
+
+## 체크포인트 (현재) — resource-detail 기반 클러스터 드릴다운
+
+- 구현:
+  - `usePods`와 `useWorkloads`를 분리했다. 팟 탭/메트릭 폴백은 실제 `resource_type=pod`, 워크로드 탭은 실제 `/inventory/workloads` read model을 사용한다.
+  - `useInventoryResourceDetail()` 훅을 추가하고 pod/node/service/workload Drawer를 공통 `ResourceDetailDrawer`로 전환했다.
+  - Drawer 이벤트는 더 이상 클러스터 전체 이벤트 문자열 includes 필터가 아니라 `resource-detail.events`만 렌더한다. related pods도 `resource-detail.related.pods`에서 온 실제 read model만 보여준다.
+  - workload scale/restart 대상은 실제 workload 리소스 중 `kind === "Deployment"`에서만 파생한다. 팟 이름 그룹핑으로 deployment 이름을 추정하지 않는다.
+  - 운영 데이터 mock/fake/hardcoded 추가 없음.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test -- --runInBand` → 8 passed.
+  - `cd frontend && npm run build` → passed(기존 large chunk warning만 있음).
+  - 실제 로그인 세션으로 `GET /api/clusters/cluster-1/inventory/resources?resource_type=node&limit=5` → 200, 실제 노드 2개 확인.
+  - 같은 세션으로 실제 노드 `GET /api/clusters/cluster-1/inventory/resource-detail?resource_type=node&kind=Node&name=<node>` → 200, `cluster_id=cluster-1`, related pods 8개.
+- 배포 필요:
+  - frontend image 재빌드/rollout 후 `/`와 `/console/` 모두에서 클러스터 상세 drilldown, 팟 딥링크, `/api/healthz` smoke를 다시 확인한다.
 
 ## 체크포인트 (21:21 KST) — `/console` 데모 보존 + AI chat 실제 계약 수정
 

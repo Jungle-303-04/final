@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
-import { useClusters, useClusterSummary, useClusterUsage, useWorkloads } from '@/features/cluster/api';
+import { useClusters, useClusterSummary, useClusterUsage, usePods } from '@/features/cluster/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { commandResultMessage, isTerminal, summarizeTelemetryResult, useCommandStatus } from '@/features/metrics/api';
 import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui';
@@ -54,7 +54,7 @@ export default function MetricsView() {
   const [cards, setCards] = useState<QueryCard[]>([]);
   const summaryQ = useClusterSummary(clusterId);
   const usageQ = useClusterUsage(clusterId);
-  const workloadsQ = useWorkloads(clusterId);
+  const workloadsQ = usePods(clusterId);
   const history = liveStore(s => s.history);
   const status = liveStore(s => s.status);
   const snapshot = liveStore(s => s.snapshot);
