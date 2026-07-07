@@ -13,10 +13,14 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
       <Badge tone="warn">승인 대기</Badge>
       <span style={{ fontSize: 'var(--fs-sm)', flex: 1 }}>{summary}</span>
       <span style={{ display: 'flex', gap: 6 }}>
-        <Button size="sm" variant="primary" disabled={!canDeploy} loading={approval.isPending}
+        {/* 클릭한 버튼에만 로딩 표시 — variables.action 으로 진행 중인 결정을 구분 */}
+        <Button size="sm" variant="primary" disabled={!canDeploy || approval.isPending}
+          loading={approval.isPending && approval.variables?.action === 'grant'}
           title={canDeploy ? '' : 'deploy 권한 필요'}
           onClick={() => approval.mutate({ approvalId, action: 'grant' })}>승인</Button>
-        <Button size="sm" variant="danger" disabled={!canDeploy}
+        <Button size="sm" variant="danger" disabled={!canDeploy || approval.isPending}
+          loading={approval.isPending && approval.variables?.action === 'reject'}
+          title={canDeploy ? '' : 'deploy 권한 필요'}
           onClick={() => approval.mutate({ approvalId, action: 'reject' })}>거절</Button>
       </span>
     </div>
