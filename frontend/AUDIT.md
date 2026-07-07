@@ -186,6 +186,7 @@
 - L3 팟: `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 404일 때 pod inventory fallback을 사용한다. 타일=팟, 크기=CPU/MEM 또는 균등, `incident_correlation_id`가 있으면 critical + pulse border로 표시하고 Drawer에서 "인시던트 보기" CTA를 제공한다.
 - 클러스터 상세 URL은 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 노드/팟 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
 - 팟 Drawer는 search param에서 파생한다. 팟 목록 로딩 중에는 Skeleton, 조회 실패는 재시도, stale URL은 "팟 상세 없음" EmptyState로 처리한다.
+- 검증(2026-07-08 07:19 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 1440/1024/390 폭에서 `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 복원 확인, overflow 0. 클릭 왕복은 `/clusters/cluster-1` → `?node=node-a` → `?node=node-a&pod=prod%2Fcheckout-api-7f9f8` → 뒤로가기 2회까지 확인.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
