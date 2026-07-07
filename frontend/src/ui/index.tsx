@@ -94,20 +94,29 @@ export function IconButton({
   icon,
   variant = 'ghost',
   size = 'md',
+  loading = false,
   className,
+  disabled,
   ...props
 }: Omit<ButtonProps, 'children' | 'leadingIcon' | 'trailingIcon'> & { label: string; icon: ReactNode }) {
   return (
-    <Button
-      variant={variant}
-      size={size}
-      className={cx(size === 'sm' ? 'w-8 px-0' : 'w-10 px-0', className)}
+    <button
+      type="button"
+      className={cx(
+        'inline-flex shrink-0 items-center justify-center rounded-control border font-semibold transition-colors duration-[var(--ui-duration-fast)] ease-standard disabled:cursor-not-allowed disabled:opacity-50',
+        focusRing,
+        buttonVariants[variant],
+        size === 'sm' ? 'h-8 w-8 text-label' : 'h-10 w-10 text-body',
+        className,
+      )}
       aria-label={label}
       title={label}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {icon}
-    </Button>
+      {loading ? <Spinner /> : icon}
+    </button>
   );
 }
 

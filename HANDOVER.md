@@ -1,6 +1,29 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 04:20 KST (콘솔 디자인 시스템 Phase 2 인증 화면 이관)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 06:30 KST (DB retention/keyset 커밋 및 콘솔 디자인 시스템 Phase 2 앱 셸 이관 메모 반영)
+
+## 현재 범위 고정 — target-01 배포 제외
+
+- 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
+- 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — DB retention/keyset 로컬 검증 완료
+
+- 커밋/푸시:
+  - `81553973 fix: retention keyset / DB 보존 / 조회 안정화` → `origin/dev` push 완료.
+- 구현:
+  - `outbox(sent_at) WHERE sent_at IS NOT NULL`, `events(created_at)`, `audit_log(created_at)`, `evidence(workspace_id, correlation_id, created_at, id)`, `rca_reports(workspace_id, correlation_id, created_at, id)` 계열 concurrent index migration 추가.
+  - `/evidence`, `/rca-reports`에 `cursor` 기반 keyset pagination 추가. 기존 `offset`은 하위 호환으로 유지하고, 응답에는 `next_cursor`를 포함한다.
+  - `command-janitor`에 `sweep_storage_retention`을 연결해 sent outbox, 오래된 events, audit_log를 작은 배치로 정리한다. 기본값: outbox 24h, events/audit 7d, batch 1000.
+  - cursor 내부 timestamp 오류도 422 `"cursor is invalid"`로 정규화했다.
+- 검증:
+  - `uv run pytest tests/test_evidence_query_api.py tests/test_storage_retention.py tests/test_database_unit.py tests/test_command_janitor.py tests/test_docs_index.py -q` → 72 passed.
+  - `uv run ruff check ...` / `uv run ruff format --check ...` 통과.
+  - `PYTHONPATH=src uv run lint-imports --config .importlinter` 통과.
+  - Alembic head: `['20260708_0525']`.
+- 다음:
+  - service image를 최신 `81553973` 기반으로 빌드/push하고 `api-gateway`, `dashboard-worker`, `command-janitor`, 신규 `outbox-relay`, 신규 `rca-timeline-janitor`에 선별 rollout한다.
+  - 운영 DB에는 migration과 동일한 concurrent index를 적용하고, health/log/EXPLAIN/retention smoke를 확인한다.
 
 ## 체크포인트 — evidence claim-check 라이브 안정화 완료
 
@@ -25,10 +48,10 @@
   - claim-check 1차: focused pytest 39 passed, schema/database/API 관련 120 passed, 전체 `uv run pytest -q` → 722 passed, 3 skipped.
   - `evidence.built` 추가 수정: focused pytest 98 passed, import-linter passed, 전체 `uv run pytest -q` → 723 passed, 3 skipped.
 - 후속 작업:
-  1. B: `count_open_rca_incidents` SQL 집계/인덱스/만료 정책으로 `/fleet/summary` 병목 제거.
-  2. C: `api-gateway` 내부 outbox relay를 `AsyncService` 기반 독립 deployment로 분리하고 gateway replicas/resources 영구 반영.
-  3. D: outbox/events/audit retention janitor와 keyset pagination.
-  4. 모든 안정화/프론트 품질 작업 완료 후 `cluster-1`에 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 실제 repo 기준 배포, 도메인 `target-01.woonyong.org` 연결 및 smoke 테스트.
+  1. B: `count_open_rca_incidents` SQL 집계/인덱스/만료 정책은 구현·검증 완료. 라이브 EXPLAIN은 8.659ms 확인됨.
+  2. C: `api-gateway` 내부 outbox relay를 `AsyncService` 기반 독립 deployment로 분리하는 코드는 구현·push 완료. 라이브에는 신규 deployment 선별 적용 필요.
+  3. D: outbox/events/audit retention janitor와 keyset pagination은 `81553973`으로 구현·push 완료. 라이브 rollout/DB index 적용 필요.
+  4. `target-01.woonyong.org` 배포와 `k8s-incident-demo-target` 연결은 최신 사용자 지시로 이 스레드 범위에서 제외(다른 스레드 담당).
 
 ## 체크포인트 — 콘솔 디자인 시스템 Phase 0/1 착수
 
@@ -80,6 +103,24 @@
 - 다음:
   1. 이 단위를 커밋/push하고 console image를 배포해 live `/login`, `/signup`, `/verify-email` asset 반영을 확인한다.
   2. 다음 화면 순서는 앱 셸(사이드바·헤더·알림)이다. `features/console/ui.tsx`의 inline style과 `plural-ui`/`console.css` 의존을 `src/ui` 토큰/프리미티브로 이관한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 앱 셸 이관
+
+- 구현:
+  - `features/console/ui.tsx`의 사이드바, 헤더, 브레드크럼, 알림 Drawer를 Tailwind semantic token과 `src/ui` 프리미티브로 재구성했다.
+  - 셸 내부 `plural-ui` imports, `console.css` import, inline `style=`, raw hex/px, legacy `pl-`/`co-` class 사용을 제거했다.
+  - `console.css`에서 셸 전용 selector를 삭제했다. 이 파일은 아직 미이관인 홈 대시보드 selector만 담으며 `HomePage.tsx`에서만 import한다.
+  - 로그아웃 mutation에 pending 버튼 상태와 성공/실패 토스트를 추가했다.
+  - `src/ui/IconButton`이 아이콘을 텍스트 슬롯에 넣어 좁은 버튼에서 잘리던 문제를 수정했다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm run build` passed. 기존 large chunk warning만 있음.
+  - Playwright route mocking 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 앱 셸을 1440/1024/390 폭에서 캡처했고 horizontal overflow 0, unexpected console error 0.
+  - screenshots: `/tmp/k8s-shell-desktop.png`, `/tmp/k8s-shell-tablet.png`, `/tmp/k8s-shell-mobile.png`.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
+  2. 다음 화면 순서는 홈 대시보드다. `HomePage.tsx`와 남은 `features/console/console.css` selector를 `src/ui` 프리미티브/Tailwind token으로 이관하고 해당 CSS 파일을 더 줄이거나 삭제한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 

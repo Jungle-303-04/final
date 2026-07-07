@@ -16,6 +16,7 @@ import { TimeSeriesChart, TreemapChart, type HeatNode } from '@/shared/ui/charts
 import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
 import { AnimatedList, CountUp } from '@/shared/motion';
 import { useConsolePath } from '../ui';
+import '../console.css';
 
 const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger', stale: 'warning', unknown: 'neutral' };
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v)}%`);
