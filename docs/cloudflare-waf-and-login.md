@@ -50,9 +50,9 @@ Skip 항목  : All managed rules, Bot Fight Mode, Browser Integrity Check
 - 쿠키 전송 때문에 `*` 는 불가 — gateway 가 `allow_credentials=True` 로 명시 origin 만 허용한다.
 - 프런트는 `credentials: 'include'` 로 호출한다 (`frontend/src/shared/lib/api.ts` 반영됨).
 
-### 2-3. 프런트 모드
+### 2-3. 프런트 API 기준
 
-`VITE_API_MODE` 기본값은 `mock` 이다. 실백엔드에 붙는 빌드는 `VITE_API_MODE=real` 로 빌드했는지 확인한다. mock 모드는 로그인이 항상 성공한 것처럼 보이므로 "로그인은 되는데 데이터가 이상함" 증상의 원인이 되기도 한다.
+프런트는 실 API 전용이다. 프로덕션 빌드는 `VITE_API_BASE=/api` 를 사용하고, 로컬 vite dev/preview 는 `frontend/vite.config.ts` 의 `/api` proxy 로 gateway 에 붙는다. "로그인은 되는데 데이터가 이상함" 증상은 API prefix/proxy, 세션 쿠키, gateway 로그 순서로 확인한다.
 
 ### 2-4. 계정 상태
 

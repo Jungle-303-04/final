@@ -131,6 +131,38 @@ class EvidenceQueryResponse(StrictModel):
     has_more: bool
 
 
+class RcaCandidateScoreItem(StrictModel):
+    """원인 후보 1개의 평가 결과 — 카탈로그 메타(제목/출처) + 평가(점수/근거) 병합."""
+
+    candidate_id: str
+    title: str | None = None
+    source: str | None = None  # rule | ai_fallback
+    score: float | None = None
+    reason: str | None = None
+    supporting_evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+
+
+class RcaEvidenceRefItem(StrictModel):
+    """판단에 실제 사용된 근거 참조 — 어떤 소스에 어떤 쿼리를 던져 얻었는지."""
+
+    source: str
+    name: str
+    check_id: str | None = None
+    summary: str | None = None
+    query: str | None = None
+    evidence_ref: str | None = None
+
+
+class RcaMissingCheckItem(StrictModel):
+    """확정에 필요하지만 미충족인 근거 수집 상태."""
+
+    check_id: str
+    source: str | None = None
+    status: str | None = None
+    reason: str | None = None
+
+
 class RcaReportSummaryItem(StrictModel):
     """저장된 RCA report 요약 — payload 원문 대신 화이트리스트 필드만 노출(secret 유출 방지)."""
 
@@ -149,6 +181,15 @@ class RcaReportSummaryItem(StrictModel):
     supporting_evidence: list[str] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
     created_at: str | None = None
+    # ── 분석 심화(화이트리스트) — 대상 리소스·부증상·후보 점수·근거 쿼리 트레일 ──
+    resource_kind: str | None = None
+    resource_name: str | None = None
+    namespace: str | None = None
+    secondary_symptoms: list[str] = Field(default_factory=list)
+    selected_candidate_id: str | None = None
+    candidates: list[RcaCandidateScoreItem] = Field(default_factory=list)
+    supporting_evidence_refs: list[RcaEvidenceRefItem] = Field(default_factory=list)
+    missing_evidence_checks: list[RcaMissingCheckItem] = Field(default_factory=list)
 
 
 class RcaReportListResponse(StrictModel):
