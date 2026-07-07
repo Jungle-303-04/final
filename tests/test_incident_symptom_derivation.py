@@ -155,7 +155,7 @@ def run_to_plan(payload: ClusterEvidenceReceivedBody, correlation_id: str) -> li
     incident_outs = run_handler(
         incident_worker.on_evidence_built, evidence_outs[0], db=db, correlation_id=correlation_id
     )
-    if incident_outs[-1].__subject__ == "rca.action_required":
+    if incident_outs[-1].__subject__ != "evidence.bundle.built":
         return evidence_outs + incident_outs
     plan_outs = run_handler(plan_worker.on_evidence_bundle_built, incident_outs[-1])
     return evidence_outs + incident_outs + plan_outs
@@ -541,7 +541,6 @@ def test_ambiguous_snapshot_does_not_open_incident() -> None:
     assert subjects_of(events) == [
         "evidence.built",
         "incident.detected",
-        "rca.action_required",
     ]
     detected = event_by_subject(events, "incident.detected")
     assert detected.detected is False
