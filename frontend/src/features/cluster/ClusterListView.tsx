@@ -6,6 +6,7 @@ import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizar
 import { Badge, Button, Card, EmptyState, QueryBoundary, ResourceTable, SearchInput, useSearchFilter } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
 import { GlobeIcon } from '@/plural-ui/icons';
+import { IconPlus } from '@/shared/ui/icons';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Cluster } from '@/shared/lib/types';
@@ -20,7 +21,7 @@ export default function ClusterListView() {
   return (
     <FadeSlideIn>
       <PageHeader title="클러스터" sub="에이전트가 연결된 클러스터의 실측 인벤토리"
-        actions={admin ? <Button variant="primary" onClick={() => setWizard(true)}>+ 클러스터 등록</Button> : undefined} />
+        actions={admin ? <Button variant="primary" onClick={() => setWizard(true)}><IconPlus size={15} />클러스터 등록</Button> : undefined} />
       <div style={{ marginBottom: 12 }}><SearchInput value={search} onChange={setSearch} /></div>
       <Card>
         <QueryBoundary query={q}>{() => (

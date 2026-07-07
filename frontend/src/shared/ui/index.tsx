@@ -9,13 +9,13 @@ import { toneColor, toneOf } from '@/shared/ui/status';
 import { AnimatePresence, AnimatedRow, CountUp } from '@/shared/motion';
 import { flyoverSlide, modalPop, overlayFade } from '@/plural-ui/motion';
 import { uiStore } from '@/shared/lib/ui-store';
-import { IconAlertTriangle, IconFile } from '@/shared/ui/icons';
+import { IconAlertTriangle, IconFile, IconX } from '@/shared/ui/icons';
 
-export function Button({ variant = 'secondary', size, loading, children, ...rest }:
+export function Button({ variant = 'secondary', size, loading, children, className, ...rest }:
   { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; size?: 'sm'; loading?: boolean } &
   React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className={`btn btn--${variant} ${size ? `btn--${size}` : ''}`} disabled={loading || rest.disabled} {...rest}>
+    <button className={`btn btn--${variant} ${size ? `btn--${size}` : ''} ${className ?? ''}`} disabled={loading || rest.disabled} {...rest}>
       {loading ? '…' : children}
     </button>
   );
@@ -92,7 +92,7 @@ export function Modal({ open, title, onClose, children, size }: { open: boolean;
             role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
               <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
-              <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
+              <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기" title="닫기" className="btn--icon"><IconX size={16} /></Button>
             </div>
             {children}
           </motion.div>
@@ -119,7 +119,7 @@ export function Drawer({ open, title, onClose, children }: { open: boolean; titl
             variants={flyoverSlide} initial="initial" animate="animate" exit="exit">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
               <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
-              <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
+              <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기" title="닫기" className="btn--icon"><IconX size={16} /></Button>
             </div>
             {children}
           </motion.aside>

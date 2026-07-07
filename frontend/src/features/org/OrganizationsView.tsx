@@ -3,6 +3,7 @@ import { useCreateOrg, useDeleteOrg, useOrgs } from '@/features/org/api';
 import { SettingsNav } from '@/features/org/SettingsNav';
 import { Button, Card, EmptyState, Field, Modal, QueryBoundary, ResourceTable } from '@/shared/ui';
 import { timeAgo } from '@/shared/lib/format';
+import { IconFile, IconPlus } from '@/shared/ui/icons';
 import type { Org } from '@/shared/lib/types';
 
 export default function OrganizationsView() {
@@ -18,12 +19,12 @@ export default function OrganizationsView() {
   return (
     <SettingsNav title="조직">
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Button variant="primary" onClick={() => setOpen(true)} data-testid="new-org">+ 조직 생성</Button>
+        <Button variant="primary" onClick={() => setOpen(true)} data-testid="new-org"><IconPlus size={15} />조직 생성</Button>
       </div>
       <Card>
         <QueryBoundary query={q}>{orgs => (
           <ResourceTable<Org> rows={orgs} rowKey={o => o.org_id}
-            empty={<EmptyState icon="🏢" title="아직 조직이 없습니다" action={<Button variant="primary" onClick={() => setOpen(true)}>첫 조직 만들기</Button>} />}
+            empty={<EmptyState icon={<IconFile size={26} />} title="아직 조직이 없습니다" action={<Button variant="primary" onClick={() => setOpen(true)}><IconPlus size={15} />첫 조직 만들기</Button>} />}
             columns={[
               { key: 'name', label: '이름', render: o => <b>{o.name}</b> },
               { key: 'desc', label: '설명', render: o => o.description || '—' },

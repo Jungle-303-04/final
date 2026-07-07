@@ -16,6 +16,28 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 19:06 KST 체크포인트
+
+- 운영 UI 표면 정리와 병렬 감사 반영.
+- 구현:
+  - 공용 모달/드로어 닫기, 메트릭 pause/play, 생성 버튼의 문자 기반 아이콘을 SVG 아이콘으로 정리했다.
+  - PromQL 결과와 AI 복구 액션 제안은 중첩 card 대신 `query-row`, `chat-action` 표면으로 분리했다.
+  - 클러스터 scale/restart, 레포 연결, 클러스터 등록, workflow detail의 내부 구현 설명 문구를 줄이고 운영 상태 중심 문구로 정리했다.
+  - mock/fake/hardcoded production data 추가 없음.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 6 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_docs_index.py` → 9 passed.
+- 병렬 감사에서 확정한 다음 P0:
+  - Backend telemetry truthfulness: provider error/stale/unknown 상태, 실제 incident count projection, stale data가 healthy로 보이는 문제 수정.
+  - Command policy alignment: workload scale/restart API와 target-agent policy 불일치 해소. policy/handler가 안전하게 지원하기 전에는 UI/API 노출을 제한한다.
+  - Cluster RBAC: RCA evidence/report, AI incident tool, realtime subscription이 workspace만 보지 말고 cluster grant/access filter를 강제한다.
+  - Deploy/DNS: `scripts/aws-up.sh`가 domain origin을 `api-gateway`로 되돌리지 않게 console service 기준으로 수정한다.
+  - Smoke: production console origin에서는 `/healthz`가 SPA HTML일 수 있으므로 `/api/healthz`, `/api/readyz`, `/api/providers/cluster-discovery=401`를 사용한다.
+  - Repo/cluster registration: `source_type` persist/runtime/cache, app+binding atomic write, target register preflight guard 재사용, import metadata 저장.
+
 ### 2026-07-07 18:54 KST 체크포인트
 
 - 레포/클러스터 위저드 선택 안정화.

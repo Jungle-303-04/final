@@ -9,6 +9,7 @@
 .btn--danger { background:transparent; border-color:var(--danger); color:var(--danger); }
 .btn--ghost { background:transparent; color:var(--text-2); } .btn--ghost:hover { color:var(--text-1); background:var(--surface-2); }
 .btn--sm { padding:4px 10px; font-size:var(--fs-xs); }
+.btn--icon { width:30px; height:30px; padding:0; justify-content:center; flex:none; }
 .card { background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius-md); padding:var(--sp-4); min-width:0; }
 /* 클릭 가능한 카드(위저드 프로바이더 선택 등) — hover/press 어포던스 */
 button.card { transition:border-color var(--dur-fast), background var(--dur-fast); font:inherit; color:inherit; }
@@ -102,6 +103,7 @@ button.card:active { background:var(--surface-2); }
 .chat-bubble { padding:10px 14px; font-size:var(--fs-sm); line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:var(--shadow-1); }
 .chat-bubble--user { background:var(--brand); color:white; border-radius:14px 14px 4px 14px; }
 .chat-bubble--assistant { background:var(--surface-2); border:1px solid var(--border); border-radius:14px 14px 14px 4px; }
+.chat-action { background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; min-width:0; }
 .chat-thinking { display:flex; align-items:center; gap:8px; color:var(--text-2); font-size:var(--fs-sm); }
 .chat-thinking .skeleton { width:34px; height:8px; min-height:8px; }
 .chat-composer { border-top:1px solid var(--border); padding:var(--sp-3); }
@@ -110,6 +112,9 @@ button.card:active { background:var(--surface-2); }
 .chat-composer-row .btn { width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; flex:none; }
 /* 데이터 테이블 가로 스크롤 컨테이너 — 좁은 화면에서 열 압착 대신 스크롤 */
 .table-scroll { max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.query-row { background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; min-width:0; }
+.query-row code { flex:1; min-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 code { overflow-wrap:anywhere; }
 @media (max-width: 900px) {
   .split--even, .split--side { grid-template-columns:1fr; }

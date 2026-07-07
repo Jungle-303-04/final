@@ -198,7 +198,6 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
       {step === 2 && (
         <>
           <KeyValue pairs={[['앱 이름', name], ['레포', `${normalizedRepoRef}@${selectedBranch}`], ['manifest', manifestPath], ['클러스터', clusterId]]} />
-          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다.</p>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
             <Button onClick={() => setStep(1)}>이전</Button>
             <Button variant="primary" loading={create.isPending}
