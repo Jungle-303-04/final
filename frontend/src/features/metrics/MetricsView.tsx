@@ -235,7 +235,7 @@ export default function MetricsView() {
           <>
             <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => selectCluster(e.target.value)}>
               {!clusterKnown && (
-                <option value={clusterId}>{clustersQ.isPending ? '클러스터 확인 중' : clusterId || '클러스터 없음'}</option>
+                <option value={clusterId}>{clusterId || (clustersQ.isPending ? '클러스터 확인 중' : '클러스터 없음')}</option>
               )}
               {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
             </select>
