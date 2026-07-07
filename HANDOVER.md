@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:40 KST (클러스터 드릴 URL state/컨텍스트 액션)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:45 KST (AI 채팅 prefill/갱신/UX polish)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,24 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (18:45 KST) — AI 채팅 prefill/갱신/UX polish
+
+- 구현:
+  - `/ai?prefill=...`이 같은 ChatView 인스턴스에서 바뀌어도 draft 입력창에 반영되도록 동기화했다.
+  - 사용자가 prefill draft를 수정하는 중 폴링 리렌더가 입력을 덮어쓰지 않도록 dependency를 `prefill` 문자열로 제한했다.
+  - 기존 대화에 메시지를 보낸 뒤 현재 대화뿐 아니라 대화 목록도 invalidate한다. waiting/updated_at 상태가 목록에 빠르게 반영된다.
+  - 전송 성공 시 `prefill` search param을 제거해 같은 문장이 다시 draft로 되살아나는 문제를 막았다.
+  - 채팅 UI의 삭제/전송 버튼을 텍스트 중심에서 아이콘 중심으로 정리하고, status는 badge로 표시한다.
+  - 이 변경은 실제 `POST /ai/conversations`, `POST /ai/conversations/{id}/messages`, `GET /ai/conversations*`, `DELETE /ai/conversations/{id}` 경로만 사용한다. mock/fake/hardcoded 응답 없음.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 5 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 다음:
+  - repo/cluster 등록 wizard의 동적 단계와 UI polish를 이어간다.
 
 ## 체크포인트 (18:40 KST) — 클러스터 드릴 URL state/컨텍스트 액션
 

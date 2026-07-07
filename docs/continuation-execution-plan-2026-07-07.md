@@ -16,6 +16,27 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:45 KST 체크포인트
+
+- AI 채팅 prefill/갱신/UX polish.
+- 구현:
+  - `/ai?prefill=...`이 같은 ChatView 인스턴스에서 바뀌어도 draft에 반영된다.
+  - `prefill` 문자열이 바뀔 때만 draft를 갱신하므로, 사용자가 입력을 수정하는 중 폴링 리렌더가 덮어쓰지 않는다.
+  - 기존 대화에 메시지를 보낸 뒤 현재 대화 query와 대화 목록 query를 모두 invalidate한다.
+  - 전송 성공 후 `prefill` search param을 제거해 같은 문장이 다시 입력창에 되살아나지 않게 했다.
+  - 삭제/전송 버튼은 아이콘 중심으로 정리했고, 대화 status는 badge로 표시한다.
+  - 실제 AI 파이프라인은 그대로 유지한다: `POST /ai/conversations` 또는 `POST /ai/conversations/{id}/messages` → `ai.message.received` → `ai-chat-worker` → stored response. mock/fake/hardcoded 응답 없음.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 5 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 다음 실행 순서:
+  - repo 등록 wizard: URL 입력 → branch list → manifest candidate list → validation → app/binding 생성 단계의 UI와 실제 API 상태를 점검한다.
+  - cluster 등록 wizard: provider discovery/import/preflight/listbox 동적 흐름을 점검한다.
+  - UI polish는 기능 검증과 같이 진행하되, 운영 데이터 원칙을 깨는 mock/fake/hardcoded 값은 넣지 않는다.
+
 ### 2026-07-07 18:40 KST 체크포인트
 
 - 클러스터 드릴 URL state/컨텍스트 액션 보강.

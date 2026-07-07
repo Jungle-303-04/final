@@ -29,7 +29,10 @@ export function useSendMessage(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (message: string) => post(`/ai/conversations/${id}/messages`, { message }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.one(id) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: chatKeys.one(id) });
+      qc.invalidateQueries({ queryKey: chatKeys.list() });
+    },
   });
 }
 export function useDeleteConversation() {

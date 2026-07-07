@@ -9,21 +9,33 @@ import { uiStore } from '@/shared/lib/ui-store';
 import { timeAgo } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import type { ChatMessage } from '@/shared/lib/types';
+import { IconFile, IconSend, IconTrash } from '@/shared/ui/icons';
 
 export default function ChatView() {
   const { conversationId } = useParams();
-  const [sp] = useSearchParams();
+  const [sp, setSp] = useSearchParams();
   const nav = useNavigate();
   const listQ = useConversations();
   const convQ = useConversation(conversationId);
   const create = useCreateConversation();
   const send = useSendMessage(conversationId ?? '');
   const remove = useDeleteConversation();
-  const [draft, setDraft] = useState(sp.get('prefill') ?? '');
+  const prefill = sp.get('prefill') ?? '';
+  const [draft, setDraft] = useState(prefill);
   const bottomRef = useRef<HTMLDivElement>(null);
   const conv = convQ.data;
 
+  useEffect(() => {
+    if (prefill) setDraft(prefill);
+  }, [prefill]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conv?.messages.length]);
+
+  const clearPrefill = () => {
+    if (!sp.has('prefill')) return;
+    const next = new URLSearchParams(sp);
+    next.delete('prefill');
+    setSp(next, { replace: true });
+  };
 
   const submit = () => {
     const text = draft.trim();
@@ -33,7 +45,7 @@ export default function ChatView() {
       setDraft(text);
       uiStore.getState().toast('danger', `전송 실패 — ${(err as Error).message || '네트워크를 확인해주세요'}`);
     };
-    if (conversationId) send.mutate(text, { onError: restore });
+    if (conversationId) send.mutate(text, { onSuccess: clearPrefill, onError: restore });
     else create.mutate(text, { onSuccess: d => nav(`/ai/${d.conversation_id}`), onError: restore });
   };
 
@@ -72,9 +84,10 @@ export default function ChatView() {
                     className="chat-thread-delete"
                     disabled={remove.isPending}
                     aria-label="대화 삭제"
+                    title="대화 삭제"
                     onClick={e => { e.stopPropagation(); deleteConversation(c.conversation_id); }}
                   >
-                    삭제
+                    <IconTrash size={13} />
                   </button>
                 </div>
               </div>
@@ -85,12 +98,16 @@ export default function ChatView() {
           <div className="chat-panel-head">
             <div>
               <strong>{conv?.title ?? 'AI 운영 어시스턴트'}</strong>
-              <span>{conv?.status ?? 'ready'}</span>
+              <span><Badge tone={conv?.status === 'waiting' ? 'info' : 'neutral'}>{conv?.status ?? 'ready'}</Badge></span>
             </div>
-            {conversationId && <Button size="sm" variant="ghost" onClick={() => deleteConversation(conversationId)} loading={remove.isPending}>삭제</Button>}
+            {conversationId && (
+              <Button size="sm" variant="ghost" onClick={() => deleteConversation(conversationId)} loading={remove.isPending} aria-label="대화 삭제" title="대화 삭제">
+                <IconTrash size={14} />
+              </Button>
+            )}
           </div>
           <div className="chat-messages">
-            {!conversationId && <EmptyState icon="✦" title="새 대화" />}
+            {!conversationId && <EmptyState icon={<IconFile size={26} />} title="새 대화" />}
             {conv?.messages.map(m => <MessageRenderer key={m.message_id} m={m} />)}
             {conv?.status === 'waiting' && (
               <div className="chat-thinking" data-testid="typing">분석 중<span className="skeleton" /></div>
@@ -100,10 +117,12 @@ export default function ChatView() {
           <div className="chat-composer">
             {draft.length > MAX_AI_MESSAGE_LENGTH && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)' }} role="alert">16,000자 제한을 초과했습니다</p>}
             <div className="chat-composer-row">
-              <textarea className="input" rows={2} value={draft} placeholder="무엇이든 물어보세요 (⌘↵ 전송)"
+              <textarea className="input" rows={2} value={draft} placeholder="메시지 입력"
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit(); }} data-testid="chat-input" />
-              <Button variant="primary" onClick={submit} loading={create.isPending || send.isPending} data-testid="chat-send">전송</Button>
+              <Button variant="primary" onClick={submit} loading={create.isPending || send.isPending} data-testid="chat-send" aria-label="전송" title="전송">
+                <IconSend size={16} />
+              </Button>
             </div>
           </div>
         </Card>
