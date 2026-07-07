@@ -4,6 +4,7 @@ import { useApplications } from '@/features/repo/api';
 import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { Badge, Button, Card, EmptyState, QueryBoundary, ResourceTable } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
+import { IconPlus } from '@/shared/ui/icons';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Application } from '@/shared/lib/types';
@@ -15,7 +16,7 @@ export default function RepoListView() {
   return (
     <FadeSlideIn>
       <PageHeader title="레포 (GitOps)" sub="Git 이 원본 — 커밋이 감지되면 워크플로우 run 이 생성됩니다"
-        actions={<Button variant="primary" onClick={() => setWizard(true)}>+ 레포 연결</Button>} />
+        actions={<Button variant="primary" onClick={() => setWizard(true)}><IconPlus size={15} />레포 연결</Button>} />
       <Card>
         <QueryBoundary query={q}>{apps => (
           <ResourceTable<Application>

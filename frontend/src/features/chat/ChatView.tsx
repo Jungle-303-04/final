@@ -162,7 +162,7 @@ function ActionSelectCard({ actions }: { actions: NonNullable<ChatMessage['actio
   const canDeploy = useIsAdmin();
   const locked = !!actions.selected;
   return (
-    <div className="card" style={{ background: 'var(--surface-2)', padding: 14 }} data-testid="action-card">
+    <div className="chat-action" data-testid="action-card">
       <b style={{ fontSize: 'var(--fs-sm)' }}>복구 액션 제안</b>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '10px 0' }}>
         {actions.options.map(o => (

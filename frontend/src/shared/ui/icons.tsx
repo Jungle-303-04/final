@@ -54,3 +54,19 @@ export const IconTrash = (p: IconProps) => (
 export const IconSend = (p: IconProps) => (
   <svg {...base(p)}><path d="M21 3 10.5 13.5" /><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>
 );
+
+export const IconPlus = (p: IconProps) => (
+  <svg {...base(p)}><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+);
+
+export const IconX = (p: IconProps) => (
+  <svg {...base(p)}><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+);
+
+export const IconPlay = (p: IconProps) => (
+  <svg {...base(p)}><path d="M8 5.5v13l10-6.5-10-6.5Z" /></svg>
+);
+
+export const IconPause = (p: IconProps) => (
+  <svg {...base(p)}><path d="M8.5 5v14" /><path d="M15.5 5v14" /></svg>
+);

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Chip, PageHeader, Table, type ChipSeverity } from '@/plural-ui';
-import { CaretRightIcon, GlobeIcon, SendIcon, ShieldIcon } from '@/plural-ui/icons';
+import { CaretRightIcon, GlobeIcon, PlusIcon, SendIcon, ShieldIcon } from '@/plural-ui/icons';
 import { healthLabel, healthScore, useFleetSummary, type FleetHealth } from '@/features/fleet/api';
 import { timeAgo, useNotices, useTimeline } from '@/features/notifications/api';
 import { useConversations } from '@/features/chat/api';
@@ -35,8 +35,8 @@ export function HomePage() {
         title="플릿 현황"
         actions={
           <>
-            <Button onClick={() => setRepoWizard(true)}>+ 레포 연결</Button>
-            {admin && <Button variant="primary" onClick={() => setClusterWizard(true)}>+ 클러스터 등록</Button>}
+            <Button onClick={() => setRepoWizard(true)}><PlusIcon size={14} />레포 연결</Button>
+            {admin && <Button variant="primary" onClick={() => setClusterWizard(true)}><PlusIcon size={14} />클러스터 등록</Button>}
           </>
         }
       />

@@ -11,7 +11,7 @@ const base = (size = 16) => ({
   xmlns: 'http://www.w3.org/2000/svg',
 });
 
-/** 더미 로고 마크 — 원형 + 사각형 조합의 제네릭 심볼 */
+/** 로고 마크 — 원형 + 사각형 조합 심볼 */
 export function PluralMarkIcon({ size = 16, ...p }: P) {
   return (
     <svg {...base(size)} {...p}>
@@ -74,6 +74,14 @@ export function CloseIcon({ size = 16, ...p }: P) {
   return (
     <svg {...base(size)} {...p}>
       <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PlusIcon({ size = 16, ...p }: P) {
+  return (
+    <svg {...base(size)} {...p}>
+      <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }

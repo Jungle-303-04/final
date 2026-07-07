@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useCreateGroup, useGroupMembers, useGroups, useOrgs, useToggleMembership, useUsers } from '@/features/org/api';
 import { SettingsNav } from '@/features/org/SettingsNav';
 import { Avatar, Button, Card, Drawer, Field, Modal, QueryBoundary, ResourceTable } from '@/shared/ui';
+import { IconPlus } from '@/shared/ui/icons';
 import type { Group } from '@/shared/lib/types';
 
 export default function GroupsView() {
@@ -16,7 +17,7 @@ export default function GroupsView() {
   return (
     <SettingsNav title="그룹">
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Button variant="primary" onClick={() => { setOpen(true); setOrgId(orgsQ.data?.[0]?.org_id ?? ''); }}>+ 그룹 생성</Button>
+        <Button variant="primary" onClick={() => { setOpen(true); setOrgId(orgsQ.data?.[0]?.org_id ?? ''); }}><IconPlus size={15} />그룹 생성</Button>
       </div>
       <Card>
         <QueryBoundary query={q}>{groups => (

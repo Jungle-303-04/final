@@ -11,7 +11,7 @@ import { PageHeader } from '@/plural-ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
 import { fmtHms } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
-import { IconClock } from '@/shared/ui/icons';
+import { IconClock, IconPause, IconPlay } from '@/shared/ui/icons';
 
 // 프리셋은 실제 스크레이프되는 계열만 사용 — node-exporter/kube-state-metrics/node-collector.
 // 전체 카탈로그·근거는 docs/frontend-metrics-queries.md 참조.
@@ -165,7 +165,9 @@ export default function MetricsView() {
             <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => selectCluster(e.target.value)}>
               {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
             </select>
-            <Button onClick={() => setPaused(p => !p)}>{paused ? '▶ 재개' : '⏸ 일시정지'}</Button>
+            <Button onClick={() => setPaused(p => !p)} aria-pressed={paused} title={paused ? '재개' : '일시정지'}>
+              {paused ? <IconPlay size={15} /> : <IconPause size={15} />}{paused ? '재개' : '일시정지'}
+            </Button>
           </>
         } />
       {(subject || subjectName) && (
@@ -281,7 +283,7 @@ function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void 
   const summary = status === 'completed' ? summarizeTelemetryResult(result) : null;
   const failMessage = status === 'failed' && !card.submitFailed ? commandResultMessage(result) : null;
   return (
-    <div className="card" style={{ background: 'var(--surface-2)', padding: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }} data-testid="query-card">
+    <div className="query-row" data-testid="query-card">
       <Badge status={badge} />
       <code style={{ fontSize: 'var(--fs-xs)', flex: 1, minWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.promql}</code>
       <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>range {fmtRange(card.rangeSeconds)}</span>

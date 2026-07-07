@@ -240,9 +240,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                 </select>
               </Field>
               {selectedFlow?.import_candidates.length === 0 && (
-                <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', marginTop: -8 }}>
-                  import 후보가 없습니다. 환경 변수에 cluster handle 또는 kube context 목록이 있으면 여기에 표시됩니다.
-                </p>
+                <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', marginTop: -8 }}>가져올 클러스터가 없습니다.</p>
               )}
               {selectedCandidate && (
                 <KeyValue pairs={[
@@ -285,7 +283,6 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           <KeyValue pairs={[
             ['provider', activeProvider],
             ['environment', 'sandbox'],
-            ['관측 스택', '기본값 (prometheus/loki/tempo .target.svc)'],
           ]} />
           <Footer onPrev={() => setStep(0)} onNext={runPreflight}
             nextDisabled={!canPreflight} nextLabel="사전 점검" loading={preflight.isPending} />
@@ -365,8 +362,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           )}
           {!connected && (
             <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginTop: 8 }}>
-              위 install manifest 를 대상 클러스터에 <code>kubectl apply -f</code> 하면 에이전트가 관리
-              플레인으로 접속합니다. 적용 후 보통 30초~1분 안에 자동으로 online 으로 바뀝니다 (5초 간격 자동 확인).
+              대상 클러스터 적용 후 연결 상태가 자동 갱신됩니다.
             </p>
           )}
         </>

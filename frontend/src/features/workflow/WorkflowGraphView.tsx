@@ -83,7 +83,8 @@ export default function WorkflowGraphView() {
       </Card>
     );
   }
-  const selectedStep = selected ? found.steps.find(s => s.name === selected) : null;
+  const currentStep = found.steps.find(s => s.name === found.status) ?? found.steps.find(s => s.status !== 'SUCCEEDED') ?? found.steps[found.steps.length - 1] ?? null;
+  const selectedStep = selected ? found.steps.find(s => s.name === selected) ?? null : currentStep;
 
   return (
     <FadeSlideIn>
@@ -110,10 +111,8 @@ export default function WorkflowGraphView() {
         <Card style={{ height: 340, padding: 0 }}>
           <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={setSelected} />
         </Card>
-        <Card title={selected ?? '단계 상세'}>
-          {selectedStep
-            ? <KeyValue pairs={[['상태', <Badge key="b" status={selectedStep.status === 'PENDING' ? 'unknown' : selectedStep.status} />], ['상세', selectedStep.detail ?? '—']]} />
-            : <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>노드를 클릭하면 산출물이 표시됩니다.</p>}
+        <Card title={selectedStep?.name ?? '단계 상세'}>
+          {selectedStep && <KeyValue pairs={[['상태', <Badge key="b" status={selectedStep.status === 'PENDING' ? 'unknown' : selectedStep.status} />], ['상세', selectedStep.detail ?? '—']]} />}
           {selectedStep?.changes && selectedStep.changes.length > 0
             ? <div style={{ marginTop: 8 }}><PlanDiff changes={selectedStep.changes} resource={selectedStep.resource} /></div>
             : selectedStep?.name === 'DIFFING' && selectedStep.detail && <CodeBlock code={selectedStep.detail} />}

@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:54 KST (레포/클러스터 위저드 선택 안정화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:06 KST (운영 UI 표면 정리 + 병렬 감사 반영)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,35 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (19:06 KST) — 운영 UI 표면 정리 + 병렬 감사 반영
+
+- 구현:
+  - 공용 모달/드로어 닫기 버튼의 문자 `✕`를 SVG 아이콘으로 교체하고 `aria-label`/`title`을 유지했다.
+  - 메트릭 일시정지/재개 버튼의 문자 아이콘을 SVG `pause/play` 아이콘으로 교체했다.
+  - 홈/클러스터/레포/조직/그룹/권한 생성 버튼의 `+ 텍스트`를 아이콘+라벨 형태로 정리했다.
+  - PromQL 실행 결과와 AI 복구 액션 제안은 중첩 `card` 대신 `query-row`, `chat-action` 표면으로 분리해 운영 UI 깊이를 낮췄다.
+  - 클러스터 scale/restart, 레포 연결, 클러스터 등록, workflow detail에서 내부 구현 설명성 문구를 줄이고 실제 운영 상태 중심 문구로 정리했다.
+  - `더미` 표현이 남은 로고 주석을 제거했다. 운영 경로 mock/fake/hardcoding 추가 없음.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 6 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_docs_index.py` → 9 passed.
+- 병렬 감사 반영:
+  - UI 감사(Dirac): 아직 남은 항목은 heatmap legend/selection/keyboard, PromQL query UX 강화, workflow graph readability, chat reduced-motion/tool detail polish.
+  - 백엔드/데이터 흐름 감사(Socrates): P0는 provider 수집 실패/스테일 데이터가 healthy로 표시될 수 있는 문제, workload scale/restart API와 agent policy 불일치, RCA/realtime cluster RBAC 누수.
+  - 등록 흐름 감사(Nash): `source_type`이 validation 뒤 app/binding/runtime에 저장되지 않는 P1, app+binding 비원자성 P1, `/targets` register가 preflight guard 일부를 재강제하지 않는 P1, cluster import metadata 미보존 P2.
+  - QA/deploy 감사(Banach): production root/API는 보이나 latest code 자동 배포는 Actions runner allocation 실패와 DNS console/api split 때문에 신뢰 불가. root `/healthz`는 SPA HTML이므로 smoke는 반드시 `/api/healthz`, `/api/readyz`, `/api/providers/cluster-discovery=401` 기준으로 한다.
+- 다음 P0:
+  - Telemetry truthfulness: provider error/stale/unknown 상태와 실제 incident count projection을 먼저 고친다.
+  - Workload scale/restart: agent policy/handler가 지원하기 전까지 UI/API 노출을 제한하거나, policy를 workload-scoped로 안전하게 구현한다.
+  - RCA/realtime RBAC: evidence/report/AI incident tool/realtime subscription에서 cluster 접근 권한을 필터링한다.
+  - `scripts/aws-up.sh`가 custom-domain/DNS를 `api-gateway`로 되돌리지 않도록 console service origin 기준으로 수정한다.
+  - passive smoke scripts를 console origin 기준 `/api/*`로 정규화한다.
+  - repo connect backend write boundary: source_type/validation receipt 저장 및 app+binding 원자 처리.
+  - target register write boundary: preflight guard 재사용, duplicate overwrite 방지, import metadata 저장.
 
 ## 체크포인트 (18:54 KST) — 레포/클러스터 위저드 선택 안정화
 

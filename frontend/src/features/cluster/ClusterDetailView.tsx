@@ -221,7 +221,7 @@ export default function ClusterDetailView() {
 
       <Modal open={!!scaleTarget} title={`${scaleTarget?.name ?? ''} 스케일`} onClose={() => setScaleTarget(null)}>
         <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>
-          현재 팟 {scaleTarget?.podCount ?? 0}개 — 비동기 명령입니다. command-worker 정책 확인 후 agent 가 실행합니다.
+          현재 팟 {scaleTarget?.podCount ?? 0}개
         </p>
         <input className="input" type="number" min={0} max={100} value={replicas} onChange={e => setReplicas(Number(e.target.value))} />
         <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
@@ -236,8 +236,7 @@ export default function ClusterDetailView() {
       {/* 재시작은 파괴적 명령 — 즉시 실행 대신 확인 단계를 둔다 */}
       <Modal open={!!restartTarget} title={`${restartTarget?.name ?? ''} 재시작`} onClose={() => setRestartTarget(null)}>
         <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>
-          <code>{restartTarget?.ns}/{restartTarget?.name}</code> 의 팟 {restartTarget?.podCount ?? 0}개가 순차 재시작됩니다.
-          비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다.
+          <code>{restartTarget?.ns}/{restartTarget?.name}</code> 팟 {restartTarget?.podCount ?? 0}개 순차 재시작
         </p>
         <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
           <Button onClick={() => setRestartTarget(null)}>취소</Button>

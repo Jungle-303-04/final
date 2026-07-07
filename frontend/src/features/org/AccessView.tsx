@@ -5,6 +5,7 @@ import { useApplications } from '@/features/repo/api';
 import { SettingsNav } from '@/features/org/SettingsNav';
 import { Badge, Button, Card, Field, Modal, QueryBoundary, ResourceTable } from '@/shared/ui';
 import { timeAgo } from '@/shared/lib/format';
+import { IconPlus } from '@/shared/ui/icons';
 import type { AccessGrant } from '@/shared/lib/types';
 
 const ROLES = [
@@ -31,7 +32,7 @@ export default function AccessView() {
   return (
     <SettingsNav title="리소스 권한">
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <Button variant="primary" onClick={() => setOpen(true)}>+ 권한 부여</Button>
+        <Button variant="primary" onClick={() => setOpen(true)}><IconPlus size={15} />권한 부여</Button>
       </div>
       <Card>
         <QueryBoundary query={q}>{grants => (
