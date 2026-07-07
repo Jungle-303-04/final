@@ -562,6 +562,41 @@ def test_unknown_symptom_creates_backlog_and_manual_selection_flow() -> None:
     assert feedback_outs[0].next_actions[0]["action_type"] == "collect_evidence"
 
 
+def test_plan_worker_resolves_backlog_when_rule_exists() -> None:
+    db = SpyDb()
+    evidence_worker = load_service("ai/evidence-worker")
+    incident_worker = load_service("ai/incident-worker")
+    plan_worker = load_service("ai/plan-worker")
+
+    evidence_outs = run_handler(
+        evidence_worker.on_cluster_evidence,
+        crashloop_payload(),
+        db=db,
+        correlation_id="corr-backlog-resolved",
+    )
+    incident_outs = run_handler(
+        incident_worker.on_evidence_built,
+        evidence_outs[0],
+        db=db,
+        correlation_id="corr-backlog-resolved",
+    )
+    plan_outs = run_handler(
+        plan_worker.on_evidence_bundle_built,
+        incident_outs[-1],
+        db=db,
+        correlation_id="corr-backlog-resolved",
+    )
+
+    assert subjects_of(plan_outs) == ["rca.candidates.planned"]
+    assert db.called("resolve_rca_backlog_item_for_rule")
+    resolve_call = next(call for call in db.calls if call[0] == "resolve_rca_backlog_item_for_rule")
+    assert resolve_call[1] == (
+        "workspace-1",
+        "CrashLoopBackOff",
+        "matching RCA rule is now available",
+    )
+
+
 def test_user_selected_safe_pr_flow_requires_concrete_patch(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.setenv("SCM_REPO", "project/repo")

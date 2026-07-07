@@ -784,7 +784,11 @@ async def save_evidence(self, correlation_id: str, workspace_id: str, kind: str,
 async def save_rca_report(self, correlation_id: str, workspace_id: str, root_cause: str, action: str, body: JsonObject) -> None
 async def find_recent_rca_report(self, workspace_id: str, root_cause: str, resource_key: str, window_seconds: int) -> JsonObject | None
 ```
-- `RcaBacklogStore`: `async def upsert_rca_backlog_item(self, body: JsonObject) -> None`.
+- `RcaBacklogStore`:
+```python
+async def upsert_rca_backlog_item(self, body: JsonObject) -> None
+async def resolve_rca_backlog_item_for_rule(self, workspace_id: str, symptom: str, reason: str) -> int
+```
 - `RecoveryPlanStore`: `async def upsert_recovery_selection_request(self, correlation_id: str, workspace_id: str, plan: JsonObject) -> None`.
 - `RepoChangeStore`:
 ```python

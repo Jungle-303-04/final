@@ -1273,6 +1273,25 @@ def test_rca_query_without_cursor_keeps_offset_compatibility() -> None:
     assert "OFFSET" in sql
 
 
+def test_rca_backlog_resolve_updates_open_missing_rule_item() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(RcaRepository, recorded, rows=[("backlog-1",)])
+
+    count = repository.resolve_rca_backlog_item_for_rule(
+        "workspace-1",
+        "CrashLoopBackOff",
+        "matching RCA rule is now available",
+    )
+
+    assert count == 1
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "UPDATE rca_backlog_items" in sql
+    assert "missing-cause-rule:workspace-1:CrashLoopBackOff" in set(compiled.params.values())
+    assert "resolved" in set(compiled.params.values())
+    assert "open" in set(compiled.params.values())
+
+
 def test_retention_delete_queries_are_batched() -> None:
     cutoff = datetime(2026, 7, 1, tzinfo=UTC)
     cases = (

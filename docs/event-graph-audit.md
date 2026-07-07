@@ -1,6 +1,14 @@
-# 이벤트 그래프 진단 — 중복·고아·병합/분리 (2026-07-06)
+# 이벤트 그래프 진단 — 중복·고아·병합/분리 (2026-07-08)
 
 전 서비스의 `@app.on(...)` 구독과 `yield ...Body(...)` 발행, gateway 발행 지점을 대조한 결과다.
+
+## 0. 실행 방법
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 make events
+```
+
+`make events`는 `uv run python scripts/events.py`를 실행한다. 스크립트는 domain의 `@event(...)` body 정의와 worker `App` 서비스의 `@app.on(...)`/`@app.on_any(...)` 등록을 import해 `events.describe()` 표를 출력한다. `PYTHONDONTWRITEBYTECODE=1`은 감사 실행 중 `__pycache__` 파일 생성을 막기 위한 옵션이다.
 
 ## 1. safe-pr-worker vs scm-worker — 중복 아님, 단 정책 이중 실행
 
@@ -8,16 +16,20 @@
 
 다만 `DefaultSafePrPreflightPolicy` 평가와 provider mismatch 검사가 **양쪽에서 각각 실행**된다(STAGE_PREPARE, STAGE_SCM). 심층 방어로 볼 수도 있으나 정책이 갈라질(drift) 위험이 있으므로, 정책 버전을 이벤트에 실어 scm 단계에서는 재검증 여부만 선택하게 하는 정리를 권한다.
 
-## 2. 고아(orphan) 발견
+## 2. 고아(orphan) 감사
 
-| 항목 | 상태 | 조치 제안 |
+엄밀한 의미의 고아 subject는 없다. `audit-worker`와 `dashboard-worker`가 `>` 전체 구독자로 모든 이벤트를 소비하기 때문이다. 다만 typed downstream worker가 없는 subject는 아래처럼 의도별로 분류해 문서에 남긴다.
+
+| 분류 | subject | 판단 |
 | --- | --- | --- |
-| `approval.recommended` (approval-worker 발행) | 전용 소비 worker는 없지만 dashboard timeline에는 `approval_recommended`로 투영됨 | 별도 approval read model이 필요해질 때만 분리하고, 현재는 RCA timeline 상태로 노출한다 |
-| `audit.>` (RESERVED_STREAM_SUBJECTS) | 발행자 없음(예약만) | 의도된 예약이면 유지, 주석 명확화 |
-| MinIO | management artifact store와 target Loki object store로 배포됨 | bucket/secret 경계가 management와 target 클러스터마다 분리되는지 계속 점검 |
-| alert-worker의 `alert.dispatched`/`alert.rejected` 자기 구독 | 로그만 남김 — audit-worker가 이미 전 이벤트를 기록 | 두 핸들러 제거 후보(중복 소비) |
+| terminal/outbound | `agent.connected`, `ai.message.responded`, `ai.message.failed`, `alert.dispatched`, `alert.rejected`, `mail.email_verification.sent`, `mail.email_verification.failed`, `cluster.inventory.snapshot.recorded` | 외부 전송 결과·연결 기록·최종 상태다. audit/dashboard 전체 구독 기록만 있으면 충분하다 |
+| human/UI gate | `approval.requested`, `approval.recommended`, `rca.followup.required` | 사용자가 보는 승인·추천·후속 조치 상태다. 별도 worker 소비보다 read model 노출이 목적이다 |
+| read-model/timeline only | `cluster.reconcile.started`, `cluster.reconcile.completed`, `cluster.reconcile.failed`, `command.dispatched`, `diff.explained`, `incident.detected`, `rca.rule_missing`, `workflow.created`, `workflow.run.started`, `workflow.step.recorded`, `workflow.run.failed` | workflow/RCA/timeline 상태 기록용이다. UI 요구가 커지면 dashboard projection 매핑만 확장한다 |
+| 예약 | `audit.>` | `RESERVED_STREAM_SUBJECTS`의 의도된 예약 prefix다. 현재 발행자는 없다 |
 
-발행자는 있으나 NATS 구독자가 projection(audit/dashboard)뿐인 이벤트: `agent.connected`, `cluster.inventory.snapshot.recorded`, `cluster.reconcile.started/completed/failed`, `workflow.*`, `mail.*.sent/failed`, `ai.message.responded/failed`, `diff.explained`. 이는 상태 기록용이므로 정상이나, timeline 매핑에 없는 것(reconcile 계열, workflow 계열)은 UI 노출이 필요해지면 매핑 추가가 필요하다.
+소비자는 있으나 코드상 직접 발행자가 안 보이는 subject도 확인했다. `git.webhook.received`, `ai.message.received`, `approval.granted`, `approval.rejected`, `command.requested`, `cluster.desired_state.changed`, `cluster.evidence.received`, `mail.email_verification.requested`, `recovery.action_selected`, `command.completed`는 gateway/API, target agent, command-janitor, timer producer, 사용자 action 등 런타임 진입점에서 발생하는 의도된 inbound subject다.
+
+이전 문서의 `alert.dispatched`/`alert.rejected` self-subscription 설명은 현재 그래프 기준으로 낡았다. 현행 alert-worker에는 해당 자기 구독 핸들러가 없다.
 
 ## 3. 병합 후보
 
