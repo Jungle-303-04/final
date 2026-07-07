@@ -399,8 +399,20 @@ def test_static_management_agent_manifest_is_read_only() -> None:
         item["name"]: item.get("value")
         for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     }
+    env_raw = {
+        item["name"]: item
+        for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
     assert env["CLUSTER_ROLE"] == "management"
     assert env["NODE_COLLECTOR_ENABLED"] == "false"
+    assert env["PROMETHEUS_BASE_URL"] == ""
+    assert env["LOKI_BASE_URL"] == ""
+    assert env["TEMPO_BASE_URL"] == ""
+    assert env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == ""
+    assert env_raw["AGENT_TOKEN"]["valueFrom"]["secretKeyRef"] == {
+        "name": "target-runtime-secret",
+        "key": "AGENT_TOKEN",
+    }
 
 
 def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
@@ -467,6 +479,46 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert db.registered[0]["status"] == "pending_install"
     assert db.registered[0]["settings"]["connect_timeout_seconds"] == 1800
     assert db.registered[0]["settings"]["connect_expires_at"] == response.connect_expires_at
+
+
+def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(
+        update={
+            "cluster_id": "management-cluster",
+            "cluster_role": "management",
+            "environment": "management",
+        }
+    )
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.install_manifest
+    assert "http://prometheus.target.svc:9090" not in response.install_manifest
+    assert "http://loki-gateway.target.svc" not in response.install_manifest
+    assert "http://tempo.target.svc:3200" not in response.install_manifest
+    assert "http://opentelemetry-collector.target.svc:4318/v1/traces" not in response.install_manifest
+    agent_state = next(item for item in db.desired_states if item["component"] == "cluster-agent")
+    assert agent_state["spec"]["prometheus_base_url"] == ""
+    assert agent_state["spec"]["loki_base_url"] == ""
+    assert agent_state["spec"]["tempo_base_url"] == ""
+    assert agent_state["spec"]["otel_traces_endpoint"] == ""
+    policy = AgentPolicy.model_validate(db.policy)
+    enabled = {
+        provider_key
+        for provider_key, provider_policy in policy.evidence.providers.items()
+        if provider_policy.enabled
+    }
+    assert enabled == {"kubernetes"}
 
 
 def test_target_registration_generates_cluster_id_when_missing(monkeypatch) -> None:

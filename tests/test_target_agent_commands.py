@@ -432,3 +432,29 @@ def test_management_agent_policy_rejects_self_patch_if_top_guard_is_bypassed() -
         agent.command_registry.kubernetes_policy.ensure_allowed(registered.spec.kubernetes, payload)
 
     assert agent.kubernetes.patches == []
+
+
+def test_management_agent_default_policy_enables_only_kubernetes_provider() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.cluster_role = "management"
+    agent.bootstrap_mode = "management"
+    agent.interval = 15
+    agent.evidence_failure_policy = "allow_partial"
+    agent.evidence_provider_worker_counts = {}
+    agent.evidence_provider_max_worker_counts = {}
+    agent.evidence_collector = type(
+        "Collector",
+        (),
+        {"providers": {"kubernetes": object(), "metrics": object(), "logs": object()}},
+    )()
+
+    policy = agent.build_default_policy()
+    enabled = {
+        provider_key
+        for provider_key, provider_policy in policy.evidence.providers.items()
+        if provider_policy.enabled
+    }
+
+    assert enabled == {"kubernetes"}
