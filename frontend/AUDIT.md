@@ -194,6 +194,14 @@
 - `ClusterDetailView`는 "이 클러스터에 배포된 레포" 섹션을 추가해 레포/브랜치/manifest/namespace/status 관계를 반대 방향에서도 확인할 수 있다.
 - `/console`과 `/console/*`는 `/`로 redirect하고, `ArchivedConsoleDemo` 소스는 삭제했다. 사이드바/브레드크럼 어휘는 "클러스터", "배포"로 정렬했다.
 
+## 레포 상세 디자인 시스템 이관 (2026-07-08)
+
+- `RepoDetailView`를 `@/ui` PageHeader/Breadcrumb/Tabs/Card/Table/Badge/CodeBlock/KeyValueList/EmptyState/Skeleton과 `@/ui/motion` list preset 기반으로 재구성했다.
+- `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, legacy CSS var 의존을 제거했다.
+- 실행 이력, 배포 대상, Safe PR 탭은 loading, empty, error+retry 상태를 모두 갖는다. 승인 대기 run은 공유 `ApprovalCard`와 token 기반 PlanDiffPanel을 표시한다.
+- `useApproval`은 legacy `uiStore` toast 대신 `@/ui` toast를 사용하고 성공/실패 사유를 한국어로 표시한다.
+- 검증(2026-07-08 08:41 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`) 0건. Playwright mock으로 `/repos/app-1`를 1440/1024/390 폭에서 순회했고 실행/배포 대상/Safe PR/설정 탭 표시, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/repo-detail-desktop.png`, `/tmp/repo-detail-tablet.png`, `/tmp/repo-detail-mobile.png`.
+
 ## 클러스터 제어 UX 변경 (2026-07-08)
 
 - `role=management` 클러스터는 목록과 홈 플릿 히트맵에서 "관리 클러스터" 뱃지를 표시한다.

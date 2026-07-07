@@ -1,8 +1,8 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import type { Application, Deployment } from '@/shared/lib/types';
-import { uiStore } from '@/shared/lib/ui-store';
 import { adaptApplication, adaptDeployment, adaptRun } from '@/shared/lib/adapt';
+import { useToast } from '@/ui';
 
 const REPO_QUERY_TIMEOUT_MS = 8_000;
 const REPO_DISCOVERY_TIMEOUT_MS = 15_000;
@@ -192,10 +192,15 @@ export const useRepositoryManifestValidation = (
   });
 export function useApproval() {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: ({ approvalId, action }: { approvalId: string; action: 'grant' | 'reject' }) => post(`/approvals/${approvalId}/${action}`),
     onSuccess: (_d, v) => {
-      uiStore.getState().toast(v.action === 'grant' ? 'ok' : 'warn', v.action === 'grant' ? '승인 완료 — 배포가 진행됩니다' : '거절했습니다');
+      push({
+        tone: v.action === 'grant' ? 'success' : 'warning',
+        title: v.action === 'grant' ? '승인 완료' : '거절 완료',
+        description: v.action === 'grant' ? '배포가 이어서 진행됩니다' : '워크플로우가 거절 상태로 정리됩니다',
+      });
       qc.invalidateQueries({ queryKey: repoKeys.apps() });
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'applications' });
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'ai' });
@@ -207,7 +212,7 @@ export function useApproval() {
       const reason = e.kind === 'forbidden' ? '권한이 없습니다'
         : e.kind === 'invalid' ? (e.detail ?? '이미 처리된 승인입니다')
         : e.detail ?? '잠시 후 다시 시도해주세요';
-      uiStore.getState().toast('danger', `${action} 실패 — ${reason}`);
+      push({ tone: 'danger', title: `${action} 실패`, description: reason });
       // 이미 다른 곳에서 처리됐을 수 있으니 최신 상태로 동기화
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'applications' });
     },
