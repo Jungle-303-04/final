@@ -11,6 +11,7 @@ import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizar
 import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { TreemapChart, type HeatNode } from '@/shared/ui/charts';
 import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
+import { AnimatedList } from '@/shared/motion';
 import { StatCard } from '../ui';
 
 const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger' };
@@ -32,7 +33,6 @@ export function HomePage() {
     <>
       <PageHeader
         title="플릿 현황"
-        sub="클러스터 · GitOps 배포 · 인시던트(RCA)를 한 화면에서"
         actions={
           <>
             <Button onClick={() => setRepoWizard(true)}>+ 레포 연결</Button>
@@ -62,7 +62,7 @@ export function HomePage() {
               <EmptyState
                 icon={<GlobeIcon size={26} />}
                 title="아직 등록된 클러스터가 없습니다"
-                description={admin ? '클러스터를 등록하고 에이전트가 연결되면 플릿 현황이 여기 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 플릿 현황이 여기 표시됩니다'}
+                description={admin ? '클러스터 등록 필요' : '접근 가능한 클러스터 없음'}
                 action={admin ? <Button variant="primary" onClick={() => setClusterWizard(true)}>첫 클러스터 등록</Button> : undefined}
               />
             </div>
@@ -116,18 +116,18 @@ export function HomePage() {
           </div>
           <QueryBoundary query={timelineQ} skeletonLines={3}>{items =>
             items.length === 0 ? (
-              <p className="pl-muted" style={{ margin: 0 }}>열린 인시던트가 없습니다 — 모니터링 알림이 인입되면 여기 표시됩니다.</p>
+              <p className="pl-muted" style={{ margin: 0 }}>열린 인시던트 없음</p>
             ) : (
               <div className="pl-stack" style={{ gap: 8 }}>
-                {items.slice(0, 5).map(i => (
-                  <Link key={i.incident_id} to={`/incidents/${i.incident_id}`} className="pl-bindrow" style={{ textDecoration: 'none' }}>
+                <AnimatedList items={items.slice(0, 5)} getKey={i => i.incident_id}>
+                  {i => <Link to={`/incidents/${i.incident_id}`} className="pl-bindrow" style={{ textDecoration: 'none' }}>
                     <div className="pl-row" style={{ minWidth: 0 }}>
                       <Chip severity="danger">{i.stage}</Chip>
                       <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.summary}</span>
                     </div>
                     <span className="pl-muted" style={{ flex: 'none' }}>{timeAgo(i.at)}</span>
-                  </Link>
-                ))}
+                  </Link>}
+                </AnimatedList>
               </div>
             )
           }</QueryBoundary>
@@ -141,18 +141,18 @@ export function HomePage() {
             <Button size="small" onClick={() => navigate('/workflows')}>워크플로우</Button>
           </div>
           {approvals.length === 0 ? (
-            <p className="pl-muted" style={{ margin: 0 }}>승인 대기 중인 배포가 없습니다.</p>
+            <p className="pl-muted" style={{ margin: 0 }}>승인 대기 없음</p>
           ) : (
             <div className="pl-stack" style={{ gap: 8 }}>
-              {approvals.map(n => (
-                <Link key={n.id} to={n.link} className="pl-bindrow" style={{ textDecoration: 'none' }}>
+              <AnimatedList items={approvals} getKey={n => n.id}>
+                {n => <Link to={n.link} className="pl-bindrow" style={{ textDecoration: 'none' }}>
                   <div className="pl-row" style={{ minWidth: 0 }}>
                     <Chip severity="warning">승인</Chip>
                     <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
                   </div>
                   <span className="pl-muted" style={{ flex: 'none' }}>{n.at ? timeAgo(n.at) : ''}</span>
-                </Link>
-              ))}
+                </Link>}
+              </AnimatedList>
             </div>
           )}
         </Card>
@@ -168,18 +168,18 @@ export function HomePage() {
             <Button size="small" onClick={() => navigate('/ai')}>전체 보기</Button>
           </div>
           {conversationsQ.isPending ? <Skeleton lines={2} /> : (conversationsQ.data ?? []).length === 0 ? (
-            <p className="pl-muted" style={{ margin: 0 }}>대화 이력이 없습니다 — AI 어시스턴트에게 장애 분석·배포 질문을 해보세요.</p>
+            <p className="pl-muted" style={{ margin: 0 }}>대화 없음</p>
           ) : (
             <div className="pl-stack" style={{ gap: 8 }}>
-              {(conversationsQ.data ?? []).slice(0, 3).map(c => (
-                <Link key={c.conversation_id} to={`/ai/${c.conversation_id}`} className="pl-bindrow" style={{ textDecoration: 'none' }}>
+              <AnimatedList items={(conversationsQ.data ?? []).slice(0, 3)} getKey={c => c.conversation_id}>
+                {c => <Link to={`/ai/${c.conversation_id}`} className="pl-bindrow" style={{ textDecoration: 'none' }}>
                   <div className="pl-row" style={{ minWidth: 0 }}>
                     <div className="pl-avatar" style={{ width: 26, height: 26, fontSize: 10, background: 'var(--color-fill-two)' }}>AI</div>
                     <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
                   </div>
                   <span className="pl-muted" style={{ flex: 'none' }}>{timeAgo(c.updated_at)}</span>
-                </Link>
-              ))}
+                </Link>}
+              </AnimatedList>
             </div>
           )}
         </Card>

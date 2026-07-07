@@ -42,14 +42,13 @@ command 상태 확인 수단이 제한적 — **초기 구현은 3s 간격 재-e
 timeline 폴링으로 완료 감지**하고, 지연이 크면 G7(동기 프록시) 도입을 트리거한다.
 이 절충은 [01 §R8 갭](../01-requirements.md#r8-그래프-메트릭-뷰)과 일치.
 
-- 프리셋(Select): "노드 CPU", "팟 재시작 5m", "네임스페이스 메모리" — PromQL 은
-  `features/metrics/presets.ts` 상수(백엔드 telemetry registry 쿼리와 정렬)
-- 결과 렌더: instant vector → StatBox 그리드, range → TimeSeriesChart
-- 권한: debug query 는 cluster read 필요 — 가드 RequirePermission
+- 프리셋(Select): `MetricsView.tsx`의 `PRESETS` 6종. 실제 스크레이프되는 node/kube 계열만 둔다.
+- 실행: `POST /agent/debug/query`로 command를 만들고 `GET /commands/{id}` 폴링 결과만 표시한다.
+- 결과 렌더: command result의 prometheus 결과를 요약해 series/points/avg/max로 표시한다.
 
 ## 다른 화면과의 관계 (중복 금지)
 
-- [cluster-detail](cluster-detail.md) 헤더 [메트릭 보기] → /metrics?cluster= 프리셋 진입
+- [cluster-detail](cluster-detail.md)의 ContextActions "메트릭" → `/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]`
 - [fleet-heatmap](fleet-heatmap.md) 사이드 패널 Sparkline 은 liveStore 재사용(이 문서의 버퍼)
 - 인시던트의 evidence 차트는 [ai-chat](ai-chat.md) 범위(대화 맥락 내 표시)
 

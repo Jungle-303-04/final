@@ -82,7 +82,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 항목 | 내용 |
 |---|---|
 | 뷰 | [views/ai-chat.md](views/ai-chat.md) |
-| API | `GET /ai/conversations`, `POST /ai/conversations`, `GET /ai/conversations/{id}`(폴링), `POST /ai/conversations/{id}/messages` |
+| API | `GET /ai/conversations`, `POST /ai/conversations`, `GET /ai/conversations/{id}`(폴링), `DELETE /ai/conversations/{id}`, `POST /ai/conversations/{id}/messages` |
 | 실행 승인 | 외부 기준 "선택지 카드" = 백엔드 실체와 매핑: RCA 액션 선택 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`, 승인 `POST /approvals/{id}/grant|reject` |
 | 갭 | 스트리밍 없음(폴링 기반) — 폴링 UX로 설계. WS 확장은 **G8**(선택) |
 

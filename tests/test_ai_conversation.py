@@ -11,7 +11,7 @@ import pytest
 from conftest import load_service, run_handler
 
 from domains.ai.events import AiMessageReceivedBody
-from domains.ai.router import create_conversation
+from domains.ai.router import create_conversation, delete_conversation
 from packages.ai import llm
 from packages.ai.llm import (
     AnthropicMessagesAdapter,
@@ -261,6 +261,20 @@ class FakeDb:
         self.messages.append(payload)
         return payload
 
+    def delete_ai_conversation(self, workspace_id: str, conversation_id: str) -> bool:
+        before = len(self.conversations)
+        self.conversations = [
+            item
+            for item in self.conversations
+            if not (
+                item["workspace_id"] == workspace_id and item["conversation_id"] == conversation_id
+            )
+        ]
+        self.messages = [
+            item for item in self.messages if item["conversation_id"] != conversation_id
+        ]
+        return len(self.conversations) < before
+
 
 class FakeEvents:
     def __init__(self) -> None:
@@ -299,6 +313,37 @@ def test_create_conversation_stores_user_message_and_emits_agent_event() -> None
         "ai.message.received",
     ]
     assert events.bodies[-1].conversation_id == response.conversation_id
+
+
+def test_delete_conversation_removes_workspace_conversation_and_messages() -> None:
+    db = FakeDb()
+    db.create_ai_conversation(
+        {
+            "conversation_id": "aic-1",
+            "workspace_id": "default",
+            "user_id": "user-1",
+            "title": "incident",
+            "agent": "operations-chat",
+            "status": "active",
+            "context": {},
+        }
+    )
+    db.append_ai_message(
+        {
+            "message_id": "aim-1",
+            "conversation_id": "aic-1",
+            "workspace_id": "default",
+            "role": "user",
+            "content": "hello",
+            "agent": "operations-chat",
+        }
+    )
+
+    response = asyncio.run(delete_conversation("aic-1", current=CurrentUser(), db=db))
+
+    assert response.status_code == 204
+    assert db.conversations == []
+    assert db.messages == []
 
 
 class TransactionalFakeDb(FakeDb):

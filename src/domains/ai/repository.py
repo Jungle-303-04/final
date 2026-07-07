@@ -131,6 +131,19 @@ class AiConversationRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
+    def delete_ai_conversation(self, workspace_id: str, conversation_id: str) -> bool:
+        statement = (
+            self.conversation_table.delete()
+            .where(
+                self.conversation_table.c.workspace_id == workspace_id,
+                self.conversation_table.c.conversation_id == conversation_id,
+            )
+            .returning(self.conversation_table.c.conversation_id)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).first()
+        return row is not None
+
     def list_ai_messages(
         self,
         workspace_id: str,

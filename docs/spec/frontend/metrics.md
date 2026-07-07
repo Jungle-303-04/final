@@ -38,7 +38,8 @@ status: synced
 
 ### `frontend/src/features/metrics/MetricsView.tsx :: MetricsView` (default export)
 
-- 라우트: `/metrics`. 쿼리스트링 `cluster` — `clusterId` 초기값(기본 `''` — 목록 로드 후 effect 가 첫 클러스터로 보정. 목록에 없는 id 도 첫 클러스터로 대체).
+- 라우트: `/metrics`. 쿼리스트링 `cluster` — `clusterId` 초기값(기본 `''` — 목록 로드 후 effect 가 첫 클러스터로 보정. 목록에 없는 id 도 첫 클러스터로 대체). 선택 셀렉트 변경 시 `cluster` search param도 replace 갱신한다.
+- 쿼리스트링 `subject`, `name`, `namespace` — 클러스터 상세의 컨텍스트 액션에서 넘어온 리소스 범위를 배지/code 행으로만 표시한다. PromQL 자동 변경은 하지 않는다.
 - 모듈 상수(비공개):
   - `PRESETS`(`{label, promql, unit: 'ratio'|'count'}` 6종 — 실측 계열만): 노드 CPU/메모리/파일시스템 사용률(ratio),
     팟 재시작율(5m, 네임스페이스별)·네임스페이스별 팟 수·sandbox 디플로이 레플리카(count).
@@ -60,15 +61,16 @@ status: synced
 - 트리:
   ```
   FadeSlideIn
-  ├─ PageHeader('메트릭', sub, actions=클러스터 select(useClusters)+⏸ 일시정지/▶ 재개 토글) — 빈 상태 분기와 동일 헤더
+  ├─ PageHeader('메트릭', actions=클러스터 select(useClusters)+⏸ 일시정지/▶ 재개 토글) — 빈 상태 분기와 동일 헤더
+  ├─ subject/name/namespace search param 이 있으면 context 배지 행
   ├─ status !== 'open' → 경고 카드 '실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다'
   ├─ StatBox: Running(ok) / Pending(warn) / CrashLoop(>0 이면 danger) / 노드(summary.nodes.length, info)
   │   / snapshot.rollout 있으면 'rollout <name>'(progress, info)
   ├─ Card('실시간 — 재시작 추이 / 실행 팟') > TimeSeriesChart(series)
   ├─ usageSeries 있으면 Card('스냅샷 추이 — 인벤토리 실측 (usage rollup)') > TimeSeriesChart(usageSeries)
-  └─ Card('온디맨드 PromQL (비동기 — agent 경유)')
+  └─ Card('PromQL')
      ├─ 입력줄: 프리셋 select + promql input(mono) + 실행 버튼
-     └─ cards.map(QueryCardRow)   (data-testid="query-card")
+     └─ AnimatedList(cards).map(QueryCardRow)   (data-testid="query-card")
   ```
 
 내부(비공개) 서브컴포넌트 `QueryCardRow { card: QueryCard; onRetry: () => void }`:
@@ -81,7 +83,7 @@ status: synced
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/metrics` | `MetricsView` | `RequireSession`+`ConsoleLayout` | `?cluster=` 로 초기 클러스터 지정([cluster 상세](./cluster.md)의 "메트릭 보기" 링크) |
+| `/metrics` | `MetricsView` | `RequireSession`+`ConsoleLayout` | `?cluster=` 로 초기 클러스터 지정. `subject`/`name`/`namespace`는 [cluster 상세](./cluster.md)의 ContextActions에서 넘긴 컨텍스트 표시용 |
 
 ## 불변식·오류 (Invariants & Errors)
 

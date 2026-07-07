@@ -7,41 +7,42 @@
 ## 목록 — ClusterListView (/clusters)
 
 ResourceTable: 이름, 환경 Badge, 연결 상태(●), 노드/팟 수, 열린 인시던트, 등록일.
-데이터: `GET /clusters` + 행별 summary lazy. admin 의 [+ 클러스터 등록] → [resources 위저드](resources.md#클러스터-등록-위저드-실존-api--mock-불필요).
+데이터: `GET /clusters`. admin 의 [+ 클러스터 등록] → [resources 위저드](resources.md#클러스터-등록-위저드-실존-api--mock-불필요).
 
 ## 상세 — ClusterDetailView (/clusters/:clusterId)
 
 ```text
-┌ 헤더: 이름 · env Badge · 연결● · agent 정책 gen · [메트릭 보기] [⋮] ┐
-│ StatBox: 노드 · 팟(실행/전체) · 서비스 · 최근 인시던트               │
-├ Tabs: resources | workloads | services | nodes | pods | events | policy ┤
+┌ 헤더: 이름 · env Badge · 연결● · [메트릭] [AI 분석]                 ┐
+│ StatBox: 노드 · 실행 팟 · 비정상 팟 · 서비스                         │
+│ 집계 요약 + 최근 클러스터 이벤트 + q drill 배지                       │
+├ Tabs: workloads | pods | nodes | services | resources | events        ┤
 │  (탭 상태는 ?tab= — 05 규칙)                                        │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-## 탭 명세 (전부 ResourceTable + EntityDrawer 패턴 — 신규 컴포넌트 없음)
+## 탭 명세
 
 | 탭 | API | 컬럼 | Drawer 내용 |
 |---|---|---|---|
-| resources | `GET /clusters/{id}/inventory/resources` (?kind, ?namespace 필터) | kind, ns, 이름, 상태 Badge, age | KeyValue(메타) + CodeBlock(raw yaml/json) + labels |
-| workloads | `.../inventory/workloads` | 이름, kind, ns, ready x/y, restarts, 이미지 | 팟 목록 + [스케일]·[재시작] 액션 |
-| services | `.../inventory/services` | 이름, ns, type, clusterIP, 포트 | 엔드포인트 KeyValue |
-| nodes | `.../inventory/resources?kind=Node` | 이름, ready, 팟 수, 버전, (G6: cpu/mem Sparkline) | 노드 조건 테이블 + 팟 목록 |
-| pods | `.../inventory/workloads` 평탄화 + liveStore hot 병합 | 이름, ns, phase Badge, restarts, node, hot🔥 | 아래 팟 Drawer |
-| events | `.../inventory/events` | 시각, type, reason, 대상, 메시지 | — (테이블 전용) |
-| policy | 조회 API 없음 **(G11)** — 계약 기본값으로 폼 프리필 + "현재 적용값 미조회" warn 배너 | — (Form 뷰, admin 전용) | 주기·provider 토글·실패 정책 편집 → `PUT /clusters/{id}/policy` (👑, AgentPolicy 전체 전송) |
+| workloads | `GET /clusters/{id}/inventory/resources?resource_type=pod` | 워크로드, ns, Ready, 재시작 합, 스케일/재시작/팟 | workload Drawer: KeyValue + ContextActions + 관련 이벤트 + 팟 보기/스케일/재시작 |
+| pods | 위 API 평탄화 + liveStore hot 병합 | 이름, ns, phase Badge, restarts, node, hot | pod Drawer: KeyValue + ContextActions + 팟 이벤트 |
+| nodes | `GET /clusters/{id}/inventory/summary`의 nodes | 이름, ready, 팟 수, CPU, MEM, 버전 | node Drawer: KeyValue + ContextActions + 노드 이벤트 + 팟 보기 |
+| services | `GET /clusters/{id}/inventory/services` | 이름, ns, type, ClusterIP, 포트 | service Drawer: KeyValue + ContextActions + 서비스 이벤트 + 리소스 보기 |
+| resources | `GET /clusters/{id}/inventory/resources` | kind, ns, 이름, 상태 Badge, age | `?q=`가 있으면 kind/ns/name/status includes 필터 |
+| events | `GET /clusters/{id}/inventory/events` | 시각, type, reason, 대상, 메시지 | `?q=`가 있으면 reason/target/message/type includes 필터 |
 
-30s refetch 공통. pods 탭의 hot 표시는 liveStore(WS) — 구조는 inventory 정본([fleet-heatmap § 데이터](fleet-heatmap.md#데이터) 동일 규칙).
+summary/workloads는 30s refetch, usage 집계는 `ClusterAggPanel`이 `GET /clusters/{id}/summary`로 따로 읽는다.
+pods 탭의 hot 표시는 liveStore(WS) — 구조는 inventory 정본([fleet-heatmap § 데이터](fleet-heatmap.md#데이터) 동일 규칙).
 
-## 팟 Drawer
+## ContextActions와 Drawer
 
-/clusters/:id/pods/:namespace/:pod (URL 오버레이). Tabs:
+`ContextActions`는 동일한 리소스 맥락을 메트릭과 AI로 넘긴다.
 
-| 탭 | 내용 | 데이터 |
-|---|---|---|
-| 개요 | phase, restarts, node, 이미지, 시작시각 (KeyValue) | inventory 행 |
-| 실시간 | live summary 중 이 팟 항목 Sparkline(있을 때) | liveStore |
-| 원인 분석 | 이 팟 연관 인시던트 목록 → [ai-chat](ai-chat.md) "이 팟 분석" 버튼 | `GET /dashboard/rca/timeline?cluster_id=` 필터 |
+- 메트릭: `/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>]`
+- AI: `/ai?prefill=<cluster namespace/name subject 상태 분석>`
+
+팟 Drawer는 `/clusters/:id/pods/:namespace/:pod` URL 오버레이를 유지한다.
+노드/서비스/워크로드 Drawer는 행 클릭 state로만 연다.
 
 ## 쓰기 액션 (권한: release_operator 이상 — RequirePermission)
 
@@ -56,6 +57,6 @@ ResourceTable: 이름, 환경 Badge, 연결 상태(●), 노드/팟 수, 열린 
 ## AC
 
 - [ ] 모든 탭이 URL 딥링크로 직접 진입 가능
-- [ ] 스케일/재시작이 権한 없으면 disabled + 사유, 있으면 확인 Modal 필수
-- [ ] inventory 5000행(백엔드 상한)에서 테이블 가상화로 렌더 지연 없음
+- [ ] 스케일/재시작이 권한 없으면 disabled + 사유, 있으면 확인 Modal 필수
+- [ ] `?q=` drilldown 해제 시 현재 tab을 유지
 - [ ] Drawer 열림 상태에서 목록 폴링이 Drawer 데이터를 덮어써도 스크롤·탭 유지

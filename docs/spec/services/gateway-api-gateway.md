@@ -168,6 +168,7 @@ status: synced
 | POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access` |
 | POST/GET | `/ai/conversations` | 세션 | — |
 | GET | `/ai/conversations/{conversation_id}` | 세션 | — |
+| DELETE | `/ai/conversations/{conversation_id}` (204) | 세션 | — |
 | POST | `/ai/conversations/{conversation_id}/messages` | 세션 | — |
 | GET/POST | `/applications` | 세션 | — |
 | GET | `/applications/{application_id}` | 세션 | `require_resource_access`(application) |

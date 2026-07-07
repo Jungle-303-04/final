@@ -9,7 +9,7 @@ status: synced
 
 ## 책임 (Responsibility)
 
-- AI 대화 목록/단건 조회, 대화 생성, 메시지 전송, 복구 액션 선택 훅과 2열 채팅 화면.
+- AI 대화 목록/단건 조회, 대화 생성, 메시지 전송, 대화 삭제, 복구 액션 선택 훅과 2열 채팅 화면.
 - assistant 메시지의 `tool_calls`(도구 호출 로그), `actions`(복구 액션 선택 카드), `approval_ref`(승인 카드) 렌더링.
 
 ## 의존성 (Dependencies)
@@ -30,6 +30,7 @@ status: synced
 | `useConversation` | `frontend/src/features/chat/api.ts :: useConversation` | GET `/ai/conversations/${id}` → `Conversation` | `(id: string \| undefined)`, `enabled: !!id`. **적응 폴링**: `data.status === 'waiting'` 이면 2s, 아니면 15s(status 만으로 파생) |
 | `useCreateConversation` | `frontend/src/features/chat/api.ts :: useCreateConversation` | POST `/ai/conversations` body `{message}` → `{conversation_id}` | 성공 시 list invalidate |
 | `useSendMessage` | `frontend/src/features/chat/api.ts :: useSendMessage` | POST `/ai/conversations/${id}/messages` body `{message}` | `(id: string)`, 성공 시 `one(id)` invalidate |
+| `useDeleteConversation` | `frontend/src/features/chat/api.ts :: useDeleteConversation` | DELETE `/ai/conversations/${id}` | 성공 시 list invalidate + `one(id)` cache remove |
 | `useSelectAction` | `frontend/src/features/chat/api.ts :: useSelectAction` | POST `/rca/recovery-plans/${planId}/actions/${actionId}/select` | mutation `({planId, actionId})`, 성공 시 list invalidate |
 | `MAX_AI_MESSAGE_LENGTH` | `frontend/src/features/chat/api.ts :: MAX_AI_MESSAGE_LENGTH` | — | `16_000` |
 
@@ -40,26 +41,29 @@ status: synced
 - 라우트: `/ai`(새 대화), `/ai/:conversationId`. 쿼리스트링 `prefill` — draft 초기값(타 화면의 "✦ 분석" 딥링크용).
 - state: `draft: string`. ref: `bottomRef` — `conv.messages.length` 변경 시 `scrollIntoView({behavior:'smooth'})`.
 - `submit()`: trim 후 빈 문자열/16,000자 초과면 무시. `conversationId` 있으면 `send.mutate(text)`, 없으면 `create.mutate(text, { onSuccess: d => nav('/ai/'+d.conversation_id) })`. 이후 draft 비움.
+- `deleteConversation(id)`: DELETE 성공 시 ok toast. 현재 열린 대화면 `/ai`로 replace 이동한다. 실패는 danger toast.
 - 트리:
   ```
   FadeSlideIn > 그리드(260px 1fr, 높이 calc(100vh - 140px))
-  ├─ Card('대화', actions="+ 새 대화" → nav('/ai'))   ← 좌측 목록 (성공+0건이면 '대화 이력이 없습니다…' 안내)
-  │   대화별 행: status==='waiting' 이면 info 점, title(ellipsis), timeAgo(updated_at)
-  │   현재 대화는 surface-3 배경. 클릭 → /ai/:id
-  └─ Card(flex column)                                ← 우측 스레드
-     ├─ 메시지 영역(overflow auto):
-     │   conversationId 없으면 EmptyState('✦ AI 운영 어시스턴트')
+  ├─ Card('대화', actions="새 대화" → nav('/ai'))      ← 좌측 목록 (성공+0건이면 '대화 없음')
+  │   AnimatedList(listQ.data)
+  │   대화별 행: status==='waiting' 이면 info 점, title(ellipsis), timeAgo(updated_at), 삭제 버튼
+  │   현재 대화는 data-active=true 배경. 행 클릭 → /ai/:id, 삭제 버튼은 stopPropagation
+  └─ Card(flex column, padding 0, overflow hidden)     ← 우측 스레드
+     ├─ 헤더: 제목 또는 'AI 운영 어시스턴트' + status, 현재 대화면 삭제 버튼
+     ├─ 메시지 영역(.chat-messages):
+     │   conversationId 없으면 EmptyState('✦', '새 대화')
      │   conv.messages.map(MessageRenderer)
-     │   conv.status==='waiting' → "✦ 분석 중" + skeleton (data-testid="typing")
-     └─ 입력줄: 16,000자 초과 시 role="alert" 경고 · textarea(rows 2, ⌘/Ctrl+Enter 전송,
+     │   conv.status==='waiting' → "분석 중" + skeleton (data-testid="typing")
+     └─ 입력줄(.chat-composer): 16,000자 초과 시 role="alert" 경고 · textarea(rows 2, ⌘/Ctrl+Enter 전송,
         data-testid="chat-input") · 전송 Button(primary, loading=create||send, data-testid="chat-send")
   ```
 
 내부(비공개) 서브컴포넌트:
 
 - `MessageRenderer { m: ChatMessage }`
-  - user: 우측 정렬 말풍선(배경 `--brand`, radius `12px 12px 2px 12px`, `white-space: pre-wrap`).
-  - assistant: 좌측 정렬(surface-2). content 는 `split('**')` 로 홀수 인덱스만 `<b>`(단순 볼드 마크업). 이어서 `tool_calls` 행들(`Badge tone=status '도구'` + code name + args), `actions` → `ActionSelectCard`, `approval_ref` → `ApprovalCard(approval_id, summary, resolved, compact)`.
+  - user: 우측 정렬 `.chat-bubble--user`(배경 `--brand`, radius `14px 14px 4px 14px`, `white-space: pre-wrap`, `overflow-wrap:anywhere`).
+  - assistant: 좌측 정렬 `.chat-bubble--assistant`(surface-2 + border, radius `14px 14px 14px 4px`). content 는 `split('**')` 로 홀수 인덱스만 `<b>`(단순 볼드 마크업). 이어서 `tool_calls` 행들(`Badge tone=status '도구'` + code name + args), `actions` → `ActionSelectCard`, `approval_ref` → `ApprovalCard(approval_id, summary, resolved, compact)`.
 - `ActionSelectCard { actions: NonNullable<ChatMessage['actions']> }` (`data-testid="action-card"`)
   - state: `picked: string | null`. `locked = !!actions.selected`.
   - 옵션별 radio(라벨 + `Badge tone=risk '위험도'` + impact 설명). locked 면 radio disabled, 미선택 옵션 opacity 0.5.
@@ -78,9 +82,11 @@ status: synced
 2. waiting 동안 2s 폴링 + "분석 중" 인디케이터 → assistant 응답이 오면 status idle → 15s 로 완화.
 3. 복구 액션: assistant `actions` 카드에서 radio 선택 → 선택 실행 → 서버가 `selected` 를 채우면 카드 잠금.
 4. 승인: assistant `approval_ref` 는 [repo](./repo.md) 의 `ApprovalCard` 로 처리(승인 성공 시 repo 쪽 훅이 `['ai']` 캐시도 invalidate).
+5. 대화 삭제: 좌측 행 또는 우측 헤더 삭제 → DELETE `/ai/conversations/:id` → 목록 갱신. 현재 대화 삭제 시 `/ai`로 이동.
 
 ## 불변식·오류 (Invariants & Errors)
 
 - 메시지 길이 상한 16,000자 — 초과 시 클라이언트에서 전송 차단 + 경고 표시.
 - 폴링 주기는 서버가 준 `status` 만으로 파생(별도 타이머·웹소켓 없음).
 - 대화 목록 응답에는 `messages` 가 없다(`adaptConversationSummary` 로 요약 정규화).
+- 삭제는 workspace 범위 서버 검증에 의존한다. 클라이언트는 성공 후 해당 detail cache만 제거한다.

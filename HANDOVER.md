@@ -11,6 +11,20 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 
+## 체크포인트 (18:04 KST) — AI 대화 삭제 API/프론트
+
+- 구현:
+  - `DELETE /ai/conversations/{conversation_id}` 추가. 세션 workspace 범위의 `ai_conversations` row만 삭제한다.
+  - 메시지는 `ai_conversation_messages.conversation_id` FK `ON DELETE CASCADE`로 함께 삭제된다.
+  - 프론트 `ChatView` 좌측 대화 목록과 현재 대화 헤더에 삭제 액션을 붙였다.
+  - 삭제 성공 시 목록 query invalidate + 단건 query remove, 현재 대화 삭제 시 `/ai`로 이동한다.
+  - Bruno `07-ai/05-delete-conversation.bru`, API map/spec 문서에 DELETE 계약을 추가했다.
+- 검증:
+  - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py tests/test_ai_conversation.py -q` → 27 passed.
+  - `bash scripts/frontend-check.sh` → typecheck, eslint, unit test, production build OK.
+  - `make check` → 688 passed, 3 skipped; manifest check 포함.
+  - `make manifest-check` → management 53 objects, target 16 objects.
+
 ## 최신 업데이트 (18:10 KST) — evidence lineage/rollback 표시
 
 - 사용자 지적: RCA `EvidenceItem.source`만으로는 버전 변경/롤백 판단이 어렵다.
