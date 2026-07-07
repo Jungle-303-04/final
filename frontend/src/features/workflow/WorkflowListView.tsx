@@ -5,6 +5,7 @@ import { PageHeader } from '@/plural-ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import { useConsolePath } from '@/features/console/ui';
+import { IconFile } from '@/shared/ui/icons';
 
 const ACTIVE = new Set(['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING']);
 
@@ -18,10 +19,10 @@ export default function WorkflowListView() {
   const loading = apps.isPending || ((apps.data ?? []).length > 0 && all.pending);
   return (
     <FadeSlideIn>
-      <PageHeader title="워크플로우" sub="커밋 → 렌더 → diff → 정책 → 승인 → 적용 파이프라인 run" />
+      <PageHeader title="워크플로우" />
       <Card>
         {loading ? <Skeleton lines={4} /> :
-        rows.length === 0 ? <EmptyState icon="⇶" title="실행된 워크플로우가 없습니다" description="레포에 커밋이 감지되면 run 이 생성됩니다" /> :
+        rows.length === 0 ? <EmptyState icon={<IconFile size={26} />} title="실행된 워크플로우가 없습니다" /> :
           <ResourceTable rows={rows} rowKey={r => r.run_id} onRowClick={r => nav(pathFor(`/workflows/${r.run_id}`))}
             columns={[
               { key: 'app', label: '앱', render: r => <b>{r.appId}</b> },

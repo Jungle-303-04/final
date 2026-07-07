@@ -22,7 +22,7 @@ export default function ClusterListView() {
 
   return (
     <FadeSlideIn>
-      <PageHeader title="클러스터" sub="에이전트가 연결된 클러스터의 실측 인벤토리"
+      <PageHeader title="클러스터"
         actions={admin ? <Button variant="primary" onClick={() => setWizard(true)}><IconPlus size={15} />클러스터 등록</Button> : undefined} />
       <div style={{ marginBottom: 12 }}><SearchInput value={search} onChange={setSearch} /></div>
       <Card>
@@ -31,9 +31,8 @@ export default function ClusterListView() {
             rows={rows} rowKey={c => c.cluster_id}
             onRowClick={c => nav(pathFor(`/clusters/${c.cluster_id}`))}
             empty={search
-              ? <EmptyState icon={<GlobeIcon size={26} />} title={`'${search}' 검색 결과가 없습니다`} description="이름·환경·cluster_id 로 검색합니다" />
+              ? <EmptyState icon={<GlobeIcon size={26} />} title={`'${search}' 검색 결과가 없습니다`} />
               : <EmptyState icon={<GlobeIcon size={26} />} title="등록된 클러스터가 없습니다"
-                  description={admin ? '클러스터를 등록하고 에이전트가 연결되면 실측 인벤토리가 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 실측 인벤토리가 표시됩니다'}
                   action={admin ? <Button variant="primary" onClick={() => setWizard(true)}>첫 클러스터 등록</Button> : undefined} />}
             columns={[
               { key: 'name', label: '이름', render: c => <b>{c.name}</b> },
