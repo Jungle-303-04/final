@@ -25,10 +25,21 @@ class IncidentDetector:
     def detect_body(self, evidence: Evidence, correlation_id: str) -> IncidentDetectedBody:
         incident = self.classify(evidence, correlation_id)
         detected = self.has_signal(evidence)
+        if not detected:
+            return IncidentDetectedBody(
+                cluster_id=evidence.cluster_id,
+                detected=False,
+                reason=self.messages.not_detected_reason,
+                workspace_id=evidence.workspace_id,
+                severity=None,
+                affected=[],
+                evidence=compact_evidence_reference(evidence),
+                incident=None,
+            )
         return IncidentDetectedBody(
             cluster_id=evidence.cluster_id,
-            detected=detected,
-            reason=self.messages.detected_reason if detected else self.messages.not_detected_reason,
+            detected=True,
+            reason=self.messages.detected_reason,
             workspace_id=evidence.workspace_id,
             severity=incident.severity,
             affected=self.affected_resources(incident),

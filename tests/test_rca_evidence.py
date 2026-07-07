@@ -417,6 +417,8 @@ def test_no_incident_flow_stops_before_rca_analysis() -> None:
         "incident.detected",
     ]
     assert event_by_subject(events, "incident.detected").detected is False
+    assert event_by_subject(events, "incident.detected").incident is None
+    assert event_by_subject(events, "incident.detected").affected == []
     assert db.called("save_evidence")
     assert not db.called("save_rca_report")
 

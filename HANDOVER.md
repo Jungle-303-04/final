@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:35 KST (outbox relay batch 영구 안정화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:58 KST (DLQ archive + no-signal incident payload 정리)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,27 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+
+## 체크포인트 (20:58 KST) — DLQ archive + no-signal incident payload 정리
+
+- 라이브 조치:
+  - `6ab49bb3-dev` 배포 후 public `https://k8s.woonyong.org/api/healthz` 200 확인.
+  - 레거시 `rca.ai_fallback.requested` DLQ 1,891건은 `/tmp/dlq-ai-fallback-legacy-missing-evidence-checks-20260707-205558.jsonl` 로 백업했다. SHA256: `9cc13ff7905a84456155caaa5f28e482c5976398eef8bb19543d268dda24cc37`.
+  - 해당 1,891건은 구버전 워커가 `EvidenceBundle.missing_evidence_checks`를 못 읽어 생긴 2026-07-06 레거시 항목이고, 원 payload가 매우 커 replay 시 NATS/outbox를 다시 막을 수 있어 `status='archived'`로 전환했다.
+  - `event_dead_letters`는 `archived=1891`, `open=13`, `replayed=5`가 됐다. 남은 open 13건은 evidence-worker deadlock 9건, 오래된 git/disk-full 계열 4건이다.
+  - oversized outbox 28건도 `/tmp/outbox-incident-worker-oversize-20260707-204642.jsonl` 로 백업 후 `sent_at` 처리했다. SHA256: `9b5b65c50e5d87483156aa88485b75a8422d0c4c53df2d9b0702eec473d52ea8`.
+- 구현:
+  - DLQ 상태 어휘에 `archived`를 추가했고, `/dead-letters/{id}/replay`는 `status=open`만 재발행하도록 막았다.
+  - no-signal `incident.detected(detected=false)` payload에서 `Unknown unknown has unknown` 가짜 incident/affected를 제거했다. 이제 정상 샘플은 `severity=None`, `affected=[]`, `incident=None`이다.
+- 검증:
+  - `python -m ruff check ...` → passed.
+  - `.venv/bin/pytest tests/test_gateway_error_handler.py tests/test_database_unit.py tests/test_docs_index.py -q` → 61 passed.
+  - `.venv/bin/pytest tests/test_rca_evidence.py tests/test_incident_symptom_derivation.py tests/test_dashboard_projection.py -q` → 31 passed.
+- 다음:
+  1. no-signal payload 정리 커밋/푸시 후 새 이미지로 롤아웃한다.
+  2. live `incident.detected` 최근 payload에서 `detected=false` 행의 `incident`가 null인지 확인한다.
+  3. 남은 open DLQ 13건은 신규 증가가 멈춘 뒤 replay 가능/아카이브 가능을 개별 판단한다.
+  4. 그 다음 프론트 우선순위로 `/console` 데모 보존과 `/` 실제 드릴다운 UI 작업을 진행한다.
 
 ## 체크포인트 (20:35 KST) — outbox relay batch 영구 안정화
 
