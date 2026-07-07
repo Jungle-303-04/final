@@ -93,7 +93,7 @@ cluster.evidence.received
 | --- | --- | --- | --- |
 | `evidence-worker` | `ClusterEvidenceReceivedBody` | `EvidenceBuiltBody` | raw provider bucket을 RCA 공통 입력 `Evidence`로 고정한다. |
 | `incident-worker` | `EvidenceBuiltBody` | `IncidentDetectedBody`, `EvidenceBundleBuiltBody` | 증상을 뽑고 incident별 판단 근거 묶음을 만든다. |
-| `plan-worker` | `EvidenceBundleBuiltBody` | `RcaCandidatesPlannedBody`, 필요 시 rule/backlog/fallback 요청 | symptom에 맞는 원인 후보를 만든다. |
+| `plan-worker` | `EvidenceBundleBuiltBody` | `RcaCandidatesPlannedBody`, 필요 시 rule/backlog/fallback 요청 | symptom에 맞는 원인 후보를 만들고, 매칭 룰이 생긴 symptom의 기존 missing-rule backlog를 `resolved`로 닫는다. |
 | `analyze-worker` | `RcaCandidatesPlannedBody` | `RcaCandidatesEvaluatedBody` | 후보별 필요한 evidence와 실제 evidence를 비교해 점수를 낸다. |
 | `rca-worker` | `RcaCandidatesEvaluatedBody` | `RcaCompletedBody` 또는 `RcaActionRequiredBody` | 충분한 근거가 있을 때만 root cause를 확정한다. |
 | `recovery-worker` | `RcaCompletedBody` | `RecoveryPlannedBody` | root cause를 사람이 선택 가능한 조치 후보로 바꾼다. |
