@@ -1,5 +1,6 @@
 vars {
-  base_url: https://k8s.woonyong.org/
+  base_url: https://k8s.woonyong.org/api/
+  auto_login: true
   auth_email: admin.local@example.com
   auth_password: local-test-password-1234
   signup_email: teammate@example.com
@@ -12,7 +13,7 @@ vars {
   agent_cluster_id: bruno-api-test
   target_name: cluster-1
   agent_target_name: Bruno API Test Target
-  management_base_url: https://k8s.woonyong.org/
+  management_base_url: https://k8s.woonyong.org/api/
   service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4cb1f247eebec806e1191e72c9763557b55b027d
   namespace: sandbox
   deployment_name: checkout-api

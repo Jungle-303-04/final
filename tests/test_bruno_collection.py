@@ -32,23 +32,27 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     local = (API_DIR / "environments" / "local.bru").read_text(encoding="utf-8")
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
-    assert "base_url: https://k8s.woonyong.org/" in collection
+    assert "base_url: https://k8s.woonyong.org/api/" in collection
+    assert "auto_login: true" in collection
     assert "auth_email: admin.local@example.com" in collection
     assert "auth_password: local-test-password-1234" in collection
     assert "cluster_id: cluster-1" in collection
 
     assert "base_url: http://localhost:18080/" in local
+    assert "auto_login: true" in local
     assert "auth_email: admin.local@example.com" in local
     assert "auth_password: local-test-password-1234" in local
     assert "cluster_id: target" in local
-    assert "base_url: https://k8s.woonyong.org/" in aws
-    assert "management_base_url: https://k8s.woonyong.org/" in aws
+    assert "base_url: https://k8s.woonyong.org/api/" in aws
+    assert "management_base_url: https://k8s.woonyong.org/api/" in aws
+    assert "auto_login: true" in aws
     assert "auth_email: admin.local@example.com" in aws
     assert "auth_password: local-test-password-1234" in aws
     assert "cluster_id: cluster-1" in aws
 
     for env_text in (local, aws):
         assert "base_url:" in env_text
+        assert "auto_login:" in env_text
         assert "auth_email:" in env_text
         assert "agent_token:" in env_text
         assert "cluster_id:" in env_text
@@ -150,6 +154,24 @@ def test_bruno_files_use_importable_v3_syntax() -> None:
     assert offenders == []
 
 
+def test_bruno_collection_auto_login_is_request_scoped() -> None:
+    collection = (API_DIR / "collection.bru").read_text(encoding="utf-8")
+
+    assert "script:pre-request" in collection
+    assert "url: `${baseUrl}/auth/login`" in collection
+    assert "bru.sendRequest" in collection
+    assert 'sessionCookieName = "service_session"' in collection
+    assert "bru.cookies.delete(sessionCookieName)" in collection
+    assert 'req.deleteHeader("cookie")' in collection
+    assert "new URL(req.getUrl()).pathname" in collection
+    assert 'rawPath.replace(/^\\/api(?=\\/)/, "")' in collection
+    assert 'req.getHeader("x-agent-token")' in collection
+    assert '"/github/webhook"' in collection
+    assert '"/webhooks/alertmanager"' in collection
+    assert '"/metrics"' in collection
+    assert '"/auth/logout"' in collection
+
+
 def test_bruno_readme_explains_each_work_type() -> None:
     readme = (API_DIR / "README.md").read_text(encoding="utf-8")
     expected_sections = [
@@ -167,7 +189,8 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "13-alert-channels",
         "정상 출력",
         "GitHub webhook signature",
-        "https://k8s.woonyong.org/",
+        "https://k8s.woonyong.org/api/",
+        "auto_login",
         "admin.local@example.com",
         "BRUNO_CLUSTER_ID",
     ]

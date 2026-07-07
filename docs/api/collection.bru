@@ -1,5 +1,6 @@
 vars:pre-request {
-  base_url: https://k8s.woonyong.org/
+  base_url: https://k8s.woonyong.org/api/
+  auto_login: true
   auth_email: admin.local@example.com
   auth_password: local-test-password-1234
   signup_email: teammate@example.com
@@ -12,7 +13,7 @@ vars:pre-request {
   agent_cluster_id: bruno-api-test
   target_name: cluster-1
   agent_target_name: Bruno API Test Target
-  management_base_url: https://k8s.woonyong.org/
+  management_base_url: https://k8s.woonyong.org/api/
   service_image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4cb1f247eebec806e1191e72c9763557b55b027d
   namespace: sandbox
   deployment_name: checkout-api
@@ -43,4 +44,118 @@ vars:pre-request {
   metrics_token: replace-with-metrics-token-if-enabled
   alertmanager_token: replace-with-ALERTMANAGER_WEBHOOK_TOKEN
   github_webhook_signature: sha256=replace-with-valid-hmac
+}
+
+script:pre-request {
+  const truthy = (value) => !["0", "false", "off", "no"].includes(String(value || "").trim().toLowerCase());
+  const readVar = (name, fallback = "") => {
+    const envValue = bru.getEnvVar(name);
+    if (envValue !== undefined && envValue !== null && String(envValue).trim() !== "") {
+      return String(envValue);
+    }
+    const runtimeValue = bru.getVar(name);
+    if (runtimeValue !== undefined && runtimeValue !== null && String(runtimeValue).trim() !== "") {
+      return String(runtimeValue);
+    }
+    const interpolated = bru.interpolate(`{{${name}}}`);
+    if (interpolated && interpolated !== `{{${name}}}`) {
+      return interpolated;
+    }
+    return fallback;
+  };
+
+  let rawPath = req.getPath();
+  try {
+    rawPath = new URL(req.getUrl()).pathname;
+  } catch (_error) {
+    rawPath = req.getPath();
+  }
+  const pathWithApiPrefix = rawPath.replace(/^\/api(?=\/)/, "");
+  const path = pathWithApiPrefix.length > 1
+    ? pathWithApiPrefix.replace(/\/+$/, "")
+    : pathWithApiPrefix;
+  const tags = req.getTags();
+  const skipPaths = [
+    "/healthz",
+    "/readyz",
+    "/openapi.json",
+    "/auth/login",
+    "/auth/signup",
+    "/auth/resend-verification",
+    "/auth/verify-email",
+    "/auth/logout",
+    "/github/webhook",
+    "/webhooks/alertmanager",
+    "/metrics"
+  ];
+  const sessionCookieName = "service_session";
+  if (path === "/auth/login") {
+    bru.cookies.delete(sessionCookieName);
+    req.deleteHeader("cookie");
+    req.deleteHeader("Cookie");
+  }
+  const shouldSkipAutoLogin =
+    !truthy(readVar("auto_login", "true")) ||
+    tags.includes("public") ||
+    skipPaths.includes(path) ||
+    path.startsWith("/install/") ||
+    Boolean(req.getHeader("x-agent-token"));
+
+  if (!shouldSkipAutoLogin && !bru.cookies.get(sessionCookieName)) {
+    const baseUrl = readVar("base_url").replace(/\/+$/, "");
+    const email = readVar("auth_email");
+    const password = readVar("auth_password");
+    if (!baseUrl || !email || !password) {
+      throw new Error("auto_login requires base_url, auth_email, and auth_password");
+    }
+
+    let loginResponse;
+    try {
+      loginResponse = await bru.sendRequest({
+        method: "POST",
+        url: `${baseUrl}/auth/login`,
+        headers: { "Content-Type": "application/json" },
+        data: { email, password },
+        timeout: 10000
+      });
+    } catch (error) {
+      const errorStatus = error && error.response ? error.response.status : "";
+      const statusSuffix = errorStatus ? ` with status ${errorStatus}` : "";
+      throw new Error(`auto_login failed${statusSuffix}: ${error.message}`);
+    }
+    const status = loginResponse.status || loginResponse.statusCode;
+    const body = loginResponse.data || loginResponse.body || {};
+    if (status !== 200) {
+      throw new Error(`auto_login failed with status ${status}`);
+    }
+
+    if (body.workspace_id) {
+      bru.setVar("workspace_id", body.workspace_id);
+    }
+    if (body.user_id) {
+      bru.setVar("user_id", body.user_id);
+    }
+
+    const headers = loginResponse.headers || {};
+    const setCookieHeader = headers["set-cookie"] || headers["Set-Cookie"];
+    const setCookies = Array.isArray(setCookieHeader)
+      ? setCookieHeader
+      : setCookieHeader
+        ? [setCookieHeader]
+        : [];
+    const sessionCookie = setCookies.find((cookie) => cookie.startsWith(`${sessionCookieName}=`));
+    const sessionValue = sessionCookie
+      ? sessionCookie.split(";")[0].slice(sessionCookieName.length + 1)
+      : "";
+    if (sessionValue) {
+      await bru.cookies.upsert({
+        key: sessionCookieName,
+        value: sessionValue,
+        path: "/",
+        secure: baseUrl.startsWith("https://"),
+        httpOnly: true,
+        sameSite: "lax"
+      });
+    }
+  }
 }
