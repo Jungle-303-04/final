@@ -339,6 +339,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/packages/security](spec/packages/security.md)
 - [spec/packages/storage](spec/packages/storage.md)
 - [spec/services/ai-agent](spec/services/ai-agent.md)
+- [spec/services/ai-ai-fallback-worker](spec/services/ai-ai-fallback-worker.md)
 - [spec/services/ai-analyze-worker](spec/services/ai-analyze-worker.md)
 - [spec/services/ai-approval-worker](spec/services/ai-approval-worker.md)
 - [spec/services/ai-backlog-worker](spec/services/ai-backlog-worker.md)
