@@ -103,7 +103,6 @@ export function HomePage() {
               <EmptyState
                 icon={<GlobeIcon size={26} />}
                 title="아직 등록된 클러스터가 없습니다"
-                description={admin ? '클러스터 등록 필요' : '접근 가능한 클러스터 없음'}
                 action={admin ? <Button variant="primary" onClick={() => setClusterWizard(true)}>첫 클러스터 등록</Button> : undefined}
               />
             </div>

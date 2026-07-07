@@ -218,7 +218,6 @@ export default function MetricsView() {
         <PageHeader title="메트릭" />
         <Card>
           <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
-            description={admin ? '클러스터를 등록하고 에이전트가 연결되면 스트림·스냅샷 메트릭이 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 스트림·스냅샷 메트릭이 표시됩니다'}
             action={admin ? <Link to={pathFor('/clusters')}><Button variant="primary">클러스터 등록</Button></Link> : undefined} />
         </Card>
       </FadeSlideIn>
@@ -264,15 +263,14 @@ export default function MetricsView() {
       <Card title="스트림 추이 — 재시작 / 실행 팟" style={{ marginBottom: 16 }}>
         <TimeSeriesChart series={series} />
       </Card>
-      <Card title="스냅샷 추이 — 인벤토리 실측 (usage rollup)" style={{ marginBottom: 16 }}>
+      <Card title="스냅샷 추이" style={{ marginBottom: 16 }}>
         {usageQ.isPending ? <Skeleton lines={4} /> /* 클러스터 선택 전(비활성)에도 스켈레톤 — 성급한 '없음' 금지 */
           : usageQ.isError ? (
             <EmptyState icon={<IconClock size={26} />} title="추이 데이터를 불러오지 못했습니다"
               description={(usageQ.error as Error).message}
               action={<Button size="sm" onClick={() => usageQ.refetch()}>다시 시도</Button>} />
           ) : usageSeries.length === 0 ? (
-            <EmptyState icon={<IconClock size={26} />} title="아직 수집된 스냅샷 시계열이 없습니다"
-              description="에이전트가 연결되면 스냅샷(30초 주기)마다 실측 usage 가 쌓입니다" />
+            <EmptyState icon={<IconClock size={26} />} title="수집된 스냅샷 시계열이 없습니다" />
           ) : <TimeSeriesChart series={usageSeries} />}
       </Card>
       <Card title="저장 위젯" style={{ marginBottom: 16 }}>
