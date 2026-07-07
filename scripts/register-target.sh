@@ -128,6 +128,7 @@ echo "==> registering target in operations tool"
 registration_response="$(curl -fsS -X POST "${BASE_URL}/targets" \
   -b "${COOKIE_JAR}" \
   -H "content-type: application/json" \
+  -H "x-service-csrf: same-origin" \
   -d "${registration_body}")"
 
 echo "==> removing legacy target agent deployment if present"
