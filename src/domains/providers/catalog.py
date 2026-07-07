@@ -147,11 +147,11 @@ CATALOG: tuple[ProviderDefinition, ...] = (
     ),
     ProviderDefinition(
         category=ProviderCategory.DEPLOY,
-        key="argocd",
-        label="Argo CD",
+        key="gitops-controller",
+        label="GitOps Controller",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="Argo CD Application/ApplicationSet adapter is unavailable",
+        unavailable_reason="GitOps controller adapter is unavailable",
     ),
     ProviderDefinition(
         category=ProviderCategory.DEPLOY,
