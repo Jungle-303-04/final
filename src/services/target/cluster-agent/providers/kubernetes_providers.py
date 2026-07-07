@@ -294,20 +294,30 @@ def pod_summary(item: JsonObject) -> JsonObject:
             for container in containers
             if container.get("state") == "waiting" and container.get("state_reason")
         ],
+        # 현재 terminated 상태와 직전(lastState) terminated 사유를 함께 승격 —
+        # crashloop 중 waiting 으로 관측돼도 OOMKilled 등 크래시 사유가 보존된다.
         "terminated_reasons": [
-            container.get("state_reason")
-            for container in containers
-            if container.get("state") == "terminated" and container.get("state_reason")
+            *(
+                container.get("state_reason")
+                for container in containers
+                if container.get("state") == "terminated" and container.get("state_reason")
+            ),
+            *(
+                container.get("last_state_reason")
+                for container in containers
+                if container.get("last_state") == "terminated"
+                and container.get("last_state_reason")
+            ),
         ],
     }
 
 
 def container_summary(item: JsonObject) -> JsonObject:
-    state = item.get("state", {}) if isinstance(item.get("state"), dict) else {}
-    state_name = next(iter(state), None)
-    state_payload = (
-        state.get(state_name, {}) if state_name and isinstance(state.get(state_name), dict) else {}
-    )
+    state_name, state_payload = container_state(item, "state")
+    # crashloop 파드는 현재 state 가 waiting(CrashLoopBackOff)이고 직전 크래시의
+    # 종료 사유/exit code 는 lastState.terminated 에 있다 — RCA 원인 판별
+    # (OOMKilled/137 vs exit 1)에 필수라 함께 요약한다.
+    last_state_name, last_state_payload = container_state(item, "lastState")
     return {
         "name": item.get("name"),
         "image": item.get("image"),
@@ -319,7 +329,19 @@ def container_summary(item: JsonObject) -> JsonObject:
         "exit_code": state_payload.get("exitCode"),
         "started_at": state_payload.get("startedAt"),
         "finished_at": state_payload.get("finishedAt"),
+        "last_state": last_state_name,
+        "last_state_reason": last_state_payload.get("reason"),
+        "last_exit_code": last_state_payload.get("exitCode"),
     }
+
+
+def container_state(item: JsonObject, key: str) -> tuple[str | None, JsonObject]:
+    state = item.get(key, {}) if isinstance(item.get(key), dict) else {}
+    state_name = next(iter(state), None)
+    state_payload = (
+        state.get(state_name, {}) if state_name and isinstance(state.get(state_name), dict) else {}
+    )
+    return state_name, state_payload if isinstance(state_payload, dict) else {}
 
 
 def event_summary(item: JsonObject) -> JsonObject:
