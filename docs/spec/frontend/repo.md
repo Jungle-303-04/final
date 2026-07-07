@@ -17,7 +17,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/ui`, `@/ui/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/ui`, `@/ui/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useSession`) | [auth](./auth.md) | 승인 버튼 활성(`service_admin`, `release_operator`) |
 | import | `@/features/resources/ConnectRepoWizard` | [resources](./resources.md) | 목록 화면 위저드 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
@@ -44,7 +44,7 @@ status: synced
 | `useRepositoryBranches` | `frontend/src/features/repo/api.ts :: useRepositoryBranches` | GET `/repositories/discovery/branches?repo_ref=...` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.branches(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
 | `useRepositoryManifestCandidates` | `frontend/src/features/repo/api.ts :: useRepositoryManifestCandidates` | GET `/repositories/discovery/manifests?repo_ref=...&branch=...` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.manifests(repoRef, branch)`, `enabled`, `retry:false`, `staleTime:30s` |
 | `useRepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: useRepositoryManifestValidation` | POST `/repositories/discovery/validate` body `{repo_ref, branch, manifest_path, source_type}` with `{timeoutMs: 15_000}` | 쿼리키 `repoKeys.validation(repoRef, branch, manifestPath, sourceType)`, `enabled`, `retry:false`, `staleTime:30s` |
-| `useApproval` | `frontend/src/features/repo/api.ts :: useApproval` | POST `/approvals/${approvalId}/${action}` (`action: 'grant'\|'reject'`) | 성공: toast(`grant → ok '승인 완료 — 배포가 진행됩니다'` / `reject → warn '거절했습니다'`) + `['applications']`·`applications*` predicate·`ai*` predicate invalidate |
+| `useApproval` | `frontend/src/features/repo/api.ts :: useApproval` | POST `/approvals/${approvalId}/${action}` (`action: 'grant'\|'reject'`) | 성공/실패 `@/ui` toast. 성공 시 `['applications']`·`applications*` predicate·`ai*` predicate invalidate. 실패는 `forbidden`/`invalid` 사유를 한국어로 표시 |
 | `CreateApplicationInput` | `frontend/src/features/repo/api.ts :: CreateApplicationInput` | — | `{ name; repo_ref; branch; manifest_path; source_type; cluster_id; namespace?; environment? }` — 레포 연결 위저드 입력 계약 |
 | `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | POST `/applications/connect` body `{name, repo_ref, branch, manifest_path, source_type, cluster_id, namespace?, environment?}` → `{application: raw}` | `(input: CreateApplicationInput)` — 앱과 배포 대상 연결을 서버 재검증 경로에 위임한다. `namespace`와 `environment`는 입력이 있을 때만 보낸다. 반환은 `adaptApplication` 결과에 `branch`/`cluster_id` 를 덮어쓴 값. 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
 
@@ -79,25 +79,20 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 - 모듈 상수 `STEP_ORDER`: `['STARTED','RENDERING','DIFFING','POLICY_CHECKING','WAITING_FOR_APPROVAL','APPLYING','ROLLOUT_WAITING','SUCCEEDED']`.
 - 트리:
   ```
-  FadeSlideIn
-  ├─ Breadcrumbs [레포 → app.name]
-  ├─ 헤더(flex wrap, gap 8): h1(name + code repo_ref@branch, overflowWrap anywhere) · 버튼 2개(새 탭):
-  │    "manifest 수정 ↗" → https://github.com/<repo_ref>/blob/<branch>/<manifest_path> · "GitHub ↗" → https://github.com/<repo_ref>
-  ├─ manifest path 안내: `manifest <manifest_path>`
-  ├─ Tabs: runs(badge=run 수)/deployments(배포)/safe-pr(Safe PR)/settings(설정)
-  ├─ [runs] 비면 EmptyState(IconClock '첫 커밋 감지 대기 중')
-  │   아니면 Stagger(run별 Card):
-  │     code(shortSha) · Badge(status) · 미니 스텝바(STEP_ORDER 별 14×5 칩 — SUCCEEDED ok/FAILED danger/PENDING surface-3/그 외 info)
-  │     · timeAgo(started_at) · "그래프 보기" → `pathFor('/workflows/${run_id}')`
-  │     status===WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인', compact)
-  │       + DIFFING step 의 changes 가 있으면 PlanDiff(changes, resource)
-  ├─ [deployments] ResourceTable: 클러스터(Link `pathFor('/clusters/:id?tab=workloads')`)/네임스페이스/이름/이미지(code)/Replicas/상태 Badge
-  ├─ [safe-pr] safePrRun 없으면 EmptyState(IconFile 'Safe PR 이력이 없습니다')
-  │   있으면 Card('Safe PR — <sha>'): Badge(safe_pr.status) + pr_url 링크 'PR 열기 ↗' + explanation
-  │     + diff_before 있으면 before(danger)/after(ok) CodeBlock 2열
-  │     + safe_pr.error 있으면 Link(`pathFor('/ai?prefill=Safe PR 실패 원인 분석: <error>')`) Button(IconSend, 'AI 분석')
-  └─ [settings] KeyValue: application_id/manifest_path/대상 클러스터/브랜치
+  PageHeader(title=app.name, breadcrumb=배포/app.name, actions=manifest 수정/GitHub)
+  ├─ description: `repo_ref@branch` + `manifest_path` CodeText
+  ├─ Tabs: 실행(count=run 수)/배포 대상(count=deployment 수)/Safe PR(count=0|1)/설정
+  ├─ [실행] Card('실행 이력'): loading Skeleton, 오류+재시도, empty('실행 이력 없음')
+  │   아니면 motion list(run별 token row):
+  │     shortSha · StatusBadge(한국어) · timeAgo · "그래프 보기" → `pathFor('/workflows/${run_id}')`
+  │     + STEP_ORDER rail(token bg success/warning/danger/info/raised)
+  │     + WAITING_FOR_APPROVAL && approval_id → ApprovalCard(compact) + DIFFING changes PlanDiffPanel
+  ├─ [배포 대상] Card + `@/ui Table`: 클러스터(Link `pathFor('/clusters/:id?tab=workloads')`)/네임스페이스/이름/이미지(CodeText)/Replicas/상태. loading/empty/error+retry 구분
+  ├─ [Safe PR] Card: loading/empty/error+retry 구분. PR 링크, 설명, before/after CodeBlock 2열, 실패 사유 + "AI 분석" 버튼
+  └─ [설정] Card + KeyValueList: application_id/레포/브랜치/manifest/기본 클러스터
   ```
+
+- `RepoDetailView`는 `@/ui` 프리미티브와 `@/ui/motion` preset만 사용한다. `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline style 의존은 없다.
 
 ## 라우트
 

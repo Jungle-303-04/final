@@ -1,11 +1,31 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:33 KST (알림 채널 전개형 검증 UX 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:41 KST (레포 상세 디자인 시스템 이관 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 레포 상세 디자인 시스템 이관
+
+- 구현:
+  - `RepoDetailView`를 `@/ui` PageHeader/Breadcrumb/Tabs/Card/Table/Badge/CodeBlock/KeyValueList/EmptyState/Skeleton과 `@/ui/motion` list preset 기반으로 재구성했다.
+  - 상세 헤더는 배포 브레드크럼, `repo_ref@branch`, manifest path, GitHub/manifest 버튼으로 정리했다.
+  - 실행 탭은 run row, token 기반 STEP_ORDER rail, 승인 대기 `ApprovalCard`, 적용 계획 `PlanDiffPanel`을 같은 surface 체계로 표시한다.
+  - 배포 대상 탭은 `@/ui Table`로 클러스터/네임스페이스/이미지/replicas/status를 표시하고 클러스터 상세 링크를 유지한다.
+  - Safe PR 탭은 PR 링크, 설명, before/after CodeBlock, 실패 사유, "AI 분석" CTA를 제공한다.
+  - 설정 탭은 `KeyValueList`로 application_id/레포/브랜치/manifest/기본 클러스터를 표시한다.
+  - `useApproval`은 legacy `uiStore` toast 대신 `@/ui` toast를 사용한다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - grep: `RepoDetailView.tsx`/`repo/api.ts`의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css` 0건.
+  - Playwright mock: `/repos/app-1`를 1440/1024/390 폭에서 순회했다. 실행/배포 대상/Safe PR/설정 탭 표시, horizontal overflow 0, console error 0 확인. screenshots: `/tmp/repo-detail-desktop.png`, `/tmp/repo-detail-tablet.png`, `/tmp/repo-detail-mobile.png`.
+- 남은 확인:
+  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
 
 ## 체크포인트 — 알림 채널 전개형 검증 UX
 
@@ -156,7 +176,7 @@
   - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
   - live asset 확인: `/assets/MetricsView-I5boPxK-.js` 200, chunk 안에 `metrics/validate`, `PromQL 실행`, `시간범위 넓히기` 포함.
 - 다음:
-  1. Phase 2 남은 화면은 레포 상세/카탈로그/AI 채팅/설정·조직/운영 액션이다.
+  1. Phase 2 남은 화면은 카탈로그/운영 액션과 전개형 검증 잔여 플로우다.
   2. 자동 Actions가 계속 billing 제한이면 코드 검증은 로컬 명령 + 수동 ECR/rollout 경로로 수행하고, run annotation을 HANDOVER에 남긴다.
 
 ## 체크포인트 — DB retention/keyset 로컬 검증 완료
