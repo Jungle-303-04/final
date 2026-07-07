@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:21 KST (`/console` 보존 + AI chat 계약 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:30 KST (`/console` 로그인 returnTo 회귀 수정)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -33,6 +33,14 @@
   1. 이 단위 커밋/푸시 후 프론트 이미지 빌드 및 live `https://k8s.woonyong.org/`, `https://k8s.woonyong.org/console/` 스모크를 수행한다.
   2. 다음 구현 단위는 클러스터 등록의 실제 discovery semantics와 레포/클러스터 위저드 UI polish다.
   3. 이후 드릴다운 resource-detail API를 프론트 Drawer에 붙여 클러스터→노드/서비스/워크로드→팟 각각의 이벤트/메트릭/AI 분석을 실제 데이터로 확장한다.
+
+### 21:30 KST follow-up — `/console` 로그인 returnTo
+
+- live smoke 중 `/console` 비로그인 진입 → 로그인 후 `/`로 이동하는 회귀를 발견했다.
+- 원인: `RequireGuest`가 인증된 사용자가 `/login?returnTo=/console`에 남아 있는 순간 항상 `/`로 리다이렉트했다. LoginView의 `onSuccess` navigation보다 guard redirect가 먼저 실행될 수 있다.
+- 수정: `RequireGuest`가 `returnTo` query를 같은 `safeReturnTo` 규칙으로 검증한 뒤 해당 경로로 이동한다. 외부 URL/프로토콜/`//`는 계속 `/`로 방어한다.
+- `frontend/tests/e2e_real_backend.py`는 기본 `E2E_APP_BASE_PATH=/console`로 갱신했다. 실제 쓰기 흐름은 기존대로 `E2E_MUTATE=1` 없이는 skip 된다.
+- 검증: `cd frontend && npm run typecheck`, `npm test`, `npm run build` 모두 passed. 새 커밋/이미지 빌드/라이브 재스모크가 다음 단계다.
 
 ## 체크포인트 (20:58 KST) — DLQ archive + no-signal incident payload 정리
 

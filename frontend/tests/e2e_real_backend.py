@@ -8,6 +8,7 @@ Optional env:
 - BASE_URL or SMOKE_BASE, default http://127.0.0.1:4173
 - PLAYWRIGHT_CHROMIUM_EXECUTABLE
 - SMOKE_SHOTS_DIR, default /tmp/shots
+- E2E_APP_BASE_PATH, default /console
 - E2E_MUTATE=1 to run write flows against the real backend
 """
 
@@ -18,6 +19,7 @@ import time
 from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("BASE_URL", os.environ.get("SMOKE_BASE", "http://127.0.0.1:4173")).rstrip("/")
+APP_BASE_PATH = os.environ.get("E2E_APP_BASE_PATH", "/console").strip()
 EMAIL = os.environ.get("AUTH_EMAIL", "").strip()
 PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 EXPECTED_EMAIL = os.environ.get("E2E_EXPECTED_USER_EMAIL", EMAIL).strip()
@@ -26,6 +28,18 @@ SHOTS = os.environ.get("SMOKE_SHOTS_DIR", "/tmp/shots")
 MUTATE = os.environ.get("E2E_MUTATE", "0") == "1"
 ENTITY_PREFIX = os.environ.get("E2E_ENTITY_PREFIX", "e2e").strip() or "e2e"
 RUN_ID = os.environ.get("E2E_RUN_ID", str(int(time.time())))
+
+
+def app_url(path: str = "") -> str:
+    base_path = "" if APP_BASE_PATH in ("", "/") else f"/{APP_BASE_PATH.strip('/')}"
+    suffix = "" if not path else f"/{path.strip('/')}"
+    return f"{BASE}{base_path}{suffix}"
+
+
+def app_url_glob(path: str = "") -> str:
+    base_path = "" if APP_BASE_PATH in ("", "/") else f"/{APP_BASE_PATH.strip('/')}"
+    suffix = "" if not path else f"/{path.strip('/')}"
+    return f"**{base_path}{suffix}"
 
 
 def require_env(name: str, value: str) -> None:
@@ -88,7 +102,7 @@ with sync_playwright() as p:
             pg.screenshot(path=f"{SHOTS}/real-fail-{len(failed)}.png")
 
     def s1():
-        pg.goto(f"{BASE}/overview")
+        pg.goto(app_url())
         pg.wait_for_url("**/login**")
 
     step("미인증 -> 로그인 리다이렉트", s1)
@@ -97,19 +111,19 @@ with sync_playwright() as p:
         pg.fill("input[type=email]", EMAIL)
         pg.fill("input[type=password]", PASSWORD)
         pg.click("button[type=submit]")
-        pg.wait_for_url("**/overview", timeout=12000)
+        pg.wait_for_url(app_url_glob(), timeout=12000)
         pg.screenshot(path=f"{SHOTS}/real-01-overview.png")
 
     step("실백엔드 로그인 -> 세션 쿠키", s2)
 
     def s3():
         pg.reload()
-        pg.wait_for_selector("text=오버뷰")
+        pg.wait_for_selector("text=플릿 현황")
 
     step("새로고침 세션 유지", s3)
 
     def s4():
-        pg.goto(f"{BASE}/settings/members")
+        pg.goto(app_url("settings/members"))
         pg.wait_for_selector(f"text={EXPECTED_EMAIL}")
         pg.screenshot(path=f"{SHOTS}/real-02-members.png")
 
@@ -117,7 +131,7 @@ with sync_playwright() as p:
 
     def s5():
         org_name = f"{ENTITY_PREFIX}-org-{RUN_ID}"
-        pg.goto(f"{BASE}/settings/orgs")
+        pg.goto(app_url("settings/orgs"))
         pg.click("[data-testid=new-org]")
         pg.fill("[data-testid=org-name]", org_name)
         pg.click("[data-testid=org-submit]")
@@ -128,7 +142,7 @@ with sync_playwright() as p:
 
     def s6():
         group_name = f"{ENTITY_PREFIX}-group-{RUN_ID}"
-        pg.goto(f"{BASE}/settings/groups")
+        pg.goto(app_url("settings/groups"))
         pg.click("text=+ 그룹 생성")
         pg.wait_for_selector(".modal")
         pg.locator(".modal input.input").last.fill(group_name)
@@ -138,7 +152,7 @@ with sync_playwright() as p:
     step("그룹 생성", s6, mutates=True)
 
     def s7():
-        pg.goto(f"{BASE}/settings/access")
+        pg.goto(app_url("settings/access"))
         pg.click("text=+ 권한 부여")
         pg.wait_for_selector(".modal")
         pg.select_option(".modal select >> nth=0", "user")
@@ -148,11 +162,11 @@ with sync_playwright() as p:
     step("권한 부여 폼 오픈", s7)
 
     def s8():
-        pg.goto(f"{BASE}/ai")
+        pg.goto(app_url("ai"))
         pg.wait_for_selector("[data-testid=chat-input]", timeout=9000)
         pg.fill("[data-testid=chat-input]", f"real backend e2e {RUN_ID}")
         pg.click("[data-testid=chat-send]")
-        pg.wait_for_url("**/ai/**", timeout=9000)
+        pg.wait_for_url(app_url_glob("ai/**"), timeout=9000)
         pg.screenshot(path=f"{SHOTS}/real-04-ai.png")
 
     step("AI 대화 생성", s8, mutates=True)

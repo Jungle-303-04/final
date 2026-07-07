@@ -93,8 +93,8 @@ export const router = createBrowserRouter([...])
 
 | 심볼 | 앵커 | 동작 |
 |---|---|---|
-| `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | `useSession()` pending 이면 `<div style={{padding:48}}><Skeleton lines={5}/></div>`. `data?.authenticated` 가 falsy 면 `<Navigate to={"/login?returnTo=" + encodeURIComponent(loc.pathname)} replace />`. 아니면 `<Outlet />` |
-| `RequireGuest` | `frontend/src/app/guards.tsx :: RequireGuest` | pending 이면 `null`. `authenticated` 면 `/` 로 replace 이동. 아니면 `<Outlet />` |
+| `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | `useSession()` pending 이면 `<div style={{padding:48}}><Skeleton lines={5}/></div>`. `data?.authenticated` 가 falsy 면 `returnTo = loc.pathname + loc.search + loc.hash` 를 인코딩해 `<Navigate to={"/login?returnTo=" + encodeURIComponent(returnTo)} replace />`. 아니면 `<Outlet />` |
+| `RequireGuest` | `frontend/src/app/guards.tsx :: RequireGuest` | pending 이면 `null`. `authenticated` 면 `returnTo` query 를 `safeReturnTo` 로 검증한 뒤 replace 이동한다. `safeReturnTo` 는 값이 없거나 `/`로 시작하지 않거나 `//`/`://`를 포함하면 `/`로 폴백한다. 아니면 `<Outlet />` |
 | `RequireAdmin` | `frontend/src/app/guards.tsx :: RequireAdmin` | `useIsAdmin()` 가 false 면 `<EmptyState icon={<IconLock size={26} />} title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />` 렌더(리다이렉트 아님). true 면 `<Outlet />` |
 
 ### 콘솔 셸 — `frontend/src/features/console/ui.tsx :: ConsoleLayout`
@@ -140,9 +140,9 @@ ConsoleLayout (div.pl-app.co-app)
 ## 동작 (Behavior)
 
 1. 부팅: `main.tsx` → `Providers`(QueryClient + 401 핸들러 + Toasts) → `RouterProvider`.
-2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 로그인되어 있으면 `/` 로 이동한다.
+2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 이미 로그인된 사용자가 게스트 라우트에 들어오면 안전한 `returnTo` query 로 이동하고, 없거나 외부 URL 형태면 `/` 로 이동한다.
 3. 세션 플로우: `RequireSession` 이 세션 확인 후 `ConsoleLayout` 렌더 → `startLive()` 1회 호출로 WS 시작.
-4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재경로>` 이동.
+4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재 path+query+hash>` 이동.
 5. `/console`과 `/console/*`는 같은 콘솔 IA를 base path 유지 상태로 렌더한다. `/overview`, `/notifications`, 구 UI 경로 계열은 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 해당 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
 
 ## 불변식·오류 (Invariants & Errors)
