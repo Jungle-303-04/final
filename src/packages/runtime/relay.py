@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
+
+LOGGER = logging.getLogger(__name__)
 
 # relay 튜닝값 — 대형 evidence backlog 처리 시 DB lock/메모리 피크를 낮추기 위해 작게 잡는다.
 DEFAULT_BATCH_ENV = "OUTBOX_RELAY_BATCH"  # 한 번에 발행할 outbox 행 수(기본 10)
@@ -19,6 +22,7 @@ DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV = (
     "OUTBOX_PUBLISH_TIMEOUT_SECONDS"  # 건당 발행 대기 한도 초(기본 10)
 )
 DEFAULT_PUBLISH_TIMEOUT_SECONDS = int(env(DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV, "10"))
+NON_RETRYABLE_PUBLISH_ERRORS = frozenset({"MaxPayloadError"})
 
 
 class OutboxRelay:
@@ -46,12 +50,37 @@ class OutboxRelay:
         published: list[str] = []
         try:
             for evt in rows:
-                await asyncio.wait_for(
-                    self.publisher.publish_envelope(evt),
-                    timeout=self.publish_timeout_seconds,
-                )
+                try:
+                    await asyncio.wait_for(
+                        self.publisher.publish_envelope(evt),
+                        timeout=self.publish_timeout_seconds,
+                    )
+                except Exception as exc:
+                    if self._is_non_retryable_publish_error(exc):
+                        await self.store.mark_events_dead_lettered(
+                            [evt],
+                            f"outbox-relay:{self.source}",
+                            str(exc),
+                        )
+                        LOGGER.error(
+                            "outbox_event_dead_lettered",
+                            extra={
+                                "context": {
+                                    "event_id": evt.event_id,
+                                    "subject": evt.subject,
+                                    "source": evt.source,
+                                    "error_type": exc.__class__.__name__,
+                                }
+                            },
+                        )
+                        continue
+                    raise
                 published.append(evt.event_id)
         finally:
             if published:
                 await self.store.mark_events_sent(published)
         return len(published)
+
+    def _is_non_retryable_publish_error(self, exc: Exception) -> bool:
+        """브로커 정책상 같은 payload로 재시도해도 성공할 수 없는 오류인지 판정한다."""
+        return exc.__class__.__name__ in NON_RETRYABLE_PUBLISH_ERRORS
