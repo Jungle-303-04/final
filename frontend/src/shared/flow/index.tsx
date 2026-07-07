@@ -1,7 +1,7 @@
 // 그래프 공통 모듈 — 모든 그래프 뷰는 이 모듈만 사용(노드 좌표 하드코딩 금지)
 // useAutoLayout: dagre 자동 배치 / AnimatedEdge: 활성 dash-flow / CollapsibleGroupNode: 접기·펼치기 / FlowCanvas: ReactFlow 래퍼
 import dagre from '@dagrejs/dagre';
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Background, BaseEdge, Handle, Position, ReactFlow, ReactFlowProvider,
   getSmoothStepPath, useReactFlow,
@@ -106,6 +106,18 @@ export function CollapsibleGroupNode({ data }: NodeProps<Node<CollapsibleGroupDa
 const BASE_NODE_TYPES: NodeTypes = { group_collapsible: CollapsibleGroupNode };
 const EDGE_TYPES: EdgeTypes = { animated: AnimatedEdge };
 
+/* 콘솔 테마(data-theme-mode)를 따라가는 colorMode — 토글 시 즉시 반영(MutationObserver) */
+function useDocThemeMode(): 'dark' | 'light' {
+  const read = () => (document.documentElement.getAttribute('data-theme-mode') === 'light' ? 'light' as const : 'dark' as const);
+  const [mode, setMode] = useState<'dark' | 'light'>(read);
+  useEffect(() => {
+    const obs = new MutationObserver(() => setMode(read()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme-mode'] });
+    return () => obs.disconnect();
+  }, []);
+  return mode;
+}
+
 /* 레이아웃(노드 구성)이 바뀔 때 다시 fitView — 접기/펼치기·데이터 갱신 대응 */
 function FitOnChange({ signature }: { signature: string }) {
   const { fitView } = useReactFlow();
@@ -122,13 +134,14 @@ export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, children }: {
   onNodeClick?: (id: string) => void; children?: ReactNode;
 }) {
   const types = useMemo(() => ({ ...BASE_NODE_TYPES, ...nodeTypes }), [nodeTypes]);
+  const colorMode = useDocThemeMode();
   return (
     <ReactFlowProvider>
       <div style={{ width: '100%', height: '100%' }}>
         <ReactFlow
           nodes={nodes} edges={edges} nodeTypes={types} edgeTypes={EDGE_TYPES}
           fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.3} maxZoom={1.6} panOnScroll
-          nodesDraggable={false} nodesConnectable={false} colorMode="dark"
+          nodesDraggable={false} nodesConnectable={false} colorMode={colorMode}
           proOptions={{ hideAttribution: true }}
           onNodeClick={onNodeClick ? (_e, n) => onNodeClick(n.id) : undefined}
         >

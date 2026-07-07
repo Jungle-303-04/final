@@ -2,10 +2,12 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'motion/react';
 import { ApiError } from '@/shared/lib/api';
 import type { Tone } from '@/shared/lib/types';
 import { toneColor, toneOf } from '@/shared/ui/status';
 import { AnimatePresence, AnimatedRow, CountUp } from '@/shared/motion';
+import { flyoverSlide, modalPop, overlayFade } from '@/plural-ui/motion';
 import { uiStore } from '@/shared/lib/ui-store';
 import { IconAlertTriangle, IconFile } from '@/shared/ui/icons';
 
@@ -82,17 +84,21 @@ export function Modal({ open, title, onClose, children, size }: { open: boolean;
     if (open) window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
-  if (!open) return null;
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className={`modal ${size ? `modal--${size}` : ''}`} role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
-          <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div className="modal-backdrop" variants={overlayFade} initial="initial" animate="animate" exit="exit" onClick={onClose}>
+          <motion.div className={`modal ${size ? `modal--${size}` : ''}`} variants={modalPop}
+            role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
+              <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
+              <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
+            </div>
+            {children}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -103,18 +109,23 @@ export function Drawer({ open, title, onClose, children }: { open: boolean; titl
     if (open) window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
-  if (!open) return null;
   return (
-    <>
-      <div className="modal-backdrop" style={{ justifyContent: 'flex-end', background: 'rgb(0 0 0 / .35)' }} onClick={onClose} />
-      <aside className="drawer" aria-label="상세">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
-          <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
-        </div>
-        {children}
-      </aside>
-    </>
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div key="drawer-backdrop" className="modal-backdrop" style={{ justifyContent: 'flex-end', background: 'rgb(0 0 0 / .35)' }}
+            variants={overlayFade} initial="initial" animate="animate" exit="exit" onClick={onClose} />
+          <motion.aside key="drawer" className="drawer" aria-label="상세"
+            variants={flyoverSlide} initial="initial" animate="animate" exit="exit">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
+              <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
+              <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기">✕</Button>
+            </div>
+            {children}
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -196,7 +207,16 @@ export function Toasts() {
   const toasts = uiStore(s => s.toasts);
   return (
     <div className="toasts" aria-live="polite">
-      {toasts.map(t => <div key={t.id} className="toast" style={{ borderLeftColor: toneColor(t.tone as Tone) }}>{t.title}</div>)}
+      {/* 진입 slide-up + 자동 소멸 fade — MotionConfig(reducedMotion="user") 존중 */}
+      <AnimatePresence initial={false}>
+        {toasts.map(t => (
+          <motion.div key={t.id} layout className="toast" style={{ borderLeftColor: toneColor(t.tone as Tone) }}
+            initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
+            {t.title}
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

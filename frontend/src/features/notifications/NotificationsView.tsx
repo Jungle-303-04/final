@@ -20,13 +20,15 @@ export default function NotificationsView() {
   return (
     <FadeSlideIn>
       <PageHeader title="인시던트 & 알림" sub="승인 대기·RCA 인시던트·처리 실패(DLQ) 이벤트를 한 곳에서" />
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         {FILTERS.map(([k, label]) => (
           <button key={k} className={`btn btn--sm ${filter === k ? '' : 'btn--ghost'}`} onClick={() => setFilter(k)}>{label}</button>
         ))}
       </div>
       {rows.length === 0
-        ? <EmptyState icon={<IconBell size={26} />} title="알림이 없습니다" />
+        ? <EmptyState icon={<IconBell size={26} />}
+            title={filter === 'all' ? '알림이 없습니다' : `${FILTERS.find(([k]) => k === filter)?.[1]} 알림이 없습니다`}
+            description="승인 대기·RCA 인시던트·처리 실패 이벤트가 생기면 여기 모입니다" />
         : <AnimatedList items={rows} getKey={n => n.id}>{n => (
             <Card style={{ marginBottom: 8, padding: 12 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
