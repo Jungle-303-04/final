@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useClusterEvents, useClusters, useClusterSummary, useResources, useRestart, useScale, useServices, useWorkloads } from '@/features/cluster/api';
+import { useClusterEvents, useClusters, useClusterSummary, useInventoryResourceDetail, usePods, useResources, useRestart, useScale, useServices, useWorkloads, type InventoryResourceIdentity } from '@/features/cluster/api';
 import { useClusterAgg } from '@/features/fleet/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, QueryBoundary, ResourceTable, StatBox, Tabs } from '@/shared/ui';
@@ -8,7 +8,7 @@ import { liveStore } from '@/shared/lib/live';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import { IconFile, IconFlame } from '@/shared/ui/icons';
-import type { K8sEvent, ServiceInfo, Workload } from '@/shared/lib/types';
+import type { InventoryResource, InventoryResourceDetail, K8sEvent, ServiceInfo, Workload, WorkloadResource } from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
 
 const TABS = [
@@ -26,10 +26,10 @@ export default function ClusterDetailView() {
   const detailSubject = sp.get('detail') ?? '';
   const detailName = sp.get('name') ?? '';
   const detailNamespace = sp.get('namespace') ?? '';
+  const detailKind = sp.get('kind') ?? '';
   const clustersQ = useClusters();
   const summaryQ = useClusterSummary(clusterId);
-  const workloadsQ = useWorkloads(clusterId);
-  const servicesQ = useServices(clusterId);
+  const podsQ = usePods(clusterId);
   const cluster = clustersQ.data?.find(c => c.cluster_id === clusterId);
   const snapshot = liveStore(s => s.snapshot);
   // selector 에서 새 객체 생성 금지(무한 리렌더) — 파생은 useMemo
@@ -42,25 +42,25 @@ export default function ClusterDetailView() {
   const [replicas, setReplicas] = useState(2);
 
   const podRows = useMemo(() =>
-    (workloadsQ.data ?? []).map(w => ({ ...w, hot: hotPods.has(w.name) || w.hot }))
+    (podsQ.data ?? []).map(w => ({ ...w, hot: hotPods.has(w.name) || w.hot }))
       .filter(w => !filter || w.name.includes(filter) || w.workload_name?.includes(filter) || w.namespace === filter || w.node === filter),
-    [workloadsQ.data, hotPods, filter]);
+    [podsQ.data, hotPods, filter]);
   const openPod = pod ? podRows.find(w => w.name === pod && w.namespace === namespace) : null;
   const phases = summaryQ.data?.pod_phases ?? {};
-  const deploymentTargets = useMemo(() => deploymentTargetsFromPods(workloadsQ.data ?? []), [workloadsQ.data]);
-  const nodeTarget = detailSubject === 'node' ? summaryQ.data?.nodes.find(n => n.name === detailName) ?? null : null;
-  const serviceTarget = detailSubject === 'service'
-    ? servicesQ.data?.find(s => s.name === detailName && (!detailNamespace || s.namespace === detailNamespace)) ?? null
-    : null;
-  const workloadTarget = detailSubject === 'workload'
-    ? deploymentTargets.find(d => d.name === detailName && (!detailNamespace || d.ns === detailNamespace)) ?? null
-    : null;
+  const selectedDetail = useMemo<InventoryResourceIdentity | null>(() => {
+    if (openPod) return { resource_type: 'pod', kind: 'Pod', name: openPod.name, namespace: openPod.namespace };
+    if (detailSubject === 'node' && detailName) return { resource_type: 'node', kind: 'Node', name: detailName };
+    if (detailSubject === 'service' && detailName) return { resource_type: 'service', kind: detailKind || 'Service', name: detailName, namespace: detailNamespace || undefined };
+    if (detailSubject === 'workload' && detailName) return { resource_type: 'workload', kind: detailKind || 'Deployment', name: detailName, namespace: detailNamespace || undefined };
+    return null;
+  }, [detailKind, detailName, detailNamespace, detailSubject, openPod]);
   const setTab = (nextTab: string) => {
     const next = new URLSearchParams(sp);
     next.set('tab', nextTab);
     next.delete('detail');
     next.delete('name');
     next.delete('namespace');
+    next.delete('kind');
     setSp(next);
   };
   const showTab = (nextTab: string, q?: string) => {
@@ -71,14 +71,17 @@ export default function ClusterDetailView() {
     next.delete('detail');
     next.delete('name');
     next.delete('namespace');
+    next.delete('kind');
     setSp(next);
   };
-  const openDetail = (subject: DetailSubject, name: string, ns?: string) => {
+  const openDetail = (subject: DetailSubject, name: string, ns?: string, kind?: string) => {
     const next = new URLSearchParams(sp);
     next.set('detail', subject);
     next.set('name', name);
     if (ns) next.set('namespace', ns);
     else next.delete('namespace');
+    if (kind) next.set('kind', kind);
+    else next.delete('kind');
     setSp(next);
   };
   const closeDetail = () => {
@@ -86,7 +89,12 @@ export default function ClusterDetailView() {
     next.delete('detail');
     next.delete('name');
     next.delete('namespace');
+    next.delete('kind');
     setSp(next);
+  };
+  const closeResourceDetail = () => {
+    if (openPod) nav(pathFor(`/clusters/${clusterId}?tab=pods`));
+    else closeDetail();
   };
 
   return (
@@ -117,9 +125,10 @@ export default function ClusterDetailView() {
       )}
       <Tabs items={TABS} current={tab} onChange={setTab} />
       {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin}
-        onInspect={d => openDetail('workload', d.name, d.ns)}
+        onInspect={d => openDetail('workload', d.name, d.namespace, d.kind)}
         onDrillPods={d => showTab('pods', d.name)}
-        onScale={d => { setScaleTarget(d); setReplicas(d.podCount); }} onRestart={setRestartTarget} />}
+        onScale={d => { const target = deploymentTargetFromWorkload(d); if (target) { setScaleTarget(target); setReplicas(target.podCount); } }}
+        onRestart={d => { const target = deploymentTargetFromWorkload(d); if (target) setRestartTarget(target); }} />}
       {tab === 'pods' && (
         <Card>
           <ResourceTable<Workload>
@@ -138,7 +147,7 @@ export default function ClusterDetailView() {
       {tab === 'nodes' && (
         <Card><QueryBoundary query={summaryQ}>{s => (
           <ResourceTable rows={s.nodes} rowKey={n => n.name}
-            onRowClick={n => openDetail('node', n.name)}
+            onRowClick={n => openDetail('node', n.name, undefined, 'Node')}
             columns={[
               { key: 'name', label: '이름', render: n => <b>{n.name}</b> },
               { key: 'ready', label: '상태', render: n => <Badge tone={n.ready ? 'ok' : 'danger'}>{n.ready ? 'Ready' : 'NotReady'}</Badge> },
@@ -149,77 +158,21 @@ export default function ClusterDetailView() {
             ]} />
         )}</QueryBoundary></Card>
       )}
-      {tab === 'services' && <ServicesTab clusterId={clusterId} onInspect={s => openDetail('service', s.name, s.namespace)} />}
+      {tab === 'services' && <ServicesTab clusterId={clusterId} onInspect={s => openDetail('service', s.name, s.namespace, 'Service')} />}
       {tab === 'resources' && <ResourcesTab clusterId={clusterId} filter={filter} />}
       {tab === 'events' && <EventsTab clusterId={clusterId} filter={filter} />}
 
-      <Drawer open={!!openPod} title={openPod?.name ?? ''} onClose={() => nav(pathFor(`/clusters/${clusterId}?tab=pods`))}>
-        {openPod && (
-          <>
-            <KeyValue pairs={[
-              ['상태', <Badge key="s" status={openPod.phase} />], ['네임스페이스', openPod.namespace],
-              ['재시작', String(openPod.restarts)], ['노드', openPod.node ?? '—'], ['이미지', openPod.image], ['Ready', openPod.ready],
-            ]} />
-            <ContextActions clusterId={clusterId} subject="pod" subjectName={openPod.name} namespace={openPod.namespace} />
-            <ContextEvents clusterId={clusterId} title="팟 이벤트" match={openPod.name} />
-          </>
-        )}
-      </Drawer>
-
-      <Drawer open={!!nodeTarget} title={nodeTarget?.name ?? ''} onClose={closeDetail}>
-        {nodeTarget && (
-          <>
-            <KeyValue pairs={[
-              ['상태', <Badge key="ready" tone={nodeTarget.ready ? 'ok' : 'danger'}>{nodeTarget.ready ? 'Ready' : 'NotReady'}</Badge>],
-              ['팟 수', String(nodeTarget.pod_count)],
-              ['CPU', nodeTarget.cpu_ratio != null ? `${(nodeTarget.cpu_ratio * 100).toFixed(0)}%` : '—'],
-              ['MEM', nodeTarget.mem_ratio != null ? `${(nodeTarget.mem_ratio * 100).toFixed(0)}%` : '—'],
-              ['버전', nodeTarget.version],
-            ]} />
-            <ContextActions clusterId={clusterId} subject="node" subjectName={nodeTarget.name} />
-            <ContextEvents clusterId={clusterId} title="노드 이벤트" match={nodeTarget.name} />
-            <div style={{ marginTop: 12 }}>
-              <Button onClick={() => showTab('pods', nodeTarget.name)}>팟 보기</Button>
-            </div>
-          </>
-        )}
-      </Drawer>
-
-      <Drawer open={!!serviceTarget} title={serviceTarget?.name ?? ''} onClose={closeDetail}>
-        {serviceTarget && (
-          <>
-            <KeyValue pairs={[
-              ['네임스페이스', serviceTarget.namespace],
-              ['타입', serviceTarget.type],
-              ['ClusterIP', <code key="ip">{serviceTarget.cluster_ip}</code>],
-              ['포트', serviceTarget.ports],
-            ]} />
-            <ContextActions clusterId={clusterId} subject="service" subjectName={serviceTarget.name} namespace={serviceTarget.namespace} />
-            <ContextEvents clusterId={clusterId} title="서비스 이벤트" match={serviceTarget.name} />
-            <div style={{ marginTop: 12 }}>
-              <Button onClick={() => showTab('resources', serviceTarget.name)}>리소스 보기</Button>
-            </div>
-          </>
-        )}
-      </Drawer>
-
-      <Drawer open={!!workloadTarget} title={workloadTarget?.name ?? ''} onClose={closeDetail}>
-        {workloadTarget && (
-          <>
-            <KeyValue pairs={[
-              ['네임스페이스', workloadTarget.ns],
-              ['팟', String(workloadTarget.podCount)],
-            ]} />
-            <ContextActions clusterId={clusterId} subject="workload" subjectName={workloadTarget.name} namespace={workloadTarget.ns} />
-            <ContextEvents clusterId={clusterId} title="워크로드 이벤트" match={workloadTarget.name} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-              <Button onClick={() => showTab('pods', workloadTarget.name)}>팟 보기</Button>
-              <Button disabled={!admin} onClick={() => { closeDetail(); setScaleTarget(workloadTarget); setReplicas(workloadTarget.podCount); }}>스케일</Button>
-              <Button variant="danger" disabled={!admin} onClick={() => { closeDetail(); setRestartTarget(workloadTarget); }}>재시작</Button>
-            </div>
-          </>
-        )}
-      </Drawer>
+      <ResourceDetailDrawer
+        clusterId={clusterId}
+        identity={selectedDetail}
+        open={!!selectedDetail}
+        onClose={closeResourceDetail}
+        admin={admin}
+        onShowPods={name => showTab('pods', name)}
+        onShowResources={name => showTab('resources', name)}
+        onScale={target => { setScaleTarget(target); setReplicas(target.podCount); }}
+        onRestart={setRestartTarget}
+      />
 
       <Modal open={!!scaleTarget} title={`${scaleTarget?.name ?? ''} 스케일`} onClose={() => setScaleTarget(null)}>
         <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>
@@ -256,48 +209,31 @@ export default function ClusterDetailView() {
 interface DeploymentTarget { ns: string; name: string; podCount: number }
 type DetailSubject = 'node' | 'service' | 'workload';
 
-export function deploymentTargetsFromPods(pods: Workload[]): DeploymentTarget[] {
-  const byDeploy = new Map<string, Workload[]>();
-  pods.forEach(w => {
-    const name = w.workload_name || w.name;
-    const key = `${w.namespace}/${name}`;
-    byDeploy.set(key, [...(byDeploy.get(key) ?? []), w]);
-  });
-  return [...byDeploy.entries()].map(([key, rows]) => ({
-    ns: rows[0].namespace,
-    name: key.split('/')[1],
-    podCount: rows.length,
-  }));
+export function deploymentTargetFromWorkload(workload: WorkloadResource): DeploymentTarget | null {
+  if (workload.kind !== 'Deployment') return null;
+  return { ns: workload.namespace, name: workload.name, podCount: workload.ready || workload.desired };
 }
 
 function WorkloadsTab({ clusterId, admin, onInspect, onDrillPods, onScale, onRestart }: {
-  clusterId: string; admin: boolean; onInspect: (d: DeploymentTarget) => void; onDrillPods: (d: DeploymentTarget) => void;
-  onScale: (d: DeploymentTarget) => void; onRestart: (d: DeploymentTarget) => void
+  clusterId: string; admin: boolean; onInspect: (d: WorkloadResource) => void; onDrillPods: (d: WorkloadResource) => void;
+  onScale: (d: WorkloadResource) => void; onRestart: (d: WorkloadResource) => void
 }) {
   const q = useWorkloads(clusterId);
-  const deployments = useMemo(() => {
-    const byDeploy = new Map<string, Workload[]>();
-    (q.data ?? []).forEach(w => {
-      const name = w.workload_name || w.name;
-      const key = `${w.namespace}/${name}`;
-      byDeploy.set(key, [...(byDeploy.get(key) ?? []), w]);
-    });
-    return [...byDeploy.entries()].map(([key, pods]) => ({ key, ns: pods[0].namespace, name: key.split('/')[1], pods }));
-  }, [q.data]);
   return (
-    <Card><QueryBoundary query={q}>{() => (
-      <ResourceTable rows={deployments} rowKey={d => d.key}
-        onRowClick={d => onInspect({ ns: d.ns, name: d.name, podCount: d.pods.length })}
+    <Card><QueryBoundary query={q}>{rows => (
+      <ResourceTable rows={rows} rowKey={d => `${d.namespace}/${d.kind}/${d.name}`}
+        onRowClick={onInspect}
         columns={[
           { key: 'name', label: '워크로드', render: d => <b>{d.name}</b> },
-          { key: 'ns', label: '네임스페이스', render: d => d.ns },
-          { key: 'ready', label: 'Ready', render: d => `${d.pods.filter(p => p.phase === 'Running').length}/${d.pods.length}` },
-          { key: 'restarts', label: '재시작 합', render: d => d.pods.reduce((a, p) => a + p.restarts, 0) },
+          { key: 'kind', label: 'Kind', render: d => d.kind },
+          { key: 'ns', label: '네임스페이스', render: d => d.namespace },
+          { key: 'ready', label: 'Ready', render: d => d.status || `${d.ready}/${d.desired}` },
+          { key: 'health', label: '상태', render: d => <Badge status={d.health} /> },
           { key: 'act', label: '', render: d => (
             <span style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-              <Button size="sm" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale({ ns: d.ns, name: d.name, podCount: d.pods.length })}>스케일</Button>
-              <Button size="sm" variant="danger" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart({ ns: d.ns, name: d.name, podCount: d.pods.length })}>재시작</Button>
-              <Button size="sm" onClick={() => onDrillPods({ ns: d.ns, name: d.name, podCount: d.pods.length })}>팟</Button>
+              <Button size="sm" disabled={!admin || d.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale(d)}>스케일</Button>
+              <Button size="sm" variant="danger" disabled={!admin || d.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart(d)}>재시작</Button>
+              <Button size="sm" onClick={() => onDrillPods(d)}>팟</Button>
             </span>
           ) },
         ]} />
@@ -317,6 +253,163 @@ function ServicesTab({ clusterId, onInspect }: { clusterId: string; onInspect: (
         { key: 'ports', label: '포트', render: s => s.ports },
       ]} />
   )}</QueryBoundary></Card>;
+}
+
+function ResourceDetailDrawer({ clusterId, identity, open, onClose, admin, onShowPods, onShowResources, onScale, onRestart }: {
+  clusterId: string;
+  identity: InventoryResourceIdentity | null;
+  open: boolean;
+  onClose: () => void;
+  admin: boolean;
+  onShowPods: (name: string) => void;
+  onShowResources: (name: string) => void;
+  onScale: (target: DeploymentTarget) => void;
+  onRestart: (target: DeploymentTarget) => void;
+}) {
+  const q = useInventoryResourceDetail(clusterId, identity);
+  const title = identity ? `${identity.kind}/${identity.name}` : '';
+  return (
+    <Drawer open={open} title={title} onClose={onClose}>
+      <QueryBoundary query={q} skeletonLines={6}>{detail => (
+        <ResourceDetailBody
+          clusterId={clusterId}
+          detail={detail}
+          admin={admin}
+          onShowPods={onShowPods}
+          onShowResources={onShowResources}
+          onScale={onScale}
+          onRestart={onRestart}
+        />
+      )}</QueryBoundary>
+    </Drawer>
+  );
+}
+
+function ResourceDetailBody({ clusterId, detail, admin, onShowPods, onShowResources, onScale, onRestart }: {
+  clusterId: string;
+  detail: InventoryResourceDetail;
+  admin: boolean;
+  onShowPods: (name: string) => void;
+  onShowResources: (name: string) => void;
+  onScale: (target: DeploymentTarget) => void;
+  onRestart: (target: DeploymentTarget) => void;
+}) {
+  const resource = detail.resource;
+  const deploymentTarget = deploymentTargetFromDetail(detail);
+  return (
+    <>
+      <KeyValue pairs={resourcePairs(resource)} />
+      <ContextActions clusterId={clusterId} subject={resource.resource_type || resource.kind.toLowerCase()} subjectName={resource.name} namespace={resource.namespace ?? undefined} />
+      <DetailEvents title={`${resource.kind} 이벤트`} rows={detail.events} />
+      {detail.related_pods.length > 0 && <RelatedPods rows={detail.related_pods} />}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        {resource.resource_type !== 'pod' && detail.related_pods.length > 0 && <Button onClick={() => onShowPods(resource.name)}>팟 보기</Button>}
+        {resource.resource_type === 'service' && <Button onClick={() => onShowResources(resource.name)}>리소스 보기</Button>}
+        {deploymentTarget && (
+          <>
+            <Button disabled={!admin} onClick={() => onScale(deploymentTarget)}>스케일</Button>
+            <Button variant="danger" disabled={!admin} onClick={() => onRestart(deploymentTarget)}>재시작</Button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function resourcePairs(resource: InventoryResource): [string, ReactNode][] {
+  const summary = resource.summary;
+  const pairs: [string, ReactNode][] = [
+    ['상태', <Badge key="status" status={resource.status || resource.health} />],
+    ['Health', <Badge key="health" status={resource.health} />],
+    ['Kind', resource.kind],
+  ];
+  if (resource.namespace) pairs.push(['네임스페이스', resource.namespace]);
+  if (resource.resource_type === 'pod') {
+    pairs.push(
+      ['재시작', String(summary.restart_total ?? 0)],
+      ['노드', String(summary.node_name ?? '—')],
+      ['이미지', String(summary.image ?? '—')],
+      ['Ready', String(summary.ready ?? '—')],
+    );
+  } else if (resource.resource_type === 'node') {
+    pairs.push(
+      ['팟 수', String(summary.pod_count ?? '—')],
+      ['버전', String(summary.version ?? '—')],
+      ['CPU', ratioText(summary.cpu_ratio)],
+      ['MEM', ratioText(summary.mem_ratio)],
+    );
+  } else if (resource.resource_type === 'service') {
+    pairs.push(
+      ['타입', String(summary.type ?? resource.status ?? '—')],
+      ['ClusterIP', <code key="ip">{String(summary.cluster_ip ?? '—')}</code>],
+      ['포트', servicePorts(summary.ports)],
+    );
+  } else if (resource.resource_type === 'workload') {
+    pairs.push(
+      ['Ready', `${summary.ready_replicas ?? 0}/${summary.desired_replicas ?? 0}`],
+      ['Available', String(summary.available_replicas ?? '—')],
+      ['Updated', String(summary.updated_replicas ?? '—')],
+    );
+  }
+  return pairs;
+}
+
+function ratioText(value: unknown) {
+  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '—';
+}
+
+function servicePorts(value: unknown) {
+  if (!Array.isArray(value)) return '—';
+  return value.map(port => {
+    const p = port as Record<string, unknown>;
+    return `${p.port ?? ''}${p.protocol ? `/${p.protocol}` : ''}`;
+  }).filter(Boolean).join(', ') || '—';
+}
+
+function deploymentTargetFromDetail(detail: InventoryResourceDetail): DeploymentTarget | null {
+  const r = detail.resource;
+  if (r.resource_type !== 'workload' || r.kind !== 'Deployment' || !r.namespace) return null;
+  return {
+    ns: r.namespace,
+    name: r.name,
+    podCount: detail.related_pods.length || Number(r.summary.ready_replicas ?? r.summary.desired_replicas ?? 0),
+  };
+}
+
+function DetailEvents({ title, rows }: { title: string; rows: K8sEvent[] }) {
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.slice(0, 8).map(e => (
+          <div key={`${e.at}${e.reason}${e.target}${e.message}`} style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, fontSize: 'var(--fs-xs)' }}>
+            <Badge tone={e.type === 'Warning' ? 'warn' : 'neutral'}>{e.reason}</Badge>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.message || e.target}</span>
+            <span style={{ marginLeft: 'auto', flex: 'none', color: 'var(--text-3)' }}>{timeAgo(e.at)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RelatedPods({ rows }: { rows: Workload[] }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', marginBottom: 8 }}>관련 팟</div>
+      <ResourceTable
+        rows={rows.slice(0, 8)}
+        rowKey={p => `${p.namespace}/${p.name}`}
+        columns={[
+          { key: 'name', label: '이름', render: p => <b>{p.name}</b> },
+          { key: 'phase', label: '상태', render: p => <Badge status={p.phase} /> },
+          { key: 'restart', label: '재시작', render: p => p.restarts },
+          { key: 'node', label: '노드', render: p => p.node ?? '—' },
+        ]}
+      />
+    </div>
+  );
 }
 
 function ContextActions({ clusterId, subject, subjectName, namespace }: {

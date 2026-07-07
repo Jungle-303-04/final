@@ -6,7 +6,9 @@ export interface Cluster { cluster_id: string; name: string; environment: string
 export interface ClusterSummary { cluster_id: string; namespaces: string[]; nodes: NodeInfo[]; pod_phases: Record<string, number>; services: number }
 export interface NodeInfo { name: string; ready: boolean; pod_count: number; version: string; cpu_ratio?: number; mem_ratio?: number }
 export interface Workload { name: string; kind: string; namespace: string; ready: string; restarts: number; image: string; node?: string; phase: string; hot?: boolean; workload_name?: string }
-export interface InventoryResource { kind: string; namespace: string | null; name: string; status: string; age: string }
+export interface WorkloadResource { name: string; kind: string; namespace: string; status: string; health: string; desired: number; ready: number; available: number; updated: number; image: string; hot?: boolean; summary: Record<string, unknown> }
+export interface InventoryResource { resource_type: string; kind: string; namespace: string | null; name: string; uid?: string | null; status: string; health: string; age: string; labels: Record<string, string>; summary: Record<string, unknown> }
+export interface InventoryResourceDetail { cluster_id: string; identity: Record<string, unknown>; resource: InventoryResource; related: Record<string, InventoryResource[]>; related_pods: Workload[]; events: K8sEvent[] }
 export interface ServiceInfo { name: string; namespace: string; type: string; cluster_ip: string; ports: string }
 export interface K8sEvent { at: string; type: string; reason: string; target: string; message: string }
 export interface Application { application_id: string; name: string; repo_ref: string; branch: string; cluster_id: string; manifest_path: string; last_run_status?: string; last_deployed_at?: string }

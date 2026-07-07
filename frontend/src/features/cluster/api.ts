@@ -1,19 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import { uiStore } from '@/shared/lib/ui-store';
-import { adaptCluster, adaptInventoryResource, adaptInventorySummary, adaptK8sEventResource, adaptServiceResource, adaptWorkloadResource } from '@/shared/lib/adapt';
+import { adaptCluster, adaptInventoryResource, adaptInventoryResourceDetail, adaptInventorySummary, adaptK8sEventResource, adaptPodResource, adaptServiceResource, adaptWorkloadResource } from '@/shared/lib/adapt';
+
+export interface InventoryResourceIdentity {
+  resource_type: string;
+  kind: string;
+  name: string;
+  namespace?: string | null;
+}
 
 export const clusterKeys = {
   list: () => ['clusters'] as const,
   summary: (id: string) => ['clusters', id, 'summary'] as const,
   inv: (id: string, kind: string) => ['clusters', id, 'inv', kind] as const,
+  detail: (id: string, identity?: InventoryResourceIdentity | null) =>
+    ['clusters', id, 'resource-detail', identity?.resource_type ?? '', identity?.kind ?? '', identity?.namespace ?? '', identity?.name ?? ''] as const,
 };
 export const useClusters = () =>
   useQuery({ queryKey: clusterKeys.list(), queryFn: () => get<{ clusters: Record<string, unknown>[] }>('/clusters'), refetchInterval: 30_000, select: d => d.clusters.map(adaptCluster) });
 export const useClusterSummary = (id: string | undefined) =>
   useQuery({ queryKey: clusterKeys.summary(id ?? ''), queryFn: () => get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`), enabled: !!id, refetchInterval: 30_000, select: adaptInventorySummary });
+export const usePods = (id: string) =>
+  useQuery({ queryKey: clusterKeys.inv(id, 'pods'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`), enabled: !!id, refetchInterval: 30_000, select: d => d.resources.map(adaptPodResource) });
 export const useWorkloads = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'pods'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`), enabled: !!id, refetchInterval: 30_000, select: d => d.resources.map(adaptWorkloadResource) });
+  useQuery({ queryKey: clusterKeys.inv(id, 'workloads'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/workloads`), enabled: !!id, refetchInterval: 30_000, select: d => d.resources.map(adaptWorkloadResource) });
 export const useResources = (id: string, kind?: string) =>
   useQuery({ queryKey: clusterKeys.inv(id, kind ?? 'all'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources${kind ? `?resource_type=${kind}` : ''}`), enabled: !!id, select: d => d.resources.map(adaptInventoryResource) });
 export const useServices = (id: string) =>
@@ -30,6 +41,22 @@ export const useClusterUsage = (id: string | undefined) =>
   });
 export const useClusterEvents = (id: string) =>
   useQuery({ queryKey: clusterKeys.inv(id, 'events'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/events`), enabled: !!id, select: d => d.resources.map(adaptK8sEventResource) });
+export const useInventoryResourceDetail = (id: string, identity: InventoryResourceIdentity | null) =>
+  useQuery({
+    queryKey: clusterKeys.detail(id, identity),
+    queryFn: () => {
+      const params = new URLSearchParams({
+        resource_type: identity?.resource_type ?? '',
+        kind: identity?.kind ?? '',
+        name: identity?.name ?? '',
+      });
+      if (identity?.namespace) params.set('namespace', identity.namespace);
+      return get<Record<string, unknown>>(`/clusters/${id}/inventory/resource-detail?${params.toString()}`);
+    },
+    enabled: !!id && !!identity?.resource_type && !!identity?.kind && !!identity?.name,
+    refetchInterval: 30_000,
+    select: adaptInventoryResourceDetail,
+  });
 
 export function useScale(clusterId: string) {
   const qc = useQueryClient();

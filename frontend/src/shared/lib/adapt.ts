@@ -1,6 +1,6 @@
 // 실백엔드 응답 형태 → 프론트 타입 정규화.
 // 백엔드가 필드를 덜 주면 안전한 기본값으로 채움(프론트 렌더 크래시 방지).
-import type { Application, Cluster, ClusterSummary, Conversation, Deployment, Incident, IncidentDetail, InventoryResource, K8sEvent, RunStep, ServiceInfo, Workload, WorkflowRun } from '@/shared/lib/types';
+import type { Application, Cluster, ClusterSummary, Conversation, Deployment, Incident, IncidentDetail, InventoryResource, InventoryResourceDetail, K8sEvent, RunStep, ServiceInfo, Workload, WorkloadResource, WorkflowRun } from '@/shared/lib/types';
 
 export function adaptCluster(raw: Record<string, unknown>): Cluster {
   return {
@@ -15,13 +15,15 @@ export function adaptCluster(raw: Record<string, unknown>): Cluster {
   };
 }
 
-type RawInventoryResource = {
+export type RawInventoryResource = {
   resource_type?: string;
   kind?: string;
   namespace?: string | null;
   name?: string;
+  uid?: string | null;
   status?: string;
   health?: string;
+  labels?: Record<string, unknown>;
   summary?: Record<string, unknown>;
   raw?: unknown;
   observed_at?: string;
@@ -41,7 +43,7 @@ export function adaptInventorySummary(raw: Record<string, unknown>): ClusterSumm
   };
 }
 
-export function adaptWorkloadResource(raw: RawInventoryResource): Workload {
+export function adaptPodResource(raw: RawInventoryResource): Workload {
   const summary = raw.summary ?? {};
   const containers = Array.isArray(summary.containers) ? summary.containers as Record<string, unknown>[] : [];
   const image = String(summary.image ?? containers.find(c => c.image)?.image ?? '');
@@ -57,6 +59,28 @@ export function adaptWorkloadResource(raw: RawInventoryResource): Workload {
     phase: String(raw.status ?? summary.phase ?? 'Unknown'),
     workload_name: workloadName,
     hot: raw.health === 'degraded',
+  };
+}
+
+export function adaptWorkloadResource(raw: RawInventoryResource): WorkloadResource {
+  const summary = raw.summary ?? {};
+  const containers = Array.isArray(summary.containers) ? summary.containers as Record<string, unknown>[] : [];
+  const image = String(summary.image ?? containers.find(c => c.image)?.image ?? '');
+  const desired = Number(summary.desired_replicas ?? 0);
+  const ready = Number(summary.ready_replicas ?? 0);
+  return {
+    name: String(raw.name ?? ''),
+    kind: String(raw.kind ?? summary.kind ?? 'Workload'),
+    namespace: String(raw.namespace ?? 'default'),
+    status: String(raw.status ?? `${ready}/${desired}`),
+    health: String(raw.health ?? 'unknown'),
+    desired,
+    ready,
+    available: Number(summary.available_replicas ?? ready),
+    updated: Number(summary.updated_replicas ?? ready),
+    image,
+    hot: raw.health === 'degraded',
+    summary,
   };
 }
 
@@ -89,12 +113,41 @@ export function adaptK8sEventResource(raw: RawInventoryResource): K8sEvent {
 }
 
 export function adaptInventoryResource(raw: RawInventoryResource): InventoryResource {
+  const labels = raw.labels && typeof raw.labels === 'object'
+    ? Object.fromEntries(Object.entries(raw.labels).map(([key, value]) => [key, String(value)]))
+    : {};
   return {
+    resource_type: String(raw.resource_type ?? ''),
     kind: String(raw.kind ?? ''),
     namespace: raw.namespace ?? null,
     name: String(raw.name ?? ''),
+    uid: raw.uid ?? null,
     status: String(raw.status ?? raw.health ?? 'unknown'),
+    health: String(raw.health ?? 'unknown'),
     age: String(raw.observed_at ?? raw.created_at ?? ''),
+    labels,
+    summary: raw.summary ?? {},
+  };
+}
+
+export function adaptInventoryResourceDetail(raw: Record<string, unknown>): InventoryResourceDetail {
+  const relatedRaw = (raw.related ?? {}) as Record<string, unknown>;
+  const related = Object.fromEntries(
+    Object.entries(relatedRaw).map(([group, items]) => [
+      group,
+      Array.isArray(items) ? (items as RawInventoryResource[]).map(adaptInventoryResource) : [],
+    ]),
+  );
+  const relatedPods = Array.isArray(relatedRaw.pods)
+    ? (relatedRaw.pods as RawInventoryResource[]).map(adaptPodResource)
+    : [];
+  return {
+    cluster_id: String(raw.cluster_id ?? ''),
+    identity: ((raw.identity ?? {}) as Record<string, unknown>),
+    resource: adaptInventoryResource((raw.resource ?? {}) as RawInventoryResource),
+    related,
+    related_pods: relatedPods,
+    events: Array.isArray(raw.events) ? (raw.events as RawInventoryResource[]).map(adaptK8sEventResource) : [],
   };
 }
 

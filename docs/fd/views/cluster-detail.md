@@ -24,16 +24,16 @@ ResourceTable: 이름, 환경 Badge, 연결 상태(●), 노드/팟 수, 열린 
 
 | 탭 | API | 컬럼 | Drawer 내용 |
 |---|---|---|---|
-| workloads | `GET /clusters/{id}/inventory/resources?resource_type=pod` | 워크로드, ns, Ready, 재시작 합, 스케일/재시작/팟 | workload Drawer: KeyValue + ContextActions + 관련 이벤트 + 팟 보기/스케일/재시작 |
-| pods | 위 API 평탄화 + liveStore hot 병합 | 이름, ns, phase Badge, restarts, node, hot | pod Drawer: KeyValue + ContextActions + 팟 이벤트 |
-| nodes | `GET /clusters/{id}/inventory/summary`의 nodes | 이름, ready, 팟 수, CPU, MEM, 버전 | node Drawer: KeyValue + ContextActions + 노드 이벤트 + 팟 보기 |
-| services | `GET /clusters/{id}/inventory/services` | 이름, ns, type, ClusterIP, 포트 | service Drawer: KeyValue + ContextActions + 서비스 이벤트 + 리소스 보기 |
+| workloads | `GET /clusters/{id}/inventory/workloads` | 워크로드, kind, ns, Ready, health, 스케일/재시작/팟 | ResourceDetailDrawer: `resource-detail` + related pods + involvedObject 이벤트 |
+| pods | `GET /clusters/{id}/inventory/resources?resource_type=pod` + liveStore hot 병합 | 이름, ns, phase Badge, restarts, node, hot | ResourceDetailDrawer: pod detail + involvedObject 이벤트 |
+| nodes | `GET /clusters/{id}/inventory/summary`의 nodes | 이름, ready, 팟 수, CPU, MEM, 버전 | ResourceDetailDrawer: node detail + related pods + involvedObject 이벤트 |
+| services | `GET /clusters/{id}/inventory/services` | 이름, ns, type, ClusterIP, 포트 | ResourceDetailDrawer: service detail + selector 기반 related pods + involvedObject 이벤트 |
 | resources | `GET /clusters/{id}/inventory/resources` | kind, ns, 이름, 상태 Badge, age | `?q=`가 있으면 kind/ns/name/status includes 필터 |
 | events | `GET /clusters/{id}/inventory/events` | 시각, type, reason, 대상, 메시지 | `?q=`가 있으면 reason/target/message/type includes 필터 |
 
-summary/workloads는 30s refetch, usage 집계는 `ClusterAggPanel`이 `GET /clusters/{id}/summary`로 따로 읽는다.
+summary/pods/workloads는 30s refetch, usage 집계는 `ClusterAggPanel`이 `GET /clusters/{id}/summary`로 따로 읽는다.
 pods 탭의 hot 표시는 liveStore(WS) — 구조는 inventory 정본([fleet-heatmap § 데이터](fleet-heatmap.md#데이터) 동일 규칙).
-단일 리소스 Drawer는 `GET /clusters/{id}/inventory/resource-detail?resource_type=&kind=&name=&namespace=`를 정본 계약으로 사용해야 한다. 응답의 `resource`, `related`, `events`는 inventory read model 기반이며 public 응답에 raw Kubernetes object는 없다.
+단일 리소스 Drawer는 `GET /clusters/{id}/inventory/resource-detail?resource_type=&kind=&name=&namespace=`를 정본 계약으로 사용한다. 응답의 `resource`, `related`, `events`는 inventory read model 기반이며 public 응답에 raw Kubernetes object는 없다.
 
 ## ContextActions와 Drawer
 
@@ -43,7 +43,7 @@ pods 탭의 hot 표시는 liveStore(WS) — 구조는 inventory 정본([fleet-he
 - AI: `/ai?prefill=<cluster namespace/name subject 상태 분석>`
 
 팟 Drawer는 `/clusters/:id/pods/:namespace/:pod` URL 오버레이를 유지한다.
-노드/서비스/워크로드 Drawer는 행 클릭 state로만 연다.
+노드/서비스/워크로드 Drawer는 URL search state(`detail`, `name`, `namespace`, `kind`)로 복원 가능하다.
 
 ## 쓰기 액션 (권한: release_operator 이상 — RequirePermission)
 
