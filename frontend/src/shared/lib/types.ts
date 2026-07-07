@@ -42,7 +42,10 @@ export interface EvidenceRecord { id: number; correlation_id: string; kind: stri
 export interface RcaCandidateScore { candidate_id: string; title: string | null; source: string | null;
   score: number | null; reason: string | null; supporting_evidence: string[]; missing_evidence: string[] }
 export interface RcaEvidenceRef { source: string; name: string; check_id: string | null;
-  summary: string | null; query: string | null; evidence_ref: string | null }
+  summary: string | null; query: string | null; evidence_ref: string | null;
+  schema_version?: number | null; source_version?: string | null; collector?: string | null;
+  collector_version?: string | null; query_version?: string | null; collected_at?: string | null;
+  evidence_key?: string | null; source_id?: string | null; agent_id?: string | null; window_start?: string | null }
 export interface RcaMissingCheck { check_id: string; source: string | null; status: string | null; reason: string | null }
 export interface RcaReportSummary { id: number; correlation_id: string; root_cause: string; action: string;
   incident_id: string | null; cluster_id: string | null; symptom: string | null; severity: string | null;

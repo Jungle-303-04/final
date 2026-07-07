@@ -14,6 +14,7 @@ from domains.rca.events import (
     RcaReportDetail,
     RecoveryActionSelectedBody,
 )
+from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EvidenceBuilder
 
 PR_URL_PREFIX = "https://github.test.local/project/repo/pull"
 PR_HTML_URL = f"{PR_URL_PREFIX}/7"
@@ -28,6 +29,8 @@ def crashloop_payload(
     metrics: dict[str, Any] | None = None,
     logs: list[dict[str, Any]] | None = None,
     traces: dict[str, Any] | None = None,
+    source_id: str | None = None,
+    window_start: str | None = None,
 ) -> ClusterEvidenceReceivedBody:
     return ClusterEvidenceReceivedBody(
         cluster_id="target-cluster-01",
@@ -45,6 +48,8 @@ def crashloop_payload(
         metrics=metrics if metrics is not None else {"memory": "near-limit"},
         logs=logs if logs is not None else [{"line": "OOMKilled"}],
         traces=traces if traces is not None else {"slow_span": "GET /checkout"},
+        source_id=source_id,
+        window_start=window_start,
     )
 
 
@@ -235,6 +240,47 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     ]
     assert command_outs[0].plan.routing_constraint.required_capability == "command_receiver"
     assert queue_db.called("queue_agent_command")
+
+
+def test_evidence_lineage_is_attached_without_mutating_source_payload(monkeypatch) -> None:
+    monkeypatch.setenv("EVIDENCE_COLLECTOR_VERSION", "agent-sha-1")
+    payload = crashloop_payload(source_id="cluster-snapshot", window_start="window-1")
+
+    evidence = EvidenceBuilder().build_evidence(payload, "corr-lineage")
+
+    assert EVIDENCE_LINEAGE_KEY not in payload.kubernetes
+    assert EVIDENCE_LINEAGE_KEY not in payload.metrics
+    assert EVIDENCE_LINEAGE_KEY not in payload.logs[0]
+    assert evidence.kubernetes[EVIDENCE_LINEAGE_KEY] == {
+        "schema_version": 1,
+        "source": "kubernetes",
+        "collector": "cluster-agent",
+        "collector_version": "agent-sha-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "target-cluster-01",
+        "source_id": "cluster-snapshot",
+        "window_start": "window-1",
+    }
+    assert evidence.metrics[EVIDENCE_LINEAGE_KEY]["source"] == "metrics"
+    assert evidence.logs[0][EVIDENCE_LINEAGE_KEY]["source"] == "logs"
+    assert evidence.traces[EVIDENCE_LINEAGE_KEY]["source"] == "traces"
+
+
+def test_evidence_bundle_promotes_lineage_to_rca_items(monkeypatch) -> None:
+    monkeypatch.setenv("EVIDENCE_COLLECTOR_VERSION", "agent-sha-2")
+    db = SpyDb()
+    payload = crashloop_payload(source_id="cluster-snapshot", window_start="window-2")
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-lineage-items")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    by_source = {item.source: item for item in bundle.items}
+    kubernetes_lineage = by_source["kubernetes"].value[EVIDENCE_LINEAGE_KEY]
+    assert kubernetes_lineage["schema_version"] == 1
+    assert kubernetes_lineage["collector_version"] == "agent-sha-2"
+    assert kubernetes_lineage["check_id"] == "evidence:kubernetes:cluster_resource_state"
+    assert kubernetes_lineage["query"] == "kubernetes.cluster_resource_state"
+    assert kubernetes_lineage["window_start"] == "window-2"
 
 
 def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_errors") -> dict:

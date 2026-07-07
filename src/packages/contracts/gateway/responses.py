@@ -152,6 +152,16 @@ class RcaEvidenceRefItem(StrictModel):
     summary: str | None = None
     query: str | None = None
     evidence_ref: str | None = None
+    schema_version: int | None = None
+    source_version: str | None = None
+    collector: str | None = None
+    collector_version: str | None = None
+    query_version: str | None = None
+    collected_at: str | None = None
+    evidence_key: str | None = None
+    source_id: str | None = None
+    agent_id: str | None = None
+    window_start: str | None = None
 
 
 class RcaMissingCheckItem(StrictModel):

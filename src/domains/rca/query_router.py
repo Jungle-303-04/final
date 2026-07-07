@@ -142,7 +142,7 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
         "secondary_symptoms": _str_list(incident.get("secondary_symptoms")),
         "selected_candidate_id": detail.get("selected_candidate_id"),
         "candidates": _candidate_scores(payload),
-        "supporting_evidence_refs": _evidence_refs(detail.get("supporting_evidence_refs")),
+        "supporting_evidence_refs": _evidence_refs(detail.get("supporting_evidence_refs"), payload),
         "missing_evidence_checks": _missing_checks(detail.get("missing_evidence_checks")),
     }
 
@@ -183,22 +183,99 @@ def _candidate_scores(payload: JsonObject) -> list[JsonObject]:
     return items
 
 
-def _evidence_refs(value: Any) -> list[JsonObject]:
+LINEAGE_KEY = "_lineage"
+LINEAGE_STRING_FIELDS = (
+    "source_version",
+    "collector",
+    "collector_version",
+    "query_version",
+    "collected_at",
+    "evidence_key",
+    "source_id",
+    "agent_id",
+    "window_start",
+)
+
+
+def _evidence_refs(value: Any, payload: JsonObject | None = None) -> list[JsonObject]:
+    lineage_by_key = _lineage_by_reference(payload or {})
     refs: list[JsonObject] = []
     for ref in value if isinstance(value, list) else []:
         if not (isinstance(ref, dict) and ref.get("source") and ref.get("name")):
             continue
-        refs.append(
-            {
-                "source": str(ref["source"]),
-                "name": str(ref["name"]),
-                "check_id": ref.get("check_id") or None,
-                "summary": ref.get("summary") or None,
-                "query": ref.get("query") or None,
-                "evidence_ref": ref.get("evidence_ref") or None,
-            }
-        )
+        item = {
+            "source": str(ref["source"]),
+            "name": str(ref["name"]),
+            "check_id": ref.get("check_id") or None,
+            "summary": ref.get("summary") or None,
+            "query": ref.get("query") or None,
+            "evidence_ref": ref.get("evidence_ref") or None,
+        }
+        lineage = {
+            **_lineage_fields(ref),
+            **_lineage_for_reference(item, lineage_by_key),
+        }
+        item.update(lineage)
+        refs.append(item)
     return refs
+
+
+def _lineage_by_reference(payload: JsonObject) -> dict[str, JsonObject]:
+    bundle = payload.get("evidence_bundle")
+    items = bundle.get("items") if isinstance(bundle, dict) else None
+    out: dict[str, JsonObject] = {}
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        lineage = _lineage_from_value(item.get("value"))
+        if not lineage:
+            continue
+        keys = [
+            item.get("evidence_ref"),
+            item.get("check_id"),
+        ]
+        if item.get("source") and item.get("name"):
+            keys.append(f"{item['source']}/{item['name']}")
+        for key in keys:
+            if key:
+                out[str(key)] = lineage
+    return out
+
+
+def _lineage_from_value(value: Any) -> JsonObject:
+    if not isinstance(value, dict):
+        return {}
+    lineage = value.get(LINEAGE_KEY)
+    return _lineage_fields(lineage) if isinstance(lineage, dict) else {}
+
+
+def _lineage_for_reference(ref: JsonObject, lineage_by_key: dict[str, JsonObject]) -> JsonObject:
+    keys = [
+        ref.get("evidence_ref"),
+        ref.get("check_id"),
+        f"{ref['source']}/{ref['name']}" if ref.get("source") and ref.get("name") else None,
+    ]
+    for key in keys:
+        if key and str(key) in lineage_by_key:
+            return lineage_by_key[str(key)]
+    return {}
+
+
+def _lineage_fields(raw: Any) -> JsonObject:
+    if not isinstance(raw, dict):
+        return {}
+    out: JsonObject = {}
+    schema_version = raw.get("schema_version")
+    if schema_version is not None:
+        try:
+            out["schema_version"] = int(schema_version)
+        except (TypeError, ValueError):
+            pass
+    for field in LINEAGE_STRING_FIELDS:
+        value = raw.get(field)
+        if value not in (None, ""):
+            out[field] = str(value)
+    return out
 
 
 def _missing_checks(value: Any) -> list[JsonObject]:

@@ -253,6 +253,16 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 | `check_id` | `str` | — |
 | `summary` | `str` | — |
 | `query` | `str | None` | `None` |
+| `schema_version` | `int | None` | `None` |
+| `source_version` | `str | None` | `None` |
+| `collector` | `str | None` | `None` |
+| `collector_version` | `str | None` | `None` |
+| `query_version` | `str | None` | `None` |
+| `collected_at` | `str | None` | `None` |
+| `evidence_key` | `str | None` | `None` |
+| `source_id` | `str | None` | `None` |
+| `agent_id` | `str | None` | `None` |
+| `window_start` | `str | None` | `None` |
 
 #### EvidenceItem — `src/domains/rca/events.py :: EvidenceItem`
 
@@ -266,7 +276,9 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 | `check_id` | `str` | `""` |
 | `query` | `str | None` | `None` |
 
-메서드: `reference(self) -> EvidenceReference` — 동일 필드로 `EvidenceReference` 생성 (`src/domains/rca/events.py :: EvidenceItem.reference`).
+라인리지: `EvidenceItem.value["_lineage"]`에 `schema_version/source_version/collector/collector_version/query_version/collected_at/evidence_key/source_id/agent_id/window_start`를 보존한다. 새 최상위 이벤트 필드를 추가하지 않고 기존 JSON payload 내부에 저장해, 구버전 워커가 unknown field로 DLQ를 만들지 않게 한다.
+
+메서드: `reference(self) -> EvidenceReference` — 안정 키(`source/name/check_id/query/evidence_ref`)로 `EvidenceReference` 생성. 조회 API는 저장된 `evidence_bundle.items[].value._lineage`를 같은 `evidence_ref/check_id/source/name`으로 매칭해 optional 라인리지 필드로 승격한다 (`src/domains/rca/query_router.py :: _evidence_refs`).
 
 #### EvidenceBundle — `src/domains/rca/events.py :: EvidenceBundle`
 

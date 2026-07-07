@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from domains.rca.events import (
     ClusterEvidenceReceivedBody,
     Evidence,
@@ -9,6 +11,7 @@ from domains.rca.events import (
     MissingEvidenceCheck,
 )
 from services.ai.agent.causes.engine import required_evidence_sources
+from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EVIDENCE_SOURCE_SCHEMA_VERSION
 from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
 
 EvidenceSource = ClusterEvidenceReceivedBody | Evidence
@@ -65,15 +68,109 @@ def evidence_item(
     value: dict,
     summary: str,
 ) -> EvidenceItem:
+    check_id = source_check_id(source, name)
+    query = source_query(source, name)
     return EvidenceItem(
         source=source,
         name=name,
-        value=value,
+        value=with_item_lineage(
+            value,
+            item_lineage(evt, source=source, name=name, check_id=check_id, query=query),
+        ),
         summary=summary,
         evidence_ref=evidence_ref_for(evt, source, name),
-        check_id=source_check_id(source, name),
-        query=source_query(source, name),
+        check_id=check_id,
+        query=query,
     )
+
+
+def item_lineage(
+    evt: EvidenceSource,
+    *,
+    source: str,
+    name: str,
+    check_id: str,
+    query: str,
+) -> dict:
+    base = lineage_from_source_payload(evt, source)
+    lineage = {
+        "schema_version": EVIDENCE_SOURCE_SCHEMA_VERSION,
+        "source": source,
+        "name": name,
+        "check_id": check_id,
+        "query": query,
+        **base,
+    }
+    return {key: value for key, value in lineage.items() if value not in (None, "", [])}
+
+
+def with_item_lineage(value: dict, lineage: dict) -> dict:
+    data = deepcopy(value)
+    current = data.get(EVIDENCE_LINEAGE_KEY)
+    if isinstance(current, dict):
+        data[EVIDENCE_LINEAGE_KEY] = {**lineage, **current}
+    else:
+        data[EVIDENCE_LINEAGE_KEY] = lineage
+    return data
+
+
+def lineage_from_source_payload(evt: EvidenceSource, source: str) -> dict:
+    payload = source_payload(evt, source)
+    if isinstance(payload, dict):
+        lineage = payload.get(EVIDENCE_LINEAGE_KEY)
+        if isinstance(lineage, dict):
+            return enrich_lineage_from_payload(dict(lineage), source, payload)
+        return enrich_lineage_from_payload({}, source, payload)
+    if source == "logs" and isinstance(payload, list):
+        for entry in payload:
+            if isinstance(entry, dict) and isinstance(entry.get(EVIDENCE_LINEAGE_KEY), dict):
+                return enrich_lineage_from_logs(dict(entry[EVIDENCE_LINEAGE_KEY]), payload)
+        return enrich_lineage_from_logs({}, payload)
+    return {}
+
+
+def source_payload(evt: EvidenceSource, source: str) -> object:
+    if source == "kubernetes":
+        return evt.kubernetes
+    if source == "metrics":
+        return evt.metrics
+    if source == "logs":
+        return evt.logs
+    if source == "traces":
+        return evt.traces
+    return {}
+
+
+def enrich_lineage_from_payload(lineage: dict, source: str, payload: dict) -> dict:
+    if source == "kubernetes":
+        cluster = payload.get("cluster")
+        if isinstance(cluster, dict):
+            lineage.setdefault("collected_at", cluster.get("collected_at"))
+    if source in {"metrics", "traces"}:
+        results = payload.get("results")
+        if isinstance(results, dict):
+            lineage.setdefault("query_names", sorted(str(key) for key in results))
+            lineage.setdefault("query_count", len(results))
+            lineage.setdefault("source_version", payload.get("source"))
+    return lineage
+
+
+def enrich_lineage_from_logs(lineage: dict, entries: list[dict]) -> dict:
+    query_names = sorted(
+        {
+            str(entry["query_name"])
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("query_name")
+        }
+    )
+    if query_names:
+        lineage.setdefault("query_names", query_names)
+        lineage.setdefault("query_count", len(query_names))
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("source"):
+            lineage.setdefault("source_version", entry.get("source"))
+            break
+    return lineage
 
 
 def missing_source_checks(missing_evidence: list[str]) -> list[MissingEvidenceCheck]:

@@ -275,6 +275,11 @@ function RecoveryCandidateRow({ candidate, recommended, selected }: { candidate:
       <p style={{ margin: '4px 0 0', color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>
         {candidate.description} · 위험 {candidate.risk_level} · 영향 {candidate.blast_radius}
       </p>
+      {candidate.rollback_plan && (
+        <p style={{ margin: '4px 0 0', color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>
+          롤백: {candidate.rollback_plan}
+        </p>
+      )}
     </div>
   );
 }
@@ -520,9 +525,23 @@ function EvidenceRefList({ refs }: { refs: RcaEvidenceRef[] }) {
         <div key={`${r.source}-${r.name}-${i}`} style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)' }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <Badge tone={kindTone(r.source)}>{r.source}</Badge>
+            {r.schema_version != null && <Badge tone="neutral">schema v{r.schema_version}</Badge>}
             <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>{r.name}</span>
             {r.summary && <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{trunc(r.summary, 60)}</span>}
           </div>
+          {(r.collector || r.collector_version || r.source_version || r.query_version || r.evidence_key || r.source_id || r.agent_id || r.collected_at || r.window_start) && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 3, fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>
+              {r.collector && <span>{r.collector}</span>}
+              {r.collector_version && <code>{trunc(r.collector_version, 18)}</code>}
+              {r.source_version && <span>{r.source_version}</span>}
+              {r.query_version && <code>{trunc(r.query_version, 18)}</code>}
+              {r.source_id && <span>{r.source_id}</span>}
+              {r.agent_id && <code>{trunc(r.agent_id, 18)}</code>}
+              {r.evidence_key && <code>{trunc(r.evidence_key, 28)}</code>}
+              {r.window_start && <span>{trunc(r.window_start, 24)}</span>}
+              {r.collected_at && <span title={fmtAbs(r.collected_at)}>{fmtAbs(r.collected_at)}</span>}
+            </div>
+          )}
           {r.query && (
             <code style={{ display: 'block', marginTop: 3, fontSize: 'var(--fs-xs)', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
               {r.query}
