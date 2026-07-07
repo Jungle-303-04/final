@@ -1,11 +1,30 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:44 KST (레포 상세 디자인 시스템 이관 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:50 KST (카탈로그 디자인 시스템 이관 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 카탈로그 디자인 시스템 이관
+
+- 구현:
+  - `CatalogView`를 `@/ui` PageHeader/Card/Badge/Button/Skeleton/EmptyState/Toast와 `@/ui/motion` list preset 기반으로 재구성했다.
+  - loading은 Skeleton 카드 그리드, empty는 "설치 항목 없음" + 새로고침 CTA, error는 "카탈로그 조회 실패" + 재시도 CTA로 분리했다.
+  - 항목 카드는 category/default version/status Badge, 식별자, 설치 이름, metadata tags를 표시한다.
+  - 설치 mutation은 카드별 pending을 유지하고 성공/실패 toast를 제공한다.
+  - 기존 `{}` 설치 요청 대신 `CatalogInstallRequest` 필수값인 `application_name`을 item slug/name에서 생성해 `{application_name, values:{}}`로 보낸다.
+  - `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, legacy `uiStore`, inline style 의존을 제거했다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - grep: `CatalogView.tsx`의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`, Tailwind arbitrary value 0건.
+  - Playwright mock: `/catalog`를 1440/1024/390 폭에서 순회했다. 카탈로그 카드/태그/설치 요청 toast, POST body `{application_name:"postgresql", values:{}}`, horizontal overflow 0, console error 0 확인. screenshots: `/tmp/catalog-desktop.png`, `/tmp/catalog-tablet.png`, `/tmp/catalog-mobile.png`.
+- 남은 확인:
+  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
 
 ## 체크포인트 — 레포 상세 디자인 시스템 이관
 
@@ -181,7 +200,7 @@
   - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
   - live asset 확인: `/assets/MetricsView-I5boPxK-.js` 200, chunk 안에 `metrics/validate`, `PromQL 실행`, `시간범위 넓히기` 포함.
 - 다음:
-  1. Phase 2 남은 화면은 카탈로그/운영 액션과 전개형 검증 잔여 플로우다.
+  1. Phase 2 남은 범위는 운영 액션과 전개형 검증 잔여 플로우다.
   2. 자동 Actions가 계속 billing 제한이면 코드 검증은 로컬 명령 + 수동 ECR/rollout 경로로 수행하고, run annotation을 HANDOVER에 남긴다.
 
 ## 체크포인트 — DB retention/keyset 로컬 검증 완료
