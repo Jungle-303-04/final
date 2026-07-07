@@ -1,33 +1,16 @@
 // plural-ui — Plural 디자인 시스템 재현 프리미티브 (재사용 레이어)
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useState,
   type ReactNode,
 } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { flyoverSlide, modalPop, overlayFade } from './motion';
 import './tokens.css';
 import './plural.css';
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  CardIcon,
-  CloseIcon,
-  DiscordIcon,
-  FrameIcon,
-  GitHubIcon,
-  ListIcon,
-  MoonIcon,
-  PeopleIcon,
-  PluralMarkIcon,
-  SearchIcon,
-  SunIcon,
-  TerminalIcon,
-} from './icons';
+import { CloseIcon, SearchIcon } from './icons';
 
 /* ── 테마 ─────────────────────────────── */
 export type ThemeMode = 'dark' | 'light';
@@ -70,22 +53,6 @@ export function Button({
     >
       {children}
     </button>
-  );
-}
-
-/** 저장 버튼 — 클릭하면 잠시 "저장됨 ✓" 표시 (mock 저장) */
-export function SaveButton({ children = '저장' }: { children?: ReactNode }) {
-  const [saved, setSaved] = useState(false);
-  return (
-    <Button
-      variant="primary"
-      onClick={() => {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 1600);
-      }}
-    >
-      {saved ? '저장됨 ✓' : children}
-    </Button>
   );
 }
 
@@ -543,177 +510,6 @@ export function PageHeader({
         {sub && <p className="pl-sub">{sub}</p>}
       </div>
       {actions && <div className="pl-pagehead-actions">{actions}</div>}
-    </div>
-  );
-}
-
-/* ── 브레드크럼 컨텍스트 ─────────────── */
-const CrumbCtx = createContext<{ crumbs: string[]; setCrumbs: (c: string[]) => void }>({
-  crumbs: [],
-  setCrumbs: () => {},
-});
-
-export function useSetCrumbs(crumbs: string[]) {
-  const ctx = useContext(CrumbCtx);
-  useEffect(() => {
-    ctx.setCrumbs(crumbs);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crumbs.join('/')]);
-}
-
-/* ── 셸 (헤더 + 사이드바 + 브레드크럼) ── */
-function ThemeToggle() {
-  const [mode, toggle] = useThemeMode();
-  return (
-    <button type="button" className="pl-themetoggle" onClick={toggle} aria-label="테마 전환">
-      <span className={`slot${mode === 'light' ? ' active' : ''}`}>
-        <SunIcon size={13} />
-      </span>
-      <span className={`slot${mode === 'dark' ? ' active' : ''}`}>
-        <MoonIcon size={12} />
-      </span>
-    </button>
-  );
-}
-
-const MENU_ITEMS = [
-  { to: '/plural/overview', label: 'Management planes', icon: <FrameIcon />, match: /^\/plural\/(overview|clusters|create-cluster)/ },
-  { to: '/plural/shell', label: 'Cloud shell', icon: <TerminalIcon />, match: /^\/plural\/shell/ },
-  { to: '/plural/audits', label: 'Audits', icon: <ListIcon />, match: /^\/plural\/audits/ },
-  { to: '/plural/account', label: 'Account', icon: <PeopleIcon />, match: /^\/plural\/account(\/(?!billing).*)?$/ },
-  { to: '/plural/account/billing', label: 'Billing', icon: <CardIcon />, match: /^\/plural\/account\/billing/ },
-];
-
-function crumbsFromPath(path: string): { label: string; to: string }[] {
-  const seg = path.replace(/^\/plural\/?/, '').split('/').filter(Boolean);
-  if (seg.length === 0) return [{ label: 'overview', to: '/plural/overview' }];
-  if (seg[0] === 'overview' && seg[1] === 'clusters' && seg[2] === 'plural-cloud')
-    return [
-      { label: 'overview', to: '/plural/overview' },
-      { label: 'LOGO cloud instances', to: '/plural/overview/clusters/plural-cloud' },
-      ...(seg[3] ? [{ label: seg[3], to: `/plural/${seg.join('/')}` }] : []),
-    ];
-  return seg.map((s, i) => ({
-    label: s.replace(/-/g, ' '),
-    to: `/plural/${seg.slice(0, i + 1).join('/')}`,
-  }));
-}
-
-export function PluralLayout() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const crumbs = crumbsFromPath(location.pathname);
-
-  return (
-    <div className="pl-app">
-      <header className="pl-header">
-        <div className="pl-logo">
-          <PluralMarkIcon size={26} />
-          <span>
-            <span className="pl-logo-word">LOGO</span> <span className="pl-logo-app">app</span>
-          </span>
-        </div>
-        <div className="pl-header-right">
-          <ThemeToggle />
-        </div>
-      </header>
-
-      <div className="pl-body">
-        <nav className="pl-sidebar">
-          {MENU_ITEMS.map((it) => (
-            <NavLink
-              key={it.to}
-              to={it.to}
-              title={it.label}
-              className={`pl-sideitem${it.match.test(location.pathname) ? ' active' : ''}`}
-            >
-              {it.icon}
-            </NavLink>
-          ))}
-          <div className="pl-side-bottom">
-            <a
-              className="pl-sideitem"
-              href="#"
-              target="_blank"
-              rel="noreferrer"
-              title="Discord"
-            >
-              <DiscordIcon />
-            </a>
-            <a
-              className="pl-sideitem"
-              href="#"
-              target="_blank"
-              rel="noreferrer"
-              title="GitHub"
-            >
-              <GitHubIcon />
-            </a>
-            <NavLink to="/plural/profile" title="프로필" style={{ textDecoration: 'none' }}>
-              <div className="pl-avatar">W</div>
-            </NavLink>
-          </div>
-        </nav>
-
-        <main className="pl-main">
-          <div className="pl-crumbbar">
-            <div className="pl-navbtns">
-              <button type="button" className="pl-navbtn" aria-label="뒤로" onClick={() => navigate(-1)}>
-                <ArrowLeftIcon size={14} />
-              </button>
-              <button type="button" className="pl-navbtn" aria-label="앞으로" onClick={() => navigate(1)}>
-                <ArrowRightIcon size={14} />
-              </button>
-            </div>
-            <div className="pl-crumbs">
-              {crumbs.map((c, i) => {
-                const isLast = i === crumbs.length - 1;
-                return (
-                  <span key={`${c.label}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    {i > 0 && <span className="sep">/</span>}
-                    {isLast ? (
-                      <span className="crumb current">{c.label}</span>
-                    ) : (
-                      <NavLink to={c.to} className="crumb crumb-link">
-                        {c.label}
-                      </NavLink>
-                    )}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-          <div className="pl-content">
-            <Outlet />
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-/** 단독 사용(레이아웃 밖) 페이지용 래퍼 — 기존 호환 */
-export function PluralShell({
-  crumbs,
-  children,
-}: {
-  crumbs: string[];
-  active?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="pl-app">
-      <div className="pl-crumbbar">
-        <div className="pl-crumbs">
-          {crumbs.map((c, i) => (
-            <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              {i > 0 && <span className="sep">/</span>}
-              <span className={`crumb${i === crumbs.length - 1 ? ' current' : ''}`}>{c}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="pl-content">{children}</div>
     </div>
   );
 }

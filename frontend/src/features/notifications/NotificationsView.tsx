@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotices } from '@/features/notifications/api';
 import { Badge, Card, EmptyState } from '@/shared/ui';
+import { PageHeader } from '@/plural-ui';
 import { timeAgo } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconBell } from '@/shared/ui/icons';
@@ -16,7 +17,7 @@ export default function NotificationsView() {
 
   return (
     <FadeSlideIn>
-      <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>알림</h1>
+      <PageHeader title="인시던트 & 알림" sub="승인 대기·RCA 인시던트·처리 실패(DLQ) 이벤트를 한 곳에서" />
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
         {FILTERS.map(([k, label]) => (
           <button key={k} className={`btn btn--sm ${filter === k ? '' : 'btn--ghost'}`} onClick={() => setFilter(k)}>{label}</button>

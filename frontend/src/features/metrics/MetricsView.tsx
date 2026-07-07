@@ -6,6 +6,7 @@ import { liveStore } from '@/shared/lib/live';
 import { useClusters, useClusterSummary, useClusterUsage, useWorkloads } from '@/features/cluster/api';
 import { commandResultMessage, isTerminal, summarizeTelemetryResult, useCommandStatus } from '@/features/metrics/api';
 import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui';
+import { PageHeader } from '@/plural-ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
 import { fmtHms } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
@@ -110,7 +111,7 @@ export default function MetricsView() {
   if (clustersQ.isSuccess && clusters.length === 0) {
     return (
       <FadeSlideIn>
-        <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>메트릭</h1>
+        <PageHeader title="메트릭" sub="실시간 스트림 · 스냅샷 실측 시계열 · 온디맨드 PromQL" />
         <Card>
           <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
             description="클러스터를 등록하고 에이전트가 연결되면 실시간·스냅샷 메트릭이 표시됩니다"
@@ -123,7 +124,7 @@ export default function MetricsView() {
   return (
     <FadeSlideIn>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', flex: 1 }}>메트릭</h1>
+        <h1 className="pl-h1" style={{ margin: 0, flex: 1 }}>메트릭</h1>
         <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => setClusterId(e.target.value)}>
           {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
         </select>

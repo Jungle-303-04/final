@@ -13,7 +13,7 @@ export function RequireSession() {
 export function RequireGuest() {
   const { data, isPending } = useSession();
   if (isPending) return null;
-  if (data?.authenticated) return <Navigate to="/overview" replace />;
+  if (data?.authenticated) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 export function RequireAdmin() {
