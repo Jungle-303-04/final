@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:10 KST (콘솔 디자인 시스템 Phase 2 클러스터 목록 이관 메모 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:20 KST (콘솔 디자인 시스템 Phase 2 클러스터 상세 이관 메모 반영)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -158,6 +158,25 @@
 - 다음:
   1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
   2. 다음 화면은 클러스터 상세다. `ClusterDetailView.tsx`가 아직 `shared/ui`, `plural-ui`, inline style을 많이 포함하므로 탭/테이블/드릴다운을 작은 커밋으로 나눠 이관한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 클러스터 상세 이관
+
+- 구현:
+  - `features/cluster/ClusterDetailView.tsx`를 `src/ui` PageHeader/Breadcrumb/StatCard/Card/Tabs/Table/Drawer/Modal/KeyValueList 기반으로 재구성했다.
+  - 워크로드/팟/노드/서비스/리소스/이벤트 탭, 리소스 상세 Drawer, 서비스 selector 관계, 컨텍스트 액션(이벤트/메트릭/AI), 스케일/재시작 모달 기능을 유지했다.
+  - 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color, legacy `pl-`/`co-` class, legacy CSS var 의존을 제거했다.
+  - 기존 테스트가 직접 사용하는 helper export(`deploymentTargetFromWorkload`, `contextActionHrefs`, `namespaceColor`, `selectorRecord`, `serviceMatches`, `textMatches`)는 유지했다. namespace 색은 inline style 대신 결정적 token class bucket으로 표현한다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test -- --runInBand` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright route mocking 검수: 인증 세션/알림/클러스터 상세 인벤토리 최소 응답으로 `/clusters/prod-seoul-01`를 1440/1024/390 폭에서 캡처했고 horizontal overflow 0, legacy class 0, visible rows 5.
+  - 탭 전환 검수: 워크로드 → 서비스 → 이벤트 전환, 서비스 IP와 이벤트 `BackOff` cell 확인, horizontal overflow 0, unexpected console error 0.
+  - screenshots: `/tmp/k8s-cluster-detail-desktop.png`, `/tmp/k8s-cluster-detail-tablet.png`, `/tmp/k8s-cluster-detail-mobile.png`, `/tmp/k8s-cluster-detail-tabs.png`.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
+  2. 다음 화면 순서는 인시던트 목록/상세다. 후보 점수바와 증거 트레일 기능은 유지하고 표현만 `src/ui` 프리미티브로 교체한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
