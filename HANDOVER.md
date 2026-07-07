@@ -1,6 +1,23 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:00 KST (안정화 배포 성공 + 메인 인증 보강)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:04 KST (RCA followup 폭증 원인 차단)
+
+## 최신 업데이트 (15:04 KST) — RCA followup 폭증 루프 차단 패스
+
+- **추가 RCA 확인 결과**:
+  - `0a84b998` 배포 후에도 `rca.followup.required` 가 분당 약 10~19건 계속 생성됨.
+  - 원인은 `IncidentDetector.has_signal()` 이 정상 샘플을 `detected=False` 로 판단한 뒤에도 `incident-worker` 가 `RcaActionRequiredBody(reason=no_incident_action_required)` 를 계속 발행했고, `rca-feedback-worker` 가 이를 `rca.followup.required` 로 정규화하던 구조.
+- **수정 완료(로컬 검증 완료, 다음 커밋/배포 대상)**:
+  - `incident-worker` 는 `incident.detected` 이벤트는 계속 기록하되, `detected=False` 일 때는 RCA/action 후속 이벤트를 발행하지 않음.
+  - 정상 snapshot 플로우 테스트 기대값을 `evidence.built -> incident.detected` 에서 멈추도록 갱신.
+- **검증 완료**:
+  - 관련 테스트: `tests/test_rca_evidence.py`, `tests/test_incident_symptom_derivation.py`, `tests/test_rca_feedback_flow.py`, `tests/test_operational_event_followups.py` → 26 passed.
+  - 전체: `.venv/bin/python -m pytest -q` → 670 passed, 3 skipped.
+  - `npm run typecheck`, `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check` → 통과.
+- **다음 즉시 작업**:
+  1. 이 RCA followup 차단 커밋/푸시 → dev CI → main 반영 → AWS CD 확인.
+  2. 배포 후 5~10분 동안 `rca_timeline` 최근 생성분에서 `rca.followup.required` 가 멈추는지 확인.
+  3. 증가 멈추면 과거 DLQ 및 과거 followup row 정리 정책을 적용.
 
 ## 최신 업데이트 (15:00 KST) — 메인 인증/가입 보강 패스
 
