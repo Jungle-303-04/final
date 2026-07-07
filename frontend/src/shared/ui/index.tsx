@@ -201,7 +201,22 @@ export function Skeleton({ lines = 3 }: { lines?: number }) {
 }
 
 export function QueryBoundary<T>({ query, children, skeletonLines }: { query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }) {
-  if (query.isPending) return <Skeleton lines={skeletonLines ?? 4} />;
+  const [slowPending, setSlowPending] = useState(false);
+  useEffect(() => {
+    if (!query.isPending) {
+      setSlowPending(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setSlowPending(true), 9000);
+    return () => window.clearTimeout(timer);
+  }, [query.isPending, query.fetchStatus]);
+
+  if (query.isPending) {
+    if (slowPending) {
+      return <EmptyState icon={<IconAlertTriangle size={26} />} title="응답 대기 중" action={<Button size="sm" onClick={() => query.refetch()}>다시 시도</Button>} />;
+    }
+    return <Skeleton lines={skeletonLines ?? 4} />;
+  }
   if (query.isError) {
     const e = query.error as unknown as ApiError;
     const msg = e.kind === 'forbidden' ? '접근 권한이 없습니다' : e.kind === 'unauthorized' ? '다시 로그인해주세요' : e.kind === 'network' ? e.detail || '네트워크 오류' : e.detail || '오류가 발생했습니다';
