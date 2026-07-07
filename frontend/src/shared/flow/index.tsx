@@ -50,21 +50,29 @@ export function useAutoLayout(nodes: Node[], edges: Edge[], direction: FlowDirec
 export type FlowEdgeData = { active?: boolean; tone?: Tone };
 export type AnimatedFlowEdge = Edge<FlowEdgeData>;
 
-/** 커스텀 edge — active 면 dash-flow 애니메이션, 아니면 정적. 색은 tone → 토큰 변수 */
+/** 커스텀 edge — active 면 dash-flow + 이동 패킷 애니메이션, 아니면 정적. 색은 tone → 토큰 변수 */
 export function AnimatedEdge(props: EdgeProps<AnimatedFlowEdge>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props;
   const [path] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 8 });
   const active = data?.active === true;
   const stroke = data?.tone ? toneColor(data.tone) : active ? toneColor('info') : 'var(--border)';
   return (
-    <BaseEdge
-      id={id} path={path}
-      style={{
-        stroke, strokeWidth: active ? 2 : 1.5,
-        strokeDasharray: active ? '6 4' : undefined,
-        animation: active ? 'flow-dash 0.7s linear infinite' : undefined,
-      }}
-    />
+    <>
+      <BaseEdge
+        id={id} path={path}
+        style={{
+          stroke, strokeWidth: active ? 2 : 1.5,
+          strokeDasharray: active ? '6 4' : undefined,
+          animation: active ? 'flow-dash 0.7s linear infinite' : undefined,
+        }}
+      />
+      {/* 활성 구간을 흐르는 패킷 — reactflow.dev animating-edges 패턴(SVG animateMotion) */}
+      {active && (
+        <circle className="flow-packet" r={3.5} fill={stroke}>
+          <animateMotion dur="1.4s" repeatCount="indefinite" path={path} />
+        </circle>
+      )}
+    </>
   );
 }
 

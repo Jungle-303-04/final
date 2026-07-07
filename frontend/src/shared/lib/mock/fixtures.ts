@@ -103,7 +103,22 @@ export const conversations: Conversation[] = [{
 }];
 
 export const incidents: Incident[] = [
-  { incident_id: 'inc-1', cluster_id: 'target', summary: 'sandbox-pod-13 CrashLoopBackOff', stage: 'recovery.planned', at: ago(15) },
+  { incident_id: 'inc-1', correlation_id: 'corr-inc-1', cluster_id: 'target', summary: 'sandbox-pod-13 CrashLoopBackOff', stage: 'recovery.planned', at: ago(15) },
+];
+// GET /evidence 데모 — EvidenceRecordItem 동형
+export const evidenceRecords = [
+  { id: 3, workspace_id: 'default', correlation_id: 'corr-inc-1', kind: 'prometheus', created_at: ago(13), payload: { query: 'container_memory_working_set_bytes{pod="sandbox-pod-13"}', point_count: 20, peak: '291Mi' } },
+  { id: 2, workspace_id: 'default', correlation_id: 'corr-inc-1', kind: 'loki', created_at: ago(14), payload: { query: '{pod="sandbox-pod-13"} |= "OOM"', lines: 4, sample: 'signal: killed (OOMKilled)' } },
+  { id: 1, workspace_id: 'default', correlation_id: 'corr-inc-1', kind: 'kubernetes', created_at: ago(15), payload: { reason: 'BackOff', restart_count: 6, last_state: 'OOMKilled' } },
+];
+// GET /rca-reports 데모 — RcaReportSummaryItem 동형
+export const rcaReports = [
+  { id: 1, workspace_id: 'default', correlation_id: 'corr-inc-1', incident_id: 'inc-1', cluster_id: 'target',
+    root_cause: 'memory limit 256Mi 대비 피크 사용량 291Mi — OOMKilled 반복', action: 'safe_pr',
+    symptom: 'sandbox-pod-13 CrashLoopBackOff', severity: 'high', confidence: 0.86,
+    reason: '메모리 사용 곡선과 OOMKilled 로그가 일치', evidence_ref: 'evidence/corr-inc-1',
+    supporting_evidence: ['restart_count=6 (30m)', 'container_memory_working_set peak 291Mi', 'loki: OOMKilled x4'],
+    missing_evidence: ['tempo trace'], created_at: ago(12) },
 ];
 export const deadLetters: DeadLetter[] = [
   { id: 1, original_subject: 'manifest.rendered', consumer: 'diff-worker', error: 'render timeout', status: 'open', created_at: ago(120) },

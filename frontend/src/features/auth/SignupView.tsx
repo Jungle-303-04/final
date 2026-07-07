@@ -31,6 +31,9 @@ export default function SignupView() {
         <Field label="비밀번호 확인" error={mismatch ? '비밀번호가 일치하지 않습니다' : undefined}>
           <input className="input" type="password" value={pw2} onChange={e => setPw2(e.target.value)} minLength={8} required />
         </Field>
+        {err && err.status !== 409 && (
+          <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">가입 실패 — {err.detail || '잠시 후 다시 시도해주세요'}</p>
+        )}
         <Button type="submit" variant="primary" loading={signup.isPending} disabled={mismatch} style={{ width: '100%', justifyContent: 'center' }}>가입하기</Button>
       </form>
       <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)', textAlign: 'center' }}>

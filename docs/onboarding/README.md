@@ -84,7 +84,7 @@ telemetry provider를 붙일 때는 `@telemetry.source(...)`를 찾는다.
 
 target command handler를 붙일 때는 `@command.handler(...)` 또는 `@command.k8s(...)`를 찾는다.
 
-RCA cause와 recovery rule을 붙일 때는 `@rca.cause(...)`, `@rca.recovery(...)`를 찾는다.
+RCA cause rule을 붙일 때는 `src/services/ai/agent/causes/catalog/*.yaml`을 먼저 보고, recovery rule을 붙일 때는 `@rca.recovery(...)`를 찾는다.
 
 데코레이터는 “자동으로 마법을 부리는 코드”가 아니라 “어떤 입력을 누가 처리하는지 등록하는 표식”이다.
 

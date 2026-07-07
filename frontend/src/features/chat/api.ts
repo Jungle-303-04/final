@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import type { Conversation } from '@/shared/lib/types';
 import { adaptConversationSummary } from '@/shared/lib/adapt';
+import { uiStore } from '@/shared/lib/ui-store';
 
 export const chatKeys = {
   list: () => ['ai', 'conversations'] as const,
@@ -36,7 +37,18 @@ export function useSelectAction() {
   return useMutation({
     mutationFn: ({ planId, actionId }: { planId: string; actionId: string }) =>
       post(`/rca/recovery-plans/${planId}/actions/${actionId}/select`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.list() }),
+    onSuccess: () => {
+      uiStore.getState().toast('ok', '복구 액션을 실행 큐에 등록했습니다 — 진행은 워크플로우에서 확인');
+      qc.invalidateQueries({ queryKey: chatKeys.list() });
+    },
+    onError: err => {
+      const e = err as { kind?: string; detail?: string };
+      uiStore.getState().toast('danger', e.kind === 'forbidden'
+        ? '실행 거부 — release_operator 권한이 필요합니다'
+        : `액션 실행 실패 — ${e.detail ?? '잠시 후 다시 시도해주세요'}`);
+      // 다른 세션에서 이미 선택됐을 수 있음 — 대화 최신화
+      qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'ai' });
+    },
   });
 }
 export const MAX_AI_MESSAGE_LENGTH = 16_000;

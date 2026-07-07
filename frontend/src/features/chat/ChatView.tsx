@@ -5,6 +5,7 @@ import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { useIsAdmin } from '@/features/auth/api';
 import { Badge, Button, Card, EmptyState } from '@/shared/ui';
 import { queryClient } from '@/shared/lib/query';
+import { uiStore } from '@/shared/lib/ui-store';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { ChatMessage } from '@/shared/lib/types';
@@ -26,9 +27,13 @@ export default function ChatView() {
   const submit = () => {
     const text = draft.trim();
     if (!text || text.length > MAX_AI_MESSAGE_LENGTH) return;
-    if (conversationId) send.mutate(text);
-    else create.mutate(text, { onSuccess: d => nav(`/ai/${d.conversation_id}`) });
-    setDraft('');
+    setDraft(''); // 낙관적으로 비우고, 실패하면 입력을 복원한다(작성 내용 유실 금지)
+    const restore = (err: unknown) => {
+      setDraft(text);
+      uiStore.getState().toast('danger', `전송 실패 — ${(err as Error).message || '네트워크를 확인해주세요'}`);
+    };
+    if (conversationId) send.mutate(text, { onError: restore });
+    else create.mutate(text, { onSuccess: d => nav(`/ai/${d.conversation_id}`), onError: restore });
   };
 
   return (
