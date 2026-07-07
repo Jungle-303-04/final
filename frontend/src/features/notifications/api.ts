@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
 import { get, post } from '@/shared/lib/api';
-import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, WorkflowRun } from '@/shared/lib/types';
+import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, RecoveryPlanStatus, WorkflowRun } from '@/shared/lib/types';
 import { adaptIncident, adaptIncidentDetail } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
@@ -34,6 +34,16 @@ export const useRcaReports = (correlationId: string | undefined) =>
       `/rca-reports?correlation_id=${encodeURIComponent(correlationId ?? '')}&limit=50`),
     enabled: !!correlationId, refetchInterval: 30_000,
     select: d => d.items,
+  });
+// 인시던트 correlation 기준 recovery plan 상태 — 없으면 상세 화면에서 "생성 전"으로 표시.
+export const useRecoveryPlan = (correlationId: string | undefined) =>
+  useQuery({
+    queryKey: ['recovery-plan', correlationId ?? ''],
+    queryFn: () => get<RecoveryPlanStatus>(
+      `/rca/recovery-plans/by-correlation/${encodeURIComponent(correlationId ?? '')}`),
+    enabled: !!correlationId, refetchInterval: 30_000,
+    retry: (failureCount, error) =>
+      (error as { kind?: string }).kind !== 'not_found' && failureCount < 2,
   });
 export const useDeadLetters = (enabled: boolean) =>
   useQuery({ queryKey: ['dead-letters'], queryFn: () => get<{ dead_letters: DeadLetter[] }>('/dead-letters?limit=20'), refetchInterval: 60_000, enabled, select: d => d.dead_letters });

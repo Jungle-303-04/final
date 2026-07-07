@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -7,11 +9,16 @@ from domains.providers.catalog import (
     ProviderCategory,
     ProviderUnavailable,
     catalog_body,
+    cluster_registration_discovery,
     require_available_provider,
     validate_provider_selection,
 )
 from domains.providers.router import router
-from packages.contracts.gateway.routes import PROVIDERS_CATALOG_PATH, PROVIDERS_VALIDATE_PATH
+from packages.contracts.gateway.routes import (
+    PROVIDERS_CATALOG_PATH,
+    PROVIDERS_CLUSTER_DISCOVERY_PATH,
+    PROVIDERS_VALIDATE_PATH,
+)
 
 
 def test_provider_catalog_groups_runtime_choices() -> None:
@@ -35,6 +42,38 @@ def test_provider_catalog_can_disable_available_provider(monkeypatch) -> None:
 
     assert aws["status"] == "unavailable"
     assert aws["unavailable_reason"] == "disabled by KUBEHEAL_DISABLED_PROVIDERS"
+
+
+def test_cluster_registration_discovery_imports_env_candidates_without_tokens(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CLUSTER_CONTEXTS", "cluster-1 cluster-2")
+    monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "cluster-1")
+    monkeypatch.setenv("PLURAL_CONSOLE_URL", "https://plural.example")
+    monkeypatch.setenv("PLURAL_CONSOLE_TOKEN", "plural-secret-token")
+    monkeypatch.setenv("PLURAL_CLUSTER_HANDLES", "@cluster-1")
+    monkeypatch.setenv("EXTERNAL_CONSOLE_INSTANCES", "cluster01")
+    monkeypatch.setenv("EXTERNAL_CONSOLE_CLUSTER01_CONSOLE_TOKEN", "external-secret-token")
+    monkeypatch.setenv("EXTERNAL_CONSOLE_CLUSTER01_CLUSTER_HANDLES", "external-prod")
+
+    discovery = cluster_registration_discovery()
+    flows = {item["cloud_provider"]: item for item in discovery["flows"]}
+
+    assert flows["existing-k8s"]["status"] == "available"
+    assert flows["plural"]["status"] == "available"
+    assert flows["external-console"]["status"] == "available"
+    existing_candidate = next(
+        item
+        for item in flows["existing-k8s"]["import_candidates"]
+        if item["cluster_id"] == "cluster-1"
+    )
+    assert existing_candidate["deploy_provider"] == "kube-context"
+    assert existing_candidate["direct_apply_available"] is True
+
+    body = json.dumps(discovery)
+    assert "plural-secret-token" not in body
+    assert "external-secret-token" not in body
+    assert "CONSOLE_TOKEN" not in body
 
 
 def test_require_available_provider_fails_closed_for_planned_adapters() -> None:
@@ -76,6 +115,11 @@ def test_provider_router_exposes_catalog_and_validation() -> None:
     catalog = client.get(PROVIDERS_CATALOG_PATH)
     assert catalog.status_code == 200
     assert "source" in catalog.json()["providers"]
+
+    discovery = client.get(PROVIDERS_CLUSTER_DISCOVERY_PATH)
+    assert discovery.status_code == 200
+    assert discovery.json()["default_cloud_provider"] == "existing-k8s"
+    assert any(flow["cloud_provider"] == "existing-k8s" for flow in discovery.json()["flows"])
 
     validation = client.post(
         PROVIDERS_VALIDATE_PATH,

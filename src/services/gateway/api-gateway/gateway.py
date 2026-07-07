@@ -21,6 +21,7 @@ from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
+from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.identity.admin_router import router as identity_admin_router
@@ -181,6 +182,7 @@ class ApiGateway:
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획
         app.include_router(ai_router)  # AI conversation API -> ai.message.* 이벤트
         app.include_router(identity_admin_router)  # 관리 콘솔: 조직/그룹/멤버/권한(admin 세션)
+        app.include_router(repository_discovery_router)  # repo 연결 전 branch/manifest 탐색
         app.include_router(applications_router)  # web UI용 application/deployment 바인딩 API
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)

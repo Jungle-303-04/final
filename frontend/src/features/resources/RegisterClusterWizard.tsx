@@ -1,4 +1,4 @@
-// 클러스터 등록 위저드 — Bruno 02-target-admin 흐름과 동일 API 순서 (docs/fd/views/resources)
+// 클러스터 등록 위저드 — provider discovery/preflight 기반 동적 등록 흐름
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
@@ -6,99 +6,309 @@ import { Badge, Button, CodeBlock, copyToClipboard, Field, KeyValue, Modal, Skel
 import { uiStore } from '@/shared/lib/ui-store';
 import { queryClient } from '@/shared/lib/query';
 
-const STEPS = ['프로바이더', '검증', '설정', '발급'];
+const STEPS = ['프로바이더', '설정', '사전 점검', '발급'];
+const DEFAULT_CLOUD_PROVIDER = 'existing-k8s';
+const DEFAULT_DEPLOY_PROVIDER = 'manual-manifest';
+const ONLINE_STATUSES = new Set(['connected', 'online']);
+
+type ProviderBody = {
+  key: string;
+  label: string;
+  status: string;
+  unavailable_reason?: string | null;
+};
+
+type ImportCandidate = {
+  cluster_id: string;
+  name: string;
+  source: string;
+  cloud_provider: string;
+  deploy_provider: string;
+  kube_context?: string | null;
+  external_handle?: string | null;
+  console_url?: string | null;
+  direct_apply_available: boolean;
+  labels: Record<string, string>;
+};
+
+type RegistrationFlow = {
+  cloud_provider: string;
+  label: string;
+  status: string;
+  description: string;
+  deploy_providers: ProviderBody[];
+  default_deploy_provider: string;
+  supports_import: boolean;
+  unavailable_reason?: string | null;
+  import_candidates: ImportCandidate[];
+};
+
+type DiscoveryResponse = {
+  default_cloud_provider: string;
+  default_deploy_provider: string;
+  flows: RegistrationFlow[];
+  import_candidates: ImportCandidate[];
+};
+
+type TargetPreflight = {
+  valid: boolean;
+  duplicate_cluster_id: boolean;
+  provider_ready: boolean;
+  agent_install_status: string;
+  connection_status: string;
+  kube_context_allowed?: boolean | null;
+  errors: string[];
+  warnings: string[];
+  selected: Record<string, ProviderBody>;
+  last_agent_id?: string | null;
+  last_seen_at?: string | null;
+};
+
+type InstallResponse = {
+  agent_token: string;
+  install_manifest: string;
+  install_command?: string;
+};
 
 export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [step, setStep] = useState(0);
-  const [provider, setProvider] = useState('existing-k8s');
+  const [provider, setProvider] = useState(DEFAULT_CLOUD_PROVIDER);
+  const [deployProvider, setDeployProvider] = useState(DEFAULT_DEPLOY_PROVIDER);
+  const [kubeContext, setKubeContext] = useState('');
+  const [selectedImportKey, setSelectedImportKey] = useState('');
   const [clusterId, setClusterId] = useState('');
   const [name, setName] = useState('');
-  const [issued, setIssued] = useState<{ agent_token: string; install_manifest: string; install_command?: string } | null>(null);
-  const [closeGuard, setCloseGuard] = useState(false); // 토큰 미확인 상태에서 실수로 닫기 방지
+  const [issued, setIssued] = useState<InstallResponse | null>(null);
+  const [closeGuard, setCloseGuard] = useState(false);
 
-  // 실백엔드 catalog 는 category 별 객체: { providers: { cloud: [...], deploy: [...], ... } }
-  const catalog = useQuery({
-    queryKey: ['providers'],
-    queryFn: () => get<{ providers: Record<string, { key: string; label: string; status: string }[]> }>('/providers/catalog'),
+  const discovery = useQuery({
+    queryKey: ['providers', 'cluster-discovery'],
+    queryFn: () => get<DiscoveryResponse>('/providers/cluster-discovery'),
     enabled: open,
   });
-  const cloudProviders = (catalog.data?.providers?.cloud ?? []).filter(p => p.status === 'available');
-  const validate = useMutation({ mutationFn: () => post<{ valid: boolean; errors: string[] }>('/providers/validate', { cloud_provider: provider, deploy_provider: 'manual-manifest' }) });
+  const flows = discovery.data?.flows ?? [];
+  const selectedFlow = flows.find(flow => flow.cloud_provider === provider) ?? flows[0];
+  const activeProvider = selectedFlow?.cloud_provider ?? provider;
+  const deployOptions = selectedFlow?.deploy_providers ?? [];
+  const selectedCandidate = selectedFlow?.import_candidates.find(candidate => candidateKey(candidate) === selectedImportKey);
+  const directApply = deployProvider === 'kube-context';
+
+  const preflight = useMutation({
+    mutationFn: () => post<TargetPreflight>('/targets/preflight', {
+      cluster_id: clusterId,
+      cloud_provider: activeProvider,
+      deploy_provider: deployProvider,
+      apply: directApply,
+      kube_context: directApply && kubeContext ? kubeContext : undefined,
+    }),
+  });
+
   const register = useMutation({
-    mutationFn: () => post<{ agent_token: string; install_manifest: string; install_command?: string }>('/targets', {
-      cluster_id: clusterId, name: name || clusterId, environment: 'sandbox', apply: false,
-      cloud_provider: provider, deploy_provider: 'manual-manifest',
+    mutationFn: () => post<InstallResponse>('/targets', {
+      cluster_id: clusterId,
+      name: name || clusterId,
+      environment: 'sandbox',
+      apply: directApply,
+      kube_context: directApply && kubeContext ? kubeContext : undefined,
+      cloud_provider: activeProvider,
+      deploy_provider: deployProvider,
       management_base_url: `${location.origin}/api`,
     }),
     onSuccess: d => {
       setIssued(d);
+      setStep(3);
       queryClient.invalidateQueries({ queryKey: ['clusters'] });
       uiStore.getState().toast('ok', `클러스터 ${clusterId} 등록 완료 — 에이전트를 설치해주세요`);
     },
   });
-  // 발급 후 5초 간격 자동 폴링 — 에이전트가 붙는 순간 connected 로 전환된다.
+
   const connQ = useQuery({
     queryKey: ['cluster-conn', clusterId],
     queryFn: () => get<{ connection_status: string }>(`/clusters/${clusterId}/connection-status`),
     enabled: step === 3 && !!issued,
-    refetchInterval: q => (q.state.data?.connection_status === 'connected' ? false : 5000),
+    refetchInterval: q => (isAgentOnline(q.state.data?.connection_status) ? false : 5000),
   });
-  const connected = connQ.data?.connection_status === 'connected';
-  const reset = () => { setStep(0); setIssued(null); setClusterId(''); setName(''); setCloseGuard(false); validate.reset(); register.reset(); onClose(); };
-  // 발급 직후(미연결) ESC/오버레이 클릭 — 토큰은 1회만 표시되므로 한 번 더 확인
+  const connected = isAgentOnline(connQ.data?.connection_status);
+  const slugOk = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(clusterId);
+  const providerReady = selectedFlow?.status === 'available';
+  const canContinueProvider = discovery.isSuccess && !!selectedFlow && providerReady;
+  const canPreflight = slugOk && canContinueProvider && !!deployProvider;
+
+  const reset = () => {
+    setStep(0);
+    setProvider(discovery.data?.default_cloud_provider ?? DEFAULT_CLOUD_PROVIDER);
+    setDeployProvider(discovery.data?.default_deploy_provider ?? DEFAULT_DEPLOY_PROVIDER);
+    setKubeContext('');
+    setSelectedImportKey('');
+    setIssued(null);
+    setClusterId('');
+    setName('');
+    setCloseGuard(false);
+    preflight.reset();
+    register.reset();
+    onClose();
+  };
+
   const guardedClose = () => {
-    if (step === 3 && issued && !connected && !closeGuard) { setCloseGuard(true); return; }
+    if (step === 3 && issued && !connected && !closeGuard) {
+      setCloseGuard(true);
+      return;
+    }
     reset();
   };
-  const slugOk = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(clusterId);
+
+  const chooseProvider = (flow: RegistrationFlow) => {
+    setProvider(flow.cloud_provider);
+    setDeployProvider(flow.default_deploy_provider || DEFAULT_DEPLOY_PROVIDER);
+    setSelectedImportKey('');
+    setKubeContext('');
+    preflight.reset();
+  };
+
+  const chooseImport = (key: string) => {
+    setSelectedImportKey(key);
+    const candidate = selectedFlow?.import_candidates.find(item => candidateKey(item) === key);
+    if (!candidate) return;
+    setClusterId(candidate.cluster_id);
+    setName(candidate.name);
+    setDeployProvider(candidate.deploy_provider || selectedFlow?.default_deploy_provider || DEFAULT_DEPLOY_PROVIDER);
+    setKubeContext(candidate.kube_context ?? '');
+    preflight.reset();
+  };
+
+  const runPreflight = () => {
+    preflight.mutate(undefined, { onSuccess: () => setStep(2) });
+  };
 
   return (
     <Modal open={open} title="클러스터 등록" onClose={guardedClose} size="lg">
       <Stepper steps={STEPS} current={step} />
       {step === 0 && (
         <>
-          {catalog.isPending && <Skeleton lines={3} />}
-          {catalog.isError && (
+          {discovery.isPending && <Skeleton lines={4} />}
+          {discovery.isError && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)', margin: 0 }}>
-                프로바이더 목록을 불러오지 못했습니다 — {(catalog.error as Error).message}
+                프로바이더 목록을 불러오지 못했습니다 — {(discovery.error as Error).message}
               </p>
-              <Button size="sm" onClick={() => catalog.refetch()} loading={catalog.isFetching}>다시 시도</Button>
+              <Button size="sm" onClick={() => discovery.refetch()} loading={discovery.isFetching}>다시 시도</Button>
             </div>
           )}
-          {catalog.isSuccess && cloudProviders.length === 0 && (
-            <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>사용 가능한 프로바이더가 없습니다 — 관리자에게 문의해주세요.</p>
+          {discovery.isSuccess && flows.length === 0 && (
+            <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>사용 가능한 등록 플로우가 없습니다 — 관리자에게 문의해주세요.</p>
           )}
-          <div className="split split--even" style={{ gap: 10 }}>
-            {cloudProviders.map(p => (
-              <button key={p.key} className="card" style={{ cursor: 'pointer', textAlign: 'left', borderColor: provider === p.key ? 'var(--brand)' : 'var(--border)' }}
-                onClick={() => setProvider(p.key)}>
-                <b>{p.label}</b><p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: '4px 0 0' }}>{p.key}</p>
-              </button>
-            ))}
-          </div>
-          <Footer onNext={() => setStep(1)} nextDisabled={!catalog.isSuccess || cloudProviders.length === 0} />
+          {discovery.isSuccess && flows.length > 0 && (
+            <>
+              <div role="listbox" aria-label="클러스터 프로바이더" className="split split--even" style={{ gap: 10 }}>
+                {flows.map(flow => (
+                  <button
+                    key={flow.cloud_provider}
+                    type="button"
+                    role="option"
+                    aria-selected={activeProvider === flow.cloud_provider}
+                    className="card"
+                    style={{ cursor: 'pointer', textAlign: 'left', borderColor: activeProvider === flow.cloud_provider ? 'var(--brand)' : 'var(--border)' }}
+                    onClick={() => chooseProvider(flow)}
+                  >
+                    <b>{flow.label}</b>
+                    <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: '4px 0' }}>{flow.description}</p>
+                    <Badge tone={flow.status === 'available' ? 'ok' : 'warn'}>{flow.status}</Badge>
+                  </button>
+                ))}
+              </div>
+              {selectedFlow?.unavailable_reason && (
+                <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>{selectedFlow.unavailable_reason}</p>
+              )}
+              <Field label="환경에서 가져오기">
+                <select className="input" value={selectedImportKey} onChange={e => chooseImport(e.target.value)} aria-label="import cluster">
+                  <option value="">직접 입력</option>
+                  {selectedFlow?.import_candidates.map(candidate => (
+                    <option key={candidateKey(candidate)} value={candidateKey(candidate)}>
+                      {candidate.name} · {candidate.source}{candidate.kube_context ? ` · ${candidate.kube_context}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {selectedFlow?.import_candidates.length === 0 && (
+                <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', marginTop: -8 }}>
+                  import 후보가 없습니다. 환경 변수에 cluster handle 또는 kube context 목록이 있으면 여기에 표시됩니다.
+                </p>
+              )}
+              {selectedCandidate && (
+                <KeyValue pairs={[
+                  ['source', selectedCandidate.source],
+                  ['handle', selectedCandidate.external_handle ?? ''],
+                  ['kube context', selectedCandidate.kube_context ?? ''],
+                ]} />
+              )}
+            </>
+          )}
+          <Footer onNext={() => setStep(1)} nextDisabled={!canContinueProvider} />
         </>
       )}
-      {step === 1 && (
+      {step === 1 && selectedFlow && (
         <>
-          <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>선택한 조합: <code>{provider} + manual-manifest</code></p>
-          {validate.data && (validate.data.valid ? <Badge tone="ok">조합 유효</Badge> : validate.data.errors.map(e => <p key={e} style={{ color: 'var(--danger)' }}>{e}</p>))}
-          {validate.isError && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>검증 실패 — {(validate.error as Error).message}</p>}
-          <Footer onPrev={() => setStep(0)}
-            onNext={() => validate.mutate(undefined, { onSuccess: d => d.valid && setStep(2) })}
-            nextLabel="검증 후 다음" loading={validate.isPending} />
+          <Field label="cluster_id (소문자 slug)" error={clusterId && !slugOk ? '소문자·숫자·하이픈만 가능합니다' : undefined}>
+            <input className="input" value={clusterId} onChange={e => { setClusterId(e.target.value); preflight.reset(); }} placeholder="prod-seoul" data-testid="cluster-id" />
+          </Field>
+          <Field label="표시 이름">
+            <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={clusterId} />
+          </Field>
+          <Field label="설치 방식">
+            <select className="input" value={deployProvider} onChange={e => { setDeployProvider(e.target.value); preflight.reset(); }}>
+              {deployOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+            </select>
+          </Field>
+          {directApply && (
+            <Field label="kube context">
+              <select className="input" value={kubeContext} onChange={e => { setKubeContext(e.target.value); preflight.reset(); }}>
+                <option value="">api-gateway 현재 context</option>
+                {selectedFlow.import_candidates.filter(candidate => candidate.kube_context).map(candidate => (
+                  <option key={candidateKey(candidate)} value={candidate.kube_context ?? ''}>{candidate.kube_context}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+          <KeyValue pairs={[
+            ['provider', activeProvider],
+            ['environment', 'sandbox'],
+            ['관측 스택', '기본값 (prometheus/loki/tempo .target.svc)'],
+          ]} />
+          <Footer onPrev={() => setStep(0)} onNext={runPreflight}
+            nextDisabled={!canPreflight} nextLabel="사전 점검" loading={preflight.isPending} />
+          {preflight.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              사전 점검 실패 — {(preflight.error as Error).message}. 입력을 확인한 뒤 다시 시도해주세요.
+            </p>
+          )}
         </>
       )}
       {step === 2 && (
         <>
-          <Field label="cluster_id (소문자 slug)" error={clusterId && !slugOk ? '소문자·숫자·하이픈만 가능합니다' : undefined}>
-            <input className="input" value={clusterId} onChange={e => setClusterId(e.target.value)} placeholder="prod-seoul" data-testid="cluster-id" />
-          </Field>
-          <Field label="표시 이름"><input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={clusterId} /></Field>
-          <KeyValue pairs={[['environment', 'sandbox'], ['관측 스택', '기본값 (prometheus/loki/tempo .target.svc)']]} />
-          <Footer onPrev={() => setStep(1)} onNext={() => register.mutate(undefined, { onSuccess: () => setStep(3) })}
-            nextDisabled={!slugOk} nextLabel="등록 실행" loading={register.isPending} />
+          {preflight.isPending && <Skeleton lines={3} />}
+          {preflight.data && (
+            <>
+              <Badge tone={preflight.data.valid ? 'ok' : 'danger'}>
+                {preflight.data.valid ? '등록 가능' : '등록 전 수정 필요'}
+              </Badge>
+              <KeyValue pairs={[
+                ['cluster_id', clusterId],
+                ['provider', `${activeProvider} + ${deployProvider}`],
+                ['agent status', preflight.data.agent_install_status],
+                ['duplicate', preflight.data.duplicate_cluster_id ? 'yes' : 'no'],
+              ]} />
+              {preflight.data.errors.map(error => <p key={error} style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{error}</p>)}
+              {preflight.data.warnings.map(warning => <p key={warning} style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>{warning}</p>)}
+            </>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+            <Button onClick={() => setStep(1)}>이전</Button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button onClick={runPreflight} loading={preflight.isPending}>다시 점검</Button>
+              <Button variant="primary" disabled={!preflight.data?.valid} loading={register.isPending}
+                onClick={() => register.mutate()}>등록 실행</Button>
+            </div>
+          </div>
           {register.isError && (
             <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
               등록 실패 — {(register.error as Error).message}. 내용을 수정한 뒤 다시 &lsquo;등록 실행&rsquo;을 눌러주세요.
@@ -129,7 +339,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           </Field>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {connected
-              ? <Badge tone="ok">connected — 에이전트 연결 완료</Badge>
+              ? <Badge tone="ok">{connQ.data?.connection_status ?? 'online'} — 에이전트 연결 완료</Badge>
               : <Badge tone="warn">미연결 — 연결 대기 중 ({connQ.data?.connection_status ?? '확인 중'})</Badge>}
             {!connected && <Button onClick={() => connQ.refetch()} loading={connQ.isFetching}>지금 확인</Button>}
             <span style={{ marginLeft: 'auto' }}><Button variant="primary" onClick={reset}>완료</Button></span>
@@ -143,7 +353,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           {!connected && (
             <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginTop: 8 }}>
               위 install manifest 를 대상 클러스터에 <code>kubectl apply -f</code> 하면 에이전트가 관리
-              플레인으로 접속합니다. 적용 후 보통 30초~1분 안에 자동으로 connected 로 바뀝니다 (5초 간격 자동 확인).
+              플레인으로 접속합니다. 적용 후 보통 30초~1분 안에 자동으로 online 으로 바뀝니다 (5초 간격 자동 확인).
             </p>
           )}
         </>
@@ -160,4 +370,12 @@ function Footer({ onPrev, onNext, nextLabel = '다음', nextDisabled, loading }:
       <Button variant="primary" onClick={onNext} disabled={nextDisabled} loading={loading} data-testid="wizard-next">{nextLabel}</Button>
     </div>
   );
+}
+
+function candidateKey(candidate: ImportCandidate): string {
+  return `${candidate.cloud_provider}:${candidate.source}:${candidate.cluster_id}:${candidate.kube_context ?? candidate.external_handle ?? ''}`;
+}
+
+function isAgentOnline(status: string | undefined): boolean {
+  return !!status && ONLINE_STATUSES.has(status);
 }

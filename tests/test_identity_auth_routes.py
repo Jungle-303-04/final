@@ -5,8 +5,10 @@ from types import SimpleNamespace
 from typing import Any
 
 from fastapi import Request, Response
+from fastapi.routing import APIRoute
 
 from domains.identity import router as identity_router
+from domains.identity.dependencies import require_session
 from packages.contracts.gateway.requests import (
     LoginRequest,
     ResendEmailVerificationRequest,
@@ -26,6 +28,13 @@ class FakePasswordAuth:
     def __init__(self) -> None:
         self.deleted: str | None = None
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
+        self.sessions = SimpleNamespace(touched=[])
+
+        async def touch_session(token: str | None) -> bool:
+            self.sessions.touched.append(token)
+            return bool(token)
+
+        self.sessions.touch_session = touch_session
 
     async def signup(
         self, email: str, password: str, password_confirm: str, client_key: str
@@ -142,6 +151,7 @@ def test_resend_verification_requests_email_without_session_cookie(monkeypatch) 
 
 def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     monkeypatch.setenv("COOKIE_SECURE", "0")
+    monkeypatch.delenv("SESSION_TTL_SECONDS", raising=False)
     response = Response()
     password_auth = FakePasswordAuth()
 
@@ -159,6 +169,49 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
     assert body.workspace_id == "default"
     assert "service_session=login-token" in cookie
     assert "httponly" in cookie
+    assert "max-age=7200" in cookie
+
+
+def test_session_refresh_route_is_guarded_by_require_session() -> None:
+    route = next(
+        route
+        for route in identity_router.router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/auth/session/refresh"
+        and "POST" in route.methods
+    )
+
+    assert any(dependency.call is require_session for dependency in route.dependant.dependencies)
+
+
+def test_session_refresh_touches_store_and_resets_httponly_cookie(monkeypatch) -> None:
+    monkeypatch.setenv("COOKIE_SECURE", "0")
+    monkeypatch.delenv("SESSION_TTL_SECONDS", raising=False)
+    response = Response()
+    password_auth = FakePasswordAuth()
+    current = SimpleNamespace(
+        token="login-token",
+        user_id="user-1",
+        roles=["service_admin"],
+        workspace_id="default",
+    )
+
+    async def run() -> Any:
+        return await identity_router.refresh_session(
+            response=response,
+            current=current,
+            password_auth=password_auth,
+        )
+
+    body = asyncio.run(run())
+    cookie = response.headers["set-cookie"].lower()
+
+    assert body.authenticated is True
+    assert body.user_id == "user-1"
+    assert password_auth.sessions.touched == ["login-token"]
+    assert "service_session=login-token" in cookie
+    assert "httponly" in cookie
+    assert "max-age=7200" in cookie
 
 
 def test_verify_email_redirects_and_sets_httponly_session_cookie(monkeypatch) -> None:

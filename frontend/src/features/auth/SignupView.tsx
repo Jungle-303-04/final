@@ -4,6 +4,7 @@ import { useSignup } from '@/features/auth/api';
 import { ApiError } from '@/shared/lib/api';
 import { Button, EmptyState, Field } from '@/shared/ui';
 import { AuthLayout } from '@/features/auth/AuthLayout';
+import { IconBell } from '@/shared/ui/icons';
 
 export default function SignupView() {
   const [email, setEmail] = useState('');
@@ -15,7 +16,7 @@ export default function SignupView() {
   if (signup.isSuccess) {
     return (
       <AuthLayout title="검증 메일 발송됨">
-        <EmptyState icon="✉️" title="메일함을 확인해주세요" description={`${email} 로 검증 링크를 보냈습니다. 검증 후 관리자 승인이 필요합니다.`}
+        <EmptyState icon={<IconBell size={26} />} title="메일함을 확인해주세요" description={`${email} 로 검증 링크를 보냈습니다. 검증 후 관리자 승인이 필요합니다.`}
           action={<Link to="/login"><Button>로그인으로</Button></Link>} />
       </AuthLayout>
     );

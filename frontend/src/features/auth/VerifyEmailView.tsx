@@ -9,6 +9,7 @@ export default function VerifyEmailView() {
   const [sp] = useSearchParams();
   const ok = sp.get('verified') === '1';
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const resend = useResendVerification();
 
   return (
@@ -18,9 +19,10 @@ export default function VerifyEmailView() {
         : (
           <div style={{ textAlign: 'center' }}>
             <EmptyState icon={<IconAlertTriangle size={26} />} title="링크가 만료되었거나 잘못되었습니다" description="아래에서 검증 메일을 다시 요청할 수 있습니다." />
-            <form onSubmit={e => { e.preventDefault(); if (email) resend.mutate({ email }); }} style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+            <form onSubmit={e => { e.preventDefault(); if (email && password) resend.mutate({ email, password }); }} style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
               <input type="email" placeholder="가입한 이메일 주소" value={email} onChange={e => setEmail(e.target.value)} required style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border, #ddd)', width: '100%', maxWidth: '320px' }} />
-              <Button type="submit" disabled={resend.isPending || !email}>
+              <input type="password" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} minLength={8} required style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border, #ddd)', width: '100%', maxWidth: '320px' }} />
+              <Button type="submit" disabled={resend.isPending || !email || password.length < 8}>
                 {resend.isPending ? '전송 중…' : '검증 메일 재전송'}
               </Button>
             </form>

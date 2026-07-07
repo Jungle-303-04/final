@@ -155,6 +155,8 @@ def run_to_plan(payload: ClusterEvidenceReceivedBody, correlation_id: str) -> li
     incident_outs = run_handler(
         incident_worker.on_evidence_built, evidence_outs[0], db=db, correlation_id=correlation_id
     )
+    if incident_outs[-1].__subject__ == "rca.action_required":
+        return evidence_outs + incident_outs
     plan_outs = run_handler(plan_worker.on_evidence_bundle_built, incident_outs[-1])
     return evidence_outs + incident_outs + plan_outs
 
@@ -509,8 +511,8 @@ def test_explicit_symptom_always_beats_derived_signals() -> None:
     assert incident.resource_name == "checkout-api"
 
 
-def test_ambiguous_snapshot_falls_back_to_unknown_and_backlog_path() -> None:
-    """신호가 전혀 없는 정상 snapshot 은 기존과 같이 unknown → rule-missing 경로."""
+def test_ambiguous_snapshot_does_not_open_incident() -> None:
+    """신호가 전혀 없는 정상 snapshot 은 RCA 분석으로 승격하지 않는다."""
     healthy = snapshot(
         pods=(pod("healthy-api-1", labels={"app": "healthy-api"}),),
         services=(
@@ -536,12 +538,15 @@ def test_ambiguous_snapshot_falls_back_to_unknown_and_backlog_path() -> None:
 
     events = run_to_plan(evidence_payload(healthy), correlation_id="corr-ambiguous")
 
-    incident = event_by_subject(events, "incident.detected").incident
-    assert incident.symptom == "unknown"
-    assert incident.secondary_symptoms == []
-    planned = event_by_subject(events, "rca.candidates.planned")
-    assert planned.candidate_count == 0
-    assert planned.rule_missing is not None
+    assert subjects_of(events) == [
+        "evidence.built",
+        "incident.detected",
+        "rca.action_required",
+    ]
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is False
+    assert detected.incident.symptom == "unknown"
+    assert detected.incident.secondary_symptoms == []
 
 
 def test_multiple_failing_pods_pick_dominant_signal_and_keep_the_rest() -> None:
