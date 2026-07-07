@@ -30,7 +30,11 @@ from packages.contracts.gateway.requests import (
     AlertmanagerWebhookRequest,
     RecoveryActionSelectRequest,
 )
-from packages.contracts.gateway.responses import AcceptedResponse
+from packages.contracts.gateway.responses import (
+    AcceptedResponse,
+    RecoveryActionCandidateItem,
+    RecoveryPlanStatusResponse,
+)
 from packages.contracts.gitops import (
     DEFAULT_APPLICATION_ID,
     DEFAULT_DEPLOYMENT_BINDING_ID,
@@ -387,6 +391,81 @@ async def select_recovery_action(
         accepted=True,
         event_id=accepted.event.event_id,
         correlation_id=accepted.event.correlation_id,
+    )
+
+
+@router.get(
+    gateway_routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH,
+    response_model=RecoveryPlanStatusResponse,
+)
+async def recovery_plan_by_correlation(
+    correlation_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RecoveryPlanStatusResponse:
+    workspace_id = current.workspace_id
+    record = await db_call(db.get_recovery_plan_by_correlation, correlation_id, workspace_id)
+    if record is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RECOVERY_PLAN_NOT_FOUND)
+    plan = RecoveryPlan.from_body(record["payload"])
+    cluster_id = str(plan.target.get("cluster_id", ""))
+    if cluster_id:
+        require_cluster_access(
+            db,
+            current,
+            workspace_id,
+            cluster_id,
+            Permission.RCA_READ.value,
+            detail=RECOVERY_SELECTION_ACCESS_DENIED,
+        )
+    return recovery_plan_status_response(record, plan)
+
+
+def recovery_action_candidate_item(
+    candidate: RecoveryActionCandidate,
+) -> RecoveryActionCandidateItem:
+    return RecoveryActionCandidateItem(
+        action_id=candidate.action_id,
+        title=candidate.title,
+        description=candidate.description,
+        route=candidate.route,
+        rank=candidate.rank,
+        score=candidate.score,
+        risk_level=candidate.risk_level,
+        blast_radius=candidate.blast_radius,
+        approval_required=candidate.approval_required,
+        prerequisites=candidate.prerequisites,
+        validation_checks=candidate.validation_checks,
+        rollback_plan=candidate.rollback_plan,
+        evidence_refs=candidate.evidence_refs,
+    )
+
+
+def recovery_plan_status_response(
+    record: dict[str, Any],
+    plan: RecoveryPlan,
+) -> RecoveryPlanStatusResponse:
+    candidates = [recovery_action_candidate_item(candidate) for candidate in plan.candidates]
+    selected_action_id = record.get("selected_action_id")
+    selected_action = next(
+        (candidate for candidate in candidates if candidate.action_id == selected_action_id),
+        None,
+    )
+    return RecoveryPlanStatusResponse(
+        plan_id=plan.plan_id,
+        correlation_id=str(record["correlation_id"]),
+        incident_id=plan.incident_id,
+        evidence_ref=plan.evidence_ref,
+        status=str(record["status"]),
+        summary=plan.summary,
+        target=plan.target,
+        recommended_action_id=plan.recommended_action_id,
+        execution_route=plan.execution_route,
+        selection_required=plan.selection_required,
+        selected_action_id=str(selected_action_id) if selected_action_id else None,
+        selected_by=str(record["selected_by"]) if record.get("selected_by") else None,
+        selected_action=selected_action,
+        candidates=candidates,
     )
 
 

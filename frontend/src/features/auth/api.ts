@@ -7,6 +7,9 @@ export const sessionKey = ['session'] as const;
 export function useSession() {
   return useQuery({ queryKey: sessionKey, queryFn: () => get<Session>('/auth/session'), staleTime: 60_000 });
 }
+export function refreshSession() {
+  return post<Session>('/auth/session/refresh');
+}
 export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
@@ -32,4 +35,7 @@ export function useIsAdmin(): boolean {
   return data?.roles?.includes('service_admin') ?? false;
 }
 export const useResendVerification = () =>
-  useMutation({ mutationFn: (b: { email: string }) => post('/auth/resend-verification', b) });
+  useMutation({
+    mutationFn: (b: { email: string; password: string }) =>
+      post('/auth/resend-verification', b),
+  });

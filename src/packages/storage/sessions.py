@@ -106,6 +106,16 @@ class RedisSessionStore:
             workspace_id=payload.get("workspace_id", self.config.default_workspace_id),
         )
 
+    async def touch_session(self, token: str | None) -> bool:
+        if not token:
+            return False
+        return bool(
+            await self._client().expire(
+                f"{self.config.key_prefix}:{token}",
+                self.config.ttl_seconds,
+            )
+        )
+
     async def delete_session(self, token: str) -> None:
         await self._client().delete(f"{self.config.key_prefix}:{token}")
 

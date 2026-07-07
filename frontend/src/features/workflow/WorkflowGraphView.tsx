@@ -88,8 +88,8 @@ export default function WorkflowGraphView() {
   return (
     <FadeSlideIn>
       <Breadcrumbs items={[{ label: '워크플로우', to: '/workflows' }, { label: `${found.appId} · ${shortSha(found.commit_sha)}` }]} />
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px' }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>{found.appId}</h1>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px', flexWrap: 'wrap', minWidth: 0 }}>
+        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', overflowWrap: 'anywhere' }}>{found.appId}</h1>
         <code>{shortSha(found.commit_sha)}</code><Badge status={found.status} />
       </div>
       {found.status === 'WAITING_FOR_APPROVAL' && found.approval_id && (() => {

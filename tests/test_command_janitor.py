@@ -15,6 +15,7 @@ class FakeDb:
         return [
             {
                 "command_id": "cmd-1",
+                "correlation_id": "corr-original",
                 "result": {
                     "status": "failed",
                     "applied": False,
@@ -60,6 +61,6 @@ def test_command_janitor_emits_completion_for_expired_commands() -> None:
                     "message": "command lease expired",
                 },
             },
-            "command-janitor:cmd-1",
+            "corr-original",
         )
     ]

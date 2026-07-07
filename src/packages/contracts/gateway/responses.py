@@ -199,6 +199,39 @@ class RcaReportListResponse(StrictModel):
     has_more: bool
 
 
+class RecoveryActionCandidateItem(StrictModel):
+    action_id: str
+    title: str
+    description: str
+    route: str
+    rank: int
+    score: float
+    risk_level: str
+    blast_radius: str
+    approval_required: bool
+    prerequisites: list[str] = Field(default_factory=list)
+    validation_checks: list[str] = Field(default_factory=list)
+    rollback_plan: str
+    evidence_refs: list[str] = Field(default_factory=list)
+
+
+class RecoveryPlanStatusResponse(StrictModel):
+    plan_id: str
+    correlation_id: str
+    incident_id: str
+    evidence_ref: str
+    status: str
+    summary: str
+    target: JsonMap = Field(default_factory=dict)
+    recommended_action_id: str
+    execution_route: str
+    selection_required: bool
+    selected_action_id: str | None = None
+    selected_by: str | None = None
+    selected_action: RecoveryActionCandidateItem | None = None
+    candidates: list[RecoveryActionCandidateItem] = Field(default_factory=list)
+
+
 class EvidenceJobScheduleResponse(StrictModel):
     accepted: bool
     evidence_key: str
@@ -476,6 +509,65 @@ class ApplicationListResponse(StrictModel):
     applications: list[JsonMap]
 
 
+class RepositoryProbeResponse(StrictModel):
+    repo_ref: str
+    normalized_repo_ref: str
+    valid: bool
+    reachable: bool
+    default_branch: str | None = None
+    private: bool | None = None
+    html_url: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class RepositoryBranchItem(StrictModel):
+    name: str
+    protected: bool = False
+    default: bool = False
+
+
+class RepositoryBranchListResponse(StrictModel):
+    repo_ref: str
+    default_branch: str | None = None
+    branches: list[RepositoryBranchItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RepositoryManifestCandidate(StrictModel):
+    path: str
+    source_type: str
+    display_name: str
+    reason: str = ""
+
+
+class RepositoryManifestCandidateListResponse(StrictModel):
+    repo_ref: str
+    branch: str
+    candidates: list[RepositoryManifestCandidate] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RepositoryManifestResource(StrictModel):
+    api_version: str = ""
+    kind: str
+    namespace: str | None = None
+    name: str
+
+
+class RepositoryManifestValidationResponse(StrictModel):
+    repo_ref: str
+    branch: str
+    manifest_path: str
+    valid: bool
+    status: str
+    validation_mode: str
+    resource_count: int = 0
+    resources: list[RepositoryManifestResource] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
 class DeploymentBindingResponse(StrictModel):
     deployment: JsonMap
 
@@ -504,8 +596,54 @@ class ProviderCatalogResponse(StrictModel):
     providers: dict[str, list[JsonMap]]
 
 
+class ClusterImportCandidate(StrictModel):
+    cluster_id: str
+    name: str
+    source: str
+    cloud_provider: str
+    deploy_provider: str
+    kube_context: str | None = None
+    external_handle: str | None = None
+    console_url: str | None = None
+    direct_apply_available: bool = False
+    labels: JsonMap = Field(default_factory=dict)
+
+
+class ClusterRegistrationFlow(StrictModel):
+    cloud_provider: str
+    label: str
+    status: str
+    description: str
+    deploy_providers: list[JsonMap] = Field(default_factory=list)
+    default_deploy_provider: str
+    supports_import: bool = False
+    unavailable_reason: str | None = None
+    import_candidates: list[ClusterImportCandidate] = Field(default_factory=list)
+
+
+class ProviderClusterDiscoveryResponse(StrictModel):
+    default_cloud_provider: str = "existing-k8s"
+    default_deploy_provider: str = "manual-manifest"
+    flows: list[ClusterRegistrationFlow] = Field(default_factory=list)
+    import_candidates: list[ClusterImportCandidate] = Field(default_factory=list)
+
+
 class ProviderValidationResponse(StrictModel):
     valid: bool
     errors: list[str]
     warnings: list[str]
     selected: dict[str, JsonMap]
+
+
+class TargetPreflightResponse(StrictModel):
+    valid: bool
+    duplicate_cluster_id: bool
+    provider_ready: bool
+    agent_install_status: str
+    connection_status: str
+    kube_context_allowed: bool | None = None
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    selected: dict[str, JsonMap] = Field(default_factory=dict)
+    last_agent_id: str | None = None
+    last_seen_at: str | None = None

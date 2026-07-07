@@ -20,6 +20,7 @@ from domains.target.router import (
     register_target,
     schedule_evidence_jobs,
     target_install_manifest,
+    target_registration_preflight,
     update_cluster_policy,
     validate_target_install_providers,
 )
@@ -30,6 +31,7 @@ from packages.contracts.gateway.requests import (
     EvidenceJobScheduleRequest,
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
+    TargetPreflightRequest,
     TargetRegisterRequest,
 )
 
@@ -195,6 +197,31 @@ class FakeClusterDb:
     ) -> list[dict[str, object]]:
         assert cluster_id == "cluster-1"
         return [self.agent]
+
+
+class FakePreflightDb(FakeClusterDb):
+    def get_cluster_registration(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> dict[str, object] | None:
+        if workspace_id == "default" and cluster_id == "cluster-1":
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "name": "prod",
+                "environment": "production",
+                "status": "registered",
+                "settings": {"cloud_provider": "existing-k8s"},
+            }
+        return None
+
+    def list_cluster_agent_statuses(
+        self,
+        _workspace_id: str,
+        cluster_id: str,
+    ) -> list[dict[str, object]]:
+        return [self.agent] if cluster_id == "cluster-1" else []
 
 
 def target_request() -> TargetRegisterRequest:
@@ -440,6 +467,53 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
     assert response.connection_status == "online"
     assert response.last_agent_id == "agent-1"
     assert response.agents[0].capabilities == ["inventory", "commands"]
+
+
+def test_target_registration_preflight_reports_duplicate_and_agent_status(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="cluster-1",
+                cloud_provider="existing-k8s",
+                deploy_provider="manual-manifest",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert response.duplicate_cluster_id is True
+    assert response.provider_ready is True
+    assert response.agent_install_status == "online"
+    assert response.last_agent_id == "agent-1"
+    assert "cluster_id is already registered" in response.errors
+
+
+def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="new-cluster",
+                cloud_provider="existing-k8s",
+                deploy_provider="manual-manifest",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is True
+    assert response.duplicate_cluster_id is False
+    assert response.provider_ready is True
+    assert response.agent_install_status == "not_registered"
+    assert response.errors == []
 
 
 def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
