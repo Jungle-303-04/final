@@ -64,8 +64,3 @@ export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; he
   );
 }
 
-export function Sparkline({ points }: { points: number[] }) {
-  const max = Math.max(1, ...points);
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${(i / Math.max(1, points.length - 1)) * 100},${28 - (p / max) * 24}`).join(' ');
-  return <svg width={100} height={30} aria-hidden><path d={path} fill="none" stroke="var(--info)" strokeWidth={1.5} /></svg>;
-}
