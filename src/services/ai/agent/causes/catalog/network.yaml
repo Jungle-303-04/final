@@ -1,4 +1,5 @@
 # RCA 원인 룰 카탈로그 — 네트워크(DNS/timeout/Ingress) 계열 (구 causes/network.py)
+# signals: 후보 판별 신호(causes/signals.py) — 로그/이벤트의 네트워크 오류 유형으로 구별한다.
 rules:
   - id: "dns_lookup_failed"
     symptoms: ["DNS lookup failed"]
@@ -13,6 +14,12 @@ rules:
           - "CoreDNS 응답 코드에서 NXDOMAIN 또는 SERVFAIL 증가 확인"
           - "로그에 no such host, DNS lookup failed, name resolution failed 확인"
           - "최근 Service selector, namespace, NetworkPolicy 변경 여부 확인"
+        signals:
+          - id: "dns_failure_log"
+            any_of:
+              - log_pattern: "no such host"
+              - log_pattern: "dns"
+              - log_pattern: "name resolution"
   - id: "connection_timeout"
     symptoms: ["Connection timeout"]
     required_sources: ["kubernetes", "metrics", "logs", "traces", "metadata"]
@@ -26,6 +33,12 @@ rules:
           - "EndpointSlice.conditions.ready와 Pod IP가 유효한지 확인"
           - "service mesh 또는 ingress timeout metric 증가 확인"
           - "trace에서 upstream timeout 또는 context deadline exceeded 확인"
+        signals:
+          - id: "network_timeout_log"
+            any_of:
+              - log_pattern: "timeout"
+              - log_pattern: "deadline exceeded"
+              - event_pattern: "timeout"
   - id: "ingress_5xx"
     symptoms: ["Ingress 502/503", "Ingress 502", "Ingress 503"]
     required_sources: ["kubernetes", "metrics", "logs", "metadata"]
@@ -39,6 +52,13 @@ rules:
           - "ingress 502/503 metric 또는 upstream connect failure 증가 확인"
           - "ingress controller log에 no endpoints, upstream error, connection refused 확인"
           - "최근 Ingress, Service, Deployment 변경 이후 발생했는지 확인"
+        signals:
+          - id: "upstream_failure_signal"
+            any_of:
+              - log_pattern: "no endpoints"
+              - log_pattern: "upstream"
+              - log_pattern: "connection refused"
+              - event_pattern: "no endpoints"
       - candidate_id: "backend_readiness_failure"
         title: "백엔드 readiness 실패"
         description: "백엔드 Pod가 Ready 상태가 아니어서 Ingress upstream에서 제외됐을 가능성이 있습니다."
@@ -47,3 +67,11 @@ rules:
           - "Pod status.conditions Ready=False 여부 확인"
           - "kube_endpoint_address_available 또는 ready endpoint 수 감소 확인"
           - "readiness probe 실패 이벤트와 app log 확인"
+        signals:
+          # upstream_unavailable(metadata 기대)과 달리 소스만으로 완결 가능하던 후보 —
+          # probe 실패 정황의 관측을 완결 조건으로 요구한다.
+          - id: "probe_failure_signal"
+            any_of:
+              - event_pattern: "probe"
+              - fact: "event_reason=Unhealthy"
+              - log_pattern: "readiness"

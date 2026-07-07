@@ -21,6 +21,15 @@ rules:
           - "Deployment.status.unavailableReplicas와 ReplicaSet.readyReplicas 확인"
           - "kube_deployment_status_replicas_unavailable 증가 확인"
           - "신규 Pod의 readiness/startup error 로그 확인"
+        signals:
+          # 이 룰에서 metadata 없이 완결 가능한 유일한 후보 — 소스 존재만으로 1.0 이
+          # 되지 않도록 unavailable/deadline 정황 관측을 완결 조건으로 요구한다.
+          # (판별 신호 DSL: causes/signals.py)
+          - id: "replica_unavailable_signal"
+            any_of:
+              - event_pattern: "unavailable"
+              - event_pattern: "deadline"
+              - log_pattern: "unavailable"
   - id: "argocd_sync_failed"
     symptoms: ["ArgoCD Sync Failed", "Sync Failed"]
     required_sources: ["kubernetes", "metrics", "logs", "metadata"]
