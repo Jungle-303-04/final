@@ -3,15 +3,15 @@
 import dagre from '@dagrejs/dagre';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  Background, BaseEdge, Handle, Position, ReactFlow, ReactFlowProvider,
+  Background, Handle, Position, ReactFlow, ReactFlowProvider,
   getSmoothStepPath, useReactFlow,
   type Edge, type EdgeProps, type EdgeTypes, type Node, type NodeProps, type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './flow.css';
 import type { Tone } from '@/shared/lib/types';
-import { toneColor } from '@/shared/ui/status';
-import { IconChevronRight } from '@/shared/ui/icons';
+import { cx } from '@/ui';
+import { durations } from '@/ui/motion';
 
 export type FlowDirection = 'LR' | 'TB';
 /* 노드 크기 기본값 — 렌더 후 measured 값이 있으면 그것을 우선 사용 */
@@ -23,7 +23,7 @@ export function useAutoLayout(nodes: Node[], edges: Edge[], direction: FlowDirec
   return useMemo(() => {
     if (nodes.length === 0) return { nodes, edges };
     const g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: direction, nodesep: 28, ranksep: 60, marginx: 12, marginy: 12 });
+    g.setGraph({ rankdir: direction, nodesep: 24, ranksep: 32, marginx: 12, marginy: 12 });
     g.setDefaultEdgeLabel(() => ({}));
     nodes.forEach(n => g.setNode(n.id, {
       width: n.measured?.width ?? n.width ?? NODE_W,
@@ -55,24 +55,17 @@ export function AnimatedEdge(props: EdgeProps<AnimatedFlowEdge>) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props;
   const [path] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 8 });
   const active = data?.active === true;
-  const stroke = data?.tone ? toneColor(data.tone) : active ? toneColor('info') : 'var(--border)';
   return (
-    <>
-      <BaseEdge
-        id={id} path={path}
-        style={{
-          stroke, strokeWidth: active ? 2 : 1.5,
-          strokeDasharray: active ? '6 4' : undefined,
-          animation: active ? 'flow-dash calc(var(--dur-slow) * 2) linear infinite' : undefined,
-        }}
-      />
-      {/* 활성 구간을 흐르는 패킷 — reactflow.dev animating-edges 패턴(SVG animateMotion) */}
-      {active && (
-        <circle className="flow-packet" r={3.5} fill={stroke}>
-          <animateMotion dur="1.4s" repeatCount="indefinite" path={path} />
-        </circle>
+    <path
+      id={id}
+      d={path}
+      fill="none"
+      className={cx(
+        'react-flow__edge-path flow-edge-path',
+        active && 'flow-edge-path--active',
+        flowToneEdgeClass(data?.tone ?? (active ? 'info' : 'neutral')),
       )}
-    </>
+    />
   );
 }
 
@@ -90,16 +83,19 @@ export function CollapsibleGroupNode({ data }: NodeProps<Node<CollapsibleGroupDa
   return (
     <button
       type="button"
-      className={`flow-group ${data.active ? 'flow-node--pulse' : ''}`}
-      style={data.tone ? { borderColor: toneColor(data.tone) } : undefined}
+      className={cx(
+        'inline-flex min-w-40 items-center gap-2 rounded-panel border bg-surface px-4 py-3 text-body font-semibold text-primary shadow-soft transition-colors duration-[var(--ui-duration-fast)] ease-standard hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        data.tone && flowToneBorderClass(data.tone),
+        data.active && 'flow-node--pulse',
+      )}
       onClick={(e) => { e.stopPropagation(); data.onToggle?.(); }}
       aria-expanded={!data.collapsed}
     >
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <span className={`flow-group__chev ${data.collapsed ? '' : 'flow-group__chev--open'}`}><IconChevronRight size={13} /></span>
-      {data.label}
-      <span className="flow-group__count">{data.count}</span>
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Left} className="opacity-0" />
+      <span className={cx('text-muted transition-transform duration-[var(--ui-duration-base)] ease-standard', data.collapsed ? '' : 'rotate-90')}>›</span>
+      <span className="min-w-0 truncate">{data.label}</span>
+      <span className="rounded-full border border-border bg-raised px-2 py-0.5 text-caption font-bold text-secondary">{data.count}</span>
+      <Handle type="source" position={Position.Right} className="opacity-0" />
     </button>
   );
 }
@@ -123,7 +119,7 @@ function useDocThemeMode(): 'dark' | 'light' {
 function FitOnChange({ signature }: { signature: string }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
-    const raf = requestAnimationFrame(() => { fitView({ duration: 300, padding: 0.15 }); });
+    const raf = requestAnimationFrame(() => { fitView({ duration: Math.round(durations.slow * 1000), padding: 0.15 }); });
     return () => cancelAnimationFrame(raf);
   }, [signature, fitView]);
   return null;
@@ -138,19 +134,39 @@ export function FlowCanvas({ nodes, edges, nodeTypes, onNodeClick, children }: {
   const colorMode = useDocThemeMode();
   return (
     <ReactFlowProvider>
-      <div style={{ width: '100%', height: '100%' }}>
+      <div className="h-full w-full">
         <ReactFlow
           nodes={nodes} edges={edges} nodeTypes={types} edgeTypes={EDGE_TYPES}
-          fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.3} maxZoom={1.6} panOnScroll
+          fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.55} maxZoom={1.6} panOnScroll
           nodesDraggable={false} nodesConnectable={false} colorMode={colorMode}
           proOptions={{ hideAttribution: true }}
           onNodeClick={onNodeClick ? (_e, n) => onNodeClick(n.id) : undefined}
         >
-          <Background gap={20} color="var(--surface-2)" />
+          <Background gap={20} color="var(--ui-raised)" />
           <FitOnChange signature={nodes.map(n => n.id).join('|')} />
           {children}
         </ReactFlow>
       </div>
     </ReactFlowProvider>
   );
+}
+
+function flowToneBorderClass(tone: Tone) {
+  return {
+    ok: 'border-success/50',
+    warn: 'border-warning/50',
+    danger: 'border-danger/50',
+    info: 'border-info/50',
+    neutral: 'border-border',
+  }[tone];
+}
+
+function flowToneEdgeClass(tone: Tone) {
+  return {
+    ok: 'flow-edge-path--success',
+    warn: 'flow-edge-path--warning',
+    danger: 'flow-edge-path--danger',
+    info: 'flow-edge-path--info',
+    neutral: 'flow-edge-path--neutral',
+  }[tone];
 }

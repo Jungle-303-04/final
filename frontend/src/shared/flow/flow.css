@@ -1,29 +1,31 @@
-/* 그래프 공통 스타일 — 활성 edge dash-flow, 활성 노드 pulse (색은 tokens.css 변수만) */
+/* React Flow shared motion hooks. Durations mirror src/ui/motion.ts via theme variables. */
 @keyframes flow-dash { to { stroke-dashoffset: -20; } }
 @keyframes flow-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
-.flow-node--pulse { animation: flow-pulse 1.4s var(--ease-in-out) infinite; }
+.flow-node--pulse { animation: flow-pulse calc(var(--ui-duration-slow) * 4) var(--ease-standard) infinite; }
 
-/* 레이아웃 재계산(단계 진행·접기/펼치기) 시 노드가 새 좌표로 부드럽게 이동 */
-.react-flow__node { transition: transform var(--dur-slow) var(--ease-in-out); }
+.flow-edge-path {
+  stroke-width: 1.5;
+  stroke: var(--ui-border);
+}
+
+.flow-edge-path--active {
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  animation: flow-dash calc(var(--ui-duration-slow) * 2) linear infinite;
+}
+
+.flow-edge-path--success { stroke: var(--ui-success); }
+.flow-edge-path--warning { stroke: var(--ui-warning); }
+.flow-edge-path--danger { stroke: var(--ui-danger); }
+.flow-edge-path--info { stroke: var(--ui-info); }
+.flow-edge-path--neutral { stroke: var(--ui-border); }
+
+.react-flow__node { transition: transform var(--ui-duration-slow) var(--ease-decelerate); }
 .react-flow__node.dragging { transition: none; }
-
-/* 활성 edge 를 따라 흐르는 패킷 — 은은한 발광 */
-.flow-packet { filter: drop-shadow(0 0 3px currentColor); pointer-events: none; }
-
-.flow-group { display:flex; align-items:center; gap:8px; padding:10px 14px; min-width:150px;
-  background:var(--surface-2); border:1.5px solid var(--border); border-radius:var(--radius-md);
-  color:var(--text-1); font:inherit; font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
-.flow-group:hover { border-color: var(--border-focus); }
-.flow-group:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
-.flow-group__count { font-size:var(--fs-xs); font-weight:700; color:var(--text-2);
-  background:var(--surface-3); border-radius:999px; padding:1px 7px; }
-.flow-group__chev { display:inline-flex; color:var(--text-3); transition:transform var(--dur-base) var(--ease-out); }
-.flow-group__chev--open { transform:rotate(90deg); }
 
 @media (prefers-reduced-motion: reduce) {
   .flow-node--pulse { animation: none; }
   .react-flow__edge-path { animation: none !important; }
   .react-flow__node { transition: none; }
-  .flow-packet { display: none; }
 }

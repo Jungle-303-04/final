@@ -23,6 +23,7 @@
 - Phase 2 클러스터 상세(`features/cluster/ClusterDetailView.tsx`)는 `src/ui` PageHeader/Breadcrumb/StatCard/Card/Tabs/Table/Drawer/Modal/KeyValueList 기반으로 이관했다. 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 인시던트 목록(`features/notifications/NotificationsView.tsx`)은 `src/ui` PageHeader/Card/Tabs/Badge/Button/EmptyState 기반으로 이관했다. 목록 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 인시던트 상세(`features/notifications/IncidentDetailView.tsx`)는 `src/ui` PageHeader/Breadcrumb/Card/KeyValueList/Badge/Button/Collapsible/EmptyState 기반으로 이관했다. RCA 파이프라인 그래프, 후보 점수바, evidence trail, 복구 계획 기능은 유지하고 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
+- Phase 2 워크플로우(`features/workflow/WorkflowListView.tsx`, `features/workflow/WorkflowGraphView.tsx`)는 `src/ui` PageHeader/Breadcrumb/Card/Table/Badge/Button/Collapsible/Tooltip/EmptyState 기반으로 이관했다. React Flow 공용 wrapper(`shared/flow`)도 새 토큰과 reduced-motion 대응으로 정렬했고, 워크플로 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - 아직 전 화면 이관 전이므로 `shared/ui/app.css`, `plural-ui/plural.css`, `shared/theme-bridge.css`는 남아 있다. 화면 이관 단위마다 해당 화면 전용 레거시 CSS를 제거한다.
 
 ## 사용 규칙
@@ -102,6 +103,42 @@
 - Playwright route mocking 검수: 인증 세션/알림/인시던트 상세/RCA 리포트/복구 계획 최소 응답으로 `/incidents/inc-101`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
 - 모바일 RCA 그래프는 화면 전체 overflow 없이 그래프 영역 내부 가로 스크롤로 읽을 수 있게 고정했다.
 - screenshots: `/tmp/k8s-incident-detail-desktop.png`, `/tmp/k8s-incident-detail-tablet.png`, `/tmp/k8s-incident-detail-mobile.png`, `/tmp/k8s-incident-detail-mobile-fixed.png`.
+
+## Phase 2 워크플로우 검증 (2026-07-08 06:03 KST)
+
+- `cd frontend && npm run typecheck` passed.
+- `cd frontend && npm run lint` passed.
+- `cd frontend && npm test -- --runInBand` passed, 11 tests.
+- `cd frontend && npm run build` passed.
+- `features/workflow/*` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 0건.
+- `shared/flow`는 React Flow edge/node motion만 유지하고 색/보더/배경은 `--ui-*` semantic token으로 정렬했다. `prefers-reduced-motion`에서 pulse/dash/node transition은 비활성화된다.
+- Playwright route mocking 검수: 인증 세션/알림 합성 API/애플리케이션 run 응답으로 `/workflows`, `/workflows/run-approval-101`을 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
+- 진행 중 워크플로우 그래프는 현재 단계까지 표시해 과축소를 막고, 완료 run은 전체 단계 경로를 표시한다. 상세 검수 기준 그래프 node 5, edge 4.
+- screenshots: `/tmp/k8s-workflows-list-desktop.png`, `/tmp/k8s-workflows-list-tablet.png`, `/tmp/k8s-workflows-list-mobile.png`, `/tmp/k8s-workflow-detail-desktop-final2.png`, `/tmp/k8s-workflow-detail-tablet.png`, `/tmp/k8s-workflow-detail-mobile.png`.
+
+## 전개형 검증 UX 패스 범위 (디자인 시스템 완료 후)
+
+원칙: 다음 단계는 서버 검증을 통과한 뒤에만 나타나며, 제출 버튼은 검증 통과 시에만 활성화한다. 이전 단계 값 변경 시 이후 단계 상태를 reset하고, 실패는 필드 밑 한국어 인라인 사유로 표시한다.
+
+| 플로우 | 단계 -> 검증 API 매핑 | 상태 |
+|---|---|---|
+| 레포 연결 | repo 입력 -> `POST /repos/validate` 또는 현행 `POST /repositories/discovery/probe`; branch -> `GET /repositories/discovery/branches`; manifest 후보 -> `GET /repositories/discovery/manifests`; manifest 선택 -> `POST /repositories/discovery/validate`; 등록 -> `POST /applications/connect` | 대기 |
+| 클러스터 등록 | 이름 -> cluster_id 생성; 등록 -> `POST /targets`; 설치 명령 -> 1회 토큰 표시; heartbeat -> `GET /clusters/{id}/connection-status` 폴링 | 대기 |
+| 알림 채널 | 설정 입력 -> 테스트 발송 API; 테스트 성공 -> 저장 API | 계약 확인 필요 |
+| 룰 추가 | YAML 입력 -> validate API; 유효 -> symptom/후보 수 preview | 계약 확인 필요 |
+| 회원가입 | 이메일 -> 중복 검증 API; 비밀번호 -> 로컬 강도/정책; 가입 -> `POST /auth/signup`; 재발송 -> `POST /auth/resend-verification` | 대기 |
+| 로그인 실패 분기 | 로그인 -> `POST /auth/login`; `invalid_credentials`, `email_unverified`, `approval_pending` 분기 | 대기 |
+| 이메일 인증 랜딩 | token 검증 -> 성공/만료/이미인증 분기; 만료 -> 재발송 | 대기 |
+| 승인 대기 화면 | 세션/승인 상태 폴링 -> 승인 시 returnTo 자동 입장 | 대기 |
+| 스케일 | 현재값 조회 -> 변경 미리보기; 정책 불가 선표시; 실행 -> scale command 상태 추적 | 대기 |
+| 재시작/DLQ replay | 확인 모달 대상 요약; 실행 중 행 pending; replay -> `POST /dead-letters/{id}/replay` | 대기 |
+| 복구 승인 | 명령/PR diff 접이식 preview; 권한 없으면 tooltip; 승인/거절 API | 대기 |
+| 역할 변경 | role 변경 -> membership/update API; `last_admin` 인라인 사유; 자기 강등 경고 | 대기 |
+| 조직/그룹 생성 | 이름 입력 -> 중복 검증 API; 생성 API | 대기 |
+| AI 채팅 | LLM 설정 상태 조회; 미설정/키 오류 -> 설정 안내 카드; 정상 -> 채팅 입력 | 대기 |
+| 메트릭 PromQL | 입력 -> dry-run 문법 검증; 실행 -> query API; 0건 -> 시간범위 확장 CTA | 대기 |
+| 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
+| 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
