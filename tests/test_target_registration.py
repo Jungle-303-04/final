@@ -951,6 +951,32 @@ def test_management_policy_update_rejects_write_policy() -> None:
     assert exc.value.detail["code"] == "management_readonly"
 
 
+def test_management_policy_update_allows_read_only_evidence_change() -> None:
+    db = FakeManagementPolicyDb()
+    read_only_update = AgentPolicy(
+        cluster_id="cluster-1",
+        generation=2,
+        evidence=EvidenceRuntimePolicy(
+            providers={"kubernetes": EvidenceProviderPolicy(interval_seconds=90)}
+        ),
+    )
+
+    response = asyncio.run(
+        update_cluster_policy(
+            "cluster-1",
+            read_only_update,
+            current=SimpleNamespace(workspace_id="default"),
+            db=db,
+        )
+    )
+
+    merged = AgentPolicy.model_validate(response["policy"])
+    assert merged.cluster_role == "management"
+    assert merged.bootstrap.resources == []
+    assert merged.desired_state.resources == []
+    assert merged.evidence.providers["kubernetes"].interval_seconds == 90
+
+
 def test_management_cluster_unregister_is_rejected() -> None:
     db = FakeUnregisterDb(cluster_role="management")
 
