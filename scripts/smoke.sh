@@ -59,46 +59,40 @@ normalize_url() {
   printf '%s\n' "${value}"
 }
 
-api_health_ok() {
-  local candidate="$1"
-  curl -fsS "${candidate}/healthz" 2>/dev/null | grep -q '"service":"api-gateway"'
-}
+if [ -n "${API_BASE_URL}" ]; then
+  API_BASE_URL="$(normalize_url "${API_BASE_URL}")"
+fi
 
-resolve_api_base_url() {
+api_base_candidates() {
   local base
   base="$(normalize_url "${BASE_URL}")"
   if [ -n "${API_BASE_URL}" ]; then
-    normalize_url "${API_BASE_URL}"
+    printf '%s\n' "${API_BASE_URL}"
     return
   fi
-  if api_health_ok "${base}/api"; then
-    printf '%s/api\n' "${base}"
-    return
-  fi
-  if api_health_ok "${base}"; then
-    printf '%s\n' "${base}"
-    return
-  fi
-  # wait_for_gateway prints the final diagnostic; default to console-origin shape.
-  printf '%s/api\n' "${base}"
+  printf '%s/api\n%s\n' "${base}" "${base}"
 }
-
-API_BASE_URL="$(resolve_api_base_url)"
 
 wait_for_gateway() {
   local attempt
+  local candidate
+  local candidates
   local output=""
   for attempt in $(seq 1 "${SMOKE_GATEWAY_ATTEMPTS}"); do
-    if output="$(curl -fsS "${API_BASE_URL}/healthz" 2>&1)" \
-      && printf '%s' "${output}" | grep -q '"service":"api-gateway"'; then
-      printf '%s\n' "${output}"
-      return 0
-    fi
+    while IFS= read -r candidate; do
+      if output="$(curl -fsS "${candidate}/healthz" 2>&1)" \
+        && printf '%s' "${output}" | grep -q '"service":"api-gateway"'; then
+        API_BASE_URL="${candidate}"
+        printf '%s\n' "${output}"
+        return 0
+      fi
+    done < <(api_base_candidates)
     if [ "${attempt}" != "${SMOKE_GATEWAY_ATTEMPTS}" ]; then
       sleep "${SMOKE_GATEWAY_INTERVAL_SECONDS}"
     fi
   done
-  echo "gateway did not become reachable at ${API_BASE_URL}/healthz" >&2
+  candidates="$(api_base_candidates | tr '\n' ' ')"
+  echo "gateway did not become reachable at candidates: ${candidates}" >&2
   printf '%s\n' "${output}" >&2
   return 1
 }

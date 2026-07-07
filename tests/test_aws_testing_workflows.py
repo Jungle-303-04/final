@@ -179,8 +179,10 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert 'SMOKE_GATEWAY_ATTEMPTS="${SMOKE_GATEWAY_ATTEMPTS:-60}"' in script
     assert 'SMOKE_GATEWAY_INTERVAL_SECONDS="${SMOKE_GATEWAY_INTERVAL_SECONDS:-5}"' in script
     assert "wait_for_gateway" in script
-    assert 'curl -fsS "${API_BASE_URL}/healthz"' in script
-    assert "printf '%s/api\\n' \"${base}\"" in script
+    assert "api_base_candidates" in script
+    assert 'curl -fsS "${candidate}/healthz"' in script
+    assert 'printf \'%s/api\\n%s\\n\' "${base}" "${base}"' in script
+    assert 'API_BASE_URL="${candidate}"' in script
     assert "`SMOKE_GATEWAY_ATTEMPTS`" in runbook
     assert 'AUTH_LOGIN_ATTEMPTS="${AUTH_LOGIN_ATTEMPTS:-12}"' in auth_script
     assert (
