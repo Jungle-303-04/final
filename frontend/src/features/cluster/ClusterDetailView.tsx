@@ -45,15 +45,15 @@ export default function ClusterDetailView() {
   return (
     <FadeSlideIn>
       <Breadcrumbs items={[{ label: '클러스터', to: '/clusters' }, { label: cluster?.name ?? clusterId }]} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px' }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px', flexWrap: 'wrap', gap: 8 }}>
+        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {cluster?.name ?? clusterId}
           {cluster && <Badge tone="neutral">{cluster.environment}</Badge>}
           {cluster && <Badge status={cluster.connection_status} />}
         </h1>
         <Link to={`/metrics?cluster=${clusterId}`}><Button>메트릭 보기</Button></Link>
       </div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <StatBox label="노드" value={summaryQ.data?.nodes.length ?? 0} />
         <StatBox label="실행 팟" value={phases['Running'] ?? 0} tone="ok" />
         <StatBox label="비정상 팟" value={(phases['CrashLoopBackOff'] ?? 0) + (phases['Pending'] ?? 0)} tone={(phases['CrashLoopBackOff'] ?? 0) > 0 ? 'danger' : 'neutral'} />
