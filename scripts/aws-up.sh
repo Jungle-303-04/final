@@ -591,6 +591,7 @@ EOF
   kubectl --context "${context}" -n management create configmap management-runtime-config \
     --from-literal=NATS_URL="${NATS_URL}" \
     --from-literal=REDIS_URL="${REDIS_URL}" \
+    --from-literal=OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}" \
     --from-literal=MANAGEMENT_BASE_URL="http://api-gateway:8000" \
     --from-literal=PUBLIC_BASE_URL="${effective_public_base_url}" \
     --from-literal=PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL}" \

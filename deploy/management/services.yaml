@@ -59,7 +59,7 @@ spec:
             - name: DB_POOL_TIMEOUT_SECONDS
               value: "20"
             # agent evidence payload 는 이벤트 1건이 클 수 있다.
-            # gateway outbox relay 기본값(1000)은 재시작 후 backlog 처리 순간 메모리 피크를 키우므로
+            # 기존 gateway outbox relay 기본값(1000)은 재시작 후 backlog 처리 순간 메모리 피크를 키우므로
             # gateway 에서는 작은 배치로 안정성을 우선한다.
             - name: OUTBOX_RELAY_BATCH
               value: "10"

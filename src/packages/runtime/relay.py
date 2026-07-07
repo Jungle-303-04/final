@@ -12,9 +12,9 @@ from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import EnvelopePublisher
 from packages.contracts.interfaces import OutboxReader
 
-# relay 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
-DEFAULT_BATCH_ENV = "OUTBOX_RELAY_BATCH"  # 한 번에 발행할 outbox 행 수(기본 1000)
-DEFAULT_BATCH = int(env(DEFAULT_BATCH_ENV, "1000"))
+# relay 튜닝값 — 대형 evidence backlog 처리 시 DB lock/메모리 피크를 낮추기 위해 작게 잡는다.
+DEFAULT_BATCH_ENV = "OUTBOX_RELAY_BATCH"  # 한 번에 발행할 outbox 행 수(기본 10)
+DEFAULT_BATCH = int(env(DEFAULT_BATCH_ENV, "10"))
 DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV = (
     "OUTBOX_PUBLISH_TIMEOUT_SECONDS"  # 건당 발행 대기 한도 초(기본 10)
 )

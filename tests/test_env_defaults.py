@@ -65,7 +65,7 @@ def test_evidence_job_env_defaults_remain_unchanged() -> None:
 
 
 def test_runtime_env_defaults_remain_unchanged() -> None:
-    assert runtime_relay.DEFAULT_BATCH == 1000
+    assert runtime_relay.DEFAULT_BATCH == 10
     assert runtime_relay.DEFAULT_PUBLISH_TIMEOUT_SECONDS == 10
     assert runtime_worker.DEFAULT_RETRY_DELAY_SECONDS == 2
     assert runtime_worker.DEFAULT_FETCH_TIMEOUT_SECONDS == 1
