@@ -123,7 +123,7 @@
 | 플로우 | 단계 -> 검증 API 매핑 | 상태 |
 |---|---|---|
 | 레포 연결 | repo 입력 -> `POST /repos/validate` 또는 현행 `POST /repositories/discovery/probe`; branch -> `GET /repositories/discovery/branches`; manifest 후보 -> `GET /repositories/discovery/manifests`; manifest 선택 -> `POST /repositories/discovery/validate`; 등록 -> `POST /applications/connect` | 대기 |
-| 클러스터 등록 | 이름 -> cluster_id 생성; 등록 -> `POST /targets`; 설치 명령 -> 1회 토큰 표시; heartbeat -> `GET /clusters/{id}/connection-status` 폴링 | 대기 |
+| 클러스터 등록 | provider/필드 입력 -> 로컬 검증; 확인 -> `POST /targets/preflight`(`cloud_provider`, `deploy_provider=manual-manifest`, `provider_config`, `apply=false`); 통과 -> `POST /targets`; 설치 -> `bootstrap_steps`/`bootstrap_command`/`install_command` 우선순위 CodeBlock 복사; 연결 -> `GET /clusters/{id}/connection-status` 5초 폴링 | 완료 |
 | 알림 채널 | 설정 입력 -> 테스트 발송 API; 테스트 성공 -> 저장 API | 계약 확인 필요 |
 | 룰 추가 | YAML 입력 -> validate API; 유효 -> symptom/후보 수 preview | 계약 확인 필요 |
 | 회원가입 | 이메일 -> 중복 검증 API; 비밀번호 -> 로컬 강도/정책; 가입 -> `POST /auth/signup`; 재발송 -> `POST /auth/resend-verification` | 대기 |
@@ -139,6 +139,16 @@
 | 메트릭 PromQL | 입력 -> dry-run 문법 검증; 실행 -> query API; 0건 -> 시간범위 확장 CTA | 대기 |
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
 | 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
+
+## 클러스터 등록 위저드 UX 변경 (2026-07-08)
+
+- `RegisterClusterWizard`를 `@/ui` 프리미티브만 사용하도록 재작성했다. 레거시 `@/shared/ui`, `uiStore`, shared `queryClient` 싱글턴, `.cluster-registration-*`, inline style 의존은 제거했다.
+- 지원 provider: `eks`, `gke`, `aks`, `existing-k8s`, `kind`, `minikube`. local 선택지는 kind/minikube 세그먼트로 분기한다.
+- 공통 필드: `cluster_id`, 표시 이름, 환경, 고급 `management_base_url`. provider별 필드는 `provider_config`로 전송한다.
+- 버튼 활성 조건: 모든 필수 provider 필드가 공백 없이 유효해야 `확인`이 활성화된다. 초기 등록은 `POST /targets/preflight` 성공 후에만 `POST /targets`가 실행된다.
+- 등록 성공 후 설치 단계는 응답의 `bootstrap_steps`를 우선 표시하고, 없으면 `bootstrap_command`, `install_command`, `install_manifest` 순으로 fallback한다. 모든 명령은 `CodeBlock` 복사 버튼을 사용한다.
+- 연결 대기 상태는 `pending`, `connected`, `install_expired/expired`, `error/failed/disconnected`를 구분한다. pending은 5초 폴링, connected는 evidence 정책 CTA, expired/error는 재발급 CTA를 제공한다.
+- 닫기 가드: 설치 명령이 발급됐지만 연결 전이면 확인 모달을 먼저 띄우고, agent token은 현재 화면에서만 노출한다.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 

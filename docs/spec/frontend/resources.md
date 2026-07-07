@@ -16,7 +16,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`(`get/post`), `@/shared/lib/ui-store`, `@/shared/lib/query`(`queryClient`), `@/shared/lib/types`(`CatalogItem`), `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`(`get/post`), `@/shared/lib/types`(`CatalogItem`), `@/ui` 프리미티브 | [shared](shared.md) | API·UI |
 | import | `@/features/repo/api`(`useCreateApplication`, `useRepositoryProbe`, `useRepositoryBranches`, `useRepositoryManifestCandidates`, `useRepositoryManifestValidation`), `@/features/cluster/api`(`useClusters`) | [repo](./repo.md), [cluster](./cluster.md) | 레포 연결 위저드 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [cluster](./cluster.md), [repo](./repo.md) | — | 위저드 소비자 |
@@ -37,25 +37,24 @@ status: synced
 export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClose: () => void })
 ```
 
-- `Modal(size 'lg', title '클러스터 등록')` + `Stepper(STEPS = ['프로바이더','설정','사전 점검','발급'], current=step)`.
-- state: `step`(0~3), `provider`(초기 'existing-k8s', discovery 이후 기본 flow), `deployProvider`(초기 'manual-manifest', flow 변경/초기화 시 `preferredDeployProvider(flow)`), `kubeContext`, `selectedImportKey`, `candidateQuery`, `clusterId`, `name`, `issued: {agent_token; install_manifest; install_command?} | null`, `closeGuard`. (연결 여부는 state 가 아니라 아래 폴링 쿼리에서 파생.)
+- `Modal(title '클러스터 등록')` + `StepRail(입력/검증/설치/연결)` 로 진행 상태를 표시한다.
+- state: `provider`(`eks|gke|aks|existing-k8s|local`), `localProvider`(`kind|minikube`), 공통/ provider별 `form`, `advancedOpen`, `issued: TargetInstallResponse | null`, `closeGuard`. 연결 여부는 `GET /clusters/:id/connection-status` 쿼리에서 파생한다.
+- 지원 provider와 필수 필드:
+  - EKS: `region`, `eks_cluster_name`, `context_alias`(기본 `cluster_id`)
+  - GKE: `project_id`, `location_type`, `location`, `gke_cluster_name`, `context_alias`
+  - AKS: `resource_group`, `aks_cluster_name`, `context_alias`
+  - Existing Kubernetes: `context_name`
+  - kind: `kind_cluster_name` → context `kind-<name>`
+  - minikube: `profile` → context `<profile>`
+- `cluster_id`는 `/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/` 로 클라이언트 선검증한다. provider 필드는 빈 값과 공백 문자를 거부한다. 필수값이 유효해야 `확인` 버튼이 활성화된다.
 - API 순서:
-  1. **프로바이더**: `useQuery(['providers','cluster-discovery'], GET /providers/cluster-discovery with {timeoutMs: 15_000}, enabled: open, retry:false)` — `flows[]` 를 카드 버튼으로 표시하고, flow `status === 'available'` 이면서 `deploy_providers` 중 `status === 'available'` 이 하나 이상 있을 때만 다음 가능. 선택 상태는 `aria-pressed`와 border 색으로 표시한다. 카드에는 실제 `cloud_provider`, 후보 수, 사용 가능한 설치 경로 수만 표시한다. flow 의 `import_candidates[]` 는 `SearchInput` + 카드 버튼으로 표시하며 `clusterImportCandidateMatches()`가 `cluster_id/name/source/cloud_provider/deploy_provider/kube_context/external_handle/console_url/labels`를 검색한다. 후보 선택 시 `clusterId`, `name`, `deployProvider`, `kubeContext` 를 채우고, "직접 입력"은 선택 후보와 kube context를 해제한다.
-  2. **설정**: `cluster_id` 입력 — slug 검증 `/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/`(실패 시 error `'소문자·숫자·하이픈만 가능합니다'`, 다음 disabled, `data-testid="cluster-id"`) + 표시 이름 + 설치 방식(`deployProvider`). 설치 방식은 select가 아니라 버튼 목록으로 표시하고 `aria-pressed`로 선택 상태를 나타내며, `status !== 'available'` 항목은 disabled 처리하고 `unavailable_reason` 을 경고문으로 보여준다. `deployProvider === 'kube-context'` 이면 kube context select 를 추가로 표시한다. `KeyValue`는 프로바이더, 설치 방식, 환경(`selectedCandidate.labels.environment/env` 또는 `서버 기본 정책`)을 표시하고, 선택 후보 labels 의 `observability_stack`/`observability`/`monitoring_stack`/`monitoring` 중 하나가 있을 때만 관측 값을 추가한다.
-     "사전 점검" → `useMutation(POST /targets/preflight with {timeoutMs: 15_000})` body `{cluster_id, cloud_provider, deploy_provider, apply, kube_context?}`. 성공 시 step 2로 이동.
-  3. **사전 점검**: `TargetPreflightResponse(valid, duplicate_cluster_id, provider_ready, agent_install_status, connection_status, errors, warnings, selected, ...)` 를 보여준다. `cluster_id`, 프로바이더, 에이전트, 중복, kube context 허용 여부는 `cluster-registration-check` 행으로 고정 폭 표시하고, 오류/경고는 응답 문자열 그대로 표시한다. "다시 점검"은 같은 preflight 를 재실행하고, `valid` 일 때만 "등록 실행" 버튼이 열린다.
-     "등록 실행" → `useMutation(POST /targets with {timeoutMs: 15_000})` body:
-     ```json
-     { "cluster_id", "name": name || clusterId, "environment": "<선택 후보 label 에 environment/env 가 있을 때만>",
-       "cloud_provider": provider, "deploy_provider": deployProvider, "kube_context": "<선택 시>" }
-     ```
-     관리 API 공개 URL은 프론트가 브라우저 origin 으로 합성하지 않는다. 백엔드가 `PUBLIC_MANAGEMENT_BASE_URL` → `PUBLIC_API_BASE_URL` → `PUBLIC_BASE_URL` 순서로 실제 agent 접속 URL을 정규화하고, 없으면 preflight/register 단계에서 실패시킨다.
-     성공 시 `issued` 저장 + `queryClient.invalidateQueries(['clusters'])`. 실패 시 에러 메시지를 danger 로 표시.
-  4. **발급**: `Badge ok '등록 완료'` + 경고 "agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다." + agent token readonly input(mono, `data-testid="agent-token"`, 복사 버튼).
-     - 응답에 `install_command`(원라인 인스톨러 — `curl -fsSL …/api/install/<token> | kubectl apply -f -`)가 있으면 "원라인 설치" readonly input(`data-testid="install-command"`, 복사 버튼)을 먼저 보여주고, install manifest `CodeBlock` 은 "수동 적용 대안" 라벨로 강등. 없으면 기존처럼 manifest 가 주 경로.
-     - **연결 상태 자동 폴링**: `useQuery(['cluster-conn', clusterId], GET /clusters/${clusterId}/connection-status with {timeoutMs: 15_000}, enabled: step===3 && !!issued, refetchInterval: connected 면 false, 아니면 5000, retry:false)`. `connected` 파생값이 true 면 `Badge ok 'connected — 에이전트 연결 완료'`, 아니면 `Badge warn '연결 대기 중… (<status>)'` + "지금 확인" 수동 refetch 버튼 + 안내문(kubectl apply 후 보통 30초~1분 내 connected, 5초 간격 자동 확인).
-     - 미연결 상태에서 처음 닫기를 시도하면 `closeGuard` 경고를 먼저 보여준다. 한 번 더 닫거나 "완료"를 누르면 reset.
-- `reset()`: 모든 state 초기화 후 `onClose()`. 내부 `Footer` 서브컴포넌트(`{onPrev?; onNext; nextLabel?='다음'; nextDisabled?; loading?}`, `data-testid="wizard-next"`).
+  1. `GET /providers/cluster-discovery` — 카드 상태/서버 지원 여부 표시. 실패 시 `Card` error + 재시도.
+  2. `POST /targets/preflight` — body `{cluster_id,name,environment,cloud_provider,deploy_provider:'manual-manifest',apply:false,provider_config,management_base_url?}`. `valid`일 때만 다음 mutation을 실행한다.
+  3. `POST /targets` — 같은 body. 성공 시 `issued` 저장, `['clusters']` invalidate, 설치 단계로 전환.
+  4. 설치 단계: 응답의 `bootstrap_steps`를 우선 `CodeBlock`으로 표시하고, 없으면 `bootstrap_command`, `install_command`, `install_manifest` 순서로 fallback한다. 명령에는 agent token이 포함되므로 자격증명 경고를 고정 표시한다.
+  5. 연결 단계: `GET /clusters/${cluster_id}/connection-status`를 5초 간격으로 폴링한다. `connected/online`은 성공, `install_expired/expired`는 만료, `error/failed/disconnected`는 오류로 표시한다.
+- expired/error 상태는 `재발급` 버튼을 제공한다. 현재 백엔드 등록 API는 동일 `cluster_id` 재등록 시 agent token 회전을 수행한다.
+- 미연결 상태에서 닫기를 시도하면 `ConfirmDialog`로 close guard를 표시한다. agent token은 현재 화면에서만 표시한다.
 
 ### `frontend/src/features/resources/ConnectRepoWizard.tsx :: ConnectRepoWizard`
 
@@ -82,7 +81,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 ## 불변식·오류 (Invariants & Errors)
 
 - 클러스터 등록 API 호출 순서는 provider cluster-discovery → target preflight → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일). connection-status 는 수동 버튼이 아니라 발급 단계 진입 시 5초 간격 자동 폴링(connected/online 되면 중단).
-- 클러스터 등록은 unavailable deploy provider 를 기본 선택하지 않는다. flow 의 기본 deploy provider 가 unavailable 이면 첫 available 항목으로 대체하고, available deploy provider 가 없으면 provider 단계에서 다음으로 진행하지 않는다.
+- 클러스터 등록은 수동 bootstrap 설치를 기본으로 하며 `deploy_provider`는 `manual-manifest`, `apply`는 `false`로 고정한다. provider별 접속 정보는 `provider_config`에만 담는다.
 - 레포 연결 API 호출 순서는 repository probe → branches → manifest candidates → manifest validate → applications/connect 로 고정한다.
 - manifest 후보 선택값은 `source_type:path` 조합이다. connect API 제출에는 `manifest_path` 와 선택 후보의 `source_type`, 선택된 클러스터, validation resource 에서 얻은 namespace(있을 때), 클러스터 environment(있을 때)를 함께 보내며, 서버는 이를 재검증한 뒤 application metadata, deployment binding deploy_policy, git watch target settings 에 보존한다.
 - provider cluster-discovery 와 target 등록/preflight 는 admin 세션 라우트다. 클러스터 등록 위저드 진입 CTA 는 admin 화면에서만 노출한다.
