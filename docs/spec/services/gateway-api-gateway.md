@@ -11,7 +11,7 @@ status: synced
 
 - 브라우저 SPA·cluster-agent 의 **유일한 HTTP 입구**. 모든 도메인 라우터를 하나의 FastAPI 앱에 조립한다.
 - 이메일+패스워드 회원가입/로그인/이메일 인증/승인 흐름과 Redis 세션(불투명 opaque 토큰) 관리. **JWT 는 사용하지 않는다** — 세션 토큰은 `secrets.token_urlsafe` 로 생성한 랜덤 문자열이고 상태는 전부 Redis 에 있다.
-- HTTP 요청을 내부 이벤트 봉투로 변환해 **outbox 에 스테이징**하고, 백그라운드 relay 태스크가 NATS 로 발행한다(직접 publish 최소화).
+- HTTP 요청을 내부 이벤트 봉투로 변환해 **outbox 에 스테이징**한다. NATS 발행은 별도 [outbox-relay](gateway-outbox-relay.md) 프로세스가 맡는다.
 - dead letter 조회/재발행(admin), Prometheus `/metrics` 노출.
 - **단일 origin 진입점**: 콘솔 정적 자산은 `CONSOLE_ORIGIN` 으로 프록시, `/api` prefix 는 미들웨어에서 제거 후 인프로세스 라우터로 전달, `/api/live/{path}` WebSocket 은 realtime-gateway 로 중계(`_bridge_websocket`). API 라우트 자체는 여전히 이 프로세스 안의 도메인 라우터가 직접 처리한다.
 - 하지 않는 것: 이벤트 소비(워커 아님), 비즈니스 로직(도메인 라우터/워커 소유).
@@ -36,12 +36,12 @@ status: synced
 | import | `packages.config` | [../../packages/config.md](../packages/config.md) | `Auth`/`Redis`/`CommandStatus` 상수, `env`, 로깅 |
 | import | `packages.contracts` | [../../packages/contracts.md](../packages/contracts.md) | gateway routes/requests/responses/fields, `ServiceRole`, `UserStatus`, `DEFAULT_WORKSPACE_ID`, `SessionStore`/`UserStore` 프로토콜 |
 | import | `packages.events` | [../../packages/events.md](../packages/events.md) | `NatsEventBus` |
-| import | `packages.runtime` | [../../packages/runtime.md](../packages/runtime.md) | `FastApiService`, `ApiEventGateway`, `OutboxRelay`, metrics 렌더러 |
+| import | `packages.runtime` | [../../packages/runtime.md](../packages/runtime.md) | `FastApiService`, `ApiEventGateway`, metrics 렌더러 |
 | import | `packages.storage` | [../../packages/storage.md](../packages/storage.md) | `Database`, `unit_of_work_or_null`, `RedisSessionStore`, `AuthSession`, `RateLimitExceeded` |
 | import | `packages.runtime.command_wakeup` | [../../packages/runtime.md](../packages/runtime.md) | `WAKEUP`(command 롱폴 LISTEN/NOTIFY 웨이크업) lifespan start/stop |
 | 외부 | PostgreSQL | — | 도메인 테이블·outbox·dead letter·처리대장 (+`COMMAND_NOTIFY_DATABASE_URL` 직결 LISTEN) |
 | 외부 | Redis | — | 세션·레이트리밋·이메일 인증 토큰 |
-| 외부 | NATS JetStream | — | outbox relay 발행 대상 |
+| 외부 | NATS JetStream | — | startup 연결 확인과 직접 publish 경로의 발행 대상. outbox 발행 루프는 [outbox-relay](gateway-outbox-relay.md)가 담당 |
 | 외부 | console (httpx) | — | 프론트 정적 자산 프록시(`CONSOLE_ORIGIN`) |
 | 외부 | realtime-gateway (websockets) | [realtime-realtime-gateway.md](realtime-realtime-gateway.md) | `/api/live/*` WebSocket 중계(`REALTIME_ORIGIN`) |
 
@@ -52,7 +52,7 @@ status: synced
 | 모듈 | 역할 |
 |---|---|
 | `src/services/gateway/api-gateway/app.py` | 진입점 — `FastApiService(Settings.SERVICE_NAME, create_app).run()` |
-| `src/services/gateway/api-gateway/gateway.py` | `ApiGateway` 조립(라우터 등록·lifespan·relay·metrics·오류 핸들러) |
+| `src/services/gateway/api-gateway/gateway.py` | `ApiGateway` 조립(라우터 등록·lifespan·metrics·오류 핸들러) |
 | `src/services/gateway/api-gateway/auth.py` | 세션/패스워드 인증 서비스 |
 | `src/services/gateway/api-gateway/passwords.py` | PBKDF2 해시·이메일 정규화 |
 | `src/services/gateway/api-gateway/rate_limits.py` | 인증 남용(escalating) 레이트리밋 정책 |
@@ -67,8 +67,7 @@ status: synced
 - `src/services/gateway/api-gateway/gateway.py :: ApiGateway` — 생성자에서 `Database()`, `NatsEventBus()`, `ApiEventGateway(bus, db, "api-gateway")`, `RedisSessionStore`, `SessionAuthService`, `PasswordAuthService`, `FastAPI(title, version, lifespan)` 를 만들고 CORS 설정 후 라우트 등록. 공유 객체는 `app.state.db / app.state.events / app.state.auth / app.state.password_auth` 에 DI.
   - `ApiGateway._configure_cors(app)` — `CORS_ALLOW_ORIGINS`(콤마 구분, 기본 로컬 dev origin 4종) 파싱 후 `CORSMiddleware(allow_credentials=True, allow_methods=["*"], allow_headers=["*"])` 추가. origin 목록이 비면 미들웨어 자체를 추가하지 않음.
   - `ApiGateway._session_store_config()` — `RedisSessionStoreConfig` 구성(아래 [설정](#설정-settings)의 세션 항목 참조).
-  - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()` → `_relay_outbox()` 태스크 시작. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → relay 취소 → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
-  - `ApiGateway._relay_outbox()` — `OutboxRelay(db, bus, "api-gateway")` 를 무한 루프로 실행. 배치가 가득 찼으면(`sent >= relay.batch`) 즉시 재실행, 아니면 `OUTBOX_RELAY_INTERVAL_SECONDS`(기본 1초) sleep. 예외는 `gateway_outbox_relay_error` 경고 로그 후 계속.
+  - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()`. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
   - `ApiGateway.configure_routes()` — 라우터 등록 순서: frontend proxy(미들웨어) → health → identity → alert channels → providers → catalog → ai → identity_admin → repository discovery → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → fleet → live proxy(WS) → dead-letter → metrics → 전역 오류 핸들러.
   - `ApiGateway._register_frontend_proxy(app)` — `@app.middleware("http")`: 경로가 `/api` 또는 `/api/*` 면 prefix 를 벗겨(`request.scope["path"]` 재작성) 인프로세스 라우터로 통과, `_is_frontend_request`(GET/HEAD 이면서 `/assets/*`·`/favicon.ico`·`/manifest.webmanifest` 또는 `Accept: text/html`)면 `_proxy_console` 로 콘솔 정적 자산을 프록시(httpx, hop-by-hop 헤더 제거, 실패 시 502 `"frontend unavailable"` + `frontend_proxy_error` 로그). 그 외는 그대로 통과.
   - `ApiGateway._register_live_proxy_routes(app)` — `@app.websocket("/api/live/{path:path}")`: `REALTIME_ORIGIN` 의 `/live/{path}` 로 접속(구독 query string 그대로 전달 — 유실 시 기본 workspace 로만 붙어 이벤트가 비어 보임), `cookie`/`authorization`/`x-session-token` 헤더 승계 후 `_bridge_websocket` 로 양방향 중계. 업스트림 실패는 `live_proxy_error` 로그 후 1011 종료.
@@ -210,6 +209,8 @@ status: synced
 | GET | `/clusters/{cluster_id}/usage` | 세션 | `require_cluster_access` |
 | POST | `/agent/evidence` | agent | evidence_key 를 토큰 cluster 로 스코핑 |
 | POST | `/webhooks/alertmanager` | Bearer `ALERTMANAGER_WEBHOOK_TOKEN` | `cluster_id` 등록 확인 후 evidence 입구 |
+| GET | `/evidence` | 세션 | 세션 workspace 범위 evidence query(`limit`/`offset`/`cursor`) |
+| GET | `/rca-reports` | 세션 | 세션 workspace 범위 RCA report query(`limit`/`offset`/`cursor`) |
 | POST | `/rca/recovery-plans/{plan_id}/actions/{action_id}/select` | 세션 | `require_cluster_access` |
 
 ### command / dashboard (`src/domains/command/router.py`, `router.include_router(agent_router)`)
@@ -245,7 +246,7 @@ status: synced
 
 ## 이벤트 (Events)
 
-발행만 하고 구독하지 않는다. 모든 발행은 `ApiEventGateway.accept/accept_body` 를 거쳐 **outbox 스테이징**(`unit_of_work` + `stage_events`) 후 `_relay_outbox` 가 NATS 로 발행한다.
+발행만 하고 구독하지 않는다. 모든 HTTP 발행은 `ApiEventGateway.accept/accept_body` 를 거쳐 **outbox 스테이징**(`unit_of_work` + `stage_events`) 후 [outbox-relay](gateway-outbox-relay.md)가 NATS 로 발행한다.
 
 | 이벤트 | subject | 발행 시점 |
 |---|---|---|
@@ -261,7 +262,7 @@ status: synced
 
 1. `main()` → `FastApiService("api-gateway", create_app)` → uvicorn(`0.0.0.0:$PORT`, 기본 8000).
 2. 미들웨어는 **frontend proxy**(`/api` prefix 제거 + 콘솔 자산 프록시)와 **CORSMiddleware**(조건부) 둘. 그 외 cross-cutting 은 ① FastAPI `Depends` 가드(라우트 단위 인증/인가), ② 전역 `@app.exception_handler(Exception)`(모든 미처리 예외 → 500 `{"error": "internal server error"}` + `gateway_unhandled_error` 로그)로 처리한다.
-3. lifespan: DB 대기 → Redis 연결 → NATS 연결 → outbox relay 태스크 → `COMMAND_NOTIFY_DATABASE_URL`이 설정된 경우 command wakeup listener.
+3. lifespan: DB 대기 → Redis 연결 → NATS 연결 → `COMMAND_NOTIFY_DATABASE_URL`이 설정된 경우 command wakeup listener. outbox relay 루프는 별도 `outbox-relay` 서비스가 실행한다.
 
 ### 인증 흐름 (상태 머신)
 
@@ -310,7 +311,6 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 | `SERVICE_NAME` (상수) | str | `api-gateway` | 서비스 이름·outbox source |
 | `APP_TITLE` / `APP_VERSION` (상수) | str | `API Gateway` / `0.1.0` | FastAPI 메타 |
 | `PORT` | int | `8000` | HTTP 포트 (`FastApiService`) |
-| `OUTBOX_RELAY_INTERVAL_SECONDS` | int | `1` | relay 유휴 간격 초 |
 | `CONSOLE_ORIGIN` | str | `http://console.management.svc.cluster.local:80` | 콘솔 정적 자산 프록시 upstream |
 | `REALTIME_ORIGIN` | str | `ws://realtime-gateway.management.svc.cluster.local:8000` | `/api/live/*` WS 중계 upstream |
 | `FRONTEND_PROXY_TIMEOUT_SECONDS` (상수) | float | `10.0` | 콘솔 프록시 httpx 타임아웃 |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select, text, update
@@ -141,3 +142,21 @@ class EventRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return {row["status"]: int(row["count"]) for row in rows}
+
+    def delete_events_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:
+        """이벤트 원장을 보존 기간 이후 배치 삭제한다."""
+        table = EventModel.__table__
+        expired = (
+            select(table.c.event_id)
+            .where(table.c.created_at < cutoff)
+            .order_by(table.c.created_at, table.c.event_id)
+            .limit(limit)
+            .cte("expired_events")
+        )
+        statement = (
+            table.delete()
+            .where(table.c.event_id.in_(select(expired.c.event_id)))
+            .returning(table.c.event_id)
+        )
+        with self.connection() as conn:
+            return len(conn.execute(statement).all())

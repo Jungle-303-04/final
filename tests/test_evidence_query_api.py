@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import json
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
+from domains.rca.query_router import next_page_cursor
 from domains.rca.query_router import router as query_router
 
 WORKSPACE_ID = "workspace-1"
@@ -251,7 +255,7 @@ def test_evidence_scoped_to_session_workspace_with_filters() -> None:
     assert kubernetes["agent_id"] == "agent-1"
     assert item["sources"][1]["summary"] == "results=1"
     assert item["sources"][2]["summary"] == "entries=1, queries=app"
-    assert body == {**body, "limit": 10, "offset": 0, "has_more": False}
+    assert body == {**body, "limit": 10, "offset": 0, "has_more": False, "next_cursor": None}
     name, kwargs = db.calls[0]
     assert name == "evidence"
     # 워크스페이스는 쿼리 파라미터가 아니라 세션에서만 온다.
@@ -275,10 +279,51 @@ def test_evidence_pagination_reports_has_more_and_trims_items() -> None:
     body = response.json()
     assert [item["id"] for item in body["items"]] == [1, 2]
     assert body["has_more"] is True
+    assert body["next_cursor"] is not None
     assert body["limit"] == 2
     assert body["offset"] == 4
     assert db.calls[0][1]["limit"] == 3
     assert db.calls[0][1]["offset"] == 4
+    assert db.calls[0][1]["cursor"] is None
+
+
+def test_evidence_keyset_cursor_is_accepted_with_offset_compatibility() -> None:
+    rows = [evidence_row(row_id) for row_id in range(1, 4)]
+    cursor = next_page_cursor(rows[:2], has_more=True)
+    assert cursor is not None
+    db = QueryApiDb(evidence_rows=rows[2:])
+    client = make_client(db, session=_session())
+
+    response = client.get("/evidence", params={"limit": 2, "offset": 999, "cursor": cursor})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == [3]
+    assert body["has_more"] is False
+    assert body["next_cursor"] is None
+    _, kwargs = db.calls[0]
+    assert kwargs["offset"] == 999  # 기존 파라미터는 계속 허용한다.
+    assert kwargs["cursor"] == (datetime.fromisoformat("2026-07-07T10:00:00+00:00"), 2)
+
+
+def test_evidence_keyset_cursor_validation() -> None:
+    client = make_client(QueryApiDb(), session=_session())
+
+    response = client.get("/evidence", params={"cursor": "not-a-valid-cursor"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "cursor is invalid"
+
+
+def test_evidence_keyset_cursor_validation_rejects_bad_timestamp() -> None:
+    client = make_client(QueryApiDb(), session=_session())
+    payload = {"v": 1, "created_at": "not-a-time", "id": 1}
+    cursor = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+
+    response = client.get("/evidence", params={"cursor": cursor.rstrip("=")})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "cursor is invalid"
 
 
 def test_evidence_query_validation() -> None:
@@ -294,7 +339,7 @@ def test_evidence_empty_result() -> None:
 
     body = client.get("/evidence").json()
 
-    assert body == {"items": [], "limit": 50, "offset": 0, "has_more": False}
+    assert body == {"items": [], "limit": 50, "offset": 0, "has_more": False, "next_cursor": None}
 
 
 def test_rca_reports_return_summary_without_raw_payload() -> None:
@@ -351,6 +396,7 @@ def test_rca_reports_pagination_and_empty() -> None:
     body = client.get("/rca-reports", params={"limit": 2}).json()
     assert len(body["items"]) == 2
     assert body["has_more"] is True
+    assert body["next_cursor"] is not None
 
     empty = make_client(QueryApiDb(), session=_session()).get("/rca-reports").json()
-    assert empty == {"items": [], "limit": 50, "offset": 0, "has_more": False}
+    assert empty == {"items": [], "limit": 50, "offset": 0, "has_more": False, "next_cursor": None}

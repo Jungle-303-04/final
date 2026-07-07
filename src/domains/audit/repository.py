@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.audit.models import AuditLog
@@ -31,3 +34,17 @@ class AuditLogRepository(DatabaseConnection):
     def append_audit_log(self, evt: EventEnvelope) -> None:
         # 단건도 벌크 경로로 위임해 insert 매핑을 한 곳으로 유지함
         self.append_audit_logs([audit_log_row(evt)])
+
+    def delete_audit_logs_older_than(self, cutoff: datetime, *, limit: int = 1000) -> int:
+        """감사 로그를 보존 기간 이후 배치 삭제한다."""
+        table = AuditLog.__table__
+        expired = (
+            select(table.c.id)
+            .where(table.c.created_at < cutoff)
+            .order_by(table.c.id)
+            .limit(limit)
+            .cte("expired_audit_log")
+        )
+        statement = table.delete().where(table.c.id.in_(select(expired.c.id))).returning(table.c.id)
+        with self.connection() as conn:
+            return len(conn.execute(statement).all())

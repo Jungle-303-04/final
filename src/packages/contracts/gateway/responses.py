@@ -196,6 +196,7 @@ class EvidenceQueryResponse(StrictModel):
     limit: int
     offset: int
     has_more: bool
+    next_cursor: str | None = None
 
 
 class RcaCandidateScoreItem(StrictModel):
@@ -274,6 +275,7 @@ class RcaReportListResponse(StrictModel):
     limit: int
     offset: int
     has_more: bool
+    next_cursor: str | None = None
 
 
 class RecoveryActionCandidateItem(StrictModel):

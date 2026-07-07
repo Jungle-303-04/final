@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Integer, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Index, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.storage.base import (
@@ -18,6 +18,16 @@ from packages.storage.base import (
 
 class Evidence(Base):
     __tablename__ = "evidence"
+    __table_args__ = (
+        Index(
+            "ix_evidence_workspace_correlation_created",
+            "workspace_id",
+            "correlation_id",
+            "created_at",
+            "id",
+        ),
+        Index("ix_evidence_workspace_created_id", "workspace_id", "created_at", "id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = text_column()
@@ -29,6 +39,16 @@ class Evidence(Base):
 
 class RcaReport(Base):
     __tablename__ = "rca_reports"
+    __table_args__ = (
+        Index(
+            "ix_rca_reports_workspace_correlation_created",
+            "workspace_id",
+            "correlation_id",
+            "created_at",
+            "id",
+        ),
+        Index("ix_rca_reports_workspace_created_id", "workspace_id", "created_at", "id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = text_column()
