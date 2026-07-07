@@ -16,6 +16,26 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:54 KST 체크포인트
+
+- 레포/클러스터 위저드 선택 안정화.
+- 구현:
+  - 레포 연결 위저드 manifest 후보 선택값을 `source_type:path`로 변경했다. 같은 path가 raw/kustomize/helm 후보로 중복되어도 선택이 보존되고, validation에는 선택 후보의 `source_type`이 들어간다.
+  - 클러스터 등록 위저드는 default deploy provider가 unavailable이면 첫 available deploy provider를 고른다.
+  - available deploy provider가 없는 flow는 provider 단계에서 다음으로 넘어가지 못한다.
+  - 설치 방식 select에서 unavailable 옵션은 disabled 처리하고 `unavailable_reason`을 표시한다.
+  - resources/repo frontend spec 문서를 실제 동적 흐름에 맞춰 갱신했다.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 6 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 남은 다음 구현:
+  - Repo backend: `POST /applications`에서 discovery validation을 서버 측에서도 강제하거나 validation receipt/source_type 계약을 추가해 API 직접 호출 우회를 막는다.
+  - Cluster backend: import candidate의 non-secret metadata(`source`, `external_handle`, `console_url`, `labels`)를 target preflight/register/settings에 보존한다.
+  - 위 두 개는 backend contract/test를 포함해 별도 의미 단위로 커밋한다.
+
 ### 2026-07-07 18:45 KST 체크포인트
 
 - AI 채팅 prefill/갱신/UX polish.
