@@ -206,23 +206,27 @@ def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
 
 
 class _RecordingConnection:
-    def __init__(self) -> None:
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
         self.statements: list[Any] = []
+        self.rows = rows or []
 
-    def execute(self, statement: Any) -> _EmptyResult:
+    def execute(self, statement: Any) -> _RowsResult:
         self.statements.append(statement)
-        return _EmptyResult()
+        return _RowsResult(self.rows)
 
 
-class _EmptyResult:
-    def mappings(self) -> _EmptyResult:
+class _RowsResult:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def mappings(self) -> _RowsResult:
         return self
 
     def all(self) -> list[dict[str, Any]]:
-        return []
+        return self.rows
 
-    def first(self) -> None:
-        return None
+    def first(self) -> dict[str, Any] | None:
+        return self.rows[0] if self.rows else None
 
 
 def _repository_with_recording_connection(connection: _RecordingConnection) -> DashboardRepository:
@@ -271,3 +275,21 @@ def test_open_incident_query_excludes_non_incident_detection_rows() -> None:
     assert "incident.detected" in sql
     assert "detected" in sql
     assert "IS true" in sql
+    assert "GROUP BY" in sql
+    assert "count(distinct" in sql.lower()
+
+
+def test_open_incident_query_returns_sql_aggregate_rows() -> None:
+    connection = _RecordingConnection(
+        [
+            {"cluster_id": "cluster-1", "open_incidents": 2},
+            {"cluster_id": "cluster-2", "open_incidents": 0},
+        ]
+    )
+
+    result = _repository_with_recording_connection(connection).count_open_rca_incidents(
+        "workspace-1",
+        {"cluster-1", "cluster-2"},
+    )
+
+    assert result == {"cluster-1": 2, "cluster-2": 0}
