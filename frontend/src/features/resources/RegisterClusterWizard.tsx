@@ -113,7 +113,6 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
       kube_context: directApply && kubeContext ? kubeContext : undefined,
       cloud_provider: activeProvider,
       deploy_provider: deployProvider,
-      management_base_url: `${location.origin}/api`,
     }),
     onSuccess: d => {
       setIssued(d);

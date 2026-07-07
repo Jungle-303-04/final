@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from domains.identity.dependencies import ClusterAgentIdentity, hash_agent_token
 from domains.target.router import (
     KUBE_CONTEXT_NOT_ALLOWED,
+    MANAGEMENT_BASE_URL_NOT_CONFIGURED,
     apply_manifest_with_kubectl,
     cluster_connection_status,
     get_cluster_connection_status,
@@ -494,6 +495,7 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
 
 def test_target_registration_preflight_reports_duplicate_and_agent_status(monkeypatch) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
 
     async def run():
         return await target_registration_preflight(
@@ -518,6 +520,7 @@ def test_target_registration_preflight_reports_duplicate_and_agent_status(monkey
 
 def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
 
     async def run():
         return await target_registration_preflight(
@@ -539,8 +542,32 @@ def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -
     assert response.errors == []
 
 
+def test_target_registration_preflight_requires_management_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="new-cluster",
+                cloud_provider="existing-k8s",
+                deploy_provider="manual-manifest",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert MANAGEMENT_BASE_URL_NOT_CONFIGURED in response.errors
+
+
 def test_target_registration_preflight_checks_direct_apply_connectivity(monkeypatch) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
     monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "cluster-1")
     monkeypatch.setattr("domains.target.router.shutil.which", lambda _name: "/usr/bin/kubectl")
     calls: list[list[str]] = []
@@ -578,6 +605,7 @@ def test_target_registration_preflight_rejects_unreachable_direct_apply_context(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
     monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "cluster-1")
     monkeypatch.setattr("domains.target.router.shutil.which", lambda _name: "/usr/bin/kubectl")
 
@@ -792,6 +820,51 @@ def test_target_registration_returns_one_line_install_command() -> None:
     )
     assert response.install_command.endswith("| kubectl apply -f -")
     assert response.agent_token in response.install_command
+
+
+def test_target_registration_uses_public_base_url_when_request_omits_management_url(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(update={"management_base_url": ""})
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.install_command.startswith("curl -fsSL https://k8s.woonyong.org/api/install/")
+    assert db.registered[0]["settings"]["management_base_url"] == "https://k8s.woonyong.org/api"
+
+
+def test_target_registration_rejects_missing_management_url(monkeypatch) -> None:
+    monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.delenv("PUBLIC_BASE_URL", raising=False)
+    db = FakeDb()
+    events = FakeEvents()
+    request = target_request().model_copy(update={"management_base_url": ""})
+
+    async def run():
+        return await register_target(
+            request,
+            current=SimpleNamespace(user_id="local-user", workspace_id="default"),
+            db=db,
+            events=events,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(run())
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == MANAGEMENT_BASE_URL_NOT_CONFIGURED
 
 
 def test_install_manifest_injects_control_namespaces_when_specified() -> None:

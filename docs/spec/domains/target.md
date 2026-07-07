@@ -128,7 +128,9 @@ docstring만 있는 패키지 마커("target cluster 등록 도메인"). public 
 | `src/domains/target/router.py :: AGENT_HEARTBEAT_CAPABILITIES` | `["evidence", "commands", "inventory"]` | `touch_agent_seen` heartbeat에 기록하는 capability 목록 |
 | `src/domains/target/router.py :: TARGET_AGENT_IMAGE_ENV` | `"TARGET_AGENT_IMAGE"` | agent 기본 이미지 env 키(placeholder 이미지 치환 1순위) |
 | `src/domains/target/router.py :: GITOPS_WEBHOOK_IMAGE_ENV` | `"GITOPS_WEBHOOK_IMAGE"` | agent 기본 이미지 env 키(2순위 폴백) |
-| `src/domains/target/router.py :: PUBLIC_MANAGEMENT_BASE_URL_ENV` | `"PUBLIC_MANAGEMENT_BASE_URL"` | `management_base_url` 미지정 시 사용하는 공개 게이트웨이 주소 env 키 |
+| `src/domains/target/router.py :: PUBLIC_MANAGEMENT_BASE_URL_ENV` | `"PUBLIC_MANAGEMENT_BASE_URL"` | `management_base_url` 미지정 시 우선 사용하는 공개 게이트웨이 주소 env 키 |
+| `src/domains/target/router.py :: PUBLIC_API_BASE_URL_ENV` | `"PUBLIC_API_BASE_URL"` | `PUBLIC_MANAGEMENT_BASE_URL` 미지정 시 fallback 공개 API 주소 env 키 |
+| `src/domains/target/router.py :: PUBLIC_BASE_URL_ENV` | `"PUBLIC_BASE_URL"` | 공개 API 주소 env 미지정 시 fallback 서비스 루트 env 키(`/api` 접미 정규화) |
 | `src/domains/target/router.py :: LOCAL_PLACEHOLDER_IMAGES` | `{"", "service:local", "kubeheal-service:latest"}` | 기본 이미지 치환 대상 placeholder 집합 |
 | `src/domains/target/router.py :: BLOCKED_TEST_CLUSTER_IDS` | `{"bruno-api-test"}` | 등록 거부·목록 제외되는 테스트 클러스터 id |
 | `src/domains/target/router.py :: BLOCKED_TEST_CLUSTER_NAME_PARTS` | `("bruno api test",)` | 이름 부분 일치로 차단하는 테스트 클러스터 마커 |
@@ -139,7 +141,8 @@ docstring만 있는 패키지 마커("target cluster 등록 도메인"). public 
 |---|---|---|
 | `src/domains/target/router.py :: target_desired_components` | `(payload: TargetRegisterRequest) -> list[TargetDesiredComponent]` | 등록 요청을 desired-state 컴포넌트 2개로 정규화: (1) `cluster-agent`(spec: `deployment`, `management_base_url`, `evidence_interval_seconds`, `prometheus_base_url`, `loki_base_url`, `tempo_base_url`, `otel_traces_endpoint`), (2) `node-collector`(spec: `enabled=payload.install_node_collector`, `daemonset="optional-node-collector"`, `managed_by="cluster-agent"`). 둘 다 `namespace=TARGET_NAMESPACE`, `version=payload.image`. **agent token 원문은 desired-state에 저장하지 않음** |
 | `src/domains/target/router.py :: allowed_kube_contexts` | `() -> set[str]` | `KUBE_CONTEXT_ALLOWLIST` env를 콤마 분리·trim한 set(빈 항목 제거) |
-| `src/domains/target/router.py :: normalize_target_provider_defaults` | `(payload: TargetRegisterRequest) -> TargetRegisterRequest` | 기본값 승격 3종을 모아 복사본 반환: ① `apply=true`이고 `deploy_provider` 미명시(`model_fields_set` 기준)면 `deploy_provider="kube-context"`; ② `image`가 `LOCAL_PLACEHOLDER_IMAGES`에 속하면 `TARGET_AGENT_IMAGE` → `GITOPS_WEBHOOK_IMAGE` env 순으로 기본 이미지 치환; ③ `management_base_url`은 trailing `/` 제거 후 `/api`로 끝나지 않으면 `/api` 접미 부여, 빈 값이면 `PUBLIC_MANAGEMENT_BASE_URL` env 기반으로 합성. 변경 없으면 원본 반환 |
+| `src/domains/target/router.py :: normalize_target_provider_defaults` | `(payload: TargetRegisterRequest) -> TargetRegisterRequest` | 기본값 승격 3종을 모아 복사본 반환: ① `apply=true`이고 `deploy_provider` 미명시(`model_fields_set` 기준)면 `deploy_provider="kube-context"`; ② `image`가 `LOCAL_PLACEHOLDER_IMAGES`에 속하면 `TARGET_AGENT_IMAGE` → `GITOPS_WEBHOOK_IMAGE` env 순으로 기본 이미지 치환; ③ `management_base_url`은 trailing `/` 제거 후 `/api`로 끝나지 않으면 `/api` 접미 부여, 빈 값이면 `PUBLIC_MANAGEMENT_BASE_URL` → `PUBLIC_API_BASE_URL` → `PUBLIC_BASE_URL` 순서로 합성. 변경 없으면 원본 반환 |
+| `src/domains/target/router.py :: require_management_base_url` | `(payload: TargetRegisterRequest) -> None` | 정규화 후에도 `management_base_url` 이 비어 있으면 422 `"management base URL is not configured"` 로 차단 |
 | `src/domains/target/router.py :: reject_test_target` | `(payload: TargetRegisterRequest) -> None` | `cluster_id ∈ BLOCKED_TEST_CLUSTER_IDS` 또는 이름에 `BLOCKED_TEST_CLUSTER_NAME_PARTS` 마커 포함 → 422 `"test target registrations are not allowed"`; 이미지가 여전히 placeholder(`LOCAL_PLACEHOLDER_IMAGES`)면 → 422 `"target agent image is not configured"` |
 | `src/domains/target/router.py :: install_command_for` | `(payload: TargetRegisterRequest, agent_token: str) -> str` | 원라인 설치 명령 합성 — `f"curl -fsSL {base}{INSTALL_MANIFEST_PATH.format(agent_token=...)} \| kubectl apply -f -"`. base는 payload의 `management_base_url`(trailing `/` 제거) 그대로 — 서버가 임의 호스트를 합성하지 않음. base 없으면 `""` |
 | `src/domains/target/router.py :: touch_agent_seen` | `(db, identity: ClusterAgentIdentity, agent_id: str \| None, *, status: str = "connected") -> None` | best-effort heartbeat — `agent_id` 없거나 db에 `save_cluster_agent_status` 없으면 no-op. capabilities는 `AGENT_HEARTBEAT_CAPABILITIES`, details `{"heartbeat_source": "agent_api"}` |
@@ -178,8 +181,8 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 경로 상수는 `src/packages/contracts/gateway/routes.py`(`TARGETS_PATH`, `TARGETS_PREFLIGHT_PATH`, `CLUSTERS_PATH`, `CLUSTER_PATH`, `CLUSTER_CONNECTION_STATUS_PATH`, `CLUSTER_POLICY_PATH`, `AGENT_POLICY_PATH`, `AGENT_POLICY_STATUS_PATH`, `AGENT_RECONCILE_STATUS_PATH`, `AGENT_EVIDENCE_JOB_SCHEDULE_PATH`, `AGENT_EVIDENCE_JOB_POLL_PATH`, `AGENT_EVIDENCE_JOB_RESULT_PATH`)에서 가져온다 — [contracts](../packages/contracts.md).
 
 요청/응답 모델 요약(정의는 `src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`):
-- `TargetRegisterRequest`: `cluster_id`, `name`, `environment`, `workspace_id`, `management_base_url`(필수, min_length=1), `image: str = ""`(placeholder면 env 기본 이미지로 치환, 최종 미해결 시 등록 422), `prometheus_base_url`, `loki_base_url`, `tempo_base_url`, `otel_traces_endpoint`, `evidence_interval_seconds`(범위 제한), `control_namespaces: str = ""`(제어 쓰기 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만. 설치 manifest ConfigMap의 `CONTROL_ALLOWED_NAMESPACES`로 주입), `install_node_collector: bool = True`, `install_sample_workload: bool = False`, `sample_workload_name`(k8s name 패턴), `sample_workload_image`, `apply: bool = False`, `kube_context: str | None = None`, `cloud_provider: str = "existing-k8s"`, `deploy_provider: str = "manual-manifest"`.
-- `TargetPreflightRequest`: `cluster_id`, `cloud_provider`, `deploy_provider`, `apply`, `kube_context`, `image`.
+- `TargetRegisterRequest`: `cluster_id`, `name`, `environment`, `workspace_id`, `management_base_url: str = ""`(클라이언트 생략 가능. 서버가 공개 URL env 로 정규화하며 최종 미해결 시 등록 422), `image: str = ""`(placeholder면 env 기본 이미지로 치환, 최종 미해결 시 등록 422), `prometheus_base_url`, `loki_base_url`, `tempo_base_url`, `otel_traces_endpoint`, `evidence_interval_seconds`(범위 제한), `control_namespaces: str = ""`(제어 쓰기 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만. 설치 manifest ConfigMap의 `CONTROL_ALLOWED_NAMESPACES`로 주입), `install_node_collector: bool = True`, `install_sample_workload: bool = False`, `sample_workload_name`(k8s name 패턴), `sample_workload_image`, `apply: bool = False`, `kube_context: str | None = None`, `cloud_provider: str = "existing-k8s"`, `deploy_provider: str = "manual-manifest"`.
+- `TargetPreflightRequest`: `cluster_id`, `cloud_provider`, `deploy_provider`, `apply`, `kube_context`, `image`, `management_base_url: str = ""`.
 - `TargetPreflightResponse`: `valid`, `duplicate_cluster_id`, `provider_ready`, `agent_install_status`, `connection_status`, `kube_context_allowed`, `errors`, `warnings`, `selected`, `last_agent_id`, `last_seen_at`.
 - `AgentPolicy`: `cluster_id`, `generation`(≥1), `cluster_role`(`"management"|"target"`), `evidence: EvidenceRuntimePolicy`(`failure_policy: "allow_partial"|"strict"`, `max_attempts`, `providers: dict[str, EvidenceProviderPolicy]`), `bootstrap: BootstrapPolicy`, `desired_state: DesiredStatePolicy`.
 - `EvidenceProviderPolicy`: `enabled: bool = True`, `interval_seconds`, `min_workers`, `max_workers`, `queue_age_target_seconds`, `queries: list[dict]`.
@@ -446,7 +449,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 
 ### 1. target 등록 — `POST /targets`
 1. `require_admin_session`으로 admin 세션 검증(라우터 단위 `require_session` 중복 없음 — 이중 검증/레이트리밋 2배 회피).
-2. `normalize_target_provider_defaults`: `apply=true`이고 `deploy_provider` 미명시면 `kube-context`로 기본값 승격 + placeholder 이미지를 `TARGET_AGENT_IMAGE`/`GITOPS_WEBHOOK_IMAGE` env로 치환 + `management_base_url`을 `/api` 접미로 정규화(빈 값이면 `PUBLIC_MANAGEMENT_BASE_URL` 기반). 그 후 payload를 세션의 `workspace_id`로 스코프.
+2. `normalize_target_provider_defaults`: `apply=true`이고 `deploy_provider` 미명시면 `kube-context`로 기본값 승격 + placeholder 이미지를 `TARGET_AGENT_IMAGE`/`GITOPS_WEBHOOK_IMAGE` env로 치환 + `management_base_url`을 `/api` 접미로 정규화(빈 값이면 `PUBLIC_MANAGEMENT_BASE_URL` → `PUBLIC_API_BASE_URL` → `PUBLIC_BASE_URL` 기반). 그 후 payload를 세션의 `workspace_id`로 스코프하고, 정규화 후에도 공개 URL이 없으면 등록을 거부한다.
 3. `reject_test_target`: 테스트 클러스터 마커(id/이름) 또는 미해결 placeholder 이미지면 422. `validate_target_install_providers`: cloud/deploy provider 존재 검증, `apply`·`kube_context`와 `deploy_provider=kube-context` 조합 규칙 검증(위반 시 422).
 4. `target_desired_components(payload)` → `desired_state_version(components)`(sha256 16자).
 5. `secrets.token_urlsafe(32)`로 per-cluster agent 토큰 생성 — 원문은 manifest Secret과 응답에만 존재, 레지스트리에는 `hash_agent_token(token)` 해시만 저장. **재등록 시 토큰 회전.** (전역 AGENT_TOKEN 신뢰 제거)
@@ -574,7 +577,9 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 | `AGENT_ONLINE_WINDOW_SECONDS` | int | `120` | agent online 판정 윈도우(최소 1로 클램프) | `agent_online_window_seconds` (호출 시) |
 | `TARGET_AGENT_IMAGE` | str | `""` | placeholder 이미지 등록 시 치환할 agent 기본 이미지(1순위) | `normalize_target_provider_defaults` (호출 시) |
 | `GITOPS_WEBHOOK_IMAGE` | str | `""` | agent 기본 이미지 폴백(2순위) | `normalize_target_provider_defaults` (호출 시) |
-| `PUBLIC_MANAGEMENT_BASE_URL` | str | `""` | `management_base_url` 빈 값일 때 사용할 공개 게이트웨이 주소(`/api` 접미 정규화) | `normalize_target_provider_defaults` (호출 시) |
+| `PUBLIC_MANAGEMENT_BASE_URL` | str | `""` | `management_base_url` 빈 값일 때 우선 사용할 공개 게이트웨이 주소(`/api` 접미 정규화) | `normalize_target_provider_defaults` (호출 시) |
+| `PUBLIC_API_BASE_URL` | str | `""` | `PUBLIC_MANAGEMENT_BASE_URL` 미지정 시 fallback 공개 API 주소 | `normalize_target_provider_defaults` (호출 시) |
+| `PUBLIC_BASE_URL` | str | `""` | 공개 API 주소 미지정 시 fallback 서비스 루트(`/api` 접미 정규화) | `normalize_target_provider_defaults` (호출 시) |
 | `EVIDENCE_JOB_LEASE_SECONDS` | int | `60` | evidence job 리스 유지 초 ※ | `evidence_jobs.py` |
 | `PENDING_EVIDENCE_EVENT_TTL_SECONDS` | int | `120` | pending evidence 윈도우 회수 TTL 초 ※ | `evidence_jobs.py` |
 | `TARGET_INSTALL_RENDERER` | str | `"native"` | 설치 manifest renderer(`native`/`kustomize`) | `target_install_renderer` (호출 시) |

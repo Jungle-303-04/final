@@ -47,9 +47,9 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
      "등록 실행" → `useMutation(POST /targets)` body:
      ```json
      { "cluster_id", "name": name || clusterId, "environment": "sandbox", "apply": "<deployProvider === 'kube-context'>",
-       "cloud_provider": provider, "deploy_provider": deployProvider, "kube_context": "<선택 시>",
-       "management_base_url": "<location.origin>/api" }
+       "cloud_provider": provider, "deploy_provider": deployProvider, "kube_context": "<선택 시>" }
      ```
+     관리 API 공개 URL은 프론트가 브라우저 origin 으로 합성하지 않는다. 백엔드가 `PUBLIC_MANAGEMENT_BASE_URL` → `PUBLIC_API_BASE_URL` → `PUBLIC_BASE_URL` 순서로 실제 agent 접속 URL을 정규화하고, 없으면 preflight/register 단계에서 실패시킨다.
      성공 시 `issued` 저장 + `queryClient.invalidateQueries(['clusters'])`. 실패 시 에러 메시지를 danger 로 표시.
   4. **발급**: `Badge ok '등록 완료'` + 경고 "agent token 은 지금 한 번만 표시됩니다. 저장소·상태에 보관하지 않습니다." + agent token readonly input(mono, `data-testid="agent-token"`, 복사 버튼).
      - 응답에 `install_command`(원라인 인스톨러 — `curl -fsSL …/api/install/<token> | kubectl apply -f -`)가 있으면 "원라인 설치" readonly input(`data-testid="install-command"`, 복사 버튼)을 먼저 보여주고, install manifest `CodeBlock` 은 "수동 적용 대안" 라벨로 강등. 없으면 기존처럼 manifest 가 주 경로.

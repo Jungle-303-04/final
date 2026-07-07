@@ -173,7 +173,7 @@ class TargetRegisterRequest(StrictModel):
     name: str = DEFAULT_TARGET_NAME
     environment: str = DEFAULT_TARGET_ENVIRONMENT
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    management_base_url: str = Field(min_length=1)
+    management_base_url: str = ""
     image: str = ""
     prometheus_base_url: str = DEFAULT_PROMETHEUS_BASE_URL
     loki_base_url: str = DEFAULT_LOKI_BASE_URL
@@ -220,6 +220,7 @@ class TargetPreflightRequest(StrictModel):
     apply: bool = False
     kube_context: str | None = None
     image: str = ""
+    management_base_url: str = ""
 
 
 class CommandRequest(StrictModel):
