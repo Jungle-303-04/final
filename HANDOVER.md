@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:50 KST (Actions runner 장애 기록)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:55 KST (최신 HEAD 확인 방식)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -12,7 +12,9 @@
 
 ## 최신 업데이트 (16:50 KST) — dev 푸시 후 Actions runner 장애 확인
 
+- 정확한 최신 SHA는 항상 `git log --oneline --decorate -6`와 `git status --short --branch`로 먼저 확인한다. `ef65c770` 이후 커밋은 production code 변경이 아니라 시크릿 제외/인수인계/runner 상태 문서화 성격이다.
 - `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`은 origin/dev push 완료.
+- `24e47e53 docs: Actions runner 상태 / 인수인계 갱신`도 origin/dev push 완료. 이 푸시의 dev workflows 역시 4~5초 내 runner 배정 없이 실패했다.
 - 이 푸시로 뜬 dev workflows도 모두 4초 내 실패:
   - CI run `28850238246` → failure. `Python lint and tests`, `Kubernetes manifest checks`, `Frontend typecheck, lint, build` 모두 `runner_id=0`, steps 없음, log 없음.
   - AWS CD run `28850238259` → failure. `Test before deploy`가 `runner_id=0`, steps 없음, log 없음. deploy job은 skipped.
