@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from domains.rca.events import ClusterEvidenceReceivedBody, EvidenceBuiltBody
+from domains.rca.events import (
+    ClusterEvidenceReceivedBody,
+    compact_evidence_built_body,
+)
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import RcaStore
 from packages.runtime.app import App, EventContext
@@ -27,7 +30,7 @@ async def on_cluster_evidence(
         pipeline.kind,
         evidence.to_body(),
     )
-    yield EvidenceBuiltBody(evidence=evidence)
+    yield compact_evidence_built_body(evidence, ctx.correlation_id, pipeline.kind)
 
 
 async def hydrate_evidence(

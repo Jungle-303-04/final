@@ -169,6 +169,30 @@ class SpyDb:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self._returns = returns
         self._workflow_approvals: dict[tuple[str, str], dict[str, Any]] = {}
+        self._evidence_payloads: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    async def save_evidence(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        kind: str,
+        body: dict[str, Any],
+    ) -> Any:
+        self.calls.append(("save_evidence", (correlation_id, workspace_id, kind, body)))
+        self._evidence_payloads[(workspace_id, correlation_id, kind)] = dict(body)
+        return self._returns.get("save_evidence")
+
+    async def get_evidence_payload(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        kind: str,
+    ) -> dict[str, Any] | None:
+        self.calls.append(("get_evidence_payload", (workspace_id, correlation_id, kind)))
+        configured = self._returns.get("get_evidence_payload")
+        if configured is not None:
+            return configured
+        return self._evidence_payloads.get((workspace_id, correlation_id, kind))
 
     async def request_workflow_approval(self, payload: dict[str, Any]) -> Any:
         self.calls.append(("request_workflow_approval", (payload,)))

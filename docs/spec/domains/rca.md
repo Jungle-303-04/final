@@ -459,6 +459,12 @@ rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 | 필드 | 타입 |
 |---|---|
 | `evidence` | `Evidence` |
+| `correlation_id` | `str | None` |
+| `kind` | `str | None` |
+| `payload_size` | `int | None` |
+| `summary` | `JsonObject` |
+
+신규 발행 경로는 원문 `Evidence`를 이벤트에 중복 탑재하지 않는다. `evidence-worker`가 먼저 `evidence` 테이블에 full payload를 저장하고, 이벤트에는 `object_ref` 중심의 얇은 `Evidence`와 `correlation_id/kind/payload_size/summary`만 싣는다. `incident-worker`는 inline evidence가 비어 있으면 `get_evidence_payload(workspace_id, correlation_id, kind)`로 저장본을 hydrate 한다. 기존 full `evidence.built` 이벤트도 rolling 배포 호환을 위해 계속 처리한다.
 
 #### `evidence.bundle.built` — `src/domains/rca/events.py :: EvidenceBundleBuiltBody`
 

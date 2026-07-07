@@ -116,6 +116,55 @@ class Evidence(EventBody):
     workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
+def compact_evidence_built_body(
+    evidence: Evidence,
+    correlation_id: str,
+    kind: str,
+) -> EvidenceBuiltBody:
+    """evidence.built 도 원문 대신 저장된 Evidence 참조만 싣는다."""
+    payload = evidence.to_body()
+    return EvidenceBuiltBody(
+        evidence=Evidence(
+            cluster_id=evidence.cluster_id,
+            kubernetes={},
+            metrics={},
+            logs=[],
+            traces={},
+            object_ref=evidence.object_ref,
+            workspace_id=evidence.workspace_id,
+        ),
+        correlation_id=correlation_id,
+        kind=kind,
+        payload_size=evidence_payload_size(payload),
+        summary=evidence_built_summary(evidence),
+    )
+
+
+def evidence_built_summary(evidence: Evidence) -> JsonObject:
+    raw_summary: JsonObject = {
+        "resource": _kubernetes_resource(evidence.kubernetes),
+        "symptom": evidence.kubernetes.get("symptom"),
+        "severity": evidence.kubernetes.get("severity"),
+        "kubernetes_keys": sorted(str(key) for key in evidence.kubernetes.keys())[:20],
+        "metrics_keys": sorted(str(key) for key in evidence.metrics.keys())[:20],
+        "logs_count": len(evidence.logs),
+        "traces_keys": sorted(str(key) for key in evidence.traces.keys())[:20],
+        "object_ref": evidence.object_ref,
+    }
+    summary = {key: value for key, value in raw_summary.items() if value not in (None, {}, [])}
+    encoded = json.dumps(summary, ensure_ascii=False, separators=(",", ":")).encode()
+    if len(encoded) <= MAX_EVIDENCE_EVENT_SUMMARY_BYTES:
+        return summary
+    return {
+        "resource": summary.get("resource"),
+        "symptom": summary.get("symptom"),
+        "severity": summary.get("severity"),
+        "logs_count": summary.get("logs_count", 0),
+        "object_ref": summary.get("object_ref"),
+        "truncated": True,
+    }
+
+
 @dataclass(frozen=True)
 class IncidentRecord(EventBody):
     """RCA 분석 대상 장애 증상."""
@@ -155,6 +204,10 @@ class EvidenceBuiltBody(EventBody):
     """evidence.built — 원본 증거를 Evidence로 정규화."""
 
     evidence: Evidence
+    correlation_id: str | None = None
+    kind: str | None = None
+    payload_size: int | None = None
+    summary: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

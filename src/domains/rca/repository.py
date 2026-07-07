@@ -31,6 +31,27 @@ class RcaRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    def get_evidence_payload(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        kind: str,
+    ) -> JsonObject | None:
+        table = Evidence.__table__
+        statement = (
+            select(table.c.payload)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.correlation_id == correlation_id,
+                table.c.kind == kind,
+            )
+            .order_by(table.c.created_at.desc(), table.c.id.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            payload = conn.execute(statement).scalar_one_or_none()
+        return payload if isinstance(payload, dict) else None
+
     def upsert_rca_backlog_item(self, body: JsonObject) -> None:
         table = RcaBacklogItem.__table__
         insert_statement = pg_insert(table).values(

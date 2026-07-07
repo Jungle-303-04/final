@@ -140,9 +140,11 @@ def test_evidence_worker_hydrates_reference_event_from_window_payload() -> None:
 
     assert subjects_of(outs) == ["evidence.built"]
     evidence = outs[0].evidence
-    assert evidence.kubernetes["resource"]["name"] == "checkout-api"
-    assert evidence.metrics["memory"] == "near-limit"
-    assert evidence.logs[0]["line"] == "OOMKilled"
+    assert evidence.kubernetes == {}
+    assert evidence.metrics == {}
+    assert evidence.logs == []
+    assert outs[0].summary["resource"]["name"] == "checkout-api"
+    assert outs[0].payload_size > 0
     assert db.called("get_evidence_window_payload")
 
 
@@ -160,9 +162,38 @@ def test_evidence_worker_accepts_legacy_full_payload_event() -> None:
 
     assert subjects_of(outs) == ["evidence.built"]
     evidence = outs[0].evidence
-    assert evidence.kubernetes["resource"]["name"] == "checkout-api"
-    assert evidence.metrics["memory"] == "near-limit"
+    assert evidence.kubernetes == {}
+    assert evidence.metrics == {}
+    assert evidence.logs == []
+    assert outs[0].payload_size > 0
+    assert outs[0].summary["resource"]["name"] == "checkout-api"
+    assert db.called("save_evidence")
     assert not db.called("get_evidence_window_payload")
+
+
+def test_incident_worker_hydrates_reference_evidence_built_event() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    incident_worker = load_service("ai/incident-worker")
+    db = SpyDb()
+
+    evidence_outs = run_handler(
+        evidence_worker.on_cluster_evidence,
+        crashloop_payload(),
+        db=db,
+        correlation_id="corr-built-ref",
+    )
+    incident_outs = run_handler(
+        incident_worker.on_evidence_built,
+        evidence_outs[0],
+        db=db,
+        correlation_id="corr-built-ref",
+    )
+
+    assert subjects_of(incident_outs) == ["incident.detected", "evidence.bundle.built"]
+    detected = incident_outs[0]
+    assert detected.detected is True
+    assert detected.incident.symptom == "CrashLoopBackOff"
+    assert db.called("get_evidence_payload")
 
 
 def report_for(root_cause: str) -> RcaCompletedBody:
