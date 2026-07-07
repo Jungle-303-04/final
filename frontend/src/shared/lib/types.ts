@@ -98,5 +98,5 @@ export interface RecoveryPlanStatus {
   selection_required: boolean; selected_action_id: string | null; selected_by: string | null;
   selected_action: RecoveryActionCandidate | null; candidates: RecoveryActionCandidate[]
 }
-export interface LiveSnapshot { at: string; connected: boolean; namespaces: { namespace: string; pods: { name: string; phase: string; restarts: number; hot: boolean }[] }[]; rollout?: { name: string; progress: number } }
+export interface LiveSnapshot { at: string; connected: boolean; cluster_id?: string; namespaces: { namespace: string; pods: { name: string; phase: string; restarts: number; hot: boolean }[] }[]; rollout?: { name: string; progress: number } }
 export interface CatalogItem { item_id: string; name: string; description: string; category: string }

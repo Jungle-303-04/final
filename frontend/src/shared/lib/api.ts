@@ -36,7 +36,7 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
       body: body ? JSON.stringify(body) : undefined,
       signal: requestSignal.signal,
     });
-  } catch { throw new ApiError(0, '네트워크 오류'); }
+  } catch { throw new ApiError(0, requestSignal.timedOut() ? '요청 시간이 초과되었습니다' : '네트워크 오류'); }
   finally { requestSignal.cancel(); }
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
@@ -50,11 +50,15 @@ export const post = <T>(p: string, b?: unknown, options?: ApiOptions) => api<T>(
 export const put = <T>(p: string, b?: unknown, options?: ApiOptions) => api<T>('PUT', p, b, options);
 export const del = <T>(p: string, options?: ApiOptions) => api<T>('DELETE', p, undefined, options);
 
-function createRequestSignal(options: ApiOptions): { signal?: AbortSignal; cancel: () => void } {
-  if (!options.timeoutMs) return { signal: options.signal, cancel: () => undefined };
+function createRequestSignal(options: ApiOptions): { signal?: AbortSignal; cancel: () => void; timedOut: () => boolean } {
+  if (!options.timeoutMs) return { signal: options.signal, cancel: () => undefined, timedOut: () => false };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs);
+  let timeoutReached = false;
+  const timeoutId = setTimeout(() => {
+    timeoutReached = true;
+    controller.abort();
+  }, options.timeoutMs);
   const abortFromParent = () => controller.abort();
 
   if (options.signal?.aborted) {
@@ -69,5 +73,6 @@ function createRequestSignal(options: ApiOptions): { signal?: AbortSignal; cance
       clearTimeout(timeoutId);
       options.signal?.removeEventListener('abort', abortFromParent);
     },
+    timedOut: () => timeoutReached,
   };
 }

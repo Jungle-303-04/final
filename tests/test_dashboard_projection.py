@@ -8,7 +8,12 @@ from typing import Any
 from conftest import SpyDb, load_service, run_handler
 from sqlalchemy.dialects import postgresql
 
-from domains.dashboard.repository import DashboardRepository, timeline_update_from_event
+from domains.dashboard.repository import (
+    DashboardRepository,
+    incident_logical_key,
+    incident_logical_key_from_projection,
+    timeline_update_from_event,
+)
 from packages.contracts.event_bus.interfaces import EventEnvelope
 
 
@@ -126,6 +131,47 @@ def test_dashboard_worker_ignores_non_incident_detection() -> None:
     assert outs == []
     assert db.calls == []
     assert timeline_update_from_event(evt) is None
+
+
+def test_incident_projection_logical_key_matches_payload_key() -> None:
+    payload_row = {
+        "cluster_id": "cluster-1",
+        "incident_id": "incident-1",
+        "correlation_id": "corr-1",
+        "payload": {
+            "incident": {
+                "namespace": "default",
+                "resource_kind": "Deployment",
+                "resource_name": "api",
+                "symptom": "CrashLoopBackOff",
+            }
+        },
+    }
+    projected_row = {
+        "cluster_id": "cluster-1",
+        "incident_id": "incident-1",
+        "correlation_id": "corr-1",
+        "incident_namespace": "default",
+        "incident_resource_kind": "Deployment",
+        "incident_resource_name": "api",
+        "incident_symptom": "CrashLoopBackOff",
+    }
+
+    assert incident_logical_key_from_projection(projected_row) == incident_logical_key(payload_row)
+
+
+def test_incident_projection_logical_key_falls_back_to_incident_id() -> None:
+    assert (
+        incident_logical_key_from_projection(
+            {
+                "id": 1,
+                "incident_id": "incident-1",
+                "correlation_id": "corr-1",
+                "cluster_id": "cluster-1",
+            }
+        )
+        == "incident-1"
+    )
 
 
 def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:

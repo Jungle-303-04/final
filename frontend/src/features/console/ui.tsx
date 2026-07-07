@@ -97,10 +97,10 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
     <div className="pl-app co-app">
       <div className="co-body">
         <nav className={`co-sidebar${collapsed ? ' collapsed' : ''}`}>
-          <div className="co-logo" onClick={() => setCollapsed(!collapsed)} role="button" aria-label="사이드바 접기/펼치기">
+          <button type="button" className="co-logo" onClick={() => setCollapsed(!collapsed)} aria-label="사이드바 접기/펼치기">
             <PluralMarkIcon size={24} />
             {!collapsed && <span className="word">LOGO</span>}
-          </div>
+          </button>
           {MENU.map((m) => (
             <NavLink
               key={m.to}

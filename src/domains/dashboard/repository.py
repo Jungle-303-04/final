@@ -321,10 +321,14 @@ class DashboardRepository(DatabaseConnection):
             return {}
         table = RcaTimeline.__table__
         statement: Select[Any] = select(
+            table.c.id,
             table.c.cluster_id,
             table.c.incident_id,
             table.c.correlation_id,
-            table.c.payload,
+            table.c.payload["incident"]["namespace"].astext.label("incident_namespace"),
+            table.c.payload["incident"]["resource_kind"].astext.label("incident_resource_kind"),
+            table.c.payload["incident"]["resource_name"].astext.label("incident_resource_name"),
+            table.c.payload["incident"]["symptom"].astext.label("incident_symptom"),
         ).where(
             table.c.workspace_id == workspace_id,
             table.c.incident_id.is_not(None),
@@ -338,7 +342,9 @@ class DashboardRepository(DatabaseConnection):
         grouped: dict[str, set[str]] = {}
         for row in rows:
             cluster_id = str(row["cluster_id"])
-            grouped.setdefault(cluster_id, set()).add(incident_logical_key(dict(row)))
+            grouped.setdefault(cluster_id, set()).add(
+                incident_logical_key_from_projection(dict(row))
+            )
         return {cluster_id: len(keys) for cluster_id, keys in grouped.items()}
 
     def list_open_rca_incidents(
@@ -423,6 +429,20 @@ def incident_logical_key(row: JsonObject) -> str:
         )
         if any(part not in (None, "") for part in parts[1:]):
             return "|".join(str(part or "unknown") for part in parts)
+    return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
+
+
+def incident_logical_key_from_projection(row: JsonObject) -> str:
+    """count 쿼리용 logical key — payload 전체를 읽지 않고 같은 묶음 규칙을 적용."""
+    parts = (
+        row.get("cluster_id"),
+        row.get("incident_namespace"),
+        row.get("incident_resource_kind"),
+        row.get("incident_resource_name"),
+        row.get("incident_symptom"),
+    )
+    if any(part not in (None, "") for part in parts[1:]):
+        return "|".join(str(part or "unknown") for part in parts)
     return str(row.get("incident_id") or row.get("correlation_id") or row.get("id"))
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, Float, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Float, ForeignKey, Index, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -60,7 +60,13 @@ class MetricWidget(Base):
 
 class RcaTimeline(Base):
     __tablename__ = "rca_timeline"
-    __table_args__ = (UniqueConstraint("workspace_id", "correlation_id"),)
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "correlation_id"),
+        Index("ix_rca_timeline_scope_updated", "workspace_id", "updated_at"),
+        Index(
+            "ix_rca_timeline_open_cluster", "workspace_id", "cluster_id", "status", "incident_id"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = text_column()

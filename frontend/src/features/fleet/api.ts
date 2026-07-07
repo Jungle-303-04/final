@@ -5,6 +5,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { get } from '@/shared/lib/api';
 
+const FLEET_QUERY_TIMEOUT_MS = 8_000;
+
 export type FleetHealth = 'healthy' | 'warning' | 'critical' | 'stale' | 'unknown';
 
 export interface FleetClusterSummary {
@@ -45,7 +47,7 @@ export const fleetKeys = {
 export const useFleetSummary = () =>
   useQuery({
     queryKey: fleetKeys.summary(),
-    queryFn: () => get<FleetSummary>('/fleet/summary'),
+    queryFn: () => get<FleetSummary>('/fleet/summary', { timeoutMs: FLEET_QUERY_TIMEOUT_MS }),
     refetchInterval: 30_000,
   });
 
@@ -78,7 +80,7 @@ export interface ClusterAggSummary {
 export const useClusterAgg = (id: string | undefined) =>
   useQuery({
     queryKey: fleetKeys.clusterAgg(id ?? ''),
-    queryFn: () => get<ClusterAggSummary>(`/clusters/${id}/summary`),
+    queryFn: () => get<ClusterAggSummary>(`/clusters/${id}/summary`, { timeoutMs: FLEET_QUERY_TIMEOUT_MS }),
     enabled: !!id,
     refetchInterval: 30_000,
   });
