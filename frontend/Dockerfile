@@ -1,7 +1,5 @@
-# console 정적 서빙 + same-origin API 프록시.
-# dist/ 는 호스트에서 `VITE_API_MODE=real npm run build` 로 생성한다(멀티스테이지 불필요한 단순 경로).
-# console frontend image.
-# AWS CD builds this image directly from frontend/, so the Dockerfile owns the Vite build.
+# 콘솔 정적 서빙 + same-origin API 프록시.
+# AWS CD는 frontend/를 직접 이미지로 빌드하므로 Dockerfile이 Vite 빌드까지 책임진다.
 FROM node:22-alpine AS build
 WORKDIR /app
 
