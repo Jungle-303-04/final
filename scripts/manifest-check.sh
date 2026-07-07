@@ -13,6 +13,8 @@ TARGET_OBJECTS="${TMP_DIR}/target.objects"
 kubectl kustomize "${ROOT_DIR}/deploy/management" > "${MANAGEMENT_MANIFEST}"
 sed 's#__MANAGEMENT_BASE_URL__#http://api-gateway.management:8000#g' \
   "${ROOT_DIR}/deploy/target/target.yaml" > "${TARGET_MANIFEST}"
+printf '\n---\n' >> "${TARGET_MANIFEST}"
+cat "${ROOT_DIR}/deploy/target/minio.yaml" >> "${TARGET_MANIFEST}"
 
 python3 - "${MANAGEMENT_MANIFEST}" "${MANAGEMENT_OBJECTS}" <<'PY'
 from pathlib import Path

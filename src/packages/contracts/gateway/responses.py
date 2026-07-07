@@ -113,6 +113,51 @@ class RcaIncidentResponse(StrictModel):
     item: RcaTimelineItem
 
 
+class EvidenceRecordItem(StrictModel):
+    """저장된 evidence row 하나 — /evidence 범용 조회 응답 항목."""
+
+    id: int
+    workspace_id: str
+    correlation_id: str
+    kind: str
+    payload: JsonMap = Field(default_factory=dict)
+    created_at: str | None = None
+
+
+class EvidenceQueryResponse(StrictModel):
+    items: list[EvidenceRecordItem]
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class RcaReportSummaryItem(StrictModel):
+    """저장된 RCA report 요약 — payload 원문 대신 화이트리스트 필드만 노출(secret 유출 방지)."""
+
+    id: int
+    workspace_id: str
+    correlation_id: str
+    root_cause: str
+    action: str
+    incident_id: str | None = None
+    cluster_id: str | None = None
+    symptom: str | None = None
+    severity: str | None = None
+    confidence: float | None = None
+    reason: str | None = None
+    evidence_ref: str | None = None
+    supporting_evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+
+
+class RcaReportListResponse(StrictModel):
+    items: list[RcaReportSummaryItem]
+    limit: int
+    offset: int
+    has_more: bool
+
+
 class EvidenceJobScheduleResponse(StrictModel):
     accepted: bool
     evidence_key: str

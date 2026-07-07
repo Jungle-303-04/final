@@ -134,7 +134,7 @@ provider source, evidence bucket, query value object를 한 곳에서 연결한�
 
 `@command.k8s(...)`는 Kubernetes write command에서 action, resource, verb, payload model, policy 검증을 묶는다.
 
-`@rca.cause(...)`는 symptom, 필요한 evidence source, 원인 후보를 RCA catalog에 등록한다.
+RCA cause YAML catalog는 symptom, 필요한 evidence source, 원인 후보를 등록한다.
 
 `@rca.recovery(...)`는 root cause별 복구 후보와 route를 등록한다.
 

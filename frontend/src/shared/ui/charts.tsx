@@ -44,7 +44,21 @@ export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; he
         xScale={{ type: 'point' }} yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
         axisBottom={{ tickValues: 5 }} enablePoints={false} enableGridX={false}
         colors={['var(--info)', 'var(--ok)', 'var(--warn)']} lineWidth={2}
-        animate={false} isInteractive useMesh
+        // 시리즈 전환 부드럽게 + x 기준 crosshair/슬라이스 툴팁(전 시리즈 동시 표시)
+        animate motionConfig="gentle" isInteractive
+        enableSlices="x" crosshairType="x"
+        sliceTooltip={({ slice }) => (
+          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12, boxShadow: 'var(--shadow-2)' }}>
+            <div style={{ color: 'var(--text-3)', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>{String(slice.points[0]?.data.x ?? '')}</div>
+            {slice.points.map(p => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-1)' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: p.serieColor }} />
+                <span style={{ color: 'var(--text-2)' }}>{String(p.serieId)}</span>
+                <b style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{String(p.data.yFormatted)}</b>
+              </div>
+            ))}
+          </div>
+        )}
       />
     </div>
   );

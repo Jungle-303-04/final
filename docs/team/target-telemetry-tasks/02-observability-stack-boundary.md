@@ -7,6 +7,7 @@ Prometheus, Loki, OTel 설치 YAML을 사용자 workload GitOps diff 대상과 �
 ## 먼저 읽을 파일
 
 - `deploy/target/target.yaml`
+- `deploy/target/minio.yaml`
 - `deploy/target/prometheus.yaml`
 - `deploy/target/loki.yaml`
 - `deploy/target/opentelemetry.yaml`

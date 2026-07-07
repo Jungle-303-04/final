@@ -31,6 +31,7 @@ from domains.identity.dependencies import (
 from domains.identity.router import router as identity_router
 from domains.inventory.router import router as inventory_router
 from domains.providers.router import router as providers_router
+from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
@@ -188,6 +189,9 @@ class ApiGateway:
             inventory_router
         )  # agent inventory snapshot -> multi-cluster read model 투영
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
+        app.include_router(
+            rca_query_router
+        )  # evidence/RCA report 범용 조회(세션 워크스페이스 범위)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         self._register_live_proxy_routes(app)

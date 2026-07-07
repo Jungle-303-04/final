@@ -95,6 +95,12 @@ export function Modal({ open, title, onClose, children, size }: { open: boolean;
 }
 
 export function Drawer({ open, title, onClose, children }: { open: boolean; title: ReactNode; onClose: () => void; children: ReactNode }) {
+  // Modal 과 동일한 ESC 규약 — 열림 상태에서만 리스너 등록
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (open) window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [open, onClose]);
   if (!open) return null;
   return (
     <>
@@ -136,12 +142,29 @@ export function KeyValue({ pairs }: { pairs: [string, ReactNode][] }) {
   return <dl className="kv">{pairs.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>;
 }
 
+// 클립보드 복사 — 실패(비보안 컨텍스트 등)까지 정직하게 알린다
+export function copyToClipboard(text: string, label = '복사되었습니다') {
+  navigator.clipboard.writeText(text)
+    .then(() => uiStore.getState().toast('ok', label))
+    .catch(() => uiStore.getState().toast('danger', '복사 실패 — 브라우저 권한을 확인해주세요'));
+}
+
 export function CodeBlock({ code }: { code: string }) {
   return (
     <div className="code">
-      <Button size="sm" variant="ghost" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => navigator.clipboard.writeText(code)}>복사</Button>
+      <Button size="sm" variant="ghost" style={{ position: 'absolute', top: 6, right: 6 }} onClick={() => copyToClipboard(code)}>복사</Button>
       {code}
     </div>
+  );
+}
+
+/** 복사 가능한 식별자 칩 — correlation id 등 (클릭 시 클립보드 + 토스트) */
+export function CopyChip({ value, display }: { value: string; display?: string }) {
+  return (
+    <button type="button" className="copychip" title={`${value} — 클릭해서 복사`}
+      onClick={() => copyToClipboard(value)}>
+      <code>{display ?? value}</code><span aria-hidden>⧉</span>
+    </button>
   );
 }
 

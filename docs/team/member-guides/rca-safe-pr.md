@@ -228,7 +228,7 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 
 구현할 것:
 
-- `src/services/ai/agent/causes/*.py` rule.
+- `src/services/ai/agent/causes/catalog/*.yaml` rule.
 - `CauseCandidate`, `CauseEvaluation`, `RcaCompletedBody` DTO.
 - fields: root_cause, action, confidence, evidence_ref, supporting_evidence, missing_evidence.
 

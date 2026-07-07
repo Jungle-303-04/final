@@ -4,6 +4,13 @@
 
 .flow-node--pulse { animation: flow-pulse 1.4s var(--ease-in-out) infinite; }
 
+/* 레이아웃 재계산(단계 진행·접기/펼치기) 시 노드가 새 좌표로 부드럽게 이동 */
+.react-flow__node { transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1); }
+.react-flow__node.dragging { transition: none; }
+
+/* 활성 edge 를 따라 흐르는 패킷 — 은은한 발광 */
+.flow-packet { filter: drop-shadow(0 0 3px currentColor); pointer-events: none; }
+
 .flow-group { display:flex; align-items:center; gap:8px; padding:10px 14px; min-width:150px;
   background:var(--surface-2); border:1.5px solid var(--border); border-radius:var(--radius-md);
   color:var(--text-1); font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
@@ -16,4 +23,6 @@
 @media (prefers-reduced-motion: reduce) {
   .flow-node--pulse { animation: none; }
   .react-flow__edge-path { animation: none !important; }
+  .react-flow__node { transition: none; }
+  .flow-packet { display: none; }
 }
