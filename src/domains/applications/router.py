@@ -6,6 +6,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from domains.gitops.repository_discovery import (
+    RepositoryDiscoveryError,
+    RepositoryDiscoveryService,
+    normalize_source_type,
+    source_type_from_path,
+)
 from domains.identity.dependencies import (
     require_cluster_access,
     require_resource_access,
@@ -13,8 +19,10 @@ from domains.identity.dependencies import (
 )
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
+    ApplicationConnectRequest,
     ApplicationUpsertRequest,
     DeploymentBindingUpsertRequest,
+    RepositoryManifestValidationRequest,
 )
 from packages.contracts.gateway.responses import (
     ApplicationListResponse,
@@ -39,6 +47,11 @@ GLOBAL_BINDING_KEY = "global"
 NO_CLUSTERS_FOR_GLOBAL_BINDING = "no registered clusters to expand global binding"
 HTTP_NOT_FOUND = 404
 APPLICATION_NOT_FOUND = "application not found"
+MANIFEST_VALIDATION_FAILED = "manifest validation failed"
+
+
+def repository_discovery_service() -> RepositoryDiscoveryService:
+    return RepositoryDiscoveryService()
 
 
 def require_application_access(
@@ -99,6 +112,84 @@ async def upsert_application(
             db.register_repository(body)
         stored = db.upsert_application(body)
     application = db.get_application(workspace_id, stored["application_id"]) or stored
+    return ApplicationResponse(application=application)
+
+
+@router.post(gateway_routes.APPLICATION_CONNECT_PATH, response_model=ApplicationResponse)
+async def connect_application(
+    payload: ApplicationConnectRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    discovery: RepositoryDiscoveryService = Depends(repository_discovery_service),
+) -> ApplicationResponse:
+    """Repo scan 결과를 서버에서 재검증한 뒤 app + watch + binding 을 원자 등록."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        payload.cluster_id,
+        Permission.DEPLOY_RUN.value,
+    )
+    try:
+        validation = await discovery.validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref=payload.repo_ref,
+                branch=payload.branch,
+                manifest_path=payload.manifest_path,
+                source_type=payload.source_type,
+            )
+        )
+    except RepositoryDiscoveryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    if not validation.valid:
+        detail = validation.errors[0] if validation.errors else MANIFEST_VALIDATION_FAILED
+        raise HTTPException(status_code=422, detail=detail)
+
+    source_type = normalize_source_type(payload.source_type) or source_type_from_path(
+        validation.manifest_path
+    )
+    metadata = {
+        **payload.metadata,
+        "branch": validation.branch,
+        "source_type": source_type,
+        "validation_mode": validation.validation_mode,
+        "validated_resource_count": validation.resource_count,
+        "validation_warnings": validation.warnings,
+    }
+    deploy_policy = {
+        **payload.deploy_policy,
+        "manifest_source": source_type,
+        "validation_mode": validation.validation_mode,
+    }
+    body = {
+        "workspace_id": workspace_id,
+        "user_id": current.user_id,
+        "name": payload.name,
+        "repo_ref": validation.repo_ref,
+        "default_branch": validation.branch,
+        "branch": validation.branch,
+        "manifest_path": validation.manifest_path,
+        "metadata": metadata,
+        "cluster_id": payload.cluster_id,
+        "namespace": payload.namespace,
+        "environment": payload.environment,
+        "deploy_policy": deploy_policy,
+        "access_policy": payload.access_policy,
+    }
+    with unit_of_work_or_null(db):
+        db.register_repository(body)
+        stored = db.upsert_application(body)
+        application_id = str(stored["application_id"])
+        application = db.get_application(workspace_id, application_id) or stored
+        binding_body = {
+            **body,
+            "application_id": application_id,
+            "repository_id": application["repository_id"],
+            "app_name": application["name"],
+        }
+        db.register_watch_target(binding_body)
+        db.register_deployment_binding(binding_body)
     return ApplicationResponse(application=application)
 
 

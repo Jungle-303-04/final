@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:42 KST (inventory resource detail API)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:55 KST (repo atomic connect + live API OOM 분석)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,26 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (19:55 KST) — repo atomic connect + live API OOM 분석
+
+- 구현:
+  - `POST /applications/connect` 계약을 추가했다.
+  - 프론트 레포 연결 위저드는 이제 `POST /applications` + `POST /applications/{id}/deployments` 두 단계가 아니라 `POST /applications/connect` 한 번만 호출한다.
+  - 서버는 사용자가 선택한 `repo_ref`, `branch`, `manifest_path`, `source_type`을 다시 `RepositoryDiscoveryService.validate_manifest()`로 검증한 뒤에만 repository, application, watch target, deployment binding을 같은 unit-of-work 안에서 등록한다.
+  - 저장 metadata/deploy_policy에 실제 검증 결과(`source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`)를 남긴다. mock/fake/hardcoded production data 추가 없음.
+- 검증 진행 중:
+  - 새 테스트 `test_connect_application_validates_manifest_and_registers_repo_watch_binding_atomically` 추가.
+  - 아직 커밋 전이면 다음 순서로 실행: ruff format/check → `pytest tests/test_applications_router.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py` → frontend typecheck/lint/test/build → 커밋/푸시.
+- 라이브 분석:
+  - AWS/Kubernetes context `kubernetes-ops` 접근 가능.
+  - `https://k8s.woonyong.org/` 및 console LoadBalancer `/`는 200.
+  - console LoadBalancer `/api/healthz`는 502가 발생했다.
+  - api-gateway LoadBalancer `/healthz`, `/api/healthz`는 살아있는 순간 200을 반환한다.
+  - `api-gateway` Pod는 `CrashLoopBackOff`, Last State `OOMKilled`, exit code 137, restart count 37 확인. 현재 배포 리소스는 requests `64Mi`, limits `512Mi`.
+- 다음:
+  - `deploy/management/services.yaml`의 api-gateway memory request/limit을 운영 부하 기준으로 상향하고, 동시에 evidence/result 폭증으로 API 메모리가 뛰는지 별도 계측한다.
+  - 메모리 상향은 안정화용이고, 인시던트/DLQ 폭증 RCA는 별도 커밋으로 이어간다.
 
 ## 체크포인트 (19:42 KST) — inventory resource detail API
 
@@ -24,7 +44,7 @@
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_inventory_domain.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py` → 21 passed.
 - 다음:
   - 프론트 `useResourceDetail`과 공통 Drawer/DrilldownPanel을 붙인다.
-  - 레포/클러스터 연결은 아직 완료 아님: repo는 `source_type` 영속화/atomic app+binding/서버 재검증, cluster는 discovery/preflight와 registration write boundary 정합화가 필요하다.
+  - 클러스터 연결은 아직 완료 아님: discovery/preflight와 registration write boundary 정합화가 필요하다.
 
 ## 체크포인트 (19:24 KST) — console origin /api smoke 정규화
 

@@ -201,7 +201,14 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
             <Button onClick={() => setStep(1)}>이전</Button>
             <Button variant="primary" loading={create.isPending}
-              onClick={() => create.mutate({ name, repo_ref: normalizedRepoRef, branch: selectedBranch, manifest_path: manifestPath, cluster_id: clusterId },
+              onClick={() => create.mutate({
+                name,
+                repo_ref: normalizedRepoRef,
+                branch: selectedBranch,
+                manifest_path: manifestPath,
+                source_type: selectedCandidate?.source_type ?? '',
+                cluster_id: clusterId,
+              },
                 {
                   onSuccess: d => {
                     uiStore.getState().toast('ok', `${name} 연결 완료 — 첫 커밋이 감지되면 run 이 생성됩니다`);

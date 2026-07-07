@@ -69,6 +69,19 @@ status: synced
 요청/응답 모델 정의는 [contracts](../packages/contracts.md)의 `packages/contracts/gateway/requests.py :: GitHubWebhookRequest`, `packages/contracts/gateway/requests.py :: ApprovalDecisionRequest`, `packages/contracts/gateway/responses.py :: AcceptedResponse`, `packages/contracts/gateway/responses.py :: AcceptedEventResponse` 참조.
 `AcceptedResponse = {accepted: bool, event_id: str, correlation_id: str}`, `AcceptedEventResponse = AcceptedResponse + {event: JsonMap}`.
 
+### Repository discovery 라우터 — `src/domains/gitops/repository_discovery_router.py`
+
+세션 보호된 repository 연결 전 탐색 API다. 프론트는 repository를 application으로 확정하기 전에 이 API로 repo 접근성, branch, manifest 후보, manifest 유효성을 확인한다. `/applications/connect`도 같은 `RepositoryDiscoveryService.validate_manifest`를 서버에서 다시 호출한다.
+
+| 메서드+경로 | 핸들러 | 요청 모델 | 응답 모델 | 권한/의존성 |
+|---|---|---|---|---|
+| `POST /repositories/discovery/probe` (`REPOSITORY_DISCOVERY_PROBE_PATH`) | `probe_repository` | `RepositoryProbeRequest` | `RepositoryProbeResponse` | `require_session` |
+| `GET /repositories/discovery/branches` (`REPOSITORY_DISCOVERY_BRANCHES_PATH`) | `list_repository_branches` | query `repo_ref` | `RepositoryBranchListResponse` | `require_session` |
+| `GET /repositories/discovery/manifests` (`REPOSITORY_DISCOVERY_MANIFESTS_PATH`) | `list_repository_manifest_candidates` | query `repo_ref`, `branch` | `RepositoryManifestCandidateListResponse` | `require_session` |
+| `POST /repositories/discovery/validate` (`REPOSITORY_DISCOVERY_VALIDATE_PATH`) | `validate_repository_manifest` | `RepositoryManifestValidationRequest` | `RepositoryManifestValidationResponse` | `require_session` |
+
+`discovery_http_error`는 `RepositoryDiscoveryError`를 원래 status/detail로, `ValueError`를 422로, 그 외 예외를 502 `"repository discovery failed"`로 변환한다.
+
 ### 인가 가드 — `src/domains/gitops/dependencies.py`
 
 | 심볼 | 시그니처 | 앵커 |

@@ -9,6 +9,7 @@ export interface CreateApplicationInput {
   repo_ref: string;
   branch: string;
   manifest_path: string;
+  source_type: string;
   cluster_id: string;
 }
 
@@ -178,19 +179,17 @@ export const useCreateApplication = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateApplicationInput) => {
-      const created = await post<{ application: Record<string, unknown> }>('/applications', {
+      const created = await post<{ application: Record<string, unknown> }>('/applications/connect', {
         name: input.name,
         repo_ref: input.repo_ref,
-        default_branch: input.branch,
+        branch: input.branch,
         manifest_path: input.manifest_path,
-      });
-      const app = adaptApplication(created.application);
-      await post(`/applications/${app.application_id}/deployments`, {
+        source_type: input.source_type,
         cluster_id: input.cluster_id,
         namespace: 'sandbox',
         environment: 'sandbox',
-        manifest_path: input.manifest_path,
       });
+      const app = adaptApplication(created.application);
       return { ...app, branch: input.branch, cluster_id: input.cluster_id };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: repoKeys.apps() }),
