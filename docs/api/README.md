@@ -265,6 +265,14 @@ timeline에서 받은 `incident_id`로 이어서 호출한다.
 토큰이 맞고 cluster가 등록되어 있으면 `ClusterEvidenceReceived` 흐름으로 들어간다.
 resolved 알림만 들어오면 이벤트를 새로 만들지 않고 `accepted: true`와 빈 `event_id`로 끝날 수 있다.
 
+`05-evidence-query`는 세션 워크스페이스에 저장된 evidence row를 최신순으로 조회하는 범용 API다.
+`correlation_id`, `kind`, `since`/`until`(ISO-8601), `limit`(기본 50, 최대 200), `offset`으로 거른다.
+응답의 `has_more`가 true면 같은 조건에 `offset`을 `limit`만큼 늘려 다음 페이지를 받는다.
+
+`06-rca-reports`는 저장된 RCA report 목록을 조회하는 API다. filter와 페이지네이션은 `05`와 같다(`kind` 제외).
+payload 원문 대신 `root_cause`, `action`, incident 요약, `confidence` 같은 화이트리스트 필드만 내려간다.
+secret 원문이 응답에 실리지 않게 하기 위한 계약이므로 프론트는 이 요약 필드만 렌더링한다.
+
 ### 06-gitops-approval
 
 `01-github-webhook`은 외부 Git webhook을 받아 workflow event로 바꾸는 API다.

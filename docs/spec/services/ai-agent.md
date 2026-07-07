@@ -213,7 +213,18 @@ class RecoveryPlanningPipeline:
 
 `src/services/ai/agent/pipeline/causes.py :: build_ai_fallback_requested_body`
 
-- `RcaAiFallbackRequestedBody(reason=NO_MATCHING_RULE_MESSAGE, evidence_ref=rule_missing.evidence_ref, incident=evt.incident, evidence_bundle=evt.evidence_bundle, missing_evidence=rule_missing.missing_evidence, workspace_id=rule_missing.workspace_id)`
+- `RcaAiFallbackRequestedBody(reason=NO_MATCHING_RULE_MESSAGE, evidence_ref=rule_missing.evidence_ref, incident=evt.incident, evidence_bundle=evt.evidence_bundle, missing_evidence=rule_missing.missing_evidence, workspace_id=rule_missing.workspace_id, evidence=evt.evidence)`
+  - `evidence` 동봉으로 ai-fallback-worker 가 되돌리는 `rca.candidates.planned` 가 rca-worker 의 evidence 필수 계약을 통과한다.
+
+`src/services/ai/agent/pipeline/ai_fallback.py :: AiFallbackPlanner` — [ai-ai-fallback-worker](ai-ai-fallback-worker.md) 전용
+
+- 필드: `max_candidates: int = MAX_FALLBACK_CANDIDATES`(5)
+- `async plan_body(evt: RcaAiFallbackRequestedBody, llm: LlmClient) -> RcaCandidatesPlannedBody | None`
+  - `build_fallback_prompt(evt)` (`src/services/ai/agent/pipeline/ai_fallback.py :: build_fallback_prompt`) — incident 증상 + evidence bundle **summary 문자열만** 실은 프롬프트(근거 원문 value 미포함, 최대 `MAX_PROMPT_EVIDENCE_ITEMS`=20건).
+  - `llm.complete_json(prompt, FALLBACK_CANDIDATES_SCHEMA)` (`src/services/ai/agent/pipeline/ai_fallback.py :: FALLBACK_CANDIDATES_SCHEMA`) 호출.
+  - `parse_fallback_candidates(raw, max_candidates)` (`src/services/ai/agent/pipeline/ai_fallback.py :: parse_fallback_candidates`) — 비정형 항목은 건너뛰고 confidence 내림차순 상위 N개만 `CauseCandidate(source="ai_fallback")` 로 변환. 유효 후보 0건이면 `None`.
+  - 반환 body 는 `rule_missing=None` — analyze-worker 가 rule 경로와 동일한 근거 매칭 평가를 수행한다.
+  - LLM 미설정(ValueError)·호출 실패·JSON 파싱 실패는 예외로 전파(워커가 로그 후 무발행 종료).
 
 `src/services/ai/agent/pipeline/causes.py :: CauseEvaluator`
 
