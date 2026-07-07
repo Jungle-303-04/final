@@ -37,6 +37,32 @@
   usage 롤업 필드, 프리셋 PromQL, RCA evidence provider 기본 쿼리 전체(k8s/metrics/logs/traces),
   `/rca-reports` 분석 필드, 재현 방법. docs/README.md 색인·frontend 키워드에 링크(test_docs_index 그린).
 
+### 반복 4 — 인터랙션 전수 감사·교정 (49d551e8)
+
+- 전 페이지 코드 감사(체크리스트는 frontend/AUDIT.md 섹션 I). 수정:
+  - **클러스터 상세 스케일/재시작 버그**: mock 시절 팟 이름 규칙(`-pod-` replace)으로 디플로이먼트명 유추 →
+    실데이터에서 잘못된 이름으로 명령 발행됨. 워크로드 그룹의 실명을 `DeploymentTarget{ns,name,podCount}` 로 전달.
+    스케일 기본값 = 현재 팟 수.
+  - 권한 회수(AccessView) 확인 모달 추가(파괴 동작 공통 패턴), 알림 배지 한국어 라벨 통일, 채팅 목록 빈 상태,
+    죽은 임포트 핵 제거.
+
+### 반복 5 — 프론트 스펙 동기화 (758ca358)
+
+- docs/spec/frontend/{metrics,cluster,org,notifications,chat}.md 를 코드 변경에 맞춰 갱신.
+
+### 반복 6 — 데드 코드 스윕 (e4fa5332, 70d5ef13)
+
+- 구 콘솔 잔재 미사용 익스포트 35종(~550줄) 제거: plural-ui `WizardModal/ConfirmModal/DetailModal/TabList/
+  LinkTabList/SideNav/Input/FormField/Switch/InfoTip/InfoList/IconFrame/Modal/SearchInput/EmptyState/modalPop`,
+  아이콘 17종, shared/motion `LayoutMorph/PressScale`, charts `Sparkline`. plural-ui 에 남은 것은 실사용
+  프리미티브(Button/Chip/Card/Table/Flyover/PageHeader/useThemeMode)뿐. 미참조 파일 스캔 0건(index 계열 오탐 제외).
+
+### 라이브 검증 (12:47 KST)
+
+- CD 1차 배포 확인: `assets/index-kyKyMN6k.js` → `assets/index-oA7Yte0S.js` 로 교체됨.
+- 번들 원문 grep: `클러스터 맵` 0건, `MOCK 모드` 0건, 비용 문자열 0건 — **스크린샷의 구화면(가짜 비용/1,000개 팟/중복 헤딩) 라이브에서 소멸 확인**.
+- /api/healthz ok. 이후 push(49d551e8~)는 다음 CD 사이클에서 반영 — 같은 방식으로 재확인할 것.
+
 ### 검증 상태 (반복 1~3)
 
 - frontend: `npm run build` + `npm run lint` 그린. backend: `pytest -k "rca or evidence or gateway or dashboard"` 153 passed,
@@ -54,6 +80,9 @@
 
 - 샌드박스 빌드에서 rollup native 오류 시: `cd frontend && npm i --no-save @rollup/rollup-linux-arm64-gnu` (package.json 커밋 금지).
   npm i 가 45초 타임아웃으로 끊겨도 node_modules 에 설치돼 있으면 빌드는 됨.
+- **⚠️ node_modules 는 사용자 Mac 과 마운트 공유** — 사용자의 로컬 npm 이 darwin 바이너리로 되돌려 rollup/eslint 가
+  갑자기 깨질 수 있다(실제 발생). 그 경우 해당 패키지 디렉터리 rm 후 재설치. 같은 이유로 **다른 세션이 워킹트리를
+  대신 커밋하는 경우가 있다** — 커밋 전 `git status`/`git log` 로 경합 확인.
 - push: `/tmp/askpass.sh`(x-access-token/PAT echo) + `GIT_ASKPASS=/tmp/askpass.sh git push origin dev`.
 - 커밋: `git -c user.name=woonyong -c user.email=woonyong.dev@gmail.com commit --no-verify`.
 
