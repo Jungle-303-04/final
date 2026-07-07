@@ -4,7 +4,7 @@ metadata:
   name: api-gateway
   namespace: management
 spec:
-  replicas: 1
+  replicas: 2
   # 무중단 교체 — 기존 pod 를 유지한 채 새 pod 가 ready 된 뒤에만 종료한다.
   strategy:
     type: RollingUpdate
@@ -37,8 +37,8 @@ spec:
               drop: ["ALL"]
           resources:
             requests:
-              cpu: 100m
-              memory: 1Gi
+              cpu: 500m
+              memory: 2Gi
             limits:
               cpu: "1"
               memory: 4Gi
