@@ -93,8 +93,18 @@ def inventory_list_response(
     return InventoryResourceListResponse(
         cluster_id=cluster_id,
         resource_type=resource_type,
-        resources=[InventoryResourceResponse(**resource) for resource in resources],
+        resources=[
+            InventoryResourceResponse(**public_inventory_resource(resource))
+            for resource in resources
+        ],
     )
+
+
+def public_inventory_resource(resource: dict[str, Any]) -> dict[str, Any]:
+    """Browser inventory list response에서 raw Kubernetes object를 제거한다."""
+    item = dict(resource)
+    item.pop("raw", None)
+    return item
 
 
 @router.get(

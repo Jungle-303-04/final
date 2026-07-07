@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useEvidence, useIncident, useRcaReports, useRecoveryPlan } from '@/features/notifications/api';
-import { Badge, Breadcrumbs, Button, Card, CodeBlock, CopyChip, EmptyState, KeyValue, QueryBoundary, Skeleton } from '@/shared/ui';
+import { Badge, Breadcrumbs, Button, Card, CopyChip, EmptyState, KeyValue, QueryBoundary, Skeleton } from '@/shared/ui';
 import { toneColor, toneOf } from '@/shared/ui/status';
 import { FlowCanvas, useAutoLayout, type CollapsibleGroupData, type FlowEdgeData } from '@/shared/flow';
 import { AnimatePresence, FadeSlideIn } from '@/shared/motion';
@@ -328,13 +328,6 @@ function EvidencePanel({ correlationId }: { correlationId: string }) {
   );
 }
 
-/* payload 를 한 줄 요약 — 상위 키 3개 key=value (원문은 펼쳐서 확인) */
-function payloadSummary(payload: Record<string, unknown>): string {
-  const entries = Object.entries(payload).slice(0, 3)
-    .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
-  return trunc(entries.join(' · '), 96) || '(빈 payload)';
-}
-
 function EvidenceRow({ record }: { record: EvidenceRecord }) {
   const [open, setOpen] = useState(false);
   return (
@@ -344,7 +337,7 @@ function EvidenceRow({ record }: { record: EvidenceRecord }) {
         <Badge tone={kindTone(record.kind)}>{record.kind}</Badge>
         <code style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>#{record.id}</code>
         <span style={{ flex: 1, fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-mono)', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {payloadSummary(record.payload)}
+          {trunc(record.summary, 96)}
         </span>
         {record.created_at && (
           <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }} title={fmtAbs(record.created_at)}>{timeAgo(record.created_at)}</span>
@@ -357,7 +350,16 @@ function EvidenceRow({ record }: { record: EvidenceRecord }) {
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} style={{ overflow: 'hidden' }}>
             <div style={{ marginTop: 8 }}>
               {record.created_at && <p style={{ margin: '0 0 6px', fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>수집 시각: {fmtAbs(record.created_at)}</p>}
-              <CodeBlock code={JSON.stringify(record.payload, null, 2)} />
+              {record.evidence_ref && <CopyChip value={record.evidence_ref} display={trunc(record.evidence_ref, 30)} />}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {record.sources.map(src => (
+                  <div key={`${record.id}-${src.source}`} style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, fontSize: 'var(--fs-xs)' }}>
+                    <Badge tone="neutral">{src.source}</Badge>
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{src.summary}</span>
+                    {src.collector_version && <code style={{ marginLeft: 'auto' }}>{trunc(src.collector_version, 18)}</code>}
+                  </div>
+                ))}
+              </div>
             </div>
           </motion.div>
         )}

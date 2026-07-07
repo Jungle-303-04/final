@@ -95,7 +95,6 @@ export function adaptInventoryResource(raw: RawInventoryResource): InventoryReso
     name: String(raw.name ?? ''),
     status: String(raw.status ?? raw.health ?? 'unknown'),
     age: String(raw.observed_at ?? raw.created_at ?? ''),
-    raw: raw.raw ?? raw.summary,
   };
 }
 

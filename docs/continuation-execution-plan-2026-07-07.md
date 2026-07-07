@@ -16,6 +16,34 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:34 KST 체크포인트
+
+- evidence/inventory 공개 응답 raw 차단.
+- 구현:
+  - `GET /evidence`는 더 이상 저장된 evidence `payload` 원문을 반환하지 않는다.
+  - 응답 항목은 `cluster_id`, `evidence_ref`, `summary`, `sources[]` 안전 요약으로 구성된다.
+  - `sources[]`는 source별 집계와 허용된 lineage 메타만 포함한다. 허용 필드: `schema_version`, `collector`, `collector_version`, `source_version`, `query_version`, `collected_at`, `evidence_key`, `source_id`, `agent_id`, `window_start`.
+  - `GET /clusters/{cluster_id}/inventory/resources` 계열 공개 응답에서 Kubernetes raw object를 제거했다. DB/저장소 내부 raw는 유지한다.
+  - 인시던트 상세 증거 panel은 raw JSON 대신 evidence ref, source 요약, collector version을 표시한다.
+  - 프론트 타입/adapter에서 raw payload 의존을 제거했다.
+- 운영 판단:
+  - 실제 데이터 원칙은 유지한다. 값 자체를 가짜로 대체하지 않고, 실제 저장된 데이터에서 안전한 집계/lineage만 projection한다.
+  - source version/collector version/evidence key는 버전 갱신·롤백 판단에 쓰기 위해 남긴다.
+  - token/secret/manifest/raw Kubernetes object는 API와 UI에 노출하지 않는다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_evidence_query_api.py tests/test_inventory_domain.py tests/test_fleet_router.py tests/test_platform_foundation_openapi.py` → 29 passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 4 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 다음 실행 순서:
+  - 이 체크포인트 커밋/푸시.
+  - repo 등록 wizard: repo probe → branch select → manifest candidate select → render validation → binding 생성 흐름을 실제 API와 화면 상태로 재점검/폴리싱.
+  - cluster 등록 wizard: provider discovery/import/preflight/listbox 흐름에서 실제 API 누락·UI 품질·검증 상태를 점검.
+  - drill view: cluster → node/service/workload → pod 각 레벨에서 events/metrics/AI 분석 URL state와 drawer/detail이 유지되는지 수정.
+  - AI chat: 실제 백엔드 연결, 대화 삭제 UX, recovery/action 컨텍스트 연결, 서비스형 채팅 UI 품질 개선.
+
 ### 2026-07-07 18:22 KST 체크포인트
 
 - `6cf5f548 fix: 드릴 메트릭 / 실제시각 / 로그인 복원`은 origin/dev push 완료.

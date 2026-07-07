@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:22 KST (운영 상태/Bruno 보안/stale 문서 정리)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:34 KST (evidence/inventory 공개 응답 raw 차단)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,27 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (18:34 KST) — evidence/inventory 공개 응답 raw 차단
+
+- 구현:
+  - `GET /evidence` 응답에서 저장된 evidence `payload` 원문을 제거했다. 대신 `cluster_id`, `evidence_ref`, `summary`, `sources[]` 안전 요약만 내려준다.
+  - `sources[]`에는 `source`, 집계 요약, 허용된 lineage(`schema_version`, `collector`, `collector_version`, `source_version`, `query_version`, `collected_at`, `evidence_key`, `source_id`, `agent_id`, `window_start`)만 포함한다.
+  - `GET /clusters/{cluster_id}/inventory/resources` 계열 공개 응답에서 Kubernetes raw object를 제거했다. 저장소 내부 raw는 유지하되 browser/API response에는 싣지 않는다.
+  - 인시던트 상세 증거 panel은 raw JSON CodeBlock 대신 evidence ref, source 요약, collector version만 표시한다.
+  - 프론트 타입/adapter도 raw field 의존을 제거했다.
+- 이유:
+  - 실제 운영 데이터만 보여준다는 원칙과 동시에 token/secret/manifest 원문이 UI·API를 통해 노출되는 문제를 막기 위함이다.
+  - version/rollback 판단에 필요한 lineage는 남기되, evidence 값 자체는 projection/API에서 화이트리스트 방식으로만 공개한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_evidence_query_api.py tests/test_inventory_domain.py tests/test_fleet_router.py tests/test_platform_foundation_openapi.py` → 29 passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 4 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 다음:
+  - 이 체크포인트 커밋/푸시 후 바로 repo/cluster 등록 wizard의 동적 흐름, drill URL state, AI chat 연결 품질을 의미 단위로 이어간다.
 
 ## 체크포인트 (18:22 KST) — 운영 상태/Bruno 보안/stale 문서 정리
 

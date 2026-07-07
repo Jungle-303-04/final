@@ -113,14 +113,34 @@ class RcaIncidentResponse(StrictModel):
     item: RcaTimelineItem
 
 
+class EvidenceSourceSummaryItem(StrictModel):
+    """저장된 evidence 원문에서 추출한 안전 요약 — raw payload 값은 제외."""
+
+    source: str
+    summary: str
+    schema_version: int | None = None
+    collector: str | None = None
+    collector_version: str | None = None
+    source_version: str | None = None
+    query_version: str | None = None
+    collected_at: str | None = None
+    evidence_key: str | None = None
+    source_id: str | None = None
+    agent_id: str | None = None
+    window_start: str | None = None
+
+
 class EvidenceRecordItem(StrictModel):
-    """저장된 evidence row 하나 — /evidence 범용 조회 응답 항목."""
+    """저장된 evidence row 하나 — raw payload 대신 안전 요약만 노출."""
 
     id: int
     workspace_id: str
     correlation_id: str
     kind: str
-    payload: JsonMap = Field(default_factory=dict)
+    cluster_id: str | None = None
+    evidence_ref: str | None = None
+    summary: str
+    sources: list[EvidenceSourceSummaryItem] = Field(default_factory=list)
     created_at: str | None = None
 
 
@@ -286,7 +306,6 @@ class InventoryResourceResponse(StrictModel):
     labels: JsonMap = Field(default_factory=dict)
     annotations: JsonMap = Field(default_factory=dict)
     summary: JsonMap = Field(default_factory=dict)
-    raw: JsonMap = Field(default_factory=dict)
     observed_at: str | None = None
     first_seen_at: str | None = None
     last_seen_at: str | None = None

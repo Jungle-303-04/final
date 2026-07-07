@@ -104,14 +104,95 @@ def parse_query_timestamp(value: str | None, name: str) -> datetime | None:
 
 
 def evidence_record(row: JsonObject) -> JsonObject:
+    payload = row.get("payload") or {}
+    sources = _evidence_source_summaries(payload)
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
         "correlation_id": row["correlation_id"],
         "kind": row["kind"],
-        "payload": row.get("payload") or {},
+        "cluster_id": payload.get("cluster_id") or None,
+        "evidence_ref": payload.get("object_ref") or payload.get("evidence_ref") or None,
+        "summary": _evidence_summary(payload, sources),
+        "sources": sources,
         "created_at": row.get("created_at"),
     }
+
+
+def _evidence_summary(payload: JsonObject, sources: list[JsonObject]) -> str:
+    cluster_id = payload.get("cluster_id")
+    labels = [str(item["source"]) for item in sources if item.get("source")]
+    if cluster_id and labels:
+        return f"{cluster_id}: {', '.join(labels)}"
+    if cluster_id:
+        return str(cluster_id)
+    if labels:
+        return ", ".join(labels)
+    return "evidence"
+
+
+def _evidence_source_summaries(payload: JsonObject) -> list[JsonObject]:
+    items: list[JsonObject] = []
+    for source in ("kubernetes", "metrics", "logs", "traces"):
+        value = payload.get(source)
+        if value in (None, {}, []):
+            continue
+        items.append(
+            {
+                "source": source,
+                "summary": _source_summary(source, value),
+                **_lineage_from_source_value(value),
+            }
+        )
+    return items
+
+
+def _source_summary(source: str, value: Any) -> str:
+    if source == "kubernetes" and isinstance(value, dict):
+        pods = _len(value.get("pods"))
+        nodes = _len(value.get("nodes"))
+        events = _len(value.get("events"))
+        parts = []
+        if pods is not None:
+            parts.append(f"pods={pods}")
+        if nodes is not None:
+            parts.append(f"nodes={nodes}")
+        if events is not None:
+            parts.append(f"events={events}")
+        return ", ".join(parts) if parts else "kubernetes snapshot"
+    if source in {"metrics", "traces"} and isinstance(value, dict):
+        results = value.get("results")
+        if isinstance(results, dict):
+            return f"results={len(results)}"
+        return f"{source} snapshot"
+    if source == "logs" and isinstance(value, list):
+        query_names = sorted(
+            {
+                str(entry["query_name"])
+                for entry in value
+                if isinstance(entry, dict) and entry.get("query_name")
+            }
+        )
+        if query_names:
+            return f"entries={len(value)}, queries={','.join(query_names[:3])}"
+        return f"entries={len(value)}"
+    return f"{source} evidence"
+
+
+def _len(value: Any) -> int | None:
+    return len(value) if isinstance(value, list) else None
+
+
+def _lineage_from_source_value(value: Any) -> JsonObject:
+    if isinstance(value, dict):
+        return _lineage_from_value(value)
+    if isinstance(value, list):
+        for entry in value:
+            if isinstance(entry, dict):
+                lineage = _lineage_from_value(entry)
+                if lineage:
+                    return lineage
+    return {}
 
 
 def rca_report_summary(row: JsonObject) -> JsonObject:
