@@ -19,10 +19,11 @@
 ### 브랜치와 커밋
 
 - 작업 브랜치: `dev`.
-- 최신 local/dev 및 origin/dev: `b013b431d5c766ea4c2b37f75ce31db974d98efe`
+- 이 문서 작성 직전 production-code baseline local/dev 및 origin/dev: `b013b431d5c766ea4c2b37f75ce31db974d98efe`
   - 커밋 메시지: `docs: target preflight route 상수 정합성`
 - 최신 origin/main: `f2b7d43c0c5eba7afb5d5a6a92e4cfb837db6d11`
   - dev를 main에 자동 merge한 merge commit.
+- 이 문서 자체 또는 이후 HANDOVER 문서 커밋 때문에 origin/dev가 더 앞서 있을 수 있다. 항상 `git rev-parse HEAD origin/dev origin/main`으로 실제 최신 SHA를 먼저 확인한다.
 - `git status --short --branch` 기준 추적 파일은 깨끗해야 한다.
 - 현재 untracked로 남아 있을 수 있는 파일:
   - `.e2e-tmp-sweep.py`
@@ -225,17 +226,80 @@ admin 확인은 로그인 cookie jar를 사용한다. secret 출력 금지.
 2. `/applications` 생성 성공 뒤 deployment 생성 실패 시 보상 처리 또는 transaction 경계를 명확히 한다.
 3. Helm/Kustomize validation이 placeholder라면 실제 render/validate로 바꾼다.
 
-현재 병렬 explorer:
+병렬 explorer 결과:
 
 - Agent nickname: `Banach`
 - Agent id: `019f3b5e-8f4b-74a0-a447-56a1e0bfd325`
-- 요청 내용: GitOps poller가 DB 등록 applications/watch targets를 순회하도록 바꿀 구현 seam, 최소 write set, 테스트, side effect를 read-only로 분석.
+- 상태: read-only 분석 완료. 파일 수정 없음.
 
-결과 받기:
+정확한 구현 seam:
 
-```text
-multi_agent_v1.wait_agent(targets=["019f3b5e-8f4b-74a0-a447-56a1e0bfd325"], timeout_ms=...)
-```
+- `src/services/gitops/github-poll-worker/poller.py`
+  - `GitHubPoller.__init__`, `poll_once`, `latest_commit_sha`, `emit_webhook`, `_github_headers`.
+  - 현재 poller가 env에서 단일 target을 `self`에 저장하고 `poll_once()`가 대상 인자 없이 한 repo만 polling한다.
+- `src/services/gitops/github-poll-worker/settings.py`
+  - 현재 env target: `GITHUB_REPO`, `GITHUB_BRANCH`, `WATCH_TARGET_ID`, `DEPLOYMENT_BINDING_ID`, `TARGET_CLUSTER_ID`, `MANIFEST_PATH`.
+- `src/domains/gitops/models.py`
+  - 이미 존재하는 테이블: `git_repositories`, `git_watch_targets`, `deployment_bindings`, `applications`.
+- `src/domains/gitops/repository.py`
+  - DB target 조회 method를 추가할 적정 위치. 이 repository가 등록과 watch state method를 이미 소유한다.
+- `src/domains/applications/router.py`
+  - app/deployment 등록 경로. 현재 repository/application/binding은 만들지만 deployment 생성 시 watch target row를 만들지 않는다.
+- `src/services/gitops/git-pull-worker/app.py`
+  - downstream dedupe는 `get_watch_last_seen_commit_sha`를 사용한다.
+- `src/services/gitops/manifest-render-worker/app.py`
+  - downstream은 `git_watch_targets.last_seen_commit_sha`를 갱신한다.
+
+현재 동작:
+
+- poller는 `GET /repos/{repo}/commits?per_page=1&sha={branch}`로 env 단일 repo의 최신 commit을 가져온다.
+- poller는 `/github/webhook`으로 단일 webhook body를 보낸다.
+- `tests/test_github_poller.py`는 이 env 단일 대상 동작을 고정하고 있다.
+- DB에는 필요한 shape가 이미 있다.
+  - `git_repositories.credential_ref`
+  - `git_watch_targets.branch`, `manifest_path`, `last_seen_commit_sha`
+  - `deployment_bindings.cluster_id`, `environment`
+  - `applications.application_id`
+
+안전한 최소 구현 계획:
+
+1. `src/domains/gitops/repository.py`
+   - `list_active_github_poll_targets(...)` 추가.
+   - active GitHub repo, active application, active deployment binding, watch target을 join한다.
+   - 실제 `git_watch_targets` row를 우선하고, 기존 row 호환을 위해 binding/application/repository 필드 fallback을 둔다.
+   - 반환 필드: `credential_ref`, `application_id`, `repository_id`, `repo_ref`, `branch`, `watch_target_id`, `binding_id`, `environment`, `cluster_id`, `manifest_path`, `last_seen_commit_sha`.
+2. `src/domains/applications/router.py`
+   - deployment 생성 시 `branch=application["default_branch"]`를 body에 포함한다.
+   - `db.register_watch_target(body)`를 `db.register_deployment_binding(body)`보다 먼저 호출한다.
+   - normal binding path와 global binding path 모두 같은 계약으로 처리한다.
+3. `src/services/gitops/github-poll-worker/poller.py`
+   - `GitHubPollTarget` dataclass를 둔다.
+   - `latest_commit_sha(target)`와 `emit_webhook(target, sha)` 형태로 대상 인자를 받게 한다.
+   - `poll_once()`는 DB target을 먼저 조회하고, target별로 실제 webhook을 낸다.
+   - DB target이 없고 `GITHUB_REPO`가 명시된 경우에만 env fallback을 사용한다.
+4. `src/services/gitops/github-poll-worker/app.py`
+   - `DATABASE_URL`이 있으면 `Database`/`AsyncDb`를 poller에 주입한다.
+   - `build_token_vault()`로 `credential_ref`를 해석한다.
+   - 기존 `GITHUB_TOKEN_REF`/`GITHUB_TOKEN` fallback은 유지한다.
+
+필요 테스트:
+
+- `tests/test_github_poller.py`
+  - DB target mode가 DB의 `application_id`, `repository_id`, `watch_target_id`, `binding_id`, `environment`, `cluster_id`, `branch`, `manifest_path`를 webhook body에 싣는지 확인.
+  - DB target이 있으면 `GITHUB_REPO` 없이도 poll 되는지 확인.
+  - `credential_ref`가 token vault를 거쳐 GitHub `Authorization` header에 반영되는지 확인.
+  - DB target이 없으면 기존 env fallback이 유지되는지 확인.
+- `tests/test_database_unit.py`
+  - `list_active_github_poll_targets` SQL join/filter compile 또는 결과 검증.
+- `tests/test_applications_router.py`
+  - deployment 생성이 `register_watch_target`을 application `default_branch`와 함께 호출한 뒤 binding을 생성하는지 확인.
+
+운영 리스크:
+
+- schema migration은 필요 없을 가능성이 높다. 필요한 table/column이 이미 있다.
+- 기존 deployment binding에는 `git_watch_targets` row가 없을 수 있다. 따라서 query fallback을 먼저 넣고, 실제 row 관찰 후 필요하면 one-time backfill을 별도 작업으로 둔다.
+- GitHub API 호출량은 env 한 repo에서 등록된 watch target 수만큼 늘어난다. 가능하면 `(repo_ref, branch, credential_ref)` 단위로 묶거나, access error는 기존처럼 soft-skip한다.
+- `credential_ref=k8s-secret:...`를 poller CronJob이 읽으려면 service account/RBAC가 필요할 수 있다. env/AWS ref는 manifest 변경 없이 가능하다.
 
 ### E. 클러스터 등록 동적화
 
