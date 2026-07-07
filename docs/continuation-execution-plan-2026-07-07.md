@@ -16,11 +16,25 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 16:45 KST 체크포인트
+### 2026-07-07 16:50 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
 
-- 현재 local/origin dev HEAD: `ef65c770 fix: 레포 discovery render 검증 전환`.
+- 현재 local/origin dev HEAD: `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`.
+- `9b1eedbf`는 origin/dev에 push 완료.
+- 이 푸시의 dev workflows는 모두 runner 배정 없이 실패:
+  - CI run `28850238246`: failure. 모든 job이 steps/log 없음, runner 배정 없음.
+  - AWS CD run `28850238259`: failure. test job이 steps/log 없음, runner 배정 없음. deploy skipped.
+  - Promote Dev To Main run `28850238255`: failure. verify job이 steps/log 없음, runner 배정 없음. merge skipped.
+- 판단: main manual dispatch뿐 아니라 dev push workflows도 같은 형태이므로 코드/테스트 실패가 아니라 GitHub Actions hosted runner 배정, quota, repo/org Actions 상태, 또는 GitHub 측 일시 장애를 먼저 확인한다.
+- runner 문제가 풀리면 위 failed workflows를 rerun하고, 그 뒤 main promotion/deploy를 재확인한다.
+- live public smoke:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+
+### 2026-07-07 16:45 KST 체크포인트
+
+- 코드 기준 dev HEAD: `ef65c770 fix: 레포 discovery render 검증 전환`.
 - `ef65c770`는 origin/dev에 push 완료, dev CI/AWS CD success, Promote Dev To Main success.
 - origin/main은 merge commit `e37cee8bf983eb122b5ab9c987210e00d7b1bf6f`까지 진행.
 - main AWS CD latest 상태:

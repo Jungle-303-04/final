@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:45 KST (시크릿 제외 마무리)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:50 KST (Actions runner 장애 기록)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,7 +10,24 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 
-## 최신 업데이트 (16:45 KST) — 시크릿 제외/Actions runner 이슈
+## 최신 업데이트 (16:50 KST) — dev 푸시 후 Actions runner 장애 확인
+
+- `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`은 origin/dev push 완료.
+- 이 푸시로 뜬 dev workflows도 모두 4초 내 실패:
+  - CI run `28850238246` → failure. `Python lint and tests`, `Kubernetes manifest checks`, `Frontend typecheck, lint, build` 모두 `runner_id=0`, steps 없음, log 없음.
+  - AWS CD run `28850238259` → failure. `Test before deploy`가 `runner_id=0`, steps 없음, log 없음. deploy job은 skipped.
+  - Promote Dev To Main run `28850238255` → failure. `Verify dev before promotion`이 `runner_id=0`, steps 없음, log 없음. merge job은 skipped.
+- 판단: main manual dispatch뿐 아니라 dev push workflows도 같은 형태이므로 코드 변경/테스트 실패가 아니라 GitHub Actions hosted runner 배정, 계정 quota, org/repo Actions 상태, 또는 GitHub 측 일시 장애를 먼저 확인해야 한다.
+- live public smoke는 계속 정상:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+- 다음 AI 첫 작업:
+  1. GitHub Actions status/runner quota/org Actions 설정 확인.
+  2. runner 문제가 풀리면 `9b1eedbf` 또는 최신 dev HEAD의 failed workflows를 rerun.
+  3. 성공하면 Promote Dev To Main 및 main AWS CD를 재확인.
+  4. AWS SSO 재인증 후 authenticated smoke와 DB 증가율 확인.
+
+## 직전 업데이트 (16:45 KST) — 시크릿 제외/Actions runner 이슈
 
 - `ef65c770 fix: 레포 discovery render 검증 전환`은 origin/dev push 완료.
 - dev Actions:
