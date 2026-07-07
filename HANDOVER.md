@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:45 KST (`LoginView` 보호 경로 fallback)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:51 KST (console `8c8b3b02-dev` live smoke)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -54,6 +54,21 @@
 - live smoke에서 비로그인 `/console`이 주소는 `/console`인 채 로그인 폼을 렌더하는 케이스를 확인했다. 이 경우 `LoginView`가 query `returnTo`를 못 읽으면 성공 후 `/`로 이동할 수 있다.
 - 수정: `LoginView`가 `/login`, `/signup`, `/pending`, `/verify-email`이 아닌 경로 위에서 렌더되면 현재 `pathname+search+hash`를 fallback returnTo로 사용한다. 외부 URL 방어(`safeReturnTo`)는 유지한다.
 - 다음 검증: typecheck/test/docs/build → 커밋/푸시 → 새 console 이미지 배포 → focused browser smoke 재실행.
+
+### 21:51 KST live 상태
+
+- live console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:8c8b3b02-dev`.
+- public curl smoke:
+  - `https://k8s.woonyong.org/` → 200 `text/html`
+  - `https://k8s.woonyong.org/console/` → 200 `text/html`
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`
+- focused browser smoke:
+  - 비로그인 `/console`에서 로그인 폼 렌더 확인.
+  - 로그인 후 `/console` 홈(`플릿 현황`) 복귀 확인.
+  - `/console/ai`, `/console/clusters`, `/console/metrics`, `/` 경로 렌더 확인.
+- 남은 관찰:
+  - headless Playwright 새 컨텍스트에서는 첫 로드/새로고침이 20초대까지 늘어나는 경우가 있다. curl 기준 `/api/auth/session`은 로그인 쿠키로 0.3~0.4초라 백엔드 세션 API 자체 병목은 아니다.
+  - 다음 UI 안정화 단위에서 Cloudflare/headless 초기 401 처리, skeleton 장기 표시, `/console/not-real-route` 비인증/인증 상태별 404 확인을 더 줄인다.
 
 ## 체크포인트 (20:58 KST) — DLQ archive + no-signal incident payload 정리
 
