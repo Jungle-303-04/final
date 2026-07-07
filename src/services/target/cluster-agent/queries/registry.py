@@ -177,3 +177,12 @@ class KubernetesSnapshotQuery:
     query_name: str
     description: str
     namespace: str
+
+
+@dataclass(frozen=True)
+class MetadataSnapshotQuery:
+    """Describe one metadata snapshot query."""
+
+    query_name: str
+    description: str
+    query: str

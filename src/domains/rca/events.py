@@ -36,6 +36,7 @@ class ClusterEvidenceReceivedBody(EventBody):
     source_id: str | None = None
     window_start: str | None = None
     evidence_key: str | None = None
+    metadata: JsonObject = field(default_factory=dict)
     correlation_id: str | None = None
     kind: str | None = None
     payload_size: int | None = None

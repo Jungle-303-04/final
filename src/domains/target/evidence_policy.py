@@ -142,6 +142,13 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "query": '{ resource.service.name = "api-gateway" }',
         },
     ],
+    "metadata": [
+        {
+            "name": "change_context",
+            "description": "Change context metadata for RCA",
+            "query": "change_context",
+        },
+    ],
 }
 
 
