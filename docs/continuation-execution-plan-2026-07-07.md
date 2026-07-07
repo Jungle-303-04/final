@@ -16,6 +16,124 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 16:24 KST 체크포인트
+
+이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
+
+- 현재 local/origin dev HEAD: `719a795c fix: GitOps poller DB target 순회`.
+- 이후 tracked local 변경:
+  - `HANDOVER.md`
+  - `docs/continuation-execution-plan-2026-07-07.md`
+  - `frontend/docs/backend-integration.md`
+  - `frontend/tests/e2e_real_backend.py`
+- 변경 의도:
+  - 병렬 explorer 결과 반영.
+  - `frontend/tests/e2e_real_backend.py`의 hardcoded credential 제거.
+  - 실제 backend browser E2E를 `AUTH_EMAIL`/`AUTH_PASSWORD` env 기반으로 전환.
+  - DB write flow는 `E2E_MUTATE=1` opt-in으로 제한.
+- dev Actions:
+  - CI run `28848586860`: success.
+  - Promote Dev To Main run `28848587013`: success.
+  - AWS CD dev push run `28848586945`: success.
+- main Actions:
+  - AWS CD run `28848639831`: `Test before deploy` success, `Deploy to AWS EKS` in progress.
+  - deploy head SHA: `657b79e6c82453bd8ec5282ad8dd286d0eebdbfd`.
+- 로컬 검증:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest -q
+# 678 passed, 3 skipped
+
+ruff format --check src scripts tests
+ruff check src scripts tests
+git diff --check
+# all passed
+
+cd frontend && npm run typecheck
+cd frontend && npm run lint
+cd frontend && npm run build
+# all passed, Vite large chunk warning only
+```
+
+- 라이브 공개 smoke:
+
+```bash
+curl --max-time 8 -fsS https://k8s.woonyong.org/api/healthz
+# {"status":"ok","service":"api-gateway"}
+
+curl --max-time 8 -fsS https://k8s.woonyong.org/api/readyz
+# {"status":"ready"}
+
+curl --max-time 8 -fsS -D - https://k8s.woonyong.org/ -o /tmp/k8s-root.html
+# HTTP 200, title: 운영 콘솔
+
+curl --max-time 8 -fsS -D - https://k8s.woonyong.org/console/ -o /tmp/k8s-console.html
+# HTTP 200, title: 운영 콘솔
+```
+
+- 로컬 인증/클러스터 접근 상태:
+  - `kubectl config get-contexts`에는 `kubernetes-ops`, `cluster-1`, `cluster-2` 등이 있다.
+  - 현재 로컬 AWS SSO session은 만료되어 `kubectl`이 `aws login` 재인증을 요구한다.
+  - 이 상태에서는 management secret, Postgres pod, cluster inventory, authenticated live E2E를 직접 조회할 수 없다.
+  - GitHub Actions의 AWS credentials는 정상 동작 중이므로 main CD 결과를 우선 추적한다.
+- 워킹트리:
+  - 위 4개 tracked 변경이 있으면 검증 후 작은 커밋으로 닫는다.
+  - untracked `.e2e-tmp-sweep.py`, `report_desktop.json`, `report_mobile.json`은 내용 확인 전 커밋 금지.
+
+즉시 이어갈 명령:
+
+```bash
+gh run view 28848639831 --repo Jungle-303-04/final --json status,conclusion,headSha,jobs
+gh run list --repo Jungle-303-04/final --branch main --limit 8
+curl --max-time 8 -fsS https://k8s.woonyong.org/api/healthz
+curl --max-time 8 -fsS https://k8s.woonyong.org/api/readyz
+python3 -m py_compile frontend/tests/e2e_real_backend.py
+git status --short --branch
+```
+
+병렬 explorer 결론:
+
+- Repo 등록:
+  - `/repositories/discovery/probe`, `branches`, `manifests`, `validate`는 실제 GitHub repository/branch/tree/content API를 사용한다.
+  - 단, Helm/Kustomize discovery validation은 아직 placeholder이며 실제 render validation으로 바꿔야 한다.
+- Cluster 등록:
+  - provider catalog/discovery/preflight/register/connection polling flow는 있다.
+  - import 후보는 실제 외부 provider adapter/API 호출이 아니라 env-derived metadata 중심이다.
+  - selected import candidate의 `external_handle`, `console_url`, `labels`는 현재 register payload로 보존되지 않는다.
+- GitOps poller:
+  - DB target 순회 후 `/github/webhook` → `git.webhook.received` → `git.changed` → `manifest.rendered` → workflow run까지 이어지는 경로는 있다.
+  - poller 내부 dedup은 메모리이고, 최종 중복 억제는 git-pull/render 단계의 DB cursor에 의존한다.
+- UI/E2E:
+  - 표준 Playwright config와 npm e2e script는 없다.
+  - Python Playwright smoke가 있지만 mock smoke와 real backend smoke가 섞여 있었고, real backend smoke의 hardcoded credential은 제거했다.
+  - `/console/`은 현재 `/`로 redirect/absorb되어 demo 보존 요구와 충돌한다. 별도 정적 demo 보존 또는 명시 redirect 정책 중 하나를 결정해야 한다.
+- DB reset:
+  - 운영 DB 안전 reset script는 없다.
+  - `DROP/TRUNCATE/DELETE`, Redis flush, NATS purge, PVC/EBS 삭제, `aws-down.sh`, `aws-up.sh` reset 용도 실행은 현재 금지.
+  - 최종 reset은 backup/snapshot/restore 검증 후 `Database().init()` + `upsert_admin_account()` 경로로만 수행한다.
+
+AWS SSO 재인증 후 실행할 authenticated smoke:
+
+```bash
+BASE_URL=https://k8s.woonyong.org \
+AUTH_EMAIL=<secret-from-approved-env> \
+AUTH_PASSWORD=<secret-from-approved-env> \
+SMOKE_CLUSTER_ID=<real-cluster-id> \
+MGMT_CONTEXT=kubernetes-ops \
+TARGET_CONTEXT=cluster-1 \
+bash scripts/smoke.sh
+
+BASE_URL=https://k8s.woonyong.org \
+AUTH_EMAIL=<secret-from-approved-env> \
+AUTH_PASSWORD=<secret-from-approved-env> \
+SMOKE_CLUSTER_ID=<real-cluster-id> \
+MGMT_CONTEXT=kubernetes-ops \
+TARGET_CONTEXT=cluster-1 \
+PYTHONPATH=src .venv/bin/python scripts/e2e_test.py
+```
+
+위 예시의 `<secret-from-approved-env>` 값은 문서/로그/커밋에 남기면 안 된다. shell history에 남는 것도 피해야 하므로 실제 실행은 temporary env file 또는 one-shot sanitized wrapper를 사용한다.
+
 ### 브랜치와 커밋
 
 - 작업 브랜치: `dev`.
