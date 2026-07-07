@@ -138,10 +138,10 @@
 | 클러스터 등록 | provider/필드 입력 -> 로컬 검증; 확인 -> `POST /targets/preflight`(`cloud_provider`, `deploy_provider=manual-manifest`, `provider_config`, `apply=false`); 통과 -> `POST /targets`; 설치 -> `bootstrap_steps`/`bootstrap_command`/`install_command` 우선순위 CodeBlock 복사; 연결 -> `GET /clusters/{id}/connection-status` 5초 폴링 | 완료 |
 | 알림 채널 | 설정 입력 -> 테스트 발송 API; 테스트 성공 -> 저장 API | 계약 확인 필요 |
 | 룰 추가 | YAML 입력 -> validate API; 유효 -> symptom/후보 수 preview | 계약 확인 필요 |
-| 회원가입 | 이메일 -> 중복 검증 API; 비밀번호 -> 로컬 강도/정책; 가입 -> `POST /auth/signup`; 재발송 -> `POST /auth/resend-verification` | 대기 |
-| 로그인 실패 분기 | 로그인 -> `POST /auth/login`; `invalid_credentials`, `email_unverified`, `approval_pending` 분기 | 대기 |
-| 이메일 인증 랜딩 | token 검증 -> 성공/만료/이미인증 분기; 만료 -> 재발송 | 대기 |
-| 승인 대기 화면 | 세션/승인 상태 폴링 -> 승인 시 returnTo 자동 입장 | 대기 |
+| 회원가입 | 이메일 입력 debounce -> `POST /auth/check-email`; 사용 가능해야 비밀번호 단계 표시; 비밀번호 강도/정책 실시간; 가입 -> `POST /auth/signup`; 성공 화면 재발송 -> `POST /auth/resend-verification` | 완료 |
+| 로그인 실패 분기 | 로그인 -> `POST /auth/login`; `invalid_credentials`는 단일 문구, `email_unverified`는 재발송 CTA, `approval_pending`은 `/pending` 자동 확인 화면 | 완료 |
+| 이메일 인증 랜딩 | token -> `/api/auth/verify-email?token=&redirect=/verify-email?status=success`; query 상태로 성공/만료/이미인증 분기; 만료 -> `POST /auth/resend-verification` | 완료 |
+| 승인 대기 화면 | `/pending` 진입 시 memory credentials가 있으면 `POST /auth/login` 5초 폴링; 승인 시 returnTo 자동 입장; 새로고침 후에는 수동 로그인 안내 | 완료 |
 | 스케일 | 현재값 조회 -> 변경 미리보기; 정책 불가 선표시; 실행 -> scale command 상태 추적 | 대기 |
 | 재시작/DLQ replay | DLQ: 확인 모달 대상 요약; 실행 중 행 pending; replay -> `POST /dead-letters/{id}/replay`. 재시작 행 pending은 클러스터 운영 액션 패스에서 진행 | 부분 완료 |
 | 복구 승인 | 명령/PR diff 접이식 preview; 권한 없으면 tooltip; 승인/거절 API | 대기 |
@@ -151,6 +151,17 @@
 | 메트릭 PromQL | 입력 debounce -> `POST /metrics/validate`; valid일 때만 저장/실행 활성; 실행 클릭 시 동일 dry-run 재검증 -> `POST /agent/debug/query` 또는 `POST /clusters/{id}/metric-query-presets/{preset_id}/run`; 결과는 `GET /commands/{id}` 폴링; 0건 -> 시간범위 확장 CTA | 완료 |
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
 | 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
+
+## 인증 전개형 검증 UX 변경 (2026-07-08)
+
+- `SignupView`는 이메일 입력을 450ms debounce 후 `POST /auth/check-email`로 선검증한다. 중복이면 "로그인하기" 링크를 인라인으로 표시하고, 사용 가능 응답 전에는 비밀번호 필드와 가입 제출이 열리지 않는다.
+- 비밀번호 단계는 강도/정책을 실시간 표시하고, 8자 이상·확인 일치가 충족되어야 가입 버튼이 활성화된다.
+- 가입 성공 화면은 인증 메일 재발송 버튼, 60초 쿨다운, 스팸함 안내를 포함한다.
+- `LoginView`는 `invalid_credentials`를 "이메일 또는 비밀번호가 올바르지 않습니다"로 통일하고, `email_unverified`는 검증 메일 재전송 CTA, `approval_pending`은 `/pending` 자동 확인 화면으로 분기한다. `returnTo` 복원은 유지한다.
+- `PendingView`는 로그인 실패 직후 넘어온 memory credentials가 있을 때만 `POST /auth/login`을 5초 간격으로 재시도하고, 승인되면 returnTo로 자동 입장한다. 새로고침 후에는 비밀번호를 보관하지 않고 수동 로그인 안내를 표시한다.
+- `VerifyEmailView`는 성공/만료/이미인증 query 상태를 구분하고, 만료 상태에서 같은 자리 재발송 폼을 제공한다. token이 있으면 `/api/auth/verify-email?token=&redirect=/verify-email?status=success`로 넘겨 서버 검증을 먼저 수행한다.
+- `app/guards.tsx`는 `@/ui` 프리미티브와 Tailwind token으로 이관해 인증 계열의 `@/shared/ui`, inline style 의존을 제거했다.
+- 검증(2026-07-08 08:16 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`을 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
 
 ## 클러스터 등록 위저드 UX 변경 (2026-07-08)
 

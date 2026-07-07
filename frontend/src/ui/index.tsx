@@ -692,6 +692,15 @@ export function Skeleton({ lines = 1, className }: { lines?: number; className?:
   );
 }
 
+export function InlineSpinner({ label = '처리 중' }: { label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-caption font-medium text-muted" role="status">
+      <Spinner />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export function EmptyState({
   title,
   description,

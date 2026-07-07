@@ -1,11 +1,31 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:05 KST (설정/조직 디자인 시스템 이관 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:16 KST (인증 전개형 검증 UX 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 인증 전개형 검증 UX
+
+- 구현:
+  - `SignupView`는 이메일 입력을 debounce 후 `POST /auth/check-email`로 선검증하고, 사용 가능 응답 전에는 비밀번호 단계와 가입 버튼을 열지 않는다.
+  - 중복 이메일은 인라인 사유와 "로그인하기" 링크를 표시한다.
+  - 비밀번호 단계는 강도/정책을 실시간 표시하고, 가입 성공 화면은 재발송 버튼, 60초 쿨다운, 스팸함 안내를 포함한다.
+  - `LoginView`는 `invalid_credentials`를 단일 문구로 뭉뚱그려 계정 존재 여부를 노출하지 않고, `email_unverified`는 재발송 CTA, `approval_pending`은 `/pending` 자동 확인 화면으로 분기한다. `returnTo` 복원 유지.
+  - `PendingView`는 로그인 실패 직후 전달된 memory credentials가 있으면 `POST /auth/login`을 즉시/5초 간격으로 재시도하고, 승인 시 returnTo로 자동 입장한다. 새로고침 후에는 비밀번호를 보관하지 않고 수동 로그인 안내를 표시한다.
+  - `VerifyEmailView`는 성공/만료/이미인증 3상태를 구분하고, 만료 상태에서 같은 자리 재발송 폼을 제공한다.
+  - `app/guards.tsx`는 `@/ui` 프리미티브와 Tailwind token으로 이관해 `@/shared/ui`, inline style 의존을 제거했다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - grep: `features/auth`와 `app/guards.tsx`의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var 0건.
+  - Playwright mock: `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`를 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
+- 남은 확인:
+  - 커밋/push 후 Actions 확인. Actions `steps: []` 실패가 반복되면 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
 
 ## 체크포인트 — 설정/조직 디자인 시스템 이관
 

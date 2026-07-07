@@ -18,7 +18,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/query`, `@/shared/lib/api`, `@/shared/lib/live`, `@/shared/lib/ui-store`, `@/shared/ui`, `@/shared/motion`, `@/shared/tokens.css`, `@/shared/ui/app.css`, `@/shared/theme-bridge.css` | [shared](./shared.md) | QueryClient, 401 핸들러, 브라우저 스냅샷 스트림 시작, 토스트, skeleton, 전역 스타일 |
+| import | `@/shared/lib/query`, `@/shared/lib/api`, `@/shared/lib/live`, `@/shared/lib/ui-store`, `@/shared/tokens.css`, `@/shared/ui/app.css`, `@/shared/theme-bridge.css`, `@/ui` | [shared](./shared.md) | QueryClient, 401 핸들러, 브라우저 스냅샷 스트림 시작, 토스트, skeleton, 전역 스타일 |
 | import | 콘솔 UI 프리미티브·아이콘·토큰 모듈 | [shared](./shared.md) | 콘솔 셸 프리미티브·아이콘·토큰 |
 | import | `@/features/auth/api`, `@/features/auth/sessionRefresh` | [features/auth](auth.md) | `useSession`·`useIsAdmin`·`useLogout`·`sessionKey`, 세션 hint, 사용자 interaction 후 세션 refresh |
 | import | `@/features/notifications/api` | [features/notifications](notifications.md) | 알림 flyover와 unread badge |
@@ -93,9 +93,9 @@ export const router = createBrowserRouter([...])
 
 | 심볼 | 앵커 | 동작 |
 |---|---|---|
-| `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | 성공 세션(`data.authenticated`)은 `markSessionSeen()`으로 최근 세션 hint 를 기록하고, 401/unauthorized error 는 `clearSessionHint()`로 지운다. `useSession()` pending 이면서 `hasRecentSessionHint()`가 true 면 `<Outlet />`을 즉시 렌더한다. hint 가 없으면 처음 5초는 `<div style={{padding:48}}><Skeleton lines={5}/></div>`, 이후에는 `EmptyState(IconAlertTriangle, '세션 확인 중')` + "다시 시도" 버튼을 보여준다. 세션 조회가 실패했지만 `unauthorized`/401이 아니면 `EmptyState(IconAlertTriangle, detail 또는 '세션을 확인하지 못했습니다')` + "다시 시도" 버튼을 보여준다. 401 또는 unauthenticated 는 `returnTo = loc.pathname + loc.search + loc.hash` 를 인코딩해 `<Navigate to={"/login?returnTo=" + encodeURIComponent(returnTo)} replace />`. 아니면 `<Outlet />` |
+| `RequireSession` | `frontend/src/app/guards.tsx :: RequireSession` | 성공 세션(`data.authenticated`)은 `markSessionSeen()`으로 최근 세션 hint 를 기록하고, 401/unauthorized error 는 `clearSessionHint()`로 지운다. `useSession()` pending 이면서 `hasRecentSessionHint()`가 true 면 `<Outlet />`을 즉시 렌더한다. hint 가 없으면 처음 5초는 `@/ui Skeleton`, 이후에는 `@/ui EmptyState(AlertGlyph, '세션 확인 중')` + "다시 시도" 버튼을 `bg-bg p-6 sm:p-12` 컨테이너에서 보여준다. 세션 조회가 실패했지만 `unauthorized`/401이 아니면 같은 `@/ui EmptyState`로 detail 또는 '세션을 확인하지 못했습니다' + "다시 시도" 버튼을 보여준다. 401 또는 unauthenticated 는 `returnTo = loc.pathname + loc.search + loc.hash` 를 인코딩해 `<Navigate to={"/login?returnTo=" + encodeURIComponent(returnTo)} replace />`. 아니면 `<Outlet />` |
 | `RequireGuest` | `frontend/src/app/guards.tsx :: RequireGuest` | `!isError && data?.authenticated` 면 `returnTo` query 를 `safeReturnTo` 로 검증한 뒤 replace 이동한다. 세션 조회가 pending 이거나 실패한 게스트 화면은 막지 않고 `<Outlet />`을 렌더한다. `safeReturnTo` 는 값이 없거나 `/`로 시작하지 않거나 `//`/`://`를 포함하면 `/`로 폴백한다. |
-| `RequireAdmin` | `frontend/src/app/guards.tsx :: RequireAdmin` | `useIsAdmin()` 가 false 면 `<EmptyState icon={<IconLock size={26} />} title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />` 렌더(리다이렉트 아님). true 면 `<Outlet />` |
+| `RequireAdmin` | `frontend/src/app/guards.tsx :: RequireAdmin` | `useIsAdmin()` 가 false 면 `@/ui EmptyState` + local `LockGlyph` 로 "권한이 필요합니다"를 렌더(리다이렉트 아님). true 면 `<Outlet />` |
 
 ### 콘솔 셸 — `frontend/src/features/console/ui.tsx :: ConsoleLayout`
 
