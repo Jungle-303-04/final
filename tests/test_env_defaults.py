@@ -55,7 +55,11 @@ def test_outbox_relay_env_defaults_remain_unchanged() -> None:
         "guard_outbox_relay_app",
     )
     assert config.OUTBOX_RELAY == "outbox-relay"
-    assert config.OUTBOX_RELAY_SOURCE == "api-gateway"
+    assert config.OUTBOX_RELAY_SOURCE_ENV == "OUTBOX_RELAY_SOURCE"
+    assert config.OUTBOX_RELAY_ALL_SOURCES == "*"
+    assert config.OUTBOX_RELAY_SOURCE == "*"
+    assert config.relay_source_filter("*") is None
+    assert config.relay_source_filter("api-gateway") == "api-gateway"
     assert config.DEFAULT_OUTBOX_RELAY_INTERVAL_SECONDS == 1.0
     assert config.OUTBOX_RELAY_INTERVAL_SECONDS_ENV == "OUTBOX_RELAY_INTERVAL_SECONDS"
 

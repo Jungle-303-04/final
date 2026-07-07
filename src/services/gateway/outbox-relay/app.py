@@ -13,12 +13,22 @@ from packages.runtime.worker import HEARTBEAT_PATH
 from packages.storage.database import Database, wait_for_database
 
 OUTBOX_RELAY = "outbox-relay"
-OUTBOX_RELAY_SOURCE = "api-gateway"
+OUTBOX_RELAY_SOURCE_ENV = "OUTBOX_RELAY_SOURCE"
+OUTBOX_RELAY_ALL_SOURCES = "*"
+OUTBOX_RELAY_SOURCE = env(OUTBOX_RELAY_SOURCE_ENV, OUTBOX_RELAY_ALL_SOURCES)
 OUTBOX_RELAY_INTERVAL_SECONDS_ENV = (
     "OUTBOX_RELAY_INTERVAL_SECONDS"  # outbox relay 유휴 간격 초(기본 1)
 )
 DEFAULT_OUTBOX_RELAY_INTERVAL_SECONDS = 1.0
 LOGGER = get_logger(__name__)
+
+
+def relay_source_filter(raw: str) -> str | None:
+    """`*`/`all`/빈 값은 모든 source relay, 그 외에는 해당 source 만 relay."""
+    value = raw.strip()
+    if value in {"", OUTBOX_RELAY_ALL_SOURCES, "all"}:
+        return None
+    return value
 
 
 async def run() -> None:
@@ -32,11 +42,12 @@ async def run() -> None:
     Path(HEARTBEAT_PATH).touch()
     await wait_for_database(db)
     await bus.connect()
-    relay = OutboxRelay(db, bus, OUTBOX_RELAY_SOURCE)
+    relay_source = relay_source_filter(OUTBOX_RELAY_SOURCE)
+    relay = OutboxRelay(db, bus, relay_source)
     interval = float(
         env(OUTBOX_RELAY_INTERVAL_SECONDS_ENV, str(DEFAULT_OUTBOX_RELAY_INTERVAL_SECONDS))
     )
-    lifecycle = {"relay_source": OUTBOX_RELAY_SOURCE}
+    lifecycle = {"relay_source": relay_source or "all"}
     LOGGER.info("outbox_relay_started", extra={CONTEXT_KEY: lifecycle})
     try:
         while not stopping.is_set():

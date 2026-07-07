@@ -29,7 +29,9 @@ class FakeOutboxStore:
         self.sent: list[str] = []
         self.dead_lettered: list[tuple[str, str, str]] = []
 
-    async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]:
+    async def unsent_events(self, limit: int, source: str | None) -> list[EventEnvelope]:
+        if source is None:
+            return self.pending[:limit]
         return [e for e in self.pending if e.source == source][:limit]
 
     async def mark_events_sent(self, event_ids: list[str]) -> None:
@@ -131,6 +133,24 @@ def test_relay_publishes_only_own_source() -> None:
 
     assert asyncio.run(relay.run_once()) == 1
     assert publisher.published == ["a"]  # 다른 워커(other-worker) 행은 건드리지 않음
+
+
+def test_relay_without_source_publishes_all_sources() -> None:
+    other = EventEnvelope(
+        event_id="x",
+        subject="workflow.created",
+        source="workflow-controller",
+        correlation_id="corr-1",
+        causation_id=None,
+        created_at="t",
+        payload={},
+    )
+    store = FakeOutboxStore([_evt("a"), other])
+    publisher = FakePublisher()
+    relay = OutboxRelay(store, publisher, None)
+
+    assert asyncio.run(relay.run_once()) == 2
+    assert publisher.published == ["a", "x"]
 
 
 def test_relay_idempotent_when_drained() -> None:

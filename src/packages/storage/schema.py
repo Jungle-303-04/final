@@ -65,6 +65,13 @@ class OutboxModel(Base):
     __tablename__ = "outbox"
     __table_args__ = (
         Index("ix_outbox_claim", "source", "sent_at", "leased_until", "id"),
+        Index(
+            "ix_outbox_claim_all_sources",
+            "sent_at",
+            "leased_until",
+            "id",
+            postgresql_where=text("sent_at IS NULL"),
+        ),
         Index("ix_outbox_sent_at", "sent_at", postgresql_where=text("sent_at IS NOT NULL")),
     )
 

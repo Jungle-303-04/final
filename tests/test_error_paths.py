@@ -24,7 +24,7 @@ class _FakeOutboxStore:
     def __init__(self) -> None:
         self.sent: list[str] = []
 
-    async def unsent_events(self, limit: int, source: str):
+    async def unsent_events(self, limit: int, source: str | None):
         return [event("a.b", source, {}, "c1")]
 
     async def mark_events_sent(self, event_ids: list[str]) -> None:

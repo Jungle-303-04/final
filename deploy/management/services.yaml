@@ -146,7 +146,10 @@ spec:
             - secretRef:
                 name: management-runtime-secret
           env:
-            # api-gateway 가 적재한 outbox 행만 relay 한다. source 변경 금지.
+            # 전용 relay 는 모든 source row 를 lease/skip-locked 로 처리한다.
+            # 워커 내장 relay 와 동시에 돌아도 같은 outbox row lease 가 중복 발행을 막는다.
+            - name: OUTBOX_RELAY_SOURCE
+              value: "*"
             - name: OUTBOX_RELAY_BATCH
               value: "10"
             - name: OUTBOX_RELAY_INTERVAL_SECONDS
