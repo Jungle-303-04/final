@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useApplications, useRunsAll } from '@/features/repo/api';
-import { Badge, Card, EmptyState, ResourceTable, Skeleton } from '@/shared/ui';
+import { Badge, Button, Card, EmptyState, ResourceTable, Skeleton } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
@@ -21,7 +21,11 @@ export default function WorkflowListView() {
     <FadeSlideIn>
       <PageHeader title="워크플로우" />
       <Card>
-        {loading ? <Skeleton lines={4} /> :
+        {apps.isError || all.failed ? (
+          <EmptyState icon={<IconFile size={26} />} title={((apps.error ?? all.error) as Error).message}
+            action={<Button size="sm" onClick={() => apps.refetch()}>다시 시도</Button>} />
+        ) :
+        loading ? <Skeleton lines={4} /> :
         rows.length === 0 ? <EmptyState icon={<IconFile size={26} />} title="실행된 워크플로우가 없습니다" /> :
           <ResourceTable rows={rows} rowKey={r => r.run_id} onRowClick={r => nav(pathFor(`/workflows/${r.run_id}`))}
             columns={[

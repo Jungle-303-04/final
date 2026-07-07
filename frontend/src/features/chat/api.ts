@@ -15,6 +15,8 @@ import { adaptConversationSummary } from '@/shared/lib/adapt';
 import { uiStore } from '@/shared/lib/ui-store';
 import type { AiChatContext } from '@/features/chat/context';
 
+const CHAT_QUERY_TIMEOUT_MS = 8_000;
+
 export interface AiMessagePayload {
   message: string;
   title?: string;
@@ -27,11 +29,18 @@ export const chatKeys = {
 };
 // G10 — AI 대화 목록 route (Gateway /conversations).
 export const useConversations = () =>
-  useQuery({ queryKey: chatKeys.list(), queryFn: () => get<{ conversations: Record<string, unknown>[] }>('/ai/conversations'), select: d => d.conversations.map(adaptConversationSummary), refetchInterval: 15_000 });
+  useQuery({
+    queryKey: chatKeys.list(),
+    queryFn: () => get<{ conversations: Record<string, unknown>[] }>('/ai/conversations', { timeoutMs: CHAT_QUERY_TIMEOUT_MS }),
+    retry: false,
+    select: d => d.conversations.map(adaptConversationSummary),
+    refetchInterval: 15_000,
+  });
 export const useConversation = (id: string | undefined) =>
   useQuery({
     queryKey: chatKeys.one(id ?? ''), enabled: !!id,
-    queryFn: () => get<AiConversationDetailResponse>(`/ai/conversations/${id}`),
+    queryFn: () => get<AiConversationDetailResponse>(`/ai/conversations/${id}`, { timeoutMs: CHAT_QUERY_TIMEOUT_MS }),
+    retry: false,
     select: adaptConversationDetail,
     // waiting 중 2s, idle 15s (docs/fd/views/ai-chat AC — status 만으로 파생)
     refetchInterval: q => (q.state.data?.conversation?.status === 'waiting' ? 2_000 : 15_000),

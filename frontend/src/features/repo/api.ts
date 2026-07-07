@@ -4,6 +4,9 @@ import type { Application } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 import { adaptApplication, adaptDeployment, adaptRun } from '@/shared/lib/adapt';
 
+const REPO_QUERY_TIMEOUT_MS = 8_000;
+const REPO_DISCOVERY_TIMEOUT_MS = 15_000;
+
 export interface CreateApplicationInput {
   name: string;
   repo_ref: string;
@@ -64,18 +67,26 @@ export const repoKeys = {
     ['repo-discovery', 'validation', repoRef, branch, manifestPath, sourceType] as const,
 };
 export const useApplications = () =>
-  useQuery({ queryKey: repoKeys.apps(), queryFn: () => get<{ applications: Record<string, unknown>[] }>('/applications'), refetchInterval: 30_000, select: d => d.applications.map(adaptApplication) });
+  useQuery({
+    queryKey: repoKeys.apps(),
+    queryFn: () => get<{ applications: Record<string, unknown>[] }>('/applications', { timeoutMs: REPO_QUERY_TIMEOUT_MS }),
+    refetchInterval: 30_000,
+    retry: false,
+    select: d => d.applications.map(adaptApplication),
+  });
 export const useApplication = (id: string) =>
   useQuery({
     queryKey: ['applications', id],
-    queryFn: () => get<{ application: Record<string, unknown> }>(`/applications/${id}`),
+    queryFn: () => get<{ application: Record<string, unknown> }>(`/applications/${id}`, { timeoutMs: REPO_QUERY_TIMEOUT_MS }),
+    retry: false,
     select: d => adaptApplication(d.application),
   });
 const ACTIVE = new Set(['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING']);
 export function useRuns(appId: string) {
   return useQuery({
     queryKey: repoKeys.runs(appId),
-    queryFn: () => get<{ runs: Record<string, unknown>[] }>(`/applications/${appId}/runs`),
+    queryFn: () => get<{ runs: Record<string, unknown>[] }>(`/applications/${appId}/runs`, { timeoutMs: REPO_QUERY_TIMEOUT_MS }),
+    retry: false,
     select: d => d.runs.map(adaptRun),
     // 활성 run 있을 때만 10s, 아니면 60s (docs/fd/views/repo AC)
     refetchInterval: (q) =>
@@ -86,7 +97,8 @@ export function useRunsAll(apps: Application[]) {
   return useQueries({
     queries: apps.map(a => ({
       queryKey: repoKeys.runs(a.application_id),
-      queryFn: () => get<{ runs: Record<string, unknown>[] }>(`/applications/${a.application_id}/runs`),
+      queryFn: () => get<{ runs: Record<string, unknown>[] }>(`/applications/${a.application_id}/runs`, { timeoutMs: REPO_QUERY_TIMEOUT_MS }),
+      retry: false,
       // useRuns 와 동일: 활성 run 있으면 10s, 아니면 30s
       refetchInterval: (q: { state: { data?: { runs: Record<string, unknown>[] } } }) =>
         (q.state.data?.runs.some(r => ACTIVE.has(String(r.status ?? '').toUpperCase())) ? 10_000 : 30_000),
@@ -94,6 +106,8 @@ export function useRunsAll(apps: Application[]) {
     combine: results => ({
       // 최초 로딩 여부 — '없음' 을 성급하게 단정하지 않기 위한 신호
       pending: results.some(r => r.isPending),
+      failed: results.some(r => r.isError),
+      error: results.find(r => r.isError)?.error,
       items: results.map((r, i) => ({
         appId: apps[i]?.application_id ?? '',
         runs: (r.data?.runs ?? []).map(adaptRun),
@@ -104,13 +118,14 @@ export function useRunsAll(apps: Application[]) {
 export const useDeployments = (appId: string) =>
   useQuery({
     queryKey: repoKeys.deployments(appId),
-    queryFn: () => get<{ deployments: Record<string, unknown>[] }>(`/applications/${appId}/deployments`),
+    queryFn: () => get<{ deployments: Record<string, unknown>[] }>(`/applications/${appId}/deployments`, { timeoutMs: REPO_QUERY_TIMEOUT_MS }),
+    retry: false,
     select: d => d.deployments.map(adaptDeployment),
   });
 export const useRepositoryProbe = (repoRef: string, enabled: boolean) =>
   useQuery({
     queryKey: repoKeys.probe(repoRef),
-    queryFn: () => post<RepositoryProbe>('/repositories/discovery/probe', { repo_ref: repoRef }),
+    queryFn: () => post<RepositoryProbe>('/repositories/discovery/probe', { repo_ref: repoRef }, { timeoutMs: REPO_DISCOVERY_TIMEOUT_MS }),
     enabled,
     retry: false,
     staleTime: 60_000,
@@ -120,6 +135,7 @@ export const useRepositoryBranches = (repoRef: string, enabled: boolean) =>
     queryKey: repoKeys.branches(repoRef),
     queryFn: () => get<{ default_branch?: string | null; branches: RepositoryBranch[]; warnings: string[] }>(
       `/repositories/discovery/branches?repo_ref=${encodeURIComponent(repoRef)}`,
+      { timeoutMs: REPO_DISCOVERY_TIMEOUT_MS },
     ),
     enabled,
     retry: false,
@@ -130,6 +146,7 @@ export const useRepositoryManifestCandidates = (repoRef: string, branch: string,
     queryKey: repoKeys.manifests(repoRef, branch),
     queryFn: () => get<{ candidates: RepositoryManifestCandidate[]; warnings: string[] }>(
       `/repositories/discovery/manifests?repo_ref=${encodeURIComponent(repoRef)}&branch=${encodeURIComponent(branch)}`,
+      { timeoutMs: REPO_DISCOVERY_TIMEOUT_MS },
     ),
     enabled,
     retry: false,
@@ -149,7 +166,7 @@ export const useRepositoryManifestValidation = (
       branch,
       manifest_path: manifestPath,
       source_type: sourceType,
-    }),
+    }, { timeoutMs: REPO_DISCOVERY_TIMEOUT_MS }),
     enabled,
     retry: false,
     staleTime: 30_000,

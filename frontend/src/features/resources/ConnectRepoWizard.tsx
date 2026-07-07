@@ -117,7 +117,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
               <select className="input" value={selectedBranch} disabled={!probeQ.data?.reachable || (branchesQ.data?.branches ?? []).length === 0}
                 onChange={e => { setBranch(e.target.value); setManifestSelection(''); }}>
                 {(branchesQ.data?.branches ?? []).map(item => (
-                  <option key={item.name} value={item.name}>{item.name}{item.protected ? ' · protected' : ''}</option>
+                  <option key={item.name} value={item.name}>{item.name}{item.protected ? ' · 보호됨' : ''}</option>
                 ))}
               </select>
             )}
@@ -177,7 +177,11 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
       )}
       {step === 1 && (
         <>
-          {clustersQ.isPending ? <Skeleton lines={2} /> : clusters.length === 0 ? (
+          {clustersQ.isError ? (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              클러스터 조회 실패 — {(clustersQ.error as Error).message}
+            </p>
+          ) : clustersQ.isPending ? <Skeleton lines={2} /> : clusters.length === 0 ? (
             <div style={{ padding: '8px 0' }}>
               <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', margin: '0 0 8px' }}>
                 {admin
@@ -206,8 +210,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
             ['레포', `${normalizedRepoRef}@${selectedBranch}`],
             ['manifest', manifestPath],
             ['클러스터', selectedCluster?.name ?? clusterId],
-            ['네임스페이스', manifestNamespace || 'manifest/server policy'],
-            ['환경', selectedCluster?.environment ?? 'server policy'],
+            ['네임스페이스', manifestNamespace || '서버 정책'],
+            ['환경', selectedCluster?.environment ?? '서버 정책'],
           ]} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
             <Button onClick={() => setStep(1)}>이전</Button>
@@ -216,12 +220,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                 name,
                 repo_ref: normalizedRepoRef,
                 branch: selectedBranch,
-	                manifest_path: manifestPath,
-	                source_type: selectedCandidate?.source_type ?? '',
-	                cluster_id: clusterId,
-	                namespace: manifestNamespace,
-	                environment: selectedCluster?.environment,
-	              },
+                manifest_path: manifestPath,
+                source_type: selectedCandidate?.source_type ?? '',
+                cluster_id: clusterId,
+                namespace: manifestNamespace,
+                environment: selectedCluster?.environment,
+              },
                 {
                   onSuccess: d => {
                     uiStore.getState().toast('ok', `${name} 연결 완료 — 첫 커밋이 감지되면 run 이 생성됩니다`);

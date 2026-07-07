@@ -9,9 +9,10 @@ import { useConversations } from '@/features/chat/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { useClusterUsage } from '@/features/cluster/api';
 import { useMetricQueryPresets, useMetricWidgets } from '@/features/metrics/api';
+import { buildUsageSeries } from '@/features/metrics/usageSeries';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
 import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
-import { TimeSeriesChart, TreemapChart, type HeatNode, type Series } from '@/shared/ui/charts';
+import { TimeSeriesChart, TreemapChart, type HeatNode } from '@/shared/ui/charts';
 import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
 import { AnimatedList, CountUp } from '@/shared/motion';
 import { useConsolePath } from '../ui';
@@ -79,19 +80,7 @@ export function HomePage() {
   const usageQ = useClusterUsage(selectedCluster?.cluster_id);
   const widgetsQ = useMetricWidgets(selectedCluster?.cluster_id);
   const presetsQ = useMetricQueryPresets(selectedCluster?.cluster_id);
-  const usageSeries = useMemo((): Series[] => {
-    const samples = usageQ.data ?? [];
-    if (!samples.length) return [];
-    const pointTime = (at: string | null, i: number) => {
-      const parsed = at ? Date.parse(at) : NaN;
-      return Number.isFinite(parsed) ? parsed : i + 1;
-    };
-    return [
-      { id: '실행 팟', data: samples.map((s, i) => ({ x: pointTime(s.sampled_at, i), y: s.usage.pod_running ?? 0 })) },
-      { id: '재시작', data: samples.map((s, i) => ({ x: pointTime(s.sampled_at, i), y: s.usage.restart_total ?? 0 })) },
-      { id: '준비 노드', data: samples.map((s, i) => ({ x: pointTime(s.sampled_at, i), y: s.usage.node_ready ?? 0 })) },
-    ];
-  }, [usageQ.data]);
+  const usageSeries = useMemo(() => buildUsageSeries(usageQ.data ?? []), [usageQ.data]);
 
   return (
     <>
@@ -113,7 +102,7 @@ export function HomePage() {
                 <div className="pl-row">
                   <Button onClick={() => setRepoWizard(true)}><PlusIcon size={14} />레포 연결</Button>
                   {admin && <Button onClick={() => setClusterWizard(true)}><PlusIcon size={14} />클러스터 등록</Button>}
-                  <Button onClick={() => navigate(pathFor('/metrics'))}>프리셋으로</Button>
+                  <Button onClick={() => navigate(pathFor('/metrics'))}>쿼리</Button>
                   <Button variant="primary" onClick={() => navigate(pathFor('/metrics'))}><PlusIcon size={14} />위젯 추가</Button>
                 </div>
               </div>
@@ -311,8 +300,8 @@ function FleetWidgetStrip({ totals, clusters }: { totals: FleetStatTotals; clust
   return (
     <div className="co-kpi-grid">
       <KpiTile label="팟 수" value={totalPods.toLocaleString()} sub={`${totals.stale + totals.unknown}개 클러스터 수집 상태 확인`} />
-      <KpiTile label="CPU 사용률" value={pct(avgCpu)} sub="실측 평균" />
-      <KpiTile label="메모리 사용률" value={pct(avgMem)} sub="실측 평균" />
+      <KpiTile label="CPU 사용률" value={pct(avgCpu)} />
+      <KpiTile label="메모리 사용률" value={pct(avgMem)} />
       <KpiTile label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} danger={activeAlerts > 0} />
     </div>
   );

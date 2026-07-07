@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { useClusters, useClusterSummary, useClusterUsage, usePods } from '@/features/cluster/api';
+import { buildUsageSeries } from '@/features/metrics/usageSeries';
 import { useIsAdmin } from '@/features/auth/api';
 import {
   commandResultMessage,
@@ -127,20 +128,8 @@ export default function MetricsView() {
     ];
   }, [clusterId, paused, frozen, history]);
 
-  // 스냅샷 기반 실측 추이 — cluster_usage_samples 시계열(실 시각 라벨)
-  const usageSeries: Series[] = useMemo(() => {
-    const samples = usageQ.data ?? [];
-    if (!samples.length) return [];
-    const pointTime = (s: { sampled_at: string | null }, i: number) => {
-      const parsed = s.sampled_at ? Date.parse(s.sampled_at) : NaN;
-      return Number.isFinite(parsed) ? parsed : i + 1;
-    };
-    return [
-      { id: '실행 팟', data: samples.map((s, i) => ({ x: pointTime(s, i), y: s.usage.pod_running ?? 0 })) },
-      { id: '재시작 누적', data: samples.map((s, i) => ({ x: pointTime(s, i), y: s.usage.restart_total ?? 0 })) },
-      { id: '준비 노드', data: samples.map((s, i) => ({ x: pointTime(s, i), y: s.usage.node_ready ?? 0 })) },
-    ];
-  }, [usageQ.data]);
+  // 스냅샷 기반 실측 추이 — restart_total 은 증가분으로 변환해 y축 왜곡을 막는다.
+  const usageSeries: Series[] = useMemo(() => buildUsageSeries(usageQ.data ?? []), [usageQ.data]);
 
   const run = useMutation({
     mutationFn: ({ q, rangeSeconds }: { q: string; rangeSeconds: number }) => post<CommandAcceptedResponse>('/agent/debug/query', {
@@ -224,6 +213,18 @@ export default function MetricsView() {
     );
   }
 
+  if (clustersQ.isError) {
+    return (
+      <FadeSlideIn>
+        <PageHeader title="메트릭" />
+        <Card>
+          <EmptyState icon={<IconClock size={26} />} title={(clustersQ.error as Error).message}
+            action={<Button size="sm" onClick={() => clustersQ.refetch()}>다시 시도</Button>} />
+        </Card>
+      </FadeSlideIn>
+    );
+  }
+
   return (
     <FadeSlideIn>
       <PageHeader title="메트릭"
@@ -252,15 +253,15 @@ export default function MetricsView() {
           )}
         </div>
       )}
-      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
+      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>스트림 재연결 중</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <MetricStatBox label="Running" value={phases.Running ?? 0} tone="ok" loading={statPending} />
-        <MetricStatBox label="Pending" value={phases.Pending ?? 0} tone="warn" loading={statPending} />
-        <MetricStatBox label="CrashLoop" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} />
+        <MetricStatBox label="실행" value={phases.Running ?? 0} tone="ok" loading={statPending} />
+        <MetricStatBox label="대기" value={phases.Pending ?? 0} tone="warn" loading={statPending} />
+        <MetricStatBox label="재시작 오류" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} />
         <MetricStatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
         {snapshot?.rollout && <StatBox label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
       </div>
-      <Card title="스트림 추이 — 재시작 / 실행 팟" style={{ marginBottom: 16 }}>
+      <Card title="스트림 추이" style={{ marginBottom: 16 }}>
         <TimeSeriesChart series={series} />
       </Card>
       <Card title="스냅샷 추이" style={{ marginBottom: 16 }}>
@@ -307,7 +308,7 @@ export default function MetricsView() {
             </div>
           )}
       </Card>
-      <Card title="PromQL">
+      <Card title="쿼리">
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <select className="input" style={{ width: 220 }}
             value={selectedPresetId}
@@ -323,7 +324,7 @@ export default function MetricsView() {
           </select>
           <Button onClick={saveCurrentPreset} loading={savePreset.isPending} disabled={!clusterId || !promql.trim() || !presetName.trim()}>저장</Button>
           <input className="input" style={{ width: 180 }} value={widgetTitle} placeholder="위젯 제목" onChange={e => setWidgetTitle(e.target.value)} />
-          <Button onClick={saveCurrentWidget} loading={saveWidget.isPending} disabled={!selectedPreset || !widgetTitle.trim()}>위젯</Button>
+          <Button onClick={saveCurrentWidget} loading={saveWidget.isPending} disabled={!selectedPreset || !widgetTitle.trim()}>위젯 저장</Button>
           <Button variant="primary" onClick={() => execute()} disabled={!clusterId || !promql.trim()}
             title={clusterId ? '' : '클러스터를 먼저 선택해주세요'}>실행</Button>
         </div>

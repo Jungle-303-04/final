@@ -7,8 +7,15 @@ import { uiStore } from '@/shared/lib/ui-store';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
 import type { CatalogItem } from '@/shared/lib/types';
 
+const CATALOG_QUERY_TIMEOUT_MS = 8_000;
+
 export default function CatalogView() {
-  const q = useQuery({ queryKey: ['catalog'], queryFn: () => get<{ items: CatalogItem[] }>('/catalog/items'), select: d => d.items });
+  const q = useQuery({
+    queryKey: ['catalog'],
+    queryFn: () => get<{ items: CatalogItem[] }>('/catalog/items', { timeoutMs: CATALOG_QUERY_TIMEOUT_MS }),
+    retry: false,
+    select: d => d.items,
+  });
   const install = useMutation({
     mutationFn: (id: string) => post(`/catalog/items/${id}/installs`, {}),
     onSuccess: () => uiStore.getState().toast('ok', '설치를 요청했습니다 — 진행 상황은 워크플로우에 표시됩니다'),

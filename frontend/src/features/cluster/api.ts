@@ -20,17 +20,56 @@ export const clusterKeys = {
     ['clusters', id, 'resource-detail', identity?.resource_type ?? '', identity?.kind ?? '', identity?.namespace ?? '', identity?.name ?? ''] as const,
 };
 export const useClusters = () =>
-  useQuery({ queryKey: clusterKeys.list(), queryFn: () => get<{ clusters: Record<string, unknown>[] }>('/clusters', { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), refetchInterval: 30_000, select: d => d.clusters.map(adaptCluster) });
+  useQuery({
+    queryKey: clusterKeys.list(),
+    queryFn: () => get<{ clusters: Record<string, unknown>[] }>('/clusters', { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    refetchInterval: 30_000,
+    retry: false,
+    select: d => d.clusters.map(adaptCluster),
+  });
 export const useClusterSummary = (id: string | undefined) =>
-  useQuery({ queryKey: clusterKeys.summary(id ?? ''), queryFn: () => get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), enabled: !!id, refetchInterval: 30_000, select: adaptInventorySummary });
+  useQuery({
+    queryKey: clusterKeys.summary(id ?? ''),
+    queryFn: () => get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    enabled: !!id,
+    refetchInterval: 30_000,
+    retry: false,
+    select: adaptInventorySummary,
+  });
 export const usePods = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'pods'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), enabled: !!id, refetchInterval: 30_000, select: d => d.resources.map(adaptPodResource) });
+  useQuery({
+    queryKey: clusterKeys.inv(id, 'pods'),
+    queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    enabled: !!id,
+    refetchInterval: 30_000,
+    retry: false,
+    select: d => d.resources.map(adaptPodResource),
+  });
 export const useWorkloads = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'workloads'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/workloads`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), enabled: !!id, refetchInterval: 30_000, select: d => d.resources.map(adaptWorkloadResource) });
+  useQuery({
+    queryKey: clusterKeys.inv(id, 'workloads'),
+    queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/workloads`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    enabled: !!id,
+    refetchInterval: 30_000,
+    retry: false,
+    select: d => d.resources.map(adaptWorkloadResource),
+  });
 export const useResources = (id: string, kind?: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, kind ?? 'all'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources${kind ? `?resource_type=${kind}` : ''}`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), enabled: !!id, select: d => d.resources.map(adaptInventoryResource) });
+  useQuery({
+    queryKey: clusterKeys.inv(id, kind ?? 'all'),
+    queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources${kind ? `?resource_type=${kind}` : ''}`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    enabled: !!id,
+    retry: false,
+    select: d => d.resources.map(adaptInventoryResource),
+  });
 export const useServices = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'services'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/services`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), enabled: !!id, select: d => d.resources.map(adaptServiceResource) });
+  useQuery({
+    queryKey: clusterKeys.inv(id, 'services'),
+    queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/services`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    enabled: !!id,
+    retry: false,
+    select: d => d.resources.map(adaptServiceResource),
+  });
 export interface UsageSample { sampled_at: string | null; usage: Record<string, number> }
 // 스냅샷마다 적재되는 실측 usage 롤업 시계열 — 인벤토리 기반 장기 추이(브라우저 스트림과 별개)
 export const useClusterUsage = (id: string | undefined) =>
@@ -39,10 +78,17 @@ export const useClusterUsage = (id: string | undefined) =>
     queryFn: () => get<{ samples: UsageSample[] }>(`/clusters/${id}/usage?limit=288`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
     enabled: !!id,
     refetchInterval: 60_000,
+    retry: false,
     select: d => d.samples,
   });
 export const useClusterEvents = (id: string) =>
-  useQuery({ queryKey: clusterKeys.inv(id, 'events'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/events`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }), enabled: !!id, select: d => d.resources.map(adaptK8sEventResource) });
+  useQuery({
+    queryKey: clusterKeys.inv(id, 'events'),
+    queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/events`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
+    enabled: !!id,
+    retry: false,
+    select: d => d.resources.map(adaptK8sEventResource),
+  });
 export const useInventoryResourceDetail = (id: string, identity: InventoryResourceIdentity | null) =>
   useQuery({
     queryKey: clusterKeys.detail(id, identity),
@@ -57,6 +103,7 @@ export const useInventoryResourceDetail = (id: string, identity: InventoryResour
     },
     enabled: !!id && !!identity?.resource_type && !!identity?.kind && !!identity?.name,
     refetchInterval: 30_000,
+    retry: false,
     select: adaptInventoryResourceDetail,
   });
 

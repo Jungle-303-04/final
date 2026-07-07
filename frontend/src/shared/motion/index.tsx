@@ -1,6 +1,6 @@
 // 모션 프리미티브 — 인라인 animate 금지, 여기서만 (docs/fd/04 § 모션 원칙)
 import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEventHandler, type ReactNode } from 'react';
 
 export { AnimatePresence };
 
@@ -59,12 +59,20 @@ export function AnimatedList<T>({ items, getKey, children }: { items: T[]; getKe
 }
 
 /** 테이블 행 layout 애니메이션 — ResourceTable 전용(AnimatedList 의 tr 변형) */
-export function AnimatedRow({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
+export function AnimatedRow({ children, className, onClick, onKeyDown, role, tabIndex }: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+  onKeyDown?: KeyboardEventHandler<HTMLTableRowElement>;
+  role?: string;
+  tabIndex?: number;
+}) {
   const reduced = useReducedMotion();
-  if (reduced) return <tr className={className} onClick={onClick}>{children}</tr>;
+  if (reduced) return <tr className={className} onClick={onClick} onKeyDown={onKeyDown} role={role} tabIndex={tabIndex}>{children}</tr>;
   return (
     <motion.tr layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className={className} onClick={onClick}>
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className={className} onClick={onClick}
+      onKeyDown={onKeyDown} role={role} tabIndex={tabIndex}>
       {children}
     </motion.tr>
   );
