@@ -42,6 +42,7 @@ status: synced
 - `src/domains/rca/events.py` — 이벤트 body·값 객체 dataclass 정의.
 - `src/domains/rca/repository.py` — `RcaRepository` 와 복구 계획 상태 상수.
 - `src/domains/rca/router.py` — FastAPI 라우터(agent evidence 수신, 복구 후보 선택).
+- `src/domains/rca/query_router.py` — FastAPI 라우터(세션 워크스페이스 범위 evidence/RCA report 조회).
 
 ### repository 상수 — `src/domains/rca/repository.py`
 
@@ -60,6 +61,8 @@ status: synced
 | `save_evidence(self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject) -> None` | `evidence` 테이블에 단순 INSERT(pg_insert) | `src/domains/rca/repository.py :: RcaRepository.save_evidence` |
 | `upsert_rca_backlog_item(self, body: JsonObject) -> None` | `rca_backlog_items`에 `backlog_id` 충돌 시 UPDATE. `missing_evidence`는 `{"items": body["missing_evidence"]}` 로 감싸 저장. 신규 INSERT 시 `occurrence_count=1`, 충돌 시 `occurrence_count + 1` 증가. `incident_id/reason/evidence_ref/missing_evidence/status/payload/updated_at` 갱신(단, `symptom/title/workspace_id/created_at`은 최초값 유지) | `src/domains/rca/repository.py :: RcaRepository.upsert_rca_backlog_item` |
 | `list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[JsonObject]` | `rca_reports`를 `workspace_id`로 필터, `created_at DESC, id DESC` 정렬, `limit` 건 조회(최신순). AI 도구 등 읽기 전용 소비자용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_reports` |
+| `list_evidence_records(self, workspace_id: str, *, correlation_id=None, kind=None, since=None, until=None, limit=50, offset=0) -> list[JsonObject]` | `evidence`를 `workspace_id` 필수 + 선택 필터(`correlation_id/kind`, `created_at >= since`, `created_at < until`)로 조회. `created_at DESC, id DESC` 정렬 + `limit/offset` 페이지네이션. `created_at`은 ISO 문자열로 직렬화 — `/evidence` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_evidence_records` |
+| `list_rca_report_records(self, workspace_id: str, *, correlation_id=None, since=None, until=None, limit=50, offset=0) -> list[JsonObject]` | `rca_reports`를 같은 방식(워크스페이스 필수, 선택 필터, 최신순, limit/offset)으로 조회. payload 요약은 라우터(`rca_report_summary`)가 수행 — `/rca-reports` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_report_records` |
 | `upsert_recovery_selection_request(self, correlation_id: str, workspace_id: str, plan: JsonObject) -> None` | `recovery_plans`에 `(workspace_id, plan_id)` 유니크 기준 upsert. status는 `selection_requested`로 넣되, 기존 row가 이미 `selected`면 status를 **유지**(CASE 식) — 나머지 필드(`correlation_id/incident_id/evidence_ref/payload/updated_at`)는 갱신 | `src/domains/rca/repository.py :: RcaRepository.upsert_recovery_selection_request` |
 | `get_recovery_plan(self, plan_id: str, workspace_id: str) -> JsonObject | None` | `recovery_plans`에서 `(plan_id, workspace_id)` 일치 1건을 dict로 반환(`plan_id, workspace_id, correlation_id, incident_id, evidence_ref, status, selected_action_id, selected_by, payload` 컬럼), 없으면 `None` | `src/domains/rca/repository.py :: RcaRepository.get_recovery_plan` |
 | `select_recovery_plan_action_if_open(self, plan_id: str, workspace_id: str, action_id: str, selected_by: str) -> JsonObject | None` | status가 `OPEN_RECOVERY_PLAN_STATUSES`(= `selection_requested`)인 row만 조건부 UPDATE → `status="selected"`, `selected_action_id`, `selected_by`, `updated_at=now()`. `RETURNING payload, correlation_id`. 열려 있지 않으면(이미 selected 등) `None` — 동시 선택 경합 방지 | `src/domains/rca/repository.py :: RcaRepository.select_recovery_plan_action_if_open` |
@@ -99,6 +102,23 @@ status: synced
 | `select_recovery_action` | `async (plan_id: str, action_id: str, payload: RecoveryActionSelectRequest, current: Any = Depends(require_session), db: Any = Depends(get_db), events: Any = Depends(get_events)) -> AcceptedResponse` | `src/domains/rca/router.py :: select_recovery_action` |
 | `db_call` | `async (func: Any, *args: Any, **kwargs: Any) -> Any` — `asyncio.to_thread(func, *args, **kwargs)` 로 동기 DB 호출을 스레드로 위임 | `src/domains/rca/router.py :: db_call` |
 
+### 조회 라우터 심볼 — `src/domains/rca/query_router.py`
+
+세션 워크스페이스 범위 read-only 조회 라우터. agent 토큰 가드(router.py)와 분리해 `require_session` 만 사용한다.
+
+| 심볼 | 정의 | 앵커 |
+|---|---|---|
+| `router` | `APIRouter()` (prefix 없음, 게이트웨이가 마운트) | `src/domains/rca/query_router.py :: router` |
+| `DEFAULT_QUERY_LIMIT` | `50` | `src/domains/rca/query_router.py :: DEFAULT_QUERY_LIMIT` |
+| `MAX_QUERY_LIMIT` | `200` | `src/domains/rca/query_router.py :: MAX_QUERY_LIMIT` |
+| `HTTP_UNPROCESSABLE` | `422` | `src/domains/rca/query_router.py :: HTTP_UNPROCESSABLE` |
+| `INVALID_TIMESTAMP_DETAIL` | `"must be an ISO-8601 timestamp"` | `src/domains/rca/query_router.py :: INVALID_TIMESTAMP_DETAIL` |
+| `list_evidence` | `async (correlation_id, kind, since, until, limit=Query(50, ge=1, le=200), offset=Query(0, ge=0), current=Depends(require_session), db=Depends(get_db)) -> EvidenceQueryResponse` — `has_more` 판정을 위해 `limit+1` 건 조회 후 `limit` 개로 자름 | `src/domains/rca/query_router.py :: list_evidence` |
+| `list_rca_reports` | `async (correlation_id, since, until, limit, offset, current, db) -> RcaReportListResponse` — 같은 페이지네이션, 항목은 `rca_report_summary` 요약 | `src/domains/rca/query_router.py :: list_rca_reports` |
+| `parse_query_timestamp` | `(value: str \| None, name: str) -> datetime \| None` — ISO-8601(`Z` suffix 허용) 파싱, 실패 시 `HTTPException(422)` | `src/domains/rca/query_router.py :: parse_query_timestamp` |
+| `evidence_record` | `(row: JsonObject) -> JsonObject` — `EvidenceRecordItem` 필드 매핑 | `src/domains/rca/query_router.py :: evidence_record` |
+| `rca_report_summary` | `(row: JsonObject) -> JsonObject` — payload 원문 대신 `incident`/`rca_detail` 화이트리스트 필드만 추출(secret 원문 미노출) | `src/domains/rca/query_router.py :: rca_report_summary` |
+
 ### HTTP 엔드포인트
 
 | 메서드+경로 | 요청 모델 | 응답 모델 | 권한/의존성 | 핸들러 앵커 |
@@ -106,6 +126,9 @@ status: synced
 | `POST /agent/evidence` (`gateway_routes.AGENT_EVIDENCE_PATH`) | `AgentEvidenceRequest` ([contracts](../packages/contracts.md)) | `AcceptedResponse` | `Depends(require_cluster_agent)` — `x-agent-token` 헤더 per-cluster 토큰, 실패 시 401. `get_events`, `get_db` | `src/domains/rca/router.py :: agent_evidence` |
 | `POST /webhooks/alertmanager?cluster_id=` (`gateway_routes.ALERTMANAGER_WEBHOOK_PATH`) | query: `cluster_id: str`(필수), `workspace_id: str = "default"` + body: `AlertmanagerWebhookRequest`(Alertmanager v4 webhook, `groupKey`/`receiver`/`alerts[]`) | `AcceptedResponse` | `require_alertmanager_token` — `Authorization: Bearer` 토큰(핸들러 내부 호출). 미설정 503, 불일치 401 | `src/domains/rca/router.py :: alertmanager_webhook` |
 | `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select` (`gateway_routes.RCA_RECOVERY_ACTION_SELECT_PATH`) | path: `plan_id: str`, `action_id: str` + body: `RecoveryActionSelectRequest` (`reason: str | None`, max 500자) | `AcceptedResponse` | `Depends(require_session)` (유효 세션 401 가드) + 핸들러 내부에서 `require_cluster_access(..., Permission.DEPLOY_RUN.value)` (실패 시 `RECOVERY_SELECTION_ACCESS_DENIED`). `get_db`, `get_events` | `src/domains/rca/router.py :: select_recovery_action` |
+
+| `GET /evidence` (`gateway_routes.EVIDENCE_QUERY_PATH`) | query: `correlation_id?`, `kind?`, `since?`/`until?`(ISO-8601), `limit`(기본 50, 최대 200), `offset`(≥0) | `EvidenceQueryResponse` | `Depends(require_session)` — 세션 워크스페이스로만 범위 지정. `get_db` | `src/domains/rca/query_router.py :: list_evidence` |
+| `GET /rca-reports` (`gateway_routes.RCA_REPORTS_PATH`) | query: `correlation_id?`, `since?`/`until?`, `limit`, `offset` | `RcaReportListResponse` | `Depends(require_session)` — 세션 워크스페이스로만 범위 지정. `get_db` | `src/domains/rca/query_router.py :: list_rca_reports` |
 
 `AcceptedResponse` 스키마: `accepted: bool`, `event_id: str`, `correlation_id: str`.
 
@@ -249,13 +272,18 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 
 #### CauseCandidate — `src/domains/rca/events.py :: CauseCandidate`
 
-| 필드 | 타입 |
-|---|---|
-| `candidate_id` | `str` |
-| `title` | `str` |
-| `description` | `str` |
-| `expected_evidence` | `list[str]` |
-| `checks` | `list[str]` |
+| 필드 | 타입 | 기본값 |
+|---|---|---|
+| `candidate_id` | `str` | — |
+| `title` | `str` | — |
+| `description` | `str` | — |
+| `expected_evidence` | `list[str]` | — |
+| `checks` | `list[str]` | — |
+| `source` | `str` | `CAUSE_CANDIDATE_SOURCE_RULE` |
+
+후보 출처 상수: `CAUSE_CANDIDATE_SOURCE_RULE = "rule"` (`src/domains/rca/events.py :: CAUSE_CANDIDATE_SOURCE_RULE`),
+`CAUSE_CANDIDATE_SOURCE_AI_FALLBACK = "ai_fallback"` (`src/domains/rca/events.py :: CAUSE_CANDIDATE_SOURCE_AI_FALLBACK`) —
+rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 
 #### CauseEvaluation — `src/domains/rca/events.py :: CauseEvaluation`
 
@@ -447,6 +475,10 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 | `evidence_bundle` | `EvidenceBundle` | — |
 | `missing_evidence` | `list[str]` | — |
 | `workspace_id` | `str` | `DEFAULT_WORKSPACE_ID` |
+| `evidence` | `Evidence \| None` | `None` |
+
+`evidence`는 AI fallback 결과(`rca.candidates.planned`)가 rule 경로와 같은 rca-worker 계약(evidence 필수)을
+지나도록 plan-worker 가 원본 증거를 동봉하는 필드다. 소비자: ai-fallback-worker, rca-feedback-worker.
 
 #### `rca.candidates.planned` — `src/domains/rca/events.py :: RcaCandidatesPlannedBody`
 
