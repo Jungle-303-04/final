@@ -104,8 +104,24 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
             "environment": "sandbox",
             "cluster_id": Target.DEFAULT_CLUSTER_ID,
             "manifest_path": "deploy.yaml",
+            "source_type": "",
         }
     ]
+
+
+def test_once_mode_posts_env_source_type_to_webhook(monkeypatch) -> None:
+    module = _load_poller()
+    monkeypatch.setenv("GIT_MANIFEST_SOURCE_TYPE", "helm")
+    posted: list[dict[str, Any]] = []
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=_transport(posted)) as client:
+            poller = module.GitHubPoller(client=client)
+            poller.once = True
+            await poller.run()
+
+    asyncio.run(go())
+    assert posted[0]["source_type"] == "helm"
 
 
 def test_poll_once_env_parses_only_truthy_values(monkeypatch) -> None:
@@ -151,6 +167,7 @@ def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None
                 "environment": "prod",
                 "cluster_id": "cluster-1",
                 "manifest_path": "k8s/deploy.yaml",
+                "source_type": "kustomize",
             }
         ]
     )
@@ -185,6 +202,7 @@ def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None
             "environment": "prod",
             "cluster_id": "cluster-1",
             "manifest_path": "k8s/deploy.yaml",
+            "source_type": "kustomize",
         }
     ]
 

@@ -360,6 +360,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))ì
 | `environment` | `str` | `DEFAULT_ENVIRONMENT` |
 | `cluster_id` | `str` | `Target.DEFAULT_CLUSTER_ID` |
 | `manifest_path` | `str` | `DEFAULT_MANIFEST_PATH` |
+| `source_type` | `str` | `""` (`max_length=40`) |
 | `force` | `bool` | `False` |
 
 - `AgentConnectRequest` â€” `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `agent_id: str`, `capabilities: list[str] = Field(default_factory=list)`.

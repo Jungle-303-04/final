@@ -821,6 +821,7 @@ def test_gitops_poll_targets_join_active_repository_application_binding() -> Non
                     "environment": "prod",
                     "cluster_id": "cluster-1",
                     "manifest_path": "k8s/deploy.yaml",
+                    "source_type": "kustomize",
                     "last_seen_commit_sha": "old-sha",
                 }
             ]
@@ -852,6 +853,7 @@ def test_gitops_poll_targets_join_active_repository_application_binding() -> Non
             "environment": "prod",
             "cluster_id": "cluster-1",
             "manifest_path": "k8s/deploy.yaml",
+            "source_type": "kustomize",
             "last_seen_commit_sha": "old-sha",
         }
     ]

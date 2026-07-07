@@ -126,6 +126,7 @@ class GitWebhookReceivedBody(EventBody):
     environment: str = DEFAULT_ENVIRONMENT
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    source_type: str = ""
     force: bool = False
 
 
@@ -148,6 +149,7 @@ class GitChangedBody(EventBody):
     environment: str = DEFAULT_ENVIRONMENT
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    source_type: str = ""
 
 
 @event(EventSubject.MANIFEST_RENDERED)

@@ -103,6 +103,7 @@ status: synced
 | `TERMINAL_WORKFLOW_STATUSES` | `= (WorkflowRunStatus.SUCCEEDED.value, WorkflowRunStatus.FAILED.value)` | `src/domains/gitops/repository.py :: TERMINAL_WORKFLOW_STATUSES` |
 | `workflow_status_rank` | `def workflow_status_rank(column: Any) -> Any` — 상태 컬럼→순위 SQL CASE 식(미등록 상태는 0) | `src/domains/gitops/repository.py :: workflow_status_rank` |
 | `workflow_transition_guard` | `def workflow_transition_guard(table: Any, new_status: Any) -> Any` — `현재 status ∉ TERMINAL AND rank(현재) <= rank(new)` 조건식. `new_status`는 문자열 또는 excluded 컬럼 | `src/domains/gitops/repository.py :: workflow_transition_guard` |
+| `watch_target_settings` | `def watch_target_settings(payload: JsonObject) -> JsonObject` — `settings.source_type` 우선, 없으면 `deploy_policy.manifest_source`/`deploy_policy.source_type`에서 `source_type`을 보존해 watch target settings 로 반환 | `src/domains/gitops/repository.py :: watch_target_settings` |
 | `RepoChangeRepository` | `class RepoChangeRepository(DatabaseConnection)` | `src/domains/gitops/repository.py :: RepoChangeRepository` |
 | `manifest_artifact_id` | `def manifest_artifact_id(payload: JsonObject) -> str` — `"manifest-" + sha256("workspace_id|binding_id|commit_sha|manifest_path")[:32]` | `src/domains/gitops/repository.py :: manifest_artifact_id` |
 | `derive_repository_id` | `def derive_repository_id(payload: JsonObject) -> str` — 명시값(비-기본) 우선, 아니면 `"repo-" + sha256("workspace_id|repo_ref")[:32]` | `src/domains/gitops/repository.py :: derive_repository_id` |
@@ -134,7 +135,7 @@ status: synced
 | `def get_deployment_binding(self, workspace_id: str, binding_id: str) -> JsonObject | None` | 바인딩 단건 조회(serialize_deployment_binding) | `src/domains/gitops/repository.py :: RepoChangeRepository.get_deployment_binding` |
 | `def list_repository_deployment_bindings(self, workspace_id: str, repository_id: str) -> list[JsonObject]` | 같은 repo 를 바라보는 `active` 바인딩 전부 — 글로벌 서비스 webhook fan-out 대상 조회. 정렬 `cluster_id, binding_id` | `src/domains/gitops/repository.py :: RepoChangeRepository.list_repository_deployment_bindings` |
 | `def list_workspace_deployment_bindings(self, workspace_id: str) -> list[JsonObject]` | 워크스페이스의 `active` 바인딩 전부 — 글로벌 그룹 탐색용(바인딩 수 소규모 전제). 정렬 `repository_id, app_name, cluster_id` | `src/domains/gitops/repository.py :: RepoChangeRepository.list_workspace_deployment_bindings` |
-| `def list_active_github_poll_targets(self, workspace_id: str \| None = None, *, limit: int = 500) -> list[JsonObject]` | github-poll-worker 대상 조회. active GitHub repo + active application + active deployment binding을 조인하고, `git_watch_targets`는 LEFT JOIN한다. watch target row가 없으면 binding의 derived `watch_target_id`와 manifest path로 fallback한다. 반환 필드: `workspace_id`, `application_id`, `repository_id`, `repo_ref`, `credential_ref`, `branch`, `watch_target_id`, `binding_id`, `environment`, `cluster_id`, `manifest_path`, `last_seen_commit_sha`. | `src/domains/gitops/repository.py :: RepoChangeRepository.list_active_github_poll_targets` |
+| `def list_active_github_poll_targets(self, workspace_id: str \| None = None, *, limit: int = 500) -> list[JsonObject]` | github-poll-worker 대상 조회. active GitHub repo + active application + active deployment binding을 조인하고, `git_watch_targets`는 LEFT JOIN한다. watch target row가 없으면 binding의 derived `watch_target_id`와 manifest path로 fallback한다. `source_type`은 watch target settings → binding deploy_policy(`manifest_source`, `source_type`) → application metadata 순서로 fallback한다. 반환 필드: `workspace_id`, `application_id`, `repository_id`, `repo_ref`, `credential_ref`, `branch`, `watch_target_id`, `binding_id`, `environment`, `cluster_id`, `manifest_path`, `source_type`, `last_seen_commit_sha`. | `src/domains/gitops/repository.py :: RepoChangeRepository.list_active_github_poll_targets` |
 | `def get_workflow_run(self, workflow_run_id: str) -> JsonObject | None` | 워크플로 run 단건 조회(serialize_workflow_run) | `src/domains/gitops/repository.py :: RepoChangeRepository.get_workflow_run` |
 | `def get_workflow_step_details(self, workflow_run_id: str, name: str) -> JsonObject | None` | 특정 step 의 `details` JSONB 단건 조회 — 승격(promotion) 시 소스 run 의 diff step details 에서 image/replicas 를 읽는 용도 | `src/domains/gitops/repository.py :: RepoChangeRepository.get_workflow_step_details` |
 | `def latest_succeeded_run_for_binding(self, workspace_id: str, binding_id: str) -> JsonObject | None` | 바인딩의 최근 `succeeded` run(`updated_at DESC LIMIT 1`) — 신규 클러스터가 글로벌 바인딩에 합류할 때 초기 배포 기준 | `src/domains/gitops/repository.py :: RepoChangeRepository.latest_succeeded_run_for_binding` |
@@ -225,7 +226,7 @@ status: synced
 | last_seen_commit_sha | Text | nullable | 마지막 관측 커밋 |
 | last_polled_at | TIMESTAMP(tz) | nullable | 마지막 폴링 시각 |
 | status | Text | NOT NULL | `WatchTargetStatus`: `active` / `paused` |
-| settings | JSONB | NOT NULL | |
+| settings | JSONB | NOT NULL | watch target 설정. `/applications/connect`는 검증된 `source_type`을 `settings.source_type`에 저장해 poller/webhook/render-worker까지 같은 렌더러 선택을 보존한다. |
 | created_at / updated_at | TIMESTAMP(tz) | NOT NULL, default now() | |
 
 ### DeploymentBinding — `src/domains/gitops/models.py :: DeploymentBinding`
@@ -381,8 +382,8 @@ status: synced
 
 | subject (라우팅 키) | body 클래스 | 필드 (타입, 기본값) | 앵커 |
 |---|---|---|---|
-| `git.webhook.received` | `GitWebhookReceivedBody` | `commit_sha: str`, `image: str`, `replicas: int`, `workspace_id: str = "default"`, `repository_id: str = ""`, `repo_ref: str = ""`, `branch: str = "main"`, `watch_target_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `cluster_id: str = "default-target-cluster"`, `manifest_path: str = "deploy.yaml"`, `force: bool = False` | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
-| `git.changed` | `GitChangedBody` | `GitWebhookReceivedBody` 와 동일하되 `force` 없음: `commit_sha: str`, `image: str`, `replicas: int`, `workspace_id`, `repository_id`, `repo_ref`, `branch`, `watch_target_id`, `binding_id`, `application_id`, `workflow_run_id`, `environment`, `cluster_id`, `manifest_path` (기본값 동일) | `src/domains/gitops/events.py :: GitChangedBody` |
+| `git.webhook.received` | `GitWebhookReceivedBody` | `commit_sha: str`, `image: str`, `replicas: int`, `workspace_id: str = "default"`, `repository_id: str = ""`, `repo_ref: str = ""`, `branch: str = "main"`, `watch_target_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `cluster_id: str = "default-target-cluster"`, `manifest_path: str = "deploy.yaml"`, `source_type: str = ""`, `force: bool = False` | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
+| `git.changed` | `GitChangedBody` | `GitWebhookReceivedBody` 와 동일하되 `force` 없음: `commit_sha: str`, `image: str`, `replicas: int`, `workspace_id`, `repository_id`, `repo_ref`, `branch`, `watch_target_id`, `binding_id`, `application_id`, `workflow_run_id`, `environment`, `cluster_id`, `manifest_path`, `source_type` (기본값 동일) | `src/domains/gitops/events.py :: GitChangedBody` |
 | `manifest.rendered` | `ManifestRenderedBody` | `rendered_manifest: RenderedManifest`, `workspace_id: str = "default"`, `repository_id: str = ""`, `watch_target_id: str = ""`, `binding_id: str = ""`, `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `cluster_id: str = "default-target-cluster"`, `commit_sha: str = ""`, `manifest_path: str = "deploy.yaml"` | `src/domains/gitops/events.py :: ManifestRenderedBody` |
 | `manifest.invalid` | `ManifestInvalidBody` | `workspace_id: str`, `repository_id: str`, `watch_target_id: str`, `binding_id: str`, `commit_sha: str`, `manifest_path: str`, `reason: str` (전부 필수), `application_id: str = ""`, `workflow_run_id: str = ""`, `environment: str = "sandbox"`, `cluster_id: str = "default-target-cluster"` | `src/domains/gitops/events.py :: ManifestInvalidBody` |
 | `desired.diff.detected` | `DesiredDesiredDiffDetectedBody` | `diff: Diff` | `src/domains/gitops/events.py :: DesiredDesiredDiffDetectedBody` |
@@ -413,7 +414,7 @@ status: synced
 ### 1. GitHub webhook 수신 (`POST /github/webhook`)
 
 1. 라우터 의존성 `verify_github_signature`: `GITHUB_WEBHOOK_SECRET` env 미설정 → 503 `"webhook secret not configured"`; 원시 body 에 대한 `sha256=<HMAC-SHA256(secret, body)>` 를 `x-hub-signature-256` 헤더와 `hmac.compare_digest` 비교, 불일치/누락 → 401 `"invalid webhook signature"`. fail-closed.
-2. `GitHubWebhookRequest` 를 `build_git_webhook_body` 로 `GitWebhookReceivedBody` 로 변환해 `events.accept_body` 로 수락(발행 스테이징).
+2. `GitHubWebhookRequest` 를 `build_git_webhook_body` 로 `GitWebhookReceivedBody` 로 변환해 `events.accept_body` 로 수락(발행 스테이징). `source_type`을 포함한 요청 body 필드는 `payload.model_dump()` 그대로 보존한다.
 3. `AcceptedEventResponse(accepted=True, event_id, correlation_id, event=<이벤트 dict>)` 반환.
 
 ### 2. 승인 grant/reject (`POST /approvals/{approval_id}/grant|reject`)

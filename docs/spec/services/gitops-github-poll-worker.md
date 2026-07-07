@@ -85,7 +85,7 @@ class GitHubPoller:
 `src/services/gitops/github-poll-worker/poller.py :: GitHubPoller`
 (내부 메서드 `_webhook_headers(body: bytes) -> dict[str, str]`, `_github_headers(target) -> dict[str, str]`, `_github_token(target)`, `_read_token_ref(ref, target)`는 동작 섹션에서 설명.)
 
-생성자에서 읽는 인스턴스 상태(설정 섹션 참조): env fallback용 `repo`, `branch`, `workspace_id`, `repository_id`, `watch_target_id`, `binding_id`, `cluster_id`, `manifest_path`, `interval`, `token_ref`, `token`, `github_api_base`, `webhook_secret`, `image`, `once`, `_client`, `db`, `token_vault`, `_last_sha_by_target: dict[str, str]`, `_etag_by_target: dict[str, str]`.
+생성자에서 읽는 인스턴스 상태(설정 섹션 참조): env fallback용 `repo`, `branch`, `workspace_id`, `repository_id`, `watch_target_id`, `binding_id`, `cluster_id`, `manifest_path`, `source_type`, `interval`, `token_ref`, `token`, `github_api_base`, `webhook_secret`, `image`, `once`, `_client`, `db`, `token_vault`, `_last_sha_by_target: dict[str, str]`, `_etag_by_target: dict[str, str]`.
 
 ### settings.py
 
@@ -107,6 +107,7 @@ class Settings:
 | `DEPLOYMENT_BINDING_ID_ENV` / `DEFAULT_DEPLOYMENT_BINDING_ID` | `"DEPLOYMENT_BINDING_ID"` / `""` |
 | `TARGET_CLUSTER_ID_ENV` / `DEFAULT_TARGET_CLUSTER_ID` | `"TARGET_CLUSTER_ID"` / `Target.DEFAULT_CLUSTER_ID`(`"default-target-cluster"`) |
 | `MANIFEST_PATH_ENV` / `DEFAULT_MANIFEST_PATH` | `"MANIFEST_PATH"` / `"deploy.yaml"` |
+| `MANIFEST_SOURCE_TYPE_ENV` | `"GIT_MANIFEST_SOURCE_TYPE"` |
 | `POLL_INTERVAL_ENV` / `DEFAULT_POLL_INTERVAL_SECONDS` | `"POLL_INTERVAL_SECONDS"` / `"30"` |
 | `POLL_ONCE_ENV` | `"POLL_ONCE"` |
 | `GITHUB_TOKEN_ENV` | `"GITHUB_TOKEN"` (contracts.gitops 재노출) |
@@ -152,6 +153,7 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 | environment | target environment(DB target이면 binding environment, env fallback이면 `"sandbox"`) |
 | cluster_id | `self.cluster_id` |
 | manifest_path | `self.manifest_path` |
+| source_type | target source type(DB target이면 watch target settings → binding deploy_policy → application metadata 순 fallback, env fallback이면 `GIT_MANIFEST_SOURCE_TYPE`) |
 
 `workflow_run_id`/`force` 키는 보내지 않는다 — 이벤트 body 기본값과 downstream 파생에 맡긴다.
 
@@ -225,6 +227,7 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 | `DEPLOYMENT_BINDING_ID` | str | `""` | webhook body의 binding_id |
 | `TARGET_CLUSTER_ID` | str | `"default-target-cluster"` | webhook body의 cluster_id |
 | `MANIFEST_PATH` | str | `"deploy.yaml"` | webhook body의 manifest_path |
+| `GIT_MANIFEST_SOURCE_TYPE` | str | `""` | env fallback webhook body의 source_type. DB target 은 저장된 source_type 을 사용 |
 | `POLL_INTERVAL_SECONDS` | int | `30` | 상주 루프 폴링 주기 초 |
 | `POLL_ONCE` | bool 문자열(`1/true/yes/on`) | 꺼짐 | 1회 폴링 후 종료(CronJob 모드) |
 | `GITHUB_TOKEN` | str | `""` | GitHub API Bearer 토큰(무인증 60회/시 → 인증 5000회/시) |

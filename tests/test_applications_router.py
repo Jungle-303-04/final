@@ -179,6 +179,7 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
     assert db.registered_watch_targets[0]["cluster_id"] == "cluster-1"
     assert db.registered_watch_targets[0]["namespace"] == "prod"
     assert db.registered_watch_targets[0]["manifest_path"] == "deploy/kustomization.yaml"
+    assert db.registered_watch_targets[0]["settings"]["source_type"] == "kustomize"
     assert db.registered_watch_targets[0]["deploy_policy"]["manifest_source"] == "kustomize"
     assert db.registered_bindings[0]["repository_id"] == "repo-1"
     assert db.access_checks == [

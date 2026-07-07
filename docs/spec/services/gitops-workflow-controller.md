@@ -62,6 +62,7 @@ status: synced
 | `DEFAULT_PROMOTION_REPLICAS` | `2` — diff 상세에 replicas가 없을 때 fallback | `src/services/gitops/workflow-controller/app.py :: DEFAULT_PROMOTION_REPLICAS` |
 | `CLUSTER_REGISTERED_REASON` | `"target registered"` — 반응 대상 `cluster.desired_state.changed` reason | `src/services/gitops/workflow-controller/app.py :: CLUSTER_REGISTERED_REASON` |
 | `binding_policy` | `def binding_policy(binding: JsonObject) -> JsonObject` — `binding["deploy_policy"]`를 dict로 (없으면 `{}`) | `src/services/gitops/workflow-controller/app.py :: binding_policy` |
+| `binding_source_type` | `def binding_source_type(binding: JsonObject) -> str` — binding deploy_policy의 `manifest_source` 또는 `source_type`을 문자열로 반환 | `src/services/gitops/workflow-controller/app.py :: binding_source_type` |
 | `promoted_image_and_replicas` | `async def promoted_image_and_replicas(ctx: EventContext[WorkflowStore], workflow_run_id: str) -> tuple[str, int]` — 소스 run의 `diff` 스텝 details에서 `desired_image`·`basis.replicas`(파싱 실패·부재 시 2)를 읽음(합성 금지) | `src/services/gitops/workflow-controller/app.py :: promoted_image_and_replicas` |
 | `entry_webhook_for_binding` | `def entry_webhook_for_binding(*, workspace_id, application_id, binding, commit_sha, image, replicas, repo_ref, branch) -> GitWebhookReceivedBody` — 대상 바인딩으로 표준 파이프라인을 재진입시키는 입구 이벤트 생성 | `src/services/gitops/workflow-controller/app.py :: entry_webhook_for_binding` |
 | `run_exists_for` | `async def run_exists_for(ctx, *, workspace_id, application_id, binding, commit_sha) -> bool` — `derive_workflow_run_id`로 결정적 run_id를 파생해 `get_workflow_run` 존재 확인 | `src/services/gitops/workflow-controller/app.py :: run_exists_for` |
@@ -127,8 +128,8 @@ status: synced
 
 | 이벤트 | 라우팅 키(NATS subject) | 핵심 body 필드 | 앵커 |
 |---|---|---|---|
-| `GitWebhookReceivedBody` | `git.webhook.received` | `commit_sha`, `image`, `replicas`, `repo_ref`, `branch`, 식별자 필드들, `force: bool = False` | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
-| `GitChangedBody` | `git.changed` | `commit_sha`, `image`, `replicas`, `repo_ref`, `branch`, 식별자 필드들 | `src/domains/gitops/events.py :: GitChangedBody` |
+| `GitWebhookReceivedBody` | `git.webhook.received` | `commit_sha`, `image`, `replicas`, `repo_ref`, `branch`, `source_type`, 식별자 필드들, `force: bool = False` | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
+| `GitChangedBody` | `git.changed` | `commit_sha`, `image`, `replicas`, `repo_ref`, `branch`, `source_type`, 식별자 필드들 | `src/domains/gitops/events.py :: GitChangedBody` |
 | `ManifestRenderedBody` | `manifest.rendered` | `rendered_manifest: RenderedManifest`, 식별자 필드들, `commit_sha`, `manifest_path` | `src/domains/gitops/events.py :: ManifestRenderedBody` |
 | `ManifestInvalidBody` | `manifest.invalid` | `reason`, `commit_sha`, `manifest_path`, 식별자 필드들 | `src/domains/gitops/events.py :: ManifestInvalidBody` |
 | `DesiredDesiredDiffDetectedBody` | `desired.diff.detected` | `diff: Diff` | `src/domains/gitops/events.py :: DesiredDesiredDiffDetectedBody` |
@@ -154,7 +155,7 @@ status: synced
 | `WorkflowRunFailedBody` | `workflow.run.failed` | `workflow_run_id`, `application_id`, `reason`, `workspace_id`, `binding_id`, `environment`, `details` | `src/domains/gitops/events.py :: WorkflowRunFailedBody` |
 | `ApprovalRequestedBody` | `approval.requested` | `approval_id`, `workflow_run_id`, `application_id`, `reason`, `workspace_id`, `binding_id`, `environment`, `requested_role = "release_operator"`, `details` | `src/domains/gitops/events.py :: ApprovalRequestedBody` |
 | `CommandRequestedBody` (조건부) | `command.requested` | `approval.granted.details["command_requested"]`를 `CommandRequestedBody.from_body`로 복원 | `src/domains/command/events.py :: CommandRequestedBody` |
-| `GitWebhookReceivedBody` (조건부) | `git.webhook.received` | `entry_webhook_for_binding`이 대상 바인딩 좌표(binding_id/environment/cluster_id/manifest_path 등)와 commit_sha·image·replicas로 구성 — 승격/글로벌 fan-out/신규 클러스터 초기 배포의 파이프라인 재진입 입구 | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
+| `GitWebhookReceivedBody` (조건부) | `git.webhook.received` | `entry_webhook_for_binding`이 대상 바인딩 좌표(binding_id/environment/cluster_id/manifest_path/source_type 등)와 commit_sha·image·replicas로 구성 — 승격/글로벌 fan-out/신규 클러스터 초기 배포의 파이프라인 재진입 입구 | `src/domains/gitops/events.py :: GitWebhookReceivedBody` |
 
 ## 동작 (Behavior)
 

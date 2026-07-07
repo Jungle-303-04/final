@@ -23,13 +23,16 @@ def test_git_pull_emits_git_changed() -> None:
     db = SpyDb()
     outs = run_handler(
         git_pull.on_git_webhook,
-        GitWebhookReceivedBody(commit_sha="abc123", image="img:new", replicas=2),
+        GitWebhookReceivedBody(
+            commit_sha="abc123", image="img:new", replicas=2, source_type="kustomize"
+        ),
         db=db,
     )
     assert subjects_of(outs) == ["git.changed"]
     assert outs[0].commit_sha == "abc123"
     assert outs[0].image == "img:new"
     assert outs[0].replicas == 2
+    assert outs[0].source_type == "kustomize"
     assert not db.called("mark_watch_observed")
 
 

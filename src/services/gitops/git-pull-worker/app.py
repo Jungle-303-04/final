@@ -73,6 +73,7 @@ async def on_git_webhook(
         environment=evt.environment,
         cluster_id=evt.cluster_id,
         manifest_path=evt.manifest_path,
+        source_type=evt.source_type,
     )
 
 

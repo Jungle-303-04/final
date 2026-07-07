@@ -51,6 +51,7 @@ class GitHubPollTarget:
     environment: str
     cluster_id: str
     manifest_path: str
+    source_type: str = ""
     credential_ref: str = ""
 
     @property
@@ -66,6 +67,7 @@ class GitHubPollTarget:
                 self.repo_ref,
                 self.branch,
                 self.manifest_path,
+                self.source_type,
             )
         )
 
@@ -82,6 +84,7 @@ class GitHubPollTarget:
             environment=str(row.get("environment") or Settings.DEFAULT_ENVIRONMENT),
             cluster_id=str(row.get("cluster_id") or Settings.DEFAULT_TARGET_CLUSTER_ID),
             manifest_path=str(row.get("manifest_path") or Settings.DEFAULT_MANIFEST_PATH),
+            source_type=str(row.get("source_type") or ""),
             credential_ref=str(row.get("credential_ref") or ""),
         )
 
@@ -108,6 +111,7 @@ class GitHubPoller:
         )
         self.cluster_id = env(Settings.TARGET_CLUSTER_ID_ENV, Settings.DEFAULT_TARGET_CLUSTER_ID)
         self.manifest_path = env(Settings.MANIFEST_PATH_ENV, Settings.DEFAULT_MANIFEST_PATH)
+        self.source_type = env(Settings.MANIFEST_SOURCE_TYPE_ENV, "")
         self.interval = int(env(Settings.POLL_INTERVAL_ENV, Settings.DEFAULT_POLL_INTERVAL_SECONDS))
         self.token_ref = env(Settings.GITHUB_TOKEN_REF_ENV, "").strip()
         self.token = env(Settings.GITHUB_TOKEN_ENV, "")
@@ -206,6 +210,7 @@ class GitHubPoller:
                     environment=Settings.DEFAULT_ENVIRONMENT,
                     cluster_id=self.cluster_id,
                     manifest_path=self.manifest_path,
+                    source_type=self.source_type,
                 )
             ]
         return []
@@ -287,6 +292,7 @@ class GitHubPoller:
                 "environment": target.environment,
                 "cluster_id": target.cluster_id,
                 "manifest_path": target.manifest_path,
+                "source_type": target.source_type,
             }
         ).encode()
         response = await client.post(

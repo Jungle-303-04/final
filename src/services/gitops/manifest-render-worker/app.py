@@ -74,9 +74,11 @@ DEFAULT_NAMESPACED_KINDS = {
 }
 RENDERER_VERSION = "manifest-render-v2"
 SOURCE_TYPE_RAW_YAML = "raw-yaml"
+SOURCE_TYPE_RAW_JSON = "raw-json"
 SOURCE_TYPE_KUSTOMIZE = "kustomize"
 SOURCE_TYPE_HELM = "helm"
 SUPPORTED_SOURCE_TYPES = {
+    SOURCE_TYPE_RAW_JSON,
     SOURCE_TYPE_RAW_YAML,
     SOURCE_TYPE_KUSTOMIZE,
     SOURCE_TYPE_HELM,
@@ -230,8 +232,8 @@ def repo_remote_url(repo_ref: str) -> str:
     return f"{web_base}/{normalized.strip('/')}.git"
 
 
-def source_type_override() -> str | None:
-    raw = env(GIT_MANIFEST_SOURCE_TYPE_ENV, "").strip().lower()
+def source_type_override(event_source_type: str = "") -> str | None:
+    raw = env(GIT_MANIFEST_SOURCE_TYPE_ENV, "").strip().lower() or event_source_type.strip().lower()
     if not raw:
         return None
     if raw not in SUPPORTED_SOURCE_TYPES:
@@ -263,23 +265,26 @@ def detect_source_type(path: Path, override: str | None) -> str:
     return SOURCE_TYPE_RAW_YAML
 
 
-def render_source_from_path(path: Path, manifest_path: str, origin: str) -> RenderSource:
+def render_source_from_path(
+    path: Path, manifest_path: str, origin: str, override: str | None = None
+) -> RenderSource:
     return RenderSource(
-        source_type=detect_source_type(path, source_type_override()),
+        source_type=detect_source_type(path, override),
         manifest_path=manifest_path,
         origin=origin,
         local_path=path,
     )
 
 
-def render_source_from_text(source: str, manifest_path: str, origin: str) -> RenderSource:
-    override = source_type_override()
-    if override and override != SOURCE_TYPE_RAW_YAML:
+def render_source_from_text(
+    source: str, manifest_path: str, origin: str, override: str | None = None
+) -> RenderSource:
+    if override and override not in {SOURCE_TYPE_RAW_YAML, SOURCE_TYPE_RAW_JSON}:
         raise ManifestSourceError(
             f"{override} rendering requires a checked-out repo path, not a raw file response"
         )
     return RenderSource(
-        source_type=SOURCE_TYPE_RAW_YAML,
+        source_type=override or SOURCE_TYPE_RAW_YAML,
         manifest_path=manifest_path,
         origin=origin,
         source_text=source,
@@ -414,17 +419,18 @@ def manifest_render_source(evt: GitChangedBody) -> Any:
         return
 
     mode = manifest_source_mode()
+    override = source_type_override(evt.source_type)
 
     if mode != SOURCE_MODE_LOCAL:
         with TemporaryDirectory(prefix="gitops-render-") as tmp:
             cached_path = export_checkout_cache_manifest_path(evt, manifest_path, Path(tmp))
             if cached_path is not None:
-                yield render_source_from_path(cached_path, manifest_path, "git_cache")
+                yield render_source_from_path(cached_path, manifest_path, "git_cache", override)
                 return
 
         remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
         if remote_source is not None:
-            yield render_source_from_text(remote_source, manifest_path, "github_contents")
+            yield render_source_from_text(remote_source, manifest_path, "github_contents", override)
             return
 
     if local_manifest_enabled(mode):
@@ -434,12 +440,12 @@ def manifest_render_source(evt: GitChangedBody) -> Any:
                 local_path = export_local_git_path(
                     repo_path, evt.commit_sha, manifest_path, Path(tmp)
                 )
-                yield render_source_from_path(local_path, manifest_path, "git_repo_path")
+                yield render_source_from_path(local_path, manifest_path, "git_repo_path", override)
             return
 
         path = Path(manifest_path)
         if path.exists():
-            yield render_source_from_path(path, manifest_path, "local_path")
+            yield render_source_from_path(path, manifest_path, "local_path", override)
             return
 
     yield None
@@ -481,7 +487,7 @@ def load_manifest_documents(source: str) -> list[Any]:
 
 
 def render_source_documents(source: RenderSource) -> list[Any]:
-    if source.source_type == SOURCE_TYPE_RAW_YAML:
+    if source.source_type in {SOURCE_TYPE_RAW_YAML, SOURCE_TYPE_RAW_JSON}:
         return load_raw_yaml_documents(source)
     if source.source_type == SOURCE_TYPE_KUSTOMIZE:
         return load_manifest_documents(render_kustomize(source))

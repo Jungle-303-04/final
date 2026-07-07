@@ -162,6 +162,7 @@ async def connect_application(
         "manifest_source": source_type,
         "validation_mode": validation.validation_mode,
     }
+    settings = {"source_type": source_type}
     body = {
         "workspace_id": workspace_id,
         "user_id": current.user_id,
@@ -175,6 +176,7 @@ async def connect_application(
         "namespace": payload.namespace,
         "environment": payload.environment,
         "deploy_policy": deploy_policy,
+        "settings": settings,
         "access_policy": payload.access_policy,
     }
     with unit_of_work_or_null(db):

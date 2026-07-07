@@ -73,6 +73,7 @@ async def on_git_webhook(
 | environment | str | `"sandbox"` |
 | cluster_id | str | `Target.DEFAULT_CLUSTER_ID`(`"default-target-cluster"`) |
 | manifest_path | str | `"deploy.yaml"` |
+| source_type | str | `""` |
 | force | bool | `False` — True면 중복 필터 무시 |
 
 ### 발행 (Publishes)
@@ -95,8 +96,9 @@ async def on_git_webhook(
 | environment | str | `evt.environment` |
 | cluster_id | str | `evt.cluster_id` |
 | manifest_path | str | `evt.manifest_path` |
+| source_type | str | `evt.source_type` |
 
-`GitChangedBody`에는 `force` 필드가 없다(필터 통과 후 소멸).
+`GitChangedBody`에는 `force` 필드가 없다(필터 통과 후 소멸). `source_type`은 레포 연결 시 선택된 manifest renderer를 downstream render-worker까지 보존하기 위해 그대로 전달한다.
 
 ## 동작 (Behavior)
 

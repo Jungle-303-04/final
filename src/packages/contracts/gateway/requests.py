@@ -92,6 +92,7 @@ class GitHubWebhookRequest(StrictModel):
     environment: str = DEFAULT_ENVIRONMENT
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    source_type: str = Field(default="", max_length=40)
     force: bool = False
 
 

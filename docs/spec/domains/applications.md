@@ -78,7 +78,7 @@ status: synced
 2. `RepositoryDiscoveryService.validate_manifest(RepositoryManifestValidationRequest(...))`로 `repo_ref`, `branch`, `manifest_path`, `source_type`을 서버에서 재검증한다. discovery 오류는 그 status/detail 그대로 HTTPException으로 반환한다.
 3. validation 결과가 `valid=False`이면 첫 `errors[0]`, 없으면 `"manifest validation failed"`로 422를 반환한다.
 4. `source_type = normalize_source_type(payload.source_type) or source_type_from_path(validation.manifest_path)`로 manifest source를 결정한다.
-5. `metadata`에는 validation의 `branch`, `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 병합한다. `deploy_policy`에는 `manifest_source`, `validation_mode`를 병합한다.
+5. `metadata`에는 validation의 `branch`, `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 병합한다. `deploy_policy`에는 `manifest_source`, `validation_mode`를 병합한다. `settings.source_type`에도 같은 값을 넣어 watch target → github poller → webhook → git-pull → manifest-render 경로에서 선택한 렌더러가 유지되게 한다.
 6. `unit_of_work_or_null(db)` 안에서 `db.register_repository(body)` → `db.upsert_application(body)` → 최신 application 조회 → `db.register_watch_target(binding_body)` → `db.register_deployment_binding(binding_body)` 순서로 app/watch/binding을 함께 등록한다.
 7. 반환은 `ApplicationResponse(application=application)`이다.
 
@@ -105,6 +105,7 @@ status: synced
 - 권한 부족 → identity 의존성이 던지는 HTTPException ([identity](./identity.md)).
 - repo 등록과 애플리케이션 업서트는 같은 트랜잭션(`unit_of_work_or_null`) — 부분 실패 시 둘 다 롤백.
 - `/applications/connect`는 repo/app/watch/deployment binding 등록을 같은 트랜잭션에서 처리한다.
+- `/applications/connect`에서 검증한 `source_type`은 application metadata, binding deploy_policy(`manifest_source`), watch target settings 모두에 남아야 한다. validate 단계와 실제 render-worker 단계가 다른 렌더러를 쓰면 안 된다.
 - binding의 `repository_id`/`app_name`은 항상 소속 애플리케이션에서 파생(클라이언트 입력을 신뢰하지 않음).
 - 글로벌 바인딩(`cluster_id="*"`)은 권한 전수 검증 후에만 확장 생성 — 부분 권한으로는 아무 바인딩도 생기지 않는다. 등록 클러스터가 없으면 422 `"no registered clusters to expand global binding"`.
 

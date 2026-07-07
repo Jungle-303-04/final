@@ -104,6 +104,20 @@ def workflow_transition_guard(table: Any, new_status: Any) -> Any:
     )
 
 
+def watch_target_settings(payload: JsonObject) -> JsonObject:
+    settings = dict(payload.get("settings", {}))
+    deploy_policy = dict(payload.get("deploy_policy", {}))
+    source_type = str(
+        settings.get("source_type")
+        or deploy_policy.get("manifest_source")
+        or deploy_policy.get("source_type")
+        or ""
+    ).strip()
+    if source_type:
+        settings["source_type"] = source_type
+    return settings
+
+
 class RepoChangeRepository(DatabaseConnection):
     def register_repository(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
@@ -155,7 +169,7 @@ class RepoChangeRepository(DatabaseConnection):
             last_seen_commit_sha=payload.get("last_seen_commit_sha"),
             last_polled_at=payload.get("last_polled_at"),
             status=str(payload.get("status", WatchTargetStatus.ACTIVE.value)),
-            settings=dict(payload.get("settings", {})),
+            settings=watch_target_settings(payload),
             updated_at=func.now(),
         )
         statement = insert.on_conflict_do_update(
@@ -561,6 +575,13 @@ class RepoChangeRepository(DatabaseConnection):
             binding_table.c.manifest_path,
             app_table.c.manifest_path,
         ).label("manifest_path")
+        source_type = func.coalesce(
+            watch_table.c.settings["source_type"].astext,
+            binding_table.c.deploy_policy["manifest_source"].astext,
+            binding_table.c.deploy_policy["source_type"].astext,
+            app_table.c.metadata["source_type"].astext,
+            "",
+        ).label("source_type")
         watch_target_id = func.coalesce(
             watch_table.c.watch_target_id,
             binding_table.c.watch_target_id,
@@ -578,6 +599,7 @@ class RepoChangeRepository(DatabaseConnection):
                 binding_table.c.environment,
                 binding_table.c.cluster_id,
                 manifest_path,
+                source_type,
                 watch_table.c.last_seen_commit_sha,
             )
             .select_from(binding_table)
