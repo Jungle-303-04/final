@@ -233,6 +233,97 @@ class InventorySummaryResponse(StrictModel):
     counts: list[JsonMap] = Field(default_factory=list)
 
 
+class FleetClusterSummaryItem(StrictModel):
+    """fleet 화면 클러스터 1개 롤업 — health 는 healthy|warning|critical."""
+
+    cluster_id: str
+    name: str
+    health: str
+    pods_running: int = 0
+    pods_total: int = 0
+    nodes_ready: int = 0
+    nodes_total: int = 0
+    open_incidents: int = 0
+    restarts_recent: int = 0
+    # 실측 활용률(%) — agent usage 롤업에 값이 없으면 None(합성 값 금지).
+    cpu_pct: float | None = None
+    mem_pct: float | None = None
+    last_seen_at: str | None = None
+
+
+class FleetTotals(StrictModel):
+    """fleet 상단 카드 합계 — dead_letters 는 플랫폼 전역 카운트(내용 비노출)."""
+
+    clusters: int = 0
+    healthy: int = 0
+    warning: int = 0
+    critical: int = 0
+    open_incidents: int = 0
+    pending_approvals: int = 0
+    running_workflows: int = 0
+    dead_letters: int = 0
+
+
+class FleetSummaryResponse(StrictModel):
+    clusters: list[FleetClusterSummaryItem] = Field(default_factory=list)
+    totals: FleetTotals = Field(default_factory=FleetTotals)
+
+
+class ClusterWorkloadHealthItem(StrictModel):
+    """드릴다운 워크로드 1개 — ready 는 "ready/desired" 문자열(inventory status)."""
+
+    name: str
+    kind: str
+    namespace: str | None = None
+    health: str
+    ready: str = ""
+    restarts: int = 0
+
+
+class ClusterWarningEventItem(StrictModel):
+    namespace: str | None = None
+    name: str
+    reason: str | None = None
+    message: str | None = None
+    involved_kind: str | None = None
+    involved_name: str | None = None
+    count: int = 0
+    last_seen_at: str | None = None
+
+
+class ClusterOpenIncidentItem(StrictModel):
+    incident_id: str
+    correlation_id: str
+    symptom: str | None = None
+    root_cause: str | None = None
+    status: str
+    created_at: str | None = None
+
+
+class ClusterUsageSnapshot(StrictModel):
+    """최신 usage 롤업 1건 — agent 가 관측한 값만(없으면 None/0)."""
+
+    sampled_at: str | None = None
+    pods_running: int = 0
+    pods_total: int = 0
+    nodes_ready: int = 0
+    nodes_total: int = 0
+    restart_total: int = 0
+    cpu_pct: float | None = None
+    mem_pct: float | None = None
+
+
+class ClusterSummaryDetailResponse(StrictModel):
+    cluster_id: str
+    name: str
+    health: str
+    # health 값("healthy"/"degraded"/"unknown") → 워크로드 목록 그룹.
+    workloads: dict[str, list[ClusterWorkloadHealthItem]] = Field(default_factory=dict)
+    warning_events: list[ClusterWarningEventItem] = Field(default_factory=list)
+    open_incidents: list[ClusterOpenIncidentItem] = Field(default_factory=list)
+    usage: ClusterUsageSnapshot | None = None
+
+
 class TargetInstallResponse(StrictModel):
     registered: bool
     cluster_id: str
