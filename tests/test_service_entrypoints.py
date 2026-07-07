@@ -141,6 +141,7 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
         "alert-worker",
         "command-janitor",
         "outbox-relay",
+        "rca-timeline-janitor",
         "evidence-worker",
         "ai-diff-worker",
         "dashboard-worker",

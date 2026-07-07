@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import Select, case, delete, func, or_, select
@@ -54,9 +55,12 @@ RCA_TIMELINE_STATUS_BY_SUBJECT: dict[str, str] = {
 CLOSED_INCIDENT_STATUSES: tuple[str, ...] = (
     "command_completed",
     "command_rejected",
+    "incident_expired",
     "pr_created",
     "pr_failed",
 )
+DEFAULT_OPEN_INCIDENT_EXPIRE_DAYS = 3
+DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT = 500
 
 
 class DashboardRepository(DatabaseConnection):
@@ -379,6 +383,52 @@ class DashboardRepository(DatabaseConnection):
             if len(items) >= bounded_limit:
                 break
         return items
+
+    def expire_stale_open_rca_incidents(
+        self,
+        max_age_days: int = DEFAULT_OPEN_INCIDENT_EXPIRE_DAYS,
+        limit: int = DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT,
+    ) -> list[JsonObject]:
+        """오래 열린 timeline row 자동 종결 — fleet 수치가 무한 누적되지 않게 한다."""
+        bounded_days = max(1, int(max_age_days))
+        bounded_limit = max(1, min(int(limit), DEFAULT_OPEN_INCIDENT_EXPIRE_LIMIT))
+        table = RcaTimeline.__table__
+        candidates = (
+            select(table.c.id)
+            .where(
+                table.c.incident_id.is_not(None),
+                table.c.cluster_id.is_not(None),
+                table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
+                table.c.updated_at < func.now() - timedelta(days=bounded_days),
+            )
+            .order_by(table.c.updated_at.asc())
+            .limit(bounded_limit)
+            .with_for_update(skip_locked=True)
+            .cte("stale_open_incidents")
+        )
+        statement = (
+            table.update()
+            .where(table.c.id.in_(select(candidates.c.id)))
+            .values(
+                status="incident_expired",
+                error_reason=func.coalesce(
+                    table.c.error_reason,
+                    f"open incident exceeded {bounded_days} day retention window",
+                ),
+                updated_at=func.now(),
+            )
+            .returning(
+                table.c.id,
+                table.c.workspace_id,
+                table.c.cluster_id,
+                table.c.incident_id,
+                table.c.correlation_id,
+                table.c.status,
+            )
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [dict(row) for row in rows]
 
 
 def open_incident_summary(row: JsonObject) -> JsonObject:
