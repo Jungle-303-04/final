@@ -2,7 +2,9 @@
 import { useMemo, useState, type ComponentProps, type SVGProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, Skeleton, StatCard, Table, Tabs, cx, type TableColumn } from '@/ui';
-import { healthLabel, healthScore, useFleetSummary, type FleetClusterSummary, type FleetHealth } from '@/features/fleet/api';
+import { useClusters } from '@/features/cluster/api';
+import { healthLabel, useFleetSummary, type FleetClusterSummary, type FleetHealth } from '@/features/fleet/api';
+import { DrilldownHeatmap } from '@/features/fleet/DrilldownHeatmap';
 import { timeAgo, useNotices, useTimeline } from '@/features/notifications/api';
 import { useConversations } from '@/features/chat/api';
 import { useIsAdmin } from '@/features/auth/api';
@@ -56,15 +58,28 @@ export function HomePage() {
   const navigate = useNavigate();
   const pathFor = useConsolePath();
   const fleetQ = useFleetSummary();
+  const clustersQ = useClusters();
   const timelineQ = useTimeline();
   const { notices } = useNotices();
   const conversationsQ = useConversations();
   const admin = useIsAdmin();
   const [fleetLens, setFleetLens] = useState<FleetLens>('all');
   const approvals = notices.filter(n => n.kind === 'approval').slice(0, 5);
+  const clusterRoles = useMemo(() => new Map((clustersQ.data ?? []).map(cluster => [cluster.cluster_id, cluster.role])), [clustersQ.data]);
 
   const clusterColumns = useMemo<TableColumn<FleetClusterSummary>[]>(() => [
-    { id: 'name', header: '클러스터', width: 'lg', sortValue: row => row.name, cell: row => <span className="font-semibold text-primary">{row.name}</span> },
+    {
+      id: 'name',
+      header: '클러스터',
+      width: 'lg',
+      sortValue: row => row.name,
+      cell: row => (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-semibold text-primary">{row.name}</span>
+          {clusterRoles.get(row.cluster_id) === 'management' && <Badge tone="info">관리 클러스터</Badge>}
+        </span>
+      ),
+    },
     { id: 'health', header: '상태', sortValue: row => row.health, cell: row => <HealthBadge health={row.health} /> },
     { id: 'pods', header: '팟', sortValue: row => row.pods_total, cell: row => `${row.pods_running}/${row.pods_total}` },
     { id: 'nodes', header: '노드', sortValue: row => row.nodes_total, cell: row => `${row.nodes_ready}/${row.nodes_total}` },
@@ -73,7 +88,7 @@ export function HomePage() {
     { id: 'incidents', header: '인시던트', sortValue: row => row.open_incidents, cell: row => row.open_incidents > 0 ? <Badge tone="danger">{row.open_incidents}</Badge> : <span className="text-muted">없음</span> },
     { id: 'restarts', header: '재시작', sortValue: row => row.restarts_recent, cell: row => row.restarts_recent.toLocaleString() },
     { id: 'lastSeen', header: '마지막 확인', sortValue: row => row.last_seen ?? '', cell: row => row.last_seen ? timeAgo(row.last_seen) : <span className="text-muted">미확인</span> },
-  ], []);
+  ], [clusterRoles]);
 
   if (fleetQ.isPending) {
     return (
@@ -128,7 +143,7 @@ export function HomePage() {
 
       <FleetStatCards totals={fleet.totals} clusters={fleet.clusters} />
 
-      <FleetHeatmap clusters={fleet.clusters} lens={fleetLens} onLensChange={setFleetLens} onOpen={clusterId => navigate(pathFor(`/clusters/${clusterId}`))} />
+      <FleetHeatmap clusters={fleet.clusters} clusterRoles={clusterRoles} lens={fleetLens} onLensChange={setFleetLens} onOpen={clusterId => navigate(pathFor(`/clusters/${clusterId}`))} />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <RecentIncidentCard query={timelineQ} pathFor={pathFor} />
@@ -172,46 +187,41 @@ function FleetStatCards({ totals, clusters }: { totals: FleetStatTotals; cluster
 
 function FleetHeatmap({
   clusters,
+  clusterRoles,
   lens,
   onLensChange,
   onOpen,
 }: {
   clusters: FleetClusterSummary[];
+  clusterRoles: Map<string, string>;
   lens: FleetLens;
   onLensChange: (lens: FleetLens) => void;
   onOpen: (clusterId: string) => void;
 }) {
+  const tiles = clusters.map(cluster => ({
+    id: cluster.cluster_id,
+    label: cluster.name,
+    size: cluster.pods_total || 1,
+    health: cluster.health,
+    badge: clusterRoles.get(cluster.cluster_id) === 'management' ? <Badge tone="info">관리 클러스터</Badge> : undefined,
+    meta: (
+      <>
+        <span>{heatSummary(cluster, lens)}</span>
+        <span className="text-caption text-muted">팟 {cluster.pods_running}/{cluster.pods_total} · 노드 {cluster.nodes_ready}/{cluster.nodes_total}</span>
+      </>
+    ),
+  }));
   return (
     <Card
       title="플릿 맵"
       description="렌즈를 전환해 클러스터 위험 신호를 확인합니다"
       actions={<Tabs items={FLEET_LENSES.map(item => ({ value: item.key, label: item.label }))} value={lens} onValueChange={value => onLensChange(value as FleetLens)} />}
     >
-      <div className="grid min-h-80 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {clusters.map(cluster => {
-          const tone = heatTone(cluster, lens);
-          return (
-            <button
-              key={cluster.cluster_id}
-              type="button"
-              className={cx(
-                'grid min-h-36 content-between rounded-panel border p-4 text-left transition-colors hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-                heatTileClass(tone),
-              )}
-              onClick={() => onOpen(cluster.cluster_id)}
-            >
-              <span className="flex items-center justify-between gap-3">
-                <span className="min-w-0 truncate text-title font-semibold text-primary">{cluster.name}</span>
-                <HealthBadge health={cluster.health} />
-              </span>
-              <span className="grid gap-2 text-body text-secondary">
-                <span>{heatSummary(cluster, lens)}</span>
-                <span className="text-caption text-muted">팟 {cluster.pods_running}/{cluster.pods_total} · 노드 {cluster.nodes_ready}/{cluster.nodes_total}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <DrilldownHeatmap
+        tiles={tiles}
+        breadcrumb={[{ id: 'fleet', label: 'fleet' }]}
+        onTileClick={tile => onOpen(tile.id)}
+      />
     </Card>
   );
 }
@@ -311,35 +321,11 @@ function avgMetric(values: (number | null)[]): number | null {
   return known.reduce((sum, value) => sum + value, 0) / known.length;
 }
 
-function heatTone(cluster: FleetClusterSummary, lens: FleetLens): BadgeTone {
-  if (lens === 'incidents') return cluster.open_incidents > 0 ? 'danger' : 'success';
-  if (lens === 'cpu') return ratioTone(cluster.cpu_pct);
-  if (lens === 'memory') return ratioTone(cluster.mem_pct);
-  const score = healthScore(cluster.health);
-  if (score <= 0.2) return 'danger';
-  if (score <= 0.55) return 'warning';
-  return 'success';
-}
-
-function ratioTone(value: number | null): BadgeTone {
-  if (value == null) return 'neutral';
-  if (value >= 85) return 'danger';
-  if (value >= 70) return 'warning';
-  return 'success';
-}
-
 function heatSummary(cluster: FleetClusterSummary, lens: FleetLens): string {
   if (lens === 'cpu') return `CPU ${pct(cluster.cpu_pct)}`;
   if (lens === 'memory') return `메모리 ${pct(cluster.mem_pct)}`;
   if (lens === 'incidents') return `인시던트 ${cluster.open_incidents.toLocaleString()}건`;
   return `상태 ${healthLabel(cluster.health)}`;
-}
-
-function heatTileClass(tone: BadgeTone) {
-  if (tone === 'danger') return 'border-danger/40 bg-danger/10';
-  if (tone === 'warning') return 'border-warning/40 bg-warning/10';
-  if (tone === 'success') return 'border-success/40 bg-success/10';
-  return 'border-border bg-raised';
 }
 
 function sparkClass(tone: StatTone) {

@@ -50,17 +50,17 @@ status: synced
 ### `frontend/src/features/cluster/ClusterListView.tsx :: ClusterListView` (default export)
 
 - 라우트: `/clusters`.
-- state: `wizard: boolean`. 훅: `useClusters`, `useNavigate`, `useIsAdmin`, `useSearchFilter`(검색 대상 `` `${name} ${cluster_id} ${environment}` ``).
+- state: `wizard: boolean`. 훅: `useClusters`, `useNavigate`, `useIsAdmin`, `useSearchFilter`(검색 대상 `` `${name} ${cluster_id} ${environment} ${role}` ``).
 - 트리: `PageHeader('클러스터', actions=admin 일 때만 primary "+ 클러스터 등록" → wizard open)` → `SearchInput` → `Card > QueryBoundary > ResourceTable<Cluster>` → `RegisterClusterWizard(open, onClose)`.
-- 테이블 열: 이름(b) / 환경(`Badge tone=neutral`) / 연결(`Badge status`) / 노드 / 팟 / 인시던트(>0 이면 `Badge tone=danger`, 아니면 '—') / 등록(`timeAgo`). 행 클릭 → `pathFor('/clusters/${cluster_id}')`.
+- 테이블 열: 이름(b, `role=management`이면 `관리 클러스터` 뱃지) / 환경(`Badge tone=neutral`) / 연결(`Badge status`) / 노드 / 팟 / 인시던트(>0 이면 `Badge tone=danger`, 아니면 '—') / 등록(`timeAgo`). 행 클릭 → `pathFor('/clusters/${cluster_id}')`.
 - `ResourceTable.empty`: 검색어가 있으면 `EmptyState(GlobeIcon, "'<검색어>' 검색 결과가 없습니다")`; 검색어가 없으면 `EmptyState(..., "등록된 클러스터가 없습니다", action=admin 일 때 첫 클러스터 등록)`.
 
 ### `frontend/src/features/cluster/ClusterDetailView.tsx :: ClusterDetailView` (default export)
 
 - 라우트: `/clusters/:clusterId`, `/clusters/:clusterId/pods/:namespace/:pod`(팟 Drawer 딥링크). 쿼리스트링: `tab`(기본 'workloads'), `q`(워크로드/팟/노드/서비스/리소스/이벤트 공통 검색 — 이름·네임스페이스·상태·노드·selector 등 실제 화면 필드만 검색).
 - 탭 상수 `TABS`: workloads/pods/nodes/services/resources/events (라벨: 워크로드·팟·노드·서비스·리소스·이벤트).
-- state: `scaleTarget`, `restartTarget`, `replicas: number`(스케일 모달 열 때 대상 팟 수로 초기화). node/service/workload/pod Drawer 대상은 URL search state와 `useInventoryResourceDetail`에서 파생한다.
-- 데이터: `useClusters`(이름/뱃지), `useClusterSummary`, `usePods`, `useWorkloads`, `useServices`, `useInventoryResourceDetail`, `useIsAdmin`, `useScale`, `useRestart`, `liveStore(s => s.snapshot)`.
+- state: `scaleTarget`, `restartTarget`, `replicas: number`(스케일 모달 열 때 대상 팟 수로 초기화), `unregisterOpen`. node/service/workload/pod Drawer 대상은 URL search state와 `useInventoryResourceDetail`에서 파생한다. 드릴다운 노드 선택은 `?node=<node>`로 URL 동기화한다.
+- 데이터: `useClusters`(이름/뱃지/role), `useClusterSummary`, `useNodeSummaries`, `useNodePodSummaries`, `usePods`, `useWorkloads`, `useServices`, `useInventoryResourceDetail`, `useApplications`, `useDeploymentsAll`, `useIsAdmin`, `useScale`, `useRestart`, `useUnregisterCluster`, `liveStore(s => s.snapshot)`.
 - `hotPods`: 스냅샷의 hot 팟 이름 Set — **selector 에서 새 객체 생성 금지 규칙에 따라 `useMemo` 로 파생**.
 - `podRows`: `usePods` 결과에 `hot: hotPods.has(name) || w.hot` 병합 후 `q` 필터. `openPod` 는 URL 의 `:pod`+`:namespace` 매칭.
 - 네임스페이스 색상은 `namespaceColor(namespace)`의 문자열 해시 기반 색상으로 워크로드/팟/서비스/리소스/노드 네임스페이스 칩에 일관 적용한다. 데이터는 실제 inventory namespace 문자열만 사용하며 색상용 가짜 namespace를 만들지 않는다.
@@ -69,9 +69,12 @@ status: synced
   ```
   FadeSlideIn
   ├─ Breadcrumbs [클러스터 → 이름]
-  ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status), flex wrap) · ContextActions(cluster)
+  ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status), flex wrap) · ContextActions(cluster) · admin target only "등록 해제"
+  ├─ role=management 안내 Card: "관리 클러스터는 콘솔에서 제어할 수 없습니다"
   ├─ StatBox ×4: 노드 / 실행 팟(pod_phases['Running'], ok) / 비정상 팟(CrashLoopBackOff+Pending, Crash>0 이면 danger) / 서비스 (flex wrap)
+  ├─ ClusterDrilldownPanel: 공용 DrilldownHeatmap으로 노드→팟 줌인. L2는 GET /clusters/{id}/nodes/summary, L3는 GET /clusters/{id}/nodes/{node}/pods/summary. 각 엔드포인트 404 시 기존 inventory API fallback.
   ├─ ClusterAggPanel: GET /clusters/{id}/summary 보조 패널(사용량 + 열린 인시던트, 실패해도 본문 차단 안 함)
+  ├─ "이 클러스터에 배포된 레포": useApplications + useDeploymentsAll 결과에서 cluster_id 매칭
   ├─ ContextEvents('클러스터 이벤트', 최근 3개)
   ├─ q 필터가 있으면 drill 배지 + code + 해제 버튼
   ├─ SearchInput(URL `q` 동기화) + Service selector 관계 요약(선택된 service가 있을 때)

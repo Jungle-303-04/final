@@ -77,6 +77,7 @@ from config import (
 from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
+from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, MANAGEMENT_READONLY_CODE
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
@@ -789,6 +790,18 @@ class TargetClusterAgent:
     async def execute_command(self, command: CommandRecord) -> JsonObject:
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
+        if self.management_write_blocked(action):
+            LOGGER.warning(
+                "management_agent_ignored_write_command",
+                extra={
+                    CONTEXT_KEY: {
+                        Gateway.CLUSTER_ID: self.cluster_id,
+                        Gateway.AGENT_ID: self.agent_id,
+                        Gateway.ACTION: action,
+                    }
+                },
+            )
+            return self.command_result(False, MANAGEMENT_READONLY_CODE)
         if (
             self.write_action_requires_approval(action)
             and not self.has_approval_evidence(command)
@@ -817,6 +830,17 @@ class TargetClusterAgent:
         # (namespace 정책 가드는 그대로 적용됨). 상태 변경 액션만 승인 증적을 요구한다.
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
+            KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        }
+
+    def management_write_blocked(self, action: str) -> bool:
+        if self.cluster_role != MANAGEMENT_CLUSTER_ROLE:
+            return False
+        return action in {
+            AgentConfig.APPLY_MANIFEST_ACTION,
+            AgentConfig.ROLLOUT_RESTART_ACTION,
+            KUBERNETES_CONFIGMAP_PATCH_ACTION,
+            KUBERNETES_DEPLOYMENT_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
         }
 

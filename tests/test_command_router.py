@@ -31,8 +31,9 @@ AGENT_IDENTITY = ClusterAgentIdentity(
 
 
 class SpyAccessDb:
-    def __init__(self, allowed: bool) -> None:
+    def __init__(self, allowed: bool, *, cluster_role: str = "target") -> None:
         self.allowed = allowed
+        self.cluster_role = cluster_role
         self.calls: list[tuple[str, str, str, str, str]] = []
 
     def user_has_resource_access(
@@ -45,6 +46,15 @@ class SpyAccessDb:
     ) -> bool:
         self.calls.append((user_id, workspace_id, resource_type, resource_id, action))
         return self.allowed
+
+    def get_cluster_registration(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, object] | None:
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": {"cluster_role": self.cluster_role},
+        }
 
 
 class SpyDebugQueryDb(SpyAccessDb):
@@ -294,6 +304,30 @@ def test_scale_deployment_wrapper_rejects_namespace_outside_current_policy() -> 
         except HTTPException as exc:
             assert exc.status_code == 422
             assert "control policy" in exc.detail
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_scale_deployment_rejects_management_cluster_at_gateway() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        try:
+            await scale_deployment(
+                "management-1",
+                "sandbox",
+                "api",
+                DeploymentScaleRequest(replicas=2),
+                current_session(),
+                SpyAccessDb(allowed=True, cluster_role="management"),
+                events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 400
+            assert exc.detail["code"] == "management_readonly"
         else:
             raise AssertionError("expected HTTPException")
 

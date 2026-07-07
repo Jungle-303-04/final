@@ -302,3 +302,32 @@ def test_kubernetes_scale_rejects_namespace_outside_control_policy() -> None:
     assert result["status"] == "failed"
     assert result["message"] == "namespace is not allowed by control policy"
     assert agent.kubernetes.patches == []
+
+
+def test_management_agent_ignores_write_command_before_kubernetes_call() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.agent_id = "agent-1"
+    agent.cluster_role = "management"
+    agent.kubernetes = FakeKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "approval_ref": "approval-1",
+                "policy_decision_ref": "policy-decision-1",
+                "payload": {
+                    "namespace": "sandbox",
+                    "name": "checkout-api",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "management_readonly"
+    assert agent.kubernetes.patches == []

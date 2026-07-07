@@ -7,10 +7,12 @@ Kubernetes manifest로 바꾸는 책임만 분리.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -112,6 +114,8 @@ GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS
 DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS = "5"
 DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS = "5"
 DEFAULT_GIT_CACHE_DIR = "/tmp/gitops-repo-cache"
+MAX_REMOTE_RENDER_SOURCE_FILES = 500
+MAX_REMOTE_RENDER_SOURCE_BYTES = 5 * 1_048_576
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 SOURCE_MODE_AUTO = "auto"
 SOURCE_MODE_REMOTE = "remote"
@@ -350,6 +354,188 @@ def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> s
     return f"{api_base}/repos/{encoded_repo}/contents/{encoded_path}?ref={encoded_ref}"
 
 
+def github_api_url(path: str, params: Mapping[str, str] | None = None) -> str:
+    api_base = env(GITHUB_API_BASE_ENV, DEFAULT_GITHUB_API_BASE).rstrip("/")
+    url = f"{api_base}/{path.lstrip('/')}"
+    if params:
+        url = f"{url}?{parse.urlencode(params)}"
+    return url
+
+
+def github_json(path: str, params: Mapping[str, str] | None = None) -> Any:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        token = github_token()
+    except SecretNotFound as exc:
+        raise ManifestSourceError(f"failed to load {GITHUB_TOKEN_REF_ENV}") from exc
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = request.Request(github_api_url(path, params), headers=headers)
+    timeout = float(
+        env(GITHUB_MANIFEST_TIMEOUT_SECONDS_ENV, DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS)
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (error.HTTPError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise ManifestSourceError(f"failed to load GitHub render source: {exc}") from exc
+
+
+def github_commit_tree_sha(repo_ref: str, commit_sha: str) -> str:
+    encoded_repo = parse.quote(repo_ref.strip("/"), safe="/")
+    encoded_commit = parse.quote(commit_sha, safe="")
+    data = github_json(f"/repos/{encoded_repo}/commits/{encoded_commit}")
+    if not isinstance(data, Mapping):
+        raise ManifestSourceError("GitHub commit response was invalid")
+    commit = data.get("commit")
+    commit_map = commit if isinstance(commit, Mapping) else {}
+    tree = commit_map.get("tree")
+    tree_map = tree if isinstance(tree, Mapping) else {}
+    tree_sha = str(tree_map.get("sha") or "").strip()
+    if not tree_sha:
+        raise ManifestSourceError("GitHub commit response did not include a tree sha")
+    return tree_sha
+
+
+def github_tree(repo_ref: str, tree_sha: str) -> list[dict[str, Any]]:
+    encoded_repo = parse.quote(repo_ref.strip("/"), safe="/")
+    encoded_tree = parse.quote(tree_sha, safe="")
+    data = github_json(
+        f"/repos/{encoded_repo}/git/trees/{encoded_tree}",
+        params={"recursive": "1"},
+    )
+    if not isinstance(data, Mapping):
+        raise ManifestSourceError("GitHub tree response was invalid")
+    raw_tree = data.get("tree")
+    if not isinstance(raw_tree, list):
+        raise ManifestSourceError("GitHub tree response was invalid")
+    return [dict(item) for item in raw_tree if isinstance(item, Mapping)]
+
+
+def read_github_content_bytes(repo_ref: str, commit_sha: str, path: str) -> bytes:
+    encoded_repo = parse.quote(repo_ref.strip("/"), safe="/")
+    encoded_path = parse.quote(path, safe="/")
+    data = github_json(
+        f"/repos/{encoded_repo}/contents/{encoded_path}",
+        params={"ref": commit_sha},
+    )
+    if not isinstance(data, Mapping) or str(data.get("type") or "") != "file":
+        raise ManifestSourceError(f"GitHub content is not a file: {path}")
+    encoding = str(data.get("encoding") or "")
+    raw_content = data.get("content")
+    if encoding != "base64" or not isinstance(raw_content, str):
+        raise ManifestSourceError(f"GitHub content response was invalid: {path}")
+    try:
+        return base64.b64decode(raw_content, validate=False)
+    except (binascii.Error, ValueError) as exc:
+        raise ManifestSourceError(f"GitHub content response was invalid: {path}") from exc
+
+
+def export_github_render_source(
+    repo_ref: str,
+    commit_sha: str,
+    manifest_path: str,
+    source_type: str,
+    destination: Path,
+) -> Path | None:
+    if not remote_manifest_enabled():
+        return None
+    if not repo_ref or not commit_sha or not manifest_path:
+        return None
+
+    source_dir = render_source_directory(manifest_path, source_type)
+    try:
+        tree = github_tree(repo_ref, github_commit_tree_sha(repo_ref, commit_sha))
+        source_paths = sorted(
+            {
+                path
+                for item in tree
+                if str(item.get("type") or "") == "blob"
+                for path in [normalize_repository_path(str(item.get("path") or ""))]
+                if path and path_is_under_directory(path, source_dir)
+            }
+        )
+        if not source_paths:
+            raise ManifestSourceError(
+                f"{source_type} render source contains no files under {source_dir}"
+            )
+        if len(source_paths) > MAX_REMOTE_RENDER_SOURCE_FILES:
+            raise ManifestSourceError(
+                f"{source_type} render source exceeds file limit "
+                f"({len(source_paths)} > {MAX_REMOTE_RENDER_SOURCE_FILES})"
+            )
+
+        total_bytes = 0
+        for path in source_paths:
+            content = read_github_content_bytes(repo_ref, commit_sha, path)
+            total_bytes += len(content)
+            if total_bytes > MAX_REMOTE_RENDER_SOURCE_BYTES:
+                raise ManifestSourceError(
+                    f"{source_type} render source exceeds byte limit "
+                    f"({total_bytes} > {MAX_REMOTE_RENDER_SOURCE_BYTES})"
+                )
+            write_render_source_file(destination, path, content)
+    except ManifestSourceError:
+        if env_truthy(GIT_REMOTE_MANIFEST_REQUIRED_ENV, "1"):
+            raise
+        return None
+
+    return destination if source_dir == "." else destination / source_dir
+
+
+def render_source_directory(manifest_path: str, source_type: str) -> str:
+    normalized = normalize_repository_path(manifest_path)
+    if not normalized:
+        raise ManifestSourceError("manifest_path must be a relative repository path")
+    basename = normalized.rsplit("/", 1)[-1]
+    if source_type == SOURCE_TYPE_HELM and basename == HELM_CHART_FILE:
+        return parent_repository_path(normalized)
+    if source_type == SOURCE_TYPE_KUSTOMIZE and basename in KUSTOMIZATION_FILES:
+        return parent_repository_path(normalized)
+    return normalized
+
+
+def path_is_under_directory(path: str, directory: str) -> bool:
+    return directory == "." or path == directory or path.startswith(f"{directory}/")
+
+
+def normalize_repository_path(path: str) -> str:
+    path = path.strip().strip("/")
+    if not path or "\\" in path:
+        return ""
+    parts = [part for part in path.split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        return ""
+    return "/".join(parts)
+
+
+def parent_repository_path(path: str) -> str:
+    if "/" not in path:
+        return "."
+    return path.rsplit("/", 1)[0]
+
+
+def write_render_source_file(checkout_root: Path, repository_path: str, content: bytes) -> None:
+    normalized = normalize_repository_path(repository_path)
+    if not normalized:
+        raise ManifestSourceError("render source path is invalid")
+    destination = checkout_root.joinpath(*normalized.split("/"))
+    root = checkout_root.resolve()
+    resolved = destination.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise ManifestSourceError("render source path escapes checkout directory")
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+    except OSError as exc:
+        message = exc.strerror or str(exc)
+        raise ManifestSourceError(f"failed to write render source: {message}") from exc
+
+
 def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: str) -> str | None:
     if not remote_manifest_enabled():
         return None
@@ -427,6 +613,23 @@ def manifest_render_source(evt: GitChangedBody) -> Any:
             if cached_path is not None:
                 yield render_source_from_path(cached_path, manifest_path, "git_cache", override)
                 return
+
+            if override in {SOURCE_TYPE_KUSTOMIZE, SOURCE_TYPE_HELM}:
+                remote_path = export_github_render_source(
+                    evt.repo_ref,
+                    evt.commit_sha,
+                    manifest_path,
+                    override,
+                    Path(tmp),
+                )
+                if remote_path is not None:
+                    yield render_source_from_path(
+                        remote_path,
+                        manifest_path,
+                        "github_tree",
+                        override,
+                    )
+                    return
 
         remote_source = read_github_manifest_source(evt.repo_ref, evt.commit_sha, manifest_path)
         if remote_source is not None:

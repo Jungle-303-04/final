@@ -38,7 +38,7 @@ export default function ClusterListView() {
     if (!normalizedSearch) return clusters;
     const tokens = normalizedSearch.split(/\s+/);
     return clusters.filter((cluster) => {
-      const haystack = `${cluster.name} ${cluster.cluster_id} ${cluster.environment} ${connectionMeta[cluster.connection_status].label}`.toLowerCase();
+      const haystack = `${cluster.name} ${cluster.cluster_id} ${cluster.environment} ${cluster.role} ${connectionMeta[cluster.connection_status].label}`.toLowerCase();
       return tokens.every((token) => haystack.includes(token));
     });
   }, [clusters, normalizedSearch]);
@@ -59,7 +59,10 @@ export default function ClusterListView() {
       sortValue: (cluster) => cluster.name,
       cell: (cluster) => (
         <div className="grid min-w-0 gap-1">
-          <span className="truncate font-semibold text-primary">{cluster.name}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-semibold text-primary">{cluster.name}</span>
+            {cluster.role === 'management' && <Badge tone="info">관리 클러스터</Badge>}
+          </span>
           <span className="truncate text-caption text-muted">{cluster.cluster_id}</span>
         </div>
       ),

@@ -9,7 +9,7 @@ status: synced
 
 ## 책임 (Responsibility)
 
-- `git.changed` 이벤트 1종을 구독해, 해당 커밋의 manifest 소스를 (git checkout cache / GitHub Contents API / 로컬 git repo / 로컬 파일) 중 하나에서 로드하고, 소스 타입(raw-yaml / raw-json / kustomize / helm)에 따라 Kubernetes 객체 목록으로 렌더한다.
+- `git.changed` 이벤트 1종을 구독해, 해당 커밋의 manifest 소스를 (git checkout cache / GitHub Contents·Tree API / 로컬 git repo / 로컬 파일) 중 하나에서 로드하고, 소스 타입(raw-yaml / raw-json / kustomize / helm)에 따라 Kubernetes 객체 목록으로 렌더한다.
 - 렌더 성공 시 리소스마다 `repo_change` 저장 + `manifest_artifact` 기록(`rendered`) + `manifest.rendered` 발행. 실패 시 `manifest_artifact` 기록(`invalid_config`) + `manifest.invalid` 발행.
 - 같은 (workspace, binding, commit, manifest_path, renderer_version)의 렌더 결과가 이미 저장돼 있으면 재렌더 없이 캐시된 artifact를 재발행한다(멱등 재처리).
 - 소스가 어디에도 없으면 manifest를 합성하지 않고 `manifest.invalid`로 정직하게 실패한다.
@@ -30,7 +30,7 @@ status: synced
 | 구독 | `git.changed` | [git-pull-worker](gitops-git-pull-worker.md) 등 발행 | 입력 이벤트 |
 | 발행 | `manifest.rendered`, `manifest.invalid` | [diff-worker](gitops-diff-worker.md), [workflow-controller](gitops-workflow-controller.md) 소비 | 출력 이벤트 |
 | 외부 | git CLI (`git clone --bare` / `fetch` / `cat-file` / `show` / `archive`) | — | checkout cache·로컬 repo에서 manifest 소스 로드 |
-| 외부 | GitHub Contents API (`GET {api_base}/repos/{repo}/contents/{path}?ref={sha}`) | — | remote manifest 소스 로드 (`Accept: application/vnd.github.raw`) |
+| 외부 | GitHub REST API (`contents`, `commits`, `git/trees`) | — | raw remote manifest 로드 또는 kustomize/helm render source tree export |
 | 외부 | `kubectl kustomize`, `helm template` / `helm dependency build` | — | kustomize/helm 렌더 |
 
 ## 공개 인터페이스 (Public API)
@@ -53,6 +53,7 @@ status: synced
 | `GIT_REPO_PATH_ENV` … `GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV` | 환경변수 이름 상수 — [설정](#설정-settings) 표 참조 | `src/services/gitops/manifest-render-worker/app.py :: GIT_REPO_PATH_ENV` |
 | `DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS` / `DEFAULT_GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS` | `"5"` / `"5"` | `src/services/gitops/manifest-render-worker/app.py :: DEFAULT_GITHUB_MANIFEST_TIMEOUT_SECONDS` |
 | `DEFAULT_GIT_CACHE_DIR` | `"/tmp/gitops-repo-cache"` | `src/services/gitops/manifest-render-worker/app.py :: DEFAULT_GIT_CACHE_DIR` |
+| `MAX_REMOTE_RENDER_SOURCE_FILES` / `MAX_REMOTE_RENDER_SOURCE_BYTES` | `500` / `5 * 1_048_576` | `src/services/gitops/manifest-render-worker/app.py :: MAX_REMOTE_RENDER_SOURCE_FILES` |
 | `TRUTHY_VALUES` | `{"1", "true", "yes", "on"}` | `src/services/gitops/manifest-render-worker/app.py :: TRUTHY_VALUES` |
 | `SOURCE_MODE_AUTO` / `SOURCE_MODE_REMOTE` / `SOURCE_MODE_LOCAL` | `"auto"` / `"remote"` / `"local"` | `src/services/gitops/manifest-render-worker/app.py :: SOURCE_MODE_AUTO` |
 | `MANIFEST_SOURCE_UNAVAILABLE_REASON` | `"manifest source unavailable"` | `src/services/gitops/manifest-render-worker/app.py :: MANIFEST_SOURCE_UNAVAILABLE_REASON` |
@@ -122,6 +123,17 @@ def render_source_from_text(source: str, manifest_path: str, origin: str, overri
 def read_checkout_cache_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None
 def export_checkout_cache_manifest_path(evt: GitChangedBody, manifest_path: str, destination: Path) -> Path | None
 def github_contents_url(repo_ref: str, commit_sha: str, manifest_path: str) -> str
+def github_api_url(path: str, params: Mapping[str, str] | None = None) -> str
+def github_json(path: str, params: Mapping[str, str] | None = None) -> Any
+def github_commit_tree_sha(repo_ref: str, commit_sha: str) -> str
+def github_tree(repo_ref: str, tree_sha: str) -> list[dict[str, Any]]
+def read_github_content_bytes(repo_ref: str, commit_sha: str, path: str) -> bytes
+def export_github_render_source(repo_ref: str, commit_sha: str, manifest_path: str, source_type: str, destination: Path) -> Path | None
+def render_source_directory(manifest_path: str, source_type: str) -> str
+def path_is_under_directory(path: str, directory: str) -> bool
+def normalize_repository_path(path: str) -> str
+def parent_repository_path(path: str) -> str
+def write_render_source_file(checkout_root: Path, repository_path: str, content: bytes) -> None
 def read_github_manifest_source(repo_ref: str, commit_sha: str, manifest_path: str) -> str | None
 def read_local_manifest_source(evt: GitChangedBody, manifest_path: str) -> str | None
 def export_local_git_path(repo_path: str, commit_sha: str, manifest_path: str, destination: Path) -> Path
@@ -136,10 +148,12 @@ def read_manifest_source(evt: GitChangedBody) -> str | None
 - `source_type_override`: `GIT_MANIFEST_SOURCE_TYPE` 환경변수가 있으면 이를 최우선으로 사용하고, 없으면 `GitChangedBody.source_type`을 사용한다. 지원값은 `raw-yaml`, `raw-json`, `kustomize`, `helm`이다.
 - `detect_source_type`: override가 있으면 그대로. path가 디렉터리이고 `Chart.yaml` 존재 → `helm`, kustomization 파일 존재 → `kustomize`, 그 외 → `raw-yaml`.
 - `render_source_from_text`: GitHub Contents 같은 단일 raw 응답은 `raw-yaml`/`raw-json`만 허용한다. 이벤트가 `kustomize`/`helm`이면 checkout cache 또는 local repo path로 디렉터리/차트가 확보돼야 하므로 `ManifestSourceError`를 낸다.
+- `export_github_render_source`: remote manifest가 켜져 있고 `source_type`이 `kustomize`/`helm`일 때 GitHub commit → tree SHA → recursive tree → contents API 순서로 렌더 source directory 전체를 임시 디렉터리에 쓴다. source directory는 `kustomization.yaml`/`kustomization.yml`/`Kustomization` 또는 `Chart.yaml`의 부모 디렉터리다. 파일 수가 500개를 넘거나 총 content bytes가 5MiB를 넘으면 `ManifestSourceError`. `GIT_REMOTE_MANIFEST_REQUIRED`가 false면 오류를 삼키고 None을 반환한다. 성공 시 `origin="github_tree"` RenderSource로 이어진다.
+- `normalize_repository_path`/`write_render_source_file`: 절대 경로, `.`/`..`, 역슬래시, checkout root 탈출을 모두 거부한다.
 - `read_github_manifest_source`: `GIT_REMOTE_MANIFEST_ENABLED`이 꺼져 있거나 repo_ref/commit_sha/manifest_path 중 하나라도 비면 None. 헤더 `Accept: application/vnd.github.raw`(+토큰 있으면 `Authorization: Bearer`). HTTP/URL/Timeout 오류 시 `GIT_REMOTE_MANIFEST_REQUIRED`(기본 truthy `"1"`)면 `ManifestSourceError`, 아니면 None. 토큰 로드에서 `SecretNotFound`면 `ManifestSourceError`.
 - `read_local_manifest_source`: `GIT_REPO_PATH` 설정 시 `git -C {repo} show {sha}:{path}` (check=True, timeout=`GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS`). 미설정 시 `manifest_path`를 파일시스템 경로로 읽고, 없으면 None.
 - `export_local_git_path`: `git -C {repo} archive --format=tar {sha} {path}` 출력 tar를 `extract_git_archive`로 풀어 경로 반환.
-- `manifest_render_source` 우선순위 (mode ≠ `local`일 때): ① checkout cache export (`origin="git_cache"`) → ② GitHub Contents (`origin="github_contents"`). 그 후 `local_manifest_enabled(mode)`이면 ③ `GIT_REPO_PATH` git archive (`origin="git_repo_path"`) → ④ 파일시스템 경로 (`origin="local_path"`). 모두 실패 시 None yield.
+- `manifest_render_source` 우선순위 (mode ≠ `local`일 때): ① checkout cache export (`origin="git_cache"`) → ② `kustomize`/`helm`이면 GitHub tree export (`origin="github_tree"`) → ③ GitHub Contents raw 파일(`origin="github_contents"`). 그 후 `local_manifest_enabled(mode)`이면 ④ `GIT_REPO_PATH` git archive (`origin="git_repo_path"`) → ⑤ 파일시스템 경로 (`origin="local_path"`). 모두 실패 시 None yield.
 - `read_checkout_cache_manifest_source` / `export_checkout_cache_manifest_path`: `GIT_CHECKOUT_CACHE_ENABLED` truthy이고 remote_url이 결정될 때만 `GitRepoCache` 사용. `GitRepoCacheError` 발생 시 `GIT_CHECKOUT_CACHE_REQUIRED` truthy면 재던짐, 아니면 None.
 
 ### 렌더링 — `app.py`
@@ -259,7 +273,7 @@ def extract_git_archive(archive: bytes, destination: Path, manifest_path: str) -
 1. `source_manifest_path = manifest_path_for(evt)` (env `GIT_MANIFEST_PATH` 우선), `event_manifest_path = evt.manifest_path` (발행 이벤트에는 항상 이벤트의 원래 경로 사용).
 2. **캐시 경로**: `cached_rendered_manifests(...)`가 비어 있지 않으면 — 각 캐시 항목마다 `save_repo_change` 후 `ManifestRenderedBody` yield → `mark_watch_observed` → 종료. (재렌더·artifact 재기록 없음)
 3. **렌더**: `build_rendered_manifest_result(evt)` 호출.
-   - `manifest_render_source`로 소스 확보 (우선순위: git_cache → github_contents → git_repo_path → local_path; [소스 로드](#소스-로드--apppy) 참조).
+   - `manifest_render_source`로 소스 확보 (우선순위: git_cache → github_tree(kustomize/helm) → github_contents → git_repo_path → local_path; [소스 로드](#소스-로드--apppy) 참조).
    - `render_source_documents`로 소스 타입별 렌더 후 `parse_rendered_manifest_payloads`로 `RenderedManifest` 목록 생성.
 4. **실패 분기**: `subprocess.CalledProcessError | subprocess.TimeoutExpired | GitRepoCacheError | ManifestSourceError | ValueError` 캐치 시 —
    - `record_manifest_artifact(status="invalid_config", reason=str(exc))`.

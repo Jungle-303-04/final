@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from collections.abc import AsyncIterator
 
@@ -29,8 +30,15 @@ from domains.command.policy import (
     PolicyRuleConfig,
 )
 from domains.command.policy import Result as PolicyResult
+from domains.target.management_guard import (
+    cluster_role_from_policy,
+    is_management_registration,
+    is_management_role,
+    management_readonly_detail,
+)
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.gateway.fields import Gateway
@@ -82,6 +90,8 @@ APPROVAL_RECORD_MISSING_REASON = "write command approval_ref is not recorded"
 APPROVAL_NOT_GRANTED_REASON = "write command approval_ref is not granted"
 APPROVAL_POLICY_DECISION_MISMATCH_REASON = "write command policy_decision_ref mismatch"
 APPROVAL_WORKFLOW_MISMATCH_REASON = "write command approval workflow mismatch"
+MANAGEMENT_READONLY_REASON = management_readonly_detail()["code"]
+LOGGER = get_logger(__name__)
 
 
 def desired_manifest_namespace(command: CommandRequestedBody) -> str | None:
@@ -188,6 +198,42 @@ async def evaluate_recorded_approval(
     return PolicyResult.allow()
 
 
+async def _maybe_await(value: object) -> object:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def evaluate_management_guard(
+    command: CommandRequestedBody, db: AgentCommandStore
+) -> PolicyResult:
+    registration_getter = getattr(db, "get_cluster_registration", None)
+    registration = None
+    if callable(registration_getter):
+        registration = await _maybe_await(
+            registration_getter(command.workspace_id, command.cluster_id)
+        )
+    policy_getter = getattr(db, "get_cluster_policy", None)
+    policy = None
+    if callable(policy_getter):
+        policy = await _maybe_await(policy_getter(command.workspace_id, command.cluster_id))
+    if is_management_registration(registration) or is_management_role(
+        cluster_role_from_policy(policy)
+    ):
+        LOGGER.warning(
+            "management_write_command_rejected",
+            extra={
+                CONTEXT_KEY: {
+                    "workspace_id": command.workspace_id,
+                    "cluster_id": command.cluster_id,
+                    "action": command.action,
+                }
+            },
+        )
+        return PolicyResult.reject(MANAGEMENT_READONLY_REASON)
+    return PolicyResult.allow()
+
+
 def idempotency_key(command: CommandRequestedBody, correlation_id: str) -> str:
     payload = {
         "correlation_id": correlation_id,
@@ -271,6 +317,12 @@ async def sweep_expired_agent_commands(
 async def handle_command_requested(
     evt: CommandRequestedBody, ctx: EventContext[AgentCommandStore]
 ) -> AsyncIterator[EventBody]:
+    management_result = await evaluate_management_guard(evt, ctx.db)
+    if not management_result.allowed:
+        yield CommandRejectedBody(
+            reason=management_result.require_reason(), requested=evt.to_body()
+        )
+        return
     result = evaluate_command_policy(evt)
     if not result.allowed:
         yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())

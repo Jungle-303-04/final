@@ -183,6 +183,7 @@ class TargetRegisterRequest(StrictModel):
     cluster_id: str | None = Field(default=None, max_length=253)
     name: str = DEFAULT_TARGET_NAME
     environment: str = DEFAULT_TARGET_ENVIRONMENT
+    cluster_role: Literal["management", "target"] = "target"
     workspace_id: str = DEFAULT_WORKSPACE_ID
     management_base_url: str = ""
     image: str = ""
@@ -227,6 +228,7 @@ class TargetRegisterRequest(StrictModel):
 
 class TargetPreflightRequest(StrictModel):
     cluster_id: str = Field(default="", max_length=253)
+    cluster_role: Literal["management", "target"] = "target"
     cloud_provider: str = "existing-k8s"
     deploy_provider: str = "manual-manifest"
     provider_config: dict[str, Any] = Field(default_factory=dict)

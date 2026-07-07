@@ -49,11 +49,13 @@ status: synced
 
 ## 소비 화면
 
-- `HomePage`(`/`)는 `useFleetSummary()`로 플릿 맵 treemap, KPI strip, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `pathFor('/clusters/:clusterId')` 로 이동해 `/console` base path를 보존한다. 테이블 행은 `role="button"`, `tabIndex=0`을 갖고 Enter/Space 키로 같은 이동을 수행한다.
-- 홈 플릿 맵은 `all`, `cpu`, `memory`, `incidents` 렌즈 탭을 제공한다. 모든 렌즈의 tile 크기는 pod total 로 고정하고, `all`은 health score, `cpu`/`memory`는 관측 사용률을 낮을수록 좋은 score, `incidents`는 open incident 유무를 위험 score 로 매핑한다.
+- `HomePage`(`/`)는 `useFleetSummary()`와 `useClusters()`로 공용 `DrilldownHeatmap` 기반 플릿 맵, KPI strip, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `pathFor('/clusters/:clusterId')` 로 이동한다.
+- 홈 플릿 맵은 `all`, `cpu`, `memory`, `incidents` 렌즈 탭을 제공한다. L1 타일은 클러스터, 크기는 `pods_total`, 색상은 항상 `health` token이다. 렌즈는 타일 내부 요약 문구만 바꾼다.
+- `useClusters()`의 `role=management` 클러스터는 플릿 타일과 클러스터 테이블 이름 옆에 `관리 클러스터` 뱃지를 표시한다.
 - 홈 KPI strip 은 `FleetTotals`와 `FleetClusterSummary[]`에서 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 계산한다. CPU/MEM 관측값이 없으면 합성하지 않고 `—`로 표시한다.
 - 홈 dashboard grid 의 저장 위젯/사용량 추이 카드는 선택 클러스터 기준 `useMetricWidgets`, `useMetricQueryPresets`, `useClusterUsage` 결과를 사용한다. fleet API가 제공하지 않는 위젯/시계열을 여기서 만들어 넣지 않는다.
 - 홈 사용량 추이 카드는 [metrics](./metrics.md)의 `buildUsageSeries()`와 같은 규칙을 쓴다. `restart_total` 누적값을 직접 그리지 않고 샘플 간 증가분으로 표시한다.
+- `ClusterDetailView`는 같은 `DrilldownHeatmap` 컴포넌트를 L2/L3에 재사용한다. L2 노드 요약은 `GET /clusters/{id}/nodes/summary`, L3 팟 요약은 `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 미배포 404는 inventory API fallback을 사용한다. L3에서 `incident_correlation_id`가 있는 팟은 critical + pulse tile이며 Drawer의 "인시던트 보기" 버튼으로 상세 이동한다.
 - `ClusterDetailView`는 `useClusterAgg(clusterId)`로 `ClusterAggPanel`을 렌더한다. 이 보조 패널은 pending 이면 null, 실패하면 본문을 막지 않고 재시도 문구를 표시한다.
 
 ## 라우트

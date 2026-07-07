@@ -122,7 +122,7 @@
 
 | 플로우 | 단계 -> 검증 API 매핑 | 상태 |
 |---|---|---|
-| 레포 연결 | repo 입력 -> `POST /repos/validate` 또는 현행 `POST /repositories/discovery/probe`; branch -> `GET /repositories/discovery/branches`; manifest 후보 -> `GET /repositories/discovery/manifests`; manifest 선택 -> `POST /repositories/discovery/validate`; 등록 -> `POST /applications/connect` | 대기 |
+| 레포 연결 | repo 입력 -> `POST /repos/validate` 또는 현행 `POST /repositories/discovery/probe`; branch -> `GET /repositories/discovery/branches`; manifest 후보 -> `GET /repositories/discovery/manifests`; manifest 선택 -> `POST /repositories/discovery/validate`; 배포 대상 -> `GET /clusters`에서 `connection_status in connected/online` 이고 `role != management`인 클러스터만 선택; 등록 -> 선택 클러스터별 `POST /applications/connect`; 400 `cluster_not_connected`는 인라인 사유 | 완료 |
 | 클러스터 등록 | provider/필드 입력 -> 로컬 검증; 확인 -> `POST /targets/preflight`(`cloud_provider`, `deploy_provider=manual-manifest`, `provider_config`, `apply=false`); 통과 -> `POST /targets`; 설치 -> `bootstrap_steps`/`bootstrap_command`/`install_command` 우선순위 CodeBlock 복사; 연결 -> `GET /clusters/{id}/connection-status` 5초 폴링 | 완료 |
 | 알림 채널 | 설정 입력 -> 테스트 발송 API; 테스트 성공 -> 저장 API | 계약 확인 필요 |
 | 룰 추가 | YAML 입력 -> validate API; 유효 -> symptom/후보 수 preview | 계약 확인 필요 |
@@ -149,6 +149,30 @@
 - 등록 성공 후 설치 단계는 응답의 `bootstrap_steps`를 우선 표시하고, 없으면 `bootstrap_command`, `install_command`, `install_manifest` 순으로 fallback한다. 모든 명령은 `CodeBlock` 복사 버튼을 사용한다.
 - 연결 대기 상태는 `pending`, `connected`, `install_expired/expired`, `error/failed/disconnected`를 구분한다. pending은 5초 폴링, connected는 evidence 정책 CTA, expired/error는 재발급 CTA를 제공한다.
 - 닫기 가드: 설치 명령이 발급됐지만 연결 전이면 확인 모달을 먼저 띄우고, agent token은 현재 화면에서만 노출한다.
+
+## 레포↔클러스터 연결 UX 변경 (2026-07-08)
+
+- `ConnectRepoWizard` 2단계는 `GET /clusters`의 `connection_status`와 `role`을 함께 사용한다. 연결된 target 클러스터만 선택 가능하며, 미연결 클러스터는 "에이전트 미연결"과 "연결하러 가기" 링크, 관리 클러스터는 "관리 클러스터" 비활성 뱃지로 표시한다.
+- 멀티 선택과 "전체 선택"은 선택 가능한 target 클러스터만 대상으로 한다. 확인 단계에는 `cluster-1 외 N개에 배포` 요약과 클러스터 상세 링크를 표시한다.
+- 선택 가능한 클러스터가 0개면 `EmptyState("배포하려면 연결된 클러스터가 필요합니다")`와 admin 전용 `RegisterClusterWizard` 중첩 오픈 CTA를 제공한다.
+- `RepoListView`는 `@/ui` 기반 카드 목록으로 교체했고, 각 배포 정의 카드에 연결된 클러스터 뱃지를 노출한다. 뱃지는 클러스터 상세로 이동한다.
+- `ClusterDetailView`는 "이 클러스터에 배포된 레포" 섹션을 추가해 레포/브랜치/manifest/namespace/status 관계를 반대 방향에서도 확인할 수 있다.
+- `/console`과 `/console/*`는 `/`로 redirect하고, `ArchivedConsoleDemo` 소스는 삭제했다. 사이드바/브레드크럼 어휘는 "클러스터", "배포"로 정렬했다.
+
+## 클러스터 제어 UX 변경 (2026-07-08)
+
+- `role=management` 클러스터는 목록과 홈 플릿 히트맵에서 "관리 클러스터" 뱃지를 표시한다.
+- 관리 클러스터 상세는 조회 전용 안내를 표시하고 스케일, 재시작, 등록 해제 버튼을 숨긴다. 배포 대상 선택에서도 관리 클러스터를 제외한다.
+- target 클러스터 상세에는 admin 전용 "등록 해제" 위험 영역을 추가했다. GitHub식 확인으로 클러스터 이름을 직접 입력해야 실행 가능하며, 성공 후 `CodeBlock`으로 에이전트 제거 명령을 제공한다.
+- 등록 해제 실패가 409 `has_deployments`면 연결된 배포 정의 목록과 레포 상세 이동 링크를 인라인으로 표시한다.
+
+## 히트맵 드릴다운 UX 변경 (2026-07-08)
+
+- 공용 `DrilldownHeatmap` 컴포넌트를 추가했다. 홈 L1(fleet 클러스터)과 클러스터 상세 L2/L3(노드/팟)가 같은 타일 레이아웃, breadcrumb, Motion `layout` 전환, health token 색상 체계를 공유한다.
+- L1 fleet: 타일=클러스터, 크기=`pods_total`, 색=`health`, 관리 클러스터 뱃지 표시.
+- L2 노드: `GET /clusters/{id}/nodes/summary`를 우선 사용하고 미배포 404일 때 기존 inventory summary/pod inventory로 fallback한다. 타일=노드, 크기=`pods_running`, CPU/MEM 미니 게이지, condition 뱃지를 표시한다.
+- L3 팟: `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 404일 때 pod inventory fallback을 사용한다. 타일=팟, 크기=CPU/MEM 또는 균등, `incident_correlation_id`가 있으면 critical + pulse border로 표시하고 Drawer에서 "인시던트 보기" CTA를 제공한다.
+- 클러스터 상세 URL은 `/clusters/{id}?node=<node>`로 노드 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 

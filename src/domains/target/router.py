@@ -39,6 +39,14 @@ from domains.target.evidence_policy import (
     provider_policy_snapshots,
 )
 from domains.target.install_manifest import target_install_manifest
+from domains.target.management_guard import (
+    MANAGEMENT_CLUSTER_ROLE,
+    freeze_management_policy,
+    is_management_registration,
+    is_management_role,
+    management_policy_update_is_forbidden,
+    management_readonly_detail,
+)
 from domains.target.reconciler import desired_state_version
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
@@ -127,6 +135,7 @@ MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
 TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS"
 TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
 DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS = 1800
+CLUSTER_NOT_FOUND = "cluster not found"
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -148,6 +157,7 @@ def target_desired_components(payload: TargetRegisterRequest) -> list[TargetDesi
             spec={
                 "deployment": "cluster-agent",
                 "management_base_url": payload.management_base_url,
+                "cluster_role": payload.cluster_role,
                 "evidence_interval_seconds": payload.evidence_interval_seconds,
                 "prometheus_base_url": payload.prometheus_base_url,
                 "loki_base_url": payload.loki_base_url,
@@ -229,7 +239,7 @@ def require_provider_config(payload: TargetRegisterRequest, *keys: str) -> dict[
 
 
 def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> TargetRegisterRequest:
-    updates: dict[str, str] = {}
+    updates: dict[str, Any] = {}
     if payload.apply and "deploy_provider" not in payload.model_fields_set:
         updates["deploy_provider"] = DIRECT_APPLY_DEPLOY_PROVIDER
 
@@ -244,6 +254,11 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
         management_base_url = public_management_base_url()
     if management_base_url:
         updates["management_base_url"] = management_base_url
+
+    if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+        updates["install_node_collector"] = False
+        updates["install_sample_workload"] = False
+        updates["control_namespaces"] = ""
 
     return payload.model_copy(update=updates) if updates else payload
 
@@ -840,8 +855,16 @@ async def register_target(
         if db.get_cluster_policy(workspace_id, scoped_payload.cluster_id) is None:
             policy = default_agent_policy(
                 cluster_id=scoped_payload.cluster_id,
+                cluster_role=scoped_payload.cluster_role,
                 interval_seconds=scoped_payload.evidence_interval_seconds,
+                bootstrap_mode=(
+                    "management"
+                    if scoped_payload.cluster_role == MANAGEMENT_CLUSTER_ROLE
+                    else "target"
+                ),
             )
+            if scoped_payload.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+                policy = freeze_management_policy(policy)
             db.upsert_cluster_policy(workspace_id, scoped_payload.cluster_id, policy.model_dump())
         db.upsert_target_desired_states(
             workspace_id,
@@ -953,7 +976,7 @@ async def get_cluster(
     )
     cluster = db.get_cluster_registration(workspace_id, cluster_id)
     if cluster is None:
-        raise HTTPException(status_code=404, detail="cluster not found")
+        raise HTTPException(status_code=404, detail=CLUSTER_NOT_FOUND)
     agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
     latest_agent = agents[0] if agents else None
     return ClusterResponse(cluster=cluster_summary(cluster, latest_agent), agents=agents)
@@ -976,7 +999,10 @@ async def get_cluster_connection_status(
         cluster_id,
         Permission.CLUSTER_READ.value,
     )
-    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    registration_getter = getattr(db, "get_cluster_registration", None)
+    registration = (
+        registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
+    )
     agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
     latest_agent = agents[0] if agents else None
     return ClusterConnectionStatusResponse(
@@ -1009,12 +1035,55 @@ async def update_cluster_policy(
         if existing
         else default_agent_policy(cluster_id=cluster_id)
     )
+    registration_getter = getattr(db, "get_cluster_registration", None)
+    registration = (
+        registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
+    )
+    management_cluster = is_management_registration(registration) or is_management_role(
+        base_policy.cluster_role
+    )
+    if management_cluster:
+        if management_policy_update_is_forbidden(payload):
+            raise HTTPException(status_code=400, detail=management_readonly_detail())
+        base_policy = freeze_management_policy(base_policy)
     merged_policy = merge_agent_policy(base_policy, payload)
+    if management_cluster:
+        merged_policy = freeze_management_policy(merged_policy)
     try:
         stored = db.upsert_cluster_policy(workspace_id, cluster_id, merged_policy.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"accepted": True, "policy": stored}
+
+
+@router.delete(gateway_routes.CLUSTER_PATH, status_code=204)
+async def unregister_cluster(
+    cluster_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> None:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+    if is_management_registration(registration):
+        raise HTTPException(status_code=400, detail=management_readonly_detail())
+    unregister = getattr(db, "unregister_target_cluster", None)
+    if callable(unregister):
+        if not unregister(workspace_id, cluster_id):
+            raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
+        return
+    status_updater = getattr(db, "update_cluster_registration_status", None)
+    if callable(status_updater):
+        status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.INSTALL_EXPIRED.value)
+        return
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "code": "cluster_unregister_unsupported",
+            "detail": "등록 해제를 처리할 수 없습니다",
+        },
+    )
 
 
 @agent_router.get(

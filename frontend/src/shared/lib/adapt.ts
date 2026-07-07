@@ -3,10 +3,12 @@
 import type { Application, Cluster, ClusterSummary, Conversation, Deployment, Incident, IncidentDetail, InventoryResource, InventoryResourceDetail, K8sEvent, RunStep, ServiceInfo, Workload, WorkloadResource, WorkflowRun } from '@/shared/lib/types';
 
 export function adaptCluster(raw: Record<string, unknown>): Cluster {
+  const settings = (raw.settings ?? {}) as Record<string, unknown>;
   return {
     cluster_id: String(raw.cluster_id ?? ''),
     name: String(raw.name ?? raw.cluster_id ?? ''),
     environment: String(raw.environment ?? 'unknown'),
+    role: String(raw.role ?? raw.cluster_role ?? settings.cluster_role ?? 'target'),
     connection_status: (raw.connection_status as Cluster['connection_status']) ?? 'unknown',
     node_count: Number(raw.node_count ?? 0),
     pod_count: Number(raw.pod_count ?? 0),
@@ -202,12 +204,16 @@ export function adaptApplication(raw: Record<string, unknown>): Application {
 
 export function adaptDeployment(raw: Record<string, unknown>): Deployment {
   return {
+    application_id: raw.application_id ? String(raw.application_id) : undefined,
     cluster_id: String(raw.cluster_id ?? ''),
     namespace: String(raw.namespace ?? 'unknown'),
     name: String(raw.name ?? raw.app_name ?? ''),
     image: String(raw.image ?? ''),
     replicas: Number(raw.replicas ?? 0),
     status: String(raw.status ?? 'unknown'),
+    manifest_path: raw.manifest_path ? String(raw.manifest_path) : undefined,
+    branch: raw.branch ? String(raw.branch) : undefined,
+    repo_ref: raw.repo_ref ? String(raw.repo_ref) : undefined,
   };
 }
 

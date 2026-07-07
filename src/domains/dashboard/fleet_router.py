@@ -32,6 +32,7 @@ from domains.target.router import (
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
+    ClusterNodesSummaryResponse,
     ClusterOpenIncidentItem,
     ClusterSummaryDetailResponse,
     ClusterUsageSnapshot,
@@ -40,6 +41,9 @@ from packages.contracts.gateway.responses import (
     FleetClusterSummaryItem,
     FleetSummaryResponse,
     FleetTotals,
+    NodePodsSummaryResponse,
+    NodeSummaryItem,
+    PodSummaryItem,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
 from packages.runtime.dependencies import get_db
@@ -57,6 +61,8 @@ FLEET_CLUSTER_LIMIT = 200
 WORKLOAD_LIMIT = 500
 WARNING_EVENT_LIMIT = 10
 OPEN_INCIDENT_LIMIT = 20
+NODE_LIMIT = 1000
+POD_LIMIT = 1000
 NOT_FOUND_CODE = 404
 
 router = APIRouter()
@@ -98,6 +104,57 @@ async def cluster_summary_detail(
     if detail is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
     return detail
+
+
+@router.get(
+    gateway_routes.CLUSTER_NODES_SUMMARY_PATH,
+    response_model=ClusterNodesSummaryResponse,
+)
+async def cluster_nodes_summary(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ClusterNodesSummaryResponse:
+    """노드 히트맵 타일 집계 — 기존 cluster.read 가드와 실제 inventory/usage 만 사용."""
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.CLUSTER_READ.value,
+    )
+    summary = await asyncio.to_thread(build_nodes_summary, db, workspace_id, cluster_id)
+    if summary is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
+    return summary
+
+
+@router.get(
+    gateway_routes.CLUSTER_NODE_PODS_SUMMARY_PATH,
+    response_model=NodePodsSummaryResponse,
+)
+async def node_pods_summary(
+    cluster_id: str,
+    node_name: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> NodePodsSummaryResponse:
+    """노드 클릭 시 팟 히트맵 타일 집계 — nodeName 배치 정보 기준."""
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        cluster_id,
+        Permission.CLUSTER_READ.value,
+    )
+    summary = await asyncio.to_thread(
+        build_node_pods_summary, db, workspace_id, cluster_id, node_name
+    )
+    if summary is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="cluster not found")
+    return summary
 
 
 def build_fleet_summary(
@@ -208,6 +265,89 @@ def build_cluster_summary_detail(
         warning_events=warning_events,
         open_incidents=open_incidents,
         usage=usage_snapshot(samples[-1] if samples else None),
+    )
+
+
+def build_nodes_summary(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> ClusterNodesSummaryResponse | None:
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        return None
+    nodes = db.list_inventory_resources(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type="node",
+        namespace=None,
+        include_deleted=False,
+        limit=NODE_LIMIT,
+    )
+    pods = db.list_inventory_resources(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type="pod",
+        namespace=None,
+        include_deleted=False,
+        limit=POD_LIMIT,
+    )
+    latest_usage = _latest_usage(
+        db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
+            cluster_id, []
+        )
+    )
+    pod_groups = pods_by_node(pods)
+    return ClusterNodesSummaryResponse(
+        cluster_id=cluster_id,
+        nodes=[
+            node_summary_item(node, pod_groups.get(str(node.get("name") or ""), []), latest_usage)
+            for node in nodes
+        ],
+    )
+
+
+def build_node_pods_summary(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    node_name: str,
+) -> NodePodsSummaryResponse | None:
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
+    if registration is None:
+        return None
+    node = db.get_inventory_resource(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type="node",
+        kind="Node",
+        name=node_name,
+        namespace=None,
+    )
+    if node is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="node not found")
+    pods = [
+        pod
+        for pod in db.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type="pod",
+            namespace=None,
+            include_deleted=False,
+            limit=POD_LIMIT,
+        )
+        if pod_node_name(pod) == node_name
+    ]
+    latest_usage = _latest_usage(
+        db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
+            cluster_id, []
+        )
+    )
+    incident_lookup = latest_open_incident_lookup(db, workspace_id, cluster_id, pods)
+    return NodePodsSummaryResponse(
+        cluster_id=cluster_id,
+        node_name=node_name,
+        pods=[pod_summary_item(pod, latest_usage, incident_lookup) for pod in pods],
     )
 
 
@@ -340,6 +480,187 @@ def warning_event_item(row: JsonObject) -> ClusterWarningEventItem:
     )
 
 
+def node_summary_item(
+    node: JsonObject,
+    pods: list[JsonObject],
+    latest_usage: JsonObject,
+) -> NodeSummaryItem:
+    summary = _summary(node)
+    name = str(node.get("name") or "")
+    running = sum(1 for pod in pods if str(pod.get("status") or "") == "Running")
+    return NodeSummaryItem(
+        name=name,
+        ready=bool(summary.get("ready")) or str(node.get("status") or "") == "Ready",
+        health=str(node.get("health") or HEALTH_UNKNOWN),
+        pods_running=running,
+        pods_capacity=pod_capacity(summary),
+        cpu_pct=resource_usage_pct(
+            latest_usage, "nodes", name, ("cpu_pct", "cpu_percent"), ("cpu_ratio",)
+        ),
+        mem_pct=resource_usage_pct(
+            latest_usage,
+            "nodes",
+            name,
+            ("mem_pct", "memory_pct"),
+            ("mem_ratio", "memory_ratio"),
+        ),
+        restarts_recent=sum(pod_restarts(pod) for pod in pods),
+        conditions=true_node_conditions(summary),
+    )
+
+
+def pod_summary_item(
+    pod: JsonObject,
+    latest_usage: JsonObject,
+    incident_lookup: dict[tuple[str, str], str],
+) -> PodSummaryItem:
+    summary = _summary(pod)
+    namespace = str(pod.get("namespace") or summary.get("namespace") or "default")
+    name = str(pod.get("name") or "")
+    return PodSummaryItem(
+        name=name,
+        namespace=namespace,
+        phase=str(pod.get("status") or summary.get("phase") or "Unknown"),
+        health=str(pod.get("health") or HEALTH_UNKNOWN),
+        ready=pod_ready_text(summary),
+        restarts=pod_restarts(pod),
+        owner_kind=_optional_text(summary.get("owner_kind")),
+        owner_name=_optional_text(summary.get("owner_name")),
+        cpu_mcores=resource_usage_value(
+            latest_usage, "pods", f"{namespace}/{name}", ("cpu_mcores",)
+        ),
+        mem_mib=resource_usage_value(
+            latest_usage,
+            "pods",
+            f"{namespace}/{name}",
+            ("mem_mib", "memory_mib"),
+        ),
+        incident_correlation_id=incident_lookup.get((namespace, name)),
+    )
+
+
+def pods_by_node(pods: list[JsonObject]) -> dict[str, list[JsonObject]]:
+    grouped: dict[str, list[JsonObject]] = {}
+    for pod in pods:
+        node_name = pod_node_name(pod)
+        if node_name:
+            grouped.setdefault(node_name, []).append(pod)
+    return grouped
+
+
+def pod_node_name(pod: JsonObject) -> str:
+    return str(_summary(pod).get("node_name") or "")
+
+
+def pod_restarts(pod: JsonObject) -> int:
+    return _int_or_zero(_summary(pod).get("restart_total"))
+
+
+def pod_capacity(summary: JsonObject) -> int:
+    for key in ("allocatable", "capacity"):
+        value = summary.get(key)
+        if isinstance(value, dict):
+            parsed = _int_or_zero(value.get("pods"))
+            if parsed:
+                return parsed
+    return _int_or_zero(summary.get("pod_capacity"))
+
+
+def true_node_conditions(summary: JsonObject) -> list[str]:
+    conditions = summary.get("conditions") if isinstance(summary.get("conditions"), list) else []
+    names: list[str] = []
+    for condition in conditions:
+        if not isinstance(condition, dict):
+            continue
+        condition_type = str(condition.get("type") or "")
+        if condition_type and condition_type != "Ready" and str(condition.get("status")) == "True":
+            names.append(condition_type)
+    return names
+
+
+def pod_ready_text(summary: JsonObject) -> str:
+    containers = summary.get("containers") if isinstance(summary.get("containers"), list) else []
+    if not containers:
+        ready_condition = next(
+            (
+                condition
+                for condition in summary.get("conditions", [])
+                if isinstance(condition, dict) and condition.get("type") == "Ready"
+            ),
+            {},
+        )
+        return "1/1" if ready_condition.get("status") == "True" else "0/0"
+    ready = sum(
+        1 for container in containers if isinstance(container, dict) and container.get("ready")
+    )
+    return f"{ready}/{len(containers)}"
+
+
+def resource_usage_pct(
+    usage: JsonObject,
+    group_key: str,
+    resource_key: str,
+    pct_keys: tuple[str, ...],
+    ratio_keys: tuple[str, ...],
+) -> float | None:
+    payload = resource_usage_payload(usage, group_key, resource_key)
+    return usage_pct(payload, pct_keys, ratio_keys)
+
+
+def resource_usage_value(
+    usage: JsonObject,
+    group_key: str,
+    resource_key: str,
+    keys: tuple[str, ...],
+) -> float | None:
+    payload = resource_usage_payload(usage, group_key, resource_key)
+    for key in keys:
+        value = _float_or_none(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def resource_usage_payload(usage: JsonObject, group_key: str, resource_key: str) -> JsonObject:
+    group = usage.get(group_key)
+    if isinstance(group, dict):
+        value = group.get(resource_key) or group.get(resource_key.split("/")[-1])
+        return dict(value) if isinstance(value, dict) else {}
+    if isinstance(group, list):
+        for item in group:
+            if not isinstance(item, dict):
+                continue
+            identity = item.get("key") or item.get("name")
+            if identity == resource_key or identity == resource_key.split("/")[-1]:
+                return dict(item)
+    return {}
+
+
+def latest_open_incident_lookup(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    pods: list[JsonObject],
+) -> dict[tuple[str, str], str]:
+    resources = {
+        (
+            str(pod.get("namespace") or _summary(pod).get("namespace") or "default"),
+            str(pod.get("name") or ""),
+        )
+        for pod in pods
+        if pod.get("name")
+    }
+    lookup = getattr(db, "latest_open_incidents_by_resource", None)
+    if not callable(lookup):
+        return {}
+    return lookup(
+        workspace_id,
+        cluster_id,
+        resource_kind="Pod",
+        resources=resources,
+    )
+
+
 def _pod_counts(rollup: JsonObject, latest_usage: JsonObject) -> tuple[int, int]:
     """inventory 롤업 우선, pod 행이 하나도 없으면 usage 샘플 대체."""
     total = _int_or_zero(rollup.get("pods_total"))
@@ -388,6 +709,15 @@ def _last_seen_at(
     if samples and samples[-1].get("sampled_at"):
         return str(samples[-1]["sampled_at"])
     return None
+
+
+def _summary(row: JsonObject) -> JsonObject:
+    summary = row.get("summary")
+    return dict(summary) if isinstance(summary, dict) else {}
+
+
+def _optional_text(value: object) -> str | None:
+    return str(value) if value not in (None, "") else None
 
 
 def _is_blocked_test_cluster(cluster: JsonObject) -> bool:

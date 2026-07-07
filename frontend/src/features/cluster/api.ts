@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, post } from '@/shared/lib/api';
+import { del, get, post, type ApiError } from '@/shared/lib/api';
 import { uiStore } from '@/shared/lib/ui-store';
 import { adaptCluster, adaptInventoryResource, adaptInventoryResourceDetail, adaptInventorySummary, adaptK8sEventResource, adaptPodResource, adaptServiceResource, adaptWorkloadResource } from '@/shared/lib/adapt';
+import type { Workload } from '@/shared/lib/types';
 
 const CLUSTER_QUERY_TIMEOUT_MS = 8_000;
 
@@ -12,10 +13,46 @@ export interface InventoryResourceIdentity {
   namespace?: string | null;
 }
 
+export interface NodeHeatmapSummary {
+  id: string;
+  name: string;
+  pods_running: number;
+  health: 'healthy' | 'warning' | 'critical' | 'unknown' | string;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  conditions: string[];
+}
+
+export interface PodHeatmapSummary {
+  id: string;
+  name: string;
+  namespace: string;
+  phase: string;
+  ready: string;
+  owner: string;
+  owner_kind: string;
+  node?: string;
+  restarts: number;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  health: 'healthy' | 'warning' | 'critical' | 'unknown' | string;
+  incident_correlation_id?: string | null;
+  incident_id?: string | null;
+}
+
+export interface ClusterUnregisterResponse {
+  unregistered?: boolean;
+  cluster_id?: string;
+  agent_remove_command?: string;
+  remove_command?: string;
+}
+
 export const clusterKeys = {
   list: () => ['clusters'] as const,
   summary: (id: string) => ['clusters', id, 'summary'] as const,
   inv: (id: string, kind: string) => ['clusters', id, 'inv', kind] as const,
+  nodesSummary: (id: string) => ['clusters', id, 'nodes-summary'] as const,
+  nodePodsSummary: (id: string, node: string) => ['clusters', id, 'nodes', node, 'pods-summary'] as const,
   detail: (id: string, identity?: InventoryResourceIdentity | null) =>
     ['clusters', id, 'resource-detail', identity?.resource_type ?? '', identity?.kind ?? '', identity?.namespace ?? '', identity?.name ?? ''] as const,
 };
@@ -35,6 +72,47 @@ export const useClusterSummary = (id: string | undefined) =>
     refetchInterval: 30_000,
     retry: false,
     select: adaptInventorySummary,
+  });
+export const useNodeSummaries = (id: string | undefined) =>
+  useQuery({
+    queryKey: clusterKeys.nodesSummary(id ?? ''),
+    queryFn: async () => {
+      try {
+        const response = await get<{ nodes: Record<string, unknown>[] }>(`/clusters/${id}/nodes/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
+        return response.nodes.map(adaptNodeHeatmapSummary);
+      } catch (error) {
+        if ((error as ApiError).status !== 404) throw error;
+        const [summary, pods] = await Promise.all([
+          get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }).then(adaptInventorySummary),
+          get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS })
+            .then((response) => response.resources.map(adaptPodResource)),
+        ]);
+        return fallbackNodeSummaries(summary.nodes, pods);
+      }
+    },
+    enabled: !!id,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+export const useNodePodSummaries = (id: string | undefined, node: string | undefined) =>
+  useQuery({
+    queryKey: clusterKeys.nodePodsSummary(id ?? '', node ?? ''),
+    queryFn: async () => {
+      try {
+        const response = await get<{ pods: Record<string, unknown>[] }>(
+          `/clusters/${id}/nodes/${encodeURIComponent(node ?? '')}/pods/summary`,
+          { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS },
+        );
+        return response.pods.map(adaptPodHeatmapSummary);
+      } catch (error) {
+        if ((error as ApiError).status !== 404) throw error;
+        const response = await get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
+        return response.resources.map(adaptPodHeatmapSummary).filter((pod) => pod.node === node);
+      }
+    },
+    enabled: !!id && !!node,
+    refetchInterval: 30_000,
+    retry: false,
   });
 export const usePods = (id: string) =>
   useQuery({
@@ -123,6 +201,103 @@ export function useRestart(clusterId: string) {
     onSuccess: () => uiStore.getState().toast('info', '재시작 명령을 큐에 등록했습니다'),
     onError: err => uiStore.getState().toast('danger', commandFailureMessage('재시작', err)),
   });
+}
+
+export function useUnregisterCluster(clusterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => del<ClusterUnregisterResponse | undefined>(`/clusters/${clusterId}`),
+    onSuccess: () => {
+      uiStore.getState().toast('ok', '클러스터 등록 해제 완료');
+      qc.invalidateQueries({ queryKey: clusterKeys.list() });
+    },
+    onError: err => uiStore.getState().toast('danger', clusterUnregisterFailureMessage(err)),
+  });
+}
+
+function adaptNodeHeatmapSummary(raw: Record<string, unknown>): NodeHeatmapSummary {
+  const conditions = raw.conditions;
+  return {
+    id: String(raw.id ?? raw.node ?? raw.name ?? raw.node_name ?? ''),
+    name: String(raw.name ?? raw.node_name ?? raw.node ?? ''),
+    pods_running: Number(raw.pods_running ?? raw.running_pods ?? raw.pod_count ?? raw.pods_total ?? 1),
+    health: String(raw.health ?? nodeHealthFromConditions(conditions, raw.ready)),
+    cpu_pct: numberOrNull(raw.cpu_pct ?? raw.cpu_percent ?? raw.cpu_ratio),
+    mem_pct: numberOrNull(raw.mem_pct ?? raw.memory_pct ?? raw.mem_ratio),
+    conditions: normalizeConditions(conditions),
+  };
+}
+
+function adaptPodHeatmapSummary(raw: Record<string, unknown>): PodHeatmapSummary {
+  const summary = (raw.summary ?? {}) as Record<string, unknown>;
+  const namespace = String(raw.namespace ?? summary.namespace ?? 'default');
+  const name = String(raw.name ?? summary.name ?? '');
+  const phase = String(raw.phase ?? raw.status ?? summary.phase ?? 'Unknown');
+  const restarts = Number(raw.restarts ?? raw.restart_count ?? raw.restart_total ?? summary.restart_total ?? 0);
+  return {
+    id: `${namespace}/${name}`,
+    name,
+    namespace,
+    phase,
+    ready: String(raw.ready ?? summary.ready ?? ''),
+    owner: String(raw.owner ?? raw.owner_name ?? summary.owner_name ?? raw.node ?? summary.node_name ?? ''),
+    owner_kind: String(raw.owner_kind ?? summary.owner_kind ?? 'Pod'),
+    node: String(raw.node ?? summary.node_name ?? '') || undefined,
+    restarts,
+    cpu_pct: numberOrNull(raw.cpu_pct ?? raw.cpu_percent ?? summary.cpu_pct ?? summary.cpu_ratio),
+    mem_pct: numberOrNull(raw.mem_pct ?? raw.memory_pct ?? summary.mem_pct ?? summary.mem_ratio),
+    health: String(raw.health ?? podHealth(phase, restarts)),
+    incident_correlation_id: (raw.incident_correlation_id ?? summary.incident_correlation_id ?? null) as string | null,
+    incident_id: (raw.incident_id ?? summary.incident_id ?? null) as string | null,
+  };
+}
+
+function fallbackNodeSummaries(nodes: Array<{ name: string; ready: boolean; pod_count: number; cpu_ratio?: number; mem_ratio?: number }>, pods: Workload[]): NodeHeatmapSummary[] {
+  return nodes.map((node) => {
+    const nodePods = pods.filter((pod) => pod.node === node.name);
+    return {
+      id: node.name,
+      name: node.name,
+      pods_running: nodePods.filter((pod) => pod.phase === 'Running').length || node.pod_count || 1,
+      health: node.ready ? 'healthy' : 'critical',
+      cpu_pct: numberOrNull(node.cpu_ratio),
+      mem_pct: numberOrNull(node.mem_ratio),
+      conditions: node.ready ? [] : ['NotReady'],
+    };
+  });
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value !== 'number') return null;
+  return value <= 1 ? value * 100 : value;
+}
+
+function normalizeConditions(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value as Record<string, unknown>)
+    .filter(([, active]) => active === true || active === 'True' || active === 'true')
+    .map(([condition]) => condition);
+}
+
+function nodeHealthFromConditions(conditions: unknown, ready: unknown) {
+  const active = normalizeConditions(conditions).map((item) => item.toLowerCase());
+  if (ready === false || active.includes('notready')) return 'critical';
+  if (active.some((item) => item.includes('pressure'))) return 'warning';
+  return 'healthy';
+}
+
+function podHealth(phase: string, restarts: number) {
+  const key = phase.toLowerCase();
+  if (['failed', 'crashloopbackoff', 'error', 'unknown'].includes(key)) return 'critical';
+  if (['pending', 'containercreating'].includes(key) || restarts > 0) return 'warning';
+  return 'healthy';
+}
+
+function clusterUnregisterFailureMessage(err: unknown): string {
+  const e = err as { detail?: string };
+  if (e.detail?.includes('has_deployments')) return '등록 해제 실패 - 연결된 배포 정의를 먼저 해제하세요';
+  return `등록 해제 실패 - ${e.detail ?? '잠시 후 다시 시도해주세요'}`;
 }
 
 // 제어 명령 실패는 조용히 삼키지 않는다 — policy(403)·검증(422) 사유를 그대로 보여줌.

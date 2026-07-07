@@ -1,12 +1,13 @@
 // API 접근 단일 지점 — 뷰/컴포넌트의 직접 fetch 금지 (docs/fd/03 D5)
 export type ApiErrorKind = 'unauthorized' | 'forbidden' | 'not_found' | 'invalid' | 'rate_limited' | 'server' | 'network';
 export class ApiError extends Error {
-  kind: ApiErrorKind; status: number; detail: string;
-  constructor(status: number, detail: string) {
+  kind: ApiErrorKind; status: number; detail: string; rawDetail?: unknown;
+  constructor(status: number, detail: string, rawDetail?: unknown) {
     super(detail);
     this.status = status; this.detail = detail;
+    this.rawDetail = rawDetail;
     this.kind = status === 401 ? 'unauthorized' : status === 403 ? 'forbidden' : status === 404 ? 'not_found'
-      : status === 422 || status === 409 ? 'invalid' : status === 429 ? 'rate_limited' : status >= 500 ? 'server' : 'network';
+      : status === 400 || status === 422 || status === 409 ? 'invalid' : status === 429 ? 'rate_limited' : status >= 500 ? 'server' : 'network';
   }
 }
 
@@ -44,10 +45,11 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
   finally { requestSignal.cancel(); }
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
-    const detail = await res.json()
-      .then(j => apiDetailToString(j?.detail ?? j ?? res.statusText))
+    const rawDetail = await res.json()
+      .then(j => detailPayload(j, res.statusText))
       .catch(() => res.statusText);
-    throw new ApiError(res.status, normalizeApiDetail(res.status, detail));
+    const detail = apiDetailToString(rawDetail);
+    throw new ApiError(res.status, normalizeApiDetail(res.status, detail), rawDetail);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
@@ -96,6 +98,13 @@ function normalizeApiDetail(status: number, detail: string): string {
   return detail;
 }
 
+function detailPayload(payload: unknown, fallback: string): unknown {
+  if (!payload || typeof payload !== 'object') return payload ?? fallback;
+  const value = payload as Record<string, unknown>;
+  if (typeof value.code === 'string') return value;
+  return value.detail ?? value ?? fallback;
+}
+
 function apiDetailToString(detail: unknown): string {
   if (typeof detail === 'string') return detail;
   if (detail && typeof detail === 'object') {
@@ -104,6 +113,9 @@ function apiDetailToString(detail: unknown): string {
       const clusters = Array.isArray(value.clusters) ? value.clusters.map(String).join(', ') : '';
       const message = String(value.detail ?? '에이전트가 연결되지 않은 클러스터입니다');
       return clusters ? `cluster_not_connected: ${message} (${clusters})` : `cluster_not_connected: ${message}`;
+    }
+    if (value.code === 'has_deployments') {
+      return `has_deployments: ${String(value.detail ?? '연결된 배포 정의가 있어 등록을 해제할 수 없습니다')}`;
     }
     const message = value.detail ?? value.message;
     if (typeof message === 'string') return message;

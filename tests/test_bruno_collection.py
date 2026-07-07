@@ -135,6 +135,8 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         "/dashboard/rca/incidents/{{incident_id}}",
         routes.FLEET_SUMMARY_PATH,
         "/clusters/{{cluster_id}}/summary",
+        "/clusters/{{cluster_id}}/nodes/summary",
+        "/clusters/{{cluster_id}}/nodes/{{node_name}}/pods/summary",
         "/metrics",
     ]
 
