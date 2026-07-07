@@ -1,5 +1,5 @@
 ---
-source_commit: 96ba52c8
+source_commit: 8c8b3b02
 status: synced
 ---
 
@@ -31,7 +31,7 @@ status: synced
 | `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
 | `useApproveUser` | `frontend/src/features/auth/api.ts :: useApproveUser` | mutation `(userId: string)` | POST `/auth/users/${userId}/approve` | 성공 시 `['users']` invalidate — [org/MembersView](./org.md) 에서 사용 |
 | `useIsAdmin` | `frontend/src/features/auth/api.ts :: useIsAdmin` | `() => boolean` | — | `session.roles.includes('service_admin') ?? false` |
-| `useResendVerification` | `frontend/src/features/auth/api.ts :: useResendVerification` | mutation `(b: {email})` | POST `/auth/resend-verification` | |
+| `useResendVerification` | `frontend/src/features/auth/api.ts :: useResendVerification` | mutation `(b: {email; password})` | POST `/auth/resend-verification` | |
 
 ## 컴포넌트
 
@@ -67,8 +67,8 @@ status: synced
 - 라우트: `/verify-email` (가드 `RequireGuest`). 쿼리스트링 `verified`.
 - `ok = sp.get('verified') === '1'`:
   - true → `EmptyState(IconCheckCircle, '검증 완료', '관리자 승인 후 로그인할 수 있습니다.')` + 로그인 버튼.
-  - false → `EmptyState(IconAlertTriangle, '링크가 만료되었거나 잘못되었습니다', …)` + 이메일 입력 폼(`useResendVerification` mutate). 전송 성공/실패 안내 문구, "로그인으로" ghost 버튼.
-- state: `email`. 재전송 버튼은 `resend.isPending || !email` 시 disabled.
+  - false → `EmptyState(IconAlertTriangle, '링크가 만료되었거나 잘못되었습니다', …)` + 이메일/비밀번호 입력 폼(`useResendVerification` mutate). 전송 성공/실패 안내 문구, "로그인으로" ghost 버튼.
+- state: `email`, `password`. 재전송 버튼은 `resend.isPending || !email || password.length < 8` 시 disabled.
 
 ## 라우트
 
