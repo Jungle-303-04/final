@@ -1329,8 +1329,9 @@ def derive_workflow_step_id(workflow_run_id: str, step_name: str) -> str:
     return f"step-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
-def derive_approval_id(workflow_run_id: str) -> str:
-    raw = f"{workflow_run_id}|deploy-approval"
+def derive_approval_id(workflow_run_id: str, qualifier: str | None = None) -> str:
+    suffix = qualifier or "deploy-approval"
+    raw = f"{workflow_run_id}|{suffix}"
     return f"approval-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 

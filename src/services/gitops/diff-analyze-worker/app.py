@@ -74,7 +74,7 @@ def evaluate_safe_pr_policy(diff: Diff) -> PolicyDecision:
             safe=False,
             reason=NO_ACTIONABLE_CHANGE_REASON,
         )
-    approval_ref = derive_approval_id(diff.workflow_run_id)
+    approval_ref = derive_approval_id(diff.workflow_run_id, approval_qualifier(diff))
     if diff.risk == RiskLevel.SANDBOX_ONLY:
         return PolicyDecision(
             route=POLICY_ROUTE_SAFE_PR,
@@ -94,6 +94,12 @@ def evaluate_safe_pr_policy(diff: Diff) -> PolicyDecision:
 
 def policy_decision_ref(approval_ref: str, route: str) -> str:
     return f"{POLICY_DECISION_REF_PREFIX}:{approval_ref}:{route}"
+
+
+def approval_qualifier(diff: Diff) -> str:
+    namespace = diff.namespace or "cluster"
+    resource = diff.resource or "resource"
+    return f"{namespace}/{resource}"
 
 
 async def persist_policy_decision(
