@@ -82,11 +82,11 @@ export const router = createBrowserRouter([...])
 | `/settings/groups` | `features/org/GroupsView` (lazy) | 〃 | 그룹 관리 |
 | `/settings/access` | `features/org/AccessView` (lazy) | 〃 | 리소스 권한 |
 | `/settings/ops` | `features/notifications/OpsView` (lazy) | 〃 | 운영(Dead Letter) |
+| `*` | `features/console/pages/NotFoundPage` (lazy) | `RequireSession` + `ConsoleLayout` | 알 수 없는 콘솔 경로 404 안내 |
 | `/console`, `/console/*` | `<Navigate to="/" replace />` | 없음 | 구 콘솔 경로 호환 |
 | 구 UI 경로 계열 | `<Navigate to="/" replace />` | 없음 | 구 UI 경로 호환 |
 | `/overview`, `/overview/*` | `<Navigate to="/" replace />` | 없음 | 구 오버뷰 경로 호환 |
 | `/notifications` | `<Navigate to="/incidents" replace />` | 없음 | 구 알림 경로 호환 |
-| `*` | `<Navigate to="/" replace />` | 없음 | 폴백 |
 
 ### 가드 — `frontend/src/app/guards.tsx`
 
@@ -139,13 +139,14 @@ ConsoleLayout (div.pl-app.co-app)
 2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 로그인되어 있으면 `/` 로 이동한다.
 3. 세션 플로우: `RequireSession` 이 세션 확인 후 `ConsoleLayout` 렌더 → `startLive()` 1회 호출로 WS 시작.
 4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재경로>` 이동.
-5. 알 수 없는 경로는 항상 `/` 로 회수된다.
+5. 구 경로(`/console`, `/overview`, `/notifications`)는 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
 
 ## 불변식·오류 (Invariants & Errors)
 
 - WS 연결 시작(`startLive`)은 앱 전체에서 `ConsoleLayout` 한 곳에서만 호출한다.
 - 정식 뷰 라우트는 lazy import + `Skeleton` fallback 을 사용한다. `HomePage`만 index 화면이라 직접 import 한다.
 - `RequireAdmin` 은 리다이렉트하지 않고 안내 `EmptyState` 를 렌더한다(URL 유지).
+- 알 수 없는 경로는 몰래 홈으로 보내지 않고 `NotFoundPage` 로 표시한다. 구 경로 호환 redirect 만 예외다.
 - 라우트 추가 시 이 표와 `ConsoleLayout` 의 `MENU`(전역 네비 대상일 때)를 함께 갱신한다.
 
 ## 설정 (Settings)
