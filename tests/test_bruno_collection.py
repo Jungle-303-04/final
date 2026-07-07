@@ -33,9 +33,9 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     aws = (API_DIR / "environments" / "aws-test.bru").read_text(encoding="utf-8")
 
     assert "base_url: https://k8s.woonyong.org/api/" in collection
-    assert "auto_login: true" in collection
-    assert "auth_email: admin.local@example.com" in collection
-    assert "auth_password: local-test-password-1234" in collection
+    assert "auto_login: false" in collection
+    assert "auth_email: replace-with-auth-email" in collection
+    assert "auth_password: replace-with-auth-password" in collection
     assert "cluster_id: cluster-1" in collection
 
     assert "base_url: http://localhost:18080/" in local
@@ -45,9 +45,9 @@ def test_bruno_collection_has_expected_root_and_profiles() -> None:
     assert "cluster_id: target" in local
     assert "base_url: https://k8s.woonyong.org/api/" in aws
     assert "management_base_url: https://k8s.woonyong.org/api/" in aws
-    assert "auto_login: true" in aws
-    assert "auth_email: admin.local@example.com" in aws
-    assert "auth_password: local-test-password-1234" in aws
+    assert "auto_login: false" in aws
+    assert "auth_email: replace-with-auth-email" in aws
+    assert "auth_password: replace-with-auth-password" in aws
     assert "cluster_id: cluster-1" in aws
 
     for env_text in (local, aws):
@@ -191,7 +191,7 @@ def test_bruno_readme_explains_each_work_type() -> None:
         "GitHub webhook signature",
         "https://k8s.woonyong.org/api/",
         "auto_login",
-        "admin.local@example.com",
+        "replace-with-auth-email",
         "BRUNO_CLUSTER_ID",
     ]
 

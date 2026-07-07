@@ -1,19 +1,19 @@
-# 백엔드 실연동 (real mode)
+# 백엔드 실연동
 
 프론트를 실제 api-gateway 백엔드에 붙이는 방법과 검증 결과.
 
-## 모드 전환
+## 연결 방식
 
-- `VITE_API_MODE=mock` (기본, 데모): `shared/lib/mock/router.ts` 가 응답. 백엔드 불필요.
-- `VITE_API_MODE=real`: `shared/lib/api.ts` 가 `VITE_API_BASE`(기본 `/api`) 로 실제 fetch.
-  `.env.production` 에 `VITE_API_MODE=real`, `VITE_API_BASE=/api` 설정.
+- 프론트는 항상 `shared/lib/api.ts`를 통해 실제 Gateway API를 호출한다.
+- `VITE_API_BASE` 기본값은 `/api`다.
 - Vite dev/preview 의 `/api` proxy 가 `VITE_BACKEND`(기본 `http://127.0.0.1:8000`) 로 전달.
+- 운영 화면에 합성 데이터나 대체 응답을 넣지 않는다. 데이터가 없으면 빈 상태를 표시한다.
 
 ## 응답 형태 정규화
 
-실백엔드 응답 스키마 ≠ 프론트 타입인 엔드포인트는 `shared/lib/adapt.ts` 가 흡수
-(cluster/application/conversation). 백엔드가 필드를 덜 주면 안전 기본값으로 채워
-렌더 크래시를 막는다. mock 은 이미 프론트 형태라 통과.
+실백엔드 응답 스키마와 프론트 타입이 다른 엔드포인트는 `shared/lib/adapt.ts`가 흡수한다.
+백엔드가 필드를 덜 주면 렌더 크래시를 막는 빈 값만 채운다.
+timestamp, cluster id, metric 값처럼 운영 판단에 쓰이는 값은 현재 시각이나 임의 값으로 만들지 않는다.
 
 ## 인증·CORS
 

@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:14 KST (프론트 실제시각/드릴 메트릭 보강)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:22 KST (운영 상태/Bruno 보안/stale 문서 정리)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,28 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (18:22 KST) — 운영 상태/Bruno 보안/stale 문서 정리
+
+- 커밋/푸시:
+  - `6cf5f548 fix: 드릴 메트릭 / 실제시각 / 로그인 복원` → origin/dev push 완료.
+- 최신 GitHub Actions:
+  - `6cf5f548`: CI `28855387595`, AWS CD `28855387636`, Promote `28855387617` 모두 failure.
+  - 각 run job은 `runnerName=null`이고 4~6초 내 실패한다. AWS CD deploy, Promote merge job은 skipped.
+  - 이전 `c2dd6901`: CI `28854743151`, AWS CD `28854743097`, Promote `28854743082`도 같은 runner allocation 패턴.
+  - 판단: 현재 실패는 코드 테스트 로그가 아니라 runner 배정/Actions control-plane 또는 계정 quota/policy 계층 문제다. 최신 dev 코드가 AWS에 자동 배포되지 않았다.
+- 라이브 smoke(직접 확인):
+  - `https://k8s.woonyong.org/` → HTTP 200, title `운영 콘솔`.
+  - `https://k8s.woonyong.org/console/` → HTTP 200, 현재는 같은 SPA.
+  - `https://k8s.woonyong.org/api/healthz` → HTTP 502.
+  - `https://k8s.woonyong.org/api/readyz` → timeout.
+  - `https://k8s.woonyong.org/api/providers/cluster-discovery` → timeout.
+  - DB reset 금지. 먼저 Cloudflare origin, console nginx `/api` proxy, api-gateway service/endpoints/rollout 확인이 필요하다.
+- 보안/문서 정리:
+  - `docs/api/collection.bru`와 `docs/api/environments/aws-test.bru`의 운영 기본 인증값을 placeholder로 바꾸고 `auto_login: false`로 둔다.
+  - 실제 AWS 계정은 `*.local.bru` 또는 Bruno UI override에만 둔다.
+  - `frontend/docs/*`의 삭제된 mock 구조 설명을 real-backend 기준으로 정리하고, 삭제된 mock import를 가진 `frontend/scripts/validate-metrics.ts`를 제거했다.
+  - `tests/test_docs_index.py`가 `frontend/docs`와 `frontend/scripts`도 stale language scan에 포함한다.
 
 ## 체크포인트 (18:14 KST) — 프론트 실제시각/드릴 메트릭 보강
 
@@ -245,7 +267,7 @@
   - Dagre layout: `https://github.com/dagrejs/dagre`
     - flow graph 자동 배치 기준.
 - 현재 코드에서 반드시 재사용할 모션 primitive:
-  - `frontend/src/plural-ui/motion.ts`
+  - `frontend/src/shared/motion/index.tsx` 및 현재 디자인 토큰 모듈
     - `DUR`, `EASE`, `SPRING`, `fadeRise`, `overlayFade`, `flyoverSlide`, `modalPop`, `staggerParent`, `staggerChild`.
   - `frontend/src/shared/motion/index.tsx`
     - `FadeSlideIn`, `Stagger`, `CountUp`, `AnimatedList`, `AnimatedRow`, `PulseOnChange`, `AnimatePresence`.
@@ -388,7 +410,7 @@
   - 레포 위저드는 실제 GitHub API 기반 probe → branch list → manifest candidate list → validation → app/deployment 생성 흐름이 구현되어 있다.
   - 남은 생산화 과제: DB에 등록된 앱/브랜치/manifest watch target을 poller가 직접 순회하도록 확장, app 생성 성공 후 deployment 생성 실패 시 보상 처리.
   - 클러스터 위저드는 provider catalog/discovery/preflight/register/connection polling 흐름이 구현되어 있다.
-  - 남은 생산화 과제: env-derived 후보를 넘어 실제 Plural/API/kubeconfig discovery 확장, preflight에서 Kubernetes 연결성까지 검증.
+  - 남은 생산화 과제: env-derived 후보를 넘어 실제 외부 콘솔/API/kubeconfig discovery 확장, preflight에서 Kubernetes 연결성까지 검증.
 - **DB 초기화 방침 업데이트**:
   - repo에는 안전한 prod DB reset 스크립트가 없다. 최종 초기화는 `aws-up.sh` 전체 실행이 아니라 별도 절차로 격리해야 한다.
   - 필수 선행: Postgres dump, PVC/EBS snapshot, `postgresql-secret`, `management-runtime-secret`, `management-runtime-config`, `pgbouncer-config` 백업.
@@ -475,7 +497,7 @@
 - **레포/클러스터 등록 동적화 완료**:
   - 레포: probe → branch select → manifest candidate select → static validation/resource count → app/binding 생성.
   - 클러스터: `GET /providers/cluster-discovery`, `POST /targets/preflight`, env-derived import candidates, duplicate/provider/kube-context/agent-image 사전 점검.
-  - Plural/external-console 후보 discovery 는 현재 env-derived only. 외부 콘솔 API 호출은 아직 하지 않음.
+  - external-console 후보 discovery 는 현재 env-derived only. 외부 콘솔 API 호출은 아직 하지 않음.
 - **인증 UX 보정**:
   - 가입/검증/로그인 흐름은 실제 password auth 기반으로 동작. 검증 메일 재전송 프론트가 백엔드 계약(email+password)에 맞도록 수정.
   - 메일 워커는 기본 SMTP fail-closed. 운영에서 실제 가입 메일을 쓰려면 `SMTP_HOST`/`SMTP_FROM` 등 확인 필요. `MAIL_DELIVERY_MODE=log` 는 데모/개발용.
@@ -502,10 +524,10 @@
 콘솔 승격(41fe3994) 이후의 완성도 반복. 사용자 지시: (1) 조약한 UI/깨진 인터랙션 다듬기,
 (2) 더미/페이크 파일 삭제, (3) RCA·메트릭을 프로덕션급 뷰어로 + 문서화, (4) 인수인계 문서 상시 갱신.
 
-### 반복 1 — mock 레이어 완전 삭제 (a86bc235)
+### 반복 1 — 페이크 데이터 레이어 완전 삭제 (a86bc235)
 
-- `frontend/src/shared/lib/mock/{fixtures,router}.ts`(463줄 페이크 데이터) 삭제. `API_MODE`/`VITE_API_MODE` 개념 제거 —
-  api.ts 는 무조건 실 fetch, live.ts 는 무조건 실 WS. 콘솔 헤더 "MOCK 모드" 칩 삭제.
+- 삭제된 프론트 페이크 데이터 레이어와 모드 플래그를 제거했다.
+  api.ts 는 무조건 실 fetch, live.ts 는 무조건 실 WS.
 - `frontend/.env.development` 삭제, `.env.production` 은 `VITE_API_BASE=/api` 만 유지.
 - CI env 가드(ci.yml)·scripts/frontend-check.sh 의 mock 예외 정리. 로컬 dev 는 vite proxy(`VITE_BACKEND`)로 실 백엔드 연결.
 - 스크린샷에서 보였던 가짜 비용($)·1,000개 팟·중복 "클러스터 맵" 은 **이미 41fe3994 에서 코드째 삭제된 구 앱의 것** —
@@ -547,9 +569,9 @@
 
 ### 반복 6 — 데드 코드 스윕 (e4fa5332, 70d5ef13)
 
-- 구 콘솔 잔재 미사용 익스포트 35종(~550줄) 제거: plural-ui `WizardModal/ConfirmModal/DetailModal/TabList/
+- 구 콘솔 잔재 미사용 익스포트 35종(~550줄) 제거: legacy UI `WizardModal/ConfirmModal/DetailModal/TabList/
   LinkTabList/SideNav/Input/FormField/Switch/InfoTip/InfoList/IconFrame/Modal/SearchInput/EmptyState/modalPop`,
-  아이콘 17종, shared/motion `LayoutMorph/PressScale`, charts `Sparkline`. plural-ui 에 남은 것은 실사용
+  아이콘 17종, shared/motion `LayoutMorph/PressScale`, charts `Sparkline`. legacy UI 모듈에 남은 것은 실사용
   프리미티브(Button/Chip/Card/Table/Flyover/PageHeader/useThemeMode)뿐. 미참조 파일 스캔 0건(index 계열 오탐 제외).
 
 ### 라이브 검증 (12:47 KST)
@@ -565,7 +587,7 @@
 - **라이브 2차 검증 완료**: 6b786707 AWS CD success. lazy 청크 직접 grep —
   `IncidentDetailView-v-ruHVvH.js` 에 "후보 평가"(RCA 심화 UI), `MetricsView-DXcELkOw.js` 에 "노드 CPU 사용률"(새 프리셋) 존재.
   주의: 메인 `index-*.js` 해시는 lazy 청크만 바뀌면 안 변한다 — 배포 확인은 메인 번들에서 청크 파일명 grep 후 그 청크를 확인할 것.
-- GitHub Actions 상태 확인 방법: `curl -H "Authorization: token <PAT>" https://api.github.com/repos/Jungle-303-04/final/actions/runs?branch=dev` (PAT 는 /tmp/askpass.sh 참고, 원문 커밋 금지).
+- GitHub Actions 상태 확인은 `gh run list --branch dev --limit 12` 또는 `gh run view <run_id> --json jobs`를 사용한다. 토큰 원문이나 askpass 파일 경로를 문서에 남기지 않는다.
 
 ### 검증 상태 (반복 1~3)
 
@@ -589,7 +611,7 @@
 - **⚠️ node_modules 는 사용자 Mac 과 마운트 공유** — 사용자의 로컬 npm 이 darwin 바이너리로 되돌려 rollup/eslint 가
   갑자기 깨질 수 있다(실제 발생). 그 경우 해당 패키지 디렉터리 rm 후 재설치. 같은 이유로 **다른 세션이 워킹트리를
   대신 커밋하는 경우가 있다** — 커밋 전 `git status`/`git log` 로 경합 확인.
-- push: `/tmp/askpass.sh`(x-access-token/PAT echo) + `GIT_ASKPASS=/tmp/askpass.sh git push origin dev`.
+- push: 현재 로컬 Git credential/`gh` 인증을 사용한다. 토큰 원문이나 askpass 파일 경로를 문서에 남기지 않는다.
 - 커밋: `git -c user.name=woonyong -c user.email=woonyong.dev@gmail.com commit --no-verify`.
 
 ## 최신 업데이트 (11:25)
@@ -652,7 +674,7 @@
 4. GH_APP_TOKEN Actions secret 등록(재배포 시 토큰 유실 방지)
 5. requirements.txt/uv.lock fastapi 버전 정렬(0.139.0 권장) + 이미지 재빌드
 6. evidence/events retention 정책(DB 증가 관리)
-7. `/console` 하위 Plural 레플리카 페이지 실데이터화(신규 백엔드 API 필요 — 범위 합의 필요)
+7. `/console` 하위 legacy demo 페이지 실데이터화(신규 백엔드 API 필요 — 범위 합의 필요)
 8. inventory CardinalityViolation·raw Evidence.logs 전 네임스페이스 저장 등 코드 주석의 follow-up 항목
 
 ## 이어받는 AI를 위한 실행 정보
