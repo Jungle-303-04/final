@@ -1,5 +1,5 @@
 ---
-source_commit: 20945a70
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -77,7 +77,7 @@ status: synced
 | `upsert_rca_timeline` | `(self, row: JsonObject) -> None` | `INSERT ... ON CONFLICT (workspace_id, correlation_id) DO UPDATE`. 갱신 규칙: ① `preserve_when_missing` 컬럼(cluster_id, incident_id, evidence_ref, root_cause, confidence, supporting_evidence, missing_evidence, action_route, command_id, pr_url)은 `coalesce(EXCLUDED.<col>, 기존값)` — 새 값이 NULL이면 기존값 보존. ② `newer_or_equal_event = EXCLUDED.last_event_at >= 기존 last_event_at`일 때만 current_subject/status/error_reason/last_event_id/last_event_at/payload 교체(CASE), 아니면 기존값 유지. ③ `updated_at=now()` 항상 갱신 |
 | `list_rca_timeline` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None, limit: int = 50) -> list[JsonObject]` | `allowed_cluster_ids == set()`이면 빈 리스트 즉시 반환(권한 0). `WHERE workspace_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT ?` 후 `serialize_timeline_row`. `None`은 필터 없음(전체 허용) |
 | `get_rca_timeline_item` | `(self, workspace_id: str, incident_id: str, allowed_cluster_ids: set[str] \| None) -> JsonObject \| None` | `WHERE workspace_id=? AND incident_id=? [AND cluster_id IN allowed] ORDER BY updated_at DESC LIMIT 1` |
-| `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 인시던트 수. `WHERE workspace_id=? AND incident_id IS NOT NULL AND cluster_id IS NOT NULL AND status NOT IN CLOSED_INCIDENT_STATUSES [AND cluster_id IN allowed] GROUP BY cluster_id`. 빈 허용 집합이면 `{}` |
+| `count_open_rca_incidents` | `(self, workspace_id: str, allowed_cluster_ids: set[str] \| None = None) -> dict[str, int]` | fleet 롤업용 클러스터별 열린 logical incident 수. `WHERE workspace_id=? AND incident_id IS NOT NULL AND cluster_id IS NOT NULL AND status NOT IN CLOSED_INCIDENT_STATUSES [AND cluster_id IN allowed]` 로 `id/cluster_id/incident_id/correlation_id`와 `payload.incident.{namespace,resource_kind,resource_name,symptom}` projection 만 읽고, Python에서 `incident_logical_key_from_projection`으로 클러스터별 중복을 제거해 count 한다. 빈 허용 집합이면 `{}` |
 | `list_open_rca_incidents` | `(self, workspace_id: str, cluster_id: str, *, limit: int = 20) -> list[JsonObject]` | 드릴다운용 — 같은 open 판정으로 `updated_at DESC LIMIT`(1..100 clamp) 후 `open_incident_summary` 적용 |
 
 열린 인시던트 판정 상수 `CLOSED_INCIDENT_STATUSES`(앵커: `src/domains/dashboard/repository.py :: CLOSED_INCIDENT_STATUSES`) = `("command_completed", "command_rejected", "pr_created", "pr_failed")` — 이 종결 status 에 도달하지 않았고 `incident_id`가 있는 row 가 open. 모듈 함수 `open_incident_summary`(앵커: `src/domains/dashboard/repository.py :: open_incident_summary`)는 timeline row 를 `{incident_id, correlation_id, symptom(payload `incident.symptom` → `symptom`), root_cause, status, created_at}` 화이트리스트 요약으로 변환한다(payload 원문 비노출).
@@ -139,7 +139,7 @@ health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_ro
 
 ### `rca_timeline` — `src/domains/dashboard/models.py :: RcaTimeline`
 
-`__table_args__ = (UniqueConstraint("workspace_id", "correlation_id"),)`
+`__table_args__ = (UniqueConstraint("workspace_id", "correlation_id"), Index("ix_rca_timeline_scope_updated", "workspace_id", "updated_at"), Index("ix_rca_timeline_open_cluster", "workspace_id", "cluster_id", "status", "incident_id"))`
 
 | 필드 | 타입 | 제약 | 설명 |
 |---|---|---|---|

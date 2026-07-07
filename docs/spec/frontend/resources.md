@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -28,7 +28,7 @@ status: synced
 
 - 라우트: `/catalog`.
 - 데이터: 인라인 `useQuery({ queryKey: ['catalog'], queryFn: get('/catalog/items'), select: d => d.items })`; 설치는 `useMutation(POST /catalog/items/${id}/installs, body {})` — 성공 시 toast ok `'설치를 요청했습니다 — 진행 상황은 워크플로우에 표시됩니다'`, 실패 시 danger `'설치 요청 실패 — <message>'`.
-- 트리: `PageHeader('카탈로그', sub='설치 요청은 워크플로우 run 으로 실행됩니다')` → `QueryBoundary` → 항목 0개면 `Card > EmptyState(IconFile, '설치 가능한 항목이 없습니다', '카탈로그 항목이 등록되면 여기에서 설치를 요청할 수 있습니다')`; 항목이 있으면 카드 그리드(`repeat(auto-fill, minmax(260px, 1fr))`) → `Stagger` 로 항목별 `Card(title=name, actions=설치 primary sm 버튼)`: description + category.
+- 트리: `PageHeader('카탈로그')` → `QueryBoundary` → 항목 0개면 `Card > EmptyState(IconFile, '설치 가능한 항목이 없습니다')`; 항목이 있으면 카드 그리드(`repeat(auto-fill, minmax(260px, 1fr))`) → `Stagger` 로 항목별 `Card(title=name, actions=설치 primary sm 버튼)`: description + category.
 - 설치 버튼은 클릭한 카드만 `loading={install.isPending && install.variables === item_id}` 로 표시하고, 다른 카드 버튼은 같은 mutation 이 pending 인 동안 disabled 처리한다.
 
 ### `frontend/src/features/resources/RegisterClusterWizard.tsx :: RegisterClusterWizard`
