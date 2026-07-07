@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 02:11 KST (요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 03:20 KST (프론트 재배포 + outbox oversized payload 안정화 진행)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -12,7 +12,29 @@
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
 
-## 체크포인트 (현재) — 요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성
+## 체크포인트 (현재) — 프론트 재배포 + outbox oversized payload 안정화
+
+- 프론트:
+  - 커밋/푸시: `5ed50fae fix: frontend 세션 복구 / API 오류 문구` → `origin/dev`.
+  - 로컬 검증: `cd frontend && npm run typecheck`, `npm run lint`, `npm test`(11 passed), `npm run build` passed. 기존 large chunk warning만 있음.
+  - GitHub Actions AWS CD는 runner 할당 전 단계에서 `Test before deploy`가 6초 만에 실패하고 logs/steps가 비어 있어 원격 빌드 경로를 사용하지 못했다.
+  - Docker Desktop을 기동해 로컬에서 `frontend/Dockerfile`로 `linux/amd64` 이미지 빌드·ECR push 완료.
+  - 배포 이미지: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:5ed50fae-frontend-20260708031456`.
+  - rollout: `kubectl -n management set image deploy/console ...` 후 `deployment/console successfully rolled out`, Ready `1/1`.
+  - public smoke: `https://k8s.woonyong.org/` HTTP 200, 새 asset `index-DI7HDdPP.js` 서빙 확인. `/api/healthz` 200, `/api/readyz` 200. 단 `/api/healthz` 1회가 `7.22s`로 느려 backend 병목은 아직 남아 있음.
+- AWS 스펙:
+  - 실제 management cluster: `kubernetes-ops`, nodegroup `kubernetes-ops-ng`.
+  - 현재 nodegroup: `t3.xlarge` ON_DEMAND, desired `2`, min `1`, max `3`, Kubernetes `1.34`.
+  - ap-northeast-2 Pricing API 기준 후보를 사용자에게 제시함: `m7i.xlarge x2`, `c7i.2xlarge x2`, `r7i.xlarge x2`, `m7i.2xlarge x1`. 권장안은 `c7i.2xlarge x2`.
+  - 실제 nodegroup 변경은 사용자 선택 대기. 선택 전 임의 변경 금지.
+- Backend 안정화:
+  - live 로그에서 확인된 핵심 병목은 `api-gateway` outbox relay의 `nats.errors.MaxPayloadError: nats: maximum payload exceeded` 반복이다. 같은 oversized payload가 계속 재시도되면 gateway OOM/readiness timeout을 다시 유발할 수 있다.
+  - 코드 패치 진행: `OutboxRelay`가 `MaxPayloadError` 같은 비재시도 publish 오류를 DLQ로 격리하고 outbox 대상에서 제거하도록 변경했다. transient 오류는 기존처럼 재시도 유지.
+  - DB 스키마 변경 없음. 기존 `event_dead_letters` 테이블을 사용해 `consumer="outbox-relay:<source>"`, `attempts=1`, original payload/error를 기록한다.
+  - 검증: `uv run pytest tests/test_outbox.py` → 5 passed, `uv run pytest tests/test_database_unit.py -q` → 45 passed, `uv run ruff check ...` → passed.
+  - 아직 backend 이미지는 빌드/배포 전이다. 다음 단계는 backend 커밋/푸시 → service 이미지 빌드/push → `api-gateway` rollout → live logs에서 `gateway_outbox_relay_error` 재발 여부 확인.
+
+## 체크포인트 — 요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성
 
 - 구현:
   - dialog 계열(`Modal`, `Drawer`, plural `Flyover`)에 `aria-modal`, focus 진입, Tab focus trap, 닫을 때 이전 focus 복원을 맞췄다.
