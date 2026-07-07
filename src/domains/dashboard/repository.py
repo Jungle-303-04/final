@@ -161,19 +161,16 @@ class DashboardRepository(DatabaseConnection):
         if allowed_cluster_ids is not None and not allowed_cluster_ids:
             return {}
         table = RcaTimeline.__table__
-        statement: Select[Any] = (
-            select(
-                table.c.cluster_id,
-                table.c.incident_id,
-                table.c.correlation_id,
-                table.c.payload,
-            )
-            .where(
-                table.c.workspace_id == workspace_id,
-                table.c.incident_id.is_not(None),
-                table.c.cluster_id.is_not(None),
-                table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
-            )
+        statement: Select[Any] = select(
+            table.c.cluster_id,
+            table.c.incident_id,
+            table.c.correlation_id,
+            table.c.payload,
+        ).where(
+            table.c.workspace_id == workspace_id,
+            table.c.incident_id.is_not(None),
+            table.c.cluster_id.is_not(None),
+            table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
         )
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
         with self.connection() as conn:
