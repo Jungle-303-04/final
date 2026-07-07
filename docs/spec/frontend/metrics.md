@@ -58,7 +58,7 @@ status: synced
 - 트리:
   ```
   FadeSlideIn
-  ├─ 헤더: h1 '메트릭' · 클러스터 select(useClusters) · ⏸ 일시정지/▶ 재개 토글
+  ├─ PageHeader('메트릭', sub, actions=클러스터 select(useClusters)+⏸ 일시정지/▶ 재개 토글) — 빈 상태 분기와 동일 헤더
   ├─ status !== 'open' → 경고 카드 '실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다'
   ├─ StatBox: Running(ok) / Pending(warn) / CrashLoop(>0 이면 danger) / 노드(summary.nodes.length, info)
   │   / snapshot.rollout 있으면 'rollout <name>'(progress, info)
