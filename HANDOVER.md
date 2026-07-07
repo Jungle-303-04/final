@@ -1,6 +1,34 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 03:50 KST (콘솔 디자인 시스템 Phase 0/1 착수)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 04:01 KST (evidence claim-check 라이브 안정화 완료)
+
+## 체크포인트 — evidence claim-check 라이브 안정화 완료
+
+- 커밋/푸시:
+  - `f7bc7bd6 fix: evidence claim-check / NATS payload / 원천 차단`
+  - `b8f764ba fix: evidence.built claim-check / NATS payload / hydrate`
+  - 두 커밋 모두 `origin/dev` push 완료, author/committer는 `choi woo-nyong <woonyong.kr@gmail.com>`.
+- 라이브 배포:
+  - service image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:b8f764ba-service-20260708035204`.
+  - `api-gateway`, `evidence-worker`, `incident-worker` 모두 위 이미지로 rollout 완료, 각 deployment `1/1 Ready`.
+  - public smoke: `/api/healthz` 200, `/api/readyz` 200. 최근 측정은 healthz 약 `0.49s`, readyz 약 `0.62s`.
+- 문제 원천 수정:
+  - `cluster.evidence.received`: full evidence는 `evidence_windows.payload`에만 저장하고, outbox/NATS에는 `evidence_key`, `workspace_id`, `cluster_id`, `correlation_id`, `kind`, `payload_size`, `summary` 중심 reference만 발행.
+  - `evidence.built`: full `Evidence`는 `evidence` 테이블에 저장하고, event는 `object_ref`, `correlation_id`, `kind`, `payload_size`, `summary` 중심 reference만 발행.
+  - `evidence-worker`는 `get_evidence_window_payload(evidence_key)`, `incident-worker`는 `get_evidence_payload(workspace_id, correlation_id, kind)`로 hydrate 한다. 기존 full payload 이벤트도 inline evidence가 있으면 그대로 처리한다.
+- DLQ/replay 결과:
+  - 기존 open DLQ `269`건을 모두 처리했다. `cluster.evidence.received` MaxPayload 255건, `evidence.built` MaxPayload 255건, 과거 deadlock 10건은 compact replay로 처리했고, 작은 disk/git 오류 4건은 원본 replay 처리했다.
+  - 최종 DB 상태: `event_dead_letters`: `archived=1891`, `replayed=529`, `open=0`.
+  - `MaxPayloadError`, `maximum payload`, `outbox_event_dead_lettered`, `EventBodyDecodeError` 로그는 최근 확인 구간에서 0건.
+  - `outbox_pending_total`은 0~8 사이로 변동하나 남은 항목은 `workflow-controller`의 0.5~1.6KB 소형 정상 이벤트다. evidence 계열 oversized pending은 없음.
+- 로컬 검증:
+  - claim-check 1차: focused pytest 39 passed, schema/database/API 관련 120 passed, 전체 `uv run pytest -q` → 722 passed, 3 skipped.
+  - `evidence.built` 추가 수정: focused pytest 98 passed, import-linter passed, 전체 `uv run pytest -q` → 723 passed, 3 skipped.
+- 후속 작업:
+  1. B: `count_open_rca_incidents` SQL 집계/인덱스/만료 정책으로 `/fleet/summary` 병목 제거.
+  2. C: `api-gateway` 내부 outbox relay를 `AsyncService` 기반 독립 deployment로 분리하고 gateway replicas/resources 영구 반영.
+  3. D: outbox/events/audit retention janitor와 keyset pagination.
+  4. 모든 안정화/프론트 품질 작업 완료 후 `cluster-1`에 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 실제 repo 기준 배포, 도메인 `target-01.woonyong.org` 연결 및 smoke 테스트.
 
 ## 체크포인트 — 콘솔 디자인 시스템 Phase 0/1 착수
 
