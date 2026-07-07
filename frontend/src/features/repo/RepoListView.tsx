@@ -8,10 +8,12 @@ import { IconPlus } from '@/shared/ui/icons';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Application } from '@/shared/lib/types';
+import { useConsolePath } from '@/features/console/ui';
 
 export default function RepoListView() {
   const q = useApplications();
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const [wizard, setWizard] = useState(false);
   return (
     <FadeSlideIn>
@@ -21,7 +23,7 @@ export default function RepoListView() {
         <QueryBoundary query={q}>{apps => (
           <ResourceTable<Application>
             rows={apps} rowKey={a => a.application_id}
-            onRowClick={a => nav(`/repos/${a.application_id}`)}
+            onRowClick={a => nav(pathFor(`/repos/${a.application_id}`))}
             empty={<EmptyState icon="⑂" title="연결된 레포가 없습니다" action={<Button variant="primary" onClick={() => setWizard(true)}>레포 연결</Button>} />}
             columns={[
               { key: 'name', label: '앱', render: a => <b>{a.name}</b> },
