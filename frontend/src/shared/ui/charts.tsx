@@ -48,10 +48,19 @@ export function TreemapChart({ nodes, onTileClick }: { nodes: HeatNode[]; onTile
 export interface Series { id: string; data: { x: number | string; y: number }[] }
 export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; height?: number }) {
   const reduced = useReducedMotion(); // nivo 는 MotionConfig 밖 — 단일 훅으로 직접 존중
+  // 포인트 없는 시리즈는 제외 — nivo 가 빈 시리즈에 d="null" 패스를 그려 SVG 콘솔 오류를 낸다
+  const drawable = series.filter(s => s.data.length > 0);
+  if (drawable.length === 0) {
+    return (
+      <div style={{ height, display: 'grid', placeItems: 'center', color: 'var(--text-3)', fontSize: 'var(--fs-sm)' }}>
+        표시할 시계열 데이터가 아직 없습니다
+      </div>
+    );
+  }
   return (
     <div style={{ height }}>
       <ResponsiveLine
-        data={series} theme={theme} margin={{ top: 12, right: 16, bottom: 28, left: 40 }}
+        data={drawable} theme={theme} margin={{ top: 12, right: 16, bottom: 28, left: 40 }}
         xScale={{ type: 'point' }} yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
         axisBottom={{ tickValues: 5 }} enablePoints={false} enableGridX={false}
         colors={['var(--info)', 'var(--ok)', 'var(--warn)']} lineWidth={2}

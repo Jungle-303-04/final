@@ -53,6 +53,8 @@ export const router = createBrowserRouter([
             { path: 'ops', element: L(() => import('@/features/notifications/OpsView')) },
           ],
         },
+        // 알 수 없는 경로 — 콘솔 셸 안에서 정직한 404 (몰래 홈 리다이렉트 금지)
+        { path: '*', element: L(() => import('@/features/console/pages/NotFoundPage')) },
       ],
     }],
   },
@@ -64,5 +66,4 @@ export const router = createBrowserRouter([
   { path: '/overview', element: <Navigate to="/" replace /> },
   { path: '/overview/*', element: <Navigate to="/" replace /> },
   { path: '/notifications', element: <Navigate to="/incidents" replace /> },
-  { path: '*', element: <Navigate to="/" replace /> },
 ]);
