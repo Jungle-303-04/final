@@ -29,8 +29,8 @@ status: synced
 | `CommandStatus` | `frontend/src/features/metrics/api.ts :: CommandStatus` | `{ command_id; cluster_id; correlation_id; action; status: 'queued'\|'leased'\|'running'\|'completed'\|'failed'\|string; result: Record<string,unknown>; completed_at: string \| null }` |
 | `isTerminal` | `frontend/src/features/metrics/api.ts :: isTerminal` | `(s: string \| undefined) => boolean` — `TERMINAL = {'completed','failed'}` 포함 여부 |
 | `useCommandStatus` | `frontend/src/features/metrics/api.ts :: useCommandStatus` | `(commandId: string \| undefined)` → GET `/commands/${commandId}`. 쿼리키 `['commands', id]`, `enabled: !!commandId`, **적응 폴링**: 터미널 상태면 중단, 아니면 2s |
-| `QueryResultSummary` | `frontend/src/features/metrics/api.ts :: QueryResultSummary` | `{ series: number; points: number; avg: number \| null }` |
-| `summarizeTelemetryResult` | `frontend/src/features/metrics/api.ts :: summarizeTelemetryResult` | `(result: Record<string,unknown>) => QueryResultSummary \| null` — agent 가 올린 prometheus 결과(`result.result.results.<name>`)에서 실측 요약 계산. instant(`samples[]`)와 range(`series[].values[]`) 모두 지원, 숫자 값만 평균에 반영. `results` 없으면 null |
+| `QueryResultSummary` | `frontend/src/features/metrics/api.ts :: QueryResultSummary` | `{ series: number; points: number; avg: number \| null; max: number \| null }` |
+| `summarizeTelemetryResult` | `frontend/src/features/metrics/api.ts :: summarizeTelemetryResult` | `(result: Record<string,unknown>) => QueryResultSummary \| null` — agent 가 올린 prometheus 결과(`result.result.results.<name>`)에서 실측 요약 계산. instant(`samples[]`)와 range(`series[].values[]`) 모두 지원, 숫자 값만 평균·최대에 반영. `results` 없으면 null |
 | `commandResultMessage` | `frontend/src/features/metrics/api.ts :: commandResultMessage` | `(result) => string \| null` — `result.message` 가 비어있지 않은 문자열일 때만 반환 |
 
 ## 컴포넌트
@@ -39,18 +39,22 @@ status: synced
 
 - 라우트: `/metrics`. 쿼리스트링 `cluster` — `clusterId` 초기값(기본 `''` — 목록 로드 후 effect 가 첫 클러스터로 보정. 목록에 없는 id 도 첫 클러스터로 대체).
 - 모듈 상수(비공개):
-  - `PRESETS`: `[{label:'팟 재시작 (5m)', promql:'sum(rate(kube_pod_container_status_restarts_total[5m]))'}, {label:'노드 CPU', promql:'sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (node)'}, {label:'네임스페이스 메모리', promql:'sum(container_memory_working_set_bytes) by (namespace)'}]`
-  - `interface QueryCard { id: string; promql: string; commandId?: string; submitFailed?: boolean }` — 실행 상태는 카드에 저장하지 않고 명령 폴링에서 파생.
-- state: `clusterId`, `paused: boolean`, `promql`(초기 PRESETS[0]), `cards: QueryCard[]`, `frozen`(일시정지 시점의 history 사본 — `paused` 아닐 때만 effect 로 최신 history 동기화).
+  - `PRESETS`(`{label, promql, unit: 'ratio'|'count'}` 6종 — 실측 계열만): 노드 CPU/메모리/파일시스템 사용률(ratio),
+    팟 재시작율(5m, 네임스페이스별)·네임스페이스별 팟 수·sandbox 디플로이 레플리카(count).
+    전체 카탈로그·근거는 [콘솔 메트릭·쿼리 카탈로그](../../frontend-metrics-queries.md).
+  - `RANGES`: 5분/15분/1시간/6시간 → `range_seconds` 300/900/3600/21600.
+  - `interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; commandId?: string; submitFailed?: boolean }` — 실행 상태는 카드에 저장하지 않고 명령 폴링에서 파생.
+- state: `clusterId`, `paused: boolean`, `promql`(초기 PRESETS[0]), `range`(초기 RANGES[0]=300), `cards: QueryCard[]`, `frozen`(일시정지 시점의 history 사본 — `paused` 아닐 때만 effect 로 최신 history 동기화).
 - 데이터: `useClusters` + `useClusterSummary(clusterId)` + `useClusterUsage(clusterId)` + `useWorkloads(clusterId)` + `liveStore(history/status/snapshot)`.
 - 파생:
   - `phases`: 우선순위 — live 스냅샷 phase 카운트 → 인벤토리 summary `pod_phases` → workloads 집계(스트림 끊겨도 인벤토리로 스탯 유지).
   - `series`: `paused ? frozen : history` 마지막 120포인트 → `[{id:'재시작 합'}, {id:'실행 팟'}]`. history 가 비어 있으면 인벤토리 기반 1포인트(재시작 합·Running 수)로 대체.
   - `usageSeries`: `useClusterUsage` samples → `[{id:'실행 팟', y:usage.pod_running}, {id:'재시작 누적', y:usage.restart_total}, {id:'준비 노드', y:usage.node_ready}]`. 샘플이 없으면 카드 자체를 숨김.
-- PromQL 실행 `execute()`:
-  1. 랜덤 id 카드를 목록 맨 앞에 추가.
-  2. `run.mutate(promql)` → POST `/agent/debug/query` body `{cluster_id, query: {source:'prometheus', name:'console_promql', description:'Console PromQL query', query: promql, range_seconds: 300}}`.
+- PromQL 실행 `execute(card?)` — 재시도 시 그 카드의 promql/unit/rangeSeconds 재사용:
+  1. 랜덤 id 카드(`promql/unit/rangeSeconds` 포함)를 목록 맨 앞에 추가. unit 은 인자 → 프리셋 매칭 → 'count' 순으로 결정.
+  2. `run.mutate({q, rangeSeconds})` → POST `/agent/debug/query` body `{cluster_id, query: {source:'prometheus', name:'console_promql', description:'Console PromQL query', query, range_seconds}}`.
   3. 성공: 카드에 `commandId` 기록(이후 상태는 `QueryCardRow` 가 폴링). 제출 실패: `submitFailed: true`.
+- 결과 포맷: `fmtValue(v, unit)` — ratio 는 `%`(소수 1자리), count 는 100 이상 정수/미만 소수 2자리. 카드에 `range 5m` 등 범위 표기, 평균·최대 표시.
 - 트리:
   ```
   FadeSlideIn

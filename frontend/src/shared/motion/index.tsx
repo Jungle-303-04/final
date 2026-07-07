@@ -40,16 +40,6 @@ export function CountUp({ value }: { value: number }) {
   return <span>{shown.toLocaleString()}</span>;
 }
 
-export function PressScale({ children }: { children: ReactNode }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <>{children}</>;
-  return <motion.div whileTap={{ scale: 0.97 }} whileHover={{ scale: 1.01 }} style={{ display: 'contents' }}>{children}</motion.div>;
-}
-
-export function LayoutMorph({ id, children }: { id: string; children: ReactNode }) {
-  return <motion.div layoutId={id} transition={{ duration: 0.35, ease: [0.65, 0, 0.35, 1] }}>{children}</motion.div>;
-}
-
 /** 목록 layout 애니메이션 — 항목 추가/제거/재정렬 시 부드럽게 이동(키 기반) */
 export function AnimatedList<T>({ items, getKey, children }: { items: T[]; getKey: (item: T) => string; children: (item: T) => ReactNode }) {
   const reduced = useReducedMotion();
