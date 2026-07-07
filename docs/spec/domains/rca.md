@@ -41,6 +41,7 @@ status: synced
 - `src/domains/rca/models.py` — SQLAlchemy 테이블 4개.
 - `src/domains/rca/events.py` — 이벤트 body·값 객체 dataclass 정의.
 - `src/domains/rca/repository.py` — `RcaRepository` 와 복구 계획 상태 상수.
+- `src/domains/rca/report_projection.py` — RCA report 목록 응답용 projection/summary 규칙.
 - `src/domains/rca/router.py` — FastAPI 라우터(agent evidence 수신, 복구 후보 선택).
 - `src/domains/rca/query_router.py` — FastAPI 라우터(세션 워크스페이스 범위 evidence/RCA report 조회).
 
@@ -66,17 +67,24 @@ status: synced
 | `resolve_rca_backlog_item_for_rule(self, workspace_id: str, symptom: str, reason: str = BACKLOG_RULE_RESOLVED_REASON) -> int` | `backlog_id="missing-cause-rule:{workspace_id}:{symptom}"`, `workspace_id` 일치, `status="open"` 인 backlog를 `status="resolved"`, `reason`, `updated_at=now()`로 전환. `RETURNING backlog_id` 결과 개수를 반환한다 | `src/domains/rca/repository.py :: RcaRepository.resolve_rca_backlog_item_for_rule` |
 | `list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[JsonObject]` | `rca_reports`를 `workspace_id`로 필터, `created_at DESC, id DESC` 정렬, `limit` 건 조회(최신순). AI 도구 등 읽기 전용 소비자용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_reports` |
 | `list_evidence_records(self, workspace_id: str, *, correlation_id=None, kind=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `evidence`를 `workspace_id` 필수 + 선택 필터(`correlation_id/kind`, `created_at >= since`, `created_at < until`)로 조회. `created_at DESC, id DESC` 정렬. `cursor=(created_at, id)`가 있으면 keyset 조건(`created_at < cursor.created_at OR created_at = cursor.created_at AND id < cursor.id`)을 우선하고, 없으면 `offset` 하위호환을 쓴다. `created_at`은 ISO 문자열로 직렬화 — `/evidence` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_evidence_records` |
-| `list_rca_report_records(self, workspace_id: str, *, correlation_id=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `rca_reports`를 같은 방식(워크스페이스 필수, 선택 필터, 최신순, cursor 우선/offset 하위호환)으로 조회. payload 요약은 라우터(`rca_report_summary`)가 수행 — `/rca-reports` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_report_records` |
+| `list_rca_report_records(self, workspace_id: str, *, correlation_id=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `rca_reports`를 같은 방식(워크스페이스 필수, 선택 필터, 최신순, cursor 우선/offset 하위호환)으로 조회. 목록 API에 필요한 projection 컬럼만 SELECT하고 `payload` 원문은 읽지 않는다 — `/rca-reports` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_report_records` |
 | `upsert_recovery_selection_request(self, correlation_id: str, workspace_id: str, plan: JsonObject) -> None` | `recovery_plans`에 `(workspace_id, plan_id)` 유니크 기준 upsert. status는 `selection_requested`로 넣되, 기존 row가 이미 `selected`면 status를 **유지**(CASE 식) — 나머지 필드(`correlation_id/incident_id/evidence_ref/payload/updated_at`)는 갱신 | `src/domains/rca/repository.py :: RcaRepository.upsert_recovery_selection_request` |
 | `get_recovery_plan(self, plan_id: str, workspace_id: str) -> JsonObject | None` | `recovery_plans`에서 `(plan_id, workspace_id)` 일치 1건을 dict로 반환(`plan_id, workspace_id, correlation_id, incident_id, evidence_ref, status, selected_action_id, selected_by, payload` 컬럼), 없으면 `None` | `src/domains/rca/repository.py :: RcaRepository.get_recovery_plan` |
 | `select_recovery_plan_action_if_open(self, plan_id: str, workspace_id: str, action_id: str, selected_by: str) -> JsonObject | None` | status가 `OPEN_RECOVERY_PLAN_STATUSES`(= `selection_requested`)인 row만 조건부 UPDATE → `status="selected"`, `selected_action_id`, `selected_by`, `updated_at=now()`. `RETURNING payload, correlation_id`. 열려 있지 않으면(이미 selected 등) `None` — 동시 선택 경합 방지 | `src/domains/rca/repository.py :: RcaRepository.select_recovery_plan_action_if_open` |
-| `save_rca_report(self, correlation_id: str, workspace_id: str, root_cause: str, action: str, body: JsonObject) -> None` | `rca_reports`에 단순 INSERT(pg_insert) | `src/domains/rca/repository.py :: RcaRepository.save_rca_report` |
-| `find_recent_rca_report(self, workspace_id: str, root_cause: str, resource_key: str, window_seconds: int) -> JsonObject | None` | 리포트 dedup 조회 — `(workspace_id, root_cause, created_at >= now-window)` 최신 20건을 읽어 `payload.incident` 의 리소스 키(`rca_report_resource_key`)가 일치하는 첫 건의 `{id, correlation_id, created_at}` 반환, 없으면 `None`. rca-worker 가 저장 전에 호출해 장애 지속 중 동일 리포트 무한 적재를 막는다 | `src/domains/rca/repository.py :: RcaRepository.find_recent_rca_report` |
+| `save_rca_report(self, correlation_id: str, workspace_id: str, root_cause: str, action: str, body: JsonObject) -> None` | `rca_reports`에 원문 `payload`와 `rca_report_projection(body)` 결과를 함께 INSERT. 원문은 감사/재처리용, projection은 목록 조회용이다 | `src/domains/rca/repository.py :: RcaRepository.save_rca_report` |
+| `find_recent_rca_report(self, workspace_id: str, root_cause: str, resource_key: str, window_seconds: int) -> JsonObject | None` | 리포트 dedup 조회 — `(workspace_id, root_cause, created_at >= now-window)` 최신 20건의 projection 컬럼을 읽어 리소스 키(`rca_report_resource_key`)가 일치하는 첫 건의 `{id, correlation_id, created_at}` 반환, 없으면 `None`. `payload` 원문을 읽지 않는다 | `src/domains/rca/repository.py :: RcaRepository.find_recent_rca_report` |
 
 모듈 함수: `rca_report_resource_key(incident: JsonObject | None) -> str` —
 `"{namespace}/{resource_kind}/{resource_name}"`(incident dict 아니면 `"unknown"`) —
 dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 앵커: `src/domains/rca/repository.py :: rca_report_resource_key`.
+
+### RCA report projection — `src/domains/rca/report_projection.py`
+
+| 심볼 | 정의 | 앵커 |
+|---|---|---|
+| `rca_report_projection(payload: JsonObject) -> JsonObject` | `rca.completed` payload에서 외부 노출 가능한 요약 필드만 추출한다. 대상 리소스, 증상, confidence/reason, 후보 점수, supporting evidence refs, missing checks를 포함하고 후보 `signals` DSL/원문 evidence는 제외한다 | `src/domains/rca/report_projection.py :: rca_report_projection` |
+| `rca_report_summary(row: JsonObject) -> JsonObject` | `RcaReport` row를 `RcaReportSummaryItem` 필드로 변환한다. projection 컬럼이 있으면 payload 없이 처리하고, 구버전/테스트 row에 payload만 있으면 `rca_report_projection` fallback을 쓴다 | `src/domains/rca/report_projection.py :: rca_report_summary` |
 
 ### 라우터 심볼 — `src/domains/rca/router.py`
 
@@ -131,8 +139,7 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `parse_page_cursor` | `(value: str \| None) -> tuple[datetime, int] \| None` — base64url JSON(`{"v":1,"created_at":...,"id":...}`)을 검증해 keyset cursor로 변환. 형식 오류는 422 `"cursor is invalid"` | `src/domains/rca/query_router.py :: parse_page_cursor` |
 | `next_page_cursor` | `(rows: list[JsonObject], *, has_more: bool) -> str \| None` — 다음 페이지가 있을 때 현재 응답 마지막 row의 `created_at`/`id`로 padding 없는 base64url cursor를 만든다 | `src/domains/rca/query_router.py :: next_page_cursor` |
 | `evidence_record` | `(row: JsonObject) -> JsonObject` — `EvidenceRecordItem` 필드 매핑 | `src/domains/rca/query_router.py :: evidence_record` |
-| `rca_report_summary` | `(row: JsonObject) -> JsonObject` — payload 원문 대신 `incident`/`rca_detail` 화이트리스트 필드만 추출(secret 원문 미노출). 분석 심화 필드 포함: 대상 리소스(`resource_kind/resource_name/namespace`), `secondary_symptoms`, `selected_candidate_id`, `candidates`(후보×평가 병합, 점수 내림차순), `supporting_evidence_refs`(source/name/check_id/summary/query), `missing_evidence_checks`. 후보 `signals` DSL 원문은 미노출 | `src/domains/rca/query_router.py :: rca_report_summary` |
-| `_str_list` / `_candidate_scores` / `_evidence_refs` / `_missing_checks` | payload 하위 구조를 방어적으로 정규화하는 내부 헬퍼 — dict/list 형태가 아니면 빈 리스트 | `src/domains/rca/query_router.py :: _candidate_scores` |
+| `rca_report_summary` | `domains.rca.report_projection`에서 import. projection 컬럼 우선, payload fallback. payload 원문/후보 `signals` DSL/secret 원문은 미노출 | `src/domains/rca/report_projection.py :: rca_report_summary` |
 
 ### HTTP 엔드포인트
 
@@ -179,6 +186,23 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `correlation_id` | `Text` | NOT NULL | 이벤트 상관관계 ID |
 | `root_cause` | `Text` | NOT NULL | 근본 원인 |
 | `action` | `Text` | NOT NULL | 권고 조치 |
+| `incident_id` | `Text` | nullable | 목록 조회 projection — 인시던트 ID |
+| `cluster_id` | `Text` | nullable | 목록 조회 projection — 클러스터 ID |
+| `symptom` | `Text` | nullable | 목록 조회 projection — 대표 증상 |
+| `severity` | `Text` | nullable | 목록 조회 projection — 심각도 |
+| `confidence` | `Float` | nullable | 목록 조회 projection — RCA 신뢰도 |
+| `reason` | `Text` | nullable | 목록 조회 projection — 판단 사유 |
+| `evidence_ref` | `Text` | nullable | 목록 조회 projection — 근거 참조 |
+| `supporting_evidence` | `JSONB` | nullable | 목록 조회 projection — 사용 근거 source 목록 |
+| `missing_evidence` | `JSONB` | nullable | 목록 조회 projection — 미충족 근거 source 목록 |
+| `resource_kind` | `Text` | nullable | 목록 조회 projection — 대상 리소스 종류 |
+| `resource_name` | `Text` | nullable | 목록 조회 projection — 대상 리소스 이름 |
+| `namespace` | `Text` | nullable | 목록 조회 projection — 대상 namespace |
+| `secondary_symptoms` | `JSONB` | nullable | 목록 조회 projection — 부증상 문자열 배열 |
+| `selected_candidate_id` | `Text` | nullable | 목록 조회 projection — 선택 후보 ID |
+| `candidates` | `JSONB` | nullable | 목록 조회 projection — 후보×평가 병합 결과 |
+| `supporting_evidence_refs` | `JSONB` | nullable | 목록 조회 projection — source/name/check/query/lineage |
+| `missing_evidence_checks` | `JSONB` | nullable | 목록 조회 projection — missing check 상태 |
 | `payload` | `JSONB` | NOT NULL | `rca.completed` body 전문 |
 | `created_at` | `TIMESTAMP(tz)` | NOT NULL, server_default `now()` | 생성 시각 |
 

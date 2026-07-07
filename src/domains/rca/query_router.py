@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.identity.dependencies import require_session
+from domains.rca.report_projection import rca_report_summary
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -257,75 +258,6 @@ def _lineage_from_source_value(value: Any) -> JsonObject:
     return {}
 
 
-def rca_report_summary(row: JsonObject) -> JsonObject:
-    """RcaReport row → 화이트리스트 요약. payload 원문은 절대 그대로 내리지 않는다."""
-    payload = row.get("payload") or {}
-    incident = payload.get("incident") or {}
-    detail = payload.get("rca_detail") or {}
-    return {
-        "id": row["id"],
-        "workspace_id": row["workspace_id"],
-        "correlation_id": row["correlation_id"],
-        "root_cause": row["root_cause"],
-        "action": row["action"],
-        "incident_id": incident.get("incident_id"),
-        "cluster_id": incident.get("cluster_id"),
-        "symptom": incident.get("symptom"),
-        "severity": incident.get("severity"),
-        "confidence": detail.get("confidence"),
-        "reason": detail.get("reason"),
-        "evidence_ref": payload.get("evidence_ref"),
-        "supporting_evidence": detail.get("supporting_evidence") or [],
-        "missing_evidence": detail.get("missing_evidence") or [],
-        "created_at": row.get("created_at"),
-        # 분석 심화 — 대상 리소스·부증상·후보 점수·근거 쿼리 트레일(전부 파생 메타, 원문 값 없음)
-        "resource_kind": incident.get("resource_kind"),
-        "resource_name": incident.get("resource_name"),
-        "namespace": incident.get("namespace"),
-        "secondary_symptoms": _str_list(incident.get("secondary_symptoms")),
-        "selected_candidate_id": detail.get("selected_candidate_id"),
-        "candidates": _candidate_scores(payload),
-        "supporting_evidence_refs": _evidence_refs(detail.get("supporting_evidence_refs"), payload),
-        "missing_evidence_checks": _missing_checks(detail.get("missing_evidence_checks")),
-    }
-
-
-def _str_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value if isinstance(item, str) and item]
-
-
-def _candidate_scores(payload: JsonObject) -> list[JsonObject]:
-    """candidates(카탈로그 메타) + evaluations(점수) 를 candidate_id 로 병합."""
-    candidates = payload.get("candidates")
-    evaluations = payload.get("evaluations")
-    meta: dict[str, JsonObject] = {}
-    for cand in candidates if isinstance(candidates, list) else []:
-        if isinstance(cand, dict) and cand.get("candidate_id"):
-            meta[str(cand["candidate_id"])] = cand
-    items: list[JsonObject] = []
-    for ev in evaluations if isinstance(evaluations, list) else []:
-        if not (isinstance(ev, dict) and ev.get("candidate_id")):
-            continue
-        candidate_id = str(ev["candidate_id"])
-        cand = meta.get(candidate_id, {})
-        items.append(
-            {
-                "candidate_id": candidate_id,
-                "title": cand.get("title"),
-                "source": cand.get("source"),
-                "score": ev.get("score"),
-                "reason": ev.get("reason"),
-                "supporting_evidence": _str_list(ev.get("supporting_evidence")),
-                "missing_evidence": _str_list(ev.get("missing_evidence")),
-            }
-        )
-    # 점수 내림차순 — 선정 후보가 항상 위로 온다.
-    items.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
-    return items
-
-
 LINEAGE_KEY = "_lineage"
 LINEAGE_STRING_FIELDS = (
     "source_version",
@@ -340,68 +272,11 @@ LINEAGE_STRING_FIELDS = (
 )
 
 
-def _evidence_refs(value: Any, payload: JsonObject | None = None) -> list[JsonObject]:
-    lineage_by_key = _lineage_by_reference(payload or {})
-    refs: list[JsonObject] = []
-    for ref in value if isinstance(value, list) else []:
-        if not (isinstance(ref, dict) and ref.get("source") and ref.get("name")):
-            continue
-        item = {
-            "source": str(ref["source"]),
-            "name": str(ref["name"]),
-            "check_id": ref.get("check_id") or None,
-            "summary": ref.get("summary") or None,
-            "query": ref.get("query") or None,
-            "evidence_ref": ref.get("evidence_ref") or None,
-        }
-        lineage = {
-            **_lineage_fields(ref),
-            **_lineage_for_reference(item, lineage_by_key),
-        }
-        item.update(lineage)
-        refs.append(item)
-    return refs
-
-
-def _lineage_by_reference(payload: JsonObject) -> dict[str, JsonObject]:
-    bundle = payload.get("evidence_bundle")
-    items = bundle.get("items") if isinstance(bundle, dict) else None
-    out: dict[str, JsonObject] = {}
-    for item in items if isinstance(items, list) else []:
-        if not isinstance(item, dict):
-            continue
-        lineage = _lineage_from_value(item.get("value"))
-        if not lineage:
-            continue
-        keys = [
-            item.get("evidence_ref"),
-            item.get("check_id"),
-        ]
-        if item.get("source") and item.get("name"):
-            keys.append(f"{item['source']}/{item['name']}")
-        for key in keys:
-            if key:
-                out[str(key)] = lineage
-    return out
-
-
 def _lineage_from_value(value: Any) -> JsonObject:
     if not isinstance(value, dict):
         return {}
     lineage = value.get(LINEAGE_KEY)
     return _lineage_fields(lineage) if isinstance(lineage, dict) else {}
-
-
-def _lineage_for_reference(ref: JsonObject, lineage_by_key: dict[str, JsonObject]) -> JsonObject:
-    keys = [
-        ref.get("evidence_ref"),
-        ref.get("check_id"),
-        f"{ref['source']}/{ref['name']}" if ref.get("source") and ref.get("name") else None,
-    ]
-    for key in keys:
-        if key and str(key) in lineage_by_key:
-            return lineage_by_key[str(key)]
-    return {}
 
 
 def _lineage_fields(raw: Any) -> JsonObject:
@@ -419,22 +294,6 @@ def _lineage_fields(raw: Any) -> JsonObject:
         if value not in (None, ""):
             out[field] = str(value)
     return out
-
-
-def _missing_checks(value: Any) -> list[JsonObject]:
-    checks: list[JsonObject] = []
-    for check in value if isinstance(value, list) else []:
-        if not (isinstance(check, dict) and check.get("check_id")):
-            continue
-        checks.append(
-            {
-                "check_id": str(check["check_id"]),
-                "source": check.get("source"),
-                "status": check.get("status"),
-                "reason": check.get("reason"),
-            }
-        )
-    return checks
 
 
 def _workspace_id(current: Any) -> str:
