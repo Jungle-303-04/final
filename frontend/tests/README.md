@@ -1,11 +1,25 @@
-# 프론트엔드 스모크 테스트
+# Frontend Tests
 
-`VITE_API_MODE=mock` 빌드본에 대한 Playwright 화면 접속 스모크.
-17개 시나리오(로그인·히트맵 드릴다운·클러스터 탭·승인·워크플로우 그래프·
-AI 채팅 왕복·액션 선택·메트릭 비동기 쿼리·조직 생성·멤버 승인·클러스터 등록 위저드·로그아웃)
-+ 콘솔 pageerror 0건을 검증한다.
+## Component smoke
+
+Run focused Vite SSR tests for real-data UI behavior:
 
 ```bash
-npm run build && npm run preview &   # 4173
-python3 tests/smoke.py               # playwright 필요
+npm test
 ```
+
+The current test covers the incident detail fallback route and verifies that a real recovery-plan payload still renders when the route id is a correlation id.
+
+## Real backend smoke
+
+Use the real backend browser smoke only with explicit credentials and keep write flows disabled unless a DB-mutating test is intentionally approved:
+
+```bash
+BASE_URL=https://k8s.woonyong.org \
+AUTH_EMAIL=<redacted> \
+AUTH_PASSWORD=<redacted> \
+E2E_MUTATE=0 \
+python frontend/tests/e2e_real_backend.py
+```
+
+Do not use mock mode, fixed production ids, or hardcoded credentials for production validation.
