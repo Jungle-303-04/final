@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:03 KST (api-gateway OOM 안정화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:07 KST (api-gateway OOM + evidence 정책 완화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,20 +11,28 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 
-## 체크포인트 (20:03 KST) — api-gateway OOM 안정화
+## 체크포인트 (20:07 KST) — api-gateway OOM + evidence 정책 완화
 
 - 원인:
   - 라이브 `api-gateway` Pod가 `CrashLoopBackOff`, Last State `OOMKilled`, exit code 137, restart count 37 상태였다.
   - 살아있는 순간에는 api-gateway LoadBalancer `/healthz`, `/api/healthz`가 200을 반환했고, console LoadBalancer `/api/healthz`는 gateway 재시작 타이밍에 502를 반환했다.
   - 따라서 public `/api` 502의 직접 원인은 console 프록시 upstream이 재시작 중인 api-gateway를 만나는 안정성 문제다.
+  - live 정책 확인 결과 `cluster-1`, `cluster-2`는 provider 4개가 모두 10초 interval, max_workers 3으로 동작 중이었다. 두 클러스터 기준 evidence job/result가 과도하게 촘촘했고, DB에는 completed evidence_jobs가 58k+ 누적되어 있었다.
 - 구현:
   - 1차로 `deploy/management/services.yaml`의 api-gateway resources를 requests `cpu=50m`, `memory=256Mi`, limits `cpu=1`, `memory=1Gi`로 상향했으나 새 Pod도 시작 직후 OOM/restart가 재현됐다.
-  - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했다.
-  - gateway `OUTBOX_RELAY_BATCH=50`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있기 때문이다.
-  - 이 변경은 OOM 완화용 안정화이며, evidence/result 폭증 및 incident/DLQ 증가 원인 분석은 별도 작업으로 계속한다.
+  - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했으나 약 4분 뒤 OOM/restart가 재현됐다.
+  - 3차로 resources를 requests `cpu=100m`, `memory=1Gi`, limits `cpu=1`, `memory=4Gi`로 상향했다.
+  - gateway `OUTBOX_RELAY_BATCH=10`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있기 때문이다.
+  - gateway에 `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=65536`을 추가해 반복 JSON/DB 처리 후 RSS 반환 여지를 확보했다.
+  - 기본 evidence interval을 30초로, provider max_workers 기본값을 2로 완화했다.
+  - live DB의 `agent_policies`에서 `cluster-1`, `cluster-2` policy generation을 4로 올리고 모든 provider interval 30초, max_workers 2로 반영했다.
+  - 이 변경은 OOM/수집 폭주 완화용 안정화이며, incident/DLQ 증가 원인 분석은 별도 작업으로 계속한다.
 - 다음:
-  - 2Gi resources + `OUTBOX_RELAY_BATCH=50` live patch 후 rollout 안정화 확인.
+  - 4Gi resources + `OUTBOX_RELAY_BATCH=10` + allocator env live patch 후 rollout 안정화 확인.
+  - agent policy status에서 generation 4 적용 확인.
   - console LB `/api/healthz`, public `https://k8s.woonyong.org/api/healthz`, `kubectl get deploy api-gateway`, restart count 증가 여부를 확인.
+- 라이브 검증:
+  - 2026-07-07 20:10 KST 기준 새 `api-gateway` Pod restart 0, memory 약 98Mi, public `/api/healthz` 200.
 
 ## 체크포인트 (19:55 KST) — repo atomic connect + live API OOM 분석
 

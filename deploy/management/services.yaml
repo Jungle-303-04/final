@@ -38,10 +38,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: "1"
-              memory: 2Gi
+              memory: 4Gi
           command: ["python", "src/services/gateway/api-gateway/app.py"]
           envFrom:
             - configMapRef:
@@ -62,7 +62,12 @@ spec:
             # gateway outbox relay 기본값(1000)은 재시작 후 backlog 처리 순간 메모리 피크를 키우므로
             # gateway 에서는 작은 배치로 안정성을 우선한다.
             - name: OUTBOX_RELAY_BATCH
-              value: "50"
+              value: "10"
+            # 반복 JSON/DB 처리 후 RSS 를 덜 붙잡게 해 OOM 여유를 확보한다.
+            - name: MALLOC_ARENA_MAX
+              value: "2"
+            - name: MALLOC_TRIM_THRESHOLD_
+              value: "65536"
           ports:
             - name: http
               containerPort: 8000
