@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import subprocess
+from collections.abc import Sequence
+from pathlib import Path
 
 import httpx
 import pytest
 
+import domains.gitops.repository_discovery as repository_discovery
 from domains.gitops.repository_discovery import (
     GitHubRepositoryClient,
     RepositoryDiscoveryError,
@@ -19,8 +23,19 @@ from packages.contracts.gateway.requests import (
 
 
 class FakeGitHubClient:
-    def __init__(self, content: bytes = b"") -> None:
+    def __init__(
+        self,
+        content: bytes = b"",
+        *,
+        contents: dict[str, bytes] | None = None,
+        tree_items: list[dict[str, object]] | None = None,
+        tree_warnings: list[str] | None = None,
+    ) -> None:
         self.content_bytes = content
+        self.contents = contents if contents is not None else {"deploy.yaml": content}
+        self.tree_items = tree_items
+        self.tree_warnings = tree_warnings or []
+        self.content_paths: list[str] = []
 
     async def repository(self, repo_ref: str) -> dict[str, object]:
         assert repo_ref == "owner/service"
@@ -41,19 +56,21 @@ class FakeGitHubClient:
     async def tree(self, repo_ref: str, branch: str) -> tuple[list[dict[str, object]], list[str]]:
         assert repo_ref == "owner/service"
         assert branch == "trunk"
-        return [
+        return self.tree_items or [
             {"type": "blob", "path": "README.md"},
             {"type": "blob", "path": "deploy.yaml"},
             {"type": "blob", "path": "k8s/kustomization.yaml"},
             {"type": "blob", "path": "charts/service/Chart.yaml"},
             {"type": "blob", "path": "scripts/setup.sh"},
-        ], []
+        ], self.tree_warnings
 
     async def content(self, repo_ref: str, branch: str, path: str) -> bytes:
         assert repo_ref == "owner/service"
         assert branch == "trunk"
-        assert path == "deploy.yaml"
-        return self.content_bytes
+        self.content_paths.append(path)
+        if path not in self.contents:
+            raise AssertionError(f"unexpected content path: {path}")
+        return self.contents[path]
 
 
 def test_manifest_candidates_filter_to_attachable_paths() -> None:
@@ -133,8 +150,53 @@ metadata:
     assert "static manifest parse only" in response.warnings[0]
 
 
-def test_kustomize_validation_returns_clear_placeholder() -> None:
-    service = RepositoryDiscoveryService(FakeGitHubClient())
+def test_kustomize_validation_renders_exported_tree(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITOPS_KUBECTL_BIN", raising=False)
+    contents = {
+        "k8s/kustomization.yaml": b"resources:\n- deployment.yaml\n",
+        "k8s/deployment.yaml": b"""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: from-source
+""",
+        "outside.yaml": b"kind: ConfigMap\nmetadata:\n  name: outside\n",
+    }
+    client = FakeGitHubClient(
+        contents=contents,
+        tree_items=[
+            {"type": "blob", "path": "k8s/kustomization.yaml"},
+            {"type": "blob", "path": "k8s/deployment.yaml"},
+            {"type": "blob", "path": "k8s/../unsafe.yaml"},
+            {"type": "blob", "path": "outside.yaml"},
+        ],
+    )
+    commands: list[list[str]] = []
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(list(command))
+        source_dir = Path(command[2])
+        assert command[:2] == ["kubectl", "kustomize"]
+        assert timeout_seconds > 0
+        assert (source_dir / "kustomization.yaml").is_file()
+        assert (source_dir / "deployment.yaml").is_file()
+        assert not (source_dir.parent / "outside.yaml").exists()
+        return subprocess.CompletedProcess(
+            list(command),
+            0,
+            stdout="""
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rendered-api
+  namespace: sandbox
+""",
+            stderr="",
+        )
+
+    service = RepositoryDiscoveryService(client, render_executor=executor)
 
     async def run():
         return await service.validate_manifest(
@@ -149,10 +211,197 @@ def test_kustomize_validation_returns_clear_placeholder() -> None:
     response = asyncio.run(run())
 
     assert response.valid is True
-    assert response.status == "not_run"
-    assert response.validation_mode == "kustomize-placeholder"
-    assert response.resource_count == 0
-    assert "render validation is deferred" in response.warnings[0]
+    assert response.status == "valid"
+    assert response.validation_mode == "kustomize-render"
+    assert response.resource_count == 1
+    assert [(item.kind, item.name) for item in response.resources] == [
+        ("Deployment", "rendered-api")
+    ]
+    assert client.content_paths == ["k8s/deployment.yaml", "k8s/kustomization.yaml"]
+    assert len(commands) == 1
+
+
+def test_helm_validation_templates_chart_with_sandbox_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GITOPS_HELM_BIN", raising=False)
+    monkeypatch.delenv("GITOPS_HELM_RELEASE_NAME", raising=False)
+    monkeypatch.delenv("GITOPS_HELM_NAMESPACE", raising=False)
+    contents = {
+        "charts/service/Chart.yaml": b"apiVersion: v2\nname: service\nversion: 0.1.0\n",
+        "charts/service/templates/service.yaml": b"""
+apiVersion: v1
+kind: Service
+metadata:
+  name: source-service
+""",
+    }
+    client = FakeGitHubClient(
+        contents=contents,
+        tree_items=[
+            {"type": "blob", "path": "charts/service/Chart.yaml"},
+            {"type": "blob", "path": "charts/service/templates/service.yaml"},
+            {"type": "blob", "path": "charts/other/Chart.yaml"},
+        ],
+    )
+    commands: list[list[str]] = []
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(list(command))
+        chart_dir = Path(command[3])
+        assert command[:3] == ["helm", "template", "service"]
+        assert command[4:] == ["--namespace", "sandbox"]
+        assert (chart_dir / "Chart.yaml").is_file()
+        assert (chart_dir / "templates" / "service.yaml").is_file()
+        return subprocess.CompletedProcess(
+            list(command),
+            0,
+            stdout="""
+apiVersion: v1
+kind: Service
+metadata:
+  name: rendered-service
+""",
+            stderr="",
+        )
+
+    service = RepositoryDiscoveryService(client, render_executor=executor)
+
+    async def run():
+        return await service.validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="charts/service",
+                source_type="helm",
+            )
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is True
+    assert response.status == "valid"
+    assert response.validation_mode == "helm-render"
+    assert [(item.kind, item.name) for item in response.resources] == [
+        ("Service", "rendered-service")
+    ]
+    assert client.content_paths == [
+        "charts/service/Chart.yaml",
+        "charts/service/templates/service.yaml",
+    ]
+    assert len(commands) == 1
+
+
+def test_render_validation_failure_is_invalid_and_redacted() -> None:
+    client = FakeGitHubClient(
+        contents={"k8s/kustomization.yaml": b"resources: []\n"},
+        tree_items=[{"type": "blob", "path": "k8s/kustomization.yaml"}],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            list(command),
+            1,
+            stdout="",
+            stderr="Error: token=secret-token Authorization: Bearer abc123",
+        )
+
+    service = RepositoryDiscoveryService(client, render_executor=executor)
+
+    async def run():
+        return await service.validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="k8s",
+                source_type="kustomize",
+            )
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert response.status == "invalid"
+    assert response.validation_mode == "kustomize-render"
+    assert "secret-token" not in response.errors[0]
+    assert "abc123" not in response.errors[0]
+    assert "<redacted>" in response.errors[0]
+
+
+def test_missing_renderer_executable_returns_invalid() -> None:
+    client = FakeGitHubClient(
+        contents={"k8s/kustomization.yaml": b"resources: []\n"},
+        tree_items=[{"type": "blob", "path": "k8s/kustomization.yaml"}],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError(command[0])
+
+    service = RepositoryDiscoveryService(client, render_executor=executor)
+
+    async def run():
+        return await service.validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="k8s",
+                source_type="kustomize",
+            )
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert response.status == "invalid"
+    assert response.validation_mode == "kustomize-render"
+    assert "executable not found" in response.errors[0]
+
+
+def test_render_validation_stops_before_content_when_file_limit_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(repository_discovery, "MAX_RENDER_SOURCE_FILES", 1)
+    client = FakeGitHubClient(
+        contents={
+            "k8s/kustomization.yaml": b"resources:\n- deployment.yaml\n",
+            "k8s/deployment.yaml": b"kind: Deployment\nmetadata:\n  name: api\n",
+        },
+        tree_items=[
+            {"type": "blob", "path": "k8s/kustomization.yaml"},
+            {"type": "blob", "path": "k8s/deployment.yaml"},
+        ],
+    )
+
+    def executor(
+        command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("renderer should not run when export bounds fail")
+
+    service = RepositoryDiscoveryService(client, render_executor=executor)
+
+    async def run():
+        return await service.validate_manifest(
+            RepositoryManifestValidationRequest(
+                repo_ref="owner/service",
+                branch="trunk",
+                manifest_path="k8s",
+                source_type="kustomize",
+            )
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert response.status == "invalid"
+    assert response.validation_mode == "kustomize-render"
+    assert "file limit" in response.errors[0]
+    assert client.content_paths == []
 
 
 def test_github_client_sends_token_without_leaking_it_in_errors() -> None:

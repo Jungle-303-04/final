@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
 import re
+import subprocess
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
@@ -46,12 +50,18 @@ MAX_BRANCHES = 100
 MAX_TREE_ITEMS = 5000
 MAX_CANDIDATES = 150
 MAX_MANIFEST_BYTES = 1_048_576
+MAX_RENDER_SOURCE_FILES = 500
+MAX_RENDER_SOURCE_BYTES = 5 * 1_048_576
+MAX_RENDER_ERROR_LENGTH = 2000
 DEFAULT_TIMEOUT_SECONDS = 5.0
+DEFAULT_RENDER_TIMEOUT_SECONDS = 5.0
+GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV = "GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS"
+GITOPS_KUBECTL_BIN_ENV = "GITOPS_KUBECTL_BIN"
+GITOPS_HELM_BIN_ENV = "GITOPS_HELM_BIN"
+GITOPS_HELM_RELEASE_NAME_ENV = "GITOPS_HELM_RELEASE_NAME"
+GITOPS_HELM_NAMESPACE_ENV = "GITOPS_HELM_NAMESPACE"
 STATIC_PARSE_WARNING = "static manifest parse only; Kubernetes server dry-run is not executed"
-RENDER_PLACEHOLDER_WARNING = (
-    "render validation is deferred for kustomize/helm sources; registration will use the "
-    "selected path and the GitOps renderer will validate the rendered output"
-)
+RENDER_PARSE_WARNING = "rendered manifest parse only; Kubernetes server dry-run is not executed"
 
 JsonMap = dict[str, Any]
 
@@ -63,6 +73,10 @@ class RepositoryDiscoveryError(Exception):
         self.detail = detail
 
 
+class ManifestRenderValidationError(Exception):
+    """The selected render source could not be exported or rendered for validation."""
+
+
 class GitHubClient(Protocol):
     async def repository(self, repo_ref: str) -> JsonMap: ...
 
@@ -71,6 +85,12 @@ class GitHubClient(Protocol):
     async def tree(self, repo_ref: str, branch: str) -> tuple[list[JsonMap], list[str]]: ...
 
     async def content(self, repo_ref: str, branch: str, path: str) -> bytes: ...
+
+
+class RenderCommandExecutor(Protocol):
+    def __call__(
+        self, command: Sequence[str], timeout_seconds: float
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 class GitHubRepositoryClient:
@@ -186,8 +206,14 @@ class GitHubRepositoryClient:
 
 
 class RepositoryDiscoveryService:
-    def __init__(self, client: GitHubClient | None = None) -> None:
+    def __init__(
+        self,
+        client: GitHubClient | None = None,
+        *,
+        render_executor: RenderCommandExecutor | None = None,
+    ) -> None:
         self.client = client or GitHubRepositoryClient()
+        self.render_executor = render_executor or default_render_command_executor
 
     async def probe_repository(self, payload: RepositoryProbeRequest) -> RepositoryProbeResponse:
         try:
@@ -269,14 +295,13 @@ class RepositoryDiscoveryService:
             manifest_path
         )
         if source_type in {"kustomize", "helm"}:
-            return RepositoryManifestValidationResponse(
-                repo_ref=repo_ref,
-                branch=branch,
-                manifest_path=manifest_path,
-                valid=True,
-                status="not_run",
-                validation_mode=f"{source_type}-placeholder",
-                warnings=[RENDER_PLACEHOLDER_WARNING],
+            return await validate_render_manifest(
+                self.client,
+                self.render_executor,
+                repo_ref,
+                branch,
+                manifest_path,
+                source_type,
             )
         content = await self.client.content(repo_ref, branch, manifest_path)
         try:
@@ -284,6 +309,278 @@ class RepositoryDiscoveryService:
         except UnicodeDecodeError as exc:
             raise RepositoryDiscoveryError(422, "selected manifest is not valid utf-8") from exc
         return validate_manifest_text(repo_ref, branch, manifest_path, text, source_type)
+
+
+async def validate_render_manifest(
+    client: GitHubClient,
+    render_executor: RenderCommandExecutor,
+    repo_ref: str,
+    branch: str,
+    manifest_path: str,
+    source_type: str,
+) -> RepositoryManifestValidationResponse:
+    validation_mode = f"{source_type}-render"
+    warnings: list[str] = []
+    try:
+        with TemporaryDirectory(prefix="repo-discovery-render-") as tmp:
+            checkout_root = Path(tmp) / "repo"
+            checkout_root.mkdir()
+            render_path, export_warnings = await export_render_source(
+                client,
+                repo_ref,
+                branch,
+                manifest_path,
+                source_type,
+                checkout_root,
+            )
+            warnings.extend(export_warnings)
+            rendered_text = await render_source(source_type, render_path, render_executor)
+    except ManifestRenderValidationError as exc:
+        return render_invalid_validation_response(
+            repo_ref,
+            branch,
+            manifest_path,
+            validation_mode,
+            str(exc),
+            warnings,
+        )
+    return validate_manifest_text(
+        repo_ref,
+        branch,
+        manifest_path,
+        rendered_text,
+        "raw-yaml",
+        validation_mode=validation_mode,
+        parse_warning=RENDER_PARSE_WARNING,
+        parse_error_prefix="rendered manifest parse failed",
+        extra_warnings=warnings,
+    )
+
+
+async def export_render_source(
+    client: GitHubClient,
+    repo_ref: str,
+    branch: str,
+    manifest_path: str,
+    source_type: str,
+    checkout_root: Path,
+) -> tuple[Path, list[str]]:
+    source_dir = render_source_directory(manifest_path, source_type)
+    tree, warnings = await client.tree(repo_ref, branch)
+    source_paths = sorted(
+        {
+            path
+            for item in tree
+            if str(item.get("type") or "") == "blob"
+            for path in [normalize_tree_path(str(item.get("path") or ""))]
+            if path and path_is_under_directory(path, source_dir)
+        }
+    )
+    if not source_paths:
+        raise ManifestRenderValidationError(
+            f"{source_type} render source contains no files under {source_dir}"
+        )
+    if len(source_paths) > MAX_RENDER_SOURCE_FILES:
+        raise ManifestRenderValidationError(
+            f"{source_type} render source exceeds file limit "
+            f"({len(source_paths)} > {MAX_RENDER_SOURCE_FILES})"
+        )
+
+    total_bytes = 0
+    for path in source_paths:
+        try:
+            content = await client.content(repo_ref, branch, path)
+        except RepositoryDiscoveryError as exc:
+            raise ManifestRenderValidationError(
+                f"render source content fetch failed for {path}: {exc.detail}"
+            ) from exc
+        total_bytes += len(content)
+        if total_bytes > MAX_RENDER_SOURCE_BYTES:
+            raise ManifestRenderValidationError(
+                f"{source_type} render source exceeds byte limit "
+                f"({total_bytes} > {MAX_RENDER_SOURCE_BYTES})"
+            )
+        write_render_source_file(checkout_root, path, content)
+
+    return checkout_root if source_dir == "." else checkout_root / source_dir, warnings
+
+
+async def render_source(
+    source_type: str,
+    source_path: Path,
+    render_executor: RenderCommandExecutor,
+) -> str:
+    command = render_command(source_type, source_path)
+    return await asyncio.to_thread(
+        run_render_command,
+        command,
+        f"{source_type} render failed",
+        render_executor,
+    )
+
+
+def render_source_directory(manifest_path: str, source_type: str) -> str:
+    basename = manifest_path.rsplit("/", 1)[-1]
+    if source_type == "helm" and basename == HELM_CHART_FILE:
+        return parent_path(manifest_path)
+    if source_type == "kustomize" and basename in KUSTOMIZATION_FILES:
+        return parent_path(manifest_path)
+    return manifest_path
+
+
+def path_is_under_directory(path: str, directory: str) -> bool:
+    return directory == "." or path == directory or path.startswith(f"{directory}/")
+
+
+def write_render_source_file(checkout_root: Path, repository_path: str, content: bytes) -> None:
+    destination = safe_checkout_file_path(checkout_root, repository_path)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+    except OSError as exc:
+        message = exc.strerror or str(exc)
+        raise ManifestRenderValidationError(f"failed to write render source: {message}") from exc
+
+
+def safe_checkout_file_path(checkout_root: Path, repository_path: str) -> Path:
+    path = normalize_tree_path(repository_path)
+    if not path:
+        raise ManifestRenderValidationError("render source path is invalid")
+    destination = checkout_root.joinpath(*path.split("/"))
+    root = checkout_root.resolve()
+    resolved = destination.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise ManifestRenderValidationError("render source path escapes checkout directory")
+    return destination
+
+
+def render_command(source_type: str, source_path: Path) -> list[str]:
+    if source_type == "kustomize":
+        if not source_path.is_dir():
+            raise ManifestRenderValidationError("Kustomize rendering requires a directory source")
+        if not any((source_path / name).is_file() for name in KUSTOMIZATION_FILES):
+            raise ManifestRenderValidationError("Kustomize source is missing kustomization.yaml")
+        return [kubectl_bin(), "kustomize", str(source_path)]
+    if source_type == "helm":
+        if not source_path.is_dir():
+            raise ManifestRenderValidationError("Helm rendering requires a chart directory source")
+        if not (source_path / HELM_CHART_FILE).is_file():
+            raise ManifestRenderValidationError("Helm source is missing Chart.yaml")
+        return [
+            helm_bin(),
+            "template",
+            helm_release_name(source_path),
+            str(source_path),
+            "--namespace",
+            render_namespace(),
+        ]
+    raise ManifestRenderValidationError(f"unsupported render source type: {source_type}")
+
+
+def default_render_command_executor(
+    command: Sequence[str], timeout_seconds: float
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        list(command),
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+    )
+
+
+def run_render_command(
+    command: Sequence[str],
+    error_prefix: str,
+    render_executor: RenderCommandExecutor,
+) -> str:
+    timeout_seconds = render_timeout_seconds()
+    try:
+        result = render_executor(command, timeout_seconds)
+    except FileNotFoundError as exc:
+        raise ManifestRenderValidationError(
+            f"{error_prefix}: executable not found: {command[0]}"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ManifestRenderValidationError(
+            f"{error_prefix}: timed out after {timeout_seconds}s"
+        ) from exc
+    if result.returncode != 0:
+        message = str(result.stderr or "").strip() or str(result.stdout or "").strip()
+        raise ManifestRenderValidationError(
+            f"{error_prefix}: {compact_render_error(message or 'renderer exited non-zero')}"
+        )
+    stdout = str(result.stdout or "")
+    if not stdout.strip():
+        raise ManifestRenderValidationError(f"{error_prefix}: renderer produced empty output")
+    return stdout
+
+
+def render_timeout_seconds() -> float:
+    raw = env(GIT_MANIFEST_COMMAND_TIMEOUT_SECONDS_ENV, str(DEFAULT_RENDER_TIMEOUT_SECONDS))
+    try:
+        return max(0.1, float(raw))
+    except ValueError:
+        return DEFAULT_RENDER_TIMEOUT_SECONDS
+
+
+def kubectl_bin() -> str:
+    return env(GITOPS_KUBECTL_BIN_ENV, "kubectl")
+
+
+def helm_bin() -> str:
+    return env(GITOPS_HELM_BIN_ENV, "helm")
+
+
+def render_namespace() -> str:
+    return env(GITOPS_HELM_NAMESPACE_ENV, "sandbox")
+
+
+def helm_release_name(source_path: Path) -> str:
+    configured = env(GITOPS_HELM_RELEASE_NAME_ENV, "").strip()
+    if configured:
+        return configured
+    cleaned = "".join(char.lower() if char.isalnum() else "-" for char in source_path.name)
+    return (cleaned.strip("-") or "release")[:53]
+
+
+def compact_render_error(message: str) -> str:
+    compact = " ".join(message.split())
+    try:
+        token = github_token()
+    except SecretNotFound:
+        token = ""
+    if token:
+        compact = compact.replace(token, "<redacted>")
+    compact = re.sub(r"(?i)(authorization:\s*bearer\s+)[^\s]+", r"\1<redacted>", compact)
+    compact = re.sub(
+        r"(?i)\b(token|secret|password|api[_-]?key)(\s*[:=]\s*)([^\s,;]+)",
+        r"\1\2<redacted>",
+        compact,
+    )
+    compact = re.sub(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b", "<redacted>", compact)
+    compact = re.sub(r"\bsk-[A-Za-z0-9_-]{10,}\b", "<redacted>", compact)
+    return compact[:MAX_RENDER_ERROR_LENGTH]
+
+
+def render_invalid_validation_response(
+    repo_ref: str,
+    branch: str,
+    manifest_path: str,
+    validation_mode: str,
+    error: str,
+    warnings: Sequence[str] = (),
+) -> RepositoryManifestValidationResponse:
+    return RepositoryManifestValidationResponse(
+        repo_ref=repo_ref,
+        branch=branch,
+        manifest_path=manifest_path,
+        valid=False,
+        status="invalid",
+        validation_mode=validation_mode,
+        warnings=dedupe(warnings),
+        errors=[compact_render_error(error)],
+    )
 
 
 def github_token() -> str:
@@ -498,9 +795,14 @@ def validate_manifest_text(
     manifest_path: str,
     text: str,
     source_type: str,
+    *,
+    validation_mode: str = "static-parse",
+    parse_warning: str = STATIC_PARSE_WARNING,
+    parse_error_prefix: str = "manifest parse failed",
+    extra_warnings: Sequence[str] = (),
 ) -> RepositoryManifestValidationResponse:
     resources: list[RepositoryManifestResource] = []
-    warnings = [STATIC_PARSE_WARNING]
+    warnings = [parse_warning, *extra_warnings] if parse_warning else list(extra_warnings)
     errors: list[str] = []
     try:
         docs = parse_manifest_documents(text, source_type)
@@ -511,8 +813,9 @@ def validate_manifest_text(
             manifest_path=manifest_path,
             valid=False,
             status="invalid",
-            validation_mode="static-parse",
-            errors=[f"manifest parse failed: {exc}"],
+            validation_mode=validation_mode,
+            warnings=dedupe(warnings),
+            errors=[f"{parse_error_prefix}: {exc}"],
         )
     for index, doc in enumerate(docs, start=1):
         if doc is None:
@@ -535,7 +838,7 @@ def validate_manifest_text(
         manifest_path=manifest_path,
         valid=bool(resources) and not errors,
         status=status,
-        validation_mode="static-parse",
+        validation_mode=validation_mode,
         resource_count=len(resources),
         resources=resources,
         warnings=dedupe(warnings),
