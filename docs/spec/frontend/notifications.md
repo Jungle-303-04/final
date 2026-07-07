@@ -30,6 +30,8 @@ status: synced
 |---|---|---|---|
 | `useTimeline` | `frontend/src/features/notifications/api.ts :: useTimeline` | GET `/dashboard/rca/timeline?limit=20` | 쿼리키 `['timeline']`, 60s, select `d.items.map(adaptIncident)` |
 | `useIncident` | `frontend/src/features/notifications/api.ts :: useIncident` | GET `/dashboard/rca/incidents/${incidentId}` | 쿼리키 `['incident', id]`, `enabled: !!id`, 30s, select `adaptIncidentDetail(d.item ?? {})` |
+| `useEvidence` | `frontend/src/features/notifications/api.ts :: useEvidence` | GET `/evidence?correlation_id=...&kind=...&limit=100` | 쿼리키 `['evidence', correlationId, kind??'all']`, `enabled: !!correlationId`, 30s |
+| `useRcaReports` | `frontend/src/features/notifications/api.ts :: useRcaReports` | GET `/rca-reports?correlation_id=...&limit=50` | 쿼리키 `['rca-reports', correlationId]`, `enabled: !!correlationId`, 30s, select `d.items` |
 | `useDeadLetters` | `frontend/src/features/notifications/api.ts :: useDeadLetters` | GET `/dead-letters?limit=20` | `(enabled: boolean)`, 쿼리키 `['dead-letters']`, 60s, select `.dead_letters` |
 | `useReplayDeadLetter` | `frontend/src/features/notifications/api.ts :: useReplayDeadLetter` | POST `/dead-letters/${id}/replay` | mutation `(id: number)`, 성공 시 `['dead-letters']` invalidate |
 | `useNotices` | `frontend/src/features/notifications/api.ts :: useNotices` | (합성 — 아래) | `() => { notices: Notice[]; unread: number; markAllSeen: (kind?: string) => void }` |
@@ -67,7 +69,12 @@ status: synced
     - 그룹 자식은 collapsed 시 노드·edge 생략. 자식 edge 는 해당 그룹이 현재 단계이고 running 일 때 active.
     - 메인 edge(incident→evidence→analysis→actions): `targetIdx < cur`→ok, `=== cur && failed`→danger, `=== cur && !running`→ok, running && `=== cur`→active.
   - 좌표: `useAutoLayout(raw, 'LR')`.
-- 트리: Breadcrumbs [알림 → `인시던트 <id>`] → `QueryBoundary(skeleton 6)`: h1(summary)+Badge(status) → 그리드(1fr 300px): `Card(h 420) > FlowCanvas(nodes, edges, nodeTypes)` · `Card('상세') > KeyValue`(클러스터/현재 단계/근본 원인(null 은 '분석 중')/신뢰도 %/PR 링크/갱신 timeAgo).
+- 트리: Breadcrumbs [알림 → `인시던트 <id>`] → `QueryBoundary(skeleton 6)`: h1(summary)+Badge(status) → 그리드(1fr 300px): `Card(h 420) > FlowCanvas(nodes, edges, nodeTypes)` · `Card('상세') > KeyValue`(클러스터/현재 단계/근본 원인(null 은 '분석 중')/신뢰도 %/PR 링크/갱신 timeAgo) → 하단 2열 `RcaReportsPanel`/`EvidencePanel`.
+- 타임라인 상세가 404 여도 동일 문자열을 correlation id 로 보고 `RcaReportsPanel` 과 `EvidencePanel` 은 계속 렌더한다.
+- `RcaReportsPanel`: `useRcaReports(correlationId)` 결과를 카드 목록으로 표시한다. `RcaReportCard` 는 root cause, 대상(`namespace/resource_kind/resource_name`), 주 증상과 `secondary_symptoms`, reason, 후보 평가, 근거 참조, 미수집 체크를 보여준다.
+- `CandidateScores`: `report.candidates` 를 점수 내림차순 그대로 최대 2개 우선 표시하고, `selected_candidate_id` 와 같은 후보는 좌측 보더와 `선정` badge 로 강조한다. `source === 'ai_fallback'` 은 `AI` badge 로 표시한다.
+- `EvidenceRefList`: `supporting_evidence_refs` 가 있으면 기존 문자열 badge 대신 source/name/summary/query 트레일을 표시한다. 참조가 없을 때만 `supporting_evidence` 문자열 badge 로 fallback 한다.
+- `EvidencePanel`: `useEvidence(correlationId)` 결과를 kind 필터(kubernetes/prometheus/loki/tempo)와 접힘 가능한 payload row 로 표시한다.
 
 ### `frontend/src/features/notifications/OpsView.tsx :: OpsView` (default export)
 

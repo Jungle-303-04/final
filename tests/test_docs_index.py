@@ -60,6 +60,13 @@ def test_docs_and_api_do_not_use_retired_scope_or_stale_language() -> None:
         "fake" + " telemetry",
         "kind" + "-management",
         "kind" + "-target",
+        "VITE_API_MODE",
+        "API_MODE",
+        "mockRequest",
+        "shared/lib/mock",
+        "mock fallback",
+        "mock 모드",
+        "MOCK 뱃지",
     )
 
     checked_paths = [ROOT_DIR / "README.md"]
