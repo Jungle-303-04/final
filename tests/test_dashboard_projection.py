@@ -91,6 +91,11 @@ def test_dashboard_worker_upserts_timeline_row_without_chaining() -> None:
     assert row["correlation_id"] == "corr-1"
     assert row["cluster_id"] == "cluster-1"
     assert row["incident_id"] == "incident-1"
+    assert row["incident_namespace"] == "shop"
+    assert row["incident_resource_kind"] == "Deployment"
+    assert row["incident_resource_name"] == "checkout-api"
+    assert row["incident_symptom"] == "ImagePullBackOff"
+    assert row["incident_logical_key"] == "cluster-1|shop|Deployment|checkout-api|ImagePullBackOff"
     assert row["status"] == "rca_completed"
     assert row["root_cause"] == "image_pull_backoff"
     assert row["confidence"] == 0.92
@@ -155,6 +160,7 @@ def test_incident_projection_logical_key_matches_payload_key() -> None:
         "incident_resource_kind": "Deployment",
         "incident_resource_name": "api",
         "incident_symptom": "CrashLoopBackOff",
+        "incident_logical_key": "cluster-1|default|Deployment|api|CrashLoopBackOff",
     }
 
     assert incident_logical_key_from_projection(projected_row) == incident_logical_key(payload_row)
@@ -277,6 +283,8 @@ def test_open_incident_query_excludes_non_incident_detection_rows() -> None:
     assert "IS true" in sql
     assert "GROUP BY" in sql
     assert "count(distinct" in sql.lower()
+    assert "incident_logical_key" in sql
+    assert "#>>" not in sql
 
 
 def test_open_incident_query_returns_sql_aggregate_rows() -> None:
