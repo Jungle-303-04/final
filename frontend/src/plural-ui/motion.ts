@@ -26,13 +26,6 @@ export const overlayFade: Variants = {
   exit: { opacity: 0, transition: { duration: DUR.fast } },
 };
 
-/** 모달 본체: scale 0.98 → 1 */
-export const modalPop: Variants = {
-  initial: { opacity: 0, scale: 0.98, y: 6 },
-  animate: { opacity: 1, scale: 1, y: 0, transition: { duration: DUR.base, ease: EASE.decelerate } },
-  exit: { opacity: 0, scale: 0.98, y: 4, transition: { duration: DUR.fast } },
-};
-
 /** 플라이오버: 오른쪽에서 슬라이드 인 */
 export const flyoverSlide: Variants = {
   initial: { x: 48, opacity: 0 },
