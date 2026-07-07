@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 23:12 KST (AI entity context live deploy)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 00:18 KST (metric query/widget API + service drilldown UI)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,7 +10,36 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
-- 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+- 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
+
+## 체크포인트 (현재) — metric query/widget 저장 API + service/namespace drilldown
+
+- 구현:
+  - backend에 cluster 단위 저장형 metric query preset과 metric widget 정의 API를 추가했다.
+    - `GET/POST/DELETE /clusters/{cluster_id}/metric-query-presets`
+    - `POST /clusters/{cluster_id}/metric-query-presets/{preset_id}/run`
+    - `GET/POST/DELETE /clusters/{cluster_id}/metric-widgets`
+  - query/widget은 결과값을 저장하지 않는다. 실행은 기존 `debug_query_plan` + `queue_agent_command` 경로로 실제 target agent가 Prometheus를 조회한다.
+  - 권한은 조회 `dashboard.read`, 저장/삭제 `dashboard.manage`, 실행 `evidence.read`로 분리했다. `dashboard.manage`는 release operator 이상 역할에 포함했다.
+  - frontend `MetricsView`는 더 이상 운영용 정적 PromQL 프리셋에 의존하지 않는다. 실제 backend query preset 목록을 읽고, 저장/삭제/실행/위젯 저장을 API로 수행한다. context drilldown에서 들어온 쿼리는 저장 전까지 ephemeral 입력값으로만 둔다.
+  - 클러스터 상세 드릴다운은 namespace를 deterministic color chip으로 표시하고, 공통 검색(`q`)이 workload/pod/node/service/resource/event의 실제 필드에만 적용된다.
+  - Kubernetes Service는 “팟에 설치된 것”이나 “특별 namespace”로 표현하지 않는다. Service는 namespace-scoped network resource이고, selector label이 matching pod를 선택한다. UI는 `resource-detail.related.pods`를 정본으로 삼아 selected pods와 hosting nodes만 강조한다.
+  - 운영 경로에 mock/fake/hardcoded production data 추가 없음.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/dashboard/models.py src/domains/dashboard/repository.py src/domains/dashboard/router.py src/packages/contracts/gateway/requests.py src/packages/contracts/gateway/responses.py src/packages/contracts/gateway/routes.py src/packages/contracts/identity.py tests/test_dashboard_metric_presets.py tests/test_database_unit.py` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_dashboard_metric_presets.py tests/test_dashboard_router.py tests/test_database_unit.py tests/test_platform_foundation_openapi.py` → 57 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_docs_index.py tests/test_command_router.py tests/test_inventory_domain.py` → 36 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test -- --runInBand` → 10 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+- 커밋 상태:
+  - backend/API/contract/doc/test 커밋: `7e19bb9b feat: metric query widget api`.
+  - frontend drilldown/metrics UI 커밋은 이 체크포인트 갱신 직후 진행한다.
+- 다음:
+  1. push 후 backend/console image를 새 commit tag로 빌드·배포한다.
+  2. live에서 로그인 세션으로 `/metrics`, `/clusters/:id` Service drawer, `/clusters/:id?tab=nodes&q=<namespace>`를 스모크한다.
+  3. Metrics preset 저장 → widget 저장 → 실행 → `/commands/{command_id}` completed까지 실제 agent result를 확인한다.
+  4. 이후 남은 큰 범위는 repo/cluster 등록 UX의 provider discovery 정직화, AI chat UI 품질/삭제/컨텍스트 polish, live E2E 반복, 최종 DB 백업 후 reset이다.
 
 ## 체크포인트 (현재) — AI 대화 엔티티 컨텍스트 연결
 

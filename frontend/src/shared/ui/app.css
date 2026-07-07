@@ -115,6 +115,12 @@ button.card:active { background:var(--surface-2); }
 .query-row { background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; min-width:0; }
 .query-row code { flex:1; min-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.namespace-chip { display:inline-flex; align-items:center; gap:5px; max-width:160px; min-width:0;
+  border:1px solid var(--border); border-radius:999px; padding:2px 8px; font-size:var(--fs-xs);
+  font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.namespace-chip .dot { width:6px; height:6px; flex:none; border-radius:50%; background:currentColor; }
+.cluster-relation-pill { display:flex; gap:6px; align-items:center; min-width:0; flex-wrap:wrap;
+  padding:4px 8px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-1); }
 code { overflow-wrap:anywhere; }
 @media (max-width: 900px) {
   .split--even, .split--side { grid-template-columns:1fr; }

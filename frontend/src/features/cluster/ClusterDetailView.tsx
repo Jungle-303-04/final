@@ -1,9 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useClusterEvents, useClusters, useClusterSummary, useInventoryResourceDetail, usePods, useResources, useRestart, useScale, useServices, useWorkloads, type InventoryResourceIdentity } from '@/features/cluster/api';
 import { useClusterAgg } from '@/features/fleet/api';
 import { useIsAdmin } from '@/features/auth/api';
-import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, QueryBoundary, ResourceTable, StatBox, Tabs } from '@/shared/ui';
+import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, QueryBoundary, ResourceTable, SearchInput, StatBox, Tabs } from '@/shared/ui';
 import { liveStore } from '@/shared/lib/live';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
@@ -44,7 +44,7 @@ export default function ClusterDetailView() {
 
   const podRows = useMemo(() =>
     (podsQ.data ?? []).map(w => ({ ...w, hot: hotPods.has(w.name) || w.hot }))
-      .filter(w => !filter || w.name.includes(filter) || w.workload_name?.includes(filter) || w.namespace === filter || w.node === filter),
+      .filter(w => !filter || textMatches(filter, w.name, w.workload_name, w.namespace, w.node, w.phase)),
     [podsQ.data, hotPods, filter]);
   const openPod = pod ? podRows.find(w => w.name === pod && w.namespace === namespace) : null;
   const phases = summaryQ.data?.pod_phases ?? {};
@@ -55,6 +55,29 @@ export default function ClusterDetailView() {
     if (detailSubject === 'workload' && detailName) return { resource_type: 'workload', kind: detailKind || 'Deployment', name: detailName, namespace: detailNamespace || undefined };
     return null;
   }, [detailKind, detailName, detailNamespace, detailSubject, openPod]);
+  const selectedServiceIdentity = useMemo(() => selectedDetail?.resource_type === 'service' ? selectedDetail : null, [selectedDetail]);
+  const selectedServiceQ = useInventoryResourceDetail(clusterId, selectedServiceIdentity);
+  const selectedServicePods = useMemo(() => (
+    selectedServiceQ.data?.related_pods ?? []
+  ), [selectedServiceQ.data?.related_pods]);
+  const selectedServicePodKeys = useMemo(
+    () => new Set(selectedServicePods.map(p => `${p.namespace}/${p.name}`)),
+    [selectedServicePods],
+  );
+  const selectedServiceNodeNames = useMemo(
+    () => new Set(selectedServicePods.map(p => p.node).filter((node): node is string => !!node)),
+    [selectedServicePods],
+  );
+  const nodeNamespaces = useMemo(() => {
+    const byNode = new Map<string, Set<string>>();
+    for (const podRow of podsQ.data ?? []) {
+      if (!podRow.node) continue;
+      const namespaces = byNode.get(podRow.node) ?? new Set<string>();
+      namespaces.add(podRow.namespace);
+      byNode.set(podRow.node, namespaces);
+    }
+    return byNode;
+  }, [podsQ.data]);
   const setTab = (nextTab: string) => {
     const next = new URLSearchParams(sp);
     next.set('tab', nextTab);
@@ -73,6 +96,12 @@ export default function ClusterDetailView() {
     next.delete('name');
     next.delete('namespace');
     next.delete('kind');
+    setSp(next);
+  };
+  const setFilter = (q: string) => {
+    const next = new URLSearchParams(sp);
+    if (q.trim()) next.set('q', q.trim());
+    else next.delete('q');
     setSp(next);
   };
   const openDetail = (subject: DetailSubject, name: string, ns?: string, kind?: string) => {
@@ -124,8 +153,20 @@ export default function ClusterDetailView() {
           <span style={{ marginLeft: 'auto' }}><Button size="sm" onClick={() => showTab(tab)}>해제</Button></span>
         </div>
       )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap' }}>
+        <SearchInput value={filter} onChange={setFilter} placeholder="이름, 네임스페이스, 상태, 노드 검색" />
+        {selectedServiceIdentity && (
+          <div className="cluster-relation-pill">
+            <Badge tone="info">selector</Badge>
+            <span style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>
+              {selectedServiceQ.isPending ? '확인 중' : `팟 ${selectedServicePods.length} · 노드 ${selectedServiceNodeNames.size}`}
+            </span>
+          </div>
+        )}
+      </div>
       <Tabs items={TABS} current={tab} onChange={setTab} />
       {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin}
+        filter={filter}
         onInspect={d => openDetail('workload', d.name, d.namespace, d.kind)}
         onDrillPods={d => showTab('pods', d.name)}
         onScale={d => { const target = deploymentTargetFromWorkload(d); if (target) { setScaleTarget(target); setReplicas(target.podCount); } }}
@@ -137,29 +178,36 @@ export default function ClusterDetailView() {
             onRowClick={w => nav(pathFor(`/clusters/${clusterId}/pods/${w.namespace}/${w.name}?tab=pods`))}
             columns={[
               { key: 'name', label: '이름', render: w => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{w.hot && <IconFlame size={13} style={{ color: 'var(--warn)' }} />}{w.name}</span> },
-              { key: 'ns', label: '네임스페이스', render: w => w.namespace },
+              { key: 'ns', label: '네임스페이스', render: w => <NamespaceChip namespace={w.namespace} /> },
               { key: 'phase', label: '상태', render: w => <Badge status={w.phase} /> },
               { key: 'restarts', label: '재시작', render: w => w.restarts },
               { key: 'node', label: '노드', render: w => w.node ?? '—' },
+              { key: 'svc', label: '', render: w => selectedServicePodKeys.has(`${w.namespace}/${w.name}`) ? <Badge tone="info">서비스 선택</Badge> : null },
             ]}
           />
         </Card>
       )}
       {tab === 'nodes' && (
         <Card><QueryBoundary query={summaryQ}>{s => (
-          <ResourceTable rows={s.nodes} rowKey={n => n.name}
+          <ResourceTable rows={filter ? s.nodes.filter(n => nodeMatches(n, filter, nodeNamespaces)) : s.nodes} rowKey={n => n.name}
             onRowClick={n => openDetail('node', n.name, undefined, 'Node')}
             columns={[
-              { key: 'name', label: '이름', render: n => <b>{n.name}</b> },
+              { key: 'name', label: '이름', render: n => (
+                <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+                  <b>{n.name}</b>
+                  {selectedServiceNodeNames.has(n.name) && <Badge tone="info">서비스 팟</Badge>}
+                </span>
+              ) },
               { key: 'ready', label: '상태', render: n => <Badge tone={n.ready ? 'ok' : 'danger'}>{n.ready ? 'Ready' : 'NotReady'}</Badge> },
               { key: 'pods', label: '팟 수', render: n => n.pod_count },
+              { key: 'namespaces', label: '네임스페이스', render: n => <NamespaceCluster namespaces={[...(nodeNamespaces.get(n.name) ?? [])]} /> },
               { key: 'cpu', label: 'CPU', render: n => n.cpu_ratio != null ? `${(n.cpu_ratio * 100).toFixed(0)}%` : '—' },
               { key: 'mem', label: 'MEM', render: n => n.mem_ratio != null ? `${(n.mem_ratio * 100).toFixed(0)}%` : '—' },
               { key: 'ver', label: '버전', render: n => n.version },
             ]} />
         )}</QueryBoundary></Card>
       )}
-      {tab === 'services' && <ServicesTab clusterId={clusterId} onInspect={s => openDetail('service', s.name, s.namespace, 'Service')} />}
+      {tab === 'services' && <ServicesTab clusterId={clusterId} filter={filter} onInspect={s => openDetail('service', s.name, s.namespace, 'Service')} />}
       {tab === 'resources' && <ResourcesTab clusterId={clusterId} filter={filter} />}
       {tab === 'events' && <EventsTab clusterId={clusterId} filter={filter} />}
 
@@ -215,19 +263,19 @@ export function deploymentTargetFromWorkload(workload: WorkloadResource): Deploy
   return { ns: workload.namespace, name: workload.name, podCount: workload.ready || workload.desired };
 }
 
-function WorkloadsTab({ clusterId, admin, onInspect, onDrillPods, onScale, onRestart }: {
-  clusterId: string; admin: boolean; onInspect: (d: WorkloadResource) => void; onDrillPods: (d: WorkloadResource) => void;
+function WorkloadsTab({ clusterId, admin, filter, onInspect, onDrillPods, onScale, onRestart }: {
+  clusterId: string; admin: boolean; filter: string; onInspect: (d: WorkloadResource) => void; onDrillPods: (d: WorkloadResource) => void;
   onScale: (d: WorkloadResource) => void; onRestart: (d: WorkloadResource) => void
 }) {
   const q = useWorkloads(clusterId);
   return (
     <Card><QueryBoundary query={q}>{rows => (
-      <ResourceTable rows={rows} rowKey={d => `${d.namespace}/${d.kind}/${d.name}`}
+      <ResourceTable rows={filter ? rows.filter(d => textMatches(filter, d.name, d.namespace, d.kind, d.status, d.health, d.image)) : rows} rowKey={d => `${d.namespace}/${d.kind}/${d.name}`}
         onRowClick={onInspect}
         columns={[
           { key: 'name', label: '워크로드', render: d => <b>{d.name}</b> },
           { key: 'kind', label: 'Kind', render: d => d.kind },
-          { key: 'ns', label: '네임스페이스', render: d => d.namespace },
+          { key: 'ns', label: '네임스페이스', render: d => <NamespaceChip namespace={d.namespace} /> },
           { key: 'ready', label: 'Ready', render: d => d.status || `${d.ready}/${d.desired}` },
           { key: 'health', label: '상태', render: d => <Badge status={d.health} /> },
           { key: 'act', label: '', render: d => (
@@ -241,17 +289,18 @@ function WorkloadsTab({ clusterId, admin, onInspect, onDrillPods, onScale, onRes
     )}</QueryBoundary></Card>
   );
 }
-function ServicesTab({ clusterId, onInspect }: { clusterId: string; onInspect: (service: ServiceInfo) => void }) {
+function ServicesTab({ clusterId, filter, onInspect }: { clusterId: string; filter: string; onInspect: (service: ServiceInfo) => void }) {
   const q = useServices(clusterId);
   return <Card><QueryBoundary query={q}>{rows => (
-    <ResourceTable rows={rows} rowKey={s => `${s.namespace}/${s.name}`}
+    <ResourceTable rows={filter ? rows.filter(s => serviceMatches(s, filter)) : rows} rowKey={s => `${s.namespace}/${s.name}`}
       onRowClick={onInspect}
       columns={[
         { key: 'name', label: '이름', render: s => <b>{s.name}</b> },
-        { key: 'ns', label: '네임스페이스', render: s => s.namespace },
+        { key: 'ns', label: '네임스페이스', render: s => <NamespaceChip namespace={s.namespace} /> },
         { key: 'type', label: '타입', render: s => s.type },
         { key: 'ip', label: 'ClusterIP', render: s => <code>{s.cluster_ip}</code> },
         { key: 'ports', label: '포트', render: s => s.ports },
+        { key: 'selector', label: 'Selector', render: s => <LabelChips labels={s.selector} /> },
       ]} />
   )}</QueryBoundary></Card>;
 }
@@ -297,14 +346,16 @@ function ResourceDetailBody({ clusterId, detail, admin, onShowPods, onShowResour
 }) {
   const resource = detail.resource;
   const deploymentTarget = deploymentTargetFromDetail(detail);
+  const isService = resource.resource_type === 'service';
   return (
     <>
       <KeyValue pairs={resourcePairs(resource)} />
       <ContextActions clusterId={clusterId} subject={resource.resource_type || resource.kind.toLowerCase()} subjectName={resource.name} namespace={resource.namespace ?? undefined} kind={resource.kind} uid={resource.uid ?? undefined} />
       <DetailEvents title={`${resource.kind} 이벤트`} rows={detail.events} />
-      {detail.related_pods.length > 0 && <RelatedPods rows={detail.related_pods} />}
+      {isService && <ServiceSelectorRelation detail={detail} />}
+      {!isService && detail.related_pods.length > 0 && <RelatedPods rows={detail.related_pods} title="관련 팟" />}
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-        {resource.resource_type !== 'pod' && detail.related_pods.length > 0 && <Button onClick={() => onShowPods(resource.name)}>팟 보기</Button>}
+        {!isService && resource.resource_type !== 'pod' && detail.related_pods.length > 0 && <Button onClick={() => onShowPods(resource.name)}>팟 보기</Button>}
         {resource.resource_type === 'service' && <Button onClick={() => onShowResources(resource.name)}>리소스 보기</Button>}
         {deploymentTarget && (
           <>
@@ -324,7 +375,7 @@ function resourcePairs(resource: InventoryResource): [string, ReactNode][] {
     ['Health', <Badge key="health" status={resource.health} />],
     ['Kind', resource.kind],
   ];
-  if (resource.namespace) pairs.push(['네임스페이스', resource.namespace]);
+  if (resource.namespace) pairs.push(['네임스페이스', <NamespaceChip key="ns" namespace={resource.namespace} />]);
   if (resource.resource_type === 'pod') {
     pairs.push(
       ['재시작', String(summary.restart_total ?? 0)],
@@ -344,6 +395,7 @@ function resourcePairs(resource: InventoryResource): [string, ReactNode][] {
       ['타입', String(summary.type ?? resource.status ?? '—')],
       ['ClusterIP', <code key="ip">{String(summary.cluster_ip ?? '—')}</code>],
       ['포트', servicePorts(summary.ports)],
+      ['Selector', <LabelChips key="selector" labels={selectorRecord(summary.selector)} />],
     );
   } else if (resource.resource_type === 'workload') {
     pairs.push(
@@ -365,6 +417,72 @@ function servicePorts(value: unknown) {
     const p = port as Record<string, unknown>;
     return `${p.port ?? ''}${p.protocol ? `/${p.protocol}` : ''}`;
   }).filter(Boolean).join(', ') || '—';
+}
+
+export function selectorRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const raw = value as Record<string, unknown>;
+  const labels = raw.matchLabels && typeof raw.matchLabels === 'object' && !Array.isArray(raw.matchLabels)
+    ? raw.matchLabels as Record<string, unknown>
+    : raw;
+  return Object.fromEntries(
+    Object.entries(labels)
+      .filter(([key, item]) => key && item != null && item !== '')
+      .map(([key, item]) => [key, String(item)]),
+  );
+}
+
+function LabelChips({ labels }: { labels: Record<string, string> }) {
+  const entries = Object.entries(labels);
+  if (!entries.length) return <span style={{ color: 'var(--text-3)' }}>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', gap: 5, flexWrap: 'wrap', minWidth: 0 }}>
+      {entries.map(([key, value]) => (
+        <code key={`${key}:${value}`} style={{ fontSize: 'var(--fs-xs)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px' }}>
+          {key}={value}
+        </code>
+      ))}
+    </span>
+  );
+}
+
+function NamespaceChip({ namespace }: { namespace: string | null | undefined }) {
+  const label = namespace || 'cluster';
+  return (
+    <span
+      className="namespace-chip"
+      style={namespaceChipStyle(label)}
+      title={label}
+    >
+      <span className="dot" />{label}
+    </span>
+  );
+}
+
+function NamespaceCluster({ namespaces }: { namespaces: string[] }) {
+  if (!namespaces.length) return <span style={{ color: 'var(--text-3)' }}>—</span>;
+  const sorted = [...new Set(namespaces)].sort();
+  return (
+    <span style={{ display: 'inline-flex', gap: 5, flexWrap: 'wrap' }}>
+      {sorted.slice(0, 5).map(namespace => <NamespaceChip key={namespace} namespace={namespace} />)}
+      {sorted.length > 5 && <Badge tone="neutral">+{sorted.length - 5}</Badge>}
+    </span>
+  );
+}
+
+export function namespaceColor(namespace: string): string {
+  let hash = 0;
+  for (const char of namespace) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+  return `oklch(72% 0.14 ${hash})`;
+}
+
+export function namespaceChipStyle(namespace: string | null | undefined): CSSProperties {
+  const color = namespaceColor(namespace || 'cluster');
+  return {
+    color,
+    borderColor: `color-mix(in oklab, ${color} 32%, transparent)`,
+    background: `color-mix(in oklab, ${color} 11%, var(--surface-2))`,
+  };
 }
 
 function deploymentTargetFromDetail(detail: InventoryResourceDetail): DeploymentTarget | null {
@@ -395,15 +513,45 @@ function DetailEvents({ title, rows }: { title: string; rows: K8sEvent[] }) {
   );
 }
 
-function RelatedPods({ rows }: { rows: Workload[] }) {
+function ServiceSelectorRelation({ detail }: { detail: InventoryResourceDetail }) {
+  const selector = selectorRecord(detail.resource.summary.selector);
+  const nodes = [...new Set(detail.related_pods.map(p => p.node).filter((node): node is string => !!node))].sort();
+  const hasSelector = Object.keys(selector).length > 0;
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', marginBottom: 8 }}>관련 팟</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)' }}>selector 매칭</div>
+        {hasSelector && <LabelChips labels={selector} />}
+      </div>
+      {!hasSelector && (
+        <EmptyState icon={<IconFile size={22} />} title="selector가 없습니다" />
+      )}
+      {hasSelector && detail.related_pods.length === 0 && (
+        <EmptyState icon={<IconFile size={22} />} title="매칭된 팟이 없습니다" />
+      )}
+      {detail.related_pods.length > 0 && (
+        <>
+          <RelatedPods rows={detail.related_pods} title="선택된 팟" />
+          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', fontWeight: 600 }}>호스팅 노드</span>
+            {nodes.map(node => <Badge key={node} tone="info">{node}</Badge>)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RelatedPods({ rows, title }: { rows: Workload[]; title: string }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', marginBottom: 8 }}>{title}</div>
       <ResourceTable
         rows={rows.slice(0, 8)}
         rowKey={p => `${p.namespace}/${p.name}`}
         columns={[
           { key: 'name', label: '이름', render: p => <b>{p.name}</b> },
+          { key: 'ns', label: '네임스페이스', render: p => <NamespaceChip namespace={p.namespace} /> },
           { key: 'phase', label: '상태', render: p => <Badge status={p.phase} /> },
           { key: 'restart', label: '재시작', render: p => p.restarts },
           { key: 'node', label: '노드', render: p => p.node ?? '—' },
@@ -477,14 +625,47 @@ function eventMatches(key: string) {
     e.message.toLowerCase().includes(key) ||
     e.reason.toLowerCase().includes(key);
 }
+
+export function textMatches(filter: string, ...values: Array<string | number | boolean | null | undefined>) {
+  const needle = filter.trim().toLowerCase();
+  if (!needle) return true;
+  return values.some(value => String(value ?? '').toLowerCase().includes(needle));
+}
+
+export function serviceMatches(service: ServiceInfo, filter: string) {
+  return textMatches(
+    filter,
+    service.name,
+    service.namespace,
+    service.type,
+    service.cluster_ip,
+    service.ports,
+    ...Object.entries(service.selector).flatMap(([key, value]) => [key, value, `${key}=${value}`]),
+  );
+}
+
+function nodeMatches(
+  node: { name: string; ready: boolean; pod_count: number; version: string; cpu_ratio?: number; mem_ratio?: number },
+  filter: string,
+  nodeNamespaces: Map<string, Set<string>>,
+) {
+  return textMatches(
+    filter,
+    node.name,
+    node.ready ? 'ready' : 'notready',
+    node.pod_count,
+    node.version,
+    ...[...(nodeNamespaces.get(node.name) ?? [])],
+  );
+}
+
 function ResourcesTab({ clusterId, filter }: { clusterId: string; filter: string }) {
   const q = useResources(clusterId);
-  const match = (value: string | null | undefined) => !!value && value.includes(filter);
   return <Card><QueryBoundary query={q}>{rows => (
-    <ResourceTable rows={filter ? rows.filter(r => match(r.name) || match(r.namespace) || match(r.kind) || match(r.status)) : rows} rowKey={r => `${r.kind}/${r.namespace}/${r.name}`}
+    <ResourceTable rows={filter ? rows.filter(r => textMatches(filter, r.name, r.namespace, r.kind, r.status, r.health, ...Object.values(r.labels))) : rows} rowKey={r => `${r.kind}/${r.namespace}/${r.name}`}
       columns={[
         { key: 'kind', label: 'Kind', render: r => r.kind },
-        { key: 'ns', label: '네임스페이스', render: r => r.namespace ?? '—' },
+        { key: 'ns', label: '네임스페이스', render: r => <NamespaceChip namespace={r.namespace} /> },
         { key: 'name', label: '이름', render: r => <b>{r.name}</b> },
         { key: 'status', label: '상태', render: r => <Badge status={r.status} /> },
         { key: 'age', label: 'Age', render: r => r.age },
@@ -493,10 +674,9 @@ function ResourcesTab({ clusterId, filter }: { clusterId: string; filter: string
 }
 function EventsTab({ clusterId, filter }: { clusterId: string; filter: string }) {
   const q = useClusterEvents(clusterId);
-  const match = (value: string | null | undefined) => !!value && value.includes(filter);
   return <Card><QueryBoundary query={q}>{rows => (
     rows.length === 0 ? <EmptyState icon={<IconFile size={26} />} title="이벤트가 없습니다" /> :
-    <ResourceTable rows={filter ? rows.filter(e => match(e.reason) || match(e.target) || match(e.message) || match(e.type)) : rows} rowKey={e => `${e.at}${e.reason}`}
+    <ResourceTable rows={filter ? rows.filter(e => textMatches(filter, e.reason, e.target, e.message, e.type)) : rows} rowKey={e => `${e.at}${e.reason}`}
       columns={[
         { key: 'at', label: '시각', render: e => timeAgo(e.at) },
         { key: 'type', label: '타입', render: e => <Badge tone={e.type === 'Warning' ? 'warn' : 'neutral'}>{e.type}</Badge> },

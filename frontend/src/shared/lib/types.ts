@@ -9,7 +9,7 @@ export interface Workload { name: string; kind: string; namespace: string; ready
 export interface WorkloadResource { name: string; kind: string; namespace: string; status: string; health: string; desired: number; ready: number; available: number; updated: number; image: string; hot?: boolean; summary: Record<string, unknown> }
 export interface InventoryResource { resource_type: string; kind: string; namespace: string | null; name: string; uid?: string | null; status: string; health: string; age: string; labels: Record<string, string>; summary: Record<string, unknown> }
 export interface InventoryResourceDetail { cluster_id: string; identity: Record<string, unknown>; resource: InventoryResource; related: Record<string, InventoryResource[]>; related_pods: Workload[]; events: K8sEvent[] }
-export interface ServiceInfo { name: string; namespace: string; type: string; cluster_ip: string; ports: string }
+export interface ServiceInfo { name: string; namespace: string; type: string; cluster_ip: string; ports: string; selector: Record<string, string> }
 export interface K8sEvent { at: string; type: string; reason: string; target: string; message: string }
 export interface Application { application_id: string; name: string; repo_ref: string; branch: string; cluster_id: string; manifest_path: string; last_run_status?: string; last_deployed_at?: string }
 export interface WorkflowRun { run_id: string; application_id: string; commit_sha: string; status: string; current_step: string; started_at: string; steps: RunStep[]; approval_id?: string; safe_pr?: SafePr }
@@ -46,6 +46,15 @@ export interface AiConversationDetailResponse { conversation: Record<string, unk
 export interface AiConversationAcceptedResponse { accepted: boolean; conversation_id: string; message_id: string; event_id: string; correlation_id: string }
 export interface Incident { incident_id: string; correlation_id: string; cluster_id: string; summary: string; stage: string; at: string }
 export interface DeadLetter { id: number; original_subject: string; consumer: string; error: string; status: string; created_at: string }
+export interface MetricQueryPreset {
+  preset_id: string; workspace_id: string; cluster_id: string; name: string; description: string;
+  source: string; query: string; range_seconds: number | null; step_seconds: number | null;
+  unit: string; metadata: Record<string, unknown>; created_by: string; created_at: string | null; updated_at: string | null
+}
+export interface MetricWidget {
+  widget_id: string; workspace_id: string; cluster_id: string; query_preset_id: string; title: string; kind: string;
+  position: Record<string, unknown>; settings: Record<string, unknown>; created_by: string; created_at: string | null; updated_at: string | null
+}
 export interface Org { org_id: string; name: string; description: string; member_count: number; group_count: number; created_at: string }
 export interface Group { group_id: string; org_id: string; name: string; member_count: number }
 export interface User { user_id: string; email: string; role: string; status: 'active'|'pending_verification'|'pending_approval'; groups: string[]; created_at: string }
