@@ -231,7 +231,6 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `TreemapChart` | `frontend/src/shared/ui/charts.tsx :: TreemapChart` | `{ nodes: HeatNode[]; onTileClick?: (id: string) => void }` — `ResponsiveTreeMap`, `leavesOnly`, 타일색 `heatColor(score)`, 커스텀 tooltip `"{label} · 건강도 N%"`, 컨테이너 `data-testid="treemap"` minHeight 320 |
 | `Series` | `frontend/src/shared/ui/charts.tsx :: Series` | `{ id: string; data: { x: number\|string; y: number }[] }` |
 | `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — `ResponsiveLine`, point scale, 색 `[--info, --ok, --warn]`, `animate={false}`, useMesh |
-| `Sparkline` | `frontend/src/shared/ui/charts.tsx :: Sparkline` | `{ points: number[] }` — 100×30 SVG path, stroke `--info` |
 
 ## 모션 (`motion/index.tsx`)
 
@@ -242,8 +241,6 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `FadeSlideIn` | `frontend/src/shared/motion/index.tsx :: FadeSlideIn` | `{ children; delay?: number; dir?: 'up'\|'left' }` — opacity 0→1 + 8px 슬라이드, 0.2s ease `[0.16,1,0.3,1]` |
 | `Stagger` | `frontend/src/shared/motion/index.tsx :: Stagger` | `{ children: ReactNode[] }` — 항목별 `min(i,8) * 0.04s` 지연 FadeSlideIn |
 | `CountUp` | `frontend/src/shared/motion/index.tsx :: CountUp` | `{ value: number }` — rAF 350ms cubic ease-out 카운트, `toLocaleString()` |
-| `PressScale` | `frontend/src/shared/motion/index.tsx :: PressScale` | tap 0.97 / hover 1.01, `display: contents` |
-| `LayoutMorph` | `frontend/src/shared/motion/index.tsx :: LayoutMorph` | `{ id: string; children }` — `layoutId` morph 0.35s |
 | `AnimatedList<T>` | `frontend/src/shared/motion/index.tsx :: AnimatedList` | `{ items: T[]; getKey: (item) => string; children: (item) => ReactNode }` — 키 기반 layout + enter(y 6)/exit(scale 0.98) |
 | `AnimatedRow` | `frontend/src/shared/motion/index.tsx :: AnimatedRow` | `{ children; className?; onClick? }` — `motion.tr` layout fade, `ResourceTable` 전용 |
 | `PulseOnChange` | `frontend/src/shared/motion/index.tsx :: PulseOnChange` | `{ signal: string\|number\|undefined; children }` — signal 변경마다 1회 scale 1.35→1 pulse. 최초 수신은 조용히(ref 가드) |
