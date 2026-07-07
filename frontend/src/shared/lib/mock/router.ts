@@ -46,6 +46,50 @@ const routes: [string, string, Handler][] = [
   }],
 
   ['GET', '/clusters', () => ({ clusters: fx.clusters })],
+  // 집계 계약 (fleet/summary · clusters/:id/summary) — 실 계약과 동형, fixtures 에서 파생
+  ['GET', '/fleet/summary', () => {
+    const clusters = fx.clusters.map(c => {
+      const pods = fx.workloadsByCluster[c.cluster_id] ?? [];
+      const running = pods.filter(w => w.phase === 'Running').length;
+      const restarts = pods.reduce((a, w) => a + w.restarts, 0);
+      const health = c.connection_status !== 'connected' || c.incident_count > 0 ? 'critical' : restarts > 3 ? 'warning' : 'healthy';
+      return {
+        cluster_id: c.cluster_id, name: c.name, health,
+        pods_running: running, pods_total: c.pod_count, nodes_ready: c.node_count, nodes_total: c.node_count,
+        open_incidents: c.incident_count, restarts_recent: restarts, cpu_pct: 42, mem_pct: 61, last_seen: fx.nowIso,
+      };
+    });
+    const approvals = Object.values(state.runsByApp).flat().filter(r => r.status === 'WAITING_FOR_APPROVAL').length;
+    const runningWf = Object.values(state.runsByApp).flat().filter(r => !['SUCCEEDED', 'FAILED'].includes(r.status)).length;
+    return {
+      clusters,
+      totals: {
+        clusters: clusters.length,
+        healthy: clusters.filter(c => c.health === 'healthy').length,
+        warning: clusters.filter(c => c.health === 'warning').length,
+        critical: clusters.filter(c => c.health === 'critical').length,
+        open_incidents: clusters.reduce((a, c) => a + c.open_incidents, 0),
+        pending_approvals: approvals,
+        running_workflows: runningWf,
+        dead_letters: state.deadLetters.filter(d => d.status === 'open').length,
+      },
+    };
+  }],
+  ['GET', '/clusters/:id/summary', (p) => {
+    const pods = fx.workloadsByCluster[p.id] ?? [];
+    return {
+      workloads: pods.map(w => ({
+        name: w.workload_name ?? w.name, kind: w.kind, namespace: w.namespace,
+        health: w.phase === 'Running' ? 'healthy' : w.phase === 'Pending' ? 'warning' : 'critical',
+        ready: w.ready, restarts: w.restarts,
+      })),
+      recent_events: fx.events.slice(0, 10),
+      open_incidents: fx.incidents.filter(i => i.cluster_id === p.id).map(i => ({
+        id: i.incident_id, symptom: i.summary, root_cause: null, status: i.stage, created_at: i.at,
+      })),
+      usage: { cpu_pct: 42, mem_pct: 61, restarts_total: pods.reduce((a, w) => a + w.restarts, 0) },
+    };
+  }],
   ['GET', '/clusters/:id', (p) => ({ cluster: fx.clusters.find(c => c.cluster_id === p.id) ?? err404() })],
   ['GET', '/clusters/:id/connection-status', (p) => ({ cluster_id: p.id, connection_status: 'connected' })],
   // 실 backend inventory 계약과 동형으로 응답한다 — adapt.ts 는 실 계약만 해석하므로

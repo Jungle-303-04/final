@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useClusters } from '@/features/cluster/api';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
 import { Badge, Button, Card, QueryBoundary, ResourceTable, SearchInput, useSearchFilter } from '@/shared/ui';
+import { PageHeader } from '@/plural-ui';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Cluster } from '@/shared/lib/types';
@@ -15,10 +16,8 @@ export default function ClusterListView() {
 
   return (
     <FadeSlideIn>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>클러스터</h1>
-        <Button variant="primary" onClick={() => setWizard(true)}>+ 클러스터 등록</Button>
-      </div>
+      <PageHeader title="클러스터" sub="에이전트가 연결된 클러스터의 실측 인벤토리"
+        actions={<Button variant="primary" onClick={() => setWizard(true)}>+ 클러스터 등록</Button>} />
       <div style={{ marginBottom: 12 }}><SearchInput value={search} onChange={setSearch} /></div>
       <Card>
         <QueryBoundary query={q}>{() => (
