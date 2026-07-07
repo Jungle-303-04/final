@@ -6,7 +6,7 @@ export interface Cluster { cluster_id: string; name: string; environment: string
 export interface ClusterSummary { cluster_id: string; namespaces: string[]; nodes: NodeInfo[]; pod_phases: Record<string, number>; services: number }
 export interface NodeInfo { name: string; ready: boolean; pod_count: number; version: string; cpu_ratio?: number; mem_ratio?: number }
 export interface Workload { name: string; kind: string; namespace: string; ready: string; restarts: number; image: string; node?: string; phase: string; hot?: boolean; workload_name?: string }
-export interface InventoryResource { kind: string; namespace: string | null; name: string; status: string; age: string; raw?: unknown }
+export interface InventoryResource { kind: string; namespace: string | null; name: string; status: string; age: string }
 export interface ServiceInfo { name: string; namespace: string; type: string; cluster_ip: string; ports: string }
 export interface K8sEvent { at: string; type: string; reason: string; target: string; message: string }
 export interface Application { application_id: string; name: string; repo_ref: string; branch: string; cluster_id: string; manifest_path: string; last_run_status?: string; last_deployed_at?: string }
@@ -36,8 +36,13 @@ export interface Notice { id: string; kind: 'approval'|'incident'|'dlq'|'cluster
 export interface IncidentDetail { incident_id: string; correlation_id: string; cluster_id: string; status: string; current_subject: string; summary: string;
   root_cause: string | null; confidence: number | null; supporting_evidence: string[]; missing_evidence: string[];
   action_route: string | null; command_id: string | null; pr_url: string | null; error_reason: string | null; updated_at: string }
-// GET /evidence — 저장된 evidence row (EvidenceQueryResponse.items[])
-export interface EvidenceRecord { id: number; correlation_id: string; kind: string; payload: Record<string, unknown>; created_at: string | null }
+// GET /evidence — raw payload 제외 안전 요약 (EvidenceQueryResponse.items[])
+export interface EvidenceSourceSummary { source: string; summary: string;
+  schema_version?: number | null; collector?: string | null; collector_version?: string | null;
+  source_version?: string | null; query_version?: string | null; collected_at?: string | null;
+  evidence_key?: string | null; source_id?: string | null; agent_id?: string | null; window_start?: string | null }
+export interface EvidenceRecord { id: number; correlation_id: string; kind: string; cluster_id?: string | null;
+  evidence_ref?: string | null; summary: string; sources: EvidenceSourceSummary[]; created_at: string | null }
 // GET /rca-reports — RCA report 화이트리스트 요약 (RcaReportListResponse.items[])
 export interface RcaCandidateScore { candidate_id: string; title: string | null; source: string | null;
   score: number | null; reason: string | null; supporting_evidence: string[]; missing_evidence: string[] }

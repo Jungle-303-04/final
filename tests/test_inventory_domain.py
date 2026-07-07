@@ -279,6 +279,7 @@ def test_inventory_workloads_route_requires_inventory_access_and_filters() -> No
     assert response.resource_type == "workload"
     assert response.resources[0].kind == "Deployment"
     assert response.resources[0].summary == {"ready_replicas": 1}
+    assert "raw" not in response.resources[0].model_dump()
 
 
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:

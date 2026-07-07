@@ -51,7 +51,48 @@ def evidence_row(row_id: int = 1, kind: str = "evidence.built") -> dict:
         "workspace_id": WORKSPACE_ID,
         "correlation_id": f"corr-{row_id}",
         "kind": kind,
-        "payload": {"cluster_id": "cluster-1", "object_ref": f"evidence://{row_id}"},
+        "payload": {
+            "cluster_id": "cluster-1",
+            "object_ref": f"evidence://{row_id}",
+            "kubernetes": {
+                "_lineage": {
+                    "schema_version": 2,
+                    "source_version": "kubernetes:v1.33",
+                    "collector": "cluster-agent",
+                    "collector_version": "agent:v2",
+                    "query_version": "k8s-snapshot:v3",
+                    "collected_at": "2026-07-07T09:59:58+00:00",
+                    "evidence_key": f"workspace-1:cluster-1:evidence-{row_id}",
+                    "source_id": "cluster-snapshot",
+                    "agent_id": "agent-1",
+                    "window_start": "2026-07-07T09:59:00+00:00",
+                },
+                "pods": [{"name": "api", "token": SECRET_MARKER}],
+                "nodes": [{"name": "node-1"}],
+                "events": [{"reason": "BackOff"}],
+            },
+            "metrics": {
+                "_lineage": {
+                    "schema_version": 2,
+                    "source_version": "prometheus:v2",
+                    "collector_version": "agent:v2",
+                    "query_version": "promql:v1",
+                },
+                "results": {"cpu": [{"value": 0.9, "secret": SECRET_MARKER}]},
+            },
+            "logs": [
+                {
+                    "_lineage": {
+                        "schema_version": 2,
+                        "source_version": "loki:v3",
+                        "collector_version": "agent:v2",
+                        "query_version": "logql:v1",
+                    },
+                    "query_name": "app",
+                    "line": SECRET_MARKER,
+                }
+            ],
+        },
         "created_at": "2026-07-07T10:00:00+00:00",
     }
 
@@ -192,6 +233,24 @@ def test_evidence_scoped_to_session_workspace_with_filters() -> None:
     assert response.status_code == 200
     body = response.json()
     assert [item["id"] for item in body["items"]] == [1]
+    item = body["items"][0]
+    assert item["cluster_id"] == "cluster-1"
+    assert item["evidence_ref"] == "evidence://1"
+    assert item["summary"] == "cluster-1: kubernetes, metrics, logs"
+    assert "payload" not in item
+    assert SECRET_MARKER not in response.text
+    assert [src["source"] for src in item["sources"]] == ["kubernetes", "metrics", "logs"]
+    kubernetes = item["sources"][0]
+    assert kubernetes["summary"] == "pods=1, nodes=1, events=1"
+    assert kubernetes["schema_version"] == 2
+    assert kubernetes["collector"] == "cluster-agent"
+    assert kubernetes["collector_version"] == "agent:v2"
+    assert kubernetes["source_version"] == "kubernetes:v1.33"
+    assert kubernetes["query_version"] == "k8s-snapshot:v3"
+    assert kubernetes["evidence_key"] == "workspace-1:cluster-1:evidence-1"
+    assert kubernetes["agent_id"] == "agent-1"
+    assert item["sources"][1]["summary"] == "results=1"
+    assert item["sources"][2]["summary"] == "entries=1, queries=app"
     assert body == {**body, "limit": 10, "offset": 0, "has_more": False}
     name, kwargs = db.calls[0]
     assert name == "evidence"
