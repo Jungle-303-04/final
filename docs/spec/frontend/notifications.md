@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: f91a4def
 status: synced
 ---
 
@@ -29,11 +29,13 @@ status: synced
 
 | 심볼 | 앵커 | API | 폴링/옵션 |
 |---|---|---|---|
-| `useTimeline` | `frontend/src/features/notifications/api.ts :: useTimeline` | GET `/dashboard/rca/timeline?limit=20` | 쿼리키 `['timeline']`, 60s, select `d.items.map(adaptIncident)` |
-| `useIncident` | `frontend/src/features/notifications/api.ts :: useIncident` | GET `/dashboard/rca/incidents/${incidentId}` | 쿼리키 `['incident', id]`, `enabled: !!id`, 30s, select `adaptIncidentDetail(d.item ?? {})` |
-| `useEvidence` | `frontend/src/features/notifications/api.ts :: useEvidence` | GET `/evidence?correlation_id=...&kind=...&limit=100` | 쿼리키 `['evidence', correlationId, kind??'all']`, `enabled: !!correlationId`, 30s |
-| `useRcaReports` | `frontend/src/features/notifications/api.ts :: useRcaReports` | GET `/rca-reports?correlation_id=...&limit=50` | 쿼리키 `['rca-reports', correlationId]`, `enabled: !!correlationId`, 30s, select `d.items` |
-| `useDeadLetters` | `frontend/src/features/notifications/api.ts :: useDeadLetters` | GET `/dead-letters?limit=20` | `(enabled: boolean)`, 쿼리키 `['dead-letters']`, 60s, select `.dead_letters` |
+| `NOTIFICATION_QUERY_TIMEOUT_MS` | `frontend/src/features/notifications/api.ts :: NOTIFICATION_QUERY_TIMEOUT_MS` | — | `8_000` — 타임라인/인시던트/evidence/RCA report/DLQ 조회 |
+| `useTimeline` | `frontend/src/features/notifications/api.ts :: useTimeline` | GET `/dashboard/rca/timeline?limit=20` with `{timeoutMs: 8_000}` | 쿼리키 `['timeline']`, 60s, `retry:false`, select `d.items.map(adaptIncident)` |
+| `useIncident` | `frontend/src/features/notifications/api.ts :: useIncident` | GET `/dashboard/rca/incidents/${incidentId}` with `{timeoutMs: 8_000}` | 쿼리키 `['incident', id]`, `enabled: !!id`, 30s, `retry:false`, select `adaptIncidentDetail(d.item ?? {})` |
+| `useEvidence` | `frontend/src/features/notifications/api.ts :: useEvidence` | GET `/evidence?correlation_id=...&kind=...&limit=100` with `{timeoutMs: 8_000}` | 쿼리키 `['evidence', correlationId, kind??'all']`, `enabled: !!correlationId`, 30s, `retry:false` |
+| `useRcaReports` | `frontend/src/features/notifications/api.ts :: useRcaReports` | GET `/rca-reports?correlation_id=...&limit=50` with `{timeoutMs: 8_000}` | 쿼리키 `['rca-reports', correlationId]`, `enabled: !!correlationId`, 30s, `retry:false`, select `d.items` |
+| `useDeadLetters` | `frontend/src/features/notifications/api.ts :: useDeadLetters` | GET `/dead-letters?limit=20` with `{timeoutMs: 8_000}` | `(enabled: boolean)`, 쿼리키 `['dead-letters']`, 60s, `retry:false`, select `.dead_letters` |
+| `useRecoveryPlan` | `frontend/src/features/notifications/api.ts :: useRecoveryPlan` | GET `/rca/recovery-plans/by-correlation/${correlationId}` with `{timeoutMs: 8_000}` | 쿼리키 `['recovery-plan', correlationId]`, `enabled: !!correlationId`, 30s. `not_found`은 재시도하지 않고 그 외 오류는 2회 미만 재시도 |
 | `useReplayDeadLetter` | `frontend/src/features/notifications/api.ts :: useReplayDeadLetter` | POST `/dead-letters/${id}/replay` | mutation `(id: number)`, 성공 시 `['dead-letters']` invalidate |
 | `useNotices` | `frontend/src/features/notifications/api.ts :: useNotices` | (합성 — 아래) | `() => { notices: Notice[]; unread: number; markAllSeen: (kind?: string) => void }` |
 | `timeAgo` (re-export) | `frontend/src/features/notifications/api.ts :: timeAgo` | — | shared/lib/format 재수출 |

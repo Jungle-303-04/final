@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: f91a4def
 status: synced
 ---
 
@@ -27,8 +27,9 @@ status: synced
 | 심볼 | 앵커 | API | 폴링/옵션 |
 |---|---|---|---|
 | `chatKeys` | `frontend/src/features/chat/api.ts :: chatKeys` | — | `list() = ['ai','conversations']`, `one(id) = ['ai','conversations', id]` |
-| `useConversations` | `frontend/src/features/chat/api.ts :: useConversations` | GET `/ai/conversations` | 15s, select `d.conversations.map(adaptConversationSummary)` |
-| `useConversation` | `frontend/src/features/chat/api.ts :: useConversation` | GET `/ai/conversations/${id}` → `AiConversationDetailResponse` envelope | `(id: string \| undefined)`, `enabled: !!id`, `select: adaptConversationDetail`. **적응 폴링**: raw `conversation.status === 'waiting'` 이면 2s, 아니면 15s(status 만으로 파생) |
+| `CHAT_QUERY_TIMEOUT_MS` | `frontend/src/features/chat/api.ts :: CHAT_QUERY_TIMEOUT_MS` | — | `8_000` — 대화 목록/단건 조회 전용 |
+| `useConversations` | `frontend/src/features/chat/api.ts :: useConversations` | GET `/ai/conversations` with `{timeoutMs: 8_000}` | 15s, `retry:false`, select `d.conversations.map(adaptConversationSummary)` |
+| `useConversation` | `frontend/src/features/chat/api.ts :: useConversation` | GET `/ai/conversations/${id}` with `{timeoutMs: 8_000}` → `AiConversationDetailResponse` envelope | `(id: string \| undefined)`, `enabled: !!id`, `retry:false`, `select: adaptConversationDetail`. **적응 폴링**: raw `conversation.status === 'waiting'` 이면 2s, 아니면 15s(status 만으로 파생) |
 | `AiMessagePayload` | `frontend/src/features/chat/api.ts :: AiMessagePayload` | `{message, title?, context?}` | `context`는 `AiChatContext` |
 | `aiMessagePayload` | `frontend/src/features/chat/api.ts :: aiMessagePayload` | `string \| AiMessagePayload`, `{includeTitle?: boolean}` → `AiMessagePayload` | 문자열 입력은 `{message}`로 보정한다. `title`은 새 대화 생성에서 `includeTitle`일 때만 포함하고, 기존 대화 메시지 전송에는 보내지 않는다 |
 | `useCreateConversation` | `frontend/src/features/chat/api.ts :: useCreateConversation` | POST `/ai/conversations` body `{message, title?, context?}` → `AiConversationAcceptedResponse` | 성공 시 list invalidate |
@@ -60,13 +61,17 @@ status: synced
   ```
   FadeSlideIn > 그리드(260px 1fr, 높이 calc(100vh - 140px))
   ├─ Card('대화', actions="새 대화" → nav(pathFor('/ai'))) ← 좌측 목록 (성공+0건이면 '대화 없음')
-  │   AnimatedList(listQ.data)
+  │   listQ.isPending → Skeleton(4)
+  │   listQ.isError → EmptyState(error message, 다시 시도)
+  │   listQ.isSuccess → AnimatedList(listQ.data)
   │   대화별 행: 열기 button(status==='waiting' 이면 info 점, title ellipsis, timeAgo(updated_at)) + 삭제 button
   │   현재 대화는 data-active=true 배경. 열기 button 클릭 → /ai/:id, 삭제 button 클릭 → deleteConversation
   └─ Card(flex column, padding 0, overflow hidden)     ← 우측 스레드
      ├─ 헤더: 제목 또는 'AI 운영 어시스턴트' + status, 현재 대화면 삭제 버튼
      ├─ 메시지 영역(.chat-messages):
      │   conversationId 없으면 EmptyState('✦', '새 대화')
+     │   conversationId 있고 convQ.isPending → Skeleton(4)
+     │   conversationId 있고 convQ.isError → EmptyState(error message, 다시 시도)
      │   conv.messages.map(MessageRenderer)
      │   conv.status==='waiting' → "분석 중" + skeleton (data-testid="typing")
      └─ 입력줄(.chat-composer): 16,000자 초과 시 role="alert" 경고 · textarea(rows 2, ⌘/Ctrl+Enter 전송,
@@ -103,6 +108,7 @@ status: synced
 
 - 메시지 길이 상한 16,000자 — 초과 시 클라이언트에서 전송 차단 + 경고 표시.
 - 폴링 주기는 서버가 준 `status` 만으로 파생(별도 타이머·웹소켓 없음).
+- 대화 조회가 실패한 상태에서는 현재 대화 전송 버튼도 비활성화한다. 실패 상태를 빈 대화로 위장하지 않고 오류 메시지와 재시도 버튼을 보여준다.
 - 대화 목록 응답에는 `messages` 가 없다(`adaptConversationSummary` 로 요약 정규화).
 - 대화 단건 응답은 `{conversation, messages}` envelope 이며, `ChatView`는 `adaptConversationDetail`이 만든 `Conversation`만 소비한다. assistant 도구 표시는 message top-level `tool_calls`, `metadata.tool_calls`, `metadata.tool_trace`를 모두 허용한다.
 - 삭제는 workspace 범위 서버 검증에 의존한다. 클라이언트는 성공 후 해당 detail cache만 제거한다.

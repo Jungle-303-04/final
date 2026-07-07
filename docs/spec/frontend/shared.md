@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: 32330d7c
 status: synced
 ---
 
@@ -55,11 +55,11 @@ status: synced
 
 ```ts
 export const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 10_000, retry: (n, err) => n < 1 && (err as {kind?:string}).kind === 'network' } },
+  defaultOptions: { queries: { staleTime: 10_000, retry: shouldRetryQuery } },
 });
 ```
 
-— 기본 staleTime 10s, 재시도는 network 오류에 한해 1회.
+— 기본 staleTime 10s. `shouldRetryQuery(n, err)`는 `kind === 'network'` 오류만 1회 재시도하되, `detail === '요청 시간이 초과되었습니다'`인 timeout은 재시도하지 않는다. timeout은 사용자가 화면의 재시도 버튼으로 즉시 판단해야 하므로 자동 재시도 스켈레톤을 만들지 않는다.
 
 ## 실시간 (`lib/live.ts`)
 
@@ -180,13 +180,13 @@ export const queryClient = new QueryClient({
 | `Card` | `{ title?: ReactNode; actions?: ReactNode; children; style? }` | title/actions 있으면 헤더 행 렌더 |
 | `StatBox` | `{ label: string; value: number; tone?: Tone }` | 값은 `CountUp` 애니메이션 |
 | `Column<T>` (interface) | `{ key: string; label: string; render: (row: T) => ReactNode; width?: string }` | `ResourceTable` 열 정의 |
-| `ResourceTable<T>` | `{ columns: Column<T>[]; rows: T[]; rowKey: (r) => string; onRowClick?; empty?: ReactNode }` | rows 비면 `empty ?? EmptyState(IconFile)`. 바디는 `AnimatePresence` + `AnimatedRow`(키 기반 layout 애니메이션). onRowClick 있으면 `.clickable` |
+| `ResourceTable<T>` | `{ columns: Column<T>[]; rows: T[]; rowKey: (r) => string; onRowClick?; empty?: ReactNode }` | rows 비면 `empty ?? EmptyState(IconFile)`. 바디는 `AnimatePresence` + `AnimatedRow`(키 기반 layout 애니메이션). onRowClick 있으면 `.clickable`, `role="button"`, `tabIndex=0`, Enter/Space 활성화를 붙인다 |
 | `Tabs` | `{ items: {key; label; badge?: number}[]; current: string; onChange: (k) => void }` | `role="tablist"`, badge 는 `(n)` 접미. 탭 행은 가로 스크롤 가능하고 버튼은 줄바꿈하지 않는다. |
 | `Modal` | `{ open: boolean; title: string; onClose; children; size?: 'lg' }` | Escape 로 닫기, 백드롭 클릭 닫기, 내부 클릭 stopPropagation. 열리면 첫 focusable 또는 dialog 자체로 focus, Tab focus trap, 닫히면 이전 focus 복원. `role="dialog"`, `aria-modal="true"`, `AnimatePresence` + `overlayFade`/`modalPop` 으로 열림·닫힘 전환. |
 | `Drawer` | `{ open; title: ReactNode; onClose; children }` | 우측 고정 aside + 반투명 백드롭. 열리면 첫 focusable 또는 drawer 자체로 focus, Tab focus trap, 닫히면 이전 focus 복원. `role="dialog"`, `aria-modal="true"`, `AnimatePresence` + `overlayFade`/`flyoverSlide` 로 열림·닫힘 전환. |
 | `EmptyState` | `{ icon: ReactNode; title: string; description?: string; action?: ReactNode }` | |
 | `Skeleton` | `{ lines?: number }` (기본 3) | 줄별 width `90 - i*12`% |
-| `QueryBoundary<T>` | `{ query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }` | isPending→Skeleton(기본 4줄); isError→`EmptyState`(kind 별 메시지: forbidden '접근 권한이 없습니다' / unauthorized '다시 로그인해주세요' / network 는 `detail` 또는 '네트워크 오류' / 기타 `detail`) + "다시 시도" refetch 버튼 |
+| `QueryBoundary<T>` | `{ query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }` | isPending 초기에는 Skeleton(기본 4줄). pending 이 9초를 넘으면 `EmptyState(IconAlertTriangle, '응답 대기 중')` + "다시 시도" refetch 버튼으로 전환한다. isError→`EmptyState`(kind 별 메시지: forbidden '접근 권한이 없습니다' / unauthorized '다시 로그인해주세요' / network 는 `detail` 또는 '네트워크 오류' / 기타 `detail`) + "다시 시도" refetch 버튼 |
 | `Field` | `{ label: string; error?: string; children }` | error 는 `role="alert"` |
 | `KeyValue` | `{ pairs: [string, ReactNode][] }` | `dl.kv` 그리드 |
 | `CodeBlock` | `{ code: string }` | 우상단 "복사"(clipboard.writeText) |
@@ -253,7 +253,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `Stagger` | `frontend/src/shared/motion/index.tsx :: Stagger` | `{ children: ReactNode[] }` — 항목별 `min(i,8) * 0.04s` 지연 FadeSlideIn |
 | `CountUp` | `frontend/src/shared/motion/index.tsx :: CountUp` | `{ value: number }` — rAF 350ms cubic ease-out 카운트, `toLocaleString()` |
 | `AnimatedList<T>` | `frontend/src/shared/motion/index.tsx :: AnimatedList` | `{ items: T[]; getKey: (item) => string; children: (item) => ReactNode }` — 키 기반 layout + enter(y 6)/exit(scale 0.98) |
-| `AnimatedRow` | `frontend/src/shared/motion/index.tsx :: AnimatedRow` | `{ children; className?; onClick? }` — `motion.tr` layout fade, `ResourceTable` 전용 |
+| `AnimatedRow` | `frontend/src/shared/motion/index.tsx :: AnimatedRow` | `{ children; className?; onClick?; onKeyDown?; role?; tabIndex? }` — `motion.tr` layout fade, `ResourceTable` 전용. reduced motion 분기도 동일한 접근성 props 를 유지한다 |
 | `PulseOnChange` | `frontend/src/shared/motion/index.tsx :: PulseOnChange` | `{ signal: string\|number\|undefined; children }` — signal 변경마다 1회 scale 1.35→1 pulse. 최초 수신은 조용히(ref 가드) |
 
 ## 그래프 공통 (`flow/index.tsx`, `flow/flow.css`)

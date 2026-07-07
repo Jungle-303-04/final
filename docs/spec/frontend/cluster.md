@@ -1,5 +1,5 @@
 ---
-source_commit: e7e4caab
+source_commit: f91a4def
 status: synced
 ---
 
@@ -30,16 +30,16 @@ status: synced
 | 심볼 | 앵커 | API | 폴링/옵션 |
 |---|---|---|---|
 | `clusterKeys` | `frontend/src/features/cluster/api.ts :: clusterKeys` | — | `list() = ['clusters']`, `summary(id) = ['clusters', id, 'summary']`, `inv(id, kind) = ['clusters', id, 'inv', kind]` |
-| `useClusters` | `frontend/src/features/cluster/api.ts :: useClusters` | GET `/clusters` → `{clusters: raw[]}` | `{timeoutMs: 8_000}`, 30s 폴링, `select: d.clusters.map(adaptCluster)` |
-| `useClusterSummary` | `frontend/src/features/cluster/api.ts :: useClusterSummary` | GET `/clusters/${id}/inventory/summary` → raw envelope(`latest_snapshot.summary`) | `{timeoutMs: 8_000}`, `(id: string \| undefined)`, `enabled: !!id`, 30s, `select: adaptInventorySummary` → `ClusterSummary` |
-| `usePods` | `frontend/src/features/cluster/api.ts :: usePods` | GET `/clusters/${id}/inventory/resources?resource_type=pod` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, 쿼리키 `inv(id,'pods')`, `enabled: !!id`, 30s, select `d.resources.map(adaptPodResource)` |
-| `useWorkloads` | `frontend/src/features/cluster/api.ts :: useWorkloads` | GET `/clusters/${id}/inventory/workloads` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, 쿼리키 `inv(id,'workloads')`, `enabled: !!id`, 30s, select `d.resources.map(adaptWorkloadResource)` |
-| `useResources` | `frontend/src/features/cluster/api.ts :: useResources` | GET `/clusters/${id}/inventory/resources[?resource_type=]` | `{timeoutMs: 8_000}`, `(id, kind?)`, 쿼리키 kind ?? 'all', `enabled: !!id`, select `d.resources.map(adaptInventoryResource)` |
-| `useServices` | `frontend/src/features/cluster/api.ts :: useServices` | GET `/clusters/${id}/inventory/services` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, `enabled: !!id`, select `d.resources.map(adaptServiceResource)` |
+| `useClusters` | `frontend/src/features/cluster/api.ts :: useClusters` | GET `/clusters` → `{clusters: raw[]}` | `{timeoutMs: 8_000}`, 30s 폴링, `retry:false`, `select: d.clusters.map(adaptCluster)` |
+| `useClusterSummary` | `frontend/src/features/cluster/api.ts :: useClusterSummary` | GET `/clusters/${id}/inventory/summary` → raw envelope(`latest_snapshot.summary`) | `{timeoutMs: 8_000}`, `(id: string \| undefined)`, `enabled: !!id`, 30s, `retry:false`, `select: adaptInventorySummary` → `ClusterSummary` |
+| `usePods` | `frontend/src/features/cluster/api.ts :: usePods` | GET `/clusters/${id}/inventory/resources?resource_type=pod` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, 쿼리키 `inv(id,'pods')`, `enabled: !!id`, 30s, `retry:false`, select `d.resources.map(adaptPodResource)` |
+| `useWorkloads` | `frontend/src/features/cluster/api.ts :: useWorkloads` | GET `/clusters/${id}/inventory/workloads` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, 쿼리키 `inv(id,'workloads')`, `enabled: !!id`, 30s, `retry:false`, select `d.resources.map(adaptWorkloadResource)` |
+| `useResources` | `frontend/src/features/cluster/api.ts :: useResources` | GET `/clusters/${id}/inventory/resources[?resource_type=]` | `{timeoutMs: 8_000}`, `(id, kind?)`, 쿼리키 kind ?? 'all', `enabled: !!id`, `retry:false`, select `d.resources.map(adaptInventoryResource)` |
+| `useServices` | `frontend/src/features/cluster/api.ts :: useServices` | GET `/clusters/${id}/inventory/services` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, `enabled: !!id`, `retry:false`, select `d.resources.map(adaptServiceResource)` |
 | `UsageSample` | `frontend/src/features/cluster/api.ts :: UsageSample` | — | `{ sampled_at: string \| null; usage: Record<string, number> }` |
-| `useClusterUsage` | `frontend/src/features/cluster/api.ts :: useClusterUsage` | GET `/clusters/${id}/usage?limit=288` → `{samples: UsageSample[]}` | `{timeoutMs: 8_000}`, `(id: string \| undefined)`, 쿼리키 `['clusters', id, 'usage']`, `enabled: !!id`, 60s, select `.samples`. 스냅샷마다 적재되는 실측 usage 롤업 시계열(인벤토리 기반 장기 추이 — 브라우저 스트림과 별개). [metrics](./metrics.md) 가 소비 |
-| `useClusterEvents` | `frontend/src/features/cluster/api.ts :: useClusterEvents` | GET `/clusters/${id}/inventory/events` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, `enabled: !!id`, select `d.resources.map(adaptK8sEventResource)` |
-| `useInventoryResourceDetail` | `frontend/src/features/cluster/api.ts :: useInventoryResourceDetail` | GET `/clusters/${id}/inventory/resource-detail?resource_type=&kind=&name=&namespace=` → `{resource, related, events}` | `{timeoutMs: 8_000}`, node/service/workload/pod Drawer의 정본 API. 문자열 필터 대신 backend가 `involvedObject`와 selector/owner 관계를 계산한다. 30s refetch |
+| `useClusterUsage` | `frontend/src/features/cluster/api.ts :: useClusterUsage` | GET `/clusters/${id}/usage?limit=288` → `{samples: UsageSample[]}` | `{timeoutMs: 8_000}`, `(id: string \| undefined)`, 쿼리키 `['clusters', id, 'usage']`, `enabled: !!id`, 60s, `retry:false`, select `.samples`. 스냅샷마다 적재되는 실측 usage 롤업 시계열(인벤토리 기반 장기 추이 — 브라우저 스트림과 별개). [metrics](./metrics.md) 가 소비 |
+| `useClusterEvents` | `frontend/src/features/cluster/api.ts :: useClusterEvents` | GET `/clusters/${id}/inventory/events` → `{resources: raw[]}` | `{timeoutMs: 8_000}`, `enabled: !!id`, `retry:false`, select `d.resources.map(adaptK8sEventResource)` |
+| `useInventoryResourceDetail` | `frontend/src/features/cluster/api.ts :: useInventoryResourceDetail` | GET `/clusters/${id}/inventory/resource-detail?resource_type=&kind=&name=&namespace=` → `{resource, related, events}` | `{timeoutMs: 8_000}`, node/service/workload/pod Drawer의 정본 API. 문자열 필터 대신 backend가 `involvedObject`와 selector/owner 관계를 계산한다. 30s refetch, `retry:false` |
 | `useScale` | `frontend/src/features/cluster/api.ts :: useScale` | POST `/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/scale` body `{replicas}` | `(clusterId)` → mutation `({ns, name, replicas})`. 성공: toast info `'스케일 명령을 큐에 등록했습니다'` + `clusterKeys.list()` invalidate. 실패: toast danger(`commandFailureMessage`) |
 | `useRestart` | `frontend/src/features/cluster/api.ts :: useRestart` | POST `/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart` | 성공: toast info `'재시작 명령을 큐에 등록했습니다'`. 실패: toast danger(`commandFailureMessage`) |
 
