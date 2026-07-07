@@ -5,7 +5,7 @@ import { Badge, Breadcrumbs, Button, Card, CodeBlock, EmptyState, KeyValue, Quer
 import { PlanDiff } from '@/shared/ui/plan-diff';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
-import { IconClock } from '@/shared/ui/icons';
+import { IconClock, IconFile, IconSend } from '@/shared/ui/icons';
 import { useConsolePath } from '@/features/console/ui';
 
 const STEP_ORDER = ['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING', 'SUCCEEDED'];
@@ -36,7 +36,7 @@ export default function RepoDetailView() {
       )}</QueryBoundary>
       <QueryBoundary query={appQ}>{app => (
         <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', margin: '-8px 0 12px' }}>
-          manifest <code>{app.manifest_path}</code> · 커밋 감지 시 run 생성
+          manifest <code>{app.manifest_path}</code>
         </p>
       )}</QueryBoundary>
       <Tabs current={tab} onChange={k => setSp({ tab: k })} items={[
@@ -47,7 +47,7 @@ export default function RepoDetailView() {
       ]} />
       {tab === 'runs' && (
         <QueryBoundary query={runsQ}>{rs => rs.length === 0
-          ? <EmptyState icon={<IconClock size={26} />} title="첫 커밋 감지 대기 중" description="변경 감지 시 run 이 생성됩니다" />
+          ? <EmptyState icon={<IconClock size={26} />} title="첫 커밋 감지 대기 중" />
           : <Stagger>{rs.map(r => (
               <Card key={r.run_id} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -95,7 +95,7 @@ export default function RepoDetailView() {
       )}
       {tab === 'safe-pr' && (
         !safePrRun?.safe_pr
-          ? <EmptyState icon="🤖" title="Safe PR 이력이 없습니다" description="AI 가 수정을 준비하면 여기 표시됩니다" />
+          ? <EmptyState icon={<IconFile size={26} />} title="Safe PR 이력이 없습니다" />
           : <Card title={`Safe PR — ${shortSha(safePrRun.commit_sha)}`}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
                 <Badge status={safePrRun.safe_pr.status} />
@@ -109,7 +109,7 @@ export default function RepoDetailView() {
                 </div>
               )}
               {safePrRun.safe_pr.error && (
-                <Link to={pathFor(`/ai?prefill=${encodeURIComponent(`Safe PR 실패 원인 분석: ${safePrRun.safe_pr.error}`)}`)}><Button>✦ AI에게 원인 묻기</Button></Link>
+                <Link to={pathFor(`/ai?prefill=${encodeURIComponent(`Safe PR 실패 원인 분석: ${safePrRun.safe_pr.error}`)}`)}><Button><IconSend size={14} />AI 분석</Button></Link>
               )}
             </Card>
       )}
