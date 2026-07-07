@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 04:05 KST (콘솔 디자인 시스템 Phase 0/1 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 04:20 KST (콘솔 디자인 시스템 Phase 2 인증 화면 이관)
 
 ## 체크포인트 — evidence claim-check 라이브 안정화 완료
 
@@ -61,6 +61,25 @@
   1. Phase 2 첫 화면은 로그인/가입이다. `features/auth/*`의 inline style과 `shared/ui` 의존을 `src/ui` 프리미티브로 이관하고, 화면 이관 완료 후 관련 레거시 스타일 사용을 제거한다.
   2. 앱 셸 이관 전까지 `plural-ui`/`shared/ui`/`theme-bridge`는 유지한다. 화면 단위로 공존 기간을 줄인다.
   3. 자동 Actions 실패는 코드 실패가 아니므로 다음 배포도 run 상세의 steps 유무를 먼저 확인한다. steps 없는 4~6초 실패가 반복되면 수동 console/backend 배포 경로를 사용한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 인증 화면 이관
+
+- 구현:
+  - `/login`, `/signup`, `/pending`, `/verify-email`와 공통 `AuthLayout`을 `frontend/src/ui` 프리미티브와 Tailwind semantic token 기반으로 재구성했다.
+  - 인증 화면 내부의 `@/shared/ui`, `@/shared/motion`, `plural-ui` import를 제거했다.
+  - 인증 화면 내부 inline `style=`, raw hex, px 하드코딩 grep 0건.
+  - 버튼/링크 라벨은 `가입`, `로그인`, `로그인 재시도`, `검증 메일 재전송`처럼 한국어 명사형으로 맞췄다.
+  - 로그인/가입/검증 메일 재전송 mutation에 pending 버튼 상태와 성공/실패 토스트를 추가했다. 승인 대기/실패 사유도 토스트와 필드 오류로 노출한다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm run build` passed. 기존 large chunk warning만 있음.
+  - Playwright 로컬 검수: `/login`, `/signup`, `/pending?email=operator@example.com`, `/verify-email`, `/verify-email?verified=1`를 1440/1024/390 폭에서 캡처했고 horizontal overflow 0.
+  - screenshots: `/tmp/k8s-auth-login-desktop.png`, `/tmp/k8s-auth-signup-mobile.png`, `/tmp/k8s-auth-verify-mobile.png` 등.
+  - 로컬 dev proxy의 `GET /api/auth/session` 500이 콘솔에 찍히지만, 화면 렌더 오류가 아니라 로컬 백엔드 세션 확인 응답이다.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live `/login`, `/signup`, `/verify-email` asset 반영을 확인한다.
+  2. 다음 화면 순서는 앱 셸(사이드바·헤더·알림)이다. `features/console/ui.tsx`의 inline style과 `plural-ui`/`console.css` 의존을 `src/ui` 토큰/프리미티브로 이관한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
