@@ -1,20 +1,20 @@
 # 뷰: AI 채팅
 
-[← 지도](../README.md) · 요구사항 [R10](../01-requirements.md#r10-ai-채팅) · 참조: 외부 기준 AI, Claude/Codex 승인 UX
+[← 지도](../README.md) · 요구사항 [R10](../01-requirements.md#r10-ai-채팅) · 참조: 외부 기준 AI와 승인 UX
 
 요구 흐름: "채팅 주고받고 → 권한/선택 창 → 선택하면 실행".
 백엔드 실체 매핑(정합성 핵심):
 
-| Claude식 개념 | 우리 백엔드 실체 |
+| 외부 기준 개념 | 우리 백엔드 실체 |
 |---|---|
 | 채팅 왕복 | `GET /ai/conversations`, `POST /ai/conversations`, `POST .../messages`, `GET /ai/conversations/{id}` 폴링 |
 | 도구 실행 제안 | assistant 메시지 metadata(도구 호출 기록) + RCA recovery plan 의 action 후보 |
 | 선택 창 | recovery action 선택: `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select` |
 | 실행 승인 | approval: `POST /approvals/{approval_id}/grant\|reject` |
 
-## 목록 — ChatListView (/ai)
+## 목록+대화 — ChatView (/ai)
 
-좌측 대화 목록(제목·시각·상태 dot) + [새 대화].
+좌측 대화 목록(제목·시각·상태 dot) + [새 대화]를 `ChatView`가 함께 렌더한다.
 데이터: `GET /ai/conversations` (G10 코드 반영).
 새 대화: 첫 메시지 입력 → `POST /ai/conversations` → /ai/:id 이동.
 

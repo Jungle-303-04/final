@@ -18,6 +18,7 @@ status: synced
 |---|---|---|---|
 | import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptCluster`, `adaptInventorySummary`, `adaptWorkloadResource`, `adaptServiceResource`, `adaptK8sEventResource`, `adaptInventoryResource`), `@/shared/lib/live`(`liveStore`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·실시간·UI (인벤토리 응답은 전부 adapt 경유) |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 스케일/재시작 버튼 활성 |
+| import | `@/features/fleet/api`(`useClusterAgg`) | [fleet](./fleet.md) | 상세 상단 집계 요약 보조 패널 |
 | import | `@/features/notifications/api`(`useTimeline`) | [notifications](./notifications.md) | 캐시 공유용 참조(`void useTimeline`) |
 | import | `@/features/resources/RegisterClusterWizard` | [resources](./resources.md) | 목록 화면의 등록 위저드 |
 | 백엔드 | `/clusters/*` | [api-gateway](../services/gateway-api-gateway.md) | 인벤토리·명령 API |
@@ -47,8 +48,9 @@ status: synced
 
 - 라우트: `/clusters`.
 - state: `wizard: boolean`. 훅: `useClusters`, `useNavigate`, `useSearchFilter`(검색 대상 `` `${name} ${cluster_id} ${environment}` ``).
-- 트리: 헤더(h1 '클러스터' + primary "+ 클러스터 등록" → wizard open) → `SearchInput` → `Card > QueryBoundary > ResourceTable<Cluster>` → `RegisterClusterWizard(open, onClose)`.
+- 트리: `PageHeader('클러스터', sub, actions=primary "+ 클러스터 등록" → wizard open)` → `SearchInput` → `Card > QueryBoundary > ResourceTable<Cluster>` → `RegisterClusterWizard(open, onClose)`.
 - 테이블 열: 이름(b) / 환경(`Badge tone=neutral`) / 연결(`Badge status`) / 노드 / 팟 / 인시던트(>0 이면 `Badge tone=danger`, 아니면 '—') / 등록(`timeAgo`). 행 클릭 → `/clusters/${cluster_id}`.
+- `ResourceTable.empty`: 검색어가 있으면 `EmptyState(GlobeIcon, "'<검색어>' 검색 결과가 없습니다", "이름·환경·cluster_id 로 검색합니다")`; 검색어가 없으면 `EmptyState(GlobeIcon, "등록된 클러스터가 없습니다", "클러스터를 등록하고 에이전트가 연결되면 실측 인벤토리가 표시됩니다", action=첫 클러스터 등록)`.
 
 ### `frontend/src/features/cluster/ClusterDetailView.tsx :: ClusterDetailView` (default export)
 
@@ -62,8 +64,9 @@ status: synced
   ```
   FadeSlideIn
   ├─ Breadcrumbs [클러스터 → 이름]
-  ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status)) · Link(/metrics?cluster=<id>) "메트릭 보기"
-  ├─ StatBox ×4: 노드 / 실행 팟(pod_phases['Running'], ok) / 비정상 팟(CrashLoopBackOff+Pending, Crash>0 이면 danger) / 서비스
+  ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status), flex wrap) · Link(/metrics?cluster=<id>) "메트릭 보기"
+  ├─ StatBox ×4: 노드 / 실행 팟(pod_phases['Running'], ok) / 비정상 팟(CrashLoopBackOff+Pending, Crash>0 이면 danger) / 서비스 (flex wrap)
+  ├─ ClusterAggPanel: GET /clusters/{id}/summary 보조 패널(사용량 + 열린 인시던트, 실패해도 본문 차단 안 함)
   ├─ Tabs (setSp({tab}))
   ├─ 탭 콘텐츠: WorkloadsTab | 팟 테이블 | 노드 테이블 | ServicesTab | ResourcesTab | EventsTab
   ├─ Drawer(openPod) — KeyValue(상태/네임스페이스/재시작/노드/이미지/Ready) + Link(/ai?prefill=<ns/pod 팟 상태를 분석해줘>) "✦ 이 팟 분석"
@@ -79,14 +82,15 @@ status: synced
 - `ServicesTab` — 이름/네임스페이스/타입/ClusterIP(code)/포트.
 - `ResourcesTab` — Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
 - `EventsTab` — 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
+- `ClusterAggPanel` — `useClusterAgg(clusterId)` 결과가 pending 이면 null, error 면 회색 문구와 "다시 시도" 버튼. 성공 시 `Card('집계 요약 — 사용량 · 열린 인시던트')` 에 CPU/MEM/재시작 누적/열린 인시던트를 표시하고, 열린 인시던트는 최대 5개까지 `/incidents/<id>` 링크로 렌더한다.
 
 ## 라우트
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/clusters` | `ClusterListView` | `RequireSession`+`AppShell` | 목록 + 등록 위저드 |
-| `/clusters/:clusterId` | `ClusterDetailView` | `RequireSession`+`AppShell` | 상세, `?tab=`·`?q=` |
-| `/clusters/:clusterId/pods/:namespace/:pod` | `ClusterDetailView` | `RequireSession`+`AppShell` | 팟 Drawer 딥링크 |
+| `/clusters` | `ClusterListView` | `RequireSession`+`ConsoleLayout` | 목록 + 등록 위저드 |
+| `/clusters/:clusterId` | `ClusterDetailView` | `RequireSession`+`ConsoleLayout` | 상세, `?tab=`·`?q=` |
+| `/clusters/:clusterId/pods/:namespace/:pod` | `ClusterDetailView` | `RequireSession`+`ConsoleLayout` | 팟 Drawer 딥링크 |
 
 ## 불변식·오류 (Invariants & Errors)
 

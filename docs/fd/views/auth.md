@@ -23,7 +23,7 @@
 | 항목 | 내용 |
 |---|---|
 | 폼 | email(형식 검증), password(min 8) — zod 스키마는 백엔드 `LoginRequest` 제약과 동일 |
-| API | `POST /auth/login` → 성공: `['session']` invalidate 후 returnTo 또는 /overview |
+| API | `POST /auth/login` → 성공: `['session']` invalidate 후 returnTo 또는 / |
 | 에러 | 401 "이메일 또는 비밀번호가 올바르지 않습니다" / 429(rate limit) "잠시 후 다시 시도" + 남은 시간 / **403 detail 분기**(백엔드 실측): 검증 필요 → 재발송 안내, 승인 대기 → /pending?email= 이동 |
 | 모션 | 카드 FadeSlideIn, 에러 시 카드 x축 shake 1회(모션 프리미티브 외 유일한 예외 — PressScale 변형으로 구현) |
 

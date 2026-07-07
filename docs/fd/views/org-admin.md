@@ -3,7 +3,7 @@
 [← 지도](../README.md) · 요구사항 [R2·R3](../01-requirements.md#r2-조직-생성--r3-조직원그룹-생성) · API [G1·G2·G3](../06-api-map.md#갭-상태-표)
 
 `/settings/*` 하위, RequireAdmin. G1~G3의 1차 운영 API는 `src/domains/identity/admin_router.py`에 붙어 있다.
-참조 UX: 외부 기준 콘솔 Settings > User Management, Backstage 조직 모델([02](../02-reference-map.md)).
+참조 UX: 외부 기준 콘솔 Settings > User Management, 외부 기준 조직 모델([02](../02-reference-map.md)).
 
 ## 공통 패턴
 
