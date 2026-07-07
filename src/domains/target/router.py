@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import time
@@ -53,6 +54,7 @@ from packages.contracts.gateway.requests import (
     TargetRegisterRequest,
 )
 from packages.contracts.gateway.responses import (
+    BootstrapStep,
     ClusterConnectionStatusResponse,
     ClusterListResponse,
     ClusterResponse,
@@ -118,8 +120,13 @@ BLOCKED_TEST_CLUSTER_IDS = {"bruno-api-test"}
 BLOCKED_TEST_CLUSTER_NAME_PARTS = ("bruno api test",)
 CLUSTER_ID_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 AGENT_STATUS_NOT_REGISTERED = "not_registered"
+AGENT_STATUS_PENDING_INSTALL = ClusterRegistrationStatus.PENDING_INSTALL.value
+AGENT_STATUS_INSTALL_EXPIRED = ClusterRegistrationStatus.INSTALL_EXPIRED.value
 TARGET_AGENT_IMAGE_NOT_CONFIGURED = "target agent image is not configured"
 MANAGEMENT_BASE_URL_NOT_CONFIGURED = "management base URL is not configured"
+TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV = "TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS"
+TARGET_REGISTRATION_AUTO_DELETE_EXPIRED_ENV = "TARGET_REGISTRATION_AUTO_DELETE_EXPIRED"
+DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS = 1800
 
 router = APIRouter()
 # per-cluster 토큰 인증 — lease 의 workspace/cluster 는 토큰 identity 에서만 취함.
@@ -185,6 +192,42 @@ def public_management_base_url() -> str:
     return ""
 
 
+def target_registration_connect_timeout_seconds() -> int:
+    raw = env(
+        TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS_ENV,
+        str(DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS),
+    )
+    try:
+        return max(60, int(raw))
+    except ValueError:
+        return DEFAULT_TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS
+
+
+def connect_expires_at_from(created_at: datetime, timeout_seconds: int) -> str:
+    return (created_at + timedelta(seconds=timeout_seconds)).isoformat()
+
+
+def shell_quote(value: object) -> str:
+    return shlex.quote(str(value))
+
+
+def provider_config_text(payload: TargetRegisterRequest, key: str, default: str = "") -> str:
+    value = payload.provider_config.get(key, default)
+    return str(value).strip() if value is not None else ""
+
+
+def require_provider_config(payload: TargetRegisterRequest, *keys: str) -> dict[str, str]:
+    values = {key: provider_config_text(payload, key) for key in keys}
+    missing = [key for key, value in values.items() if not value]
+    if missing:
+        joined = ", ".join(missing)
+        raise HTTPException(
+            status_code=422,
+            detail=f"provider_config is missing required fields: {joined}",
+        )
+    return values
+
+
 def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> TargetRegisterRequest:
     updates: dict[str, str] = {}
     if payload.apply and "deploy_provider" not in payload.model_fields_set:
@@ -205,9 +248,38 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
     return payload.model_copy(update=updates) if updates else payload
 
 
+def slugify_cluster_name(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "cluster"
+
+
+def generated_cluster_id(name: str) -> str:
+    suffix = f"{secrets.randbelow(10_000):04d}"
+    base = slugify_cluster_name(name)[:58].strip("-") or "cluster"
+    return f"{base}-{suffix}"
+
+
+def resolve_target_cluster_id(payload: TargetRegisterRequest, workspace_id: str, db: Any) -> str:
+    explicit = (payload.cluster_id or "").strip()
+    if explicit:
+        if not CLUSTER_ID_PATTERN.match(explicit):
+            raise HTTPException(
+                status_code=422,
+                detail="cluster_id must use lowercase letters, numbers, and hyphens",
+            )
+        return explicit
+    getter = getattr(db, "get_cluster_registration", None)
+    for _ in range(20):
+        candidate = generated_cluster_id(payload.name)
+        if not callable(getter) or getter(workspace_id, candidate) is None:
+            return candidate
+    raise HTTPException(status_code=409, detail="cluster_id generation collided")
+
+
 def reject_test_target(payload: TargetRegisterRequest) -> None:
     name = payload.name.lower()
-    if payload.cluster_id in BLOCKED_TEST_CLUSTER_IDS or any(
+    if (payload.cluster_id or "") in BLOCKED_TEST_CLUSTER_IDS or any(
         marker in name for marker in BLOCKED_TEST_CLUSTER_NAME_PARTS
     ):
         raise HTTPException(status_code=422, detail="test target registrations are not allowed")
@@ -243,6 +315,22 @@ def validate_target_install_providers(payload: TargetRegisterRequest) -> None:
                 f"deploy_provider={DIRECT_APPLY_DEPLOY_PROVIDER}"
             ),
         )
+
+
+def validate_target_bootstrap_config(payload: TargetRegisterRequest) -> None:
+    if payload.cloud_provider == "eks":
+        require_provider_config(payload, "region", "eks_cluster_name")
+    if payload.cloud_provider == "gke":
+        values = require_provider_config(
+            payload, "project_id", "location_type", "location", "gke_cluster_name"
+        )
+        if values["location_type"] not in {"region", "zone"}:
+            raise HTTPException(
+                status_code=422,
+                detail="provider_config.location_type must be region or zone",
+            )
+    if payload.cloud_provider == "aks":
+        require_provider_config(payload, "resource_group", "aks_cluster_name")
 
 
 def target_agent_image_ready(image: str = "") -> bool:
@@ -391,21 +479,123 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    return f"curl -fsSL {base}{path} | kubectl apply -f -"
+    return f"curl -fsSL {shell_quote(f'{base}{path}')} | kubectl apply -f -"
+
+
+def kubectl_apply_command(
+    payload: TargetRegisterRequest, agent_token: str, context: str = ""
+) -> str:
+    base = payload.management_base_url.strip().rstrip("/")
+    if not base:
+        return ""
+    path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
+    kubectl = "kubectl"
+    if context:
+        kubectl = f"kubectl --context {shell_quote(context)}"
+    return f"curl -fsSL {shell_quote(f'{base}{path}')} | {kubectl} apply -f -"
+
+
+def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
+    cloud_provider = payload.cloud_provider.strip()
+    base_install = install_command_for(payload, agent_token)
+    if cloud_provider == "eks":
+        values = require_provider_config(payload, "region", "eks_cluster_name")
+        context_alias = provider_config_text(payload, "context_alias", payload.cluster_id or "")
+        return (
+            "aws eks update-kubeconfig "
+            f"--region {shell_quote(values['region'])} "
+            f"--name {shell_quote(values['eks_cluster_name'])} "
+            f"--alias {shell_quote(context_alias)} "
+            f"&& kubectl --context {shell_quote(context_alias)} get nodes "
+            f"&& {kubectl_apply_command(payload, agent_token, context_alias)}"
+        )
+    if cloud_provider == "gke":
+        values = require_provider_config(
+            payload, "project_id", "location_type", "location", "gke_cluster_name"
+        )
+        if values["location_type"] not in {"region", "zone"}:
+            raise HTTPException(
+                status_code=422,
+                detail="provider_config.location_type must be region or zone",
+            )
+        location_flag = "--zone" if values["location_type"] == "zone" else "--region"
+        return (
+            "gcloud container clusters get-credentials "
+            f"{shell_quote(values['gke_cluster_name'])} "
+            f"--project {shell_quote(values['project_id'])} "
+            f"{location_flag} {shell_quote(values['location'])} "
+            f"&& kubectl get nodes "
+            f"&& {base_install}"
+        )
+    if cloud_provider == "aks":
+        values = require_provider_config(payload, "resource_group", "aks_cluster_name")
+        return (
+            "az aks get-credentials "
+            f"--resource-group {shell_quote(values['resource_group'])} "
+            f"--name {shell_quote(values['aks_cluster_name'])} "
+            "--overwrite-existing "
+            f"&& kubectl get nodes "
+            f"&& {base_install}"
+        )
+    if cloud_provider == "existing-k8s":
+        context = provider_config_text(payload, "context_name", payload.kube_context or "")
+        if context:
+            return (
+                f"kubectl --context {shell_quote(context)} get nodes "
+                f"&& {kubectl_apply_command(payload, agent_token, context)}"
+            )
+        return base_install
+    if cloud_provider == "kind":
+        name = provider_config_text(
+            payload, "kind_cluster_name", payload.name or payload.cluster_id
+        )
+        context = f"kind-{name.removeprefix('kind-')}"
+        return (
+            f"kubectl --context {shell_quote(context)} get nodes "
+            f"&& {kubectl_apply_command(payload, agent_token, context)}"
+        )
+    if cloud_provider == "minikube":
+        context = provider_config_text(payload, "profile", "minikube")
+        return (
+            f"kubectl --context {shell_quote(context)} get nodes "
+            f"&& {kubectl_apply_command(payload, agent_token, context)}"
+        )
+    return base_install
+
+
+def bootstrap_steps_for(payload: TargetRegisterRequest, command: str) -> list[BootstrapStep]:
+    steps = [
+        BootstrapStep(label="kubeconfig 확인", command="kubectl config current-context"),
+    ]
+    if command:
+        steps.append(BootstrapStep(label="target agent 설치", command=command))
+    steps.append(BootstrapStep(label="연결 확인", command="kubectl -n target get pods"))
+    return steps
 
 
 def install_response(
-    payload: TargetRegisterRequest, manifest: str, apply_output: str | None, agent_token: str
+    payload: TargetRegisterRequest,
+    manifest: str,
+    apply_output: str | None,
+    agent_token: str,
+    *,
+    connect_timeout_seconds: int | None = None,
+    connect_expires_at: str | None = None,
 ) -> TargetInstallResponse:
+    bootstrap_command = bootstrap_command_for(payload, agent_token)
     return TargetInstallResponse(
         registered=True,
         cluster_id=payload.cluster_id,
-        status=ClusterRegistrationStatus.REGISTERED.value,
+        status=ClusterRegistrationStatus.PENDING_INSTALL.value,
         applied=apply_output is not None,
         apply_output=apply_output,
         install_manifest=manifest,
         agent_token=agent_token,
         install_command=install_command_for(payload, agent_token),
+        bootstrap_command=bootstrap_command,
+        bootstrap_steps=bootstrap_steps_for(payload, bootstrap_command),
+        connect_timeout_seconds=connect_timeout_seconds,
+        connect_expires_at=connect_expires_at,
     )
 
 
@@ -442,15 +632,56 @@ def cluster_connection_status(agent: dict[str, Any] | None) -> str:
     )
 
 
+def registration_connect_timeout(registration: dict[str, Any] | None) -> int | None:
+    settings = (registration or {}).get("settings") or {}
+    value = settings.get("connect_timeout_seconds")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def registration_connect_expires_at(registration: dict[str, Any] | None) -> str | None:
+    settings = (registration or {}).get("settings") or {}
+    value = settings.get("connect_expires_at")
+    return str(value) if value else None
+
+
+def registration_connection_status(
+    registration: dict[str, Any] | None,
+    latest_agent: dict[str, Any] | None,
+) -> str:
+    agent_status = cluster_connection_status(latest_agent)
+    if latest_agent is not None:
+        return agent_status
+    if registration is None:
+        return AGENT_STATUS_NEVER_CONNECTED
+    status = str(registration.get("status") or "")
+    expires_at = parse_timestamp(registration_connect_expires_at(registration))
+    if status == ClusterRegistrationStatus.PENDING_INSTALL.value:
+        if expires_at is not None and datetime.now(UTC) > expires_at:
+            return AGENT_STATUS_INSTALL_EXPIRED
+        return AGENT_STATUS_PENDING_INSTALL
+    if status == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
+        return AGENT_STATUS_INSTALL_EXPIRED
+    return agent_status
+
+
 def cluster_summary(cluster: dict[str, Any], latest_agent: dict[str, Any] | None) -> ClusterSummary:
+    connection_status = registration_connection_status(cluster, latest_agent)
+    status = (
+        ClusterRegistrationStatus.INSTALL_EXPIRED.value
+        if connection_status == AGENT_STATUS_INSTALL_EXPIRED
+        else cluster["status"]
+    )
     return ClusterSummary(
         workspace_id=cluster["workspace_id"],
         cluster_id=cluster["cluster_id"],
         name=cluster["name"],
         environment=cluster["environment"],
-        status=cluster["status"],
+        status=status,
         settings=cluster.get("settings") or {},
-        connection_status=cluster_connection_status(latest_agent),
+        connection_status=connection_status,
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_agent_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         created_at=cluster.get("created_at"),
@@ -487,6 +718,13 @@ def inventory_counts(counts: list[dict[str, Any]]) -> dict[str, int]:
         resource_type = str(row.get("resource_type") or "")
         totals[resource_type] = totals.get(resource_type, 0) + int(row.get("count") or 0)
     return totals
+
+
+def target_register_payload_from_settings(settings: dict[str, Any]) -> TargetRegisterRequest:
+    allowed = set(TargetRegisterRequest.model_fields)
+    return TargetRegisterRequest(
+        **{key: value for key, value in settings.items() if key in allowed}
+    )
 
 
 # require_admin_session 이 세션을 검증 → base router 에 둠.
@@ -557,12 +795,14 @@ async def register_target(
     events: Any = Depends(get_events),
 ) -> TargetInstallResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    cluster_id = resolve_target_cluster_id(payload, workspace_id, db)
     scoped_payload = normalize_target_provider_defaults(payload).model_copy(
-        update={"workspace_id": workspace_id}
+        update={"workspace_id": workspace_id, "cluster_id": cluster_id}
     )
     reject_test_target(scoped_payload)
     require_management_base_url(scoped_payload)
     validate_target_install_providers(scoped_payload)
+    validate_target_bootstrap_config(scoped_payload)
     components = target_desired_components(scoped_payload)
     version = desired_state_version(components)
 
@@ -575,6 +815,12 @@ async def register_target(
         if scoped_payload.apply
         else None
     )
+    connect_timeout_seconds = target_registration_connect_timeout_seconds()
+    created_at = datetime.now(UTC)
+    connect_expires_at = connect_expires_at_from(created_at, connect_timeout_seconds)
+    registration_settings = scoped_payload.model_dump(exclude={"apply", "kube_context"})
+    registration_settings["connect_timeout_seconds"] = connect_timeout_seconds
+    registration_settings["connect_expires_at"] = connect_expires_at
 
     # 클러스터 등록·정책·desired-state·이벤트 스테이징을 한 트랜잭션으로 —
     # 부분 실패 시 정책/desired-state 없는 반쪽 등록(고아)이 남지 않음.
@@ -586,10 +832,9 @@ async def register_target(
                 "cluster_id": scoped_payload.cluster_id,
                 "name": scoped_payload.name,
                 "environment": scoped_payload.environment,
+                "status": ClusterRegistrationStatus.PENDING_INSTALL.value,
                 "agent_token_hash": hash_agent_token(agent_token),
-                "settings": scoped_payload.model_dump(
-                    exclude={"apply", "kube_context"},
-                ),
+                "settings": registration_settings,
             }
         )
         if db.get_cluster_policy(workspace_id, scoped_payload.cluster_id) is None:
@@ -614,7 +859,14 @@ async def register_target(
                 requested_by=current.user_id,
             )
         )
-    return install_response(scoped_payload, manifest, apply_output, agent_token)
+    return install_response(
+        scoped_payload,
+        manifest,
+        apply_output,
+        agent_token,
+        connect_timeout_seconds=connect_timeout_seconds,
+        connect_expires_at=connect_expires_at,
+    )
 
 
 @router.get(gateway_routes.INSTALL_MANIFEST_PATH, include_in_schema=True)
@@ -634,7 +886,7 @@ async def install_manifest_by_token(
     registration = db.get_cluster_registration(identity["workspace_id"], identity["cluster_id"])
     if registration is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="install link not found")
-    payload = TargetRegisterRequest(**(registration.get("settings") or {}))
+    payload = target_register_payload_from_settings(registration.get("settings") or {})
     manifest = target_install_manifest(payload, agent_token)
     return PlainTextResponse(manifest, media_type="text/yaml")
 
@@ -724,14 +976,17 @@ async def get_cluster_connection_status(
         cluster_id,
         Permission.CLUSTER_READ.value,
     )
+    registration = db.get_cluster_registration(workspace_id, cluster_id)
     agents = db.list_cluster_agent_statuses(workspace_id, cluster_id)
     latest_agent = agents[0] if agents else None
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
-        connection_status=cluster_connection_status(latest_agent),
+        connection_status=registration_connection_status(registration, latest_agent),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         agents=agents,
+        connect_timeout_seconds=registration_connect_timeout(registration),
+        connect_expires_at=registration_connect_expires_at(registration),
     )
 
 

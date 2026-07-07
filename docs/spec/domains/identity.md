@@ -54,6 +54,7 @@ status: synced
 | 메서드 | 경로 | 핸들러 앵커 | 요청 모델 | 응답 모델 | 권한(의존성) |
 |---|---|---|---|---|---|
 | GET | `/auth/session` (`AUTH_SESSION_PATH`) | `src/domains/identity/router.py :: session` | — | `AuthSessionResponse` | `require_session` |
+| POST | `/auth/check-email` (`AUTH_CHECK_EMAIL_PATH`) | `src/domains/identity/router.py :: check_email` | `EmailCheckRequest` | `EmailCheckResponse` | 없음(공개) + 이메일/client rate limit |
 | POST | `/auth/signup` (`AUTH_SIGNUP_PATH`) | `src/domains/identity/router.py :: signup` | `SignupRequest` | `EmailVerificationResponse` | 없음(공개) + `get_password_auth`, `get_events` |
 | POST | `/auth/resend-verification` (`AUTH_RESEND_VERIFICATION_PATH`) | `src/domains/identity/router.py :: resend_verification` | `ResendEmailVerificationRequest` | `EmailVerificationResponse` | 없음(공개) + `get_password_auth`, `get_events` |
 | POST | `/auth/login` (`AUTH_LOGIN_PATH`) | `src/domains/identity/router.py :: login` | `LoginRequest` | `AuthSessionResponse` (+ 세션 쿠키 set) | 없음(공개) + `get_password_auth` |
@@ -64,9 +65,11 @@ status: synced
 요청/응답 모델 스키마 (정의: `src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`):
 
 - `SignupRequest`: `email: str` (패턴 `^[^@\s]+@[^@\s]+\.[^@\s]+$`), `password: str` (min_length=8), `password_confirm: str` (min_length=8)
+- `EmailCheckRequest`: `email: str` (동일 패턴). 가입 폼 저장 전 중복 확인 전용.
 - `LoginRequest`: `email: str` (동일 패턴), `password: str` (min_length=8)
 - `ResendEmailVerificationRequest`: `email: str` (동일 패턴), `password: str` (min_length=8)
 - `AuthSessionResponse`: `authenticated: bool`, `user_id: str`, `roles: list[str]`, `workspace_id: str`
+- `EmailCheckResponse`: `available: bool`, `reason_code: str = ""`, `detail: str = ""`, `retry_after: int | None = None`. 중복이면 `available=false`, `reason_code="already_registered"`이고, rate limit은 429 detail에 `code/detail/retry_after`를 담는다.
 - `EmailVerificationResponse`: `accepted: bool`, `verification_required: bool`, `email: str | None = None`
 - `UserApprovalResponse`: `accepted: bool`, `user_id: str`, `status: str`, `role: str`, `workspace_id: str`
 - `LogoutResponse`: `authenticated: bool`
@@ -392,6 +395,7 @@ Upsert 정책(비공개 헬퍼들의 계약, 재구성에 필요):
    - 저장소 계층(`complete_email_verification`): 활성 service_admin 존재 시 `pending_approval`/`user`, 최초 사용자면 `active`/`service_admin` + 기본 workspace/org/그룹 OWNER·MANAGER 편입.
 3. `POST /auth/users/{user_id}/approve` (admin): `password_auth.approve_user(user_id, workspace_id)` — workspace_id 는 admin 세션의 `workspace_id`(없으면 `DEFAULT_WORKSPACE_ID="default"`). 저장소 `approve_user` 는 `pending_approval` 사용자만 `active`/`user` 로 전환하고 조직 MEMBER + 기본그룹 MEMBER 로 편입.
 4. `POST /auth/resend-verification`: `password_auth.resend_email_verification(email, password, client_key)` 가 `None` 이면(재발송 불필요/불가) `verification_required=False` 로 응답 — 계정 존재 여부를 노출하지 않음.
+5. `POST /auth/check-email`: 이메일 존재 여부 탐색 공격을 줄이기 위해 rate limit을 먼저 적용한다. 정상 응답은 `{available, reason_code}`이고, 초과 시 `code="rate_limited"` 및 `retry_after`를 포함한다.
 
 ### 세션 쿠키
 

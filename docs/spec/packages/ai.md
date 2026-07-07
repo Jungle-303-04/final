@@ -3,13 +3,14 @@ source_commit: 1616d295
 status: synced
 ---
 
-# packages/ai — AI 공유 커널(LLM 게이트웨이·에이전트 베이스·대화 엔진·도구 레지스트리)
+# packages/ai — AI 공유 커널(LLM 게이트웨이·에이전트 베이스·대화 엔진·도구 레지스트리·RCA 룰 검증)
 
-> 소스: `src/packages/ai/` · 테스트: `tests/test_ai_agent.py`, `tests/test_ai_engine.py`, `tests/test_ai_tool_registry.py`, `tests/test_llm_gateway_retry.py`
+> 소스: `src/packages/ai/` · 테스트: `tests/test_ai_agent.py`, `tests/test_ai_engine.py`, `tests/test_ai_tool_registry.py`, `tests/test_llm_gateway_retry.py`, `tests/test_rca_rule_catalog.py`
 
 ## 책임 (Responsibility)
 
 - AI 에이전트들이 재사용하는 **인프라**: LLM port(`LlmClient`)와 provider 어댑터(OpenAI/Anthropic/Gemini/OpenAI 호환), 에이전트 베이스 ABC(`AiAgent`), 도구 호출 루프 대화 엔진(`ConversationEngine`), `@ai.tool` 도구 레지스트리.
+- RCA 룰 YAML의 저장 전 검증 schema(`rule_catalog.py`)를 domain API와 AI service 로더가 같이 쓰는 순수 계약으로 제공한다.
 - 도메인 로직은 `domains/<capability>` 에, 에이전트 프로세스는 [services/ai/*](../services/ai-chat-worker.md) 에 둠. 이 패키지는 NATS/HTTP/DB 를 모른다(저장소 접근은 `ToolContext.db` 로만 흘러듦; 이벤트 배선은 서비스 레이어 책임).
 
 ## 의존성 (Dependencies)
@@ -18,6 +19,7 @@ status: synced
 |---|---|---|---|
 | import | `packages.config.settings` | [config](config.md) | `env` |
 | 외부 | `httpx` | — | provider HTTP 호출 |
+| 외부 | `pydantic`, `yaml` | — | RCA 룰 YAML schema 검증 |
 | 피참조 | `domains/*/tools.py`, `services/ai/*` | [domains/ai](../domains/ai.md), [services/ai](../services/ai-chat-worker.md) | 도구 등록·엔진 사용 |
 
 ## 공개 인터페이스 (Public API)
@@ -117,6 +119,24 @@ def normalize_provider(provider: str) -> str
 def describe_llm_client(client: LlmClient) -> dict[str, Any]
     # client.metadata() 있으면 그 결과, 없으면 {"provider": 클래스명, "model": "unknown"}
 ```
+
+### `rule_catalog.py` — RCA 룰 YAML 검증 schema
+
+도메인 라우터(`/rca/rules/validate`)와 `services/ai/agent/causes/loader.py`가 같이 쓰는 순수 schema다. 여기서는 `CauseProfile` 같은 service 객체를 만들지 않고, `CatalogRuleSpec`/`CatalogCandidateSpec` 데이터로만 반환한다.
+
+| 심볼 | 계약 |
+|---|---|
+| `MATCHER_KEYS` | `("fact", "log_pattern", "event_pattern")` |
+| `CatalogValidationIssue` | `@dataclass(frozen=True)`: `code`, `detail`, `line: int \| None = None` |
+| `CatalogCandidateSpec` | `candidate_id`, `title`, `description`, `expected_evidence: tuple[str, ...]`, `checks: tuple[str, ...]`, `signals: tuple[dict[str, Any], ...]` |
+| `CatalogRuleSpec` | `rule_id`, `symptoms`, `required_sources`, `candidates` |
+| `CatalogValidationResult` | `valid: bool`, `rules: tuple[CatalogRuleSpec, ...] = ()`, `errors: tuple[CatalogValidationIssue, ...] = ()` |
+| `CatalogSignalMatcherModel` | Pydantic model. `fact`/`log_pattern`/`event_pattern` 중 정확히 하나만 허용한다. |
+| `CatalogSignalGroupModel` | `id`, `any_of: list[CatalogSignalMatcherModel]` |
+| `CatalogCandidateModel` | `candidate_id`, `title`, `description`, `expected_evidence`, `checks`, `signals=[]` |
+| `CatalogRuleModel` | `id`, `symptoms`, `required_sources`, `candidates` |
+| `CatalogFileModel` | root schema: `rules: list[CatalogRuleModel]` |
+| `validate_catalog_yaml(raw_text: str) -> CatalogValidationResult` | YAML parse/schema/파일 내부 rule id 중복을 검증한다. 오류 code는 `yaml_parse_error`, `schema_error`, `duplicate_rule_id` 중 하나다. |
 
 ### `agent.py` — 에이전트 베이스(ABC)
 
@@ -218,6 +238,7 @@ def registered_ai_tools() -> tuple[ToolSpec, ...]   # 조회 관례(registered_*
 1. 서비스 부팅: `build_llm_client()` 로 gateway 획득, `domains.registry.load_domain_tools()`([storage](storage.md#도메인-자동발견registry-연동) 의 registry) 로 `@ai.tool` 자동 등록.
 2. 대화 1턴: 서비스가 `ConversationEngine.respond(system_prompt, history, user_message, ToolContext(db=AsyncDb(...), workspace_id, cluster_id?, resource_type?, kind?, namespace?, name?, uid?, locale?))` 호출 → 도구 루프(상한 4) → `EngineResult`.
 3. 단발 에이전트: `AiAgent` 하위 클래스의 `run(evt)` = 프롬프트 생성 → `llm.complete` → 결과 파싱.
+4. RCA 룰 저장 전 검증: `domains.rca.router.validate_rca_rule_catalog`는 `validate_catalog_yaml` 결과의 첫 rule symptom과 전체 후보 수를 응답한다. AI service 로더는 같은 schema 결과를 `CauseProfile`로 변환해 `CAUSE_PROFILES`에 병합한다.
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -228,6 +249,7 @@ def registered_ai_tools() -> tuple[ToolSpec, ...]   # 조회 관례(registered_*
 5. `execute` 의 미등록 도구·인자 오류는 예외 — 엔진은 이를 잡아 `ok: False` trace 로 LLM 에 회신(대화는 계속).
 6. 엔진 응답이 프로토콜 JSON 이 아니면 전체 텍스트를 최종 답변으로 취급(예외 아님).
 7. 이 패키지는 NATS/HTTP 서버/DB 커넥션을 직접 만들지 않는다.
+8. RCA 룰 matcher는 `fact`/`log_pattern`/`event_pattern` 중 하나만 가질 수 있고, 한 YAML 안의 rule id 중복은 `duplicate_rule_id`로 실패한다.
 
 ## 설정 (Settings)
 

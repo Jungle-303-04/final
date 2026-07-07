@@ -24,18 +24,22 @@ from domains.rca.events import (
     RecoveryPlan,
     compact_cluster_evidence_payload,
 )
+from packages.ai.rule_catalog import validate_catalog_yaml
 from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentEvidenceRequest,
     AlertmanagerWebhookRequest,
+    RcaRuleValidateRequest,
     RecoveryActionSelectRequest,
 )
 from packages.contracts.gateway.responses import (
     AcceptedResponse,
+    RcaRuleValidateResponse,
     RecoveryActionCandidateItem,
     RecoveryPlanStatusResponse,
+    ValidationErrorItem,
 )
 from packages.contracts.gitops import (
     DEFAULT_APPLICATION_ID,
@@ -58,6 +62,28 @@ RECOVERY_PLAN_ALREADY_RESOLVED = "recovery plan already resolved"
 RECOVERY_SELECTION_ACCESS_DENIED = "recovery selection access denied"
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
+
+
+@router.post(gateway_routes.RCA_RULES_VALIDATE_PATH, response_model=RcaRuleValidateResponse)
+async def validate_rca_rule_catalog(
+    payload: RcaRuleValidateRequest,
+    _current: Any = Depends(require_session),
+) -> RcaRuleValidateResponse:
+    result = validate_catalog_yaml(payload.yaml_text)
+    if not result.valid:
+        return RcaRuleValidateResponse(
+            valid=False,
+            errors=[
+                ValidationErrorItem(code=issue.code, detail=issue.detail, line=issue.line)
+                for issue in result.errors
+            ],
+        )
+    first_rule = result.rules[0] if result.rules else None
+    return RcaRuleValidateResponse(
+        valid=True,
+        matched_symptom=first_rule.symptoms[0] if first_rule else None,
+        candidates_count=sum(len(rule.candidates) for rule in result.rules),
+    )
 
 
 def scoped_evidence_key(identity: ClusterAgentIdentity, evidence_key: str | None) -> str | None:

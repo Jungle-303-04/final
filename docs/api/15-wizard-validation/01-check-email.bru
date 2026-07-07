@@ -1,0 +1,35 @@
+meta {
+  name: 01 이메일 사용 가능 여부
+  type: http
+  seq: 1
+  tags: [auth, wizard, validation]
+}
+
+post {
+  url: {{base_url}}auth/check-email
+  body: json
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "email": "{{signup_email}}"
+  }
+}
+
+tests {
+  test("email check returns availability or rate limit", function () {
+    expect([200, 422, 429]).to.include(res.status);
+  });
+
+  test("success body has machine-readable reason code", function () {
+    if (res.status === 200) {
+      const body = res.getBody();
+      expect(body).to.have.property("available");
+      expect(body).to.have.property("reason_code");
+    }
+  });
+}

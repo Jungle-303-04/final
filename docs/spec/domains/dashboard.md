@@ -98,6 +98,7 @@ status: synced
 |---|---|---|---|---|
 | `GET /dashboard/rca/timeline` (`gateway_routes.DASHBOARD_RCA_TIMELINE_PATH`) | `src/domains/dashboard/router.py :: rca_timeline` | query `cluster_id: str \| None = None`, `limit: int = 50 (ge=1, le=100)` | `RcaTimelineResponse(items=[RcaTimelineItem...])` | `require_session` + cluster `Permission.RCA_READ` |
 | `GET /dashboard/rca/incidents/{incident_id}` (`DASHBOARD_RCA_INCIDENT_PATH`) | `src/domains/dashboard/router.py :: rca_incident` | query `cluster_id: str \| None = None` | `RcaIncidentResponse(item=RcaTimelineItem)`; 없으면 404 `"RCA incident not found"` | 동일 |
+| `POST /metrics/validate` (`gateway_routes.METRICS_VALIDATE_PATH`) | `src/domains/dashboard/router.py :: validate_metrics_query` | `MetricsValidateRequest` | `MetricsValidateResponse` | `require_session`; Prometheus `query_range` dry-run |
 | `GET /clusters/{cluster_id}/metric-query-presets` | `list_metric_query_presets` | cluster path | `MetricQueryPresetListResponse` | cluster `Permission.DASHBOARD_READ` |
 | `POST /clusters/{cluster_id}/metric-query-presets` | `upsert_metric_query_preset` | `MetricQueryPresetUpsertRequest` | `MetricQueryPresetResponse` | cluster `Permission.DASHBOARD_MANAGE` |
 | `DELETE /clusters/{cluster_id}/metric-query-presets/{preset_id}` | `delete_metric_query_preset` | path | 204 / 404 | cluster `Permission.DASHBOARD_MANAGE` |
@@ -226,4 +227,5 @@ cluster별 저장형 PromQL 정의. `UNIQUE(workspace_id, cluster_id, name)`. �
 
 ## 설정 (Settings)
 
-없음.
+- `PROMETHEUS_VALIDATE_BASE_URL` — `/metrics/validate`에서 `base_url` 요청값이 없을 때 사용할 Prometheus endpoint. 비어 있으면 `prometheus_base_url_required`로 실패한다.
+- `PROMETHEUS_VALIDATE_TIMEOUT_SECONDS` — PromQL dry-run HTTP timeout. 기본 `"5"`.

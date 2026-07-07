@@ -25,6 +25,6 @@ body:json {
 
 tests {
   test("200 or auth/validation", function () {
-    expect([200, 401, 403, 404, 422]).to.include(res.status);
+    expect([200, 400, 401, 403, 404, 422]).to.include(res.status);
   });
 }

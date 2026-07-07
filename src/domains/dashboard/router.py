@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from domains.command.router import debug_query_plan
+from domains.dashboard.metrics_validation import validate_promql_query
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
     require_cluster_access,
@@ -20,6 +21,7 @@ from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     MetricQueryPresetUpsertRequest,
+    MetricsValidateRequest,
     MetricWidgetUpsertRequest,
 )
 from packages.contracts.gateway.responses import (
@@ -27,6 +29,7 @@ from packages.contracts.gateway.responses import (
     MetricQueryPresetItem,
     MetricQueryPresetListResponse,
     MetricQueryPresetResponse,
+    MetricsValidateResponse,
     MetricWidgetItem,
     MetricWidgetListResponse,
     MetricWidgetResponse,
@@ -47,6 +50,25 @@ METRIC_PRESET_NOT_FOUND = "metric query preset not found"
 METRIC_WIDGET_NOT_FOUND = "metric widget not found"
 
 router = APIRouter()
+
+
+@router.post(gateway_routes.METRICS_VALIDATE_PATH, response_model=MetricsValidateResponse)
+async def validate_metrics_query(
+    payload: MetricsValidateRequest,
+    _current: Any = Depends(require_session),
+) -> MetricsValidateResponse:
+    result = await validate_promql_query(
+        payload.query,
+        base_url=payload.base_url,
+        range_seconds=payload.range_seconds,
+        step_seconds=payload.step_seconds,
+    )
+    return MetricsValidateResponse(
+        valid=result.valid,
+        code=result.code,
+        detail=result.detail,
+        result_type=result.result_type,
+    )
 
 
 @router.get(

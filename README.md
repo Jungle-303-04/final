@@ -11,6 +11,7 @@ Kubernetes 운영 자동화를 위한 이벤트 드리븐 마이크로서비스 
 ```text
 src/services
   gateway/api-gateway
+  gateway/outbox-relay
   realtime/realtime-gateway
   gitops/git-pull-worker
   gitops/github-poll-worker
@@ -41,6 +42,7 @@ src/services
   projection/audit-worker
   projection/dashboard-worker
   projection/dead-letter-monitor
+  projection/rca-timeline-janitor
   alert/alert-worker
   mail/mail-worker
   target/cluster-agent
@@ -96,6 +98,7 @@ API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/RE
 ```text
 [gateway]
 api-gateway                  관리 API Gateway (인증, REST, agent 연결)
+outbox-relay                 outbox event relay와 DLQ 연결
 realtime-gateway             cluster-agent live stream -> browser WS fan-out
 
 [gitops]
@@ -134,6 +137,7 @@ command-janitor              만료 command 정리
 audit-worker                 audit log projector (@on_any)
 dashboard-worker             이벤트 흐름 -> 프론트 RCA timeline read model
 dead-letter-monitor          dead_letter.created -> 운영 alert 연결
+rca-timeline-janitor         RCA timeline read model 만료/정리
 
 [alert / mail]
 alert-worker                 alarm/notification event boundary

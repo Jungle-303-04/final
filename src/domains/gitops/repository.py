@@ -19,6 +19,7 @@ from domains.gitops.models import (
     RepoChange,
     WorkflowRun,
     WorkflowRunStep,
+    WorkspaceCredential,
 )
 from packages.config.constants import Target
 from packages.config.logs import get_logger
@@ -119,6 +120,51 @@ def watch_target_settings(payload: JsonObject) -> JsonObject:
 
 
 class RepoChangeRepository(DatabaseConnection):
+    def upsert_workspace_credential(self, payload: JsonObject) -> JsonObject:
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        provider = str(payload["provider"])
+        scope = str(payload["scope"])
+        credential_id = str(
+            payload.get("credential_id") or stable_credential_id(workspace_id, provider, scope)
+        )
+        table = WorkspaceCredential.__table__
+        insert = pg_insert(table).values(
+            credential_id=credential_id,
+            workspace_id=workspace_id,
+            provider=provider,
+            scope=scope,
+            encrypted_value=str(payload["encrypted_value"]),
+            status=str(payload.get("status", "active")),
+            metadata=dict(payload.get("metadata", {})),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.workspace_id, table.c.provider, table.c.scope],
+            set_={
+                "encrypted_value": insert.excluded.encrypted_value,
+                "status": insert.excluded.status,
+                "metadata": insert.excluded.metadata,
+                "updated_at": func.now(),
+            },
+        ).returning(table)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return row_dict(row)
+
+    def get_workspace_credential(
+        self, workspace_id: str, provider: str, scope: str
+    ) -> JsonObject | None:
+        table = WorkspaceCredential.__table__
+        statement = select(table).where(
+            table.c.workspace_id == workspace_id,
+            table.c.provider == provider,
+            table.c.scope == scope,
+            table.c.status == "active",
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return row_dict(row) if row is not None else None
+
     def register_repository(self, payload: JsonObject) -> JsonObject:
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         repository_id = derive_repository_id(payload)
@@ -1195,6 +1241,11 @@ def derive_repository_id(payload: JsonObject) -> str:
         ]
     )
     return f"repo-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
+
+
+def stable_credential_id(workspace_id: str, provider: str, scope: str) -> str:
+    raw = "|".join([workspace_id, provider, scope])
+    return f"cred-{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
 def derive_watch_target_id(payload: JsonObject) -> str:

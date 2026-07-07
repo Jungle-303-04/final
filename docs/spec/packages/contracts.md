@@ -389,7 +389,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 
 | 필드 | 타입 | 기본값 / 제약 |
 |---|---|---|
-| `cluster_id` | `str` | `Target.DEFAULT_CLUSTER_ID` |
+| `cluster_id` | `str \| None` | `None` — 미지정 시 서버가 `<name-slug>-<4자리 난수>` 생성 |
 | `name` | `str` | `DEFAULT_TARGET_NAME` |
 | `environment` | `str` | `DEFAULT_TARGET_ENVIRONMENT` |
 | `workspace_id` | `str` | `DEFAULT_WORKSPACE_ID` |
@@ -409,6 +409,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 | `kube_context` | `str \| None` | `None` |
 | `cloud_provider` | `str` | `"existing-k8s"` |
 | `deploy_provider` | `str` | `"manual-manifest"` |
+| `provider_config` | `dict[str, Any]` | `{}` — EKS/GKE/AKS/kind/minikube 등 provider별 bootstrap 힌트. 비밀값 저장 금지 |
 
 `@model_validator(mode="after") _sample_workload_requires_explicit_config`: `install_sample_workload=True` 인데 name/image 중 하나라도 없으면 `ValueError`.
 
@@ -417,6 +418,11 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 - `DeploymentRestartRequest` — `reason: str | None`(`max_length=500`), `approval_ref: str | None = None`, `policy_decision_ref: str | None = None`.
 - `AgentDebugQueryRequest` — `cluster_id: str = Target.DEFAULT_CLUSTER_ID`, `query: dict[str, Any]`, `reason: str | None = None`.
 - `AlertChannelUpsertRequest` — workspace 알림 채널 생성/수정 입력. `channel_id: str = ""`(빈 값이면 서버 생성), `name: str`(`min_length=1`), `kind: Literal["webhook"] = "webhook"`, `url: str`(`min_length=1`), `min_severity: Literal["info","warning","critical"] = "warning"`, `enabled: bool = True`.
+- `EmailCheckRequest` — `email: str`. `/auth/check-email` 사전 검증 요청.
+- `RepoValidateRequest` — `url: str`, `token: str | None = None`. URL은 GitHub `owner/repo`로 정규화되며 token 원문은 응답에 절대 포함하지 않는다.
+- `AlertChannelTestRequest` — 저장 전 알림 테스트. `name`, `kind="webhook"`, `url`, `min_severity`, `severity`, `message`.
+- `RcaRuleValidateRequest` — `yaml_text: str`(`max_length=100_000`). RCA 룰 저장 전 검증 전용.
+- `MetricsValidateRequest` — `source="prometheus"`, `query`, `base_url`, `range_seconds`, `step_seconds`. PromQL dry-run 검증 전용.
 - `AlertmanagerAlert` — 외부 Alertmanager webhook alert 항목. `model_config.extra="allow"`이고 외부 camelCase 계약을 유지한다. 필드: `status: str = "firing"`, `labels/annotations: dict[str, Any] = {}`, `startsAt: str = ""`, `endsAt: str = ""`, `fingerprint: str = ""`.
 - `AlertmanagerWebhookRequest` — Alertmanager v4 webhook payload. `model_config.extra="allow"`. 필드: `version: str = "4"`, `groupKey: str = ""`, `status: str = "firing"`, `receiver: str = ""`, `alerts: list[AlertmanagerAlert] = []`.
 - `AiConversationCreateRequest` — `message: str`(`min_length=1, max_length=MAX_AI_MESSAGE_LENGTH`), `title: str | None`(`max_length=120`), `agent: str = DEFAULT_AI_AGENT`(`min_length=1, max_length=80`), `context: dict[str, Any] = {}`.
@@ -500,12 +506,20 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `ClusterOpenIncidentItem` | `incident_id/correlation_id/status: str`, `symptom/root_cause/created_at: str \| None = None` |
 | `ClusterUsageSnapshot` | `sampled_at: str \| None = None`, `pods_running/pods_total/nodes_ready/nodes_total/restart_total: int = 0`, `cpu_pct/mem_pct: float \| None = None` |
 | `ClusterSummaryDetailResponse` | `cluster_id/name/health: str`, `workloads: dict[str, list[ClusterWorkloadHealthItem]] = {}`(health 값 → 목록), `warning_events: list[ClusterWarningEventItem] = []`, `open_incidents: list[ClusterOpenIncidentItem] = []`, `usage: ClusterUsageSnapshot \| None = None` |
-| `TargetInstallResponse` | `registered: bool`, `cluster_id: str`, `status: str`, `applied: bool`, `apply_output: str \| None`, `install_manifest: str`, `agent_token: str`, `install_command: str = ""` — per-cluster agent 토큰 **원문**은 등록 관리자에게 1회만 반환(서버는 해시만 저장, agent 는 `x-agent-token` 으로 인증) |
+| `EmailCheckResponse` | `available: bool`, `reason_code: str = ""`, `detail: str = ""`, `retry_after: int \| None = None` |
+| `RepoValidateResponse` | `accessible: bool`, `private: bool \| None`, `default_branch: str \| None`, `normalized: str`, `reason/code: str \| None`, `credential_ref: str \| None` |
+| `RepoManifestFile` / `RepoManifestFileListResponse` | `path: str`, `kinds: list[str]` / `repo`, `branch`, `manifests`, `warnings` |
+| `ValidationErrorItem` | `code: str`, `detail: str`, `line: int \| None` |
+| `AlertChannelTestResponse` | `valid: bool`, `delivered: bool`, `code: str \| None`, `detail: str`, `status_code: int \| None` |
+| `RcaRuleValidateResponse` | `valid: bool`, `errors: list[ValidationErrorItem]`, `matched_symptom: str \| None`, `candidates_count: int` |
+| `MetricsValidateResponse` | `valid: bool`, `code: str \| None`, `detail: str`, `result_type: str \| None` |
+| `BootstrapStep` | `label: str`, `command: str` |
+| `TargetInstallResponse` | `registered: bool`, `cluster_id: str`, `status: str`, `applied: bool`, `apply_output: str \| None`, `install_manifest: str`, `agent_token: str`, `install_command: str = ""`, `bootstrap_command: str = ""`, `bootstrap_steps: list[BootstrapStep] = []`, `connect_timeout_seconds`, `connect_expires_at` — per-cluster agent 토큰 **원문**은 등록 관리자에게 1회만 반환(서버는 해시만 저장, agent 는 `x-agent-token` 으로 인증) |
 | `ClusterAgentStatus` | `workspace_id/cluster_id/agent_id/status: str`, `capabilities: list[str] = []`, `details: JsonMap = {}`, `last_seen_at/created_at/updated_at: str \| None = None` |
 | `ClusterSummary` | `workspace_id/cluster_id/name/environment/status: str`, `settings: JsonMap = {}`, `connection_status: str`, `last_agent_id/last_agent_seen_at: str \| None = None`, `node_count/pod_count/incident_count: int = 0`, `created_at/updated_at: str \| None = None` |
 | `ClusterListResponse` | `clusters: list[ClusterSummary]` |
 | `ClusterResponse` | `cluster: ClusterSummary`, `agents: list[ClusterAgentStatus] = []` |
-| `ClusterConnectionStatusResponse` | `cluster_id: str`, `connection_status: str`, `last_agent_id/last_seen_at: str \| None = None`, `agents: list[ClusterAgentStatus] = []` |
+| `ClusterConnectionStatusResponse` | `cluster_id: str`, `connection_status: str`, `last_agent_id/last_seen_at: str \| None = None`, `agents: list[ClusterAgentStatus] = []`, `connect_timeout_seconds`, `connect_expires_at` |
 | `AlertChannelResponse` / `AlertChannelListResponse` | `channel_id/workspace_id/name/kind/url/min_severity: str`, `enabled: bool`, `created_at/updated_at: str \| None = None` / `channels: list[AlertChannelResponse]` |
 | `DeadLettersResponse` | `dead_letters: list[JsonMap]` |
 | `DeadLetterReplayResponse` | `accepted: bool`, `dead_letter_id: int`, `replay_event: JsonMap` |

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +15,8 @@ from domains.rca.events import (
     EvidenceItem,
     IncidentRecord,
 )
+from domains.rca.router import validate_rca_rule_catalog
+from packages.contracts.gateway.requests import RcaRuleValidateRequest
 from services.ai.agent.causes.engine import evaluate_causes, plan_causes, required_evidence_sources
 from services.ai.agent.causes.loader import (
     CauseCatalogError,
@@ -152,6 +156,47 @@ def test_catalog_rules_match_previous_hardcoded_plan_snapshot() -> None:
         assert [c.candidate_id for c in plan.candidates] == expected_candidates, symptom
         assert required_evidence_sources(incident_for(symptom)) == expected_sources, symptom
         assert all(c.source == CAUSE_CANDIDATE_SOURCE_RULE for c in plan.candidates), symptom
+
+
+def test_rca_rule_validate_route_returns_candidate_summary() -> None:
+    yaml_text = dedent(
+        """
+        rules:
+          - id: "custom_dns"
+            symptoms: ["DNS lookup failed"]
+            required_sources: ["kubernetes", "logs"]
+            candidates:
+              - candidate_id: "service_dns_resolution_failure"
+                title: "서비스 DNS 실패"
+                description: "서비스 이름 해석이 실패했습니다."
+                expected_evidence: ["kubernetes", "logs"]
+                checks:
+                  - "CoreDNS 이벤트 확인"
+        """
+    )
+
+    response = asyncio.run(
+        validate_rca_rule_catalog(
+            RcaRuleValidateRequest(yaml_text=yaml_text),
+            SimpleNamespace(user_id="user-1", workspace_id="workspace-1"),
+        )
+    )
+
+    assert response.valid is True
+    assert response.matched_symptom == "DNS lookup failed"
+    assert response.candidates_count == 1
+
+
+def test_rca_rule_validate_route_reports_schema_errors() -> None:
+    response = asyncio.run(
+        validate_rca_rule_catalog(
+            RcaRuleValidateRequest(yaml_text="rules:\n  - id: broken\n"),
+            SimpleNamespace(user_id="user-1", workspace_id="workspace-1"),
+        )
+    )
+
+    assert response.valid is False
+    assert response.errors[0].code == "schema_error"
 
 
 def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:

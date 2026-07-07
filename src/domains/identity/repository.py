@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.identity.models import (
@@ -207,6 +207,21 @@ class IdentityAccessRepository(DatabaseConnection):
             )
             conn.execute(self._cluster_upsert(payload))
         return payload
+
+    def update_cluster_registration_status(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        status: str,
+    ) -> None:
+        table = ClusterRegistration.__table__
+        statement = (
+            update(table)
+            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .values(status=status, updated_at=func.now())
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
 
     def get_user_by_email(self, email: str) -> JsonObject | None:
         table = UserAccount.__table__
@@ -722,7 +737,12 @@ class IdentityAccessRepository(DatabaseConnection):
             select(table.c.workspace_id, table.c.cluster_id)
             .where(
                 table.c.agent_token_hash == token_hash,
-                table.c.status == ClusterRegistrationStatus.REGISTERED.value,
+                table.c.status.in_(
+                    (
+                        ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.REGISTERED.value,
+                    )
+                ),
             )
             .limit(1)
         )
@@ -939,6 +959,16 @@ class IdentityAccessRepository(DatabaseConnection):
                 .where(member.c.group_id == group_id, member.c.user_id == user_id)
                 .values(status=AccessStatus.DISABLED.value, updated_at=func.now())
             )
+
+    def is_last_active_service_admin(self, user_id: str) -> bool:
+        table = self.user_table
+        statement = select(table.c.user_id).where(
+            table.c.role == ServiceRole.SERVICE_ADMIN.value,
+            table.c.status == UserStatus.ACTIVE.value,
+        )
+        with self.connection() as conn:
+            rows = [str(row[0]) for row in conn.execute(statement).all()]
+        return rows == [user_id]
 
     def list_users(self, status: str | None = None) -> list[JsonObject]:
         user = self.user_table
@@ -1263,7 +1293,7 @@ class IdentityAccessRepository(DatabaseConnection):
             cluster_id=str(payload["cluster_id"]),
             name=str(payload.get("name") or payload["cluster_id"]),
             environment=str(payload.get("environment") or "default"),
-            status=ClusterRegistrationStatus.REGISTERED.value,
+            status=str(payload.get("status") or ClusterRegistrationStatus.REGISTERED.value),
             agent_token_hash=payload.get("agent_token_hash"),
             settings=payload.get("settings") or {},
         )
@@ -1272,7 +1302,7 @@ class IdentityAccessRepository(DatabaseConnection):
             set_={
                 "name": insert.excluded.name,
                 "environment": insert.excluded.environment,
-                "status": ClusterRegistrationStatus.REGISTERED.value,
+                "status": str(payload.get("status") or ClusterRegistrationStatus.REGISTERED.value),
                 "agent_token_hash": insert.excluded.agent_token_hash,
                 "settings": insert.excluded.settings,
                 "updated_at": func.now(),

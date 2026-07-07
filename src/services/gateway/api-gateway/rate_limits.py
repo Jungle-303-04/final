@@ -47,9 +47,14 @@ class AuthRateLimiter:
                 policy.lock_steps_seconds,
                 policy.strike_ttl_seconds,
             )
-        except RateLimitExceeded:
+        except RateLimitExceeded as exc:
             raise HTTPException(
-                status_code=429, detail=Settings.RATE_LIMIT_EXCEEDED_MESSAGE
+                status_code=429,
+                detail={
+                    "code": "rate_limited",
+                    "detail": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+                    "retry_after": exc.retry_after_seconds,
+                },
             ) from None
 
 
@@ -74,6 +79,25 @@ def resend_verification_rate_limit_policy() -> AuthRateLimitPolicy:
         scope="resend",
         email_limit=Settings.RESEND_EMAIL_RATE_LIMIT,
         client_limit=Settings.RESEND_IP_RATE_LIMIT,
+    )
+
+
+def check_email_rate_limit_policy() -> AuthRateLimitPolicy:
+    return _auth_policy(
+        scope="check_email",
+        email_limit=Settings.CHECK_EMAIL_EMAIL_RATE_LIMIT,
+        client_limit=Settings.CHECK_EMAIL_IP_RATE_LIMIT,
+    )
+
+
+def resend_verification_cooldown_policy() -> AuthRateLimitPolicy:
+    return AuthRateLimitPolicy(
+        scope="resend_cooldown",
+        email_limit=1,
+        client_limit=Settings.RESEND_IP_RATE_LIMIT,
+        window_seconds=Settings.RESEND_EMAIL_COOLDOWN_SECONDS,
+        lock_steps_seconds=(Settings.RESEND_EMAIL_COOLDOWN_SECONDS,),
+        strike_ttl_seconds=Settings.RESEND_EMAIL_COOLDOWN_SECONDS,
     )
 
 

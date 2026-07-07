@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import type { Application } from '@/shared/lib/types';
+import type { Application, Deployment } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 import { adaptApplication, adaptDeployment, adaptRun } from '@/shared/lib/adapt';
 
@@ -122,6 +122,25 @@ export const useDeployments = (appId: string) =>
     retry: false,
     select: d => d.deployments.map(adaptDeployment),
   });
+export function useDeploymentsAll(apps: Application[]) {
+  return useQueries({
+    queries: apps.map((app) => ({
+      queryKey: repoKeys.deployments(app.application_id),
+      queryFn: () => get<{ deployments: Record<string, unknown>[] }>(`/applications/${app.application_id}/deployments`, { timeoutMs: REPO_QUERY_TIMEOUT_MS }),
+      retry: false,
+      select: (d: { deployments: Record<string, unknown>[] }) => d.deployments.map(adaptDeployment),
+    })),
+    combine: (results) => ({
+      pending: results.some((result) => result.isPending),
+      failed: results.some((result) => result.isError),
+      error: results.find((result) => result.isError)?.error,
+      items: results.map((result, index) => ({
+        appId: apps[index]?.application_id ?? '',
+        deployments: (result.data ?? []) as Deployment[],
+      })),
+    }),
+  });
+}
 export const useRepositoryProbe = (repoRef: string, enabled: boolean) =>
   useQuery({
     queryKey: repoKeys.probe(repoRef),

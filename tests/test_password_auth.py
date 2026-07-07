@@ -397,7 +397,7 @@ def test_password_login_rejects_pending_email_verification() -> None:
         with pytest.raises(HTTPException) as exc:
             await service.login("local@example.com", "local-password", "127.0.0.1")
         assert exc.value.status_code == 403
-        assert exc.value.detail == "email verification required"
+        assert exc.value.detail["code"] == "email_unverified"
 
     asyncio.run(run())
 
@@ -495,7 +495,7 @@ def test_password_login_rejects_pending_approval() -> None:
         with pytest.raises(HTTPException) as exc:
             await service.login("local@example.com", "local-password", "127.0.0.1")
         assert exc.value.status_code == 403
-        assert exc.value.detail == "account approval required"
+        assert exc.value.detail["code"] == "approval_pending"
 
     asyncio.run(run())
 
@@ -546,7 +546,7 @@ def test_password_login_rejects_wrong_password() -> None:
         with pytest.raises(HTTPException) as exc:
             await service.login("local@example.com", "wrong-password", "127.0.0.1")
         assert exc.value.status_code == 401
-        assert exc.value.detail == "invalid email or password"
+        assert exc.value.detail["code"] == "invalid_credentials"
 
     asyncio.run(run())
 

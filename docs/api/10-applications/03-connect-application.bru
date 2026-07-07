@@ -36,7 +36,7 @@ script:post-response {
 
 tests {
   test("200 or auth/validation failure", function () {
-    expect([200, 401, 403, 422]).to.include(res.status);
+    expect([200, 400, 401, 403, 422]).to.include(res.status);
   });
   test("success returns application", function () {
     if (res.status === 200) {

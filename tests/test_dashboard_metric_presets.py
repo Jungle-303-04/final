@@ -8,16 +8,20 @@ from typing import Any
 
 from fastapi import HTTPException
 
+import domains.dashboard.router as dashboard_router
+from domains.dashboard.metrics_validation import MetricsValidationResult
 from domains.dashboard.router import (
     delete_metric_query_preset,
     list_metric_query_presets,
     run_metric_query_preset,
     upsert_metric_query_preset,
     upsert_metric_widget,
+    validate_metrics_query,
 )
 from packages.config.constants import Command, CommandStatus
 from packages.contracts.gateway.requests import (
     MetricQueryPresetUpsertRequest,
+    MetricsValidateRequest,
     MetricWidgetUpsertRequest,
 )
 
@@ -150,6 +154,60 @@ def test_metric_query_presets_list_requires_dashboard_access() -> None:
             "cluster-1",
             "dashboard.read",
         )
+
+    asyncio.run(run())
+
+
+def test_metrics_validate_route_returns_prometheus_dry_run_result(monkeypatch) -> None:
+    calls: list[tuple[str, str | None, int | None, int | None]] = []
+
+    async def fake_validate(query: str, *, base_url=None, range_seconds=None, step_seconds=None):
+        calls.append((query, base_url, range_seconds, step_seconds))
+        return MetricsValidationResult(
+            valid=True,
+            detail="PromQL dry-run 성공",
+            result_type="matrix",
+        )
+
+    monkeypatch.setattr(dashboard_router, "validate_promql_query", fake_validate)
+
+    async def run() -> None:
+        response = await validate_metrics_query(
+            MetricsValidateRequest(
+                query="up",
+                base_url="http://prometheus:9090",
+                range_seconds=300,
+                step_seconds=30,
+            ),
+            _current=_current_session(),
+        )
+        assert response.valid is True
+        assert response.detail == "PromQL dry-run 성공"
+        assert response.result_type == "matrix"
+
+    asyncio.run(run())
+
+    assert calls == [("up", "http://prometheus:9090", 300, 30)]
+
+
+def test_metrics_validate_route_returns_validation_error(monkeypatch) -> None:
+    async def fake_validate(*_args, **_kwargs):
+        return MetricsValidationResult(
+            valid=False,
+            code="promql_invalid",
+            detail="PromQL 문법 오류입니다.",
+        )
+
+    monkeypatch.setattr(dashboard_router, "validate_promql_query", fake_validate)
+
+    async def run() -> None:
+        response = await validate_metrics_query(
+            MetricsValidateRequest(query="sum("),
+            _current=_current_session(),
+        )
+        assert response.valid is False
+        assert response.code == "promql_invalid"
+        assert response.detail == "PromQL 문법 오류입니다."
 
     asyncio.run(run())
 

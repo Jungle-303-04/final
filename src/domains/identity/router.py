@@ -18,12 +18,14 @@ from packages.config.constants import Auth
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
+    EmailCheckRequest,
     LoginRequest,
     ResendEmailVerificationRequest,
     SignupRequest,
 )
 from packages.contracts.gateway.responses import (
     AuthSessionResponse,
+    EmailCheckResponse,
     EmailVerificationResponse,
     LogoutResponse,
     UserApprovalResponse,
@@ -160,6 +162,34 @@ async def signup(
         accepted=True,
         verification_required=True,
         email=challenge.email,
+    )
+
+
+@router.post(gateway_routes.AUTH_CHECK_EMAIL_PATH, response_model=EmailCheckResponse)
+async def check_email(
+    payload: EmailCheckRequest,
+    request: Request,
+    password_auth: Any = Depends(get_password_auth),
+) -> EmailCheckResponse:
+    try:
+        available = await password_auth.check_email_available(payload.email, _client_key(request))
+    except HTTPException as exc:
+        if exc.status_code == 429 and isinstance(exc.detail, dict):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": str(exc.detail.get("code") or "rate_limited"),
+                    "detail": str(exc.detail.get("detail") or "요청이 너무 많습니다."),
+                    "retry_after": exc.detail.get("retry_after"),
+                },
+            ) from exc
+        raise
+    if available:
+        return EmailCheckResponse(available=True)
+    return EmailCheckResponse(
+        available=False,
+        reason_code="already_registered",
+        detail="이미 가입된 이메일입니다.",
     )
 
 

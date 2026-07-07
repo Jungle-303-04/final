@@ -305,7 +305,7 @@ def block_reason_code(evt: RcaCandidatesEvaluatedBody, detail) -> str | None
 
 `src/services/ai/agent/causes/catalog/__init__.py` 는 부수효과 패키지 루트다.
 먼저 `load_rule_modules(package_name="services.ai.agent.causes", excluded=("catalog", "engine", "loader"))`로 코드 정의 rule을 발견하고, 이어서 `register_catalog_profiles()`가 `src/services/ai/agent/causes/catalog/*.yaml`을 읽어 `CAUSE_PROFILES`에 병합한다.
-`src/services/ai/agent/causes/loader.py`는 YAML 파싱, Pydantic schema 검증, catalog 내부 rule id 중복 검사를 담당한다. YAML rule id가 기존 code rule id와 겹치면 `CauseCatalogError`로 기동 시점에 실패한다.
+YAML schema와 저장 전 검증은 [packages/ai](../packages/ai.md#rule_catalogpy--rca-룰-yaml-검증-schema)의 `packages.ai.rule_catalog`가 담당한다. `src/services/ai/agent/causes/loader.py`는 파일 경로 로딩, 파일명 포함 오류 메시지, `CatalogRuleSpec` → `CauseProfile` 변환, 기존 code rule id와의 충돌 검사를 담당한다.
 `catalog/__init__.py`는 `cause_rules`/`evidence_rules`를 재노출한다(`__all__ = ["cause_rules", "evidence_rules"]`).
 
 #### causes/loader.py — YAML 카탈로그 로더
@@ -313,13 +313,11 @@ def block_reason_code(evt: RcaCandidatesEvaluatedBody, detail) -> str | None
 | 심볼 | 앵커 | 동작 |
 |---|---|---|
 | `CATALOG_DIR` | `src/services/ai/agent/causes/loader.py :: CATALOG_DIR` | 기본 카탈로그 디렉터리 = `causes/catalog/` (패키지 동봉, 컨테이너 이미지에 포함) |
+| `CATALOG_PATTERNS` | `src/services/ai/agent/causes/loader.py :: CATALOG_PATTERNS` | `("*.yaml", "*.yml")` |
 | `CauseCatalogError` | `src/services/ai/agent/causes/loader.py :: CauseCatalogError` | 카탈로그 로딩 실패 오류(RuntimeError) — 기동 시점 즉시 중단 |
-| `CatalogFileModel` | `src/services/ai/agent/causes/loader.py :: CatalogFileModel` | 파일 루트 스키마: `rules: list[CatalogRuleModel]` (pydantic, `extra="forbid"`) |
-| `CatalogRuleModel` | `src/services/ai/agent/causes/loader.py :: CatalogRuleModel` | `id, symptoms, required_sources, candidates` + `to_profile() -> CauseProfile(rule_id=id)` |
-| `CatalogCandidateModel` | `src/services/ai/agent/causes/loader.py :: CatalogCandidateModel` | `candidate_id, title, description, expected_evidence, checks, signals(선택)` + `to_spec() -> CauseCandidateSpec` |
-| `CatalogSignalGroupModel` | `src/services/ai/agent/causes/loader.py :: CatalogSignalGroupModel` | 판별 신호 그룹: `id`, `any_of: list[matcher]`(min 1) |
-| `CatalogSignalMatcherModel` | `src/services/ai/agent/causes/loader.py :: CatalogSignalMatcherModel` | matcher: `fact`/`log_pattern`/`event_pattern` 중 **정확히 하나**(위반 시 스키마 오류) |
-| `parse_catalog_file(path)` | `src/services/ai/agent/causes/loader.py :: parse_catalog_file` | YAML 파싱 실패 → `"RCA 룰 카탈로그 YAML 파싱 실패: {파일명} — ..."`, 스키마 위반 → `"RCA 룰 카탈로그 스키마 위반: {파일명} — ..."` |
+| `cause_candidate_from_catalog(spec)` | `src/services/ai/agent/causes/loader.py :: cause_candidate_from_catalog` | `packages.ai.rule_catalog.CatalogCandidateSpec`을 service `CauseCandidateSpec`으로 변환한다. |
+| `cause_profile_from_catalog(rule)` | `src/services/ai/agent/causes/loader.py :: cause_profile_from_catalog` | `CatalogRuleSpec`을 `CauseProfile(rule_id=rule.rule_id)`로 변환한다. |
+| `parse_catalog_file(path)` | `src/services/ai/agent/causes/loader.py :: parse_catalog_file` | `packages.ai.rule_catalog.validate_catalog_yaml(path_text)` 호출. YAML 파싱 실패 → `"RCA 룰 카탈로그 YAML 파싱 실패: {파일명} — ..."`, 스키마/중복 위반 → `"RCA 룰 카탈로그 스키마 위반: {파일명} — ..."` |
 | `load_catalog_profiles(catalog_dir=None)` | `src/services/ai/agent/causes/loader.py :: load_catalog_profiles` | `*.yaml`/`*.yml` 을 파일명 정렬 순서로 로딩(순수 함수); 카탈로그 내 rule id 중복 → `"RCA 룰 id 중복: ..."` |
 | `register_catalog_profiles(catalog_dir=None)` | `src/services/ai/agent/causes/loader.py :: register_catalog_profiles` | 로딩 결과를 `CAUSE_PROFILES` 에 병합; 기존 등록 룰과 id 충돌 시 `CauseCatalogError`(병합 전 검사라 실패 시 레지스트리 오염 없음) |
 

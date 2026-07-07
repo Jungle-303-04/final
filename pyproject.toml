@@ -5,6 +5,7 @@ description = "Event-driven Kubernetes operations platform"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cryptography>=46.0.0",
     "fastapi>=0.116.0",
     "httpx>=0.28.0",
     "nats-py>=2.11.0",

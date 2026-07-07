@@ -166,6 +166,12 @@ async def remove_group_member(
     _current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
 ) -> Response:
+    checker = getattr(db, "is_last_active_service_admin", None)
+    if callable(checker) and checker(user_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "last_admin", "detail": "마지막 관리자는 제거할 수 없습니다."},
+        )
     db.remove_group_member(group_id, user_id)
     response.status_code = 204
     return response

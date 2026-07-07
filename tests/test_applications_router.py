@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -20,12 +21,28 @@ from packages.contracts.gateway.responses import RepositoryManifestValidationRes
 
 
 class FakeApplicationsDb:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        connected_cluster_ids: set[str] | None = None,
+        clusters: list[dict[str, object]] | None = None,
+    ) -> None:
         self.registered_repositories: list[dict[str, object]] = []
         self.registered_watch_targets: list[dict[str, object]] = []
         self.registered_bindings: list[dict[str, object]] = []
         self.registration_calls: list[str] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
+        self.connected_cluster_ids = (
+            {"cluster-1"} if connected_cluster_ids is None else connected_cluster_ids
+        )
+        self.clusters = clusters or [
+            {
+                "workspace_id": "ws-1",
+                "cluster_id": "cluster-1",
+                "name": "cluster-1",
+                "environment": "prod",
+            }
+        ]
         self.application = {
             "application_id": "app-1",
             "workspace_id": "ws-1",
@@ -85,6 +102,32 @@ class FakeApplicationsDb:
     ) -> bool:
         self.access_checks.append((user_id, workspace_id, resource_type, resource_id, permission))
         return True
+
+    def latest_cluster_agent_statuses(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, dict[str, object]]:
+        assert workspace_id == "ws-1"
+        return {
+            cluster_id: {
+                "workspace_id": "ws-1",
+                "cluster_id": cluster_id,
+                "agent_id": f"agent-{cluster_id}",
+                "status": "connected",
+                "capabilities": ["inventory", "commands"],
+                "details": {},
+                "last_seen_at": datetime.now(UTC).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            for cluster_id in cluster_ids
+            if cluster_id in self.connected_cluster_ids
+        }
+
+    def list_cluster_registrations(self, workspace_id: str) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        return self.clusters
 
     def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
         self.registration_calls.append("watch")
@@ -189,6 +232,37 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
     ]
 
 
+def test_connect_application_rejects_disconnected_cluster_before_write() -> None:
+    db = FakeApplicationsDb(connected_cluster_ids=set())
+
+    async def run():
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="checkout-api",
+                repo_ref="org/checkout",
+                branch="release",
+                manifest_path="deploy/kustomization.yaml",
+                source_type="kustomize",
+                cluster_id="cluster-1",
+                namespace="prod",
+            ),
+            current=current_session(),
+            db=db,
+            discovery=FakeRepositoryDiscovery(),
+        )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run())
+
+    assert getattr(exc.value, "status_code", None) == 400
+    assert exc.value.detail == {
+        "code": "cluster_not_connected",
+        "detail": "에이전트가 연결되지 않은 클러스터입니다",
+        "clusters": ["cluster-1"],
+    }
+    assert db.registration_calls == []
+
+
 def test_connect_application_returns_422_for_invalid_source_type() -> None:
     db = FakeApplicationsDb()
 
@@ -239,3 +313,52 @@ def test_upsert_application_deployment_requires_app_and_cluster_access() -> None
         ("user-1", "ws-1", "application", "app-1", "application.manage"),
         ("user-1", "ws-1", "cluster", "cluster-1", "deploy.run"),
     ]
+
+
+def test_upsert_application_deployment_rejects_disconnected_cluster() -> None:
+    db = FakeApplicationsDb(connected_cluster_ids=set())
+
+    async def run():
+        return await upsert_application_deployment(
+            "app-1",
+            DeploymentBindingUpsertRequest(cluster_id="cluster-1", namespace="sandbox"),
+            current=current_session(),
+            db=db,
+        )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run())
+
+    assert getattr(exc.value, "status_code", None) == 400
+    assert exc.value.detail["code"] == "cluster_not_connected"
+    assert exc.value.detail["clusters"] == ["cluster-1"]
+    assert db.registration_calls == []
+
+
+def test_global_application_deployment_reports_mixed_disconnected_targets() -> None:
+    db = FakeApplicationsDb(
+        connected_cluster_ids={"cluster-1"},
+        clusters=[
+            {"workspace_id": "ws-1", "cluster_id": "cluster-1", "name": "cluster-1"},
+            {"workspace_id": "ws-1", "cluster_id": "cluster-2", "name": "cluster-2"},
+        ],
+    )
+
+    async def run():
+        return await upsert_application_deployment(
+            "app-1",
+            DeploymentBindingUpsertRequest(cluster_id="*", namespace="sandbox"),
+            current=current_session(),
+            db=db,
+        )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run())
+
+    assert getattr(exc.value, "status_code", None) == 400
+    assert exc.value.detail == {
+        "code": "cluster_not_connected",
+        "detail": "에이전트가 연결되지 않은 클러스터입니다",
+        "clusters": ["cluster-2"],
+    }
+    assert db.registration_calls == []

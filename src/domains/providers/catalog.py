@@ -23,6 +23,11 @@ PROVIDER_DISABLED_ENV = "KUBEHEAL_DISABLED_PROVIDERS"
 EXISTING_K8S_PROVIDER = "existing-k8s"
 PLURAL_PROVIDER = "plural"
 EXTERNAL_CONSOLE_PROVIDER = "external-console"
+EKS_PROVIDER = "eks"
+GKE_PROVIDER = "gke"
+AKS_PROVIDER = "aks"
+KIND_PROVIDER = "kind"
+MINIKUBE_PROVIDER = "minikube"
 MANUAL_MANIFEST_DEPLOY_PROVIDER = "manual-manifest"
 KUBE_CONTEXT_DEPLOY_PROVIDER = "kube-context"
 KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
@@ -54,6 +59,26 @@ class CredentialRequirement:
 
 
 @dataclass(frozen=True)
+class ProviderConfigField:
+    key: str
+    label: str
+    required: bool = False
+    kind: str = "text"
+    options: tuple[str, ...] = field(default_factory=tuple)
+    description: str = ""
+
+    def to_body(self) -> dict[str, object]:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "required": self.required,
+            "kind": self.kind,
+            "options": list(self.options),
+            "description": self.description,
+        }
+
+
+@dataclass(frozen=True)
 class ProviderDefinition:
     category: ProviderCategory
     key: str
@@ -63,6 +88,7 @@ class ProviderDefinition:
     capabilities: tuple[str, ...] = field(default_factory=tuple)
     credential_requirements: tuple[CredentialRequirement, ...] = field(default_factory=tuple)
     config_keys: tuple[str, ...] = field(default_factory=tuple)
+    config_fields: tuple[ProviderConfigField, ...] = field(default_factory=tuple)
     unavailable_reason: str | None = None
 
     def to_body(self) -> dict[str, object]:
@@ -77,6 +103,7 @@ class ProviderDefinition:
                 requirement.to_body() for requirement in self.credential_requirements
             ],
             "config_keys": list(self.config_keys),
+            "config_fields": [field.to_body() for field in self.config_fields],
             "unavailable_reason": self.unavailable_reason,
         }
 
@@ -185,6 +212,92 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         adapter="kubeconfig context or target agent bootstrap",
         capabilities=("install_target_agent", "apply_manifest"),
         config_keys=(KUBE_CONTEXT_ALLOWLIST_ENV,),
+        config_fields=(
+            ProviderConfigField(
+                key="context_name",
+                label="Kube context",
+                description="kubectl --context 에 사용할 kubeconfig context 이름.",
+            ),
+        ),
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=EKS_PROVIDER,
+        label="Amazon EKS",
+        status=ProviderStatus.AVAILABLE,
+        adapter="aws eks update-kubeconfig + manual manifest bootstrap",
+        capabilities=("install_target_agent", "bootstrap_command"),
+        config_fields=(
+            ProviderConfigField(key="region", label="AWS region", required=True),
+            ProviderConfigField(key="eks_cluster_name", label="EKS cluster name", required=True),
+            ProviderConfigField(
+                key="context_alias",
+                label="Context alias",
+                description="생략하면 등록 cluster_id를 alias로 사용.",
+            ),
+        ),
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=GKE_PROVIDER,
+        label="Google Kubernetes Engine",
+        status=ProviderStatus.AVAILABLE,
+        adapter="gcloud container clusters get-credentials + manual manifest bootstrap",
+        capabilities=("install_target_agent", "bootstrap_command"),
+        config_fields=(
+            ProviderConfigField(key="project_id", label="GCP project ID", required=True),
+            ProviderConfigField(
+                key="location_type",
+                label="Location type",
+                required=True,
+                kind="select",
+                options=("region", "zone"),
+            ),
+            ProviderConfigField(key="location", label="Region or zone", required=True),
+            ProviderConfigField(key="gke_cluster_name", label="GKE cluster name", required=True),
+        ),
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=AKS_PROVIDER,
+        label="Azure Kubernetes Service",
+        status=ProviderStatus.AVAILABLE,
+        adapter="az aks get-credentials + manual manifest bootstrap",
+        capabilities=("install_target_agent", "bootstrap_command"),
+        config_fields=(
+            ProviderConfigField(key="resource_group", label="Resource group", required=True),
+            ProviderConfigField(key="aks_cluster_name", label="AKS cluster name", required=True),
+        ),
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=KIND_PROVIDER,
+        label="kind",
+        status=ProviderStatus.AVAILABLE,
+        adapter="kubectl context kind-<cluster> + manual manifest bootstrap",
+        capabilities=("install_target_agent", "bootstrap_command", "developer_loop"),
+        config_fields=(
+            ProviderConfigField(
+                key="kind_cluster_name",
+                label="kind cluster name",
+                description="생략하면 등록 name 또는 cluster_id를 사용.",
+            ),
+        ),
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=MINIKUBE_PROVIDER,
+        label="minikube",
+        status=ProviderStatus.AVAILABLE,
+        adapter="kubectl context/profile + manual manifest bootstrap",
+        capabilities=("install_target_agent", "bootstrap_command", "developer_loop"),
+        config_fields=(
+            ProviderConfigField(
+                key="profile",
+                label="minikube profile",
+                description="생략하면 minikube context를 사용.",
+            ),
+        ),
     ),
     ProviderDefinition(
         category=ProviderCategory.CLOUD,
@@ -313,6 +426,16 @@ class UnknownProvider(ValueError):
 
 WORD_SPLIT_RE = re.compile(r"[\s,]+")
 CLUSTER_ID_CHARS_RE = re.compile(r"[^a-z0-9-]+")
+REGISTRATION_CLOUD_PROVIDERS = (
+    EXISTING_K8S_PROVIDER,
+    EKS_PROVIDER,
+    GKE_PROVIDER,
+    AKS_PROVIDER,
+    KIND_PROVIDER,
+    MINIKUBE_PROVIDER,
+    PLURAL_PROVIDER,
+    EXTERNAL_CONSOLE_PROVIDER,
+)
 
 
 def provider_catalog() -> tuple[ProviderDefinition, ...]:
@@ -332,6 +455,7 @@ def provider_catalog() -> tuple[ProviderDefinition, ...]:
             capabilities=definition.capabilities,
             credential_requirements=definition.credential_requirements,
             config_keys=definition.config_keys,
+            config_fields=definition.config_fields,
             unavailable_reason="disabled by KUBEHEAL_DISABLED_PROVIDERS",
         )
         for definition in catalog
@@ -358,6 +482,7 @@ def definition_available(definition: ProviderDefinition) -> ProviderDefinition:
         capabilities=definition.capabilities,
         credential_requirements=definition.credential_requirements,
         config_keys=definition.config_keys,
+        config_fields=definition.config_fields,
         unavailable_reason=None,
     )
 
@@ -376,9 +501,10 @@ def cluster_registration_discovery() -> dict[str, object]:
         and definition.key in {MANUAL_MANIFEST_DEPLOY_PROVIDER, KUBE_CONTEXT_DEPLOY_PROVIDER}
     }
 
-    for cloud_provider in (EXISTING_K8S_PROVIDER, PLURAL_PROVIDER, EXTERNAL_CONSOLE_PROVIDER):
+    for cloud_provider in REGISTRATION_CLOUD_PROVIDERS:
         definition = get_provider(ProviderCategory.CLOUD, cloud_provider)
-        deploy_keys = registration_deploy_providers(candidates_by_provider[cloud_provider])
+        candidates = candidates_by_provider.get(cloud_provider, [])
+        deploy_keys = registration_deploy_providers(candidates)
         flows.append(
             {
                 "cloud_provider": cloud_provider,
@@ -391,9 +517,9 @@ def cluster_registration_discovery() -> dict[str, object]:
                     if key in deploy_provider_bodies
                 ],
                 "default_deploy_provider": deploy_keys[0],
-                "supports_import": True,
+                "supports_import": cloud_provider in candidates_by_provider,
                 "unavailable_reason": definition.unavailable_reason,
-                "import_candidates": candidates_by_provider[cloud_provider],
+                "import_candidates": candidates,
             }
         )
 
@@ -416,6 +542,16 @@ def registration_deploy_providers(candidates: list[dict[str, object]]) -> list[s
 
 
 def registration_flow_description(cloud_provider: str) -> str:
+    if cloud_provider == EKS_PROVIDER:
+        return "Generate an AWS EKS kubeconfig bootstrap command for the target agent."
+    if cloud_provider == GKE_PROVIDER:
+        return "Generate a GKE get-credentials bootstrap command for the target agent."
+    if cloud_provider == AKS_PROVIDER:
+        return "Generate an AKS get-credentials bootstrap command for the target agent."
+    if cloud_provider == KIND_PROVIDER:
+        return "Register a kind cluster by applying the target agent manifest."
+    if cloud_provider == MINIKUBE_PROVIDER:
+        return "Register a minikube cluster by applying the target agent manifest."
     if cloud_provider == PLURAL_PROVIDER:
         return "Import Plural cluster handles from env, then bootstrap the target agent."
     if cloud_provider == EXTERNAL_CONSOLE_PROVIDER:

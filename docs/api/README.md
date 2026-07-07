@@ -14,7 +14,7 @@ Bruno에서 import할 때는 repository root나 `docs`가 아니라 반드시 `d
 docs/api
 ```
 
-4. 왼쪽에 `00 상태와 인증`부터 `13 알림 채널`까지 한글 폴더명이 보이면 정상이다.
+4. 왼쪽에 `00 상태와 인증`부터 `15 Wizard Validation`까지 폴더가 보이면 정상이다.
 5. 오른쪽 위 Environment에서 `aws-test`를 고른다.
 6. 로컬 Gateway를 직접 띄워 보는 경우에만 `local`을 고른다.
 
@@ -384,6 +384,7 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 `01-list-applications`는 등록된 애플리케이션(레포+워치+배포 바인딩) 목록이다. 첫 항목의 `application_id`를 자동 저장한다.
 `02-create-application`은 데모 레포(`repo_ref`, `default_branch`, `manifest_path`)를 애플리케이션으로 등록한다. 응답의 `application.application_id`를 자동 저장한다.
 `03-connect-application`은 `repo_ref`, `branch`, `manifest_path`, `source_type`, `cluster_id`를 서버에서 다시 검증한 뒤 repository, application, watch target, deployment binding을 한 번에 등록한다.
+대상 클러스터 agent가 online이 아니면 400 `cluster_not_connected`가 정상 보호 응답이다. 먼저 target 등록 응답의 `bootstrap_command`를 실행하고 `11-clusters/03-connection-status`가 `online`이 된 뒤 다시 호출한다.
 `get-application`은 상세, `list-deployments`는 배포 바인딩 목록, `create-deployment`는 `cluster_id`/`namespace`에 배포를 묶는다.
 `06-list-runs`는 그 애플리케이션의 워크플로우 run 목록이다(웹훅 push 후 run이 생긴다).
 각 run에는 `workflow_run_id`, `application_id`, `commit_sha`, `status`, `current_step`, `created_at`, `metadata`, `approval_id`, `safe_pr`, `steps`가 들어온다.
@@ -397,6 +398,18 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 `02-list-branches`는 repository branch 목록을 조회한다.
 `03-list-manifests`는 선택한 branch에서 연결 가능한 manifest 후보를 찾는다.
 `04-validate-manifest`는 `repo_ref`/`branch`/`manifest_path`/`source_type` 조합을 검증하고 발견된 Kubernetes resource 목록을 반환한다.
+
+### 15-wizard-validation
+
+프론트 위저드가 저장 전 단계에서 실패를 먼저 감지하는 API 묶음이다.
+`01-check-email`은 가입 이메일 사용 가능 여부와 rate limit 사유를 반환한다.
+`02-cluster-registration-discovery`는 EKS/GKE/AKS/existing-k8s/kind/minikube 등록 폼 metadata와 import 후보를 반환한다.
+`03-repo-validate`는 GitHub URL을 `owner/repo`로 정규화하고 접근 가능 여부와 기본 branch를 반환한다.
+`04-repo-branches`는 선택 저장소의 branch 목록을 반환한다.
+`05-repo-manifests`는 선택 branch에서 Kubernetes `kind`가 파싱되는 `.yaml/.yml` 파일만 반환한다.
+`06-alert-channel-test`는 저장 전 webhook 테스트 알림 1건을 실제 전송하고 성공/실패 사유를 반환한다.
+`07-rca-rule-validate`는 RCA 룰 YAML을 `packages.ai.rule_catalog` schema로 검증하고 첫 symptom과 후보 수를 반환한다.
+`08-metrics-validate`는 PromQL dry-run 결과를 반환한다.
 
 ### 11-clusters
 

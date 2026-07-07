@@ -1462,7 +1462,7 @@
   갑자기 깨질 수 있다(실제 발생). 그 경우 해당 패키지 디렉터리 rm 후 재설치. 같은 이유로 **다른 세션이 워킹트리를
   대신 커밋하는 경우가 있다** — 커밋 전 `git status`/`git log` 로 경합 확인.
 - push: 현재 로컬 Git credential/`gh` 인증을 사용한다. 토큰 원문이나 askpass 파일 경로를 문서에 남기지 않는다.
-- 커밋: `git -c user.name=woonyong -c user.email=woonyong.dev@gmail.com commit --no-verify`.
+- 커밋: `git -c user.name="choi woo-nyong" -c user.email=woonyong.kr@gmail.com commit --no-verify`.
 
 ## 최신 업데이트 (11:25)
 
@@ -1605,11 +1605,281 @@
   - 인증 쿠키로 `GET /api/rca-reports?correlation_id=f7bf5469-4899-4682-a3aa-6f621793e705&limit=1` 호출 → 200, item id `927` 반환.
   - 주입한 crashloop fault cleanup 완료(`scenario=crashloop` 남은 리소스 0).
 
-### 관찰 중 / 다음 확인
+### 관찰 완료
 
-- 30분 신규 DLQ 관찰 시작: `2026-07-07T20:30:41Z`.
-  - 시작 기준: `event_dead_letters` 최신 생성시각 `2026-07-07 18:45:53.193523+00`, 관찰 시작 이후 신규 `0`.
-  - 관찰 종료 후 확인할 것: `event_dead_letters.created_at >= '2026-07-07 20:27:55+00'` count `0`, outbox pending `0`, outbox/api-gateway 로그 `MaxPayloadError|dead_letter|Traceback|ERROR` 없음.
+- 30분 신규 DLQ 관찰 완료: `2026-07-07T20:30:41Z` 시작 → `2026-07-07T21:00:41Z` 종료.
+  - `event_dead_letters.created_at >= '2026-07-07 20:27:55+00'` count `0`.
+  - `event_dead_letters` 최신 생성시각은 여전히 `2026-07-07 18:45:53.193523+00`.
+  - outbox pending `0`.
+  - 관찰 구간 outbox-relay 로그: `MaxPayloadError|dead_letter|Traceback|ERROR|outbox_relay_error` 없음.
+  - 관찰 구간 api-gateway 로그: 오류 패턴 없음.
+  - `github-poll-worker` CronJob 최신 이미지 `8c623faa-service-20260708052433`, 최근 job 연속 `Complete`, `failedJobsHistoryLimit=1`.
 - `TARGET_CONTEXT=target1` kube context는 현재 없음. 실제 target context는 `cluster-1`/`cluster-2`라 이번 E2E는 `cluster-1`로 수행.
 - live DB에는 `alembic_version` 테이블이 없어 migration은 기존 운영 방식대로 psql 수동 DDL로 적용함. 다음 운영 정리 시 Alembic versioning 도입 여부를 결정할 것.
 - 작업트리에 `frontend/` 변경이 생길 수 있음(다른 UI 세션). backend 후속 커밋 시 `git status --short` 확인 후 frontend 파일은 stage하지 말 것.
+
+## 위저드 API 계약 (backend, 2026-07-08)
+
+> 원칙: 목업/페이크/하드코딩 금지. 프론트 위저드는 아래 API로 서버가 실제 접근성/문법/전송 가능성을 먼저 검증한 뒤 다음 단계로 이동한다. 모든 실패 응답은 사람이 읽는 한국어 `detail`과 기계 분기용 `code` 또는 `reason_code`를 함께 사용한다. `frontend/`는 이 백엔드 세션에서 수정하지 않았다.
+
+### Auth
+
+- `POST /auth/check-email`
+
+요청:
+
+```json
+{"email":"user@example.com"}
+```
+
+성공 응답:
+
+```json
+{"available":true,"reason_code":"","detail":"","retry_after":null}
+```
+
+이미 등록된 이메일:
+
+```json
+{"available":false,"reason_code":"already_registered","detail":"이미 가입된 이메일입니다.","retry_after":null}
+```
+
+rate limit:
+
+```json
+{"detail":{"code":"rate_limited","detail":"요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.","retry_after":60}}
+```
+
+로그인 실패는 이메일 없음/비밀번호 오류를 모두 `invalid_credentials`로만 노출한다. 비밀번호까지 맞은 계정 상태만 `email_unverified`, `approval_pending`으로 분기한다. 인증 메일 재발송은 cooldown 초과 시 `code="resend_cooldown"`과 `retry_after`를 반환한다. 마지막 active service admin 제거/강등은 `code="last_admin"` 400으로 차단한다.
+
+### Repository Wizard
+
+- `POST /repos/validate`
+
+요청은 `https://github.com/owner/repo`, `github.com/owner/repo`, `owner/repo`, `git@github.com:owner/repo.git` 모두 수용한다. GitHub 외 host는 `unsupported_host`.
+
+```json
+{"url":"https://github.com/Jungle-303-04/final.git","token":"<github-token-optional>"}
+```
+
+성공 응답:
+
+```json
+{
+  "accessible": true,
+  "private": false,
+  "default_branch": "main",
+  "normalized": "Jungle-303-04/final",
+  "reason": null,
+  "code": null,
+  "credential_ref": "db:github:github"
+}
+```
+
+token이 필요하지만 없는 경우:
+
+```json
+{
+  "accessible": false,
+  "private": null,
+  "default_branch": null,
+  "normalized": "owner/repo",
+  "reason": "비공개 저장소이거나 접근 토큰이 필요합니다.",
+  "code": "token_required",
+  "credential_ref": null
+}
+```
+
+token 원문은 응답/로그에 남기지 않는다. 제공된 token은 `CREDENTIAL_ENCRYPTION_KEY` 기반 Fernet으로 `workspace_credentials`에 암호화 저장한다.
+
+- `GET /repos/branches?repo=owner/repo`
+
+```json
+{
+  "repo": "owner/repo",
+  "default_branch": "main",
+  "branches": [
+    {"name": "main", "default": true, "protected": true}
+  ]
+}
+```
+
+- `GET /repos/manifests?repo=owner/repo&branch=main`
+
+응답은 `.yaml/.yml` 중 Kubernetes `kind`가 파싱되는 파일만 반환한다.
+
+```json
+{
+  "repo": "owner/repo",
+  "branch": "main",
+  "manifests": [
+    {"path": "deploy/api.yaml", "kinds": ["Deployment", "Service"]}
+  ],
+  "warnings": []
+}
+```
+
+### Target Cluster Wizard
+
+- `GET /providers/cluster-discovery`
+
+`flows[]`에 `existing-k8s`, `eks`, `gke`, `aks`, `kind`, `minikube`, 외부 import provider가 포함된다. 각 cloud provider body에는 `config_fields`가 있어 프론트가 provider별 입력폼을 하드코딩 없이 구성한다.
+
+EKS form metadata 예:
+
+```json
+{
+  "cloud_provider": "eks",
+  "deploy_providers": [{"key": "manual-manifest"}],
+  "default_deploy_provider": "manual-manifest",
+  "supports_import": false,
+  "config_fields": [
+    {"key": "region", "label": "AWS region", "required": true},
+    {"key": "eks_cluster_name", "label": "EKS cluster name", "required": true},
+    {"key": "context_alias", "label": "Context alias", "required": false}
+  ]
+}
+```
+
+- `POST /targets`
+
+`cluster_id`는 optional이다. 미지정 시 서버가 `<name-slug>-<4자리 난수>`로 생성한다. 등록 직후 status는 `pending_install`이고, agent가 `/agent/connect`로 최초 연결하면 `registered`로 승격한다. `TARGET_REGISTRATION_CONNECT_TIMEOUT_SECONDS` 기본은 1800초다. 만료 이후 connection-status는 `install_expired`를 반환한다. `TARGET_REGISTRATION_AUTO_DELETE_EXPIRED` 기본은 `false`; audit 보존을 위해 hard delete보다 UI 삭제/재시도 흐름 권장.
+
+EKS 요청 예:
+
+```json
+{
+  "name": "customer-prod-01",
+  "environment": "prod",
+  "management_base_url": "https://k8s.woonyong.org/api",
+  "image": "183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest",
+  "cloud_provider": "eks",
+  "deploy_provider": "manual-manifest",
+  "provider_config": {
+    "region": "ap-northeast-2",
+    "eks_cluster_name": "customer-prod-eks",
+    "context_alias": "customer-prod-01"
+  }
+}
+```
+
+응답 예:
+
+```json
+{
+  "registered": true,
+  "cluster_id": "customer-prod-01-0042",
+  "status": "pending_install",
+  "applied": false,
+  "apply_output": null,
+  "install_manifest": "apiVersion: v1\n...",
+  "agent_token": "원문은 1회 반환",
+  "install_command": "curl -fsSL https://k8s.woonyong.org/api/install/<token> | kubectl apply -f -",
+  "bootstrap_command": "aws eks update-kubeconfig --region ap-northeast-2 --name customer-prod-eks --alias customer-prod-01 && kubectl --context customer-prod-01 get nodes && curl -fsSL https://k8s.woonyong.org/api/install/<token> | kubectl --context customer-prod-01 apply -f -",
+  "bootstrap_steps": [
+    {"label": "kubeconfig 확인", "command": "kubectl config current-context"},
+    {"label": "target agent 설치", "command": "<bootstrap_command>"},
+    {"label": "연결 확인", "command": "kubectl -n target get pods"}
+  ],
+  "connect_timeout_seconds": 1800,
+  "connect_expires_at": "2026-07-08T12:30:00+00:00"
+}
+```
+
+provider별 bootstrap command 입력:
+
+- EKS: `region`, `eks_cluster_name`, optional `context_alias`.
+- GKE: `project_id`, `location_type`(`region|zone`), `location`, `gke_cluster_name`.
+- AKS: `resource_group`, `aks_cluster_name`.
+- Existing Kubernetes: optional `context_name`; 없으면 현재 kube context 기준 generic install command.
+- kind: optional `kind_cluster_name`; 기본 context는 `kind-<name>`.
+- minikube: optional `profile`; 기본 context는 `minikube`.
+
+모든 shell command 입력값은 `shlex.quote`로 escaping한다. cloud secret은 `provider_config`에 저장하지 않는다.
+
+- `GET /clusters/{cluster_id}/connection-status`
+
+```json
+{
+  "cluster_id": "customer-prod-01-0042",
+  "connection_status": "pending_install",
+  "last_agent_id": null,
+  "last_seen_at": null,
+  "agents": [],
+  "connect_timeout_seconds": 1800,
+  "connect_expires_at": "2026-07-08T12:30:00+00:00"
+}
+```
+
+상태: `pending_install`, `install_expired`, `online`, `stale`, `never_connected`.
+
+### 기타 검증 API
+
+- `POST /alert-channels/test`
+
+```json
+{
+  "name": "ops",
+  "kind": "webhook",
+  "url": "https://hooks.example/service",
+  "min_severity": "warning",
+  "severity": "warning",
+  "message": "알림 채널 테스트"
+}
+```
+
+```json
+{"valid":true,"delivered":true,"code":null,"detail":"테스트 알림을 전송했습니다.","status_code":204}
+```
+
+- `POST /rca/rules/validate`
+
+```json
+{"yaml_text":"rules:\n  - id: custom_dns\n    symptoms: [\"DNS lookup failed\"]\n    required_sources: [\"kubernetes\", \"logs\"]\n    candidates:\n      - candidate_id: service_dns_resolution_failure\n        title: 서비스 DNS 실패\n        description: 서비스 이름 해석 실패\n        expected_evidence: [\"kubernetes\", \"logs\"]\n        checks:\n          - CoreDNS 이벤트 확인\n"}
+```
+
+```json
+{"valid":true,"errors":[],"matched_symptom":"DNS lookup failed","candidates_count":1}
+```
+
+오류:
+
+```json
+{"valid":false,"errors":[{"code":"schema_error","detail":"RCA 룰 스키마 위반: ...","line":null}],"matched_symptom":null,"candidates_count":0}
+```
+
+- `POST /metrics/validate`
+
+```json
+{"source":"prometheus","query":"up","base_url":"http://prometheus:9090","range_seconds":300,"step_seconds":30}
+```
+
+```json
+{"valid":true,"code":null,"detail":"PromQL dry-run 성공","result_type":"matrix"}
+```
+
+Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base_url_required"`, 문법 오류는 `promql_invalid`, timeout은 `prometheus_timeout`.
+
+### Repo 연결 / 배포 정의 생성 가드
+
+- `POST /applications/connect`와 `POST /applications/{application_id}/deployments`는 대상 cluster-agent connection_status가 `online`이 아니면 쓰기 전에 중단한다.
+- 단일 대상 실패 응답:
+
+```json
+{
+  "detail": {
+    "code": "cluster_not_connected",
+    "detail": "에이전트가 연결되지 않은 클러스터입니다",
+    "clusters": ["cluster-1"]
+  }
+}
+```
+
+- global/multi target(`cluster_id="*"`)은 연결 안 된 전체 cluster id를 `clusters` 배열에 담고, 하나라도 실패하면 watch/deployment binding을 하나도 만들지 않는다.
+- 프론트 순서: target 등록 → `bootstrap_command` 실행 → `GET /clusters/{cluster_id}/connection-status`가 `online`인지 확인 → repo/app connect 또는 deployment binding 생성.
+
+### 검증/문서 파일
+
+- Bruno: `docs/api/15-wizard-validation/*`.
+- 스펙: `docs/spec/packages/contracts.md`, `docs/spec/domains/{identity,gitops,providers,target,alert,rca,dashboard}.md`, `docs/spec/services/gateway-api-gateway.md`.
+- focused test: `uv run pytest tests/test_repository_discovery.py tests/test_identity_auth_routes.py tests/test_password_auth.py tests/test_target_registration.py tests/test_provider_registry.py tests/test_alert_routing.py tests/test_rca_rule_catalog.py tests/test_dashboard_metric_presets.py tests/test_admin_console_routes.py tests/test_applications_router.py tests/test_schemas.py -q`.

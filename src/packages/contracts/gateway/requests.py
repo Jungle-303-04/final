@@ -81,6 +81,10 @@ class ResendEmailVerificationRequest(StrictModel):
     password: str = Field(min_length=8)
 
 
+class EmailCheckRequest(StrictModel):
+    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 class GitHubWebhookRequest(StrictModel):
     commit_sha: str
     image: str = Field(min_length=1)
@@ -176,7 +180,7 @@ class InventorySnapshotRequest(StrictModel):
 
 
 class TargetRegisterRequest(StrictModel):
-    cluster_id: str = Target.DEFAULT_CLUSTER_ID
+    cluster_id: str | None = Field(default=None, max_length=253)
     name: str = DEFAULT_TARGET_NAME
     environment: str = DEFAULT_TARGET_ENVIRONMENT
     workspace_id: str = DEFAULT_WORKSPACE_ID
@@ -207,6 +211,7 @@ class TargetRegisterRequest(StrictModel):
     kube_context: str | None = None
     cloud_provider: str = "existing-k8s"
     deploy_provider: str = "manual-manifest"
+    provider_config: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _sample_workload_requires_explicit_config(self) -> TargetRegisterRequest:
@@ -224,6 +229,7 @@ class TargetPreflightRequest(StrictModel):
     cluster_id: str = Field(default="", max_length=253)
     cloud_provider: str = "existing-k8s"
     deploy_provider: str = "manual-manifest"
+    provider_config: dict[str, Any] = Field(default_factory=dict)
     apply: bool = False
     kube_context: str | None = None
     image: str = ""
@@ -350,6 +356,11 @@ class RepositoryProbeRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
 
 
+class RepoValidateRequest(StrictModel):
+    url: str = Field(min_length=1, max_length=500)
+    token: str | None = Field(default=None, min_length=1, max_length=500)
+
+
 class RepositoryManifestValidationRequest(StrictModel):
     repo_ref: str = Field(min_length=1, max_length=240)
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
@@ -399,6 +410,37 @@ class AlertChannelUpsertRequest(StrictModel):
     url: str = Field(min_length=1)
     min_severity: Literal["info", "warning", "critical"] = "warning"
     enabled: bool = True
+
+
+class AlertChannelTestRequest(StrictModel):
+    name: str = Field(default="test", min_length=1, max_length=120)
+    kind: Literal["webhook"] = "webhook"
+    url: str = Field(min_length=1, max_length=2000)
+    min_severity: Literal["info", "warning", "critical"] = "warning"
+    severity: Literal["info", "warning", "critical"] = "warning"
+    message: str = Field(default="알림 채널 테스트", max_length=500)
+
+
+class RcaRuleValidateRequest(StrictModel):
+    yaml_text: str = Field(min_length=1, max_length=100_000)
+
+
+class MetricsValidateRequest(StrictModel):
+    source: Literal["prometheus"] = "prometheus"
+    query: str = Field(min_length=1, max_length=MAX_METRIC_QUERY_LENGTH)
+    base_url: str | None = Field(default=None, max_length=500)
+    range_seconds: int | None = Field(default=300, ge=MIN_METRIC_RANGE_SECONDS, le=3600)
+    step_seconds: int | None = Field(default=30, ge=MIN_METRIC_STEP_SECONDS, le=300)
+
+    @model_validator(mode="after")
+    def _validate_range(self) -> MetricsValidateRequest:
+        if (
+            self.range_seconds is not None
+            and self.step_seconds is not None
+            and self.step_seconds > self.range_seconds
+        ):
+            raise ValueError("step_seconds must be less than or equal to range_seconds")
+        return self
 
 
 class AlertmanagerAlert(StrictModel):

@@ -25,10 +25,11 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `domains.command.models :: AgentCommand`, `domains.command.events :: CommandRequestedBody` | [command](./command.md) | 대기 중 명령 payload에서 워크플로 identity 복원, 승인 시 apply 명령 요청 body 구성 |
-| import | `domains.identity.dependencies :: require_cluster_access, require_session` | [identity](./identity.md) | 승인 엔드포인트의 세션·클러스터 권한 검사 |
+| import | `domains.identity.dependencies :: require_admin_session, require_cluster_access, require_session` | [identity](./identity.md) | 승인 엔드포인트의 세션·클러스터 권한 검사, repository wizard API admin 보호 |
 | import | `packages.config` (`constants`, `logs`, `settings`) | [config](../packages/config.md) | `RiskLevel`/`Target`/`Command`/`Sandbox` 상수, 로거, `env()` |
 | import | `packages.contracts` (`event_bus`, `gitops`, `identity`, `gateway`, `auth`) | [contracts](../packages/contracts.md) | 이벤트 subject/registry/body 기반 클래스, gitops enum·기본값, 요청/응답 모델, `Actor` |
 | import | `packages.runtime.dependencies :: get_db, get_events` | [runtime](../packages/runtime.md) | FastAPI 의존성 주입(DB·이벤트 버스) |
+| import | `packages.security.credentials` | [security](../packages/security.md) | `/repos/validate`가 받은 GitHub token을 `credential_ref("github", "github")`로 참조 가능한 암호문으로 저장 |
 | import | `packages.storage` (`base`, `engine`) | [storage](../packages/storage.md) | `Base`, 컬럼 헬퍼, `DatabaseConnection`, `unit_of_work_or_null`, `iso_or_none`, `row_dict` |
 | 소비자 | `src/services/gitops/*` (git-pull-worker, manifest-render-worker, diff-worker, diff-analyze-worker, workflow-controller), `src/services/gateway/api-gateway`, `src/services/target/drift-worker` | (services 스펙) | 이 도메인의 이벤트 body·repository·diffing 헬퍼를 사용 |
 
@@ -79,8 +80,12 @@ status: synced
 | `GET /repositories/discovery/branches` (`REPOSITORY_DISCOVERY_BRANCHES_PATH`) | `list_repository_branches` | query `repo_ref` | `RepositoryBranchListResponse` | `require_session` |
 | `GET /repositories/discovery/manifests` (`REPOSITORY_DISCOVERY_MANIFESTS_PATH`) | `list_repository_manifest_candidates` | query `repo_ref`, `branch` | `RepositoryManifestCandidateListResponse` | `require_session` |
 | `POST /repositories/discovery/validate` (`REPOSITORY_DISCOVERY_VALIDATE_PATH`) | `validate_repository_manifest` | `RepositoryManifestValidationRequest` | `RepositoryManifestValidationResponse` | `require_session` |
+| `POST /repos/validate` (`REPOS_VALIDATE_PATH`) | `validate_repo_for_wizard` | `RepoValidateRequest` | `RepoValidateResponse` | `require_admin_session` |
+| `GET /repos/branches` (`REPOS_BRANCHES_PATH`) | `list_repo_branches_for_wizard` | query `repo` | `RepositoryBranchListResponse` | `require_admin_session` |
+| `GET /repos/manifests` (`REPOS_MANIFESTS_PATH`) | `list_repo_manifests_for_wizard` | query `repo`, `branch` | `RepoManifestFileListResponse` | `require_admin_session` |
 
 `discovery_http_error`는 `RepositoryDiscoveryError`를 원래 status/detail로, `ValueError`를 422로, 그 외 예외를 502 `"repository discovery failed"`로 변환한다.
+위저드용 `/repos/*` 경로는 GitHub URL을 `owner/repo`로 정규화하고, `.yaml/.yml` 중 Kubernetes `kind`가 파싱되는 파일만 프론트 listbox 후보로 반환한다. token이 제공되면 workspace credential로 암호화 저장하고 원문은 응답하지 않는다.
 
 ### 인가 가드 — `src/domains/gitops/dependencies.py`
 
@@ -114,6 +119,7 @@ status: synced
 | `derive_workflow_run_id` | `def derive_workflow_run_id(payload: JsonObject) -> str` — `"workflow-" + sha256("workspace_id|application_id|binding_id|environment|commit_sha")[:32]` | `src/domains/gitops/repository.py :: derive_workflow_run_id` |
 | `derive_workflow_step_id` | `def derive_workflow_step_id(workflow_run_id: str, step_name: str) -> str` — `"step-" + sha256(f"{workflow_run_id}|{step_name}")[:32]` | `src/domains/gitops/repository.py :: derive_workflow_step_id` |
 | `derive_approval_id` | `def derive_approval_id(workflow_run_id: str) -> str` — `"approval-" + sha256(f"{workflow_run_id}|deploy-approval")[:32]` | `src/domains/gitops/repository.py :: derive_approval_id` |
+| `stable_credential_id` | `def stable_credential_id(workspace_id: str, provider: str, scope: str) -> str` — `"cred-" + sha256("workspace_id|provider|scope")[:32]` | `src/domains/gitops/repository.py :: stable_credential_id` |
 | `serialize_application` | `def serialize_application(row: Any) -> JsonObject` — metadata dict 강제, created_at/updated_at ISO 문자열화 | `src/domains/gitops/repository.py :: serialize_application` |
 | `serialize_deployment_binding` | `def serialize_deployment_binding(row: Any) -> JsonObject` — deploy_policy/access_policy dict 강제, 시각 ISO 화 | `src/domains/gitops/repository.py :: serialize_deployment_binding` |
 | `serialize_workflow_run` | `def serialize_workflow_run(row: Any) -> JsonObject` — metadata dict 강제, 시각 ISO 화 | `src/domains/gitops/repository.py :: serialize_workflow_run` |
@@ -124,6 +130,8 @@ status: synced
 
 | 메서드 시그니처 | 쿼리 의미 | 앵커 |
 |---|---|---|
+| `def upsert_workspace_credential(self, payload: JsonObject) -> JsonObject` | `workspace_credentials`에 `(workspace_id, provider, scope)` 유니크 기준 upsert. `credential_id`가 없으면 `stable_credential_id`로 파생하고, `encrypted_value/status/metadata/updated_at`을 갱신한다. token 원문은 저장하지 않는다. | `src/domains/gitops/repository.py :: RepoChangeRepository.upsert_workspace_credential` |
+| `def get_workspace_credential(self, workspace_id: str, provider: str, scope: str) -> JsonObject \| None` | active credential 단건 조회. 현재 wizard는 저장에만 사용하고 poller는 repository `credential_ref` 또는 env token ref를 별도로 해석한다. | `src/domains/gitops/repository.py :: RepoChangeRepository.get_workspace_credential` |
 | `def register_repository(self, payload: JsonObject) -> JsonObject` | `git_repositories` upsert(`repository_id` 충돌 시 provider/repo_ref/default_branch/credential_ref/status/access_policy 갱신). `user_id` 있으면 `repository` 리소스에 `cluster_steward` 롤 부여. 반환: payload + 해석된 `workspace_id`/`repository_id` | `src/domains/gitops/repository.py :: RepoChangeRepository.register_repository` |
 | `def register_watch_target(self, payload: JsonObject) -> JsonObject` | `git_watch_targets` upsert(`watch_target_id` 충돌 시 branch/manifest_path/interval_seconds/last_seen_commit_sha/last_polled_at/status/settings 갱신). `interval_seconds` 기본 30 | `src/domains/gitops/repository.py :: RepoChangeRepository.register_watch_target` |
 | `def register_deployment_binding(self, payload: JsonObject) -> JsonObject` | `deployment_bindings` upsert(`binding_id` 충돌 시 대상·정책 필드 전부 갱신). `cluster_id`/`namespace`/`app_name`은 payload 필수(`payload["…"]`). `user_id` 있으면 `deployment_binding` 리소스에 롤 부여 | `src/domains/gitops/repository.py :: RepoChangeRepository.register_deployment_binding` |
@@ -210,6 +218,21 @@ status: synced
 | access_policy | JSONB | NOT NULL | 접근 정책 |
 | created_at | TIMESTAMP(tz) | NOT NULL, default now() | |
 | updated_at | TIMESTAMP(tz) | NOT NULL, default now() | |
+
+### WorkspaceCredential — `src/domains/gitops/models.py :: WorkspaceCredential`
+
+`__tablename__ = "workspace_credentials"`, `UniqueConstraint("workspace_id", "provider", "scope")`
+
+| 필드명 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| credential_id | Text | PK | `stable_credential_id`로 파생되는 결정적 ID (`cred-<sha256[:32]>`) |
+| workspace_id | Text | FK → `workspaces.workspace_id`, NOT NULL | 소속 워크스페이스 |
+| provider | Text | NOT NULL | 예: `github` |
+| scope | Text | NOT NULL | 예: `github`; `(workspace_id, provider, scope)` 단위로 최신 암호문을 보존 |
+| encrypted_value | Text | NOT NULL | `packages.security.credentials.encrypt_credential` 결과. 원문 token은 DB와 응답에 남기지 않는다. |
+| status | Text | NOT NULL | 기본 `active` |
+| metadata_ | JSONB | NOT NULL, DB 컬럼명 `metadata` | 파이썬 속성명은 `metadata_`(SQLAlchemy 예약어 회피). `/repos/validate`는 `credential_ref`를 담는다. |
+| created_at / updated_at | TIMESTAMP(tz) | NOT NULL, default now() | |
 
 ### GitWatchTarget — `src/domains/gitops/models.py :: GitWatchTarget`
 

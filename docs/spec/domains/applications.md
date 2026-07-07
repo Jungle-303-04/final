@@ -19,6 +19,7 @@ status: synced
 |---|---|---|---|
 | import | `domains.identity` | [./identity.md](./identity.md) | `require_session`, `require_resource_access`, `require_cluster_access` |
 | import | `domains.gitops.repository_discovery` | [./gitops.md](./gitops.md) | `/applications/connect`에서 manifest 재검증(`RepositoryDiscoveryService.validate_manifest`) |
+| import | `domains.target.router` | [./target.md](./target.md) | deployment 정의 생성 전 cluster-agent 최신 연결 상태 판정(`cluster_connection_status`) |
 | import | `packages.contracts` | [../packages/contracts.md](../packages/contracts.md) | gateway routes/요청·응답 모델, `AccessResourceType`, `Permission`, `DEFAULT_WORKSPACE_ID` |
 | import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | `get_db` |
 | import | `packages.storage` | [../packages/storage.md](../packages/storage.md) | `unit_of_work_or_null` |
@@ -36,9 +37,12 @@ status: synced
 | `HTTP_NOT_FOUND` | `404` | `src/domains/applications/router.py :: HTTP_NOT_FOUND` |
 | `APPLICATION_NOT_FOUND` | `"application not found"` | `src/domains/applications/router.py :: APPLICATION_NOT_FOUND` |
 | `MANIFEST_VALIDATION_FAILED` | `"manifest validation failed"` | `src/domains/applications/router.py :: MANIFEST_VALIDATION_FAILED` |
+| `CLUSTER_NOT_CONNECTED_CODE` | `"cluster_not_connected"` | `src/domains/applications/router.py :: CLUSTER_NOT_CONNECTED_CODE` |
+| `CLUSTER_NOT_CONNECTED_DETAIL` | `"에이전트가 연결되지 않은 클러스터입니다"` | `src/domains/applications/router.py :: CLUSTER_NOT_CONNECTED_DETAIL` |
 | `repository_discovery_service` | `def repository_discovery_service() -> RepositoryDiscoveryService` — 기본 discovery service DI factory | `src/domains/applications/router.py :: repository_discovery_service` |
 | `require_application_access` | `def require_application_access(db: Any, current: Any, workspace_id: str, application_id: str, permission: str) -> None` — `require_resource_access(db, current, workspace_id, AccessResourceType.APPLICATION.value, application_id, permission)` 위임 | `src/domains/applications/router.py :: require_application_access` |
 | `get_application_or_404` | `def get_application_or_404(db: Any, workspace_id: str, application_id: str) -> dict[str, Any]` — `db.get_application` None이면 404 | `src/domains/applications/router.py :: get_application_or_404` |
+| `require_connected_clusters` | `(db, workspace_id, cluster_ids) -> None` — 최신 agent 상태가 `online`이 아닌 대상이 있으면 400 `{"code":"cluster_not_connected","detail":"에이전트가 연결되지 않은 클러스터입니다","clusters":[...]}` | `src/domains/applications/router.py :: require_connected_clusters` |
 
 ### 엔드포인트
 
@@ -75,12 +79,13 @@ status: synced
 ### repository 연결 (`POST /applications/connect`)
 
 1. session workspace를 기준으로 대상 `payload.cluster_id`에 `Permission.DEPLOY_RUN` 권한을 먼저 검사한다.
-2. `RepositoryDiscoveryService.validate_manifest(RepositoryManifestValidationRequest(...))`로 `repo_ref`, `branch`, `manifest_path`, `source_type`을 서버에서 재검증한다. discovery 오류는 그 status/detail 그대로 HTTPException으로 반환한다.
-3. validation 결과가 `valid=False`이면 첫 `errors[0]`, 없으면 `"manifest validation failed"`로 422를 반환한다.
-4. `source_type = normalize_source_type(payload.source_type) or source_type_from_path(validation.manifest_path)`로 manifest source를 결정한다.
-5. `metadata`에는 validation의 `branch`, `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 병합한다. `deploy_policy`에는 `manifest_source`, `validation_mode`를 병합한다. `settings.source_type`에도 같은 값을 넣어 watch target → github poller → webhook → git-pull → manifest-render 경로에서 선택한 렌더러가 유지되게 한다.
-6. `unit_of_work_or_null(db)` 안에서 `db.register_repository(body)` → `db.upsert_application(body)` → 최신 application 조회 → `db.register_watch_target(binding_body)` → `db.register_deployment_binding(binding_body)` 순서로 app/watch/binding을 함께 등록한다.
-7. 반환은 `ApplicationResponse(application=application)`이다.
+2. `require_connected_clusters(db, workspace_id, [payload.cluster_id])`로 cluster-agent 최신 상태가 `online`인지 확인한다. 아니면 400 `cluster_not_connected`로 쓰기 전에 중단한다.
+3. `RepositoryDiscoveryService.validate_manifest(RepositoryManifestValidationRequest(...))`로 `repo_ref`, `branch`, `manifest_path`, `source_type`을 서버에서 재검증한다. discovery 오류는 그 status/detail 그대로 HTTPException으로 반환한다.
+4. validation 결과가 `valid=False`이면 첫 `errors[0]`, 없으면 `"manifest validation failed"`로 422를 반환한다.
+5. `source_type = normalize_source_type(payload.source_type) or source_type_from_path(validation.manifest_path)`로 manifest source를 결정한다.
+6. `metadata`에는 validation의 `branch`, `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 병합한다. `deploy_policy`에는 `manifest_source`, `validation_mode`를 병합한다. `settings.source_type`에도 같은 값을 넣어 watch target → github poller → webhook → git-pull → manifest-render 경로에서 선택한 렌더러가 유지되게 한다.
+7. `unit_of_work_or_null(db)` 안에서 `db.register_repository(body)` → `db.upsert_application(body)` → 최신 application 조회 → `db.register_watch_target(binding_body)` → `db.register_deployment_binding(binding_body)` 순서로 app/watch/binding을 함께 등록한다.
+8. 반환은 `ApplicationResponse(application=application)`이다.
 
 ### deployment binding 업서트 (`POST /applications/{application_id}/deployments`)
 
@@ -90,9 +95,10 @@ status: synced
 4. **글로벌 서비스** — `payload.cluster_id == GLOBAL_CLUSTER_SELECTOR`(`"*"`)면:
    - `db.list_cluster_registrations(workspace_id)`로 등록 클러스터 목록 조회. 비어 있으면 422 `NO_CLUSTERS_FOR_GLOBAL_BINDING`.
    - 전 대상 클러스터에 `DEPLOY_RUN` 권한을 **먼저** 검증 — 하나라도 없으면 아무것도 만들지 않음.
+   - 전 대상 클러스터의 agent connection_status를 검사한다. 연결 안 된 대상이 하나라도 있으면 400 `cluster_not_connected`와 `clusters` 실패 목록을 반환하고 아무 바인딩도 만들지 않는다.
    - 클러스터별로 `db.register_deployment_binding({**body, "cluster_id": <cluster>, "deploy_policy": {**payload.deploy_policy, GLOBAL_BINDING_KEY: True}})` 확장 생성. 각 바인딩에 `deploy_policy.global`이 남아 (a) webhook fan-out 대상이 되고 (b) 신규 클러스터 등록 시 workflow-controller가 자동 합류시킨다.
    - 첫 번째 stored 바인딩으로 `DeploymentBindingResponse` 반환.
-5. 일반 경로: `stored = db.register_deployment_binding(body)` → `DeploymentBindingResponse(deployment=stored)`.
+5. 일반 경로: `require_connected_clusters(db, workspace_id, [payload.cluster_id])` 통과 후 `stored = db.register_deployment_binding(body)` → `DeploymentBindingResponse(deployment=stored)`.
 
 ### 목록 조회 (`GET /applications`)
 
@@ -102,6 +108,7 @@ status: synced
 
 - 존재하지 않는 애플리케이션 → HTTP 404 `"application not found"`.
 - `/applications/connect` manifest validation 실패 → HTTP 422 `"manifest validation failed"` 또는 discovery validation의 첫 번째 error.
+- `/applications/connect` 또는 deployment binding 생성 대상 cluster-agent가 online이 아니면 HTTP 400 `{"code":"cluster_not_connected","detail":"에이전트가 연결되지 않은 클러스터입니다","clusters":["cluster-id"]}`. 글로벌/다중 대상이면 실패 클러스터 목록 전체를 포함한다.
 - 권한 부족 → identity 의존성이 던지는 HTTPException ([identity](./identity.md)).
 - repo 등록과 애플리케이션 업서트는 같은 트랜잭션(`unit_of_work_or_null`) — 부분 실패 시 둘 다 롤백.
 - `/applications/connect`는 repo/app/watch/deployment binding 등록을 같은 트랜잭션에서 처리한다.
