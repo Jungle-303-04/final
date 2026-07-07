@@ -1,13 +1,34 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:37 KST (마무리 커밋/푸시 준비)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:45 KST (시크릿 제외 마무리)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
 - 운영 코드, 배포 대상 화면, API 응답, DB 정리/복구 절차에는 **목업 데이터, 페이크 데이터, 하드코딩된 클러스터/레포/인시던트 값 사용 금지**.
 - 화면 수치와 드릴다운은 실제 세션 권한으로 접근 가능한 DB/API/클러스터 관측값만 표시한다. 개발용/테스트용 격리 객체는 단위 테스트 내부에만 두고 운영 경로에 연결하지 않는다.
+- 실제 토큰/비밀번호/세션 쿠키/API key는 사용자 요청이 있어도 커밋하지 않는다. Git 히스토리에서 완전 삭제가 어렵기 때문에 GitHub Actions secrets, 로컬 env, 승인된 secret store만 사용한다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (16:45 KST) — 시크릿 제외/Actions runner 이슈
+
+- `ef65c770 fix: 레포 discovery render 검증 전환`은 origin/dev push 완료.
+- dev Actions:
+  - CI run `28849784747` → success.
+  - AWS CD run `28849784735` → success.
+  - Promote Dev To Main run `28849784833` → success.
+- origin/main은 merge commit `e37cee8bf983eb122b5ab9c987210e00d7b1bf6f`까지 진행.
+- main AWS CD:
+  - run `28849845008` attempt 2 → failure. `Test before deploy`는 success였고 `Deploy to AWS EKS`가 `runner_id=0`, steps 없음, log 없음으로 실패.
+  - fresh dispatch run `28850098836` → failure. `Test before deploy` 자체가 `runner_id=0`, steps 없음, log 없음으로 실패했고 deploy job은 skipped.
+  - 판단: 코드/테스트 실패가 아니라 GitHub Actions runner 배정 또는 계정/환경 실행 상태 이슈로 보인다. 다음 AI는 같은 run 무한 재시도 대신 GitHub Actions 상태/runner quota/environment 상태를 먼저 확인할 것.
+- live public smoke는 계속 정상:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+- 커밋 제외/보호:
+  - `.e2e-tmp-sweep.py`, `report_desktop.json`, `report_mobile.json`, `아카이브.zip`은 커밋하지 않는다.
+  - `아카이브.zip`에는 `.env*` 계열 파일이 들어 있으므로 시크릿 포함 가능성이 높다. 사용자 요청이 있어도 커밋 금지.
+  - `.gitignore`에 `.e2e-tmp-*.py`, `report_*.json`, `*.zip`을 추가해 실수 stage를 방지했다.
 
 ## 최신 업데이트 (16:37 KST) — 마무리 커밋/푸시 준비
 

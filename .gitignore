@@ -38,3 +38,6 @@ htmlcov/
 .codex/
 CODE_REVIEW_REPORT.md
 DEV_BRANCH_STATUS.md
+.e2e-tmp-*.py
+report_*.json
+*.zip
