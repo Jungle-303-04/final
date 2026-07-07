@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Select, Text, case, cast, delete, func, or_, select
+from sqlalchemy import Select, case, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
@@ -333,6 +333,7 @@ class DashboardRepository(DatabaseConnection):
             table.c.workspace_id == workspace_id,
             table.c.incident_id.is_not(None),
             table.c.cluster_id.is_not(None),
+            table.c.incident_logical_key.is_not(None),
             table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
         )
         statement = _exclude_non_incident_detection(statement)
@@ -451,12 +452,7 @@ def incident_logical_key_from_projection(row: JsonObject) -> str:
 def rca_timeline_logical_incident_key_expression() -> Any:
     """SQL 집계용 logical incident key — payload JSON을 읽지 않는 projection 컬럼 사용."""
     table = RcaTimeline.__table__
-    return func.coalesce(
-        func.nullif(table.c.incident_logical_key, ""),
-        func.nullif(table.c.incident_id, ""),
-        func.nullif(table.c.correlation_id, ""),
-        cast(table.c.id, Text),
-    )
+    return func.nullif(table.c.incident_logical_key, "")
 
 
 def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
