@@ -141,10 +141,15 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                     {
                         "metadata": {"name": "checkout-api", "namespace": "target"},
                         "spec": {
-                            "type": "ClusterIP",
+                            "type": "LoadBalancer",
                             "clusterIP": "10.96.10.20",
-                            "ports": [{"port": 8080}],
+                            "ports": [{"port": 80, "targetPort": "http"}],
                             "selector": {"app": "checkout"},
+                        },
+                        "status": {
+                            "loadBalancer": {
+                                "ingress": [{"hostname": "checkout.example.elb.amazonaws.com"}]
+                            }
                         },
                     }
                 ]
@@ -207,6 +212,13 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["workloads"][0]["kind"] == "Deployment"
     assert validated.kubernetes["workloads"][0]["ready_replicas"] == 1
     assert validated.kubernetes["services"][0]["name"] == "checkout-api"
+    assert validated.kubernetes["services"][0]["external_hosts"] == [
+        "checkout.example.elb.amazonaws.com"
+    ]
+    assert (
+        validated.kubernetes["services"][0]["external_url"]
+        == "http://checkout.example.elb.amazonaws.com"
+    )
     assert validated.kubernetes["endpoints"][0]["endpoint_count"] == 1
     assert validated.kubernetes["provider_status"]["target_namespace_snapshot"]["counts"] == {
         "pods": 1,

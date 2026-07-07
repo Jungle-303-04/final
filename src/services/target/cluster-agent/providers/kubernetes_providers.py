@@ -415,6 +415,14 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
 
 def service_summary(item: JsonObject) -> JsonObject:
     service_spec = spec(item)
+    service_status = status(item)
+    load_balancer = service_status.get("loadBalancer", {})
+    ingress = load_balancer.get("ingress", []) if isinstance(load_balancer, dict) else []
+    external_hosts = [
+        str(entry.get("hostname") or entry.get("ip"))
+        for entry in ingress
+        if isinstance(entry, dict) and (entry.get("hostname") or entry.get("ip"))
+    ]
     return {
         "namespace": metadata(item).get("namespace"),
         "name": metadata(item).get("name"),
@@ -422,6 +430,9 @@ def service_summary(item: JsonObject) -> JsonObject:
         "cluster_ip": service_spec.get("clusterIP"),
         "ports": service_spec.get("ports", []),
         "selector": service_spec.get("selector", {}),
+        "load_balancer": {"ingress": ingress},
+        "external_hosts": external_hosts,
+        "external_url": f"http://{external_hosts[0]}" if external_hosts else None,
     }
 
 
