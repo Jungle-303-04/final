@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:24 KST (multi-agent 조사 반영/E2E hardcoding 제거)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:37 KST (마무리 커밋/푸시 준비)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -9,10 +9,95 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 
+## 최신 업데이트 (16:37 KST) — 마무리 커밋/푸시 준비
+
+- main AWS CD run `28849235901` → success.
+- live public smoke:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+- 이번 마무리 커밋 대상:
+  - `src/domains/gitops/repository_discovery.py`
+  - `tests/test_repository_discovery.py`
+  - `HANDOVER.md`
+  - `docs/continuation-execution-plan-2026-07-07.md`
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_repository_discovery.py tests/test_manifest_render_worker.py tests/test_docs_index.py` → 37 passed.
+  - `ruff format --check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py`
+  - `ruff check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py`
+  - `git diff --check`
+- 커밋 제외:
+  - `.e2e-tmp-sweep.py`, `report_desktop.json`, `report_mobile.json`
+  - 이유: 임시 E2E 산출물이며 특정 app/run/incident id가 들어 있어 운영 원칙의 hardcoding 금지와 충돌한다. 다음 AI는 필요하면 내용을 참고하되 커밋하지 말 것.
+- 다음 AI 즉시 작업:
+  1. 이 커밋의 dev CI / Promote / AWS CD / main AWS CD 확인.
+  2. AWS SSO 재인증 후 authenticated smoke와 DB 증가율 확인.
+  3. `/console/` 데모 보존 방식을 별도 static build 또는 별도 route bundle로 결정.
+  4. cluster import를 env-derived 후보에서 실제 provider adapter/API discovery로 확장.
+
+## 최신 업데이트 (16:33 KST) — 프론트 애니메이션/드릴다운 설계 메모
+
+토큰/맥락이 끊겨도 다음 AI가 같은 방향으로 이어가도록 프론트 목표를 명시한다.
+
+- 참고할 애니메이션/시각화 소스:
+  - Motion for React: `https://motion.dev/docs/react`
+    - 페이지 진입, drawer/modal, list layout transition, reduced motion 처리 기준.
+  - React Flow examples: `https://reactflow.dev/examples`
+    - incident RCA graph, workflow graph, node select/edge active 상태 기준.
+  - Nivo examples: `https://nivo.rocks/treemap/`, `https://nivo.rocks/line/`
+    - fleet treemap, metric time-series interaction/tooltip 기준.
+  - Dagre layout: `https://github.com/dagrejs/dagre`
+    - flow graph 자동 배치 기준.
+- 현재 코드에서 반드시 재사용할 모션 primitive:
+  - `frontend/src/plural-ui/motion.ts`
+    - `DUR`, `EASE`, `SPRING`, `fadeRise`, `overlayFade`, `flyoverSlide`, `modalPop`, `staggerParent`, `staggerChild`.
+  - `frontend/src/shared/motion/index.tsx`
+    - `FadeSlideIn`, `Stagger`, `CountUp`, `AnimatedList`, `AnimatedRow`, `PulseOnChange`, `AnimatePresence`.
+  - 규칙: 새 화면에서 inline random animation을 만들지 말고 위 primitive를 먼저 확장한다. `prefers-reduced-motion`은 항상 존중한다.
+- 드릴다운 canonical 흐름:
+  1. `/` fleet dashboard
+     - `GET /fleet/summary` → StatCard + treemap + cluster table.
+     - treemap tile/table row click → `/clusters/:clusterId`.
+     - 최근 incident row → `/incidents/:incidentId`.
+     - 승인 대기 row → `/workflows/:runId`.
+     - AI conversation row → `/ai/:conversationId`.
+  2. `/clusters/:clusterId`
+     - query param `?tab=workloads|pods|nodes|services|resources|events`로 탭 상태 유지.
+     - pod row click → `/clusters/:clusterId/pods/:namespace/:pod?tab=pods`.
+     - pod detail은 Drawer로 열고, "이 팟 분석"은 `/ai?prefill=...`로 연결.
+     - cluster agg panel의 열린 incident → `/incidents/:incidentId`.
+  3. `/incidents/:incidentId`
+     - React Flow graph: incident → evidence → analysis → actions.
+     - group node collapse/expand는 local state, evidence/recovery/report drill은 같은 화면 하단 panel.
+     - recovery plan status는 `useRecoveryPlan(correlationId)`로 실제 API 값만 표시.
+  4. `/workflows/:runId`
+     - React Flow graph: STARTED → RENDERING → DIFFING → POLICY_CHECKING → WAITING_FOR_APPROVAL → APPLYING → ROLLOUT_WAITING → SUCCEEDED/FAILED.
+     - node click → 오른쪽 detail card에 step detail, diff, approval card를 표시.
+  5. `/repos/:applicationId`
+     - app/repo/binding/run 실데이터 중심. workflow run click은 `/workflows/:runId`.
+  6. `/metrics?cluster=:clusterId`
+     - cluster context를 query param으로 유지하고, time-series tooltip/slice로 metric detail을 노출.
+- 인터랙션 원칙:
+  - URL로 복원 가능한 drilldown은 route/search param에 둔다. 순간 선택만 local state로 둔다.
+  - Drawer/Modal은 실제 API row id를 받아야 하며 mock row 생성 금지.
+  - Count/Badge 변화는 `PulseOnChange` 또는 `CountUp`으로 짧게만 강조한다. 계속 흔들리는 장식 애니메이션 금지.
+  - Table row/list 추가·삭제·정렬은 `AnimatedRow`/`AnimatedList` layout animation을 쓴다.
+  - Flow edge active animation은 실제 workflow/incident status에만 연결한다. 데모용 forced active 금지.
+  - Loading은 기존 `Skeleton`/`QueryBoundary`, Empty는 `EmptyState`, Error는 retry button 포함.
+  - Desktop/mobile 모두 overflow, text overlap, chart min-height 깨짐을 Playwright screenshot으로 확인한다.
+- 현재 중요한 모순:
+  - `/console/`은 보존 대상이라고 했지만 라우터는 `/console/*`를 `/`로 흡수한다. 데모 보존을 진짜로 하려면 별도 static build 또는 별도 route bundle이 필요하다. 실제 서비스는 `/` 유지.
+  - Python browser smoke는 있지만 표준 Playwright config/npm e2e script는 없다. production polish 전용 E2E를 추가해야 한다.
+- worker 완료:
+  - `Harvey` worker가 repo Helm/Kustomize discovery validation placeholder 제거를 구현했다.
+  - GitHub tree/content를 bounded export하고 TemporaryDirectory에서 `kubectl kustomize` 또는 `helm template`로 실제 render validation을 수행한다.
+  - path traversal, file count/byte limit, renderer missing/failure, render error compact/redact 처리를 포함한다.
+  - 검증: `tests/test_repository_discovery.py tests/test_manifest_render_worker.py tests/test_docs_index.py` → 37 passed.
+  - 검증: `ruff check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py`, `git diff --check` → 통과.
+
 ## 최신 업데이트 (16:24 KST) — multi-agent 조사 반영/E2E hardcoding 제거
 
 - 병렬 explorer 3개 완료:
-  - 동적 등록: repo probe/branch/manifest 후보는 실제 GitHub API 기반이지만, Helm/Kustomize discovery validation은 아직 placeholder다. cluster import 후보는 provider catalog API가 있어도 실제 외부 provider adapter/API discovery가 아니라 env-derived metadata 중심이다.
+  - 동적 등록: repo probe/branch/manifest 후보는 실제 GitHub API 기반이다. Helm/Kustomize discovery validation placeholder 제거는 worker가 진행 중이며, 완료 전까지 검증/커밋하지 않는다. cluster import 후보는 provider catalog API가 있어도 실제 외부 provider adapter/API discovery가 아니라 env-derived metadata 중심이다.
   - UI/E2E: 표준 Playwright config는 없고 Python Playwright smoke만 있다. `/console/`은 현재 라우터에서 `/`로 흡수되며, live `/`와 `/console/` 모두 같은 SPA를 반환한다.
   - DB reset: 운영 DB reset script는 없다. 최종 reset은 backup/snapshot/restore 검증 후 `Database().init()` + `Database.upsert_admin_account()` 경로로만 수행해야 한다. 지금 즉시 reset 금지.
 - `frontend/tests/e2e_real_backend.py`의 hardcoded real-backend test credential을 제거했다.
@@ -22,10 +107,10 @@
   - screenshot dir는 `SMOKE_SHOTS_DIR`로 조정 가능하다.
 - `frontend/docs/backend-integration.md`도 위 실행 방식과 맞게 갱신했다.
 - 남은 즉시 작업:
-  1. 이 hardcoding 제거 커밋/푸시.
-  2. main AWS CD run `28848639831` 완료 확인.
+  1. repo Helm/Kustomize discovery validation 변경을 커밋/푸시.
+  2. main AWS CD run `28849235901` 완료 확인.
   3. AWS SSO 재인증 가능 시 authenticated smoke와 DB 증가율 검증.
-  4. 다음 구현 후보는 repo Helm/Kustomize validation을 실제 checkout/render 기반으로 바꾸는 작업.
+  4. 다음 구현 후보는 cluster import의 실제 provider adapter/API discovery 확장.
 
 ## 최신 업데이트 (16:22 KST) — 배포/검증 체크포인트
 
@@ -104,7 +189,7 @@
   - 프론트에서도 비관리자에게 cluster 등록 액션/빈 상태 등록 버튼을 노출하지 않도록 조정했다. 레포 연결은 유지하되, 배포 대상 클러스터가 없으면 관리자 권한 요청 안내만 보여준다.
 - **동적 레포/클러스터 등록 재분석 결과**:
   - 레포 위저드는 실제 GitHub API 기반 probe → branch list → manifest candidate list → validation → app/deployment 생성 흐름이 구현되어 있다.
-  - 남은 생산화 과제: DB에 등록된 앱/브랜치/manifest watch target을 poller가 직접 순회하도록 확장, Helm/Kustomize render validation 실제 실행, app 생성 성공 후 deployment 생성 실패 시 보상 처리.
+  - 남은 생산화 과제: DB에 등록된 앱/브랜치/manifest watch target을 poller가 직접 순회하도록 확장, app 생성 성공 후 deployment 생성 실패 시 보상 처리.
   - 클러스터 위저드는 provider catalog/discovery/preflight/register/connection polling 흐름이 구현되어 있다.
   - 남은 생산화 과제: env-derived 후보를 넘어 실제 Plural/API/kubeconfig discovery 확장, preflight에서 Kubernetes 연결성까지 검증.
 - **DB 초기화 방침 업데이트**:
