@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:41 KST (레포 상세 디자인 시스템 이관 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:44 KST (레포 상세 디자인 시스템 이관 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -24,8 +24,13 @@
   - `cd frontend && npm run build` passed.
   - grep: `RepoDetailView.tsx`/`repo/api.ts`의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css` 0건.
   - Playwright mock: `/repos/app-1`를 1440/1024/390 폭에서 순회했다. 실행/배포 대상/Safe PR/설정 탭 표시, horizontal overflow 0, console error 0 확인. screenshots: `/tmp/repo-detail-desktop.png`, `/tmp/repo-detail-tablet.png`, `/tmp/repo-detail-mobile.png`.
-- 남은 확인:
-  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
+- CI/CD:
+  - `77ecf6be` push 후 GitHub Actions `28906506627`(CI), `28906506601`(AWS CD), `28906506650`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:77ecf6be-repo-detail-ui-20260708084354`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-C_dVPWot.js`에서 `RepoDetailView-a14V4fYv.js`, `ApprovalCard-Ci8lQGAe.js` 참조 확인. lazy chunk 본문에서 `실행 이력`, `배포 대상`, `Safe PR`, `AI 분석`, `release_operator`, `승인 완료`, `그래프 보기` 문구 확인.
 
 ## 체크포인트 — 알림 채널 전개형 검증 UX
 
