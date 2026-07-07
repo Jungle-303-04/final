@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/env.sh"
 
 BASE_URL="${BASE_URL:-}"
+API_BASE_URL="${API_BASE_URL:-}"
 TARGET_CONTEXT="${TARGET_CONTEXT:-}"
 TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID:-}"
 TARGET_NAME="${TARGET_NAME:-${TARGET_CLUSTER_ID}}"
@@ -73,8 +74,38 @@ if is_true "${INSTALL_SAMPLE_WORKLOAD}" && { [ -z "${SAMPLE_WORKLOAD_NAME}" ] ||
   exit 1
 fi
 
+normalize_url() {
+  local value="${1%/}"
+  printf '%s\n' "${value}"
+}
+
+api_health_ok() {
+  local candidate="$1"
+  curl -fsS "${candidate}/healthz" 2>/dev/null | grep -q '"service":"api-gateway"'
+}
+
+resolve_api_base_url() {
+  local base
+  base="$(normalize_url "${BASE_URL}")"
+  if [ -n "${API_BASE_URL}" ]; then
+    normalize_url "${API_BASE_URL}"
+    return
+  fi
+  if api_health_ok "${base}/api"; then
+    printf '%s/api\n' "${base}"
+    return
+  fi
+  if api_health_ok "${base}"; then
+    printf '%s\n' "${base}"
+    return
+  fi
+  printf '%s/api\n' "${base}"
+}
+
+API_BASE_URL="$(resolve_api_base_url)"
+
 echo "==> logging in operator for target registration"
-login_with_password "${BASE_URL}" "${COOKIE_JAR}"
+login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"
 
 registration_body="$(
   TARGET_CLUSTER_ID="${TARGET_CLUSTER_ID}" \
@@ -125,7 +156,7 @@ PY
 )"
 
 echo "==> registering target in operations tool"
-registration_response="$(curl -fsS -X POST "${BASE_URL}/targets" \
+registration_response="$(curl -fsS -X POST "${API_BASE_URL}/targets" \
   -b "${COOKIE_JAR}" \
   -H "content-type: application/json" \
   -H "x-service-csrf: same-origin" \

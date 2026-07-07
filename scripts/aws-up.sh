@@ -744,28 +744,28 @@ EOF
     management_rollout_status "${resource}"
   done < <(management_rollout_resources)
 
-  log "exposing api-gateway with LoadBalancer"
-  kubectl --context "${MGMT_CLUSTER}" -n management patch svc api-gateway --type merge \
-    -p '{"spec":{"type":"LoadBalancer","ports":[{"name":"http","port":8000,"targetPort":"http","protocol":"TCP"},{"name":"public-http","port":80,"targetPort":"http","protocol":"TCP"}]}}' >/dev/null
+  log "exposing console with LoadBalancer"
+  kubectl --context "${MGMT_CLUSTER}" -n management patch svc console --type merge \
+    -p '{"spec":{"type":"LoadBalancer","ports":[{"name":"http","port":80,"targetPort":"http","protocol":"TCP"}]}}' >/dev/null
 }
 
 gateway_load_balancer_host() {
   local host=""
   for _ in $(seq 1 90); do
     host="$(
-      kubectl --context "${MGMT_CLUSTER}" -n management get svc api-gateway \
+      kubectl --context "${MGMT_CLUSTER}" -n management get svc console \
         -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true
     )"
     if [[ -n "${host}" ]] && {
       [[ "${SKIP_LB_HEALTH_WAIT}" == "1" ]] \
-        || curl -fsS "http://${host}/healthz" >/dev/null 2>&1
+        || curl -fsS "http://${host}/api/healthz" | grep -q '"service":"api-gateway"'
     }; then
       printf '%s\n' "${host}"
       return
     fi
     sleep 10
   done
-  echo "api-gateway LoadBalancer did not become reachable" >&2
+  echo "console LoadBalancer did not become reachable" >&2
   return 1
 }
 
@@ -792,7 +792,7 @@ configure_route53_record() {
 
   cat >"${change_batch}" <<JSON
 {
-  "Comment": "Point ${record_name} to ${MGMT_CLUSTER} api-gateway",
+  "Comment": "Point ${record_name} to ${MGMT_CLUSTER} console",
   "Changes": [
     {
       "Action": "UPSERT",
@@ -1013,7 +1013,7 @@ PY
   "content": "${lb_host}",
   "ttl": ${ttl},
   "proxied": ${proxied},
-  "comment": "${PROJECT_SLUG} api-gateway"
+  "comment": "${PROJECT_SLUG} console"
 }
 JSON
 
@@ -1121,7 +1121,7 @@ custom_domain_base_url() {
     scheme="https"
   fi
   for _ in $(seq 1 30); do
-    if curl -fsS "${scheme}://${CUSTOM_DOMAIN}/healthz" >/dev/null 2>&1; then
+    if curl -fsS "${scheme}://${CUSTOM_DOMAIN}/api/healthz" | grep -q '"service":"api-gateway"'; then
       printf '%s://%s\n' "${scheme}" "${CUSTOM_DOMAIN}"
       return
     fi
@@ -1178,7 +1178,7 @@ register_target() {
 
   log "registering target ${display_name} (${context})"
   BASE_URL="${base_url}" \
-  MANAGEMENT_BASE_URL="${base_url}" \
+  MANAGEMENT_BASE_URL="${base_url%/}/api" \
   TARGET_CONTEXT="${context}" \
   TARGET_CLUSTER_ID="${cluster_id}" \
   TARGET_NAME="${display_name}" \
@@ -1201,9 +1201,9 @@ basic_status() {
   kubectl --context "${TARGET_CLUSTER_1}" -n target get pods -o wide
   log "${TARGET_2_DISPLAY_NAME} target pods"
   kubectl --context "${TARGET_CLUSTER_2}" -n target get pods -o wide
-  log "gateway health"
-  if ! curl -fsS "${base_url}/healthz"; then
-    echo "gateway health check failed from this machine; verify DNS propagation for ${base_url}" >&2
+  log "console/api health"
+  if ! curl -fsS "${base_url}/api/healthz" | grep -q '"service":"api-gateway"'; then
+    echo "console/api health check failed from this machine; verify DNS propagation for ${base_url}" >&2
   fi
   echo
 }

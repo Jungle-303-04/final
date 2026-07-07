@@ -74,7 +74,7 @@ GitHub repository variables나 로컬 env로 덮어쓸 수 있다.
 - service/console ECR push
 - management runtime ConfigMap/Secret upsert
 - management manifests apply
-- `api-gateway` LoadBalancer health check
+- `console` LoadBalancer health check via `/api/healthz` (api-gateway는 console nginx `/api/*` 프록시 뒤)
 - Route53 CNAME upsert when `CONFIGURE_ROUTE53=1`, `CUSTOM_DOMAIN`, `ROUTE53_ZONE_NAME` are set
 - Cloudflare CNAME upsert when `CONFIGURE_CLOUDFLARE=1`, `CUSTOM_DOMAIN`, `CLOUDFLARE_ZONE_NAME`, `CLOUDFLARE_API_TOKEN` are set
 

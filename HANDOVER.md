@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:16 KST (fleet health truthfulness)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 19:24 KST (console origin /api smoke 정규화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,21 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (19:24 KST) — console origin /api smoke 정규화
+
+- 구현:
+  - `scripts/aws-up.sh`가 public LoadBalancer/DNS origin을 `api-gateway`가 아니라 `console` service 기준으로 잡도록 변경했다.
+  - console origin health는 `/api/healthz`가 `{"service":"api-gateway"}`를 반환하는지로 확인한다. root `/healthz`는 SPA fallback일 수 있으므로 smoke 기준으로 쓰지 않는다.
+  - `scripts/smoke.sh`, `scripts/register-target.sh`는 `BASE_URL`이 console origin이면 `${BASE_URL}/api`, raw gateway origin이면 `${BASE_URL}`를 API base로 자동 판별한다.
+  - target agent `MANAGEMENT_BASE_URL`은 aws-up 경로에서 `${console_origin}/api`로 주입된다.
+  - `scripts/status.sh`, `docs/aws-testing-runbook.md`, `docs/local-testing.md`도 `/api/healthz` 기준으로 정리했다.
+- 검증:
+  - `bash -n scripts/aws-up.sh scripts/smoke.sh scripts/register-target.sh scripts/status.sh` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_aws_testing_workflows.py tests/test_service_entrypoints.py tests/test_docs_index.py` → 33 passed.
+- 남은 관련 작업:
+  - GitHub Actions runner allocation 실패는 repo/org/billing/policy 계층 확인이 필요하다.
+  - live 배포 후 passive smoke: `/` title, `/api/healthz`, `/api/readyz`, 비로그인 `/api/providers/cluster-discovery` 401.
 
 ## 체크포인트 (19:16 KST) — fleet health truthfulness
 

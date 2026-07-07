@@ -139,10 +139,10 @@ AWS bootstrap 계정은 Bruno UI override 또는 gitignore된 `*.local.bru` 파�
 
 ## 8단계. URL이 안 열릴 때
 
-먼저 Gateway health를 확인한다.
+먼저 console origin 뒤의 API health를 확인한다.
 
 ```bash
-curl -i https://k8s.woonyong.org/healthz
+curl -i https://k8s.woonyong.org/api/healthz
 ```
 
 정상 기준:

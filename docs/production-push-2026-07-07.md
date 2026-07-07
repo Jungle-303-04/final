@@ -60,20 +60,20 @@
 ### 6. 배포 파이프라인 (이번 밤 전용 경로)
 
 - GitHub push 권한이 없으므로: 로컬 dev 커밋 → 소스 zip → S3 → CodeBuild(x86_64, privileged) → ECR push → `kubectl set image`.
-- 완료 기준: api-gateway 포함 전체 워커가 새 이미지로 1/1, `/healthz` 200.
+- 완료 기준: api-gateway 포함 전체 워커가 새 이미지로 1/1, console origin 기준 `/api/healthz` 200.
 - 아침 이후: 우녕님이 dev push하면 기존 GitHub Actions 경로로 회귀. CodeBuild 경로는 비상용으로 문서화만 유지.
 
 ### 7. 도메인 연결
 
 - 현재 구성: cloudflared 터널(2 replicas)이 이미 배포됨. LoadBalancer 대신 터널 경유가 팀 구성.
-- 순서: api-gateway 복구 확인 → 터널 자격/라우트 확인 → `k8s.woonyong.org` DNS가 터널을 가리키는지 확인, 아니면 Cloudflare API 토큰으로 CNAME 교정 → `https://k8s.woonyong.org/healthz` 200 + 로그인 화면 확인.
+- 순서: api-gateway 복구 확인 → 터널 자격/라우트 확인 → `k8s.woonyong.org` DNS가 터널을 가리키는지 확인, 아니면 Cloudflare API 토큰으로 CNAME 교정 → `https://k8s.woonyong.org/api/healthz` 200 + 로그인 화면 확인.
 - WAF: `docs/cloudflare-waf-and-login.md`의 skip-machine-endpoints 규칙 기준 유지.
 
 ### 8. 최종 검증 게이트
 
 1. `make check` 상당(린트 + 전체 pytest) 통과
 2. 장애 주입 → RCA 완료 → API 응답 E2E
-3. `https://k8s.woonyong.org/healthz` 200, 로그인, timeline 데이터 확인
+3. `https://k8s.woonyong.org/api/healthz` 200, 로그인, timeline 데이터 확인
 4. 인수인계 문서: 완료/미완료, 밤 사이 변경 전체 목록, 키 교체 안내(OpenAI 키·AWS `claude-deploy`(user/k8s) 키·Cloudflare 토큰 — 채팅으로 전달됐으므로 작업 종료 후 교체 권장)
 
 ## 순서와 의존성
