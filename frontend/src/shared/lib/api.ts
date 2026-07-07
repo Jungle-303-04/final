@@ -45,7 +45,7 @@ export async function api<T>(method: string, path: string, body?: unknown, optio
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
     const detail = await res.json().then(j => j.detail ?? res.statusText).catch(() => res.statusText);
-    throw new ApiError(res.status, String(detail));
+    throw new ApiError(res.status, normalizeApiDetail(res.status, String(detail)));
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
@@ -84,4 +84,12 @@ function createRequestSignal(options: ApiOptions): { signal?: AbortSignal; timeo
     },
     timedOut: () => timeoutReached,
   };
+}
+
+function normalizeApiDetail(status: number, detail: string): string {
+  if (status === 502 || status === 503 || status === 504) return '백엔드 연결이 지연되고 있습니다';
+  if (status >= 500 && /^(bad gateway|gateway timeout|service unavailable|internal server error)$/i.test(detail.trim())) {
+    return '서버 응답이 불안정합니다';
+  }
+  return detail;
 }

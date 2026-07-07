@@ -36,6 +36,7 @@ export function RequireSession() {
   }
   if (isError) {
     const e = error as { kind?: string; detail?: string; status?: number };
+    if (hasRecentSessionHint() && e.kind !== 'unauthorized' && e.status !== 401) return <Outlet />;
     if (e.kind !== 'unauthorized' && e.status !== 401) {
       return (
         <div style={{ padding: 48 }}>
