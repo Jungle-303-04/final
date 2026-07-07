@@ -82,6 +82,7 @@ export const router = createBrowserRouter([...])
 | `/settings/orgs` | `features/org/OrganizationsView` (lazy) | 〃 | 조직 관리 |
 | `/settings/groups` | `features/org/GroupsView` (lazy) | 〃 | 그룹 관리 |
 | `/settings/access` | `features/org/AccessView` (lazy) | 〃 | 리소스 권한 |
+| `/settings/alerts` | `features/notifications/AlertChannelsView` (lazy) | 〃 | 알림 채널 테스트·저장 |
 | `/settings/ops` | `features/notifications/OpsView` (lazy) | 〃 | 운영(Dead Letter) |
 | `*` | `features/console/pages/NotFoundPage` (lazy) | `RequireSession` + `ConsoleLayout` | 알 수 없는 콘솔 경로 404 안내 |
 | `/console`, `/console/*` | `<Navigate to="/" replace />` | 없음 | 아카이브 콘솔 데모 삭제 후 루트로 회수 |

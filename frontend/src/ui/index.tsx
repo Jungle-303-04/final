@@ -597,6 +597,24 @@ export function Textarea(props: ComponentPropsWithoutRef<'textarea'>) {
   return <textarea {...props} id={props.id ?? field.id} aria-describedby={props['aria-describedby'] ?? field.describedBy} aria-invalid={props['aria-invalid'] ?? field.invalid} className={cx(controlClass, 'min-h-24 resize-y py-2', props.className)} />;
 }
 
+export function Checkbox({ label, description, ...props }: ComponentPropsWithoutRef<'input'> & { label: ReactNode; description?: ReactNode }) {
+  const id = useId();
+  return (
+    <label htmlFor={props.id ?? id} className="flex cursor-pointer items-start gap-3 rounded-control border border-border bg-bg p-3 transition-colors hover:bg-raised">
+      <input
+        {...props}
+        id={props.id ?? id}
+        type="checkbox"
+        className={cx('mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-accent', focusRing, props.className)}
+      />
+      <span className="grid gap-1">
+        <span className="text-body font-semibold text-primary">{label}</span>
+        {description && <span className="text-caption text-muted">{description}</span>}
+      </span>
+    </label>
+  );
+}
+
 type ToastMessage = { id: number; tone: Tone; title: string; description?: string };
 type ToastApi = {
   toasts: ToastMessage[];

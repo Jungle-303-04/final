@@ -1,7 +1,7 @@
 // 알림 합성 피드 — 3개 실존 소스 정규화(G9 도입 시 이 파일만 교체)
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
-import { get, post } from '@/shared/lib/api';
+import { del, get, post } from '@/shared/lib/api';
 import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, RecoveryPlanStatus, WorkflowRun } from '@/shared/lib/types';
 import { adaptIncident, adaptIncidentDetail } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
@@ -10,6 +10,42 @@ import { timeAgo } from '@/shared/lib/format';
 import { useToast } from '@/ui';
 
 const NOTIFICATION_QUERY_TIMEOUT_MS = 8_000;
+
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+
+export type AlertChannel = {
+  channel_id: string;
+  workspace_id: string;
+  name: string;
+  kind: 'webhook' | string;
+  url: string;
+  min_severity: AlertSeverity | string;
+  enabled: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AlertChannelPayload = {
+  channel_id?: string;
+  name: string;
+  kind: 'webhook';
+  url: string;
+  min_severity: AlertSeverity;
+  enabled: boolean;
+};
+
+export type AlertChannelTestPayload = AlertChannelPayload & {
+  severity: AlertSeverity;
+  message: string;
+};
+
+export type AlertChannelTestResult = {
+  valid: boolean;
+  delivered: boolean;
+  code?: string | null;
+  detail: string;
+  status_code?: number | null;
+};
 
 export const useTimeline = () =>
   useQuery({
@@ -71,6 +107,45 @@ export const useDeadLetters = (enabled: boolean) =>
     retry: false,
     select: d => d.dead_letters,
   });
+
+export const useAlertChannels = () =>
+  useQuery({
+    queryKey: ['alert-channels'],
+    queryFn: () => get<{ channels: AlertChannel[] }>('/alert-channels', { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS }),
+    retry: false,
+    select: d => d.channels,
+  });
+
+export const useTestAlertChannel = () =>
+  useMutation({
+    mutationFn: (payload: AlertChannelTestPayload) => post<AlertChannelTestResult>('/alert-channels/test', payload),
+  });
+
+export const useSaveAlertChannel = () => {
+  const qc = useQueryClient();
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: (payload: AlertChannelPayload) => post<AlertChannel>('/alert-channels', payload),
+    onSuccess: () => {
+      push({ tone: 'success', title: '알림 채널 저장', description: '테스트를 통과한 설정을 저장했습니다' });
+      qc.invalidateQueries({ queryKey: ['alert-channels'] });
+    },
+    onError: err => push({ tone: 'danger', title: '알림 채널 저장 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' }),
+  });
+};
+
+export const useDeleteAlertChannel = () => {
+  const qc = useQueryClient();
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: (channelId: string) => del(`/alert-channels/${encodeURIComponent(channelId)}`),
+    onSuccess: () => {
+      push({ tone: 'success', title: '알림 채널 삭제', description: '채널을 목록에서 제거했습니다' });
+      qc.invalidateQueries({ queryKey: ['alert-channels'] });
+    },
+    onError: err => push({ tone: 'danger', title: '알림 채널 삭제 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' }),
+  });
+};
 export const useReplayDeadLetter = () => {
   const qc = useQueryClient();
   const { push } = useToast();

@@ -20,7 +20,7 @@ status: synced
 | import | `@/features/auth/api`(`useApproveUser`) | [auth](./auth.md) | 멤버 승인 |
 | import | `@/features/cluster/api`(`useClusters`), `@/features/repo/api`(`useApplications`) | [cluster](./cluster.md), [repo](./repo.md) | AccessView 리소스 선택지 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 설정 탭 |
-| import ← | [notifications/OpsView](./notifications.md) | — | `SettingsNav` 소비 |
+| import ← | [notifications/OpsView, AlertChannelsView](./notifications.md) | — | `SettingsNav` 소비 |
 | 백엔드 | `/orgs*`, `/groups*`, `/users`, `/access*` | [api-gateway](../services/gateway-api-gateway.md) | 갭 API |
 
 ## 공개 인터페이스 (Public API) — `api.ts`
@@ -47,7 +47,7 @@ status: synced
 
 ### `frontend/src/features/org/SettingsNav.tsx :: SettingsNav`
 
-`{ title: string; children: ReactNode }` — `motion.div(fadeInUp)` 안에서 `PageHeader(title='설정 - <title>')` + Tailwind 토큰 기반 탭 NavLink 5개(`pathFor('/settings/members')` 멤버, `pathFor('/settings/orgs')` 조직, `pathFor('/settings/groups')` 그룹, `pathFor('/settings/access')` 리소스 권한, `pathFor('/settings/ops')` 운영 DLQ) + children. `.tabs`나 이전 UI/motion 계층 의존은 없다.
+`{ title: string; children: ReactNode }` — `motion.div(fadeInUp)` 안에서 `PageHeader(title='설정 - <title>')` + Tailwind 토큰 기반 탭 NavLink 6개(`pathFor('/settings/members')` 멤버, `pathFor('/settings/orgs')` 조직, `pathFor('/settings/groups')` 그룹, `pathFor('/settings/access')` 리소스 권한, `pathFor('/settings/alerts')` 알림 채널, `pathFor('/settings/ops')` 운영(DLQ)) + children. `.tabs`나 이전 UI/motion 계층 의존은 없다.
 
 ### `frontend/src/features/org/MembersView.tsx :: MembersView` (default export) — `/settings/members`
 
@@ -87,7 +87,7 @@ status: synced
 | `/settings/groups` | `GroupsView` | 〃 | 그룹 생성·멤버십 토글 |
 | `/settings/access` | `AccessView` | 〃 | 리소스 권한 부여/회수 |
 
-(`/settings/ops` 는 [notifications](./notifications.md) 의 OpsView.)
+(`/settings/alerts`, `/settings/ops` 는 [notifications](./notifications.md) 의 AlertChannelsView, OpsView.)
 
 ## 불변식·오류 (Invariants & Errors)
 
