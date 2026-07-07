@@ -1,12 +1,23 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useIsAdmin, useSession } from '@/features/auth/api';
-import { EmptyState, Skeleton } from '@/shared/ui';
-import { IconLock } from '@/shared/ui/icons';
+import { Button, EmptyState, Skeleton } from '@/shared/ui';
+import { IconAlertTriangle, IconLock } from '@/shared/ui/icons';
 
 export function RequireSession() {
-  const { data, isError, isPending } = useSession();
+  const { data, error, isError, isPending, refetch } = useSession();
   const loc = useLocation();
   if (isPending) return <div style={{ padding: 48 }}><Skeleton lines={5} /></div>;
+  if (isError) {
+    const e = error as { kind?: string; detail?: string; status?: number };
+    if (e.kind !== 'unauthorized' && e.status !== 401) {
+      return (
+        <div style={{ padding: 48 }}>
+          <EmptyState icon={<IconAlertTriangle size={26} />} title={e.detail || '세션을 확인하지 못했습니다'}
+            action={<Button size="sm" onClick={() => refetch()}>다시 시도</Button>} />
+        </div>
+      );
+    }
+  }
   if (isError || !data?.authenticated) {
     const returnTo = `${loc.pathname}${loc.search}${loc.hash}`;
     return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
