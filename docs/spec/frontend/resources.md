@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 097ea811
 status: synced
 ---
 
@@ -40,7 +40,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 - `Modal(size 'lg', title '클러스터 등록')` + `Stepper(STEPS = ['프로바이더','설정','사전 점검','발급'], current=step)`.
 - state: `step`(0~3), `provider`(초기 'existing-k8s', discovery 이후 기본 flow), `deployProvider`(초기 'manual-manifest', flow 변경/초기화 시 `preferredDeployProvider(flow)`), `kubeContext`, `selectedImportKey`, `candidateQuery`, `clusterId`, `name`, `issued: {agent_token; install_manifest; install_command?} | null`, `closeGuard`. (연결 여부는 state 가 아니라 아래 폴링 쿼리에서 파생.)
 - API 순서:
-  1. **프로바이더**: `useQuery(['providers','cluster-discovery'], GET /providers/cluster-discovery, enabled: open)` — `flows[]` 를 카드로 표시하고, flow `status === 'available'` 이면서 `deploy_providers` 중 `status === 'available'` 이 하나 이상 있을 때만 다음 가능. 카드에는 실제 `cloud_provider`, 후보 수, 사용 가능한 설치 경로 수만 표시한다. flow 의 `import_candidates[]` 는 `SearchInput` + listbox 카드로 표시하며 `clusterImportCandidateMatches()`가 `cluster_id/name/source/provider/kube_context/external_handle/labels`를 검색한다. 후보 선택 시 `clusterId`, `name`, `deployProvider`, `kubeContext` 를 채우고, "직접 입력"은 선택 후보와 kube context를 해제한다.
+  1. **프로바이더**: `useQuery(['providers','cluster-discovery'], GET /providers/cluster-discovery, enabled: open)` — `flows[]` 를 카드로 표시하고, flow `status === 'available'` 이면서 `deploy_providers` 중 `status === 'available'` 이 하나 이상 있을 때만 다음 가능. 카드에는 실제 `cloud_provider`, 후보 수, 사용 가능한 설치 경로 수만 표시한다. flow 의 `import_candidates[]` 는 `SearchInput` + listbox 카드로 표시하며 `clusterImportCandidateMatches()`가 `cluster_id/name/source/cloud_provider/deploy_provider/kube_context/external_handle/console_url/labels`를 검색한다. 후보 선택 시 `clusterId`, `name`, `deployProvider`, `kubeContext` 를 채우고, "직접 입력"은 선택 후보와 kube context를 해제한다.
   2. **설정**: `cluster_id` 입력 — slug 검증 `/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/`(실패 시 error `'소문자·숫자·하이픈만 가능합니다'`, 다음 disabled, `data-testid="cluster-id"`) + 표시 이름 + 설치 방식(`deployProvider`). 설치 방식은 select가 아니라 listbox 버튼으로 표시하고 `status !== 'available'` 항목은 disabled 처리하며, `unavailable_reason` 을 경고문으로 보여준다. `deployProvider === 'kube-context'` 이면 kube context select 를 추가로 표시한다. `KeyValue([프로바이더], [설치 방식], [환경 'sandbox'], [관측 스택 'prometheus/loki/tempo target service'])`.
      "사전 점검" → `useMutation(POST /targets/preflight)` body `{cluster_id, cloud_provider, deploy_provider, apply, kube_context?}`. 성공 시 step 2로 이동.
   3. **사전 점검**: `TargetPreflightResponse(valid, duplicate_cluster_id, provider_ready, agent_install_status, connection_status, errors, warnings, selected, ...)` 를 보여준다. `cluster_id`, 프로바이더, 에이전트, 중복, kube context 허용 여부는 `cluster-registration-check` 행으로 고정 폭 표시하고, 오류/경고는 응답 문자열 그대로 표시한다. "다시 점검"은 같은 preflight 를 재실행하고, `valid` 일 때만 "등록 실행" 버튼이 열린다.
