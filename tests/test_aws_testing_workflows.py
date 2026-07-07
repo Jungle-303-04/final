@@ -173,6 +173,7 @@ def test_aws_smoke_uses_first_target_cluster_id_by_default() -> None:
 
 def test_smoke_retries_gateway_health_before_api_flow() -> None:
     script = read("scripts/smoke.sh")
+    auth_script = read("scripts/lib/auth.sh")
     runbook = read("docs/aws-testing-runbook.md")
 
     assert 'SMOKE_GATEWAY_ATTEMPTS="${SMOKE_GATEWAY_ATTEMPTS:-60}"' in script
@@ -180,6 +181,12 @@ def test_smoke_retries_gateway_health_before_api_flow() -> None:
     assert "wait_for_gateway" in script
     assert 'curl -fsS "${BASE_URL}/healthz"' in script
     assert "`SMOKE_GATEWAY_ATTEMPTS`" in runbook
+    assert 'AUTH_LOGIN_ATTEMPTS="${AUTH_LOGIN_ATTEMPTS:-12}"' in auth_script
+    assert (
+        'AUTH_LOGIN_RETRY_INTERVAL_SECONDS="${AUTH_LOGIN_RETRY_INTERVAL_SECONDS:-5}"' in auth_script
+    )
+    assert "login failed (attempt ${attempt}/${AUTH_LOGIN_ATTEMPTS}); retrying" in auth_script
+    assert "`AUTH_LOGIN_ATTEMPTS`" in runbook
     assert '"force": True' in script
 
 
