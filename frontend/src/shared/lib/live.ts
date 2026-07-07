@@ -1,8 +1,6 @@
-// 실시간 스냅샷 스토어 — WS 단일 연결(D6). mock 모드에선 가짜 스트림 생성
+// 실시간 스냅샷 스토어 — WS 단일 연결(D6)
 import { create } from 'zustand';
 import type { LiveSnapshot } from '@/shared/lib/types';
-import { API_MODE } from '@/shared/lib/api';
-import { workloadsByCluster } from '@/shared/lib/mock/fixtures';
 
 interface LiveState {
   status: 'connecting' | 'open' | 'closed';
@@ -29,23 +27,6 @@ export const liveStore = create<LiveState>((set, get) => ({
 let started = false;
 export function startLive() {
   if (started) return; started = true;
-  if (API_MODE === 'mock') {
-    liveStore.getState().setStatus('open');
-    let tick = 0;
-    setInterval(() => {
-      tick += 1;
-      const pods = (workloadsByCluster['target'] ?? []).map(p => ({
-        name: p.name, phase: p.phase, hot: p.hot ?? false,
-        restarts: p.restarts + (p.hot ? Math.floor(tick / 5) : 0),
-      }));
-      liveStore.getState().apply({
-        at: new Date().toISOString(), connected: true,
-        namespaces: [{ namespace: 'sandbox', pods }],
-        rollout: tick % 40 < 20 ? { name: 'checkout-api', progress: Math.min(100, (tick % 20) * 10) } : undefined,
-      });
-    }, 1000);
-    return;
-  }
   void connect();
   async function connect(attempt = 0) {
     const workspaceId = await currentWorkspaceId();

@@ -10,7 +10,7 @@ import { FlowCanvas, useAutoLayout, type CollapsibleGroupData, type FlowEdgeData
 import { AnimatePresence, FadeSlideIn } from '@/shared/motion';
 import { motion } from 'motion/react';
 import { fmtAbs, timeAgo } from '@/shared/lib/format';
-import type { EvidenceRecord, IncidentDetail, RcaReportSummary, Tone } from '@/shared/lib/types';
+import type { EvidenceRecord, IncidentDetail, RcaCandidateScore, RcaEvidenceRef, RcaReportSummary, Tone } from '@/shared/lib/types';
 import { IconAlertTriangle, IconFile } from '@/shared/ui/icons';
 
 /* 파이프라인 단계 순서 — current_subject 를 방어적으로 매핑(백엔드 subject 네이밍 변화 흡수) */
@@ -301,6 +301,10 @@ function RcaReportsPanel({ correlationId, onShowEvidence }: { correlationId: str
 function RcaReportCard({ report, onShowEvidence }: { report: RcaReportSummary; onShowEvidence: () => void }) {
   const sevTone: Tone = report.severity === 'critical' || report.severity === 'high' ? 'danger'
     : report.severity === 'medium' ? 'warn' : report.severity ? 'info' : 'neutral';
+  const candidates = report.candidates ?? [];
+  const refs = report.supporting_evidence_refs ?? [];
+  const missingChecks = (report.missing_evidence_checks ?? []).filter(c => c.status !== 'collected');
+  const target = [report.namespace, report.resource_kind, report.resource_name].filter(Boolean).join('/');
   return (
     <div className="card" style={{ background: 'var(--surface-2)', padding: 12 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -316,27 +320,130 @@ function RcaReportCard({ report, onShowEvidence }: { report: RcaReportSummary; o
         )}
       </div>
       <p style={{ margin: '0 0 6px', fontSize: 'var(--fs-sm)', fontWeight: 600 }}>{report.root_cause}</p>
-      {report.symptom && <p style={{ margin: '0 0 4px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>증상: {report.symptom}</p>}
-      {report.reason && <p style={{ margin: '0 0 8px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>판단 근거: {report.reason}</p>}
-      {report.supporting_evidence.length > 0 && (
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
-          {report.supporting_evidence.map((e, i) => (
-            <span key={i} className="badge" style={{ color: 'var(--ok)' }}><span className="dot" />{trunc(e, 40)}</span>
-          ))}
-        </div>
+      {target && (
+        <p style={{ margin: '0 0 4px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>
+          대상: <code style={{ fontSize: 'var(--fs-xs)' }}>{target}</code>
+        </p>
       )}
-      {report.missing_evidence.length > 0 && (
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
-          {report.missing_evidence.map((e, i) => (
-            <span key={i} className="badge" style={{ color: 'var(--warn)' }}><span className="dot" />미수집: {trunc(e, 36)}</span>
+      {report.symptom && (
+        <p style={{ margin: '0 0 4px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>
+          증상: {report.symptom}
+          {(report.secondary_symptoms ?? []).map(s => (
+            <span key={s} className="badge" style={{ marginLeft: 6, color: 'var(--text-3)' }}>{s}</span>
+          ))}
+        </p>
+      )}
+      {report.reason && <p style={{ margin: '0 0 8px', fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>판단 근거: {report.reason}</p>}
+
+      {candidates.length > 0 && (
+        <CandidateScores candidates={candidates} selectedId={report.selected_candidate_id ?? null} />
+      )}
+
+      {refs.length > 0 ? (
+        <EvidenceRefList refs={refs} />
+      ) : (
+        report.supporting_evidence.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+            {report.supporting_evidence.map((e, i) => (
+              <span key={i} className="badge" style={{ color: 'var(--ok)' }}><span className="dot" />{trunc(e, 40)}</span>
+            ))}
+          </div>
+        )
+      )}
+      {missingChecks.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
+          {missingChecks.map(c => (
+            <span key={c.check_id} style={{ fontSize: 'var(--fs-xs)', color: 'var(--warn)' }}>
+              미수집 {c.source ? `[${c.source}] ` : ''}{c.check_id}{c.reason ? ` — ${c.reason}` : ''}
+            </span>
           ))}
         </div>
+      ) : (
+        report.missing_evidence.length > 0 && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+            {report.missing_evidence.map((e, i) => (
+              <span key={i} className="badge" style={{ color: 'var(--warn)' }}><span className="dot" />미수집: {trunc(e, 36)}</span>
+            ))}
+          </div>
+        )
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
         <Button size="sm" onClick={onShowEvidence}>증거 흐름 보기 →</Button>
         {report.evidence_ref && <code style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>{trunc(report.evidence_ref, 30)}</code>}
         <CopyChip value={report.correlation_id} display={trunc(report.correlation_id, 16)} />
       </div>
+    </div>
+  );
+}
+
+/* 후보 평가 점수표 — rule/AI 출처, 점수 바, 충족/미충족 신호. 선정 후보는 좌측 강조. */
+function CandidateScores({ candidates, selectedId }: { candidates: RcaCandidateScore[]; selectedId: string | null }) {
+  const [open, setOpen] = useState(false);
+  const shown = open ? candidates : candidates.slice(0, 2);
+  return (
+    <div style={{ margin: '2px 0 8px' }}>
+      <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginBottom: 4 }}>후보 평가 ({candidates.length})</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {shown.map(c => {
+          const selected = c.candidate_id === selectedId;
+          const score = c.score ?? 0;
+          return (
+            <div key={c.candidate_id} style={{
+              padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)',
+              borderLeft: `2px solid ${selected ? 'var(--ok)' : 'var(--border)'}`,
+            }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', fontWeight: selected ? 700 : 500, color: selected ? 'var(--text-1)' : 'var(--text-2)' }}>
+                  {c.title ?? c.candidate_id}
+                </span>
+                {c.source === 'ai_fallback' && <Badge tone="info">AI</Badge>}
+                {selected && <Badge tone="ok">선정</Badge>}
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span aria-hidden style={{ width: 64, height: 4, borderRadius: 2, background: 'var(--surface-3, var(--border))', overflow: 'hidden', display: 'inline-block' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${Math.round(Math.min(1, Math.max(0, score)) * 100)}%`,
+                      background: score >= 1 ? 'var(--ok)' : score >= 0.5 ? 'var(--warn)' : 'var(--text-3)' }} />
+                  </span>
+                  <b style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(2)}</b>
+                </span>
+              </div>
+              {(c.supporting_evidence.length > 0 || c.missing_evidence.length > 0) && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 3, fontSize: 'var(--fs-xs)' }}>
+                  {c.supporting_evidence.map(s => <span key={`s-${s}`} style={{ color: 'var(--ok)' }}>✓ {trunc(s, 36)}</span>)}
+                  {c.missing_evidence.map(m => <span key={`m-${m}`} style={{ color: 'var(--warn)' }}>✗ {trunc(m, 36)}</span>)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {candidates.length > 2 && (
+        <button className="btn btn--sm btn--ghost" style={{ marginTop: 4 }} onClick={() => setOpen(o => !o)}>
+          {open ? '접기' : `후보 ${candidates.length - 2}개 더 보기`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* 근거 참조 트레일 — 어떤 소스에 어떤 쿼리를 던져 얻은 근거인지(운영자 재현 가능) */
+function EvidenceRefList({ refs }: { refs: RcaEvidenceRef[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+      <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>판단에 사용된 근거 ({refs.length})</div>
+      {refs.map((r, i) => (
+        <div key={`${r.source}-${r.name}-${i}`} style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-1)' }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Badge tone={kindTone(r.source)}>{r.source}</Badge>
+            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)' }}>{r.name}</span>
+            {r.summary && <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{trunc(r.summary, 60)}</span>}
+          </div>
+          {r.query && (
+            <code style={{ display: 'block', marginTop: 3, fontSize: 'var(--fs-xs)', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+              {r.query}
+            </code>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

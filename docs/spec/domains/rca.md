@@ -123,7 +123,8 @@ dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
 | `list_rca_reports` | `async (correlation_id, since, until, limit, offset, current, db) -> RcaReportListResponse` — 같은 페이지네이션, 항목은 `rca_report_summary` 요약 | `src/domains/rca/query_router.py :: list_rca_reports` |
 | `parse_query_timestamp` | `(value: str \| None, name: str) -> datetime \| None` — ISO-8601(`Z` suffix 허용) 파싱, 실패 시 `HTTPException(422)` | `src/domains/rca/query_router.py :: parse_query_timestamp` |
 | `evidence_record` | `(row: JsonObject) -> JsonObject` — `EvidenceRecordItem` 필드 매핑 | `src/domains/rca/query_router.py :: evidence_record` |
-| `rca_report_summary` | `(row: JsonObject) -> JsonObject` — payload 원문 대신 `incident`/`rca_detail` 화이트리스트 필드만 추출(secret 원문 미노출) | `src/domains/rca/query_router.py :: rca_report_summary` |
+| `rca_report_summary` | `(row: JsonObject) -> JsonObject` — payload 원문 대신 `incident`/`rca_detail` 화이트리스트 필드만 추출(secret 원문 미노출). 분석 심화 필드 포함: 대상 리소스(`resource_kind/resource_name/namespace`), `secondary_symptoms`, `selected_candidate_id`, `candidates`(후보×평가 병합, 점수 내림차순), `supporting_evidence_refs`(source/name/check_id/summary/query), `missing_evidence_checks`. 후보 `signals` DSL 원문은 미노출 | `src/domains/rca/query_router.py :: rca_report_summary` |
+| `_str_list` / `_candidate_scores` / `_evidence_refs` / `_missing_checks` | payload 하위 구조를 방어적으로 정규화하는 내부 헬퍼 — dict/list 형태가 아니면 빈 리스트 | `src/domains/rca/query_router.py :: _candidate_scores` |
 
 ### HTTP 엔드포인트
 
