@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -66,7 +66,7 @@ status: synced
   - `phases`: 우선순위 — live 스냅샷 phase 카운트 → 인벤토리 summary `pod_phases` → workloads 집계(스트림 끊겨도 인벤토리로 스탯 유지).
   - `clusterKnown`: 현재 `clusterId`가 `useClusters()` 목록에 있는지 확인한다. 알 수 없는 `cluster` query 값이나 목록 로딩 중에는 select에 임시 option을 넣어 controlled select 상태를 유지한다.
   - `statPending`: `!clusterId || summaryQ.isPending || workloadsQ.isPending`. 이 동안 Running/Pending/CrashLoop/노드 값은 0이 아니라 `MetricStatBox`의 `—`로 표시해 아직 모르는 값을 0처럼 보이지 않게 한다.
-  - `series`: `paused ? frozen : history` 마지막 120포인트 → 숫자 x값(`at`)을 유지한 `[{id:'재시작 합'}, {id:'실행 팟'}]`. history 가 비어 있으면 차트 empty state 를 그대로 표시하고 인벤토리 기반 포인트를 만들지 않는다.
+  - `series`: `paused ? frozen : history` 중 `clusterId`가 비어 있거나 선택 `clusterId`와 같은 포인트만 필터링한 뒤 마지막 120포인트 → 숫자 x값(`at`)을 유지한 `[{id:'재시작'}, {id:'실행 팟'}]`. history 가 비어 있으면 차트 empty state 를 그대로 표시하고 인벤토리 기반 포인트를 만들지 않는다.
   - `usageSeries`: `useClusterUsage` samples → `sampled_at`을 `Date.parse()` 숫자 x값(파싱 실패 시 1부터 시작하는 index)으로 유지한 `[{id:'실행 팟', y:usage.pod_running}, {id:'재시작 누적', y:usage.restart_total}, {id:'준비 노드', y:usage.node_ready}]`. 카드는 항상 렌더하고 `usageQ.isPending`이면 스켈레톤, 오류면 재시도 empty state, 샘플이 없으면 "아직 수집된 스냅샷 시계열이 없습니다" empty state를 표시한다.
 - 저장 쿼리/위젯:
   - `selectPreset(presetId)`: 저장 query를 선택해 `promql`, `presetName`, `range`, `widgetTitle`을 채운다.
@@ -78,7 +78,7 @@ status: synced
   2. `presetId`가 있으면 `useRunMetricQueryPreset`으로 POST `/clusters/${clusterId}/metric-query-presets/${presetId}/run`. 없으면 `run.mutate({q, rangeSeconds})` → POST `/agent/debug/query` body `{cluster_id, query: {source:'prometheus', name:'console_promql', description:'Console PromQL query', query, range_seconds}}`.
   3. 성공: 카드에 `commandId` 기록(이후 상태는 `QueryCardRow` 가 폴링). 제출 실패: `submitFailed: true`.
 - 결과 포맷: `fmtValue(v, unit)` — ratio 는 `%`(소수 1자리), count 는 100 이상 정수/미만 소수 2자리. 카드에 `range 5m` 등 범위 표기, 평균·최대 표시.
-- 클러스터 목록이 비어 있으면 `PageHeader` 다음 `EmptyState` 만 렌더한다. admin 은 `pathFor('/clusters')` 등록 버튼을 보고, non-admin 은 접근 가능한 클러스터가 연결되면 표시된다는 안내만 본다.
+- 클러스터 목록이 비어 있으면 `PageHeader` 다음 `EmptyState('등록된 클러스터가 없습니다')` 만 렌더한다. admin 은 `pathFor('/clusters')` 등록 버튼을 본다.
 - 트리:
   ```
   FadeSlideIn
@@ -89,7 +89,7 @@ status: synced
   │   / statPending 이면 값 대신 `—` 표시
   │   / snapshot.rollout 있으면 'rollout <name>'(progress, info)
   ├─ Card('스트림 추이 — 재시작 / 실행 팟') > TimeSeriesChart(series)
-  ├─ Card('스냅샷 추이 — 인벤토리 실측 (usage rollup)') > Skeleton | EmptyState(error/empty) | TimeSeriesChart(usageSeries)
+  ├─ Card('스냅샷 추이') > Skeleton | EmptyState(error/empty) | TimeSeriesChart(usageSeries)
   ├─ Card('저장 위젯') > GET `/metric-widgets`; 각 widget은 연결 preset 이름, 실행, 삭제 버튼
   └─ Card('PromQL')
      ├─ 입력줄: 저장 쿼리 select + presetName + promql input(mono) + range + 저장/위젯/실행 버튼

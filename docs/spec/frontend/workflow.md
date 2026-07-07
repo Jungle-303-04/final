@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -29,7 +29,7 @@ status: synced
 - 라우트: `/workflows`.
 - 모듈 상수 `ACTIVE`(비공개): repo 와 동일한 활성 상태 7종 Set.
 - 데이터: `useApplications()` → `useRunsAll(apps.data ?? [])`. 행 = 모든 run 에 `appId` 부착 후 정렬: **활성 run 우선**, 그다음 `started_at` 내림차순(localeCompare).
-- 트리: h1 '워크플로우' → `Card` → 비면 `EmptyState('⇶', '실행된 워크플로우가 없습니다', '레포에 커밋이 감지되면 run 이 생성됩니다')`, 아니면 `ResourceTable` 열: 앱(b appId) / 커밋(code shortSha) / 상태(Badge) / 현재 단계(current_step) / 시작(timeAgo). 행 클릭 → `/workflows/${run_id}`.
+- 트리: `PageHeader('워크플로우')` → `Card` → 비면 `EmptyState(IconFile, '실행된 워크플로우가 없습니다')`, 아니면 `ResourceTable` 열: 앱(b appId) / 커밋(code shortSha) / 상태(Badge) / 현재 단계(current_step) / 시작(timeAgo). 행 클릭 → `/workflows/${run_id}`.
 
 ### `frontend/src/features/workflow/WorkflowGraphView.tsx :: WorkflowGraphView` (default export)
 

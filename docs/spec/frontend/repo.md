@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -65,8 +65,8 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 ### `frontend/src/features/repo/RepoListView.tsx :: RepoListView` (default export)
 
 - 라우트: `/repos`. state: `wizard: boolean`.
-- 트리: 헤더(h1 '레포' + "+ 레포 연결") → `Card > QueryBoundary(useApplications) > ResourceTable<Application>` → `ConnectRepoWizard`.
-- 빈 목록: `EmptyState('⑂', '연결된 레포가 없습니다', 레포 연결 버튼)`.
+- 트리: `PageHeader('레포 (GitOps)', actions="+ 레포 연결")` → `Card > QueryBoundary(useApplications) > ResourceTable<Application>` → `ConnectRepoWizard`.
+- 빈 목록: `EmptyState(IconFile, '연결된 레포가 없습니다', 레포 연결 버튼)`.
 - 열: 앱(b) / 레포(`code {repo_ref}@{branch}`) / 클러스터 / 최근 run(`Badge status={last_run_status}`, 없으면 '—') / 마지막 배포(timeAgo, 없으면 '—'). 행 클릭 → `/repos/${application_id}`.
 
 ### `frontend/src/features/repo/RepoDetailView.tsx :: RepoDetailView` (default export)
@@ -80,20 +80,19 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   ├─ Breadcrumbs [레포 → app.name]
   ├─ 헤더(flex wrap, gap 8): h1(name + code repo_ref@branch, overflowWrap anywhere) · 버튼 2개(새 탭):
   │    "manifest 수정 ↗" → https://github.com/<repo_ref>/blob/<branch>/<manifest_path> · "GitHub ↗" → https://github.com/<repo_ref>
-  ├─ 안내문: "manifest(<manifest_path>)는 Git 이 원본입니다 — GitHub 에서 수정해 커밋하면
-  │    webhook/poller 가 감지해 자동으로 run 이 생성됩니다. 콘솔에서는 직접 수정하지 않습니다."
+  ├─ manifest path 안내: `manifest <manifest_path>`
   ├─ Tabs: runs(badge=run 수)/deployments(배포)/safe-pr(Safe PR)/settings(설정)
-  ├─ [runs] 비면 EmptyState(IconClock '첫 커밋 감지 대기 중' — webhook/poller 안내)
+  ├─ [runs] 비면 EmptyState(IconClock '첫 커밋 감지 대기 중')
   │   아니면 Stagger(run별 Card):
   │     code(shortSha) · Badge(status) · 미니 스텝바(STEP_ORDER 별 14×5 칩 — SUCCEEDED ok/FAILED danger/PENDING surface-3/그 외 info)
   │     · timeAgo(started_at) · "그래프 보기" → `pathFor('/workflows/${run_id}')`
   │     status===WAITING_FOR_APPROVAL && approval_id → ApprovalCard(summary '<sha> 배포 승인', compact)
   │       + DIFFING step 의 changes 가 있으면 PlanDiff(changes, resource)
   ├─ [deployments] ResourceTable: 클러스터(Link `pathFor('/clusters/:id?tab=workloads')`)/네임스페이스/이름/이미지(code)/Replicas/상태 Badge
-  ├─ [safe-pr] safePrRun 없으면 EmptyState('🤖 Safe PR 이력이 없습니다')
+  ├─ [safe-pr] safePrRun 없으면 EmptyState(IconFile 'Safe PR 이력이 없습니다')
   │   있으면 Card('Safe PR — <sha>'): Badge(safe_pr.status) + pr_url 링크 'PR 열기 ↗' + explanation
   │     + diff_before 있으면 before(danger)/after(ok) CodeBlock 2열
-  │     + safe_pr.error 있으면 Link(`pathFor('/ai?prefill=Safe PR 실패 원인 분석: <error>')`) "✦ AI에게 원인 묻기"
+  │     + safe_pr.error 있으면 Link(`pathFor('/ai?prefill=Safe PR 실패 원인 분석: <error>')`) Button(IconSend, 'AI 분석')
   └─ [settings] KeyValue: application_id/manifest_path/대상 클러스터/브랜치
   ```
 

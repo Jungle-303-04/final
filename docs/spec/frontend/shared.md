@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -43,7 +43,7 @@ status: synced
 
 1. `createRequestSignal(options)` 로 optional `AbortSignal`을 만든다. `timeoutMs`가 없으면 caller signal 을 그대로 쓰고, 있으면 새 `AbortController`를 만들고 timeout 또는 parent abort 중 먼저 온 이벤트로 abort 한다.
 2. `fetch(`${BASE}${path}`, { method, credentials: 'include', headers, body, signal })`. `BASE = import.meta.env.VITE_API_BASE ?? '/api'`. body 가 있으면 `content-type: application/json`, POST/PUT/PATCH/DELETE 는 CSRF intent header 를 붙인다.
-3. fetch 예외(네트워크 실패 또는 abort) → `throw new ApiError(0, '네트워크 오류')`. `finally`에서 timeout 과 parent abort listener 를 해제한다.
+3. fetch 예외(네트워크 실패 또는 abort) → timeout 으로 abort 된 경우 `throw new ApiError(0, '요청 시간이 초과되었습니다')`, 그 외 `throw new ApiError(0, '네트워크 오류')`. `finally`에서 timeout 과 parent abort listener 를 해제한다.
 4. `!res.ok`: 401 이면 `onUnauthorized?.()` 먼저 호출. detail 은 `res.json().detail ?? res.statusText`(파싱 실패 시 statusText). `throw new ApiError(res.status, String(detail))`.
 5. 204 → `undefined as T`, 그 외 → `res.json()`.
 
@@ -73,14 +73,14 @@ export const queryClient = new QueryClient({
 ```ts
 { status: 'connecting'|'open'|'closed';
   snapshot: LiveSnapshot | null;
-  history: { at: number; restarts: number; running: number }[];   // 최대 900포인트 유지(slice(-899) + 신규)
+  history: { at: number; clusterId: string | null; restarts: number; running: number }[];   // 최대 900포인트 유지(slice(-899) + 신규)
   apply: (s: LiveSnapshot) => void;
-  applyCounts: (restarts: number, running: number) => void;
+  applyCounts: (clusterId: string | null, restarts: number, running: number) => void;
   setStatus: (s: status) => void }
 ```
 
-- `apply(snapshot)`: 전체 pods 를 flat 하여 `restarts` 합·`phase==='Running'` 수를 `history` 포인트(`at: Date.now()`)로 추가.
-- `applyCounts(restarts, running)`: 스냅샷 없이 집계 숫자만 history 포인트로 추가 — 게이트웨이의 `live.summary` 경량 메시지용.
+- `apply(snapshot)`: 전체 pods 를 flat 하여 `restarts` 합·`phase==='Running'` 수를 `history` 포인트(`at: Date.now(), clusterId: snapshot.cluster_id ?? null`)로 추가.
+- `applyCounts(clusterId, restarts, running)`: 스냅샷 없이 집계 숫자와 cluster id 를 history 포인트로 추가 — 게이트웨이의 `live.summary` 경량 메시지용.
 - `startLive()` 동작:
   - 내부 `async connect(attempt)` — 먼저 비공개 `currentWorkspaceId()`(GET `/api/auth/session` 직접 fetch, 실패 시 `'default'`)로 워크스페이스를 알아낸 뒤 `new WebSocket(`${wss|ws}://${location.host}/api/live/browser?workspace_id=<id>`)` (https→wss). `onopen`→'open'; `onmessage`→`JSON.parse` 후 분기: `type === 'live.summary'` 면 `applyCounts(summary.restart_delta, summary.pods_ready)`, `namespaces` 필드가 있으면 전체 스냅샷으로 `apply`(그 외/파싱 실패는 무시); `onclose`→'closed' 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결. 구독 채널은 이 단일 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
 
@@ -140,7 +140,7 @@ export const queryClient = new QueryClient({
 | `RcaEvidenceRef` | `source; name; check_id: string\|null; summary: string\|null; query: string\|null; evidence_ref: string\|null; optional lineage: schema_version/source_version/collector/collector_version/query_version/collected_at/evidence_key/source_id/agent_id/window_start` |
 | `RcaMissingCheck` | `check_id; source: string\|null; status: string\|null; reason: string\|null` |
 | `RcaReportSummary` | `id; correlation_id; root_cause; action; incident_id: string\|null; cluster_id: string\|null; symptom: string\|null; severity: string\|null; confidence: number\|null; reason: string\|null; evidence_ref: string\|null; supporting_evidence: string[]; missing_evidence: string[]; created_at: string\|null; optional resource/secondary symptom/candidate/evidence-ref/missing-check fields` |
-| `LiveSnapshot` | `at; connected: boolean; namespaces: { namespace; pods: {name; phase; restarts; hot: boolean}[] }[]; rollout?: {name; progress: number}` |
+| `LiveSnapshot` | `at; connected: boolean; cluster_id?: string; namespaces: { namespace; pods: {name; phase; restarts; hot: boolean}[] }[]; rollout?: {name; progress: number}` |
 | `CatalogItem` | `item_id; name; description; category` |
 
 ## 어댑터 (`lib/adapt.ts`)
@@ -186,7 +186,7 @@ export const queryClient = new QueryClient({
 | `Drawer` | `{ open; title: ReactNode; onClose; children }` | 우측 고정 aside + 반투명 백드롭. 열리면 첫 focusable 또는 drawer 자체로 focus, Tab focus trap, 닫히면 이전 focus 복원. `role="dialog"`, `aria-modal="true"`, `AnimatePresence` + `overlayFade`/`flyoverSlide` 로 열림·닫힘 전환. |
 | `EmptyState` | `{ icon: ReactNode; title: string; description?: string; action?: ReactNode }` | |
 | `Skeleton` | `{ lines?: number }` (기본 3) | 줄별 width `90 - i*12`% |
-| `QueryBoundary<T>` | `{ query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }` | isPending→Skeleton(기본 4줄); isError→`EmptyState`(kind 별 메시지: forbidden '접근 권한이 없습니다' / unauthorized '다시 로그인해주세요' / network '네트워크 오류' / 기타 `detail`) + "다시 시도" refetch 버튼 |
+| `QueryBoundary<T>` | `{ query: UseQueryResult<T>; children: (data: T) => ReactNode; skeletonLines?: number }` | isPending→Skeleton(기본 4줄); isError→`EmptyState`(kind 별 메시지: forbidden '접근 권한이 없습니다' / unauthorized '다시 로그인해주세요' / network 는 `detail` 또는 '네트워크 오류' / 기타 `detail`) + "다시 시도" refetch 버튼 |
 | `Field` | `{ label: string; error?: string; children }` | error 는 `role="alert"` |
 | `KeyValue` | `{ pairs: [string, ReactNode][] }` | `dl.kv` 그리드 |
 | `CodeBlock` | `{ code: string }` | 우상단 "복사"(clipboard.writeText) |
@@ -241,7 +241,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `heatColor` | `frontend/src/shared/ui/charts.tsx :: heatColor` | `(score: number) => string` — 0(위험)~1(건강)을 `color-mix(in oklab, …)` 로 `--heat-bad → --heat-mid → --heat-good` 보간(0.5 기준 2구간) |
 | `TreemapChart` | `frontend/src/shared/ui/charts.tsx :: TreemapChart` | `{ nodes: HeatNode[]; onTileClick?: (id: string) => void }` — `ResponsiveTreeMap`, `leavesOnly`, 타일색 `heatColor(score)`, 공통 tooltip style(`surface-2`+border+shadow), `useReducedMotion()` 이 true 면 `animate=false`, 컨테이너 `data-testid="treemap"` minHeight 300 |
 | `Series` | `frontend/src/shared/ui/charts.tsx :: Series` | `{ id: string; data: { x: number\|string; y: number }[] }` |
-| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — 빈 `data` 시리즈는 제외하고, 표시 가능한 포인트가 없으면 고정 높이 empty state 를 렌더한다. 모든 x값이 number면 linear scale, 하나라도 string이면 point scale. 가장 긴 시리즈에서 최대 5개 tick을 샘플링하고 number tick은 epoch ms면 `fmtHms`, 작은 숫자면 그대로 표시한다. 데이터가 있으면 `ResponsiveLine`, 색 `[--info, --ok, --warn]`, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
+| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — 빈 `data` 시리즈는 제외하고, 표시 가능한 포인트가 없으면 고정 높이 empty state 를 렌더한다. 모든 x값이 number면 linear scale, 하나라도 string이면 point scale. 가장 긴 시리즈에서 최대 5개 tick을 샘플링하고 number tick은 epoch ms면 `fmtHms`, 작은 숫자면 그대로 표시한다. 데이터가 있으면 상단 자체 legend(`.chart-legend`) + `ResponsiveLine`; 색은 `LINE_COLORS = [--info, --ok, --warn, --color-graph-lilac, --color-graph-red]`, y축 최소값은 0, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
 
 ## 모션 (`motion/index.tsx`)
 
@@ -268,7 +268,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `AnimatedFlowEdge` | `frontend/src/shared/flow/index.tsx :: AnimatedFlowEdge` | `Edge<FlowEdgeData>` |
 | `AnimatedEdge` | `frontend/src/shared/flow/index.tsx :: AnimatedEdge` | `(props: EdgeProps<AnimatedFlowEdge>)` — smoothstep path(radius 8). active 면 `strokeDasharray '6 4'` + `flow-dash 0.7s linear infinite`, stroke = `tone ? toneColor(tone) : active ? toneColor('info') : var(--border)` |
 | `CollapsibleGroupData` | `frontend/src/shared/flow/index.tsx :: CollapsibleGroupData` | `{ label: string; count: number; collapsed: boolean; tone?: Tone; active?: boolean; onToggle?: () => void }` |
-| `CollapsibleGroupNode` | `frontend/src/shared/flow/index.tsx :: CollapsibleGroupNode` | 접기/펼치기 그룹 노드 — 클릭 시 `onToggle`(자식 표시/숨김은 부모가 제어), `aria-expanded`, chevron 회전(`.flow-group__chev--open`), count pill |
+| `CollapsibleGroupNode` | `frontend/src/shared/flow/index.tsx :: CollapsibleGroupNode` | 접기/펼치기 그룹 노드 — 실제 `button.flow-group`으로 렌더하고 클릭 시 `onToggle`(자식 표시/숨김은 부모가 제어), `aria-expanded`, focus-visible outline, chevron 회전(`.flow-group__chev--open`), count pill |
 | `FlowCanvas` | `frontend/src/shared/flow/index.tsx :: FlowCanvas` | `{ nodes; edges; nodeTypes?; onNodeClick?: (id) => void; children? }` — `ReactFlowProvider` 래핑. 기본 nodeTypes `{ group_collapsible: CollapsibleGroupNode }` 병합, edgeTypes `{ animated: AnimatedEdge }`. fitView(padding 0.15), zoom 0.3~1.6, panOnScroll, 드래그/연결 비활성, attribution 숨김, `Background gap 20`. `colorMode` 는 `document.documentElement[data-theme-mode]` 를 `MutationObserver` 로 따라간다. 내부 `FitOnChange` 가 노드 id 시그니처 변경 시 rAF 후 `fitView({duration:300})` 재실행 |
 
 `flow.css`: `@keyframes flow-dash`(stroke-dashoffset -20), `flow-pulse`(opacity 1↔0.55), `.flow-node--pulse`(1.4s infinite), `.flow-group*` 스타일. `prefers-reduced-motion: reduce` 에서 애니메이션 제거.

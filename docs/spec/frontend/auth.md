@@ -1,5 +1,5 @@
 ---
-source_commit: b367da80
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -25,7 +25,7 @@ status: synced
 | 심볼 | 앵커 | 시그니처 | API (메서드+경로) | 비고 |
 |---|---|---|---|---|
 | `sessionKey` | `frontend/src/features/auth/api.ts :: sessionKey` | `['session'] as const` | — | 세션 쿼리 키 |
-| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` via `get(..., { timeoutMs: 8_000 })` | `staleTime: 60_000`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다. 8초 안에 응답이 없으면 API 클라이언트가 요청을 abort 하고 network 오류로 다룬다 |
+| `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` via `get(..., { timeoutMs: 8_000 })` | `staleTime: 60_000`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다. 8초 안에 응답이 없으면 API 클라이언트가 요청을 abort 하고 network 오류 detail 로 `'요청 시간이 초과되었습니다'`를 준다 |
 | `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 시 `sessionKey` invalidate |
 | `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `qc.clear()` (캐시 전체 삭제) |
 | `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
@@ -37,13 +37,13 @@ status: synced
 
 ### `frontend/src/features/auth/AuthLayout.tsx :: AuthLayout`
 
-`{ title: string; subtitle?: string; children: ReactNode }` — 전체 화면 중앙 정렬(라디얼 그라디언트 배경), `FadeSlideIn` 안에 `.card`(min(440px, 92vw), padding `--sp-8`): "◈" 로고 + h1 title + subtitle(옵션) + children.
+`{ title: string; subtitle?: string; children: ReactNode }` — 전체 화면 중앙 정렬(라디얼 그라디언트 배경), `FadeSlideIn` 안에 `.card`(min(440px, 92vw), padding `--sp-8`): 브랜드 마크 아이콘 + h1 title + subtitle(옵션) + children.
 
 ### `frontend/src/features/auth/LoginView.tsx :: LoginView` (default export)
 
 - 라우트: `/login` (가드 `RequireGuest`).
 - state: `email`, `password`. 훅: `useLogin`, `useNavigate`, `useLocation`, `useSearchParams`.
-- 트리: `AuthLayout(title='로그인', subtitle='운영 콘솔에 접속합니다')` → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
+- 트리: `AuthLayout(title='로그인')` → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
 - submit: `login.mutate({email, password})`
   - 성공: query `returnTo` 또는 보호 경로에서 렌더된 현재 `pathname+search+hash` 를 `safeReturnTo` 로 검증한 뒤 `nav(..., { replace: true })`
   - 실패: `status === 403 && detail.includes('approval')` → `nav('/pending?email=<encoded>')`

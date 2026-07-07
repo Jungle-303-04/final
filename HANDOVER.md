@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 02:05 KST (프론트 접근성/시계열 표시 안정화 + 스펙 정합성)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 02:11 KST (요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -12,22 +12,26 @@
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
 
-## 체크포인트 (현재) — 프론트 접근성/시계열 표시 안정화 + 스펙 정합성
+## 체크포인트 (현재) — 요청 timeout/RCA 집계/콘솔 UI 문구·접근성 + 스펙 정합성
 
 - 구현:
   - dialog 계열(`Modal`, `Drawer`, plural `Flyover`)에 `aria-modal`, focus 진입, Tab focus trap, 닫을 때 이전 focus 복원을 맞췄다.
-  - `TimeSeriesChart`가 숫자 x축이면 linear scale로 그리고 최대 5개 tick만 샘플링한다. epoch ms tick은 `fmtHms`로 표시한다.
-  - Metrics/HomePage usage series는 `sampled_at`을 숫자 timestamp로 넘긴다. Metrics 스트림 차트는 history가 없을 때 인벤토리 기반 포인트를 합성하지 않고 empty state를 보여준다.
+  - `TimeSeriesChart`가 숫자 x축이면 linear scale로 그리고 최대 5개 tick만 샘플링한다. epoch ms tick은 `fmtHms`로 표시하고, 자체 legend와 y축 min=0을 적용한다.
+  - Metrics/HomePage usage series는 `sampled_at`을 숫자 timestamp로 넘긴다. Metrics 스트림 차트는 history가 없을 때 인벤토리 기반 포인트를 합성하지 않고 empty state를 보여주며, live history의 `clusterId`가 있으면 선택 cluster만 표시한다.
   - Console header의 LIVE badge 표시를 제거했다. 단, `ConsoleLayout`은 여전히 `startLive()`를 호출해 브라우저 스냅샷 스트림을 시작한다.
+  - `api.ts`는 timeout abort와 일반 네트워크 오류를 구분해 timeout detail을 `'요청 시간이 초과되었습니다'`로 전달한다. cluster/fleet 조회 훅은 8초 timeout을 사용한다.
+  - `count_open_rca_incidents`는 payload 전체 대신 incident projection만 읽고 `incident_logical_key_from_projection`으로 logical incident를 dedupe한다. `rca_timeline`에는 scope/update, open cluster 조회용 index 2개를 추가했다.
   - 레포 연결/클러스터 등록에서 `sandbox` environment/namespace 하드코딩을 제거했다. manifest validation namespace와 선택 클러스터 environment가 있을 때만 connect payload에 보낸다.
   - 채팅 목록 행을 열기 버튼과 삭제 버튼으로 분리했고, 빈 draft/16,000자 초과/pending 상태에서 전송 버튼이 disabled 된다.
+  - 콘솔 여러 화면의 설명용 subtitle/description을 제거하고, 빈 상태 icon을 실제 icon 컴포넌트로 맞췄다. Incident evidence row와 flow group은 `role=button` div 대신 실제 `button`으로 바꿨다.
   - 운영 화면에 mock/fake/hardcoded production data 추가 없음.
 - 문서:
-  - `docs/spec/frontend/{app,chat,cluster,fleet,metrics,repo,resources,shared}.md`를 `c8d21d6d` 기준으로 갱신했다.
-  - `LIVE` 표시, `sandbox` 기본 배포 namespace/environment, 시계열 합성 포인트 설명을 실제 코드 기준으로 제거했다.
+  - `docs/spec/frontend/{app,auth,cluster,fleet,metrics,notifications,org,repo,resources,shared,workflow}.md`와 `docs/spec/domains/dashboard.md`를 `e7e4caab` 기준으로 갱신했다.
+  - `LIVE` 표시, `sandbox` 기본 배포 namespace/environment, 시계열 합성 포인트, stale subtitle/description, dashboard count SQL group-by 설명을 실제 코드 기준으로 제거했다.
 - 검증:
   - `cd frontend && npm run typecheck` → passed.
   - `cd frontend && npm test` → 10 passed.
+  - `uv run pytest tests/test_dashboard_projection.py tests/test_fleet_router.py -q` → 21 passed.
   - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q` → 17 passed.
   - `make manifest-check` → management 53, target 16.
   - `make check` → 717 passed, 3 skipped, manifest-check 포함 passed.

@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -40,8 +40,8 @@ status: synced
 |---|---|---|
 | `fleetKeys.summary()` | `frontend/src/features/fleet/api.ts :: fleetKeys` | `['fleet', 'summary']` |
 | `fleetKeys.clusterAgg(id)` | 〃 | `['clusters', id, 'agg']` |
-| `useFleetSummary` | `frontend/src/features/fleet/api.ts :: useFleetSummary` | GET `/fleet/summary`, 30s refetch |
-| `useClusterAgg` | `frontend/src/features/fleet/api.ts :: useClusterAgg` | `(id: string \| undefined)`, GET `/clusters/${id}/summary`, `enabled: !!id`, 30s refetch |
+| `useFleetSummary` | `frontend/src/features/fleet/api.ts :: useFleetSummary` | GET `/fleet/summary` with `{timeoutMs: 8_000}`, 30s refetch |
+| `useClusterAgg` | `frontend/src/features/fleet/api.ts :: useClusterAgg` | `(id: string \| undefined)`, GET `/clusters/${id}/summary` with `{timeoutMs: 8_000}`, `enabled: !!id`, 30s refetch |
 | `HEALTH_SCORE` | `frontend/src/features/fleet/api.ts :: HEALTH_SCORE` | healthy 0.92, warning 0.5, critical 0.08, stale 0.28, unknown 0.36 |
 | `HEALTH_LABEL` | `frontend/src/features/fleet/api.ts :: HEALTH_LABEL` | healthy '정상', warning '주의', critical '위험', stale '스테일', unknown '미확인' |
 | `healthScore` | `frontend/src/features/fleet/api.ts :: healthScore` | 알 수 없는 health 문자열은 0.5 |

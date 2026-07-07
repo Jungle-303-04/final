@@ -1,5 +1,5 @@
 ---
-source_commit: c8d21d6d
+source_commit: e7e4caab
 status: synced
 ---
 
@@ -109,7 +109,7 @@ export const useConsolePath: () => (to: string) => string
 ```text
 ConsoleLayout (div.pl-app.co-app)
 ├─ nav.co-sidebar(.collapsed)
-│  ├─ div.co-logo ("운영 콘솔", click=sidebar collapse toggle)
+│  ├─ button.co-logo (브랜드 마크 아이콘 + "LOGO", click=sidebar collapse toggle)
 │  ├─ MENU NavLink: /, /clusters, /repos, /workflows, /incidents, /metrics, /ai, /catalog
 │  ├─ admin only NavLink /settings
 │  └─ session email avatar row
@@ -118,7 +118,7 @@ ConsoleLayout (div.pl-app.co-app)
 │  │  └─ 프로젝트 라벨 + 알림 버튼(unread badge) + AI 채팅 버튼 + ThemeToggle + 로그아웃 버튼
 │  ├─ div.co-subheader: back button + pathname 기반 breadcrumbs
 │  └─ div.co-content > motion.div(key=first path segment, fadeRise) > <Outlet />
-└─ Flyover(notifOpen): 최근 알림 최대 30개, 모두 읽음, 인시던트로 이동
+└─ Flyover(notifOpen): 최근 알림 최대 30개, 모두 읽음, 인시던트로 이동. 알림이 없으면 "표시할 알림이 없습니다"
 ```
 
 - 상태 소스: local `collapsed`, `notifOpen`, `useIsAdmin()`, `useSession()`, `useLogout()`, `useNotices()`, `useLocation()`, `useNavigate()`. `ConsoleLayout`은 `liveStore` 값을 표시하지 않지만 `startLive()`로 스트림 연결은 시작한다.
@@ -134,7 +134,7 @@ ConsoleLayout (div.pl-app.co-app)
 - 데이터: `useFleetSummary`, `useTimeline`, `useNotices`, `useConversations`, `useIsAdmin`, 선택 클러스터 기준 `useClusterUsage`, `useMetricWidgets`, `useMetricQueryPresets`.
 - state: `clusterWizard`, `repoWizard`, `fleetLens`, `selectedClusterId`.
 - `fleetClusters = useMemo(() => fleetQ.data?.clusters ?? [], [fleetQ.data?.clusters])` 로 fleet 배열 참조를 고정한다. `useEffect`는 선택 클러스터가 비었거나 fleet 에 없으면 첫 클러스터로 보정한다.
-- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState`(admin 이면 등록 action, non-admin 이면 접근 가능한 클러스터 없음 안내) 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 메트릭 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, 스냅샷 추이 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
+- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState('아직 등록된 클러스터가 없습니다', admin 이면 등록 action)` 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 메트릭 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, 스냅샷 추이 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
 - `usageSeries`는 `sampled_at`을 `Date.parse()` 숫자 x값으로 넘기고, 파싱할 수 없으면 1부터 시작하는 index를 쓴다. 시간 라벨 포맷은 [shared `TimeSeriesChart`](shared.md#차트-uichartstsx)가 담당한다.
 - `fleetHeatNode(cluster, lens)`는 모든 렌즈에서 tile 크기 `value=max(1,pods_total)`을 유지하고 score/label만 바꾼다. `all`: `score=healthScore(health)`. `cpu`: `score=ratioHealthScore(cpu_pct)`. `memory`: `score=ratioHealthScore(mem_pct)`. `incidents`: 인시던트가 있으면 `score=0.12`, 없으면 `healthScore(health)`.
 - `FleetWidgetStrip`은 fleet totals 와 cluster summary 만 사용한다. 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 표시하고 CPU/MEM 관측값이 없으면 `—`로 표시한다.
