@@ -793,6 +793,29 @@ class RepoChangeRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row else None
 
+    def count_open_workflow_approvals(self, workspace_id: str) -> int:
+        """fleet 합계용 — 사람 결정 대기(requested) 승인 수.
+
+        NOT_REQUIRED 는 자동 진행 표식이라 '대기'로 세지 않음(OPEN_APPROVAL_STATUSES 와 다른 기준).
+        """
+        table = Approval.__table__
+        statement = select(func.count()).where(
+            table.c.workspace_id == workspace_id,
+            table.c.status == ApprovalStatus.REQUESTED.value,
+        )
+        with self.connection() as conn:
+            return int(conn.execute(statement).scalar() or 0)
+
+    def count_running_workflow_runs(self, workspace_id: str) -> int:
+        """fleet 합계용 — 종결(SUCCEEDED/FAILED) 전 상태의 워크플로 run 수."""
+        table = WorkflowRun.__table__
+        statement = select(func.count()).where(
+            table.c.workspace_id == workspace_id,
+            table.c.status.not_in(TERMINAL_WORKFLOW_STATUSES),
+        )
+        with self.connection() as conn:
+            return int(conn.execute(statement).scalar() or 0)
+
     def attach_workflow_command(self, workflow_run_id: str, command_id: str) -> None:
         table = WorkflowRun.__table__
         statement = (

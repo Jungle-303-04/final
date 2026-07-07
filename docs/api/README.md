@@ -273,6 +273,14 @@ resolved 알림만 들어오면 이벤트를 새로 만들지 않고 `accepted: 
 payload 원문 대신 `root_cause`, `action`, incident 요약, `confidence` 같은 화이트리스트 필드만 내려간다.
 secret 원문이 응답에 실리지 않게 하기 위한 계약이므로 프론트는 이 요약 필드만 렌더링한다.
 
+`07-fleet-summary`는 콘솔 루트 화면용 fleet 롤업 API다.
+세션 사용자가 읽을 수 있는 cluster마다 `health`(healthy/warning/critical), pod/node 수, 최근 재시작 델타, 열린 incident 수를 내려주고,
+`totals`에 cluster 수, health별 수, 대기 approval, 진행 중 workflow, dead letter 개수를 합산한다.
+
+`08-cluster-summary`는 fleet 타일 클릭 드릴다운 API다.
+해당 cluster에 `CLUSTER_READ` 권한이 있어야 하고, workload를 health별로 묶은 목록,
+최근 Warning 이벤트(최대 10건), 열린 incident 요약, 최신 usage 스냅샷을 내려준다.
+
 ### 06-gitops-approval
 
 `01-github-webhook`은 외부 Git webhook을 받아 workflow event로 바꾸는 API다.
@@ -512,6 +520,12 @@ status 정상 출력에는 `command_id`, `cluster_id`, `status`, `result`가 있
 `05-rca-dashboard/04-alertmanager-webhook.bru`는 외부 모니터링 알림이 RCA evidence로 들어오는지 보는 요청이다.
 정상 출력은 `accepted: true`, `event_id`, `correlation_id`다.
 토큰이 설정되지 않은 배포에서는 `503`, 토큰이 틀리면 `401`이 정상 보호 응답이다.
+
+`05-rca-dashboard/07-fleet-summary.bru`는 fleet 롤업이 내려오는지 보는 요청이다.
+정상 출력은 `clusters` 배열과 `totals`다. cluster가 하나도 없으면 `clusters: []`에 totals가 0으로 내려온다.
+
+`05-rca-dashboard/08-cluster-summary.bru`는 cluster 드릴다운 요약을 보는 요청이다.
+권한이 없으면 `403`, 등록되지 않은 `cluster_id`면 `404`가 정상이다.
 
 ## 10단계. GitHub webhook signature와 approval 확인
 

@@ -19,6 +19,7 @@ from domains.alert.router import router as alert_router
 from domains.applications.router import router as applications_router
 from domains.catalog.router import router as catalog_router
 from domains.command.router import router as command_router
+from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
@@ -194,6 +195,7 @@ class ApiGateway:
         )  # evidence/RCA report 범용 조회(세션 워크스페이스 범위)
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
+        app.include_router(fleet_router)  # fleet 롤업 + 클러스터 드릴다운(콘솔 루트 화면)
         self._register_live_proxy_routes(app)
         self._register_dead_letter_routes(app)
         self._register_metrics_routes(app)
