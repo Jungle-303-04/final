@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 22:59 KST (AI entity context wiring/docs sync)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 23:12 KST (AI entity context live deploy)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -31,10 +31,21 @@
   - `cd frontend && npm test` → 8 passed.
   - `make manifest-check` → passed.
   - `make check` → 705 passed, 3 skipped.
+- 배포/live smoke:
+  - commit/push: `a08b13d5 feat: AI 컨텍스트 / 인벤토리 도구 / 문서 정합성` → `origin/dev`.
+  - backend CodeBuild `kubernetes-ops-image-build:a91aedb1-7fc9-44dd-9809-88f5ba7c7829` → succeeded.
+  - backend image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:a08b13d5-dev`, digest `sha256:9723393d482fc35bbcc640e22e677698f14287238493aa8ffca98e9fe2c74aa5`.
+  - console CodeBuild `kubernetes-ops-console-build:944d652e-ac1e-4f18-a147-93518c69176a` → succeeded. `ECR_REPO=kubeheal-console` override 사용.
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:a08b13d5-dev`, digest `sha256:ae6c2208433e17080001b2010cff5f7d0a0486c53a20feb1f64caaac8b6bda43`.
+  - rollout 완료: `api-gateway`, `ai-chat-worker`, `console` 모두 1/1 ready, restart 0.
+  - `https://k8s.woonyong.org/` → 200 `text/html`, `/console/` → 200 `text/html`, `/api/healthz` → 200 `{"status":"ok","service":"api-gateway"}`.
+  - 실제 로그인 세션: `POST /api/auth/login` → 200, `service_session` `Max-Age=7200` 확인.
+  - AI context smoke: `POST /api/ai/conversations` with `{cluster_id:"cluster-1", resource_type:"pod", kind:"Pod", namespace:"sandbox", name:"codex-context-smoke", uid:"codex-context-smoke", locale:"ko"}` → 200 accepted, conversation `waiting → completed`. DB `ai_conversations.context`에 allowlist context 저장 확인, assistant 응답도 Pod/sandbox context를 인지했다.
+  - smoke conversation cleanup: `DELETE /api/ai/conversations/<id>` → 204, 재조회 404.
+  - headless browser smoke: `/` login, refresh session, `/clusters/cluster-1` detail, `/ai?prefill=...&context=...` prefill 화면 확인. Cloudflare/SPA navigation 중 기존 in-flight 요청 abort 로그가 일부 남지만 최종 화면은 정상 렌더.
 - 다음 실행:
-  1. backend image는 `api-gateway`와 `ai-chat-worker`에 배포한다. frontend image는 console deployment에 배포한다.
-  2. live smoke는 `/`, `/console/`, `/api/healthz`, 로그인 세션의 AI context create/send 수락 여부까지 확인한다.
-  3. 다음 의미 단위는 저장형 query/widget API + PromQL 실제 실행 결과를 AI/드릴다운/위젯에 공통으로 연결하는 작업이다.
+  1. 다음 의미 단위는 저장형 query/widget API + PromQL 실제 실행 결과를 AI/드릴다운/위젯에 공통으로 연결하는 작업이다.
+  2. 브라우저 QA는 Cloudflare clearance/초기 401 리다이렉트 때문에 첫 요청이 흔들릴 수 있다. 판정은 최종 화면 렌더와 API 200 기준으로 보고, 필요 시 Playwright context 재사용 또는 clearance preflight를 넣어 안정화한다.
 
 ## 체크포인트 (22:08 KST) — 클러스터 등록 URL 소유권 정리 + live 배포
 
