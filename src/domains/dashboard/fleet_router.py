@@ -221,7 +221,7 @@ def rollup_health(
     has_observations: bool = True,
     connection_status: str = "online",
 ) -> str:
-    """결정적 health 롤업 — 모듈 docstring 의 규칙 그대로(순서: critical → warning → healthy)."""
+    """결정적 health 롤업 — 모듈 docstring 의 규칙 그대로(순서: unknown → critical → warning → stale → healthy)."""
     if not has_observations:
         return HEALTH_UNKNOWN
     if workloads_degraded > FLEET_DEGRADED_WORKLOAD_THRESHOLD:
@@ -367,7 +367,10 @@ def _latest_usage(samples: list[JsonObject]) -> JsonObject:
 
 
 def has_observations(rollup: JsonObject, samples: list[JsonObject]) -> bool:
-    if any(_int_or_zero(rollup.get(key)) > 0 for key in ("pods_total", "nodes_total", "workloads_total")):
+    if any(
+        _int_or_zero(rollup.get(key)) > 0
+        for key in ("pods_total", "nodes_total", "workloads_total")
+    ):
         return True
     latest_usage = _latest_usage(samples)
     return any(_int_or_zero(latest_usage.get(key)) > 0 for key in ("pod_total", "node_total"))

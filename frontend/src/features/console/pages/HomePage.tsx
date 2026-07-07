@@ -17,6 +17,30 @@ import { StatCard } from '../ui';
 const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger', stale: 'warning', unknown: 'neutral' };
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v)}%`);
 
+type FleetHealthTotals = {
+  clusters: number;
+  critical: number;
+  warning: number;
+  stale: number;
+  unknown: number;
+};
+
+type FleetStatTotals = FleetHealthTotals & {
+  open_incidents: number;
+  pending_approvals: number;
+  running_workflows: number;
+  dead_letters: number;
+};
+
+export function fleetClusterChip(totals: FleetHealthTotals): { chip?: string; severity: ChipSeverity } {
+  if (totals.critical > 0) return { chip: `위험 ${totals.critical}`, severity: 'danger' };
+  if (totals.warning > 0) return { chip: `주의 ${totals.warning}`, severity: 'warning' };
+  if (totals.stale > 0) return { chip: `스테일 ${totals.stale}`, severity: 'warning' };
+  if (totals.unknown > 0) return { chip: `미확인 ${totals.unknown}`, severity: 'neutral' };
+  if (totals.clusters > 0) return { chip: '모두 정상', severity: 'success' };
+  return { severity: 'success' };
+}
+
 export function HomePage() {
   const navigate = useNavigate();
   const fleetQ = useFleetSummary();
@@ -44,18 +68,7 @@ export function HomePage() {
       {/* ── 집계 카드 + 히트맵 + 클러스터 테이블 — GET /fleet/summary ── */}
       <QueryBoundary query={fleetQ} skeletonLines={5}>{fleet => (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
-            <StatCard
-              label="클러스터"
-              value={fleet.totals.clusters}
-              chip={fleet.totals.critical > 0 ? `위험 ${fleet.totals.critical}` : fleet.totals.warning > 0 ? `주의 ${fleet.totals.warning}` : fleet.totals.clusters > 0 ? '모두 정상' : undefined}
-              chipSeverity={fleet.totals.critical > 0 ? 'danger' : fleet.totals.warning > 0 ? 'warning' : 'success'}
-            />
-            <StatCard label="열린 인시던트" value={fleet.totals.open_incidents} chip={fleet.totals.open_incidents > 0 ? '조치 필요' : undefined} chipSeverity="danger" />
-            <StatCard label="승인 대기" value={fleet.totals.pending_approvals} chip={fleet.totals.pending_approvals > 0 ? '검토 필요' : undefined} chipSeverity="warning" />
-            <StatCard label="실행 중 워크플로우" value={fleet.totals.running_workflows} />
-            <StatCard label="처리 실패 이벤트 (DLQ)" value={fleet.totals.dead_letters} chip={fleet.totals.dead_letters > 0 ? '재처리 필요' : undefined} chipSeverity="danger" />
-          </div>
+          <FleetStatCards totals={fleet.totals} />
 
           {fleet.clusters.length === 0 ? (
             <div className="pl-card" style={{ marginBottom: 16 }}>
@@ -188,5 +201,23 @@ export function HomePage() {
       <RegisterClusterWizard open={clusterWizard} onClose={() => setClusterWizard(false)} />
       <ConnectRepoWizard open={repoWizard} onClose={() => setRepoWizard(false)} />
     </>
+  );
+}
+
+function FleetStatCards({ totals }: { totals: FleetStatTotals }) {
+  const clusterChip = fleetClusterChip(totals);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+      <StatCard
+        label="클러스터"
+        value={totals.clusters}
+        chip={clusterChip.chip}
+        chipSeverity={clusterChip.severity}
+      />
+      <StatCard label="열린 인시던트" value={totals.open_incidents} chip={totals.open_incidents > 0 ? '조치 필요' : undefined} chipSeverity="danger" />
+      <StatCard label="승인 대기" value={totals.pending_approvals} chip={totals.pending_approvals > 0 ? '검토 필요' : undefined} chipSeverity="warning" />
+      <StatCard label="실행 중 워크플로우" value={totals.running_workflows} />
+      <StatCard label="처리 실패 이벤트 (DLQ)" value={totals.dead_letters} chip={totals.dead_letters > 0 ? '재처리 필요' : undefined} chipSeverity="danger" />
+    </div>
   );
 }

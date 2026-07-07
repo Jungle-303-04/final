@@ -483,8 +483,8 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `InventoryResourceListResponse` | `cluster_id: str`, `resource_type: str \| None = None`, `resources: list[InventoryResourceResponse]` |
 | `ClusterUsageSample` / `ClusterUsageResponse` | `sampled_at: str \| None`, `usage: JsonMap` / `cluster_id: str`, `samples: list[ClusterUsageSample]` |
 | `InventorySummaryResponse` | `cluster_id: str`, `latest_snapshot: JsonMap \| None = None`, `counts: list[JsonMap] = []` |
-| `FleetClusterSummaryItem` | `cluster_id/name/health: str`(health 는 healthy\|warning\|critical), `pods_running/pods_total/nodes_ready/nodes_total/open_incidents/restarts_recent: int = 0`, `cpu_pct/mem_pct: float \| None = None`(실측 없으면 None), `last_seen_at: str \| None = None` |
-| `FleetTotals` | `clusters/healthy/warning/critical/open_incidents/pending_approvals/running_workflows/dead_letters: int = 0` — dead_letters 는 플랫폼 전역 카운트 |
+| `FleetClusterSummaryItem` | `cluster_id/name/health: str`(health 는 healthy\|warning\|critical\|stale\|unknown), `pods_running/pods_total/nodes_ready/nodes_total/open_incidents/restarts_recent: int = 0`, `cpu_pct/mem_pct: float \| None = None`(실측 없으면 None), `last_seen_at: str \| None = None` |
+| `FleetTotals` | `clusters/healthy/warning/critical/stale/unknown/open_incidents/pending_approvals/running_workflows/dead_letters: int = 0` — dead_letters 는 플랫폼 전역 카운트 |
 | `FleetSummaryResponse` | `clusters: list[FleetClusterSummaryItem] = []`, `totals: FleetTotals = FleetTotals()` |
 | `ClusterWorkloadHealthItem` | `name/kind/health: str`, `namespace: str \| None = None`, `ready: str = ""`("ready/desired"), `restarts: int = 0` |
 | `ClusterWarningEventItem` | `name: str`, `namespace/reason/message/involved_kind/involved_name: str \| None = None`, `count: int = 0`, `last_seen_at: str \| None = None` |

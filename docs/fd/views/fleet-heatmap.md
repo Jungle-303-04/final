@@ -24,7 +24,7 @@ PageHeader("플릿 현황") [+ 레포 연결] [+ 클러스터 등록(admin)]
 |---|---|
 | 데이터 | `useFleetSummary()` → `fleet.clusters` |
 | 면적 | `Math.max(1, pods_total)` |
-| 색 | `healthScore(health)` (`healthy=0.92`, `warning=0.5`, `critical=0.08`) |
+| 색 | `healthScore(health)` (`healthy=0.92`, `warning=0.5`, `critical=0.08`, `stale=0.28`, `unknown=0.36`) |
 | 라벨 | `<name> · <pods_running>/<pods_total> pods` |
 | 클릭 | `/clusters/:clusterId` 이동 |
 | 높이 | `TreemapChart`의 `minHeight=300`이 결정한다 |
@@ -49,4 +49,5 @@ PageHeader("플릿 현황") [+ 레포 연결] [+ 클러스터 등록(admin)]
 - [ ] `/overview` 접속 시 `/`로 redirect 된다.
 - [ ] 클러스터가 0개면 HomePage가 admin 에게만 등록 CTA를 제공한다.
 - [ ] `GET /fleet/summary` 값만으로 카드, treemap, 테이블을 그리며 프론트에서 집계 값을 합성하지 않는다.
+- [ ] `unknown`/`stale` health 를 healthy 로 보정하지 않고 그대로 라벨·색상에 반영한다.
 - [ ] treemap tile/cluster row 클릭이 클러스터 상세로 이어진다.

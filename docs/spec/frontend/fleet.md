@@ -28,9 +28,9 @@ status: synced
 
 | 심볼 | 필드 |
 |---|---|
-| `FleetHealth` | `'healthy' \| 'warning' \| 'critical'` |
+| `FleetHealth` | `'healthy' \| 'warning' \| 'critical' \| 'stale' \| 'unknown'` |
 | `FleetClusterSummary` | `cluster_id`, `name`, `health`, `pods_running`, `pods_total`, `nodes_ready`, `nodes_total`, `open_incidents`, `restarts_recent`, `cpu_pct`, `mem_pct`, `last_seen` |
-| `FleetTotals` | `clusters`, `healthy`, `warning`, `critical`, `open_incidents`, `pending_approvals`, `running_workflows`, `dead_letters` |
+| `FleetTotals` | `clusters`, `healthy`, `warning`, `critical`, `stale`, `unknown`, `open_incidents`, `pending_approvals`, `running_workflows`, `dead_letters` |
 | `FleetSummary` | `{ clusters: FleetClusterSummary[]; totals: FleetTotals }` |
 | `ClusterAggSummary` | `workloads`, `recent_events`, `open_incidents`, `usage` |
 
@@ -42,8 +42,8 @@ status: synced
 | `fleetKeys.clusterAgg(id)` | 〃 | `['clusters', id, 'agg']` |
 | `useFleetSummary` | `frontend/src/features/fleet/api.ts :: useFleetSummary` | GET `/fleet/summary`, 30s refetch |
 | `useClusterAgg` | `frontend/src/features/fleet/api.ts :: useClusterAgg` | `(id: string \| undefined)`, GET `/clusters/${id}/summary`, `enabled: !!id`, 30s refetch |
-| `HEALTH_SCORE` | `frontend/src/features/fleet/api.ts :: HEALTH_SCORE` | healthy 0.92, warning 0.5, critical 0.08 |
-| `HEALTH_LABEL` | `frontend/src/features/fleet/api.ts :: HEALTH_LABEL` | healthy '정상', warning '주의', critical '위험' |
+| `HEALTH_SCORE` | `frontend/src/features/fleet/api.ts :: HEALTH_SCORE` | healthy 0.92, warning 0.5, critical 0.08, stale 0.28, unknown 0.36 |
+| `HEALTH_LABEL` | `frontend/src/features/fleet/api.ts :: HEALTH_LABEL` | healthy '정상', warning '주의', critical '위험', stale '스테일', unknown '미확인' |
 | `healthScore` | `frontend/src/features/fleet/api.ts :: healthScore` | 알 수 없는 health 문자열은 0.5 |
 | `healthLabel` | `frontend/src/features/fleet/api.ts :: healthLabel` | 알 수 없는 health 문자열은 원문 표시 |
 
@@ -64,4 +64,5 @@ status: synced
 
 - 집계 API 타입이 화면 계약이다. 필드가 없으면 UI에서 합성하지 않고 빈 상태나 `—`로 표시한다.
 - 건강도 점수/라벨 변환은 이 파일의 `healthScore`/`healthLabel`만 사용한다.
+- `unknown` 은 backend 가 pod/node/usage 관측값 부재를 그대로 드러낸 상태이고, `stale` 은 관측값은 있으나 agent connection status 가 online 이 아닌 상태다. 프론트는 이를 healthy 로 보정하지 않는다.
 - `/fleet/summary`와 `/clusters/{id}/summary`는 실측 집계이며, 프론트에서 과거 `score.ts`식 계산을 복원하지 않는다.

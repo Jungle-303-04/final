@@ -287,8 +287,8 @@ payload 원문 대신 `root_cause`, `action`, incident 요약, `confidence` 같�
 secret 원문이 응답에 실리지 않게 하기 위한 계약이므로 프론트는 이 요약 필드만 렌더링한다.
 
 `07-fleet-summary`는 콘솔 루트 화면용 fleet 롤업 API다.
-세션 사용자가 읽을 수 있는 cluster마다 `health`(healthy/warning/critical), pod/node 수, 최근 재시작 델타, 열린 incident 수를 내려주고,
-`totals`에 cluster 수, health별 수, 대기 approval, 진행 중 workflow, dead letter 개수를 합산한다.
+세션 사용자가 읽을 수 있는 cluster마다 `health`(healthy/warning/critical/stale/unknown), pod/node 수, 최근 재시작 델타, 열린 incident 수를 내려주고,
+`totals`에 cluster 수, health별 수(healthy/warning/critical/stale/unknown), 대기 approval, 진행 중 workflow, dead letter 개수를 합산한다.
 
 `08-cluster-summary`는 fleet 타일 클릭 드릴다운 API다.
 해당 cluster에 `CLUSTER_READ` 권한이 있어야 하고, workload를 health별로 묶은 목록,
