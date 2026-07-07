@@ -135,7 +135,86 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
         "supporting_evidence": detail.get("supporting_evidence") or [],
         "missing_evidence": detail.get("missing_evidence") or [],
         "created_at": row.get("created_at"),
+        # 분석 심화 — 대상 리소스·부증상·후보 점수·근거 쿼리 트레일(전부 파생 메타, 원문 값 없음)
+        "resource_kind": incident.get("resource_kind"),
+        "resource_name": incident.get("resource_name"),
+        "namespace": incident.get("namespace"),
+        "secondary_symptoms": _str_list(incident.get("secondary_symptoms")),
+        "selected_candidate_id": detail.get("selected_candidate_id"),
+        "candidates": _candidate_scores(payload),
+        "supporting_evidence_refs": _evidence_refs(detail.get("supporting_evidence_refs")),
+        "missing_evidence_checks": _missing_checks(detail.get("missing_evidence_checks")),
     }
+
+
+def _str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _candidate_scores(payload: JsonObject) -> list[JsonObject]:
+    """candidates(카탈로그 메타) + evaluations(점수) 를 candidate_id 로 병합."""
+    candidates = payload.get("candidates")
+    evaluations = payload.get("evaluations")
+    meta: dict[str, JsonObject] = {}
+    for cand in candidates if isinstance(candidates, list) else []:
+        if isinstance(cand, dict) and cand.get("candidate_id"):
+            meta[str(cand["candidate_id"])] = cand
+    items: list[JsonObject] = []
+    for ev in evaluations if isinstance(evaluations, list) else []:
+        if not (isinstance(ev, dict) and ev.get("candidate_id")):
+            continue
+        candidate_id = str(ev["candidate_id"])
+        cand = meta.get(candidate_id, {})
+        items.append(
+            {
+                "candidate_id": candidate_id,
+                "title": cand.get("title"),
+                "source": cand.get("source"),
+                "score": ev.get("score"),
+                "reason": ev.get("reason"),
+                "supporting_evidence": _str_list(ev.get("supporting_evidence")),
+                "missing_evidence": _str_list(ev.get("missing_evidence")),
+            }
+        )
+    # 점수 내림차순 — 선정 후보가 항상 위로 온다.
+    items.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+    return items
+
+
+def _evidence_refs(value: Any) -> list[JsonObject]:
+    refs: list[JsonObject] = []
+    for ref in value if isinstance(value, list) else []:
+        if not (isinstance(ref, dict) and ref.get("source") and ref.get("name")):
+            continue
+        refs.append(
+            {
+                "source": str(ref["source"]),
+                "name": str(ref["name"]),
+                "check_id": ref.get("check_id") or None,
+                "summary": ref.get("summary") or None,
+                "query": ref.get("query") or None,
+                "evidence_ref": ref.get("evidence_ref") or None,
+            }
+        )
+    return refs
+
+
+def _missing_checks(value: Any) -> list[JsonObject]:
+    checks: list[JsonObject] = []
+    for check in value if isinstance(value, list) else []:
+        if not (isinstance(check, dict) and check.get("check_id")):
+            continue
+        checks.append(
+            {
+                "check_id": str(check["check_id"]),
+                "source": check.get("source"),
+                "status": check.get("status"),
+                "reason": check.get("reason"),
+            }
+        )
+    return checks
 
 
 def _workspace_id(current: Any) -> str:

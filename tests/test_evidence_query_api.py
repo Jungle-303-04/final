@@ -69,14 +69,62 @@ def report_row(row_id: int = 1) -> dict:
             "incident": {
                 "incident_id": "incident-1",
                 "cluster_id": "cluster-1",
+                "resource_kind": "Deployment",
+                "resource_name": "checkout-api",
+                "namespace": "sandbox",
                 "symptom": "ImagePullBackOff",
                 "severity": "high",
+                "secondary_symptoms": ["restart_spike"],
             },
+            "candidates": [
+                {
+                    "candidate_id": "image-pull-backoff",
+                    "title": "이미지 풀 실패",
+                    "source": "rule",
+                    "signals": [{"id": "s1", "any_of": [{"fact": "waiting_reason"}]}],
+                },
+                {"candidate_id": "oom-killed", "title": "OOM", "source": "rule"},
+            ],
+            "evaluations": [
+                {
+                    "candidate_id": "oom-killed",
+                    "score": 0.2,
+                    "reason": "신호 미충족",
+                    "supporting_evidence": [],
+                    "missing_evidence": ["prometheus:container_memory"],
+                },
+                {
+                    "candidate_id": "image-pull-backoff",
+                    "score": 1.0,
+                    "reason": "모든 신호 충족",
+                    "supporting_evidence": ["kubernetes:events"],
+                    "missing_evidence": [],
+                },
+            ],
             "rca_detail": {
                 "confidence": 0.91,
                 "reason": "필요한 근거가 모두 수집되었습니다.",
+                "selected_candidate_id": "image-pull-backoff",
                 "supporting_evidence": ["kubernetes"],
                 "missing_evidence": [],
+                "supporting_evidence_refs": [
+                    {
+                        "source": "kubernetes",
+                        "name": "events",
+                        "check_id": "events",
+                        "summary": "Failed to pull image",
+                        "query": "events(namespace=sandbox)",
+                        "evidence_ref": "evidence://cluster-1/incident-1",
+                    }
+                ],
+                "missing_evidence_checks": [
+                    {
+                        "check_id": "loki:app-logs",
+                        "source": "loki",
+                        "status": "collected",
+                        "reason": "ok",
+                    }
+                ],
             },
             # 응답으로 새 나가면 안 되는 원문 payload 내용물
             "evidence": {"kubernetes": {"token": SECRET_MARKER}},
@@ -183,7 +231,25 @@ def test_rca_reports_return_summary_without_raw_payload() -> None:
     assert item["confidence"] == 0.91
     assert item["supporting_evidence"] == ["kubernetes"]
     assert item["created_at"] == "2026-07-07T10:00:00+00:00"
-    # payload 원문(secret 포함 가능)은 응답 어디에도 실리지 않는다.
+    # 분석 심화 필드 — 대상 리소스·부증상·후보 점수(내림차순)·근거 쿼리 트레일
+    assert item["resource_kind"] == "Deployment"
+    assert item["resource_name"] == "checkout-api"
+    assert item["namespace"] == "sandbox"
+    assert item["secondary_symptoms"] == ["restart_spike"]
+    assert item["selected_candidate_id"] == "image-pull-backoff"
+    assert [c["candidate_id"] for c in item["candidates"]] == ["image-pull-backoff", "oom-killed"]
+    top = item["candidates"][0]
+    assert top["title"] == "이미지 풀 실패"
+    assert top["source"] == "rule"
+    assert top["score"] == 1.0
+    assert top["supporting_evidence"] == ["kubernetes:events"]
+    assert item["candidates"][1]["missing_evidence"] == ["prometheus:container_memory"]
+    ref = item["supporting_evidence_refs"][0]
+    assert ref["source"] == "kubernetes"
+    assert ref["query"] == "events(namespace=sandbox)"
+    assert item["missing_evidence_checks"][0]["check_id"] == "loki:app-logs"
+    # 후보의 signals DSL 원문·payload 원문(secret 포함 가능)은 응답 어디에도 실리지 않는다.
+    assert "signals" not in top
     assert "payload" not in item
     assert SECRET_MARKER not in response.text
     name, kwargs = db.calls[0]
