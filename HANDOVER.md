@@ -16,6 +16,10 @@
 - 검증:
   - `cd frontend && npm run typecheck` passed.
   - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright mock: `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8`를 1440/1024/390 폭에서 직접 열어 팟 Drawer 복원, critical/인시던트 상태, "인시던트 보기" CTA, horizontal overflow 0 확인.
+  - Playwright mock: `/clusters/cluster-1`에서 노드 타일 클릭 → 팟 타일 클릭 → 브라우저 뒤로가기 2회로 `?node`/base 상태 복귀 확인. 세션 refresh API를 목킹한 뒤 unexpected console error 0.
 
 ## 체크포인트 — 콘솔 디자인 시스템 Phase 2 메트릭 이관 완료
 
