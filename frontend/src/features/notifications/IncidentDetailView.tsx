@@ -143,7 +143,7 @@ export default function IncidentDetailView() {
   if (notFound) {
     return (
       <FadeSlideIn>
-        <Breadcrumbs items={[{ label: '알림', to: '/notifications' }, { label: `인시던트 ${incidentId}` }]} />
+        <Breadcrumbs items={[{ label: '인시던트', to: '/incidents' }, { label: `인시던트 ${incidentId}` }]} />
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px' }}>
           <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>인시던트 타임라인 상세를 찾을 수 없습니다</h1>
           <CopyChip value={incidentId} display={trunc(incidentId, 22)} />
@@ -161,7 +161,7 @@ export default function IncidentDetailView() {
 
   return (
     <FadeSlideIn>
-      <Breadcrumbs items={[{ label: '알림', to: '/notifications' }, { label: `인시던트 ${incidentId}` }]} />
+      <Breadcrumbs items={[{ label: '인시던트', to: '/incidents' }, { label: `인시던트 ${incidentId}` }]} />
       <QueryBoundary query={q} skeletonLines={6}>{inc => (
         <>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', margin: '10px 0 14px', flexWrap: 'wrap' }}>

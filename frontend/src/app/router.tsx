@@ -1,9 +1,9 @@
-// 라우트 트리 — docs/fd/05 와 1:1
+// 라우트 트리 — 콘솔 앱이 곧 루트(/) 앱. 모든 화면은 실데이터 API 만 사용
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { AppShell } from '@/app/shell/AppShell';
 import { RequireAdmin, RequireGuest, RequireSession } from '@/app/guards';
-import { consoleRoutes } from '@/features/console/routes';
+import { ConsoleLayout } from '@/features/console/ui';
+import { HomePage } from '@/features/console/pages/HomePage';
 import { Skeleton } from '@/shared/ui';
 
 const L = (f: () => Promise<{ default: React.ComponentType }>) => {
@@ -24,26 +24,25 @@ export const router = createBrowserRouter([
   {
     element: <RequireSession />,
     children: [{
-      element: <AppShell />,
+      path: '/',
+      element: <ConsoleLayout />,
       children: [
-        { path: '/', element: <Navigate to="/overview" replace /> },
-        { path: '/overview', element: L(() => import('@/features/fleet/FleetHeatmapView')) },
-        { path: '/overview/c/:clusterId', element: L(() => import('@/features/fleet/FleetHeatmapView')) },
-        { path: '/clusters', element: L(() => import('@/features/cluster/ClusterListView')) },
-        { path: '/clusters/:clusterId', element: L(() => import('@/features/cluster/ClusterDetailView')) },
-        { path: '/clusters/:clusterId/pods/:namespace/:pod', element: L(() => import('@/features/cluster/ClusterDetailView')) },
-        { path: '/repos', element: L(() => import('@/features/repo/RepoListView')) },
-        { path: '/repos/:applicationId', element: L(() => import('@/features/repo/RepoDetailView')) },
-        { path: '/workflows', element: L(() => import('@/features/workflow/WorkflowListView')) },
-        { path: '/workflows/:runId', element: L(() => import('@/features/workflow/WorkflowGraphView')) },
-        { path: '/metrics', element: L(() => import('@/features/metrics/MetricsView')) },
-        { path: '/ai', element: L(() => import('@/features/chat/ChatView')) },
-        { path: '/ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
-        { path: '/notifications', element: L(() => import('@/features/notifications/NotificationsView')) },
-        { path: '/incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
-        { path: '/catalog', element: L(() => import('@/features/resources/CatalogView')) },
+        { index: true, element: <HomePage /> },
+        { path: 'clusters', element: L(() => import('@/features/cluster/ClusterListView')) },
+        { path: 'clusters/:clusterId', element: L(() => import('@/features/cluster/ClusterDetailView')) },
+        { path: 'clusters/:clusterId/pods/:namespace/:pod', element: L(() => import('@/features/cluster/ClusterDetailView')) },
+        { path: 'repos', element: L(() => import('@/features/repo/RepoListView')) },
+        { path: 'repos/:applicationId', element: L(() => import('@/features/repo/RepoDetailView')) },
+        { path: 'workflows', element: L(() => import('@/features/workflow/WorkflowListView')) },
+        { path: 'workflows/:runId', element: L(() => import('@/features/workflow/WorkflowGraphView')) },
+        { path: 'incidents', element: L(() => import('@/features/notifications/NotificationsView')) },
+        { path: 'incidents/:incidentId', element: L(() => import('@/features/notifications/IncidentDetailView')) },
+        { path: 'metrics', element: L(() => import('@/features/metrics/MetricsView')) },
+        { path: 'ai', element: L(() => import('@/features/chat/ChatView')) },
+        { path: 'ai/:conversationId', element: L(() => import('@/features/chat/ChatView')) },
+        { path: 'catalog', element: L(() => import('@/features/resources/CatalogView')) },
         {
-          path: '/settings',
+          path: 'settings',
           element: <RequireAdmin />,
           children: [
             { index: true, element: <Navigate to="/settings/members" replace /> },
@@ -57,9 +56,13 @@ export const router = createBrowserRouter([
       ],
     }],
   },
-  // 복각 UI — 단일 콘솔 앱 (구 /plural은 /console로 흡수)
-  consoleRoutes,
-  { path: '/plural', element: <Navigate to="/console" replace /> },
-  { path: '/plural/*', element: <Navigate to="/console" replace /> },
-  { path: '*', element: <Navigate to="/overview" replace /> },
+  // 구 경로 호환 — 콘솔이 루트 앱으로 승격되며 전부 / 로 흡수
+  { path: '/console', element: <Navigate to="/" replace /> },
+  { path: '/console/*', element: <Navigate to="/" replace /> },
+  { path: '/plural', element: <Navigate to="/" replace /> },
+  { path: '/plural/*', element: <Navigate to="/" replace /> },
+  { path: '/overview', element: <Navigate to="/" replace /> },
+  { path: '/overview/*', element: <Navigate to="/" replace /> },
+  { path: '/notifications', element: <Navigate to="/incidents" replace /> },
+  { path: '*', element: <Navigate to="/" replace /> },
 ]);
