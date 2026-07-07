@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:25 KST (RCA/DLQ 폭증 안정화 패치)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 20:35 KST (outbox relay batch 영구 안정화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,21 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+
+## 체크포인트 (20:35 KST) — outbox relay batch 영구 안정화
+
+- 라이브 진단:
+  - `2a62d262-dev` 배포 후 신규 compact event는 적용됐지만, `incident-worker` outbox relay가 여전히 기본 batch 1000으로 동작해 `SELECT ... FOR UPDATE` 범위가 커지고 `LockNotAvailable`/statement timeout이 발생했다.
+  - live 임시 조치로 `incident-worker`, `evidence-worker`, `plan-worker`, `analyze-worker`, `rca-worker`, `recovery-worker`, `select-worker`, `approval-worker`에 `OUTBOX_RELAY_BATCH=10`을 적용하고 rollout을 완료했다.
+- 구현:
+  - `src/packages/runtime/relay.py`의 `OUTBOX_RELAY_BATCH` 기본값을 1000에서 10으로 변경했다.
+  - `scripts/aws-up.sh`의 `management-runtime-config`에도 `OUTBOX_RELAY_BATCH="${OUTBOX_RELAY_BATCH:-10}"`을 추가해 재배포/재부팅 시 기본값이 되돌아가지 않게 했다.
+  - `tests/test_env_defaults.py`, `docs/spec/packages/runtime.md`, `docs/continuation-execution-plan-2026-07-07.md`를 새 기본값과 맞췄다.
+- 다음 즉시 할 일:
+  1. ruff/pytest/bash syntax 검증 후 커밋/푸시한다.
+  2. 새 이미지 tag로 CodeBuild 직접 빌드 후 management 워커를 롤아웃한다.
+  3. live configmap에도 `OUTBOX_RELAY_BATCH=10`을 패치한다.
+  4. `incident-worker` 로그에서 `MaxPayloadError`, `LockNotAvailable`, `relay_error`가 사라졌는지 확인하고, 남은 구버전 oversized outbox는 백업 후 `source`/`event_id`/payload 크기 조건으로만 격리한다.
 
 ## 체크포인트 (20:25 KST) — RCA/DLQ 폭증 안정화 패치
 
@@ -46,7 +61,7 @@
   - 1차로 `deploy/management/services.yaml`의 api-gateway resources를 requests `cpu=50m`, `memory=256Mi`, limits `cpu=1`, `memory=1Gi`로 상향했으나 새 Pod도 시작 직후 OOM/restart가 재현됐다.
   - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했으나 약 4분 뒤 OOM/restart가 재현됐다.
   - 3차로 resources를 requests `cpu=100m`, `memory=1Gi`, limits `cpu=1`, `memory=4Gi`로 상향했다.
-  - gateway `OUTBOX_RELAY_BATCH=10`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있기 때문이다.
+  - gateway `OUTBOX_RELAY_BATCH=10`을 추가했다. 기존 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있기 때문이다.
   - gateway에 `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=65536`을 추가해 반복 JSON/DB 처리 후 RSS 반환 여지를 확보했다.
   - 기본 evidence interval을 30초로, provider max_workers 기본값을 2로 완화했다.
   - live DB의 `agent_policies`에서 `cluster-1`, `cluster-2` policy generation을 4로 올리고 모든 provider interval 30초, max_workers 2로 반영했다.

@@ -28,7 +28,7 @@
   - 1차로 `deploy/management/services.yaml`의 api-gateway resources를 requests `cpu=50m`, `memory=256Mi`, limits `cpu=1`, `memory=1Gi`로 상향했으나 새 Pod도 시작 직후 OOM/restart가 재현됐다.
   - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했으나 약 4분 뒤 OOM/restart가 재현됐다.
   - 3차로 resources를 requests `cpu=100m`, `memory=1Gi`, limits `cpu=1`, `memory=4Gi`로 상향했다.
-  - gateway `OUTBOX_RELAY_BATCH=10`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있다.
+  - gateway `OUTBOX_RELAY_BATCH=10`을 추가했다. 기존 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있다.
   - gateway에 `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=65536`을 추가해 반복 JSON/DB 처리 후 RSS 반환 여지를 확보했다.
   - 코드 기본 evidence interval을 30초, provider max_workers 기본값을 2로 완화했다.
   - live DB `agent_policies`에서 `cluster-1`, `cluster-2` policy generation을 4로 올리고 모든 provider interval 30초/max_workers 2로 반영했다.

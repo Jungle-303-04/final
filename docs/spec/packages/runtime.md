@@ -178,7 +178,7 @@ class Ledger:
 
 ### `relay.py` — OutboxRelay
 
-- `src/packages/runtime/relay.py :: DEFAULT_BATCH_ENV` — `"OUTBOX_RELAY_BATCH"`; `DEFAULT_BATCH`(기본 1000).
+- `src/packages/runtime/relay.py :: DEFAULT_BATCH_ENV` — `"OUTBOX_RELAY_BATCH"`; `DEFAULT_BATCH`(기본 10).
 - `src/packages/runtime/relay.py :: DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV` — `"OUTBOX_PUBLISH_TIMEOUT_SECONDS"`; `DEFAULT_PUBLISH_TIMEOUT_SECONDS`(기본 10).
 - `src/packages/runtime/relay.py :: OutboxRelay`
 
@@ -347,7 +347,7 @@ async def deliver(call: Callable[[], Awaitable[Any]], ok: Callable[[Any], Any],
 | `WORKER_HANDLER_TIMEOUT_SECONDS` | int | `30` | 핸들러 hang 상한 |
 | `WORKER_DEAD_LETTER_TIMEOUT_SECONDS` | int | `10` | DLQ 기록 대기 한도 |
 | `WORKER_HEARTBEAT_PATH` | str | `/tmp/heartbeat` | liveness 하트비트 파일 경로(mtime 신선도 검사) |
-| `OUTBOX_RELAY_BATCH` | int | `1000` | relay 1회 발행 행 수 |
+| `OUTBOX_RELAY_BATCH` | int | `10` | relay 1회 발행 행 수 |
 | `OUTBOX_PUBLISH_TIMEOUT_SECONDS` | int | `10` | 건당 발행 대기 한도 |
 | `OUTBOUND_CALLBACK_BASE_URL` | str | `http://api-gateway:8000` | HttpOutbound 기본 base URL |
 | `OUTBOUND_HTTP_TIMEOUT_SECONDS` | int | `5` | outbound POST 타임아웃 |
