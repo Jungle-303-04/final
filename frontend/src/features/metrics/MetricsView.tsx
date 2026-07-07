@@ -28,6 +28,7 @@ import { fmtHms } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconClock, IconPause, IconPlay } from '@/shared/ui/icons';
 import { useConsolePath } from '@/features/console/ui';
+import type { Tone } from '@/shared/lib/types';
 
 type Unit = 'ratio' | 'count' | string;
 const RANGES = [
@@ -77,6 +78,8 @@ export default function MetricsView() {
   const queryPresets = queryPresetsQ.data ?? [];
   const metricWidgets = metricWidgetsQ.data ?? [];
   const selectedPreset = queryPresets.find(p => p.preset_id === selectedPresetId) ?? null;
+  const clusterKnown = clusters.some(c => c.cluster_id === clusterId);
+  const statPending = !clusterId || summaryQ.isPending || workloadsQ.isPending;
 
   useEffect(() => {
     if (!clusters.length) return;
@@ -231,6 +234,9 @@ export default function MetricsView() {
         actions={
           <>
             <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => selectCluster(e.target.value)}>
+              {!clusterKnown && (
+                <option value={clusterId}>{clustersQ.isPending ? '클러스터 확인 중' : clusterId || '클러스터 없음'}</option>
+              )}
               {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
             </select>
             <Button onClick={() => setPaused(p => !p)} aria-pressed={paused} title={paused ? '재개' : '일시정지'}>
@@ -252,10 +258,10 @@ export default function MetricsView() {
       )}
       {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <StatBox label="Running" value={phases.Running ?? 0} tone="ok" />
-        <StatBox label="Pending" value={phases.Pending ?? 0} tone="warn" />
-        <StatBox label="CrashLoop" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} />
-        <StatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" />
+        <MetricStatBox label="Running" value={phases.Running ?? 0} tone="ok" loading={statPending} />
+        <MetricStatBox label="Pending" value={phases.Pending ?? 0} tone="warn" loading={statPending} />
+        <MetricStatBox label="CrashLoop" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} />
+        <MetricStatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
         {snapshot?.rollout && <StatBox label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
       </div>
       <Card title="실시간 — 재시작 추이 / 실행 팟" style={{ marginBottom: 16 }}>
@@ -418,6 +424,11 @@ export function metricWidgetPayload(input: {
     position: {},
     settings: input.settings ?? {},
   };
+}
+
+function MetricStatBox({ label, value, tone, loading }: { label: string; value: number; tone?: Tone; loading: boolean }) {
+  if (!loading) return <StatBox label={label} value={value} tone={tone} />;
+  return <div className="statbox"><b>—</b><span>{label}</span></div>;
 }
 
 export function buildContextPreset(subject: string, name: string, namespace: string): ContextPreset | null {
