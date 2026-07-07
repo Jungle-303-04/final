@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useApplications, useRunsAll } from '@/features/repo/api';
-import { Badge, Card, EmptyState, ResourceTable } from '@/shared/ui';
+import { Badge, Card, EmptyState, ResourceTable, Skeleton } from '@/shared/ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 
@@ -10,13 +10,15 @@ export default function WorkflowListView() {
   const apps = useApplications();
   const all = useRunsAll(apps.data ?? []);
   const nav = useNavigate();
-  const rows = all.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId })))
+  const rows = all.items.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId })))
     .sort((a, b) => Number(ACTIVE.has(b.status)) - Number(ACTIVE.has(a.status)) || (b.started_at ?? '').localeCompare(a.started_at ?? ''));
+  const loading = apps.isPending || ((apps.data ?? []).length > 0 && all.pending);
   return (
     <FadeSlideIn>
       <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>워크플로우</h1>
       <Card>
-        {rows.length === 0 ? <EmptyState icon="⇶" title="실행된 워크플로우가 없습니다" description="레포에 커밋이 감지되면 run 이 생성됩니다" /> :
+        {loading ? <Skeleton lines={4} /> :
+        rows.length === 0 ? <EmptyState icon="⇶" title="실행된 워크플로우가 없습니다" description="레포에 커밋이 감지되면 run 이 생성됩니다" /> :
           <ResourceTable rows={rows} rowKey={r => r.run_id} onRowClick={r => nav(`/workflows/${r.run_id}`)}
             columns={[
               { key: 'app', label: '앱', render: r => <b>{r.appId}</b> },

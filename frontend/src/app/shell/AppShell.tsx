@@ -64,7 +64,11 @@ export function AppShell() {
               <IconBell size={16} />{unread > 0 && <span className="topbar__count">{unread}</span>}
             </Link>
             {session?.email && <Avatar name={session.email} />}
-            <Button variant="ghost" size="sm" onClick={() => logout.mutate(undefined, { onSuccess: () => nav('/login', { replace: true }) })}>로그아웃</Button>
+            <Button variant="ghost" size="sm" loading={logout.isPending}
+              onClick={() => logout.mutate(undefined, {
+                onSuccess: () => nav('/login', { replace: true }),
+                onError: () => uiStore.getState().toast('danger', '로그아웃 실패 — 네트워크를 확인해주세요'),
+              })}>로그아웃</Button>
           </div>
         </header>
         <main className="content"><Outlet /></main>

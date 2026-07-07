@@ -5,7 +5,8 @@
     @rca.recovery(...)  원인 → 복구 액션 룰
     @rca.fallback(...)  어떤 룰도 안 맞을 때의 안전망
 
-새 장애 시나리오 추가 = causes//recovery/ 아래 파일 1개(엔진 수정 없음).
+새 장애 시나리오 추가 = 원인 룰은 causes/catalog/ 아래 YAML 파일 1개,
+복구 룰은 recovery/ 아래 파일 1개(엔진 수정 없음).
 """
 
 from __future__ import annotations

@@ -1,0 +1,23 @@
+# RCA 원인 룰 카탈로그 — Secret/보안 정책 계열 (구 causes/security_policy.py)
+rules:
+  - id: "secret_not_found"
+    symptoms: ["Secret not found"]
+    required_sources: ["kubernetes", "logs", "metadata"]
+    candidates:
+      - candidate_id: "missing_secret_reference"
+        title: "Secret 참조 누락"
+        description: "Pod가 참조하는 Secret이 없거나 namespace가 맞지 않아 컨테이너 생성이 실패했을 가능성이 있습니다."
+        expected_evidence: ["kubernetes", "logs", "metadata"]
+        checks:
+          - "Pod.spec.envFrom.secretRef 또는 volume.secret 참조 확인"
+          - "events.reason/message에 secret not found, FailedMount, CreateContainerConfigError 확인"
+          - "Secret이 같은 namespace에 존재하는지 확인"
+          - "최근 Secret rename/delete 또는 manifest 변경 여부 확인"
+      - candidate_id: "secret_key_missing"
+        title: "Secret key 누락"
+        description: "Secret 객체는 있지만 필요한 key가 없어 환경변수 또는 mount 구성이 실패했을 가능성이 있습니다."
+        expected_evidence: ["kubernetes", "logs", "metadata"]
+        checks:
+          - "env.valueFrom.secretKeyRef key와 Secret data key 비교"
+          - "events.reason/message에 couldn't find key 또는 optional=false 오류 확인"
+          - "최근 Secret template 또는 external secret sync 변경 여부 확인"
