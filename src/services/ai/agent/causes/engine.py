@@ -69,6 +69,7 @@ def merge_candidates(candidates: list[CauseCandidate]) -> list[CauseCandidate]:
                 existing.expected_evidence + candidate.expected_evidence
             ),
             checks=unique_ordered(existing.checks + candidate.checks),
+            source=existing.source,
         )
     return list(by_id.values())
 
