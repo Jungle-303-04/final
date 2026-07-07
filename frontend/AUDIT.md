@@ -196,6 +196,7 @@
 - 복구 조치 선택 권한은 `service_admin` 또는 `release_operator` 역할로 통일했고, 권한이 없으면 버튼 비활성 + `release_operator 권한 필요` Tooltip을 표시한다. 선택 성공 시 `chatKeys.list()` 캐시를 무효화한다.
 - `ApprovalCard`는 repo·workflow·chat·notifications 공유 단일 구현을 유지하되 `@/ui` 프리미티브와 `useSession` 역할 체크로 정리했다.
 - 검증(2026-07-08 07:58 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/ai/aic-1` 1440/1024/390 폭에서 메시지/도구 호출/복구 조치/승인 카드/빈 draft 전송 차단/복구 조치 선택 활성 전환/horizontal overflow 0을 확인했다. `/ai` LLM 설정 오류 mock(503 raw detail `LLM_PROVIDER is not configured`)에서는 composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다.
+- 배포(2026-07-08 08:00 KST): Actions가 `steps: []`로 실패해 수동 console image `ce75d57c-ai-chat-ui-20260708074225`를 `mgmt/management` console deployment에 롤아웃했다. `https://k8s.woonyong.org/` 200, `/api/healthz` 200, live chunks `ChatView-RjgESk8p.js`와 `ApprovalCard-DlHhFo68.js`에서 새 LLM 안내/권한/승인 문구를 확인했다.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
