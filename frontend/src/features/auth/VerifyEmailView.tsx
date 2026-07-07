@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button, EmptyState } from '@/shared/ui';
 import { AuthLayout } from '@/features/auth/AuthLayout';
@@ -8,9 +8,24 @@ import { IconAlertTriangle, IconCheckCircle } from '@/shared/ui/icons';
 export default function VerifyEmailView() {
   const [sp] = useSearchParams();
   const ok = sp.get('verified') === '1';
+  const token = sp.get('token');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const resend = useResendVerification();
+
+  useEffect(() => {
+    if (!token) return;
+    const query = new URLSearchParams({ token });
+    window.location.replace(`/api/auth/verify-email?${query.toString()}`);
+  }, [token]);
+
+  if (token) {
+    return (
+      <AuthLayout title="이메일 검증">
+        <EmptyState icon={<IconCheckCircle size={26} />} title="검증 중" description="잠시만 기다려주세요." />
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout title="이메일 검증">

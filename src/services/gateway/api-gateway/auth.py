@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request
 from passwords import default_display_name, hash_password, normalize_email, verify_password
 from rate_limits import (
     AuthRateLimiter,
+    login_rate_limit_policy,
     resend_verification_rate_limit_policy,
     signup_rate_limit_policy,
 )
@@ -100,9 +101,12 @@ class PasswordAuthService:
             expires_in_seconds=Settings.EMAIL_VERIFICATION_TTL_SECONDS,
         )
 
-    async def login(self, email: str, password: str) -> AuthSession:
+    async def login(self, email: str, password: str, client_key: str) -> AuthSession:
+        await self.rate_limiter.check(login_rate_limit_policy(), email, client_key)
         user = self.db.get_user_by_email(normalize_email(email))
         if user is None:
+            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
+        if not verify_password(password, str(user["password_hash"])):
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
         status = str(user["status"])
         if status == UserStatus.PENDING_EMAIL_VERIFICATION.value:
@@ -112,8 +116,6 @@ class PasswordAuthService:
         if status == UserStatus.PENDING_APPROVAL.value:
             raise HTTPException(status_code=403, detail=Settings.ACCOUNT_APPROVAL_REQUIRED_MESSAGE)
         if status != UserStatus.ACTIVE.value:
-            raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
-        if not verify_password(password, str(user["password_hash"])):
             raise HTTPException(status_code=401, detail=Settings.INVALID_CREDENTIALS_MESSAGE)
         user_id = user_id_from_record(user)
         return await self.sessions.create_session(
