@@ -764,6 +764,7 @@ def delta_key_parts(key: str) -> tuple[str, str, str, str]
 ```python
 async def save_evidence(self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject) -> None
 async def save_rca_report(self, correlation_id: str, workspace_id: str, root_cause: str, action: str, body: JsonObject) -> None
+async def find_recent_rca_report(self, workspace_id: str, root_cause: str, resource_key: str, window_seconds: int) -> JsonObject | None
 ```
 - `RcaBacklogStore`: `async def upsert_rca_backlog_item(self, body: JsonObject) -> None`.
 - `RecoveryPlanStore`: `async def upsert_recovery_selection_request(self, correlation_id: str, workspace_id: str, plan: JsonObject) -> None`.
