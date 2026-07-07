@@ -595,6 +595,16 @@ def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
     assert events.body is None
 
 
+def test_evidence_job_result_rejects_oversized_provider_result() -> None:
+    with pytest.raises(ValueError, match="evidence payload exceeds size limit"):
+        EvidenceJobResultRequest(
+            agent_id="agent-1",
+            lease_id="lease-1",
+            status="completed",
+            result={"metrics": {"series": "x" * 1_100_000}},
+        )
+
+
 def test_pending_evidence_window_is_not_reported_as_final_event() -> None:
     class PendingWindowDb(FakeEvidenceJobDb):
         def get_evidence_window(self, _evidence_key: str) -> dict[str, str]:

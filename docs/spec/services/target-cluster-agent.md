@@ -678,11 +678,11 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 | `AGENT_AUTO_APPROVE_ACTIONS` | str(콤마 구분) | `k8s.apps.v1.deployments.scale` | 승인 증적 면제 대상 액션 목록(`approval_exempt_for_environment`) | `agent.py` |
 | `AGENT_AUTO_APPROVE_ENVIRONMENTS` | str(콤마 구분) | `sandbox` | 면제가 적용되는 plan 메타데이터 environment 목록(소문자 비교) | `agent.py` |
 | `BOOTSTRAP_MODE` | str | `target` | 기본 정책의 `bootstrap.mode` | `config.py` |
-| `EVIDENCE_INTERVAL_SECONDS` | int | `10` | provider 기본 수집 주기·윈도 크기 | `config.py` |
+| `EVIDENCE_INTERVAL_SECONDS` | int | `30` | provider 기본 수집 주기·윈도 크기 | `config.py` |
 | `AGENT_CONTROL_DB_PATH` | str | `/tmp/target-agent/agent-control.db` | 정책/reconcile SQLite 경로 | `config.py` |
 | `COMMAND_OUTBOX_DB_PATH` | str | `/tmp/target-agent/command-outbox.db` | 커맨드 결과 outbox SQLite 경로 | `config.py` |
 | `EVIDENCE_PROVIDER_WORKERS` | str | `kubernetes=1,metrics=1,logs=1,traces=1` | provider별 최소 워커 수 (`k=v,` 목록) | `config.py` |
-| `EVIDENCE_PROVIDER_MAX_WORKERS` | str | `kubernetes=2,metrics=3,logs=3,traces=3` | provider별 최대 워커 수(기본 정책의 max_workers) | `config.py` |
+| `EVIDENCE_PROVIDER_MAX_WORKERS` | str | `kubernetes=2,metrics=2,logs=2,traces=2` | provider별 최대 워커 수(기본 정책의 max_workers) | `config.py` |
 | `EVIDENCE_FAILURE_POLICY` | str | `allow_partial` | 기본 정책의 `evidence.failure_policy` (`allow_partial`\|`strict`) | `config.py` |
 | `POLICY_SYNC_INTERVAL_SECONDS` | int | `15` | 정책 fetch 주기 | `config.py` |
 | `RECONCILE_INTERVAL_SECONDS` | int | `30` | desired state reconcile 주기 | `config.py` |

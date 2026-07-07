@@ -125,8 +125,11 @@ class RecoveryPlanningPipeline:
   - `detected = has_signal(evidence)`
   - `reason` 은 detected 여부에 따라 `messages.detected_reason` / `messages.not_detected_reason`.
   - `severity=incident.severity`, `affected=affected_resources(incident)`,
-    `evidence`, `incident` 를 body에 채워 반환.
-- `has_signal(evidence) -> bool` = `bool(evidence.logs or evidence.kubernetes.get("pods") or evidence.metrics)`
+    `evidence=compact_evidence_reference(evidence)`, `incident` 를 body에 채워 반환한다.
+- `has_signal(evidence) -> bool`:
+  `derive_symptom(evidence.kubernetes)` 가 명시/유도 symptom 또는 대표 signal을 만들면 true.
+  Kubernetes 신호가 없을 때는 `metrics.alertmanager.alerts[].status == "firing"` 이 있으면 true.
+  일반 metrics sample만으로는 incident로 보지 않는다.
 - `classify(evidence, incident_id) -> IncidentRecord`
   - `derive_symptom(evidence.kubernetes)` 로 대표 symptom을 만든다. `kubernetes["symptom"]` 이 명시되어 있으면 그대로 쓰고, 없으면 pod waiting/terminated reason, warning event, service/endpoints 신호를 우선순위 표대로 `ImagePullBackOff`, `CrashLoopBackOff`, `FailedScheduling`, `Ingress 502/503` 중 하나로 승격한다. 신호가 없으면 `"unknown"`이다.
   - `resource_kind/name/namespace` 는 `resolve_resource(evidence.kubernetes, derived.signal)` 로 추출한다. 명시 `kubernetes["resource"]` dict가 있으면 그 값을 우선하고, 없으면 대표 신호의 리소스 힌트(소유 workload 또는 service)를 쓴다. 둘 다 없으면 `"Unknown"/"unknown"/None`.
@@ -161,6 +164,10 @@ class RecoveryPlanningPipeline:
 - 다중 신호 대표 선정: 우선순위 → 출처 순위(파드 상태 > 이벤트 > service) → 가중치
   (재시작 수/이벤트 count) → 리소스 이름/신호 라벨(사전순) — 같은 입력이면 항상 같은 결과.
   나머지 신호 라벨은 `IncidentRecord.secondary_symptoms` 로 보존한다(정보 손실 없음).
+- Event 객체는 해결 뒤에도 남을 수 있으므로 `event_is_current_warning` 이 `Warning`
+  또는 type 미기재 event만 본다. `cluster.collected_at` 이 있으면
+  `last_timestamp`/`first_timestamp` 가 10분(`EVENT_SIGNAL_MAX_AGE`)보다 오래된 warning event는
+  symptom 신호에서 제외한다.
 - `src/services/ai/agent/pipeline/symptom.py :: resolve_resource` — incident 대상 결정.
   명시 `kubernetes["resource"]` > 대표 신호의 리소스 힌트(파드 소유 워크로드 또는 Pod/Service)
   > `"Unknown"/"unknown"/None`.
@@ -177,7 +184,7 @@ class RecoveryPlanningPipeline:
      `RcaActionRequiredBody(reason=messages.missing_incident_context, evidence_ref=evidence.object_ref if evidence else "unknown", workspace_id=evt.workspace_id)`
   2. `not evt.detected` →
      `RcaActionRequiredBody(reason=messages.no_incident_action_required, evidence_ref=evidence.object_ref, workspace_id=evidence.workspace_id)`
-  3. 그 외 → `EvidenceBundleBuiltBody(evidence, incident, evidence_bundle=build_incident_evidence_bundle(evidence, incident))`
+  3. 그 외 → `EvidenceBundleBuiltBody(evidence=compact_evidence_reference(evidence), incident, evidence_bundle=build_incident_evidence_bundle(evidence, incident))`
 
 #### pipeline/evidence_bundle.py — 근거 번들 빌더 (모듈 함수)
 
@@ -186,6 +193,8 @@ class RecoveryPlanningPipeline:
 | `extract_resource(kubernetes: dict)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: extract_resource` | incident 분류와 같은 규칙. 명시 resource가 있으면 우선하고, 없으면 `derive_symptom(...).signal`의 리소스 힌트를 쓴다. |
 | `extract_symptom(kubernetes: dict)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: extract_symptom` | incident 분류와 같은 규칙. 명시 symptom이 있으면 보존하고, 없으면 snapshot 신호를 카탈로그 symptom으로 유도한다. |
 | `build_incident_evidence_bundle(evt, incident)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: build_incident_evidence_bundle` | 아래 참조 |
+| `compact_evidence_reference(evidence)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: compact_evidence_reference` | downstream 이벤트에는 원본 provider payload 중복 대신 `object_ref`, lineage, cluster 식별자 중심의 얇은 참조만 싣는다. `logs`는 빈 list로 줄이고 kubernetes/metrics/traces는 `compact_reference_payload` 결과만 보존한다. |
+| `compact_reference_payload(payload)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: compact_reference_payload` | `_lineage`와 `cluster.cluster_id/namespace/collected_at`만 보존한다. |
 | `evidence_ref_for(evt, source, name)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: evidence_ref_for` | `Evidence` 면 `object_ref`, 아니면 `evidence_key or f"cluster:{workspace_id}:{cluster_id}"` 를 base로 `f"{base}#{source}:{name}"` |
 | `source_check_id(source, name)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: source_check_id` | `f"evidence:{source}:{name}"` |
 | `source_query(source, name)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: source_query` | `f"{source}.{name}"` |
@@ -193,6 +202,9 @@ class RecoveryPlanningPipeline:
 | `missing_source_checks(missing_evidence)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: missing_source_checks` | source마다 `MissingEvidenceCheck(check_id=f"evidence:{source}:required", status="missing", reason=f"{source} evidence query/check must complete before RCA can be finalized.")` |
 | `select_incident_log_entries(logs, namespace)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: select_incident_log_entries` | incident 네임스페이스의 로그만 근거로 채택. Loki entry 는 네임스페이스 라벨(`k8s_namespace_name`/`namespace`)이 일치하는 stream 만 남기고 전부 걸러지면 entry 제외; 라벨 없는 stream/단순 line entry 는 귀속 불가라 유지; namespace 미상이면 무필터. 원본 `Evidence.logs` 는 그대로(수집 시점 분리는 후속 과제) |
 | `collect_evidence_items(evt)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: collect_evidence_items` | 아래 참조 |
+| `compact_kubernetes_value(...)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: compact_kubernetes_value` | incident resource와 관련된 pods/events/workloads/services/endpoints, not-ready nodes, cluster/resource/symptom/severity/lineage만 bounded payload로 남긴다. |
+| `compact_metrics_value(metrics)` / `compact_traces_value(traces)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: compact_metrics_value`, `compact_traces_value` | 결과 dict를 최대 result/series 수로 줄이고 긴 문자열은 `MAX_TEXT_LENGTH`로 자른다. |
+| `compact_log_entries(entries)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: compact_log_entries` | 로그 entry, stream, values 개수를 제한하고 line 문자열을 자른다. |
 
 - 타입 별칭: `EvidenceSource = ClusterEvidenceReceivedBody | Evidence`
   (`src/services/ai/agent/pipeline/evidence_bundle.py :: EvidenceSource`)
@@ -202,10 +214,10 @@ class RecoveryPlanningPipeline:
 
 | 조건 | source | name | value | summary 접미사 |
 |---|---|---|---|---|
-| `evt.kubernetes` truthy | `kubernetes` | `cluster_resource_state` | `evt.kubernetes` | `" Kubernetes 상태 근거입니다."` |
-| `evt.metrics` truthy | `metrics` | `telemetry_metrics` | `evt.metrics` | `" Metric snapshot 근거입니다."` |
-| `select_incident_log_entries(evt.logs, namespace)` 비어있지 않음 | `logs` | `related_logs` | `{"entries": <필터된 로그>}` | `" Log tail 근거입니다."` |
-| `evt.traces` truthy | `traces` | `related_traces` | `evt.traces` | `" Trace 근거입니다."` |
+| `evt.kubernetes` truthy | `kubernetes` | `cluster_resource_state` | `compact_kubernetes_value(...)` | `" Kubernetes 상태 근거입니다."` |
+| `evt.metrics` truthy | `metrics` | `telemetry_metrics` | `compact_metrics_value(evt.metrics)` | `" Metric snapshot 근거입니다."` |
+| `select_incident_log_entries(evt.logs, namespace)` 비어있지 않음 | `logs` | `related_logs` | `{"entries": compact_log_entries(<필터된 로그>)}` | `" Log tail 근거입니다."` |
+| `evt.traces` truthy | `traces` | `related_traces` | `compact_traces_value(evt.traces)` | `" Trace 근거입니다."` |
 
 - `build_incident_evidence_bundle`:
   `required_sources = required_evidence_sources(incident)` (causes 엔진),
