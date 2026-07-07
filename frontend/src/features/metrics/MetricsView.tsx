@@ -12,12 +12,24 @@ import { fmtHms } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import { IconClock } from '@/shared/ui/icons';
 
-const PRESETS = [
-  { label: '팟 재시작 (5m)', promql: 'sum(rate(kube_pod_container_status_restarts_total[5m]))' },
-  { label: '노드 CPU', promql: 'sum(rate(node_cpu_seconds_total{mode!="idle"}[5m])) by (node)' },
-  { label: '네임스페이스 메모리', promql: 'sum(container_memory_working_set_bytes) by (namespace)' },
+// 프리셋은 실제 스크레이프되는 계열만 사용 — node-exporter/kube-state-metrics/node-collector.
+// 전체 카탈로그·근거는 docs/frontend-metrics-queries.md 참조.
+type Unit = 'ratio' | 'count';
+const PRESETS: { label: string; promql: string; unit: Unit }[] = [
+  { label: '노드 CPU 사용률', unit: 'ratio', promql: '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))' },
+  { label: '노드 메모리 사용률', unit: 'ratio', promql: '1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)' },
+  { label: '노드 파일시스템 사용률', unit: 'ratio', promql: '1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"})' },
+  { label: '팟 재시작율 (5m, 네임스페이스별)', unit: 'count', promql: 'sum by (namespace) (rate(kube_pod_container_status_restarts_total[5m]))' },
+  { label: '네임스페이스별 팟 수', unit: 'count', promql: 'count by (namespace) (kube_pod_info)' },
+  { label: 'sandbox 디플로이 레플리카', unit: 'count', promql: 'kube_deployment_status_replicas{namespace="sandbox"}' },
 ];
-interface QueryCard { id: string; promql: string; commandId?: string; submitFailed?: boolean }
+const RANGES = [
+  { label: '5분', seconds: 300 },
+  { label: '15분', seconds: 900 },
+  { label: '1시간', seconds: 3600 },
+  { label: '6시간', seconds: 21600 },
+];
+interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; commandId?: string; submitFailed?: boolean }
 
 export default function MetricsView() {
   const [sp] = useSearchParams();
@@ -26,6 +38,7 @@ export default function MetricsView() {
   const [clusterId, setClusterId] = useState(sp.get('cluster') ?? '');
   const [paused, setPaused] = useState(false);
   const [promql, setPromql] = useState(PRESETS[0].promql);
+  const [range, setRange] = useState(RANGES[0].seconds);
   const [cards, setCards] = useState<QueryCard[]>([]);
   const summaryQ = useClusterSummary(clusterId);
   const usageQ = useClusterUsage(clusterId);
@@ -84,24 +97,26 @@ export default function MetricsView() {
   }, [usageQ.data]);
 
   const run = useMutation({
-    mutationFn: (q: string) => post<{ command_id: string }>('/agent/debug/query', {
+    mutationFn: ({ q, rangeSeconds }: { q: string; rangeSeconds: number }) => post<{ command_id: string }>('/agent/debug/query', {
       cluster_id: clusterId,
       query: {
         source: 'prometheus',
         name: 'console_promql',
         description: 'Console PromQL query',
         query: q,
-        range_seconds: 300,
+        range_seconds: rangeSeconds,
       },
     }),
   });
-  // query 인자를 받는다 — 재시도 시 '그 카드의' 쿼리를 다시 실행(현재 입력값과 무관)
-  const execute = (query?: string) => {
-    const q = (query ?? promql).trim();
+  // 재시도 시 '그 카드의' 쿼리·범위를 다시 실행(현재 입력값과 무관)
+  const execute = (card?: Pick<QueryCard, 'promql' | 'unit' | 'rangeSeconds'>) => {
+    const q = (card?.promql ?? promql).trim();
     if (!q) return;
+    const unit = card?.unit ?? PRESETS.find(p => p.promql === q)?.unit ?? 'count';
+    const rangeSeconds = card?.rangeSeconds ?? range;
     const id = Math.random().toString(36).slice(2, 8);
-    setCards(cs => [{ id, promql: q }, ...cs]);
-    run.mutate(q, {
+    setCards(cs => [{ id, promql: q, unit, rangeSeconds }, ...cs]);
+    run.mutate({ q, rangeSeconds }, {
       onSuccess: d => setCards(cs => cs.map(c => c.id === id ? { ...c, commandId: d.command_id } : c)),
       onError: () => setCards(cs => cs.map(c => c.id === id ? { ...c, submitFailed: true } : c)),
     });
@@ -153,24 +168,35 @@ export default function MetricsView() {
           ) : <TimeSeriesChart series={usageSeries} />}
       </Card>
       <Card title="온디맨드 PromQL (비동기 — agent 경유)">
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <select className="input" style={{ width: 200 }}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <select className="input" style={{ width: 220 }}
             value={PRESETS.some(p => p.promql === promql) ? promql : ''}
             onChange={e => { if (e.target.value) setPromql(e.target.value); }}>
             <option value="" disabled>직접 입력…</option>
             {PRESETS.map(p => <option key={p.label} value={p.promql}>{p.label}</option>)}
           </select>
-          <input className="input" style={{ fontFamily: 'var(--font-mono)' }} value={promql} onChange={e => setPromql(e.target.value)} />
+          <input className="input" style={{ fontFamily: 'var(--font-mono)', flex: 1, minWidth: 220 }} value={promql} onChange={e => setPromql(e.target.value)} />
+          <select className="input" style={{ width: 92 }} value={range} onChange={e => setRange(Number(e.target.value))}
+            title="조회 범위 (range)">
+            {RANGES.map(r => <option key={r.seconds} value={r.seconds}>{r.label}</option>)}
+          </select>
           <Button variant="primary" onClick={() => execute()} disabled={!clusterId || !promql.trim()}
             title={clusterId ? '' : '클러스터를 먼저 선택해주세요'}>실행</Button>
         </div>
+        <p style={{ margin: '0 0 8px', fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>
+          프리셋·수집 스택 카탈로그: docs/frontend-metrics-queries.md — 결과는 agent 가 클러스터 안에서 실측한 값만 표시합니다
+        </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cards.map(c => <QueryCardRow key={c.id} card={c} onRetry={() => execute(c.promql)} />)}
+          {cards.map(c => <QueryCardRow key={c.id} card={c} onRetry={() => execute(c)} />)}
         </div>
       </Card>
     </FadeSlideIn>
   );
 }
+
+// 단위별 값 포맷 — ratio 는 % 로, count 는 유효자리 축약
+const fmtValue = (v: number, unit: Unit) => (unit === 'ratio' ? `${(v * 100).toFixed(1)}%` : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
+const fmtRange = (s: number) => (s >= 3600 ? `${s / 3600}h` : `${s / 60}m`);
 
 // 쿼리 카드 1개 — 명령 상태를 폴링해 agent 가 올린 실측 결과만 표시한다.
 function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void }) {
@@ -181,13 +207,15 @@ function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void 
   const summary = status === 'completed' ? summarizeTelemetryResult(result) : null;
   const failMessage = status === 'failed' && !card.submitFailed ? commandResultMessage(result) : null;
   return (
-    <div className="card" style={{ background: 'var(--surface-2)', padding: 10, display: 'flex', gap: 10, alignItems: 'center' }} data-testid="query-card">
+    <div className="card" style={{ background: 'var(--surface-2)', padding: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }} data-testid="query-card">
       <Badge status={badge} />
-      <code style={{ fontSize: 'var(--fs-xs)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.promql}</code>
-      {card.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{card.commandId}</span>}
+      <code style={{ fontSize: 'var(--fs-xs)', flex: 1, minWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.promql}</code>
+      <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>range {fmtRange(card.rangeSeconds)}</span>
       {summary && (
-        <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>
-          {summary.series} series · {summary.points} pts{summary.avg !== null ? ` · 평균 ${summary.avg.toFixed(2)}` : ''}
+        <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)', fontVariantNumeric: 'tabular-nums' }}>
+          {summary.series} series · {summary.points} pts
+          {summary.avg !== null ? ` · 평균 ${fmtValue(summary.avg, card.unit)}` : ''}
+          {summary.max !== null && summary.max !== summary.avg ? ` · 최대 ${fmtValue(summary.max, card.unit)}` : ''}
         </span>
       )}
       {status === 'completed' && !summary && <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>{commandResultMessage(result) ?? '완료'}</span>}
