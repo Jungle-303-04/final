@@ -88,18 +88,19 @@ export type CollapsibleGroupData = {
 /** 접기/펼치기 그룹 노드 — 클릭 시 부모가 하위 노드 표시/숨김을 토글 */
 export function CollapsibleGroupNode({ data }: NodeProps<Node<CollapsibleGroupData>>) {
   return (
-    <div
+    <button
+      type="button"
       className={`flow-group ${data.active ? 'flow-node--pulse' : ''}`}
       style={data.tone ? { borderColor: toneColor(data.tone) } : undefined}
       onClick={(e) => { e.stopPropagation(); data.onToggle?.(); }}
-      role="button" aria-expanded={!data.collapsed}
+      aria-expanded={!data.collapsed}
     >
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <span className={`flow-group__chev ${data.collapsed ? '' : 'flow-group__chev--open'}`}><IconChevronRight size={13} /></span>
       {data.label}
       <span className="flow-group__count">{data.count}</span>
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-    </div>
+    </button>
   );
 }
 

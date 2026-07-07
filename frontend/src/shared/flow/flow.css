@@ -13,8 +13,9 @@
 
 .flow-group { display:flex; align-items:center; gap:8px; padding:10px 14px; min-width:150px;
   background:var(--surface-2); border:1.5px solid var(--border); border-radius:var(--radius-md);
-  color:var(--text-1); font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
+  color:var(--text-1); font:inherit; font-size:var(--fs-sm); font-weight:600; cursor:pointer; }
 .flow-group:hover { border-color: var(--border-focus); }
+.flow-group:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
 .flow-group__count { font-size:var(--fs-xs); font-weight:700; color:var(--text-2);
   background:var(--surface-3); border-radius:999px; padding:1px 7px; }
 .flow-group__chev { display:inline-flex; color:var(--text-3); transition:transform var(--dur-base) var(--ease-out); }
