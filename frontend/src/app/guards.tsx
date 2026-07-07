@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { useIsAdmin, useSession } from '@/features/auth/api';
+import { clearSessionHint, hasRecentSessionHint, markSessionSeen, useIsAdmin, useSession } from '@/features/auth/api';
 import { Button, EmptyState, Skeleton } from '@/shared/ui';
 import { IconAlertTriangle, IconLock } from '@/shared/ui/icons';
 
@@ -8,6 +8,13 @@ export function RequireSession() {
   const { data, error, isError, isPending, refetch } = useSession();
   const loc = useLocation();
   const [slowPending, setSlowPending] = useState(false);
+  useEffect(() => {
+    if (data?.authenticated) markSessionSeen();
+    if (isError) {
+      const e = error as { kind?: string; status?: number };
+      if (e.kind === 'unauthorized' || e.status === 401) clearSessionHint();
+    }
+  }, [data?.authenticated, error, isError]);
   useEffect(() => {
     if (!isPending) {
       setSlowPending(false);
@@ -17,6 +24,7 @@ export function RequireSession() {
     return () => window.clearTimeout(timer);
   }, [isPending]);
   if (isPending) {
+    if (hasRecentSessionHint()) return <Outlet />;
     return (
       <div style={{ padding: 48 }}>
         {slowPending ? (
