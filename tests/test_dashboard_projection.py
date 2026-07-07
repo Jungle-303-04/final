@@ -103,6 +103,31 @@ def test_dashboard_worker_ignores_unmapped_subjects() -> None:
     assert db.calls == []
 
 
+def test_dashboard_worker_ignores_non_incident_detection() -> None:
+    dashboard = load_service("projection/dashboard-worker")
+    db = SpyDb()
+    evt = _evt(
+        "incident.detected",
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "detected": False,
+            "reason": "no deterministic incident signal found",
+            "incident": {
+                "incident_id": "normal-sample-1",
+                "cluster_id": "cluster-1",
+                "symptom": "unknown",
+            },
+        },
+    )
+
+    outs = run_handler(dashboard.on_event, evt, db=db)
+
+    assert outs == []
+    assert db.calls == []
+    assert timeline_update_from_event(evt) is None
+
+
 def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
     command = timeline_update_from_event(
         _evt(
@@ -134,30 +159,42 @@ def test_timeline_update_preserves_command_and_pr_status_inputs() -> None:
     assert pr["action_route"] == "safe_pr"
 
 
-class _FakeConnection:
+class _RecordingConnection:
     def __init__(self) -> None:
         self.statements: list[Any] = []
 
-    def execute(self, statement: Any) -> None:
+    def execute(self, statement: Any) -> _EmptyResult:
         self.statements.append(statement)
+        return _EmptyResult()
 
 
-def _repository_with_fake_connection(connection: _FakeConnection) -> DashboardRepository:
+class _EmptyResult:
+    def mappings(self) -> _EmptyResult:
+        return self
+
+    def all(self) -> list[dict[str, Any]]:
+        return []
+
+    def first(self) -> None:
+        return None
+
+
+def _repository_with_recording_connection(connection: _RecordingConnection) -> DashboardRepository:
     @contextmanager
-    def fake_connection():
+    def recording_connection():
         yield connection
 
     repository = object.__new__(DashboardRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = recording_connection  # type: ignore[method-assign]
     return repository
 
 
 def test_upsert_rca_timeline_uses_correlation_conflict_and_preserves_known_fields() -> None:
-    connection = _FakeConnection()
+    connection = _RecordingConnection()
     row = timeline_update_from_event(_evt("rca.completed", _rca_completed_payload()))
     assert row is not None
 
-    _repository_with_fake_connection(connection).upsert_rca_timeline(row)
+    _repository_with_recording_connection(connection).upsert_rca_timeline(row)
 
     assert len(connection.statements) == 1
     compiled = connection.statements[0].compile(dialect=postgresql.dialect())
@@ -168,3 +205,23 @@ def test_upsert_rca_timeline_uses_correlation_conflict_and_preserves_known_field
     assert "coalesce" in sql.lower()
     assert "CASE" in sql
     assert "last_event_at" in sql
+
+
+def test_open_incident_query_excludes_non_incident_detection_rows() -> None:
+    connection = _RecordingConnection()
+
+    result = _repository_with_recording_connection(connection).count_open_rca_incidents(
+        "workspace-1",
+        {"cluster-1"},
+    )
+
+    assert result == {}
+    assert len(connection.statements) == 1
+    compiled = connection.statements[0].compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True},
+    )
+    sql = str(compiled)
+    assert "incident.detected" in sql
+    assert "detected" in sql
+    assert "IS true" in sql
