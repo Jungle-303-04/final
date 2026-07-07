@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { get } from '@/shared/lib/api';
 
-export type FleetHealth = 'healthy' | 'warning' | 'critical';
+export type FleetHealth = 'healthy' | 'warning' | 'critical' | 'stale' | 'unknown';
 
 export interface FleetClusterSummary {
   cluster_id: string;
@@ -27,6 +27,8 @@ export interface FleetTotals {
   healthy: number;
   warning: number;
   critical: number;
+  stale: number;
+  unknown: number;
   open_incidents: number;
   pending_approvals: number;
   running_workflows: number;
@@ -82,7 +84,7 @@ export const useClusterAgg = (id: string | undefined) =>
   });
 
 /* 건강 상태 → 히트맵 점수(0~1)/라벨 — 홈·상세 공용 단일 매핑 */
-export const HEALTH_SCORE: Record<FleetHealth, number> = { healthy: 0.92, warning: 0.5, critical: 0.08 };
-export const HEALTH_LABEL: Record<FleetHealth, string> = { healthy: '정상', warning: '주의', critical: '위험' };
+export const HEALTH_SCORE: Record<FleetHealth, number> = { healthy: 0.92, warning: 0.5, critical: 0.08, stale: 0.28, unknown: 0.36 };
+export const HEALTH_LABEL: Record<FleetHealth, string> = { healthy: '정상', warning: '주의', critical: '위험', stale: '스테일', unknown: '미확인' };
 export const healthScore = (h: FleetHealth | string): number => HEALTH_SCORE[h as FleetHealth] ?? 0.5;
 export const healthLabel = (h: FleetHealth | string): string => HEALTH_LABEL[h as FleetHealth] ?? String(h);

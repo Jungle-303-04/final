@@ -16,6 +16,25 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 19:16 KST 체크포인트
+
+- Fleet health truthfulness.
+- 구현:
+  - `/fleet/summary` health에 `stale`, `unknown` 상태를 추가했다.
+  - pod/node/usage 관측값이 없으면 `unknown`, 관측값은 있으나 agent가 online이 아니면 `stale`로 표시된다.
+  - critical/warning 조건이 있으면 stale보다 우선한다.
+  - Fleet totals에 `stale`, `unknown` 카운트를 추가했다.
+  - `/clusters` 목록의 `incident_count`는 실제 `count_open_rca_incidents` projection 값을 사용한다.
+  - 프론트 fleet 타입/라벨/heatmap score/severity를 새 health 상태에 맞췄다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_fleet_router.py tests/test_target_registration.py tests/test_platform_foundation_openapi.py` → 37 passed.
+  - `.venv/bin/ruff check src/domains/dashboard/fleet_router.py src/domains/target/router.py src/packages/contracts/gateway/responses.py tests/test_fleet_router.py tests/test_target_registration.py` → passed.
+  - `cd frontend && npm run typecheck` → passed.
+- 다음 백엔드 P0:
+  - RCA/realtime RBAC: workspace-only read를 cluster grant/access filter로 제한.
+  - Provider failure truthfulness: source-level `provider_error`를 evidence/inventory projection까지 전달.
+  - Deploy/DNS/smoke: console origin과 `/api/*` smoke 정규화.
+
 ### 2026-07-07 19:12 KST 체크포인트
 
 - Workload scale 실행 정책 정합성.

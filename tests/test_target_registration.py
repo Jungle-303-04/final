@@ -181,6 +181,25 @@ class FakeClusterDb:
         assert cluster_ids == {"cluster-1"}
         return {"cluster-1": self.agent}
 
+    def count_open_rca_incidents(
+        self,
+        _workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, int]:
+        assert cluster_ids == {"cluster-1"}
+        return {"cluster-1": 3}
+
+    def inventory_resource_counts(
+        self,
+        _workspace_id: str,
+        cluster_id: str,
+    ) -> list[dict[str, object]]:
+        assert cluster_id == "cluster-1"
+        return [
+            {"resource_type": "node", "health": "healthy", "count": 2},
+            {"resource_type": "pod", "health": "healthy", "count": 9},
+        ]
+
     def can_access(
         self,
         _user_id: str,
@@ -452,6 +471,9 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].cluster_id == "cluster-1"
     assert response.clusters[0].connection_status == "online"
     assert response.clusters[0].last_agent_id == "agent-1"
+    assert response.clusters[0].node_count == 2
+    assert response.clusters[0].pod_count == 9
+    assert response.clusters[0].incident_count == 3
 
 
 def test_cluster_connection_status_route_returns_agent_details() -> None:
