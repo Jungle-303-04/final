@@ -12,6 +12,7 @@ from domains.rca.events import (
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from services.ai.agent.defaults import IncidentMessages, RcaMessages
 from services.ai.agent.pipeline.evidence_bundle import build_incident_evidence_bundle
+from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
 
 
 @dataclass(frozen=True)
@@ -36,8 +37,13 @@ class IncidentDetector:
         return bool(evidence.logs or evidence.kubernetes.get("pods") or evidence.metrics)
 
     def classify(self, evidence: Evidence, incident_id: str) -> IncidentRecord:
-        resource_kind, resource_name, namespace = self.extract_resource(evidence.kubernetes)
-        symptom = str(evidence.kubernetes.get("symptom", "unknown"))
+        # 명시 symptom(webhook/fixture)이 있으면 그대로, 없으면 snapshot 신호에서 유도.
+        # 우선순위·판정 기준은 pipeline/symptom.py 상수 표 참조(명시 > 유도 > unknown).
+        derived = derive_symptom(evidence.kubernetes)
+        resource_kind, resource_name, namespace = resolve_resource(
+            evidence.kubernetes, derived.signal
+        )
+        symptom = derived.symptom
         severity = str(evidence.kubernetes.get("severity", "medium"))
         return IncidentRecord(
             incident_id=incident_id,
@@ -50,14 +56,7 @@ class IncidentDetector:
             first_seen_at=evidence.kubernetes.get("first_seen_at"),
             summary=f"{resource_kind} {resource_name} has {symptom}",
             workspace_id=evidence.workspace_id,
-        )
-
-    def extract_resource(self, kubernetes: JsonObject) -> tuple[str, str, str | None]:
-        resource = kubernetes.get("resource", {})
-        return (
-            str(resource.get("kind", "Unknown")),
-            str(resource.get("name", "unknown")),
-            resource.get("namespace"),
+            secondary_symptoms=derived.secondary_symptoms,
         )
 
     def affected_resources(self, incident: IncidentRecord) -> list[JsonObject]:

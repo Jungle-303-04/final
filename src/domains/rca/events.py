@@ -62,6 +62,8 @@ class IncidentRecord(EventBody):
     first_seen_at: str | None
     summary: str
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    # 대표 symptom 외에 snapshot 에서 함께 관측된 신호 라벨 — triage 정보 손실 방지.
+    secondary_symptoms: list[str] = field(default_factory=list)
 
 
 @event(EventSubject.INCIDENT_DETECTED)

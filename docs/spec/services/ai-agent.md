@@ -128,15 +128,46 @@ class RecoveryPlanningPipeline:
     `evidence`, `incident` 를 body에 채워 반환.
 - `has_signal(evidence) -> bool` = `bool(evidence.logs or evidence.kubernetes.get("pods") or evidence.metrics)`
 - `classify(evidence, incident_id) -> IncidentRecord`
-  - `resource_kind/name/namespace` 는 `extract_resource(evidence.kubernetes)` 로 추출:
-    `kubernetes["resource"]` dict의 `kind`(기본 `"Unknown"`), `name`(기본 `"unknown"`), `namespace`(기본 None).
-  - `symptom = str(kubernetes.get("symptom", "unknown"))`,
+  - `derive_symptom(evidence.kubernetes)` 로 대표 symptom을 만든다. `kubernetes["symptom"]` 이 명시되어 있으면 그대로 쓰고, 없으면 pod waiting/terminated reason, warning event, service/endpoints 신호를 우선순위 표대로 `ImagePullBackOff`, `CrashLoopBackOff`, `FailedScheduling`, `Ingress 502/503` 중 하나로 승격한다. 신호가 없으면 `"unknown"`이다.
+  - `resource_kind/name/namespace` 는 `resolve_resource(evidence.kubernetes, derived.signal)` 로 추출한다. 명시 `kubernetes["resource"]` dict가 있으면 그 값을 우선하고, 없으면 대표 신호의 리소스 힌트(소유 workload 또는 service)를 쓴다. 둘 다 없으면 `"Unknown"/"unknown"/None`.
+  - `secondary_symptoms = derived.secondary_symptoms`,
     `severity = str(kubernetes.get("severity", "medium"))`,
     `first_seen_at = kubernetes.get("first_seen_at")`,
     `summary = f"{resource_kind} {resource_name} has {symptom}"`.
-- `extract_resource(kubernetes: JsonObject) -> tuple[str, str, str | None]`
+- `derive_symptom(kubernetes: JsonObject) -> DerivedSymptom` — 아래 pipeline/symptom.py 참조.
+- `resolve_resource(kubernetes: JsonObject, signal: SymptomSignal | None) -> tuple[str, str, str | None]`
 - `affected_resources(incident) -> list[JsonObject]` — 단일 원소 리스트,
   키: `cluster_id, workspace_id, namespace, resource_kind, resource_name, symptom, severity`.
+
+#### pipeline/symptom.py — snapshot 신호 → symptom 승격
+
+`src/services/ai/agent/pipeline/symptom.py :: derive_symptom` —
+에이전트 kubernetes snapshot 요약(pods/events/services/endpoints)의 장애 신호를
+카탈로그(causes/catalog/*.yaml) symptom 어휘로 결정적으로 승격한다.
+계약: **명시 > 유도 > `"unknown"`** — `kubernetes["symptom"]` 이 명시돼 있으면
+(alertmanager/webhook, 테스트 fixture) 절대 덮지 않는다.
+
+신호 → symptom 유도 표(우선순위 순 — 근거 rationale 은 모듈 상수 주석):
+
+| 우선순위 | 신호(근거) | 유도 symptom |
+|---|---|---|
+| 1 | pod `waiting_reasons` ∈ {ImagePullBackOff, ErrImagePull, InvalidImageName, ErrImageNeverPull} · event `Failed`+"pull image" · event `BackOff`+"pulling image" | `ImagePullBackOff` |
+| 2 | pod `waiting_reasons` CrashLoopBackOff · event `BackOff`+"restarting failed container" | `CrashLoopBackOff` |
+| 3 | pod `terminated_reasons` OOMKilled · event `OOMKilling` | `CrashLoopBackOff` (crashloop 룰의 `oom_killed` 후보로 수렴) |
+| 4 | event `FailedScheduling` · pod Pending + node 미배정 | `FailedScheduling` |
+| 5 | event `Unhealthy`+"probe" · pod Running + Ready=False(상위 신호 없는 파드만) | `Ingress 502/503` (`backend_readiness_failure` 계열) |
+| 6 | Service selector 有 + 해당 EndpointSlice endpoint 합 0 + selector 매칭 파드 없음 | `Ingress 502/503` (`upstream_unavailable` 계열) |
+
+- 다중 신호 대표 선정: 우선순위 → 출처 순위(파드 상태 > 이벤트 > service) → 가중치
+  (재시작 수/이벤트 count) → 리소스 이름/신호 라벨(사전순) — 같은 입력이면 항상 같은 결과.
+  나머지 신호 라벨은 `IncidentRecord.secondary_symptoms` 로 보존한다(정보 손실 없음).
+- `src/services/ai/agent/pipeline/symptom.py :: resolve_resource` — incident 대상 결정.
+  명시 `kubernetes["resource"]` > 대표 신호의 리소스 힌트(파드 소유 워크로드 또는 Pod/Service)
+  > `"Unknown"/"unknown"/None`.
+- 테스트: `tests/test_incident_symptom_derivation.py` —
+  `src/samples/scenarios/faults/` 6개 장애 클래스(crashloop, oom, imagepull,
+  probe-fail, sched-fail, svc-selector) fixture 로 (a) symptom 유도, (b) 후보 계획,
+  (c) crashloop → `rca.completed` golden path 를 검증.
 
 `src/services/ai/agent/pipeline/incident.py :: EvidenceBundler`
 
@@ -152,8 +183,8 @@ class RecoveryPlanningPipeline:
 
 | 함수 | 앵커 | 동작 |
 |---|---|---|
-| `extract_resource(kubernetes: dict)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: extract_resource` | `(kind, name, namespace)` 추출(기본값 `"Unknown"/"unknown"/None`) |
-| `extract_symptom(kubernetes: dict)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: extract_symptom` | `str(kubernetes.get("symptom", "unknown"))` |
+| `extract_resource(kubernetes: dict)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: extract_resource` | incident 분류와 같은 규칙. 명시 resource가 있으면 우선하고, 없으면 `derive_symptom(...).signal`의 리소스 힌트를 쓴다. |
+| `extract_symptom(kubernetes: dict)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: extract_symptom` | incident 분류와 같은 규칙. 명시 symptom이 있으면 보존하고, 없으면 snapshot 신호를 카탈로그 symptom으로 유도한다. |
 | `build_incident_evidence_bundle(evt, incident)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: build_incident_evidence_bundle` | 아래 참조 |
 | `evidence_ref_for(evt, source, name)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: evidence_ref_for` | `Evidence` 면 `object_ref`, 아니면 `evidence_key or f"cluster:{workspace_id}:{cluster_id}"` 를 base로 `f"{base}#{source}:{name}"` |
 | `source_check_id(source, name)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: source_check_id` | `f"evidence:{source}:{name}"` |
