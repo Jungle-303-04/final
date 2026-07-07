@@ -11,7 +11,7 @@ export function adaptCluster(raw: Record<string, unknown>): Cluster {
     node_count: Number(raw.node_count ?? 0),
     pod_count: Number(raw.pod_count ?? 0),
     incident_count: Number(raw.incident_count ?? 0),
-    registered_at: String(raw.registered_at ?? raw.created_at ?? new Date().toISOString()),
+    registered_at: String(raw.registered_at ?? raw.created_at ?? ''),
   };
 }
 
@@ -238,6 +238,6 @@ export function adaptConversationSummary(raw: Record<string, unknown>): Omit<Con
     conversation_id: String(raw.conversation_id ?? ''),
     title: String(raw.title ?? '대화'),
     status: (raw.status === 'waiting' ? 'waiting' : 'idle'),
-    updated_at: String(raw.updated_at ?? new Date().toISOString()),
+    updated_at: String(raw.updated_at ?? ''),
   };
 }

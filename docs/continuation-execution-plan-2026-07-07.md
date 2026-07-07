@@ -16,6 +16,23 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:14 KST 체크포인트
+
+- 프론트 실제시각/드릴 메트릭 보강.
+- 구현:
+  - adapter fallback에서 `new Date()` timestamp 합성을 제거했다. 백엔드가 관측 시각을 주지 않으면 빈 값으로 두고 `timeAgo()`가 `—`를 표시한다.
+  - `/metrics?cluster=...&subject=...&name=...&namespace=...`는 선택 context에 맞는 PromQL 후보를 자동 입력한다.
+  - pod는 container restart rate, workload는 deployment replicas, node는 node CPU, service는 kube service info, cluster는 namespace별 pod count로 매핑한다.
+  - 실행은 기존 real command pipeline(`POST /agent/debug/query`, `GET /commands/{id}`)을 그대로 사용한다.
+  - 로그인 redirect는 `pathname + search + hash`를 보존한다. drill/metrics/ai prefill URL이 인증 경유 후에도 유지된다.
+  - light theme의 invalid hex token을 수정했다.
+- 검증:
+  - `cd frontend && npm test` → 4 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+
 ### 2026-07-07 18:04 KST 체크포인트
 
 - AI 대화 삭제 API/프론트/Bruno 계약이 1차 구현됐다.
