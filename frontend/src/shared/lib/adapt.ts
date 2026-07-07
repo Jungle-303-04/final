@@ -203,7 +203,7 @@ export function adaptApplication(raw: Record<string, unknown>): Application {
 export function adaptDeployment(raw: Record<string, unknown>): Deployment {
   return {
     cluster_id: String(raw.cluster_id ?? ''),
-    namespace: String(raw.namespace ?? 'sandbox'),
+    namespace: String(raw.namespace ?? 'unknown'),
     name: String(raw.name ?? raw.app_name ?? ''),
     image: String(raw.image ?? ''),
     replicas: Number(raw.replicas ?? 0),

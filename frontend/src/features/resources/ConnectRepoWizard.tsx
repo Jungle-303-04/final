@@ -48,7 +48,9 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   );
   const name = normalizedRepoRef.split('/')[1] ?? '';
   const clusters = clustersQ.data ?? [];
+  const selectedCluster = clusters.find(cluster => cluster.cluster_id === clusterId);
   const validation = validationQ.data;
+  const manifestNamespace = firstManifestNamespace(validation?.resources ?? []);
   const manifestAccepted = Boolean(validation?.valid);
   const repoStepReady = Boolean(probeQ.data?.reachable && selectedBranch && manifestPath && manifestAccepted);
   // 닫을 때 입력 초기화 — 다음에 열면 항상 1단계부터(중간 상태 잔류 방지)
@@ -144,7 +146,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           )}
           {validationQ.isPending && <Skeleton lines={2} />}
           {validation && (
-            <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
               <KeyValue pairs={[
                 ['검증', validation.status === 'not_run' ? 'render 대기' : validation.valid ? '통과' : '확인 필요'],
                 ['리소스', `${validation.resource_count}`],
@@ -199,7 +201,14 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
       )}
       {step === 2 && (
         <>
-          <KeyValue pairs={[['앱 이름', name], ['레포', `${normalizedRepoRef}@${selectedBranch}`], ['manifest', manifestPath], ['클러스터', clusterId]]} />
+          <KeyValue pairs={[
+            ['앱 이름', name],
+            ['레포', `${normalizedRepoRef}@${selectedBranch}`],
+            ['manifest', manifestPath],
+            ['클러스터', selectedCluster?.name ?? clusterId],
+            ['네임스페이스', manifestNamespace || 'manifest/server policy'],
+            ['환경', selectedCluster?.environment ?? 'server policy'],
+          ]} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
             <Button onClick={() => setStep(1)}>이전</Button>
             <Button variant="primary" loading={create.isPending}
@@ -207,10 +216,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
                 name,
                 repo_ref: normalizedRepoRef,
                 branch: selectedBranch,
-                manifest_path: manifestPath,
-                source_type: selectedCandidate?.source_type ?? '',
-                cluster_id: clusterId,
-              },
+	                manifest_path: manifestPath,
+	                source_type: selectedCandidate?.source_type ?? '',
+	                cluster_id: clusterId,
+	                namespace: manifestNamespace,
+	                environment: selectedCluster?.environment,
+	              },
                 {
                   onSuccess: d => {
                     uiStore.getState().toast('ok', `${name} 연결 완료 — 첫 커밋이 감지되면 run 이 생성됩니다`);
@@ -232,4 +243,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 
 export function repositoryManifestCandidateValue(candidate: RepositoryManifestCandidate): string {
   return `${candidate.source_type}:${candidate.path}`;
+}
+
+function firstManifestNamespace(resources: { namespace?: string | null }[]): string | undefined {
+  return resources.find(resource => resource.namespace?.trim())?.namespace?.trim();
 }

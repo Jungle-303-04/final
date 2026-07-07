@@ -11,6 +11,8 @@ export interface CreateApplicationInput {
   manifest_path: string;
   source_type: string;
   cluster_id: string;
+  namespace?: string;
+  environment?: string;
 }
 
 export interface RepositoryProbe {
@@ -186,8 +188,8 @@ export const useCreateApplication = () => {
         manifest_path: input.manifest_path,
         source_type: input.source_type,
         cluster_id: input.cluster_id,
-        namespace: 'sandbox',
-        environment: 'sandbox',
+        ...(input.namespace ? { namespace: input.namespace } : {}),
+        ...(input.environment ? { environment: input.environment } : {}),
       });
       const app = adaptApplication(created.application);
       return { ...app, branch: input.branch, cluster_id: input.cluster_id };

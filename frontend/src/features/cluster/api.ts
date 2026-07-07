@@ -30,7 +30,7 @@ export const useResources = (id: string, kind?: string) =>
 export const useServices = (id: string) =>
   useQuery({ queryKey: clusterKeys.inv(id, 'services'), queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/services`), enabled: !!id, select: d => d.resources.map(adaptServiceResource) });
 export interface UsageSample { sampled_at: string | null; usage: Record<string, number> }
-// 스냅샷마다 적재되는 실측 usage 롤업 시계열 — 인벤토리 기반 장기 추이(LIVE 스트림과 별개)
+// 스냅샷마다 적재되는 실측 usage 롤업 시계열 — 인벤토리 기반 장기 추이(브라우저 스트림과 별개)
 export const useClusterUsage = (id: string | undefined) =>
   useQuery({
     queryKey: ['clusters', id ?? '', 'usage'],

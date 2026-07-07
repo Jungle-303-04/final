@@ -84,24 +84,6 @@
   white-space: nowrap;
 }
 
-.co-live {
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--rad-md);
-  color: var(--color-text-xlight);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.co-live.is-open {
-  color: var(--color-text-success);
-  border-color: color-mix(in oklab, var(--color-text-success) 35%, var(--color-border));
-}
-
 .co-subheader {
   height: 38px;
   flex: none;

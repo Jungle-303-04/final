@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -104,6 +105,7 @@ export function Flyover({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const flyoverRef = useDialogFocus<HTMLElement>(open, onClose);
   return (
     <AnimatePresence>
       {open && (
@@ -115,7 +117,15 @@ export function Flyover({
           exit="exit"
           onClick={onClose}
         >
-          <motion.aside className="pl-flyover" variants={flyoverSlide} onClick={(e) => e.stopPropagation()}>
+          <motion.aside
+            ref={flyoverRef}
+            className="pl-flyover"
+            variants={flyoverSlide}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="pl-modal-head">
               <span className="pl-modal-title">{title}</span>
               <button type="button" className="pl-caretbtn" onClick={onClose} aria-label="닫기">
@@ -129,6 +139,64 @@ export function Flyover({
       )}
     </AnimatePresence>
   );
+}
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function useDialogFocus<T extends HTMLElement>(open: boolean, onClose: () => void) {
+  const ref = useRef<T | null>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => {
+      const node = ref.current;
+      const first = node?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (first ?? node)?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (event.key === 'Tab' && ref.current) trapTab(event, ref.current);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus.current?.focus();
+    };
+  }, [open, onClose]);
+
+  return ref;
+}
+
+function trapTab(event: KeyboardEvent, container: HTMLElement) {
+  const focusable = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter(element => element.offsetParent !== null || element === document.activeElement);
+  if (!focusable.length) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function PageHeader({

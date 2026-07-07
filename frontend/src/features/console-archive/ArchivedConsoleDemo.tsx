@@ -88,7 +88,7 @@ export default function ArchivedConsoleDemo() {
       </aside>
       <main className="archive-main">
         <header className="archive-topbar">
-          <button type="button" className="archive-project">모든 프로젝트</button>
+          <span className="archive-project">모든 프로젝트</span>
           <div className="archive-actions">
             <button type="button" className="archive-icon"><ListIcon size={14} /><i>4</i></button>
             <button type="button" className="archive-chat"><SendIcon size={13} />채팅</button>

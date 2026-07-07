@@ -93,6 +93,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const deployOptions = useMemo(() => selectedFlow?.deploy_providers ?? [], [selectedFlow]);
   const selectedDeployOption = deployOptions.find(option => option.key === deployProvider);
   const selectedCandidate = selectedFlow?.import_candidates.find(candidate => candidateKey(candidate) === selectedImportKey);
+  const selectedEnvironment = selectedCandidate?.labels.environment || selectedCandidate?.labels.env || '';
   const filteredImportCandidates = useMemo(
     () => (selectedFlow?.import_candidates ?? []).filter(candidate => clusterImportCandidateMatches(candidate, candidateQuery)),
     [candidateQuery, selectedFlow],
@@ -113,7 +114,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     mutationFn: () => post<InstallResponse>('/targets', {
       cluster_id: clusterId,
       name: name || clusterId,
-      environment: 'sandbox',
+      ...(selectedEnvironment ? { environment: selectedEnvironment } : {}),
       apply: directApply,
       kube_context: directApply && kubeContext ? kubeContext : undefined,
       cloud_provider: activeProvider,
@@ -221,13 +222,12 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           )}
           {discovery.isSuccess && flows.length > 0 && (
             <>
-              <div role="listbox" aria-label="클러스터 프로바이더" className="split split--even" style={{ gap: 10 }}>
+              <div aria-label="클러스터 프로바이더" className="split split--even" style={{ gap: 10 }}>
                 {flows.map(flow => (
                   <button
                     key={flow.cloud_provider}
                     type="button"
-                    role="option"
-                    aria-selected={activeProvider === flow.cloud_provider}
+                    aria-pressed={activeProvider === flow.cloud_provider}
                     className="card"
                     style={{ cursor: 'pointer', textAlign: 'left', borderColor: activeProvider === flow.cloud_provider ? 'var(--brand)' : 'var(--border)' }}
                     onClick={() => chooseProvider(flow)}
@@ -257,7 +257,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                   직접 입력
                 </Button>
               </div>
-              <div role="listbox" aria-label="가져올 클러스터" className="cluster-registration-list">
+              <div aria-label="가져올 클러스터" className="cluster-registration-list">
                 {filteredImportCandidates.map(candidate => (
                   <ImportCandidateButton
                     key={candidateKey(candidate)}
@@ -293,13 +293,12 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
             <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={clusterId} />
           </Field>
           <Field label="설치 방식">
-            <div role="listbox" aria-label="설치 방식" className="cluster-registration-list cluster-registration-list--compact">
+            <div aria-label="설치 방식" className="cluster-registration-list cluster-registration-list--compact">
               {deployOptions.map(option => (
                 <button
                   key={option.key}
                   type="button"
-                  role="option"
-                  aria-selected={option.key === deployProvider}
+                  aria-pressed={option.key === deployProvider}
                   disabled={option.status !== 'available'}
                   className="cluster-registration-option"
                   data-selected={option.key === deployProvider}
@@ -330,7 +329,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           <KeyValue pairs={[
             ['프로바이더', activeProvider],
             ['설치 방식', deployProvider],
-            ['환경', 'sandbox'],
+            ['환경', selectedEnvironment || '서버 기본 정책'],
             ['관측 스택', 'prometheus/loki/tempo target service'],
           ]} />
           <Footer onPrev={() => setStep(0)} onNext={runPreflight}
@@ -445,8 +444,7 @@ function ImportCandidateButton({ candidate, selected, onClick }: { candidate: Im
   return (
     <button
       type="button"
-      role="option"
-      aria-selected={selected}
+      aria-pressed={selected}
       className="cluster-registration-candidate"
       data-selected={selected}
       onClick={onClick}
