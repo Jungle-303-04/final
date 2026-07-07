@@ -30,12 +30,6 @@ class Settings:
     EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
     DEFAULT_DEAD_LETTER_LIMIT = 50
     MAX_DEAD_LETTER_LIMIT = 100
-    # 튜닝 가능값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
-    OUTBOX_RELAY_INTERVAL_SECONDS_ENV = (
-        "OUTBOX_RELAY_INTERVAL_SECONDS"  # outbox relay 유휴 간격 초(기본 1)
-    )
-    OUTBOX_RELAY_INTERVAL_SECONDS = int(env(OUTBOX_RELAY_INTERVAL_SECONDS_ENV, "1"))
-
     # 브라우저 SPA CORS — 쿠키 인증 요청 허용 origin(콤마 구분). 로컬 개발 origin 기본 포함.
     CORS_ALLOW_ORIGINS_ENV = "CORS_ALLOW_ORIGINS"
     DEFAULT_CORS_ALLOW_ORIGINS = (

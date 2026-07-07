@@ -57,7 +57,6 @@ from packages.events.bus import NatsEventBus
 from packages.runtime.command_wakeup import COMMAND_NOTIFY_DATABASE_URL_ENV, WAKEUP
 from packages.runtime.gateway import ApiEventGateway
 from packages.runtime.metrics import render_labeled_counter, render_prometheus_metrics
-from packages.runtime.relay import OutboxRelay
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
@@ -98,7 +97,6 @@ class ApiGateway:
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.configure_routes()
-        self._relay_task: asyncio.Task[None] | None = None
 
     @staticmethod
     def _configure_cors(app: FastAPI) -> None:
@@ -186,7 +184,6 @@ class ApiGateway:
         await wait_for_database(self.db)
         await self.sessions.connect()
         await self.bus.connect()
-        self._relay_task = asyncio.create_task(self._relay_outbox())
         # 명령 롱폴 웨이크업 — 직결 URL 이 설정된 경우에만 LISTEN 시작.
         # (pgbouncer transaction pooling 경유로는 LISTEN 불가; 미설정 시 주기 폴링 유지)
         notify_url = env(COMMAND_NOTIFY_DATABASE_URL_ENV, "")
@@ -196,30 +193,10 @@ class ApiGateway:
             yield
         finally:
             await WAKEUP.stop()
-            if self._relay_task is not None:
-                self._relay_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await self._relay_task
             await self.bus.close()
             await self.sessions.close()
             await self.db.dispose_async()
             self.db.dispose()
-
-    async def _relay_outbox(self) -> None:
-        relay = OutboxRelay(self.db, self.bus, Settings.SERVICE_NAME)
-        while True:
-            try:
-                sent = await relay.run_once()
-            except Exception as exc:
-                LOGGER.warning(
-                    "gateway_outbox_relay_error",
-                    extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
-                    exc_info=exc,
-                )
-                sent = 0
-            if sent >= relay.batch:
-                continue
-            await asyncio.sleep(Settings.OUTBOX_RELAY_INTERVAL_SECONDS)
 
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
