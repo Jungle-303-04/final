@@ -22,6 +22,13 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the target namespace.",
             "query": "target",
         },
+        {
+            # 데모/장애주입 워크로드는 sandbox 네임스페이스에 배포된다 — 이 snapshot 이
+            # 없으면 sandbox 장애의 incident 가 탐지되지 않거나 target 관측 스택 신호로 오염된다.
+            "name": "sandbox_namespace_snapshot",
+            "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the sandbox namespace.",
+            "query": "sandbox",
+        },
     ],
     "metrics": [
         {
@@ -84,6 +91,13 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "name": "target_namespace_errors",
             "description": "Error logs emitted by workloads in the target namespace.",
             "query": '{k8s_namespace_name="target"} |= "ERROR"',
+        },
+        {
+            # sandbox 워크로드(장애주입 대상)의 오류 로그 — RCA 리포트 근거의 1차 소스.
+            # FATAL(치명 시작 실패)·panic 도 함께 잡아 crashloop 원인 판별 신호를 확보한다.
+            "name": "sandbox_namespace_errors",
+            "description": "Error/fatal logs emitted by workloads in the sandbox namespace.",
+            "query": '{k8s_namespace_name="sandbox"} |~ "ERROR|FATAL|panic"',
         },
         {
             "name": "node_collector_runtime_samples",

@@ -237,6 +237,90 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert queue_db.called("queue_agent_command")
 
 
+def loki_log_entry(namespace: str, line: str, *, query_name: str = "namespace_errors") -> dict:
+    """Loki provider(normalize_payload) 출력과 같은 모양의 로그 evidence 항목."""
+    return {
+        "source": "loki",
+        "query_name": query_name,
+        "query": f'{{k8s_namespace_name="{namespace}"}} |= "ERROR"',
+        "result_type": "streams",
+        "streams": [
+            {
+                "stream": {"k8s_namespace_name": namespace, "k8s_container_name": "app"},
+                "values": [{"timestamp": "1751871600000000000", "line": line}],
+            }
+        ],
+        "line_count": 1,
+    }
+
+
+def test_evidence_bundle_keeps_only_incident_namespace_log_streams() -> None:
+    """incident 리소스(sandbox)의 로그만 근거로 남고 target 네임스페이스 노이즈는 제외된다."""
+    db = SpyDb()
+    payload = crashloop_payload(
+        logs=[
+            loki_log_entry("target", "ERROR loki querier internal noise"),
+            loki_log_entry(
+                "sandbox", "FATAL: required environment variable DATABASE_URL is not set"
+            ),
+        ],
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-ns-filter")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    logs_item = next(item for item in bundle.items if item.source == "logs")
+    namespaces = {
+        stream["stream"]["k8s_namespace_name"]
+        for entry in logs_item.value["entries"]
+        for stream in entry["streams"]
+    }
+    assert namespaces == {"sandbox"}
+    # target 노이즈가 빠진 로그로 판별 — env 누락 FATAL 로그가 config_env_error 를 만든다.
+    completed = event_by_subject(rca_events, "rca.completed")
+    assert completed.root_cause == "config_env_error"
+    assert completed.root_cause != "oom_killed"
+
+
+def test_target_namespace_only_logs_do_not_count_as_workload_evidence() -> None:
+    """다른 네임스페이스(target) 로그뿐이면 logs 근거가 빠져 완결 대신 blocked 로 흐른다."""
+    db = SpyDb()
+    payload = crashloop_payload(
+        logs=[loki_log_entry("target", "ERROR loki querier internal noise")],
+        traces={},
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-ns-noise")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    assert all(item.source != "logs" for item in bundle.items)
+    assert rca_events[-1].__subject__ == "rca.analysis_blocked"
+    assert not db.called("save_rca_report")
+
+
+def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:
+    """dedup — 같은 (workspace, root_cause, 리소스) 리포트가 창 안에 있으면 저장 생략."""
+    db = SpyDb(
+        find_recent_rca_report={
+            "id": 1,
+            "correlation_id": "corr-earlier",
+            "created_at": "2026-07-07T09:00:00+00:00",
+        }
+    )
+
+    rca_events = run_to_rca(crashloop_payload(), db=db, correlation_id="corr-dup")
+
+    # rca.completed 이벤트는 그대로 발행된다 — 저장(INSERT)만 생략된다.
+    assert rca_events[-1].__subject__ == "rca.completed"
+    assert not db.called("save_rca_report")
+    lookup = next(c for c in db.calls if c[0] == "find_recent_rca_report")
+    workspace_id, root_cause, resource_key, window_seconds = lookup[1]
+    assert workspace_id == "workspace-1"
+    assert root_cause == rca_events[-1].root_cause
+    assert resource_key == "sandbox/deployment/checkout-api"
+    assert window_seconds > 0
+
+
 def test_no_incident_flow_stops_before_rca_analysis() -> None:
     db = SpyDb()
 
