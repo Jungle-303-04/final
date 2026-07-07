@@ -143,6 +143,10 @@ class EvidenceBundleBuiltBody(EventBody):
     evidence_bundle: EvidenceBundle
 
 
+CAUSE_CANDIDATE_SOURCE_RULE = "rule"
+CAUSE_CANDIDATE_SOURCE_AI_FALLBACK = "ai_fallback"
+
+
 @dataclass(frozen=True)
 class CauseCandidate(EventBody):
     """RCA 원인 후보."""
@@ -152,6 +156,8 @@ class CauseCandidate(EventBody):
     description: str
     expected_evidence: list[str]
     checks: list[str]
+    # 후보 출처 — rule 엔진("rule") 또는 LLM fallback("ai_fallback").
+    source: str = CAUSE_CANDIDATE_SOURCE_RULE
 
 
 @dataclass(frozen=True)
@@ -241,6 +247,8 @@ class RcaAiFallbackRequestedBody(EventBody):
     evidence_bundle: EvidenceBundle
     missing_evidence: list[str]
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    # AI fallback 결과가 rule 경로와 같은 rca-worker 계약(evidence 필수)을 지나도록 원본 증거를 동봉.
+    evidence: Evidence | None = None
 
 
 @event(EventSubject.RCA_CANDIDATES_PLANNED)
