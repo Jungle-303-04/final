@@ -1,4 +1,6 @@
-/* Console 전용 레이아웃 스타일 — plural-ui tokens 재사용 */
+/* Console 전용 레이아웃 스타일 — plural-ui tokens 재사용.
+   데드 스윕(2026-07-07): 구 콘솔 복각 잔재(가짜 히트맵/차트 그리드/챗패널/터미널/역할 배너 등
+   tsx 미참조 셀렉터 ~150줄) 제거. 복원은 git 히스토리에서. */
 
 .co-app { height: 100vh; overflow: hidden; }
 .co-body { display: flex; height: 100%; }
@@ -56,20 +58,6 @@
   background: var(--color-fill-zero);
 }
 .co-header-right { display: flex; align-items: center; gap: var(--sp-sm); }
-.co-project {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-xs);
-  height: 32px;
-  padding: 0 var(--sp-sm);
-  border: 1px solid var(--color-border-input);
-  border-radius: var(--rad-md);
-  background: none;
-  color: var(--color-text);
-  font-size: 13px;
-  cursor: pointer;
-}
-.co-project:hover { background: var(--color-fill-zero-hover); }
 
 .co-subheader {
   height: 44px;
@@ -83,158 +71,8 @@
 
 .co-content { flex: 1; overflow: auto; padding: var(--sp-lg) var(--sp-xl); }
 
-/* 홈 대시보드 */
-.co-charts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-md); margin-bottom: var(--sp-lg); }
+/* 홈 대시보드 스탯 */
 .co-stat { margin-top: 8px; font-size: 22px; font-family: var(--font-semi); font-weight: 500; color: var(--color-text); }
-
-.co-heatmap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--sp-sm); }
-.co-heatcell {
-  width: 72px;
-  height: 56px;
-  border-radius: var(--rad-md);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  font-size: 11px;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-}
-.co-heatcell .score { font-size: 16px; font-weight: 600; }
-.co-heatcell.h-good { background: rgba(23, 232, 160, 0.14); border-color: rgba(23, 232, 160, 0.4); }
-.co-heatcell.h-mid { background: rgba(245, 175, 0, 0.14); border-color: rgba(245, 175, 0, 0.4); }
-.co-heatcell.h-bad { background: rgba(232, 23, 72, 0.14); border-color: rgba(232, 23, 72, 0.4); }
-
-.co-bars { display: flex; flex-direction: column; gap: 8px; margin-top: var(--sp-sm); }
-.co-bar { display: flex; align-items: center; gap: var(--sp-sm); font-size: 12px; color: var(--color-text-light); }
-.co-bar.clickable { cursor: pointer; border-radius: var(--rad-md); padding: 2px 4px; margin: -2px -4px; transition: background 0.12s ease, opacity 0.12s ease; }
-.co-bar.clickable:hover { background: var(--color-fill-zero-hover); }
-.co-bar .track { flex: 1; height: 8px; border-radius: 4px; background: var(--color-fill-one); overflow: hidden; }
-.co-bar .fill { height: 100%; border-radius: 4px; }
-
-/* AI 챗봇 패널 */
-.co-chatpanel {
-  width: 400px;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--color-border);
-  background: var(--color-fill-zero);
-}
-.co-chat-head {
-  height: 52px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--sp-md);
-  border-bottom: 1px solid var(--color-border);
-}
-.co-chat-threads {
-  display: flex;
-  gap: var(--sp-xxs);
-  padding: var(--sp-xs) var(--sp-md);
-  border-bottom: 1px solid var(--color-border);
-  overflow-x: auto;
-}
-.co-chat-thread {
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--rad-md);
-  background: none;
-  font-size: 12px;
-  color: var(--color-text-light);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.co-chat-thread:hover { background: var(--color-fill-zero-hover); }
-.co-chat-thread.active {
-  background: var(--color-fill-one);
-  border-color: var(--color-border);
-  color: var(--color-text);
-}
-.co-chat-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--sp-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-sm);
-}
-.co-chat-empty { color: var(--color-text-light); font-size: 14px; }
-.co-msg { display: flex; gap: var(--sp-xs); }
-.co-msg.user { justify-content: flex-end; }
-.co-msg .bubble {
-  max-width: 85%;
-  padding: 10px 12px;
-  border-radius: var(--rad-lg);
-  font-size: 13px;
-  line-height: 19px;
-}
-.co-msg.assistant .bubble {
-  background: var(--color-fill-one);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-light);
-}
-.co-msg.user .bubble { background: var(--color-fill-primary); color: #fff; }
-.co-msg-avatar { width: 26px; height: 26px; font-size: 10px; flex: none; }
-.co-msg-info {
-  margin-top: 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--rad-md);
-  overflow: hidden;
-}
-.co-msg-info .row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-sm);
-  padding: 6px 10px;
-  font-size: 12px;
-}
-.co-msg-info .row + .row { border-top: 1px solid var(--color-border); }
-.co-msg-info .k { color: var(--color-text-xlight); flex: none; }
-.co-msg-info .v { color: var(--color-text); text-align: right; }
-.co-msg-actions { display: flex; flex-wrap: wrap; gap: var(--sp-xs); margin-top: 10px; }
-.co-chat-input {
-  flex: none;
-  display: flex;
-  gap: var(--sp-xs);
-  padding: var(--sp-sm) var(--sp-md);
-  border-top: 1px solid var(--color-border);
-}
-.co-chat-input input {
-  flex: 1;
-  height: 36px;
-  padding: 0 var(--sp-sm);
-  border: 1px solid var(--color-border-input);
-  border-radius: var(--rad-md);
-  background: transparent;
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  outline: none;
-}
-.co-chat-input input:focus { border-color: var(--color-border-outline-focused); }
-
-/* 역할 시뮬레이터 배너 (다른 역할 시점으로 보는 중) */
-.co-viewas {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 16px;
-  background: color-mix(in srgb, var(--color-text-warning, #f5a623) 12%, transparent);
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text);
-  font-size: 13px;
-}
-.co-avatarbtn {
-  border: none;
-  cursor: pointer;
-}
-.co-avatarbtn:hover { outline: 2px solid var(--color-border-outline-focused); }
 
 /* ── 반응형 — 1024 이하에선 아이콘 레일, 모바일에선 여백 축소 ── */
 @media (max-width: 1100px) {
@@ -245,18 +83,4 @@
 @media (max-width: 760px) {
   .co-content { padding: var(--sp-md); }
   .co-header, .co-subheader { padding: 0 var(--sp-sm); }
-}
-
-/* 터미널 룩 */
-.co-terminal {
-  background: #0b0d11;
-  border: 1px solid var(--color-border);
-  border-radius: var(--rad-lg);
-  padding: var(--sp-md);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 20px;
-  color: #9fe8c8;
-  min-height: 280px;
-  white-space: pre-wrap;
 }

@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClusters } from '@/features/cluster/api';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
-import { Badge, Button, Card, QueryBoundary, ResourceTable, SearchInput, useSearchFilter } from '@/shared/ui';
+import { Badge, Button, Card, EmptyState, QueryBoundary, ResourceTable, SearchInput, useSearchFilter } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
+import { GlobeIcon } from '@/plural-ui/icons';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Cluster } from '@/shared/lib/types';
@@ -24,6 +25,11 @@ export default function ClusterListView() {
           <ResourceTable<Cluster>
             rows={rows} rowKey={c => c.cluster_id}
             onRowClick={c => nav(`/clusters/${c.cluster_id}`)}
+            empty={search
+              ? <EmptyState icon={<GlobeIcon size={26} />} title={`'${search}' 검색 결과가 없습니다`} description="이름·환경·cluster_id 로 검색합니다" />
+              : <EmptyState icon={<GlobeIcon size={26} />} title="등록된 클러스터가 없습니다"
+                  description="클러스터를 등록하고 에이전트가 연결되면 실측 인벤토리가 표시됩니다"
+                  action={<Button variant="primary" onClick={() => setWizard(true)}>첫 클러스터 등록</Button>} />}
             columns={[
               { key: 'name', label: '이름', render: c => <b>{c.name}</b> },
               { key: 'env', label: '환경', render: c => <Badge tone="neutral">{c.environment}</Badge> },
