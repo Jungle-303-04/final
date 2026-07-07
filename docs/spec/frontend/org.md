@@ -71,7 +71,7 @@ status: synced
 - 모듈 상수 `ROLES`: `[['observer','읽기 전용'],['release_operator','배포 실행'],['cluster_steward','위험 명령 승인']]`.
 - state: `open`, `subjectType`('user'|'group', 기본 'group'), `subjectId`, `resourceType`(기본 'cluster'), `resourceId`, `role`(기본 'observer'). 유형 변경 시 대상 id 리셋.
 - 선택지: subject — user 면 users(`[user_id, email]`), group 이면 groups(`[group_id, name]`); resource — cluster 면 clusters(`[cluster_id, name]`), application 이면 apps(`[application_id, name]`).
-- 테이블 열: 대상(`Badge neutral subject_type` + subject_label) / 리소스(`code resource_type/resource_id`) / 역할(`Badge info`) / 부여(timeAgo) / "회수"(danger sm → `revoke.mutate(access_id)`).
+- 테이블 열: 대상(`Badge neutral subject_type` + subject_label) / 리소스(`code resource_type/resource_id`) / 역할(`Badge info`) / 부여(timeAgo) / "회수"(danger sm → 확인 모달 `revoking` 오픈 후 "회수 실행" 이 `revoke.mutate(access_id)` — 파괴 동작 공통 패턴).
 - 부여 모달 폼: 대상 유형/대상/리소스 유형/리소스/역할 select 5개 → `grant.mutate({subject_type, subject_id, subject_label(선택지에서 역해석), resource_type, resource_id, role})`.
 
 ## 라우트

@@ -51,7 +51,7 @@ status: synced
 - 라우트: `/notifications`.
 - 모듈 상수 `FILTERS`: `[['all','전체'],['approval','승인'],['incident','인시던트'],['dlq','운영(DLQ)'],['cluster','클러스터']]`.
 - state: `filter`(기본 'all'). 마운트 시 `markAllSeen()` 1회(진입 시 워터마크 갱신).
-- 트리: h1 '알림' → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가) → 비면 `EmptyState(IconBell '알림이 없습니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, kind)` + title(read 면 opacity 0.6) + timeAgo + `Link(n.link)` '바로가기 →'.
+- 트리: h1 '알림' → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가) → 비면 `EmptyState(IconBell '알림이 없습니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, KIND_LABEL[kind] ?? kind)`(한국어 라벨 — 셸 플라이오버와 동일 어휘) + title(read 면 opacity 0.6) + timeAgo + `Link(n.link)` '바로가기 →'.
 
 ### `frontend/src/features/notifications/IncidentDetailView.tsx :: IncidentDetailView` (default export)
 
