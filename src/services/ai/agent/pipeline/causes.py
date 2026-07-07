@@ -179,4 +179,5 @@ def build_ai_fallback_requested_body(
         evidence_bundle=evt.evidence_bundle,
         missing_evidence=rule_missing.missing_evidence,
         workspace_id=rule_missing.workspace_id,
+        evidence=evt.evidence,
     )
