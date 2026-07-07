@@ -26,6 +26,14 @@ class RcaStore(Protocol):
         body: JsonObject,
     ) -> None: ...
 
+    async def find_recent_rca_report(
+        self,
+        workspace_id: str,
+        root_cause: str,
+        resource_key: str,
+        window_seconds: int,
+    ) -> JsonObject | None: ...
+
 
 class RcaBacklogStore(Protocol):
     async def upsert_rca_backlog_item(self, body: JsonObject) -> None: ...
