@@ -16,7 +16,6 @@ status: synced
   - credential_ref 요구사항(접두어·필요 capability) 기반 경고 생성.
 - **하지 않는다**:
   - provider 어댑터의 실제 구현·연결 — 카탈로그는 메타데이터(`adapter` 문자열)만 기술한다.
-  - 인증/인가 — 카탈로그·검증 엔드포인트에는 세션 가드가 없다(공개).
   - DB 저장 — 카탈로그는 코드 내 불변 상수이며 테이블이 없다.
 
 ## 의존성 (Dependencies)
@@ -24,9 +23,10 @@ status: synced
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
 | import | `packages.config.settings.env` | [config](../packages/config.md) | `KUBEHEAL_DISABLED_PROVIDERS` 환경변수 조회 |
+| import | `domains.identity.dependencies.require_admin_session` | [identity](./identity.md) | provider catalog/검증/cluster discovery 관리자 세션 가드 |
 | import | `packages.contracts.gateway.requests.ProviderSelectionRequest` | [contracts](../packages/contracts.md) | 검증 요청 모델 |
 | import | `packages.contracts.gateway.responses` (`ProviderCatalogResponse`, `ProviderValidationResponse`) | [contracts](../packages/contracts.md) | 응답 모델 |
-| import | `packages.contracts.gateway.routes` (`PROVIDERS_CATALOG_PATH`, `PROVIDERS_VALIDATE_PATH`) | [contracts](../packages/contracts.md) | 라우트 경로 상수 |
+| import | `packages.contracts.gateway.routes` (`PROVIDERS_CATALOG_PATH`, `PROVIDERS_CLUSTER_DISCOVERY_PATH`, `PROVIDERS_VALIDATE_PATH`) | [contracts](../packages/contracts.md) | 라우트 경로 상수 |
 
 이벤트 발행/구독 없음. 외부 시스템 의존 없음.
 
@@ -38,16 +38,19 @@ status: synced
 
 | 메서드 | 경로 | 핸들러 앵커 | 요청 모델 | 응답 모델 | 권한 |
 |---|---|---|---|---|---|
-| GET | `/providers/catalog` (`PROVIDERS_CATALOG_PATH`) | `src/domains/providers/router.py :: provider_catalog` | — | `ProviderCatalogResponse` | 없음(공개) |
-| POST | `/providers/validate` (`PROVIDERS_VALIDATE_PATH`) | `src/domains/providers/router.py :: provider_selection_validate` | `ProviderSelectionRequest` | `ProviderValidationResponse` | 없음(공개) |
+| GET | `/providers/catalog` (`PROVIDERS_CATALOG_PATH`) | `src/domains/providers/router.py :: provider_catalog` | — | `ProviderCatalogResponse` | admin 세션 |
+| GET | `/providers/cluster-discovery` (`PROVIDERS_CLUSTER_DISCOVERY_PATH`) | `src/domains/providers/router.py :: provider_cluster_discovery` | — | `ProviderClusterDiscoveryResponse` | admin 세션 |
+| POST | `/providers/validate` (`PROVIDERS_VALIDATE_PATH`) | `src/domains/providers/router.py :: provider_selection_validate` | `ProviderSelectionRequest` | `ProviderValidationResponse` | admin 세션 |
 
 - `GET /providers/catalog`: `ProviderCatalogResponse(providers=catalog_body())`.
+- `GET /providers/cluster-discovery`: 환경변수 기반 import 후보와 deploy provider 조합을 `ProviderClusterDiscoveryResponse`로 반환한다. kube context/외부 console handle 후보가 포함될 수 있어 admin 세션이 필수다.
 - `POST /providers/validate`: 요청의 `source_provider`/`deploy_provider`/`cloud_provider`/`secret_provider` 를 `{"source": ..., "deploy": ..., "cloud": ..., "secret": ...}` 로 매핑해 `validate_provider_selection(selection, credential_refs=payload.credential_refs, capabilities=tuple(payload.capabilities))` 호출, 결과 dict 를 `ProviderValidationResponse(**result)` 로 반환.
 
 요청/응답 모델 스키마 (정의: `src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`):
 
 - `ProviderSelectionRequest`: `source_provider: str | None = None`, `deploy_provider: str | None = None`, `cloud_provider: str | None = None`, `secret_provider: str | None = None`, `capabilities: list[str] = []`, `credential_refs: dict[str, str] = {}`
 - `ProviderCatalogResponse`: `providers: dict[str, list[JsonMap]]` — 카테고리 값(`source`/`deploy`/`cloud`/`secret`)을 키로 하는 provider body 목록
+- `ProviderClusterDiscoveryResponse`: `default_cloud_provider`, `default_deploy_provider`, `flows`, `import_candidates` — cluster 등록 위저드용 실제 import 후보 응답
 - `ProviderValidationResponse`: `valid: bool`, `errors: list[str]`, `warnings: list[str]`, `selected: dict[str, JsonMap]`
 
 ### `src/domains/providers/catalog.py`
@@ -181,7 +184,7 @@ DB 테이블 없음. 카탈로그는 코드 상수 `CATALOG` (frozen dataclass �
 - `unavailable` provider 는 `require_available_provider` 를 통과할 수 없으므로 선택 검증에서 항상 error 가 된다.
 - `provider_keys_for_category` 는 비활성 여부와 무관하게 키를 나열한다(비활성은 상태만 바뀌고 목록에는 남음).
 - 예외 계층: `ProviderUnavailable(ValueError)`, `UnknownProvider(ValueError)`. 라우터에서는 이 예외가 HTTP 로 전파되지 않고 `validate_provider_selection` 내부에서 `errors` 로 흡수된다. 단, `get_provider`/`require_available_provider` 를 직접 호출하는 다른 코드에서는 `ValueError` 로 잡을 수 있다.
-- 검증 엔드포인트는 인증이 없다 — 카탈로그는 비밀정보를 포함하지 않는 메타데이터만 노출해야 한다.
+- provider HTTP 엔드포인트는 모두 admin 세션이 필요하다. 특히 cluster discovery는 환경의 kube context/console handle 후보를 노출하므로 공개하면 안 된다.
 
 ## 설정 (Settings)
 

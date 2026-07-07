@@ -74,7 +74,7 @@
 |---|---|---|
 | GET /dead-letters | 👑 | [notifications](views/notifications.md), /settings/ops |
 | POST /dead-letters/{dead_letter_id}/replay | 👑 | /settings/ops |
-| GET /providers/catalog · POST /providers/validate | 👑 | resources 위저드 1·2단계 |
+| GET /providers/catalog · GET /providers/cluster-discovery · POST /providers/validate | 👑 | resources 위저드 provider 조회·검증 |
 | GET /healthz · /readyz | 🔓 | (모니터링 전용) |
 
 ### WebSocket

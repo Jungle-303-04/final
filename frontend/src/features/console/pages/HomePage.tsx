@@ -6,6 +6,7 @@ import { CaretRightIcon, GlobeIcon, SendIcon, ShieldIcon } from '@/plural-ui/ico
 import { healthLabel, healthScore, useFleetSummary, type FleetHealth } from '@/features/fleet/api';
 import { timeAgo, useNotices, useTimeline } from '@/features/notifications/api';
 import { useConversations } from '@/features/chat/api';
+import { useIsAdmin } from '@/features/auth/api';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
 import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { TreemapChart, type HeatNode } from '@/shared/ui/charts';
@@ -21,6 +22,7 @@ export function HomePage() {
   const timelineQ = useTimeline();
   const { notices } = useNotices();
   const conversationsQ = useConversations();
+  const admin = useIsAdmin();
   const [clusterWizard, setClusterWizard] = useState(false);
   const [repoWizard, setRepoWizard] = useState(false);
 
@@ -34,7 +36,7 @@ export function HomePage() {
         actions={
           <>
             <Button onClick={() => setRepoWizard(true)}>+ 레포 연결</Button>
-            <Button variant="primary" onClick={() => setClusterWizard(true)}>+ 클러스터 등록</Button>
+            {admin && <Button variant="primary" onClick={() => setClusterWizard(true)}>+ 클러스터 등록</Button>}
           </>
         }
       />
@@ -60,8 +62,8 @@ export function HomePage() {
               <EmptyState
                 icon={<GlobeIcon size={26} />}
                 title="아직 등록된 클러스터가 없습니다"
-                description="클러스터를 등록하고 에이전트가 연결되면 플릿 현황이 여기 표시됩니다"
-                action={<Button variant="primary" onClick={() => setClusterWizard(true)}>첫 클러스터 등록</Button>}
+                description={admin ? '클러스터를 등록하고 에이전트가 연결되면 플릿 현황이 여기 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 플릿 현황이 여기 표시됩니다'}
+                action={admin ? <Button variant="primary" onClick={() => setClusterWizard(true)}>첫 클러스터 등록</Button> : undefined}
               />
             </div>
           ) : (

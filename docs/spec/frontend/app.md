@@ -128,9 +128,9 @@ ConsoleLayout (div.pl-app.co-app)
 ### 홈 — `frontend/src/features/console/pages/HomePage.tsx :: HomePage`
 
 - 라우트: `/` index.
-- 데이터: `useFleetSummary`, `useTimeline`, `useNotices`, `useConversations`.
+- 데이터: `useFleetSummary`, `useTimeline`, `useNotices`, `useConversations`, `useIsAdmin`.
 - state: `clusterWizard`, `repoWizard`.
-- 트리: `PageHeader('플릿 현황', actions=레포 연결/클러스터 등록)` → `QueryBoundary(useFleetSummary)` 안의 `StatCard` 5개, 빈 클러스터 `EmptyState`, `TreemapChart`, 클러스터 `Table` → 최근 인시던트 카드 → 승인 대기 배포 카드 → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
+- 트리: `PageHeader('플릿 현황', actions=레포 연결 + admin 일 때만 클러스터 등록)` → `QueryBoundary(useFleetSummary)` 안의 `StatCard` 5개, 빈 클러스터 `EmptyState`(admin 이면 등록 action, non-admin 이면 접근 가능한 클러스터 연결 안내), `TreemapChart`, 클러스터 `Table` → 최근 인시던트 카드 → 승인 대기 배포 카드 → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
 - treemap 노드: `value=max(1,pods_total)`, `score=healthScore(health)`, 클릭 시 `/clusters/:clusterId`.
 
 ## 동작 (Behavior)

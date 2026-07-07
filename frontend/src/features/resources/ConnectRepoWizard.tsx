@@ -9,6 +9,7 @@ import {
   useRepositoryProbe,
 } from '@/features/repo/api';
 import { useClusters } from '@/features/cluster/api';
+import { useIsAdmin } from '@/features/auth/api';
 import { Button, Field, KeyValue, Modal, Skeleton, Stepper } from '@/shared/ui';
 import { uiStore } from '@/shared/lib/ui-store';
 
@@ -24,6 +25,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const clustersQ = useClusters();
   const create = useCreateApplication();
   const nav = useNavigate();
+  const admin = useIsAdmin();
   const trimmedRepoRef = repoRef.trim();
   const refOk = PROBEABLE_REPO.test(trimmedRepoRef);
   const probeQ = useRepositoryProbe(trimmedRepoRef, open && refOk);
@@ -172,9 +174,11 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           {clustersQ.isPending ? <Skeleton lines={2} /> : clusters.length === 0 ? (
             <div style={{ padding: '8px 0' }}>
               <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', margin: '0 0 8px' }}>
-                배포 대상으로 지정할 클러스터가 없습니다 — 먼저 클러스터를 등록해주세요.
+                {admin
+                  ? '배포 대상으로 지정할 클러스터가 없습니다 — 먼저 클러스터를 등록해주세요.'
+                  : '배포 대상으로 지정할 수 있는 클러스터가 없습니다 — 관리자에게 클러스터 접근 권한을 요청해주세요.'}
               </p>
-              <Link to="/clusters" onClick={reset}><Button variant="primary">클러스터 등록하러 가기 →</Button></Link>
+              {admin && <Link to="/clusters" onClick={reset}><Button variant="primary">클러스터 등록하러 가기 →</Button></Link>}
             </div>
           ) : (
             <Field label="대상 클러스터">
