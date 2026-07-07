@@ -252,7 +252,7 @@ status: synced
 | `AgentConnectedBody` | `agent.connected` | `POST /agent/connect` — `save_cluster_agent_status` 와 같은 트랜잭션 |
 | `EmailVerificationRequestedBody` | `mail.email_verification.requested` | signup / resend-verification 성공 시 (`_request_email_verification`) |
 | `ClusterEvidenceReceivedBody` | `cluster.evidence.received` | `POST /webhooks/alertmanager` 또는 RCA evidence 라우터 — Alertmanager firing 알림을 evidence payload로 변환 |
-| (임의 원본 subject) | dead letter 의 `original_subject` | `POST /dead-letters/{id}/replay` — 원본 payload·correlation_id·`original_event_id`(causation) 로 재발행 |
+| (임의 원본 subject) | dead letter 의 `original_subject` | `POST /dead-letters/{id}/replay` — `status=open` 인 DLQ만 원본 payload·correlation_id·`original_event_id`(causation) 로 재발행 |
 | 도메인 라우터 발행 이벤트 | `git.webhook.received`, `command.requested`, `cluster.evidence.received`, `ai.message.received`, `approval.granted/rejected` 등 | 각 도메인 스펙 참조 |
 
 ## 동작 (Behavior)
@@ -284,7 +284,7 @@ status: synced
 
 ### dead letter replay 원자성
 
-replay 이벤트의 outbox 스테이징과 `mark_dead_letter_replayed`(열린 행만 원자 UPDATE)를 한 트랜잭션(`unit_of_work_or_null`)으로 묶는다 — 동시 replay 는 첫 요청만 통과하고 진 요청의 스테이징은 롤백(이중 재발행 방지). 이미 replayed 면 409.
+replay 이벤트의 outbox 스테이징과 `mark_dead_letter_replayed`(열린 행만 원자 UPDATE)를 한 트랜잭션(`unit_of_work_or_null`)으로 묶는다 — 동시 replay 는 첫 요청만 통과하고 진 요청의 스테이징은 롤백(이중 재발행 방지). `status != open` 이면 409.
 
 ### /metrics 산출 항목
 

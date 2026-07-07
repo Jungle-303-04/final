@@ -57,7 +57,7 @@ def updated_at_column() -> Mapped[Any]        # TIMESTAMP(timezone=True), nullab
 | `DB_LOCK_TIMEOUT` / `DB_STATEMENT_TIMEOUT` / `DB_IDLE_IN_TRANSACTION_TIMEOUT` | env 값 ms 문자열(기본 `5000ms`/`30000ms`/`30000ms`) | `set local` 에 쓰는 값 |
 | `DB_SCHEMA_INIT_LOCK_TIMEOUT` / `DB_SCHEMA_INIT_STATEMENT_TIMEOUT` | 기본 `60000ms`/`120000ms` | 스키마 초기화용 |
 | `SCHEMA_INIT_LOCK_NAMESPACE` / `SCHEMA_INIT_LOCK_KEY` | `774897281` / `20260703` | `pg_advisory_xact_lock` 식별자 — 전 프로세스 공유 필수라 env 오버라이드 없는 고정값 |
-| `DEAD_LETTER_STATUS_OPEN` / `DEAD_LETTER_STATUS_REPLAYED` | `"open"` / `"replayed"` | DLQ 상태 어휘 |
+| `DEAD_LETTER_STATUS_OPEN` / `DEAD_LETTER_STATUS_REPLAYED` / `DEAD_LETTER_STATUS_ARCHIVED` | `"open"` / `"replayed"` / `"archived"` | DLQ 상태 어휘 |
 | `RAW_DEAD_LETTER_SUBJECT` | `"__decode_failed__"` | 디코드 실패 DLQ subject |
 | `UNKNOWN_AGENT_ID` | `"unknown-agent"` | agent 미상 표기 |
 | `POOL_OPTIONS` | `{pool_size, max_overflow, pool_timeout, pool_pre_ping: True, pool_recycle: 300}` | env 기반 풀 옵션(설정 표 참조) |
@@ -279,7 +279,7 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 | `attempts` | Integer | not null | 시도 횟수 |
 | `error` | Text | not null | 오류(2000자 절단) |
 | `payload` | JSONB | not null | 원 payload(raw 는 `{"raw": ...}`) |
-| `status` | Text | not null | `open` / `replayed` |
+| `status` | Text | not null | `open` / `replayed` / `archived` |
 | `replayed_at` | TIMESTAMPTZ | null 허용 | replay 시각 |
 | `replay_event_id` | Text | null 허용 | 재발행 이벤트 ID |
 | `created_at` | TIMESTAMPTZ | not null, default now() | 적재 시각 |
@@ -326,7 +326,7 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 1. `DATABASE_URL` 미설정 시 `DatabaseConnection()` 생성 자체가 `RuntimeError("DATABASE_URL is required")`.
 2. **UoW 합류 규칙**: 활성 `_ACTIVE_CONN` 이 있으면 `connection()`/`unit_of_work()` 는 새 트랜잭션을 열지 않고 합류하며 commit 은 최상위 UoW 소유 — 중첩 커밋으로 인한 원자성 파괴 금지.
 3. **claim 원자성**: `claim_event_processing` 은 단일 UPSERT 문으로 검사+갱신 — 종결 상태 재클레임 금지, 신선한(90s 이내) PROCESSING 재클레임 금지.
-4. **DLQ replay 단일성**: `mark_dead_letter_replayed` 는 `status='open'` 조건부 원자 UPDATE — 첫 호출만 `True`.
+4. **DLQ replay 단일성**: `mark_dead_letter_replayed` 는 `status='open'` 조건부 원자 UPDATE — 첫 호출만 `True`. 원인이 해결됐지만 원 payload 재발행이 위험한 레거시 DLQ는 운영 절차로 `archived` 처리해 open 카운트와 replay 대상에서 제외한다.
 5. **outbox lease**: `unsent_events` 는 `FOR UPDATE SKIP LOCKED` + lease(60s)로 다중 relay 인스턴스의 이중 발행을 억제. `mark_events_sent` 만 sent 확정.
 6. 스키마 초기화 advisory lock (namespace, key) 는 고정값 — 변경하면 구/신 배포가 상호 배제되지 않는다.
 7. 오류 메시지는 항상 `compact_error` 로 2000자 절단 후 저장.

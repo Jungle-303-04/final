@@ -105,6 +105,49 @@ def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
     assert "event_dead_letters_open_total 0" in response.text
 
 
+def test_dead_letter_replay_rejects_archived_status(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+
+    async def allow_admin(_request: Any) -> None:
+        return None
+
+    class DeadLetterDb:
+        def get_dead_letter(self, dead_letter_id: int) -> dict[str, Any]:
+            assert dead_letter_id == 7
+            return {
+                "id": 7,
+                "status": "archived",
+                "original_subject": "rca.ai_fallback.requested",
+                "payload": {},
+                "correlation_id": "corr-1",
+                "original_event_id": "event-1",
+            }
+
+        def mark_dead_letter_replayed(self, *_args: Any) -> bool:
+            raise AssertionError("archived dead letters must not be marked replayed")
+
+    class NoopBus:
+        pass
+
+    class NoopEvents:
+        def __init__(self, *_args: Any) -> None:
+            pass
+
+        async def accept(self, *_args: Any) -> Any:
+            raise AssertionError("archived dead letters must not be re-emitted")
+
+    monkeypatch.setattr(gateway, "require_admin_session", allow_admin)
+    monkeypatch.setattr(gateway, "Database", DeadLetterDb)
+    monkeypatch.setattr(gateway, "NatsEventBus", NoopBus)
+    monkeypatch.setattr(gateway, "ApiEventGateway", NoopEvents)
+
+    response = TestClient(gateway.create_app()).post("/dead-letters/7/replay")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "dead letter is not open"}
+
+
 def test_session_cookie_state_changes_require_same_origin_intent(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()

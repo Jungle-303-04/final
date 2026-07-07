@@ -263,6 +263,8 @@ def from_body(cls, raw: Mapping[str, Any]) -> EventBody        # wire dict → �
 | `created_at` | `str` | (필수) | 적재 시각(ISO) |
 | `status` | `str` | (필수) | DLQ 상태 |
 | `correlation_id` | `str` | (필수) | 흐름 ID |
+
+DLQ 상태 어휘: `open`, `replayed`, `archived`. replay API는 `open` 상태만 재발행한다.
 | `payload` | `JsonObject \| None` | `None` | 디코드 실패(raw) 경로에서만 원문이 실림 |
 
 - `src/packages/contracts/event_bus/bodies/platform.py :: PipelineContractFailedBody` — `@event(EventSubject.PIPELINE_CONTRACT_FAILED)` `@dataclass(frozen=True)`, `EventBody` 상속. consumer 가 계약 위반 이벤트를 거부.
