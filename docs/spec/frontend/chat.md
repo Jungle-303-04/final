@@ -43,7 +43,7 @@ status: synced
 - 트리:
   ```
   FadeSlideIn > 그리드(260px 1fr, 높이 calc(100vh - 140px))
-  ├─ Card('대화', actions="+ 새 대화" → nav('/ai'))   ← 좌측 목록
+  ├─ Card('대화', actions="+ 새 대화" → nav('/ai'))   ← 좌측 목록 (성공+0건이면 '대화 이력이 없습니다…' 안내)
   │   대화별 행: status==='waiting' 이면 info 점, title(ellipsis), timeAgo(updated_at)
   │   현재 대화는 surface-3 배경. 클릭 → /ai/:id
   └─ Card(flex column)                                ← 우측 스레드
