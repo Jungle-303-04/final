@@ -228,7 +228,7 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
           }
         >
           {notices.length === 0 ? (
-            <p className="pl-muted" style={{ margin: 0 }}>표시할 알림이 없습니다 — 승인 대기·인시던트·처리 실패 이벤트가 생기면 여기 모입니다.</p>
+            <p className="pl-muted" style={{ margin: 0 }}>표시할 알림이 없습니다</p>
           ) : (
             <div className="pl-stack" style={{ gap: 10 }}>
               {notices.slice(0, 30).map((n) => (

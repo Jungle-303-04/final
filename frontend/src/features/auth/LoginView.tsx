@@ -26,7 +26,7 @@ export default function LoginView() {
   };
   const err = login.error as ApiError | null;
   return (
-    <AuthLayout title="로그인" subtitle="운영 콘솔에 접속합니다">
+    <AuthLayout title="로그인">
       <form onSubmit={submit}>
         <Field label="이메일"><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></Field>
         <Field label="비밀번호" error={err && err.status === 401 ? '이메일 또는 비밀번호가 올바르지 않습니다' : err?.status === 429 ? '잠시 후 다시 시도해주세요' : err && err.status === 403 && !err.detail.includes('approval') ? '이메일 검증이 필요합니다' : undefined}>
