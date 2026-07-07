@@ -161,7 +161,7 @@ async def on_command_requested(
 | GitOps | `git.webhook.received`, `git.changed`, `manifest.rendered`, `manifest.invalid`, `desired.diff.detected`, `diff.analyzed` |
 | Agent/Target | `agent.connected`, `cluster.evidence.received`, `cluster.desired_state.changed`, `cluster.reconcile.requested`, `cluster.reconcile.started`, `cluster.drift.detected`, `cluster.reconcile.completed`, `cluster.reconcile.failed` |
 | Command | `command.requested`, `command.rejected`, `command.dispatched`, `command.queued_for_agent`, `command.completed` |
-| RCA/Safe PR | `evidence.built`, `rca.analysis_blocked`, `rca.followup.required`, `rca.completed`, `safe_pr.requested`, `safe_pr.patch_prepared`, `diff.explained`, `safe_pr.created`, `safe_pr.failed` |
+| RCA/Safe PR | `incident.detected`, `evidence.built`, `evidence.bundle.built`, `rca.candidates.planned`, `rca.candidates.evaluated`, `rca.completed`, `rca.analysis_blocked`, `rca.followup.required`, `rca.rule_missing`, `rca.backlog.created`, `rca.ai_fallback.requested`, `recovery.planned`, `recovery.selection_requested`, `recovery.action_selected`, `safe_pr.requested`, `safe_pr.patch_prepared`, `diff.explained`, `safe_pr.ready_for_creation`, `rollout.diagnosed`, `approval.recommended`, `rca.action_required`, `alert.requested`, `alert.dispatched`, `alert.rejected`, `safe_pr.created`, `safe_pr.failed` |
 | Workflow/Approval | `workflow.created`, `workflow.run.started`, `workflow.step.recorded`, `workflow.run.completed`, `workflow.run.failed`, `approval.requested`, `approval.granted`, `approval.rejected` |
 | Dashboard | `dashboard.updated` |
 | DLQ | `dead_letter.created` |
