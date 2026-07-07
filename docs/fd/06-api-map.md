@@ -161,7 +161,7 @@ POST /clusters/{id}/metrics/query  {promql, start?, end?, step?}
 
 ### G8. AI 스트리밍 (P3 선택)
 
-`WS /ai/conversations/{id}/stream` — assistant 토큰 스트림. 폴링 대체.
+현재 구현된 AI 대화 경로에는 token stream WebSocket 이 없다. 프론트는 `GET /ai/conversations/{id}` 폴링을 유지하며, 스트리밍은 별도 후속 과제로 추가될 때 이 표에 실제 route 를 반영한다.
 
 ### G9. 알림 피드 (P2)
 

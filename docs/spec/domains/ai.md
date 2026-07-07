@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 3e1beb02
 status: synced
 ---
 
@@ -93,12 +93,12 @@ status: synced
 |---|---|---|
 | `create_ai_conversation` | `(self, payload: JsonObject) -> JsonObject` | `INSERT ... ON CONFLICT (conversation_id) DO NOTHING RETURNING *`. values: conversation_id/workspace_id/user_id/title/agent 필수, `status=payload.get("status", STATUS_ACTIVE)`, `context=payload.get("context") or {}`, `updated_at=func.now()`. 충돌(기존 행)이면 payload 그대로 반환 |
 | `append_ai_message` | `(self, payload: JsonObject) -> JsonObject` | `INSERT ... ON CONFLICT (message_id) DO NOTHING RETURNING *` (멱등). `correlation_id=payload.get("correlation_id")`, `metadata=payload.get("metadata") or {}` |
-| `mark_ai_conversation_status` | `(self, workspace_id: str, conversation_id: str, status: str) -> None` | `UPDATE ai_conversations SET status=?, updated_at=now() WHERE workspace_id=? AND conversation_id=?` |
-| `record_ai_response` | `(self, payload: JsonObject) -> None` | `unit_of_work()` 트랜잭션 안에서 assistant 메시지 append(`message_id=payload["response_message_id"]`, `role=ROLE_ASSISTANT`) + 상태 `STATUS_COMPLETED` 전이 |
-| `record_ai_failure` | `(self, payload: JsonObject) -> None` | `unit_of_work()` 안에서 상태 `STATUS_FAILED` 전이만 수행 |
-| `list_ai_conversations` | `(self, workspace_id: str, *, limit: int = 100) -> list[JsonObject]` | `SELECT conversation_id, title, status, updated_at WHERE workspace_id=? ORDER BY updated_at DESC LIMIT clamp(limit,1,200)` |
-| `get_ai_conversation` | `(self, workspace_id: str, conversation_id: str) -> JsonObject \| None` | 단건 SELECT (workspace_id+conversation_id), 없으면 None |
-| `delete_ai_conversation` | `(self, workspace_id: str, conversation_id: str) -> bool` | `DELETE ai_conversations WHERE workspace_id=? AND conversation_id=? RETURNING conversation_id`. 삭제 행이 있으면 true, 없으면 false. 메시지는 FK `ON DELETE CASCADE` |
+| `mark_ai_conversation_status` | `(self, workspace_id: str, conversation_id: str, status: str) -> bool` | `UPDATE ai_conversations SET status=?, updated_at=now() WHERE workspace_id=? AND conversation_id=?`. 갱신 행이 있으면 true |
+| `record_ai_response` | `(self, payload: JsonObject) -> bool` | `unit_of_work()` 트랜잭션 안에서 먼저 상태 `STATUS_COMPLETED` 전이. 대상 대화가 없으면 false, 있으면 assistant 메시지 append(`message_id=payload["response_message_id"]`, `role=ROLE_ASSISTANT`) 후 true |
+| `record_ai_failure` | `(self, payload: JsonObject) -> bool` | `unit_of_work()` 안에서 상태 `STATUS_FAILED` 전이만 수행하고 갱신 여부를 반환 |
+| `list_ai_conversations` | `(self, workspace_id: str, *, user_id: str \| None = None, limit: int = 100) -> list[JsonObject]` | `SELECT conversation_id, title, status, updated_at WHERE workspace_id=?` + `user_id`가 있으면 `AND user_id=?`, `ORDER BY updated_at DESC LIMIT clamp(limit,1,200)` |
+| `get_ai_conversation` | `(self, workspace_id: str, conversation_id: str, *, user_id: str \| None = None) -> JsonObject \| None` | 단건 SELECT (workspace_id+conversation_id, `user_id`가 있으면 user 범위 포함), 없으면 None |
+| `delete_ai_conversation` | `(self, workspace_id: str, conversation_id: str, *, user_id: str \| None = None) -> bool` | `DELETE ai_conversations WHERE workspace_id=? AND conversation_id=?` + `user_id`가 있으면 `AND user_id=?`, `RETURNING conversation_id`. 삭제 행이 있으면 true, 없으면 false. 메시지는 FK `ON DELETE CASCADE` |
 | `list_ai_messages` | `(self, workspace_id: str, conversation_id: str, *, newest: int \| None = None) -> list[JsonObject]` | 기본: `ORDER BY created_at, message_id` 전체. `newest=N`: `ORDER BY created_at DESC, message_id DESC LIMIT N` 후 `reversed()` → 최근 N개를 시간 오름차순으로 반환 |
 
 ### 라우터 — `src/domains/ai/router.py`
@@ -127,6 +127,8 @@ status: synced
 | `DELETE /ai/conversations/{conversation_id}` (`AI_CONVERSATION_PATH`) | `delete_conversation` — `src/domains/ai/router.py :: delete_conversation` | — | `204 Response` | `require_session` |
 
 요청·응답 모델은 `src/packages/contracts/gateway/requests.py` / `responses.py` 정의를 사용한다 ([contracts](../packages/contracts.md)).
+
+HTTP 라우터의 목록/조회/메시지 추가/삭제 경로는 repository 호출에 `user_id=current.user_id`를 넘긴다. 같은 workspace 안에서도 다른 사용자의 대화는 404 또는 목록 제외로 처리한다.
 
 ## 데이터 모델 (Data Model)
 
@@ -215,7 +217,7 @@ status: synced
 
 ### 메시지 추가 (`POST /ai/conversations/{conversation_id}/messages`)
 
-1. `db.get_ai_conversation(workspace_id, conversation_id)` — None이면 404 `"conversation not found"`.
+1. `db.get_ai_conversation(workspace_id, conversation_id, user_id=current.user_id)` — None이면 404 `"conversation not found"`.
 2. `agent = payload.agent or str(conversation["agent"])`, `message_id = new_id("aim")`.
 3. `request_context = normalize_context(payload.context or conversation.get("context") or {})`.
 4. 단일 트랜잭션(`unit_of_work_or_null`) 안에서: 메시지 append(user) → `mark_ai_conversation_status(..., STATUS_WAITING)` → `AiMessageReceivedBody(..., context=request_context)` 발행.
@@ -223,7 +225,7 @@ status: synced
 ### 대화 삭제 (`DELETE /ai/conversations/{conversation_id}`)
 
 1. `workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)`.
-2. `db.delete_ai_conversation(workspace_id, conversation_id)` 호출.
+2. `db.delete_ai_conversation(workspace_id, conversation_id, user_id=current.user_id)` 호출.
 3. false면 404 `"conversation not found"`, true면 본문 없는 204 `Response`.
 4. 메시지는 `ai_conversation_messages.conversation_id`의 `ON DELETE CASCADE`로 함께 삭제된다.
 
@@ -239,8 +241,8 @@ status: synced
 
 - 대화·메시지 insert는 모두 `ON CONFLICT DO NOTHING`으로 멱등 — 같은 ID 재삽입은 무해.
 - 대화 생성/메시지 추가에서 read model 기록과 이벤트 스테이징은 반드시 같은 트랜잭션.
-- `record_ai_response`는 메시지 기록과 상태 전이를 같은 `unit_of_work`로 묶는다.
-- 조회·삭제는 항상 `workspace_id` 필터 포함(워크스페이스 격리).
+- `record_ai_response`는 메시지 기록과 상태 전이를 같은 `unit_of_work`로 묶고, 대상 대화가 없으면 false를 반환해 응답 메시지를 쓰지 않는다.
+- HTTP 조회·삭제·메시지 추가는 항상 `workspace_id`와 `current.user_id` 필터를 함께 적용한다(워크스페이스 + 사용자 격리).
 - 존재하지 않는 대화 접근 → HTTP 404 `"conversation not found"`.
 - `messages.text` 미등록 키 → `KeyError` (fail-fast).
 - 도구 limit는 항상 1–20으로 클램프.
