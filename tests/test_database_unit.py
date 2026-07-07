@@ -202,6 +202,7 @@ def test_operational_indexes_do_not_duplicate_outbox_claim_index() -> None:
         "ix_outbox_unsent_source_id" not in statement
         for statement in storage_engine.OPERATIONAL_INDEXES
     )
+    assert "ix_outbox_claim_all_sources" in storage_engine.OUTBOX_CLAIM_ALL_SOURCES_INDEX
 
 
 def test_record_event_persists_causation_id() -> None:
@@ -342,6 +343,38 @@ def test_outbox_claim_uses_skip_locked_lease_update() -> None:
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "leased_until" in sql
     assert compiled.params["source_1"] == "api-gateway"
+
+
+def test_outbox_claim_without_source_omits_source_filter() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class FakeAsyncConnection:
+        async def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @asynccontextmanager
+    async def fake_async_connection():
+        yield FakeAsyncConnection()
+
+    repository = object.__new__(OutboxRepository)
+    repository.async_connection = fake_async_connection  # type: ignore[method-assign]
+
+    asyncio.run(repository.unsent_events(100, None))
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "UPDATE outbox" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "outbox.source =" not in sql
+    assert "source_1" not in compiled.params
 
 
 def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> None:

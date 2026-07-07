@@ -1,7 +1,7 @@
 """OutboxRelay — outbox 에 적재된 이벤트를 NATS 로 발행(소비 루프와 별도).
 
 저장된 봉투를 같은 event_id 로 발행 → relay 재시도 시 downstream 이 dedup.
-각 워커는 자기 outbox 만 relay 함.
+source 필터가 있으면 해당 서비스 row 만, 없으면 모든 source row 를 lease 기반으로 relay 함.
 """
 
 from __future__ import annotations
@@ -30,13 +30,14 @@ class OutboxRelay:
         self,
         store: OutboxReader,
         publisher: EnvelopePublisher,
-        source: str,
+        source: str | None,
         batch: int = DEFAULT_BATCH,
         publish_timeout_seconds: int = DEFAULT_PUBLISH_TIMEOUT_SECONDS,
     ) -> None:
         self.store = store
         self.publisher = publisher
-        self.source = source  # 자기 서비스가 적재한 행만 relay
+        self.source = source
+        self.consumer_name = f"outbox-relay:{source or 'all'}"
         self.batch = batch
         self.publish_timeout_seconds = publish_timeout_seconds
 
@@ -59,7 +60,7 @@ class OutboxRelay:
                     if self._is_non_retryable_publish_error(exc):
                         await self.store.mark_events_dead_lettered(
                             [evt],
-                            f"outbox-relay:{self.source}",
+                            self.consumer_name,
                             str(exc),
                         )
                         LOGGER.error(

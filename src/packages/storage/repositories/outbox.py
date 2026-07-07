@@ -43,14 +43,17 @@ class OutboxRepository(DatabaseConnection):
                 .on_conflict_do_nothing(index_elements=[table.c.event_id])
             )
 
-    async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]:
+    async def unsent_events(self, limit: int, source: str | None) -> list[EventEnvelope]:
         table = OutboxModel.__table__
         lease_id = str(uuid.uuid4())
         leased_until = datetime.now(UTC) + timedelta(seconds=DEFAULT_OUTBOX_LEASE_SECONDS)
         available = or_(table.c.lease_id.is_(None), table.c.leased_until < func.now())
+        filters = [table.c.sent_at.is_(None), available]
+        if source is not None:
+            filters.append(table.c.source == source)
         claimable = (
             select(table.c.id)
-            .where(table.c.sent_at.is_(None), table.c.source == source, available)
+            .where(*filters)
             .order_by(table.c.id)
             .limit(limit)
             .with_for_update(skip_locked=True)

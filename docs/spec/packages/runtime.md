@@ -185,12 +185,12 @@ class Ledger:
 
 ```python
 class OutboxRelay:
-    def __init__(self, store: OutboxReader, publisher: EnvelopePublisher, source: str,
+    def __init__(self, store: OutboxReader, publisher: EnvelopePublisher, source: str | None,
                  batch: int = DEFAULT_BATCH, publish_timeout_seconds: int = DEFAULT_PUBLISH_TIMEOUT_SECONDS) -> None
     async def run_once(self) -> int
     def _is_non_retryable_publish_error(self, exc: Exception) -> bool
 ```
-`run_once`: `store.unsent_events(batch, source)`(자기 서비스 행만) → 건별 `asyncio.wait_for(publisher.publish_envelope(evt), timeout)` — 같은 event_id 로 발행해 downstream dedup. transient 발행 오류는 기존처럼 예외를 다시 올리고, `finally` 에서 **이미 발행된 것만** `mark_events_sent`(전체 배치 재발행 방지, 미발행 행은 다음 루프 재시도)한다. 예외 class name 이 `NON_RETRYABLE_PUBLISH_ERRORS`에 있으면 `store.mark_events_dead_lettered([evt], f"outbox-relay:{source}", str(exc))`로 DLQ에 격리하고 `outbox_event_dead_lettered` 로그를 남긴 뒤 다음 이벤트 발행을 계속한다. 반환 = 실제 발행 성공 건수(DLQ 격리 건수는 제외).
+`run_once`: `store.unsent_events(batch, source)`(`source`가 있으면 해당 source만, `None`이면 모든 source) → 건별 `asyncio.wait_for(publisher.publish_envelope(evt), timeout)` — 같은 event_id 로 발행해 downstream dedup. transient 발행 오류는 기존처럼 예외를 다시 올리고, `finally` 에서 **이미 발행된 것만** `mark_events_sent`(전체 배치 재발행 방지, 미발행 행은 다음 루프 재시도)한다. 예외 class name 이 `NON_RETRYABLE_PUBLISH_ERRORS`에 있으면 `store.mark_events_dead_lettered([evt], f"outbox-relay:{source or 'all'}", str(exc))`로 DLQ에 격리하고 `outbox_event_dead_lettered` 로그를 남긴 뒤 다음 이벤트 발행을 계속한다. 반환 = 실제 발행 성공 건수(DLQ 격리 건수는 제외).
 
 ### `gateway.py` — HTTP → 이벤트 입구
 

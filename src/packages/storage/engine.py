@@ -79,6 +79,10 @@ OUTBOX_COMPAT_COLUMNS = {
 OUTBOX_CLAIM_INDEX = (
     "create index if not exists ix_outbox_claim on outbox (source, sent_at, leased_until, id)"
 )
+OUTBOX_CLAIM_ALL_SOURCES_INDEX = (
+    "create index if not exists ix_outbox_claim_all_sources "
+    "on outbox (sent_at, leased_until, id) where sent_at is null"
+)
 USER_ACCOUNT_COMPAT_COLUMNS = {
     "email": "alter table user_accounts add column if not exists email text",
     "password_hash": "alter table user_accounts add column if not exists password_hash text",
@@ -519,6 +523,7 @@ class DatabaseConnection:
         self._add_missing_columns(conn, "events", EVENT_COMPAT_COLUMNS)
         self._add_missing_columns(conn, "outbox", OUTBOX_COMPAT_COLUMNS)
         conn.execute(text(OUTBOX_CLAIM_INDEX))
+        conn.execute(text(OUTBOX_CLAIM_ALL_SOURCES_INDEX))
 
         self._add_missing_columns(conn, "agent_commands", AGENT_COMMAND_COMPAT_COLUMNS)
         self._add_missing_columns(conn, "user_accounts", USER_ACCOUNT_COMPAT_COLUMNS)
