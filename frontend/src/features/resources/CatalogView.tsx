@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import { Button, Card, QueryBoundary } from '@/shared/ui';
+import { Button, Card, EmptyState, QueryBoundary } from '@/shared/ui';
+import { IconFile } from '@/shared/ui/icons';
 import { PageHeader } from '@/plural-ui';
 import { uiStore } from '@/shared/lib/ui-store';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
@@ -16,7 +17,12 @@ export default function CatalogView() {
   return (
     <FadeSlideIn>
       <PageHeader title="카탈로그" sub="설치 요청은 워크플로우 run 으로 실행됩니다" />
-      <QueryBoundary query={q}>{items => (
+      <QueryBoundary query={q}>{items => items.length === 0 ? (
+        <Card>
+          <EmptyState icon={<IconFile size={26} />} title="설치 가능한 항목이 없습니다"
+            description="카탈로그 항목이 등록되면 여기에서 설치를 요청할 수 있습니다" />
+        </Card>
+      ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
           <Stagger>{items.map(i => (
             <Card key={i.item_id} title={i.name} actions={
