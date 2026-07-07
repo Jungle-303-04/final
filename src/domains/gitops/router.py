@@ -87,6 +87,10 @@ def approval_command_request(
     reason: str | None,
     user_id: str,
 ) -> CommandRequestedBody:
+    details = approval_details(record)
+    policy_ref = str(
+        details.get("policy_decision_ref") or f"approval:{record['approval_id']}:granted"
+    )
     return CommandRequestedBody(
         cluster_id=diff.cluster_id or Target.DEFAULT_CLUSTER_ID,
         action=Command.APPLY_MANIFEST_ACTION,
@@ -100,7 +104,7 @@ def approval_command_request(
         environment=str(record["environment"]),
         requested_by=user_id,
         approval_ref=str(record["approval_id"]),
-        policy_decision_ref=f"approval:{record['approval_id']}:granted",
+        policy_decision_ref=policy_ref,
     )
 
 

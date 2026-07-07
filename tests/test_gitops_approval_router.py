@@ -29,6 +29,7 @@ class ApprovalDb:
             "reason": "approval required",
             "requested_role": "release_operator",
             "details": {
+                "policy_decision_ref": "policy-decision:approval-1:approval_required",
                 "diff": {
                     "resource": "deployment/checkout-api",
                     "namespace": "sandbox",
@@ -41,7 +42,7 @@ class ApprovalDb:
                     "binding_id": "binding-1",
                     "environment": "prod",
                     "cluster_id": "cluster-1",
-                }
+                },
             },
         }
 
@@ -108,7 +109,7 @@ def test_grant_approval_emits_granted_event_with_command_request() -> None:
     assert events.body.details["command_requested"]["cluster_id"] == "cluster-1"
     assert events.body.details["command_requested"]["approval_ref"] == "approval-1"
     assert events.body.details["command_requested"]["policy_decision_ref"] == (
-        "approval:approval-1:granted"
+        "policy-decision:approval-1:approval_required"
     )
 
 
