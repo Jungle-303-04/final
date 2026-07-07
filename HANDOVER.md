@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:58 KST (AI 채팅 디자인 시스템 이관 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:00 KST (AI 채팅 라이브 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -22,7 +22,14 @@
   - Playwright mock: `/ai/aic-1`를 1440/1024/390 폭에서 열어 대화 목록, 메시지, tool trace, 복구 조치 카드, 승인 카드, 빈 draft 전송 차단, radio 선택 후 "선택 실행" 활성화, horizontal overflow 0을 확인했다.
   - Playwright mock: `/ai`에서 `/api/ai/conversations` 503 raw detail `LLM_PROVIDER is not configured`를 반환하게 해 "AI 설정 확인 필요" 카드, composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다. 콘솔의 503 resource log는 의도된 오류 응답이다.
 - 남은 확인:
-  - 커밋/푸시 후 GitHub Actions 상태 확인. Actions 계층 실패가 반복되면 이전 체크포인트와 같은 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
+- CI/CD:
+  - `ce75d57c` push 후 GitHub Actions `28903723803`(CI), `28903723754`(Promote Dev To Main), `28903723798`(AWS CD)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+- 라이브 배포:
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:ce75d57c-ai-chat-ui-20260708074225`, digest `sha256:e09a833f3978a774035bf05f62ccfc0ff1dc2aca2eb6b0b9228e5b5baceee686`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset 확인: main chunk `/assets/index-Cxw9hiRb.js`, `/assets/ChatView-RjgESk8p.js`, `/assets/ApprovalCard-DlHhFo68.js` 200. Chat chunk 안에 `AI 설정 확인 필요`, `운영 질문 입력`, `release_operator 권한 필요`, `LLM_PROVIDER` 포함. Approval chunk 안에 `승인 대기`, `승인 완료`, `거절 완료`, `release_operator 권한 필요` 포함.
 
 ## 체크포인트 — 히트맵 드릴다운 URL 복원 보강
 
