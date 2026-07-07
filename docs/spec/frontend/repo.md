@@ -48,7 +48,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   { approvalId: string; summary: string; resolved?: 'granted' | 'rejected'; compact?: boolean })
 ```
 
-- `resolved` 있으면 `<Badge status={resolved} />` 만 렌더.
+- `resolved` 있으면 `<FadeSlideIn><Badge status={resolved} /></FadeSlideIn>` 만 렌더해 승인/거절 확정 배지가 부드럽게 등장한다.
 - 아니면 `.card`(surface-2, compact 시 padding 10): `Badge(warn '승인 대기')` + summary + 승인(primary sm)/거절(danger sm) 버튼 — 진행 중엔 둘 다 disabled, 로딩 스피너는 `approval.variables.action` 이 일치하는(클릭한) 버튼에만.
 - `canDeploy = useIsAdmin()` — false 면 두 버튼 disabled + title `'deploy 권한 필요'` (mock 단계 단순화, 서버가 최종 검증. G5 도입 시 리소스 권한으로 대체).
 - 클릭 → `useApproval().mutate({ approvalId, action })`.
@@ -69,7 +69,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   ```
   FadeSlideIn
   ├─ Breadcrumbs [레포 → app.name]
-  ├─ 헤더: h1(name + code repo_ref@branch) · 버튼 2개(새 탭):
+  ├─ 헤더(flex wrap, gap 8): h1(name + code repo_ref@branch, overflowWrap anywhere) · 버튼 2개(새 탭):
   │    "manifest 수정 ↗" → https://github.com/<repo_ref>/blob/<branch>/<manifest_path> · "GitHub ↗" → https://github.com/<repo_ref>
   ├─ 안내문: "manifest(<manifest_path>)는 Git 이 원본입니다 — GitHub 에서 수정해 커밋하면
   │    webhook/poller 가 감지해 자동으로 run 이 생성됩니다. 콘솔에서는 직접 수정하지 않습니다."
@@ -92,8 +92,8 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/repos` | `RepoListView` | `RequireSession`+`AppShell` | 목록 + 연결 위저드 |
-| `/repos/:applicationId` | `RepoDetailView` | `RequireSession`+`AppShell` | 상세 4탭, `?tab=` |
+| `/repos` | `RepoListView` | `RequireSession`+`ConsoleLayout` | 목록 + 연결 위저드 |
+| `/repos/:applicationId` | `RepoDetailView` | `RequireSession`+`ConsoleLayout` | 상세 4탭, `?tab=` |
 
 ## 불변식·오류 (Invariants & Errors)
 

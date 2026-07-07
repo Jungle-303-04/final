@@ -10,7 +10,7 @@ status: synced
 ## 책임 (Responsibility)
 
 - 세션 조회/로그인/로그아웃/가입/검증 메일 재전송/사용자 승인 훅(`api.ts`)과 게스트 화면 4종(로그인·가입·승인 대기·이메일 검증)을 제공한다.
-- `useSession`/`useIsAdmin` 은 [app 가드](app.md#가드--frontendsrcappguardstsx)와 [AppShell](app.md), 타 feature 의 권한 판정에 공용으로 쓰인다.
+- `useSession`/`useIsAdmin` 은 [app 가드](app.md#가드--frontendsrcappguardstsx)와 [ConsoleLayout](app.md), 타 feature 의 권한 판정에 공용으로 쓰인다.
 
 ## 의존성 (Dependencies)
 
@@ -45,7 +45,7 @@ status: synced
 - state: `email`(초기값 `'admin.local@example.com'`), `password`. 훅: `useLogin`, `useNavigate`, `useSearchParams`.
 - 트리: `AuthLayout(title='로그인', subtitle='운영 콘솔에 접속합니다')` → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
 - submit: `login.mutate({email, password})`
-  - 성공: `nav(sp.get('returnTo') ?? '/overview', { replace: true })`
+  - 성공: `nav(sp.get('returnTo') ?? '/', { replace: true })`
   - 실패: `status === 403 && detail.includes('approval')` → `nav('/pending?email=<encoded>')`
 - 비밀번호 필드 error 메시지: 401 → `'이메일 또는 비밀번호가 올바르지 않습니다'`; 429 → `'잠시 후 다시 시도해주세요'`; 403(approval 아님) → `'이메일 검증이 필요합니다'`.
 - input 제약: email required, password `minLength={8}` required.

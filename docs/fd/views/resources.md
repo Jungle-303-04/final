@@ -6,7 +6,7 @@
 
 ## 클러스터 등록 위저드 (실존 API — mock 불필요)
 
-진입: /clusters [+ 클러스터 등록], /overview 빈 상태, 커맨드 팔레트.
+진입: /clusters [+ 클러스터 등록], / 홈 빈 상태, 커맨드 팔레트(구현 예정).
 Modal(size lg) 내 Stepper 4단계. 백엔드 흐름은 Bruno `02-target-admin` 과 동일.
 
 | 단계 | 내용 | API |
