@@ -16,21 +16,37 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 16:24 KST 체크포인트
+### 2026-07-07 16:37 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
 
-- 현재 local/origin dev HEAD: `719a795c fix: GitOps poller DB target 순회`.
-- 이후 tracked local 변경:
+- 현재 local/origin dev HEAD: `6e5b9d42 test: 실백엔드 E2E credential 하드코딩 제거`.
+- `6e5b9d42`는 origin/dev에 push 완료, dev CI/AWS CD success, Promote Dev To Main success.
+- origin/main은 merge commit `1f9900f12e0c56babeff5237f82ff5d42dcc4139`까지 진행.
+- main AWS CD run `28849235901`: success.
+- 현재 로컬 tracked 변경:
+  - `HANDOVER.md`: 프론트 애니메이션/드릴다운 설계와 worker 상태 갱신.
+  - `src/domains/gitops/repository_discovery.py`: worker `Harvey`가 Helm/Kustomize discovery render validation 전환 구현.
+  - `tests/test_repository_discovery.py`: worker `Harvey` 테스트 갱신.
+- worker `Harvey` 보고:
+  - GitHub tree/content를 bounded export한 뒤 TemporaryDirectory에서 `kubectl kustomize` 또는 `helm template` 실행.
+  - path traversal, file count/byte limit, renderer missing/failure 응답, render error compact/redact 처리.
+  - 실행 테스트: `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_repository_discovery.py tests/test_manifest_render_worker.py` → 28 passed.
+  - 실행 lint: `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py` → passed.
+- 메인 에이전트 추가 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_repository_discovery.py tests/test_manifest_render_worker.py tests/test_docs_index.py` → 37 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py` → passed.
+  - `git diff --check` → passed.
+- 이번 마무리 커밋 대상:
   - `HANDOVER.md`
   - `docs/continuation-execution-plan-2026-07-07.md`
-  - `frontend/docs/backend-integration.md`
-  - `frontend/tests/e2e_real_backend.py`
-- 변경 의도:
-  - 병렬 explorer 결과 반영.
-  - `frontend/tests/e2e_real_backend.py`의 hardcoded credential 제거.
-  - 실제 backend browser E2E를 `AUTH_EMAIL`/`AUTH_PASSWORD` env 기반으로 전환.
-  - DB write flow는 `E2E_MUTATE=1` opt-in으로 제한.
+  - `src/domains/gitops/repository_discovery.py`
+  - `tests/test_repository_discovery.py`
+- 커밋 제외:
+  - `.e2e-tmp-sweep.py`
+  - `report_desktop.json`
+  - `report_mobile.json`
+  - 이유: 임시 E2E 산출물이며 특정 app/run/incident id가 들어 있어 hardcoding 금지 원칙과 충돌한다.
 - dev Actions:
   - CI run `28848586860`: success.
   - Promote Dev To Main run `28848587013`: success.
@@ -83,13 +99,64 @@ curl --max-time 8 -fsS -D - https://k8s.woonyong.org/console/ -o /tmp/k8s-consol
 즉시 이어갈 명령:
 
 ```bash
-gh run view 28848639831 --repo Jungle-303-04/final --json status,conclusion,headSha,jobs
+gh run list --repo Jungle-303-04/final --branch dev --limit 8
 gh run list --repo Jungle-303-04/final --branch main --limit 8
 curl --max-time 8 -fsS https://k8s.woonyong.org/api/healthz
 curl --max-time 8 -fsS https://k8s.woonyong.org/api/readyz
-python3 -m py_compile frontend/tests/e2e_real_backend.py
+PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_repository_discovery.py tests/test_manifest_render_worker.py tests/test_docs_index.py
+PYTHONPATH=src .venv/bin/python -m ruff check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py
+git diff --check
 git status --short --branch
 ```
+
+프론트 애니메이션/드릴다운 설계:
+
+- 참고할 소스:
+  - Motion for React: `https://motion.dev/docs/react`
+  - React Flow examples: `https://reactflow.dev/examples`
+  - Nivo treemap/line: `https://nivo.rocks/treemap/`, `https://nivo.rocks/line/`
+  - Dagre layout: `https://github.com/dagrejs/dagre`
+- 기존 primitive를 먼저 재사용한다:
+  - brand UI motion token file under `frontend/src/*-ui/motion.ts`
+    - `DUR`, `EASE`, `SPRING`, `fadeRise`, `overlayFade`, `flyoverSlide`, `modalPop`, `staggerParent`, `staggerChild`.
+  - `frontend/src/shared/motion/index.tsx`
+    - `FadeSlideIn`, `Stagger`, `CountUp`, `AnimatedList`, `AnimatedRow`, `PulseOnChange`, `AnimatePresence`.
+  - `frontend/src/shared/ui/charts.tsx`
+    - `TreemapChart`, `TimeSeriesChart`; Nivo motion은 `useReducedMotion()`으로 직접 제어.
+- 드릴다운 canonical route:
+  1. `/`
+     - `GET /fleet/summary`를 StatCard, treemap, cluster table에 매핑.
+     - treemap tile/table row → `/clusters/:clusterId`.
+     - recent incident → `/incidents/:incidentId`.
+     - pending approval/workflow → `/workflows/:runId`.
+     - AI conversation → `/ai/:conversationId`.
+  2. `/clusters/:clusterId`
+     - `?tab=workloads|pods|nodes|services|resources|events`로 탭 복원.
+     - pod row → `/clusters/:clusterId/pods/:namespace/:pod?tab=pods`.
+     - pod detail은 Drawer, AI 분석 진입은 `/ai?prefill=...`.
+     - cluster agg panel incident → `/incidents/:incidentId`.
+  3. `/incidents/:incidentId`
+     - React Flow graph: incident → evidence → analysis → actions.
+     - evidence/action group collapse는 local state, recovery plan은 실제 `useRecoveryPlan(correlationId)` API.
+  4. `/workflows/:runId`
+     - React Flow graph: STARTED → RENDERING → DIFFING → POLICY_CHECKING → WAITING_FOR_APPROVAL → APPLYING → ROLLOUT_WAITING → SUCCEEDED/FAILED.
+     - node click → right detail card with step detail/diff/approval.
+  5. `/repos/:applicationId`
+     - repo/app/binding/run 실데이터 중심. run click → `/workflows/:runId`.
+  6. `/metrics?cluster=:clusterId`
+     - cluster context를 query param으로 보존하고 time-series tooltip/slice로 detail 노출.
+- 모션 적용 규칙:
+  - URL 복원 가능한 drilldown은 route/search param에 둔다.
+  - 순간 선택만 local state로 둔다.
+  - table/list add/remove/reorder는 `AnimatedRow`/`AnimatedList`.
+  - count/badge 변화는 `CountUp`/`PulseOnChange`.
+  - Flow edge active animation은 실제 incident/workflow status에만 연결한다.
+  - 계속 흔들리는 장식, gradient orb, fake demo active state 금지.
+  - loading은 `Skeleton`/`QueryBoundary`, empty는 `EmptyState`, error는 retry button 포함.
+  - desktop/mobile screenshot으로 overflow/text overlap/chart min-height를 확인한다.
+- 현재 모순:
+  - `/console/`은 데모 보존 대상이지만 라우터는 `/console/*`를 `/`로 흡수한다. 진짜 보존하려면 별도 static demo build 또는 별도 route bundle이 필요하다.
+  - 표준 Playwright config/npm e2e script가 없다. production polish 전용 E2E 추가 필요.
 
 병렬 explorer 결론:
 
