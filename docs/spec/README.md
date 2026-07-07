@@ -47,6 +47,7 @@
 ## services
 
 - [services/ai-agent](services/ai-agent.md)
+- [services/ai-ai-fallback-worker](services/ai-ai-fallback-worker.md)
 - [services/ai-analyze-worker](services/ai-analyze-worker.md)
 - [services/ai-approval-worker](services/ai-approval-worker.md)
 - [services/ai-backlog-worker](services/ai-backlog-worker.md)
