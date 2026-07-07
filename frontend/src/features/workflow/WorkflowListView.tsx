@@ -4,6 +4,7 @@ import { Badge, Card, EmptyState, ResourceTable, Skeleton } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
+import { useConsolePath } from '@/features/console/ui';
 
 const ACTIVE = new Set(['STARTED', 'RENDERING', 'DIFFING', 'POLICY_CHECKING', 'WAITING_FOR_APPROVAL', 'APPLYING', 'ROLLOUT_WAITING']);
 
@@ -11,6 +12,7 @@ export default function WorkflowListView() {
   const apps = useApplications();
   const all = useRunsAll(apps.data ?? []);
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const rows = all.items.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId })))
     .sort((a, b) => Number(ACTIVE.has(b.status)) - Number(ACTIVE.has(a.status)) || (b.started_at ?? '').localeCompare(a.started_at ?? ''));
   const loading = apps.isPending || ((apps.data ?? []).length > 0 && all.pending);
@@ -20,7 +22,7 @@ export default function WorkflowListView() {
       <Card>
         {loading ? <Skeleton lines={4} /> :
         rows.length === 0 ? <EmptyState icon="⇶" title="실행된 워크플로우가 없습니다" description="레포에 커밋이 감지되면 run 이 생성됩니다" /> :
-          <ResourceTable rows={rows} rowKey={r => r.run_id} onRowClick={r => nav(`/workflows/${r.run_id}`)}
+          <ResourceTable rows={rows} rowKey={r => r.run_id} onRowClick={r => nav(pathFor(`/workflows/${r.run_id}`))}
             columns={[
               { key: 'app', label: '앱', render: r => <b>{r.appId}</b> },
               { key: 'sha', label: '커밋', render: r => <code>{shortSha(r.commit_sha)}</code> },

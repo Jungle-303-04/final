@@ -10,10 +10,12 @@ import { IconPlus } from '@/shared/ui/icons';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Cluster } from '@/shared/lib/types';
+import { useConsolePath } from '@/features/console/ui';
 
 export default function ClusterListView() {
   const q = useClusters();
   const nav = useNavigate();
+  const pathFor = useConsolePath();
   const admin = useIsAdmin();
   const [wizard, setWizard] = useState(false);
   const [rows, search, setSearch] = useSearchFilter(q.data ?? [], c => `${c.name} ${c.cluster_id} ${c.environment}`);
@@ -27,7 +29,7 @@ export default function ClusterListView() {
         <QueryBoundary query={q}>{() => (
           <ResourceTable<Cluster>
             rows={rows} rowKey={c => c.cluster_id}
-            onRowClick={c => nav(`/clusters/${c.cluster_id}`)}
+            onRowClick={c => nav(pathFor(`/clusters/${c.cluster_id}`))}
             empty={search
               ? <EmptyState icon={<GlobeIcon size={26} />} title={`'${search}' 검색 결과가 없습니다`} description="이름·환경·cluster_id 로 검색합니다" />
               : <EmptyState icon={<GlobeIcon size={26} />} title="등록된 클러스터가 없습니다"
