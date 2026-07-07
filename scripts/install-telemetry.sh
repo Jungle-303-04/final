@@ -18,6 +18,9 @@ PROMETHEUS_VALUES="${PROMETHEUS_VALUES:-${ROOT_DIR}/deploy/target/prometheus.yam
 LOKI_VALUES="${LOKI_VALUES:-${ROOT_DIR}/deploy/target/loki.yaml}"
 TEMPO_VALUES="${TEMPO_VALUES:-${ROOT_DIR}/deploy/target/tempo.yaml}"
 OTEL_VALUES="${OTEL_VALUES:-${ROOT_DIR}/deploy/target/opentelemetry.yaml}"
+TARGET_MINIO_MANIFEST="${TARGET_MINIO_MANIFEST:-${ROOT_DIR}/deploy/target/minio.yaml}"
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -47,13 +50,54 @@ wait_rollouts() {
   done <<< "${resources}"
 }
 
+existing_secret_value() {
+  local secret_name="$1"
+  local key="$2"
+
+  {
+    kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+      get secret "${secret_name}" -o "jsonpath={.data.${key}}" 2>/dev/null \
+      || true
+  } | python3 -c 'import base64, sys; data=sys.stdin.read().strip(); print(base64.b64decode(data).decode() if data else "")'
+}
+
+random_hex() {
+  python3 -c 'import secrets; print(secrets.token_hex(32))'
+}
+
+ensure_target_minio() {
+  if [[ -z "${MINIO_ROOT_PASSWORD}" ]]; then
+    MINIO_ROOT_PASSWORD="$(existing_secret_value minio-secret MINIO_ROOT_PASSWORD)"
+  fi
+  if [[ -z "${MINIO_ROOT_PASSWORD}" ]]; then
+    MINIO_ROOT_PASSWORD="$(random_hex)"
+  fi
+
+  echo "==> ensuring target MinIO credentials secret exists"
+  kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" create secret generic minio-secret \
+    --from-literal=MINIO_ROOT_USER="${MINIO_ROOT_USER}" \
+    --from-literal=MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}" \
+    --dry-run=client -o yaml \
+    | kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" apply -f -
+
+  echo "==> installing target MinIO object store for Loki"
+  kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" apply -f "${TARGET_MINIO_MANIFEST}"
+  kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+    rollout status statefulset/minio --timeout=180s
+  kubectl --context "${TARGET_CONTEXT}" -n "${TARGET_NAMESPACE}" \
+    wait --for=condition=complete job/minio-create-buckets --timeout=180s
+}
+
 need helm
 need kubectl
+need python3
 
 echo "==> ensuring target namespace exists: ${TARGET_NAMESPACE}"
 kubectl --context "${TARGET_CONTEXT}" create namespace "${TARGET_NAMESPACE}" \
   --dry-run=client -o yaml \
   | kubectl --context "${TARGET_CONTEXT}" apply -f -
+
+ensure_target_minio
 
 echo "==> adding Helm repositories"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update

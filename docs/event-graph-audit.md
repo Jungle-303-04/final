@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | `approval.recommended` (approval-worker 발행) | 전용 소비 worker는 없지만 dashboard timeline에는 `approval_recommended`로 투영됨 | 별도 approval read model이 필요해질 때만 분리하고, 현재는 RCA timeline 상태로 노출한다 |
 | `audit.>` (RESERVED_STREAM_SUBJECTS) | 발행자 없음(예약만) | 의도된 예약이면 유지, 주석 명확화 |
-| MinIO | 배포만 되고 코드 사용처 없음 | evidence/manifest 대용량 저장 계획이 없으면 배포 제거 |
+| MinIO | management artifact store와 target Loki object store로 배포됨 | bucket/secret 경계가 management와 target 클러스터마다 분리되는지 계속 점검 |
 | alert-worker의 `alert.dispatched`/`alert.rejected` 자기 구독 | 로그만 남김 — audit-worker가 이미 전 이벤트를 기록 | 두 핸들러 제거 후보(중복 소비) |
 
 발행자는 있으나 NATS 구독자가 projection(audit/dashboard)뿐인 이벤트: `agent.connected`, `cluster.inventory.snapshot.recorded`, `cluster.reconcile.started/completed/failed`, `workflow.*`, `mail.*.sent/failed`, `ai.message.responded/failed`, `diff.explained`. 이는 상태 기록용이므로 정상이나, timeline 매핑에 없는 것(reconcile 계열, workflow 계열)은 UI 노출이 필요해지면 매핑 추가가 필요하다.

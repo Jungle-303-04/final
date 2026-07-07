@@ -73,14 +73,14 @@ flowchart TB
         PGB["PgBouncer v1.25"]
         PG["PostgreSQL 17 (단일 인스턴스)<br/>events, event_processing, event_dead_letters, outbox,<br/>workflow/command/identity/inventory/rca_timeline/audit"]
         RD["Redis 7<br/>httpOnly session, rate limit,<br/>email verification token"]
-        MIO["MinIO<br/>object store (배포됨 — 현재 서비스 코드 직접 사용처 없음)"]
+        MIO["MinIO<br/>management object store<br/>evidence / manifest artifact bucket"]
     end
 
     subgraph TARGET["대상 클러스터 (Target Cluster)"]
         CA["cluster-agent (outbound-only)<br/>command poll/start/result/heartbeat,<br/>evidence job scheduler/collector,<br/>inventory snapshot, policy guard, debug query"]
         NC["node-collector (DaemonSet, 선택형)<br/>node/runtime metrics → /metrics (Prometheus scrape)"]
         K8S["Kubernetes API + RBAC<br/>read: pods/events/nodes/services<br/>write: sandbox namespace 한정"]
-        TEL["Telemetry<br/>Prometheus / Loki / OTel Collector / Tempo<br/>(deploy/target, provider adapter로 수용)"]
+        TEL["Telemetry<br/>Prometheus / Loki / OTel Collector / Tempo<br/>target MinIO object store + provider adapter"]
     end
 
     GH -->|webhook HMAC| GW
@@ -152,7 +152,7 @@ flowchart LR
 | 이름 변경 | Alert + Notification Worker (Slack/Email/Webhook) | **alert-worker** (provider: log/webhook) + **mail-worker** (이메일 인증)로 분리. Slack provider는 현재 코드에 없음 |
 | 이름 변경 | Evidence Builder/Incident Detector/RCA Analyzer/Recovery Planner/Safe PR Agent/Diff Explanation/Rollout Diagnosis/Approval Assistant Worker | evidence / incident / plan / analyze / rca / recovery / select / approval / dispatch / ai-diff / rollout / safe-pr worker로 세분화·개명 |
 | 변경 | PostgreSQL 3개 분리 (Event Runtime / GitOps State / Read·Audit) | **단일 PostgreSQL 17 + PgBouncer** 경유. 테이블 수준 분리 (events, outbox, event_processing, event_dead_letters, 도메인 테이블) |
-| 변경 | Object / Secret Stores | **MinIO** 배포됨 (`deploy/management/storage.yaml`, 코드 사용처는 연결 전). Secret은 **SecretVault** port (env / aws-secrets-manager / kubernetes-secret provider, `src/packages/security/vault.py`) + SOPS/age 암호화 (`secrets/*.enc.yaml`) |
+| 변경 | Object / Secret Stores | **MinIO**는 management artifact bucket(`deploy/management/storage.yaml`)과 target Loki object store(`deploy/target/minio.yaml`, `deploy/target/loki.yaml`)로 배포된다. Secret은 **SecretVault** port (env / aws-secrets-manager / kubernetes-secret provider, `src/packages/security/vault.py`) + SOPS/age 암호화 (`secrets/*.enc.yaml`) |
 | 변경 | Workflow Console Target "planned UI" | **console-frontend 구현 완료**: React 18 + Vite, nginx 컨테이너 (`deploy/management/console.yaml`) |
 | 변경 | Telemetry "take Prometheus/Loki/OTel now; real adapters planned" | Prometheus·Loki·OTel Collector·**Tempo** 배포 존재 (`deploy/target/`), agent evidence provider adapter 구현됨 |
 | 변경 | Gateway 경로 | `/clusters/*` inventory·policy API, `/applications`, `/approvals`, `/ai/conversations`, `/catalog`, `/providers`, identity admin(`/orgs`,`/groups`,`/users`,`/access`), `/readyz` 추가 |

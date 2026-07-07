@@ -121,6 +121,8 @@ MVP는 cluster 내부 workload로 시작한다. 운영 후보는 managed service
 | Metrics Store | Prometheus/Mimir | AMP 또는 Mimir 별도 운영 |
 | Log/Trace Store | Loki/Tempo | CloudWatch/OpenSearch/Loki/Tempo 별도 운영 |
 
+현재 `scripts/install-telemetry.sh`는 target cluster 안에 Loki용 MinIO를 함께 올린다. AWS처럼 management와 target이 별도 cluster이면 target Loki가 management namespace Service DNS를 직접 바라보면 안 된다.
+
 운영에서 DB를 cluster 내부에 두지 않는다는 말은 “애플리케이션 pod와 같은 lifecycle로 DB를 취급하지 않는다”는 뜻이다. DB 접근 자체는 각 서비스가 repository/port를 통해 한다.
 
 ## 배포 단계
