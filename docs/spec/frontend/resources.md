@@ -1,5 +1,5 @@
 ---
-source_commit: 097ea811
+source_commit: c8d21d6d
 status: synced
 ---
 
@@ -40,13 +40,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 - `Modal(size 'lg', title '클러스터 등록')` + `Stepper(STEPS = ['프로바이더','설정','사전 점검','발급'], current=step)`.
 - state: `step`(0~3), `provider`(초기 'existing-k8s', discovery 이후 기본 flow), `deployProvider`(초기 'manual-manifest', flow 변경/초기화 시 `preferredDeployProvider(flow)`), `kubeContext`, `selectedImportKey`, `candidateQuery`, `clusterId`, `name`, `issued: {agent_token; install_manifest; install_command?} | null`, `closeGuard`. (연결 여부는 state 가 아니라 아래 폴링 쿼리에서 파생.)
 - API 순서:
-  1. **프로바이더**: `useQuery(['providers','cluster-discovery'], GET /providers/cluster-discovery, enabled: open)` — `flows[]` 를 카드로 표시하고, flow `status === 'available'` 이면서 `deploy_providers` 중 `status === 'available'` 이 하나 이상 있을 때만 다음 가능. 카드에는 실제 `cloud_provider`, 후보 수, 사용 가능한 설치 경로 수만 표시한다. flow 의 `import_candidates[]` 는 `SearchInput` + listbox 카드로 표시하며 `clusterImportCandidateMatches()`가 `cluster_id/name/source/cloud_provider/deploy_provider/kube_context/external_handle/console_url/labels`를 검색한다. 후보 선택 시 `clusterId`, `name`, `deployProvider`, `kubeContext` 를 채우고, "직접 입력"은 선택 후보와 kube context를 해제한다.
-  2. **설정**: `cluster_id` 입력 — slug 검증 `/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/`(실패 시 error `'소문자·숫자·하이픈만 가능합니다'`, 다음 disabled, `data-testid="cluster-id"`) + 표시 이름 + 설치 방식(`deployProvider`). 설치 방식은 select가 아니라 listbox 버튼으로 표시하고 `status !== 'available'` 항목은 disabled 처리하며, `unavailable_reason` 을 경고문으로 보여준다. `deployProvider === 'kube-context'` 이면 kube context select 를 추가로 표시한다. `KeyValue([프로바이더], [설치 방식], [환경 'sandbox'], [관측 스택 'prometheus/loki/tempo target service'])`.
+  1. **프로바이더**: `useQuery(['providers','cluster-discovery'], GET /providers/cluster-discovery, enabled: open)` — `flows[]` 를 카드 버튼으로 표시하고, flow `status === 'available'` 이면서 `deploy_providers` 중 `status === 'available'` 이 하나 이상 있을 때만 다음 가능. 선택 상태는 `aria-pressed`와 border 색으로 표시한다. 카드에는 실제 `cloud_provider`, 후보 수, 사용 가능한 설치 경로 수만 표시한다. flow 의 `import_candidates[]` 는 `SearchInput` + 카드 버튼으로 표시하며 `clusterImportCandidateMatches()`가 `cluster_id/name/source/cloud_provider/deploy_provider/kube_context/external_handle/console_url/labels`를 검색한다. 후보 선택 시 `clusterId`, `name`, `deployProvider`, `kubeContext` 를 채우고, "직접 입력"은 선택 후보와 kube context를 해제한다.
+  2. **설정**: `cluster_id` 입력 — slug 검증 `/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/`(실패 시 error `'소문자·숫자·하이픈만 가능합니다'`, 다음 disabled, `data-testid="cluster-id"`) + 표시 이름 + 설치 방식(`deployProvider`). 설치 방식은 select가 아니라 버튼 목록으로 표시하고 `aria-pressed`로 선택 상태를 나타내며, `status !== 'available'` 항목은 disabled 처리하고 `unavailable_reason` 을 경고문으로 보여준다. `deployProvider === 'kube-context'` 이면 kube context select 를 추가로 표시한다. `KeyValue([프로바이더], [설치 방식], [환경 selectedCandidate.labels.environment/env 또는 '서버 기본 정책'], [관측 스택 'prometheus/loki/tempo target service'])`.
      "사전 점검" → `useMutation(POST /targets/preflight)` body `{cluster_id, cloud_provider, deploy_provider, apply, kube_context?}`. 성공 시 step 2로 이동.
   3. **사전 점검**: `TargetPreflightResponse(valid, duplicate_cluster_id, provider_ready, agent_install_status, connection_status, errors, warnings, selected, ...)` 를 보여준다. `cluster_id`, 프로바이더, 에이전트, 중복, kube context 허용 여부는 `cluster-registration-check` 행으로 고정 폭 표시하고, 오류/경고는 응답 문자열 그대로 표시한다. "다시 점검"은 같은 preflight 를 재실행하고, `valid` 일 때만 "등록 실행" 버튼이 열린다.
      "등록 실행" → `useMutation(POST /targets)` body:
      ```json
-     { "cluster_id", "name": name || clusterId, "environment": "sandbox", "apply": "<deployProvider === 'kube-context'>",
+     { "cluster_id", "name": name || clusterId, "environment": "<선택 후보 label 에 environment/env 가 있을 때만>",
        "cloud_provider": provider, "deploy_provider": deployProvider, "kube_context": "<선택 시>" }
      ```
      관리 API 공개 URL은 프론트가 브라우저 origin 으로 합성하지 않는다. 백엔드가 `PUBLIC_MANAGEMENT_BASE_URL` → `PUBLIC_API_BASE_URL` → `PUBLIC_BASE_URL` 순서로 실제 agent 접속 URL을 정규화하고, 없으면 preflight/register 단계에서 실패시킨다.
@@ -69,7 +69,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 - 단계:
   1. repo_ref 입력 → `useRepositoryProbe(POST /repositories/discovery/probe)` 로 `normalized_repo_ref`/default branch/reachability 를 확인한다. reachable 이면 `useRepositoryBranches(GET /repositories/discovery/branches?repo_ref=...)` 로 브랜치 select 를 채우고, 선택 branch 기준 `useRepositoryManifestCandidates(GET /repositories/discovery/manifests?repo_ref=...&branch=...)` 로 manifest 후보 select 를 채운다. 후보 value/key 는 `${source_type}:${path}` 이므로 같은 path 가 raw/kustomize/helm 등 여러 source type 으로 잡혀도 선택이 보존된다. 선택된 후보는 `useRepositoryManifestValidation(POST /repositories/discovery/validate)` body `{repo_ref, branch, manifest_path, source_type}` 로 검증하고, `valid` 일 때만 다음 가능(다음 클릭 시 첫 클러스터로 `clusterId` 초기화).
   2. 대상 클러스터 select(`useClusters`). 클러스터가 없으면 admin 은 "먼저 클러스터를 등록" 안내와 `pathFor('/clusters')` 링크를 보고, non-admin 은 관리자에게 클러스터 접근 권한을 요청하라는 안내만 본다.
-  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, source_type, cluster_id})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 `POST /applications/connect` 1회 호출) — 성공 시 `onClose()` 후 `nav(pathFor('/repos/${application_id}'))`, 실패 시 에러 메시지를 danger 로 표시.
+  3. `KeyValue`(앱 이름/레포 `@branch`/manifest/클러스터/네임스페이스/환경) + 안내 "등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다." → "연결": `useCreateApplication().mutate({name, repo_ref, branch, manifest_path, source_type, cluster_id, namespace, environment})`([repo](./repo.md) 의 `CreateApplicationInput` — 내부적으로 `POST /applications/connect` 1회 호출) — `namespace`는 validation resources 중 첫 non-empty namespace, `environment`는 선택 클러스터 environment 를 사용하며 없으면 보내지 않는다. 성공 시 `onClose()` 후 `nav(pathFor('/repos/${application_id}'))`, 실패 시 에러 메시지를 danger 로 표시.
 
 ## 라우트
 
@@ -83,8 +83,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 
 - 클러스터 등록 API 호출 순서는 provider cluster-discovery → target preflight → targets → connection-status 로 고정(Bruno 02-target-admin 과 동일). connection-status 는 수동 버튼이 아니라 발급 단계 진입 시 5초 간격 자동 폴링(connected/online 되면 중단).
 - 클러스터 등록은 unavailable deploy provider 를 기본 선택하지 않는다. flow 의 기본 deploy provider 가 unavailable 이면 첫 available 항목으로 대체하고, available deploy provider 가 없으면 provider 단계에서 다음으로 진행하지 않는다.
-- 레포 연결 API 호출 순서는 repository probe → branches → manifest candidates → manifest validate → applications → application deployment 로 고정한다.
-- manifest 후보 선택값은 `source_type:path` 조합이다. connect API 제출에는 `manifest_path` 와 선택 후보의 `source_type` 을 함께 보내며, 서버는 이를 재검증한 뒤 application metadata, deployment binding deploy_policy, git watch target settings 에 보존한다.
+- 레포 연결 API 호출 순서는 repository probe → branches → manifest candidates → manifest validate → applications/connect 로 고정한다.
+- manifest 후보 선택값은 `source_type:path` 조합이다. connect API 제출에는 `manifest_path` 와 선택 후보의 `source_type`, 선택된 클러스터, validation resource 에서 얻은 namespace(있을 때), 클러스터 environment(있을 때)를 함께 보내며, 서버는 이를 재검증한 뒤 application metadata, deployment binding deploy_policy, git watch target settings 에 보존한다.
 - provider cluster-discovery 와 target 등록/preflight 는 admin 세션 라우트다. 클러스터 등록 위저드 진입 CTA 는 admin 화면에서만 노출한다.
 - agent token 과 `install_command` 는 발급 응답에서만 표시하고 어디에도 저장하지 않는다(위저드 닫으면 소실).
 - `cluster_id` 는 소문자 slug, `repo_ref` 는 `owner/name` 또는 Git URL 형식을 클라이언트에서 선검증한다.

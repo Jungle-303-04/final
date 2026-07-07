@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 01:47 KST (인증 가드 스켈레톤 정지 수정 + 다음 안정화 분석)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 02:05 KST (프론트 접근성/시계열 표시 안정화 + 스펙 정합성)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -12,7 +12,31 @@
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
 
-## 체크포인트 (현재) — 인증 가드 스켈레톤 정지 수정 + 다음 안정화 분석
+## 체크포인트 (현재) — 프론트 접근성/시계열 표시 안정화 + 스펙 정합성
+
+- 구현:
+  - dialog 계열(`Modal`, `Drawer`, plural `Flyover`)에 `aria-modal`, focus 진입, Tab focus trap, 닫을 때 이전 focus 복원을 맞췄다.
+  - `TimeSeriesChart`가 숫자 x축이면 linear scale로 그리고 최대 5개 tick만 샘플링한다. epoch ms tick은 `fmtHms`로 표시한다.
+  - Metrics/HomePage usage series는 `sampled_at`을 숫자 timestamp로 넘긴다. Metrics 스트림 차트는 history가 없을 때 인벤토리 기반 포인트를 합성하지 않고 empty state를 보여준다.
+  - Console header의 LIVE badge 표시를 제거했다. 단, `ConsoleLayout`은 여전히 `startLive()`를 호출해 브라우저 스냅샷 스트림을 시작한다.
+  - 레포 연결/클러스터 등록에서 `sandbox` environment/namespace 하드코딩을 제거했다. manifest validation namespace와 선택 클러스터 environment가 있을 때만 connect payload에 보낸다.
+  - 채팅 목록 행을 열기 버튼과 삭제 버튼으로 분리했고, 빈 draft/16,000자 초과/pending 상태에서 전송 버튼이 disabled 된다.
+  - 운영 화면에 mock/fake/hardcoded production data 추가 없음.
+- 문서:
+  - `docs/spec/frontend/{app,chat,cluster,fleet,metrics,repo,resources,shared}.md`를 `c8d21d6d` 기준으로 갱신했다.
+  - `LIVE` 표시, `sandbox` 기본 배포 namespace/environment, 시계열 합성 포인트 설명을 실제 코드 기준으로 제거했다.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test` → 10 passed.
+  - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q` → 17 passed.
+  - `make manifest-check` → management 53, target 16.
+  - `make check` → 717 passed, 3 skipped, manifest-check 포함 passed.
+- 다음:
+  1. route/archive 경계 dead code 정리 또는 backend evidence/outbox MaxPayload guard 중 하나를 의미 단위로 진행한다.
+  2. frontend 정리를 먼저 잡을 경우 `consoleChildren(basePath)` 제거, `StatCard` dead export 제거, `NotFoundPage` base path 정리부터 시작한다.
+  3. backend 안정화를 먼저 잡을 경우 oversized outbox row size 조사 → relay byte guard → evidence event reference화 순서로 진행한다.
+
+## 체크포인트 — 인증 가드 스켈레톤 정지 수정 + 배포/live smoke
 
 - 구현:
   - `RequireSession`은 세션 조회가 실패(`isError`)하거나 인증 데이터가 없으면 즉시 `/login?returnTo=<현재 경로>`로 보낸다. 보호 경로 `/`에서 장시간 스켈레톤만 보이는 상태를 막는다.
@@ -28,14 +52,18 @@
   - local browser QA: `/` → `/login?returnTo=%2F`, email input 1개, password input 1개, submit button 1개, skeleton 0개.
   - local browser QA: `/console/` archive shell 1개, `실서비스` 링크 1개, heatmap tile 19개.
   - screenshots: `/tmp/k8s-root-local-login-guard.png`, `/tmp/k8s-console-archive-local.png`.
+- 배포/live smoke:
+  - commit/push: `0b4058dd fix: 세션 가드 / 홈 위젯 안정화`, `b367da80 fix: 세션 조회 timeout / 게스트 진입 안정화`, `19efafdd docs: auth guard handover / spec sync / 문서` → `origin/dev`.
+  - console CodeBuild `kubernetes-ops-console-build:4fb74cfb-c86d-4244-9e17-9cc3676421c4` → succeeded.
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:19efafdd-dev`, digest `sha256:be3c4be127db541b73e79dc9879a2972b73f12f458d0ad87dea57f500e096873`.
+  - rollout 완료: `deployment/console` 1/1 ready, image `19efafdd-dev`.
+  - public smoke: `/` 200 `text/html`, `/console/` 200 `text/html`, `/api/healthz` 200 `{"status":"ok","service":"api-gateway"}`.
+  - live browser QA: `/` → `/login?returnTo=%2F`, email input 1개, password input 1개, submit button 1개, skeleton 0개, unexpected console error/request failure 0.
+  - live browser QA: `/console/` archive shell 1개, `실서비스` 링크 1개, heatmap tile 19개, unexpected console error/request failure 0.
+  - screenshots: `/tmp/k8s-root-live-login-guard-19efafdd.png`, `/tmp/k8s-console-archive-live-19efafdd.png`.
 - 병렬 분석 결과:
   - frontend 구조 감사: `/console` archive와 `/` service 경계는 분리됐지만 `consoleChildren(basePath)`, `NotFoundPage`의 `/console` 흔적, `StatCard` dead export, cluster drilldown 대형 컴포넌트, metrics/workflow helper 중복이 다음 리팩토링 후보.
   - backend 안정화 감사: `gateway_outbox_relay_error + nats.errors.MaxPayloadError`는 oversized evidence payload가 outbox poison row로 남아 반복 publish되는 구조가 핵심 후보. 최소 수정 방향은 raw evidence event 발행이 아니라 DB JSONB 보존 + event reference화, relay byte guard, oversized row park/archive다.
-- 다음:
-  1. 이 단위를 `fix: auth guard / session timeout / 로그인` 형식의 한국어+영어 키워드 커밋으로 저장·푸시·console 재배포한다.
-  2. live `/` 미인증 진입이 로그인으로 떨어지는지, `/console/` archive가 유지되는지 smoke 한다.
-  3. 다음 커밋은 route/archive 경계 dead code 정리 또는 backend evidence/outbox MaxPayload guard 중 하나를 의미 단위로 진행한다.
-
 ## 체크포인트 — `/console` 아카이브 격리 + `/` Plural 복각 홈 1차
 
 - 구현:

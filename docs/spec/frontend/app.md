@@ -1,5 +1,5 @@
 ---
-source_commit: b367da80
+source_commit: c8d21d6d
 status: synced
 ---
 
@@ -10,7 +10,7 @@ status: synced
 ## 책임 (Responsibility)
 
 - React 앱 부트스트랩(`main.tsx`), 전역 provider(`providers.tsx`), 라우트 트리(`router.tsx`), 접근 가드(`guards.tsx`)를 담당한다.
-- 로그인 후 공통 레이아웃은 `features/console/ui.tsx :: ConsoleLayout`이다. 이 셸이 사이드바, 상단 LIVE/알림/테마/로그아웃, 브레드크럼, 알림 flyover, `<Outlet />`을 조립한다.
+- 로그인 후 공통 레이아웃은 `features/console/ui.tsx :: ConsoleLayout`이다. 이 셸이 사이드바, 상단 프로젝트 라벨/알림/테마/로그아웃, 브레드크럼, 알림 flyover, `<Outlet />`을 조립한다.
 - 기본 랜딩은 `/`의 `features/console/pages/HomePage`이다. `/console` 하위에도 같은 콘솔 라우트 트리를 보존용 base path 로 제공하고, `/overview`와 구 UI 경로 계열은 호환 redirect 만 수행한다.
 - WebSocket 실시간 연결의 시작점은 `ConsoleLayout`이다(로그인 후 1회).
 
@@ -18,7 +18,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/query`, `@/shared/lib/api`, `@/shared/lib/live`, `@/shared/lib/ui-store`, `@/shared/ui`, `@/shared/motion`, `@/shared/tokens.css`, `@/shared/ui/app.css`, `@/shared/theme-bridge.css` | [shared](./shared.md) | QueryClient, 401 핸들러, 실시간 스토어, 토스트, skeleton, 전역 스타일 |
+| import | `@/shared/lib/query`, `@/shared/lib/api`, `@/shared/lib/live`, `@/shared/lib/ui-store`, `@/shared/ui`, `@/shared/motion`, `@/shared/tokens.css`, `@/shared/ui/app.css`, `@/shared/theme-bridge.css` | [shared](./shared.md) | QueryClient, 401 핸들러, 브라우저 스냅샷 스트림 시작, 토스트, skeleton, 전역 스타일 |
 | import | 콘솔 UI 프리미티브·아이콘·토큰 모듈 | [shared](./shared.md) | 콘솔 셸 프리미티브·아이콘·토큰 |
 | import | `@/features/auth/api` | [features/auth](auth.md) | `useSession`·`useIsAdmin`·`useLogout`·`sessionKey` |
 | import | `@/features/notifications/api` | [features/notifications](notifications.md) | 알림 flyover와 unread badge |
@@ -73,7 +73,7 @@ export const router = createBrowserRouter([...])
 | `/workflows/:runId` | `features/workflow/WorkflowGraphView` (lazy) | 〃 | run 단계 그래프 |
 | `/incidents` | `features/notifications/NotificationsView` (lazy) | 〃 | 알림/인시던트 합성 피드 |
 | `/incidents/:incidentId` | `features/notifications/IncidentDetailView` (lazy) | 〃 | RCA 인시던트 파이프라인 |
-| `/metrics` | `features/metrics/MetricsView` (lazy) | 〃 | 실시간 메트릭 + 온디맨드 PromQL |
+| `/metrics` | `features/metrics/MetricsView` (lazy) | 〃 | 스트림·스냅샷 메트릭 + 온디맨드 PromQL |
 | `/ai` | `features/chat/ChatView` (lazy) | 〃 | AI 대화(새 대화) |
 | `/ai/:conversationId` | `features/chat/ChatView` (lazy) | 〃 | AI 대화(기존 대화) |
 | `/catalog` | `features/resources/CatalogView` (lazy) | 〃 | 카탈로그 |
@@ -115,13 +115,13 @@ ConsoleLayout (div.pl-app.co-app)
 │  └─ session email avatar row
 ├─ div.co-main
 │  ├─ header.co-header
-│  │  └─ LIVE indicator + 알림 버튼(unread badge) + AI 채팅 버튼 + ThemeToggle + 로그아웃 버튼
+│  │  └─ 프로젝트 라벨 + 알림 버튼(unread badge) + AI 채팅 버튼 + ThemeToggle + 로그아웃 버튼
 │  ├─ div.co-subheader: back button + pathname 기반 breadcrumbs
 │  └─ div.co-content > motion.div(key=first path segment, fadeRise) > <Outlet />
 └─ Flyover(notifOpen): 최근 알림 최대 30개, 모두 읽음, 인시던트로 이동
 ```
 
-- 상태 소스: local `collapsed`, `notifOpen`, `liveStore(status/snapshot.at)`, `useIsAdmin()`, `useSession()`, `useLogout()`, `useNotices()`, `useLocation()`, `useNavigate()`.
+- 상태 소스: local `collapsed`, `notifOpen`, `useIsAdmin()`, `useSession()`, `useLogout()`, `useNotices()`, `useLocation()`, `useNavigate()`. `ConsoleLayout`은 `liveStore` 값을 표시하지 않지만 `startLive()`로 스트림 연결은 시작한다.
 - `basePath`가 있으면 `normalizeBasePath`와 `pathFor`가 내부 링크, sidebar `NavLink`, breadcrumb, 알림 이동, 홈/AI/인시던트 이동을 같은 base path 아래로 보정한다. 하위 뷰는 `useConsolePath()`로 `/clusters/...` 같은 절대 콘솔 경로를 현재 base path에 맞춘다.
 - `useEffect(() => { startLive(); }, [])` — WS 연결은 셸 마운트 시 1회만([shared/lib/live](./shared.md#실시간-livets)).
 - `MENU` (비공개): 홈(`/`), 클러스터(`/clusters`), 레포(`/repos`), 워크플로우(`/workflows`), 인시던트(`/incidents`), 메트릭(`/metrics`), AI 어시스턴트(`/ai`), 카탈로그(`/catalog`). admin 이면 `/settings` 추가.
@@ -134,8 +134,9 @@ ConsoleLayout (div.pl-app.co-app)
 - 데이터: `useFleetSummary`, `useTimeline`, `useNotices`, `useConversations`, `useIsAdmin`, 선택 클러스터 기준 `useClusterUsage`, `useMetricWidgets`, `useMetricQueryPresets`.
 - state: `clusterWizard`, `repoWizard`, `fleetLens`, `selectedClusterId`.
 - `fleetClusters = useMemo(() => fleetQ.data?.clusters ?? [], [fleetQ.data?.clusters])` 로 fleet 배열 참조를 고정한다. `useEffect`는 선택 클러스터가 비었거나 fleet 에 없으면 첫 클러스터로 보정한다.
-- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState`(admin 이면 등록 action, non-admin 이면 접근 가능한 클러스터 없음 안내) 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 메트릭 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, CPU 추세 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
-- `fleetHeatNode(cluster, lens)`는 렌즈별 treemap 값을 바꾼다. `all`: `value=max(1,pods_total)`, `score=healthScore(health)`. `cpu`: `value=max(1,cpu_pct ?? pods_total)`, `score=ratioHealthScore(cpu_pct)`. `memory`: `value=max(1,mem_pct ?? pods_total)`, `score=ratioHealthScore(mem_pct)`. `incidents`: `value=max(1,open_incidents)`, 인시던트가 있으면 `score=0.12`, 없으면 `healthScore(health)`.
+- 트리: `QueryBoundary(useFleetSummary)` → 빈 클러스터 `EmptyState`(admin 이면 등록 action, non-admin 이면 접근 가능한 클러스터 없음 안내) 또는 dashboard toolbar(레포 연결, admin 클러스터 등록, 메트릭 이동, 위젯 추가) → 플릿 맵(`FLEET_LENSES` tab + `TreemapChart`) → `FleetWidgetStrip` KPI 4개 → dashboard grid(`StoredWidgetSummary`, 스냅샷 추이 `TimeSeriesChart`, `RecentIncidentList`, `ApprovalList`) → 클러스터 `Table` → 최근 AI 대화 카드 → `RegisterClusterWizard`, `ConnectRepoWizard`.
+- `usageSeries`는 `sampled_at`을 `Date.parse()` 숫자 x값으로 넘기고, 파싱할 수 없으면 1부터 시작하는 index를 쓴다. 시간 라벨 포맷은 [shared `TimeSeriesChart`](shared.md#차트-uichartstsx)가 담당한다.
+- `fleetHeatNode(cluster, lens)`는 모든 렌즈에서 tile 크기 `value=max(1,pods_total)`을 유지하고 score/label만 바꾼다. `all`: `score=healthScore(health)`. `cpu`: `score=ratioHealthScore(cpu_pct)`. `memory`: `score=ratioHealthScore(mem_pct)`. `incidents`: 인시던트가 있으면 `score=0.12`, 없으면 `healthScore(health)`.
 - `FleetWidgetStrip`은 fleet totals 와 cluster summary 만 사용한다. 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 표시하고 CPU/MEM 관측값이 없으면 `—`로 표시한다.
 - `StoredWidgetSummary`는 선택 클러스터의 `/metric-widgets`와 `/metric-query-presets` 결과 개수와 최대 4개 저장 위젯을 보여준다. 저장 위젯이 없으면 `저장된 위젯 없음`을 표시한다.
 - 최근 인시던트, 승인 대기, 최근 AI 대화 행은 `AnimatedList`로 렌더한다. 빈 상태 문구는 각각 `열린 인시던트 없음`, `승인 대기 없음`, `대화 없음`.
