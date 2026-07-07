@@ -60,8 +60,13 @@
   - `PYTHONPATH=src .venv/bin/python -m ruff check ...` → passed.
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_applications_router.py tests/test_github_poller.py tests/test_git_pull_worker.py tests/test_manifest_render_worker.py tests/test_promotion_and_global.py tests/test_database_unit.py tests/test_schemas.py tests/test_docs_index.py` → 112 passed.
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_event_golden_path.py tests/test_workflow_controller.py tests/test_platform_foundation_openapi.py tests/test_schemas.py tests/test_docs_index.py` → 41 passed.
-- 배포 필요:
-  - 이 커밋은 backend image 재빌드 후 최소 `api-gateway`, `github-poll-worker`, `git-pull-worker`, `manifest-render-worker`, `workflow-controller` rollout이 필요하다.
+- 커밋/배포:
+  - commit/push: `9cb55b46 fix: 레포 source_type 런타임 전파` → `origin/dev`.
+  - backend CodeBuild `kubernetes-ops-image-build:8021c21c-87cc-40f8-8289-99fb1b68e7d8` → succeeded.
+  - backend image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:9cb55b46-dev`.
+  - rollout 완료: `api-gateway`, `git-pull-worker`, `manifest-render-worker`, `workflow-controller` 모두 1/1 ready.
+  - `github-poll-worker` CronJob image도 `9cb55b46-dev`로 교체했다. 새 배포 이후 최근 jobs `github-poll-worker-29723847`, `github-poll-worker-29723848`, `github-poll-worker-29723849`가 Complete 상태다.
+  - live smoke: `https://k8s.woonyong.org/api/healthz` → 200 `{"status":"ok","service":"api-gateway"}`.
 - 병렬 감사(Avicenna, 읽기 전용)로 확인한 다음 프론트 1순위:
   - 드릴다운 drawer가 아직 백엔드 `GET /clusters/{cluster_id}/inventory/resource-detail` 계약을 충분히 쓰지 않고, 프론트 문자열 필터/팟 그룹핑으로 관련 이벤트를 구성한다. 다음 프론트 커밋은 `useInventoryResourceDetail()` 훅을 추가하고 클러스터/노드/서비스/워크로드/팟 drawer의 이벤트/related pods를 `resource-detail` 응답 기준으로 전환해야 한다.
   - 엔티티별 AI 분석 버튼은 `prefill` 문자열만 넘기지 말고 `{cluster_id, resource_type, kind, namespace, name, uid}` context를 대화 생성/전송 API에 싣고, chat-worker/tool layer에서 inventory detail/readonly telemetry/RCA 조회를 도구화해야 한다.
