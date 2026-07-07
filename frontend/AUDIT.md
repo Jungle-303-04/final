@@ -1,3 +1,29 @@
+# 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 디자인 시스템 재정립
+
+## 2026-07-08 디자인 시스템 리셋 진행 상황
+
+- Tailwind CSS v4를 Vite 플러그인 방식으로 연결했다. 설정 소스는 `src/ui/theme.css` 하나로 두고, CSS-first `@theme inline` semantic token을 사용한다.
+- 새 토큰 계층:
+  - 배경: `bg`, `surface`, `raised`
+  - 보더: `border`, `border-strong`
+  - 텍스트: `primary`, `secondary`, `muted`
+  - 액션/상태: `accent`, `success`, `warning`, `danger`, `info`
+  - radius: `control`, `panel`
+  - shadow: `soft`, `elevated`
+- 타이포는 Pretendard 우선, fallback system-ui이며 `caption(12)`, `label(13)`, `body(14)`, `title(16)`, `page(20)` 5단만 새 UI 레이어에서 사용한다.
+- Motion preset 정본은 `src/ui/motion.ts`다. duration은 `fast 120ms`, `base 200ms`, `slow 320ms`이며 개별 컴포넌트에서 duration/easing을 하드코딩하지 않는다.
+- 새 프리미티브 정본은 `src/ui/index.tsx`다. Button, IconButton, Card, StatCard, Table, Tabs, Badge, StatusChip, Modal, Drawer, Dropdown/Menu, Field/Input/Select/Textarea, Toast, Tooltip, Skeleton, EmptyState, PageHeader, Breadcrumb, CodeBlock, KeyValueList, ConfirmDialog, Collapsible를 포함한다.
+- `/dev/ui`는 개발 환경에서만 등록되는 검수 라우트다. production build output에 `UiShowcase` chunk가 생성되지 않는 것을 확인했다.
+- 아직 전 화면 이관 전이므로 `shared/ui/app.css`, `plural-ui/plural.css`, `shared/theme-bridge.css`는 남아 있다. 화면 이관 단위마다 해당 화면 전용 레거시 CSS를 제거한다.
+
+## 사용 규칙
+
+- feature 코드는 `src/ui` 프리미티브와 Tailwind semantic token만 사용한다.
+- feature 코드에서 새 CSS 파일, inline `style=`, hex 색상, px 하드코딩을 추가하지 않는다.
+- 상태 어휘는 `healthy`, `warning`, `critical`, `pending`, `running`, `failed`로 고정하고 사용자 노출 라벨은 한국어 명사형으로 쓴다.
+- 리스트/카드/테이블은 로딩, 빈 상태, 오류+재시도 상태를 반드시 제공한다.
+- 뮤테이션은 pending, 성공 토스트, 실패 사유 토스트를 함께 설계한다.
+
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
 기준: 프로덕션 빌드에서 mock/fixture/하드코딩 수치는 전부 결함.

@@ -42,7 +42,12 @@ const consoleChildren = (basePath = '') => [
   { path: '*', element: L(() => import('@/features/console/pages/NotFoundPage')) },
 ];
 
+const devRoutes = import.meta.env.DEV
+  ? [{ path: '/dev/ui', element: L(() => import('@/dev/UiShowcase')) }]
+  : [];
+
 export const router = createBrowserRouter([
+  ...devRoutes,
   {
     element: <RequireGuest />,
     children: [

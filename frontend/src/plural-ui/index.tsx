@@ -22,6 +22,8 @@ export function useThemeMode(): [ThemeMode, () => void] {
   );
   useEffect(() => {
     document.documentElement.setAttribute('data-theme-mode', mode);
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+    document.documentElement.classList.toggle('light', mode === 'light');
     localStorage.setItem(THEME_KEY, mode);
   }, [mode]);
   const toggle = useCallback(() => setMode((m) => (m === 'dark' ? 'light' : 'dark')), []);
