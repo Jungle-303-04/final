@@ -3,8 +3,12 @@ from __future__ import annotations
 from packages.config.constants import Target
 from packages.config.settings import env
 from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID as CONTRACT_DEFAULT_APPLICATION_ID,
+)
+from packages.contracts.gitops import (
     DEFAULT_DEPLOYMENT_BINDING_ID as CONTRACT_DEFAULT_DEPLOYMENT_BINDING_ID,
 )
+from packages.contracts.gitops import DEFAULT_ENVIRONMENT as CONTRACT_DEFAULT_ENVIRONMENT
 from packages.contracts.gitops import DEFAULT_GITHUB_API_BASE as CONTRACT_DEFAULT_GITHUB_API_BASE
 from packages.contracts.gitops import (
     DEFAULT_MANIFEST_PATH as CONTRACT_DEFAULT_MANIFEST_PATH,
@@ -23,6 +27,7 @@ from packages.contracts.gitops import (
 )
 from packages.contracts.gitops import GITHUB_API_BASE_ENV as CONTRACT_GITHUB_API_BASE_ENV
 from packages.contracts.gitops import GITHUB_TOKEN_ENV as CONTRACT_GITHUB_TOKEN_ENV
+from packages.contracts.gitops import GITHUB_TOKEN_REF_ENV as CONTRACT_GITHUB_TOKEN_REF_ENV
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID as CONTRACT_DEFAULT_WORKSPACE_ID
 
 
@@ -46,6 +51,8 @@ class Settings:
     DEFAULT_WATCH_TARGET_ID = CONTRACT_DEFAULT_WATCH_TARGET_ID
     DEPLOYMENT_BINDING_ID_ENV = "DEPLOYMENT_BINDING_ID"
     DEFAULT_DEPLOYMENT_BINDING_ID = CONTRACT_DEFAULT_DEPLOYMENT_BINDING_ID
+    DEFAULT_APPLICATION_ID = CONTRACT_DEFAULT_APPLICATION_ID
+    DEFAULT_ENVIRONMENT = CONTRACT_DEFAULT_ENVIRONMENT
     TARGET_CLUSTER_ID_ENV = "TARGET_CLUSTER_ID"
     DEFAULT_TARGET_CLUSTER_ID = Target.DEFAULT_CLUSTER_ID
     MANIFEST_PATH_ENV = "MANIFEST_PATH"
@@ -58,6 +65,7 @@ class Settings:
 
     # 공개 repo 는 무인증도 되나 시간당 60회 제한 → 토큰 있으면 인증(5000회). 데모 30초=120회/시.
     GITHUB_TOKEN_ENV = CONTRACT_GITHUB_TOKEN_ENV
+    GITHUB_TOKEN_REF_ENV = CONTRACT_GITHUB_TOKEN_REF_ENV
     GITHUB_API_BASE_ENV = CONTRACT_GITHUB_API_BASE_ENV
     DEFAULT_GITHUB_API_BASE = CONTRACT_DEFAULT_GITHUB_API_BASE
 

@@ -15,6 +15,7 @@ import pytest
 from conftest import ROOT, load_file
 
 from packages.config.constants import Target
+from packages.contracts.security import SecretRef
 
 
 def _load_poller() -> Any:
@@ -59,6 +60,24 @@ def _rate_limited_transport(posted: list[dict[str, Any]]) -> httpx.MockTransport
     return httpx.MockTransport(handler)
 
 
+class FakePollTargetDb:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def list_active_github_poll_targets(self) -> list[dict[str, Any]]:
+        return self.rows
+
+
+class FakeTokenVault:
+    def __init__(self, tokens: dict[str, str]) -> None:
+        self.tokens = tokens
+        self.refs: list[str] = []
+
+    def read_token(self, ref: SecretRef) -> str:
+        self.refs.append(ref.value)
+        return self.tokens[ref.value]
+
+
 def test_once_mode_posts_latest_commit_to_webhook() -> None:
     module = _load_poller()
     posted: list[dict[str, Any]] = []
@@ -81,6 +100,8 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
             "branch": "main",
             "watch_target_id": "",
             "binding_id": "",
+            "application_id": "",
+            "environment": "sandbox",
             "cluster_id": Target.DEFAULT_CLUSTER_ID,
             "manifest_path": "deploy.yaml",
         }
@@ -109,6 +130,100 @@ def test_dedup_guard_skips_unchanged_sha() -> None:
 
     asyncio.run(go())
     assert len(posted) == 1
+
+
+def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None:
+    module = _load_poller()
+    monkeypatch.delenv("GITHUB_REPO", raising=False)
+    posted: list[dict[str, Any]] = []
+    calls: list[str] = []
+    db = FakePollTargetDb(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "application_id": "app-1",
+                "repository_id": "repo-1",
+                "repo_ref": "org/checkout",
+                "credential_ref": "",
+                "branch": "release",
+                "watch_target_id": "watch-1",
+                "binding_id": "binding-1",
+                "environment": "prod",
+                "cluster_id": "cluster-1",
+                "manifest_path": "k8s/deploy.yaml",
+            }
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if request.url.host == "api.github.com":
+            assert request.url.params["sha"] == "release"
+            return httpx.Response(200, json=[{"sha": "db-sha-1"}])
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            poller = module.GitHubPoller(client=client, db=db)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+    assert calls[0].startswith("https://api.github.com/repos/org/checkout/commits")
+    assert posted == [
+        {
+            "commit_sha": "db-sha-1",
+            "image": "ghcr.io/example/app:test",
+            "replicas": 2,
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "repo_ref": "org/checkout",
+            "branch": "release",
+            "watch_target_id": "watch-1",
+            "binding_id": "binding-1",
+            "application_id": "app-1",
+            "environment": "prod",
+            "cluster_id": "cluster-1",
+            "manifest_path": "k8s/deploy.yaml",
+        }
+    ]
+
+
+def test_db_poll_target_credential_ref_sets_github_authorization(monkeypatch) -> None:
+    module = _load_poller()
+    monkeypatch.delenv("GITHUB_REPO", raising=False)
+    auth_headers: list[str | None] = []
+    db = FakePollTargetDb(
+        [
+            {
+                "workspace_id": "workspace-1",
+                "repository_id": "repo-1",
+                "repo_ref": "org/private",
+                "credential_ref": "env:DB_GITHUB_TOKEN",
+                "branch": "main",
+                "watch_target_id": "watch-1",
+                "binding_id": "binding-1",
+                "cluster_id": "cluster-1",
+                "manifest_path": "deploy.yaml",
+            }
+        ]
+    )
+    token_vault = FakeTokenVault({"env:DB_GITHUB_TOKEN": "token-from-ref"})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            auth_headers.append(request.headers.get("authorization"))
+            return httpx.Response(200, json=[{"sha": "private-sha"}])
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            poller = module.GitHubPoller(client=client, db=db, token_vault=token_vault)
+            await poller.poll_once(client)
+
+    asyncio.run(go())
+    assert token_vault.refs == ["env:DB_GITHUB_TOKEN"]
+    assert auth_headers == ["Bearer token-from-ref"]
 
 
 def test_github_api_base_env_controls_poll_endpoint(monkeypatch) -> None:
