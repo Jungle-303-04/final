@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from domains.providers.catalog import (
@@ -19,6 +21,39 @@ from packages.contracts.gateway.routes import (
     PROVIDERS_CLUSTER_DISCOVERY_PATH,
     PROVIDERS_VALIDATE_PATH,
 )
+
+
+class _SessionAuth:
+    def __init__(self, session: Any | None) -> None:
+        self.session = session
+
+    async def require_session(self, request: Request) -> Any:
+        if self.session is None:
+            raise HTTPException(status_code=401, detail="authentication required")
+        return self.session
+
+
+def _admin_session() -> SimpleNamespace:
+    return SimpleNamespace(
+        user_id="admin-1",
+        roles=("service_admin",),
+        workspace_id="workspace-1",
+    )
+
+
+def _user_session() -> SimpleNamespace:
+    return SimpleNamespace(
+        user_id="user-1",
+        roles=("user",),
+        workspace_id="workspace-1",
+    )
+
+
+def make_provider_client(session: Any | None) -> TestClient:
+    app = FastAPI()
+    app.include_router(router)
+    app.state.auth = _SessionAuth(session)
+    return TestClient(app)
 
 
 def test_provider_catalog_groups_runtime_choices() -> None:
@@ -108,9 +143,7 @@ def test_provider_selection_rejects_unknown_or_unavailable_provider() -> None:
 
 
 def test_provider_router_exposes_catalog_and_validation() -> None:
-    app = FastAPI()
-    app.include_router(router)
-    client = TestClient(app)
+    client = make_provider_client(_admin_session())
 
     catalog = client.get(PROVIDERS_CATALOG_PATH)
     assert catalog.status_code == 200
@@ -135,3 +168,15 @@ def test_provider_router_exposes_catalog_and_validation() -> None:
     assert validation.status_code == 200
     assert validation.json()["valid"] is True
     assert validation.json()["warnings"] == []
+
+
+def test_provider_router_requires_admin_session() -> None:
+    anonymous = make_provider_client(None)
+    assert anonymous.get(PROVIDERS_CATALOG_PATH).status_code == 401
+    assert anonymous.get(PROVIDERS_CLUSTER_DISCOVERY_PATH).status_code == 401
+    assert anonymous.post(PROVIDERS_VALIDATE_PATH, json={}).status_code == 401
+
+    user = make_provider_client(_user_session())
+    assert user.get(PROVIDERS_CATALOG_PATH).status_code == 403
+    assert user.get(PROVIDERS_CLUSTER_DISCOVERY_PATH).status_code == 403
+    assert user.post(PROVIDERS_VALIDATE_PATH, json={}).status_code == 403
