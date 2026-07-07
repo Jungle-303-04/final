@@ -2,6 +2,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-}"
+API_BASE_URL="${API_BASE_URL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/env.sh"
@@ -53,11 +54,43 @@ require_env AUTH_EMAIL
 require_env AUTH_PASSWORD
 require_env SMOKE_CLUSTER_ID
 
+normalize_url() {
+  local value="${1%/}"
+  printf '%s\n' "${value}"
+}
+
+api_health_ok() {
+  local candidate="$1"
+  curl -fsS "${candidate}/healthz" 2>/dev/null | grep -q '"service":"api-gateway"'
+}
+
+resolve_api_base_url() {
+  local base
+  base="$(normalize_url "${BASE_URL}")"
+  if [ -n "${API_BASE_URL}" ]; then
+    normalize_url "${API_BASE_URL}"
+    return
+  fi
+  if api_health_ok "${base}/api"; then
+    printf '%s/api\n' "${base}"
+    return
+  fi
+  if api_health_ok "${base}"; then
+    printf '%s\n' "${base}"
+    return
+  fi
+  # wait_for_gateway prints the final diagnostic; default to console-origin shape.
+  printf '%s/api\n' "${base}"
+}
+
+API_BASE_URL="$(resolve_api_base_url)"
+
 wait_for_gateway() {
   local attempt
   local output=""
   for attempt in $(seq 1 "${SMOKE_GATEWAY_ATTEMPTS}"); do
-    if output="$(curl -fsS "${BASE_URL}/healthz" 2>&1)"; then
+    if output="$(curl -fsS "${API_BASE_URL}/healthz" 2>&1)" \
+      && printf '%s' "${output}" | grep -q '"service":"api-gateway"'; then
       printf '%s\n' "${output}"
       return 0
     fi
@@ -65,7 +98,7 @@ wait_for_gateway() {
       sleep "${SMOKE_GATEWAY_INTERVAL_SECONDS}"
     fi
   done
-  echo "gateway did not become reachable at ${BASE_URL}/healthz" >&2
+  echo "gateway did not become reachable at ${API_BASE_URL}/healthz" >&2
   printf '%s\n' "${output}" >&2
   return 1
 }
@@ -169,7 +202,7 @@ echo "==> checking gateway"
 wait_for_gateway
 
 echo "==> logging in operator"
-login_with_password "${BASE_URL}" "${COOKIE_JAR}"
+login_with_password "${API_BASE_URL}" "${COOKIE_JAR}"
 
 if [ -z "${SMOKE_COMMIT_SHA}" ]; then
   echo "==> resolving latest Git commit for ${GITHUB_REPO}@${GITHUB_BRANCH}"
@@ -212,7 +245,7 @@ print(
 PY
 )"
 signature="$(sign_body "${webhook_body}")"
-curl -fsS -X POST "${BASE_URL}/github/webhook" \
+curl -fsS -X POST "${API_BASE_URL}/github/webhook" \
   -H "content-type: application/json" \
   -H "x-hub-signature-256: ${signature}" \
   -d "${webhook_body}" | tee "${WEBHOOK_RESPONSE}"
@@ -246,7 +279,7 @@ print(json.dumps({
     },
 }))
 PY
-  curl -fsS -X POST "${BASE_URL}/commands" \
+  curl -fsS -X POST "${API_BASE_URL}/commands" \
     -b "${COOKIE_JAR}" \
     -H "content-type: application/json" \
     -H "x-service-csrf: same-origin" \

@@ -21,10 +21,12 @@ echo "==> target pods"
 kubectl --context "${TARGET_CONTEXT}" -n target get pods -o wide
 
 echo
-echo "==> gateway health"
+echo "==> console/api health"
 if [ -n "${BASE_URL}" ]; then
-  curl -fsS "${BASE_URL}/healthz" || true
+  if ! curl -fsS "${BASE_URL%/}/api/healthz"; then
+    curl -fsS "${BASE_URL%/}/healthz" || true
+  fi
 else
-  echo "BASE_URL not set; skipping gateway health"
+  echo "BASE_URL not set; skipping console/api health"
 fi
 echo

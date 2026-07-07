@@ -47,15 +47,15 @@ uv run python scripts/e2e_test.py
 ## EKS가 활성인데도 URL이 안 열리는 이유
 
 AWS Console의 EKS cluster 상태가 `활성`이면 Kubernetes control plane이 살아 있다는 뜻이다.
-그 상태만으로 `https://k8s.woonyong.org/healthz`가 열린다는 뜻은 아니다.
+그 상태만으로 `https://k8s.woonyong.org/api/healthz`가 열린다는 뜻은 아니다.
 서비스 URL이 열리려면 아래 단계가 모두 끝나야 한다.
 
 1. `scripts/aws-up.sh`가 management manifest를 적용한다.
-2. `api-gateway`, worker, `nats`, `postgresql` rollout이 끝난다.
-3. `api-gateway` Service가 `LoadBalancer`로 patch된다.
+2. `console`, `api-gateway`, worker, `nats`, `postgresql` rollout이 끝난다.
+3. `console` Service가 public `LoadBalancer`가 된다. `api-gateway`는 console nginx의 `/api/*` 프록시 뒤에 둔다.
 4. AWS LoadBalancer hostname이 생긴다.
 5. Cloudflare DNS record가 그 LoadBalancer hostname을 origin으로 가리킨다.
-6. Bruno나 `curl`이 custom domain 또는 LoadBalancer URL로 `/healthz`를 호출한다.
+6. Bruno나 `curl`이 custom domain 또는 LoadBalancer URL로 `/api/healthz`를 호출한다.
 
 이번에 본 `TLS handshake timeout`은 2번 단계에서 GitHub Actions runner가 EKS API에
 상태 조회를 하던 중 네트워크가 한 번 끊긴 상황이다. cluster가 죽은 것이 아니라
@@ -80,7 +80,7 @@ management rollout 대상 목록 조회와 각 rollout status를 3번 재시도�
 | `SMOKE_CLUSTER_ID` | repository variable, 기본 `TARGET_CLUSTER_ID_1` | smoke가 GitHub webhook/command body에 넣는 cluster id |
 | `MANIFEST_PATH` | repository variable, 운영 배포 필수 | GitHub webhook에 넣고 `manifest-render-worker`가 원격 repository에서 읽는 앱 배포 manifest |
 | `SMOKE_MANIFEST_PATH` | repository variable, 기본 `src/samples/smoke/deploy.yaml` | `run_smoke=true`인데 `MANIFEST_PATH`가 비어 있을 때만 쓰는 smoke 전용 manifest |
-| `SMOKE_GATEWAY_ATTEMPTS` | env, 기본 `60` | LoadBalancer DNS/health가 준비될 때까지 smoke가 `/healthz`를 확인하는 횟수 |
+| `SMOKE_GATEWAY_ATTEMPTS` | env, 기본 `60` | LoadBalancer DNS/health가 준비될 때까지 smoke가 `/api/healthz` 또는 raw gateway `/healthz`를 확인하는 횟수 |
 | `SMOKE_GATEWAY_INTERVAL_SECONDS` | env, 기본 `5` | smoke gateway health 재시도 간격 |
 | `AUTH_LOGIN_ATTEMPTS` | env, 기본 `12` | rollout 직후 연결 리셋 같은 일시 오류가 있어도 smoke login을 재시도하는 횟수 |
 | `AUTH_LOGIN_RETRY_INTERVAL_SECONDS` | env, 기본 `5` | smoke login 재시도 간격 |
@@ -108,17 +108,17 @@ management rollout 대상 목록 조회와 각 rollout status를 3번 재시도�
 
 ## Cloudflare DNS가 1016이면 먼저 볼 것
 
-`curl -i https://k8s.woonyong.org/healthz`가 `HTTP/2 530`과 `error code: 1016`을 반환하면
+`curl -i https://k8s.woonyong.org/api/healthz`가 `HTTP/2 530`과 `error code: 1016`을 반환하면
 Bruno나 Gateway 문제가 아니라 Cloudflare가 origin DNS record를 찾지 못하는 상태다.
 
 1. AWS LoadBalancer가 살아 있는지 먼저 확인한다.
 
 ```bash
 MGMT_CLUSTER="${MGMT_CLUSTER:-kubeheal-mgmt}"
-LB_HOST="$(kubectl --context "${MGMT_CLUSTER}" -n management get svc api-gateway \
+LB_HOST="$(kubectl --context "${MGMT_CLUSTER}" -n management get svc console \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
 
-curl -i "http://${LB_HOST}/healthz"
+curl -i "http://${LB_HOST}/api/healthz"
 ```
 
 2. GitHub environment `aws-test`에 `CLOUDFLARE_API_TOKEN` secret이 있는지 확인한다.
@@ -176,7 +176,7 @@ unset CF_TOKEN
 잘못된 토큰 때문에 Cloudflare DNS를 갱신할 수 없어도 AWS/EKS 배포 자체는 실패시키지 않는다.
 이 경우 log에 `skipping Cloudflare DNS ... AWS LoadBalancer remains available`가 남고,
 smoke와 상태 확인은 AWS LoadBalancer URL로 계속 진행한다.
-단, `https://k8s.woonyong.org/healthz`는 올바른 Cloudflare token으로 DNS record가 만들어지기 전까지
+단, `https://k8s.woonyong.org/api/healthz`는 올바른 Cloudflare token으로 DNS record가 만들어지기 전까지
 `error code: 1016`이 계속 날 수 있다.
 
 4. secret을 넣은 뒤 AWS CD를 다시 실행한다.
@@ -199,7 +199,7 @@ smoke와 상태 확인은 AWS LoadBalancer URL로 계속 진행한다.
 정상 연결은 아래처럼 직접 확인한다.
 
 ```bash
-curl -i https://k8s.woonyong.org/healthz
+curl -i https://k8s.woonyong.org/api/healthz
 ```
 
 정상 응답 기준은 `HTTP/2 200`과 아래 JSON이다.
@@ -248,7 +248,7 @@ RUN_ID="$(gh run list \
 gh run watch "$RUN_ID" --repo Jungle-303-04/final --exit-status
 ```
 
-`run_smoke=true`에서는 `scripts/smoke.sh`가 먼저 `${BASE_URL}/healthz`를 확인한다.
+`run_smoke=true`에서는 `scripts/smoke.sh`가 먼저 `${BASE_URL}/api/healthz`를 확인한다. `BASE_URL`이 raw gateway origin이면 자동으로 `${BASE_URL}/healthz`를 사용한다.
 AWS LoadBalancer hostname은 service에 붙은 직후 몇 분 동안 runner DNS에서 아직 resolve되지 않을 수 있다.
 그래서 smoke는 기본적으로 `SMOKE_GATEWAY_ATTEMPTS=60`, `SMOKE_GATEWAY_INTERVAL_SECONDS=5` 기준으로
 최대 5분까지 기다린 뒤 로그인, webhook, event flow 검증으로 넘어간다.

@@ -16,6 +16,22 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 19:24 KST 체크포인트
+
+- Console origin /api smoke 정규화.
+- 구현:
+  - `scripts/aws-up.sh` public LoadBalancer/DNS 기준을 `console` service로 바꿨다.
+  - public health는 root `/healthz`가 아니라 `/api/healthz`에서 `service=api-gateway`를 확인한다.
+  - `scripts/smoke.sh`, `scripts/register-target.sh`는 console origin과 raw gateway origin을 자동 판별해 API base를 고른다.
+  - target agent `MANAGEMENT_BASE_URL`은 aws-up 경로에서 `${console_origin}/api`로 들어간다.
+  - `scripts/status.sh`, `docs/aws-testing-runbook.md`, `docs/local-testing.md`도 같은 기준으로 정리했다.
+- 검증:
+  - `bash -n scripts/aws-up.sh scripts/smoke.sh scripts/register-target.sh scripts/status.sh` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_aws_testing_workflows.py tests/test_service_entrypoints.py tests/test_docs_index.py` → 33 passed.
+- 다음:
+  - Actions runner allocation 문제 확인.
+  - live passive smoke: `/`, `/api/healthz`, `/api/readyz`, `/api/providers/cluster-discovery` 401.
+
 ### 2026-07-07 19:16 KST 체크포인트
 
 - Fleet health truthfulness.
