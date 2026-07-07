@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:30 KST (`/console` 로그인 returnTo 회귀 수정)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:37 KST (세션 확인 retry 제거)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -41,6 +41,13 @@
 - 수정: `RequireGuest`가 `returnTo` query를 같은 `safeReturnTo` 규칙으로 검증한 뒤 해당 경로로 이동한다. 외부 URL/프로토콜/`//`는 계속 `/`로 방어한다.
 - `frontend/tests/e2e_real_backend.py`는 기본 `E2E_APP_BASE_PATH=/console`로 갱신했다. 실제 쓰기 흐름은 기존대로 `E2E_MUTATE=1` 없이는 skip 된다.
 - 검증: `cd frontend && npm run typecheck`, `npm test`, `npm run build` 모두 passed. 새 커밋/이미지 빌드/라이브 재스모크가 다음 단계다.
+
+### 21:37 KST follow-up — 세션 확인 retry 제거
+
+- live browser smoke에서 `/console` 로그인 후 새로고침이 약 26초 동안 skeleton에 머무는 문제를 발견했다.
+- 원인: 비로그인 진입 때 `GET /auth/session` 401이 TanStack Query 기본 retry를 타면서, 로그인/새로고침 이후까지 지연 재시도가 남았다.
+- 수정: `useSession()`에 `retry:false`를 명시했다. 세션 확인의 401은 정상적인 unauth 신호이므로 재시도하지 않고 `RequireSession`이 즉시 `/login?returnTo=...`로 보낸다.
+- 다음 검증: typecheck/test/build → 커밋/푸시 → 새 console 이미지 배포 → `/console` 로그인/새로고침 브라우저 smoke 재실행.
 
 ## 체크포인트 (20:58 KST) — DLQ archive + no-signal incident payload 정리
 
