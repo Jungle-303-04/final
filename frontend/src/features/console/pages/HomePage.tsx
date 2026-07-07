@@ -67,7 +67,7 @@ export function HomePage() {
   const [selectedClusterId, setSelectedClusterId] = useState('');
 
   const approvals = notices.filter(n => n.kind === 'approval').slice(0, 5);
-  const fleetClusters = fleetQ.data?.clusters ?? [];
+  const fleetClusters = useMemo(() => fleetQ.data?.clusters ?? [], [fleetQ.data?.clusters]);
 
   useEffect(() => {
     if (!fleetClusters.length) return;

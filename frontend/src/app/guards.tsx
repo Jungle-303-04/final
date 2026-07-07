@@ -4,20 +4,20 @@ import { EmptyState, Skeleton } from '@/shared/ui';
 import { IconLock } from '@/shared/ui/icons';
 
 export function RequireSession() {
-  const { data, isPending } = useSession();
+  const { data, isError, isPending } = useSession();
   const loc = useLocation();
   if (isPending) return <div style={{ padding: 48 }}><Skeleton lines={5} /></div>;
-  if (!data?.authenticated) {
+  if (isError || !data?.authenticated) {
     const returnTo = `${loc.pathname}${loc.search}${loc.hash}`;
     return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
   return <Outlet />;
 }
 export function RequireGuest() {
-  const { data, isPending } = useSession();
+  const { data, isError, isPending } = useSession();
   const loc = useLocation();
   if (isPending) return null;
-  if (data?.authenticated) return <Navigate to={safeReturnTo(new URLSearchParams(loc.search).get('returnTo'))} replace />;
+  if (!isError && data?.authenticated) return <Navigate to={safeReturnTo(new URLSearchParams(loc.search).get('returnTo'))} replace />;
   return <Outlet />;
 }
 export function RequireAdmin() {
