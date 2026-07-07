@@ -124,8 +124,9 @@ class RecoveryPlanningPipeline:
   - `incident = classify(evidence, correlation_id)` — correlation_id가 곧 `incident_id`.
   - `detected = has_signal(evidence)`
   - `reason` 은 detected 여부에 따라 `messages.detected_reason` / `messages.not_detected_reason`.
-  - `severity=incident.severity`, `affected=affected_resources(incident)`,
+  - `detected=True`이면 `severity=incident.severity`, `affected=affected_resources(incident)`,
     `evidence=compact_evidence_reference(evidence)`, `incident` 를 body에 채워 반환한다.
+  - `detected=False`이면 정상 샘플 사실만 남기고 `severity=None`, `affected=[]`, `incident=None` 으로 반환한다.
 - `has_signal(evidence) -> bool`:
   `derive_symptom(evidence.kubernetes)` 가 명시/유도 symptom 또는 대표 signal을 만들면 true.
   Kubernetes 신호가 없을 때는 `metrics.alertmanager.alerts[].status == "firing"` 이 있으면 true.

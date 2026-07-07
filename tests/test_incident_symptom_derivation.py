@@ -544,8 +544,8 @@ def test_ambiguous_snapshot_does_not_open_incident() -> None:
     ]
     detected = event_by_subject(events, "incident.detected")
     assert detected.detected is False
-    assert detected.incident.symptom == "unknown"
-    assert detected.incident.secondary_symptoms == []
+    assert detected.incident is None
+    assert detected.affected == []
 
 
 def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> None:
@@ -574,7 +574,8 @@ def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> Non
     ]
     detected = event_by_subject(events, "incident.detected")
     assert detected.detected is False
-    assert detected.incident.symptom == "unknown"
+    assert detected.incident is None
+    assert detected.affected == []
 
 
 def test_multiple_failing_pods_pick_dominant_signal_and_keep_the_rest() -> None:
