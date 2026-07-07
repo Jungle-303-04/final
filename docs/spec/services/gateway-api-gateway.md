@@ -161,8 +161,9 @@ status: synced
 | GET | `/alert-channels` | 세션 | admin |
 | POST | `/alert-channels` | 세션 | admin |
 | DELETE | `/alert-channels/{channel_id}` (204) | 세션 | admin |
-| GET | `/providers/catalog` | 공개 | — |
-| POST | `/providers/validate` | 공개 | — |
+| GET | `/providers/catalog` | admin | — |
+| GET | `/providers/cluster-discovery` | admin | — |
+| POST | `/providers/validate` | admin | — |
 | GET | `/catalog/items` · `/catalog/items/{item_id}` | 세션 | — |
 | POST | `/catalog/items/{item_id}/installs` | 세션 | `require_cluster_access` |
 | POST/GET | `/ai/conversations` | 세션 | — |
@@ -177,6 +178,7 @@ status: synced
 
 | 메서드 | 경로 | 인증 | 권한 |
 |---|---|---|---|
+| POST | `/targets/preflight` | 세션 | admin |
 | POST | `/targets` | 세션 | admin (`kubectl apply` 실행) |
 | GET | `/install/{agent_token}` | 공개 URL + agent token 참조 | 토큰 해시가 등록된 target 만 |
 | GET | `/clusters` | 세션 | — (접근 가능 cluster 필터) |

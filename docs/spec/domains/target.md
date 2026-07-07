@@ -160,6 +160,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 
 | 메서드+경로 | 핸들러 앵커 | 요청 | 응답 | 인증/권한 |
 |---|---|---|---|---|
+| `POST /targets/preflight` | `src/domains/target/router.py :: target_registration_preflight` | body: `TargetPreflightRequest` | `TargetPreflightResponse` | `require_admin_session` |
 | `POST /targets` | `src/domains/target/router.py :: register_target` | body: `TargetRegisterRequest` | `TargetInstallResponse` | `require_admin_session` (kubectl apply 실행 가능 → admin 전용) |
 | `GET /install/{agent_token}` (`INSTALL_MANIFEST_PATH`) | `src/domains/target/router.py :: install_manifest_by_token` | path: `agent_token` | `PlainTextResponse`(`text/yaml`) | 없음(토큰 자체가 자격증명) — `hash_agent_token` 해시로 `authenticate_cluster_agent` 조회, 미등록/불일치 404 `"install link not found"`(존재 여부 비구분) |
 | `GET /clusters` | `src/domains/target/router.py :: list_clusters` | query: `limit: int = 100` | `ClusterListResponse` | `require_session` + `accessible_resource_ids(..., CLUSTER, Permission.CLUSTER_READ)` 필터 |
@@ -173,10 +174,12 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 | `GET /agent/evidence/jobs/poll` | `src/domains/target/router.py :: poll_evidence_job` | query: `provider_key: str`, `agent_id: str = "target-agent"`, `timeout: int = DEFAULT_EVIDENCE_JOB_POLL_SECONDS` | `EvidenceJobPollResponse` | `require_cluster_agent` |
 | `POST /agent/evidence/jobs/{job_id}/result` | `src/domains/target/router.py :: evidence_job_result` | path: `job_id`, body: `EvidenceJobResultRequest` | `EvidenceJobResultResponse` | `require_cluster_agent` |
 
-경로 상수는 `src/packages/contracts/gateway/routes.py`(`TARGETS_PATH`, `CLUSTERS_PATH`, `CLUSTER_PATH`, `CLUSTER_CONNECTION_STATUS_PATH`, `CLUSTER_POLICY_PATH`, `AGENT_POLICY_PATH`, `AGENT_POLICY_STATUS_PATH`, `AGENT_RECONCILE_STATUS_PATH`, `AGENT_EVIDENCE_JOB_SCHEDULE_PATH`, `AGENT_EVIDENCE_JOB_POLL_PATH`, `AGENT_EVIDENCE_JOB_RESULT_PATH`)에서 가져온다 — [contracts](../packages/contracts.md).
+경로 상수는 `src/packages/contracts/gateway/routes.py`(`TARGETS_PATH`, `TARGETS_PREFLIGHT_PATH`, `CLUSTERS_PATH`, `CLUSTER_PATH`, `CLUSTER_CONNECTION_STATUS_PATH`, `CLUSTER_POLICY_PATH`, `AGENT_POLICY_PATH`, `AGENT_POLICY_STATUS_PATH`, `AGENT_RECONCILE_STATUS_PATH`, `AGENT_EVIDENCE_JOB_SCHEDULE_PATH`, `AGENT_EVIDENCE_JOB_POLL_PATH`, `AGENT_EVIDENCE_JOB_RESULT_PATH`)에서 가져온다 — [contracts](../packages/contracts.md).
 
 요청/응답 모델 요약(정의는 `src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`):
 - `TargetRegisterRequest`: `cluster_id`, `name`, `environment`, `workspace_id`, `management_base_url`(필수, min_length=1), `image: str = ""`(placeholder면 env 기본 이미지로 치환, 최종 미해결 시 등록 422), `prometheus_base_url`, `loki_base_url`, `tempo_base_url`, `otel_traces_endpoint`, `evidence_interval_seconds`(범위 제한), `control_namespaces: str = ""`(제어 쓰기 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만. 설치 manifest ConfigMap의 `CONTROL_ALLOWED_NAMESPACES`로 주입), `install_node_collector: bool = True`, `install_sample_workload: bool = False`, `sample_workload_name`(k8s name 패턴), `sample_workload_image`, `apply: bool = False`, `kube_context: str | None = None`, `cloud_provider: str = "existing-k8s"`, `deploy_provider: str = "manual-manifest"`.
+- `TargetPreflightRequest`: `cluster_id`, `cloud_provider`, `deploy_provider`, `apply`, `kube_context`, `image`.
+- `TargetPreflightResponse`: `valid`, `duplicate_cluster_id`, `provider_ready`, `agent_install_status`, `connection_status`, `kube_context_allowed`, `errors`, `warnings`, `selected`, `last_agent_id`, `last_seen_at`.
 - `AgentPolicy`: `cluster_id`, `generation`(≥1), `cluster_role`(`"management"|"target"`), `evidence: EvidenceRuntimePolicy`(`failure_policy: "allow_partial"|"strict"`, `max_attempts`, `providers: dict[str, EvidenceProviderPolicy]`), `bootstrap: BootstrapPolicy`, `desired_state: DesiredStatePolicy`.
 - `EvidenceProviderPolicy`: `enabled: bool = True`, `interval_seconds`, `min_workers`, `max_workers`, `queue_age_target_seconds`, `queries: list[dict]`.
 - `EvidenceJobScheduleRequest`: `source_id: str = "cluster-snapshot"`, `window_start: str`, `provider_keys: list[str]`(min_length=1).
