@@ -109,6 +109,15 @@ button.card:active { background:var(--surface-2); }
 .chat-bubble { padding:10px 14px; font-size:var(--fs-sm); line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:var(--shadow-1); }
 .chat-bubble--user { background:var(--brand); color:white; border-radius:14px 14px 4px 14px; }
 .chat-bubble--assistant { background:var(--surface-2); border:1px solid var(--border); border-radius:14px 14px 14px 4px; }
+.chat-tool-trace { max-width:100%; min-width:0; background:var(--surface-1); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:6px 10px; color:var(--text-2); font-size:var(--fs-xs); }
+.chat-tool-trace summary { display:flex; align-items:center; gap:8px; cursor:pointer; min-width:0; list-style:none; }
+.chat-tool-trace summary::-webkit-details-marker { display:none; }
+.chat-tool-trace summary code { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chat-tool-trace summary::after { content:'›'; margin-left:auto; color:var(--text-3); transition:transform var(--dur-fast); }
+.chat-tool-trace[open] summary::after { transform:rotate(90deg); }
+.chat-tool-args { display:block; margin-top:8px; max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere;
+  color:var(--text-2); background:var(--surface-0); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px; }
 .chat-action { background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; min-width:0; }
 .chat-thinking { display:flex; align-items:center; gap:8px; color:var(--text-2); font-size:var(--fs-sm); }
 .chat-thinking .skeleton { width:34px; height:8px; min-height:8px; }

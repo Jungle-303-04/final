@@ -94,12 +94,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
       {step === 0 && (
         <>
           <Field label="repo_ref" error={repoRef && !refOk ? 'owner/name 또는 GitHub URL 형식이어야 합니다' : undefined}>
-            <input className="input" value={repoRef} onChange={e => setRepoRef(e.target.value)} placeholder="Jungle-303-04/final" />
+            <input className="input" value={repoRef} onChange={e => setRepoRef(e.target.value)} placeholder="owner/name" />
           </Field>
           {probeQ.isPending && <Skeleton lines={1} />}
           {probeQ.data?.reachable && (
             <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--ok)', margin: '-4px 0 8px' }}>
-              {probeQ.data.normalized_repo_ref} · default {probeQ.data.default_branch ?? 'main'}
+              {probeQ.data.normalized_repo_ref}{probeQ.data.default_branch ? ` · 기본 ${probeQ.data.default_branch}` : ''}
             </p>
           )}
           {probeQ.data && !probeQ.data.reachable && (
@@ -171,7 +171,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
             </p>
           )}
           <div style={{ textAlign: 'right' }}>
-            <Button variant="primary" disabled={!repoStepReady} onClick={() => { setClusterId(clusters[0]?.cluster_id ?? ''); setStep(1); }}>다음</Button>
+            <Button variant="primary" disabled={!repoStepReady} onClick={() => { setClusterId(''); setStep(1); }}>다음</Button>
           </div>
         </>
       )}
@@ -193,6 +193,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           ) : (
             <Field label="대상 클러스터">
               <select className="input" value={clusterId} onChange={e => setClusterId(e.target.value)}>
+                <option value="" disabled>클러스터 선택</option>
                 {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
               </select>
             </Field>

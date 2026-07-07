@@ -253,7 +253,7 @@ export default function MetricsView() {
           )}
         </div>
       )}
-      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>스트림 재연결 중</div>}
+      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>수집 지연</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <MetricStatBox label="실행" value={phases.Running ?? 0} tone="ok" loading={statPending} />
         <MetricStatBox label="대기" value={phases.Pending ?? 0} tone="warn" loading={statPending} />
@@ -261,17 +261,17 @@ export default function MetricsView() {
         <MetricStatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
         {snapshot?.rollout && <StatBox label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
       </div>
-      <Card title="스트림 추이" style={{ marginBottom: 16 }}>
+      <Card title="실시간 추이" style={{ marginBottom: 16 }}>
         <TimeSeriesChart series={series} />
       </Card>
-      <Card title="스냅샷 추이" style={{ marginBottom: 16 }}>
+      <Card title="사용량 추이" style={{ marginBottom: 16 }}>
         {usageQ.isPending ? <Skeleton lines={4} /> /* 클러스터 선택 전(비활성)에도 스켈레톤 — 성급한 '없음' 금지 */
           : usageQ.isError ? (
             <EmptyState icon={<IconClock size={26} />} title="추이 데이터를 불러오지 못했습니다"
               description={(usageQ.error as Error).message}
               action={<Button size="sm" onClick={() => usageQ.refetch()}>다시 시도</Button>} />
           ) : usageSeries.length === 0 ? (
-            <EmptyState icon={<IconClock size={26} />} title="수집된 스냅샷 시계열이 없습니다" />
+            <EmptyState icon={<IconClock size={26} />} title="수집된 사용량 추이가 없습니다" />
           ) : <TimeSeriesChart series={usageSeries} />}
       </Card>
       <Card title="저장 위젯" style={{ marginBottom: 16 }}>
@@ -319,7 +319,7 @@ export default function MetricsView() {
           <input className="input" style={{ width: 180 }} value={presetName} placeholder="쿼리 이름" onChange={e => setPresetName(e.target.value)} />
           <input className="input" style={{ fontFamily: 'var(--font-mono)', flex: 1, minWidth: 220 }} value={promql} onChange={e => setPromql(e.target.value)} />
           <select className="input" style={{ width: 92 }} value={range} onChange={e => setRange(Number(e.target.value))}
-            title="조회 범위 (range)">
+            title="조회 범위">
             {RANGES.map(r => <option key={r.seconds} value={r.seconds}>{r.label}</option>)}
           </select>
           <Button onClick={saveCurrentPreset} loading={savePreset.isPending} disabled={!clusterId || !promql.trim() || !presetName.trim()}>저장</Button>
@@ -330,15 +330,15 @@ export default function MetricsView() {
         </div>
         {queryPresetsQ.isError && (
           <div className="query-row" style={{ marginBottom: 8 }}>
-            <Badge tone="danger">error</Badge>
+            <Badge tone="danger">오류</Badge>
             <span style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{(queryPresetsQ.error as Error).message}</span>
             <Button size="sm" onClick={() => queryPresetsQ.refetch()}>다시 시도</Button>
           </div>
         )}
         {selectedPreset && (
           <div className="query-row" style={{ marginBottom: 8 }}>
-            <Badge tone="neutral">saved</Badge>
-            <span style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>{selectedPreset.unit || 'count'} · range {fmtRange(selectedPreset.range_seconds ?? range)}</span>
+            <Badge tone="neutral">저장됨</Badge>
+            <span style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>{selectedPreset.unit || 'count'} · 범위 {fmtRange(selectedPreset.range_seconds ?? range)}</span>
             <Button size="sm" variant="danger" onClick={() => {
               deletePreset.mutate(selectedPreset.preset_id);
               setSelectedPresetId('');
@@ -478,7 +478,7 @@ function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void 
     <div className="query-row" data-testid="query-card">
       <Badge status={badge} />
       <code style={{ fontSize: 'var(--fs-xs)', flex: 1, minWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.promql}</code>
-      <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>range {fmtRange(card.rangeSeconds)}</span>
+      <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>범위 {fmtRange(card.rangeSeconds)}</span>
       {summary && (
         <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)', fontVariantNumeric: 'tabular-nums' }}>
           {summary.series} series · {summary.points} pts
@@ -488,7 +488,7 @@ function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void 
       )}
       {status === 'completed' && !summary && <span style={{ color: 'var(--ok)', fontSize: 'var(--fs-sm)' }}>{commandResultMessage(result) ?? '완료'}</span>}
       {failMessage && <span style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)' }}>{failMessage}</span>}
-      {!isTerminal(status) && card.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>agent 실행 대기·수행 중</span>}
+      {!isTerminal(status) && card.commandId && <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>실행 대기·수행 중</span>}
       {status === 'failed' && <Button size="sm" onClick={onRetry}>재시도</Button>}
     </div>
   );

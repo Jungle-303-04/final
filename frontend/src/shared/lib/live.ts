@@ -24,39 +24,59 @@ export const liveStore = create<LiveState>((set, get) => ({
   setStatus: (status) => set({ status }),
 }));
 
-let started = false;
-export function startLive() {
-  if (started) return; started = true;
-  void connect();
-  async function connect(attempt = 0) {
-    const workspaceId = await currentWorkspaceId();
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live/browser?workspace_id=${encodeURIComponent(workspaceId)}`;
-    const ws = new WebSocket(url);
-    ws.onopen = () => liveStore.getState().setStatus('open');
-    ws.onmessage = (e) => {
-      try {
-        const message = JSON.parse(e.data);
-        if (message?.type === 'live.summary') {
-          liveStore.getState().applyCounts(String(message.cluster_id ?? message.summary?.cluster_id ?? '') || null, Number(message.summary?.restart_delta ?? 0), Number(message.summary?.pods_ready ?? 0));
-          return;
-        }
-        if (message?.namespaces) liveStore.getState().apply(message);
-      } catch { /* 스키마 미스매치 무시 */ }
-    };
-    ws.onclose = () => {
-      liveStore.getState().setStatus('closed');
-      setTimeout(() => { void connect(attempt + 1); }, Math.min(15000, 1000 * 2 ** attempt) * (0.7 + Math.random() * 0.6));
-    };
+let activeWorkspaceId: string | null = null;
+let activeSocket: WebSocket | null = null;
+let reconnectTimer = 0;
+let connectionSeq = 0;
+
+export function startLive(workspaceId: string | null | undefined) {
+  if (!workspaceId) {
+    stopLive();
+    return;
   }
+  if (workspaceId === activeWorkspaceId && activeSocket && activeSocket.readyState <= WebSocket.OPEN) return;
+
+  stopLive();
+  activeWorkspaceId = workspaceId;
+  connectionSeq += 1;
+  const seq = connectionSeq;
+  connect(workspaceId, 0, seq);
 }
 
-async function currentWorkspaceId(): Promise<string> {
-  try {
-    const res = await fetch('/api/auth/session', { credentials: 'include' });
-    if (!res.ok) return 'default';
-    const session = await res.json();
-    return String(session.workspace_id || 'default');
-  } catch {
-    return 'default';
+function stopLive() {
+  connectionSeq += 1;
+  activeWorkspaceId = null;
+  if (reconnectTimer) window.clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+  if (activeSocket) {
+    activeSocket.onclose = null;
+    activeSocket.close();
   }
+  activeSocket = null;
+  liveStore.getState().setStatus('closed');
+}
+
+function connect(workspaceId: string, attempt = 0, seq: number) {
+  if (seq !== connectionSeq) return;
+  liveStore.getState().setStatus('connecting');
+  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live/browser?workspace_id=${encodeURIComponent(workspaceId)}`;
+  const ws = new WebSocket(url);
+  activeSocket = ws;
+  ws.onopen = () => liveStore.getState().setStatus('open');
+  ws.onmessage = (e) => {
+    if (seq !== connectionSeq) return;
+    try {
+      const message = JSON.parse(e.data);
+      if (message?.type === 'live.summary') {
+        liveStore.getState().applyCounts(String(message.cluster_id ?? message.summary?.cluster_id ?? '') || null, Number(message.summary?.restart_delta ?? 0), Number(message.summary?.pods_ready ?? 0));
+        return;
+      }
+      if (message?.namespaces) liveStore.getState().apply(message);
+    } catch { /* 스키마 미스매치 무시 */ }
+  };
+  ws.onclose = () => {
+    if (seq !== connectionSeq) return;
+    liveStore.getState().setStatus('closed');
+    reconnectTimer = window.setTimeout(() => { connect(workspaceId, attempt + 1, seq); }, Math.min(15000, 1000 * 2 ** attempt) * (0.7 + Math.random() * 0.6));
+  };
 }

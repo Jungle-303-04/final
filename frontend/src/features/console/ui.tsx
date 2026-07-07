@@ -69,7 +69,6 @@ function normalizeBasePath(basePath: string | undefined) {
 }
 
 export function ConsoleLayout({ basePath }: { basePath?: string }) {
-  useEffect(() => { startLive(); }, []); // WS 단일 연결(D6) — 셸에서 1회
   const location = useLocation();
   const navigate = useNavigate();
   const routeBase = normalizeBasePath(basePath);
@@ -86,6 +85,9 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
   const { data: session } = useSession();
   const logout = useLogout();
   const { notices, unread, markAllSeen } = useNotices();
+  useEffect(() => {
+    startLive(session?.workspace_id);
+  }, [session?.workspace_id]);
   const localPath =
     routeBase && (location.pathname === routeBase || location.pathname.startsWith(`${routeBase}/`))
       ? location.pathname.slice(routeBase.length) || '/'
