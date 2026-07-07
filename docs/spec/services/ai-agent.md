@@ -191,6 +191,7 @@ class RecoveryPlanningPipeline:
 | `source_query(source, name)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: source_query` | `f"{source}.{name}"` |
 | `evidence_item(evt, *, source, name, value, summary)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: evidence_item` | 위 세 헬퍼로 `EvidenceItem` 구성 |
 | `missing_source_checks(missing_evidence)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: missing_source_checks` | source마다 `MissingEvidenceCheck(check_id=f"evidence:{source}:required", status="missing", reason=f"{source} evidence query/check must complete before RCA can be finalized.")` |
+| `select_incident_log_entries(logs, namespace)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: select_incident_log_entries` | incident 네임스페이스의 로그만 근거로 채택. Loki entry 는 네임스페이스 라벨(`k8s_namespace_name`/`namespace`)이 일치하는 stream 만 남기고 전부 걸러지면 entry 제외; 라벨 없는 stream/단순 line entry 는 귀속 불가라 유지; namespace 미상이면 무필터. 원본 `Evidence.logs` 는 그대로(수집 시점 분리는 후속 과제) |
 | `collect_evidence_items(evt)` | `src/services/ai/agent/pipeline/evidence_bundle.py :: collect_evidence_items` | 아래 참조 |
 
 - 타입 별칭: `EvidenceSource = ClusterEvidenceReceivedBody | Evidence`
@@ -203,7 +204,7 @@ class RecoveryPlanningPipeline:
 |---|---|---|---|---|
 | `evt.kubernetes` truthy | `kubernetes` | `cluster_resource_state` | `evt.kubernetes` | `" Kubernetes 상태 근거입니다."` |
 | `evt.metrics` truthy | `metrics` | `telemetry_metrics` | `evt.metrics` | `" Metric snapshot 근거입니다."` |
-| `evt.logs` truthy | `logs` | `related_logs` | `{"entries": evt.logs}` | `" Log tail 근거입니다."` |
+| `select_incident_log_entries(evt.logs, namespace)` 비어있지 않음 | `logs` | `related_logs` | `{"entries": <필터된 로그>}` | `" Log tail 근거입니다."` |
 | `evt.traces` truthy | `traces` | `related_traces` | `evt.traces` | `" Trace 근거입니다."` |
 
 - `build_incident_evidence_bundle`:
@@ -302,12 +303,14 @@ def block_reason_code(evt: RcaCandidatesEvaluatedBody, detail) -> str | None
 | `CauseCatalogError` | `src/services/ai/agent/causes/loader.py :: CauseCatalogError` | 카탈로그 로딩 실패 오류(RuntimeError) — 기동 시점 즉시 중단 |
 | `CatalogFileModel` | `src/services/ai/agent/causes/loader.py :: CatalogFileModel` | 파일 루트 스키마: `rules: list[CatalogRuleModel]` (pydantic, `extra="forbid"`) |
 | `CatalogRuleModel` | `src/services/ai/agent/causes/loader.py :: CatalogRuleModel` | `id, symptoms, required_sources, candidates` + `to_profile() -> CauseProfile(rule_id=id)` |
-| `CatalogCandidateModel` | `src/services/ai/agent/causes/loader.py :: CatalogCandidateModel` | `candidate_id, title, description, expected_evidence, checks` + `to_spec() -> CauseCandidateSpec` |
+| `CatalogCandidateModel` | `src/services/ai/agent/causes/loader.py :: CatalogCandidateModel` | `candidate_id, title, description, expected_evidence, checks, signals(선택)` + `to_spec() -> CauseCandidateSpec` |
+| `CatalogSignalGroupModel` | `src/services/ai/agent/causes/loader.py :: CatalogSignalGroupModel` | 판별 신호 그룹: `id`, `any_of: list[matcher]`(min 1) |
+| `CatalogSignalMatcherModel` | `src/services/ai/agent/causes/loader.py :: CatalogSignalMatcherModel` | matcher: `fact`/`log_pattern`/`event_pattern` 중 **정확히 하나**(위반 시 스키마 오류) |
 | `parse_catalog_file(path)` | `src/services/ai/agent/causes/loader.py :: parse_catalog_file` | YAML 파싱 실패 → `"RCA 룰 카탈로그 YAML 파싱 실패: {파일명} — ..."`, 스키마 위반 → `"RCA 룰 카탈로그 스키마 위반: {파일명} — ..."` |
 | `load_catalog_profiles(catalog_dir=None)` | `src/services/ai/agent/causes/loader.py :: load_catalog_profiles` | `*.yaml`/`*.yml` 을 파일명 정렬 순서로 로딩(순수 함수); 카탈로그 내 rule id 중복 → `"RCA 룰 id 중복: ..."` |
 | `register_catalog_profiles(catalog_dir=None)` | `src/services/ai/agent/causes/loader.py :: register_catalog_profiles` | 로딩 결과를 `CAUSE_PROFILES` 에 병합; 기존 등록 룰과 id 충돌 시 `CauseCatalogError`(병합 전 검사라 실패 시 레지스트리 오염 없음) |
 
-카탈로그 파일 형식 전체 예시(모든 필드 필수, 알 수 없는 키는 거부):
+카탈로그 파일 형식 전체 예시(`signals` 만 선택, 나머지 필드 필수, 알 수 없는 키는 거부):
 
 ```yaml
 # src/services/ai/agent/causes/catalog/<시나리오>.yaml
@@ -319,11 +322,32 @@ rules:
       - candidate_id: "kubelet_down"
         title: "kubelet 중단"
         description: "노드 kubelet 프로세스가 중단되어 NodeNotReady 가 됐을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metrics"]  # 평가 시 점수 분모
-        checks:
+        expected_evidence: ["kubernetes", "metrics"]  # 평가 시 점수 분모(소스 존재)
+        checks:                              # 사람용 점검 프로즈 — 평가에는 미사용
           - "Node.status.conditions Ready=False reason 확인"
           - "kubelet process/heartbeat metric 확인"
+        signals:                             # 판별 신호(선택) — 근거 "내용" 매칭 DSL
+          - id: "kubelet_not_ready_evidence" # 미충족 시 missing_evidence 토큰 "signal:<id>"
+            any_of:                          # 그룹 안은 OR — 하나라도 매칭되면 충족
+              - fact: "event_reason=NodeNotReady"   # snapshot 정규화 fact 토큰 일치
+              - log_pattern: "kubelet stopped"      # 로그 라인 대소문자 무시 부분일치
+              - event_pattern: "node not ready"     # 이벤트 reason+message 부분일치
 ```
+
+`signals` DSL 의미론(평가: `causes/signals.py`, 스키마: `causes/loader.py`):
+
+- 그룹 목록은 AND — **선언된 그룹이 모두 충족돼야** 후보가 완결 점수(1.0)에 도달한다.
+  미충족 그룹은 `missing_evidence` 에 `signal:<id>` 토큰으로 남아, 그 후보가 선택되면
+  `rca.completed` 대신 `rca.analysis_blocked(insufficient_evidence)` 로 흐른다.
+- `fact` 토큰 어휘(kubernetes snapshot 에서 추출, `src/services/ai/agent/causes/signals.py :: extract_bundle_signals`):
+  `waiting_reason=<r>`, `terminated_reason=<r>`, `event_reason=<r>`,
+  `exit_code=<n>`(예: `exit_code=137` — 컨테이너 현재/직전(lastState) 종료 코드),
+  파생 토큰 `exit_code=non_oom`(0/137 이 아닌 종료 코드 관측 — 일반 앱 크래시 판별).
+- `log_pattern` 은 로그 근거의 라인(단순 `{"line": ...}` + Loki `streams[].values[].line`),
+  `event_pattern` 은 warning 이벤트의 `"reason message"` 문자열을 casefold 부분일치로 검사한다.
+- 도입 배경: 소스 존재만 보던 기존 점수는 exit 1 크래시(OOM 신호 없음)도 `oom_killed` 를
+  1.0 으로 완결시켰다. `oom_killed` 는 이제 양성 OOM 근거(`terminated_reason=OOMKilled` /
+  `exit_code=137` / `OOMKilling` 이벤트 / OOM 로그) 없이는 완결 점수에 도달할 수 없다.
 
 #### causes/engine.py — 룰 엔진
 
@@ -341,7 +365,7 @@ rules:
 | `CausePlan` | `src/services/ai/agent/causes/engine.py :: CausePlan` | `candidates: list[CauseCandidate]`, `rule_missing: RcaRuleMissing | None = None`, `candidate_count` property = `len(candidates)` |
 | `unique_ordered(values)` | `src/services/ai/agent/causes/engine.py :: unique_ordered` | 순서 보존 중복 제거 |
 | `required_evidence_sources(incident, rules=None)` | `src/services/ai/agent/causes/engine.py :: required_evidence_sources` | `rules`(기본 `evidence_rules()`) 중 `matches(incident)` 인 룰의 `required_sources` 를 합쳐 `unique_ordered`; 매칭 없으면 `DEFAULT_REQUIRED_EVIDENCE` 복사본 |
-| `merge_candidates(candidates)` | `src/services/ai/agent/causes/engine.py :: merge_candidates` | `candidate_id` 로 병합: 첫 후보의 title/description 유지, `expected_evidence`·`checks` 는 합집합(순서 보존) |
+| `merge_candidates(candidates)` | `src/services/ai/agent/causes/engine.py :: merge_candidates` | `candidate_id` 로 병합: 첫 후보의 title/description 유지, `expected_evidence`·`checks` 는 합집합(순서 보존), `signals` 는 그룹 id 기준 합집합(`merge_signal_groups`) |
 | `build_rule_missing(incident, evidence_ref)` | `src/services/ai/agent/causes/engine.py :: build_rule_missing` | `RcaRuleMissing(missing_evidence=[MATCHING_CAUSE_RULE_EVIDENCE], message=NO_MATCHING_RULE_MESSAGE, ...)` |
 | `plan_causes(incident, evidence_bundle, evidence_ref, rules=None)` | `src/services/ai/agent/causes/engine.py :: plan_causes` | 매칭 룰의 후보들을 모아 `merge_candidates`; 결과 비면 `CausePlan(candidates=[], rule_missing=build_rule_missing(...))` |
 | `evaluate_causes(candidates, evidence_bundle, rule_missing=None)` | `src/services/ai/agent/causes/engine.py :: evaluate_causes` | 아래 참조 |
@@ -357,13 +381,20 @@ rules:
 
 1. `rule_missing` 이 있으면 단일 평가
    `[CauseEvaluation(candidate_id="unknown", score=0.0, checks=[MATCHING_CAUSE_RULE_EVIDENCE], supporting_evidence=[], missing_evidence=rule_missing.missing_evidence, reason=NO_MATCHING_RULE_MESSAGE)]` 반환.
-2. 아니면 후보마다:
+2. 아니면 `bundle_signals = extract_bundle_signals(evidence_bundle)` 를 한 번 추출하고 후보마다:
    - `expected = set(candidate.expected_evidence)`,
      `actual_sources = {item.source for item in evidence_bundle.items}`
-   - `supporting = sorted(expected & actual)`, `missing = sorted(expected − actual)`
-   - `score = len(supporting) / len(expected)` (expected 비면 0.0)
-   - `reason = f"필요한 근거 {len(expected)}개 중 {len(supporting)}개가 수집되었습니다."`
-   - `supporting_evidence_refs`, `missing_evidence_checks` 부속 채움.
+   - `supporting = sorted(expected & actual)`, `missing_sources = sorted(expected − actual)`
+   - `matched/unmatched = split_signal_groups(candidate.signals, bundle_signals)` —
+     판별 신호(내용 매칭). 미충족 그룹은 `signal:<id>` 토큰으로 `missing_evidence` 에 추가.
+   - `score = (len(supporting) + len(matched)) / (len(expected) + len(candidate.signals))`
+     (분모 0 이면 0.0) — `signals` 없는 후보(예: ai_fallback 후보)는 기존 소스 비율과 동일.
+   - `reason = "필요한 근거 N개 중 M개가 수집되었습니다."` + signals 선언 시
+     `" 판별 신호 K개 중 J개가 확인되었습니다."` (`build_evaluation_reason`)
+   - `supporting_evidence_refs`, `missing_evidence_checks`(소스 누락 + 신호 누락
+     `missing_signal_checks` — `check_id="signal:<id>"`, `source="signals"`) 부속 채움.
+   - 결과: 소스가 모두 있어도 판별 신호가 없는 후보는 1.0 이 될 수 없고, 미충족 신호
+     토큰 때문에 선택되더라도 완결이 아닌 blocked 로 흐른다(오판 대신 근거 부족 처리).
 
 `analyze_root_cause` 알고리즘 (RcaReportDetail 반환):
 
@@ -378,10 +409,15 @@ rules:
 
 #### causes/catalog/*.yaml — 등록된 프로파일 (지식 베이스)
 
-각 YAML 파일은 `rules` 목록을 가진다. 각 rule은 `id`, `symptoms`, `required_sources`, `candidates`를 선언하고, 후보는 `candidate_id`, `title`, `description`, `expected_evidence`, `checks`를 선언한다. 아래 내용이 현재 등록 데이터 전부다.
+각 YAML 파일은 `rules` 목록을 가진다. 각 rule은 `id`, `symptoms`, `required_sources`, `candidates`를 선언하고, 후보는 `candidate_id`, `title`, `description`, `expected_evidence`, `checks`(+선택 `signals`)를 선언한다. 아래 내용이 현재 등록 데이터 전부다.
+
+판별 신호(`signals`)는 완결 가능한 후보(= `expected_evidence` 가 실제 수집 소스
+`kubernetes/metrics/logs/traces` 안에 있는 후보) 전부와, 이벤트/로그로 구별 가능한
+후보에 선언되어 있다. `metadata` 를 기대하는 후보는 현행 근거 번들이 그 소스를
+수집하지 않아 완결 점수에 도달할 수 없으므로 일부는 신호 없이 유지된다.
 
 **crashloop.yaml** — `src/services/ai/agent/causes/catalog/crashloop.yaml`
-- `crashloop_backoff`: symptoms `CrashLoopBackOff`, `pod_restart_loop`; required `kubernetes`, `metrics`, `logs`; 후보 `oom_killed`, `bad_image_rollout`, `config_env_error`, `app_startup_failure`, `dependency_connection_failure`
+- `crashloop_backoff`: symptoms `CrashLoopBackOff`, `pod_restart_loop`; required `kubernetes`, `metrics`, `logs`; 후보 `oom_killed`(signal: 양성 OOM 근거 — OOMKilled/137/OOMKilling/OOM 로그), `bad_image_rollout`(signal: import/binary 시작 오류 로그), `config_env_error`(signal: env/config 오류 로그 — expected 는 `kubernetes`+`logs`), `app_startup_failure`(signal: `exit_code=non_oom` fact 또는 FATAL/panic 류 로그), `dependency_connection_failure`(signal: connection refused/timeout 류 로그). exit 1 + env 누락 FATAL 로그는 `config_env_error`, 일반 FATAL 크래시는 `app_startup_failure`, 양성 OOM 근거는 `oom_killed` 로 판별된다.
 
 **dependencies.yaml** — `src/services/ai/agent/causes/catalog/dependencies.yaml`
 - `db_connection_failed`: symptoms `DB connection failed`; required `kubernetes`, `metrics`, `logs`, `traces`, `metadata`; 후보 `database_connectivity_failure`, `database_credential_or_config_error`
@@ -430,7 +466,7 @@ rca = RcaPlaybooks()
 |---|---|---|
 | `EvidenceRequirementRule` (Protocol) | `src/services/ai/agent/playbooks/cause.py :: EvidenceRequirementRule` | `matches(incident) -> bool`, `required_sources(incident) -> list[str]` |
 | `CauseRule` (Protocol) | `src/services/ai/agent/playbooks/cause.py :: CauseRule` | `matches(incident, evidence_bundle) -> bool`, `candidates(incident, evidence_bundle) -> list[CauseCandidate]` |
-| `CauseCandidateSpec` | `src/services/ai/agent/playbooks/cause.py :: CauseCandidateSpec` | `candidate_id, title, description, expected_evidence: tuple[str, ...], checks: tuple[str, ...]` + `to_candidate() -> CauseCandidate` (tuple→list 변환) |
+| `CauseCandidateSpec` | `src/services/ai/agent/playbooks/cause.py :: CauseCandidateSpec` | `candidate_id, title, description, expected_evidence: tuple[str, ...], checks: tuple[str, ...], signals: tuple[JsonObject, ...] = ()` + `to_candidate() -> CauseCandidate` (tuple→list 변환) |
 | `SymptomEvidenceRequirementRule` | `src/services/ai/agent/playbooks/cause.py :: SymptomEvidenceRequirementRule` | `symptoms/sources` 튜플. `matches` = `incident.symptom in symptoms` |
 | `SymptomCauseRule` | `src/services/ai/agent/playbooks/cause.py :: SymptomCauseRule` | `matches` = 증상 포함 여부, `candidates` = spec 전체를 `to_candidate()` |
 | `CauseProfile` | `src/services/ai/agent/playbooks/cause.py :: CauseProfile` | `symptoms, required_sources, candidate_specs, rule_id` + `evidence_rule()`, `cause_rule()` 파생 |
