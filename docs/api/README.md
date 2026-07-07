@@ -325,6 +325,10 @@ AI worker가 아직 응답하지 않았더라도 사용자가 보낸 메시지�
 좌측 대화 목록과 최근 대화 복구에 쓰인다.
 목록에서 첫 대화가 있으면 `conversation_id`를 자동 저장해서 상세 조회로 바로 이어갈 수 있다.
 
+`05-delete-conversation`은 현재 workspace의 AI 대화를 삭제한다.
+성공하면 204이고, 대화가 없거나 다른 workspace의 대화면 404다.
+메시지는 `ai_conversation_messages.conversation_id` FK의 cascade 삭제를 따른다.
+
 ### 08-ops-dlq
 
 `01-dead-letters`는 처리 실패로 dead letter에 남은 event를 조회하는 API다.
@@ -574,6 +578,9 @@ approval record가 있으면 `06-gitops-approval/02-grant-approval.bru` 또는 `
 
 `07-ai/04-list-conversations.bru`를 보내면 대화 목록이 나온다.
 정상 출력에는 `conversations` 배열이 있다.
+
+삭제 흐름까지 확인하려면 마지막에 `07-ai/05-delete-conversation.bru`를 보낸다.
+정상 삭제는 204이고, 이미 삭제됐거나 없는 대화는 404다.
 
 ## 12단계. 운영 API 확인
 

@@ -265,6 +265,7 @@ def test_bruno_display_names_are_korean() -> None:
         "name: 02 AI 대화 상세 조회",
         "name: 03 AI 메시지 추가",
         "name: 04 AI 대화 목록 조회",
+        "name: 05 AI 대화 삭제",
         "name: 01 Dead Letter 목록 조회",
         "name: 02 Dead Letter 재처리",
         "name: 03 Gateway Metrics 조회",

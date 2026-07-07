@@ -15,6 +15,9 @@ npx tsc --noEmit
 echo "[frontend-check] eslint (경고 0 강제)"
 npx eslint src/ --max-warnings 0
 
+echo "[frontend-check] unit tests"
+npm test
+
 echo "[frontend-check] production build"
 npx vite build --logLevel error
 

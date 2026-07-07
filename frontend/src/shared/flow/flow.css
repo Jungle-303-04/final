@@ -5,7 +5,7 @@
 .flow-node--pulse { animation: flow-pulse 1.4s var(--ease-in-out) infinite; }
 
 /* 레이아웃 재계산(단계 진행·접기/펼치기) 시 노드가 새 좌표로 부드럽게 이동 */
-.react-flow__node { transition: transform 0.35s cubic-bezier(0.65, 0, 0.35, 1); }
+.react-flow__node { transition: transform var(--dur-slow) var(--ease-in-out); }
 .react-flow__node.dragging { transition: none; }
 
 /* 활성 edge 를 따라 흐르는 패킷 — 은은한 발광 */

@@ -63,7 +63,7 @@ export function AnimatedEdge(props: EdgeProps<AnimatedFlowEdge>) {
         style={{
           stroke, strokeWidth: active ? 2 : 1.5,
           strokeDasharray: active ? '6 4' : undefined,
-          animation: active ? 'flow-dash 0.7s linear infinite' : undefined,
+          animation: active ? 'flow-dash calc(var(--dur-slow) * 2) linear infinite' : undefined,
         }}
       />
       {/* 활성 구간을 흐르는 패킷 — reactflow.dev animating-edges 패턴(SVG animateMotion) */}

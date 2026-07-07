@@ -58,7 +58,7 @@ export const router = createBrowserRouter([
       ],
     }],
   },
-  // 구 경로 호환 — 콘솔이 루트 앱으로 승격되며 전부 / 로 흡수
+  // 구 경로 호환 — 실제 서비스는 /, /console 은 별도 데모 archive 가 붙기 전까지 기존 앱으로 흡수
   { path: '/console', element: <Navigate to="/" replace /> },
   { path: '/console/*', element: <Navigate to="/" replace /> },
   { path: '/plural', element: <Navigate to="/" replace /> },

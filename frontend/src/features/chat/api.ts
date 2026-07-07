@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { get, post } from '@/shared/lib/api';
+import { del, get, post } from '@/shared/lib/api';
 import type { Conversation } from '@/shared/lib/types';
 import { adaptConversationSummary } from '@/shared/lib/adapt';
 import { uiStore } from '@/shared/lib/ui-store';
@@ -30,6 +30,16 @@ export function useSendMessage(id: string) {
   return useMutation({
     mutationFn: (message: string) => post(`/ai/conversations/${id}/messages`, { message }),
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.one(id) }),
+  });
+}
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => del<void>(`/ai/conversations/${id}`),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: chatKeys.list() });
+      qc.removeQueries({ queryKey: chatKeys.one(id) });
+    },
   });
 }
 export function useSelectAction() {

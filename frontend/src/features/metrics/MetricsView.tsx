@@ -10,7 +10,7 @@ import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui'
 import { PageHeader } from '@/plural-ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
 import { fmtHms } from '@/shared/lib/format';
-import { FadeSlideIn } from '@/shared/motion';
+import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconClock } from '@/shared/ui/icons';
 
 // 프리셋은 실제 스크레이프되는 계열만 사용 — node-exporter/kube-state-metrics/node-collector.
@@ -33,11 +33,14 @@ const RANGES = [
 interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; commandId?: string; submitFailed?: boolean }
 
 export default function MetricsView() {
-  const [sp] = useSearchParams();
+  const [sp, setSp] = useSearchParams();
   const clustersQ = useClusters();
   const clusters = useMemo(() => clustersQ.data ?? [], [clustersQ.data]);
   const admin = useIsAdmin();
   const [clusterId, setClusterId] = useState(sp.get('cluster') ?? '');
+  const subject = sp.get('subject') ?? '';
+  const subjectName = sp.get('name') ?? '';
+  const namespace = sp.get('namespace') ?? '';
   const [paused, setPaused] = useState(false);
   const [promql, setPromql] = useState(PRESETS[0].promql);
   const [range, setRange] = useState(RANGES[0].seconds);
@@ -56,6 +59,13 @@ export default function MetricsView() {
       setClusterId(clusters[0].cluster_id);
     }
   }, [clusterId, clusters]);
+
+  const selectCluster = (nextClusterId: string) => {
+    setClusterId(nextClusterId);
+    const next = new URLSearchParams(sp);
+    next.set('cluster', nextClusterId);
+    setSp(next, { replace: true });
+  };
 
   useEffect(() => {
     if (!paused) setFrozen(history);
@@ -128,7 +138,7 @@ export default function MetricsView() {
   if (clustersQ.isSuccess && clusters.length === 0) {
     return (
       <FadeSlideIn>
-        <PageHeader title="메트릭" sub="실시간 스트림 · 스냅샷 실측 시계열 · 온디맨드 PromQL" />
+        <PageHeader title="메트릭" />
         <Card>
           <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
             description={admin ? '클러스터를 등록하고 에이전트가 연결되면 실시간·스냅샷 메트릭이 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 실시간·스냅샷 메트릭이 표시됩니다'}
@@ -140,15 +150,22 @@ export default function MetricsView() {
 
   return (
     <FadeSlideIn>
-      <PageHeader title="메트릭" sub="실시간 스트림 · 스냅샷 실측 시계열 · 온디맨드 PromQL"
+      <PageHeader title="메트릭"
         actions={
           <>
-            <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => setClusterId(e.target.value)}>
+            <select className="input" style={{ width: 180 }} value={clusterId} onChange={e => selectCluster(e.target.value)}>
               {clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
             </select>
             <Button onClick={() => setPaused(p => !p)}>{paused ? '▶ 재개' : '⏸ 일시정지'}</Button>
           </>
         } />
+      {(subject || subjectName) && (
+        <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, padding: 10, minWidth: 0 }}>
+          <Badge tone="info">{subject || 'resource'}</Badge>
+          {namespace && <code>{namespace}</code>}
+          {subjectName && <code style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subjectName}</code>}
+        </div>
+      )}
       {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <StatBox label="Running" value={phases.Running ?? 0} tone="ok" />
@@ -171,7 +188,7 @@ export default function MetricsView() {
               description="에이전트가 연결되면 스냅샷(30초 주기)마다 실측 usage 가 쌓입니다" />
           ) : <TimeSeriesChart series={usageSeries} />}
       </Card>
-      <Card title="온디맨드 PromQL (비동기 — agent 경유)">
+      <Card title="PromQL">
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <select className="input" style={{ width: 220 }}
             value={PRESETS.some(p => p.promql === promql) ? promql : ''}
@@ -187,11 +204,10 @@ export default function MetricsView() {
           <Button variant="primary" onClick={() => execute()} disabled={!clusterId || !promql.trim()}
             title={clusterId ? '' : '클러스터를 먼저 선택해주세요'}>실행</Button>
         </div>
-        <p style={{ margin: '0 0 8px', fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>
-          프리셋·수집 스택 카탈로그: docs/frontend-metrics-queries.md — 결과는 agent 가 클러스터 안에서 실측한 값만 표시합니다
-        </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cards.map(c => <QueryCardRow key={c.id} card={c} onRetry={() => execute(c)} />)}
+          <AnimatedList items={cards} getKey={c => c.id}>
+            {c => <QueryCardRow card={c} onRetry={() => execute(c)} />}
+          </AnimatedList>
         </div>
       </Card>
     </FadeSlideIn>

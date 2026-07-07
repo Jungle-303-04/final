@@ -39,7 +39,7 @@
 | GET /clusters · GET /clusters/{cluster_id} | 🍪 | [fleet](views/fleet-heatmap.md), [cluster](views/cluster-detail.md) |
 | GET /clusters/{id}/connection-status | 🍪 | 위저드 4단계 폴링 |
 | GET /clusters/{id}/inventory/summary·resources·workloads·services·events | 🍪 | [fleet](views/fleet-heatmap.md), [cluster](views/cluster-detail.md) |
-| PUT /clusters/{id}/policy | 👑 | cluster policy 탭 — **GET 없음(G11)**, AgentPolicy 전체 전송 |
+| PUT /clusters/{id}/policy | 👑 | Bruno/API 확인용 cluster policy 수정 — **GET 없음(G11)**, AgentPolicy 전체 전송 |
 | POST /commands | 🍪 deploy | (팔레트 "명령 실행") |
 | POST /clusters/{id}/namespaces/{ns}/deployments/{name}/scale·restart | 🍪 deploy | [cluster workloads](views/cluster-detail.md#쓰기-액션-권한-release_operator-이상--requirepermission) |
 | POST /agent/debug/query | 🍪 read | [metrics](views/metrics.md#온디맨드-쿼리-비동기-ux--이-화면의-핵심-설계) |
@@ -63,6 +63,7 @@
 | GET /ai/conversations | 🍪 | [ai-chat 목록](views/ai-chat.md#목록--chatlistview-ai) |
 | POST /ai/conversations | 🍪 | [ai-chat](views/ai-chat.md) |
 | GET /ai/conversations/{conversation_id} | 🍪 | ai-chat 폴링 |
+| DELETE /ai/conversations/{conversation_id} | 🍪 | ai-chat 대화 삭제 |
 | POST /ai/conversations/{id}/messages | 🍪 | ai-chat 전송 |
 | GET /dashboard/rca/timeline | 🍪 | fleet 티커, [notifications](views/notifications.md), pod 원인분석 탭 |
 | GET /dashboard/rca/incidents/{incident_id} | 🍪 | 인시던트 상세 |
@@ -185,8 +186,8 @@ GET /ai/conversations → { conversations: [{ conversation_id, title, status, up
 GET /clusters/{cluster_id}/policy → AgentPolicy   👑
 ```
 
-실측: PUT 만 존재해 편집 폼 프리필이 불가 — 도입 전까지 계약 기본값 프리필 + 경고 배너
-([cluster-detail § policy 탭](views/cluster-detail.md)).
+실측: PUT 만 존재하고 현재 프론트 cluster 상세에는 policy 편집 탭이 없다.
+도입 전까지 정책 수정 검증은 Bruno `02-target-admin/02-update-cluster-policy.bru`로 수행한다.
 
 ## 갭-뷰 정합성 규칙 재확인
 

@@ -11,7 +11,7 @@ status: synced
 
 - AI 대화(`ai_conversations`)와 대화 메시지(`ai_conversation_messages`) read model 테이블 및 리포지토리를 소유한다.
 - 대화 이벤트 계약(`ai.message.received / responded / failed`)을 정의한다.
-- 대화 생성·메시지 추가·조회 HTTP API를 제공한다 (실제 LLM 응답 생성은 chat-worker 서비스 담당 — 이 도메인은 이벤트를 발행할 뿐 소비하지 않음).
+- 대화 생성·메시지 추가·조회·삭제 HTTP API를 제공한다 (실제 LLM 응답 생성은 chat-worker 서비스 담당 — 이 도메인은 이벤트를 발행할 뿐 소비하지 않음).
 - LLM이 대화 중 호출 가능한 읽기 전용 플랫폼 조회 도구(`@ai.tool`)와, 로케일별 노출 텍스트 카탈로그, 시스템 프롬프트 빌더를 제공한다.
 - 하지 않는 것: LLM 호출 자체(엔진은 `packages/ai`), 이벤트 소비(워커 프로세스 담당).
 
@@ -94,6 +94,7 @@ status: synced
 | `record_ai_failure` | `(self, payload: JsonObject) -> None` | `unit_of_work()` 안에서 상태 `STATUS_FAILED` 전이만 수행 |
 | `list_ai_conversations` | `(self, workspace_id: str, *, limit: int = 100) -> list[JsonObject]` | `SELECT conversation_id, title, status, updated_at WHERE workspace_id=? ORDER BY updated_at DESC LIMIT clamp(limit,1,200)` |
 | `get_ai_conversation` | `(self, workspace_id: str, conversation_id: str) -> JsonObject \| None` | 단건 SELECT (workspace_id+conversation_id), 없으면 None |
+| `delete_ai_conversation` | `(self, workspace_id: str, conversation_id: str) -> bool` | `DELETE ai_conversations WHERE workspace_id=? AND conversation_id=? RETURNING conversation_id`. 삭제 행이 있으면 true, 없으면 false. 메시지는 FK `ON DELETE CASCADE` |
 | `list_ai_messages` | `(self, workspace_id: str, conversation_id: str, *, newest: int \| None = None) -> list[JsonObject]` | 기본: `ORDER BY created_at, message_id` 전체. `newest=N`: `ORDER BY created_at DESC, message_id DESC LIMIT N` 후 `reversed()` → 최근 N개를 시간 오름차순으로 반환 |
 
 ### 라우터 — `src/domains/ai/router.py`
@@ -114,6 +115,7 @@ status: synced
 | `POST /ai/conversations/{conversation_id}/messages` (`AI_CONVERSATION_MESSAGES_PATH`) | `append_message` — `src/domains/ai/router.py :: append_message` | `AiMessageCreateRequest` | `AiConversationAcceptedResponse` | `require_session` |
 | `GET /ai/conversations` (`AI_CONVERSATIONS_PATH`) | `list_conversations` — `src/domains/ai/router.py :: list_conversations` | — | `AiConversationListResponse` | `require_session` |
 | `GET /ai/conversations/{conversation_id}` (`AI_CONVERSATION_PATH`) | `get_conversation` — `src/domains/ai/router.py :: get_conversation` | — | `AiConversationResponse` | `require_session` |
+| `DELETE /ai/conversations/{conversation_id}` (`AI_CONVERSATION_PATH`) | `delete_conversation` — `src/domains/ai/router.py :: delete_conversation` | — | `204 Response` | `require_session` |
 
 요청·응답 모델은 `src/packages/contracts/gateway/requests.py` / `responses.py` 정의를 사용한다 ([contracts](../packages/contracts.md)).
 
@@ -205,6 +207,13 @@ status: synced
 2. `agent = payload.agent or str(conversation["agent"])`, `message_id = new_id("aim")`.
 3. 단일 트랜잭션(`unit_of_work_or_null`) 안에서: 메시지 append(user) → `mark_ai_conversation_status(..., STATUS_WAITING)` → `AiMessageReceivedBody` 발행. 이벤트 `context = payload.context or conversation.get("context") or {}`.
 
+### 대화 삭제 (`DELETE /ai/conversations/{conversation_id}`)
+
+1. `workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)`.
+2. `db.delete_ai_conversation(workspace_id, conversation_id)` 호출.
+3. false면 404 `"conversation not found"`, true면 본문 없는 204 `Response`.
+4. 메시지는 `ai_conversation_messages.conversation_id`의 `ON DELETE CASCADE`로 함께 삭제된다.
+
 ### 상태 머신 (conversation.status)
 
 ```
@@ -218,7 +227,7 @@ status: synced
 - 대화·메시지 insert는 모두 `ON CONFLICT DO NOTHING`으로 멱등 — 같은 ID 재삽입은 무해.
 - 대화 생성/메시지 추가에서 read model 기록과 이벤트 스테이징은 반드시 같은 트랜잭션.
 - `record_ai_response`는 메시지 기록과 상태 전이를 같은 `unit_of_work`로 묶는다.
-- 조회는 항상 `workspace_id` 필터 포함(워크스페이스 격리).
+- 조회·삭제는 항상 `workspace_id` 필터 포함(워크스페이스 격리).
 - 존재하지 않는 대화 접근 → HTTP 404 `"conversation not found"`.
 - `messages.text` 미등록 키 → `KeyError` (fail-fast).
 - 도구 limit는 항상 1–20으로 클램프.

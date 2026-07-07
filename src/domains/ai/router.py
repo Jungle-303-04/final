@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from domains.ai.events import AiMessageReceivedBody
 from domains.ai.repository import ROLE_USER, STATUS_WAITING
@@ -178,3 +178,16 @@ async def get_conversation(
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     messages = db.list_ai_messages(workspace_id, conversation_id)
     return AiConversationResponse(conversation=conversation, messages=messages)
+
+
+@router.delete(gateway_routes.AI_CONVERSATION_PATH, status_code=204)
+async def delete_conversation(
+    conversation_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    deleted = db.delete_ai_conversation(workspace_id, conversation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=NOT_FOUND)
+    return Response(status_code=204)

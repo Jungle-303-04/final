@@ -16,6 +16,20 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:04 KST 체크포인트
+
+- AI 대화 삭제 API/프론트/Bruno 계약이 1차 구현됐다.
+- 구현:
+  - `DELETE /ai/conversations/{conversation_id}`는 세션 workspace 범위의 대화만 삭제한다.
+  - 메시지는 FK cascade로 함께 삭제된다.
+  - 프론트 `ChatView` 목록 row와 현재 대화 헤더에서 삭제할 수 있다.
+  - Bruno `07-ai/05-delete-conversation.bru`, API map, gateway/ai spec에 DELETE 계약을 추가했다.
+- 검증:
+  - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py tests/test_ai_conversation.py -q` → 27 passed.
+  - `bash scripts/frontend-check.sh` → typecheck, eslint, unit test, production build OK.
+  - `make check` → 688 passed, 3 skipped; manifest check 포함.
+  - `make manifest-check` → management 53 objects, target 16 objects.
+
 ### 2026-07-07 18:10 KST 체크포인트
 
 - evidence lineage/rollback 표시가 1차 구현됐다.

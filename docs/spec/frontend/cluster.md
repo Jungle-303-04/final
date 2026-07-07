@@ -54,9 +54,9 @@ status: synced
 
 ### `frontend/src/features/cluster/ClusterDetailView.tsx :: ClusterDetailView` (default export)
 
-- 라우트: `/clusters/:clusterId`, `/clusters/:clusterId/pods/:namespace/:pod`(팟 Drawer 딥링크). 쿼리스트링: `tab`(기본 'workloads'), `q`(팟 필터 — 이름 includes 또는 node 정확 일치).
+- 라우트: `/clusters/:clusterId`, `/clusters/:clusterId/pods/:namespace/:pod`(팟 Drawer 딥링크). 쿼리스트링: `tab`(기본 'workloads'), `q`(팟/리소스/이벤트 drilldown 필터 — 팟 이름·workload_name includes, namespace·node exact).
 - 탭 상수 `TABS`: workloads/pods/nodes/services/resources/events (라벨: 워크로드·팟·노드·서비스·리소스·이벤트).
-- state: `scaleTarget: Workload | null`, `replicas: number`(모달 열 때 2로 리셋).
+- state: `scaleTarget`, `restartTarget`, `workloadTarget`(`DeploymentTarget | null`), `nodeTarget`, `serviceTarget`, `replicas: number`(스케일 모달 열 때 대상 팟 수로 초기화).
 - 데이터: `useClusters`(이름/뱃지), `useClusterSummary`, `useWorkloads`, `useIsAdmin`, `useScale`, `useRestart`, `liveStore(s => s.snapshot)`.
 - `hotPods`: 스냅샷의 hot 팟 이름 Set — **selector 에서 새 객체 생성 금지 규칙에 따라 `useMemo` 로 파생**.
 - `podRows`: workloads 에 `hot: hotPods.has(name) || w.hot` 병합 후 `q` 필터. `openPod` 는 URL 의 `:pod`+`:namespace` 매칭.
@@ -64,24 +64,31 @@ status: synced
   ```
   FadeSlideIn
   ├─ Breadcrumbs [클러스터 → 이름]
-  ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status), flex wrap) · Link(/metrics?cluster=<id>) "메트릭 보기"
+  ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status), flex wrap) · ContextActions(cluster)
   ├─ StatBox ×4: 노드 / 실행 팟(pod_phases['Running'], ok) / 비정상 팟(CrashLoopBackOff+Pending, Crash>0 이면 danger) / 서비스 (flex wrap)
   ├─ ClusterAggPanel: GET /clusters/{id}/summary 보조 패널(사용량 + 열린 인시던트, 실패해도 본문 차단 안 함)
+  ├─ ContextEvents('클러스터 이벤트', 최근 3개)
+  ├─ q 필터가 있으면 drill 배지 + code + 해제 버튼
   ├─ Tabs (setSp({tab}))
   ├─ 탭 콘텐츠: WorkloadsTab | 팟 테이블 | 노드 테이블 | ServicesTab | ResourcesTab | EventsTab
-  ├─ Drawer(openPod) — KeyValue(상태/네임스페이스/재시작/노드/이미지/Ready) + Link(/ai?prefill=<ns/pod 팟 상태를 분석해줘>) "✦ 이 팟 분석"
+  ├─ Drawer(openPod) — KeyValue(상태/네임스페이스/재시작/노드/이미지/Ready) + ContextActions(pod) + ContextEvents('팟 이벤트')
+  ├─ Drawer(nodeTarget) — KeyValue(Ready/팟 수/CPU/MEM/버전) + ContextActions(node) + ContextEvents('노드 이벤트') + "팟 보기"
+  ├─ Drawer(serviceTarget) — KeyValue(ns/type/ClusterIP/ports) + ContextActions(service) + ContextEvents('서비스 이벤트') + "리소스 보기"
+  ├─ Drawer(workloadTarget) — KeyValue(ns/팟 수) + ContextActions(workload) + ContextEvents('워크로드 이벤트') + 팟 보기/스케일/재시작
   └─ Modal(scaleTarget/restartTarget) — 대상은 DeploymentTarget{ns,name,podCount}. 스케일: 현재 팟 수 안내 + replicas number input(0~100, 초기값=podCount) + 실행(scale.mutate). 재시작: 확인 모달(danger) 후 restart.mutate
   ```
 - 팟 탭 열: 이름(hot 이면 `IconFlame` warn) / 네임스페이스 / 상태 Badge / 재시작 / 노드. 행 클릭 → `/clusters/${clusterId}/pods/${ns}/${name}?tab=pods`. Drawer 닫기 → `/clusters/${clusterId}?tab=pods`.
-- 노드 탭 열: 이름 / Ready·NotReady Badge / 팟 수 / CPU·MEM(`(ratio*100).toFixed(0)%`, null 은 '—') / 버전.
+- 노드 탭 열: 이름 / Ready·NotReady Badge / 팟 수 / CPU·MEM(`(ratio*100).toFixed(0)%`, null 은 '—') / 버전. 행 클릭 → node Drawer.
 - 스케일/재시작 대상은 WorkloadsTab 의 그룹 키(디플로이먼트 실명 `workload_name || name`)에서 `DeploymentTarget{ns,name,podCount}` 로 전달 — 팟 이름에서 유도하지 않는다. 모달 안내문: "비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다."
 
 내부(비공개) 서브컴포넌트:
 
-- `WorkloadsTab { clusterId; admin; onScale: (d: DeploymentTarget) => void; onRestart: (d: DeploymentTarget) => void }` — workloads 를 `${namespace}/${workload_name || name}` 키로 그룹핑해 deployment 행 생성(`workload_name` 은 인벤토리 summary 의 owner_name — [shared/adapt](shared.md#어댑터-libadaptts) `adaptWorkloadResource` 가 채움). 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
-- `ServicesTab` — 이름/네임스페이스/타입/ClusterIP(code)/포트.
-- `ResourcesTab` — Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
-- `EventsTab` — 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
+- `WorkloadsTab { clusterId; admin; onInspect; onDrillPods; onScale; onRestart }` — workloads 를 `${namespace}/${workload_name || name}` 키로 그룹핑해 deployment 행 생성(`workload_name` 은 인벤토리 summary 의 owner_name — [shared/adapt](shared.md#어댑터-libadaptts) `adaptWorkloadResource` 가 채움). 행 클릭은 workload Drawer. 열: 워크로드 / 네임스페이스 / Ready(`Running수/전체`) / 재시작 합 / 액션(스케일·재시작·팟 sm 버튼, `!admin` 시 disabled + title `'release_operator 권한 필요'`, `stopPropagation`).
+- `ServicesTab { clusterId; onInspect }` — 이름/네임스페이스/타입/ClusterIP(code)/포트. 행 클릭은 service Drawer.
+- `ContextActions` — `Link(/metrics?cluster=<id>&subject=<subject>&name=<name>[&namespace=<ns>])` "메트릭" + `Link(/ai?prefill=<cluster namespace/name subject 상태 분석>)` "AI 분석".
+- `ContextEvents` — `useClusterEvents(clusterId)` 결과를 target/message/reason lower-case includes 로 필터하고 compact 면 3개, 아니면 8개까지 표시한다. pending 이거나 결과가 없으면 null.
+- `ResourcesTab { clusterId; filter }` — `q`가 있으면 kind/namespace/name/status includes 로 필터. 열: Kind/네임스페이스(null '—')/이름/상태 Badge/Age.
+- `EventsTab { clusterId; filter }` — `q`가 있으면 reason/target/message/type includes 로 필터. 비면 EmptyState(`IconFile` 아이콘, '이벤트가 없습니다'); 열: 시각(timeAgo)/타입(Warning 은 warn Badge)/사유/대상(code)/메시지.
 - `ClusterAggPanel` — `useClusterAgg(clusterId)` 결과가 pending 이면 null, error 면 회색 문구와 "다시 시도" 버튼. 성공 시 `Card('집계 요약 — 사용량 · 열린 인시던트')` 에 CPU/MEM/재시작 누적/열린 인시던트를 표시하고, 열린 인시던트는 최대 5개까지 `/incidents/<id>` 링크로 렌더한다.
 
 ## 라우트
