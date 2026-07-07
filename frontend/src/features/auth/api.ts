@@ -4,8 +4,15 @@ import type { Session } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 
 export const sessionKey = ['session'] as const;
+const SESSION_CHECK_TIMEOUT_MS = 8_000;
+
 export function useSession() {
-  return useQuery({ queryKey: sessionKey, queryFn: () => get<Session>('/auth/session'), staleTime: 60_000, retry: false });
+  return useQuery({
+    queryKey: sessionKey,
+    queryFn: () => get<Session>('/auth/session', { timeoutMs: SESSION_CHECK_TIMEOUT_MS }),
+    staleTime: 60_000,
+    retry: false,
+  });
 }
 export function refreshSession() {
   return post<Session>('/auth/session/refresh');

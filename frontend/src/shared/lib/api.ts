@@ -10,6 +10,11 @@ export class ApiError extends Error {
   }
 }
 
+export type ApiOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
 const CSRF_INTENT_HEADER = 'x-service-csrf';
 const CSRF_INTENT_VALUE = 'same-origin';
@@ -18,8 +23,9 @@ const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
 
-export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function api<T>(method: string, path: string, body?: unknown, options: ApiOptions = {}): Promise<T> {
   let res: Response;
+  const requestSignal = createRequestSignal(options);
   try {
     const headers: Record<string, string> = {};
     if (body) headers['content-type'] = 'application/json';
@@ -28,8 +34,10 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
       method, credentials: 'include',
       headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
+      signal: requestSignal.signal,
     });
   } catch { throw new ApiError(0, '네트워크 오류'); }
+  finally { requestSignal.cancel(); }
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
     const detail = await res.json().then(j => j.detail ?? res.statusText).catch(() => res.statusText);
@@ -37,7 +45,29 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
-export const get = <T>(p: string) => api<T>('GET', p);
-export const post = <T>(p: string, b?: unknown) => api<T>('POST', p, b);
-export const put = <T>(p: string, b?: unknown) => api<T>('PUT', p, b);
-export const del = <T>(p: string) => api<T>('DELETE', p);
+export const get = <T>(p: string, options?: ApiOptions) => api<T>('GET', p, undefined, options);
+export const post = <T>(p: string, b?: unknown, options?: ApiOptions) => api<T>('POST', p, b, options);
+export const put = <T>(p: string, b?: unknown, options?: ApiOptions) => api<T>('PUT', p, b, options);
+export const del = <T>(p: string, options?: ApiOptions) => api<T>('DELETE', p, undefined, options);
+
+function createRequestSignal(options: ApiOptions): { signal?: AbortSignal; cancel: () => void } {
+  if (!options.timeoutMs) return { signal: options.signal, cancel: () => undefined };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs);
+  const abortFromParent = () => controller.abort();
+
+  if (options.signal?.aborted) {
+    controller.abort();
+  } else {
+    options.signal?.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    cancel: () => {
+      clearTimeout(timeoutId);
+      options.signal?.removeEventListener('abort', abortFromParent);
+    },
+  };
+}
