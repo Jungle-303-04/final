@@ -16,18 +16,25 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 16:37 KST 체크포인트
+### 2026-07-07 16:45 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
 
-- 현재 local/origin dev HEAD: `6e5b9d42 test: 실백엔드 E2E credential 하드코딩 제거`.
-- `6e5b9d42`는 origin/dev에 push 완료, dev CI/AWS CD success, Promote Dev To Main success.
-- origin/main은 merge commit `1f9900f12e0c56babeff5237f82ff5d42dcc4139`까지 진행.
-- main AWS CD run `28849235901`: success.
+- 현재 local/origin dev HEAD: `ef65c770 fix: 레포 discovery render 검증 전환`.
+- `ef65c770`는 origin/dev에 push 완료, dev CI/AWS CD success, Promote Dev To Main success.
+- origin/main은 merge commit `e37cee8bf983eb122b5ab9c987210e00d7b1bf6f`까지 진행.
+- main AWS CD latest 상태:
+  - run `28849845008` attempt 2: failure. `Test before deploy` success, `Deploy to AWS EKS` failure, runner 배정 없음(`runner_id=0`), steps/log 없음.
+  - fresh dispatch run `28850098836`: failure. `Test before deploy`도 runner 배정 없음(`runner_id=0`), steps/log 없음, deploy skipped.
+  - 판단: 코드/테스트 실패가 아니라 GitHub Actions runner 배정, quota, repo Actions 상태, environment 실행 상태를 먼저 확인해야 한다.
+- 직전 성공 main AWS CD run: `28849235901`: success.
+- live public smoke:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
 - 현재 로컬 tracked 변경:
-  - `HANDOVER.md`: 프론트 애니메이션/드릴다운 설계와 worker 상태 갱신.
-  - `src/domains/gitops/repository_discovery.py`: worker `Harvey`가 Helm/Kustomize discovery render validation 전환 구현.
-  - `tests/test_repository_discovery.py`: worker `Harvey` 테스트 갱신.
+  - `.gitignore`: 임시 E2E 산출물과 로컬 압축 아카이브 stage 방지.
+  - `HANDOVER.md`: 시크릿 제외 원칙과 main Actions runner 실패 상태 갱신.
+  - `docs/continuation-execution-plan-2026-07-07.md`: 이 체크포인트 갱신.
 - worker `Harvey` 보고:
   - GitHub tree/content를 bounded export한 뒤 TemporaryDirectory에서 `kubectl kustomize` 또는 `helm template` 실행.
   - path traversal, file count/byte limit, renderer missing/failure 응답, render error compact/redact 처리.
@@ -38,22 +45,24 @@
   - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/gitops/repository_discovery.py tests/test_repository_discovery.py` → passed.
   - `git diff --check` → passed.
 - 이번 마무리 커밋 대상:
+  - `.gitignore`
   - `HANDOVER.md`
   - `docs/continuation-execution-plan-2026-07-07.md`
-  - `src/domains/gitops/repository_discovery.py`
-  - `tests/test_repository_discovery.py`
 - 커밋 제외:
   - `.e2e-tmp-sweep.py`
   - `report_desktop.json`
   - `report_mobile.json`
-  - 이유: 임시 E2E 산출물이며 특정 app/run/incident id가 들어 있어 hardcoding 금지 원칙과 충돌한다.
+  - local env archive zip
+  - 이유: 임시 E2E 산출물에는 특정 app/run/incident id가 있고, env archive는 secret 포함 가능성이 높다. hardcoding 금지와 secret hygiene 원칙상 커밋하지 않는다.
 - dev Actions:
-  - CI run `28848586860`: success.
-  - Promote Dev To Main run `28848587013`: success.
-  - AWS CD dev push run `28848586945`: success.
+  - CI run `28849784747`: success.
+  - Promote Dev To Main run `28849784833`: success.
+  - AWS CD dev push run `28849784735`: success.
 - main Actions:
-  - AWS CD run `28848639831`: `Test before deploy` success, `Deploy to AWS EKS` in progress.
-  - deploy head SHA: `657b79e6c82453bd8ec5282ad8dd286d0eebdbfd`.
+  - latest failed run `28850098836`: no runner/log.
+  - previous failed run `28849845008`: deploy job no runner/log.
+  - previous successful run `28849235901`: success.
+  - deploy head SHA: `e37cee8bf983eb122b5ab9c987210e00d7b1bf6f`.
 - 로컬 검증:
 
 ```bash
