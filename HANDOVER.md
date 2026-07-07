@@ -1402,3 +1402,25 @@
 - 롤아웃: management 네임스페이스에서 kubernetes-ops-service 이미지 쓰는 deploy 전체 `kubectl set image` (이벤트 스키마 변경 시 전 워커 동시 롤아웃 필수)
 - 장애 주입: `TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh inject|status|cleanup <fault>`
 - 문서 색인 규칙: 새 문서는 docs/README.md 색인에 링크(tests/test_docs_index.py 강제)
+
+## 인프라 비용 최적화 (2026-07-08)
+
+- target 클러스터 노드그룹 전환 완료(ap-northeast-2):
+  - `cluster-1`: 기존 ON_DEMAND `cluster-1-ng`(t3.large, desired 2→1) 드레인 후 삭제. 현재 `cluster-1-spot`만 ACTIVE, SPOT, instance types `t3.large t3a.large m5.large`, scaling min=1/max=2/desired=1.
+  - `cluster-2`: 기존 ON_DEMAND `cluster-2-ng`(t3.large, desired 2→1) 드레인 후 삭제. 현재 `cluster-2-spot`만 ACTIVE, SPOT, instance types `t3.large t3a.large m5.large`, scaling min=1/max=2/desired=1.
+  - 두 target 모두 단일 새 노드에서 allocatable pods가 29로 잡혀 CoreDNS/metrics-server를 1 replica로 낮춤. target/sandbox 팟은 각 클러스터에서 target 12개, sandbox 13개 모두 Running.
+- 추가 요청으로 management 노드그룹 전환 완료:
+  - 기존 `kubernetes-ops-ng`(t3.xlarge) 삭제, 현재 `kubernetes-ops-r6i`만 ACTIVE, ON_DEMAND, `r6i.xlarge`, min=2/max=2/desired=2.
+  - PV AZ 안전을 위해 새 노드그룹은 `ap-northeast-2b`/`ap-northeast-2d` 서브넷만 사용. PostgreSQL/NATS는 2b, MinIO는 2d에 정상 재부착.
+  - NATS 재기동 중 JetStream 복구가 1Gi PVC 여유 부족으로 503이 되어 `management/data-nats-0` PVC를 1Gi→5Gi 확장. 축소는 Kubernetes/EBS상 직접 불가하므로 유지 권장.
+- 검증:
+  - `https://k8s.woonyong.org/api/healthz` 200 OK.
+  - management `Deployment` 38개와 `StatefulSet` 3개(minio/nats/postgresql) 모두 Ready.
+  - `evidence-worker` 로그에서 `cluster.evidence.received`/`evidence.built`가 계속 발생. cluster-agent 로그에서 `cluster-2` evidence job result POST 200 확인, `cluster-1` policy/reconcile POST 200 및 management evidence 수신 지속 확인.
+- 롤백:
+  - target 즉시 완화: `aws eks update-nodegroup-config --cluster-name cluster-N --nodegroup-name cluster-N-spot --scaling-config minSize=1,maxSize=2,desiredSize=2`.
+  - target 온디맨드 복귀: 기존 describe 값의 서브넷/노드롤로 `cluster-N-ng` ON_DEMAND t3.large 노드그룹을 다시 만들고 Ready 확인 → `cluster-N-spot` 노드 drain → `cluster-N-spot` 삭제. 단일 노드 유지 시 CoreDNS/metrics-server 1 replica 조정은 유지 가능.
+  - management 복귀: `kubernetes-ops-ng` ON_DEMAND t3.xlarge min=2/max=2/desired=2를 같은 노드롤과 b/d 서브넷으로 생성 → Ready 확인 → `kubernetes-ops-r6i` 노드 drain → `kubernetes-ops-r6i` 삭제. NATS PVC는 5Gi 유지.
+- 스팟 중단 대응:
+  - EKS managed nodegroup이 `cluster-1-spot`/`cluster-2-spot` 노드를 자동 교체한다.
+  - 데모 중 중단이 발생하면 일시적인 노드 장애/재스케줄 시나리오로 활용 가능. 스팟 확보가 길어지면 위 즉시 완화 명령으로 desired=2까지 올리거나 온디맨드 롤백을 수행.
