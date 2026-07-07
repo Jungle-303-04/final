@@ -284,7 +284,7 @@ status: synced
 
 ### dead letter replay 원자성
 
-replay 이벤트의 outbox 스테이징과 `mark_dead_letter_replayed`(열린 행만 원자 UPDATE)를 한 트랜잭션(`unit_of_work_or_null`)으로 묶는다 — 동시 replay 는 첫 요청만 통과하고 진 요청의 스테이징은 롤백(이중 재발행 방지). `status != open` 이면 409.
+replay 이벤트의 outbox 스테이징과 `mark_dead_letter_replayed`(열린 행만 원자 UPDATE)를 한 트랜잭션(`unit_of_work_or_null`)으로 묶는다 — 동시 replay 는 첫 요청만 통과하고 진 요청의 스테이징은 롤백(이중 재발행 방지). `status != open` 이면 409와 `"dead letter is not open"`을 반환한다.
 
 ### /metrics 산출 항목
 
@@ -333,6 +333,7 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 | `SESSION_KEY_PREFIX` / `RATE_LIMIT_KEY_PREFIX` / `EMAIL_VERIFICATION_KEY_PREFIX` (상수) | str | `session` / `rate` / `email_verify` | Redis 키 프리픽스 |
 | `AUTHORIZATION_HEADER` / `SESSION_TOKEN_HEADER` (상수) | str | `authorization` / `x-session-token` | 토큰 헤더 |
 | `DEFAULT_DEAD_LETTER_LIMIT` / `MAX_DEAD_LETTER_LIMIT` (상수) | int | `50` / `100` | dead letter 조회 한도 |
+| `DEAD_LETTER_NOT_OPEN_MESSAGE` (상수) | str | `dead letter is not open` | replay 대상 DLQ가 `open`이 아닐 때 409 detail |
 | identity 라우터: `PUBLIC_BASE_URL` | str | `""` | 인증 메일 링크 base URL |
 | identity 라우터: `TRUST_PROXY` | str | `""` | `1` 이면 X-Forwarded-For 신뢰 |
 | `COOKIE_SECURE` (`Auth.COOKIE_SECURE_ENV`) | str | `1` | `0` 이면 쿠키 secure 해제(로컬 http) |
