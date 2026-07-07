@@ -27,6 +27,16 @@ HEALTH_RESOURCE_TYPE = "health"
 USAGE_RESOURCE_TYPE = "usage"
 UNKNOWN_STATUS = "unknown"
 
+# fleet 롤업 대상 리소스 타입·판정 기준값 — kubernetes_snapshot 이 기록하는 값과 동일해야 함.
+POD_RESOURCE_TYPE = "pod"
+NODE_RESOURCE_TYPE = "node"
+WORKLOAD_RESOURCE_TYPE = "workload"
+EVENT_RESOURCE_TYPE = "event"
+FLEET_ROLLUP_RESOURCE_TYPES = (POD_RESOURCE_TYPE, NODE_RESOURCE_TYPE, WORKLOAD_RESOURCE_TYPE)
+POD_RUNNING_STATUS = "Running"
+NODE_READY_STATUS = "Ready"
+DEGRADED_HEALTH = "degraded"
+
 
 def parse_observed_at(value: str | None) -> datetime:
     if not value:
@@ -383,6 +393,137 @@ class InventoryRepository(DatabaseConnection):
             {"sampled_at": iso_or_none(row["sampled_at"]), "usage": dict(row["usage"] or {})}
             for row in rows
         ]
+
+    def fleet_inventory_rollup(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str] | None = None,
+    ) -> dict[str, JsonObject]:
+        """fleet 화면용 클러스터별 pod/node/workload 상태 롤업(1 쿼리, GROUP BY).
+
+        cluster_ids 는 None(전체 허용) 또는 허용 집합 — 빈 집합이면 즉시 {} (권한 0).
+        반환: {cluster_id: {pods_running, pods_total, nodes_ready, nodes_total,
+        workloads_degraded, workloads_total, last_seen_at}}.
+        """
+        if cluster_ids is not None and not cluster_ids:
+            return {}
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(
+                table.c.cluster_id,
+                table.c.resource_type,
+                table.c.status,
+                table.c.health,
+                func.count().label("count"),
+                func.max(table.c.last_seen_at).label("last_seen_at"),
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.resource_type.in_(FLEET_ROLLUP_RESOURCE_TYPES),
+                table.c.deleted_at.is_(None),
+            )
+            .group_by(table.c.cluster_id, table.c.resource_type, table.c.status, table.c.health)
+        )
+        if cluster_ids is not None:
+            statement = statement.where(table.c.cluster_id.in_(cluster_ids))
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        rollup: dict[str, JsonObject] = {}
+        for row in rows:
+            entry = rollup.setdefault(
+                str(row["cluster_id"]),
+                {
+                    "pods_running": 0,
+                    "pods_total": 0,
+                    "nodes_ready": 0,
+                    "nodes_total": 0,
+                    "workloads_degraded": 0,
+                    "workloads_total": 0,
+                    "last_seen_at": None,
+                },
+            )
+            count = int(row["count"])
+            resource_type = row["resource_type"]
+            if resource_type == POD_RESOURCE_TYPE:
+                entry["pods_total"] += count
+                if row["status"] == POD_RUNNING_STATUS:
+                    entry["pods_running"] += count
+            elif resource_type == NODE_RESOURCE_TYPE:
+                entry["nodes_total"] += count
+                if row["status"] == NODE_READY_STATUS:
+                    entry["nodes_ready"] += count
+            elif resource_type == WORKLOAD_RESOURCE_TYPE:
+                entry["workloads_total"] += count
+                if row["health"] == DEGRADED_HEALTH:
+                    entry["workloads_degraded"] += count
+            seen = iso_or_none(row["last_seen_at"])
+            if seen is not None and (entry["last_seen_at"] is None or seen > entry["last_seen_at"]):
+                entry["last_seen_at"] = seen
+        return rollup
+
+    def latest_cluster_usage_rollups(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str] | None = None,
+        *,
+        samples_per_cluster: int = 2,
+    ) -> dict[str, list[JsonObject]]:
+        """클러스터별 최신 usage 샘플 N개(시간 오름차순) — restarts_recent 델타 계산용.
+
+        빈 허용 집합이면 즉시 {}. window function(row_number)으로 클러스터당 최신 N개만 취함.
+        """
+        if cluster_ids is not None and not cluster_ids:
+            return {}
+        table = ClusterUsageSampleRecord.__table__
+        ranked = select(
+            table.c.cluster_id,
+            table.c.sampled_at,
+            table.c.usage,
+            func.row_number()
+            .over(partition_by=table.c.cluster_id, order_by=table.c.sampled_at.desc())
+            .label("recency_rank"),
+        ).where(table.c.workspace_id == workspace_id)
+        if cluster_ids is not None:
+            ranked = ranked.where(table.c.cluster_id.in_(cluster_ids))
+        subquery = ranked.subquery()
+        statement = (
+            select(subquery.c.cluster_id, subquery.c.sampled_at, subquery.c.usage)
+            .where(subquery.c.recency_rank <= max(1, min(samples_per_cluster, 10)))
+            .order_by(subquery.c.cluster_id, subquery.c.sampled_at.asc())
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        samples: dict[str, list[JsonObject]] = {}
+        for row in rows:
+            samples.setdefault(str(row["cluster_id"]), []).append(
+                {"sampled_at": iso_or_none(row["sampled_at"]), "usage": dict(row["usage"] or {})}
+            )
+        return samples
+
+    def list_recent_warning_events(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        limit: int = 10,
+    ) -> list[JsonObject]:
+        """드릴다운용 최근 경고 이벤트 — Warning 이벤트(health=degraded)만 최신순."""
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == EVENT_RESOURCE_TYPE,
+                table.c.health == DEGRADED_HEALTH,
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.observed_at.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self.serialize_inventory_resource(dict(row)) for row in rows]
 
     def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> JsonObject | None:
         table = ClusterInventorySnapshotRecord.__table__

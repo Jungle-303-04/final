@@ -69,7 +69,7 @@ status: synced
   - `ApiGateway._session_store_config()` — `RedisSessionStoreConfig` 구성(아래 [설정](#설정-settings)의 세션 항목 참조).
   - `ApiGateway.lifespan(_app)` — `wait_for_database(db)` → `sessions.connect()` → `bus.connect()` → `_relay_outbox()` 태스크 시작. `COMMAND_NOTIFY_DATABASE_URL`이 있으면 `WAKEUP.start(url)`로 command long-poll 전용 LISTEN 연결을 연다. 종료 시 `WAKEUP.stop()` → relay 취소 → `bus.close()` → `sessions.close()` → `db.dispose_async()` → `db.dispose()`.
   - `ApiGateway._relay_outbox()` — `OutboxRelay(db, bus, "api-gateway")` 를 무한 루프로 실행. 배치가 가득 찼으면(`sent >= relay.batch`) 즉시 재실행, 아니면 `OUTBOX_RELAY_INTERVAL_SECONDS`(기본 1초) sleep. 예외는 `gateway_outbox_relay_error` 경고 로그 후 계속.
-  - `ApiGateway.configure_routes()` — 라우터 등록 순서: frontend proxy(미들웨어) → health → identity → alert channels → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → live proxy(WS) → dead-letter → metrics → 전역 오류 핸들러.
+  - `ApiGateway.configure_routes()` — 라우터 등록 순서: frontend proxy(미들웨어) → health → identity → alert channels → providers → catalog → ai → identity_admin → applications → target → gitops → approval → ingest(`/agent/connect`) → inventory → rca → command → dashboard → fleet → live proxy(WS) → dead-letter → metrics → 전역 오류 핸들러.
   - `ApiGateway._register_frontend_proxy(app)` — `@app.middleware("http")`: 경로가 `/api` 또는 `/api/*` 면 prefix 를 벗겨(`request.scope["path"]` 재작성) 인프로세스 라우터로 통과, `_is_frontend_request`(GET/HEAD 이면서 `/assets/*`·`/favicon.ico`·`/manifest.webmanifest` 또는 `Accept: text/html`)면 `_proxy_console` 로 콘솔 정적 자산을 프록시(httpx, hop-by-hop 헤더 제거, 실패 시 502 `"frontend unavailable"` + `frontend_proxy_error` 로그). 그 외는 그대로 통과.
   - `ApiGateway._register_live_proxy_routes(app)` — `@app.websocket("/api/live/{path:path}")`: `REALTIME_ORIGIN` 의 `/live/{path}` 로 접속(구독 query string 그대로 전달 — 유실 시 기본 workspace 로만 붙어 이벤트가 비어 보임), `cookie`/`authorization`/`x-session-token` 헤더 승계 후 `_bridge_websocket` 로 양방향 중계. 업스트림 실패는 `live_proxy_error` 로그 후 1011 종료.
 - `src/services/gateway/api-gateway/gateway.py :: agent_connected_body_from_request(payload, identity)` — `AgentConnectRequest` 의 `cluster_id` 를 버리고 인증 identity 의 `cluster_id`/`workspace_id` 를 권위값으로 채운 `AgentConnectedBody` 생성.
@@ -219,6 +219,8 @@ status: synced
 | POST | `/agent/commands/{command_id}/result` | agent | — |
 | GET | `/dashboard/rca/timeline` | 세션 | cluster read 필터 |
 | GET | `/dashboard/rca/incidents/{incident_id}` | 세션 | cluster read 필터 |
+| GET | `/fleet/summary` | 세션 | `accessible_resource_ids`(cluster read)로 클러스터 필터 — `src/domains/dashboard/fleet_router.py :: fleet_summary` |
+| GET | `/clusters/{cluster_id}/summary` | 세션 | cluster read 접근 — `src/domains/dashboard/fleet_router.py :: cluster_summary_detail` |
 
 ## 데이터 모델 (Data Model)
 

@@ -6,7 +6,7 @@ import { Button, Field } from '@/shared/ui';
 import { AuthLayout } from '@/features/auth/AuthLayout';
 
 export default function LoginView() {
-  const [email, setEmail] = useState('admin.local@example.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const login = useLogin();
   const nav = useNavigate();
@@ -15,7 +15,7 @@ export default function LoginView() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     login.mutate({ email, password }, {
-      onSuccess: () => nav(sp.get('returnTo') ?? '/overview', { replace: true }),
+      onSuccess: () => nav(sp.get('returnTo') ?? '/', { replace: true }),
       onError: (err) => {
         const a = err as ApiError;
         if (a.status === 403 && a.detail.includes('approval')) nav(`/pending?email=${encodeURIComponent(email)}`);

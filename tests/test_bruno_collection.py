@@ -112,6 +112,8 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.PROVIDERS_VALIDATE_PATH,
         routes.DASHBOARD_RCA_TIMELINE_PATH,
         "/dashboard/rca/incidents/{{incident_id}}",
+        routes.FLEET_SUMMARY_PATH,
+        "/clusters/{{cluster_id}}/summary",
         "/metrics",
     ]
 

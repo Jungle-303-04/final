@@ -1,58 +1,82 @@
-# 프론트엔드 프로덕션 감사 (AUDIT)
+# 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
-기준: `VITE_API_MODE=real` 프로덕션 빌드(`.env.production`) — 실데이터 아닌 것은 모두 결함으로 취급.
-범위: `src/app`, `src/features/*`, `src/shared/*` (메인 앱) + `/console`·`/plural` 복각 UI.
+기준: `VITE_API_MODE=real` 프로덕션 빌드 — 서빙되는 앱에서 mock/fixture/하드코딩 수치는 전부 결함.
+이번 패스: **Plural 스타일 콘솔이 루트(`/`) 앱으로 승격**, 구 베이스 앱 셸/화면 삭제, 전 화면 실데이터화.
 
-## A. 메인 앱 (── `/overview` `/clusters` `/repos` `/workflows` `/metrics` `/ai` `/notifications` `/incidents` `/catalog` `/settings`)
+## A. 아키텍처 결정
 
-### A-1. mock/가짜 데이터 경로
-- [x] `shared/lib/api.ts` — 기본값 real, mock 은 `VITE_API_MODE=mock` 명시 시에만. `.env.production=real` 확인.
-- [x] `shared/lib/live.ts` — mock 분기는 API_MODE==='mock' 에서만 가짜 스트림. real 은 WS(`/api/live/browser`) + 지수 백오프 재연결. 이상 없음.
-- [x] 메인 앱 뷰 전수 확인 — 하드코딩 수치/固定 fixture 렌더 없음 (모든 데이터 TanStack Query → `/api/*`).
+- 콘솔 셸(`features/console/ui.tsx`, plural-ui 디자인)이 `/` 에 마운트. 구 `AppShell`(`app/shell/`)과 `/overview` 히트맵 화면 삭제.
+- "디자인 프리뷰(샘플 데이터)" 배너 제거 — 콘솔이 이제 실데이터 앱 그 자체이므로 존재 이유 소멸.
+- 실데이터 뷰(클러스터/레포/워크플로/인시던트/메트릭/AI/설정)는 콘솔 레이아웃 하위로 이동하고,
+  `shared/theme-bridge.css` 로 shared/ui 토큰(`--surface-* --text-* --brand …`)을 plural 토큰(`--color-*`)에
+  매핑 — 셸과 콘텐츠가 동일 팔레트·다크/라이트 모드(`data-theme-mode`)를 공유. 페이지 헤더는 plural `PageHeader` 로 통일.
+- 로그인 등 인증 화면도 같은 토큰 브리지를 사용(첫 페인트 전 `main.tsx` 에서 테마 속성 적용).
 
-### A-2. 이번 패스에서 발견·수정한 결함
-- [x] **인시던트 상세에 evidence/RCA report 실데이터 미연동** — 신규 `GET /evidence`, `GET /rca-reports` 를 `useEvidence`/`useRcaReports` 로 연결. kind 뱃지(kubernetes/prometheus/loki/tempo), payload 펼침(원문 JSON), 상대+절대 시각, correlation id 복사 칩, RCA 리포트(근본원인·신뢰도·severity·action·근거·미수집 증거) + 증거 흐름 앵커. 빈/오류/로딩 상태 모두 정직하게 처리.
-- [x] `IncidentDetail`/`Incident` 타입·adapt 에서 `correlation_id` 유실 → 보존하도록 수정 (evidence 조회 키).
-- [x] **ConnectRepoWizard** — 닫아도 입력·단계가 남는 문제 → 닫을 때 초기화. 클러스터 0개면 2단계가 빈 select 로 dead-end → 안내 + `/clusters` 이동 버튼. 성공 토스트 + 상세로 이동(기존). 실패 사유 inline 유지.
-- [x] **RegisterClusterWizard** — providers catalog 로딩/실패 시 0단계 dead-end → 스켈레톤/오류+재시도. 복사 버튼 무피드백 → 토스트. 등록 성공 토스트. **미연결 상태에서 ESC/오버레이로 닫으면 1회용 토큰 유실** → close guard(경고 후 한 번 더 닫기). '미연결' 표기 명시.
-- [x] **useApproval(승인/거절) 실패가 무음** → 사유 토스트(권한/중복 처리) + 상태 재동기화.
-- [x] **ChatView 전송 실패 시 입력 유실** → 실패 시 draft 복원 + 토스트. `useSelectAction` 성공/실패 토스트.
-- [x] **CatalogView 설치** — 실패 무음 → 토스트. 한 카드 클릭 시 모든 카드 버튼이 pending 되던 문제 → variables 로 해당 카드만.
-- [x] **OpsView DLQ 재처리** — 실패 무음 → 성공/실패 토스트.
-- [x] **org/api 뮤테이션 (조직·그룹 생성, 권한 부여/회수, 멤버십 토글)** — 실패 무음 → 토스트, 토글 실패 시 서버 상태 재조회로 체크박스 롤백. 멤버십 토글 pending 중 체크박스 잠금.
-- [x] **useApproveUser(가입 승인)** — 성공/실패 토스트 + 목록 재동기화.
-- [x] SignupView — 409 외 오류(500 등) 무표시 → fallback 오류 라인.
-- [x] AppShell 로그아웃 — pending 표시 + 실패 토스트.
-- [x] Drawer ESC 미지원(Modal 과 불일치) → ESC 지원 추가.
-- [x] ClusterDetailView 재시작 — 파괴적 명령이 확인 없이 즉시 실행 → 확인 모달 추가.
-- [x] WorkflowGraphView — run 미발견 시 dead-end 텍스트만 → 목록 복귀 링크, 로딩 중 성급한 '없음' 방지(`useRunsAll` 이 pending 노출).
-- [x] WorkflowListView — 첫 로딩 중 '없음' 빈 상태가 먼저 보이던 문제 → 스켈레톤.
-- [x] MetricsView — usage 시계열이 비면 카드 자체를 숨겨서(암묵) → 로딩 스켈레톤/오류+재시도/정직한 빈 상태로 항상 표시. 클러스터 0개면 등록 유도 빈 상태. PromQL 재시도가 현재 입력값을 재실행하던 버그 → 해당 카드의 쿼리 재실행. 프리셋 select 를 controlled 로. x축을 실제 시각(HH:MM:SS) 라벨로.
-- [x] `TimeSeriesChart` — crosshair + 전 시리즈 슬라이스 툴팁, 부드러운 시리즈 전환(animate+motionConfig).
-- [x] 그래프(AnimatedEdge) — 활성 edge 에 이동 패킷(animateMotion) + 노드 좌표 전환 애니메이션(reduced-motion 존중).
-- [x] mock 라우터/픽스처 — 신규 `/evidence`·`/rca-reports` 계약 동형 추가(데모 모드 무결성).
+## B. 라우트 → 실데이터 API 매핑 (전 화면)
 
-### A-3. 확인만 하고 이상 없던 항목
-- [x] 401 처리 — `setUnauthorizedHandler` → session invalidate → `RequireSession` 이 `returnTo` 보존 리다이렉트, 로그인 성공 시 복귀.
-- [x] 레포 연결 성공 흐름 — invalidate + `/repos/:id` 이동 + 첫 run 대기 빈 상태 안내.
-- [x] 클러스터 등록 후 목록 invalidate + connection-status 5s 폴링(connected 시 중단).
-- [x] 스케일/재시작 — 비동기 명령 안내, policy(403)/검증(422) 사유 노출 (`commandFailureMessage`).
-- [x] PromQL 온디맨드 — `/agent/debug/query` 발행 후 `/commands/{id}` 2s 폴링, 실측 요약만 표시(가짜 완료 없음).
-- [x] 알림 — 승인 대기 run·RCA timeline·DLQ 3소스 합성, 미읽음 워터마크, 링크 전부 실 라우트.
-- [x] WS 실시간 — AppShell 1회 연결, heatmap/metrics/cluster 뷰가 스냅샷 반영. 끊김 시 '재연결 중' 배너 + 인벤토리 폴백(정직).
-- [x] Modal/Drawer — 오버레이 클릭·ESC·✕ 일관.
+| 라우트 | 화면 | 실 API |
+|---|---|---|
+| `/` | 홈(플릿 대시보드) | `GET /fleet/summary`(신규 집계 계약) + `GET /dashboard/rca/timeline` + 승인 알림 합성(`/applications/*/runs`) + `GET /ai/conversations` |
+| `/clusters` | 클러스터 목록 + 등록 위저드 | `GET /clusters`, `GET /providers/catalog`, `POST /providers/validate`, `POST /targets`, `GET /clusters/{id}/connection-status`(5s 폴링) |
+| `/clusters/:id` | 클러스터 상세(워크로드/팟/노드/서비스/리소스/이벤트 + 집계 요약) | `GET /clusters/{id}/inventory/*`, `GET /clusters/{id}/summary`(신규 집계 계약: usage·open_incidents), `POST …/scale`, `POST …/restart` |
+| `/repos`, `/repos/:id` | GitOps 레포 + 연결 위저드 | `GET/POST /applications`, `GET /applications/{id}/runs·deployments`, `POST /approvals/{id}/grant·reject` |
+| `/workflows`, `/workflows/:runId` | run 목록 + React Flow 그래프(dash-flow·패킷 애니메이션, dagre 자동 배치) | `GET /applications/*/runs`(활성 run 10s 폴링), 승인 API |
+| `/incidents` | 알림/인시던트 피드 | timeline + DLQ(`GET /dead-letters`, admin) + 승인 대기 합성 |
+| `/incidents/:id` | RCA 파이프라인 그래프 + 증거/리포트 | `GET /dashboard/rca/incidents/{id}`, `GET /evidence?correlation_id=`, `GET /rca-reports?correlation_id=` |
+| `/metrics` | 실시간(WS)·스냅샷 시계열·온디맨드 PromQL | WS `/api/live/browser`, `GET /clusters/{id}/usage`, `POST /agent/debug/query` → `GET /commands/{id}` 폴링 |
+| `/ai`, `/ai/:id` | AI 채팅(도구 호출·복구 액션·승인 카드) | `GET/POST /ai/conversations*`, `POST /rca/recovery-plans/*/actions/*/select` |
+| `/catalog` | 서비스 카탈로그 | `GET /catalog/items`, `POST /catalog/items/{id}/installs` |
+| `/settings/{members,orgs,groups,access,ops}` | 조직/그룹/멤버/권한/DLQ (admin 가드) | `GET/POST/DELETE /users·/orgs·/groups·/access`, `POST /auth/users/{id}/approve`, `POST /dead-letters/{id}/replay` |
+| `/login /signup /pending /verify-email` | 인증 | `POST /auth/*`, `GET /auth/session` |
+| `/console/*`, `/plural/*`, `/overview*`, `/notifications` | 리다이렉트 | → `/` (`/notifications` → `/incidents`) |
 
-## B. `/console`·`/plural` 복각 UI (Plural.sh 디자인 데모)
+신규 집계 계약(백엔드에서 병행 구현 중, `features/fleet/api.ts` 에 타입 고정):
+- `GET /fleet/summary` → `{clusters:[{cluster_id,name,health,pods_running,pods_total,nodes_ready,nodes_total,open_incidents,restarts_recent,cpu_pct,mem_pct,last_seen}], totals:{clusters,healthy,warning,critical,open_incidents,pending_approvals,running_workflows,dead_letters}}`
+- `GET /clusters/{id}/summary` → `{workloads[], recent_events[], open_incidents[], usage:{cpu_pct,mem_pct,restarts_total}}`
+- 엔드포인트 미배포 상태에서는 QueryBoundary 가 오류+재시도(정직한 상태)로 표시 — 배포되면 즉시 동작.
 
-- [x] **전 구간 mock**: `features/console/api/index.ts` 가 `../mock`/`../metrics` 를 재수출 — CLUSTERS/SERVICES/STACKS/ALERTS 등 27개 fixture, seeded RNG 시계열(`genHistorySeries`), 사인파 라이브 스트림(`console/live.ts`). 폼 제출(배포/스케일/스택 생성 등)은 로컬 state 만 변경.
-- [x] **조치**: real 모드에서 `/console` 상단에 상시 "디자인 프리뷰 — 샘플 데이터" 배너 + 실데이터 콘솔(`/overview`) 이동 링크. (fabricated 데이터를 실측으로 오인하지 않도록 정직성 확보)
-- [ ] (선택/후속) `/console` 하위 CD·K8s 화면을 실 API 로 재배선 — 이번 범위 아님. 필요 시 `frontend/docs/api-layer.md` 의 교체 지침대로 `console/api/index.ts` 만 교체.
+## C. 백엔드 도메인이 없는 복각 섹션 처리 (fixture 삭제)
 
-## C. MISSING-BACKEND (백엔드에 필요한 것)
+| 구 콘솔 섹션 | 결정 |
+|---|---|
+| CD(clusters/services/pipelines/repos/globalservices/observers) | **재설계-흡수** — 실 도메인 `/clusters`(인벤토리)·`/repos`(GitOps)·`/workflows`(파이프라인) 로 대체 |
+| Stacks / Kubernetes 뷰어 | **흡수** — `/clusters/:id` 리소스/워크로드 탭(실측 인벤토리) |
+| Alerts / AI threads / sentinels | **흡수** — `/incidents`(RCA 타임라인) · `/ai`(실 대화) |
+| Home 위젯보드·플릿맵(fixture) | **재구현** — `/` 홈이 `GET /fleet/summary` 기반 히트맵(Treemap)·집계 카드·테이블로 대체 |
+| Marketplace/번들/퍼블리셔 | **삭제** — 대응 도메인 없음. 설치형 카탈로그는 실 `/catalog` 로 대체 |
+| Cost management / Security(취약점·컴플라이언스) / Edge / Flows / Workbenches / Self-service PR | **삭제** — 백엔드 도메인 없음(fabricated 데이터 금지) |
+| Cloud shell / Audits(geo·login) / Profile(키·토큰) / Personas / OIDC·SMTP 등 설정 복제 | **삭제** — 실 설정은 `/settings/*` (orgs/groups/members/access/ops) |
+| 역할 전환 데모(viewer.tsx "View as") | **삭제** — 권한은 실 세션(`roles`)과 서버 검증으로만 |
 
-- 없음 — 이번 패스에서 필요한 `GET /evidence`, `GET /rca-reports`, `GET /clusters/{id}/usage`, `GET /clusters/{id}/connection-status`, `GET /commands/{id}` 모두 존재(contracts/gateway/routes.py 확인).
-- (참고) `/console` 복각 UI 를 실데이터로 전환하려면 stacks/pipelines/security/cost 등 대응 API 가 없음 — 전환 결정 시 별도 설계 필요.
+삭제 파일: `features/plural/**`(5), `features/console/{mock,metrics,flows,popups,viewer,ChatPanel,live,routes,api/**,map/**,widgets/**,pages/{AiMisc,Cd,Drill,Settings,StacksK8s}Pages}`(29), `app/shell/**`(2), `features/fleet/{FleetHeatmapView,score}`(2), plural-ui 데드 코드(`PluralLayout/PluralShell/SaveButton` — mock 저장 버튼 포함) = **38개 파일 + 데드 익스포트 제거**.
 
-## D. 검증
-- [x] `npm run build` (tsc --noEmit + vite build) 통과 — 0 TS error.
-- [x] `npm run lint` 통과.
+## D. mock 격리 증명
+
+- `API_MODE` 기본 `real`; fixture(`shared/lib/mock/*`)는 `VITE_API_MODE=mock` 명시 빌드에서만 라우팅됨(`shared/lib/api.ts` 단일 분기).
+- grep 검증: `mock/fixtures|mock/router` 임포트는 `shared/lib/api.ts`(모드 분기)·`shared/lib/live.ts`(mock 분기)·`shared/lib/mock/router.ts` 뿐.
+- 신규 집계 계약도 mock 라우터에 동형 핸들러 추가(데모 모드 무결성) — real 경로와 무관.
+- 하드코딩 제거: 로그인 이메일 prefill(`admin.local@example.com`) 삭제.
+
+## E. 애니메이션/모션 일관성
+
+- React Flow: `AnimatedEdge`(dash-flow + animateMotion 패킷), dagre 자동 배치, fitView 전환 — 워크플로 그래프·RCA 파이프라인.
+- Motion: 섹션 전환 fadeRise(콘솔 셸), 카드/리스트 enter-exit(`AnimatedList`/`Stagger`/`AnimatedRow`), 모달 pop·플라이오버 slide(plural-ui variants), LIVE 인디케이터 `PulseOnChange`, CountUp 스탯.
+- Nivo: crosshair + 슬라이스 툴팁 + 시리즈 전환 애니메이션(`TimeSeriesChart`), 플릿 히트맵 Treemap.
+- `MotionConfig reducedMotion="user"` + 개별 `useReducedMotion` 폴백으로 prefers-reduced-motion 전면 존중.
+
+## F. 실시간
+
+- WS 단일 연결(`startLive`)은 콘솔 셸 마운트 시 1회 — 지수 백오프 재연결, `live.summary`/스냅샷 반영.
+- 반영 지점: 셸 LIVE 인디케이터(pulse), 메트릭 실시간 차트, 클러스터 상세 hot 팟 표시.
+
+## G. MISSING-BACKEND
+
+- `GET /fleet/summary`, `GET /clusters/{id}/summary` — 병행 구현 중인 집계 엔드포인트(계약 확정, 프론트 타입 고정).
+  미배포 동안 홈 집계 카드/히트맵·클러스터 상세 집계 패널은 오류+재시도 상태로 표시(그 외 화면은 무영향).
+- 그 외 필요 API 전부 존재 확인(contracts/gateway/routes.py).
+
+## H. 검증
+
+- [x] `npm run build` (tsc --noEmit + vite build) exit 0
+- [x] `npm run lint` exit 0
+- [x] 삭제 모듈 잔존 임포트 grep 0건, `/console·/plural·/overview` 링크 잔존 0건(리다이렉트 제외)
