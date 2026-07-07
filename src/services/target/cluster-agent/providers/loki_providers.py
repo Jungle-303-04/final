@@ -18,7 +18,7 @@ from providers.base import TRACER, ConfigReader
     source="loki",
     evidence_key="logs",
     query_type=LokiLogQuery,
-    empty_payload=list,  # 로그 payload 는 목록 형태
+    empty_payload=list,  # log payload's shape is list
 )
 class LokiLogsProvider:
     """Collect log data from Loki.
