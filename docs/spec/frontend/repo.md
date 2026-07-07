@@ -17,8 +17,8 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·UI |
-| import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 승인 버튼 활성 |
+| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/adapt`(`adaptApplication`, `adaptDeployment`, `adaptRun`), `@/shared/lib/format`, `@/shared/ui/plan-diff`, `@/shared/ui/icons`, `@/ui`, `@/ui/motion` | [shared](shared.md) | API·UI |
+| import | `@/features/auth/api`(`useSession`) | [auth](./auth.md) | 승인 버튼 활성(`service_admin`, `release_operator`) |
 | import | `@/features/resources/ConnectRepoWizard` | [resources](./resources.md) | 목록 화면 위저드 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | import ← | [workflow](./workflow.md), [chat](./chat.md), [notifications](./notifications.md), [org](./org.md) | — | `useApplications`/`useRuns*`/`ApprovalCard` 소비 |
@@ -59,9 +59,9 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   { approvalId: string; summary: string; resolved?: 'granted' | 'rejected'; compact?: boolean })
 ```
 
-- `resolved` 있으면 `<FadeSlideIn><Badge status={resolved} /></FadeSlideIn>` 만 렌더해 승인/거절 확정 배지가 부드럽게 등장한다.
-- 아니면 `.card`(surface-2, compact 시 padding 10): `Badge(warn '승인 대기')` + summary + 승인(primary sm)/거절(danger sm) 버튼 — 진행 중엔 둘 다 disabled, 로딩 스피너는 `approval.variables.action` 이 일치하는(클릭한) 버튼에만.
-- `canDeploy = useIsAdmin()` — false 면 두 버튼 disabled + title `'deploy 권한 필요'` (mock 단계 단순화, 서버가 최종 검증. G5 도입 시 리소스 권한으로 대체).
+- `resolved` 있으면 `motion.div(fadeInUp)` 안에 `Badge(success|danger)`만 렌더해 승인/거절 확정 배지가 부드럽게 등장한다.
+- 아니면 `@/ui` token surface(`rounded-panel`, `border-border`, `bg-bg`)에 `Badge(warning '승인 대기')` + summary + 승인(primary sm)/거절(danger sm) 버튼을 렌더한다. 진행 중엔 둘 다 disabled, 로딩 스피너는 `approval.variables.action` 이 일치하는 버튼에만 표시한다.
+- `canDeploy = session.roles includes service_admin|release_operator` — false 면 두 버튼 disabled + Tooltip `'release_operator 권한 필요'`. 서버가 최종 검증한다.
 - 클릭 → `useApproval().mutate({ approvalId, action })`.
 
 ### `frontend/src/features/repo/RepoListView.tsx :: RepoListView` (default export)

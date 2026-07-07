@@ -16,10 +16,11 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`(`AiConversationAcceptedResponse`, `AiConversationDetailResponse`, `Conversation`, `ConversationSummary`, `ChatMessage`, `ChatToolCall`, `ChatActions`, `ChatApprovalRef`, `Tone`), `@/shared/lib/adapt`(`adaptConversationSummary`), `@/shared/lib/query`(`queryClient`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`(`AiConversationAcceptedResponse`, `AiConversationDetailResponse`, `Conversation`, `ConversationSummary`, `ChatMessage`, `ChatToolCall`, `ChatActions`, `ChatApprovalRef`, `Tone`), `@/shared/lib/adapt`(`adaptConversationSummary`), `@/shared/lib/format` | [shared](shared.md) | API·타입·포맷 |
 | import | `@/features/repo/ApprovalCard` | [repo](./repo.md) | `approval_ref` 렌더 |
-| import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 액션 실행 권한 |
+| import | `@/features/auth/api`(`useSession`) | [auth](./auth.md) | 액션 실행 권한(`service_admin`, `release_operator`) |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
+| import | `@/ui`, `@/ui/motion`, `@tanstack/react-query`(`useQueryClient`) | [shared](shared.md) | 디자인 시스템 프리미티브·Motion preset·캐시 무효화 |
 | 백엔드 | `/ai/*`, `/rca/recovery-plans/*` | [api-gateway](../services/gateway-api-gateway.md) | G10 대화 route |
 
 ## 공개 인터페이스 (Public API) — `api.ts`
@@ -53,41 +54,42 @@ status: synced
 ### `frontend/src/features/chat/ChatView.tsx :: ChatView` (default export)
 
 - 라우트: `/ai`(새 대화), `/ai/:conversationId`. 쿼리스트링 `prefill` — draft 초기값(타 화면의 "✦ 분석" 딥링크용), `context` — JSON 직렬화된 `AiChatContext`.
-- state: `draft: string`. ref: `bottomRef` — `conv.messages.length` 변경 시 `scrollIntoView({behavior:'smooth'})`.
+- state: `draft: string`. ref: `bottomRef` — `conv.messages.length` 변경 시 reduced-motion을 깨지 않도록 `scrollIntoView({ block: 'end' })`.
 - `chatContext = chatContextFromSearchParams(sp)` 를 `useMemo`로 파생한다. `context` JSON이 깨졌거나 비어 있으면 `undefined`.
 - `submit()`: trim 후 빈 문자열/16,000자 초과면 무시. payload는 `{message: text, context: chatContext}`. `conversationId` 있으면 `send.mutate(payload, {onSuccess: clearPrefill})`, 없으면 `create.mutate(payload, { onSuccess: d => nav(pathFor('/ai/'+d.conversation_id)) })`. 이후 draft 비움, 실패 시 draft 복원.
 - `deleteConversation(id)`: DELETE 성공 시 ok toast. 현재 열린 대화면 `pathFor('/ai')`로 replace 이동한다. 실패는 danger toast.
+- `aiConfigurationIssue()`: list/detail/create/send 오류 메시지에서 `LLM_PROVIDER`, `API_KEY`, quota/auth 계열 오류를 감지하거나 conversation status가 `failed`면 채팅창 대신 설정 안내 EmptyState를 먼저 보여준다. 현 백엔드에 별도 설정 조회 API가 없으므로 오류 계약 기반 선행 차단으로 동작한다.
 - 트리:
   ```
-  FadeSlideIn > 그리드(260px 1fr, 높이 calc(100vh - 140px))
+  motion.div(fadeInUp) > PageHeader('AI 채팅') > responsive grid
   ├─ Card('대화', actions="새 대화" → nav(pathFor('/ai'))) ← 좌측 목록 (성공+0건이면 '대화 없음')
-  │   listQ.isPending → Skeleton(4)
+  │   listQ.isPending → Skeleton
   │   listQ.isError → EmptyState(error message, 다시 시도)
-  │   listQ.isSuccess → AnimatedList(listQ.data)
+  │   listQ.isSuccess → motion list(listStagger)
   │   대화별 행: 열기 button(status==='waiting' 이면 info 점, title ellipsis, timeAgo(updated_at)) + 삭제 button
-  │   현재 대화는 data-active=true 배경. 열기 button 클릭 → /ai/:id, 삭제 button 클릭 → deleteConversation
-  └─ Card(flex column, padding 0, overflow hidden)     ← 우측 스레드
+  │   현재 대화는 accent border/background. 열기 button 클릭 → /ai/:id, 삭제 button 클릭 → deleteConversation
+  └─ Card(flex column, padding 0, overflow hidden) ← 우측 스레드
      ├─ 헤더: 제목 또는 'AI 운영 어시스턴트' + status, 현재 대화면 삭제 버튼
-     ├─ 메시지 영역(.chat-messages):
-     │   conversationId 없으면 EmptyState('✦', '새 대화')
-     │   conversationId 있고 convQ.isPending → Skeleton(4)
+     ├─ 메시지 영역:
+     │   aiConfigurationIssue 있으면 EmptyState('AI 설정 확인 필요' 또는 'AI 응답 실패') + 다시 시도 + 운영 설정 링크
+     │   conversationId 없으면 EmptyState('AI', '새 대화')
+     │   conversationId 있고 convQ.isPending → Skeleton
      │   conversationId 있고 convQ.isError → EmptyState(error message, 다시 시도)
      │   conv.messages.map(MessageRenderer)
-     │   conv.status==='waiting' → "분석 중" + skeleton (data-testid="typing")
-     └─ 입력줄(.chat-composer): 16,000자 초과 시 role="alert" 경고 · textarea(rows 2, ⌘/Ctrl+Enter 전송,
-        data-testid="chat-input") · 전송 Button(primary, loading=create||send, disabled=빈 draft/16,000자 초과/pending, data-testid="chat-send")
+     │   conv.status==='waiting' → "분석 중" 인디케이터(data-testid="typing")
+     └─ 입력줄: Field/Textarea(rows 2, Ctrl/Meta+Enter 전송, data-testid="chat-input") + Button(primary, loading=create||send, disabled=빈 draft/16,000자 초과/pending/AI 설정 오류, data-testid="chat-send")
   ```
 
 내부(비공개) 서브컴포넌트:
 
-- `MessageRenderer { m: ChatMessage }`
-  - user: 우측 정렬 `.chat-bubble--user`(배경 `--brand`, radius `14px 14px 4px 14px`, `white-space: pre-wrap`, `overflow-wrap:anywhere`).
-- assistant: 좌측 정렬 `.chat-bubble--assistant`(surface-2 + border, radius `14px 14px 14px 4px`). content 는 `split('**')` 로 홀수 인덱스만 `<b>`(단순 볼드 마크업). 이어서 `tool_calls`는 `ToolTraceRow` details 로 접힌 상태(`summary`: `Badge tone=status '도구'` + code name)로 렌더하고, 펼치면 args 를 `.chat-tool-args` code block 으로 보여준다. `actions` → `ActionSelectCard`, `approval_ref` → `ApprovalCard(approval_id, summary, resolved, compact)`.
-- `ToolTraceRow { trace }`: assistant 도구 호출 1건을 `<details className="chat-tool-trace">`로 렌더한다. `compactToolArgs(args)`는 앞뒤 공백 제거 후 900자를 넘으면 900자 + `…`로 줄인다.
+- `MessageRenderer { message: ChatMessage }`
+  - user: 우측 정렬 Tailwind bubble. `bg-accent`, `text-on-accent`, `rounded-panel`, `shadow-soft`, `whitespace-pre-wrap`, `break-words`.
+  - assistant: 좌측 정렬 Tailwind bubble. `bg-bg`, `border-border`, `rounded-panel`, `shadow-soft`. content 는 `split('**')` 로 홀수 인덱스만 `<strong>`(단순 볼드 마크업). 이어서 `tool_calls` → `ToolTraceRow`, `actions` → `ActionSelectCard`, `approval_ref` → `ApprovalCard(approval_id, summary, resolved, compact)`.
+- `ToolTraceRow { trace }`: assistant 도구 호출 1건을 디자인 시스템 토큰 기반 `<details>`로 렌더한다. `compactToolArgs(args)`는 앞뒤 공백 제거 후 900자를 넘으면 900자 + `...`로 줄인다.
 - `ActionSelectCard { actions: NonNullable<ChatMessage['actions']> }` (`data-testid="action-card"`)
   - state: `picked: string | null`. `locked = !!actions.selected`.
   - 옵션별 radio(라벨 + `Badge tone=risk '위험도'` + impact 설명). locked 면 radio disabled, 미선택 옵션 opacity 0.5.
-  - locked → `Badge ok '실행됨 — 진행은 워크플로우에서 확인'`. 아니면 "선택 실행" 버튼(primary sm): `!picked || !canDeploy` disabled(title `'release_operator 권한 필요'`), 클릭 시 `select.mutate({planId, actionId: picked})` + 성공 시 `queryClient.invalidateQueries({ queryKey: ['ai'] })`.
+  - locked → `Badge success '실행됨'`. 아니면 "선택 실행" 버튼(primary sm): `!picked || !canDeploy` disabled, Tooltip `'release_operator 권한 필요'`, 클릭 시 `select.mutate({planId, actionId: picked})` + 성공 시 `queryClient.invalidateQueries({ queryKey: chatKeys.list() })`.
 
 ## 라우트
 
@@ -104,12 +106,14 @@ status: synced
 4. 승인: assistant `approval_ref` 는 [repo](./repo.md) 의 `ApprovalCard` 로 처리(승인 성공 시 repo 쪽 훅이 `['ai']` 캐시도 invalidate).
 5. 대화 삭제: 좌측 행 또는 우측 헤더 삭제 → DELETE `/ai/conversations/:id` → 목록 갱신. 현재 대화 삭제 시 `pathFor('/ai')`로 이동.
 6. 타 화면에서 들어온 리소스 컨텍스트는 `/ai?prefill=...&context=<json>`으로만 전달하고, 전송 버튼을 누른 시점의 POST body에 포함한다(자동 전송 없음).
+7. LLM 미설정/키 오류/크레딧 오류는 입력창보다 먼저 설정 안내 카드를 표시한다. 사용자는 "운영 설정"으로 이동하거나 "다시 시도"로 목록/상세 쿼리를 재실행한다.
 
 ## 불변식·오류 (Invariants & Errors)
 
 - 메시지 길이 상한 16,000자 — 초과 시 클라이언트에서 전송 차단 + 경고 표시.
 - 폴링 주기는 서버가 준 `status` 만으로 파생(별도 타이머·웹소켓 없음).
 - 대화 조회가 실패한 상태에서는 현재 대화 전송 버튼도 비활성화한다. 실패 상태를 빈 대화로 위장하지 않고 오류 메시지와 재시도 버튼을 보여준다.
+- LLM 설정 오류 상태에서는 전송 버튼과 composer를 숨겨 "제출 후 실패"를 만들지 않는다. 정상 상태가 확인되어야 입력 UI가 다시 나타난다.
 - 대화 목록 응답에는 `messages` 가 없다(`adaptConversationSummary` 로 요약 정규화).
 - 대화 단건 응답은 `{conversation, messages}` envelope 이며, `ChatView`는 `adaptConversationDetail`이 만든 `Conversation`만 소비한다. assistant 도구 표시는 message top-level `tool_calls`, `metadata.tool_calls`, `metadata.tool_trace`를 모두 허용한다.
 - 삭제는 workspace 범위 서버 검증에 의존한다. 클라이언트는 성공 후 해당 detail cache만 제거한다.
