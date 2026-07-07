@@ -1017,6 +1017,43 @@ def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> Non
     assert compiled.params["status"] == "failed"
 
 
+def test_expire_stale_open_rca_incidents_closes_old_rows_atomically() -> None:
+    from domains.dashboard.repository import DashboardRepository
+
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(DashboardRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+
+    assert repository.expire_stale_open_rca_incidents(max_age_days=3, limit=100) == []
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+
+    # 단일 UPDATE ... RETURNING — 오래 열린 incident row 를 닫아 fleet 집계 폭증을 막는다.
+    assert "UPDATE rca_timeline" in sql
+    assert "stale_open_incidents" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "incident_expired" in compiled.params.values()
+    assert "RETURNING rca_timeline.id" in sql
+
+
 def test_user_account_schema_supports_password_login() -> None:
     columns = set(metadata.tables["user_accounts"].c.keys())
     assert {"email", "password_hash", "role"} <= columns

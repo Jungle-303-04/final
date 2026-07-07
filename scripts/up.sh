@@ -101,6 +101,7 @@ APP_WORKER_DEPLOYMENTS=(
   command-worker
   command-janitor
   outbox-relay
+  rca-timeline-janitor
   target-reconcile-worker
   rca-worker
   rca-feedback-worker
@@ -146,6 +147,7 @@ RCA_WORKER_DEPLOYMENTS=(
   command-worker
   command-janitor
   outbox-relay
+  rca-timeline-janitor
   evidence-worker
   incident-worker
   plan-worker
