@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:09 KST (stability rollout verified)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 21:21 KST (`/console` 보존 + AI chat 계약 검증)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,28 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+
+## 체크포인트 (21:21 KST) — `/console` 데모 보존 + AI chat 실제 계약 수정
+
+- 구현:
+  - 라우터에서 `/console` → `/` 리다이렉트를 제거했다. `/`는 실제 서비스, `/console`은 같은 콘솔 셸을 base path `/console`으로 띄우는 보존 데모 경로다.
+  - `ConsoleLayout`에 base path context를 추가했고, 사이드바/브레드크럼/알림 flyover/홈 위젯/상세 화면 링크가 현재 base path를 유지하도록 정리했다.
+  - 클러스터 드릴다운의 이벤트/메트릭/AI 분석 링크, 팟 drawer close, 노드/서비스/워크로드 상세 링크, 인시던트/워크플로우/레포 상세 브레드크럼도 `/console`에서 루트로 새지 않게 했다.
+  - AI 채팅 상세 조회는 실제 백엔드 envelope `{ conversation, messages }`를 `Conversation`으로 정규화한다. `metadata.tool_trace`는 렌더 가능한 `tool_calls`로 매핑하고, create/send 응답 타입은 실제 accepted response로 맞췄다.
+  - AI 채팅의 새 대화/대화 선택/삭제 후 이동도 현재 console base path를 유지한다.
+  - 운영 경로에 mock/fake/hardcoded production data 추가 없음.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test` → 8 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+- 병렬 감사 반영:
+  - 레포 연결은 실제 GitHub API 기반 probe → branch select → manifest candidate select → validation → `/applications/connect` 흐름이 이미 구현돼 있다.
+  - 클러스터 등록은 실제 provider/cloud discovery가 아니라 현재 env/config 후보(`CLUSTER_CONTEXTS`, `KUBE_CONTEXT_ALLOWLIST`, external console metadata)를 보여주는 수준이다. UI 라벨과 backend adapter를 “configured candidates”/실제 provider discovery로 분리해야 한다.
+  - `management_base_url`을 프론트 `location.origin`으로 넣는 현재 방식은 운영/프록시 환경에서 잘못된 설치 URL을 만들 수 있다. backend config `PUBLIC_MANAGEMENT_BASE_URL` 기본값을 내려주는 방식으로 옮기는 것이 다음 P1이다.
+- 다음:
+  1. 이 단위 커밋/푸시 후 프론트 이미지 빌드 및 live `https://k8s.woonyong.org/`, `https://k8s.woonyong.org/console/` 스모크를 수행한다.
+  2. 다음 구현 단위는 클러스터 등록의 실제 discovery semantics와 레포/클러스터 위저드 UI polish다.
+  3. 이후 드릴다운 resource-detail API를 프론트 Drawer에 붙여 클러스터→노드/서비스/워크로드→팟 각각의 이벤트/메트릭/AI 분석을 실제 데이터로 확장한다.
 
 ## 체크포인트 (20:58 KST) — DLQ archive + no-signal incident payload 정리
 

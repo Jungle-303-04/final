@@ -1,5 +1,5 @@
 // 운영 콘솔 셸 — 사이드바/헤더/브레드크럼/알림. 모든 표시는 실데이터(세션·알림·라이브 WS)만 사용
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { liveStore, startLive } from '@/shared/lib/live';
@@ -61,10 +61,27 @@ const toneSeverity = (t: Tone): ChipSeverity =>
 
 const NOTICE_KIND_LABEL: Record<string, string> = { approval: '승인', incident: '인시던트', dlq: 'DLQ', cluster: '클러스터' };
 
-export function ConsoleLayout() {
+const ConsolePathContext = createContext<(to: string) => string>((to) => to);
+
+export const useConsolePath = () => useContext(ConsolePathContext);
+
+function normalizeBasePath(basePath: string | undefined) {
+  if (!basePath || basePath === '/') return '';
+  return basePath.startsWith('/') ? basePath.replace(/\/$/, '') : `/${basePath.replace(/\/$/, '')}`;
+}
+
+export function ConsoleLayout({ basePath }: { basePath?: string }) {
   useEffect(() => { startLive(); }, []); // WS 단일 연결(D6) — 셸에서 1회
   const location = useLocation();
   const navigate = useNavigate();
+  const routeBase = normalizeBasePath(basePath);
+  const pathFor = useMemo(() => (to: string) => {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(to)) return to;
+    if (!routeBase) return to;
+    if (to === '/') return routeBase;
+    if (to === routeBase || to.startsWith(`${routeBase}/`)) return to;
+    return `${routeBase}${to.startsWith('/') ? to : `/${to}`}`;
+  }, [routeBase]);
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const admin = useIsAdmin();
@@ -73,9 +90,14 @@ export function ConsoleLayout() {
   const { notices, unread, markAllSeen } = useNotices();
   const liveStatus = liveStore(s => s.status);
   const liveAt = liveStore(s => s.snapshot?.at);
-  const crumbs = location.pathname.split('/').filter(Boolean);
+  const localPath =
+    routeBase && (location.pathname === routeBase || location.pathname.startsWith(`${routeBase}/`))
+      ? location.pathname.slice(routeBase.length) || '/'
+      : location.pathname;
+  const crumbs = localPath.split('/').filter(Boolean);
 
   return (
+    <ConsolePathContext.Provider value={pathFor}>
     <div className="pl-app co-app">
       <div className="co-body">
         <nav className={`co-sidebar${collapsed ? ' collapsed' : ''}`}>
@@ -86,7 +108,7 @@ export function ConsoleLayout() {
           {MENU.map((m) => (
             <NavLink
               key={m.to}
-              to={m.to}
+              to={pathFor(m.to)}
               end={m.end}
               title={m.label}
               className={({ isActive }) => `co-menuitem${isActive ? ' active' : ''}`}
@@ -97,9 +119,9 @@ export function ConsoleLayout() {
           ))}
           {admin && (
             <NavLink
-              to="/settings"
+              to={pathFor('/settings')}
               title="설정"
-              className={`co-menuitem${location.pathname.startsWith('/settings') ? ' active' : ''}`}
+              className={`co-menuitem${localPath.startsWith('/settings') ? ' active' : ''}`}
             >
               <GearIcon />
               {!collapsed && <span>설정</span>}
@@ -150,7 +172,7 @@ export function ConsoleLayout() {
                   </span>
                 )}
               </button>
-              <Button size="small" onClick={() => navigate('/ai')}>
+              <Button size="small" onClick={() => navigate(pathFor('/ai'))}>
                 <SendIcon size={13} /> AI 채팅
               </Button>
               <ThemeToggle />
@@ -177,7 +199,7 @@ export function ConsoleLayout() {
               {crumbs.length === 0 && <span className="crumb current">홈</span>}
               {crumbs.map((c, i) => {
                 const isLast = i === crumbs.length - 1;
-                const to = `/${crumbs.slice(0, i + 1).join('/')}`;
+                const to = pathFor(`/${crumbs.slice(0, i + 1).join('/')}`);
                 const label = i === 0 ? (SECTION_LABEL[c] ?? decodeURIComponent(c)) : decodeURIComponent(c);
                 return (
                   <span key={`${c}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -208,7 +230,7 @@ export function ConsoleLayout() {
           actions={
             <>
               <Button onClick={() => markAllSeen()}>모두 읽음</Button>
-              <Button variant="primary" onClick={() => { setNotifOpen(false); navigate('/incidents'); }}>
+              <Button variant="primary" onClick={() => { setNotifOpen(false); navigate(pathFor('/incidents')); }}>
                 인시던트로 이동
               </Button>
             </>
@@ -224,7 +246,7 @@ export function ConsoleLayout() {
                   type="button"
                   className="pl-bindrow"
                   style={{ cursor: 'pointer', textAlign: 'left', width: '100%', border: 'none', opacity: n.read ? 0.65 : 1 }}
-                  onClick={() => { setNotifOpen(false); navigate(n.link); }}
+                  onClick={() => { setNotifOpen(false); navigate(pathFor(n.link)); }}
                 >
                   <div className="pl-row" style={{ minWidth: 0 }}>
                     <Chip severity={toneSeverity(n.tone)}>{NOTICE_KIND_LABEL[n.kind] ?? n.kind}</Chip>
@@ -240,6 +262,7 @@ export function ConsoleLayout() {
         </Flyover>
       </div>
     </div>
+    </ConsolePathContext.Provider>
   );
 }
 

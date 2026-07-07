@@ -12,7 +12,7 @@ import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { TreemapChart, type HeatNode } from '@/shared/ui/charts';
 import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
 import { AnimatedList } from '@/shared/motion';
-import { StatCard } from '../ui';
+import { StatCard, useConsolePath } from '../ui';
 
 const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger', stale: 'warning', unknown: 'neutral' };
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v)}%`);
@@ -43,6 +43,7 @@ export function fleetClusterChip(totals: FleetHealthTotals): { chip?: string; se
 
 export function HomePage() {
   const navigate = useNavigate();
+  const pathFor = useConsolePath();
   const fleetQ = useFleetSummary();
   const timelineQ = useTimeline();
   const { notices } = useNotices();
@@ -90,12 +91,12 @@ export function HomePage() {
                     value: Math.max(1, c.pods_total),
                     score: healthScore(c.health),
                   }))}
-                  onTileClick={id => navigate(`/clusters/${id}`)}
+                  onTileClick={id => navigate(pathFor(`/clusters/${id}`))}
                 />
               </div>
               <Table headers={['클러스터', '건강', '팟', '노드', 'CPU', 'MEM', '인시던트', '최근 재시작', '마지막 확인', '']}>
                 {fleet.clusters.map(c => (
-                  <tr key={c.cluster_id} className="clickable" onClick={() => navigate(`/clusters/${c.cluster_id}`)}>
+                  <tr key={c.cluster_id} className="clickable" onClick={() => navigate(pathFor(`/clusters/${c.cluster_id}`))}>
                     <td><b style={{ color: 'var(--color-text)' }}>{c.name}</b></td>
                     <td><Chip severity={HEALTH_SEVERITY[c.health] ?? 'neutral'}>{healthLabel(c.health)}</Chip></td>
                     <td>{c.pods_running}/{c.pods_total}</td>
@@ -125,7 +126,7 @@ export function HomePage() {
             <span className="pl-row" style={{ fontWeight: 600, color: 'var(--color-text)' }}>
               <ShieldIcon size={14} /> 최근 인시던트
             </span>
-            <Button size="small" onClick={() => navigate('/incidents')}>전체 보기</Button>
+            <Button size="small" onClick={() => navigate(pathFor('/incidents'))}>전체 보기</Button>
           </div>
           <QueryBoundary query={timelineQ} skeletonLines={3}>{items =>
             items.length === 0 ? (
@@ -133,7 +134,7 @@ export function HomePage() {
             ) : (
               <div className="pl-stack" style={{ gap: 8 }}>
                 <AnimatedList items={items.slice(0, 5)} getKey={i => i.incident_id}>
-                  {i => <Link to={`/incidents/${i.incident_id}`} className="pl-bindrow" style={{ textDecoration: 'none' }}>
+                  {i => <Link to={pathFor(`/incidents/${i.incident_id}`)} className="pl-bindrow" style={{ textDecoration: 'none' }}>
                     <div className="pl-row" style={{ minWidth: 0 }}>
                       <Chip severity="danger">{i.stage}</Chip>
                       <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.summary}</span>
@@ -151,14 +152,14 @@ export function HomePage() {
             <span className="pl-row" style={{ fontWeight: 600, color: 'var(--color-text)' }}>
               <SendIcon size={14} /> 승인 대기 배포
             </span>
-            <Button size="small" onClick={() => navigate('/workflows')}>워크플로우</Button>
+            <Button size="small" onClick={() => navigate(pathFor('/workflows'))}>워크플로우</Button>
           </div>
           {approvals.length === 0 ? (
             <p className="pl-muted" style={{ margin: 0 }}>승인 대기 없음</p>
           ) : (
             <div className="pl-stack" style={{ gap: 8 }}>
               <AnimatedList items={approvals} getKey={n => n.id}>
-                {n => <Link to={n.link} className="pl-bindrow" style={{ textDecoration: 'none' }}>
+                {n => <Link to={pathFor(n.link)} className="pl-bindrow" style={{ textDecoration: 'none' }}>
                   <div className="pl-row" style={{ minWidth: 0 }}>
                     <Chip severity="warning">승인</Chip>
                     <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
@@ -178,14 +179,14 @@ export function HomePage() {
             <span className="pl-row" style={{ fontWeight: 600, color: 'var(--color-text)' }}>
               <SendIcon size={14} /> 최근 AI 대화
             </span>
-            <Button size="small" onClick={() => navigate('/ai')}>전체 보기</Button>
+            <Button size="small" onClick={() => navigate(pathFor('/ai'))}>전체 보기</Button>
           </div>
           {conversationsQ.isPending ? <Skeleton lines={2} /> : (conversationsQ.data ?? []).length === 0 ? (
             <p className="pl-muted" style={{ margin: 0 }}>대화 없음</p>
           ) : (
             <div className="pl-stack" style={{ gap: 8 }}>
               <AnimatedList items={(conversationsQ.data ?? []).slice(0, 3)} getKey={c => c.conversation_id}>
-                {c => <Link to={`/ai/${c.conversation_id}`} className="pl-bindrow" style={{ textDecoration: 'none' }}>
+                {c => <Link to={pathFor(`/ai/${c.conversation_id}`)} className="pl-bindrow" style={{ textDecoration: 'none' }}>
                   <div className="pl-row" style={{ minWidth: 0 }}>
                     <div className="pl-avatar" style={{ width: 26, height: 26, fontSize: 10, background: 'var(--color-fill-two)' }}>AI</div>
                     <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>

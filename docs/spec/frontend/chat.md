@@ -16,9 +16,10 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`(`Conversation`, `ChatMessage`), `@/shared/lib/adapt`(`adaptConversationSummary`), `@/shared/lib/query`(`queryClient`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`(`AiConversationAcceptedResponse`, `AiConversationDetailResponse`, `Conversation`, `ConversationSummary`, `ChatMessage`, `ChatToolCall`, `ChatActions`, `ChatApprovalRef`, `Tone`), `@/shared/lib/adapt`(`adaptConversationSummary`), `@/shared/lib/query`(`queryClient`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/repo/ApprovalCard` | [repo](./repo.md) | `approval_ref` 렌더 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | 액션 실행 권한 |
+| import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 링크 |
 | 백엔드 | `/ai/*`, `/rca/recovery-plans/*` | [api-gateway](../services/gateway-api-gateway.md) | G10 대화 route |
 
 ## 공개 인터페이스 (Public API) — `api.ts`
@@ -27,11 +28,12 @@ status: synced
 |---|---|---|---|
 | `chatKeys` | `frontend/src/features/chat/api.ts :: chatKeys` | — | `list() = ['ai','conversations']`, `one(id) = ['ai','conversations', id]` |
 | `useConversations` | `frontend/src/features/chat/api.ts :: useConversations` | GET `/ai/conversations` | 15s, select `d.conversations.map(adaptConversationSummary)` |
-| `useConversation` | `frontend/src/features/chat/api.ts :: useConversation` | GET `/ai/conversations/${id}` → `Conversation` | `(id: string \| undefined)`, `enabled: !!id`. **적응 폴링**: `data.status === 'waiting'` 이면 2s, 아니면 15s(status 만으로 파생) |
-| `useCreateConversation` | `frontend/src/features/chat/api.ts :: useCreateConversation` | POST `/ai/conversations` body `{message}` → `{conversation_id}` | 성공 시 list invalidate |
-| `useSendMessage` | `frontend/src/features/chat/api.ts :: useSendMessage` | POST `/ai/conversations/${id}/messages` body `{message}` | `(id: string)`, 성공 시 `one(id)` invalidate |
+| `useConversation` | `frontend/src/features/chat/api.ts :: useConversation` | GET `/ai/conversations/${id}` → `AiConversationDetailResponse` envelope | `(id: string \| undefined)`, `enabled: !!id`, `select: adaptConversationDetail`. **적응 폴링**: raw `conversation.status === 'waiting'` 이면 2s, 아니면 15s(status 만으로 파생) |
+| `useCreateConversation` | `frontend/src/features/chat/api.ts :: useCreateConversation` | POST `/ai/conversations` body `{message}` → `AiConversationAcceptedResponse` | 성공 시 list invalidate |
+| `useSendMessage` | `frontend/src/features/chat/api.ts :: useSendMessage` | POST `/ai/conversations/${id}/messages` body `{message}` → `AiConversationAcceptedResponse` | `(id: string)`, 성공 시 `one(id)` invalidate |
 | `useDeleteConversation` | `frontend/src/features/chat/api.ts :: useDeleteConversation` | DELETE `/ai/conversations/${id}` | 성공 시 list invalidate + `one(id)` cache remove |
 | `useSelectAction` | `frontend/src/features/chat/api.ts :: useSelectAction` | POST `/rca/recovery-plans/${planId}/actions/${actionId}/select` | mutation `({planId, actionId})`, 성공 시 list invalidate |
+| `adaptConversationDetail` | `frontend/src/features/chat/api.ts :: adaptConversationDetail` | `AiConversationDetailResponse` → `Conversation` | `conversation`은 `adaptConversationSummary`, `messages[]`는 `adaptChatMessage`로 정규화. `metadata.tool_trace`/`metadata.tool_calls`/top-level `tool_calls`, `actions`, `approval_ref`를 렌더 타입으로 보정 |
 | `MAX_AI_MESSAGE_LENGTH` | `frontend/src/features/chat/api.ts :: MAX_AI_MESSAGE_LENGTH` | — | `16_000` |
 
 ## 컴포넌트
@@ -40,12 +42,12 @@ status: synced
 
 - 라우트: `/ai`(새 대화), `/ai/:conversationId`. 쿼리스트링 `prefill` — draft 초기값(타 화면의 "✦ 분석" 딥링크용).
 - state: `draft: string`. ref: `bottomRef` — `conv.messages.length` 변경 시 `scrollIntoView({behavior:'smooth'})`.
-- `submit()`: trim 후 빈 문자열/16,000자 초과면 무시. `conversationId` 있으면 `send.mutate(text)`, 없으면 `create.mutate(text, { onSuccess: d => nav('/ai/'+d.conversation_id) })`. 이후 draft 비움.
-- `deleteConversation(id)`: DELETE 성공 시 ok toast. 현재 열린 대화면 `/ai`로 replace 이동한다. 실패는 danger toast.
+- `submit()`: trim 후 빈 문자열/16,000자 초과면 무시. `conversationId` 있으면 `send.mutate(text)`, 없으면 `create.mutate(text, { onSuccess: d => nav(pathFor('/ai/'+d.conversation_id)) })`. 이후 draft 비움.
+- `deleteConversation(id)`: DELETE 성공 시 ok toast. 현재 열린 대화면 `pathFor('/ai')`로 replace 이동한다. 실패는 danger toast.
 - 트리:
   ```
   FadeSlideIn > 그리드(260px 1fr, 높이 calc(100vh - 140px))
-  ├─ Card('대화', actions="새 대화" → nav('/ai'))      ← 좌측 목록 (성공+0건이면 '대화 없음')
+  ├─ Card('대화', actions="새 대화" → nav(pathFor('/ai'))) ← 좌측 목록 (성공+0건이면 '대화 없음')
   │   AnimatedList(listQ.data)
   │   대화별 행: status==='waiting' 이면 info 점, title(ellipsis), timeAgo(updated_at), 삭제 버튼
   │   현재 대화는 data-active=true 배경. 행 클릭 → /ai/:id, 삭제 버튼은 stopPropagation
@@ -78,15 +80,16 @@ status: synced
 
 ## 동작 (Behavior)
 
-1. 새 대화: 입력 → POST `/ai/conversations` → 응답 `conversation_id` 로 이동 → 단건 폴링 시작.
+1. 새 대화: 입력 → POST `/ai/conversations` → `AiConversationAcceptedResponse.conversation_id` 로 이동 → 단건 폴링 시작. `/console` 아래에서 열린 경우 `useConsolePath`로 `/console/ai/:id`를 유지한다.
 2. waiting 동안 2s 폴링 + "분석 중" 인디케이터 → assistant 응답이 오면 status idle → 15s 로 완화.
 3. 복구 액션: assistant `actions` 카드에서 radio 선택 → 선택 실행 → 서버가 `selected` 를 채우면 카드 잠금.
 4. 승인: assistant `approval_ref` 는 [repo](./repo.md) 의 `ApprovalCard` 로 처리(승인 성공 시 repo 쪽 훅이 `['ai']` 캐시도 invalidate).
-5. 대화 삭제: 좌측 행 또는 우측 헤더 삭제 → DELETE `/ai/conversations/:id` → 목록 갱신. 현재 대화 삭제 시 `/ai`로 이동.
+5. 대화 삭제: 좌측 행 또는 우측 헤더 삭제 → DELETE `/ai/conversations/:id` → 목록 갱신. 현재 대화 삭제 시 `pathFor('/ai')`로 이동.
 
 ## 불변식·오류 (Invariants & Errors)
 
 - 메시지 길이 상한 16,000자 — 초과 시 클라이언트에서 전송 차단 + 경고 표시.
 - 폴링 주기는 서버가 준 `status` 만으로 파생(별도 타이머·웹소켓 없음).
 - 대화 목록 응답에는 `messages` 가 없다(`adaptConversationSummary` 로 요약 정규화).
+- 대화 단건 응답은 `{conversation, messages}` envelope 이며, `ChatView`는 `adaptConversationDetail`이 만든 `Conversation`만 소비한다. assistant 도구 표시는 message top-level `tool_calls`, `metadata.tool_calls`, `metadata.tool_trace`를 모두 허용한다.
 - 삭제는 workspace 범위 서버 검증에 의존한다. 클라이언트는 성공 후 해당 detail cache만 제거한다.

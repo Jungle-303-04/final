@@ -11,7 +11,7 @@ status: synced
 
 - React 앱 부트스트랩(`main.tsx`), 전역 provider(`providers.tsx`), 라우트 트리(`router.tsx`), 접근 가드(`guards.tsx`)를 담당한다.
 - 로그인 후 공통 레이아웃은 `features/console/ui.tsx :: ConsoleLayout`이다. 이 셸이 사이드바, 상단 LIVE/알림/테마/로그아웃, 브레드크럼, 알림 flyover, `<Outlet />`을 조립한다.
-- 기본 랜딩은 `/`의 `features/console/pages/HomePage`이다. `/overview`, `/console`, 구 UI 경로 계열은 호환 redirect 만 수행한다.
+- 기본 랜딩은 `/`의 `features/console/pages/HomePage`이다. `/console` 하위에도 같은 콘솔 라우트 트리를 보존용 base path 로 제공하고, `/overview`와 구 UI 경로 계열은 호환 redirect 만 수행한다.
 - WebSocket 실시간 연결의 시작점은 `ConsoleLayout`이다(로그인 후 1회).
 
 ## 의존성 (Dependencies)
@@ -54,6 +54,7 @@ export const router = createBrowserRouter([...])
 ```
 
 - 내부 헬퍼 `L(f)` (비공개): `lazy(f)` 를 `<Suspense fallback={<Skeleton lines={6} />}>` 로 감싼 lazy 라우트 요소를 만든다.
+- 내부 헬퍼 `consoleChildren(basePath = '')` (비공개): `/`와 `/console`이 같은 콘솔 하위 IA를 공유하게 만든다. `settings` index redirect 는 base path 를 반영해 `/settings/members` 또는 `/console/settings/members`로 이동한다.
 - 라우트 트리:
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
@@ -83,7 +84,7 @@ export const router = createBrowserRouter([...])
 | `/settings/access` | `features/org/AccessView` (lazy) | 〃 | 리소스 권한 |
 | `/settings/ops` | `features/notifications/OpsView` (lazy) | 〃 | 운영(Dead Letter) |
 | `*` | `features/console/pages/NotFoundPage` (lazy) | `RequireSession` + `ConsoleLayout` | 알 수 없는 콘솔 경로 404 안내 |
-| `/console`, `/console/*` | `<Navigate to="/" replace />` | 없음 | 구 콘솔 경로 호환 |
+| `/console`, `/console/*` | `ConsoleLayout basePath="/console"` + `consoleChildren('/console')` | `RequireSession` | 보존용 콘솔 경로. `/console/clusters`, `/console/ai/:conversationId` 등은 같은 화면을 base path 유지 상태로 렌더 |
 | 구 UI 경로 계열 | `<Navigate to="/" replace />` | 없음 | 구 UI 경로 호환 |
 | `/overview`, `/overview/*` | `<Navigate to="/" replace />` | 없음 | 구 오버뷰 경로 호환 |
 | `/notifications` | `<Navigate to="/incidents" replace />` | 없음 | 구 알림 경로 호환 |
@@ -99,7 +100,8 @@ export const router = createBrowserRouter([...])
 ### 콘솔 셸 — `frontend/src/features/console/ui.tsx :: ConsoleLayout`
 
 ```tsx
-export function ConsoleLayout(): JSX.Element
+export function ConsoleLayout({ basePath }: { basePath?: string }): JSX.Element
+export const useConsolePath: () => (to: string) => string
 ```
 
 컴포넌트 트리:
@@ -120,10 +122,11 @@ ConsoleLayout (div.pl-app.co-app)
 ```
 
 - 상태 소스: local `collapsed`, `notifOpen`, `liveStore(status/snapshot.at)`, `useIsAdmin()`, `useSession()`, `useLogout()`, `useNotices()`, `useLocation()`, `useNavigate()`.
+- `basePath`가 있으면 `normalizeBasePath`와 `pathFor`가 내부 링크, sidebar `NavLink`, breadcrumb, 알림 이동, 홈/AI/인시던트 이동을 같은 base path 아래로 보정한다. 하위 뷰는 `useConsolePath()`로 `/clusters/...` 같은 절대 콘솔 경로를 현재 base path에 맞춘다.
 - `useEffect(() => { startLive(); }, [])` — WS 연결은 셸 마운트 시 1회만([shared/lib/live](./shared.md#실시간-livets)).
 - `MENU` (비공개): 홈(`/`), 클러스터(`/clusters`), 레포(`/repos`), 워크플로우(`/workflows`), 인시던트(`/incidents`), 메트릭(`/metrics`), AI 어시스턴트(`/ai`), 카탈로그(`/catalog`). admin 이면 `/settings` 추가.
 - `SECTION_LABEL` (비공개): 1뎁스 breadcrumb 라벨을 메뉴 어휘와 맞춘다.
-- 알림 flyover 의 항목 클릭은 `navigate(n.link)` 하고, "인시던트로 이동"은 `/incidents` 로 이동한다.
+- 알림 flyover 의 항목 클릭은 `navigate(pathFor(n.link))` 하고, "인시던트로 이동"은 `pathFor('/incidents')` 로 이동한다.
 
 ### 홈 — `frontend/src/features/console/pages/HomePage.tsx :: HomePage`
 
@@ -140,7 +143,7 @@ ConsoleLayout (div.pl-app.co-app)
 2. 게스트 플로우: 인증 전 사용자는 `RequireGuest` 하위 4개 라우트만 접근. 로그인되어 있으면 `/` 로 이동한다.
 3. 세션 플로우: `RequireSession` 이 세션 확인 후 `ConsoleLayout` 렌더 → `startLive()` 1회 호출로 WS 시작.
 4. 401 발생 시: `api()` 가 `onUnauthorized` 호출 → 세션 쿼리 무효화 → `RequireSession` 재평가 → `/login?returnTo=<현재경로>` 이동.
-5. 구 경로(`/console`, `/overview`, `/notifications`)는 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
+5. `/console`과 `/console/*`는 같은 콘솔 IA를 base path 유지 상태로 렌더한다. `/overview`, `/notifications`, 구 UI 경로 계열은 호환 redirect 로 회수한다. 그 외 알 수 없는 세션 경로는 해당 `ConsoleLayout` 안에서 404 `EmptyState` 를 렌더한다.
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -148,7 +151,7 @@ ConsoleLayout (div.pl-app.co-app)
 - 정식 뷰 라우트는 lazy import + `Skeleton` fallback 을 사용한다. `HomePage`만 index 화면이라 직접 import 한다.
 - `RequireAdmin` 은 리다이렉트하지 않고 안내 `EmptyState` 를 렌더한다(URL 유지).
 - 알 수 없는 경로는 몰래 홈으로 보내지 않고 `NotFoundPage` 로 표시한다. 구 경로 호환 redirect 만 예외다.
-- 라우트 추가 시 이 표와 `ConsoleLayout` 의 `MENU`(전역 네비 대상일 때)를 함께 갱신한다.
+- 라우트 추가 시 이 표, `consoleChildren`, `ConsoleLayout` 의 `MENU`(전역 네비 대상일 때), `useConsolePath` 소비 위치를 함께 갱신한다.
 
 ## 설정 (Settings)
 

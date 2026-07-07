@@ -6,6 +6,7 @@ import { PageHeader } from '@/plural-ui';
 import { timeAgo } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconBell } from '@/shared/ui/icons';
+import { useConsolePath } from '@/features/console/ui';
 
 const FILTERS = [['all', '전체'], ['approval', '승인'], ['incident', '인시던트'], ['dlq', '운영(DLQ)'], ['cluster', '클러스터']] as const;
 // 목록 배지도 필터와 같은 한국어 어휘 사용 — 셸 알림 플라이오버(NOTICE_KIND_LABEL)와 일관
@@ -13,6 +14,7 @@ const KIND_LABEL: Record<string, string> = { approval: '승인', incident: '인�
 
 export default function NotificationsView() {
   const { notices, markAllSeen } = useNotices();
+  const pathFor = useConsolePath();
   const [filter, setFilter] = useState<string>('all');
   useEffect(() => { markAllSeen(); /* 진입 시 워터마크 갱신 */ }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = notices.filter(n => filter === 'all' || n.kind === filter);
@@ -35,7 +37,7 @@ export default function NotificationsView() {
                 <Badge tone={n.tone}>{KIND_LABEL[n.kind] ?? n.kind}</Badge>
                 <span style={{ flex: 1, opacity: n.read ? 0.6 : 1 }}>{n.title}</span>
                 <span style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)' }}>{timeAgo(n.at)}</span>
-                <Link to={n.link} style={{ color: 'var(--brand)' }}>바로가기 →</Link>
+                <Link to={pathFor(n.link)} style={{ color: 'var(--brand)' }}>바로가기 →</Link>
               </div>
             </Card>
           )}</AnimatedList>}
