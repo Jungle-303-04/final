@@ -1,12 +1,11 @@
-// 운영 콘솔 셸 — 사이드바/헤더/브레드크럼/알림. 모든 표시는 실데이터(세션·알림·라이브 WS)만 사용
+// 운영 콘솔 셸 — 사이드바/헤더/브레드크럼/알림. 모든 표시는 실데이터(세션·알림)만 사용
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { liveStore, startLive } from '@/shared/lib/live';
+import { startLive } from '@/shared/lib/live';
 import { uiStore } from '@/shared/lib/ui-store';
 import { useIsAdmin, useLogout, useSession } from '@/features/auth/api';
 import { timeAgo, useNotices } from '@/features/notifications/api';
-import { PulseOnChange } from '@/shared/motion';
 import { fadeRise } from '@/plural-ui/motion';
 import { Button, Chip, Flyover, useThemeMode, type ChipSeverity } from '@/plural-ui';
 import {
@@ -87,8 +86,6 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
   const { data: session } = useSession();
   const logout = useLogout();
   const { notices, unread, markAllSeen } = useNotices();
-  const liveStatus = liveStore(s => s.status);
-  const liveAt = liveStore(s => s.snapshot?.at);
   const localPath =
     routeBase && (location.pathname === routeBase || location.pathname.startsWith(`${routeBase}/`))
       ? location.pathname.slice(routeBase.length) || '/'
@@ -141,17 +138,9 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
         <div className="co-main">
           <header className="co-header">
             <div className="pl-row">
-              <button type="button" className="co-project" title={session?.workspace_id ?? 'workspace'}>
+              <span className="co-project" title={session?.workspace_id ?? 'workspace'}>
                 모든 프로젝트
-              </button>
-              <PulseOnChange signal={liveAt}>
-                <span
-                  title={liveStatus === 'open' ? '실시간 스트림 연결됨' : '실시간 스트림 재연결 중'}
-                  className={`co-live ${liveStatus === 'open' ? 'is-open' : ''}`}
-                >
-                  LIVE
-                </span>
-              </PulseOnChange>
+              </span>
             </div>
             <div className="co-header-right">
               <button

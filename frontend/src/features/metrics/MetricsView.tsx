@@ -24,7 +24,6 @@ import {
 import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
-import { fmtHms } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconClock, IconPause, IconPlay } from '@/shared/ui/icons';
 import { useConsolePath } from '@/features/console/ui';
@@ -119,29 +118,27 @@ export default function MetricsView() {
     ? snapshot.namespaces.flatMap(n => n.pods).reduce<Record<string, number>>((a, p) => ({ ...a, [p.phase]: (a[p.phase] ?? 0) + 1 }), {})
     : {};
   const phases = Object.keys(livePhases).length ? livePhases : Object.keys(inventoryPhases).length ? inventoryPhases : workloadPhases;
-  const inventoryRunning = phases.Running ?? 0;
-  const inventoryRestarts = workloads.reduce((sum, pod) => sum + pod.restarts, 0);
   const series: Series[] = useMemo(() => {
     const base = paused ? frozen : history;
-    const pts = (base.length
-      ? base
-      : clusterId ? [{ at: Date.now(), restarts: inventoryRestarts, running: inventoryRunning }] : []
-    ).slice(-120);
+    const pts = base.slice(-120);
     return [
-      { id: '재시작 합', data: pts.map(p => ({ x: fmtHms(p.at), y: p.restarts })) },
-      { id: '실행 팟', data: pts.map(p => ({ x: fmtHms(p.at), y: p.running })) },
+      { id: '재시작 합', data: pts.map(p => ({ x: p.at, y: p.restarts })) },
+      { id: '실행 팟', data: pts.map(p => ({ x: p.at, y: p.running })) },
     ];
-  }, [paused, frozen, history, clusterId, inventoryRestarts, inventoryRunning]);
+  }, [paused, frozen, history]);
 
   // 스냅샷 기반 실측 추이 — cluster_usage_samples 시계열(실 시각 라벨)
   const usageSeries: Series[] = useMemo(() => {
     const samples = usageQ.data ?? [];
     if (!samples.length) return [];
-    const label = (s: { sampled_at: string | null }, i: number) => (s.sampled_at ? fmtHms(s.sampled_at) : `#${i}`);
+    const pointTime = (s: { sampled_at: string | null }, i: number) => {
+      const parsed = s.sampled_at ? Date.parse(s.sampled_at) : NaN;
+      return Number.isFinite(parsed) ? parsed : i + 1;
+    };
     return [
-      { id: '실행 팟', data: samples.map((s, i) => ({ x: label(s, i), y: s.usage.pod_running ?? 0 })) },
-      { id: '재시작 누적', data: samples.map((s, i) => ({ x: label(s, i), y: s.usage.restart_total ?? 0 })) },
-      { id: '준비 노드', data: samples.map((s, i) => ({ x: label(s, i), y: s.usage.node_ready ?? 0 })) },
+      { id: '실행 팟', data: samples.map((s, i) => ({ x: pointTime(s, i), y: s.usage.pod_running ?? 0 })) },
+      { id: '재시작 누적', data: samples.map((s, i) => ({ x: pointTime(s, i), y: s.usage.restart_total ?? 0 })) },
+      { id: '준비 노드', data: samples.map((s, i) => ({ x: pointTime(s, i), y: s.usage.node_ready ?? 0 })) },
     ];
   }, [usageQ.data]);
 
@@ -221,7 +218,7 @@ export default function MetricsView() {
         <PageHeader title="메트릭" />
         <Card>
           <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
-            description={admin ? '클러스터를 등록하고 에이전트가 연결되면 실시간·스냅샷 메트릭이 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 실시간·스냅샷 메트릭이 표시됩니다'}
+            description={admin ? '클러스터를 등록하고 에이전트가 연결되면 스트림·스냅샷 메트릭이 표시됩니다' : '접근 권한이 있는 클러스터가 연결되면 스트림·스냅샷 메트릭이 표시됩니다'}
             action={admin ? <Link to={pathFor('/clusters')}><Button variant="primary">클러스터 등록</Button></Link> : undefined} />
         </Card>
       </FadeSlideIn>
@@ -256,7 +253,7 @@ export default function MetricsView() {
           )}
         </div>
       )}
-      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
+      {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <MetricStatBox label="Running" value={phases.Running ?? 0} tone="ok" loading={statPending} />
         <MetricStatBox label="Pending" value={phases.Pending ?? 0} tone="warn" loading={statPending} />
@@ -264,7 +261,7 @@ export default function MetricsView() {
         <MetricStatBox label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
         {snapshot?.rollout && <StatBox label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
       </div>
-      <Card title="실시간 — 재시작 추이 / 실행 팟" style={{ marginBottom: 16 }}>
+      <Card title="스트림 추이 — 재시작 / 실행 팟" style={{ marginBottom: 16 }}>
         <TimeSeriesChart series={series} />
       </Card>
       <Card title="스냅샷 추이 — 인벤토리 실측 (usage rollup)" style={{ marginBottom: 16 }}>

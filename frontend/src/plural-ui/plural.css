@@ -147,7 +147,7 @@
   overflow-x: auto; /* 좁은 화면에서 열 압착 대신 가로 스크롤 */
 }
 @media (max-width: 760px) { .pl-table { min-width: 640px; } }
-.pl-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pl-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
 .pl-table thead th {
   text-align: left;
   padding: var(--sp-sm) var(--sp-md);
@@ -161,6 +161,10 @@
   border-top: 1px solid var(--color-border);
   background: var(--color-fill-zero-selected);
   vertical-align: middle;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pl-table tbody tr:hover td { background: var(--color-fill-zero-hover); }
 .pl-table tr.clickable { cursor: pointer; }

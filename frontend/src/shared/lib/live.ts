@@ -1,4 +1,4 @@
-// 실시간 스냅샷 스토어 — WS 단일 연결(D6)
+// 브라우저 스냅샷 스트림 스토어 — WS 단일 연결(D6)
 import { create } from 'zustand';
 import type { LiveSnapshot } from '@/shared/lib/types';
 

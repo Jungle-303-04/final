@@ -63,6 +63,8 @@ export default function ChatView() {
       onError: err => uiStore.getState().toast('danger', `삭제 실패 — ${(err as Error).message}`),
     });
   };
+  const draftLengthInvalid = draft.length > MAX_AI_MESSAGE_LENGTH;
+  const submitDisabled = !draft.trim() || draftLengthInvalid || create.isPending || send.isPending;
 
   return (
     <FadeSlideIn>
@@ -76,25 +78,24 @@ export default function ChatView() {
               <div
                 className="chat-thread-row"
                 data-active={c.conversation_id === conversationId ? 'true' : 'false'}
-                onClick={() => nav(pathFor(`/ai/${c.conversation_id}`))}
               >
-                <div className="chat-thread-row__main">
-                  <span className={`chat-thread-dot ${c.status === 'waiting' ? 'is-waiting' : ''}`} />
-                  <span className="chat-thread-title">{c.title}</span>
-                </div>
-                <div className="chat-thread-row__meta">
-                  <span>{timeAgo(c.updated_at)}</span>
-                  <button
-                    type="button"
-                    className="chat-thread-delete"
-                    disabled={remove.isPending}
-                    aria-label="대화 삭제"
-                    title="대화 삭제"
-                    onClick={e => { e.stopPropagation(); deleteConversation(c.conversation_id); }}
-                  >
-                    <IconTrash size={13} />
-                  </button>
-                </div>
+                <button type="button" className="chat-thread-open" onClick={() => nav(pathFor(`/ai/${c.conversation_id}`))}>
+                  <span className="chat-thread-row__main">
+                    <span className={`chat-thread-dot ${c.status === 'waiting' ? 'is-waiting' : ''}`} />
+                    <span className="chat-thread-title">{c.title}</span>
+                  </span>
+                  <span className="chat-thread-row__meta">{timeAgo(c.updated_at)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="chat-thread-delete"
+                  disabled={remove.isPending}
+                  aria-label="대화 삭제"
+                  title="대화 삭제"
+                  onClick={() => deleteConversation(c.conversation_id)}
+                >
+                  <IconTrash size={13} />
+                </button>
               </div>
             )}
           </AnimatedList>
@@ -120,12 +121,12 @@ export default function ChatView() {
             <div ref={bottomRef} />
           </div>
           <div className="chat-composer">
-            {draft.length > MAX_AI_MESSAGE_LENGTH && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)' }} role="alert">16,000자 제한을 초과했습니다</p>}
+            {draftLengthInvalid && <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-xs)' }} role="alert">16,000자 제한을 초과했습니다</p>}
             <div className="chat-composer-row">
               <textarea className="input" rows={2} value={draft} placeholder="메시지 입력"
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit(); }} data-testid="chat-input" />
-              <Button variant="primary" onClick={submit} loading={create.isPending || send.isPending} data-testid="chat-send" aria-label="전송" title="전송">
+              <Button variant="primary" onClick={submit} loading={create.isPending || send.isPending} disabled={submitDisabled} data-testid="chat-send" aria-label="전송" title="전송">
                 <IconSend size={16} />
               </Button>
             </div>

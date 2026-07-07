@@ -79,17 +79,13 @@ export function Tabs({ items, current, onChange }: { items: { key: string; label
 }
 
 export function Modal({ open, title, onClose, children, size }: { open: boolean; title: string; onClose: () => void; children: ReactNode; size?: 'lg' }) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    if (open) window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
+  const dialogRef = useDialogFocus<HTMLDivElement>(open, onClose);
   return (
     <AnimatePresence>
       {open && (
         <motion.div className="modal-backdrop" variants={overlayFade} initial="initial" animate="animate" exit="exit" onClick={onClose}>
           <motion.div className={`modal ${size ? `modal--${size}` : ''}`} variants={modalPop}
-            role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
+            ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
               <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
               <Button variant="ghost" size="sm" onClick={onClose} aria-label="닫기" title="닫기" className="btn--icon"><IconX size={16} /></Button>
@@ -103,19 +99,14 @@ export function Modal({ open, title, onClose, children, size }: { open: boolean;
 }
 
 export function Drawer({ open, title, onClose, children }: { open: boolean; title: ReactNode; onClose: () => void; children: ReactNode }) {
-  // Modal 과 동일한 ESC 규약 — 열림 상태에서만 리스너 등록
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    if (open) window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
+  const drawerRef = useDialogFocus<HTMLElement>(open, onClose);
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div key="drawer-backdrop" className="modal-backdrop" style={{ justifyContent: 'flex-end', background: 'rgb(0 0 0 / .35)' }}
             variants={overlayFade} initial="initial" animate="animate" exit="exit" onClick={onClose} />
-          <motion.aside key="drawer" className="drawer" aria-label="상세"
+          <motion.aside key="drawer" className="drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-label="상세" tabIndex={-1}
             variants={flyoverSlide} initial="initial" animate="animate" exit="exit">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-4)' }}>
               <strong style={{ fontSize: 'var(--fs-lg)' }}>{title}</strong>
@@ -127,6 +118,64 @@ export function Drawer({ open, title, onClose, children }: { open: boolean; titl
       )}
     </AnimatePresence>
   );
+}
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function useDialogFocus<T extends HTMLElement>(open: boolean, onClose: () => void) {
+  const ref = useRef<T | null>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => {
+      const node = ref.current;
+      const first = node?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (first ?? node)?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (event.key === 'Tab' && ref.current) trapTab(event, ref.current);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocus.current?.focus();
+    };
+  }, [open, onClose]);
+
+  return ref;
+}
+
+function trapTab(event: KeyboardEvent, container: HTMLElement) {
+  const focusable = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter(element => element.offsetParent !== null || element === document.activeElement);
+  if (!focusable.length) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function EmptyState({ icon, title, description, action }: { icon: ReactNode; title: string; description?: string; action?: ReactNode }) {

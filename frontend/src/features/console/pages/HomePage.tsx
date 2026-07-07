@@ -14,7 +14,6 @@ import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { TimeSeriesChart, TreemapChart, type HeatNode, type Series } from '@/shared/ui/charts';
 import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
 import { AnimatedList, CountUp } from '@/shared/motion';
-import { fmtHms } from '@/shared/lib/format';
 import { useConsolePath } from '../ui';
 
 const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger', stale: 'warning', unknown: 'neutral' };
@@ -83,11 +82,14 @@ export function HomePage() {
   const usageSeries = useMemo((): Series[] => {
     const samples = usageQ.data ?? [];
     if (!samples.length) return [];
-    const label = (at: string | null, i: number) => (at ? fmtHms(at) : `#${i + 1}`);
+    const pointTime = (at: string | null, i: number) => {
+      const parsed = at ? Date.parse(at) : NaN;
+      return Number.isFinite(parsed) ? parsed : i + 1;
+    };
     return [
-      { id: '실행 팟', data: samples.map((s, i) => ({ x: label(s.sampled_at, i), y: s.usage.pod_running ?? 0 })) },
-      { id: '재시작', data: samples.map((s, i) => ({ x: label(s.sampled_at, i), y: s.usage.restart_total ?? 0 })) },
-      { id: '준비 노드', data: samples.map((s, i) => ({ x: label(s.sampled_at, i), y: s.usage.node_ready ?? 0 })) },
+      { id: '실행 팟', data: samples.map((s, i) => ({ x: pointTime(s.sampled_at, i), y: s.usage.pod_running ?? 0 })) },
+      { id: '재시작', data: samples.map((s, i) => ({ x: pointTime(s.sampled_at, i), y: s.usage.restart_total ?? 0 })) },
+      { id: '준비 노드', data: samples.map((s, i) => ({ x: pointTime(s.sampled_at, i), y: s.usage.node_ready ?? 0 })) },
     ];
   }, [usageQ.data]);
 
@@ -170,7 +172,7 @@ export function HomePage() {
 
                 <Card className="pl-stack co-widget-panel">
                   <div className="pl-row pl-row--between">
-                    <b>CPU 추세</b>
+                    <b>스냅샷 추이</b>
                     <Button size="small" onClick={() => navigate(pathFor(`/metrics?cluster=${selectedCluster?.cluster_id ?? ''}`))}>메트릭</Button>
                   </div>
                   {usageQ.isPending ? <Skeleton lines={4} /> : usageSeries.length === 0 ? (
@@ -258,11 +260,12 @@ export function HomePage() {
 function fleetHeatNode(cluster: FleetClusterSummary, lens: FleetLens): HeatNode {
   const cpuScore = ratioHealthScore(cluster.cpu_pct);
   const memScore = ratioHealthScore(cluster.mem_pct);
+  const size = Math.max(1, cluster.pods_total);
   if (lens === 'cpu') {
     return {
       id: cluster.cluster_id,
       label: `${cluster.name} · ${pct(cluster.cpu_pct)} CPU`,
-      value: Math.max(1, cluster.cpu_pct ?? cluster.pods_total),
+      value: size,
       score: cpuScore,
     };
   }
@@ -270,7 +273,7 @@ function fleetHeatNode(cluster: FleetClusterSummary, lens: FleetLens): HeatNode 
     return {
       id: cluster.cluster_id,
       label: `${cluster.name} · ${pct(cluster.mem_pct)} MEM`,
-      value: Math.max(1, cluster.mem_pct ?? cluster.pods_total),
+      value: size,
       score: memScore,
     };
   }
@@ -278,14 +281,14 @@ function fleetHeatNode(cluster: FleetClusterSummary, lens: FleetLens): HeatNode 
     return {
       id: cluster.cluster_id,
       label: `${cluster.name} · ${cluster.open_incidents} incidents`,
-      value: Math.max(1, cluster.open_incidents),
+      value: size,
       score: cluster.open_incidents > 0 ? 0.12 : healthScore(cluster.health),
     };
   }
   return {
     id: cluster.cluster_id,
     label: `${cluster.name} · ${cluster.pods_running}/${cluster.pods_total} pods`,
-    value: Math.max(1, cluster.pods_total),
+    value: size,
     score: healthScore(cluster.health),
   };
 }

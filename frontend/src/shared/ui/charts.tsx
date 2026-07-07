@@ -3,6 +3,7 @@ import { ResponsiveLine } from '@nivo/line';
 import { ResponsiveTreeMap } from '@nivo/treemap';
 import { useReducedMotion } from 'motion/react';
 import type { CSSProperties } from 'react';
+import { fmtHms } from '@/shared/lib/format';
 
 const theme = {
   text: { fill: 'var(--text-2)', fontSize: 11 },
@@ -46,6 +47,8 @@ export function TreemapChart({ nodes, onTileClick }: { nodes: HeatNode[]; onTile
 }
 
 export interface Series { id: string; data: { x: number | string; y: number }[] }
+const MAX_X_AXIS_TICKS = 5;
+
 export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; height?: number }) {
   const reduced = useReducedMotion(); // nivo 는 MotionConfig 밖 — 단일 훅으로 직접 존중
   // 포인트 없는 시리즈는 제외 — nivo 가 빈 시리즈에 d="null" 패스를 그려 SVG 콘솔 오류를 낸다
@@ -57,19 +60,25 @@ export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; he
       </div>
     );
   }
+  const usesLinearTime = drawable.every(item => item.data.every(point => typeof point.x === 'number'));
+  const xTickValues = sampleAxisTicks(drawable, MAX_X_AXIS_TICKS);
   return (
     <div style={{ height }}>
       <ResponsiveLine
-        data={drawable} theme={theme} margin={{ top: 12, right: 16, bottom: 28, left: 40 }}
-        xScale={{ type: 'point' }} yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
-        axisBottom={{ tickValues: 5 }} enablePoints={false} enableGridX={false}
+        data={drawable} theme={theme} margin={{ top: 12, right: 18, bottom: 34, left: 42 }}
+        xScale={usesLinearTime ? { type: 'linear', min: 'auto', max: 'auto' } : { type: 'point' }}
+        yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
+        axisBottom={{ tickValues: xTickValues, tickSize: 0, tickPadding: 8, format: formatAxisTick }}
+        enablePoints={false} enableGridX={false}
         colors={['var(--info)', 'var(--ok)', 'var(--warn)']} lineWidth={2}
         // 시리즈 전환 부드럽게 + x 기준 crosshair/슬라이스 툴팁(전 시리즈 동시 표시)
         animate={!reduced} motionConfig="gentle" isInteractive
         enableSlices="x" crosshairType="x"
         sliceTooltip={({ slice }) => (
           <div style={tooltipStyle}>
-            <div style={{ color: 'var(--text-3)', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>{String(slice.points[0]?.data.x ?? '')}</div>
+            <div style={{ color: 'var(--text-3)', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {formatAxisTick(slice.points[0]?.data.x as number | string)}
+            </div>
             {slice.points.map(p => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-1)' }}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: p.serieColor }} />
@@ -84,3 +93,20 @@ export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; he
   );
 }
 
+function sampleAxisTicks(series: Series[], maxTicks: number): Array<number | string> {
+  const source = series.reduce((best, current) => current.data.length > best.data.length ? current : best, series[0]);
+  const values = Array.from(new Set(source.data.map(point => point.x)));
+  if (values.length <= maxTicks) return values;
+
+  const step = (values.length - 1) / (maxTicks - 1);
+  return Array.from({ length: maxTicks }, (_, index) => values[Math.round(index * step)]);
+}
+
+function formatAxisTick(value: number | string): string {
+  if (typeof value === 'number') {
+    return value > 10_000_000_000 ? fmtHms(value) : String(value);
+  }
+  const text = String(value);
+  if (/^\d{2}:\d{2}/.test(text)) return text.slice(0, 5);
+  return text.length > 10 ? `${text.slice(0, 9)}…` : text;
+}
