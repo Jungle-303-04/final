@@ -16,9 +16,27 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 16:57 KST 체크포인트
+### 2026-07-07 17:02 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
+
+- `dd02f260 docs: Actions runner 재실행 기록`은 origin/dev push 완료.
+- 이 푸시로 생성된 dev workflows도 runner 배정 없이 즉시 실패했다:
+  - Promote Dev To Main run `28850987065`: failure.
+  - CI run `28850987079`: failure.
+  - AWS CD run `28850987004`: failure.
+  - 세부 패턴은 직전과 동일하게 `runner_id=0`, steps/log 없음으로 본다. 코드 실패로 단정하지 않는다.
+- UI advance:
+  - `frontend/src/features/notifications/IncidentDetailView.tsx`.
+  - incident detail lookup 404 fallback 화면에서도 real API hook `GET /rca/recovery-plans/by-correlation/{correlation_id}` 기반 복구 계획 panel을 표시한다.
+  - mock/fake/hardcoded data 없음. recovery plan row가 없으면 기존 not-generated 상태를 표시한다.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `git diff --check` → passed.
+- authenticated smoke 주의: `scripts/smoke.sh`, `scripts/e2e_test.py`는 쓰기/배포 변경을 만들 수 있으므로 passive smoke로 실행하지 않는다. `frontend/tests/e2e_real_backend.py`는 `E2E_MUTATE=0`일 때만 사용한다.
+
+### 2026-07-07 16:57 KST 체크포인트
 
 - 이 체크포인트 작성 전 local/origin dev HEAD: `f8364e02 docs: 최신 HEAD 확인 / runner 장애 / 인수인계`. 이 문서 커밋 후 정확한 최신 SHA는 `git log --oneline --decorate -6`로 확인한다.
 - 워크트리는 tracked clean이어야 한다. untracked `아카이브/`는 `.env*` 포함 가능성이 높으므로 커밋하지 않는다.
