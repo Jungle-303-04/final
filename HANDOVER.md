@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:20 KST (콘솔 디자인 시스템 Phase 2 클러스터 상세 이관 메모 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 05:30 KST (콘솔 디자인 시스템 Phase 2 인시던트 목록 이관 메모 반영)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -177,6 +177,23 @@
 - 다음:
   1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
   2. 다음 화면 순서는 인시던트 목록/상세다. 후보 점수바와 증거 트레일 기능은 유지하고 표현만 `src/ui` 프리미티브로 교체한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 인시던트 목록 이관
+
+- 구현:
+  - `features/notifications/NotificationsView.tsx`를 `src/ui` PageHeader/Card/Tabs/Badge/Button/EmptyState 기반으로 재구성했다.
+  - 알림 합성 소스(timeline, 승인 대기 run, DLQ)는 유지하고, 필터 탭/빈 상태/행 CTA를 새 디자인 시스템으로 통일했다.
+  - 목록 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 의존을 제거했다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test -- --runInBand` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright route mocking 검수: 인증 세션/알림 합성 소스(timeline/app runs/DLQ) 응답으로 `/incidents`를 1440/1024/390 폭에서 캡처했고 horizontal overflow 0, legacy class 0, unexpected console error 0.
+  - screenshots: `/tmp/k8s-incidents-list-desktop.png`, `/tmp/k8s-incidents-list-tablet.png`, `/tmp/k8s-incidents-list-mobile.png`.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
+  2. 다음 화면은 인시던트 상세다. RCA 파이프라인 그래프, 후보 점수바, evidence trail, recovery plan 기능은 유지하고 `src/ui`/Motion preset으로 표현만 교체한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 

@@ -21,6 +21,7 @@
 - 홈 이관 완료에 따라 `features/console/console.css`는 삭제했다.
 - Phase 2 클러스터 목록(`features/cluster/ClusterListView.tsx`)은 `src/ui` PageHeader/StatCard/Card/Input/Table/Badge/EmptyState 기반으로 이관했다. 목록 본체의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 클러스터 상세(`features/cluster/ClusterDetailView.tsx`)는 `src/ui` PageHeader/Breadcrumb/StatCard/Card/Tabs/Table/Drawer/Modal/KeyValueList 기반으로 이관했다. 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
+- Phase 2 인시던트 목록(`features/notifications/NotificationsView.tsx`)은 `src/ui` PageHeader/Card/Tabs/Badge/Button/EmptyState 기반으로 이관했다. 목록 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - 아직 전 화면 이관 전이므로 `shared/ui/app.css`, `plural-ui/plural.css`, `shared/theme-bridge.css`는 남아 있다. 화면 이관 단위마다 해당 화면 전용 레거시 CSS를 제거한다.
 
 ## 사용 규칙
@@ -79,6 +80,16 @@
 - Playwright route mocking 검수: 인증 세션/알림/클러스터 상세 인벤토리 최소 응답으로 `/clusters/prod-seoul-01`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, visible rows 5.
 - 탭 전환 검수: 워크로드 → 서비스 → 이벤트 전환, 서비스 IP와 이벤트 `BackOff` cell 확인, document horizontal overflow 0, unexpected console error 0.
 - screenshots: `/tmp/k8s-cluster-detail-desktop.png`, `/tmp/k8s-cluster-detail-tablet.png`, `/tmp/k8s-cluster-detail-mobile.png`, `/tmp/k8s-cluster-detail-tabs.png`.
+
+## Phase 2 인시던트 목록 검증 (2026-07-08 05:30 KST)
+
+- `cd frontend && npm run typecheck` passed.
+- `cd frontend && npm run lint` passed.
+- `cd frontend && npm test -- --runInBand` passed, 11 tests.
+- `cd frontend && npm run build` passed.
+- `features/notifications/NotificationsView.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 0건.
+- Playwright route mocking 검수: 인증 세션/알림 합성 소스(timeline/app runs/DLQ) 응답으로 `/incidents`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
+- screenshots: `/tmp/k8s-incidents-list-desktop.png`, `/tmp/k8s-incidents-list-tablet.png`, `/tmp/k8s-incidents-list-mobile.png`.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
