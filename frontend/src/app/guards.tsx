@@ -7,7 +7,10 @@ export function RequireSession() {
   const { data, isPending } = useSession();
   const loc = useLocation();
   if (isPending) return <div style={{ padding: 48 }}><Skeleton lines={5} /></div>;
-  if (!data?.authenticated) return <Navigate to={`/login?returnTo=${encodeURIComponent(loc.pathname)}`} replace />;
+  if (!data?.authenticated) {
+    const returnTo = `${loc.pathname}${loc.search}${loc.hash}`;
+    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+  }
   return <Outlet />;
 }
 export function RequireGuest() {

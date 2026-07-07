@@ -31,6 +31,7 @@ const RANGES = [
   { label: '6시간', seconds: 21600 },
 ];
 interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; commandId?: string; submitFailed?: boolean }
+interface ContextPreset { promql: string; unit: Unit; label: string }
 
 export default function MetricsView() {
   const [sp, setSp] = useSearchParams();
@@ -41,8 +42,12 @@ export default function MetricsView() {
   const subject = sp.get('subject') ?? '';
   const subjectName = sp.get('name') ?? '';
   const namespace = sp.get('namespace') ?? '';
+  const contextPreset = useMemo(
+    () => buildContextPreset(subject, subjectName, namespace),
+    [namespace, subject, subjectName],
+  );
   const [paused, setPaused] = useState(false);
-  const [promql, setPromql] = useState(PRESETS[0].promql);
+  const [promql, setPromql] = useState(contextPreset?.promql ?? PRESETS[0].promql);
   const [range, setRange] = useState(RANGES[0].seconds);
   const [cards, setCards] = useState<QueryCard[]>([]);
   const summaryQ = useClusterSummary(clusterId);
@@ -70,6 +75,10 @@ export default function MetricsView() {
   useEffect(() => {
     if (!paused) setFrozen(history);
   }, [history, paused]);
+
+  useEffect(() => {
+    if (contextPreset) setPromql(contextPreset.promql);
+  }, [contextPreset]);
 
   const summary = summaryQ.data;
   const workloads = workloadsQ.data ?? [];
@@ -164,6 +173,11 @@ export default function MetricsView() {
           <Badge tone="info">{subject || 'resource'}</Badge>
           {namespace && <code>{namespace}</code>}
           {subjectName && <code style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subjectName}</code>}
+          {contextPreset && (
+            <span style={{ marginLeft: 'auto' }}>
+              <Button size="sm" onClick={() => execute({ ...contextPreset, rangeSeconds: range })}>쿼리 실행</Button>
+            </span>
+          )}
         </div>
       )}
       {status !== 'open' && <div className="card" style={{ borderColor: 'var(--warn)', marginBottom: 12, fontSize: 'var(--fs-sm)' }}>실시간 스트림 재연결 중 — 최신 인벤토리 스냅샷을 표시합니다</div>}
@@ -193,7 +207,7 @@ export default function MetricsView() {
           <select className="input" style={{ width: 220 }}
             value={PRESETS.some(p => p.promql === promql) ? promql : ''}
             onChange={e => { if (e.target.value) setPromql(e.target.value); }}>
-            <option value="" disabled>직접 입력…</option>
+            <option value="" disabled>{contextPreset?.label ?? '직접 입력…'}</option>
             {PRESETS.map(p => <option key={p.label} value={p.promql}>{p.label}</option>)}
           </select>
           <input className="input" style={{ fontFamily: 'var(--font-mono)', flex: 1, minWidth: 220 }} value={promql} onChange={e => setPromql(e.target.value)} />
@@ -217,6 +231,46 @@ export default function MetricsView() {
 // 단위별 값 포맷 — ratio 는 % 로, count 는 유효자리 축약
 const fmtValue = (v: number, unit: Unit) => (unit === 'ratio' ? `${(v * 100).toFixed(1)}%` : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
 const fmtRange = (s: number) => (s >= 3600 ? `${s / 3600}h` : `${s / 60}m`);
+const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+export function buildContextPreset(subject: string, name: string, namespace: string): ContextPreset | null {
+  const n = name.trim();
+  if (!subject || !n) return null;
+  const ns = namespace.trim();
+  const nsFilter = ns ? `namespace="${esc(ns)}",` : '';
+  if (subject === 'pod') {
+    return {
+      label: '선택 팟 재시작',
+      unit: 'count',
+      promql: `sum by (pod) (rate(kube_pod_container_status_restarts_total{${nsFilter}pod="${esc(n)}"}[5m]))`,
+    };
+  }
+  if (subject === 'workload') {
+    return {
+      label: '선택 워크로드 레플리카',
+      unit: 'count',
+      promql: `kube_deployment_status_replicas{${nsFilter}deployment="${esc(n)}"}`,
+    };
+  }
+  if (subject === 'node') {
+    return {
+      label: '선택 노드 CPU',
+      unit: 'ratio',
+      promql: `1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle",instance=~".*${esc(n)}.*"}[5m]))`,
+    };
+  }
+  if (subject === 'service') {
+    return {
+      label: '선택 서비스 정보',
+      unit: 'count',
+      promql: `count by (service) (kube_service_info{${nsFilter}service="${esc(n)}"})`,
+    };
+  }
+  if (subject === 'cluster') {
+    return { label: '클러스터 팟 수', unit: 'count', promql: 'count by (namespace) (kube_pod_info)' };
+  }
+  return null;
+}
 
 // 쿼리 카드 1개 — 명령 상태를 폴링해 agent 가 올린 실측 결과만 표시한다.
 function QueryCardRow({ card, onRetry }: { card: QueryCard; onRetry: () => void }) {

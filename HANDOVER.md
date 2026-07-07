@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:10 KST (evidence lineage/rollback 표시)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:14 KST (프론트 실제시각/드릴 메트릭 보강)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,22 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (18:14 KST) — 프론트 실제시각/드릴 메트릭 보강
+
+- 구현:
+  - 프론트 adapter가 백엔드 timestamp 누락 시 `new Date()`로 현재 시각을 합성하던 동작을 제거했다.
+  - `timeAgo()`는 빈 값/잘못된 시각을 `—`로 표시한다. 실제 관측 시각이 없는데 "방금 전"처럼 보이는 운영 오판을 막기 위함이다.
+  - `/metrics`는 `cluster/node/service/workload/pod` drill query param을 읽어 대상별 PromQL 후보를 자동 입력하고, 같은 range로 즉시 실행할 수 있다.
+  - 쿼리 실행은 기존 `POST /agent/debug/query` → `GET /commands/{id}` 경로 그대로이며, 실측 agent 결과만 표시한다.
+  - 인증 만료/미로그인 상태에서 drill URL로 진입해도 로그인 후 `search/hash`를 포함한 원래 URL로 복귀한다.
+  - light theme의 잘못된 hex token(`--color-action-input-hover`)을 수정했다.
+- 검증:
+  - `cd frontend && npm test` → 4 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
 
 ## 체크포인트 (18:04 KST) — AI 대화 삭제 API/프론트
 
