@@ -346,7 +346,10 @@ def test_rollup_health_rules_are_deterministic() -> None:
     assert rollup_health(**{**healthy, "workloads_degraded": 1}) == "critical"
     assert rollup_health(**{**healthy, "nodes_ready": 2, "restarts_recent": 9}) == "critical"
     # node 관측이 아예 없으면(nodes_total=0) node 조건은 판정에서 제외되지만 관측값 존재 여부는 별도로 판단한다.
-    assert rollup_health(**{**healthy, "nodes_ready": 0, "nodes_total": 0, "has_observations": True}) == "healthy"
+    assert (
+        rollup_health(**{**healthy, "nodes_ready": 0, "nodes_total": 0, "has_observations": True})
+        == "healthy"
+    )
 
 
 def test_fleet_summary_marks_unknown_when_cluster_has_no_observations() -> None:

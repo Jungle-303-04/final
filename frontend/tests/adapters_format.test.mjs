@@ -85,3 +85,20 @@ test('resource wizards keep exact real discovery selections', async () => {
     'manual-manifest',
   );
 });
+
+test('fleet cluster stat chip does not report stale or unknown as normal', async () => {
+  const { fleetClusterChip } = await vite.ssrLoadModule('/src/features/console/pages/HomePage.tsx');
+
+  assert.deepEqual(
+    fleetClusterChip({ clusters: 2, critical: 0, warning: 0, stale: 1, unknown: 0 }),
+    { chip: '스테일 1', severity: 'warning' },
+  );
+  assert.deepEqual(
+    fleetClusterChip({ clusters: 2, critical: 0, warning: 0, stale: 0, unknown: 2 }),
+    { chip: '미확인 2', severity: 'neutral' },
+  );
+  assert.deepEqual(
+    fleetClusterChip({ clusters: 2, critical: 0, warning: 0, stale: 0, unknown: 0 }),
+    { chip: '모두 정상', severity: 'success' },
+  );
+});

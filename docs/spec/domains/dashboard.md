@@ -109,14 +109,17 @@ status: synced
 
 health 롤업 규칙 — `rollup_health`(앵커: `src/domains/dashboard/fleet_router.py :: rollup_health`, 결정적·단위 테스트 고정):
 
-1. `critical`: degraded workload 수 > `FLEET_DEGRADED_WORKLOAD_THRESHOLD`(0, 앵커: `src/domains/dashboard/fleet_router.py :: FLEET_DEGRADED_WORKLOAD_THRESHOLD`) **또는** `nodes_total > 0`이면서 `nodes_ready < nodes_total`.
-2. `warning`: `restarts_recent > 0` **또는** `open_incidents > 0`.
-3. 그 외 `healthy`. (node 관측이 없으면(nodes_total=0) node 조건은 판정에서 제외)
+1. `unknown`: pod/node/workload inventory rollup 과 최신 usage 샘플 모두에 관측값이 없음(`has_observations(...) == False`).
+2. `critical`: degraded workload 수 > `FLEET_DEGRADED_WORKLOAD_THRESHOLD`(0, 앵커: `src/domains/dashboard/fleet_router.py :: FLEET_DEGRADED_WORKLOAD_THRESHOLD`) **또는** `nodes_total > 0`이면서 `nodes_ready < nodes_total`.
+3. `warning`: `restarts_recent > 0` **또는** `open_incidents > 0`.
+4. `stale`: 관측값은 있으나 `cluster_connection_status(agent) != "online"`.
+5. 그 외 `healthy`. (node 관측이 없으면(nodes_total=0) node 조건은 판정에서 제외되지만, 관측값 존재 여부는 `has_observations`가 별도로 판단)
 
 집계 원천(공개 헬퍼):
 
 - `build_fleet_summary`(앵커: `src/domains/dashboard/fleet_router.py :: build_fleet_summary`) — `list_cluster_registrations`(허용 집합) → 테스트 클러스터 숨김(target 라우터의 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS` 재사용) → `fleet_inventory_rollup` + `latest_cluster_usage_rollups` + `count_open_rca_incidents` + `latest_cluster_agent_statuses`(클러스터가 있을 때만 호출) → totals 에 `count_open_workflow_approvals`/`count_running_workflow_runs`(gitops)·`open_dead_letter_count`(플랫폼 전역, 개수만) 합산.
 - `restarts_recent_from_samples`(앵커: `src/domains/dashboard/fleet_router.py :: restarts_recent_from_samples`) — 최신 usage 샘플 2개의 `restart_total` 델타(샘플<2 또는 음수면 0).
+- `has_observations`(앵커: `src/domains/dashboard/fleet_router.py :: has_observations`) — inventory rollup 의 `pods_total`/`nodes_total`/`workloads_total` 또는 최신 usage 의 `pod_total`/`node_total` 중 하나라도 0보다 크면 true. false 면 health 는 `unknown`.
 - `usage_pct`(앵커: `src/domains/dashboard/fleet_router.py :: usage_pct`) — usage 롤업의 실측 pct/ratio(×100) 키만 추출, 없으면 None(합성 금지) → `cpu_pct`/`mem_pct`.
 - `build_cluster_summary_detail`(앵커: `src/domains/dashboard/fleet_router.py :: build_cluster_summary_detail`) — workload 를 health 값으로 그룹(`list_inventory_resources(resource_type="workload")`), 최근 Warning 이벤트(`list_recent_warning_events`, 최대 10건), 열린 인시던트(`list_open_rca_incidents`), 최신 usage 스냅샷(`usage_snapshot`).
 - pod/node 수는 inventory 롤업 우선, inventory 에 해당 행이 없으면 최신 usage 샘플로 대체. `last_seen_at`은 agent 상태 → inventory 최근 관측 → usage 샘플 순.
