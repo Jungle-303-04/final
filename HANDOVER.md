@@ -1878,8 +1878,74 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 - global/multi target(`cluster_id="*"`)은 연결 안 된 전체 cluster id를 `clusters` 배열에 담고, 하나라도 실패하면 watch/deployment binding을 하나도 만들지 않는다.
 - 프론트 순서: target 등록 → `bootstrap_command` 실행 → `GET /clusters/{cluster_id}/connection-status`가 `online`인지 확인 → repo/app connect 또는 deployment binding 생성.
 
+### Management Cluster Read-only 계약
+
+- `TargetRegisterRequest.cluster_role`은 `"target"` 또는 `"management"`다. management는 셀프 모니터링용으로만 쓴다.
+- management 설치 manifest는 namespace `management`에 agent를 올리고, ServiceAccount RBAC는 cluster read(`get/list/watch`)만 가진다. create/patch/update/delete 권한은 manifest에 포함하지 않는다.
+- policy update는 management cluster에서 write/command resource를 열 수 없다. 위반 시 400:
+
+```json
+{"code":"management_readonly","detail":"management 클러스터는 읽기 전용입니다"}
+```
+
+- 단 evidence provider 주기 같은 읽기성 정책 변경은 허용된다. 저장 시 `cluster_role=management`, `bootstrap.resources=[]`, `desired_state.resources=[]`로 다시 고정된다.
+- scale/restart/manual command/recovery dispatch는 gateway와 command-worker에서 각각 차단한다. target-agent도 `CLUSTER_ROLE=management`면 Kubernetes API 호출 전에 write action을 실패 결과(`message="management_readonly"`)로 무시한다.
+- `DELETE /clusters/{cluster_id}`는 management registration에 대해 같은 `management_readonly` 400을 반환한다.
+
+### Heatmap Drilldown API 계약
+
+- `GET /clusters/{cluster_id}/nodes/summary`
+
+```json
+{
+  "cluster_id": "cluster-1",
+  "nodes": [
+    {
+      "name": "ip-10-0-1-12.ap-northeast-2.compute.internal",
+      "ready": true,
+      "health": "healthy",
+      "pods_running": 12,
+      "pods_capacity": 110,
+      "cpu_pct": 42.0,
+      "mem_pct": 73.4,
+      "restarts_recent": 3,
+      "conditions": ["MemoryPressure"]
+    }
+  ]
+}
+```
+
+- `GET /clusters/{cluster_id}/nodes/{node_name}/pods/summary`
+
+```json
+{
+  "cluster_id": "cluster-1",
+  "node_name": "ip-10-0-1-12.ap-northeast-2.compute.internal",
+  "pods": [
+    {
+      "name": "orders-api-6f48d9d9c8-lfx2p",
+      "namespace": "sandbox",
+      "phase": "Running",
+      "health": "healthy",
+      "ready": "1/1",
+      "restarts": 0,
+      "owner_kind": "ReplicaSet",
+      "owner_name": "orders-api-6f48d9d9c8",
+      "cpu_mcores": 120.5,
+      "mem_mib": 256.0,
+      "incident_correlation_id": "corr-123"
+    }
+  ]
+}
+```
+
+- 두 API 모두 session + `cluster.read` 권한을 사용한다. cluster가 없으면 404, node가 없으면 pod summary에서 404다.
+- 데이터 소스는 `cluster_inventory_resources`와 `cluster_usage_samples`뿐이다. CPU/MEM 샘플이 없으면 합성하지 않고 `null`로 둔다.
+- pod 배치 정보는 이미 cluster-agent pod summary의 `node_name`으로 저장된다. 새 수집 루프 없이 집계만 추가했다.
+
 ### 검증/문서 파일
 
 - Bruno: `docs/api/15-wizard-validation/*`.
-- 스펙: `docs/spec/packages/contracts.md`, `docs/spec/domains/{identity,gitops,providers,target,alert,rca,dashboard}.md`, `docs/spec/services/gateway-api-gateway.md`.
-- focused test: `uv run pytest tests/test_repository_discovery.py tests/test_identity_auth_routes.py tests/test_password_auth.py tests/test_target_registration.py tests/test_provider_registry.py tests/test_alert_routing.py tests/test_rca_rule_catalog.py tests/test_dashboard_metric_presets.py tests/test_admin_console_routes.py tests/test_applications_router.py tests/test_schemas.py -q`.
+- Bruno 추가: `docs/api/05-rca-dashboard/09-node-summary.bru`, `docs/api/05-rca-dashboard/10-node-pods-summary.bru`, `docs/api/11-clusters/12-unregister-cluster.bru`.
+- 스펙: `docs/spec/packages/contracts.md`, `docs/spec/domains/{identity,gitops,providers,target,alert,rca,dashboard,command,applications}.md`, `docs/spec/services/gateway-api-gateway.md`.
+- focused test: `uv run pytest tests/test_repository_discovery.py tests/test_identity_auth_routes.py tests/test_password_auth.py tests/test_target_registration.py tests/test_provider_registry.py tests/test_alert_routing.py tests/test_rca_rule_catalog.py tests/test_dashboard_metric_presets.py tests/test_admin_console_routes.py tests/test_applications_router.py tests/test_schemas.py tests/test_command_router.py tests/test_command_worker.py tests/test_target_agent_commands.py tests/test_fleet_router.py tests/test_bruno_collection.py -q`.

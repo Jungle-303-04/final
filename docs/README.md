@@ -35,7 +35,10 @@
 8. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
    실제 서비스 smoke 기준을 확인한다.
 
-9. [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)을 본다.
+9. [라이브 데모 런북](demo-runbook.md)을 본다.
+   클러스터 연결부터 자동 복구까지 발표 리허설 순서와 플랜B를 확인한다.
+
+10. [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)을 본다.
    현재 밤샘 안정화 작업을 대화 맥락 없이 이어받을 때 필요한 SHA, run ID, 게이트, 다음 명령을 확인한다.
 
 ## 민정이 먼저 볼 문서

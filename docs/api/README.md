@@ -53,7 +53,7 @@ bash scripts/run-bruno-aws.sh
 5. `metrics_token`은 `METRICS_TOKEN`이 켜진 배포에서만 넣는다.
 6. `alertmanager_token`은 외부 Alertmanager webhook 입구가 켜진 배포에서만 넣는다. 배포의 `ALERTMANAGER_WEBHOOK_TOKEN`과 같아야 한다.
 7. `service_image`는 target manifest 발급 시 쓸 agent 이미지다. 라이브 기본값은 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:latest`(dry-run은 pull 불필요, 실제 apply 시 태그 확인).
-8. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
+8. `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 `cluster-1`/`cluster-2`로 매핑돼 있다. `node_name`은 노드→팟 드릴다운용 실제 노드명이다. `repo_ref`는 데모 레포 `Jungle-303-04/gitops-demo`, `manifest_path`는 `deploy.yaml`이다.
 
 요청 순서대로 실행하면 아래 값은 자동으로 채워진다.
 
@@ -97,6 +97,8 @@ AWS 라이브 계정은 문서/collection 파일에 쓰지 않는다.
 `cluster_id`/`cluster_id_2`는 실제 AWS EKS 클러스터 id다. 기본값은 `cluster-1`/`cluster-2`다.
 단, 두 클러스터에 cluster-agent가 아직 배포되지 않았다면 `clusters` 목록/인벤토리는 비어 있을 수 있다 —
 먼저 `02-target-admin/01`로 매니페스트를 받아 각 대상 클러스터에 apply해야 데이터가 흐른다.
+`node_name`은 `05-rca-dashboard/09-node-summary.bru` 응답의 `nodes[].name` 중 하나로 바꿔 넣는다.
+노드명이 비어 있거나 존재하지 않으면 `10-node-pods-summary`는 404가 정상이다.
 
 팀 통합 테스트는 `aws-test` Environment가 기준이다.
 로컬에서는 [로컬 검증 실행 기준](../local-testing.md)을 따라 코드 정합성과 Bruno 문법만 확인하고, 실제 API 흐름은 AWS에서 확인한다.
@@ -293,6 +295,14 @@ secret 원문이 응답에 실리지 않게 하기 위한 계약이므로 프론
 `08-cluster-summary`는 fleet 타일 클릭 드릴다운 API다.
 해당 cluster에 `CLUSTER_READ` 권한이 있어야 하고, workload를 health별로 묶은 목록,
 최근 Warning 이벤트(최대 10건), 열린 incident 요약, 최신 usage 스냅샷을 내려준다.
+
+`09-node-summary`는 클러스터 내부 노드 히트맵 타일용 API다.
+기존 inventory와 usage sample만 집계하며, node별 `ready`, `health`, 실행 중 pod 수, pod capacity, 재시작 수, pressure condition, 실측 CPU/MEM이 있으면 해당 값을 내려준다.
+CPU/MEM 실측이 없는 노드는 값을 합성하지 않고 `null`로 둔다.
+
+`10-node-pods-summary`는 노드 타일 클릭 후 팟 히트맵을 그리는 API다.
+`node_name`에 배치된 pod만 내려주며 namespace, phase, ready 문자열, owner, 재시작 수, 열린 incident correlation, 실측 CPU/MEM이 있으면 해당 값을 포함한다.
+존재하는 노드에 pod가 없으면 `pods: []`, 존재하지 않는 노드는 `404`가 정상이다.
 
 ### 06-gitops-approval
 
@@ -568,6 +578,12 @@ status 정상 출력에는 `command_id`, `cluster_id`, `status`, `result`가 있
 
 `05-rca-dashboard/08-cluster-summary.bru`는 cluster 드릴다운 요약을 보는 요청이다.
 권한이 없으면 `403`, 등록되지 않은 `cluster_id`면 `404`가 정상이다.
+
+`05-rca-dashboard/09-node-summary.bru`는 노드 히트맵 요약을 보는 요청이다.
+정상 출력은 `cluster_id`와 `nodes` 배열이며, 여기서 받은 `nodes[].name`을 Environment의 `node_name`에 넣는다.
+
+`05-rca-dashboard/10-node-pods-summary.bru`는 선택한 노드의 팟 타일 목록을 보는 요청이다.
+정상 출력은 `cluster_id`, `node_name`, `pods` 배열이다. node가 없으면 `404`, 권한이 없으면 `403`이 정상이다.
 
 ## 10단계. GitHub webhook signature와 approval 확인
 
