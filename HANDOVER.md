@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 22:00 KST (cluster registration URL ownership patch ready)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 22:08 KST (cluster registration URL ownership live)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -12,7 +12,7 @@
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
 
-## 체크포인트 (22:00 KST) — 클러스터 등록 URL 소유권 정리
+## 체크포인트 (22:08 KST) — 클러스터 등록 URL 소유권 정리 + live 배포
 
 - 구현:
   - 클러스터 등록 프론트가 더 이상 `management_base_url: ${location.origin}/api`를 보내지 않는다. 브라우저 origin은 Cloudflare/프록시/내부망 구성에 따라 target agent가 접속할 공개 API URL과 다를 수 있으므로 운영 URL 합성은 백엔드가 소유한다.
@@ -26,6 +26,18 @@
   - `cd frontend && npm run typecheck` → passed.
   - `cd frontend && npm test -- --runInBand` → 8 passed.
   - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
+- 배포:
+  - commit/push: `271d8213 fix: 클러스터 등록 URL / 백엔드 공개 주소 / 사전 점검` → `origin/dev`.
+  - backend CodeBuild `kubernetes-ops-image-build:8826643d-c4bd-4b74-8775-5b1a0e2bfc8b` → succeeded.
+  - api-gateway image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:271d8213-dev`, rollout 1/1 ready.
+  - console CodeBuild `kubernetes-ops-console-build:1b5d9462-bf9c-4394-a0c3-95f8c5fb666b` → succeeded.
+  - console image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:271d8213-dev`, rollout 1/1 ready.
+- live smoke:
+  - `https://k8s.woonyong.org/` → 200 `text/html`.
+  - `https://k8s.woonyong.org/console/` → 200 `text/html`.
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - 실제 로그인 세션 + same-origin 헤더로 `POST /api/targets/preflight` body `{cluster_id:"codex-preflight-271d8213", cloud_provider:"existing-k8s", deploy_provider:"manual-manifest"}` → 200, `valid=true`, `provider_ready=true`, `errors=[]`.
+  - same-origin 헤더 없이 admin mutation endpoint를 호출하면 403 `"same-origin session request required"`가 정상이다(CSRF/Origin 방어).
 - 병렬 감사 결과 반영:
   - Arendt: 레포 연결은 실제 GitHub probe/branch/manifest/validate를 쓰지만, `credential_ref` 계약과 `source_type` render-worker 전파 parity가 부족하다.
   - Aquinas: `/console` 경로 보존 누락이 목록 3곳에 남아 있고, 위젯/쿼리 등록은 아직 영속 API가 아니라 local state다.
