@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -514,6 +515,73 @@ def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -
     assert response.provider_ready is True
     assert response.agent_install_status == "not_registered"
     assert response.errors == []
+
+
+def test_target_registration_preflight_checks_direct_apply_connectivity(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "cluster-1")
+    monkeypatch.setattr("domains.target.router.shutil.which", lambda _name: "/usr/bin/kubectl")
+    calls: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout='{"gitVersion":"v1"}', stderr="")
+
+    monkeypatch.setattr("domains.target.router.subprocess.run", fake_run)
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="new-cluster",
+                cloud_provider="existing-k8s",
+                deploy_provider="kube-context",
+                apply=True,
+                kube_context="cluster-1",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is True
+    assert response.kube_context_allowed is True
+    assert response.errors == []
+    assert calls == [
+        ["kubectl", "--context", "cluster-1", "get", "--raw=/version", "--request-timeout=5s"]
+    ]
+
+
+def test_target_registration_preflight_rejects_unreachable_direct_apply_context(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("KUBE_CONTEXT_ALLOWLIST", "cluster-1")
+    monkeypatch.setattr("domains.target.router.shutil.which", lambda _name: "/usr/bin/kubectl")
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="cluster unreachable")
+
+    monkeypatch.setattr("domains.target.router.subprocess.run", fake_run)
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="new-cluster",
+                cloud_provider="existing-k8s",
+                deploy_provider="kube-context",
+                apply=True,
+                kube_context="cluster-1",
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is False
+    assert response.kube_context_allowed is True
+    assert any("kubernetes preflight connection failed" in error for error in response.errors)
 
 
 def test_cluster_policy_update_preserves_existing_unset_fields() -> None:

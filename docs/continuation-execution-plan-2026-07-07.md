@@ -16,9 +16,29 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 17:02 KST 체크포인트
+### 2026-07-07 17:10 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
+
+- `2107376f feat: incident 복구계획 fallback 연결`은 origin/dev push 완료.
+- 해당 push의 dev workflows도 runner 배정 없이 실패:
+  - CI run `28851117498`: jobs `85566424069`, `85566424087`, `85566424088` all `runner_id=0`.
+  - Promote Dev To Main run `28851117588`: verify job `85566424109` `runner_id=0`, merge skipped.
+  - AWS CD run `28851117482`: `Test before deploy` job `85566424684` `runner_id=0`, deploy skipped.
+- target 등록 preflight 개선:
+  - direct apply(`deploy_provider="kube-context"`, `apply=true`)이고 allowlist/provider/image 검증을 통과하면 `kubectl [--context <ctx>] get --raw=/version --request-timeout=5s`로 실제 Kubernetes API 연결성을 non-mutating 방식으로 확인한다.
+  - 실패/timeout/kubectl 없음은 preflight error로 반환된다.
+- 검증:
+  - `python -m pytest -q tests/test_target_registration.py tests/test_provider_registry.py` → 31 passed, 1 warning.
+  - `python -m compileall -q src/domains/target/router.py tests/test_target_registration.py` → passed.
+  - `git diff --check` → passed.
+  - 로컬에는 `.venv`와 `uv`, 시스템 `ruff`가 없어 `ruff check`는 실행하지 못했다.
+- Actions runner mitigation:
+  - 현재 token은 repo read/push는 가능하지만 repo/org admin·billing runner 설정 API는 403/404로 접근 불가다.
+  - org owner/repo admin이 org Actions policy, billing/quota, hosted runner limits, runner groups를 확인해야 한다.
+  - retry canary는 Promote/AWS CD가 아니라 CI의 `Kubernetes manifest checks` 단일 job을 우선 사용한다. 최신 job id는 `85566424088`(run `28851117498`).
+
+### 2026-07-07 17:02 KST 체크포인트
 
 - `dd02f260 docs: Actions runner 재실행 기록`은 origin/dev push 완료.
 - 이 푸시로 생성된 dev workflows도 runner 배정 없이 즉시 실패했다:

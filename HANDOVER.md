@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 17:02 KST (incident fallback 복구계획 연결)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 17:10 KST (target preflight Kubernetes 연결성 확인)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -9,6 +9,29 @@
 - 실제 토큰/비밀번호/세션 쿠키/API key는 사용자 요청이 있어도 커밋하지 않는다. Git 히스토리에서 완전 삭제가 어렵기 때문에 GitHub Actions secrets, 로컬 env, 승인된 secret store만 사용한다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (17:10 KST) — target preflight Kubernetes 연결성 확인
+
+- `2107376f feat: incident 복구계획 fallback 연결`은 origin/dev push 완료.
+- 해당 push의 dev workflows도 runner 배정 없이 실패:
+  - CI run `28851117498`: jobs `85566424069`, `85566424087`, `85566424088` 모두 `runner_id=0`.
+  - Promote Dev To Main run `28851117588`: verify job `85566424109` `runner_id=0`, merge skipped.
+  - AWS CD run `28851117482`: `Test before deploy` job `85566424684` `runner_id=0`, deploy skipped.
+  - 계속 코드 실패가 아니라 GitHub-hosted runner 배정/계정·org 정책·quota 문제로 본다.
+- target 등록 preflight 개선:
+  - `src/domains/target/router.py`: direct apply(`deploy_provider="kube-context"`, `apply=true`)이고 allowlist/provider/image 검증을 통과하면 `kubectl [--context <ctx>] get --raw=/version --request-timeout=5s`로 실제 Kubernetes API 연결성을 non-mutating 방식으로 확인한다.
+  - 실패 시 `kubernetes preflight connection failed`, timeout 시 `kubernetes preflight connection timed out`, kubectl 없음 시 기존 `kubectl is not available to api-gateway`를 preflight error로 반환한다.
+  - `tests/test_target_registration.py`: direct apply 연결성 성공/실패 테스트 추가.
+  - `docs/spec/domains/target.md`: preflight 연결성 동작 문서화.
+- 검증:
+  - `python -m pytest -q tests/test_target_registration.py tests/test_provider_registry.py` → 31 passed, 1 warning.
+  - `python -m compileall -q src/domains/target/router.py tests/test_target_registration.py` → passed.
+  - `git diff --check` → passed.
+  - 로컬에는 `.venv`와 `uv`, 시스템 `ruff`가 없어 `ruff check`는 실행하지 못했다.
+- Actions runner mitigation:
+  - 현재 저장된 GitHub token은 repo read/push는 가능하지만 repo/org admin·billing runner 설정 API는 403/404로 접근 불가다.
+  - org owner/repo admin이 org Actions policy, billing/quota, hosted runner limits, runner groups를 GitHub UI 또는 admin token으로 확인해야 한다.
+  - retry canary는 Promote/AWS CD가 아니라 CI의 `Kubernetes manifest checks` 단일 job을 우선 사용한다. 최신 job id는 `85566424088`(run `28851117498`)이며, 성공 전까지 Promote/Main AWS CD 재실행은 피한다.
 
 ## 최신 업데이트 (17:02 KST) — incident fallback 복구계획 연결
 
