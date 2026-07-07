@@ -463,10 +463,10 @@ class ApiGateway:
                     status_code=Settings.COMMAND_NOT_FOUND_STATUS_CODE,
                     detail=Settings.DEAD_LETTER_NOT_FOUND_MESSAGE,
                 )
-            if dead_letter[Gateway.STATUS] == Gateway.STATUS_REPLAYED:
+            if dead_letter[Gateway.STATUS] != Gateway.STATUS_OPEN:
                 raise HTTPException(
                     status_code=Settings.CONFLICT_STATUS_CODE,
-                    detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
+                    detail=Settings.DEAD_LETTER_NOT_OPEN_MESSAGE,
                 )
 
             # replay 이벤트 스테이징과 replay 표시(열린 행만 원자 UPDATE)를 한 트랜잭션으로 —
@@ -481,7 +481,7 @@ class ApiGateway:
                 if not self.db.mark_dead_letter_replayed(dead_letter_id, accepted.event.event_id):
                     raise HTTPException(
                         status_code=Settings.CONFLICT_STATUS_CODE,
-                        detail=Settings.DEAD_LETTER_REPLAYED_MESSAGE,
+                        detail=Settings.DEAD_LETTER_NOT_OPEN_MESSAGE,
                     )
             return DeadLetterReplayResponse(
                 accepted=True,
