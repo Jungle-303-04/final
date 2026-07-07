@@ -76,6 +76,7 @@ def kubectl_json(ctx: str, *args: str) -> dict | list | None:
 
 def api_client() -> requests.Session:
     s = requests.Session()
+    s.headers.update({"x-service-csrf": "same-origin"})
     resp = s.post(
         f"{BASE}/auth/login", json={"email": EMAIL, "password": PASSWORD}, timeout=TIMEOUT
     )

@@ -1,6 +1,26 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 14:45 KST (안정화/동적 등록/recovery 상태 통합 패스)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:00 KST (안정화 배포 성공 + 메인 인증 보강)
+
+## 최신 업데이트 (15:00 KST) — 메인 인증/가입 보강 패스
+
+- **이전 안정화 묶음 배포 성공**:
+  - `origin/main` 수동 병합 커밋 `0a84b998` 기준 GitHub Actions `AWS CD` run `28844725355` 성공.
+  - 라이브 `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`, `/` HTTP 200 확인.
+- **메인 인증/가입 보강 적용(로컬 검증 완료, 다음 커밋/배포 대상)**:
+  - 가입/로그인 흐름은 기존대로 `signup -> email verification -> admin approval -> login/session` 모델 유지.
+  - 세션 쿠키 기반 상태 변경 요청에 same-origin intent guard 추가. 세션 쿠키가 붙은 `POST/PUT/PATCH/DELETE` 는 `x-service-csrf: same-origin` 헤더 또는 허용된 `Origin/Referer` 없으면 403.
+  - 프론트 중앙 API 클라이언트가 모든 상태 변경 요청에 `x-service-csrf: same-origin` 을 자동 부착.
+  - `scripts/lib/auth.sh`, `scripts/smoke.sh`, `scripts/register-target.sh`, `scripts/e2e_test.py` 도 쿠키 로그인 후 상태 변경 요청이 새 guard 를 통과하도록 갱신.
+- **검증 완료(이번 인증 보강 포함)**:
+  - `.venv/bin/python -m pytest -q` → 670 passed, 3 skipped.
+  - `npm run lint && npm run build` → 통과(기존 Vite large chunk warning만).
+  - `npm run typecheck`, `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check` → 통과.
+- **다음 즉시 작업**:
+  1. 인증 보강 커밋/푸시 → dev CI → main 반영 → AWS CD 확인.
+  2. 배포 후 로그인 API를 실제 `AUTH_EMAIL/AUTH_PASSWORD`로 curl 검증: login/session/refresh, 그리고 CSRF guard 403/통과 케이스 확인.
+  3. 배포 후 `rca_timeline`/`event_dead_letters` 증가율 5~10분 관찰.
+  4. 증가 멈추면 과거 DLQ 아카이브 + 필요 시 old followup timeline closed/archive 정책 적용.
 
 ## 최신 업데이트 (14:45 KST) — 안정화 통합 패스
 
