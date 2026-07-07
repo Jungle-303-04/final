@@ -46,19 +46,21 @@ export function ResourceTable<T>({ columns, rows, rowKey, onRowClick, empty }:
   { columns: Column<T>[]; rows: T[]; rowKey: (r: T) => string; onRowClick?: (r: T) => void; empty?: ReactNode }) {
   if (rows.length === 0) return <>{empty ?? <EmptyState icon={<IconFile size={26} />} title="데이터가 없습니다" />}</>;
   return (
-    <table className="table">
-      <thead><tr>{columns.map(c => <th key={c.key} style={{ width: c.width }}>{c.label}</th>)}</tr></thead>
-      <tbody>
-        {/* 행 추가/제거/재정렬 시 layout 애니메이션(키 기반) */}
-        <AnimatePresence initial={false}>
-          {rows.map(r => (
-            <AnimatedRow key={rowKey(r)} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick?.(r)}>
-              {columns.map(c => <td key={c.key}>{c.render(r)}</td>)}
-            </AnimatedRow>
-          ))}
-        </AnimatePresence>
-      </tbody>
-    </table>
+    <div className="table-scroll">{/* 좁은 화면에서 열 압착 대신 가로 스크롤 */}
+      <table className="table">
+        <thead><tr>{columns.map(c => <th key={c.key} style={{ width: c.width }}>{c.label}</th>)}</tr></thead>
+        <tbody>
+          {/* 행 추가/제거/재정렬 시 layout 애니메이션(키 기반) */}
+          <AnimatePresence initial={false}>
+            {rows.map(r => (
+              <AnimatedRow key={rowKey(r)} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick?.(r)}>
+                {columns.map(c => <td key={c.key}>{c.render(r)}</td>)}
+              </AnimatedRow>
+            ))}
+          </AnimatePresence>
+        </tbody>
+      </table>
+    </div>
   );
 }
 

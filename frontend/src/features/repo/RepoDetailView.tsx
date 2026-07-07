@@ -102,7 +102,7 @@ export default function RepoDetailView() {
               </div>
               {safePrRun.safe_pr.explanation && <p style={{ fontSize: 'var(--fs-sm)' }}>{safePrRun.safe_pr.explanation}</p>}
               {safePrRun.safe_pr.diff_before && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="split split--even" style={{ gap: 10 }}>
                   <div><Badge tone="danger">before</Badge><CodeBlock code={safePrRun.safe_pr.diff_before} /></div>
                   <div><Badge tone="ok">after</Badge><CodeBlock code={safePrRun.safe_pr.diff_after ?? ''} /></div>
                 </div>

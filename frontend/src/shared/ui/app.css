@@ -65,3 +65,24 @@
 .stepper .step { flex:1; text-align:center; font-size:var(--fs-xs); color:var(--text-3); padding-bottom:8px; border-bottom:2px solid var(--border); }
 .stepper .step.done { color:var(--ok); border-color:var(--ok); }
 .stepper .step.now { color:var(--text-1); border-color:var(--brand); }
+
+/* ── 반응형 레이아웃 유틸 ─────────────────────────────
+   뷰의 인라인 2단 grid 대체 — 1440/1024 에선 2단, ≤900px 에선 1단으로 접힘 */
+.split { display:grid; gap:var(--sp-4); align-items:start; }
+.split--even { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.split--side { grid-template-columns:minmax(0, 1fr) 300px; }
+/* 채팅 레이아웃 — 좌측 대화 목록 + 우측 스레드 (좁은 화면에선 위/아래 스택) */
+.chat-layout { display:grid; grid-template-columns:260px minmax(0, 1fr); gap:var(--sp-4); height:calc(100vh - 140px); }
+/* 데이터 테이블 가로 스크롤 컨테이너 — 좁은 화면에서 열 압착 대신 스크롤 */
+.table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+@media (max-width: 900px) {
+  .split--even, .split--side { grid-template-columns:1fr; }
+  .chat-layout { grid-template-columns:1fr; height:auto; }
+  .chat-layout > .card:first-child { max-height:220px; overflow:auto; }
+  .chat-layout > .card:last-child { height:min(65vh, 560px); }
+}
+@media (max-width: 760px) {
+  .table-scroll .table { min-width:560px; }
+  .kv { grid-template-columns:110px 1fr; }
+  .modal, .drawer { padding:var(--sp-4); }
+}

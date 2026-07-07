@@ -106,7 +106,7 @@ export default function WorkflowGraphView() {
           </div>
         );
       })()}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
+      <div className="split split--side">
         <Card style={{ height: 340, padding: 0 }}>
           <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={setSelected} />
         </Card>
