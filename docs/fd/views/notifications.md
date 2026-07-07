@@ -2,8 +2,8 @@
 
 [← 지도](../README.md) · 요구사항 [R11](../01-requirements.md#r11-알림) · 갭 [G9](../06-api-map.md#g9-알림-피드)
 
-통합 알림 API 가 없으므로(G9) 초기 버전은 **3개 실존 소스의 클라이언트 합성**으로 구현.
-합성 로직은 `features/notifications/feed.ts` 한 곳 — G9 도입 시 이 파일만 교체.
+통합 알림 API 가 없으므로(G9) 현재 버전은 **3개 실존 소스의 클라이언트 합성**으로 구현.
+합성 로직은 `features/notifications/api.ts :: useNotices` 한 곳 — G9 도입 시 이 훅만 교체.
 
 ## 소스 → 알림 항목 정규화
 
@@ -24,18 +24,17 @@ type Notice = { id: string; kind: 'approval'|'incident'|'dlq'|'cluster';
 - 폴링: 60s 통합(개별 화면 폴링과 캐시 공유 — queryKey 동일해 추가 트래픽 없음)
 - read 상태: localStorage(`notice:lastSeen:{kind}` 워터마크) — 서버 저장은 G9 범위
 
-## Topbar 벨
+## Header 알림 Flyover
 
-- 미읽음 수 Badge(danger) + 새 알림 도착 시 벨 1회 흔들림(PressScale 변형)
-- 클릭 → Popover 최근 5건 → [모두 보기] /notifications
+- 미읽음 수 badge + 최근 알림 최대 30건.
+- 클릭 → `ConsoleLayout`의 `Flyover`. "모두 읽음"은 `markAllSeen()`, "인시던트로 이동"은 `/incidents`.
 
-## NotificationsView (/notifications)
+## NotificationsView (/incidents)
 
 ```text
 필터 칩: [전체] [승인] [인시던트] [운영(DLQ)] [클러스터]
-리스트(시간 역순, 날짜 그룹 헤더):
+리스트(시간 역순):
   tone dot · 제목 · 상대시각 · [바로가기 →]
-  approval 항목은 인라인 [승인][거절] (ApprovalCard 축약형 — 권한 가드)
 ```
 
 바로가기 딥링크 규칙은 [05 § 딥링크](../05-routes-ia.md#딥링크url-상태-규칙) 정본.
@@ -51,4 +50,4 @@ DLQ 의 조치(replay)는 알림이 아니라 /settings/ops(OpsView)에서:
 - [ ] 벨 배지 수 = 필터 "전체" 미읽음 수와 항상 일치(동일 selector)
 - [ ] admin 아닌 사용자에게 DLQ 알림 유형 자체가 생성되지 않음
 - [ ] 알림 클릭 후 해당 kind 워터마크 갱신 → 배지 감소
-- [ ] G9 도입 시 feed.ts 교체만으로 화면 무변경(어댑터 경계 테스트)
+- [ ] G9 도입 시 `useNotices` 교체만으로 화면 무변경(어댑터 경계 테스트)

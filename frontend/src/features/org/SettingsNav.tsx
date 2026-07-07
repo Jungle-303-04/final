@@ -12,10 +12,10 @@ export function SettingsNav({ title, children }: { title: string; children: Reac
   return (
     <FadeSlideIn>
       <PageHeader title={`설정 — ${title}`} sub="조직·그룹·멤버·리소스 권한과 운영(DLQ) 관리" />
+      {/* 스타일은 .tabs a 공통 규칙 사용 — 인라인 color 가 active 색을 덮지 않게 제거 */}
       <div className="tabs">
         {ITEMS.map(([to, label]) => (
-          <NavLink key={to} to={to} className={({ isActive }) => isActive ? 'active' : ''}
-            style={{ padding: '9px 14px', fontSize: 'var(--fs-sm)', color: 'inherit' }}>{label}</NavLink>
+          <NavLink key={to} to={to} className={({ isActive }) => isActive ? 'active' : ''}>{label}</NavLink>
         ))}
       </div>
       {children}

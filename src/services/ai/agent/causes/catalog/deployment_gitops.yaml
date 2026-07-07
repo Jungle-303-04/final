@@ -30,18 +30,18 @@ rules:
               - event_pattern: "unavailable"
               - event_pattern: "deadline"
               - log_pattern: "unavailable"
-  - id: "argocd_sync_failed"
-    symptoms: ["ArgoCD Sync Failed", "Sync Failed"]
+  - id: "gitops_controller_sync_failed"
+    symptoms: ["GitOps Sync Failed", "Sync Failed"]
     required_sources: ["kubernetes", "metrics", "logs", "metadata"]
     candidates:
       - candidate_id: "gitops_sync_failed"
         title: "GitOps sync 실패"
-        description: "ArgoCD Application sync 과정에서 manifest render 또는 apply가 실패했을 가능성이 있습니다."
+        description: "GitOps controller sync 과정에서 manifest render 또는 apply가 실패했을 가능성이 있습니다."
         expected_evidence: ["kubernetes", "metrics", "logs", "metadata"]
         checks:
           - "Application.status.sync.status와 Application.status.conditions 확인"
-          - "argocd_app_sync_total 또는 app sync failed metric 확인"
-          - "argocd application controller/repo-server log에서 render/apply 오류 확인"
+          - "app sync failed metric 확인"
+          - "GitOps controller/repo-server log에서 render/apply 오류 확인"
           - "git revision, manifest path, Helm values 변경 이후 실패했는지 확인"
       - candidate_id: "manifest_validation_failed"
         title: "Manifest 검증 실패"

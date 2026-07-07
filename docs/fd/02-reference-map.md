@@ -54,16 +54,16 @@ console 의 실제 IA(사이드바: Home / CD / Stacks / Kubernetes / AI / PR / 
 
 | 앱 | 라이선스 | 참조 포인트 | 어디에 |
 |---|---|---|---|
-| **Headlamp** (kubernetes-sigs) | Apache 2.0 | k8s 리소스 목록/상세 UI, 플러그인 구조 — **코드 차용 가능** | cluster-detail 의 리소스 테이블·상세 drawer |
-| **Argo CD UI** | Apache 2.0 | 리소스 트리/헬스 아이콘 체계, sync 상태 UX | cluster-detail, workflow |
-| **Argo Workflows UI** | Apache 2.0 | DAG 노드뷰(실행 상태 색·로그 패널) | workflow |
-| **kube-ops-view** | GPL-3.0 | 클러스터/노드/팟 타일 시각화 아이디어 | fleet-heatmap (아이디어만, 코드 금지) |
-| **Grafana** | AGPL v3 | 대시보드 패널 UX | metrics (아이디어만, 코드 금지) |
-| **Backstage** | Apache 2.0 | 카탈로그/소유권(조직·그룹) 모델 UX | org-admin, resources |
-| **Finviz 식 주식 히트맵** | — | 면적=규모·색=등락 매핑, 호버 툴팁 | fleet-heatmap 색·범례 설계 |
+| **벤치마크 k8s 콘솔 A** | Apache 2.0 | k8s 리소스 목록/상세 UI, 플러그인 구조 — **코드 차용 가능** | cluster-detail 의 리소스 테이블·상세 drawer |
+| **벤치마크 GitOps 콘솔 A** | Apache 2.0 | 리소스 트리/헬스 아이콘 체계, sync 상태 UX | cluster-detail, workflow |
+| **벤치마크 워크플로우 콘솔 A** | Apache 2.0 | DAG 노드뷰(실행 상태 색·로그 패널) | workflow |
+| **벤치마크 클러스터 타일 뷰** | GPL-3.0 | 클러스터/노드/팟 타일 시각화 아이디어 | fleet-heatmap (아이디어만, 코드 금지) |
+| **벤치마크 대시보드 도구** | AGPL v3 | 대시보드 패널 UX | metrics (아이디어만, 코드 금지) |
+| **벤치마크 개발자 포털** | Apache 2.0 | 카탈로그/소유권(조직·그룹) 모델 UX | org-admin, resources |
+| **벤치마크 히트맵 패턴** | — | 면적=규모·색=등락 매핑, 호버 툴팁 | fleet-heatmap 색·범례 설계 |
 
-**권고**: 코드 수준 차용은 Apache 2.0 계열(Headlamp, Argo)에서만.
-AGPL(console, Grafana)·GPL(kube-ops-view)은 스크린샷·문서 수준 참조로 제한.
+**권고**: 코드 수준 차용은 Apache 2.0 계열 벤치마크에서만.
+AGPL/GPL 계열 벤치마크는 스크린샷·문서 수준 참조로 제한.
 
 ## 현재 frontend 반영 위치
 

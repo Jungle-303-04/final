@@ -33,6 +33,13 @@ export const flyoverSlide: Variants = {
   exit: { x: 48, opacity: 0, transition: { duration: DUR.fast } },
 };
 
+/** 모달 본체: 살짝 떠오르며 pop (오버레이는 overlayFade 와 조합) */
+export const modalPop: Variants = {
+  initial: { opacity: 0, scale: 0.96, y: 10 },
+  animate: { opacity: 1, scale: 1, y: 0, transition: { duration: DUR.base, ease: EASE.decelerate } },
+  exit: { opacity: 0, scale: 0.98, y: 6, transition: { duration: DUR.fast } },
+};
+
 /** 리스트/그리드 컨테이너: 자식 20ms 스태거 */
 export const staggerParent: Variants = {
   initial: {},

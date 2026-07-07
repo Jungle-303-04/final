@@ -2,7 +2,7 @@
 
 [← 지도](../README.md) · 요구사항 [R6](../01-requirements.md#r6-클러스터-모음--클러스터--노드--팟-히트맵-드릴다운) · 진입: [fleet-heatmap](fleet-heatmap.md) 또는 /clusters 목록
 
-참조 UX: 외부 기준 콘솔 CD>Clusters 탭 구조, Headlamp 리소스 테이블(Apache-2.0 — 코드 차용 가능)([02](../02-reference-map.md)).
+참조 UX: 외부 기준 콘솔 CD>Clusters 탭 구조, 벤치마크 k8s 리소스 테이블(Apache-2.0 — 코드 차용 가능)([02](../02-reference-map.md)).
 
 ## 목록 — ClusterListView (/clusters)
 

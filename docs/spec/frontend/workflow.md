@@ -61,8 +61,8 @@ status: synced
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/workflows` | `WorkflowListView` | `RequireSession`+`AppShell` | 전 앱 run 목록(활성 우선 정렬) |
-| `/workflows/:runId` | `WorkflowGraphView` | `RequireSession`+`AppShell` | 단계 그래프 + 승인 카드 |
+| `/workflows` | `WorkflowListView` | `RequireSession`+`ConsoleLayout` | 전 앱 run 목록(활성 우선 정렬) |
+| `/workflows/:runId` | `WorkflowGraphView` | `RequireSession`+`ConsoleLayout` | 단계 그래프 + 승인 카드 |
 
 ## 불변식·오류 (Invariants & Errors)
 

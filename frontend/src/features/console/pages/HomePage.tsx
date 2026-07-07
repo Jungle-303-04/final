@@ -66,7 +66,8 @@ export function HomePage() {
             </div>
           ) : (
             <>
-              <div className="pl-card" style={{ height: 300, padding: 8, marginBottom: 16 }}>
+              {/* 높이는 차트 minHeight(300)가 결정 — 고정 height 와 minHeight 불일치로 넘치던 것 교정 */}
+              <div className="pl-card" style={{ padding: 8, marginBottom: 16 }}>
                 <TreemapChart
                   nodes={fleet.clusters.map((c): HeatNode => ({
                     id: c.cluster_id,

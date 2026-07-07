@@ -3,72 +3,65 @@ source_commit: 664925a6
 status: synced
 ---
 
-# features/fleet — 플릿 히트맵(오버뷰) 드릴다운
+# features/fleet — 플릿 집계 API와 홈 대시보드 건강도 매핑
 
-> 소스: `frontend/src/features/fleet/`
+> 소스: `frontend/src/features/fleet/api.ts`
 
 ## 책임 (Responsibility)
 
-- 앱의 기본 랜딩 화면: 클러스터→노드→팟 3단계 트리맵 히트맵과 상단 집계 스탯, 최근 인시던트 목록.
-- 건강도 산식(`score.ts`)의 단일 출처.
+- 홈 대시보드(`frontend/src/features/console/pages/HomePage.tsx`)와 클러스터 상세의 보조 집계 패널이 쓰는 플릿/클러스터 집계 API 훅을 제공한다.
+- 예전 히트맵 전용 화면 파일은 더 이상 존재하지 않는다. 현재 기본 랜딩은 router index(`/`)의 `HomePage`이며, `/overview`와 `/overview/*`는 `/`로 redirect 된다.
+- 건강 상태 문자열을 홈 treemap 점수와 표시 라벨로 바꾸는 단일 매핑을 제공한다.
 
 ## 의존성 (Dependencies)
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/features/cluster/api`(`useClusters`, `useClusterSummary`, `useWorkloads`) | [cluster](./cluster.md) | 데이터 |
-| import | `@/features/notifications/api`(`useTimeline`) | [notifications](./notifications.md) | 최근 인시던트 |
-| import | `@/shared/ui`, `@/shared/ui/charts`(`TreemapChart`, `heatColor`, `HeatNode`), `@/shared/ui/icons`, `@/shared/motion`, `@/shared/lib/live`, `@/shared/lib/format` | [shared](shared.md) | 차트·실시간·UI |
-| 실시간 | `liveStore.snapshot` | [realtime-gateway](../services/realtime-realtime-gateway.md) | 팟 phase/restarts 실시간 덮어쓰기 |
+| import | `@/shared/lib/api`(`get`) | [shared](shared.md) | REST client |
+| import ← | `@/features/console/pages/HomePage` | [app](app.md) | `useFleetSummary`, `healthScore`, `healthLabel` 소비 |
+| import ← | `@/features/cluster/ClusterDetailView` | [cluster](./cluster.md) | `useClusterAgg` 소비 |
+| 백엔드 | `/fleet/summary`, `/clusters/{id}/summary` | [api-gateway](../services/gateway-api-gateway.md) | 대시보드 집계 API |
 
 ## 공개 인터페이스 (Public API)
 
-### 건강도 — `score.ts` (0=위험 ~ 1=건강, 내부 `clamp` 0..1)
+### 타입
 
-| 심볼 | 앵커 | 산식 |
+| 심볼 | 필드 |
+|---|---|
+| `FleetHealth` | `'healthy' \| 'warning' \| 'critical'` |
+| `FleetClusterSummary` | `cluster_id`, `name`, `health`, `pods_running`, `pods_total`, `nodes_ready`, `nodes_total`, `open_incidents`, `restarts_recent`, `cpu_pct`, `mem_pct`, `last_seen` |
+| `FleetTotals` | `clusters`, `healthy`, `warning`, `critical`, `open_incidents`, `pending_approvals`, `running_workflows`, `dead_letters` |
+| `FleetSummary` | `{ clusters: FleetClusterSummary[]; totals: FleetTotals }` |
+| `ClusterAggSummary` | `workloads`, `recent_events`, `open_incidents`, `usage` |
+
+### 훅과 헬퍼
+
+| 심볼 | 앵커 | API/동작 |
 |---|---|---|
-| `clusterScore` | `frontend/src/features/fleet/score.ts :: clusterScore` | `(c: Cluster) => number` — 연결 안 됨(`connection_status !== 'connected'`)이면 0.15. 아니면 `clamp(1 - (0.5*min(1, incident_count/3) + 0.2*(pod_count===0 ? 1 : 0)))` |
-| `nodeScore` | `frontend/src/features/fleet/score.ts :: nodeScore` | `(n: NodeInfo, pods: Workload[]) => number` — 해당 노드 팟 중 비Running 비율 `bad/mine`: `clamp((ready ? 1 : 0.2) - 0.6*비율)` |
-| `podScore` | `frontend/src/features/fleet/score.ts :: podScore` | `(p: Workload) => number` — CrashLoopBackOff/Failed→0.05, Pending→0.5, 그 외 `clamp(1 - min(0.6, restarts*0.08))` |
+| `fleetKeys.summary()` | `frontend/src/features/fleet/api.ts :: fleetKeys` | `['fleet', 'summary']` |
+| `fleetKeys.clusterAgg(id)` | 〃 | `['clusters', id, 'agg']` |
+| `useFleetSummary` | `frontend/src/features/fleet/api.ts :: useFleetSummary` | GET `/fleet/summary`, 30s refetch |
+| `useClusterAgg` | `frontend/src/features/fleet/api.ts :: useClusterAgg` | `(id: string \| undefined)`, GET `/clusters/${id}/summary`, `enabled: !!id`, 30s refetch |
+| `HEALTH_SCORE` | `frontend/src/features/fleet/api.ts :: HEALTH_SCORE` | healthy 0.92, warning 0.5, critical 0.08 |
+| `HEALTH_LABEL` | `frontend/src/features/fleet/api.ts :: HEALTH_LABEL` | healthy '정상', warning '주의', critical '위험' |
+| `healthScore` | `frontend/src/features/fleet/api.ts :: healthScore` | 알 수 없는 health 문자열은 0.5 |
+| `healthLabel` | `frontend/src/features/fleet/api.ts :: healthLabel` | 알 수 없는 health 문자열은 원문 표시 |
 
-### 뷰 — `frontend/src/features/fleet/FleetHeatmapView.tsx :: FleetHeatmapView` (default export)
+## 소비 화면
 
-- 라우트: `/overview`(플릿 레벨), `/overview/c/:clusterId`(노드 레벨, `:clusterId` param).
-- state: `nodeSel: string | null`(노드 드릴다운 — URL 아님), `hover: string | null`.
-- 데이터: `useClusters`, `useClusterSummary(clusterId)`, `useWorkloads(clusterId ?? '')`, `useTimeline`, `liveStore(s => s.snapshot)`.
-- 파생(`useMemo`):
-  - `livePods`: 스냅샷 pods 를 `Map<name, pod>` 으로.
-  - `pods`: clusterId 있을 때 workloads 각 항목을 livePods 로 `phase/restarts/hot` 덮어쓰기(폴링 대기 없이 실시간 반영).
-  - `tiles: HeatNode[]` — 레벨별:
-    - 플릿: 클러스터당 `{ id: cluster_id, label: '<name> · <pod_count>pods', value: max(1, pod_count), score: clusterScore(c) }`
-    - 노드: `{ id: name, label: '<name> · <pod_count>', value: max(1, pod_count), score: nodeScore(n, pods) }`
-    - 팟(nodeSel): 해당 노드 팟 최대 400개, `{ id: name, label: name, value: 1 + restarts, score: podScore(p) }`
-- 스탯: `totals` = 클러스터 수 / node_count 합 / pod_count 합 / incident_count 합. **실행 팟 스탯**은 스냅샷 수신 후 `clusters.length === 1` 인 경우에만 live Running 수로 대체(스냅샷은 단일 클러스터 범위라 단위가 다르기 때문).
-- 타일 클릭 `onTile(id)`: 플릿→`nav('/overview/c/'+id)`; 노드→`setNodeSel(id)`; 팟→`nav('/clusters/'+clusterId+'?tab=pods&q='+id)`.
-- 트리:
-  ```
-  FadeSlideIn
-  ├─ StatBox ×4 (클러스터/노드/실행 팟/열린 인시던트 — 인시던트>0 이면 danger, 0 이면 ok)
-  ├─ 행: Breadcrumbs(플릿 → clusterId → nodeSel; span 클릭 시 nodeSel 해제) · 히트 범례(건강 0.9/주의 0.5/위험 0.1 heatColor 칩)
-  ├─ 그리드(1fr 280px):
-  │  ├─ Card(h 440) > QueryBoundary(clustersQ) > tiles 비면 EmptyState('클러스터가 없습니다' + /clusters 등록 버튼)
-  │  │   아니면 TreemapChart(nodes=tiles, onTileClick=onTile)  (onMouseMove 로 treemap 밖이면 hover 해제)
-  │  └─ Card(title = hoverInfo?.label ?? '요약') — hover 시 KeyValue(건강도%/규모), 아니면 KeyValue(레벨/타일 수/안내)
-  └─ Card('최근 인시던트') > QueryBoundary(timelineQ, skeleton 2)
-      비면 EmptyState(IconCheckCircle '열린 인시던트가 없습니다')
-      아니면 AnimatedList(items.slice(0,5), key=incident_id): Badge(danger, stage) + Link(/incidents/:id, summary) + timeAgo + '파이프라인 →' 링크
-  ```
+- `HomePage`(`/`)는 `useFleetSummary()`로 상단 집계 카드, treemap, 클러스터 테이블을 렌더한다. 클러스터 타일/행 클릭은 `/clusters/:clusterId` 로 이동한다.
+- `ClusterDetailView`는 `useClusterAgg(clusterId)`로 `ClusterAggPanel`을 렌더한다. 이 보조 패널은 pending 이면 null, 실패하면 본문을 막지 않고 재시도 문구를 표시한다.
 
 ## 라우트
 
 | 경로 | 컴포넌트 | 가드 | 설명 |
 |---|---|---|---|
-| `/overview` | `FleetHeatmapView` | `RequireSession`+`AppShell` | 플릿 레벨 트리맵 |
-| `/overview/c/:clusterId` | `FleetHeatmapView` | `RequireSession`+`AppShell` | 노드 레벨(팟 레벨은 로컬 state) |
+| `/` | `features/console/pages/HomePage` | `RequireSession`+`ConsoleLayout` | 플릿 현황 홈 |
+| `/overview` | `<Navigate to="/" replace />` | 없음 | 구 오버뷰 경로 호환 redirect |
+| `/overview/*` | `<Navigate to="/" replace />` | 없음 | 구 오버뷰 하위 경로 호환 redirect |
 
 ## 불변식·오류 (Invariants & Errors)
 
-- 건강도 계산은 반드시 `score.ts` 3개 함수만 사용(뷰 인라인 산식 금지).
-- 색상은 `heatColor`(토큰 heat 스케일 보간) 경유.
-- 팟 타일은 400개로 잘라 렌더 폭주를 방지한다.
-- 노드→팟 드릴다운은 URL 에 남기지 않는다(브레드크럼 클릭으로 복귀).
+- 집계 API 타입이 화면 계약이다. 필드가 없으면 UI에서 합성하지 않고 빈 상태나 `—`로 표시한다.
+- 건강도 점수/라벨 변환은 이 파일의 `healthScore`/`healthLabel`만 사용한다.
+- `/fleet/summary`와 `/clusters/{id}/summary`는 실측 집계이며, 프론트에서 과거 `score.ts`식 계산을 복원하지 않는다.
