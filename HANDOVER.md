@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 06:30 KST (DB retention/keyset 커밋 및 콘솔 디자인 시스템 Phase 2 앱 셸 이관 메모 반영)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 06:30 KST (DB retention/keyset 커밋 및 콘솔 디자인 시스템 Phase 2 홈 대시보드 이관 메모 반영)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -109,7 +109,7 @@
 - 구현:
   - `features/console/ui.tsx`의 사이드바, 헤더, 브레드크럼, 알림 Drawer를 Tailwind semantic token과 `src/ui` 프리미티브로 재구성했다.
   - 셸 내부 `plural-ui` imports, `console.css` import, inline `style=`, raw hex/px, legacy `pl-`/`co-` class 사용을 제거했다.
-  - `console.css`에서 셸 전용 selector를 삭제했다. 이 파일은 아직 미이관인 홈 대시보드 selector만 담으며 `HomePage.tsx`에서만 import한다.
+  - `console.css`에서 셸 전용 selector를 삭제했다. 이후 홈 대시보드 이관에서 파일 자체도 삭제했다.
   - 로그아웃 mutation에 pending 버튼 상태와 성공/실패 토스트를 추가했다.
   - `src/ui/IconButton`이 아이콘을 텍스트 슬롯에 넣어 좁은 버튼에서 잘리던 문제를 수정했다.
 - 검증:
@@ -121,6 +121,25 @@
 - 다음:
   1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
   2. 다음 화면 순서는 홈 대시보드다. `HomePage.tsx`와 남은 `features/console/console.css` selector를 `src/ui` 프리미티브/Tailwind token으로 이관하고 해당 CSS 파일을 더 줄이거나 삭제한다.
+
+## 체크포인트 — 콘솔 디자인 시스템 Phase 2 홈 대시보드 이관
+
+- 구현:
+  - `features/console/pages/HomePage.tsx`를 `src/ui` StatCard/Card/Table/Tabs/Badge/EmptyState 기반으로 재구성했다.
+  - 기존 Plural Treemap/Nivo 의존 대신 Tailwind semantic token 기반 플릿 히트맵 타일을 사용한다.
+  - 홈 화면의 `plural-ui`, `shared/ui`, `shared/motion`, Nivo chart wrapper, inline `style=`, legacy `pl-`/`co-` class 의존을 제거했다.
+  - 홈 이관 완료에 따라 `features/console/console.css` 파일을 삭제했다.
+  - `NotFoundPage`도 작은 콘솔 페이지라 함께 `src/ui` EmptyState/Button으로 정리했다.
+- 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test -- --runInBand` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright route mocking 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 홈 대시보드를 1440/1024/390 폭에서 캡처했고 horizontal overflow 0, unexpected console error 0.
+  - screenshots: `/tmp/k8s-home-desktop.png`, `/tmp/k8s-home-tablet.png`, `/tmp/k8s-home-mobile.png`.
+- 다음:
+  1. 이 단위를 커밋/push하고 console image를 배포해 live asset 반영과 public health를 확인한다.
+  2. 다음 화면 순서는 클러스터 목록/상세다. `features/cluster/*`의 `shared/ui`, inline style, legacy token 사용을 화면 단위로 제거한다.
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 

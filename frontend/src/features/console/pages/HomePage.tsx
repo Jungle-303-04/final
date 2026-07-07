@@ -1,25 +1,23 @@
 // 홈 대시보드 — 플릿 집계(/fleet/summary) + 인시던트 타임라인 + 승인 대기 + 최근 AI 대화 (전부 실데이터)
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, useState, type ComponentProps, type SVGProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Card, Chip, Table, type ChipSeverity } from '@/plural-ui';
-import { CaretRightIcon, GlobeIcon, PlusIcon, SendIcon, ShieldIcon } from '@/plural-ui/icons';
+import { Badge, Button, Card, EmptyState, Skeleton, StatCard, Table, Tabs, cx, type TableColumn } from '@/ui';
 import { healthLabel, healthScore, useFleetSummary, type FleetClusterSummary, type FleetHealth } from '@/features/fleet/api';
 import { timeAgo, useNotices, useTimeline } from '@/features/notifications/api';
 import { useConversations } from '@/features/chat/api';
 import { useIsAdmin } from '@/features/auth/api';
-import { useClusterUsage } from '@/features/cluster/api';
-import { useMetricQueryPresets, useMetricWidgets } from '@/features/metrics/api';
-import { buildUsageSeries } from '@/features/metrics/usageSeries';
-import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
-import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
-import { TimeSeriesChart, TreemapChart, type HeatNode } from '@/shared/ui/charts';
-import { EmptyState, QueryBoundary, Skeleton } from '@/shared/ui';
-import { AnimatedList, CountUp } from '@/shared/motion';
 import { useConsolePath } from '../ui';
-import '../console.css';
 
-const HEALTH_SEVERITY: Record<FleetHealth, ChipSeverity> = { healthy: 'success', warning: 'warning', critical: 'danger', stale: 'warning', unknown: 'neutral' };
-const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v)}%`);
+type BadgeTone = ComponentProps<typeof Badge>['tone'];
+type StatTone = ComponentProps<typeof StatCard>['tone'];
+
+const HEALTH_TONE: Record<FleetHealth, BadgeTone> = {
+  healthy: 'success',
+  warning: 'warning',
+  critical: 'danger',
+  stale: 'warning',
+  unknown: 'neutral',
+};
 
 type FleetHealthTotals = {
   clusters: number;
@@ -45,7 +43,7 @@ const FLEET_LENSES: { key: FleetLens; label: string }[] = [
   { key: 'incidents', label: '인시던트' },
 ];
 
-export function fleetClusterChip(totals: FleetHealthTotals): { chip?: string; severity: ChipSeverity } {
+export function fleetClusterChip(totals: FleetHealthTotals): { chip?: string; severity: BadgeTone } {
   if (totals.critical > 0) return { chip: `위험 ${totals.critical}`, severity: 'danger' };
   if (totals.warning > 0) return { chip: `주의 ${totals.warning}`, severity: 'warning' };
   if (totals.stale > 0) return { chip: `스테일 ${totals.stale}`, severity: 'warning' };
@@ -62,350 +60,339 @@ export function HomePage() {
   const { notices } = useNotices();
   const conversationsQ = useConversations();
   const admin = useIsAdmin();
-  const [clusterWizard, setClusterWizard] = useState(false);
-  const [repoWizard, setRepoWizard] = useState(false);
   const [fleetLens, setFleetLens] = useState<FleetLens>('all');
-  const [selectedClusterId, setSelectedClusterId] = useState('');
-
   const approvals = notices.filter(n => n.kind === 'approval').slice(0, 5);
-  const fleetClusters = useMemo(() => fleetQ.data?.clusters ?? [], [fleetQ.data?.clusters]);
 
-  useEffect(() => {
-    if (!fleetClusters.length) return;
-    if (!selectedClusterId || !fleetClusters.some(c => c.cluster_id === selectedClusterId)) {
-      setSelectedClusterId(fleetClusters[0].cluster_id);
-    }
-  }, [fleetClusters, selectedClusterId]);
+  const clusterColumns = useMemo<TableColumn<FleetClusterSummary>[]>(() => [
+    { id: 'name', header: '클러스터', width: 'lg', sortValue: row => row.name, cell: row => <span className="font-semibold text-primary">{row.name}</span> },
+    { id: 'health', header: '상태', sortValue: row => row.health, cell: row => <HealthBadge health={row.health} /> },
+    { id: 'pods', header: '팟', sortValue: row => row.pods_total, cell: row => `${row.pods_running}/${row.pods_total}` },
+    { id: 'nodes', header: '노드', sortValue: row => row.nodes_total, cell: row => `${row.nodes_ready}/${row.nodes_total}` },
+    { id: 'cpu', header: 'CPU', sortValue: row => row.cpu_pct ?? -1, cell: row => pct(row.cpu_pct) },
+    { id: 'mem', header: '메모리', sortValue: row => row.mem_pct ?? -1, cell: row => pct(row.mem_pct) },
+    { id: 'incidents', header: '인시던트', sortValue: row => row.open_incidents, cell: row => row.open_incidents > 0 ? <Badge tone="danger">{row.open_incidents}</Badge> : <span className="text-muted">없음</span> },
+    { id: 'restarts', header: '재시작', sortValue: row => row.restarts_recent, cell: row => row.restarts_recent.toLocaleString() },
+    { id: 'lastSeen', header: '마지막 확인', sortValue: row => row.last_seen ?? '', cell: row => row.last_seen ? timeAgo(row.last_seen) : <span className="text-muted">미확인</span> },
+  ], []);
 
-  const selectedCluster = fleetClusters.find(c => c.cluster_id === selectedClusterId) ?? fleetClusters[0];
-  const usageQ = useClusterUsage(selectedCluster?.cluster_id);
-  const widgetsQ = useMetricWidgets(selectedCluster?.cluster_id);
-  const presetsQ = useMetricQueryPresets(selectedCluster?.cluster_id);
-  const usageSeries = useMemo(() => buildUsageSeries(usageQ.data ?? []), [usageQ.data]);
-  const openCluster = (clusterId: string) => navigate(pathFor(`/clusters/${clusterId}`));
-  const openClusterByKeyboard = (event: KeyboardEvent<HTMLTableRowElement>, clusterId: string) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    openCluster(clusterId);
-  };
+  if (fleetQ.isPending) {
+    return (
+      <div className="grid gap-4">
+        <Skeleton lines={6} />
+        <div className="grid gap-4 lg:grid-cols-4">
+          <Skeleton lines={3} />
+          <Skeleton lines={3} />
+          <Skeleton lines={3} />
+          <Skeleton lines={3} />
+        </div>
+      </div>
+    );
+  }
+
+  if (fleetQ.isError) {
+    return (
+      <Card title="홈 대시보드" error={fleetQ.error as Error} onRetry={() => void fleetQ.refetch()}>
+        <span />
+      </Card>
+    );
+  }
+
+  const fleet = fleetQ.data;
+  if (fleet.clusters.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<GlobeIcon />}
+          title="클러스터 없음"
+          description="등록된 클러스터가 아직 없습니다"
+          action={admin ? <Button variant="primary" onClick={() => navigate(pathFor('/clusters'))}>클러스터 등록</Button> : undefined}
+        />
+      </Card>
+    );
+  }
 
   return (
-    <>
-      {/* ── 집계 카드 + 히트맵 + 클러스터 테이블 — GET /fleet/summary ── */}
-      <QueryBoundary query={fleetQ} skeletonLines={5}>{fleet => (
-        <div className="co-dashboard">
-          {fleet.clusters.length === 0 ? (
-            <div className="pl-card" style={{ marginBottom: 16 }}>
-              <EmptyState
-                icon={<GlobeIcon size={26} />}
-                title="아직 등록된 클러스터가 없습니다"
-                action={admin ? <Button variant="primary" onClick={() => setClusterWizard(true)}>첫 클러스터 등록</Button> : undefined}
-              />
-            </div>
-          ) : (
-            <>
-              <div className="co-dashboard-toolbar">
-                <b>위젯</b>
-                <div className="pl-row">
-                  <Button onClick={() => setRepoWizard(true)}><PlusIcon size={14} />레포 연결</Button>
-                  {admin && <Button onClick={() => setClusterWizard(true)}><PlusIcon size={14} />클러스터 등록</Button>}
-                  <Button onClick={() => navigate(pathFor('/metrics'))}>쿼리</Button>
-                  <Button variant="primary" onClick={() => navigate(pathFor('/metrics'))}><PlusIcon size={14} />위젯 추가</Button>
-                </div>
-              </div>
-
-              <div className="pl-card co-fleet-map">
-                <div className="co-map-head">
-                  <b>플릿 맵</b>
-                  <div className="co-map-tabs" role="tablist" aria-label="플릿 맵 렌즈">
-                    {FLEET_LENSES.map(lens => (
-                      <button
-                        key={lens.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={fleetLens === lens.key}
-                        className={fleetLens === lens.key ? 'active' : ''}
-                        onClick={() => setFleetLens(lens.key)}
-                      >
-                        {lens.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="co-treemap-frame">
-                  <TreemapChart
-                    nodes={fleet.clusters.map(c => fleetHeatNode(c, fleetLens))}
-                    onTileClick={openCluster}
-                  />
-                </div>
-              </div>
-
-              <FleetWidgetStrip totals={fleet.totals} clusters={fleet.clusters} />
-
-              <div className="co-dashboard-grid">
-                <Card className="pl-stack co-widget-panel">
-                  <div className="pl-row pl-row--between">
-                    <b>저장 위젯</b>
-                    {selectedCluster && (
-                      <select
-                        className="input co-compact-select"
-                        value={selectedCluster.cluster_id}
-                        onChange={e => setSelectedClusterId(e.target.value)}
-                        aria-label="위젯 클러스터"
-                      >
-                        {fleet.clusters.map(c => <option key={c.cluster_id} value={c.cluster_id}>{c.name}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <StoredWidgetSummary
-                    loading={widgetsQ.isPending || presetsQ.isPending}
-                    widgets={widgetsQ.data ?? []}
-                    presetCount={(presetsQ.data ?? []).length}
-                    onOpen={() => navigate(pathFor(`/metrics?cluster=${selectedCluster?.cluster_id ?? ''}`))}
-                  />
-                </Card>
-
-                <Card className="pl-stack co-widget-panel">
-                  <div className="pl-row pl-row--between">
-                    <b>사용량 추이</b>
-                    <Button size="small" onClick={() => navigate(pathFor(`/metrics?cluster=${selectedCluster?.cluster_id ?? ''}`))}>메트릭</Button>
-                  </div>
-                  {usageQ.isPending ? <Skeleton lines={4} /> : usageSeries.length === 0 ? (
-                    <p className="pl-muted" style={{ margin: 0 }}>수집된 시계열 없음</p>
-                  ) : (
-                    <TimeSeriesChart series={usageSeries} height={180} />
-                  )}
-                </Card>
-
-                <Card className="pl-stack co-widget-panel">
-                  <div className="pl-row pl-row--between">
-                    <b>최근 인시던트</b>
-                    <Button size="small" onClick={() => navigate(pathFor('/incidents'))}>전체 보기</Button>
-                  </div>
-                  <RecentIncidentList query={timelineQ} pathFor={pathFor} />
-                </Card>
-
-                <Card className="pl-stack co-widget-panel">
-                  <div className="pl-row pl-row--between">
-                    <b>승인 대기 배포</b>
-                    <Button size="small" onClick={() => navigate(pathFor('/workflows'))}>워크플로우</Button>
-                  </div>
-                  <ApprovalList approvals={approvals} pathFor={pathFor} />
-                </Card>
-              </div>
-
-              <Table headers={['클러스터', '건강', '팟', '노드', 'CPU', 'MEM', '인시던트', '최근 재시작', '마지막 확인', '']}>
-                {fleet.clusters.map(c => (
-                  <tr
-                    key={c.cluster_id}
-                    className="clickable"
-                    tabIndex={0}
-                    role="button"
-                    onClick={() => openCluster(c.cluster_id)}
-                    onKeyDown={event => openClusterByKeyboard(event, c.cluster_id)}
-                  >
-                    <td><b style={{ color: 'var(--color-text)' }}>{c.name}</b></td>
-                    <td><Chip severity={HEALTH_SEVERITY[c.health] ?? 'neutral'}>{healthLabel(c.health)}</Chip></td>
-                    <td>{c.pods_running}/{c.pods_total}</td>
-                    <td>{c.nodes_ready}/{c.nodes_total}</td>
-                    <td>{pct(c.cpu_pct)}</td>
-                    <td>{pct(c.mem_pct)}</td>
-                    <td>{c.open_incidents > 0 ? <Chip severity="danger">{c.open_incidents}</Chip> : '—'}</td>
-                    <td>{c.restarts_recent}</td>
-                    <td>{c.last_seen ? timeAgo(c.last_seen) : '—'}</td>
-                    <td>
-                      <div className="pl-rowactions">
-                        <span className="pl-caretbtn" aria-hidden><CaretRightIcon size={14} /></span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </Table>
-            </>
-          )}
+    <div className="grid gap-4">
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-page font-semibold text-primary">홈</h1>
+          <p className="mt-1 text-body text-secondary">플릿 상태, 인시던트, 승인 대기 흐름</p>
         </div>
-      )}</QueryBoundary>
-
-      {/* ── 최근 AI 대화 — GET /ai/conversations ── */}
-      <div style={{ marginTop: 16 }}>
-        <Card className="pl-stack">
-          <div className="pl-row pl-row--between">
-            <span className="pl-row" style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-              <SendIcon size={14} /> 최근 AI 대화
-            </span>
-            <Button size="small" onClick={() => navigate(pathFor('/ai'))}>전체 보기</Button>
-          </div>
-          {conversationsQ.isPending ? <Skeleton lines={2} /> : (conversationsQ.data ?? []).length === 0 ? (
-            <p className="pl-muted" style={{ margin: 0 }}>대화 없음</p>
-          ) : (
-            <div className="pl-stack" style={{ gap: 8 }}>
-              <AnimatedList items={(conversationsQ.data ?? []).slice(0, 3)} getKey={c => c.conversation_id}>
-                {c => <Link to={pathFor(`/ai/${c.conversation_id}`)} className="pl-bindrow" style={{ textDecoration: 'none' }}>
-                  <div className="pl-row" style={{ minWidth: 0 }}>
-                    <div className="pl-avatar" style={{ width: 26, height: 26, fontSize: 10, background: 'var(--color-fill-two)' }}>AI</div>
-                    <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
-                  </div>
-                  <span className="pl-muted" style={{ flex: 'none' }}>{timeAgo(c.updated_at)}</span>
-                </Link>}
-              </AnimatedList>
-            </div>
-          )}
-        </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" leadingIcon={<PlusIcon />} onClick={() => navigate(pathFor('/repos'))}>레포 연결</Button>
+          {admin && <Button size="sm" leadingIcon={<PlusIcon />} onClick={() => navigate(pathFor('/clusters'))}>클러스터 등록</Button>}
+          <Button size="sm" onClick={() => navigate(pathFor('/metrics'))}>쿼리</Button>
+          <Button size="sm" variant="primary" leadingIcon={<PlusIcon />} onClick={() => navigate(pathFor('/metrics'))}>위젯 추가</Button>
+        </div>
       </div>
 
-      <RegisterClusterWizard open={clusterWizard} onClose={() => setClusterWizard(false)} />
-      <ConnectRepoWizard open={repoWizard} onClose={() => setRepoWizard(false)} />
-    </>
+      <FleetStatCards totals={fleet.totals} clusters={fleet.clusters} />
+
+      <FleetHeatmap clusters={fleet.clusters} lens={fleetLens} onLensChange={setFleetLens} onOpen={clusterId => navigate(pathFor(`/clusters/${clusterId}`))} />
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <RecentIncidentCard query={timelineQ} pathFor={pathFor} />
+        <ApprovalCard approvals={approvals} pathFor={pathFor} />
+      </div>
+
+      <Card title="클러스터" description="클릭하면 상세 화면으로 이동합니다">
+        <Table
+          columns={clusterColumns}
+          rows={fleet.clusters}
+          rowKey={row => row.cluster_id}
+          onRowClick={row => navigate(pathFor(`/clusters/${row.cluster_id}`))}
+        />
+      </Card>
+
+      <RecentConversationCard query={conversationsQ} pathFor={pathFor} />
+    </div>
   );
 }
 
-function fleetHeatNode(cluster: FleetClusterSummary, lens: FleetLens): HeatNode {
-  const cpuScore = ratioHealthScore(cluster.cpu_pct);
-  const memScore = ratioHealthScore(cluster.mem_pct);
-  const size = Math.max(1, cluster.pods_total);
-  if (lens === 'cpu') {
-    return {
-      id: cluster.cluster_id,
-      label: `${cluster.name} · ${pct(cluster.cpu_pct)} CPU`,
-      value: size,
-      score: cpuScore,
-    };
-  }
-  if (lens === 'memory') {
-    return {
-      id: cluster.cluster_id,
-      label: `${cluster.name} · ${pct(cluster.mem_pct)} MEM`,
-      value: size,
-      score: memScore,
-    };
-  }
-  if (lens === 'incidents') {
-    return {
-      id: cluster.cluster_id,
-      label: `${cluster.name} · 인시던트 ${cluster.open_incidents}`,
-      value: size,
-      score: cluster.open_incidents > 0 ? 0.12 : healthScore(cluster.health),
-    };
-  }
-  return {
-    id: cluster.cluster_id,
-    label: `${cluster.name} · 팟 ${cluster.pods_running}/${cluster.pods_total}`,
-    value: size,
-    score: healthScore(cluster.health),
-  };
+function FleetStatCards({ totals, clusters }: { totals: FleetStatTotals; clusters: FleetClusterSummary[] }) {
+  const totalPods = clusters.reduce((sum, cluster) => sum + cluster.pods_total, 0);
+  const avgCpu = avgMetric(clusters.map(cluster => cluster.cpu_pct));
+  const avgMem = avgMetric(clusters.map(cluster => cluster.mem_pct));
+  const activeAlerts = totals.open_incidents + totals.dead_letters;
+  const clusterChip = fleetClusterChip(totals);
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} spark={<SparkBars tone={clusterChip.severity as StatTone} />} />
+      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} spark={<SparkBars tone="info" />} />
+      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} spark={<SparkBars tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} />} />
+      <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} spark={<SparkBars tone={activeAlerts > 0 ? 'danger' : 'success'} />} />
+      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} spark={<SparkBars tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} />} />
+      <StatCard label="인시던트" value={totals.open_incidents.toLocaleString()} delta="열린 항목" tone={totals.open_incidents > 0 ? 'danger' : 'success'} spark={<SparkBars tone={totals.open_incidents > 0 ? 'danger' : 'success'} />} />
+      <StatCard label="승인 대기" value={totals.pending_approvals.toLocaleString()} delta="배포 승인" tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} spark={<SparkBars tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} />} />
+      <StatCard label="워크플로우" value={totals.running_workflows.toLocaleString()} delta="실행 중" tone={totals.running_workflows > 0 ? 'info' : 'neutral'} spark={<SparkBars tone={totals.running_workflows > 0 ? 'info' : 'neutral'} />} />
+    </div>
+  );
 }
 
-function ratioHealthScore(value: number | null): number {
-  if (value == null) return 0.36;
-  return Math.max(0.05, Math.min(0.95, 1 - value / 100));
+function FleetHeatmap({
+  clusters,
+  lens,
+  onLensChange,
+  onOpen,
+}: {
+  clusters: FleetClusterSummary[];
+  lens: FleetLens;
+  onLensChange: (lens: FleetLens) => void;
+  onOpen: (clusterId: string) => void;
+}) {
+  return (
+    <Card
+      title="플릿 맵"
+      description="렌즈를 전환해 클러스터 위험 신호를 확인합니다"
+      actions={<Tabs items={FLEET_LENSES.map(item => ({ value: item.key, label: item.label }))} value={lens} onValueChange={value => onLensChange(value as FleetLens)} />}
+    >
+      <div className="grid min-h-80 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {clusters.map(cluster => {
+          const tone = heatTone(cluster, lens);
+          return (
+            <button
+              key={cluster.cluster_id}
+              type="button"
+              className={cx(
+                'grid min-h-36 content-between rounded-panel border p-4 text-left transition-colors hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                heatTileClass(tone),
+              )}
+              onClick={() => onOpen(cluster.cluster_id)}
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-title font-semibold text-primary">{cluster.name}</span>
+                <HealthBadge health={cluster.health} />
+              </span>
+              <span className="grid gap-2 text-body text-secondary">
+                <span>{heatSummary(cluster, lens)}</span>
+                <span className="text-caption text-muted">팟 {cluster.pods_running}/{cluster.pods_total} · 노드 {cluster.nodes_ready}/{cluster.nodes_total}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function RecentIncidentCard({ query, pathFor }: { query: ReturnType<typeof useTimeline>; pathFor: (to: string) => string }) {
+  const items = query.data ?? [];
+  return (
+    <Card
+      title="최근 인시던트"
+      actions={<Link to={pathFor('/incidents')}><Button size="sm">전체 보기</Button></Link>}
+      loading={query.isPending}
+      error={query.isError ? query.error as Error : null}
+      onRetry={() => void query.refetch()}
+      empty={items.length === 0 ? <EmptyState title="열린 인시던트 없음" description="최근 타임라인에 열린 인시던트가 없습니다" icon={<ShieldIcon />} /> : undefined}
+    >
+      <div className="grid gap-2">
+        {items.slice(0, 5).map(item => (
+          <Link key={item.incident_id} to={pathFor(`/incidents/${item.incident_id}`)} className="grid gap-2 rounded-panel border border-border bg-bg p-3 transition-colors hover:bg-raised">
+            <span className="flex min-w-0 items-center gap-2">
+              <Badge tone="danger">{item.stage}</Badge>
+              <span className="min-w-0 truncate text-body font-medium text-primary">{item.summary}</span>
+            </span>
+            <span className="text-caption text-muted">{timeAgo(item.at)}</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function ApprovalCard({ approvals, pathFor }: { approvals: ReturnType<typeof useNotices>['notices']; pathFor: (to: string) => string }) {
+  return (
+    <Card
+      title="승인 대기 배포"
+      actions={<Link to={pathFor('/workflows')}><Button size="sm">워크플로우</Button></Link>}
+      empty={approvals.length === 0 ? <EmptyState title="승인 대기 없음" description="대기 중인 배포 승인이 없습니다" icon={<SendIcon />} /> : undefined}
+    >
+      <div className="grid gap-2">
+        {approvals.map(approval => (
+          <Link key={approval.id} to={pathFor(approval.link)} className="grid gap-2 rounded-panel border border-border bg-bg p-3 transition-colors hover:bg-raised">
+            <span className="flex min-w-0 items-center gap-2">
+              <Badge tone="warning">승인</Badge>
+              <span className="min-w-0 truncate text-body font-medium text-primary">{approval.title}</span>
+            </span>
+            <span className="text-caption text-muted">{approval.at ? timeAgo(approval.at) : ''}</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RecentConversationCard({ query, pathFor }: { query: ReturnType<typeof useConversations>; pathFor: (to: string) => string }) {
+  const conversations = query.data ?? [];
+  return (
+    <Card
+      title="최근 AI 대화"
+      actions={<Link to={pathFor('/ai')}><Button size="sm">전체 보기</Button></Link>}
+      loading={query.isPending}
+      error={query.isError ? query.error as Error : null}
+      onRetry={() => void query.refetch()}
+      empty={conversations.length === 0 ? <EmptyState title="대화 없음" description="최근 AI 대화가 없습니다" icon={<TerminalIcon />} /> : undefined}
+    >
+      <div className="grid gap-2">
+        {conversations.slice(0, 3).map(conversation => (
+          <Link key={conversation.conversation_id} to={pathFor(`/ai/${conversation.conversation_id}`)} className="flex min-w-0 items-center justify-between gap-3 rounded-panel border border-border bg-bg p-3 transition-colors hover:bg-raised">
+            <span className="min-w-0 truncate text-body font-medium text-primary">{conversation.title}</span>
+            <span className="shrink-0 text-caption text-muted">{timeAgo(conversation.updated_at)}</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function SparkBars({ tone }: { tone: StatTone }) {
+  return (
+    <div className="flex h-full items-end gap-1 p-2">
+      {[3, 5, 4, 7, 6].map((height, index) => (
+        <span key={index} className={cx('w-full rounded-control', sparkClass(tone), heightClass(height))} />
+      ))}
+    </div>
+  );
+}
+
+function HealthBadge({ health }: { health: FleetHealth | string }) {
+  return <Badge tone={HEALTH_TONE[health as FleetHealth] ?? 'neutral'}>{healthLabel(health)}</Badge>;
+}
+
+function pct(value: number | null): string {
+  return value == null ? '미확인' : `${Math.round(value)}%`;
 }
 
 function avgMetric(values: (number | null)[]): number | null {
-  const known = values.filter((v): v is number => typeof v === 'number');
+  const known = values.filter((value): value is number => typeof value === 'number');
   if (!known.length) return null;
-  return known.reduce((sum, v) => sum + v, 0) / known.length;
+  return known.reduce((sum, value) => sum + value, 0) / known.length;
 }
 
-function FleetWidgetStrip({ totals, clusters }: { totals: FleetStatTotals; clusters: FleetClusterSummary[] }) {
-  const totalPods = clusters.reduce((sum, c) => sum + c.pods_total, 0);
-  const avgCpu = avgMetric(clusters.map(c => c.cpu_pct));
-  const avgMem = avgMetric(clusters.map(c => c.mem_pct));
-  const activeAlerts = totals.open_incidents + totals.dead_letters;
-  return (
-    <div className="co-kpi-grid">
-      <KpiTile label="팟 수" value={totalPods.toLocaleString()} sub={`${totals.stale + totals.unknown}개 클러스터 수집 상태 확인`} />
-      <KpiTile label="CPU 사용률" value={pct(avgCpu)} />
-      <KpiTile label="메모리 사용률" value={pct(avgMem)} />
-      <KpiTile label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} danger={activeAlerts > 0} />
-    </div>
-  );
+function heatTone(cluster: FleetClusterSummary, lens: FleetLens): BadgeTone {
+  if (lens === 'incidents') return cluster.open_incidents > 0 ? 'danger' : 'success';
+  if (lens === 'cpu') return ratioTone(cluster.cpu_pct);
+  if (lens === 'memory') return ratioTone(cluster.mem_pct);
+  const score = healthScore(cluster.health);
+  if (score <= 0.2) return 'danger';
+  if (score <= 0.55) return 'warning';
+  return 'success';
 }
 
-function KpiTile({ label, value, sub, danger }: { label: string; value: string; sub?: string; danger?: boolean }) {
-  return (
-    <div className="co-kpi">
-      <span>{label}</span>
-      <b className={danger ? 'danger' : ''}>{value}</b>
-      {sub && <small>{sub}</small>}
-    </div>
-  );
+function ratioTone(value: number | null): BadgeTone {
+  if (value == null) return 'neutral';
+  if (value >= 85) return 'danger';
+  if (value >= 70) return 'warning';
+  return 'success';
 }
 
-function StoredWidgetSummary({
-  loading,
-  widgets,
-  presetCount,
-  onOpen,
-}: {
-  loading: boolean;
-  widgets: { widget_id: string; title: string; kind: string }[];
-  presetCount: number;
-  onOpen: () => void;
-}) {
-  if (loading) return <Skeleton lines={4} />;
-  return (
-    <>
-      <div className="co-widget-count">
-        <b><CountUp value={widgets.length} /></b>
-        <span>위젯</span>
-        <b><CountUp value={presetCount} /></b>
-        <span>쿼리</span>
-      </div>
-      {widgets.length === 0 ? (
-        <p className="pl-muted" style={{ margin: 0 }}>저장된 위젯 없음</p>
-      ) : (
-        <div className="pl-stack" style={{ gap: 8 }}>
-          <AnimatedList items={widgets.slice(0, 4)} getKey={w => w.widget_id}>
-            {w => (
-              <button type="button" className="pl-bindrow co-compact-row" onClick={onOpen}>
-                <span>{w.title}</span>
-                <Chip severity="info">{w.kind}</Chip>
-              </button>
-            )}
-          </AnimatedList>
-        </div>
-      )}
-    </>
-  );
+function heatSummary(cluster: FleetClusterSummary, lens: FleetLens): string {
+  if (lens === 'cpu') return `CPU ${pct(cluster.cpu_pct)}`;
+  if (lens === 'memory') return `메모리 ${pct(cluster.mem_pct)}`;
+  if (lens === 'incidents') return `인시던트 ${cluster.open_incidents.toLocaleString()}건`;
+  return `상태 ${healthLabel(cluster.health)}`;
 }
 
-function RecentIncidentList({ query, pathFor }: { query: ReturnType<typeof useTimeline>; pathFor: (to: string) => string }) {
-  return (
-    <QueryBoundary query={query} skeletonLines={3}>{items =>
-      items.length === 0 ? (
-        <p className="pl-muted" style={{ margin: 0 }}>열린 인시던트 없음</p>
-      ) : (
-        <div className="pl-stack" style={{ gap: 8 }}>
-          <AnimatedList items={items.slice(0, 5)} getKey={i => i.incident_id}>
-            {i => <Link to={pathFor(`/incidents/${i.incident_id}`)} className="pl-bindrow" style={{ textDecoration: 'none' }}>
-              <div className="pl-row" style={{ minWidth: 0 }}>
-                <ShieldIcon size={13} />
-                <Chip severity="danger">{i.stage}</Chip>
-                <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.summary}</span>
-              </div>
-              <span className="pl-muted" style={{ flex: 'none' }}>{timeAgo(i.at)}</span>
-            </Link>}
-          </AnimatedList>
-        </div>
-      )
-    }</QueryBoundary>
-  );
+function heatTileClass(tone: BadgeTone) {
+  if (tone === 'danger') return 'border-danger/40 bg-danger/10';
+  if (tone === 'warning') return 'border-warning/40 bg-warning/10';
+  if (tone === 'success') return 'border-success/40 bg-success/10';
+  return 'border-border bg-raised';
 }
 
-function ApprovalList({ approvals, pathFor }: { approvals: ReturnType<typeof useNotices>['notices']; pathFor: (to: string) => string }) {
-  if (approvals.length === 0) return <p className="pl-muted" style={{ margin: 0 }}>승인 대기 없음</p>;
-  return (
-    <div className="pl-stack" style={{ gap: 8 }}>
-      <AnimatedList items={approvals} getKey={n => n.id}>
-        {n => <Link to={pathFor(n.link)} className="pl-bindrow" style={{ textDecoration: 'none' }}>
-          <div className="pl-row" style={{ minWidth: 0 }}>
-            <SendIcon size={13} />
-            <Chip severity="warning">승인</Chip>
-            <span style={{ color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
-          </div>
-          <span className="pl-muted" style={{ flex: 'none' }}>{n.at ? timeAgo(n.at) : ''}</span>
-        </Link>}
-      </AnimatedList>
-    </div>
-  );
+function sparkClass(tone: StatTone) {
+  if (tone === 'danger') return 'bg-danger/70';
+  if (tone === 'warning') return 'bg-warning/70';
+  if (tone === 'success') return 'bg-success/70';
+  if (tone === 'info') return 'bg-info/70';
+  return 'bg-muted/50';
+}
+
+function heightClass(value: number) {
+  return {
+    3: 'h-3',
+    4: 'h-4',
+    5: 'h-5',
+    6: 'h-6',
+    7: 'h-7',
+  }[value] ?? 'h-4';
+}
+
+type IconProps = SVGProps<SVGSVGElement>;
+
+function iconProps(props: IconProps = {}): IconProps {
+  return {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+    ...props,
+  };
+}
+
+function PlusIcon(props: IconProps) {
+  return <svg {...iconProps(props)}><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
+}
+
+function GlobeIcon(props: IconProps) {
+  return <svg {...iconProps(props)}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.2 2.3 3.2 5.3 3.2 9S14.2 18.7 12 21" /><path d="M12 3c-2.2 2.3-3.2 5.3-3.2 9s1 6.7 3.2 9" /></svg>;
+}
+
+function ShieldIcon(props: IconProps) {
+  return <svg {...iconProps(props)}><path d="M12 3.5 5 6v5.7c0 4.2 2.8 7.1 7 8.8 4.2-1.7 7-4.6 7-8.8V6z" /><path d="m9 12 2 2 4-4" /></svg>;
+}
+
+function SendIcon(props: IconProps) {
+  return <svg {...iconProps(props)}><path d="M21 3 10.5 13.5" /><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>;
+}
+
+function TerminalIcon(props: IconProps) {
+  return <svg {...iconProps(props)}><path d="m5 8 4 4-4 4" /><path d="M11 17h8" /><rect x="3" y="4" width="18" height="16" rx="2" /></svg>;
 }
