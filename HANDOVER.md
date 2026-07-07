@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:12 KST (연속 실행 계획 문서화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:25 KST (GitOps poller DB target 전환)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -8,6 +8,27 @@
 - 화면 수치와 드릴다운은 실제 세션 권한으로 접근 가능한 DB/API/클러스터 관측값만 표시한다. 개발용/테스트용 격리 객체는 단위 테스트 내부에만 두고 운영 경로에 연결하지 않는다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (16:25 KST) — GitOps poller DB target 전환
+
+- `github-poll-worker`가 env 단일 target만 보던 구조를 DB 등록 target 우선 구조로 전환했다.
+- 신규 `RepoChangeRepository.list_active_github_poll_targets()`:
+  - active GitHub repository + active application + active deployment binding + optional watch target을 조인한다.
+  - 과거 binding에 `git_watch_targets` row가 없어도 binding의 derived `watch_target_id`/`manifest_path`로 fallback한다.
+- application deployment 생성 경로:
+  - application `default_branch`를 body에 넣는다.
+  - `register_watch_target()` 후 `register_deployment_binding()` 순서로 실행한다. 실제 DB에서는 `unit_of_work_or_null(db)` 안이라 같은 트랜잭션에 묶인다.
+- poller:
+  - `GitHubPollTarget` dataclass 추가.
+  - DB target을 우선 사용하고, DB target이 없고 `GITHUB_REPO`가 있을 때만 env fallback.
+  - target별 `_last_sha_by_target`/`_etag_by_target`을 유지한다.
+  - DB `credential_ref`와 env `GITHUB_TOKEN_REF`를 token vault로 해석한다.
+  - webhook body에 실제 `application_id`와 `environment`까지 포함한다.
+- 검증 완료:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_github_poller.py tests/test_applications_router.py tests/test_database_unit.py` → 56 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q` → 678 passed, 3 skipped.
+  - `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check` → 통과.
+- 다음: 커밋/푸시 → dev CI/promote/main AWS CD 확인 → live provider/auth/health smoke → incident/DLQ 증가율 확인.
 
 ## 최신 업데이트 (16:12 KST) — 연속 실행 계획 문서화
 

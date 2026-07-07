@@ -17,7 +17,9 @@ from packages.contracts.gateway.requests import (
 class FakeApplicationsDb:
     def __init__(self) -> None:
         self.registered_repositories: list[dict[str, object]] = []
+        self.registered_watch_targets: list[dict[str, object]] = []
         self.registered_bindings: list[dict[str, object]] = []
+        self.registration_calls: list[str] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
         self.application = {
             "application_id": "app-1",
@@ -25,6 +27,7 @@ class FakeApplicationsDb:
             "repository_id": "repo-1",
             "name": "checkout-api",
             "manifest_path": "deploy.yaml",
+            "default_branch": "release",
             "status": "active",
             "metadata": {"team": "payments"},
         }
@@ -77,7 +80,13 @@ class FakeApplicationsDb:
         self.access_checks.append((user_id, workspace_id, resource_type, resource_id, permission))
         return True
 
+    def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
+        self.registration_calls.append("watch")
+        self.registered_watch_targets.append(payload)
+        return {**payload, "watch_target_id": "watch-1"}
+
     def register_deployment_binding(self, payload: dict[str, object]) -> dict[str, object]:
+        self.registration_calls.append("binding")
         self.registered_bindings.append(payload)
         return {**payload, "binding_id": "binding-1"}
 
@@ -132,6 +141,10 @@ def test_upsert_application_deployment_requires_app_and_cluster_access() -> None
     assert response.deployment["binding_id"] == "binding-1"
     assert response.deployment["app_name"] == "checkout-api"
     assert response.deployment["repository_id"] == "repo-1"
+    assert db.registration_calls == ["watch", "binding"]
+    assert db.registered_watch_targets[0]["branch"] == "release"
+    assert db.registered_watch_targets[0]["manifest_path"] == "deploy.yaml"
+    assert db.registered_bindings[0]["branch"] == "release"
     assert db.access_checks == [
         ("user-1", "ws-1", "application", "app-1", "application.manage"),
         ("user-1", "ws-1", "cluster", "cluster-1", "deploy.run"),

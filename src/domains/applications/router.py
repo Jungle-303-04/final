@@ -23,6 +23,7 @@ from packages.contracts.gateway.responses import (
     DeploymentBindingResponse,
     WorkflowRunListResponse,
 )
+from packages.contracts.gitops import DEFAULT_REPO_BRANCH
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
     AccessResourceType,
@@ -177,6 +178,7 @@ async def upsert_application_deployment(
         "user_id": current.user_id,
         "repository_id": application["repository_id"],
         "app_name": application["name"],
+        "branch": application.get("default_branch") or DEFAULT_REPO_BRANCH,
         "manifest_path": payload.manifest_path or application["manifest_path"],
     }
     # 글로벌 서비스 — cluster_id "*" 는 등록된 모든 클러스터로 확장 생성한다.
@@ -195,17 +197,17 @@ async def upsert_application_deployment(
                 str(cluster["cluster_id"]),
                 Permission.DEPLOY_RUN.value,
             )
-        stored_list = [
-            db.register_deployment_binding(
-                {
-                    **body,
-                    "cluster_id": str(cluster["cluster_id"]),
-                    "deploy_policy": {**payload.deploy_policy, GLOBAL_BINDING_KEY: True},
-                }
-            )
-            for cluster in clusters
-        ]
+        stored_list = []
+        for cluster in clusters:
+            cluster_body = {
+                **body,
+                "cluster_id": str(cluster["cluster_id"]),
+                "deploy_policy": {**payload.deploy_policy, GLOBAL_BINDING_KEY: True},
+            }
+            db.register_watch_target(cluster_body)
+            stored_list.append(db.register_deployment_binding(cluster_body))
         return DeploymentBindingResponse(deployment=stored_list[0])
+    db.register_watch_target(body)
     stored = db.register_deployment_binding(body)
     return DeploymentBindingResponse(deployment=stored)
 
