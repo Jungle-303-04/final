@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
-import { Badge, Button, CodeBlock, copyToClipboard, Field, KeyValue, Modal, Skeleton, Stepper } from '@/shared/ui';
+import { Badge, Button, CodeBlock, copyToClipboard, Field, KeyValue, Modal, SearchInput, Skeleton, Stepper } from '@/shared/ui';
 import { uiStore } from '@/shared/lib/ui-store';
 import { queryClient } from '@/shared/lib/query';
 
@@ -76,6 +76,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const [deployProvider, setDeployProvider] = useState(DEFAULT_DEPLOY_PROVIDER);
   const [kubeContext, setKubeContext] = useState('');
   const [selectedImportKey, setSelectedImportKey] = useState('');
+  const [candidateQuery, setCandidateQuery] = useState('');
   const [clusterId, setClusterId] = useState('');
   const [name, setName] = useState('');
   const [issued, setIssued] = useState<InstallResponse | null>(null);
@@ -92,6 +93,10 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const deployOptions = useMemo(() => selectedFlow?.deploy_providers ?? [], [selectedFlow]);
   const selectedDeployOption = deployOptions.find(option => option.key === deployProvider);
   const selectedCandidate = selectedFlow?.import_candidates.find(candidate => candidateKey(candidate) === selectedImportKey);
+  const filteredImportCandidates = useMemo(
+    () => (selectedFlow?.import_candidates ?? []).filter(candidate => clusterImportCandidateMatches(candidate, candidateQuery)),
+    [candidateQuery, selectedFlow],
+  );
   const directApply = deployProvider === 'kube-context';
 
   const preflight = useMutation({
@@ -142,6 +147,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     setDeployProvider(defaultFlow ? preferredDeployProvider(defaultFlow) : DEFAULT_DEPLOY_PROVIDER);
     setKubeContext('');
     setSelectedImportKey('');
+    setCandidateQuery('');
     setIssued(null);
     setClusterId('');
     setName('');
@@ -162,6 +168,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const chooseProvider = (flow: RegistrationFlow) => {
     setProvider(flow.cloud_provider);
     setDeployProvider(preferredDeployProvider(flow));
+    setSelectedImportKey('');
+    setCandidateQuery('');
+    setKubeContext('');
+    preflight.reset();
+  };
+
+  const clearImport = () => {
     setSelectedImportKey('');
     setKubeContext('');
     preflight.reset();
@@ -219,28 +232,46 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                     style={{ cursor: 'pointer', textAlign: 'left', borderColor: activeProvider === flow.cloud_provider ? 'var(--brand)' : 'var(--border)' }}
                     onClick={() => chooseProvider(flow)}
                   >
-                    <b>{flow.label}</b>
-                    <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: '4px 0' }}>{flow.description}</p>
-                    <Badge tone={flow.status === 'available' ? 'ok' : 'warn'}>{flow.status}</Badge>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+                      <b>{flow.label}</b>
+                      <Badge tone={registrationStatusTone(flow.status)}>{registrationStatusLabel(flow.status)}</Badge>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      <span className="cluster-registration-chip">{flow.cloud_provider}</span>
+                      <span className="cluster-registration-chip">{flow.import_candidates.length} 후보</span>
+                      <span className="cluster-registration-chip">{flow.deploy_providers.filter(option => option.status === 'available').length} 설치 경로</span>
+                    </div>
                   </button>
                 ))}
               </div>
               {selectedFlow?.unavailable_reason && (
                 <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>{selectedFlow.unavailable_reason}</p>
               )}
-              <Field label="환경에서 가져오기">
-                <select className="input" value={selectedImportKey} onChange={e => chooseImport(e.target.value)} aria-label="import cluster">
-                  <option value="">직접 입력</option>
-                  {selectedFlow?.import_candidates.map(candidate => (
-                    <option key={candidateKey(candidate)} value={candidateKey(candidate)}>
-                      {candidate.name} · {candidate.source}{candidate.kube_context ? ` · ${candidate.kube_context}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              {selectedFlow?.import_candidates.length === 0 && (
-                <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', marginTop: -8 }}>가져올 클러스터가 없습니다.</p>
-              )}
+              <div className="cluster-registration-toolbar">
+                <SearchInput value={candidateQuery} onChange={setCandidateQuery} placeholder="후보 검색" />
+                <Button
+                  size="sm"
+                  variant={selectedImportKey ? 'secondary' : 'primary'}
+                  onClick={clearImport}
+                >
+                  직접 입력
+                </Button>
+              </div>
+              <div role="listbox" aria-label="가져올 클러스터" className="cluster-registration-list">
+                {filteredImportCandidates.map(candidate => (
+                  <ImportCandidateButton
+                    key={candidateKey(candidate)}
+                    candidate={candidate}
+                    selected={candidateKey(candidate) === selectedImportKey}
+                    onClick={() => chooseImport(candidateKey(candidate))}
+                  />
+                ))}
+                {filteredImportCandidates.length === 0 && (
+                  <div className="cluster-registration-empty">
+                    {selectedFlow?.import_candidates.length ? '검색 결과 없음' : '가져올 후보 없음'}
+                  </div>
+                )}
+              </div>
               {selectedCandidate && (
                 <KeyValue pairs={[
                   ['source', selectedCandidate.source],
@@ -262,9 +293,26 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
             <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={clusterId} />
           </Field>
           <Field label="설치 방식">
-            <select className="input" value={deployProvider} onChange={e => { setDeployProvider(e.target.value); preflight.reset(); }}>
-              {deployOptions.map(option => <option key={option.key} value={option.key} disabled={option.status !== 'available'}>{option.label}</option>)}
-            </select>
+            <div role="listbox" aria-label="설치 방식" className="cluster-registration-list cluster-registration-list--compact">
+              {deployOptions.map(option => (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="option"
+                  aria-selected={option.key === deployProvider}
+                  disabled={option.status !== 'available'}
+                  className="cluster-registration-option"
+                  data-selected={option.key === deployProvider}
+                  onClick={() => { setDeployProvider(option.key); preflight.reset(); }}
+                >
+                  <span>
+                    <b>{option.label}</b>
+                    <code>{option.key}</code>
+                  </span>
+                  <Badge tone={registrationStatusTone(option.status)}>{registrationStatusLabel(option.status)}</Badge>
+                </button>
+              ))}
+            </div>
           </Field>
           {selectedDeployOption?.unavailable_reason && (
             <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>{selectedDeployOption.unavailable_reason}</p>
@@ -280,8 +328,10 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
             </Field>
           )}
           <KeyValue pairs={[
-            ['provider', activeProvider],
-            ['environment', 'sandbox'],
+            ['프로바이더', activeProvider],
+            ['설치 방식', deployProvider],
+            ['환경', 'sandbox'],
+            ['관측 스택', 'prometheus/loki/tempo target service'],
           ]} />
           <Footer onPrev={() => setStep(0)} onNext={runPreflight}
             nextDisabled={!canPreflight} nextLabel="사전 점검" loading={preflight.isPending} />
@@ -300,12 +350,15 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
               <Badge tone={preflight.data.valid ? 'ok' : 'danger'}>
                 {preflight.data.valid ? '등록 가능' : '등록 전 수정 필요'}
               </Badge>
-              <KeyValue pairs={[
-                ['cluster_id', clusterId],
-                ['provider', `${activeProvider} + ${deployProvider}`],
-                ['agent status', preflight.data.agent_install_status],
-                ['duplicate', preflight.data.duplicate_cluster_id ? 'yes' : 'no'],
-              ]} />
+              <div className="cluster-registration-checks" style={{ marginTop: 12 }}>
+                <PreflightCheck label="cluster_id" value={clusterId} tone={preflight.data.duplicate_cluster_id ? 'danger' : 'ok'} />
+                <PreflightCheck label="프로바이더" value={`${activeProvider} + ${deployProvider}`} tone={preflight.data.provider_ready ? 'ok' : 'danger'} />
+                <PreflightCheck label="에이전트" value={preflight.data.agent_install_status} tone={preflight.data.agent_install_status === 'not_registered' ? 'neutral' : registrationStatusTone(preflight.data.agent_install_status)} />
+                <PreflightCheck label="중복" value={preflight.data.duplicate_cluster_id ? '있음' : '없음'} tone={preflight.data.duplicate_cluster_id ? 'danger' : 'ok'} />
+                {preflight.data.kube_context_allowed !== null && preflight.data.kube_context_allowed !== undefined && (
+                  <PreflightCheck label="kube context" value={preflight.data.kube_context_allowed ? '허용' : '차단'} tone={preflight.data.kube_context_allowed ? 'ok' : 'danger'} />
+                )}
+              </div>
               {preflight.data.errors.map(error => <p key={error} style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{error}</p>)}
               {preflight.data.warnings.map(warning => <p key={warning} style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>{warning}</p>)}
             </>
@@ -386,6 +439,78 @@ function candidateKey(candidate: ImportCandidate): string {
 
 function isAgentOnline(status: string | undefined): boolean {
   return !!status && ONLINE_STATUSES.has(status);
+}
+
+function ImportCandidateButton({ candidate, selected, onClick }: { candidate: ImportCandidate; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      className="cluster-registration-candidate"
+      data-selected={selected}
+      onClick={onClick}
+    >
+      <span className="cluster-registration-candidate__main">
+        <b>{candidate.name}</b>
+        <code>{candidate.cluster_id}</code>
+      </span>
+      <span className="cluster-registration-candidate__meta">
+        <span>{candidate.source}</span>
+        {candidate.kube_context && <span>{candidate.kube_context}</span>}
+        {candidate.external_handle && <span>{candidate.external_handle}</span>}
+      </span>
+      <span className="cluster-registration-candidate__tags">
+        <span className="cluster-registration-chip">{candidate.deploy_provider}</span>
+        {candidate.direct_apply_available && <span className="cluster-registration-chip">직접 적용</span>}
+        {Object.entries(candidate.labels).slice(0, 4).map(([key, value]) => (
+          <span className="cluster-registration-chip" key={key}>{key}:{String(value)}</span>
+        ))}
+      </span>
+    </button>
+  );
+}
+
+function PreflightCheck({ label, value, tone }: { label: string; value: string; tone: 'ok' | 'warn' | 'danger' | 'neutral' }) {
+  return (
+    <div className="cluster-registration-check">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+      <Badge tone={tone}>{tone === 'ok' ? '정상' : tone === 'danger' ? '차단' : tone === 'warn' ? '주의' : '확인'}</Badge>
+    </div>
+  );
+}
+
+export function clusterImportCandidateMatches(candidate: ImportCandidate, query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  const haystack = [
+    candidate.cluster_id,
+    candidate.name,
+    candidate.source,
+    candidate.cloud_provider,
+    candidate.deploy_provider,
+    candidate.kube_context ?? '',
+    candidate.external_handle ?? '',
+    candidate.console_url ?? '',
+    ...Object.entries(candidate.labels).flatMap(([key, value]) => [key, String(value)]),
+  ].join(' ').toLowerCase();
+  return normalized.split(/\s+/).every(token => haystack.includes(token));
+}
+
+export function registrationStatusTone(status: string): 'ok' | 'warn' | 'danger' | 'neutral' {
+  if (['available', 'connected', 'online'].includes(status)) return 'ok';
+  if (['unavailable', 'failed', 'blocked'].includes(status)) return 'danger';
+  if (['stale', 'warning', 'degraded'].includes(status)) return 'warn';
+  return 'neutral';
+}
+
+function registrationStatusLabel(status: string): string {
+  if (status === 'available') return '사용 가능';
+  if (status === 'unavailable') return '사용 불가';
+  if (status === 'connected' || status === 'online') return '연결됨';
+  if (status === 'stale') return '스테일';
+  return status;
 }
 
 export function preferredDeployProvider(flow: Pick<RegistrationFlow, 'default_deploy_provider' | 'deploy_providers'>): string {

@@ -181,12 +181,29 @@ test('cluster drilldown uses deterministic namespace color and real service sele
 
 test('resource wizards keep exact real discovery selections', async () => {
   const { repositoryManifestCandidateValue } = await vite.ssrLoadModule('/src/features/resources/ConnectRepoWizard.tsx');
-  const { preferredDeployProvider } = await vite.ssrLoadModule('/src/features/resources/RegisterClusterWizard.tsx');
+  const { clusterImportCandidateMatches, preferredDeployProvider, registrationStatusTone } = await vite.ssrLoadModule('/src/features/resources/RegisterClusterWizard.tsx');
 
   assert.equal(
     repositoryManifestCandidateValue({ source_type: 'kustomize', path: 'deploy', display_name: 'deploy', reason: 'kustomization' }),
     'kustomize:deploy',
   );
+  const candidate = {
+    cluster_id: 'prod-seoul-01',
+    name: 'prod seoul',
+    source: 'env:CLUSTER_CONTEXTS',
+    cloud_provider: 'existing-k8s',
+    deploy_provider: 'kube-context',
+    kube_context: 'arn:aws:eks:ap-northeast-2:183548421506:cluster/kubernetes-ops',
+    external_handle: null,
+    console_url: null,
+    direct_apply_available: true,
+    labels: { region: 'ap-northeast-2', owner: 'platform' },
+  };
+  assert.equal(clusterImportCandidateMatches(candidate, 'prod platform'), true);
+  assert.equal(clusterImportCandidateMatches(candidate, 'plural'), false);
+  assert.equal(registrationStatusTone('available'), 'ok');
+  assert.equal(registrationStatusTone('unavailable'), 'danger');
+  assert.equal(registrationStatusTone('stale'), 'warn');
   assert.equal(
     preferredDeployProvider({
       default_deploy_provider: 'kube-context',
