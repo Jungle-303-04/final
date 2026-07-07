@@ -12,7 +12,6 @@ import { Button, Chip, Flyover, useThemeMode, type ChipSeverity } from '@/plural
 import {
   ArrowLeftIcon,
   ChartIcon,
-  DocumentIcon,
   FrameIcon,
   GearIcon,
   GlobeIcon,
@@ -31,12 +30,12 @@ import './console.css';
 /* ── 사이드바 메뉴 — 실존 도메인만 노출 ── */
 const MENU = [
   { to: '/', label: '홈', icon: <FrameIcon />, end: true },
-  { to: '/clusters', label: '클러스터', icon: <GlobeIcon /> },
-  { to: '/repos', label: '레포 (GitOps)', icon: <DocumentIcon /> },
+  { to: '/repos', label: '지속 배포 (CD)', icon: <SendIcon /> },
+  { to: '/clusters', label: '쿠버네티스', icon: <GlobeIcon /> },
   { to: '/workflows', label: '워크플로우', icon: <SendIcon /> },
   { to: '/incidents', label: '인시던트 (RCA)', icon: <ShieldIcon /> },
   { to: '/metrics', label: '메트릭', icon: <ChartIcon /> },
-  { to: '/ai', label: 'AI 어시스턴트', icon: <TerminalIcon /> },
+  { to: '/ai', label: 'LOGO AI', icon: <TerminalIcon /> },
   { to: '/catalog', label: '카탈로그', icon: <PackageIcon /> },
 ];
 
@@ -103,7 +102,7 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
         <nav className={`co-sidebar${collapsed ? ' collapsed' : ''}`}>
           <div className="co-logo" onClick={() => setCollapsed(!collapsed)} role="button" aria-label="사이드바 접기/펼치기">
             <PluralMarkIcon size={24} />
-            {!collapsed && <span className="word">운영 콘솔</span>}
+            {!collapsed && <span className="word">LOGO</span>}
           </div>
           {MENU.map((m) => (
             <NavLink
@@ -142,12 +141,15 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
         <div className="co-main">
           <header className="co-header">
             <div className="pl-row">
+              <button type="button" className="co-project" title={session?.workspace_id ?? 'workspace'}>
+                모든 프로젝트
+              </button>
               <PulseOnChange signal={liveAt}>
                 <span
                   title={liveStatus === 'open' ? '실시간 스트림 연결됨' : '실시간 스트림 재연결 중'}
-                  style={{ fontSize: 11, fontWeight: 700, color: liveStatus === 'open' ? 'var(--color-text-success)' : 'var(--color-text-xlight)' }}
+                  className={`co-live ${liveStatus === 'open' ? 'is-open' : ''}`}
                 >
-                  ● LIVE
+                  LIVE
                 </span>
               </PulseOnChange>
             </div>
