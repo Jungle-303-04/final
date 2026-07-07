@@ -6,6 +6,10 @@ from domains.gitops.events import DesiredDesiredDiffDetectedBody, Diff
 from domains.gitops.repository import derive_approval_id
 
 
+def _approval_ref(diff: Diff) -> str:
+    return derive_approval_id(diff.workflow_run_id, f"{diff.namespace}/{diff.resource}")
+
+
 def _diff(risk: str) -> Diff:
     return Diff(
         resource="deployment/checkout-api",
@@ -29,7 +33,7 @@ def test_safe_diff_requests_pr() -> None:
         DesiredDesiredDiffDetectedBody(diff=diff),
         db=db,
     )
-    approval_ref = derive_approval_id(diff.workflow_run_id)
+    approval_ref = _approval_ref(diff)
     policy_decision_ref = f"policy-decision:{approval_ref}:safe_pr"
     assert subjects_of(safe) == ["diff.analyzed", "safe_pr.requested"]
     assert safe[0].safe is True
@@ -53,6 +57,29 @@ def test_safe_diff_requests_pr() -> None:
     assert approval_payload["approval_id"] == approval_ref
     assert approval_payload["details"]["policy_decision_ref"] == policy_decision_ref
     assert approval_payload["details"]["policy_route"] == "safe_pr"
+
+
+def test_policy_approval_ref_is_scoped_by_resource() -> None:
+    analyze = load_service("gitops/diff-analyze-worker")
+    deployment = _diff("sandbox-only")
+    service = Diff(
+        resource="service/checkout-api",
+        namespace=deployment.namespace,
+        desired_image=deployment.desired_image,
+        actual_image=deployment.actual_image,
+        risk=deployment.risk,
+        workspace_id=deployment.workspace_id,
+        repository_id=deployment.repository_id,
+        binding_id=deployment.binding_id,
+        cluster_id=deployment.cluster_id,
+    )
+
+    deployment_decision = analyze.evaluate_safe_pr_policy(deployment)
+    service_decision = analyze.evaluate_safe_pr_policy(service)
+
+    assert deployment_decision.approval_ref == _approval_ref(deployment)
+    assert service_decision.approval_ref == _approval_ref(service)
+    assert deployment_decision.approval_ref != service_decision.approval_ref
 
 
 def test_unsafe_diff_skips_pr() -> None:
