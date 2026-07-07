@@ -190,7 +190,10 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: target-cluster-agent
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              value: http://opentelemetry-collector.target.svc:4318/v1/traces
+              # collector Helm chart 는 daemonset 모드에서 Service 를 "<fullname>-agent" 로
+              # 만든다(deploy/target/opentelemetry.yaml: fullnameOverride=opentelemetry-collector,
+              # mode=daemonset → Service 이름 opentelemetry-collector-agent).
+              value: http://opentelemetry-collector-agent.target.svc:4318/v1/traces
           volumeMounts:
             - name: target-agent-runtime
               mountPath: /var/lib/target-agent

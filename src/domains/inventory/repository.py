@@ -101,6 +101,22 @@ def normalize_inventory_resource(
     }
 
 
+def dedupe_inventory_rows(rows: list[JsonObject]) -> list[JsonObject]:
+    """conflict key(inventory_key) 중복 행 제거 — 마지막 관측 승리(last-wins).
+
+    kubernetes provider 가 namespace 별 쿼리 결과를 병합하면 cluster-scoped 리소스
+    (node 등)가 같은 스냅샷 안에 중복 수집될 수 있다. 같은 배치 VALUES 에 같은
+    conflict key 가 두 번 들어가면 postgres 가 "ON CONFLICT DO UPDATE command cannot
+    affect row a second time"(CardinalityViolation) 으로 스냅샷 저장 전체를 실패시키므로,
+    upsert 전에 키당 1행으로 줄인다. dict 삽입 순서 특성상 위치는 첫 관측, 값은 마지막
+    관측이 남는다.
+    """
+    by_key: dict[str, JsonObject] = {}
+    for row in rows:
+        by_key[str(row["inventory_key"])] = row
+    return list(by_key.values())
+
+
 def snapshot_resources(payload: JsonObject) -> list[JsonObject]:
     resources = [dict(item) for item in payload.get("resources", [])]
     health = dict(payload.get("health") or {})
@@ -173,16 +189,19 @@ class InventoryRepository(DatabaseConnection):
         snapshot_id = str(uuid.uuid4())
         observed_at = parse_observed_at(payload.get("collected_at"))
         resources = snapshot_resources(payload)
-        normalized = [
-            normalize_inventory_resource(
-                resource,
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                snapshot_id=snapshot_id,
-                observed_at=observed_at,
-            )
-            for resource in resources
-        ]
+        # 중복 inventory_key 는 upsert 전에 제거 — 배치 안 중복은 CardinalityViolation 을 유발.
+        normalized = dedupe_inventory_rows(
+            [
+                normalize_inventory_resource(
+                    resource,
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    snapshot_id=snapshot_id,
+                    observed_at=observed_at,
+                )
+                for resource in resources
+            ]
+        )
 
         snapshot_table = ClusterInventorySnapshotRecord.__table__
         resource_table = ClusterInventoryResourceRecord.__table__
