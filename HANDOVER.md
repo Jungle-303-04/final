@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:25 KST (GitOps poller DB target 전환)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:24 KST (multi-agent 조사 반영/E2E hardcoding 제거)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -9,7 +9,60 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 
-## 최신 업데이트 (16:25 KST) — GitOps poller DB target 전환
+## 최신 업데이트 (16:24 KST) — multi-agent 조사 반영/E2E hardcoding 제거
+
+- 병렬 explorer 3개 완료:
+  - 동적 등록: repo probe/branch/manifest 후보는 실제 GitHub API 기반이지만, Helm/Kustomize discovery validation은 아직 placeholder다. cluster import 후보는 provider catalog API가 있어도 실제 외부 provider adapter/API discovery가 아니라 env-derived metadata 중심이다.
+  - UI/E2E: 표준 Playwright config는 없고 Python Playwright smoke만 있다. `/console/`은 현재 라우터에서 `/`로 흡수되며, live `/`와 `/console/` 모두 같은 SPA를 반환한다.
+  - DB reset: 운영 DB reset script는 없다. 최종 reset은 backup/snapshot/restore 검증 후 `Database().init()` + `Database.upsert_admin_account()` 경로로만 수행해야 한다. 지금 즉시 reset 금지.
+- `frontend/tests/e2e_real_backend.py`의 hardcoded real-backend test credential을 제거했다.
+  - 이제 `AUTH_EMAIL`/`AUTH_PASSWORD` env가 필수다.
+  - `BASE_URL` 또는 `SMOKE_BASE`로 target URL을 받는다.
+  - 운영 DB에 row를 추가하는 조직/그룹/AI 대화 write flow는 `E2E_MUTATE=1`을 명시한 경우에만 실행한다.
+  - screenshot dir는 `SMOKE_SHOTS_DIR`로 조정 가능하다.
+- `frontend/docs/backend-integration.md`도 위 실행 방식과 맞게 갱신했다.
+- 남은 즉시 작업:
+  1. 이 hardcoding 제거 커밋/푸시.
+  2. main AWS CD run `28848639831` 완료 확인.
+  3. AWS SSO 재인증 가능 시 authenticated smoke와 DB 증가율 검증.
+  4. 다음 구현 후보는 repo Helm/Kustomize validation을 실제 checkout/render 기반으로 바꾸는 작업.
+
+## 최신 업데이트 (16:22 KST) — 배포/검증 체크포인트
+
+- 현재 local/origin dev HEAD: `719a795c fix: GitOps poller DB target 순회`.
+- dev Actions 확인:
+  - CI run `28848586860` → success.
+  - Promote Dev To Main run `28848587013` → success.
+  - AWS CD dev push run `28848586945` → success.
+- main Actions 확인:
+  - AWS CD run `28848639831` → `Test before deploy` success, `Deploy to AWS EKS` in progress.
+  - main deploy head SHA: `657b79e6c82453bd8ec5282ad8dd286d0eebdbfd`.
+- 로컬 검증 재실행 완료:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q` → 678 passed, 3 skipped.
+  - `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check` → 통과.
+  - `cd frontend && npm run typecheck` → 통과.
+  - `cd frontend && npm run lint` → 통과.
+  - `cd frontend && npm run build` → 통과. 기존 Vite large chunk warning만 있음.
+- 라이브 공개 smoke:
+  - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+  - `https://k8s.woonyong.org/api/readyz` → `{"status":"ready"}`.
+  - `https://k8s.woonyong.org/` → HTTP 200, title `운영 콘솔`.
+  - `https://k8s.woonyong.org/console/` → HTTP 200, title `운영 콘솔`.
+- 로컬 kubectl/AWS 상태:
+  - kube contexts는 존재한다: `kubernetes-ops`, `cluster-1`, `cluster-2` 등.
+  - 하지만 로컬 AWS SSO session이 만료되어 `kubectl`이 `aws login` 재인증을 요구한다.
+  - 따라서 지금 이 셸에서는 management secret/DB/pod 직접 조회와 authenticated cluster smoke를 실행할 수 없다.
+  - GitHub Actions의 AWS credentials는 정상이며 main AWS CD deploy 단계가 진행 중이다.
+- 현재 워킹트리:
+  - tracked file 변경 없음.
+  - untracked: `.e2e-tmp-sweep.py`, `report_desktop.json`, `report_mobile.json`. 내용 확인 전 커밋 금지.
+- 다음 즉시 작업:
+  1. main AWS CD run `28848639831` 완료까지 추적.
+  2. 완료 후 live health/root/readyz 재확인.
+  3. AWS SSO 재인증이 가능해지면 `scripts/smoke.sh` 또는 `scripts/e2e_test.py`를 실제 env credential과 실제 cluster context로 실행.
+  4. DB 초기화는 아직 금지. 모든 기능/배포/E2E 완료 후 백업/스냅샷부터 실행한다.
+
+## 최신 업데이트 (16:15 KST) — GitOps poller DB target 전환
 
 - `github-poll-worker`가 env 단일 target만 보던 구조를 DB 등록 target 우선 구조로 전환했다.
 - 신규 `RepoChangeRepository.list_active_github_poll_targets()`:

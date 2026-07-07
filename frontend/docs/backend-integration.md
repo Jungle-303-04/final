@@ -29,15 +29,30 @@ NATS 정적 바이너리로 root 없이 로컬 기동 가능(테스트 환경 �
 
 ## 실연동 e2e 검증 결과
 
-`frontend/tests/e2e_real_backend.py` — 실제 브라우저가 gateway 에 붙어 검증:
+`frontend/tests/e2e_real_backend.py` — 실제 브라우저가 gateway 에 붙어 검증한다.
+계정 정보는 코드에 쓰지 않고 `AUTH_EMAIL`/`AUTH_PASSWORD` 환경변수로만 주입한다.
+운영 DB에 row를 추가하는 write flow는 `E2E_MUTATE=1`을 명시한 경우에만 실행한다.
+
+```bash
+BASE_URL=http://127.0.0.1:4173 \
+AUTH_EMAIL=<admin email> \
+AUTH_PASSWORD=<admin password> \
+python3 frontend/tests/e2e_real_backend.py
+
+BASE_URL=http://127.0.0.1:4173 \
+AUTH_EMAIL=<admin email> \
+AUTH_PASSWORD=<admin password> \
+E2E_MUTATE=1 \
+python3 frontend/tests/e2e_real_backend.py
+```
 
 - 미인증 → /login 리다이렉트
 - 실백엔드 로그인 → 세션 쿠키 → 새로고침 세션 유지
 - 실 사용자 목록(GET /users)
-- 조직 생성 → **Postgres 저장 → 목록 반영**(POST/GET /orgs)
-- 그룹 생성(POST /groups)
+- `E2E_MUTATE=1`: 조직 생성 → **Postgres 저장 → 목록 반영**(POST/GET /orgs)
+- `E2E_MUTATE=1`: 그룹 생성(POST /groups)
 - 권한 부여 폼(POST /access)
-- AI 대화 생성(**실 POST /ai/conversations**)
+- `E2E_MUTATE=1`: AI 대화 생성(**실 POST /ai/conversations**)
 - 로그아웃 → 세션 종료
 - 콘솔 치명 에러 0건
 
