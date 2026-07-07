@@ -27,7 +27,7 @@ export function useCommandStatus(commandId: string | undefined) {
 
 // agent 가 올린 prometheus 결과에서 실측 요약을 계산한다.
 // 결과 형태: result.result = { source, results: { <name>: { result_type, samples|series, point_count } } }
-export interface QueryResultSummary { series: number; points: number; avg: number | null }
+export interface QueryResultSummary { series: number; points: number; avg: number | null; max: number | null }
 
 export function summarizeTelemetryResult(result: Record<string, unknown>): QueryResultSummary | null {
   const inner = result['result'] as Record<string, unknown> | undefined;
@@ -37,12 +37,18 @@ export function summarizeTelemetryResult(result: Record<string, unknown>): Query
   let points = 0;
   let sum = 0;
   let numeric = 0;
+  let max: number | null = null;
+  const feed = (value: number | null) => {
+    if (typeof value !== 'number') return;
+    sum += value; numeric += 1;
+    if (max === null || value > max) max = value;
+  };
   for (const entry of Object.values(groups)) {
     const samples = entry['samples'] as { value: number | null }[] | undefined;
     if (Array.isArray(samples)) {
       series += samples.length;
       points += samples.length;
-      for (const s of samples) if (typeof s.value === 'number') { sum += s.value; numeric += 1; }
+      for (const s of samples) feed(s.value);
       continue;
     }
     const matrix = entry['series'] as { values: { value: number | null }[] }[] | undefined;
@@ -50,11 +56,11 @@ export function summarizeTelemetryResult(result: Record<string, unknown>): Query
       series += matrix.length;
       for (const line of matrix) {
         points += line.values.length;
-        for (const v of line.values) if (typeof v.value === 'number') { sum += v.value; numeric += 1; }
+        for (const v of line.values) feed(v.value);
       }
     }
   }
-  return { series, points, avg: numeric ? sum / numeric : null };
+  return { series, points, avg: numeric ? sum / numeric : null, max };
 }
 
 export function commandResultMessage(result: Record<string, unknown>): string | null {
