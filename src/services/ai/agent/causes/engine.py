@@ -13,6 +13,12 @@ from domains.rca.events import (
     RcaRuleMissing,
 )
 from services.ai.agent.causes.catalog import cause_rules, evidence_rules
+from services.ai.agent.causes.signals import (
+    describe_signal_group,
+    extract_bundle_signals,
+    signal_missing_token,
+    split_signal_groups,
+)
 from services.ai.agent.playbooks.cause import CauseRule, EvidenceRequirementRule
 
 DEFAULT_REQUIRED_EVIDENCE = ["kubernetes"]
@@ -69,9 +75,24 @@ def merge_candidates(candidates: list[CauseCandidate]) -> list[CauseCandidate]:
                 existing.expected_evidence + candidate.expected_evidence
             ),
             checks=unique_ordered(existing.checks + candidate.checks),
+            signals=merge_signal_groups(existing.signals, candidate.signals),
             source=existing.source,
         )
     return list(by_id.values())
+
+
+def merge_signal_groups(existing: list, incoming: list) -> list:
+    """signals 병합 — 그룹 id 기준 중복 제거(순서 보존, 먼저 등록된 정의 유지)."""
+    merged = list(existing)
+    seen_ids = {str(group.get("id")) for group in existing if isinstance(group, dict)}
+    for group in incoming:
+        group_id = str(group.get("id")) if isinstance(group, dict) else None
+        if group_id is not None and group_id in seen_ids:
+            continue
+        if group_id is not None:
+            seen_ids.add(group_id)
+        merged.append(group)
+    return merged
 
 
 def build_rule_missing(incident: IncidentRecord, evidence_ref: str) -> RcaRuleMissing:
@@ -121,12 +142,19 @@ def evaluate_causes(
         ]
 
     actual_sources = {item.source for item in evidence_bundle.items}
+    bundle_signals = extract_bundle_signals(evidence_bundle)
     evaluations: list[CauseEvaluation] = []
     for candidate in candidates:
         expected = set(candidate.expected_evidence)
         supporting = sorted(expected & actual_sources)
-        missing = sorted(expected - actual_sources)
-        score = len(supporting) / len(expected) if expected else 0.0
+        missing_sources = sorted(expected - actual_sources)
+        # 판별 신호(내용 매칭) — 소스 존재만으로 점수가 1.0 이 되는 오판을 막는다.
+        # 선언된 그룹이 하나라도 미충족이면 missing_evidence 에 signal 토큰이 남아
+        # 해당 후보가 선택되더라도 완결(rca.completed)이 아니라 blocked 로 흐른다.
+        matched_groups, unmatched_groups = split_signal_groups(candidate.signals, bundle_signals)
+        missing = missing_sources + [signal_missing_token(group) for group in unmatched_groups]
+        denominator = len(expected) + len(candidate.signals)
+        score = (len(supporting) + len(matched_groups)) / denominator if denominator else 0.0
         evaluations.append(
             CauseEvaluation(
                 candidate_id=candidate.candidate_id,
@@ -134,12 +162,45 @@ def evaluate_causes(
                 checks=candidate.checks,
                 supporting_evidence=supporting,
                 missing_evidence=missing,
-                reason=f"필요한 근거 {len(expected)}개 중 {len(supporting)}개가 수집되었습니다.",
+                reason=build_evaluation_reason(
+                    expected_count=len(expected),
+                    supporting_count=len(supporting),
+                    signal_count=len(candidate.signals),
+                    matched_signal_count=len(matched_groups),
+                ),
                 supporting_evidence_refs=evidence_refs_for_sources(evidence_bundle, supporting),
-                missing_evidence_checks=missing_evidence_checks(missing, candidate.checks),
+                missing_evidence_checks=[
+                    *missing_evidence_checks(missing_sources, candidate.checks),
+                    *missing_signal_checks(unmatched_groups),
+                ],
             )
         )
     return evaluations
+
+
+def build_evaluation_reason(
+    *,
+    expected_count: int,
+    supporting_count: int,
+    signal_count: int,
+    matched_signal_count: int,
+) -> str:
+    reason = f"필요한 근거 {expected_count}개 중 {supporting_count}개가 수집되었습니다."
+    if signal_count:
+        reason += f" 판별 신호 {signal_count}개 중 {matched_signal_count}개가 확인되었습니다."
+    return reason
+
+
+def missing_signal_checks(unmatched_groups: list) -> list[MissingEvidenceCheck]:
+    return [
+        MissingEvidenceCheck(
+            check_id=signal_missing_token(group),
+            source="signals",
+            status="missing",
+            reason=f"판별 신호 미충족 — 다음 중 하나가 관측되어야 합니다: {describe_signal_group(group)}",
+        )
+        for group in unmatched_groups
+    ]
 
 
 def evidence_refs_for_sources(
