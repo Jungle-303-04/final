@@ -223,6 +223,16 @@ def test_aws_cd_builds_and_patches_console_frontend_image() -> None:
     assert "`CONSOLE_ECR_REPO`" in runbook
 
 
+def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
+    script = read("scripts/aws-up.sh")
+
+    assert "db.upsert_admin_account(" in script
+    assert "role = 'admin'" not in script
+    assert "workspace_members" not in script
+    assert "--from-literal=PUBLIC_BASE_URL=" in script
+    assert "--from-literal=PUBLIC_API_BASE_URL=" in script
+
+
 def test_aws_smoke_uses_runnable_application_manifest() -> None:
     workflow = read(".github/workflows/aws-cd.yml")
     script = read("scripts/aws-up.sh")
