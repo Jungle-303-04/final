@@ -80,7 +80,7 @@ test('ai message payload keeps title out of existing conversation sends', async 
 });
 
 test('metrics context preset narrows PromQL by real drilldown subject', async () => {
-  const { buildContextPreset } = await vite.ssrLoadModule('/src/features/metrics/MetricsView.tsx');
+  const { buildContextPreset, metricPresetPayload, metricWidgetPayload } = await vite.ssrLoadModule('/src/features/metrics/MetricsView.tsx');
 
   assert.equal(
     buildContextPreset('pod', 'checkout-api-123', 'prod').promql,
@@ -90,6 +90,34 @@ test('metrics context preset narrows PromQL by real drilldown subject', async ()
     buildContextPreset('node', 'ip-10-0-1-1', '').promql,
     '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle",instance=~".*ip-10-0-1-1.*"}[5m]))',
   );
+  assert.deepEqual(metricPresetPayload({
+    name: 'Pod restarts',
+    query: 'sum(rate(kube_pod_container_status_restarts_total[5m]))',
+    rangeSeconds: 900,
+    unit: 'count',
+    context: { cluster: 'cluster-1', namespace: 'prod' },
+  }), {
+    name: 'Pod restarts',
+    description: '',
+    source: 'prometheus',
+    query: 'sum(rate(kube_pod_container_status_restarts_total[5m]))',
+    range_seconds: 900,
+    step_seconds: 30,
+    unit: 'count',
+    metadata: { context: { cluster: 'cluster-1', namespace: 'prod' } },
+  });
+  assert.equal(metricPresetPayload({ name: '', query: 'up', rangeSeconds: 300, unit: 'count' }), null);
+  assert.deepEqual(metricWidgetPayload({
+    queryPresetId: 'preset-cpu',
+    title: 'CPU',
+    settings: { unit: 'ratio' },
+  }), {
+    query_preset_id: 'preset-cpu',
+    title: 'CPU',
+    kind: 'line',
+    position: {},
+    settings: { unit: 'ratio' },
+  });
 });
 
 test('cluster drill actions keep real subject context across events metrics and ai', async () => {
@@ -121,6 +149,34 @@ test('cluster drill actions keep real subject context across events metrics and 
     namespace: 'prod',
     name: 'checkout-abc',
   });
+});
+
+test('cluster drilldown uses deterministic namespace color and real service selector fields', async () => {
+  const { namespaceColor, selectorRecord, serviceMatches, textMatches } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
+  const { adaptServiceResource } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');
+
+  assert.equal(namespaceColor('payments'), namespaceColor('payments'));
+  assert.notEqual(namespaceColor('payments'), namespaceColor('observability'));
+  assert.deepEqual(selectorRecord({ matchLabels: { app: 'checkout', tier: 'api' } }), { app: 'checkout', tier: 'api' });
+
+  const service = adaptServiceResource({
+    kind: 'Service',
+    namespace: 'prod',
+    name: 'checkout',
+    status: 'ClusterIP',
+    summary: {
+      type: 'ClusterIP',
+      cluster_ip: '10.96.0.12',
+      ports: [{ port: 80, protocol: 'TCP' }],
+      selector: { matchLabels: { app: 'checkout' } },
+    },
+  });
+
+  assert.equal(service.ports, '80/TCP');
+  assert.deepEqual(service.selector, { app: 'checkout' });
+  assert.equal(serviceMatches(service, 'app=checkout'), true);
+  assert.equal(serviceMatches(service, 'sandbox'), false);
+  assert.equal(textMatches('READY', 'NotReady'), true);
 });
 
 test('resource wizards keep exact real discovery selections', async () => {

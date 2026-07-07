@@ -5,7 +5,22 @@ import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { useClusters, useClusterSummary, useClusterUsage, usePods } from '@/features/cluster/api';
 import { useIsAdmin } from '@/features/auth/api';
-import { commandResultMessage, isTerminal, summarizeTelemetryResult, useCommandStatus } from '@/features/metrics/api';
+import {
+  commandResultMessage,
+  isTerminal,
+  summarizeTelemetryResult,
+  useCommandStatus,
+  useDeleteMetricQueryPreset,
+  useDeleteMetricWidget,
+  useMetricQueryPresets,
+  useMetricWidgets,
+  useRunMetricQueryPreset,
+  useUpsertMetricQueryPreset,
+  useUpsertMetricWidget,
+  type CommandAcceptedResponse,
+  type MetricQueryPresetPayload,
+  type MetricWidgetPayload,
+} from '@/features/metrics/api';
 import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui';
 import { PageHeader } from '@/plural-ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
@@ -14,24 +29,14 @@ import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import { IconClock, IconPause, IconPlay } from '@/shared/ui/icons';
 import { useConsolePath } from '@/features/console/ui';
 
-// 프리셋은 실제 스크레이프되는 계열만 사용 — node-exporter/kube-state-metrics/node-collector.
-// 전체 카탈로그·근거는 docs/frontend-metrics-queries.md 참조.
-type Unit = 'ratio' | 'count';
-const PRESETS: { label: string; promql: string; unit: Unit }[] = [
-  { label: '노드 CPU 사용률', unit: 'ratio', promql: '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))' },
-  { label: '노드 메모리 사용률', unit: 'ratio', promql: '1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)' },
-  { label: '노드 파일시스템 사용률', unit: 'ratio', promql: '1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/var"})' },
-  { label: '팟 재시작율 (5m, 네임스페이스별)', unit: 'count', promql: 'sum by (namespace) (rate(kube_pod_container_status_restarts_total[5m]))' },
-  { label: '네임스페이스별 팟 수', unit: 'count', promql: 'count by (namespace) (kube_pod_info)' },
-  { label: 'sandbox 디플로이 레플리카', unit: 'count', promql: 'kube_deployment_status_replicas{namespace="sandbox"}' },
-];
+type Unit = 'ratio' | 'count' | string;
 const RANGES = [
   { label: '5분', seconds: 300 },
   { label: '15분', seconds: 900 },
   { label: '1시간', seconds: 3600 },
   { label: '6시간', seconds: 21600 },
 ];
-interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; commandId?: string; submitFailed?: boolean }
+interface QueryCard { id: string; promql: string; unit: Unit; rangeSeconds: number; presetId?: string; commandId?: string; submitFailed?: boolean }
 interface ContextPreset { promql: string; unit: Unit; label: string }
 
 export default function MetricsView() {
@@ -49,7 +54,10 @@ export default function MetricsView() {
     [namespace, subject, subjectName],
   );
   const [paused, setPaused] = useState(false);
-  const [promql, setPromql] = useState(contextPreset?.promql ?? PRESETS[0].promql);
+  const [promql, setPromql] = useState(contextPreset?.promql ?? '');
+  const [presetName, setPresetName] = useState(contextPreset?.label ?? '');
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [widgetTitle, setWidgetTitle] = useState('');
   const [range, setRange] = useState(RANGES[0].seconds);
   const [cards, setCards] = useState<QueryCard[]>([]);
   const summaryQ = useClusterSummary(clusterId);
@@ -59,6 +67,16 @@ export default function MetricsView() {
   const status = liveStore(s => s.status);
   const snapshot = liveStore(s => s.snapshot);
   const [frozen, setFrozen] = useState(history);
+  const queryPresetsQ = useMetricQueryPresets(clusterId);
+  const metricWidgetsQ = useMetricWidgets(clusterId);
+  const savePreset = useUpsertMetricQueryPreset(clusterId);
+  const deletePreset = useDeleteMetricQueryPreset(clusterId);
+  const runPreset = useRunMetricQueryPreset(clusterId);
+  const saveWidget = useUpsertMetricWidget(clusterId);
+  const deleteWidget = useDeleteMetricWidget(clusterId);
+  const queryPresets = queryPresetsQ.data ?? [];
+  const metricWidgets = metricWidgetsQ.data ?? [];
+  const selectedPreset = queryPresets.find(p => p.preset_id === selectedPresetId) ?? null;
 
   useEffect(() => {
     if (!clusters.length) return;
@@ -69,6 +87,8 @@ export default function MetricsView() {
 
   const selectCluster = (nextClusterId: string) => {
     setClusterId(nextClusterId);
+    setSelectedPresetId('');
+    setWidgetTitle('');
     const next = new URLSearchParams(sp);
     next.set('cluster', nextClusterId);
     setSp(next, { replace: true });
@@ -79,7 +99,10 @@ export default function MetricsView() {
   }, [history, paused]);
 
   useEffect(() => {
-    if (contextPreset) setPromql(contextPreset.promql);
+    if (!contextPreset) return;
+    setSelectedPresetId('');
+    setPromql(contextPreset.promql);
+    setPresetName(contextPreset.label);
   }, [contextPreset]);
 
   const summary = summaryQ.data;
@@ -120,7 +143,7 @@ export default function MetricsView() {
   }, [usageQ.data]);
 
   const run = useMutation({
-    mutationFn: ({ q, rangeSeconds }: { q: string; rangeSeconds: number }) => post<{ command_id: string }>('/agent/debug/query', {
+    mutationFn: ({ q, rangeSeconds }: { q: string; rangeSeconds: number }) => post<CommandAcceptedResponse>('/agent/debug/query', {
       cluster_id: clusterId,
       query: {
         source: 'prometheus',
@@ -135,14 +158,57 @@ export default function MetricsView() {
   const execute = (card?: Pick<QueryCard, 'promql' | 'unit' | 'rangeSeconds'>) => {
     const q = (card?.promql ?? promql).trim();
     if (!q) return;
-    const unit = card?.unit ?? PRESETS.find(p => p.promql === q)?.unit ?? 'count';
+    const unit = card?.unit ?? unitForCurrentQuery(q, selectedPreset, contextPreset);
     const rangeSeconds = card?.rangeSeconds ?? range;
-    const id = Math.random().toString(36).slice(2, 8);
-    setCards(cs => [{ id, promql: q, unit, rangeSeconds }, ...cs]);
-    run.mutate({ q, rangeSeconds }, {
-      onSuccess: d => setCards(cs => cs.map(c => c.id === id ? { ...c, commandId: d.command_id } : c)),
-      onError: () => setCards(cs => cs.map(c => c.id === id ? { ...c, submitFailed: true } : c)),
+    const presetId = 'presetId' in (card ?? {}) ? (card as QueryCard).presetId : presetIdForCurrentQuery(q, rangeSeconds, selectedPreset);
+    const id = newQueryCardId();
+    setCards(cs => [{ id, promql: q, unit, rangeSeconds, presetId }, ...cs]);
+    const onSuccess = (d: CommandAcceptedResponse) => setCards(cs => cs.map(c => c.id === id ? { ...c, commandId: d.command_id } : c));
+    const onError = () => setCards(cs => cs.map(c => c.id === id ? { ...c, submitFailed: true } : c));
+    if (presetId) runPreset.mutate(presetId, { onSuccess, onError });
+    else run.mutate({ q, rangeSeconds }, { onSuccess, onError });
+  };
+
+  const selectPreset = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const preset = queryPresets.find(p => p.preset_id === presetId);
+    if (!preset) return;
+    setPromql(preset.query);
+    setPresetName(preset.name);
+    if (preset.range_seconds) setRange(preset.range_seconds);
+    setWidgetTitle(preset.name);
+  };
+
+  const saveCurrentPreset = () => {
+    const payload = metricPresetPayload({
+      presetId: selectedPreset?.preset_id,
+      name: presetName,
+      query: promql,
+      rangeSeconds: range,
+      unit: unitForCurrentQuery(promql, selectedPreset, contextPreset),
+      context: contextPreset ? { subject, name: subjectName, namespace } : undefined,
     });
+    if (!payload) return;
+    savePreset.mutate(payload, {
+      onSuccess: response => {
+        setSelectedPresetId(response.item.preset_id);
+        setPresetName(response.item.name);
+        setWidgetTitle(response.item.name);
+      },
+    });
+  };
+
+  const saveCurrentWidget = () => {
+    const preset = selectedPreset;
+    if (!preset) return;
+    const payload = metricWidgetPayload({
+      queryPresetId: preset.preset_id,
+      title: widgetTitle || preset.name,
+      kind: 'line',
+      settings: { unit: preset.unit || unitForCurrentQuery(preset.query, preset, contextPreset) },
+    });
+    if (!payload) return;
+    saveWidget.mutate(payload);
   };
 
   // 클러스터가 하나도 없으면 차트가 의미 없다 — 등록 유도(정직한 빈 상태)
@@ -206,22 +272,77 @@ export default function MetricsView() {
               description="에이전트가 연결되면 스냅샷(30초 주기)마다 실측 usage 가 쌓입니다" />
           ) : <TimeSeriesChart series={usageSeries} />}
       </Card>
+      <Card title="저장 위젯" style={{ marginBottom: 16 }}>
+        {metricWidgetsQ.isPending ? <Skeleton lines={3} />
+          : metricWidgetsQ.isError ? (
+            <EmptyState icon={<IconClock size={26} />} title="위젯을 불러오지 못했습니다"
+              description={(metricWidgetsQ.error as Error).message}
+              action={<Button size="sm" onClick={() => metricWidgetsQ.refetch()}>다시 시도</Button>} />
+          ) : metricWidgets.length === 0 ? (
+            <EmptyState icon={<IconClock size={26} />} title="저장된 위젯이 없습니다" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <AnimatedList items={metricWidgets} getKey={w => w.widget_id}>
+                {widget => {
+                  const preset = queryPresets.find(p => p.preset_id === widget.query_preset_id);
+                  return (
+                    <div className="query-row">
+                      <Badge tone="info">{widget.kind}</Badge>
+                      <strong style={{ minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{widget.title}</strong>
+                      <code>{preset?.name ?? widget.query_preset_id}</code>
+                      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6 }}>
+                        <Button size="sm" disabled={!preset} onClick={() => preset && execute({
+                          promql: preset.query,
+                          unit: preset.unit || 'count',
+                          rangeSeconds: preset.range_seconds ?? range,
+                          presetId: preset.preset_id,
+                        } as QueryCard)}>실행</Button>
+                        <Button size="sm" variant="danger" onClick={() => deleteWidget.mutate(widget.widget_id)}>삭제</Button>
+                      </span>
+                    </div>
+                  );
+                }}
+              </AnimatedList>
+            </div>
+          )}
+      </Card>
       <Card title="PromQL">
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <select className="input" style={{ width: 220 }}
-            value={PRESETS.some(p => p.promql === promql) ? promql : ''}
-            onChange={e => { if (e.target.value) setPromql(e.target.value); }}>
-            <option value="" disabled>{contextPreset?.label ?? '직접 입력…'}</option>
-            {PRESETS.map(p => <option key={p.label} value={p.promql}>{p.label}</option>)}
+            value={selectedPresetId}
+            onChange={e => selectPreset(e.target.value)}>
+            <option value="">저장 쿼리</option>
+            {queryPresets.map(p => <option key={p.preset_id} value={p.preset_id}>{p.name}</option>)}
           </select>
+          <input className="input" style={{ width: 180 }} value={presetName} placeholder="쿼리 이름" onChange={e => setPresetName(e.target.value)} />
           <input className="input" style={{ fontFamily: 'var(--font-mono)', flex: 1, minWidth: 220 }} value={promql} onChange={e => setPromql(e.target.value)} />
           <select className="input" style={{ width: 92 }} value={range} onChange={e => setRange(Number(e.target.value))}
             title="조회 범위 (range)">
             {RANGES.map(r => <option key={r.seconds} value={r.seconds}>{r.label}</option>)}
           </select>
+          <Button onClick={saveCurrentPreset} loading={savePreset.isPending} disabled={!clusterId || !promql.trim() || !presetName.trim()}>저장</Button>
+          <input className="input" style={{ width: 180 }} value={widgetTitle} placeholder="위젯 제목" onChange={e => setWidgetTitle(e.target.value)} />
+          <Button onClick={saveCurrentWidget} loading={saveWidget.isPending} disabled={!selectedPreset || !widgetTitle.trim()}>위젯</Button>
           <Button variant="primary" onClick={() => execute()} disabled={!clusterId || !promql.trim()}
             title={clusterId ? '' : '클러스터를 먼저 선택해주세요'}>실행</Button>
         </div>
+        {queryPresetsQ.isError && (
+          <div className="query-row" style={{ marginBottom: 8 }}>
+            <Badge tone="danger">error</Badge>
+            <span style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }}>{(queryPresetsQ.error as Error).message}</span>
+            <Button size="sm" onClick={() => queryPresetsQ.refetch()}>다시 시도</Button>
+          </div>
+        )}
+        {selectedPreset && (
+          <div className="query-row" style={{ marginBottom: 8 }}>
+            <Badge tone="neutral">saved</Badge>
+            <span style={{ color: 'var(--text-2)', fontSize: 'var(--fs-xs)' }}>{selectedPreset.unit || 'count'} · range {fmtRange(selectedPreset.range_seconds ?? range)}</span>
+            <Button size="sm" variant="danger" onClick={() => {
+              deletePreset.mutate(selectedPreset.preset_id);
+              setSelectedPresetId('');
+            }}>삭제</Button>
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <AnimatedList items={cards} getKey={c => c.id}>
             {c => <QueryCardRow card={c} onRetry={() => execute(c)} />}
@@ -236,6 +357,68 @@ export default function MetricsView() {
 const fmtValue = (v: number, unit: Unit) => (unit === 'ratio' ? `${(v * 100).toFixed(1)}%` : Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
 const fmtRange = (s: number) => (s >= 3600 ? `${s / 3600}h` : `${s / 60}m`);
 const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+function newQueryCardId() {
+  return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
+}
+
+function unitForCurrentQuery(q: string, selectedPreset: { query: string; unit: string } | null, contextPreset: ContextPreset | null): Unit {
+  if (selectedPreset?.query === q && selectedPreset.unit) return selectedPreset.unit;
+  if (contextPreset?.promql === q) return contextPreset.unit;
+  return 'count';
+}
+
+function presetIdForCurrentQuery(q: string, rangeSeconds: number, selectedPreset: { preset_id: string; query: string; range_seconds: number | null } | null): string | undefined {
+  if (!selectedPreset) return undefined;
+  return selectedPreset.query === q && (selectedPreset.range_seconds ?? rangeSeconds) === rangeSeconds
+    ? selectedPreset.preset_id
+    : undefined;
+}
+
+export function metricPresetPayload(input: {
+  presetId?: string;
+  name: string;
+  query: string;
+  rangeSeconds: number;
+  unit: Unit;
+  context?: Record<string, string>;
+}): MetricQueryPresetPayload | null {
+  const name = input.name.trim();
+  const query = input.query.trim();
+  if (!name || !query) return null;
+  const metadata = input.context ? { context: input.context } : {};
+  return {
+    ...(input.presetId ? { preset_id: input.presetId } : {}),
+    name,
+    description: '',
+    source: 'prometheus',
+    query,
+    range_seconds: input.rangeSeconds,
+    step_seconds: Math.min(30, input.rangeSeconds),
+    unit: input.unit,
+    metadata,
+  };
+}
+
+export function metricWidgetPayload(input: {
+  widgetId?: string;
+  queryPresetId: string;
+  title: string;
+  kind?: MetricWidgetPayload['kind'];
+  settings?: Record<string, unknown>;
+}): MetricWidgetPayload | null {
+  const title = input.title.trim();
+  const queryPresetId = input.queryPresetId.trim();
+  if (!title || !queryPresetId) return null;
+  return {
+    ...(input.widgetId ? { widget_id: input.widgetId } : {}),
+    query_preset_id: queryPresetId,
+    title,
+    kind: input.kind ?? 'line',
+    position: {},
+    settings: input.settings ?? {},
+  };
+}
 
 export function buildContextPreset(subject: string, name: string, namespace: string): ContextPreset | null {
   const n = name.trim();

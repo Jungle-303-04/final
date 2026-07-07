@@ -98,6 +98,7 @@ export function adaptServiceResource(raw: RawInventoryResource): ServiceInfo {
     type: String(summary.type ?? raw.status ?? ''),
     cluster_ip: String(summary.cluster_ip ?? ''),
     ports,
+    selector: asStringRecord(summary.selector),
   };
 }
 
@@ -170,6 +171,19 @@ function asStringList(value: unknown): string[] {
 function asCountMap(value: unknown): Record<string, number> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).map(([key, count]) => [key, Number(count)]));
+}
+
+function asStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const raw = value as Record<string, unknown>;
+  const labels = raw.matchLabels && typeof raw.matchLabels === 'object' && !Array.isArray(raw.matchLabels)
+    ? raw.matchLabels as Record<string, unknown>
+    : raw;
+  return Object.fromEntries(
+    Object.entries(labels)
+      .filter(([key, item]) => key && item != null && item !== '')
+      .map(([key, item]) => [key, String(item)]),
+  );
 }
 
 export function adaptApplication(raw: Record<string, unknown>): Application {

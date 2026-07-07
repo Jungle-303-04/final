@@ -106,7 +106,7 @@ export const queryClient = new QueryClient({
 | `NodeInfo` | `name; ready: boolean; pod_count; version; cpu_ratio?; mem_ratio?` |
 | `Workload` | `name; kind; namespace; ready: string; restarts: number; image; node?; phase; hot?; workload_name?` — `workload_name` 은 인벤토리 summary 의 owner_name(디플로이먼트 그룹핑 키) |
 | `InventoryResource` | `kind; namespace: string \| null; name; status; age; raw?: unknown` |
-| `ServiceInfo` | `name; namespace; type; cluster_ip; ports` |
+| `ServiceInfo` | `name; namespace; type; cluster_ip; ports; selector: Record<string,string>` |
 | `K8sEvent` | `at; type; reason; target; message` |
 | `Application` | `application_id; name; repo_ref; branch; cluster_id; manifest_path; last_run_status?; last_deployed_at?` |
 | `WorkflowRun` | `run_id; application_id; commit_sha; status; current_step; started_at; steps: RunStep[]; approval_id?; safe_pr?: SafePr` |
@@ -150,7 +150,7 @@ export const queryClient = new QueryClient({
 | `adaptCluster` | `frontend/src/shared/lib/adapt.ts :: adaptCluster` | `(raw: Record<string,unknown>) => Cluster`. `name ?? cluster_id`, `environment ?? 'unknown'`, `connection_status ?? 'unknown'`, 수치 기본 0, `registered_at ?? created_at ?? now` |
 | `adaptInventorySummary` | `frontend/src/shared/lib/adapt.ts :: adaptInventorySummary` | `=> ClusterSummary`. `raw.latest_snapshot.summary`(이중 중첩 `summary.summary` 도 허용)에서 namespaces/nodes/pod_phases/services 추출. 노드는 비공개 `adaptNodeSummary` 로 필드별 안전 변환 |
 | `adaptWorkloadResource` | `frontend/src/shared/lib/adapt.ts :: adaptWorkloadResource` | 인벤토리 pod 리소스(`summary` 포함) `=> Workload`. `kind = summary.owner_kind ?? kind ?? 'Pod'`, `restarts = summary.restart_total`, `image = summary.image ?? containers[].image`, `workload_name = summary.owner_name ?? name`, `hot = (health === 'degraded')` |
-| `adaptServiceResource` | `frontend/src/shared/lib/adapt.ts :: adaptServiceResource` | `=> ServiceInfo`. `summary.ports[]` 를 `'<port>/<protocol>'` join, `type = summary.type ?? status`, `cluster_ip = summary.cluster_ip` |
+| `adaptServiceResource` | `frontend/src/shared/lib/adapt.ts :: adaptServiceResource` | `=> ServiceInfo`. `summary.ports[]` 를 `'<port>/<protocol>'` join, `type = summary.type ?? status`, `cluster_ip = summary.cluster_ip`, `selector = summary.selector` 또는 `summary.selector.matchLabels`의 문자열 record |
 | `adaptK8sEventResource` | `frontend/src/shared/lib/adapt.ts :: adaptK8sEventResource` | `=> K8sEvent`. `at = last_timestamp ?? first_timestamp ?? observed_at ?? created_at`, `target = '<involved_kind>/<involved_name>'` |
 | `adaptInventoryResource` | `frontend/src/shared/lib/adapt.ts :: adaptInventoryResource` | `=> InventoryResource`. `status ?? health ?? 'unknown'`, `age = observed_at ?? created_at`, `raw = raw ?? summary` |
 | `adaptApplication` | `frontend/src/shared/lib/adapt.ts :: adaptApplication` | `=> Application`. `name ?? application_id`, `repo_ref ?? metadata.repo_ref`, `branch ?? default_branch ?? metadata.branch ?? 'main'` |
