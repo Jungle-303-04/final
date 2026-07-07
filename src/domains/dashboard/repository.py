@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import RcaTimeline
@@ -125,6 +125,7 @@ class DashboardRepository(DatabaseConnection):
             .order_by(RcaTimeline.updated_at.desc())
             .limit(limit)
         )
+        statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
@@ -147,6 +148,7 @@ class DashboardRepository(DatabaseConnection):
             .order_by(RcaTimeline.updated_at.desc())
             .limit(1)
         )
+        statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
@@ -172,6 +174,7 @@ class DashboardRepository(DatabaseConnection):
             table.c.cluster_id.is_not(None),
             table.c.status.not_in(CLOSED_INCIDENT_STATUSES),
         )
+        statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
@@ -202,6 +205,7 @@ class DashboardRepository(DatabaseConnection):
             .order_by(RcaTimeline.updated_at.desc())
             .limit(scan_limit)
         )
+        statement = _exclude_non_incident_detection(statement)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         seen: set[str] = set()
@@ -254,6 +258,9 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
         return None
 
     payload = evt.payload if isinstance(evt.payload, dict) else {}
+    if _is_non_incident_detection(str(evt.subject), payload):
+        return None
+
     row: JsonObject = {
         "workspace_id": _workspace_id(payload),
         "correlation_id": evt.correlation_id or evt.event_id,
@@ -292,6 +299,21 @@ def _apply_cluster_filter(
     if allowed_cluster_ids is None:
         return statement
     return statement.where(RcaTimeline.cluster_id.in_(allowed_cluster_ids))
+
+
+def _exclude_non_incident_detection(statement: Select[Any]) -> Select[Any]:
+    """정상 샘플(detected=false)은 RCA timeline/incident 조회에서 제외한다."""
+    table = RcaTimeline.__table__
+    return statement.where(
+        or_(
+            table.c.current_subject != EventSubject.INCIDENT_DETECTED.value,
+            table.c.payload["detected"].as_boolean().is_(True),
+        )
+    )
+
+
+def _is_non_incident_detection(subject: str, payload: JsonObject) -> bool:
+    return subject == EventSubject.INCIDENT_DETECTED.value and payload.get("detected") is not True
 
 
 def _workspace_id(payload: JsonObject) -> str:
