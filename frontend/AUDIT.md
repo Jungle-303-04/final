@@ -147,7 +147,7 @@
 | 복구 승인 | 명령/PR diff 접이식 preview; 권한 없으면 tooltip; 승인/거절 API | 대기 |
 | 역할 변경 | role 변경 -> membership/update API; `last_admin` 인라인 사유; 자기 강등 경고 | 대기 |
 | 조직/그룹 생성 | 이름 입력 -> 중복 검증 API; 생성 API | 대기 |
-| AI 채팅 | LLM 설정 상태 조회; 미설정/키 오류 -> 설정 안내 카드; 정상 -> 채팅 입력 | 대기 |
+| AI 채팅 | `GET /ai/conversations`, `GET /ai/conversations/:id`, create/send mutation 오류에서 LLM provider/API key/quota 계열 사유 감지; `conversation.status=failed`도 설정 안내 카드 선행; 정상일 때만 채팅 입력 표시 | 완료 |
 | 메트릭 PromQL | 입력 debounce -> `POST /metrics/validate`; valid일 때만 저장/실행 활성; 실행 클릭 시 동일 dry-run 재검증 -> `POST /agent/debug/query` 또는 `POST /clusters/{id}/metric-query-presets/{preset_id}/run`; 결과는 `GET /commands/{id}` 폴링; 0건 -> 시간범위 확장 CTA | 완료 |
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
 | 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
@@ -187,6 +187,15 @@
 - 클러스터 상세 URL은 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 노드/팟 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
 - 팟 Drawer는 search param에서 파생한다. 팟 목록 로딩 중에는 Skeleton, 조회 실패는 재시도, stale URL은 "팟 상세 없음" EmptyState로 처리한다.
 - 검증(2026-07-08 07:19 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 1440/1024/390 폭에서 `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 복원 확인, overflow 0. 클릭 왕복은 `/clusters/cluster-1` → `?node=node-a` → `?node=node-a&pod=prod%2Fcheckout-api-7f9f8` → 뒤로가기 2회까지 확인.
+
+## AI 채팅 디자인 시스템 이관 (2026-07-08)
+
+- `ChatView`를 `@/ui` PageHeader/Card/Field/Textarea/Badge/Tooltip/EmptyState/Skeleton/Toast와 `@/ui/motion` preset으로 재구성했다. feature 내부의 `@/shared/ui`, `@/shared/motion`, `.chat-*` 레거시 class, inline style, raw hex 의존은 0건이다.
+- 대화 목록/메시지/도구 호출/복구 조치/승인 카드 모두 같은 surface, border, typography, shadow 토큰을 사용한다. 삭제/생성/전송 실패는 toast로 사유를 노출하고, 목록·상세는 로딩/빈/오류+재시도 상태를 각각 갖는다.
+- LLM provider/API key/quota/auth 계열 오류 또는 `conversation.status=failed`가 감지되면 composer를 숨기고 "AI 설정 확인 필요" 또는 "AI 응답 실패" 안내 카드와 `운영 설정` CTA를 먼저 보여준다. 현 백엔드에 별도 설정 조회 API가 없어 오류 계약 기반 선행 차단으로 구현했다.
+- 복구 조치 선택 권한은 `service_admin` 또는 `release_operator` 역할로 통일했고, 권한이 없으면 버튼 비활성 + `release_operator 권한 필요` Tooltip을 표시한다. 선택 성공 시 `chatKeys.list()` 캐시를 무효화한다.
+- `ApprovalCard`는 repo·workflow·chat·notifications 공유 단일 구현을 유지하되 `@/ui` 프리미티브와 `useSession` 역할 체크로 정리했다.
+- 검증(2026-07-08 07:58 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/ai/aic-1` 1440/1024/390 폭에서 메시지/도구 호출/복구 조치/승인 카드/빈 draft 전송 차단/복구 조치 선택 활성 전환/horizontal overflow 0을 확인했다. `/ai` LLM 설정 오류 mock(503 raw detail `LLM_PROVIDER is not configured`)에서는 composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 

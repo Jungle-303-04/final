@@ -1,11 +1,28 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:27 KST (히트맵 드릴다운 라이브 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 07:58 KST (AI 채팅 디자인 시스템 이관 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — AI 채팅 디자인 시스템 이관
+
+- 구현:
+  - `frontend/src/features/chat/ChatView.tsx`를 `@/ui` PageHeader/Card/Field/Textarea/Badge/Tooltip/EmptyState/Skeleton/Toast와 `@/ui/motion` preset 기반으로 재구성했다.
+  - 대화 목록/상세/도구 호출/복구 조치/승인 카드에서 `.chat-*`, `@/shared/ui`, `@/shared/motion`, inline style, raw hex 의존을 제거했다.
+  - LLM provider/API key/quota/auth 계열 오류 또는 conversation `failed` 상태를 감지하면 채팅 입력창 대신 "AI 설정 확인 필요" 또는 "AI 응답 실패" 안내 카드와 `운영 설정` CTA를 먼저 보여준다. 현 백엔드에 별도 설정 조회 API가 없어 오류 계약 기반 선행 차단으로 구현했다.
+  - `ApprovalCard`와 AI 복구 조치 선택 권한은 `service_admin` 또는 `release_operator`로 통일했고, 권한이 없으면 `release_operator 권한 필요` Tooltip을 표시한다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - Playwright mock: `/ai/aic-1`를 1440/1024/390 폭에서 열어 대화 목록, 메시지, tool trace, 복구 조치 카드, 승인 카드, 빈 draft 전송 차단, radio 선택 후 "선택 실행" 활성화, horizontal overflow 0을 확인했다.
+  - Playwright mock: `/ai`에서 `/api/ai/conversations` 503 raw detail `LLM_PROVIDER is not configured`를 반환하게 해 "AI 설정 확인 필요" 카드, composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다. 콘솔의 503 resource log는 의도된 오류 응답이다.
+- 남은 확인:
+  - 커밋/푸시 후 GitHub Actions 상태 확인. Actions 계층 실패가 반복되면 이전 체크포인트와 같은 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
 
 ## 체크포인트 — 히트맵 드릴다운 URL 복원 보강
 
