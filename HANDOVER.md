@@ -1,6 +1,27 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:04 KST (RCA followup 폭증 원인 차단)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:25 KST (정상 샘플 dashboard projection 차단)
+
+## 절대 운영 원칙 — mock/fake/hardcoding 금지
+
+- 운영 코드, 배포 대상 화면, API 응답, DB 정리/복구 절차에는 **목업 데이터, 페이크 데이터, 하드코딩된 클러스터/레포/인시던트 값 사용 금지**.
+- 화면 수치와 드릴다운은 실제 세션 권한으로 접근 가능한 DB/API/클러스터 관측값만 표시한다. 개발용/테스트용 격리 객체는 단위 테스트 내부에만 두고 운영 경로에 연결하지 않는다.
+- DB 초기화/정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
+
+## 최신 업데이트 (15:25 KST) — 정상 샘플 dashboard projection 차단 패스
+
+- **추가 확인 결과**:
+  - `incident-worker` followup 폭주는 `61839836` 배포로 멈췄지만, `incident.detected` 이벤트 자체는 정상 샘플도 `detected=false` 로 남긴다.
+  - `dashboard` read model 이 `detected=false` 정상 샘플을 `rca_timeline`에 저장하거나 기존 row를 open incident 조회에 포함하면 화면의 인시던트 수가 계속 부풀 수 있다.
+- **수정 완료(로컬 대상 검증 완료, 다음 전체 검증/배포 대상)**:
+  - `timeline_update_from_event()` 는 `incident.detected` + `detected != true` 이벤트를 저장하지 않음.
+  - `list_rca_timeline`, `get_rca_timeline_item`, `count_open_rca_incidents`, `list_open_rca_incidents` 는 과거에 이미 쌓인 `detected=false` row를 조회에서 제외.
+  - `tests/test_dashboard_projection.py` 에 정상 샘플 미저장, open incident SQL 필터 회귀 테스트 추가.
+- **검증 완료**:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_dashboard_projection.py` → 6 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q` → 672 passed, 3 skipped.
+  - `ruff format --check src scripts tests`, `ruff check src scripts tests`, `git diff --check`, `npm run typecheck` → 통과.
+  - 다음: 커밋/푸시 → 배포 후 라이브 DB 5~10분 관찰.
 
 ## 최신 업데이트 (15:04 KST) — RCA followup 폭증 루프 차단 패스
 
