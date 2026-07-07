@@ -11,6 +11,10 @@ TelemetrySource = str
 
 @dataclass(frozen=True)
 class TelemetryQueryDefinition:
+    """Store one query request from policy or a debug command.
+    It can become the query object used by one provider.
+    """
+
     source: TelemetrySource
     name: str
     description: str
@@ -20,6 +24,7 @@ class TelemetryQueryDefinition:
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> Self:
+        """Build a query definition from a plain payload dict."""
         ensure_sources_loaded()
         source = _required_text(payload, "source")
         telemetry.spec(source)  # 미등록 소스면 supported 목록과 함께 즉시 예외
@@ -52,14 +57,20 @@ class TelemetryQueryDefinition:
 
 
 class TelemetryQueryRegistry:
+    """Keep query definitions by source and name.
+    Providers use this registry to find the queries they should run.
+    """
+
     def __init__(
         self,
         definitions: tuple[TelemetryQueryDefinition, ...] = (),
     ) -> None:
+        """Create the registry and load the first definitions."""
         self.definitions: dict[tuple[TelemetrySource, str], TelemetryQueryDefinition] = {}
         self.register_many(definitions)
 
     def register(self, definition: TelemetryQueryDefinition) -> TelemetryQueryDefinition:
+        """Store one query definition and return it."""
         self.definitions[(definition.source, definition.name)] = definition
         return definition
 
@@ -67,6 +78,7 @@ class TelemetryQueryRegistry:
         self,
         definitions: tuple[TelemetryQueryDefinition, ...],
     ) -> tuple[TelemetryQueryDefinition, ...]:
+        """Store many query definitions in this registry."""
         for definition in definitions:
             self.register(definition)
         return definitions
@@ -76,18 +88,21 @@ class TelemetryQueryRegistry:
         source: TelemetrySource,
         definitions: tuple[TelemetryQueryDefinition, ...],
     ) -> tuple[TelemetryQueryDefinition, ...]:
+        """Replace all query definitions for one source."""
         self.definitions = {
             key: definition for key, definition in self.definitions.items() if key[0] != source
         }
         return self.register_many(definitions)
 
     def get(self, source: TelemetrySource, name: str) -> TelemetryQueryDefinition:
+        """Find one query definition by source and name."""
         try:
             return self.definitions[(source, name)]
         except KeyError as exc:
             raise ValueError(f"unknown telemetry query: {source}/{name}") from exc
 
     def for_source(self, source: TelemetrySource) -> tuple[TelemetryQueryDefinition, ...]:
+        """Return all query definitions for one source."""
         return tuple(
             definition
             for (definition_source, _name), definition in self.definitions.items()
@@ -96,6 +111,7 @@ class TelemetryQueryRegistry:
 
 
 def _required_text(payload: dict[str, Any], key: str) -> str:
+    """Read a required text field from a payload."""
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"telemetry query field must be a non-empty string: {key}")
@@ -103,6 +119,7 @@ def _required_text(payload: dict[str, Any], key: str) -> str:
 
 
 def _optional_positive_int(payload: dict[str, Any], key: str) -> int | None:
+    """Read an optional positive integer field from a payload."""
     value = payload.get(key)
     if value is None:
         return None
@@ -117,6 +134,8 @@ def _optional_positive_int(payload: dict[str, Any], key: str) -> int | None:
 
 @dataclass(frozen=True)
 class PrometheusInstantQuery:
+    """Describe one Prometheus instant query."""
+
     metric_name: str
     description: str
     promql: str
@@ -124,6 +143,8 @@ class PrometheusInstantQuery:
 
 @dataclass(frozen=True)
 class PrometheusRangeQuery:
+    """Describe one Prometheus range query."""
+
     metric_name: str
     description: str
     promql: str
@@ -133,6 +154,8 @@ class PrometheusRangeQuery:
 
 @dataclass(frozen=True)
 class LokiLogQuery:
+    """Describe one Loki log query."""
+
     query_name: str
     description: str
     logql: str
@@ -140,6 +163,8 @@ class LokiLogQuery:
 
 @dataclass(frozen=True)
 class OpenTelemetrySpanQuery:
+    """Describe one Tempo or OpenTelemetry span query."""
+
     query_name: str
     description: str
     traceql: str
@@ -147,6 +172,8 @@ class OpenTelemetrySpanQuery:
 
 @dataclass(frozen=True)
 class KubernetesSnapshotQuery:
+    """Describe one Kubernetes namespace snapshot query."""
+
     query_name: str
     description: str
     namespace: str
