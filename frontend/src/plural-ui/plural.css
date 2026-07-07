@@ -234,7 +234,9 @@
   border: 1px solid var(--color-border);
   border-radius: var(--rad-lg);
   overflow: hidden;
+  overflow-x: auto; /* 좁은 화면에서 열 압착 대신 가로 스크롤 */
 }
+@media (max-width: 760px) { .pl-table { min-width: 640px; } }
 .pl-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pl-table thead th {
   text-align: left;
@@ -302,8 +304,8 @@
 .pl-aicard .desc { margin: var(--sp-sm) 0 0; font-size: 14px; line-height: 20px; color: var(--color-text-light); }
 
 /* ── 페이지 헤더 ──────────────────────── */
-.pl-pagehead { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-lg); margin-bottom: var(--sp-lg); }
-.pl-pagehead-actions { display: flex; gap: var(--sp-sm); flex: none; }
+.pl-pagehead { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-lg); margin-bottom: var(--sp-lg); flex-wrap: wrap; }
+.pl-pagehead-actions { display: flex; gap: var(--sp-sm); flex: none; flex-wrap: wrap; }
 
 /* ── 링크 탭(NavLink) ─────────────────── */
 .pl-tabs a { text-decoration: none; }

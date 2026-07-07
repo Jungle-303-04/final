@@ -151,7 +151,7 @@ export default function IncidentDetailView() {
         <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)', marginTop: 0 }}>
           파이프라인 상태 행이 정리됐을 수 있습니다. 아래는 동일 correlation 으로 저장된 RCA 리포트·증거입니다.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+        <div className="split split--even">
           <RcaReportsPanel correlationId={incidentId} onShowEvidence={() => evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
           <div ref={evidenceRef}><EvidencePanel correlationId={incidentId} /></div>
         </div>
@@ -169,7 +169,7 @@ export default function IncidentDetailView() {
             <Badge status={inc.status} />
             {inc.correlation_id && <CopyChip value={inc.correlation_id} display={`corr ${trunc(inc.correlation_id, 22)}`} />}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
+          <div className="split split--side">
             <Card style={{ height: 420, padding: 0 }}>
               <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} />
             </Card>
@@ -189,7 +189,7 @@ export default function IncidentDetailView() {
               )}
             </Card>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16, alignItems: 'start' }}>
+          <div className="split split--even" style={{ marginTop: 16 }}>
             <RcaReportsPanel correlationId={inc.correlation_id} onShowEvidence={() => evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
             <div ref={evidenceRef}><EvidencePanel correlationId={inc.correlation_id} /></div>
           </div>
