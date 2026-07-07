@@ -28,6 +28,7 @@ def test_platform_foundation_routes_are_present_in_openapi() -> None:
         routes.CLUSTER_CONNECTION_STATUS_PATH,
         routes.AGENT_INVENTORY_SNAPSHOTS_PATH,
         routes.CLUSTER_INVENTORY_RESOURCES_PATH,
+        routes.CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH,
         routes.CLUSTER_INVENTORY_SUMMARY_PATH,
         routes.CLUSTER_DEPLOYMENT_SCALE_PATH,
         routes.CLUSTER_DEPLOYMENT_RESTART_PATH,

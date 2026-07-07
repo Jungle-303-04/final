@@ -125,6 +125,21 @@ status: synced
     def list_inventory_resources(self, *, workspace_id: str, cluster_id: str, resource_type: str | None = None, namespace: str | None = None, include_deleted: bool = False, limit: int = 200) -> list[JsonObject]
     ```
     `cluster_inventory_resources`에서 workspace/cluster 필수 필터 + `resource_type`·`namespace` 선택 필터(truthy일 때만), `include_deleted=False`면 `deleted_at IS NULL`. 정렬 `resource_type, namespace NULLS FIRST, name`, limit은 `max(1, min(limit, 1000))`로 clamp. 각 행은 `serialize_inventory_resource` 적용.
+  - `src/domains/inventory/repository.py :: InventoryRepository.get_inventory_resource`
+    ```python
+    def get_inventory_resource(self, *, workspace_id: str, cluster_id: str, resource_type: str, kind: str, name: str, namespace: str | None = None) -> JsonObject | None
+    ```
+    삭제되지 않은 단일 Kubernetes resource identity를 최신 `last_seen_at` 기준으로 조회한다. 드릴다운은 list 결과 추론 대신 이 row를 기준으로 이벤트/관계를 계산한다.
+  - `src/domains/inventory/repository.py :: InventoryRepository.list_related_inventory_resources`
+    ```python
+    def list_related_inventory_resources(self, *, workspace_id: str, cluster_id: str, resource: JsonObject, limit: int = 100) -> dict[str, list[JsonObject]]
+    ```
+    실제 inventory summary만으로 1-hop 관계를 계산한다. 현재 규칙: node → `summary.node_name` 일치 pod, service → selector와 pod labels 매칭 pod, workload → selector 또는 pod owner 일치 pod. 합성 관계를 만들지 않는다.
+  - `src/domains/inventory/repository.py :: InventoryRepository.list_resource_events`
+    ```python
+    def list_resource_events(self, *, workspace_id: str, cluster_id: str, resource: JsonObject, limit: int = 50) -> list[JsonObject]
+    ```
+    Kubernetes Event summary의 `involved_kind`/`involved_name`/`involved_uid`가 단일 resource identity와 일치하는 이벤트만 최신순으로 반환한다.
   - `src/domains/inventory/repository.py :: InventoryRepository.get_actual_resource_image`
     ```python
     def get_actual_resource_image(self, workspace_id: str, cluster_id: str, namespace: str | None, resource: str) -> str | None
@@ -191,6 +206,7 @@ status: synced
 |---|---|---|---|---|
 | POST `/agent/inventory/snapshots` (`AGENT_INVENTORY_SNAPSHOTS_PATH`) | `src/domains/inventory/router.py :: record_inventory_snapshot` | body: `InventorySnapshotRequest` | `InventorySnapshotResponse` | `require_cluster_agent` (x-agent-token, 401 fail-closed) + `get_db` + `get_events` |
 | GET `/clusters/{cluster_id}/inventory/resources` (`CLUSTER_INVENTORY_RESOURCES_PATH`) | `src/domains/inventory/router.py :: list_inventory_resources` | query: `resource_type: str \| None`, `namespace: str \| None`, `include_deleted: bool = False`, `limit: int = Query(200, ge=1, le=1000)` | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/clusters/{cluster_id}/inventory/resource-detail` (`CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH`) | `src/domains/inventory/router.py :: get_inventory_resource_detail` | query: `resource_type`, `kind`, `name`, `namespace?`, `related_limit: 1..1000`, `event_limit: 1..200` | `InventoryResourceDetailResponse(resource, related, events)`; 없으면 404 | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/workloads` (`CLUSTER_INVENTORY_WORKLOADS_PATH`) | `src/domains/inventory/router.py :: list_inventory_workloads` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/services` (`CLUSTER_INVENTORY_SERVICES_PATH`) | `src/domains/inventory/router.py :: list_inventory_services` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/events` (`CLUSTER_INVENTORY_EVENTS_PATH`) | `src/domains/inventory/router.py :: list_inventory_events` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
@@ -199,7 +215,7 @@ status: synced
 
 - workloads/services/events 뷰는 각각 `resource_type="workload"` / `"service"` / `"event"` 고정 + `include_deleted=False`인 `list_inventory_resources`의 특수화다.
 - GET 계열의 `workspace_id`는 `getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)`로 세션에서 얻는다(요청 파라미터 아님).
-- 요청/응답 pydantic 모델(`InventorySnapshotRequest`, `InventoryResource`, `InventorySnapshotResponse`, `InventoryResourceResponse`, `InventoryResourceListResponse`, `InventorySummaryResponse`)의 필드 정의는 [contracts](../packages/contracts.md) 소유 (`src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`).
+- 요청/응답 pydantic 모델(`InventorySnapshotRequest`, `InventoryResource`, `InventorySnapshotResponse`, `InventoryResourceResponse`, `InventoryResourceListResponse`, `InventoryResourceDetailResponse`, `InventorySummaryResponse`)의 필드 정의는 [contracts](../packages/contracts.md) 소유 (`src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`).
 
 ## 데이터 모델 (Data Model)
 

@@ -320,6 +320,16 @@ class InventoryResourceListResponse(StrictModel):
     resources: list[InventoryResourceResponse]
 
 
+class InventoryResourceDetailResponse(StrictModel):
+    """단일 Kubernetes 리소스 드릴다운 — raw object 없이 실제 read model 관계만 노출."""
+
+    cluster_id: str
+    identity: JsonMap
+    resource: InventoryResourceResponse
+    related: dict[str, list[InventoryResourceResponse]] = Field(default_factory=dict)
+    events: list[InventoryResourceResponse] = Field(default_factory=list)
+
+
 class ClusterUsageSample(StrictModel):
     sampled_at: str | None = None
     usage: JsonMap = Field(default_factory=dict)

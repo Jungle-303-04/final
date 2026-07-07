@@ -12,12 +12,16 @@ from domains.inventory.repository import (
     HEALTH_RESOURCE_TYPE,
     USAGE_RESOURCE_TYPE,
     dedupe_inventory_rows,
+    event_involves_resource,
     first_container_image,
     inventory_resource_key,
+    labels_match,
     normalize_inventory_resource,
+    selector_labels,
     snapshot_resources,
 )
 from domains.inventory.router import (
+    get_inventory_resource_detail,
     get_inventory_summary,
     list_inventory_workloads,
     record_inventory_snapshot,
@@ -26,8 +30,9 @@ from packages.contracts.gateway.requests import InventoryResource, InventorySnap
 
 
 class FakeInventoryDb:
-    def __init__(self) -> None:
+    def __init__(self, resources: list[dict[str, object]] | None = None) -> None:
         self.saved: dict[str, object] | None = None
+        self.resources = resources or [inventory_resource("workload", "Deployment", "api")]
 
     def save_inventory_snapshot(
         self,
@@ -74,11 +79,75 @@ class FakeInventoryDb:
     ) -> list[dict[str, object]]:
         assert workspace_id == "ws-1"
         assert cluster_id == "cluster-1"
-        assert resource_type == "workload"
-        assert namespace == "default"
-        assert include_deleted is False
-        assert limit == 25
-        return [inventory_resource("workload", "Deployment", "api")]
+        rows = [
+            item
+            for item in self.resources
+            if (resource_type is None or item["resource_type"] == resource_type)
+            and (namespace is None or item["namespace"] == namespace)
+            and (include_deleted or item["deleted_at"] is None)
+        ]
+        return rows[:limit]
+
+    def get_inventory_resource(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        kind: str,
+        name: str,
+        namespace: str | None,
+    ) -> dict[str, object] | None:
+        assert workspace_id == "ws-1"
+        assert cluster_id == "cluster-1"
+        for item in self.resources:
+            if (
+                item["resource_type"] == resource_type
+                and str(item["kind"]).lower() == kind.lower()
+                and item["name"] == name
+                and item["namespace"] == namespace
+                and item["deleted_at"] is None
+            ):
+                return item
+        return None
+
+    def list_related_inventory_resources(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: dict[str, object],
+        limit: int,
+    ) -> dict[str, list[dict[str, object]]]:
+        assert workspace_id == "ws-1"
+        assert cluster_id == "cluster-1"
+        if resource["resource_type"] != "service":
+            return {}
+        selector = selector_labels(dict(resource["summary"]).get("selector"))
+        pods = [
+            item
+            for item in self.resources
+            if item["resource_type"] == "pod"
+            and item["namespace"] == resource["namespace"]
+            and labels_match(selector, dict(dict(item["summary"]).get("labels") or {}))
+        ]
+        return {"pods": pods[:limit]}
+
+    def list_resource_events(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: dict[str, object],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert cluster_id == "cluster-1"
+        return [
+            item
+            for item in self.resources
+            if item["resource_type"] == "event" and event_involves_resource(item, resource)
+        ][:limit]
 
     def latest_inventory_snapshot(
         self,
@@ -103,7 +172,15 @@ class FakeInventoryEvents:
         self.accepted.append(body)
 
 
-def inventory_resource(resource_type: str, kind: str, name: str) -> dict[str, object]:
+def inventory_resource(
+    resource_type: str,
+    kind: str,
+    name: str,
+    *,
+    namespace: str | None = "default",
+    uid: str = "uid-1",
+    summary: dict[str, object] | None = None,
+) -> dict[str, object]:
     return {
         "inventory_key": f"{resource_type}:{name}",
         "snapshot_id": "snapshot-1",
@@ -112,16 +189,16 @@ def inventory_resource(resource_type: str, kind: str, name: str) -> dict[str, ob
         "resource_type": resource_type,
         "api_version": "apps/v1",
         "kind": kind,
-        "namespace": "default",
+        "namespace": namespace,
         "name": name,
-        "uid": "uid-1",
+        "uid": uid,
         "resource_version": "1",
         "status": "running",
         "health": "healthy",
         "labels": {},
         "annotations": {},
-        "summary": {"ready_replicas": 1},
-        "raw": {},
+        "summary": summary or {"ready_replicas": 1},
+        "raw": {"secret": "must-not-leak"},
         "observed_at": "2026-07-05T00:00:00+00:00",
         "first_seen_at": "2026-07-05T00:00:00+00:00",
         "last_seen_at": "2026-07-05T00:00:00+00:00",
@@ -280,6 +357,74 @@ def test_inventory_workloads_route_requires_inventory_access_and_filters() -> No
     assert response.resources[0].kind == "Deployment"
     assert response.resources[0].summary == {"ready_replicas": 1}
     assert "raw" not in response.resources[0].model_dump()
+
+
+def test_inventory_resource_detail_returns_related_resources_and_events_without_raw() -> None:
+    db = FakeInventoryDb(
+        [
+            inventory_resource(
+                "service",
+                "Service",
+                "api",
+                summary={"selector": {"app": "checkout"}},
+            ),
+            inventory_resource(
+                "pod",
+                "Pod",
+                "api-1",
+                summary={"labels": {"app": "checkout"}, "node_name": "node-1"},
+            ),
+            inventory_resource(
+                "pod",
+                "Pod",
+                "other-1",
+                summary={"labels": {"app": "other"}, "node_name": "node-1"},
+            ),
+            inventory_resource(
+                "event",
+                "Event",
+                "evt-service",
+                summary={
+                    "involved_kind": "Service",
+                    "involved_name": "api",
+                    "reason": "Updated",
+                    "message": "Service updated",
+                },
+            ),
+            inventory_resource(
+                "event",
+                "Event",
+                "evt-other",
+                summary={
+                    "involved_kind": "Pod",
+                    "involved_name": "api-1",
+                    "reason": "Pulled",
+                },
+            ),
+        ]
+    )
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="service",
+            kind="Service",
+            namespace="default",
+            name="api",
+            related_limit=10,
+            event_limit=10,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.resource.name == "api"
+    assert [pod.name for pod in response.related["pods"]] == ["api-1"]
+    assert [event.name for event in response.events] == ["evt-service"]
+    assert "raw" not in response.resource.model_dump()
+    assert "raw" not in response.related["pods"][0].model_dump()
+    assert "raw" not in response.events[0].model_dump()
 
 
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:

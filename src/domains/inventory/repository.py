@@ -7,7 +7,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.inventory.models import (
@@ -331,6 +331,149 @@ class InventoryRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [self.serialize_inventory_resource(dict(row)) for row in rows]
 
+    def get_inventory_resource(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        kind: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> JsonObject | None:
+        """단일 resource identity 조회 — 드릴다운은 list 결과 추론 대신 이 계약을 사용."""
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == resource_type.strip().lower(),
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.name == name,
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.last_seen_at.desc())
+            .limit(1)
+        )
+        if namespace is None:
+            statement = statement.where(table.c.namespace.is_(None))
+        else:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self.serialize_inventory_resource(dict(row)) if row else None
+
+    def list_related_inventory_resources(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: JsonObject,
+        limit: int = 100,
+    ) -> dict[str, list[JsonObject]]:
+        """실제 inventory 필드로 계산한 1-hop 관계.
+
+        - node -> scheduled pods(summary.node_name)
+        - service -> selector 와 pod labels 매칭
+        - workload -> selector 또는 pod owner 매칭
+        """
+        resource_type = str(resource.get("resource_type") or "").lower()
+        namespace = resource.get("namespace")
+        name = str(resource.get("name") or "")
+        summary = dict(resource.get("summary") or {})
+        related: dict[str, list[JsonObject]] = {}
+
+        if resource_type == NODE_RESOURCE_TYPE:
+            pods = self.list_inventory_resources(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource_type=POD_RESOURCE_TYPE,
+                include_deleted=False,
+                limit=1000,
+            )
+            related["pods"] = [
+                pod for pod in pods if dict(pod.get("summary") or {}).get("node_name") == name
+            ][: max(1, min(limit, 1000))]
+            return related
+
+        if resource_type == "service":
+            selector = selector_labels(summary.get("selector"))
+            if selector:
+                pods = self.list_inventory_resources(
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    resource_type=POD_RESOURCE_TYPE,
+                    namespace=str(namespace) if namespace is not None else None,
+                    include_deleted=False,
+                    limit=1000,
+                )
+                related["pods"] = [
+                    pod for pod in pods if labels_match(selector, pod_summary_labels(pod))
+                ][: max(1, min(limit, 1000))]
+            return related
+
+        if resource_type == WORKLOAD_RESOURCE_TYPE:
+            selector = selector_labels(summary.get("selector"))
+            kind = str(resource.get("kind") or "")
+            pods = self.list_inventory_resources(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource_type=POD_RESOURCE_TYPE,
+                namespace=str(namespace) if namespace is not None else None,
+                include_deleted=False,
+                limit=1000,
+            )
+            related["pods"] = [
+                pod
+                for pod in pods
+                if (selector and labels_match(selector, pod_summary_labels(pod)))
+                or pod_owner_matches(pod, kind=kind, name=name)
+            ][: max(1, min(limit, 1000))]
+            return related
+
+        return related
+
+    def list_resource_events(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource: JsonObject,
+        limit: int = 50,
+    ) -> list[JsonObject]:
+        """Kubernetes Event 의 involvedObject 기준으로 단일 리소스 이벤트만 반환."""
+        table = ClusterInventoryResourceRecord.__table__
+        kind = str(resource.get("kind") or "")
+        name = str(resource.get("name") or "")
+        uid = resource.get("uid")
+        summary_filters = [table.c.summary.contains({"involved_kind": kind, "involved_name": name})]
+        if uid:
+            summary_filters.append(table.c.summary.contains({"involved_uid": str(uid)}))
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == EVENT_RESOURCE_TYPE,
+                table.c.deleted_at.is_(None),
+                or_(*summary_filters),
+            )
+            .order_by(table.c.observed_at.desc())
+            .limit(max(1, min(limit, 200)))
+        )
+        namespace = resource.get("namespace")
+        if namespace is not None:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        matched = [
+            self.serialize_inventory_resource(dict(row))
+            for row in rows
+            if event_involves_resource(dict(row), resource)
+        ]
+        return matched[: max(1, min(limit, 200))]
+
     def get_actual_resource_image(
         self,
         workspace_id: str,
@@ -590,3 +733,40 @@ class InventoryRepository(DatabaseConnection):
         item["created_at"] = iso_or_none(item.get("created_at"))
         item["updated_at"] = iso_or_none(item.get("updated_at"))
         return item
+
+
+def selector_labels(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    labels = value.get("matchLabels") if isinstance(value.get("matchLabels"), dict) else value
+    return {str(key): str(val) for key, val in labels.items() if isinstance(key, str)}
+
+
+def pod_summary_labels(pod: JsonObject) -> dict[str, str]:
+    summary = pod.get("summary") if isinstance(pod.get("summary"), dict) else {}
+    labels = summary.get("labels") if isinstance(summary.get("labels"), dict) else {}
+    return {str(key): str(val) for key, val in labels.items() if isinstance(key, str)}
+
+
+def labels_match(selector: dict[str, str], labels: dict[str, str]) -> bool:
+    return bool(selector) and all(labels.get(key) == value for key, value in selector.items())
+
+
+def pod_owner_matches(pod: JsonObject, *, kind: str, name: str) -> bool:
+    summary = pod.get("summary") if isinstance(pod.get("summary"), dict) else {}
+    owner_kind = str(summary.get("owner_kind") or "")
+    owner_name = str(summary.get("owner_name") or "")
+    return owner_kind.lower() == kind.lower() and owner_name == name
+
+
+def event_involves_resource(event: JsonObject, resource: JsonObject) -> bool:
+    summary = event.get("summary") if isinstance(event.get("summary"), dict) else {}
+    involved_kind = str(summary.get("involved_kind") or "")
+    involved_name = str(summary.get("involved_name") or "")
+    involved_uid = summary.get("involved_uid")
+    resource_kind = str(resource.get("kind") or "")
+    resource_name = str(resource.get("name") or "")
+    resource_uid = resource.get("uid")
+    if resource_uid and involved_uid and str(involved_uid) == str(resource_uid):
+        return True
+    return involved_kind.lower() == resource_kind.lower() and involved_name == resource_name
