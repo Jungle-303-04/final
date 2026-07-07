@@ -20,6 +20,8 @@ async def on_evidence_built(
 ) -> AsyncIterator[EventBody]:
     bodies = pipeline.build_bodies(evt.evidence, ctx.correlation_id)
     yield bodies.detected_body
+    if not bodies.detected_body.detected:
+        return
     yield bodies.next_body
 
 
