@@ -1,5 +1,5 @@
 ---
-source_commit: 1616d295
+source_commit: 262db708
 status: synced
 ---
 
@@ -170,6 +170,9 @@ async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]
     # UPDATE lease_id=uuid4, leased_until=now+60s RETURNING * → EventEnvelope 복원
 async def mark_events_sent(self, event_ids: list[str]) -> None
     # sent_at=now(), lease 해제(lease_id/leased_until NULL)
+async def mark_events_dead_lettered(self, events: list[EventEnvelope], consumer: str, error: str) -> None
+    # 비재시도 outbox 이벤트를 event_dead_letters(status=open, attempts=1)에 남기고
+    # 해당 outbox 행을 sent_at=now(), lease 해제로 표시해 relay 대상에서 제거
 def outbox_pending_count(self) -> int    # sent_at IS NULL count(메트릭용)
 ```
 
@@ -319,7 +322,7 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 - 결과: 팀원이 `domains/<새도메인>/{models,repository}.py` 를 추가하면 `packages/` 수정 0 으로 테이블·repo 가 포함된다.
 
 ### 코어 처리 대장/아웃박스 흐름
-[runtime — EventProcessor](runtime.md#동작-behavior) 가 사용하는 순서: `record_event`(멱등 기록) → `begin_event_processing`(원자 claim) → 업무 트랜잭션에서 `stage_events`(outbox) + `finish_event_processing` → `OutboxRelay` 가 `unsent_events`(lease claim) → 발행 → `mark_events_sent`.
+[runtime — EventProcessor](runtime.md#동작-behavior) 가 사용하는 순서: `record_event`(멱등 기록) → `begin_event_processing`(원자 claim) → 업무 트랜잭션에서 `stage_events`(outbox) + `finish_event_processing` → `OutboxRelay` 가 `unsent_events`(lease claim) → 발행 → `mark_events_sent`. `OutboxRelay`가 브로커의 비재시도 publish 오류(`MaxPayloadError`)를 받으면 `mark_events_dead_lettered`로 원 payload/error 를 DLQ에 남기고 해당 outbox 행을 sent 처리해 같은 oversized payload 무한 재시도를 끊는다.
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -327,7 +330,7 @@ PK: `PrimaryKeyConstraint("event_id", "consumer")`. 호환 인덱스: `ix_event_
 2. **UoW 합류 규칙**: 활성 `_ACTIVE_CONN` 이 있으면 `connection()`/`unit_of_work()` 는 새 트랜잭션을 열지 않고 합류하며 commit 은 최상위 UoW 소유 — 중첩 커밋으로 인한 원자성 파괴 금지.
 3. **claim 원자성**: `claim_event_processing` 은 단일 UPSERT 문으로 검사+갱신 — 종결 상태 재클레임 금지, 신선한(90s 이내) PROCESSING 재클레임 금지.
 4. **DLQ replay 단일성**: `mark_dead_letter_replayed` 는 `status='open'` 조건부 원자 UPDATE — 첫 호출만 `True`. 원인이 해결됐지만 원 payload 재발행이 위험한 레거시 DLQ는 운영 절차로 `archived` 처리해 open 카운트와 replay 대상에서 제외한다.
-5. **outbox lease**: `unsent_events` 는 `FOR UPDATE SKIP LOCKED` + lease(60s)로 다중 relay 인스턴스의 이중 발행을 억제. `mark_events_sent` 만 sent 확정.
+5. **outbox lease**: `unsent_events` 는 `FOR UPDATE SKIP LOCKED` + lease(60s)로 다중 relay 인스턴스의 이중 발행을 억제. 정상 발행은 `mark_events_sent`, 브로커 정책상 재시도 불가 publish 오류는 `mark_events_dead_lettered` 만 sent 확정한다.
 6. 스키마 초기화 advisory lock (namespace, key) 는 고정값 — 변경하면 구/신 배포가 상호 배제되지 않는다.
 7. 오류 메시지는 항상 `compact_error` 로 2000자 절단 후 저장.
 8. `RedisSessionStore` 의 명령은 `connect()` 이전 호출 시 `RedisSessionStoreNotConnected`.
