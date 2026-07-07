@@ -8,11 +8,8 @@
 - dev CI 실패 원인 해결: env 가드가 frontend/.env.production(시크릿 아닌 vite 플래그)을 거부 → 허용 목록 추가(2530884e). dev CI 그린 확인.
 - **repo Actions 변수 `CONFIGURE_CLOUDFLARE=0`으로 변경** — CD가 배포마다 DNS를 api-gateway ELB로 덮어써 콘솔이 사라지는 문제 차단. 도메인은 console ELB로 수동 유지(아래 참고). 되돌리려면 GitHub 변수에서 1로.
 - **RCA 정확도 라이브 검증 완료**: exit-1 크래시(payment-gateway)가 배포 전 `oom_killed` 오판 → 배포 후 `config_env_error` 정답 판정. 주입 장애는 전부 정리됨(sandbox clean).
-- **주의**: CD의 aws-up.sh가 배포마다 `GITHUB_TOKEN` 시크릿을 1시간짜리 임시 토큰으로 덮어씀. 마지막 CD 후 PAT 재주입 필요(아래 명령). 영구 해결은 GitHub Actions secret `GH_APP_TOKEN` 등록.
-  ```
-  kubectl -n management patch secret management-runtime-secret --type merge -p '{"stringData":{"GITHUB_TOKEN":"<PAT>"}}'
-  kubectl -n management rollout restart deploy scm-worker manifest-render-worker git-pull-worker
-  ```
+- **✅ 해결됨(11:40)**: GitHub 환경 시크릿(`aws-test`)에 `GH_APP_TOKEN`(내구성 PAT) 등록 완료 — 이후 CD 배포는 임시 토큰 대신 이 토큰을 사용하므로 GitHub 연동이 만료되지 않음. 클러스터 시크릿도 PAT로 재주입 + scm/render/pull 워커 재시작 완료.
+- **최종 검증(11:42)**: 38개 deployment 전부 Ready, 콘솔 200, /api/healthz ok, DNS=console ELB 유지, dev CI 그린, main CD 그린.
 
 ## 서비스 현재 상태 (라이브)
 
