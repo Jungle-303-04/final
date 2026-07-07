@@ -66,7 +66,7 @@ class AiConversationRepository(DatabaseConnection):
 
     def mark_ai_conversation_status(
         self, workspace_id: str, conversation_id: str, status: str
-    ) -> None:
+    ) -> bool:
         statement = (
             self.conversation_table.update()
             .where(
@@ -76,10 +76,17 @@ class AiConversationRepository(DatabaseConnection):
             .values(status=status, updated_at=func.now())
         )
         with self.connection() as conn:
-            conn.execute(statement)
+            result = conn.execute(statement)
+        return bool(result.rowcount)
 
-    def record_ai_response(self, payload: JsonObject) -> None:
+    def record_ai_response(self, payload: JsonObject) -> bool:
         with self.unit_of_work():
+            if not self.mark_ai_conversation_status(
+                str(payload["workspace_id"]),
+                str(payload["conversation_id"]),
+                STATUS_COMPLETED,
+            ):
+                return False
             self.append_ai_message(
                 {
                     "message_id": payload["response_message_id"],
@@ -92,25 +99,26 @@ class AiConversationRepository(DatabaseConnection):
                     "metadata": payload.get("metadata") or {},
                 }
             )
-            self.mark_ai_conversation_status(
-                str(payload["workspace_id"]),
-                str(payload["conversation_id"]),
-                STATUS_COMPLETED,
-            )
+        return True
 
-    def record_ai_failure(self, payload: JsonObject) -> None:
+    def record_ai_failure(self, payload: JsonObject) -> bool:
         with self.unit_of_work():
-            self.mark_ai_conversation_status(
+            return self.mark_ai_conversation_status(
                 str(payload["workspace_id"]),
                 str(payload["conversation_id"]),
                 STATUS_FAILED,
             )
 
-    def list_ai_conversations(self, workspace_id: str, *, limit: int = 100) -> list[JsonObject]:
+    def list_ai_conversations(
+        self, workspace_id: str, *, user_id: str | None = None, limit: int = 100
+    ) -> list[JsonObject]:
         table = self.conversation_table
+        predicates = [table.c.workspace_id == workspace_id]
+        if user_id is not None:
+            predicates.append(table.c.user_id == user_id)
         statement = (
             select(table.c.conversation_id, table.c.title, table.c.status, table.c.updated_at)
-            .where(table.c.workspace_id == workspace_id)
+            .where(*predicates)
             .order_by(table.c.updated_at.desc())
             .limit(max(1, min(limit, 200)))
         )
@@ -118,26 +126,32 @@ class AiConversationRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings().all()
         return [row_dict(r) for r in rows]
 
-    def get_ai_conversation(self, workspace_id: str, conversation_id: str) -> JsonObject | None:
-        statement = (
-            select(self.conversation_table)
-            .where(
-                self.conversation_table.c.workspace_id == workspace_id,
-                self.conversation_table.c.conversation_id == conversation_id,
-            )
-            .limit(1)
-        )
+    def get_ai_conversation(
+        self, workspace_id: str, conversation_id: str, *, user_id: str | None = None
+    ) -> JsonObject | None:
+        predicates = [
+            self.conversation_table.c.workspace_id == workspace_id,
+            self.conversation_table.c.conversation_id == conversation_id,
+        ]
+        if user_id is not None:
+            predicates.append(self.conversation_table.c.user_id == user_id)
+        statement = select(self.conversation_table).where(*predicates).limit(1)
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return row_dict(row) if row is not None else None
 
-    def delete_ai_conversation(self, workspace_id: str, conversation_id: str) -> bool:
+    def delete_ai_conversation(
+        self, workspace_id: str, conversation_id: str, *, user_id: str | None = None
+    ) -> bool:
+        predicates = [
+            self.conversation_table.c.workspace_id == workspace_id,
+            self.conversation_table.c.conversation_id == conversation_id,
+        ]
+        if user_id is not None:
+            predicates.append(self.conversation_table.c.user_id == user_id)
         statement = (
             self.conversation_table.delete()
-            .where(
-                self.conversation_table.c.workspace_id == workspace_id,
-                self.conversation_table.c.conversation_id == conversation_id,
-            )
+            .where(*predicates)
             .returning(self.conversation_table.c.conversation_id)
         )
         with self.connection() as conn:

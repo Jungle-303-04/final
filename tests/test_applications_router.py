@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from domains.applications.router import (
     connect_application,
     list_applications,
@@ -185,6 +187,32 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
     assert db.access_checks == [
         ("user-1", "ws-1", "cluster", "cluster-1", "deploy.run"),
     ]
+
+
+def test_connect_application_returns_422_for_invalid_source_type() -> None:
+    db = FakeApplicationsDb()
+
+    async def run():
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="checkout-api",
+                repo_ref="org/checkout",
+                branch="release",
+                manifest_path="deploy/kustomization.yaml",
+                source_type="zip",
+                cluster_id="cluster-1",
+            ),
+            current=current_session(),
+            db=db,
+            discovery=FakeRepositoryDiscovery(),
+        )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run())
+
+    assert getattr(exc.value, "status_code", None) == 422
+    assert "source_type must be" in str(getattr(exc.value, "detail", ""))
+    assert db.registration_calls == []
 
 
 def test_upsert_application_deployment_requires_app_and_cluster_access() -> None:

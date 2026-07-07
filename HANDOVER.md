@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 00:52 KST (cluster registration 후보 검색/listbox + preflight 상태판)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 01:05 KST (AI 대화 삭제 레이스 + repo connect 422 안정화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,23 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `choi woo-nyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com` 또는 `woonyong <woonyong.kr@gmail.com>` 표기는 사용하지 않는다.
+
+## 체크포인트 (현재) — AI 대화 삭제 레이스 + repo connect 422 안정화
+
+- 구현:
+  - `AiConversationRepository.record_ai_response()`가 assistant message insert 전에 conversation row를 `completed`로 update하고, row가 없으면 `False`를 반환한다. 삭제된 waiting 대화에 늦은 worker 응답이 들어와도 FK 실패/worker 실패로 번지지 않는다.
+  - `record_ai_failure()`도 conversation row가 없으면 `False`를 반환한다.
+  - `ai-chat-worker`는 `record_ai_response/record_ai_failure`가 `False`를 반환하면 `ai.message.responded/failed` 이벤트를 발행하지 않고 종료한다. 이벤트 처리는 ack되지만 삭제된 대화 read model을 되살리지 않는다.
+  - AI HTTP list/get/append/delete 범위를 `workspace_id + user_id`로 제한했다. 같은 workspace의 다른 사용자 대화를 조회/삭제/추가하지 않는다.
+  - `/applications/connect`에서 `RepositoryDiscoveryError`뿐 아니라 `ValueError`도 422로 변환한다. 잘못된 `source_type` 같은 검증 오류가 500으로 새지 않는다.
+  - 운영 경로 mock/fake/hardcoded data 추가 없음. 테스트 더블은 `tests/*` 내부에만 존재.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/ai/repository.py src/domains/ai/router.py src/domains/applications/router.py src/services/ai/chat-worker/app.py src/packages/contracts/stores.py tests/test_ai_conversation.py tests/test_applications_router.py` → passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_ai_conversation.py tests/test_ai_chat_hardening.py tests/test_ai_platform_tools.py tests/test_applications_router.py tests/test_repository_discovery.py` → 44 passed.
+- 다음:
+  1. 이 단위를 `fix: AI 대화 삭제 / 사용자 범위 / 레포 검증`으로 커밋/푸시한다.
+  2. 남은 repo UX 갭: namespace/environment 하드코딩 제거 또는 서버 정책 기본값 API화, 앱 이름 충돌 방지, repo probe debounce/warnings 표시.
+  3. 배포 후 AI 채팅 삭제, repo connect invalid source_type, 클러스터 등록 모달 live smoke를 진행한다.
 
 ## 체크포인트 (현재) — 클러스터 등록 후보 검색/listbox + 사전 점검 상태판
 

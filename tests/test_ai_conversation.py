@@ -11,6 +11,7 @@ import pytest
 from conftest import load_service, run_handler
 
 from domains.ai.events import AiMessageReceivedBody
+from domains.ai.repository import STATUS_COMPLETED, STATUS_FAILED, AiConversationRepository
 from domains.ai.router import create_conversation, delete_conversation
 from packages.ai import llm
 from packages.ai.engine import EngineResult
@@ -50,11 +51,23 @@ class FakeConversationStore:
     ) -> list[dict[str, Any]]:
         return [{"role": "user", "content": "earlier question"}]
 
-    async def record_ai_response(self, payload: dict[str, Any]) -> None:
+    async def record_ai_response(self, payload: dict[str, Any]) -> bool:
         self.responses.append(payload)
+        return True
 
-    async def record_ai_failure(self, payload: dict[str, Any]) -> None:
+    async def record_ai_failure(self, payload: dict[str, Any]) -> bool:
         self.failures.append(payload)
+        return True
+
+
+class DeletedConversationStore(FakeConversationStore):
+    """삭제된 대화처럼 저장소가 false 를 반환하는 상황."""
+
+    async def record_ai_response(self, payload: dict[str, Any]) -> bool:
+        return False
+
+    async def record_ai_failure(self, payload: dict[str, Any]) -> bool:
+        return False
 
 
 class CaptureEngine:
@@ -135,6 +148,29 @@ def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
     assert capture.context.namespace == "prod"
     assert capture.context.name == "checkout-abc"
     assert capture.context.uid == "pod-uid-1"
+
+
+def test_chat_worker_drops_late_response_for_deleted_conversation() -> None:
+    worker = load_service("ai/chat-worker")
+    worker.engine = CaptureEngine()
+    store = DeletedConversationStore()
+
+    outs = run_handler(
+        worker.on_ai_message_received,
+        AiMessageReceivedBody(
+            conversation_id="aic-deleted",
+            message_id="aim-deleted",
+            content="this conversation was deleted",
+            agent="operations-chat",
+            user_id="user-1",
+            workspace_id="ws-1",
+        ),
+        db=store,
+    )
+
+    assert outs == []
+    assert store.responses == []
+    assert store.failures == []
 
 
 def test_llm_client_defaults_to_openai_and_boots_without_credentials(
@@ -308,18 +344,21 @@ class FakeDb:
         self.messages.append(payload)
         return payload
 
-    def delete_ai_conversation(self, workspace_id: str, conversation_id: str) -> bool:
+    def delete_ai_conversation(
+        self, workspace_id: str, conversation_id: str, *, user_id: str | None = None
+    ) -> bool:
         before = len(self.conversations)
-        self.conversations = [
-            item
+        matched = {
+            item["conversation_id"]
             for item in self.conversations
-            if not (
-                item["workspace_id"] == workspace_id and item["conversation_id"] == conversation_id
-            )
+            if item["workspace_id"] == workspace_id
+            and item["conversation_id"] == conversation_id
+            and (user_id is None or item["user_id"] == user_id)
+        }
+        self.conversations = [
+            item for item in self.conversations if item["conversation_id"] not in matched
         ]
-        self.messages = [
-            item for item in self.messages if item["conversation_id"] != conversation_id
-        ]
+        self.messages = [item for item in self.messages if item["conversation_id"] not in matched]
         return len(self.conversations) < before
 
 
@@ -393,6 +432,27 @@ def test_delete_conversation_removes_workspace_conversation_and_messages() -> No
     assert db.messages == []
 
 
+def test_delete_conversation_does_not_remove_other_user_conversation() -> None:
+    db = FakeDb()
+    db.create_ai_conversation(
+        {
+            "conversation_id": "aic-1",
+            "workspace_id": "default",
+            "user_id": "other-user",
+            "title": "incident",
+            "agent": "operations-chat",
+            "status": "active",
+            "context": {},
+        }
+    )
+
+    with pytest.raises(Exception) as exc:
+        asyncio.run(delete_conversation("aic-1", current=CurrentUser(), db=db))
+
+    assert getattr(exc.value, "status_code", None) == 404
+    assert len(db.conversations) == 1
+
+
 class TransactionalFakeDb(FakeDb):
     """unit_of_work 를 제공해 쓰기·이벤트 스테이징이 한 트랜잭션으로 묶이는지 기록함."""
 
@@ -450,3 +510,84 @@ def test_create_conversation_wraps_writes_and_event_in_single_transaction() -> N
     assert db.calls == [("create_conversation", True), ("append_message", True)]
     assert events.accepted_in_uow == [True]
     assert db.uow_active is False  # 핸들러 종료 후 트랜잭션 정리 확인
+
+
+class GuardedAiRepository(AiConversationRepository):
+    """실 DB 없이 record_ai_response 의 존재 확인 순서를 검증하는 저장소."""
+
+    def __init__(self, *, exists: bool) -> None:
+        self.exists = exists
+        self.status_calls: list[tuple[str, str, str]] = []
+        self.messages: list[dict[str, Any]] = []
+        self.uow_active = False
+
+    @contextmanager
+    def unit_of_work(self):
+        self.uow_active = True
+        try:
+            yield self
+        finally:
+            self.uow_active = False
+
+    def mark_ai_conversation_status(
+        self, workspace_id: str, conversation_id: str, status: str
+    ) -> bool:
+        assert self.uow_active is True
+        self.status_calls.append((workspace_id, conversation_id, status))
+        return self.exists
+
+    def append_ai_message(self, payload: dict[str, Any]) -> dict[str, Any]:
+        assert self.uow_active is True
+        self.messages.append(payload)
+        return payload
+
+
+def test_ai_repository_skips_late_response_when_conversation_was_deleted() -> None:
+    repository = GuardedAiRepository(exists=False)
+
+    stored = repository.record_ai_response(
+        {
+            "workspace_id": "ws-1",
+            "conversation_id": "aic-deleted",
+            "response_message_id": "aim-deleted-assistant",
+            "content": "late response",
+            "agent": "operations-chat",
+        }
+    )
+
+    assert stored is False
+    assert repository.status_calls == [("ws-1", "aic-deleted", STATUS_COMPLETED)]
+    assert repository.messages == []
+
+
+def test_ai_repository_records_response_only_for_existing_conversation() -> None:
+    repository = GuardedAiRepository(exists=True)
+
+    stored = repository.record_ai_response(
+        {
+            "workspace_id": "ws-1",
+            "conversation_id": "aic-1",
+            "response_message_id": "aim-1-assistant",
+            "content": "stored response",
+            "agent": "operations-chat",
+        }
+    )
+
+    assert stored is True
+    assert repository.status_calls == [("ws-1", "aic-1", STATUS_COMPLETED)]
+    assert repository.messages[0]["message_id"] == "aim-1-assistant"
+
+
+def test_ai_repository_skips_late_failure_when_conversation_was_deleted() -> None:
+    repository = GuardedAiRepository(exists=False)
+
+    stored = repository.record_ai_failure(
+        {
+            "workspace_id": "ws-1",
+            "conversation_id": "aic-deleted",
+        }
+    )
+
+    assert stored is False
+    assert repository.status_calls == [("ws-1", "aic-deleted", STATUS_FAILED)]
+    assert repository.messages == []
