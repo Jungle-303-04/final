@@ -114,7 +114,14 @@ def test_recovery_plan_by_correlation_returns_selected_action_status() -> None:
         assert response.selected_action is not None
         assert response.selected_action.title == "Open Safe PR"
         assert response.candidates[0].action_id == "restart"
-        assert ("can_access", "user-1", "workspace-1", "cluster", "cluster-1", "rca.read") in db.calls
+        assert (
+            "can_access",
+            "user-1",
+            "workspace-1",
+            "cluster",
+            "cluster-1",
+            "rca.read",
+        ) in db.calls
 
     asyncio.run(run())
 

@@ -38,9 +38,7 @@ class FakeGitHubClient:
             {"name": "release/2026-07", "protected": False},
         ]
 
-    async def tree(
-        self, repo_ref: str, branch: str
-    ) -> tuple[list[dict[str, object]], list[str]]:
+    async def tree(self, repo_ref: str, branch: str) -> tuple[list[dict[str, object]], list[str]]:
         assert repo_ref == "owner/service"
         assert branch == "trunk"
         return [
