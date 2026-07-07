@@ -15,12 +15,18 @@ export function RequireSession() {
 }
 export function RequireGuest() {
   const { data, isPending } = useSession();
+  const loc = useLocation();
   if (isPending) return null;
-  if (data?.authenticated) return <Navigate to="/" replace />;
+  if (data?.authenticated) return <Navigate to={safeReturnTo(new URLSearchParams(loc.search).get('returnTo'))} replace />;
   return <Outlet />;
 }
 export function RequireAdmin() {
   const admin = useIsAdmin();
   if (!admin) return <EmptyState icon={<IconLock size={26} />} title="권한이 필요합니다" description="service_admin 역할이 필요한 화면입니다" />;
   return <Outlet />;
+}
+
+function safeReturnTo(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('://')) return '/';
+  return value;
 }
