@@ -16,6 +16,29 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 19:55 KST 체크포인트
+
+- Repo atomic connect 구현 중/검증 예정.
+- 구현:
+  - `POST /applications/connect` 계약을 추가했다.
+  - 프론트 레포 연결 위저드는 서버 검증이 끝난 후보만 `source_type`과 함께 이 엔드포인트로 보낸다.
+  - 백엔드는 다시 manifest validation을 수행하고, 성공 시 repository, application, watch target, deployment binding을 같은 unit-of-work 안에서 등록한다.
+  - metadata/deploy_policy에 `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 저장한다.
+  - 운영 경로 mock/fake/hardcoded production data 추가 없음.
+- 검증 예정:
+  - `.venv/bin/ruff format --check ...` 또는 format 후 check.
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_applications_router.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py`.
+  - `cd frontend && npm run typecheck && npm run lint && npm test && npm run build`.
+- Live 분석:
+  - AWS login 이후 `aws sts get-caller-identity`와 `kubectl --context kubernetes-ops` 접근 성공.
+  - console LB `/`는 200, console LB `/api/healthz`는 502.
+  - api-gateway LB `/healthz`와 `/api/healthz`는 살아있는 순간 200.
+  - `api-gateway` Pod가 `CrashLoopBackOff`이며 Last State `OOMKilled`, exit code 137, restart count 37. 현재 resource limit은 memory `512Mi`.
+- 다음 실행:
+  - repo atomic connect 테스트/커밋/푸시를 먼저 닫는다.
+  - 이어서 `deploy/management/services.yaml`에서 api-gateway memory request/limit을 상향하고 배포 안정화를 확인한다.
+  - API OOM은 증상 완화이고, evidence/result 폭증 및 incident/DLQ 증가 원인 분석은 별도 안정화 커밋으로 진행한다.
+
 ### 2026-07-07 19:42 KST 체크포인트
 
 - Inventory resource detail API 추가.
@@ -29,7 +52,7 @@
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_inventory_domain.py tests/test_platform_foundation_openapi.py tests/test_docs_index.py` → 21 passed.
 - 다음:
   - frontend `useResourceDetail`/DrilldownPanel 연결.
-  - repo/cluster 연결 안정화는 아직 남음: repo source_type persistence/atomic create, cluster registration write-boundary preflight reuse.
+  - cluster 연결 안정화는 아직 남음: registration write-boundary preflight reuse.
 
 ### 2026-07-07 19:24 KST 체크포인트
 
