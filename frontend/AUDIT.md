@@ -19,6 +19,7 @@
 - Phase 2 앱 셸(`features/console/ui.tsx`)은 Tailwind semantic token과 `src/ui` 프리미티브로 이관했다. 셸 내부의 `plural-ui`, `console.css`, inline `style=`, raw color/px 의존은 0건이다.
 - Phase 2 홈 대시보드(`features/console/pages/HomePage.tsx`)는 `src/ui` StatCard/Card/Table/Tabs/Badge/EmptyState 기반으로 이관했다. 홈 화면의 `plural-ui`, `shared/ui`, `shared/motion`, Nivo chart wrapper, inline `style=` 의존은 0건이다.
 - 홈 이관 완료에 따라 `features/console/console.css`는 삭제했다.
+- Phase 2 클러스터 목록(`features/cluster/ClusterListView.tsx`)은 `src/ui` PageHeader/StatCard/Card/Input/Table/Badge/EmptyState 기반으로 이관했다. 목록 본체의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - 아직 전 화면 이관 전이므로 `shared/ui/app.css`, `plural-ui/plural.css`, `shared/theme-bridge.css`는 남아 있다. 화면 이관 단위마다 해당 화면 전용 레거시 CSS를 제거한다.
 
 ## 사용 규칙
@@ -56,6 +57,16 @@
 - `features/console/pages/HomePage.tsx`, `features/console/pages/NotFoundPage.tsx`, `features/console/ui.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, `console.css`, inline `style=`, raw hex/px, legacy `pl-`/`co-` class 0건.
 - Playwright route mocking 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 홈 대시보드를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0.
 - screenshots: `/tmp/k8s-home-desktop.png`, `/tmp/k8s-home-tablet.png`, `/tmp/k8s-home-mobile.png`.
+
+## Phase 2 클러스터 목록 검증 (2026-07-08 05:10 KST)
+
+- `cd frontend && npm run typecheck` passed.
+- `cd frontend && npm run lint` passed.
+- `cd frontend && npm test -- --runInBand` passed, 11 tests.
+- `cd frontend && npm run build` passed.
+- `features/cluster/ClusterListView.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-` class 0건.
+- Playwright route mocking 검수: 인증 세션/알림/클러스터 목록 최소 응답으로 `/clusters`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0, visible rows 4.
+- screenshots: `/tmp/k8s-clusters-list-desktop.png`, `/tmp/k8s-clusters-list-tablet.png`, `/tmp/k8s-clusters-list-mobile.png`.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
