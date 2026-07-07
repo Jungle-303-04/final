@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 17:10 KST (target preflight Kubernetes 연결성 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 17:14 KST (repo manifest validation gate 강화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -9,6 +9,25 @@
 - 실제 토큰/비밀번호/세션 쿠키/API key는 사용자 요청이 있어도 커밋하지 않는다. Git 히스토리에서 완전 삭제가 어렵기 때문에 GitHub Actions secrets, 로컬 env, 승인된 secret store만 사용한다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (17:14 KST) — repo manifest validation gate 강화
+
+- `ec00ea77 feat: target preflight 연결성 확인`은 origin/dev push 완료.
+- 해당 push의 dev workflows도 runner 배정 없이 실패:
+  - CI run `28851671441` → failure.
+  - AWS CD run `28851671409` → failure.
+  - Promote Dev To Main run `28851671384` → failure.
+  - 기존과 같은 runner allocation 계층 문제로 본다.
+- repo 연결 위저드 개선:
+  - `frontend/src/features/resources/ConnectRepoWizard.tsx`
+  - legacy placeholder인 `validation.status === "not_run"`으로는 다음 단계/앱 생성으로 진행하지 못하게 막았다.
+  - 이제 repo 입력 → branch list → manifest 후보 → static/render validation 후 `validation.valid === true`인 경우에만 app/binding 생성 단계로 진행한다.
+  - mock/fake/hardcoded data 없음.
+- 검증:
+  - `python -m pytest -q tests/test_repository_discovery.py tests/test_manifest_render_worker.py` → 28 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `git diff --check` → passed.
 
 ## 최신 업데이트 (17:10 KST) — target preflight Kubernetes 연결성 확인
 

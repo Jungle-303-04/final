@@ -45,7 +45,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const name = normalizedRepoRef.split('/')[1] ?? '';
   const clusters = clustersQ.data ?? [];
   const validation = validationQ.data;
-  const manifestAccepted = Boolean(validation && (validation.valid || validation.status === 'not_run'));
+  const manifestAccepted = Boolean(validation?.valid);
   const repoStepReady = Boolean(probeQ.data?.reachable && selectedBranch && manifestPath && manifestAccepted);
   // 닫을 때 입력 초기화 — 다음에 열면 항상 1단계부터(중간 상태 잔류 방지)
   const reset = () => {
