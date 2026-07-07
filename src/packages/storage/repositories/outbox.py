@@ -9,9 +9,12 @@ from sqlalchemy.engine import Connection
 
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.storage.engine import (
+    DEAD_LETTER_STATUS_OPEN,
     DatabaseConnection,
+    compact_error,
 )
 from packages.storage.schema import (
+    EventDeadLetter,
     OutboxModel,
 )
 
@@ -86,6 +89,35 @@ class OutboxRepository(DatabaseConnection):
         )
         async with self.async_connection() as conn:
             await conn.execute(stmt)
+
+    async def mark_events_dead_lettered(
+        self, events: list[EventEnvelope], consumer: str, error: str
+    ) -> None:
+        """비재시도 outbox 이벤트를 DLQ에 남기고 relay 대상에서 제거한다."""
+        if not events:
+            return
+        outbox_table = OutboxModel.__table__
+        dead_letter_table = EventDeadLetter.__table__
+        compacted_error = compact_error(error)
+        async with self.async_connection() as conn:
+            for evt in events:
+                await conn.execute(
+                    pg_insert(dead_letter_table).values(
+                        original_event_id=evt.event_id,
+                        original_subject=evt.subject,
+                        consumer=consumer,
+                        correlation_id=evt.correlation_id,
+                        attempts=1,
+                        error=compacted_error,
+                        payload=evt.payload,
+                        status=DEAD_LETTER_STATUS_OPEN,
+                    )
+                )
+            await conn.execute(
+                update(outbox_table)
+                .where(outbox_table.c.event_id.in_([evt.event_id for evt in events]))
+                .values(sent_at=func.now(), lease_id=None, leased_until=None)
+            )
 
     def outbox_pending_count(self) -> int:
         table = OutboxModel.__table__
