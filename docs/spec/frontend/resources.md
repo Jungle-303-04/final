@@ -27,9 +27,11 @@ status: synced
 ### `frontend/src/features/resources/CatalogView.tsx :: CatalogView` (default export)
 
 - 라우트: `/catalog`.
-- 데이터: 인라인 `useQuery({ queryKey: ['catalog'], queryFn: get('/catalog/items', {timeoutMs: 8_000}), retry:false, select: d => d.items })`; 설치는 `useMutation(POST /catalog/items/${id}/installs, body {})` — 성공 시 toast ok `'설치를 요청했습니다 — 진행 상황은 워크플로우에 표시됩니다'`, 실패 시 danger `'설치 요청 실패 — <message>'`.
-- 트리: `PageHeader('카탈로그')` → `QueryBoundary` → 항목 0개면 `Card > EmptyState(IconFile, '설치 가능한 항목이 없습니다')`; 항목이 있으면 카드 그리드(`repeat(auto-fill, minmax(260px, 1fr))`) → `Stagger` 로 항목별 `Card(title=name, actions=설치 primary sm 버튼)`: description + category.
-- 설치 버튼은 클릭한 카드만 `loading={install.isPending && install.variables === item_id}` 로 표시하고, 다른 카드 버튼은 같은 mutation 이 pending 인 동안 disabled 처리한다.
+- 데이터: 인라인 `useQuery({ queryKey: ['catalog'], queryFn: get('/catalog/items', {timeoutMs: 8_000}), retry:false, select: d => d.items })`; 설치는 `useMutation(POST /catalog/items/${item_id}/installs)` body `{application_name: slug|name 기반 slug, values:{}}`.
+- 트리: `PageHeader('카탈로그')` → loading이면 6개 Skeleton 카드 그리드 → 오류면 `Card > EmptyState('카탈로그 조회 실패', 다시 시도)` → 항목 0개면 `Card > EmptyState('설치 항목 없음', 새로고침)` → 항목이 있으면 `motion.div(listStagger)` 카드 그리드(`md:grid-cols-2`, `xl:grid-cols-3`)로 렌더한다.
+- 항목 카드: `@/ui Card(title=name, description, actions=설치 요청 primary sm)` → category Badge(데이터베이스/애플리케이션/캐시), default version Badge, status Badge(비활성일 때), 식별자, 설치 이름, metadata tags 최대 4개.
+- 설치 버튼은 클릭한 카드만 `loading={install.isPending && install.variables?.item_id === item_id}` 로 표시하고, 다른 카드 버튼은 같은 mutation 이 pending 인 동안 disabled 처리한다. 성공/실패는 `@/ui` toast로 한국어 사유를 표시한다.
+- `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, legacy `uiStore`, inline style 의존은 없다.
 
 ### `frontend/src/features/resources/RegisterClusterWizard.tsx :: RegisterClusterWizard`
 
