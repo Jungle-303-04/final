@@ -149,7 +149,7 @@ flowchart LR
 | 신규 | 없음 | **backlog-worker**, **rca-feedback-worker**: RCA 개선 backlog·차단/폴백 피드백 루프 |
 | 제거 | Git Cache Worker (repo mirror) | 별도 서비스 없음 — git-pull-worker 단일 파일로 통합 |
 | 제거 | Rollout Observer / PR Status Watcher / Rollback PR Worker | 서비스 목록에 없음 — rollout-worker·scm-worker로 흡수 |
-| 이름 변경 | Alert + Notification Worker (Slack/Email/Webhook) | **alert-worker** (provider: log/webhook) + **mail-worker** (이메일 인증)로 분리. Slack provider는 현재 코드에 없음 |
+| 이름 변경 | Alert + Notification Worker (채팅/이메일/Webhook) | **alert-worker** (provider: log/webhook) + **mail-worker** (이메일 인증)로 분리. 채팅 provider는 현재 코드에 없음 |
 | 이름 변경 | Evidence Builder/Incident Detector/RCA Analyzer/Recovery Planner/Safe PR Agent/Diff Explanation/Rollout Diagnosis/Approval Assistant Worker | evidence / incident / plan / analyze / rca / recovery / select / approval / dispatch / ai-diff / rollout / safe-pr worker로 세분화·개명 |
 | 변경 | PostgreSQL 3개 분리 (Event Runtime / GitOps State / Read·Audit) | **단일 PostgreSQL 17 + PgBouncer** 경유. 테이블 수준 분리 (events, outbox, event_processing, event_dead_letters, 도메인 테이블) |
 | 변경 | Object / Secret Stores | **MinIO**는 management artifact bucket(`deploy/management/storage.yaml`)과 target Loki object store(`deploy/target/minio.yaml`, `deploy/target/loki.yaml`)로 배포된다. Secret은 **SecretVault** port (env / aws-secrets-manager / kubernetes-secret provider, `src/packages/security/vault.py`) + SOPS/age 암호화 (`secrets/*.enc.yaml`) |

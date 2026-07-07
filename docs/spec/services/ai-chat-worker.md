@@ -46,6 +46,7 @@ status: synced
 | `response_message_id(request_message_id)` | `src/services/ai/chat-worker/app.py :: response_message_id` | `f"{request_message_id}-assistant"` |
 | `request_locale(evt)` | `src/services/ai/chat-worker/app.py :: request_locale` | `evt.context["locale"]` → str 또는 None |
 | `request_cluster_id(evt)` | `src/services/ai/chat-worker/app.py :: request_cluster_id` | `evt.context["cluster_id"]` → str 또는 None |
+| `request_resource_context(evt)` | `src/services/ai/chat-worker/app.py :: request_resource_context` | `evt.context`에서 `resource_type`, `kind`, `namespace`, `name`, `uid` 문자열만 trim 후 추출 |
 | `on_ai_message_received(evt, ctx)` | `src/services/ai/chat-worker/app.py :: on_ai_message_received` | 유일한 핸들러 |
 
 모듈 부팅 부수효과: `import tools`(로컬 도구 등록) + `load_domain_tools()`(도메인 도구 등록).
@@ -71,7 +72,7 @@ status: synced
 
 | 이벤트 | 라우팅 키 | body |
 |---|---|---|
-| `AiMessageReceivedBody` | `ai.message.received` | `conversation_id, message_id, content, agent, user_id, workspace_id="default", context: JsonObject?` (context 에 `locale`, `cluster_id` 선택 포함) |
+| `AiMessageReceivedBody` | `ai.message.received` | `conversation_id, message_id, content, agent, user_id, workspace_id="default", context: JsonObject?` (context 에 `locale`, `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid` 선택 포함) |
 
 ### 발행 (Publishes)
 
@@ -82,7 +83,7 @@ status: synced
 
 ## 동작 (Behavior)
 
-1. `locale = request_locale(evt)`.
+1. `locale = request_locale(evt)`, `resource_context = request_resource_context(evt)`.
 2. `history = await ctx.db.list_ai_messages(evt.workspace_id, evt.conversation_id, newest=10)`.
 3. `asyncio.wait_for(engine.respond(...), timeout=20)` 호출. `engine.respond` 인자:
    - `system_prompt = build_system_prompt(evt, locale)` —
@@ -90,7 +91,7 @@ status: synced
      event-driven platform...", ko 번역 있음) + `Agent:`/`Conversation:`/`Workspace:`/
      `Context: {json.dumps(evt.context, sort_keys=True)}` 줄들.
    - `history`, `user_message=evt.content`,
-     `context=ToolContext(db=ctx.db, workspace_id, cluster_id, locale)`.
+     `context=ToolContext(db=ctx.db, workspace_id, cluster_id, resource_type, kind, namespace, name, uid, resource_context, locale)`.
 4. **LLM 호출 상세** (`ConversationEngine` / `LlmGateway`):
    - 프롬프트 = `system_prompt` + 도구 프로토콜 안내(엄격 JSON:
      `{"type": "final", "content": ...}` / `{"type": "tool_call", "tool": ..., "arguments": {...}}`)

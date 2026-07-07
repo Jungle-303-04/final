@@ -67,6 +67,18 @@ test('ai conversation detail adapter unwraps real backend envelope and message m
   ]);
 });
 
+test('ai message payload keeps title out of existing conversation sends', async () => {
+  const { aiMessagePayload } = await vite.ssrLoadModule('/src/features/chat/api.ts');
+
+  const input = { message: '분석해줘', title: '초기 제목', context: { cluster_id: 'cluster-1' } };
+  assert.deepEqual(aiMessagePayload(input), {
+    message: '분석해줘',
+    context: { cluster_id: 'cluster-1' },
+  });
+  assert.deepEqual(aiMessagePayload(input, { includeTitle: true }), input);
+  assert.deepEqual(aiMessagePayload('안녕'), { message: '안녕' });
+});
+
 test('metrics context preset narrows PromQL by real drilldown subject', async () => {
   const { buildContextPreset } = await vite.ssrLoadModule('/src/features/metrics/MetricsView.tsx');
 
@@ -99,7 +111,16 @@ test('cluster drill actions keep real subject context across events metrics and 
   const hrefs = contextActionHrefs('cluster-1', 'pod', 'checkout-abc', 'prod');
   assert.equal(hrefs.events, '/clusters/cluster-1?tab=events&q=checkout-abc');
   assert.equal(hrefs.metrics, '/metrics?cluster=cluster-1&subject=pod&name=checkout-abc&namespace=prod');
-  assert.equal(decodeURIComponent(hrefs.ai), '/ai?prefill=cluster-1 prod/checkout-abc pod 상태 분석');
+  const aiUrl = new URL(hrefs.ai, 'https://console.test');
+  assert.equal(aiUrl.pathname, '/ai');
+  assert.equal(aiUrl.searchParams.get('prefill'), 'cluster-1 prod/checkout-abc pod 상태 분석');
+  assert.deepEqual(JSON.parse(aiUrl.searchParams.get('context')), {
+    cluster_id: 'cluster-1',
+    resource_type: 'pod',
+    kind: 'Pod',
+    namespace: 'prod',
+    name: 'checkout-abc',
+  });
 });
 
 test('resource wizards keep exact real discovery selections', async () => {

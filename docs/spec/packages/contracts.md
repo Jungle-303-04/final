@@ -36,7 +36,7 @@ class AlertProvider(Protocol):
     async def dispatch(self, alert: Any) -> Any: ...
 ```
 
-`alert.requested` 를 채널(Slack/Email/PagerDuty 등)로 전송하는 전략. `alert` 인자는 실제로는 `domains.alert.events.AlertRequestedBody`, 반환은 `AlertDispatchedBody` 임(레이어 규칙상 구조적 시그니처). `alert/__init__.py` 는 `AlertProvider` 만 re-export (`__all__ = ["AlertProvider"]`).
+`alert.requested` 를 채팅/이메일/온콜 채널로 전송하는 전략. `alert` 인자는 실제로는 `domains.alert.events.AlertRequestedBody`, 반환은 `AlertDispatchedBody` 임(레이어 규칙상 구조적 시그니처). `alert/__init__.py` 는 `AlertProvider` 만 re-export (`__all__ = ["AlertProvider"]`).
 
 관련 도메인: [alert](../domains/alert.md).
 

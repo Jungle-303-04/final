@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MAX_AI_MESSAGE_LENGTH, useConversation, useConversations, useCreateConversation, useDeleteConversation, useSendMessage, useSelectAction } from '@/features/chat/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
@@ -11,6 +11,7 @@ import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import type { ChatMessage } from '@/shared/lib/types';
 import { IconFile, IconSend, IconTrash } from '@/shared/ui/icons';
 import { useConsolePath } from '@/features/console/ui';
+import { chatContextFromSearchParams } from '@/features/chat/context';
 
 export default function ChatView() {
   const { conversationId } = useParams();
@@ -23,6 +24,7 @@ export default function ChatView() {
   const send = useSendMessage(conversationId ?? '');
   const remove = useDeleteConversation();
   const prefill = sp.get('prefill') ?? '';
+  const chatContext = useMemo(() => chatContextFromSearchParams(sp), [sp]);
   const [draft, setDraft] = useState(prefill);
   const bottomRef = useRef<HTMLDivElement>(null);
   const conv = convQ.data;
@@ -47,8 +49,9 @@ export default function ChatView() {
       setDraft(text);
       uiStore.getState().toast('danger', `전송 실패 — ${(err as Error).message || '네트워크를 확인해주세요'}`);
     };
-    if (conversationId) send.mutate(text, { onSuccess: clearPrefill, onError: restore });
-    else create.mutate(text, { onSuccess: d => nav(pathFor(`/ai/${d.conversation_id}`)), onError: restore });
+    const payload = { message: text, context: chatContext };
+    if (conversationId) send.mutate(payload, { onSuccess: clearPrefill, onError: restore });
+    else create.mutate(payload, { onSuccess: d => nav(pathFor(`/ai/${d.conversation_id}`)), onError: restore });
   };
 
   const deleteConversation = (id: string) => {

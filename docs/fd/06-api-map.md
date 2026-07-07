@@ -184,7 +184,7 @@ POST /ai/conversations/{conversation_id}/messages {message, agent?, context?}
   → { accepted, conversation_id, message_id, event_id, correlation_id }  🍪
 ```
 
-코드 반영 범위: 목록 조회, 새 대화/메시지 accepted response, 단건 `{conversation, messages}` envelope. 프론트는 단건 응답을 `adaptConversationDetail`로 `Conversation`에 정규화하고, `metadata.tool_trace`를 `tool_calls`로 렌더한다.
+코드 반영 범위: 목록 조회, 새 대화/메시지 accepted response, 단건 `{conversation, messages}` envelope. 프론트는 단건 응답을 `adaptConversationDetail`로 `Conversation`에 정규화하고, `metadata.tool_trace`를 `tool_calls`로 렌더한다. `context?`는 서버에서 `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `locale` 문자열 필드만 유지하고 각 값을 253자로 제한한다.
 
 ### G11. 클러스터 정책 조회 (P2)
 

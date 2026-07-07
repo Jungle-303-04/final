@@ -36,7 +36,7 @@
 
 ## 데이터 흐름 (폴링 기반 — G8 스트리밍은 선택)
 
-1. 전송: `POST /ai/conversations/{id}/messages` → 대화 상태 waiting
+1. 전송: `POST /ai/conversations/{id}/messages` `{message, context?}` → 대화 상태 waiting
 2. 폴링: `GET /ai/conversations/{id}` → `{conversation, messages}` envelope — raw `conversation.status`가 waiting 이면 2s, 아니면 15s
 3. 새 assistant 메시지 도착 → 메시지 `FadeSlideIn` 등장 + 하단 스크롤
 4. 삭제: `DELETE /ai/conversations/{id}` 성공 시 list invalidate/detail cache remove
@@ -69,7 +69,7 @@
 
 ## 컨텍스트 프리필 (타 화면 진입점 — 전부 이 형식)
 
-`/ai?prefill=...&cluster=...` → Composer 에 초안 삽입(자동 전송 안 함).
+`/ai?prefill=...&context=<json>` → Composer 에 초안 삽입(자동 전송 안 함). `context` JSON은 `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `locale` 중 문자열 필드만 담고, 사용자가 전송할 때 POST body에 포함된다.
 진입점: 클러스터 상세 `ContextActions`의 "AI 분석", workflow FAILED "AI 분석".
 
 ## AC
@@ -79,4 +79,4 @@
 - [ ] 폴링 중 중복 메시지 렌더 없음(message_id 키)
 - [ ] 대화 삭제 후 현재 대화 cache 제거와 `/ai` 이동
 - [ ] 16k자 제한(MAX_AI_MESSAGE_LENGTH) 초과 입력 시 전송 전 인라인 경고
-- [ ] 프리필 진입 시 자동 전송되지 않음(사용자 확인 후 전송)
+- [ ] 프리필 진입 시 자동 전송되지 않음(사용자 확인 후 전송), 전송 시 구조화 `context`가 같이 전달됨

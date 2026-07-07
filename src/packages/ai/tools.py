@@ -28,6 +28,12 @@ class ToolContext:
     db: Any
     workspace_id: str
     cluster_id: str | None = None
+    resource_type: str | None = None
+    kind: str | None = None
+    namespace: str | None = None
+    name: str | None = None
+    uid: str | None = None
+    resource_context: dict[str, Any] | None = None
     locale: str | None = None
 
 

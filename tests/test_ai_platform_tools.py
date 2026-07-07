@@ -33,6 +33,47 @@ class FakeDb:
             }
         ]
 
+    async def get_inventory_resource(self, **kwargs: Any) -> dict[str, Any] | None:
+        self.inventory_query = kwargs
+        return {
+            "resource_type": "pod",
+            "kind": "Pod",
+            "namespace": "prod",
+            "name": "checkout-abc",
+            "status": "Running",
+            "health": "healthy",
+            "summary": {"restart_total": 1},
+            "raw": {"must": "not leak"},
+        }
+
+    async def list_related_inventory_resources(self, **kwargs: Any) -> dict[str, list[dict]]:
+        self.related_query = kwargs
+        return {
+            "pods": [
+                {
+                    "resource_type": "pod",
+                    "kind": "Pod",
+                    "namespace": "prod",
+                    "name": "checkout-abc",
+                    "status": "Running",
+                    "raw": {"must": "not leak"},
+                }
+            ]
+        }
+
+    async def list_resource_events(self, **kwargs: Any) -> list[dict]:
+        self.events_query = kwargs
+        return [
+            {
+                "resource_type": "event",
+                "kind": "Event",
+                "namespace": "prod",
+                "name": "pulling",
+                "summary": {"reason": "Pulled"},
+                "raw": {"must": "not leak"},
+            }
+        ]
+
     async def list_ai_messages(
         self, workspace_id: str, conversation_id: str, *, newest: int | None = None
     ) -> list[dict]:
@@ -44,7 +85,16 @@ class FakeDb:
 
 
 def make_context(db: Any = None) -> ToolContext:
-    return ToolContext(db=db or FakeDb(), workspace_id="ws-1", cluster_id=None, locale="ko")
+    return ToolContext(
+        db=db or FakeDb(),
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        resource_type="pod",
+        kind="Pod",
+        namespace="prod",
+        name="checkout-abc",
+        locale="ko",
+    )
 
 
 def execute(name: str, arguments: dict[str, Any] | None = None, db: Any = None) -> Any:
@@ -54,8 +104,10 @@ def execute(name: str, arguments: dict[str, Any] | None = None, db: Any = None) 
 def test_platform_tools_are_discovered_and_registered() -> None:
     assert {
         "get_conversation_summary",
+        "get_inventory_resource_detail",
         "list_command_actions",
         "list_recent_incidents",
+        "list_resource_rca_reports",
         "list_recovery_playbooks",
     } <= set(ai.tool_names())
 
@@ -83,6 +135,51 @@ def test_get_conversation_summary_truncates_and_limits() -> None:
     assert db.messages_query == ("ws-1", "aic-1", 20)  # 상한 clamp
     assert len(result["messages"][0]["content"]) == 300
     assert result["messages"][1]["content"] == "answer"
+    json.dumps(result)
+
+
+def test_get_inventory_resource_detail_reads_real_inventory_methods_without_raw() -> None:
+    db = FakeDb()
+    result = execute("get_inventory_resource_detail", {}, db=db)
+
+    assert db.inventory_query["cluster_id"] == "cluster-1"
+    assert db.inventory_query["resource_type"] == "pod"
+    assert result["found"] is True
+    assert result["resource"]["name"] == "checkout-abc"
+    assert "raw" not in result["resource"]
+    assert "raw" not in result["related"]["pods"][0]
+    assert "raw" not in result["events"][0]
+    json.dumps(result)
+
+
+def test_list_resource_rca_reports_filters_to_context_resource() -> None:
+    class RcaDb(FakeDb):
+        async def list_rca_reports(
+            self, workspace_id: str, *, limit: int = 5
+        ) -> list[dict[str, Any]]:
+            self.rca_query = (workspace_id, limit)
+            return [
+                {
+                    "root_cause": "image_pull_error",
+                    "action": "inspect_secret",
+                    "correlation_id": "corr-match",
+                    "cluster_id": "cluster-1",
+                    "payload": {"incident": {"resource_name": "checkout-abc"}},
+                },
+                {
+                    "root_cause": "node_pressure",
+                    "action": "cordon",
+                    "correlation_id": "corr-other",
+                    "cluster_id": "cluster-1",
+                    "payload": {"incident": {"resource_name": "other-pod"}},
+                },
+            ]
+
+    db = RcaDb()
+    result = execute("list_resource_rca_reports", {"limit": 10}, db=db)
+
+    assert db.rca_query == ("ws-1", 10)
+    assert [row["correlation_id"] for row in result["reports"]] == ["corr-match"]
     json.dumps(result)
 
 

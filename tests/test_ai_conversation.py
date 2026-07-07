@@ -13,6 +13,7 @@ from conftest import load_service, run_handler
 from domains.ai.events import AiMessageReceivedBody
 from domains.ai.router import create_conversation, delete_conversation
 from packages.ai import llm
+from packages.ai.engine import EngineResult
 from packages.ai.llm import (
     AnthropicMessagesAdapter,
     GeminiGenerateContentAdapter,
@@ -56,6 +57,16 @@ class FakeConversationStore:
         self.failures.append(payload)
 
 
+class CaptureEngine:
+    def __init__(self) -> None:
+        self.context = None
+        self.llm = object()
+
+    async def respond(self, **kwargs: Any) -> EngineResult:
+        self.context = kwargs["context"]
+        return EngineResult("context captured", raw_length=0)
+
+
 def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
     worker = load_service("ai/chat-worker")
     scripted = ScriptedLlm(
@@ -88,6 +99,42 @@ def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
     assert "target-cluster-01" in scripted.prompts[0]
     assert "[user] earlier question" in scripted.prompts[0]
     assert store.responses and store.responses[0]["content"] == "restart is allowed"
+
+
+def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
+    worker = load_service("ai/chat-worker")
+    capture = CaptureEngine()
+    worker.engine = capture
+    store = FakeConversationStore()
+
+    outs = run_handler(
+        worker.on_ai_message_received,
+        AiMessageReceivedBody(
+            conversation_id="aic-ctx",
+            message_id="aim-ctx",
+            content="analyze this pod",
+            agent="operations-chat",
+            user_id="user-1",
+            workspace_id="ws-1",
+            context={
+                "cluster_id": "cluster-1",
+                "resource_type": "pod",
+                "kind": "Pod",
+                "namespace": "prod",
+                "name": "checkout-abc",
+                "uid": "pod-uid-1",
+            },
+        ),
+        db=store,
+    )
+
+    assert [out.__subject__ for out in outs] == ["ai.message.responded"]
+    assert capture.context.cluster_id == "cluster-1"
+    assert capture.context.resource_type == "pod"
+    assert capture.context.kind == "Pod"
+    assert capture.context.namespace == "prod"
+    assert capture.context.name == "checkout-abc"
+    assert capture.context.uid == "pod-uid-1"
 
 
 def test_llm_client_defaults_to_openai_and_boots_without_credentials(

@@ -65,15 +65,19 @@ status: synced
 
 ### LLM 도구 — `src/domains/ai/tools.py`
 
-모듈 상수: `DEFAULT_INCIDENT_LIMIT = 5`, `DEFAULT_MESSAGE_LIMIT = 10`, `MAX_ROWS = 20`, `CONTENT_PREVIEW_CHARS = 300`. 내부 `_clamp(value, default)`는 `int(value)`를 `[1, MAX_ROWS]`로 클램프, 변환 실패(`TypeError`/`ValueError`) 시 default 반환.
+모듈 상수: `DEFAULT_INCIDENT_LIMIT = 5`, `DEFAULT_MESSAGE_LIMIT = 10`, `MAX_ROWS = 20`, `CONTENT_PREVIEW_CHARS = 300`, `INVENTORY_PUBLIC_FIELDS = ("inventory_key", "workspace_id", "cluster_id", "resource_type", "api_version", "kind", "namespace", "name", "uid", "status", "health", "labels", "annotations", "summary", "observed_at", "last_seen_at")`. 내부 `_clamp(value, default)`는 `int(value)`를 `[1, MAX_ROWS]`로 클램프, 변환 실패(`TypeError`/`ValueError`) 시 default 반환.
 
 | 도구명 | 함수 | 앵커 |
 |---|---|---|
 | `list_recent_incidents` | `async def list_recent_incidents(context: ToolContext, limit: int = DEFAULT_INCIDENT_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_recent_incidents` |
+| `get_inventory_resource_detail` | `async def get_inventory_resource_detail(context: ToolContext, cluster_id: str = "", resource_type: str = "", kind: str = "", name: str = "", namespace: str = "") -> dict[str, Any]` | `src/domains/ai/tools.py :: get_inventory_resource_detail` |
+| `list_resource_rca_reports` | `async def list_resource_rca_reports(context: ToolContext, limit: int = DEFAULT_INCIDENT_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_resource_rca_reports` |
 | `get_conversation_summary` | `async def get_conversation_summary(context: ToolContext, conversation_id: str, limit: int = DEFAULT_MESSAGE_LIMIT) -> dict[str, Any]` | `src/domains/ai/tools.py :: get_conversation_summary` |
 | `list_command_actions` | `async def list_command_actions(context: ToolContext) -> dict[str, Any]` | `src/domains/ai/tools.py :: list_command_actions` |
 
 - `list_recent_incidents`: `@ai.tool(name="list_recent_incidents", description="Recent RCA reports (root cause, recommended action) for this workspace.", parameters={"limit": {"type": "integer", "description": "max rows (1-20, default 5)"}})`. `context.db.list_rca_reports(context.workspace_id, limit=_clamp(limit, 5))` 호출, 반환 `{"incidents": [{"root_cause", "action", "correlation_id", "created_at"(str)} ...]}`.
+- `get_inventory_resource_detail`: parameters `cluster_id`, `resource_type`, `kind`, `name`, `namespace`(모두 선택, 비면 `ToolContext`의 같은 필드 사용). `cluster_id/resource_type/kind/name`을 모두 해석하지 못하면 `{"found": False, "error": "cluster_id, resource_type, kind and name are required"}`. 있으면 `context.db.get_inventory_resource(...)` 조회 후, 없으면 `{"found": False, "identity": {...}}`; 있으면 `list_related_inventory_resources(...)`, `list_resource_events(...)`를 함께 조회해 `{"found": True, "resource": <INVENTORY_PUBLIC_FIELDS>, "related": {group: [...]}, "events": [...]}` 반환.
+- `list_resource_rca_reports`: `context.db.list_rca_reports(context.workspace_id, limit=_clamp(limit, 5))` 결과를 `ToolContext.cluster_id`/`ToolContext.name`으로 가능한 만큼 필터한다. 반환 `{"reports": [{"root_cause", "action", "correlation_id", "created_at"(str), "cluster_id"} ...]}`.
 - `get_conversation_summary`: parameters에 `conversation_id`(string, required=True)·`limit`(integer). `context.db.list_ai_messages(context.workspace_id, str(conversation_id), newest=_clamp(limit, 10))` 호출, 반환 `{"conversation_id", "messages": [{"role", "content"(300자 절단), "created_at"(str)} ...]}`.
 - `list_command_actions`: parameters 없음. [command 카탈로그](./command.md)의 `registered_command_actions()` 순회, 반환 `{"actions": [{"action", "recovery_aliases"(list), "allowed_namespaces"(list), "requires_approval"(bool)} ...]}`.
 - 모든 도구는 읽기 전용, JSON 직렬화 가능한 dict 반환. DB 접근은 `ToolContext.db`(AsyncDb)로만.
@@ -104,8 +108,13 @@ status: synced
 | `router` | `APIRouter()` | `src/domains/ai/router.py :: router` |
 | `DEFAULT_AGENT` | `"operations-chat"` | `src/domains/ai/router.py :: DEFAULT_AGENT` |
 | `NOT_FOUND` | `"conversation not found"` | `src/domains/ai/router.py :: NOT_FOUND` |
+| `CONTEXT_STRING_FIELDS` | `("cluster_id", "resource_type", "kind", "namespace", "name", "uid", "locale")` | `src/domains/ai/router.py :: CONTEXT_STRING_FIELDS` |
+| `MAX_CONTEXT_VALUE_LENGTH` | `253` | `src/domains/ai/router.py :: MAX_CONTEXT_VALUE_LENGTH` |
 | `new_id` | `def new_id(prefix: str) -> str` — `f"{prefix}-{uuid.uuid4()}"` | `src/domains/ai/router.py :: new_id` |
 | `title_for` | `def title_for(payload: AiConversationCreateRequest) -> str` — `payload.title` 있으면 그대로, 없으면 message 공백 정규화(`" ".join(split())`) 후 80자 절단, 빈 문자열이면 `"AI conversation"` | `src/domains/ai/router.py :: title_for` |
+| `normalize_context` | `def normalize_context(raw: dict[str, Any] \| None) -> dict[str, str]` | `src/domains/ai/router.py :: normalize_context` |
+
+`normalize_context()`는 `CONTEXT_STRING_FIELDS`만 허용하고, 각 값은 `str(value).strip()` 후 비어 있지 않을 때만 `MAX_CONTEXT_VALUE_LENGTH`로 잘라 저장한다. `None`/빈 dict는 `{}`.
 
 #### 엔드포인트
 
@@ -167,6 +176,8 @@ status: synced
 | workspace_id | str | `DEFAULT_WORKSPACE_ID` |
 | context | JsonObject \| None | None |
 
+`context`는 라우터가 `normalize_context()`로 보정한 값이다. 현재 유지되는 필드는 `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `locale`뿐이다.
+
 ### 정의만 (chat-worker가 발행하는 계약)
 
 **`ai.message.responded`** (`EventSubject.AI_MESSAGE_RESPONDED`) — `src/domains/ai/events.py :: AiMessageRespondedBody`
@@ -197,15 +208,17 @@ status: synced
 ### 대화 생성 (`POST /ai/conversations`)
 
 1. `workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)`, `agent = payload.agent or DEFAULT_AGENT`.
-2. `conversation_id = new_id("aic")`, `message_id = new_id("aim")`, `title = title_for(payload)`.
-3. `unit_of_work_or_null(db)` 단일 트랜잭션 안에서: (a) `db.create_ai_conversation(status=STATUS_WAITING, context=payload.context)`, (b) `db.append_ai_message(role=ROLE_USER, metadata={"source": "http"})`, (c) `events.accept_body(AiMessageReceivedBody(...), actor=Actor(current.user_id, tuple(current.roles)))` — 부분 실패 시 고아 대화/이벤트 없는 메시지 방지.
-4. `AiConversationAcceptedResponse(accepted=True, conversation_id, message_id, event_id=accepted.event.event_id, correlation_id=accepted.event.correlation_id)` 반환.
+2. `request_context = normalize_context(payload.context)`.
+3. `conversation_id = new_id("aic")`, `message_id = new_id("aim")`, `title = title_for(payload)`.
+4. `unit_of_work_or_null(db)` 단일 트랜잭션 안에서: (a) `db.create_ai_conversation(status=STATUS_WAITING, context=request_context)`, (b) `db.append_ai_message(role=ROLE_USER, metadata={"source": "http"})`, (c) `events.accept_body(AiMessageReceivedBody(..., context=request_context), actor=Actor(current.user_id, tuple(current.roles)))` — 부분 실패 시 고아 대화/이벤트 없는 메시지 방지.
+5. `AiConversationAcceptedResponse(accepted=True, conversation_id, message_id, event_id=accepted.event.event_id, correlation_id=accepted.event.correlation_id)` 반환.
 
 ### 메시지 추가 (`POST /ai/conversations/{conversation_id}/messages`)
 
 1. `db.get_ai_conversation(workspace_id, conversation_id)` — None이면 404 `"conversation not found"`.
 2. `agent = payload.agent or str(conversation["agent"])`, `message_id = new_id("aim")`.
-3. 단일 트랜잭션(`unit_of_work_or_null`) 안에서: 메시지 append(user) → `mark_ai_conversation_status(..., STATUS_WAITING)` → `AiMessageReceivedBody` 발행. 이벤트 `context = payload.context or conversation.get("context") or {}`.
+3. `request_context = normalize_context(payload.context or conversation.get("context") or {})`.
+4. 단일 트랜잭션(`unit_of_work_or_null`) 안에서: 메시지 append(user) → `mark_ai_conversation_status(..., STATUS_WAITING)` → `AiMessageReceivedBody(..., context=request_context)` 발행.
 
 ### 대화 삭제 (`DELETE /ai/conversations/{conversation_id}`)
 
@@ -231,6 +244,7 @@ status: synced
 - 존재하지 않는 대화 접근 → HTTP 404 `"conversation not found"`.
 - `messages.text` 미등록 키 → `KeyError` (fail-fast).
 - 도구 limit는 항상 1–20으로 클램프.
+- 대화 context 는 allowlist field만 저장/이벤트 발행한다. 리소스 상세·이벤트·RCA 내용은 conversation row에 복사하지 않고 도구 실행 시점의 실제 inventory/RCA read model에서 다시 조회한다.
 
 ## 설정 (Settings)
 

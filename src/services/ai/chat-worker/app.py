@@ -51,12 +51,23 @@ def request_cluster_id(evt: AiMessageReceivedBody) -> str | None:
     return str(cluster_id) if cluster_id else None
 
 
+def request_resource_context(evt: AiMessageReceivedBody) -> dict[str, str]:
+    context = evt.context or {}
+    keys = ("resource_type", "kind", "namespace", "name", "uid")
+    return {
+        key: str(context[key]).strip()
+        for key in keys
+        if context.get(key) is not None and str(context[key]).strip()
+    }
+
+
 @app.on(AiMessageReceivedBody)
 async def on_ai_message_received(
     evt: AiMessageReceivedBody,
     ctx: EventContext[AiConversationStore],
 ) -> AsyncIterator[EventBody]:
     locale = request_locale(evt)
+    resource_context = request_resource_context(evt)
     try:
         history = await ctx.db.list_ai_messages(
             evt.workspace_id, evt.conversation_id, newest=HISTORY_LIMIT
@@ -70,6 +81,12 @@ async def on_ai_message_received(
                     db=ctx.db,
                     workspace_id=evt.workspace_id,
                     cluster_id=request_cluster_id(evt),
+                    resource_type=resource_context.get("resource_type"),
+                    kind=resource_context.get("kind"),
+                    namespace=resource_context.get("namespace"),
+                    name=resource_context.get("name"),
+                    uid=resource_context.get("uid"),
+                    resource_context=resource_context,
                     locale=locale,
                 ),
             ),

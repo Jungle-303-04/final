@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 22:08 KST (cluster registration URL ownership live)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 22:59 KST (AI entity context wiring/docs sync)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -11,6 +11,30 @@
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
 - 현재 Git 커밋 identity는 `woonyong <woonyong.kr@gmail.com>` 이어야 한다. 오래된 하단 메모의 `woonyong.dev@gmail.com`은 사용하지 않는다.
+
+## 체크포인트 (현재) — AI 대화 엔티티 컨텍스트 연결
+
+- 구현:
+  - 클러스터/노드/서비스/워크로드/팟 `AI 분석` 링크가 이제 `prefill` 문자열만 넘기지 않는다. `{cluster_id, resource_type, kind, namespace, name, uid}` 를 JSON `context` query로 함께 보낸다.
+  - `ChatView`는 `/ai?context=...` 또는 개별 query(`cluster_id`, `subject/resource_type`, `kind`, `namespace`, `name`, `uid`, `locale`)를 `AiChatContext`로 보정하고, 새 대화/기존 대화 메시지 모두 실제 `/ai/*` API body의 `context`에 포함한다.
+  - AI 라우터는 context allowlist(`cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `uid`, `locale`)만 253자 이내로 정규화해 저장/이벤트 발행한다. 임의 nested payload를 conversation row에 복사하지 않는다.
+  - chat-worker는 이벤트 context를 `ToolContext`의 `cluster_id/resource_type/kind/namespace/name/uid/resource_context`로 승격한다.
+  - AI 도구 2개를 추가했다:
+    - `get_inventory_resource_detail`: 실제 `inventory/resource-detail` 계열 repository 메서드(`get_inventory_resource`, `list_related_inventory_resources`, `list_resource_events`)로 리소스 세부/관련 팟/이벤트를 읽는다. `raw` 전체 객체는 반환하지 않고 public field만 반환한다.
+    - `list_resource_rca_reports`: 실제 RCA report read model을 읽고 가능한 경우 현재 리소스 context로 필터한다.
+  - telemetry/PromQL 조회 도구는 이번 커밋에 넣지 않았다. 이유: 메트릭은 브라우저 local state나 합성값으로 만들 수 없고, 기존 command/query 경로로 실제 Prometheus 실행 결과를 받아야 하므로 별도 의미 단위에서 저장형 query/widget API와 함께 연결한다.
+  - 운영 경로에 mock/fake/hardcoded production data 추가 없음.
+- 검증:
+  - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q` → 17 passed.
+  - `uv run pytest tests/test_ai_conversation.py tests/test_ai_platform_tools.py tests/test_ai_chat_hardening.py tests/test_ai_engine.py tests/test_ai_tool_registry.py -q` → 35 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm test` → 8 passed.
+  - `make manifest-check` → passed.
+  - `make check` → 705 passed, 3 skipped.
+- 다음 실행:
+  1. backend image는 `api-gateway`와 `ai-chat-worker`에 배포한다. frontend image는 console deployment에 배포한다.
+  2. live smoke는 `/`, `/console/`, `/api/healthz`, 로그인 세션의 AI context create/send 수락 여부까지 확인한다.
+  3. 다음 의미 단위는 저장형 query/widget API + PromQL 실제 실행 결과를 AI/드릴다운/위젯에 공통으로 연결하는 작업이다.
 
 ## 체크포인트 (22:08 KST) — 클러스터 등록 URL 소유권 정리 + live 배포
 
@@ -24,7 +48,8 @@
   - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/target/router.py src/packages/contracts/gateway/requests.py tests/test_target_registration.py tests/test_schemas.py` → passed.
   - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_target_registration.py tests/test_schemas.py tests/test_provider_registry.py tests/test_docs_index.py` → 59 passed.
   - `cd frontend && npm run typecheck` → passed.
-  - `cd frontend && npm test -- --runInBand` → 8 passed.
+  - `cd frontend && npm test -- --runInBand` → 9 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
   - `cd frontend && npm run build` → passed. 기존 large chunk warning만 있음.
 - 배포:
   - commit/push: `271d8213 fix: 클러스터 등록 URL / 백엔드 공개 주소 / 사전 점검` → `origin/dev`.
