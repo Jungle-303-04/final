@@ -16,6 +16,8 @@
 - `/dev/ui`는 개발 환경에서만 등록되는 검수 라우트다. production build output에 `UiShowcase` chunk가 생성되지 않는 것을 확인했다.
 - Phase 2 첫 화면 묶음(`/login`, `/signup`, `/pending`, `/verify-email`)은 `src/ui` 프리미티브로 이관했다. 인증 화면 내부의 `@/shared/ui`, `@/shared/motion`, `plural-ui` import와 inline `style=` 사용은 0건이다.
 - 인증 뮤테이션은 pending 버튼 상태와 성공/실패 토스트를 제공한다. 가입 성공, 검증 메일 재전송 성공, 로그인 승인 대기/실패 사유도 사용자에게 명시한다.
+- Phase 2 앱 셸(`features/console/ui.tsx`)은 Tailwind semantic token과 `src/ui` 프리미티브로 이관했다. 셸 내부의 `plural-ui`, `console.css`, inline `style=`, raw color/px 의존은 0건이다.
+- `features/console/console.css`에서는 셸 전용 selector를 삭제했고, 아직 미이관인 홈 대시보드 selector만 임시로 남겼다. 홈 이관 완료 시 이 파일의 남은 selector도 제거한다.
 - 아직 전 화면 이관 전이므로 `shared/ui/app.css`, `plural-ui/plural.css`, `shared/theme-bridge.css`는 남아 있다. 화면 이관 단위마다 해당 화면 전용 레거시 CSS를 제거한다.
 
 ## 사용 규칙
@@ -34,6 +36,15 @@
 - Playwright 로컬 검수: `/login`, `/signup`, `/pending?email=operator@example.com`, `/verify-email`, `/verify-email?verified=1`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0.
 - screenshots: `/tmp/k8s-auth-login-desktop.png`, `/tmp/k8s-auth-signup-mobile.png`, `/tmp/k8s-auth-verify-mobile.png` 등 `/tmp/k8s-auth-<route>-<viewport>.png`.
 - 로컬 dev proxy의 `GET /api/auth/session` 500은 화면 렌더 오류가 아니라 로컬 백엔드 세션 확인 응답이다. 배포 smoke에서는 public API health를 별도 확인한다.
+
+## Phase 2 앱 셸 검증 (2026-07-08 04:40 KST)
+
+- `cd frontend && npm run typecheck` passed.
+- `cd frontend && npm run lint` passed.
+- `cd frontend && npm run build` passed. 기존 large chunk warning만 있음.
+- `features/console/ui.tsx` grep: `plural-ui`, `console.css`, inline `style=`, raw hex/px, legacy `pl-`/`co-` class 0건.
+- Playwright route mocking 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 앱 셸을 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0.
+- screenshots: `/tmp/k8s-shell-desktop.png`, `/tmp/k8s-shell-tablet.png`, `/tmp/k8s-shell-mobile.png`.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
