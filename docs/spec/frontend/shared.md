@@ -230,7 +230,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 | `heatColor` | `frontend/src/shared/ui/charts.tsx :: heatColor` | `(score: number) => string` — 0(위험)~1(건강)을 `color-mix(in oklab, …)` 로 `--heat-bad → --heat-mid → --heat-good` 보간(0.5 기준 2구간) |
 | `TreemapChart` | `frontend/src/shared/ui/charts.tsx :: TreemapChart` | `{ nodes: HeatNode[]; onTileClick?: (id: string) => void }` — `ResponsiveTreeMap`, `leavesOnly`, 타일색 `heatColor(score)`, 공통 tooltip style(`surface-2`+border+shadow), `useReducedMotion()` 이 true 면 `animate=false`, 컨테이너 `data-testid="treemap"` minHeight 300 |
 | `Series` | `frontend/src/shared/ui/charts.tsx :: Series` | `{ id: string; data: { x: number\|string; y: number }[] }` |
-| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — `ResponsiveLine`, point scale, 색 `[--info, --ok, --warn]`, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
+| `TimeSeriesChart` | `frontend/src/shared/ui/charts.tsx :: TimeSeriesChart` | `{ series: Series[]; height?: number }` (기본 220) — 빈 `data` 시리즈는 제외하고, 표시 가능한 포인트가 없으면 고정 높이 empty state 를 렌더한다. 데이터가 있으면 `ResponsiveLine`, point scale, 색 `[--info, --ok, --warn]`, `useReducedMotion()` 이 true 면 `animate=false`, `enableSlices="x"` + `crosshairType="x"` + 공통 tooltip style |
 
 ## 모션 (`motion/index.tsx`)
 
