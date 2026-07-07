@@ -1,43 +1,170 @@
 // 레포 연결 위저드 — application(+watch target/binding) 생성 (docs/fd/views/resources)
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCreateApplication } from '@/features/repo/api';
+import {
+  useCreateApplication,
+  useRepositoryBranches,
+  useRepositoryManifestCandidates,
+  useRepositoryManifestValidation,
+  useRepositoryProbe,
+} from '@/features/repo/api';
 import { useClusters } from '@/features/cluster/api';
 import { Button, Field, KeyValue, Modal, Skeleton, Stepper } from '@/shared/ui';
 import { uiStore } from '@/shared/lib/ui-store';
 
 const STEPS = ['레포', '배포 대상', '확인'];
+const PROBEABLE_REPO = /^([\w.-]+\/[\w.-]+|https?:\/\/[^/\s]+\/[^/\s]+\/[^/\s]+|git@[^:\s]+:[^/\s]+\/[^/\s]+(?:\.git)?)$/;
 
 export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [step, setStep] = useState(0);
   const [repoRef, setRepoRef] = useState('');
-  const [branch, setBranch] = useState('main');
-  const [manifestPath, setManifestPath] = useState('deploy.yaml');
+  const [branch, setBranch] = useState('');
+  const [manifestPath, setManifestPath] = useState('');
   const [clusterId, setClusterId] = useState('');
   const clustersQ = useClusters();
   const create = useCreateApplication();
   const nav = useNavigate();
-  const refOk = /^[\w.-]+\/[\w.-]+$/.test(repoRef);
-  const name = repoRef.split('/')[1] ?? '';
+  const trimmedRepoRef = repoRef.trim();
+  const refOk = PROBEABLE_REPO.test(trimmedRepoRef);
+  const probeQ = useRepositoryProbe(trimmedRepoRef, open && refOk);
+  const normalizedRepoRef = probeQ.data?.normalized_repo_ref || '';
+  const branchesQ = useRepositoryBranches(normalizedRepoRef, open && Boolean(probeQ.data?.reachable && normalizedRepoRef));
+  const selectedBranch = branch || branchesQ.data?.default_branch || probeQ.data?.default_branch || '';
+  const manifestsQ = useRepositoryManifestCandidates(normalizedRepoRef, selectedBranch, open && Boolean(normalizedRepoRef && selectedBranch && probeQ.data?.reachable));
+  const candidates = useMemo(() => manifestsQ.data?.candidates ?? [], [manifestsQ.data?.candidates]);
+  const selectedCandidate = candidates.find(c => c.path === manifestPath);
+  const validationQ = useRepositoryManifestValidation(
+    normalizedRepoRef,
+    selectedBranch,
+    manifestPath,
+    selectedCandidate?.source_type ?? '',
+    open && Boolean(normalizedRepoRef && selectedBranch && manifestPath && selectedCandidate),
+  );
+  const name = normalizedRepoRef.split('/')[1] ?? '';
   const clusters = clustersQ.data ?? [];
+  const validation = validationQ.data;
+  const manifestAccepted = Boolean(validation && (validation.valid || validation.status === 'not_run'));
+  const repoStepReady = Boolean(probeQ.data?.reachable && selectedBranch && manifestPath && manifestAccepted);
   // 닫을 때 입력 초기화 — 다음에 열면 항상 1단계부터(중간 상태 잔류 방지)
-  const reset = () => { setStep(0); setRepoRef(''); setBranch('main'); setManifestPath('deploy.yaml'); setClusterId(''); create.reset(); onClose(); };
+  const reset = () => {
+    setStep(0);
+    setRepoRef('');
+    setBranch('');
+    setManifestPath('');
+    setClusterId('');
+    create.reset();
+    onClose();
+  };
+
+  useEffect(() => {
+    setBranch('');
+    setManifestPath('');
+  }, [trimmedRepoRef]);
+
+  useEffect(() => {
+    if (!open || branch) return;
+    const defaultBranch = branchesQ.data?.branches.find(item => item.default)?.name;
+    const firstBranch = branchesQ.data?.branches[0]?.name;
+    const next = defaultBranch || branchesQ.data?.default_branch || probeQ.data?.default_branch || firstBranch || '';
+    if (next) setBranch(next);
+  }, [branch, branchesQ.data, open, probeQ.data]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (candidates.length === 0) {
+      if (manifestPath) setManifestPath('');
+      return;
+    }
+    if (!candidates.some(candidate => candidate.path === manifestPath)) {
+      setManifestPath(candidates[0].path);
+    }
+  }, [candidates, manifestPath, open]);
 
   return (
     <Modal open={open} title="레포 연결" onClose={reset} size="lg">
       <Stepper steps={STEPS} current={step} />
       {step === 0 && (
         <>
-          <Field label="repo_ref (owner/name)" error={repoRef && !refOk ? 'owner/name 형식이어야 합니다' : undefined}>
+          <Field label="repo_ref" error={repoRef && !refOk ? 'owner/name 또는 GitHub URL 형식이어야 합니다' : undefined}>
             <input className="input" value={repoRef} onChange={e => setRepoRef(e.target.value)} placeholder="Jungle-303-04/final" />
           </Field>
-          <Field label="브랜치"><input className="input" value={branch} onChange={e => setBranch(e.target.value)} /></Field>
-          <Field label="manifest 경로"><input className="input" value={manifestPath} onChange={e => setManifestPath(e.target.value)} placeholder="deploy.yaml · k8s/ · kustomization.yaml" /></Field>
-          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', marginTop: -6 }}>
-            단일 YAML(문서 여러 개 <code>---</code> 구분 지원), 디렉터리(하위 .yaml/.yml/.json 전부),
-            <code>kustomization.yaml</code>, Helm <code>Chart.yaml</code> 경로를 모두 지원합니다.
-          </p>
-          <div style={{ textAlign: 'right' }}><Button variant="primary" disabled={!refOk} onClick={() => { setClusterId(clusters[0]?.cluster_id ?? ''); setStep(1); }}>다음</Button></div>
+          {probeQ.isPending && <Skeleton lines={1} />}
+          {probeQ.data?.reachable && (
+            <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--ok)', margin: '-4px 0 8px' }}>
+              {probeQ.data.normalized_repo_ref} · default {probeQ.data.default_branch ?? 'main'}
+            </p>
+          )}
+          {probeQ.data && !probeQ.data.reachable && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              확인 실패 — {probeQ.data.errors[0] ?? '레포에 접근할 수 없습니다'}
+            </p>
+          )}
+          {probeQ.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              확인 실패 — {(probeQ.error as Error).message}
+            </p>
+          )}
+          <Field label="브랜치">
+            {branchesQ.isPending ? <Skeleton lines={1} /> : (
+              <select className="input" value={selectedBranch} disabled={!probeQ.data?.reachable || (branchesQ.data?.branches ?? []).length === 0}
+                onChange={e => { setBranch(e.target.value); setManifestPath(''); }}>
+                {(branchesQ.data?.branches ?? []).map(item => (
+                  <option key={item.name} value={item.name}>{item.name}{item.protected ? ' · protected' : ''}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+          {branchesQ.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              브랜치 조회 실패 — {(branchesQ.error as Error).message}
+            </p>
+          )}
+          <Field label="manifest">
+            {manifestsQ.isPending ? <Skeleton lines={1} /> : (
+              <select className="input" value={manifestPath} disabled={candidates.length === 0} onChange={e => setManifestPath(e.target.value)}>
+                {candidates.map(candidate => (
+                  <option key={`${candidate.source_type}:${candidate.path}`} value={candidate.path}>{candidate.display_name}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+          {manifestsQ.data?.warnings.map(warning => (
+            <p key={warning} style={{ fontSize: 'var(--fs-xs)', color: 'var(--warn)', margin: '-2px 0 8px' }}>{warning}</p>
+          ))}
+          {manifestsQ.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              manifest 조회 실패 — {(manifestsQ.error as Error).message}
+            </p>
+          )}
+          {validationQ.isPending && <Skeleton lines={2} />}
+          {validation && (
+            <div style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+              <KeyValue pairs={[
+                ['검증', validation.status === 'not_run' ? 'render 대기' : validation.valid ? '통과' : '확인 필요'],
+                ['리소스', `${validation.resource_count}`],
+                ['방식', validation.validation_mode],
+              ]} />
+              {validation.resources.length > 0 && (
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-2)', margin: '8px 0 0' }}>
+                  {validation.resources.slice(0, 4).map(r => `${r.kind}/${r.name}`).join(', ')}
+                  {validation.resources.length > 4 ? ` 외 ${validation.resources.length - 4}개` : ''}
+                </p>
+              )}
+              {[...validation.warnings, ...validation.errors].slice(0, 3).map(message => (
+                <p key={message} style={{ fontSize: 'var(--fs-xs)', color: validation.errors.includes(message) ? 'var(--danger)' : 'var(--warn)', margin: '6px 0 0' }}>
+                  {message}
+                </p>
+              ))}
+            </div>
+          )}
+          {validationQ.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)' }} role="alert">
+              manifest 검증 실패 — {(validationQ.error as Error).message}
+            </p>
+          )}
+          <div style={{ textAlign: 'right' }}>
+            <Button variant="primary" disabled={!repoStepReady} onClick={() => { setClusterId(clusters[0]?.cluster_id ?? ''); setStep(1); }}>다음</Button>
+          </div>
         </>
       )}
       {step === 1 && (
@@ -64,12 +191,12 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
       )}
       {step === 2 && (
         <>
-          <KeyValue pairs={[['앱 이름', name], ['레포', `${repoRef}@${branch}`], ['manifest', manifestPath], ['클러스터', clusterId]]} />
+          <KeyValue pairs={[['앱 이름', name], ['레포', `${normalizedRepoRef}@${selectedBranch}`], ['manifest', manifestPath], ['클러스터', clusterId]]} />
           <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)' }}>등록 후 webhook/poller 가 첫 커밋을 감지하면 run 이 생성됩니다.</p>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
             <Button onClick={() => setStep(1)}>이전</Button>
             <Button variant="primary" loading={create.isPending}
-              onClick={() => create.mutate({ name, repo_ref: repoRef, branch, manifest_path: manifestPath, cluster_id: clusterId },
+              onClick={() => create.mutate({ name, repo_ref: normalizedRepoRef, branch: selectedBranch, manifest_path: manifestPath, cluster_id: clusterId },
                 {
                   onSuccess: d => {
                     uiStore.getState().toast('ok', `${name} 연결 완료 — 첫 커밋이 감지되면 run 이 생성됩니다`);

@@ -1,6 +1,42 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 오후 (품질 반복 패스, 커밋 17ac76e1 기준)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 14:45 KST (안정화/동적 등록/recovery 상태 통합 패스)
+
+## 최신 업데이트 (14:45 KST) — 안정화 통합 패스
+
+- **핵심 안정화 구현 완료(로컬 검증 완료, 배포 전)**:
+  - 정상 Kubernetes snapshot 이 10초마다 인시던트로 승격되던 구조를 차단. `IncidentDetector.has_signal()` 이 명시 symptom/유도 symptom/firing Alertmanager 만 incident-worthy 로 본다.
+  - `rca_timeline` open count/list 는 logical incident key 로 dedupe 하도록 보강. 과거 row 가 많아도 같은 리소스/증상은 UI에서 하나로 집계된다.
+  - `command-janitor` 가 원래 correlation_id 를 보존하도록 수정.
+  - 세션 기본 TTL 2시간(`SESSION_TTL_SECONDS=7200`) + `POST /auth/session/refresh` + 프론트 user interaction 기반 5분 throttle sliding refresh 추가.
+- **recovery plan 상태 노출 완료**:
+  - 신규 `GET /rca/recovery-plans/by-correlation/{correlation_id}`.
+  - 응답은 `selection_requested/selected`, `selected_action_id`, `selected_action`, 후보 요약만 노출(draft params/secret 미노출).
+  - 인시던트 상세의 "복구 계획" 패널에서 추천/선택 액션과 승인 필요 여부 표시.
+- **레포/클러스터 등록 동적화 완료**:
+  - 레포: probe → branch select → manifest candidate select → static validation/resource count → app/binding 생성.
+  - 클러스터: `GET /providers/cluster-discovery`, `POST /targets/preflight`, env-derived import candidates, duplicate/provider/kube-context/agent-image 사전 점검.
+  - Plural/external-console 후보 discovery 는 현재 env-derived only. 외부 콘솔 API 호출은 아직 하지 않음.
+- **인증 UX 보정**:
+  - 가입/검증/로그인 흐름은 실제 password auth 기반으로 동작. 검증 메일 재전송 프론트가 백엔드 계약(email+password)에 맞도록 수정.
+  - 메일 워커는 기본 SMTP fail-closed. 운영에서 실제 가입 메일을 쓰려면 `SMTP_HOST`/`SMTP_FROM` 등 확인 필요. `MAIL_DELIVERY_MODE=log` 는 데모/개발용.
+- **프론트 폴리싱 완료**:
+  - 모바일 overflow, drawer/backdrop z-index, long breadcrumb/code/badge/action wrap 정리.
+  - authenticated route QA는 mock API로 수행됨. 실 로그인 E2E는 배포 후 `.env.local-test`의 `AUTH_EMAIL/AUTH_PASSWORD`로 재확인할 것.
+- **검증 완료**:
+  - `.venv/bin/python -m pytest -q` → 669 passed, 3 skipped.
+  - `npm run build` → 통과(기존 Vite large chunk warning만).
+  - `npm run typecheck`, `npm run lint`, `ruff check`, `git diff --check` → 통과.
+  - 라이브 현재: `https://k8s.woonyong.org/` 200, `/api/healthz` ok, management 38 deployment Ready.
+- **라이브 DB 관찰(배포 전)**:
+  - `rca_timeline`: 11,965 rows, 대부분 `rca.followup.required`(10,590) / `approval.recommended`(1,256). 최근까지 증가 중이므로 이번 코드 배포 후 증가 멈춤 여부 확인 필수.
+  - `event_dead_letters`: open 1,895. 원인 대부분 과거 `rca-fallback-worker`의 `EvidenceBundle: unexpected field(s): missing_evidence_checks`(1,891건, 2026-07-06 09~11 UTC) + 디스크 full 흔적 3건.
+  - 전체 DB 초기화는 하지 말 것. 배포 후 새 증가가 멈춘 것을 확인한 뒤, 위 과거 open DLQ만 `status='replayed'`, `replay_event_id='archived-20260707-stale-dlq'`, `replayed_at=now()`로 아카이브하는 부분 정리를 권장.
+- **남은 즉시 작업**:
+  1. 이 변경 커밋/푸시 → dev CI → Promote Dev To Main → AWS CD 확인.
+  2. 배포 후 `rca_timeline`/`event_dead_letters` 증가율 5~10분 관찰.
+  3. 증가 멈추면 과거 DLQ 아카이브 + 필요 시 old followup timeline closed/archive 정책 적용.
+  4. 실 로그인 E2E: login/signup/verify-resend/session-refresh/repo wizard/cluster wizard/incident recovery panel 확인.
 
 ## 품질 반복 패스 (2026-07-07 오후) — 진행 로그
 
@@ -81,10 +117,7 @@
 ### 다음 백로그 (우선순위) — 반복 1~7 이후 잔여
 
 1. ~~인터랙션 정밀 감사~~ / ~~데드 파일·익스포트 스윕~~ / ~~라이브 스팟체크~~ — **완료** (frontend/AUDIT.md 섹션 I).
-2. **recovery plan 상태 노출**(지시 3의 잔여): `recovery_plans` 테이블(status: selection_requested/selected,
-   selected_action_id)이 correlation 별로 있으나 조회 API 없음(select 만 존재). 인시던트 상세의 "복구 조치" 그룹에
-   붙이려면 (a) `GET /rca-reports` 에 join 하거나 (b) timeline projection 에 recovery 상태 반영 필요 — projection
-   워커 수정이라 최소 확장 범위 밖으로 판단, 범위 합의 후 진행 권장.
+2. ~~recovery plan 상태 노출~~ — **완료**. `GET /rca/recovery-plans/by-correlation/{correlation_id}` + 인시던트 상세 "복구 계획" 패널.
 3. 로그인 후 실브라우저 E2E 스팟체크(등록 위저드→연결, 승인 grant, 인시던트 상세 심화 필드 실데이터 렌더) —
    자격증명 필요(이 세션엔 없음).
 4. OpenAI 크레딧 충전 후 chat/fallback LLM 라이브 검증(기존 백로그 승계).

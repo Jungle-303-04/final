@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -19,6 +20,21 @@ class ProviderStatus(StrEnum):
 
 
 PROVIDER_DISABLED_ENV = "KUBEHEAL_DISABLED_PROVIDERS"
+EXISTING_K8S_PROVIDER = "existing-k8s"
+PLURAL_PROVIDER = "plural"
+EXTERNAL_CONSOLE_PROVIDER = "external-console"
+MANUAL_MANIFEST_DEPLOY_PROVIDER = "manual-manifest"
+KUBE_CONTEXT_DEPLOY_PROVIDER = "kube-context"
+KUBE_CONTEXT_ALLOWLIST_ENV = "KUBE_CONTEXT_ALLOWLIST"
+CLUSTER_CONTEXTS_ENV = "CLUSTER_CONTEXTS"
+MGMT_CONTEXT_ENV = "MGMT_CONTEXT"
+TARGET_CONTEXT_ENV = "TARGET_CONTEXT"
+PLURAL_CLUSTER_HANDLES_ENV = "PLURAL_CLUSTER_HANDLES"
+PLURAL_CONSOLE_URL_ENV = "PLURAL_CONSOLE_URL"
+PLURAL_CLOUD_INSTANCES_ENV = "PLURAL_CLOUD_INSTANCES"
+EXTERNAL_CLUSTER_HANDLES_ENV = "EXTERNAL_CLUSTER_HANDLES"
+EXTERNAL_CONSOLE_URL_ENV = "EXTERNAL_CONSOLE_URL"
+EXTERNAL_CONSOLE_INSTANCES_ENV = "EXTERNAL_CONSOLE_INSTANCES"
 
 
 @dataclass(frozen=True)
@@ -163,12 +179,42 @@ CATALOG: tuple[ProviderDefinition, ...] = (
     ),
     ProviderDefinition(
         category=ProviderCategory.CLOUD,
-        key="existing-k8s",
+        key=EXISTING_K8S_PROVIDER,
         label="Existing Kubernetes",
         status=ProviderStatus.AVAILABLE,
         adapter="kubeconfig context or target agent bootstrap",
         capabilities=("install_target_agent", "apply_manifest"),
-        config_keys=("KUBE_CONTEXT_ALLOWLIST",),
+        config_keys=(KUBE_CONTEXT_ALLOWLIST_ENV,),
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=PLURAL_PROVIDER,
+        label="Plural",
+        status=ProviderStatus.UNAVAILABLE,
+        adapter="Plural Console metadata + target agent bootstrap",
+        capabilities=("import_handles", "install_target_agent", "apply_manifest"),
+        config_keys=(
+            PLURAL_CONSOLE_URL_ENV,
+            PLURAL_CLUSTER_HANDLES_ENV,
+            PLURAL_CLOUD_INSTANCES_ENV,
+            KUBE_CONTEXT_ALLOWLIST_ENV,
+        ),
+        unavailable_reason="Plural console metadata is not configured",
+    ),
+    ProviderDefinition(
+        category=ProviderCategory.CLOUD,
+        key=EXTERNAL_CONSOLE_PROVIDER,
+        label="External Console",
+        status=ProviderStatus.UNAVAILABLE,
+        adapter="external console metadata + target agent bootstrap",
+        capabilities=("import_handles", "install_target_agent", "apply_manifest"),
+        config_keys=(
+            EXTERNAL_CONSOLE_URL_ENV,
+            EXTERNAL_CLUSTER_HANDLES_ENV,
+            EXTERNAL_CONSOLE_INSTANCES_ENV,
+            KUBE_CONTEXT_ALLOWLIST_ENV,
+        ),
+        unavailable_reason="external console metadata is not configured",
     ),
     ProviderDefinition(
         category=ProviderCategory.CLOUD,
@@ -265,10 +311,15 @@ class UnknownProvider(ValueError):
     pass
 
 
+WORD_SPLIT_RE = re.compile(r"[\s,]+")
+CLUSTER_ID_CHARS_RE = re.compile(r"[^a-z0-9-]+")
+
+
 def provider_catalog() -> tuple[ProviderDefinition, ...]:
+    catalog = tuple(runtime_provider_definition(definition) for definition in CATALOG)
     disabled = disabled_provider_keys()
     if not disabled:
-        return CATALOG
+        return catalog
     return tuple(
         definition
         if provider_key(definition.category, definition.key) not in disabled
@@ -283,7 +334,319 @@ def provider_catalog() -> tuple[ProviderDefinition, ...]:
             config_keys=definition.config_keys,
             unavailable_reason="disabled by KUBEHEAL_DISABLED_PROVIDERS",
         )
-        for definition in CATALOG
+        for definition in catalog
+    )
+
+
+def runtime_provider_definition(definition: ProviderDefinition) -> ProviderDefinition:
+    if definition.category != ProviderCategory.CLOUD:
+        return definition
+    if definition.key == PLURAL_PROVIDER and plural_metadata_configured():
+        return definition_available(definition)
+    if definition.key == EXTERNAL_CONSOLE_PROVIDER and external_console_metadata_configured():
+        return definition_available(definition)
+    return definition
+
+
+def definition_available(definition: ProviderDefinition) -> ProviderDefinition:
+    return ProviderDefinition(
+        category=definition.category,
+        key=definition.key,
+        label=definition.label,
+        status=ProviderStatus.AVAILABLE,
+        adapter=definition.adapter,
+        capabilities=definition.capabilities,
+        credential_requirements=definition.credential_requirements,
+        config_keys=definition.config_keys,
+        unavailable_reason=None,
+    )
+
+
+def cluster_registration_discovery() -> dict[str, object]:
+    flows: list[dict[str, object]] = []
+    candidates_by_provider = {
+        EXISTING_K8S_PROVIDER: existing_k8s_import_candidates(),
+        PLURAL_PROVIDER: plural_import_candidates(),
+        EXTERNAL_CONSOLE_PROVIDER: external_console_import_candidates(),
+    }
+    deploy_provider_bodies = {
+        definition.key: definition.to_body()
+        for definition in provider_catalog()
+        if definition.category == ProviderCategory.DEPLOY
+        and definition.key in {MANUAL_MANIFEST_DEPLOY_PROVIDER, KUBE_CONTEXT_DEPLOY_PROVIDER}
+    }
+
+    for cloud_provider in (EXISTING_K8S_PROVIDER, PLURAL_PROVIDER, EXTERNAL_CONSOLE_PROVIDER):
+        definition = get_provider(ProviderCategory.CLOUD, cloud_provider)
+        deploy_keys = registration_deploy_providers(candidates_by_provider[cloud_provider])
+        flows.append(
+            {
+                "cloud_provider": cloud_provider,
+                "label": definition.label,
+                "status": definition.status.value,
+                "description": registration_flow_description(cloud_provider),
+                "deploy_providers": [
+                    deploy_provider_bodies[key]
+                    for key in deploy_keys
+                    if key in deploy_provider_bodies
+                ],
+                "default_deploy_provider": deploy_keys[0],
+                "supports_import": True,
+                "unavailable_reason": definition.unavailable_reason,
+                "import_candidates": candidates_by_provider[cloud_provider],
+            }
+        )
+
+    all_candidates = [
+        candidate for candidates in candidates_by_provider.values() for candidate in candidates
+    ]
+    return {
+        "default_cloud_provider": EXISTING_K8S_PROVIDER,
+        "default_deploy_provider": MANUAL_MANIFEST_DEPLOY_PROVIDER,
+        "flows": flows,
+        "import_candidates": all_candidates,
+    }
+
+
+def registration_deploy_providers(candidates: list[dict[str, object]]) -> list[str]:
+    deploy_keys = [MANUAL_MANIFEST_DEPLOY_PROVIDER]
+    if any(candidate.get("direct_apply_available") for candidate in candidates):
+        deploy_keys.append(KUBE_CONTEXT_DEPLOY_PROVIDER)
+    return deploy_keys
+
+
+def registration_flow_description(cloud_provider: str) -> str:
+    if cloud_provider == PLURAL_PROVIDER:
+        return "Import Plural cluster handles from env, then bootstrap the target agent."
+    if cloud_provider == EXTERNAL_CONSOLE_PROVIDER:
+        return "Import external console cluster handles from env, then bootstrap the target agent."
+    return "Register an existing Kubernetes cluster by installing the target agent."
+
+
+def existing_k8s_import_candidates() -> list[dict[str, object]]:
+    contexts = env_values_with_source(
+        (
+            CLUSTER_CONTEXTS_ENV,
+            TARGET_CONTEXT_ENV,
+            MGMT_CONTEXT_ENV,
+            KUBE_CONTEXT_ALLOWLIST_ENV,
+        )
+    )
+    return [
+        import_candidate(
+            cloud_provider=EXISTING_K8S_PROVIDER,
+            name=context,
+            source=f"env:{source}",
+            kube_context=context,
+            labels={"kube_context": context},
+        )
+        for context, source in contexts
+    ]
+
+
+def plural_import_candidates() -> list[dict[str, object]]:
+    candidates = handle_import_candidates(
+        cloud_provider=PLURAL_PROVIDER,
+        handles=env_words(PLURAL_CLUSTER_HANDLES_ENV),
+        source=f"env:{PLURAL_CLUSTER_HANDLES_ENV}",
+        console_url=non_secret_env(PLURAL_CONSOLE_URL_ENV),
+    )
+    for instance_id in env_words(PLURAL_CLOUD_INSTANCES_ENV):
+        suffix = env_suffix(instance_id)
+        prefix = f"PLURAL_CLOUD_{suffix}"
+        labels = instance_labels(
+            instance_id,
+            prefix,
+            ("NAME", "OWNER", "PROVIDER", "REGION", "HOSTING", "SIZE"),
+        )
+        candidates.extend(
+            handle_import_candidates(
+                cloud_provider=PLURAL_PROVIDER,
+                handles=env_words(f"{prefix}_CLUSTER_HANDLES"),
+                source=f"env:{prefix}_CLUSTER_HANDLES",
+                console_url=non_secret_env(f"{prefix}_CONSOLE_URL"),
+                labels=labels,
+            )
+        )
+    return dedupe_candidates(candidates)
+
+
+def external_console_import_candidates() -> list[dict[str, object]]:
+    candidates = handle_import_candidates(
+        cloud_provider=EXTERNAL_CONSOLE_PROVIDER,
+        handles=env_words(EXTERNAL_CLUSTER_HANDLES_ENV),
+        source=f"env:{EXTERNAL_CLUSTER_HANDLES_ENV}",
+        console_url=non_secret_env(EXTERNAL_CONSOLE_URL_ENV),
+    )
+    for instance_id in env_words(EXTERNAL_CONSOLE_INSTANCES_ENV):
+        suffix = env_suffix(instance_id)
+        prefix = f"EXTERNAL_CONSOLE_{suffix}"
+        labels = instance_labels(
+            instance_id,
+            prefix,
+            ("NAME", "OWNER", "PROVIDER", "REGION", "HOSTING", "SIZE"),
+        )
+        candidates.extend(
+            handle_import_candidates(
+                cloud_provider=EXTERNAL_CONSOLE_PROVIDER,
+                handles=env_words(f"{prefix}_CLUSTER_HANDLES"),
+                source=f"env:{prefix}_CLUSTER_HANDLES",
+                console_url=non_secret_env(f"{prefix}_CONSOLE_URL"),
+                labels=labels,
+            )
+        )
+    return dedupe_candidates(candidates)
+
+
+def handle_import_candidates(
+    *,
+    cloud_provider: str,
+    handles: list[str],
+    source: str,
+    console_url: str | None = None,
+    labels: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
+    contexts = env_words(CLUSTER_CONTEXTS_ENV)
+    candidates: list[dict[str, object]] = []
+    for index, handle in enumerate(handles):
+        clean_handle = handle.removeprefix("@")
+        kube_context = matching_context(clean_handle, contexts, index)
+        candidates.append(
+            import_candidate(
+                cloud_provider=cloud_provider,
+                name=clean_handle,
+                source=source,
+                kube_context=kube_context,
+                external_handle=clean_handle,
+                console_url=console_url,
+                labels={
+                    **(labels or {}),
+                    "handle": clean_handle,
+                    **({"kube_context": kube_context} if kube_context else {}),
+                },
+            )
+        )
+    return candidates
+
+
+def import_candidate(
+    *,
+    cloud_provider: str,
+    name: str,
+    source: str,
+    kube_context: str | None = None,
+    external_handle: str | None = None,
+    console_url: str | None = None,
+    labels: dict[str, str] | None = None,
+) -> dict[str, object]:
+    direct_apply_available = is_direct_apply_available(kube_context)
+    return {
+        "cluster_id": slugify_cluster_id(external_handle or kube_context or name),
+        "name": name,
+        "source": source,
+        "cloud_provider": cloud_provider,
+        "deploy_provider": (
+            KUBE_CONTEXT_DEPLOY_PROVIDER
+            if direct_apply_available
+            else MANUAL_MANIFEST_DEPLOY_PROVIDER
+        ),
+        "kube_context": kube_context,
+        "external_handle": external_handle,
+        "console_url": console_url,
+        "direct_apply_available": direct_apply_available,
+        "labels": {key: value for key, value in (labels or {}).items() if value},
+    }
+
+
+def env_values_with_source(names: tuple[str, ...]) -> list[tuple[str, str]]:
+    values: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for name in names:
+        for value in env_words(name):
+            if value not in seen:
+                values.append((value, name))
+                seen.add(value)
+    return values
+
+
+def env_words(name: str) -> list[str]:
+    raw = env(name, "").strip().strip("\"'")
+    if not raw:
+        return []
+    return [item.strip().strip("\"'") for item in WORD_SPLIT_RE.split(raw) if item.strip()]
+
+
+def non_secret_env(name: str) -> str | None:
+    value = env(name, "").strip().strip("\"'")
+    return value or None
+
+
+def instance_labels(
+    instance_id: str,
+    prefix: str,
+    metadata_keys: tuple[str, ...],
+) -> dict[str, str]:
+    labels = {"instance": instance_id}
+    for key in metadata_keys:
+        value = non_secret_env(f"{prefix}_{key}")
+        if value:
+            labels[key.lower()] = value
+    return labels
+
+
+def matching_context(handle: str, contexts: list[str], index: int) -> str | None:
+    if handle in contexts:
+        return handle
+    if index < len(contexts):
+        return contexts[index]
+    return None
+
+
+def is_direct_apply_available(kube_context: str | None) -> bool:
+    if not kube_context:
+        return False
+    return kube_context in set(env_words(KUBE_CONTEXT_ALLOWLIST_ENV))
+
+
+def dedupe_candidates(candidates: list[dict[str, object]]) -> list[dict[str, object]]:
+    deduped: list[dict[str, object]] = []
+    seen: set[tuple[object, object, object]] = set()
+    for candidate in candidates:
+        key = (
+            candidate.get("cloud_provider"),
+            candidate.get("cluster_id"),
+            candidate.get("kube_context") or candidate.get("external_handle"),
+        )
+        if key in seen:
+            continue
+        deduped.append(candidate)
+        seen.add(key)
+    return deduped
+
+
+def slugify_cluster_id(value: str) -> str:
+    slug = CLUSTER_ID_CHARS_RE.sub("-", value.removeprefix("@").lower()).strip("-")
+    slug = re.sub(r"-{2,}", "-", slug)
+    return slug or "cluster"
+
+
+def env_suffix(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").upper()
+
+
+def plural_metadata_configured() -> bool:
+    return bool(
+        env_words(PLURAL_CLUSTER_HANDLES_ENV)
+        or env_words(PLURAL_CLOUD_INSTANCES_ENV)
+        or non_secret_env(PLURAL_CONSOLE_URL_ENV)
+    )
+
+
+def external_console_metadata_configured() -> bool:
+    return bool(
+        env_words(EXTERNAL_CLUSTER_HANDLES_ENV)
+        or env_words(EXTERNAL_CONSOLE_INSTANCES_ENV)
+        or non_secret_env(EXTERNAL_CONSOLE_URL_ENV)
     )
 
 
