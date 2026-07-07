@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 262db708
 status: synced
 ---
 
@@ -708,6 +708,7 @@ async def report_reconcile_status(self, status: JsonObject) -> None
 ```python
 async def unsent_events(self, limit: int, source: str) -> list[EventEnvelope]
 async def mark_events_sent(self, event_ids: list[str]) -> None
+async def mark_events_dead_lettered(self, events: list[EventEnvelope], consumer: str, error: str) -> None
 ```
 
 ---

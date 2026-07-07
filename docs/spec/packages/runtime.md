@@ -1,5 +1,5 @@
 ---
-source_commit: 664925a6
+source_commit: 262db708
 status: synced
 ---
 
@@ -180,6 +180,7 @@ class Ledger:
 
 - `src/packages/runtime/relay.py :: DEFAULT_BATCH_ENV` — `"OUTBOX_RELAY_BATCH"`; `DEFAULT_BATCH`(기본 10).
 - `src/packages/runtime/relay.py :: DEFAULT_PUBLISH_TIMEOUT_SECONDS_ENV` — `"OUTBOX_PUBLISH_TIMEOUT_SECONDS"`; `DEFAULT_PUBLISH_TIMEOUT_SECONDS`(기본 10).
+- `src/packages/runtime/relay.py :: NON_RETRYABLE_PUBLISH_ERRORS` — `{"MaxPayloadError"}`. 같은 payload 로 재시도해도 성공하지 않는 브로커 정책 오류 이름.
 - `src/packages/runtime/relay.py :: OutboxRelay`
 
 ```python
@@ -187,8 +188,9 @@ class OutboxRelay:
     def __init__(self, store: OutboxReader, publisher: EnvelopePublisher, source: str,
                  batch: int = DEFAULT_BATCH, publish_timeout_seconds: int = DEFAULT_PUBLISH_TIMEOUT_SECONDS) -> None
     async def run_once(self) -> int
+    def _is_non_retryable_publish_error(self, exc: Exception) -> bool
 ```
-`run_once`: `store.unsent_events(batch, source)`(자기 서비스 행만) → 건별 `asyncio.wait_for(publisher.publish_envelope(evt), timeout)` — 같은 event_id 로 발행해 downstream dedup. 발행 도중 실패해도 `finally` 에서 **이미 발행된 것만** `mark_events_sent`(전체 배치 재발행 방지, 미발행 행은 다음 루프 재시도). 반환 = 발행 건수.
+`run_once`: `store.unsent_events(batch, source)`(자기 서비스 행만) → 건별 `asyncio.wait_for(publisher.publish_envelope(evt), timeout)` — 같은 event_id 로 발행해 downstream dedup. transient 발행 오류는 기존처럼 예외를 다시 올리고, `finally` 에서 **이미 발행된 것만** `mark_events_sent`(전체 배치 재발행 방지, 미발행 행은 다음 루프 재시도)한다. 예외 class name 이 `NON_RETRYABLE_PUBLISH_ERRORS`에 있으면 `store.mark_events_dead_lettered([evt], f"outbox-relay:{source}", str(exc))`로 DLQ에 격리하고 `outbox_event_dead_lettered` 로그를 남긴 뒤 다음 이벤트 발행을 계속한다. 반환 = 실제 발행 성공 건수(DLQ 격리 건수는 제외).
 
 ### `gateway.py` — HTTP → 이벤트 입구
 
