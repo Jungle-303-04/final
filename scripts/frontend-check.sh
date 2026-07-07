@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}/frontend"
 
 echo "[frontend-check] npm ci"
-npm ci --no-audit --no-fund
+npm ci --include=dev --no-audit --no-fund
 
 echo "[frontend-check] typecheck (tsc --noEmit)"
 npx tsc --noEmit
