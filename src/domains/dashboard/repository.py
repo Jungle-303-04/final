@@ -226,6 +226,11 @@ class DashboardRepository(DatabaseConnection):
         preserve_when_missing = (
             "cluster_id",
             "incident_id",
+            "incident_namespace",
+            "incident_resource_kind",
+            "incident_resource_name",
+            "incident_symptom",
+            "incident_logical_key",
             "evidence_ref",
             "root_cause",
             "confidence",
@@ -381,7 +386,8 @@ def open_incident_summary(row: JsonObject) -> JsonObject:
     return {
         "incident_id": row.get("incident_id"),
         "correlation_id": row.get("correlation_id"),
-        "symptom": _first_string(payload, ("incident", "symptom"), ("symptom",)),
+        "symptom": row.get("incident_symptom")
+        or _first_string(payload, ("incident", "symptom"), ("symptom",)),
         "root_cause": row.get("root_cause"),
         "status": row.get("status"),
         "created_at": row.get("created_at"),
@@ -407,6 +413,9 @@ def serialize_metric_widget(row: Any) -> JsonObject:
 
 def incident_logical_key(row: JsonObject) -> str:
     """같은 실제 장애를 묶는 key — evidence correlation 폭증을 fleet 수치에서 제거."""
+    projected_key = row.get("incident_logical_key")
+    if projected_key not in (None, ""):
+        return str(projected_key)
     payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
     incident = payload.get("incident") if isinstance(payload, dict) else None
     if isinstance(incident, dict):
@@ -424,6 +433,9 @@ def incident_logical_key(row: JsonObject) -> str:
 
 def incident_logical_key_from_projection(row: JsonObject) -> str:
     """count 쿼리용 logical key — payload 전체를 읽지 않고 같은 묶음 규칙을 적용."""
+    projected_key = row.get("incident_logical_key")
+    if projected_key not in (None, ""):
+        return str(projected_key)
     parts = (
         row.get("cluster_id"),
         row.get("incident_namespace"),
@@ -437,40 +449,13 @@ def incident_logical_key_from_projection(row: JsonObject) -> str:
 
 
 def rca_timeline_logical_incident_key_expression() -> Any:
-    """SQL 집계용 logical incident key — Python helper와 같은 묶음 규칙."""
+    """SQL 집계용 logical incident key — payload JSON을 읽지 않는 projection 컬럼 사용."""
     table = RcaTimeline.__table__
-    incident_namespace = func.nullif(table.c.payload["incident"]["namespace"].astext, "")
-    incident_resource_kind = func.nullif(
-        table.c.payload["incident"]["resource_kind"].astext,
-        "",
-    )
-    incident_resource_name = func.nullif(
-        table.c.payload["incident"]["resource_name"].astext,
-        "",
-    )
-    incident_symptom = func.nullif(table.c.payload["incident"]["symptom"].astext, "")
-    has_incident_projection = or_(
-        incident_namespace.is_not(None),
-        incident_resource_kind.is_not(None),
-        incident_resource_name.is_not(None),
-        incident_symptom.is_not(None),
-    )
-    return case(
-        (
-            has_incident_projection,
-            func.concat(
-                table.c.cluster_id,
-                "|",
-                func.coalesce(incident_namespace, "unknown"),
-                "|",
-                func.coalesce(incident_resource_kind, "unknown"),
-                "|",
-                func.coalesce(incident_resource_name, "unknown"),
-                "|",
-                func.coalesce(incident_symptom, "unknown"),
-            ),
-        ),
-        else_=func.coalesce(table.c.incident_id, table.c.correlation_id, cast(table.c.id, Text)),
+    return func.coalesce(
+        func.nullif(table.c.incident_logical_key, ""),
+        func.nullif(table.c.incident_id, ""),
+        func.nullif(table.c.correlation_id, ""),
+        cast(table.c.id, Text),
     )
 
 
@@ -483,11 +468,16 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     if _is_non_incident_detection(str(evt.subject), payload):
         return None
 
+    correlation_id = evt.correlation_id or evt.event_id
+    cluster_id = _cluster_id(payload)
+    incident_id = _incident_id(payload)
+    projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
     row: JsonObject = {
         "workspace_id": _workspace_id(payload),
-        "correlation_id": evt.correlation_id or evt.event_id,
-        "cluster_id": _cluster_id(payload),
-        "incident_id": _incident_id(payload),
+        "correlation_id": correlation_id,
+        "cluster_id": cluster_id,
+        "incident_id": incident_id,
+        **projection,
         "evidence_ref": _evidence_ref(payload),
         "current_subject": str(evt.subject),
         "status": status,
@@ -513,6 +503,51 @@ def serialize_timeline_row(row: Any) -> JsonObject:
     item["supporting_evidence"] = item.get("supporting_evidence") or []
     item["missing_evidence"] = item.get("missing_evidence") or []
     return item
+
+
+def _incident_projection(
+    payload: JsonObject,
+    cluster_id: str | None,
+    incident_id: str | None,
+    correlation_id: str,
+) -> JsonObject:
+    """fleet 집계용 작은 projection — 큰 payload JSON 재파싱을 피한다."""
+    namespace = _first_string(
+        payload,
+        ("incident", "namespace"),
+        ("namespace",),
+        ("plan", "target", "namespace"),
+        ("selected", "draft", "params", "namespace"),
+    )
+    resource_kind = _first_string(
+        payload,
+        ("incident", "resource_kind"),
+        ("resource", "kind"),
+        ("kind",),
+        ("plan", "target", "resource_kind"),
+        ("selected", "draft", "params", "resource_kind"),
+    )
+    resource_name = _first_string(
+        payload,
+        ("incident", "resource_name"),
+        ("resource", "name"),
+        ("name",),
+        ("plan", "target", "resource_name"),
+        ("selected", "draft", "params", "resource_name"),
+    )
+    symptom = _first_string(payload, ("incident", "symptom"), ("symptom",))
+    parts = (cluster_id, namespace, resource_kind, resource_name, symptom)
+    if any(part not in (None, "") for part in parts[1:]):
+        logical_key = "|".join(str(part or "unknown") for part in parts)
+    else:
+        logical_key = incident_id or correlation_id
+    return {
+        "incident_namespace": namespace,
+        "incident_resource_kind": resource_kind,
+        "incident_resource_name": resource_name,
+        "incident_symptom": symptom,
+        "incident_logical_key": logical_key,
+    }
 
 
 def _apply_cluster_filter(
