@@ -79,6 +79,9 @@ PROVIDERS_CATALOG_PATH = "/providers/catalog"
 PROVIDERS_VALIDATE_PATH = "/providers/validate"
 DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
 DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
+# 범용 조회 API — 세션 워크스페이스 범위의 evidence/RCA report 목록(read-only)
+EVIDENCE_QUERY_PATH = "/evidence"
+RCA_REPORTS_PATH = "/rca-reports"
 RCA_RECOVERY_ACTION_SELECT_PATH = "/rca/recovery-plans/{plan_id}/actions/{action_id}/select"
 
 
