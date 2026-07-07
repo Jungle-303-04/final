@@ -25,17 +25,19 @@ status: synced
 | 심볼 | 앵커 | 시그니처 | API (메서드+경로) | 비고 |
 |---|---|---|---|---|
 | `sessionKey` | `frontend/src/features/auth/api.ts :: sessionKey` | `['session'] as const` | — | 세션 쿼리 키 |
+| `emailCheckKey` | `frontend/src/features/auth/api.ts :: emailCheckKey` | `(email: string) => ['auth','check-email', normalized]` | — | 이메일 선검증 쿼리 키 |
 | `markSessionSeen` | `frontend/src/features/auth/api.ts :: markSessionSeen` | `() => void` | — | `localStorage['k8s-console-session-seen-at'] = Date.now()` 저장. SSR/window 없음이면 no-op |
 | `clearSessionHint` | `frontend/src/features/auth/api.ts :: clearSessionHint` | `() => void` | — | 최근 세션 hint 삭제. 401/logout 에서 호출 |
 | `hasRecentSessionHint` | `frontend/src/features/auth/api.ts :: hasRecentSessionHint` | `() => boolean` | — | hint timestamp 가 현재 기준 2시간(`SESSION_HINT_TTL_MS`) 이내이면 true |
 | `useSession` | `frontend/src/features/auth/api.ts :: useSession` | `() => UseQueryResult<Session>` | GET `/auth/session` via `get(..., { timeoutMs: 20_000 })` | `staleTime: 120_000`, `refetchOnWindowFocus:false`, `retry:false` — 401 세션 확인은 재시도하지 않고 가드가 즉시 로그인으로 보낸다. 20초 안에 응답이 없으면 API 클라이언트가 요청을 abort 하고 network 오류 detail 로 `'요청 시간이 초과되었습니다'`를 준다 |
 | `refreshSession` | `frontend/src/features/auth/api.ts :: refreshSession` | `() => Promise<Session>` | POST `/auth/session/refresh` | 세션 리프레시 helper. 자동 호출은 `frontend/src/features/auth/sessionRefresh.ts` 소비자 책임 |
+| `useEmailAvailability` | `frontend/src/features/auth/api.ts :: useEmailAvailability` | `(email: string, enabled: boolean) => UseQueryResult<EmailCheckResponse>` | POST `/auth/check-email` | 가입 이메일 debounce 선검증. `staleTime=60s`, `retry=false`, `AbortSignal` 전달 |
 | `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 응답이 authenticated 면 `markSessionSeen()` 후 `queryClient.setQueryData(sessionKey, session)`로 즉시 반영 |
 | `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `clearSessionHint()` + `qc.clear()` (캐시 전체 삭제) |
-| `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
+| `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm}) => EmailVerificationResponse` | POST `/auth/signup` | |
 | `useApproveUser` | `frontend/src/features/auth/api.ts :: useApproveUser` | mutation `(userId: string)` | POST `/auth/users/${userId}/approve` | 성공/실패 `@/ui` toast, 성공·실패 모두 `['users']` invalidate — [org/MembersView](./org.md) 에서 사용 |
 | `useIsAdmin` | `frontend/src/features/auth/api.ts :: useIsAdmin` | `() => boolean` | — | `session.roles.includes('service_admin') ?? false` |
-| `useResendVerification` | `frontend/src/features/auth/api.ts :: useResendVerification` | mutation `(b: {email; password})` | POST `/auth/resend-verification` | |
+| `useResendVerification` | `frontend/src/features/auth/api.ts :: useResendVerification` | mutation `(b: {email; password}) => EmailVerificationResponse` | POST `/auth/resend-verification` | |
 
 ## 컴포넌트
 
@@ -46,34 +48,38 @@ status: synced
 ### `frontend/src/features/auth/LoginView.tsx :: LoginView` (default export)
 
 - 라우트: `/login` (가드 `RequireGuest`).
-- state: `email`, `password`. 훅: `useLogin`, `useNavigate`, `useLocation`, `useSearchParams`, `useToast`.
-- 트리: `AuthLayout(title='로그인')` → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
+- state: `email`, `password`, `resendCooldown`. 훅: `useLogin`, `useResendVerification`, `useNavigate`, `useLocation`, `useSearchParams`, `useToast`.
+- 트리: `AuthLayout(title='로그인')` → verified/approval query 안내 패널(옵션) → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
 - submit: `login.mutate({email, password})`
   - 성공: success toast "로그인 완료" 후 query `returnTo` 또는 보호 경로에서 렌더된 현재 `pathname+search+hash` 를 `safeReturnTo` 로 검증한 뒤 `nav(..., { replace: true })`
-  - 실패: `status === 403 && detail.includes('approval')` → warning toast "승인 대기" 후 `nav('/pending?email=<encoded>')`; 그 외는 danger toast + 필드 error
+  - 실패 `rawDetail.code === 'approval_pending'`: warning toast 후 `/pending?email=<encoded>&returnTo=<encoded>`로 이동하며 router state에 `{email,password,returnTo}`를 전달한다. 비밀번호는 URL에 싣지 않는다.
+  - 실패 `rawDetail.code === 'email_unverified'`: 비밀번호 필드 error와 인라인 "이메일 인증 필요" 패널을 표시하고, `POST /auth/resend-verification` 재전송 버튼을 연다.
+  - 실패 `rawDetail.code === 'invalid_credentials'` 또는 401: "이메일 또는 비밀번호가 올바르지 않습니다" 단일 문구만 표시해 계정 존재 여부를 노출하지 않는다.
 - 비밀번호 필드 error 메시지: 401 → `'이메일 또는 비밀번호가 올바르지 않습니다'`; 429 → `'잠시 후 다시 시도해주세요'`; 403(approval 아님) → `'이메일 검증이 필요합니다'`.
-- input 제약: email required, password `minLength={8}` required.
+- input 제약: email required, password `minLength={8}` required. submit 버튼은 이메일 형식과 비밀번호 8자 이상일 때만 활성.
 
 ### `frontend/src/features/auth/SignupView.tsx :: SignupView` (default export)
 
 - 라우트: `/signup` (가드 `RequireGuest`).
-- state: `email`, `pw`, `pw2`. 파생 `mismatch = pw2 !== '' && pw !== pw2`.
-- `signup.isSuccess` 이면 `AuthLayout('검증 메일 발송됨')` + `EmptyState(MailGlyph, '메일함 확인', description에 email 포함)` + "로그인" 버튼으로 전환.
-- 폼: 이메일(409 시 `'이미 가입된 이메일입니다'` error) / 비밀번호(8자 이상) / 비밀번호 확인(mismatch 시 error). submit 은 mismatch 아니면 `signup.mutate({email, password: pw, password_confirm: pw2})`. 성공은 success toast, 실패는 danger toast와 인라인 오류. 제출 버튼은 mismatch 시 disabled.
+- state: `email`, `pw`, `pw2`, `sent`, `resendCooldown`. `email`은 450ms debounce 뒤 `useEmailAvailability(debouncedEmail, isEmail(email))`로 `POST /auth/check-email`을 호출한다.
+- 이메일이 중복이면 인라인 오류와 `/login` "로그인하기" 링크를 표시한다. 이메일 사용 가능 응답 전에는 비밀번호 필드가 렌더되지 않는다.
+- 비밀번호 단계는 강도(`약함/보통/강함`)와 정책(`8자 이상`, `문자 포함`, `숫자 또는 기호 포함`)을 실시간 표시한다. 제출은 이메일 available + 비밀번호 8자 이상 + 확인 일치일 때만 활성.
+- `signup.isSuccess` 또는 local `sent` 이면 `AuthLayout('인증 메일 발송됨')` + `EmptyState(MailGlyph, '메일함 확인', description에 email 포함)` + "인증 메일 재발송" 버튼(60초 쿨다운) + "로그인" 버튼으로 전환한다. 성공 화면은 스팸함 안내를 포함한다.
 
 ### `frontend/src/features/auth/PendingView.tsx :: PendingView` (default export)
 
-- 라우트: `/pending` (가드 `RequireGuest`). 쿼리스트링 `email`.
+- 라우트: `/pending` (가드 `RequireGuest`). 쿼리스트링 `email`, `returnTo`; router state `{email,password,returnTo}`(로그인 실패 직후 memory only).
 - `AuthLayout('승인 대기 중')` + `EmptyState(ClockGlyph, '관리자 승인 대기', '"<email ?? 계정> 은(는) 승인 후 로그인할 수 있습니다.')` + `/login` "로그인 재시도" primary 버튼.
+- router state에 email/password가 있으면 `POST /auth/login`을 즉시 1회, 이후 5초 간격으로 재시도한다. `approval_pending`은 정상 대기 상태로 처리하고, 성공하면 success toast 후 `returnTo`로 replace 이동한다. 새로고침 후에는 비밀번호를 보관하지 않으므로 자동 확인 대신 수동 로그인 안내를 표시한다.
 
 ### `frontend/src/features/auth/VerifyEmailView.tsx :: VerifyEmailView` (default export)
 
-- 라우트: `/verify-email` (가드 `RequireGuest`). 쿼리스트링 `verified`, `token`.
-- `token` 이 있으면 클라이언트가 `/api/auth/verify-email?token=<token>` 으로 replace 이동하고, 이동 전 `AuthLayout('이메일 검증')` + `EmptyState(CheckGlyph, '검증 중')`을 표시한다.
-- `ok = sp.get('verified') === '1'`:
-  - true → `EmptyState(CheckGlyph, '검증 완료', '관리자 승인 후 로그인할 수 있습니다.')` + 로그인 버튼.
-  - false → `EmptyState(AlertGlyph, '검증 링크 만료', '검증 메일을 다시 요청할 수 있습니다.')` + 이메일/비밀번호 입력 폼(`useResendVerification` mutate). 성공/실패 toast와 하단 안내 문구, "로그인" ghost 버튼.
-- state: `email`, `password`. 재전송 버튼은 `resend.isPending || !email || password.length < 8` 시 disabled.
+- 라우트: `/verify-email` (가드 `RequireGuest`). 쿼리스트링 `token`, `status`, `verified`, `already_verified`, `expired`, `email`.
+- `token` 이 있으면 클라이언트가 `/api/auth/verify-email?token=<token>&redirect=/verify-email?status=success` 로 replace 이동하고, 이동 전 `AuthLayout('이메일 인증')` + `EmptyState(CheckGlyph, '인증 중')` + `InlineSpinner`를 표시한다.
+- 상태 분기:
+  - success: `status=success` 또는 `verified=1` → "인증 완료" + `/login?verified=1`.
+  - already_verified: `status=already_verified|already` 또는 `already_verified=1` → "이미 인증됨" + `/login`.
+  - expired/default: "인증 링크 만료" + 이메일/비밀번호 입력 폼(`POST /auth/resend-verification`), 60초 쿨다운, 성공/실패 인라인 안내.
 
 ## 라우트
 
@@ -86,7 +92,7 @@ status: synced
 
 ## 동작 (Behavior)
 
-가입→로그인 상태 머신: 가입(POST /auth/signup) → 이메일 검증(`/verify-email?verified=1`) → 관리자 승인([org/MembersView](./org.md) 의 `useApproveUser`) → 로그인 가능. 승인 전 로그인 시도는 403 detail `'account approval required'` → `/pending` 이동.
+가입→로그인 상태 머신: 이메일 선검증(POST `/auth/check-email`) → 가입(POST `/auth/signup`) → 이메일 검증(`/verify-email?status=success` 또는 backend redirect `/login?verified=1&approval=pending`) → 관리자 승인([org/MembersView](./org.md) 의 `useApproveUser`) → 로그인 가능. 승인 전 로그인 시도는 403 `rawDetail.code='approval_pending'` → `/pending` 이동 후 5초 폴링.
 
 ## 불변식·오류 (Invariants & Errors)
 

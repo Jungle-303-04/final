@@ -4,10 +4,24 @@ import type { Session } from '@/shared/lib/types';
 import { useToast } from '@/ui';
 
 export const sessionKey = ['session'] as const;
+export const emailCheckKey = (email: string) => ['auth', 'check-email', email.trim().toLowerCase()] as const;
 const SESSION_CHECK_TIMEOUT_MS = 20_000;
 const SESSION_STALE_MS = 120_000;
 const SESSION_HINT_KEY = 'k8s-console-session-seen-at';
 const SESSION_HINT_TTL_MS = 2 * 60 * 60 * 1000;
+
+export type EmailCheckResponse = {
+  available: boolean;
+  reason_code?: string;
+  detail?: string;
+  retry_after?: number | null;
+};
+
+export type EmailVerificationResponse = {
+  accepted: boolean;
+  verification_required: boolean;
+  email?: string | null;
+};
 
 export function markSessionSeen() {
   if (typeof window === 'undefined') return;
@@ -37,6 +51,18 @@ export function useSession() {
 export function refreshSession() {
   return post<Session>('/auth/session/refresh');
 }
+
+export function useEmailAvailability(email: string, enabled: boolean) {
+  const normalized = email.trim().toLowerCase();
+  return useQuery({
+    queryKey: emailCheckKey(normalized),
+    queryFn: ({ signal }) => post<EmailCheckResponse>('/auth/check-email', { email: normalized }, { signal }),
+    enabled: enabled && normalized.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
@@ -57,7 +83,7 @@ export function useLogout() {
     },
   });
 }
-export const useSignup = () => useMutation({ mutationFn: (b: { email: string; password: string; password_confirm: string }) => post('/auth/signup', b) });
+export const useSignup = () => useMutation({ mutationFn: (b: { email: string; password: string; password_confirm: string }) => post<EmailVerificationResponse>('/auth/signup', b) });
 export const useApproveUser = () => {
   const qc = useQueryClient();
   const { push } = useToast();
@@ -80,5 +106,5 @@ export function useIsAdmin(): boolean {
 export const useResendVerification = () =>
   useMutation({
     mutationFn: (b: { email: string; password: string }) =>
-      post('/auth/resend-verification', b),
+      post<EmailVerificationResponse>('/auth/resend-verification', b),
   });
