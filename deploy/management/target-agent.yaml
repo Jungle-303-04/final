@@ -28,6 +28,7 @@ subjects:
   - kind: ServiceAccount
     name: cluster-agent
     namespace: management
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -60,6 +61,11 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: "http://api-gateway:8000"
+            - name: AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: target-runtime-secret
+                  key: AGENT_TOKEN
             - name: TARGET_CLUSTER_ID
               value: "management-cluster"
             - name: CLUSTER_ROLE
@@ -70,8 +76,14 @@ spec:
               value: "false"
             - name: OTEL_SERVICE_NAME
               value: "target-cluster-agent"
+            - name: PROMETHEUS_BASE_URL
+              value: ""
+            - name: LOKI_BASE_URL
+              value: ""
+            - name: TEMPO_BASE_URL
+              value: ""
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-              value: "http://opentelemetry-collector.management.svc:4318/v1/traces"
+              value: ""
             - name: EVIDENCE_INTERVAL_SECONDS
               value: "15"
             - name: POLICY_SYNC_INTERVAL_SECONDS
@@ -79,9 +91,9 @@ spec:
             - name: RECONCILE_INTERVAL_SECONDS
               value: "30"
             - name: EVIDENCE_PROVIDER_WORKERS
-              value: "metrics=1,logs=1,traces=1"
+              value: "kubernetes=1,metrics=0,logs=0,traces=0"
             - name: EVIDENCE_PROVIDER_MAX_WORKERS
-              value: "metrics=2,logs=2,traces=2"
+              value: "kubernetes=2,metrics=0,logs=0,traces=0"
             - name: EVIDENCE_FAILURE_POLICY
               value: "allow_partial"
             - name: AGENT_CONTROL_DB_PATH

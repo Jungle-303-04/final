@@ -13,7 +13,9 @@ DEFAULT_EVIDENCE_FAILURE_POLICY = "allow_partial"
 DEFAULT_EVIDENCE_PROVIDER_WORKERS = 1
 DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS = 2
 DEFAULT_CLUSTER_ROLE = "target"
+MANAGEMENT_CLUSTER_ROLE = "management"
 DEFAULT_BOOTSTRAP_MODE = "target"
+MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS = {"kubernetes"}
 
 DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
     "kubernetes": [
@@ -144,9 +146,11 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
 def default_evidence_provider_policy(
     provider_key: str,
     interval_seconds: int,
+    *,
+    enabled: bool = True,
 ) -> EvidenceProviderPolicy:
     return EvidenceProviderPolicy(
-        enabled=True,
+        enabled=enabled,
         interval_seconds=interval_seconds,
         min_workers=DEFAULT_EVIDENCE_PROVIDER_WORKERS,
         max_workers=DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
@@ -154,9 +158,20 @@ def default_evidence_provider_policy(
     )
 
 
-def default_evidence_providers(interval_seconds: int) -> dict[str, EvidenceProviderPolicy]:
+def default_evidence_providers(
+    interval_seconds: int,
+    *,
+    cluster_role: str = DEFAULT_CLUSTER_ROLE,
+) -> dict[str, EvidenceProviderPolicy]:
     return {
-        provider_key: default_evidence_provider_policy(provider_key, interval_seconds)
+        provider_key: default_evidence_provider_policy(
+            provider_key,
+            interval_seconds,
+            enabled=(
+                cluster_role != MANAGEMENT_CLUSTER_ROLE
+                or provider_key in MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS
+            ),
+        )
         for provider_key in DEFAULT_EVIDENCE_PROVIDER_QUERIES
     }
 
@@ -176,7 +191,10 @@ def default_agent_policy(
         generation=generation,
         evidence=EvidenceRuntimePolicy(
             failure_policy=failure_policy,
-            providers=default_evidence_providers(interval_seconds),
+            providers=default_evidence_providers(
+                interval_seconds,
+                cluster_role=cluster_role,
+            ),
         ),
         bootstrap=BootstrapPolicy(mode=bootstrap_mode),
         desired_state=DesiredStatePolicy(),

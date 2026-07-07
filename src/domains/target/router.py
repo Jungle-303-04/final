@@ -259,6 +259,14 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
         updates["install_node_collector"] = False
         updates["install_sample_workload"] = False
         updates["control_namespaces"] = ""
+        for telemetry_field in (
+            "prometheus_base_url",
+            "loki_base_url",
+            "tempo_base_url",
+            "otel_traces_endpoint",
+        ):
+            if telemetry_field not in payload.model_fields_set:
+                updates[telemetry_field] = ""
 
     return payload.model_copy(update=updates) if updates else payload
 
