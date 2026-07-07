@@ -45,10 +45,14 @@ export function useRunsAll(apps: Application[]) {
       refetchInterval: (q: { state: { data?: { runs: Record<string, unknown>[] } } }) =>
         (q.state.data?.runs.some(r => ACTIVE.has(String(r.status ?? '').toUpperCase())) ? 10_000 : 30_000),
     })),
-    combine: results => results.map((r, i) => ({
-      appId: apps[i]?.application_id ?? '',
-      runs: (r.data?.runs ?? []).map(adaptRun),
-    })),
+    combine: results => ({
+      // 최초 로딩 여부 — '없음' 을 성급하게 단정하지 않기 위한 신호
+      pending: results.some(r => r.isPending),
+      items: results.map((r, i) => ({
+        appId: apps[i]?.application_id ?? '',
+        runs: (r.data?.runs ?? []).map(adaptRun),
+      })),
+    }),
   });
 }
 export const useDeployments = (appId: string) =>
@@ -66,6 +70,17 @@ export function useApproval() {
       qc.invalidateQueries({ queryKey: repoKeys.apps() });
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'applications' });
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'ai' });
+    },
+    // 승인/거절 실패를 조용히 삼키지 않는다 — 사유(중복 처리·권한)를 그대로 노출
+    onError: (err, v) => {
+      const e = err as { kind?: string; detail?: string };
+      const action = v.action === 'grant' ? '승인' : '거절';
+      const reason = e.kind === 'forbidden' ? '권한이 없습니다'
+        : e.kind === 'invalid' ? (e.detail ?? '이미 처리된 승인입니다')
+        : e.detail ?? '잠시 후 다시 시도해주세요';
+      uiStore.getState().toast('danger', `${action} 실패 — ${reason}`);
+      // 이미 다른 곳에서 처리됐을 수 있으니 최신 상태로 동기화
+      qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'applications' });
     },
   });
 }

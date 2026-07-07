@@ -122,7 +122,7 @@ action과 payload model을 command dispatcher에 등록한다.
 `@command.k8s(...)`는 Kubernetes read/write command에서 쓴다.
 action, verb, resource, scope, payload model을 함께 묶어 policy guard가 볼 수 있게 한다.
 
-`@rca.cause(...)`는 RCA cause catalog에서 쓴다.
+RCA cause catalog는 `src/services/ai/agent/causes/catalog/*.yaml`에서 쓴다.
 symptom, 필요한 evidence source, confidence rule을 root cause candidate로 등록한다.
 
 `@rca.recovery(...)`는 recovery action catalog에서 쓴다.

@@ -87,6 +87,7 @@
 
 서비스 경계와 전체 구조가 필요하면 [아키텍처](architecture.md)를 본다.
 그림으로 한 번에 보고 싶으면 [아키텍처 다이어그램](architecture-diagram.md)을 본다.
+서비스 통합 후보를 볼 때는 [서비스 통합 계획](architecture/service-consolidation-plan.md)을 본다.
 
 subject, body, worker 연결이 필요하면 [이벤트 흐름](events.md)을 본다.
 
@@ -105,6 +106,8 @@ GitHub Actions와 AWS CD 흐름은 [AWS CI/CD](aws-cicd.md)를 본다.
 로컬 smoke 실행 기준은 [로컬 테스트 실행 기준](local-testing.md)을 본다.
 
 실제 서비스 smoke 실행 기준은 [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+
+실서비스 형태의 sandbox 장애 데이터는 [실서비스 데이터 시나리오](scenarios.md)를 본다.
 
 production 전 위험과 점검 항목은 [운영 준비도](production-readiness.md)를 본다.
 
@@ -150,6 +153,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
+- [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
 - [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
@@ -162,6 +166,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [platform-foundation-plan](platform-foundation-plan.md)
 - [production-readiness](production-readiness.md)
 - [production-push-2026-07-07](production-push-2026-07-07.md)
+- [scenarios](scenarios.md)
 - [secrets](secrets.md)
 
 프론트 상세 설계 문서는 아래에 있다.
@@ -256,6 +261,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [api/README](api/README.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture](architecture.md)
+- [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
 - [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
@@ -299,6 +305,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [rca-production-onboarding/06-chanbin-permission-dashboard](rca-production-onboarding/06-chanbin-permission-dashboard.md)
 - [rca-production-onboarding/07-how-to-find-and-implement](rca-production-onboarding/07-how-to-find-and-implement.md)
 - [rca-production-onboarding/README](rca-production-onboarding/README.md)
+- [scenarios](scenarios.md)
 - [secrets](secrets.md)
 - [spec/README](spec/README.md)
 - [spec/_conventions](spec/_conventions.md)

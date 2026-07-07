@@ -201,6 +201,7 @@ export function adaptIncident(raw: Record<string, unknown>): Incident {
     String(raw.current_subject ?? '인시던트');
   return {
     incident_id: String(raw.incident_id ?? raw.correlation_id ?? ''),
+    correlation_id: String(raw.correlation_id ?? raw.incident_id ?? ''),
     cluster_id: String(raw.cluster_id ?? ''),
     summary,
     stage: String(raw.current_subject ?? raw.status ?? ''),
@@ -215,6 +216,7 @@ export function adaptIncidentDetail(raw: Record<string, unknown>): IncidentDetai
   const base = adaptIncident(raw);
   return {
     incident_id: base.incident_id,
+    correlation_id: base.correlation_id,
     cluster_id: base.cluster_id,
     status: String(raw.status ?? raw.stage ?? 'open'),
     current_subject: base.stage,

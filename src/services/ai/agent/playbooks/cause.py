@@ -74,6 +74,8 @@ class CauseProfile:
     symptoms: tuple[str, ...]
     required_sources: tuple[str, ...]
     candidate_specs: tuple[CauseCandidateSpec, ...]
+    # 룰 식별자 — YAML 카탈로그 룰은 필수, 코드 정의 룰은 선택(None 이면 중복 검사 제외).
+    rule_id: str | None = None
 
     def evidence_rule(self) -> SymptomEvidenceRequirementRule:
         return SymptomEvidenceRequirementRule(self.symptoms, self.required_sources)
@@ -90,9 +92,12 @@ def causes_for(
     symptoms: tuple[str, ...],
     required_sources: tuple[str, ...],
     candidates: tuple[CauseCandidateSpec, ...],
+    rule_id: str | None = None,
 ) -> Callable[[type], type]:
     def decorator(marker: type) -> type:
-        CAUSE_PROFILES.append(CauseProfile(symptoms, required_sources, candidates))
+        if rule_id is not None and any(p.rule_id == rule_id for p in CAUSE_PROFILES):
+            raise ValueError(f"RCA 룰 id 중복: '{rule_id}' — 코드 룰 id 는 고유해야 합니다.")
+        CAUSE_PROFILES.append(CauseProfile(symptoms, required_sources, candidates, rule_id))
         return marker
 
     return decorator

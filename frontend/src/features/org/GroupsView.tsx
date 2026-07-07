@@ -59,7 +59,7 @@ function GroupMembers({ group }: { group: Group }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {users.map(u => (
           <label key={u.user_id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
-            <input type="checkbox" checked={memberIds.has(u.user_id)}
+            <input type="checkbox" checked={memberIds.has(u.user_id)} disabled={toggle.isPending}
               onChange={e => toggle.mutate({ userId: u.user_id, add: e.target.checked })} />
             <Avatar name={u.email} /> {u.email}
           </label>

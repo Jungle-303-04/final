@@ -17,7 +17,7 @@ AI 워커 프로세스들이 공유하는 **순수 도메인 로직 패키지**�
 |---|---|
 | `defaults.py` | 파이프라인 전역 기본값·메시지 상수(불변 dataclass) |
 | `pipeline/` | 단계별 파사드(Pipeline)와 변환기(Builder/Detector/Planner/Evaluator/Analyzer) |
-| `causes/` | 증상→원인 후보 지식 베이스(플레이북 프로파일) + 룰 엔진 |
+| `causes/` | 증상→원인 후보 지식 베이스(YAML 룰 카탈로그 + 코드 프로파일) + 룰 엔진 |
 | `playbooks/` | 룰 등록 데코레이터 네임스페이스(`rca`)와 룰 타입 정의 |
 | `recovery/` | 원인→복구 액션 지식 베이스 + 복구 계획/선택/디스패치 로직 |
 
@@ -258,10 +258,41 @@ def block_reason_code(evt: RcaCandidatesEvaluatedBody, detail) -> str | None
 
 ### causes/ — 원인 지식 베이스 + 룰 엔진
 
-`src/services/ai/agent/causes/catalog.py` 는 부수효과 모듈이다:
-`load_rule_modules(package_name="services.ai.agent.causes", excluded=("catalog", "engine"))`
-로 프로파일 모듈들을 임포트해 `@rca.cause` 등록을 유발하고,
-`cause_rules`/`evidence_rules` 를 재노출한다(`__all__ = ["cause_rules", "evidence_rules"]`).
+`src/services/ai/agent/causes/catalog/__init__.py` 는 부수효과 패키지 루트다.
+먼저 `load_rule_modules(package_name="services.ai.agent.causes", excluded=("catalog", "engine", "loader"))`로 코드 정의 rule을 발견하고, 이어서 `register_catalog_profiles()`가 `src/services/ai/agent/causes/catalog/*.yaml`을 읽어 `CAUSE_PROFILES`에 병합한다.
+`src/services/ai/agent/causes/loader.py`는 YAML 파싱, Pydantic schema 검증, catalog 내부 rule id 중복 검사를 담당한다. YAML rule id가 기존 code rule id와 겹치면 `CauseCatalogError`로 기동 시점에 실패한다.
+`catalog/__init__.py`는 `cause_rules`/`evidence_rules`를 재노출한다(`__all__ = ["cause_rules", "evidence_rules"]`).
+
+#### causes/loader.py — YAML 카탈로그 로더
+
+| 심볼 | 앵커 | 동작 |
+|---|---|---|
+| `CATALOG_DIR` | `src/services/ai/agent/causes/loader.py :: CATALOG_DIR` | 기본 카탈로그 디렉터리 = `causes/catalog/` (패키지 동봉, 컨테이너 이미지에 포함) |
+| `CauseCatalogError` | `src/services/ai/agent/causes/loader.py :: CauseCatalogError` | 카탈로그 로딩 실패 오류(RuntimeError) — 기동 시점 즉시 중단 |
+| `CatalogFileModel` | `src/services/ai/agent/causes/loader.py :: CatalogFileModel` | 파일 루트 스키마: `rules: list[CatalogRuleModel]` (pydantic, `extra="forbid"`) |
+| `CatalogRuleModel` | `src/services/ai/agent/causes/loader.py :: CatalogRuleModel` | `id, symptoms, required_sources, candidates` + `to_profile() -> CauseProfile(rule_id=id)` |
+| `CatalogCandidateModel` | `src/services/ai/agent/causes/loader.py :: CatalogCandidateModel` | `candidate_id, title, description, expected_evidence, checks` + `to_spec() -> CauseCandidateSpec` |
+| `parse_catalog_file(path)` | `src/services/ai/agent/causes/loader.py :: parse_catalog_file` | YAML 파싱 실패 → `"RCA 룰 카탈로그 YAML 파싱 실패: {파일명} — ..."`, 스키마 위반 → `"RCA 룰 카탈로그 스키마 위반: {파일명} — ..."` |
+| `load_catalog_profiles(catalog_dir=None)` | `src/services/ai/agent/causes/loader.py :: load_catalog_profiles` | `*.yaml`/`*.yml` 을 파일명 정렬 순서로 로딩(순수 함수); 카탈로그 내 rule id 중복 → `"RCA 룰 id 중복: ..."` |
+| `register_catalog_profiles(catalog_dir=None)` | `src/services/ai/agent/causes/loader.py :: register_catalog_profiles` | 로딩 결과를 `CAUSE_PROFILES` 에 병합; 기존 등록 룰과 id 충돌 시 `CauseCatalogError`(병합 전 검사라 실패 시 레지스트리 오염 없음) |
+
+카탈로그 파일 형식 전체 예시(모든 필드 필수, 알 수 없는 키는 거부):
+
+```yaml
+# src/services/ai/agent/causes/catalog/<시나리오>.yaml
+rules:
+  - id: "node_not_ready"                     # 룰 식별자 — 전체 카탈로그+코드 룰에서 고유
+    symptoms: ["NodeNotReady"]               # incident.symptom 이 목록에 있으면 매칭
+    required_sources: ["kubernetes", "metrics"]  # 근거 번들 필수 소스(evidence rule)
+    candidates:                              # 매칭 시 생성되는 원인 후보(순서 유지)
+      - candidate_id: "kubelet_down"
+        title: "kubelet 중단"
+        description: "노드 kubelet 프로세스가 중단되어 NodeNotReady 가 됐을 가능성이 있습니다."
+        expected_evidence: ["kubernetes", "metrics"]  # 평가 시 점수 분모
+        checks:
+          - "Node.status.conditions Ready=False reason 확인"
+          - "kubelet process/heartbeat metric 확인"
+```
 
 #### causes/engine.py — 룰 엔진
 
@@ -314,68 +345,33 @@ def block_reason_code(evt: RcaCandidatesEvaluatedBody, detail) -> str | None
    `root_cause=selected.candidate_id`, `confidence=selected.score`,
    `reason=build_root_cause_reason(selected)` 등으로 구성.
 
-#### causes/* — 등록된 프로파일 (지식 베이스)
+#### causes/catalog/*.yaml — 등록된 프로파일 (지식 베이스)
 
-각 모듈은 `@rca.cause(...)` 를 붙인 마커 클래스(본문 `pass`)로 프로파일을 등록한다.
-아래 표의 내용이 등록 데이터 전부다(후보의 title/description/checks 는 소스 원문 유지).
+각 YAML 파일은 `rules` 목록을 가진다. 각 rule은 `id`, `symptoms`, `required_sources`, `candidates`를 선언하고, 후보는 `candidate_id`, `title`, `description`, `expected_evidence`, `checks`를 선언한다. 아래 내용이 현재 등록 데이터 전부다.
 
-**crashloop.py** — `src/services/ai/agent/causes/crashloop.py :: CrashLoopBackOffProfile`
-- symptoms: `("CrashLoopBackOff", "pod_restart_loop")`
-- required_sources: `("kubernetes", "metrics", "logs")`
-- 후보: `oom_killed` (expected: kubernetes, metrics, logs) ·
-  `bad_image_rollout` (kubernetes, logs, metadata) ·
-  `config_env_error` (kubernetes, logs, metadata) ·
-  `app_startup_failure` (kubernetes, logs) ·
-  `dependency_connection_failure` (kubernetes, logs, traces)
+**crashloop.yaml** — `src/services/ai/agent/causes/catalog/crashloop.yaml`
+- `crashloop_backoff`: symptoms `CrashLoopBackOff`, `pod_restart_loop`; required `kubernetes`, `metrics`, `logs`; 후보 `oom_killed`, `bad_image_rollout`, `config_env_error`, `app_startup_failure`, `dependency_connection_failure`
 
-**dependencies.py** — `src/services/ai/agent/causes/dependencies.py :: DbConnectionFailedProfile`
-- symptoms: `("DB connection failed",)`
-- required_sources: `("kubernetes", "metrics", "logs", "traces", "metadata")`
-- 후보: `database_connectivity_failure` (kubernetes, metrics, logs, traces, metadata) ·
-  `database_credential_or_config_error` (kubernetes, logs, metadata)
+**dependencies.yaml** — `src/services/ai/agent/causes/catalog/dependencies.yaml`
+- `db_connection_failed`: symptoms `DB connection failed`; required `kubernetes`, `metrics`, `logs`, `traces`, `metadata`; 후보 `database_connectivity_failure`, `database_credential_or_config_error`
 
-**deployment_gitops.py** —
-`src/services/ai/agent/causes/deployment_gitops.py :: DeploymentRolloutProfile`
-- symptoms: `("ProgressDeadlineExceeded", "Rollout failed")`
-- required_sources: `("kubernetes", "metrics", "logs", "metadata")`
-- 후보: `deployment_progress_deadline_exceeded` (kubernetes, metrics, logs, metadata) ·
-  `replica_unavailable_after_rollout` (kubernetes, metrics, logs)
+**deployment_gitops.yaml** — `src/services/ai/agent/causes/catalog/deployment_gitops.yaml`
+- `deployment_rollout_failed`: symptoms `ProgressDeadlineExceeded`, `Rollout failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `deployment_progress_deadline_exceeded`, `replica_unavailable_after_rollout`
+- `argocd_sync_failed`: symptoms `ArgoCD Sync Failed`, `Sync Failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `gitops_sync_failed`, `manifest_validation_failed`
 
-`src/services/ai/agent/causes/deployment_gitops.py :: ArgoCdSyncFailedProfile`
-- symptoms: `("ArgoCD Sync Failed", "Sync Failed")`
-- required_sources: `("kubernetes", "metrics", "logs", "metadata")`
-- 후보: `gitops_sync_failed` (kubernetes, metrics, logs, metadata) ·
-  `manifest_validation_failed` (kubernetes, logs, metadata)
+**image_pull.yaml** — `src/services/ai/agent/causes/catalog/image_pull.yaml`
+- `image_pull_backoff`: symptoms `ImagePullBackOff`, `ErrImagePull`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `wrong_image_tag`, `missing_image_pull_secret`, `registry_unavailable`
 
-**image_pull.py** — `src/services/ai/agent/causes/image_pull.py :: ImagePullProfile`
-- symptoms: `("ImagePullBackOff", "ErrImagePull")`
-- required_sources: `("kubernetes", "metrics", "logs", "metadata")`
-- 후보: `wrong_image_tag` (kubernetes, logs, metadata) ·
-  `missing_image_pull_secret` (kubernetes, logs, metadata) ·
-  `registry_unavailable` (kubernetes, metrics, logs)
+**network.yaml** — `src/services/ai/agent/causes/catalog/network.yaml`
+- `dns_lookup_failed`: symptoms `DNS lookup failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `service_dns_resolution_failure`
+- `connection_timeout`: symptoms `Connection timeout`; required `kubernetes`, `metrics`, `logs`, `traces`, `metadata`; 후보 `network_path_timeout`
+- `ingress_5xx`: symptoms `Ingress 502/503`, `Ingress 502`, `Ingress 503`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `upstream_unavailable`, `backend_readiness_failure`
 
-**network.py** — `src/services/ai/agent/causes/network.py :: DnsLookupFailedProfile`
-- symptoms: `("DNS lookup failed",)` / required: `("kubernetes", "metrics", "logs", "metadata")`
-- 후보: `service_dns_resolution_failure` (kubernetes, metrics, logs, metadata)
+**scheduling.yaml** — `src/services/ai/agent/causes/catalog/scheduling.yaml`
+- `failed_scheduling`: symptoms `FailedScheduling`, `Pending`; required `kubernetes`, `metrics`, `metadata`; 후보 `insufficient_cpu`, `insufficient_memory`, `node_affinity_or_taint_mismatch`, `pvc_pending`
 
-`src/services/ai/agent/causes/network.py :: ConnectionTimeoutProfile`
-- symptoms: `("Connection timeout",)` / required: `("kubernetes", "metrics", "logs", "traces", "metadata")`
-- 후보: `network_path_timeout` (kubernetes, metrics, logs, traces, metadata)
-
-`src/services/ai/agent/causes/network.py :: IngressFailureProfile`
-- symptoms: `("Ingress 502/503", "Ingress 502", "Ingress 503")` / required: `("kubernetes", "metrics", "logs", "metadata")`
-- 후보: `upstream_unavailable` (kubernetes, metrics, logs, metadata) ·
-  `backend_readiness_failure` (kubernetes, metrics, logs)
-
-**scheduling.py** — `src/services/ai/agent/causes/scheduling.py :: SchedulingProfile`
-- symptoms: `("FailedScheduling", "Pending")` / required: `("kubernetes", "metrics", "metadata")`
-- 후보: `insufficient_cpu` (kubernetes, metrics) · `insufficient_memory` (kubernetes, metrics) ·
-  `node_affinity_or_taint_mismatch` (kubernetes, metadata) · `pvc_pending` (kubernetes, metadata)
-
-**security_policy.py** — `src/services/ai/agent/causes/security_policy.py :: SecretNotFoundProfile`
-- symptoms: `("Secret not found",)` / required: `("kubernetes", "logs", "metadata")`
-- 후보: `missing_secret_reference` (kubernetes, logs, metadata) ·
-  `secret_key_missing` (kubernetes, logs, metadata)
+**security_policy.yaml** — `src/services/ai/agent/causes/catalog/security_policy.yaml`
+- `secret_not_found`: symptoms `Secret not found`; required `kubernetes`, `logs`, `metadata`; 후보 `missing_secret_reference`, `secret_key_missing`
 
 ### playbooks/ — 룰 등록 네임스페이스
 
@@ -394,8 +390,8 @@ rca = RcaPlaybooks()
 `__all__`: `CauseCandidateSpec`, `RcaPlaybooks`, `RecoveryActionSpec`,
 `causes_for`, `fallback_recovery`, `recovery_for`, `rca`.
 
-규칙: **등록은 `@rca.<단어>`, 조회는 `registered_*()`**. 새 장애 시나리오 추가 =
-`causes/` 또는 `recovery/` 아래 파일 1개(엔진 수정 없음).
+규칙: **등록은 `@rca.<단어>` 또는 카탈로그 YAML, 조회는 `registered_*()`**. 새 장애 시나리오 추가 =
+원인 룰은 `causes/catalog/` 아래 YAML 파일 1개, 복구 룰은 `recovery/` 아래 파일 1개(엔진 수정 없음).
 
 #### playbooks/cause.py
 
@@ -406,9 +402,9 @@ rca = RcaPlaybooks()
 | `CauseCandidateSpec` | `src/services/ai/agent/playbooks/cause.py :: CauseCandidateSpec` | `candidate_id, title, description, expected_evidence: tuple[str, ...], checks: tuple[str, ...]` + `to_candidate() -> CauseCandidate` (tuple→list 변환) |
 | `SymptomEvidenceRequirementRule` | `src/services/ai/agent/playbooks/cause.py :: SymptomEvidenceRequirementRule` | `symptoms/sources` 튜플. `matches` = `incident.symptom in symptoms` |
 | `SymptomCauseRule` | `src/services/ai/agent/playbooks/cause.py :: SymptomCauseRule` | `matches` = 증상 포함 여부, `candidates` = spec 전체를 `to_candidate()` |
-| `CauseProfile` | `src/services/ai/agent/playbooks/cause.py :: CauseProfile` | `symptoms, required_sources, candidate_specs` + `evidence_rule()`, `cause_rule()` 파생 |
+| `CauseProfile` | `src/services/ai/agent/playbooks/cause.py :: CauseProfile` | `symptoms, required_sources, candidate_specs, rule_id` + `evidence_rule()`, `cause_rule()` 파생 |
 | `CAUSE_PROFILES` | `src/services/ai/agent/playbooks/cause.py :: CAUSE_PROFILES` | 등록 저장소 `list[CauseProfile]` (모듈 전역) |
-| `causes_for(*, symptoms, required_sources, candidates)` | `src/services/ai/agent/playbooks/cause.py :: causes_for` | 클래스 데코레이터 — `CAUSE_PROFILES.append` 후 마커 클래스 그대로 반환 |
+| `causes_for(*, symptoms, required_sources, candidates, rule_id=None)` | `src/services/ai/agent/playbooks/cause.py :: causes_for` | 클래스 데코레이터 — `rule_id`가 있으면 중복 검사 후 `CAUSE_PROFILES.append`, 마커 클래스 그대로 반환 |
 | `registered_cause_profiles()` | `src/services/ai/agent/playbooks/cause.py :: registered_cause_profiles` | `services.ai.agent.causes.catalog` 를 지연 임포트(등록 유발) 후 튜플 반환 |
 | `evidence_rules(profiles=None)` | `src/services/ai/agent/playbooks/cause.py :: evidence_rules` | 프로파일별 `evidence_rule()` 튜플 |
 | `cause_rules(profiles=None)` | `src/services/ai/agent/playbooks/cause.py :: cause_rules` | 프로파일별 `cause_rule()` 튜플 |
