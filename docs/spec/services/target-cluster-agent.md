@@ -542,7 +542,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
    - `NodeCollectorManager.from_env`, `LiveSummaryPublisher.from_env` 생성.
    - `providers` 미주입 시 기본 4종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`.
    - `TelemetryQueryRegistry`, `EvidenceCollector(providers, registry)`, `AgentControlStore`, `CommandResultOutbox`, `EvidenceJobScheduler`(source_id=`"cluster-snapshot"`, provider_keys=collector의 evidence_key들) 생성.
-   - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(enabled=True, interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값(기본 1), max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값(기본 3), queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`.
+   - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(enabled=True, interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값(기본 1), max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값(기본 2), queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`.
    - `AgentPolicySync`, `DesiredStateReconciler`, `KubernetesApiClient`, `AgentCommandRegistry.from_instance(self, ..., default_handler=self.apply_default_command)` 생성 — 데코레이트된 6개 핸들러 자동 등록.
 3. `run()`: 주입된 client가 있으면 그대로, 없으면 `HttpManagementPlaneClient(base_url)`를 async context로 열어 `run_with_client`. finally에서 `close()`(두 SQLite store를 `suppress(Exception)`으로 닫음).
 4. `run_with_client(client)`:

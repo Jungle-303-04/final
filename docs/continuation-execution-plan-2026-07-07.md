@@ -16,19 +16,25 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 20:03 KST 체크포인트
+### 2026-07-07 20:07 KST 체크포인트
 
-- api-gateway OOM 안정화 진행.
+- api-gateway OOM 안정화와 evidence 정책 완화 진행.
 - 라이브 확인:
   - `api-gateway` Pod Last State `OOMKilled`, exit code 137, restart count 37.
   - api-gateway LB `/healthz`, `/api/healthz`는 alive window에서 200.
   - console LB `/api/healthz`는 gateway 재시작 타이밍에 502.
+  - `cluster-1`, `cluster-2` provider 정책은 10초 interval/max_workers 3이었고 completed evidence_jobs가 58k+까지 누적되어 있었다.
 - 구현:
   - 1차로 `deploy/management/services.yaml`의 api-gateway resources를 requests `cpu=50m`, `memory=256Mi`, limits `cpu=1`, `memory=1Gi`로 상향했으나 새 Pod도 시작 직후 OOM/restart가 재현됐다.
-  - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했다.
-  - gateway `OUTBOX_RELAY_BATCH=50`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있다.
+  - 2차로 resources를 requests `cpu=100m`, `memory=512Mi`, limits `cpu=1`, `memory=2Gi`로 상향했으나 약 4분 뒤 OOM/restart가 재현됐다.
+  - 3차로 resources를 requests `cpu=100m`, `memory=1Gi`, limits `cpu=1`, `memory=4Gi`로 상향했다.
+  - gateway `OUTBOX_RELAY_BATCH=10`을 추가했다. 기본값 1000은 큰 evidence 페이로드 backlog를 한 번에 읽어 메모리 피크를 키울 수 있다.
+  - gateway에 `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=65536`을 추가해 반복 JSON/DB 처리 후 RSS 반환 여지를 확보했다.
+  - 코드 기본 evidence interval을 30초, provider max_workers 기본값을 2로 완화했다.
+  - live DB `agent_policies`에서 `cluster-1`, `cluster-2` policy generation을 4로 올리고 모든 provider interval 30초/max_workers 2로 반영했다.
 - 다음 실행:
-  - 2Gi resources + `OUTBOX_RELAY_BATCH=50` live patch rollout을 확인한다.
+  - 4Gi resources + `OUTBOX_RELAY_BATCH=10` + allocator env live patch rollout을 확인한다.
+  - agent policy status에서 generation 4 적용을 확인한다.
   - `kubectl rollout status deploy/api-gateway`, console LB `/api/healthz`, public `/api/healthz`를 확인.
   - 이 변경은 OOM 완화용이고, evidence/result 폭증, outbox relay batch memory, incident/DLQ 증가는 별도 RCA로 이어간다.
 

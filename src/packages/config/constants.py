@@ -20,7 +20,7 @@ class Runtime:
 
 class Target:
     DEFAULT_CLUSTER_ID: Final[str] = "default-target-cluster"
-    DEFAULT_EVIDENCE_INTERVAL_SECONDS: Final[str] = "10"
+    DEFAULT_EVIDENCE_INTERVAL_SECONDS: Final[str] = "30"
 
 
 class Auth:

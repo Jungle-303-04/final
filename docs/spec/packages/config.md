@@ -37,7 +37,7 @@ def now_iso() -> str                             # datetime.now(UTC).isoformat()
 - `Nats` — `DEFAULT_URL: Final[str] = "nats://nats:4222"`.
 - `Redis` — `DEFAULT_URL: Final[str] = "redis://redis:6379/0"`.
 - `Runtime` — `DEFAULT_SERVICE_NAME = "service"`, `DEFAULT_HTTP_PORT = "8000"`, `SERVICE_NAME_ENV = "SERVICE_NAME"`.
-- `Target` — `DEFAULT_CLUSTER_ID = "default-target-cluster"`, `DEFAULT_EVIDENCE_INTERVAL_SECONDS = "10"`.
+- `Target` — `DEFAULT_CLUSTER_ID = "default-target-cluster"`, `DEFAULT_EVIDENCE_INTERVAL_SECONDS = "30"`.
 - `Auth` — `LOCAL_USER_ID = "local-user"`, `DEFAULT_SESSION_TTL_SECONDS = "86400"`, `SESSION_TTL_ENV = "SESSION_TTL_SECONDS"`, `SESSION_COOKIE_NAME = "service_session"`, `COOKIE_SECURE_ENV = "COOKIE_SECURE"`, `COOKIE_SAMESITE = "lax"`. (세션 쿠키는 httpOnly 로 XSS 토큰 탈취 차단; Secure 는 운영 기본 on, 로컬 http 는 `COOKIE_SECURE=0`; SameSite=lax 로 CSRF 완화.)
 - `GitHub` — `PROVIDER = "github"`.
 - `Command` — `DEFAULT_ACTION = "rollout_restart"`, `APPLY_MANIFEST_ACTION = "apply_manifest"`, `DELETE_WORKLOAD_ACTION = "delete_workload"`, `KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"`, `TELEMETRY_QUERY_RUN_ACTION = "telemetry.query.run"`.
