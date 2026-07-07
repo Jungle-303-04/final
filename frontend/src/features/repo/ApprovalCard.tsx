@@ -2,12 +2,14 @@
 import { useApproval } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { Badge, Button } from '@/shared/ui';
+import { FadeSlideIn } from '@/shared/motion';
 
 export function ApprovalCard({ approvalId, summary, resolved, compact }:
   { approvalId: string; summary: string; resolved?: 'granted' | 'rejected'; compact?: boolean }) {
   const approval = useApproval();
   const canDeploy = useIsAdmin(); // 프론트는 표시만 단순화 — 서버가 최종 검증(G5 도입 시 리소스 권한으로 대체)
-  if (resolved) return <Badge status={resolved} />;
+  // 승인/거절 확정 시 배지가 부드럽게 등장 — 상태 전환이 갑작스럽지 않게
+  if (resolved) return <FadeSlideIn><Badge status={resolved} /></FadeSlideIn>;
   return (
     <div className="card" style={{ background: 'var(--surface-2)', padding: compact ? 10 : 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
       <Badge tone="warn">승인 대기</Badge>

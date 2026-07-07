@@ -24,8 +24,8 @@ export default function RepoDetailView() {
     <FadeSlideIn>
       <Breadcrumbs items={[{ label: '레포', to: '/repos' }, { label: appQ.data?.name ?? applicationId }]} />
       <QueryBoundary query={appQ}>{app => (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px' }}>
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>{app.name} <code style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{app.repo_ref}@{app.branch}</code></h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '10px 0 16px', flexWrap: 'wrap', gap: 8 }}>
+          <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', overflowWrap: 'anywhere' }}>{app.name} <code style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{app.repo_ref}@{app.branch}</code></h1>
           <div style={{ display: 'flex', gap: 8 }}>
             <a href={`https://github.com/${app.repo_ref}/blob/${app.branch}/${app.manifest_path}`} target="_blank" rel="noreferrer"><Button>manifest 수정 ↗</Button></a>
             <a href={`https://github.com/${app.repo_ref}`} target="_blank" rel="noreferrer"><Button>GitHub ↗</Button></a>
