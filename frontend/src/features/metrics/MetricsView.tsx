@@ -141,7 +141,7 @@ export default function MetricsView() {
         <TimeSeriesChart series={series} />
       </Card>
       <Card title="스냅샷 추이 — 인벤토리 실측 (usage rollup)" style={{ marginBottom: 16 }}>
-        {usageQ.isPending && !!clusterId ? <Skeleton lines={4} />
+        {usageQ.isPending ? <Skeleton lines={4} /> /* 클러스터 선택 전(비활성)에도 스켈레톤 — 성급한 '없음' 금지 */
           : usageQ.isError ? (
             <EmptyState icon={<IconClock size={26} />} title="추이 데이터를 불러오지 못했습니다"
               description={(usageQ.error as Error).message}
