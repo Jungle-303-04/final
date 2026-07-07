@@ -1,6 +1,7 @@
 // Console 셸 + 공용 빌딩블록 (plural-ui 재사용, 콘솔 전용 레이아웃)
 import { useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { API_MODE } from '@/shared/lib/api';
 import { motion } from 'motion/react';
 import { fadeRise } from '@/plural-ui/motion';
 import { Button, Chip, Modal, useThemeMode, type ChipSeverity } from '@/plural-ui';
@@ -111,6 +112,21 @@ function ConsoleShell() {
         </nav>
 
         <div className="co-main">
+          {API_MODE === 'real' && (
+            /* 정직성 배너 — /console 하위는 디자인 복각 데모(샘플 데이터)라서 실측이 아니다 */
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '6px 16px',
+              background: 'color-mix(in oklab, var(--warn, #d99a2b) 14%, transparent)',
+              borderBottom: '1px solid color-mix(in oklab, var(--warn, #d99a2b) 35%, transparent)',
+              fontSize: 12,
+            }} role="status">
+              <b>디자인 프리뷰</b>
+              <span>이 /console 화면은 샘플 데이터로 렌더링됩니다 — 실제 운영 데이터가 아닙니다.</span>
+              <Link to="/overview" style={{ marginLeft: 'auto', fontWeight: 600, textDecoration: 'underline', color: 'inherit' }}>
+                실데이터 운영 콘솔로 이동 →
+              </Link>
+            </div>
+          )}
           <header className="co-header">
             <div className="pl-row">
               <button type="button" className="co-project" onClick={() => setProjectOpen(true)}>

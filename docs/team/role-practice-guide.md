@@ -432,7 +432,7 @@ safe_pr.requested
 | 7 | `src/services/ai/recovery-worker/app.py` | RCA 결과를 복구 후보로 바꾸는 부분을 본다 |
 | 8 | `src/services/ai/select-worker/app.py` | route 선택을 본다 |
 | 9 | `src/services/ai/dispatch-worker/app.py` | command 또는 Safe PR로 나누는 부분을 본다 |
-| 10 | `src/services/ai/agent/causes/*.py` | 증상별 rule을 본다 |
+| 10 | `src/services/ai/agent/causes/catalog/*.yaml` | 증상별 rule을 본다 |
 
 ### 현재 RCA worker 구조
 

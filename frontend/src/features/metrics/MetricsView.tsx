@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { useClusters, useClusterSummary, useClusterUsage, useWorkloads } from '@/features/cluster/api';
 import { commandResultMessage, isTerminal, summarizeTelemetryResult, useCommandStatus } from '@/features/metrics/api';
-import { Badge, Button, Card, StatBox } from '@/shared/ui';
+import { Badge, Button, Card, EmptyState, Skeleton, StatBox } from '@/shared/ui';
 import { TimeSeriesChart, type Series } from '@/shared/ui/charts';
+import { fmtHms } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
+import { IconClock } from '@/shared/ui/icons';
 
 const PRESETS = [
   { label: '팟 재시작 (5m)', promql: 'sum(rate(kube_pod_container_status_restarts_total[5m]))' },
@@ -63,19 +65,20 @@ export default function MetricsView() {
       : clusterId ? [{ at: Date.now(), restarts: inventoryRestarts, running: inventoryRunning }] : []
     ).slice(-120);
     return [
-      { id: '재시작 합', data: pts.map((p, i) => ({ x: i, y: p.restarts })) },
-      { id: '실행 팟', data: pts.map((p, i) => ({ x: i, y: p.running })) },
+      { id: '재시작 합', data: pts.map(p => ({ x: fmtHms(p.at), y: p.restarts })) },
+      { id: '실행 팟', data: pts.map(p => ({ x: fmtHms(p.at), y: p.running })) },
     ];
   }, [paused, frozen, history, clusterId, inventoryRestarts, inventoryRunning]);
 
-  // 스냅샷 기반 실측 추이 — cluster_usage_samples 시계열(빈 데이터면 카드 자체를 숨김)
+  // 스냅샷 기반 실측 추이 — cluster_usage_samples 시계열(실 시각 라벨)
   const usageSeries: Series[] = useMemo(() => {
     const samples = usageQ.data ?? [];
     if (!samples.length) return [];
+    const label = (s: { sampled_at: string | null }, i: number) => (s.sampled_at ? fmtHms(s.sampled_at) : `#${i}`);
     return [
-      { id: '실행 팟', data: samples.map((s, i) => ({ x: i, y: s.usage.pod_running ?? 0 })) },
-      { id: '재시작 누적', data: samples.map((s, i) => ({ x: i, y: s.usage.restart_total ?? 0 })) },
-      { id: '준비 노드', data: samples.map((s, i) => ({ x: i, y: s.usage.node_ready ?? 0 })) },
+      { id: '실행 팟', data: samples.map((s, i) => ({ x: label(s, i), y: s.usage.pod_running ?? 0 })) },
+      { id: '재시작 누적', data: samples.map((s, i) => ({ x: label(s, i), y: s.usage.restart_total ?? 0 })) },
+      { id: '준비 노드', data: samples.map((s, i) => ({ x: label(s, i), y: s.usage.node_ready ?? 0 })) },
     ];
   }, [usageQ.data]);
 
@@ -91,14 +94,31 @@ export default function MetricsView() {
       },
     }),
   });
-  const execute = () => {
+  // query 인자를 받는다 — 재시도 시 '그 카드의' 쿼리를 다시 실행(현재 입력값과 무관)
+  const execute = (query?: string) => {
+    const q = (query ?? promql).trim();
+    if (!q) return;
     const id = Math.random().toString(36).slice(2, 8);
-    setCards(cs => [{ id, promql }, ...cs]);
-    run.mutate(promql, {
+    setCards(cs => [{ id, promql: q }, ...cs]);
+    run.mutate(q, {
       onSuccess: d => setCards(cs => cs.map(c => c.id === id ? { ...c, commandId: d.command_id } : c)),
       onError: () => setCards(cs => cs.map(c => c.id === id ? { ...c, submitFailed: true } : c)),
     });
   };
+
+  // 클러스터가 하나도 없으면 차트가 의미 없다 — 등록 유도(정직한 빈 상태)
+  if (clustersQ.isSuccess && clusters.length === 0) {
+    return (
+      <FadeSlideIn>
+        <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>메트릭</h1>
+        <Card>
+          <EmptyState icon={<IconClock size={26} />} title="등록된 클러스터가 없습니다"
+            description="클러스터를 등록하고 에이전트가 연결되면 실시간·스냅샷 메트릭이 표시됩니다"
+            action={<Link to="/clusters"><Button variant="primary">클러스터 등록</Button></Link>} />
+        </Card>
+      </FadeSlideIn>
+    );
+  }
 
   return (
     <FadeSlideIn>
@@ -120,21 +140,31 @@ export default function MetricsView() {
       <Card title="실시간 — 재시작 추이 / 실행 팟" style={{ marginBottom: 16 }}>
         <TimeSeriesChart series={series} />
       </Card>
-      {usageSeries.length > 0 && (
-        <Card title="스냅샷 추이 — 인벤토리 실측 (usage rollup)" style={{ marginBottom: 16 }}>
-          <TimeSeriesChart series={usageSeries} />
-        </Card>
-      )}
+      <Card title="스냅샷 추이 — 인벤토리 실측 (usage rollup)" style={{ marginBottom: 16 }}>
+        {usageQ.isPending && !!clusterId ? <Skeleton lines={4} />
+          : usageQ.isError ? (
+            <EmptyState icon={<IconClock size={26} />} title="추이 데이터를 불러오지 못했습니다"
+              description={(usageQ.error as Error).message}
+              action={<Button size="sm" onClick={() => usageQ.refetch()}>다시 시도</Button>} />
+          ) : usageSeries.length === 0 ? (
+            <EmptyState icon={<IconClock size={26} />} title="아직 수집된 스냅샷 시계열이 없습니다"
+              description="에이전트가 연결되면 스냅샷(30초 주기)마다 실측 usage 가 쌓입니다" />
+          ) : <TimeSeriesChart series={usageSeries} />}
+      </Card>
       <Card title="온디맨드 PromQL (비동기 — agent 경유)">
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <select className="input" style={{ width: 200 }} onChange={e => setPromql(e.target.value)}>
+          <select className="input" style={{ width: 200 }}
+            value={PRESETS.some(p => p.promql === promql) ? promql : ''}
+            onChange={e => { if (e.target.value) setPromql(e.target.value); }}>
+            <option value="" disabled>직접 입력…</option>
             {PRESETS.map(p => <option key={p.label} value={p.promql}>{p.label}</option>)}
           </select>
           <input className="input" style={{ fontFamily: 'var(--font-mono)' }} value={promql} onChange={e => setPromql(e.target.value)} />
-          <Button variant="primary" onClick={execute}>실행</Button>
+          <Button variant="primary" onClick={() => execute()} disabled={!clusterId || !promql.trim()}
+            title={clusterId ? '' : '클러스터를 먼저 선택해주세요'}>실행</Button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cards.map(c => <QueryCardRow key={c.id} card={c} onRetry={execute} />)}
+          {cards.map(c => <QueryCardRow key={c.id} card={c} onRetry={() => execute(c.promql)} />)}
         </div>
       </Card>
     </FadeSlideIn>

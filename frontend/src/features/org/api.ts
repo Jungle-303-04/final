@@ -15,9 +15,16 @@ function useInvalidator(keys: string[][]) {
   const qc = useQueryClient();
   return () => keys.forEach(k => qc.invalidateQueries({ queryKey: k }));
 }
+const failToast = (action: string) => (err: unknown) =>
+  uiStore.getState().toast('danger', `${action} 실패 — ${(err as Error).message || '잠시 후 다시 시도해주세요'}`);
+
 export function useCreateOrg() {
   const inv = useInvalidator([['orgs']]);
-  return useMutation({ mutationFn: (b: { name: string; description?: string }) => post<Org>('/orgs', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '조직을 만들었습니다'); } });
+  return useMutation({
+    mutationFn: (b: { name: string; description?: string }) => post<Org>('/orgs', b),
+    onSuccess: () => { inv(); uiStore.getState().toast('ok', '조직을 만들었습니다'); },
+    onError: failToast('조직 생성'),
+  });
 }
 export function useDeleteOrg() {
   const inv = useInvalidator([['orgs']]);
@@ -29,7 +36,11 @@ export function useDeleteOrg() {
 }
 export function useCreateGroup() {
   const inv = useInvalidator([['groups'], ['orgs']]);
-  return useMutation({ mutationFn: (b: { org_id: string; name: string }) => post<Group>('/groups', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '그룹을 만들었습니다'); } });
+  return useMutation({
+    mutationFn: (b: { org_id: string; name: string }) => post<Group>('/groups', b),
+    onSuccess: () => { inv(); uiStore.getState().toast('ok', '그룹을 만들었습니다'); },
+    onError: failToast('그룹 생성'),
+  });
 }
 export function useGroupMembers(groupId: string) {
   return useQuery({ queryKey: ['groups', groupId, 'members'], queryFn: () => get<{ members: { user_id: string; email: string }[] }>(`/groups/${groupId}/members`), enabled: !!groupId, select: d => d.members });
@@ -40,14 +51,24 @@ export function useToggleMembership(groupId: string) {
     mutationFn: ({ userId, add }: { userId: string; add: boolean }) =>
       add ? put(`/groups/${groupId}/members/${userId}`) : del(`/groups/${groupId}/members/${userId}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['users'] }); },
+    // 실패 시 체크박스가 실제 상태로 되돌아가도록 서버 상태 재조회
+    onError: (err) => { failToast('멤버십 변경')(err); qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['users'] }); },
   });
 }
 export interface GrantPayload { subject_type: 'user' | 'group'; subject_id: string; subject_label?: string; resource_type: string; resource_id: string; role: string }
 export function useGrantAccess() {
   const inv = useInvalidator([['access']]);
-  return useMutation({ mutationFn: (b: GrantPayload) => post('/access', b), onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 부여했습니다'); } });
+  return useMutation({
+    mutationFn: (b: GrantPayload) => post('/access', b),
+    onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 부여했습니다'); },
+    onError: failToast('권한 부여'),
+  });
 }
 export function useRevokeAccess() {
   const inv = useInvalidator([['access']]);
-  return useMutation({ mutationFn: (id: string) => del(`/access/${id}`), onSuccess: inv });
+  return useMutation({
+    mutationFn: (id: string) => del(`/access/${id}`),
+    onSuccess: () => { inv(); uiStore.getState().toast('ok', '권한을 회수했습니다'); },
+    onError: failToast('권한 회수'),
+  });
 }

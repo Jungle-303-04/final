@@ -32,6 +32,7 @@ export default function ClusterDetailView() {
   const scale = useScale(clusterId);
   const restart = useRestart(clusterId);
   const [scaleTarget, setScaleTarget] = useState<Workload | null>(null);
+  const [restartTarget, setRestartTarget] = useState<Workload | null>(null);
   const [replicas, setReplicas] = useState(2);
 
   const podRows = useMemo(() =>
@@ -59,7 +60,7 @@ export default function ClusterDetailView() {
         <StatBox label="서비스" value={summaryQ.data?.services ?? 0} />
       </div>
       <Tabs items={TABS} current={tab} onChange={k => setSp({ tab: k })} />
-      {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin} onScale={w => { setScaleTarget(w); setReplicas(2); }} onRestart={w => restart.mutate({ ns: w.namespace, name: w.name.replace(/-pod-.*/, '') })} />}
+      {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin} onScale={w => { setScaleTarget(w); setReplicas(2); }} onRestart={setRestartTarget} />}
       {tab === 'pods' && (
         <Card>
           <ResourceTable<Workload>
@@ -117,6 +118,21 @@ export default function ClusterDetailView() {
             { ns: scaleTarget.namespace, name: scaleTarget.name.replace(/-pod-.*/, ''), replicas },
             { onSuccess: () => setScaleTarget(null) },
           )}>실행</Button>
+        </div>
+      </Modal>
+
+      {/* 재시작은 파괴적 명령 — 즉시 실행 대신 확인 단계를 둔다 */}
+      <Modal open={!!restartTarget} title={`${restartTarget?.name.replace(/-pod-.*/, '') ?? ''} 재시작`} onClose={() => setRestartTarget(null)}>
+        <p style={{ color: 'var(--text-2)', fontSize: 'var(--fs-sm)' }}>
+          <code>{restartTarget?.namespace}/{restartTarget?.name.replace(/-pod-.*/, '')}</code> 의 팟이 순차 재시작됩니다.
+          비동기 명령입니다 — command-worker 정책 확인 후 agent 가 실행합니다.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+          <Button onClick={() => setRestartTarget(null)}>취소</Button>
+          <Button variant="danger" loading={restart.isPending} onClick={() => restartTarget && restart.mutate(
+            { ns: restartTarget.namespace, name: restartTarget.name.replace(/-pod-.*/, '') },
+            { onSettled: () => setRestartTarget(null) },
+          )}>재시작 실행</Button>
         </div>
       </Modal>
     </FadeSlideIn>

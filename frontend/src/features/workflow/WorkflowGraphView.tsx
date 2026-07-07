@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
-import { Badge, Breadcrumbs, Card, CodeBlock, KeyValue, Skeleton } from '@/shared/ui';
+import { Badge, Breadcrumbs, Button, Card, CodeBlock, KeyValue, Skeleton } from '@/shared/ui';
 import { PlanDiff } from '@/shared/ui/plan-diff';
 import { IconCheck } from '@/shared/ui/icons';
 import { toneColor, toneOf } from '@/shared/ui/status';
@@ -40,7 +40,7 @@ export default function WorkflowGraphView() {
   const { runId = '' } = useParams();
   const apps = useApplications();
   const all = useRunsAll(apps.data ?? []); // 활성 run 있으면 10s polling (repo/api)
-  const found = all.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId }))).find(r => r.run_id === runId);
+  const found = all.items.flatMap(({ appId, runs }) => runs.map(r => ({ ...r, appId }))).find(r => r.run_id === runId);
   const [selected, setSelected] = useState<string | null>(null);
 
   const raw = useMemo(() => {
@@ -72,7 +72,17 @@ export default function WorkflowGraphView() {
   }, [found]);
   const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
 
-  if (!found) return apps.isPending ? <Skeleton lines={5} /> : <Card>run 을 찾을 수 없습니다: {runId}</Card>;
+  if (!found) {
+    // 목록·개별 runs 쿼리가 아직 로딩 중이면 스켈레톤 — 성급한 '없음' 표시 금지
+    if (apps.isPending || ((apps.data ?? []).length > 0 && all.pending)) return <Skeleton lines={5} />;
+    return (
+      <Card>
+        <p style={{ margin: '0 0 10px' }}>run 을 찾을 수 없습니다: <code>{runId}</code></p>
+        <p style={{ margin: '0 0 10px', color: 'var(--text-3)', fontSize: 'var(--fs-sm)' }}>이미 정리됐거나 접근 권한이 없는 run 일 수 있습니다.</p>
+        <Link to="/workflows"><Button>워크플로우 목록으로 →</Button></Link>
+      </Card>
+    );
+  }
   const selectedStep = selected ? found.steps.find(s => s.name === selected) : null;
 
   return (
