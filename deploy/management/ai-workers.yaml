@@ -505,6 +505,48 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: ai-fallback-worker
+  namespace: management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-fallback-worker
+  template:
+    metadata:
+      labels:
+        app: ai-fallback-worker
+    spec:
+      containers:
+        - name: worker
+          image: kubeheal-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/services/ai/ai-fallback-worker/app.py"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: rca-feedback-worker
   namespace: management
 spec:
