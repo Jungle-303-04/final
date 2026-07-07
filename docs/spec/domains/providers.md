@@ -136,7 +136,7 @@ DB 테이블 없음. 카탈로그는 코드 상수 `CATALOG` (frozen dataclass �
 | 5 | deploy | `manual-manifest` | Manual Manifest Export | available | `POST /targets apply=false` | `preview`, `download_manifest` | — | — | — |
 | 6 | deploy | `kube-context` | Kubernetes Context Apply | available | `kubectl apply with KUBE_CONTEXT_ALLOWLIST` | `preview`, `server_apply` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
 | 7 | deploy | `github-actions` | GitHub Actions | available | `.github/workflows/promote-dev.yml + .github/workflows/aws-cd.yml` | `ci`, `build`, `promote`, `deploy` | `scm_write` / `github-actions-permissions` / `promote` — "Repository workflow permission that allows the runner to push to main." | `AUTO_PROMOTE_DEV_TO_MAIN`, `AWS_AUTO_DEPLOY` | — |
-| 8 | deploy | `argocd` | Argo CD | unavailable | None | — | — | — | "Argo CD Application/ApplicationSet adapter is unavailable" |
+| 8 | deploy | `gitops-controller` | GitOps Controller | unavailable | None | — | — | — | "GitOps controller adapter is unavailable" |
 | 9 | deploy | `jenkins` | Jenkins | unavailable | None | — | — | — | "Jenkins job trigger/status adapter is unavailable" |
 | 10 | cloud | `existing-k8s` | Existing Kubernetes | available | `kubeconfig context or target agent bootstrap` | `install_target_agent`, `apply_manifest` | — | `KUBE_CONTEXT_ALLOWLIST` | — |
 | 11 | cloud | `local` | Local Kubernetes | available | `scripts/up.sh` | `kind`, `minikube`, `developer_loop` | — | — | — |
