@@ -44,3 +44,24 @@ test('metrics context preset narrows PromQL by real drilldown subject', async ()
     '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle",instance=~".*ip-10-0-1-1.*"}[5m]))',
   );
 });
+
+test('cluster drill actions keep real subject context across events metrics and ai', async () => {
+  const { contextActionHrefs, deploymentTargetsFromPods } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
+
+  assert.deepEqual(
+    deploymentTargetsFromPods([
+      { namespace: 'prod', name: 'checkout-abc', workload_name: 'checkout', phase: 'Running', restarts: 0 },
+      { namespace: 'prod', name: 'checkout-def', workload_name: 'checkout', phase: 'Running', restarts: 1 },
+      { namespace: 'ops', name: 'agent-1', phase: 'Running', restarts: 0 },
+    ]),
+    [
+      { ns: 'prod', name: 'checkout', podCount: 2 },
+      { ns: 'ops', name: 'agent-1', podCount: 1 },
+    ],
+  );
+
+  const hrefs = contextActionHrefs('cluster-1', 'pod', 'checkout-abc', 'prod');
+  assert.equal(hrefs.events, '/clusters/cluster-1?tab=events&q=checkout-abc');
+  assert.equal(hrefs.metrics, '/metrics?cluster=cluster-1&subject=pod&name=checkout-abc&namespace=prod');
+  assert.equal(decodeURIComponent(hrefs.ai), '/ai?prefill=cluster-1 prod/checkout-abc pod 상태 분석');
+});

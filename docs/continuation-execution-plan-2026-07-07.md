@@ -16,6 +16,32 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:40 KST 체크포인트
+
+- 클러스터 드릴 URL state/컨텍스트 액션 보강.
+- 구현:
+  - 노드/서비스/워크로드 drawer를 local state 대신 URL search state로 복원 가능하게 만들었다.
+  - 지원 URL:
+    - `/clusters/{cluster_id}?tab=nodes&detail=node&name={node}`
+    - `/clusters/{cluster_id}?tab=services&detail=service&namespace={ns}&name={service}`
+    - `/clusters/{cluster_id}?tab=workloads&detail=workload&namespace={ns}&name={workload}`
+  - 새로고침 후에도 실제 inventory API 응답에서 대상 리소스를 찾아 drawer가 다시 열린다.
+  - cluster/node/service/workload/pod ContextActions는 이벤트, 메트릭, AI 분석 세 경로를 모두 제공한다.
+  - 이벤트: `/clusters/{cluster_id}?tab=events&q={target}`.
+  - 메트릭: `/metrics?cluster=...&subject=...&name=...&namespace=...`.
+  - AI: `/ai?prefill=...`.
+  - 워크로드 묶음은 실제 pod inventory의 `workload_name || pod.name` 기준으로 산출한다.
+- 검증:
+  - `cd frontend && npm test` → 5 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 다음 실행 순서:
+  - AI chat prefill이 기존 `/ai` 컴포넌트 재사용 시에도 갱신되는지 수정.
+  - 실제 대화/메시지 API 응답 품질, recovery action card context, 삭제 UX를 service-grade로 polish.
+  - 이후 repo/cluster 등록 wizard의 동적 단계와 시각 polish를 이어간다.
+
 ### 2026-07-07 18:34 KST 체크포인트
 
 - evidence/inventory 공개 응답 raw 차단.
