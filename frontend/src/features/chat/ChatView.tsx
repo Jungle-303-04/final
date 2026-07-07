@@ -3,13 +3,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MAX_AI_MESSAGE_LENGTH, useConversation, useConversations, useCreateConversation, useDeleteConversation, useSendMessage, useSelectAction } from '@/features/chat/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { useIsAdmin } from '@/features/auth/api';
-import { Badge, Button, Card, EmptyState } from '@/shared/ui';
+import { Badge, Button, Card, EmptyState, Skeleton } from '@/shared/ui';
 import { queryClient } from '@/shared/lib/query';
 import { uiStore } from '@/shared/lib/ui-store';
 import { timeAgo } from '@/shared/lib/format';
 import { AnimatedList, FadeSlideIn } from '@/shared/motion';
 import type { ChatMessage } from '@/shared/lib/types';
-import { IconFile, IconSend, IconTrash } from '@/shared/ui/icons';
+import { IconAlertTriangle, IconFile, IconSend, IconTrash } from '@/shared/ui/icons';
 import { useConsolePath } from '@/features/console/ui';
 import { chatContextFromSearchParams } from '@/features/chat/context';
 
@@ -64,16 +64,21 @@ export default function ChatView() {
     });
   };
   const draftLengthInvalid = draft.length > MAX_AI_MESSAGE_LENGTH;
-  const submitDisabled = !draft.trim() || draftLengthInvalid || create.isPending || send.isPending;
+  const submitDisabled = !draft.trim() || draftLengthInvalid || create.isPending || send.isPending || (!!conversationId && convQ.isError);
 
   return (
     <FadeSlideIn>
       <div className="chat-layout">
         <Card style={{ overflow: 'auto' }} title="대화" actions={<Button size="sm" onClick={() => nav(pathFor('/ai'))}>새 대화</Button>}>
+          {listQ.isPending && <Skeleton lines={4} />}
+          {listQ.isError && (
+            <EmptyState icon={<IconAlertTriangle size={26} />} title={(listQ.error as Error).message}
+              action={<Button size="sm" onClick={() => listQ.refetch()}>다시 시도</Button>} />
+          )}
           {listQ.isSuccess && (listQ.data ?? []).length === 0 && (
             <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>대화 없음</p>
           )}
-          <AnimatedList items={listQ.data ?? []} getKey={c => c.conversation_id}>
+          {listQ.isSuccess && <AnimatedList items={listQ.data ?? []} getKey={c => c.conversation_id}>
             {c => (
               <div
                 className="chat-thread-row"
@@ -98,7 +103,7 @@ export default function ChatView() {
                 </button>
               </div>
             )}
-          </AnimatedList>
+          </AnimatedList>}
         </Card>
         <Card style={{ display: 'flex', flexDirection: 'column', minHeight: 0, padding: 0, overflow: 'hidden' }}>
           <div className="chat-panel-head">
@@ -114,6 +119,11 @@ export default function ChatView() {
           </div>
           <div className="chat-messages">
             {!conversationId && <EmptyState icon={<IconFile size={26} />} title="새 대화" />}
+            {conversationId && convQ.isPending && <Skeleton lines={4} />}
+            {conversationId && convQ.isError && (
+              <EmptyState icon={<IconAlertTriangle size={26} />} title={(convQ.error as Error).message}
+                action={<Button size="sm" onClick={() => convQ.refetch()}>다시 시도</Button>} />
+            )}
             {conv?.messages.map(m => <MessageRenderer key={m.message_id} m={m} />)}
             {conv?.status === 'waiting' && (
               <div className="chat-thinking" data-testid="typing">분석 중<span className="skeleton" /></div>

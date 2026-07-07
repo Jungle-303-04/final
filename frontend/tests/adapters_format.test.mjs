@@ -120,6 +120,20 @@ test('metrics context preset narrows PromQL by real drilldown subject', async ()
   });
 });
 
+test('usage series renders restart_total as per-sample delta', async () => {
+  const { buildUsageSeries } = await vite.ssrLoadModule('/src/features/metrics/usageSeries.ts');
+
+  const series = buildUsageSeries([
+    { sampled_at: '2026-07-08T00:00:00Z', usage: { pod_running: 4, node_ready: 2, restart_total: 10 } },
+    { sampled_at: '2026-07-08T00:01:00Z', usage: { pod_running: 4, node_ready: 2, restart_total: 13 } },
+    { sampled_at: '2026-07-08T00:02:00Z', usage: { pod_running: 5, node_ready: 2, restart_total: 12 } },
+    { sampled_at: '2026-07-08T00:03:00Z', usage: { pod_running: 5, node_ready: 2, restart_total: 17 } },
+  ]);
+
+  assert.deepEqual(series.map(item => item.id), ['실행 팟', '준비 노드', '재시작 증가']);
+  assert.deepEqual(series[2].data.map(point => point.y), [0, 3, 0, 5]);
+});
+
 test('cluster drill actions keep real subject context across events metrics and ai', async () => {
   const { contextActionHrefs, deploymentTargetFromWorkload } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
   const { adaptWorkloadResource } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');

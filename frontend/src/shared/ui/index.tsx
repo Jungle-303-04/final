@@ -1,6 +1,6 @@
 // 공용 프리미티브 — docs/fd/04 인벤토리. 뷰는 이 모듈과 motion 만 사용
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ApiError } from '@/shared/lib/api';
@@ -55,7 +55,14 @@ export function ResourceTable<T>({ columns, rows, rowKey, onRowClick, empty }:
           {/* 행 추가/제거/재정렬 시 layout 애니메이션(키 기반) */}
           <AnimatePresence initial={false}>
             {rows.map(r => (
-              <AnimatedRow key={rowKey(r)} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick?.(r)}>
+              <AnimatedRow
+                key={rowKey(r)}
+                className={onRowClick ? 'clickable' : ''}
+                tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? 'button' : undefined}
+                onClick={() => onRowClick?.(r)}
+                onKeyDown={event => activateRow(event, r, onRowClick)}
+              >
                 {columns.map(c => <td key={c.key}>{c.render(r)}</td>)}
               </AnimatedRow>
             ))}
@@ -64,6 +71,13 @@ export function ResourceTable<T>({ columns, rows, rowKey, onRowClick, empty }:
       </table>
     </div>
   );
+}
+
+function activateRow<T>(event: ReactKeyboardEvent<HTMLTableRowElement>, row: T, onRowClick?: (row: T) => void) {
+  if (!onRowClick) return;
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  onRowClick(row);
 }
 
 export function Tabs({ items, current, onChange }: { items: { key: string; label: string; badge?: number }[]; current: string; onChange: (k: string) => void }) {
@@ -141,7 +155,7 @@ function useDialogFocus<T extends HTMLElement>(open: boolean, onClose: () => voi
       const first = node?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
       (first ?? node)?.focus();
     });
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
         return;
@@ -159,7 +173,7 @@ function useDialogFocus<T extends HTMLElement>(open: boolean, onClose: () => voi
   return ref;
 }
 
-function trapTab(event: KeyboardEvent, container: HTMLElement) {
+function trapTab(event: globalThis.KeyboardEvent, container: HTMLElement) {
   const focusable = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
     .filter(element => element.offsetParent !== null || element === document.activeElement);
   if (!focusable.length) {
@@ -273,7 +287,7 @@ export function Toasts() {
 export function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === '/' && document.activeElement === document.body) { e.preventDefault(); ref.current?.focus(); } };
+    const h = (e: globalThis.KeyboardEvent) => { if (e.key === '/' && document.activeElement === document.body) { e.preventDefault(); ref.current?.focus(); } };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);

@@ -49,6 +49,7 @@ export const useFleetSummary = () =>
     queryKey: fleetKeys.summary(),
     queryFn: () => get<FleetSummary>('/fleet/summary', { timeoutMs: FLEET_QUERY_TIMEOUT_MS }),
     refetchInterval: 30_000,
+    retry: false,
   });
 
 export interface ClusterAggWorkload {
@@ -83,6 +84,7 @@ export const useClusterAgg = (id: string | undefined) =>
     queryFn: () => get<ClusterAggSummary>(`/clusters/${id}/summary`, { timeoutMs: FLEET_QUERY_TIMEOUT_MS }),
     enabled: !!id,
     refetchInterval: 30_000,
+    retry: false,
   });
 
 /* 건강 상태 → 히트맵 점수(0~1)/라벨 — 홈·상세 공용 단일 매핑 */

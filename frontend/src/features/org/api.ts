@@ -4,11 +4,13 @@ import { del, get, post, put } from '@/shared/lib/api';
 import type { AccessGrant, Group, Org, User } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 
-export const useOrgs = () => useQuery({ queryKey: ['orgs'], queryFn: () => get<{ orgs: Org[] }>('/orgs'), select: d => d.orgs });
-export const useGroups = () => useQuery({ queryKey: ['groups'], queryFn: () => get<{ groups: Group[] }>('/groups'), select: d => d.groups });
-export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => get<{ users: User[] }>('/users'), select: d => d.users });
+const ORG_QUERY_TIMEOUT_MS = 8_000;
+
+export const useOrgs = () => useQuery({ queryKey: ['orgs'], queryFn: () => get<{ orgs: Org[] }>('/orgs', { timeoutMs: ORG_QUERY_TIMEOUT_MS }), retry: false, select: d => d.orgs });
+export const useGroups = () => useQuery({ queryKey: ['groups'], queryFn: () => get<{ groups: Group[] }>('/groups', { timeoutMs: ORG_QUERY_TIMEOUT_MS }), retry: false, select: d => d.groups });
+export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => get<{ users: User[] }>('/users', { timeoutMs: ORG_QUERY_TIMEOUT_MS }), retry: false, select: d => d.users });
 export const useGrants = (resourceId?: string) =>
-  useQuery({ queryKey: ['access', resourceId ?? 'all'], queryFn: () => get<{ grants: AccessGrant[] }>(`/access${resourceId ? `?resource_id=${resourceId}` : ''}`), select: d => d.grants });
+  useQuery({ queryKey: ['access', resourceId ?? 'all'], queryFn: () => get<{ grants: AccessGrant[] }>(`/access${resourceId ? `?resource_id=${resourceId}` : ''}`, { timeoutMs: ORG_QUERY_TIMEOUT_MS }), retry: false, select: d => d.grants });
 
 // 커스텀 훅 — hooks 규칙 준수를 위해 use 접두사(내부에서 useQueryClient 호출).
 function useInvalidator(keys: string[][]) {
@@ -43,7 +45,13 @@ export function useCreateGroup() {
   });
 }
 export function useGroupMembers(groupId: string) {
-  return useQuery({ queryKey: ['groups', groupId, 'members'], queryFn: () => get<{ members: { user_id: string; email: string }[] }>(`/groups/${groupId}/members`), enabled: !!groupId, select: d => d.members });
+  return useQuery({
+    queryKey: ['groups', groupId, 'members'],
+    queryFn: () => get<{ members: { user_id: string; email: string }[] }>(`/groups/${groupId}/members`, { timeoutMs: ORG_QUERY_TIMEOUT_MS }),
+    enabled: !!groupId,
+    retry: false,
+    select: d => d.members,
+  });
 }
 export function useToggleMembership(groupId: string) {
   const qc = useQueryClient();

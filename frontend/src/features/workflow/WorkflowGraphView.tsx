@@ -3,9 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
-import { Badge, Breadcrumbs, Button, Card, CodeBlock, KeyValue, Skeleton } from '@/shared/ui';
+import { Badge, Breadcrumbs, Button, Card, CodeBlock, EmptyState, KeyValue, Skeleton } from '@/shared/ui';
 import { PlanDiff } from '@/shared/ui/plan-diff';
-import { IconCheck } from '@/shared/ui/icons';
+import { IconAlertTriangle, IconCheck } from '@/shared/ui/icons';
 import { toneColor, toneOf } from '@/shared/ui/status';
 import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
 import { shortSha } from '@/shared/lib/format';
@@ -75,6 +75,14 @@ export default function WorkflowGraphView() {
   const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
 
   if (!found) {
+    if (apps.isError || all.failed) {
+      return (
+        <Card>
+          <EmptyState icon={<IconAlertTriangle size={26} />} title={((apps.error ?? all.error) as Error).message}
+            action={<Button size="sm" onClick={() => apps.refetch()}>다시 시도</Button>} />
+        </Card>
+      );
+    }
     // 목록·개별 runs 쿼리가 아직 로딩 중이면 스켈레톤 — 성급한 '없음' 표시 금지
     if (apps.isPending || ((apps.data ?? []).length > 0 && all.pending)) return <Skeleton lines={5} />;
     return (

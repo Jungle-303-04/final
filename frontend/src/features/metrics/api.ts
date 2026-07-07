@@ -5,6 +5,8 @@ import { del, get, post } from '@/shared/lib/api';
 import type { MetricQueryPreset, MetricWidget } from '@/shared/lib/types';
 import { uiStore } from '@/shared/lib/ui-store';
 
+const METRIC_QUERY_TIMEOUT_MS = 8_000;
+
 export interface CommandStatus {
   command_id: string;
   cluster_id: string;
@@ -21,9 +23,10 @@ export const isTerminal = (s: string | undefined) => !!s && TERMINAL.has(s);
 export function useCommandStatus(commandId: string | undefined) {
   return useQuery({
     queryKey: ['commands', commandId ?? ''],
-    queryFn: () => get<CommandStatus>(`/commands/${commandId}`),
+    queryFn: () => get<CommandStatus>(`/commands/${commandId}`, { timeoutMs: METRIC_QUERY_TIMEOUT_MS }),
     enabled: !!commandId,
     refetchInterval: q => (isTerminal(q.state.data?.status) ? false : 2000),
+    retry: false,
   });
 }
 
@@ -62,8 +65,9 @@ export interface CommandAcceptedResponse {
 export function useMetricQueryPresets(clusterId: string | undefined) {
   return useQuery({
     queryKey: metricKeys.queryPresets(clusterId),
-    queryFn: () => get<{ items: MetricQueryPreset[] }>(`/clusters/${clusterId}/metric-query-presets`),
+    queryFn: () => get<{ items: MetricQueryPreset[] }>(`/clusters/${clusterId}/metric-query-presets`, { timeoutMs: METRIC_QUERY_TIMEOUT_MS }),
     enabled: !!clusterId,
+    retry: false,
     select: d => d.items,
   });
 }
@@ -71,8 +75,9 @@ export function useMetricQueryPresets(clusterId: string | undefined) {
 export function useMetricWidgets(clusterId: string | undefined) {
   return useQuery({
     queryKey: metricKeys.widgets(clusterId),
-    queryFn: () => get<{ items: MetricWidget[] }>(`/clusters/${clusterId}/metric-widgets`),
+    queryFn: () => get<{ items: MetricWidget[] }>(`/clusters/${clusterId}/metric-widgets`, { timeoutMs: METRIC_QUERY_TIMEOUT_MS }),
     enabled: !!clusterId,
+    retry: false,
     select: d => d.items,
   });
 }

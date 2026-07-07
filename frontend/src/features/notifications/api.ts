@@ -9,13 +9,22 @@ import { useIsAdmin } from '@/features/auth/api';
 import { uiStore } from '@/shared/lib/ui-store';
 import { timeAgo } from '@/shared/lib/format';
 
+const NOTIFICATION_QUERY_TIMEOUT_MS = 8_000;
+
 export const useTimeline = () =>
-  useQuery({ queryKey: ['timeline'], queryFn: () => get<{ items: Record<string, unknown>[] }>('/dashboard/rca/timeline?limit=20'), refetchInterval: 60_000, select: d => d.items.map(adaptIncident) });
+  useQuery({
+    queryKey: ['timeline'],
+    queryFn: () => get<{ items: Record<string, unknown>[] }>('/dashboard/rca/timeline?limit=20', { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS }),
+    refetchInterval: 60_000,
+    retry: false,
+    select: d => d.items.map(adaptIncident),
+  });
 export const useIncident = (incidentId: string) =>
   useQuery({
     queryKey: ['incident', incidentId],
-    queryFn: () => get<{ item: Record<string, unknown> }>(`/dashboard/rca/incidents/${incidentId}`),
+    queryFn: () => get<{ item: Record<string, unknown> }>(`/dashboard/rca/incidents/${incidentId}`, { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS }),
     enabled: !!incidentId, refetchInterval: 30_000,
+    retry: false,
     select: d => adaptIncidentDetail(d.item ?? {}),
   });
 // 인시던트 correlation 범위의 저장된 evidence — GET /evidence (세션 워크스페이스 스코프)
@@ -23,16 +32,22 @@ export const useEvidence = (correlationId: string | undefined, kind?: string) =>
   useQuery({
     queryKey: ['evidence', correlationId ?? '', kind ?? 'all'],
     queryFn: () => get<{ items: EvidenceRecord[]; has_more: boolean; limit: number; offset: number }>(
-      `/evidence?correlation_id=${encodeURIComponent(correlationId ?? '')}${kind ? `&kind=${encodeURIComponent(kind)}` : ''}&limit=100`),
+      `/evidence?correlation_id=${encodeURIComponent(correlationId ?? '')}${kind ? `&kind=${encodeURIComponent(kind)}` : ''}&limit=100`,
+      { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS },
+    ),
     enabled: !!correlationId, refetchInterval: 30_000,
+    retry: false,
   });
 // 인시던트 correlation 범위의 RCA report 요약 — GET /rca-reports
 export const useRcaReports = (correlationId: string | undefined) =>
   useQuery({
     queryKey: ['rca-reports', correlationId ?? ''],
     queryFn: () => get<{ items: RcaReportSummary[]; has_more: boolean; limit: number; offset: number }>(
-      `/rca-reports?correlation_id=${encodeURIComponent(correlationId ?? '')}&limit=50`),
+      `/rca-reports?correlation_id=${encodeURIComponent(correlationId ?? '')}&limit=50`,
+      { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS },
+    ),
     enabled: !!correlationId, refetchInterval: 30_000,
+    retry: false,
     select: d => d.items,
   });
 // 인시던트 correlation 기준 recovery plan 상태 — 없으면 상세 화면에서 "생성 전"으로 표시.
@@ -40,13 +55,22 @@ export const useRecoveryPlan = (correlationId: string | undefined) =>
   useQuery({
     queryKey: ['recovery-plan', correlationId ?? ''],
     queryFn: () => get<RecoveryPlanStatus>(
-      `/rca/recovery-plans/by-correlation/${encodeURIComponent(correlationId ?? '')}`),
+      `/rca/recovery-plans/by-correlation/${encodeURIComponent(correlationId ?? '')}`,
+      { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS },
+    ),
     enabled: !!correlationId, refetchInterval: 30_000,
     retry: (failureCount, error) =>
       (error as { kind?: string }).kind !== 'not_found' && failureCount < 2,
   });
 export const useDeadLetters = (enabled: boolean) =>
-  useQuery({ queryKey: ['dead-letters'], queryFn: () => get<{ dead_letters: DeadLetter[] }>('/dead-letters?limit=20'), refetchInterval: 60_000, enabled, select: d => d.dead_letters });
+  useQuery({
+    queryKey: ['dead-letters'],
+    queryFn: () => get<{ dead_letters: DeadLetter[] }>('/dead-letters?limit=20', { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS }),
+    refetchInterval: 60_000,
+    enabled,
+    retry: false,
+    select: d => d.dead_letters,
+  });
 export const useReplayDeadLetter = () => {
   const qc = useQueryClient();
   return useMutation({

@@ -9,6 +9,7 @@ import { queryClient } from '@/shared/lib/query';
 const STEPS = ['프로바이더', '설정', '사전 점검', '발급'];
 const DEFAULT_CLOUD_PROVIDER = 'existing-k8s';
 const DEFAULT_DEPLOY_PROVIDER = 'manual-manifest';
+const CLUSTER_REGISTRATION_TIMEOUT_MS = 15_000;
 const ONLINE_STATUSES = new Set(['connected', 'online']);
 
 type ProviderBody = {
@@ -84,8 +85,9 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 
   const discovery = useQuery({
     queryKey: ['providers', 'cluster-discovery'],
-    queryFn: () => get<DiscoveryResponse>('/providers/cluster-discovery'),
+    queryFn: () => get<DiscoveryResponse>('/providers/cluster-discovery', { timeoutMs: CLUSTER_REGISTRATION_TIMEOUT_MS }),
     enabled: open,
+    retry: false,
   });
   const flows = discovery.data?.flows ?? [];
   const selectedFlow = flows.find(flow => flow.cloud_provider === provider) ?? flows[0];
@@ -107,7 +109,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
       deploy_provider: deployProvider,
       apply: directApply,
       kube_context: directApply && kubeContext ? kubeContext : undefined,
-    }),
+    }, { timeoutMs: CLUSTER_REGISTRATION_TIMEOUT_MS }),
   });
 
   const register = useMutation({
@@ -119,7 +121,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
       kube_context: directApply && kubeContext ? kubeContext : undefined,
       cloud_provider: activeProvider,
       deploy_provider: deployProvider,
-    }),
+    }, { timeoutMs: CLUSTER_REGISTRATION_TIMEOUT_MS }),
     onSuccess: d => {
       setIssued(d);
       setStep(3);
@@ -130,9 +132,10 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 
   const connQ = useQuery({
     queryKey: ['cluster-conn', clusterId],
-    queryFn: () => get<{ connection_status: string }>(`/clusters/${clusterId}/connection-status`),
+    queryFn: () => get<{ connection_status: string }>(`/clusters/${clusterId}/connection-status`, { timeoutMs: CLUSTER_REGISTRATION_TIMEOUT_MS }),
     enabled: step === 3 && !!issued,
     refetchInterval: q => (isAgentOnline(q.state.data?.connection_status) ? false : 5000),
+    retry: false,
   });
   const connected = isAgentOnline(connQ.data?.connection_status);
   const slugOk = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(clusterId);
