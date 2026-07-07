@@ -2027,3 +2027,36 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 - Bruno 추가: `docs/api/05-rca-dashboard/09-node-summary.bru`, `docs/api/05-rca-dashboard/10-node-pods-summary.bru`, `docs/api/11-clusters/12-unregister-cluster.bru`.
 - 스펙: `docs/spec/packages/contracts.md`, `docs/spec/domains/{identity,gitops,providers,target,alert,rca,dashboard,command,applications}.md`, `docs/spec/services/gateway-api-gateway.md`.
 - focused test: `uv run pytest tests/test_repository_discovery.py tests/test_identity_auth_routes.py tests/test_password_auth.py tests/test_target_registration.py tests/test_provider_registry.py tests/test_alert_routing.py tests/test_rca_rule_catalog.py tests/test_dashboard_metric_presets.py tests/test_admin_console_routes.py tests/test_applications_router.py tests/test_schemas.py tests/test_command_router.py tests/test_command_worker.py tests/test_target_agent_commands.py tests/test_fleet_router.py tests/test_bruno_collection.py -q`.
+
+## 라이브 데모 흐름 보강 (2026-07-08)
+
+- 데모 레포 `Jungle-303-04/k8s-incident-demo-target`는 별도 클론(`/tmp/k8s-incident-demo-target-live.EQqszH`)에서 직접 수정/푸시했다.
+  - commit: `f398640 feat: 라이브 데모 배포 / sandbox / ECR 이미지`
+  - branch: `main`
+  - `deploy/k8s`는 `sandbox` namespace, ECR 이미지 `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/final-demo-target/{orders-api,storefront-web}:cb47853c0367`, `storefront-web` Service `LoadBalancer` port 80 기준.
+- main repo `dev`에 데모 E2E 차단 이슈 3개를 수정/푸시했다.
+  - `db7b8877 fix: apply manifest payload 처리 보강`: agent command payload 안에 `diff.desired_manifest`가 있는데 nested `payload: {}` 때문에 사라지던 문제 수정.
+  - `b6bb0a8b fix: 리소스별 approval id 분리`: kustomize multi-resource adoption에서 approval id가 workflow 단위 하나라 한 리소스만 apply되던 문제를 `namespace/resource` 단위 approval로 분리.
+  - `4d69cac3 feat: 서비스 inventory 외부 URL 수집`: target-agent service evidence에 LoadBalancer ingress, `external_hosts`, `external_url`을 싣도록 확장.
+- 라이브 배포:
+  - 최종 service/agent 이미지: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:4d69cac3-service-20260708074025`
+  - management namespace의 `kubernetes-ops-service` 계열 deployment 전부 rollout 완료, `management-runtime-config`의 `TARGET_AGENT_IMAGE`/`GITOPS_WEBHOOK_IMAGE`도 같은 태그로 갱신.
+  - cluster-1 `target/deploy/cluster-agent`도 같은 태그로 rollout 완료.
+  - `https://k8s.woonyong.org/api/healthz` 200 OK.
+- 자동 배포 E2E 실측:
+  - workflow: `workflow-demo-retry-1783463710`
+  - GitHub webhook -> render/diff -> approval 5개 생성(Service 2, ConfigMap 1, Deployment 2) -> 5개 grant -> 5개 agent command 모두 `completed`.
+  - 완료 리소스: `service/storefront-web`, `configmap/demo-target-config`, `service/orders-api`, `deployment/orders-api`, `deployment/storefront-web`.
+  - cluster-1 `sandbox`: `orders-api` 2/2, `storefront-web` 2/2 Running. `storefront-web` Service는 `80:30080/TCP`, LB hostname `ad0a0534d57d944d8b04195ded178864-204968478.ap-northeast-2.elb.amazonaws.com`.
+- 도메인:
+  - Cloudflare `target-01.woonyong.org` CNAME을 위 storefront LB로 갱신(proxied=true).
+  - `http://target-01.woonyong.org/` 200, `https://target-01.woonyong.org/` 200, `https://target-01.woonyong.org/?demo=true` HTML title `GreenCart Home` 확인.
+  - inventory API `GET /api/clusters/cluster-1/inventory/services?namespace=sandbox`에서 `storefront-web.summary.external_url` 노출 확인.
+- evidence:
+  - `evidence-worker`가 cluster evidence를 계속 처리 중이고, 새 agent 배포 후 inventory observed_at `2026-07-07T22:43:14Z`에 external URL 포함 확인.
+- 문서:
+  - `docs/demo-runbook.md` 리허설 기록에 자동 배포 1회 실측치를 반영했다.
+- 미완료/주의:
+  - 전체 시나리오(리셋 -> 클러스터 등록 -> 레포 연결 -> 자동 배포 -> 장애 -> RCA/복구 제안 -> 승인 -> 자동 복구) 2회 연속 리허설은 아직 완료하지 못했다.
+  - 특히 장애/RCA/recovery-worker 승인 실행은 별도 리허설이 필요하다. 발표 직전에는 `docs/demo-runbook.md`의 플랜B를 유지하고, 복구 제안 조회/승인 UI가 실제 incident에서 보이는지 확인해야 한다.
+  - 현재 작업 중 워킹트리에 `deploy/management/kustomization.yaml`, `deploy/management/target-agent.yaml` 미커밋 변경이 남아 있었는데, 이 섹션 작업에서는 건드리지 않았다.
