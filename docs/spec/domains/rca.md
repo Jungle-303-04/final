@@ -67,6 +67,12 @@ status: synced
 | `get_recovery_plan(self, plan_id: str, workspace_id: str) -> JsonObject | None` | `recovery_plans`에서 `(plan_id, workspace_id)` 일치 1건을 dict로 반환(`plan_id, workspace_id, correlation_id, incident_id, evidence_ref, status, selected_action_id, selected_by, payload` 컬럼), 없으면 `None` | `src/domains/rca/repository.py :: RcaRepository.get_recovery_plan` |
 | `select_recovery_plan_action_if_open(self, plan_id: str, workspace_id: str, action_id: str, selected_by: str) -> JsonObject | None` | status가 `OPEN_RECOVERY_PLAN_STATUSES`(= `selection_requested`)인 row만 조건부 UPDATE → `status="selected"`, `selected_action_id`, `selected_by`, `updated_at=now()`. `RETURNING payload, correlation_id`. 열려 있지 않으면(이미 selected 등) `None` — 동시 선택 경합 방지 | `src/domains/rca/repository.py :: RcaRepository.select_recovery_plan_action_if_open` |
 | `save_rca_report(self, correlation_id: str, workspace_id: str, root_cause: str, action: str, body: JsonObject) -> None` | `rca_reports`에 단순 INSERT(pg_insert) | `src/domains/rca/repository.py :: RcaRepository.save_rca_report` |
+| `find_recent_rca_report(self, workspace_id: str, root_cause: str, resource_key: str, window_seconds: int) -> JsonObject | None` | 리포트 dedup 조회 — `(workspace_id, root_cause, created_at >= now-window)` 최신 20건을 읽어 `payload.incident` 의 리소스 키(`rca_report_resource_key`)가 일치하는 첫 건의 `{id, correlation_id, created_at}` 반환, 없으면 `None`. rca-worker 가 저장 전에 호출해 장애 지속 중 동일 리포트 무한 적재를 막는다 | `src/domains/rca/repository.py :: RcaRepository.find_recent_rca_report` |
+
+모듈 함수: `rca_report_resource_key(incident: JsonObject | None) -> str` —
+`"{namespace}/{resource_kind}/{resource_name}"`(incident dict 아니면 `"unknown"`) —
+dedup 리소스 키의 단일 출처(rca-worker 와 repository 가 공유).
+앵커: `src/domains/rca/repository.py :: rca_report_resource_key`.
 
 ### 라우터 심볼 — `src/domains/rca/router.py`
 
@@ -280,6 +286,7 @@ RCA 입력 증거 값 객체. (주의: `models.py`의 테이블 `Evidence`와 **
 | `description` | `str` | — |
 | `expected_evidence` | `list[str]` | — |
 | `checks` | `list[str]` | — |
+| `signals` | `list[JsonObject]` | `field(default_factory=list)` — 판별 신호 그룹(`{"id", "any_of": [fact/log_pattern/event_pattern matcher]}`). 평가 의미론은 [ai-agent 카탈로그 DSL](../services/ai-agent.md#causesloaderpy--yaml-카탈로그-로더) 참조 |
 | `source` | `str` | `CAUSE_CANDIDATE_SOURCE_RULE` |
 
 후보 출처 상수: `CAUSE_CANDIDATE_SOURCE_RULE = "rule"` (`src/domains/rca/events.py :: CAUSE_CANDIDATE_SOURCE_RULE`),
