@@ -688,7 +688,10 @@ bash "${ROOT_DIR}/scripts/register-target.sh"
 INSTALL_TELEMETRY="${INSTALL_TELEMETRY:-1}"
 if [ "${INSTALL_TELEMETRY}" = "1" ]; then
   echo "==> installing telemetry stack on target cluster"
-  if TARGET_CONTEXT="kind-${TARGET_CLUSTER}" bash "${ROOT_DIR}/scripts/install-telemetry.sh"; then
+  if MINIO_ROOT_USER="${MINIO_ROOT_USER}" \
+    MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}" \
+    TARGET_CONTEXT="kind-${TARGET_CLUSTER}" \
+    bash "${ROOT_DIR}/scripts/install-telemetry.sh"; then
     echo "==> telemetry stack ready"
   else
     echo "WARN: telemetry install failed — 재시도: TARGET_CONTEXT=kind-${TARGET_CLUSTER} bash scripts/install-telemetry.sh" >&2
