@@ -20,9 +20,14 @@
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
 
-- 현재 local/origin dev HEAD: `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`.
+- 정확한 현재 local/origin dev HEAD는 `git log --oneline --decorate -6`와 `git status --short --branch`로 확인한다. 이 문서가 자기 자신을 커밋할 때마다 SHA가 바뀌므로 문서 안의 SHA는 체크포인트 예시로만 본다.
+- 최신 production code 기준 dev HEAD: `ef65c770 fix: 레포 discovery render 검증 전환`.
+- `ef65c770` 이후 커밋은 시크릿 제외, local artifact ignore, runner 상태, 인수인계 갱신 성격이다.
+- `9b1eedbf chore: 시크릿 제외 / runner 상태 / 인수인계`.
+- `24e47e53 docs: Actions runner 상태 / 인수인계 갱신`.
 - `9b1eedbf`는 origin/dev에 push 완료.
-- 이 푸시의 dev workflows는 모두 runner 배정 없이 실패:
+- `24e47e53`도 origin/dev에 push 완료했고 동일하게 새 dev workflows가 runner 배정 없이 실패했다.
+- 대표 dev workflow failure:
   - CI run `28850238246`: failure. 모든 job이 steps/log 없음, runner 배정 없음.
   - AWS CD run `28850238259`: failure. test job이 steps/log 없음, runner 배정 없음. deploy skipped.
   - Promote Dev To Main run `28850238255`: failure. verify job이 steps/log 없음, runner 배정 없음. merge skipped.
