@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 15:58 KST (provider admin 경계 + DB 초기화 절차 재정렬)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 16:12 KST (연속 실행 계획 문서화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -8,6 +8,16 @@
 - 화면 수치와 드릴다운은 실제 세션 권한으로 접근 가능한 DB/API/클러스터 관측값만 표시한다. 개발용/테스트용 격리 객체는 단위 테스트 내부에만 두고 운영 경로에 연결하지 않는다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+
+## 최신 업데이트 (16:12 KST) — 연속 실행 계획 문서화
+
+- 대화 맥락이 사라져도 바로 이어받을 수 있도록 [docs/continuation-execution-plan-2026-07-07.md](docs/continuation-execution-plan-2026-07-07.md)를 추가했다.
+- 이 문서에는 현재 SHA/run ID, 최신 검증 결과, dev/main Actions 상태, live smoke 명령, 남은 10개 작업 항목, DB 초기화 게이트, 금지 명령, 다음 구현 후보와 예상 write set을 정리했다.
+- 현재 최신 dev 커밋은 `b013b431`이고 main merge commit은 `f2b7d43`이다.
+- 최신 main AWS CD run은 `28847747039`이며, 문서 작성 당시 `Test before deploy`는 성공했고 `Deploy to AWS EKS`가 진행 중이다.
+- 이전 main AWS CD `28847597545`는 더 최신 run 때문에 취소됐으므로 실패로 보지 않는다.
+- live `https://k8s.woonyong.org/api/healthz`는 직전 확인에서 `{"status":"ok","service":"api-gateway"}`였다.
+- 병렬 explorer `Banach`(`019f3b5e-8f4b-74a0-a447-56a1e0bfd325`)가 GitOps poller를 DB 등록 watch target 기반으로 전환할 구현 seam을 read-only 분석 중이다.
 
 ## 최신 업데이트 (15:58 KST) — provider admin 경계 + 최종 DB 초기화 절차 재정렬
 
