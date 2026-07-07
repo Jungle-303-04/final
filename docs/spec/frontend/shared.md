@@ -126,7 +126,7 @@ export const queryClient = new QueryClient({
 | `IncidentDetail` | `incident_id; correlation_id; cluster_id; status; current_subject; summary; root_cause: string\|null; confidence: number\|null; supporting_evidence: string[]; missing_evidence: string[]; action_route: string\|null; command_id: string\|null; pr_url: string\|null; error_reason: string\|null; updated_at` |
 | `EvidenceRecord` | `id; correlation_id; kind; payload: Record<string, unknown>; created_at: string\|null` |
 | `RcaCandidateScore` | `candidate_id; title: string\|null; source: string\|null; score: number\|null; reason: string\|null; supporting_evidence: string[]; missing_evidence: string[]` |
-| `RcaEvidenceRef` | `source; name; check_id: string\|null; summary: string\|null; query: string\|null; evidence_ref: string\|null` |
+| `RcaEvidenceRef` | `source; name; check_id: string\|null; summary: string\|null; query: string\|null; evidence_ref: string\|null; optional lineage: schema_version/source_version/collector/collector_version/query_version/collected_at/evidence_key/source_id/agent_id/window_start` |
 | `RcaMissingCheck` | `check_id; source: string\|null; status: string\|null; reason: string\|null` |
 | `RcaReportSummary` | `id; correlation_id; root_cause; action; incident_id: string\|null; cluster_id: string\|null; symptom: string\|null; severity: string\|null; confidence: number\|null; reason: string\|null; evidence_ref: string\|null; supporting_evidence: string[]; missing_evidence: string[]; created_at: string\|null; optional resource/secondary symptom/candidate/evidence-ref/missing-check fields` |
 | `LiveSnapshot` | `at; connected: boolean; namespaces: { namespace; pods: {name; phase; restarts; hot: boolean}[] }[]; rollout?: {name; progress: number}` |

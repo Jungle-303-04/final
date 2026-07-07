@@ -16,9 +16,27 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 18:10 KST 체크포인트
+
+- evidence lineage/rollback 표시가 1차 구현됐다.
+- 핵심 설계:
+  - `EvidenceItem.source`는 룰 매칭용 안정 키로 유지한다.
+  - 수집·버전 메타는 evidence JSON payload 내부 `_lineage`에 저장한다. 새 최상위 event body 필드는 rolling deploy 중 구버전 워커 DLQ를 만들 수 있어 쓰지 않는다.
+  - `/rca-reports`는 raw evidence payload 대신 `supporting_evidence_refs[]`에 허용된 lineage 필드만 노출한다.
+  - 인시던트 상세 RCA 리포트는 schema/collector/version/evidence_key/window/agent 메타를 표시한다.
+  - 복구 후보 row에는 `rollback_plan`을 표시한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_rca_evidence.py tests/test_evidence_query_api.py` → 17 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `git diff --check` → passed.
+- DB 초기화:
+  - 사용자는 신버전 구현 완료 후 기존 DB를 삭제하고 새 버전으로 시작하길 원한다.
+  - 아직 실행 금지. 모든 기능/배포/E2E/live smoke 완료 후 백업/스냅샷, reset/migrate/bootstrap, 실제 cluster/repo 재등록, fresh evidence 수집 확인 순서로만 진행한다.
+
 ### 2026-07-07 17:16 KST 체크포인트
 
-이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
+아래의 오래된 SHA/run ID는 당시 기록으로 보존한다. 실제 재개 시에는 가장 위의 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
 
 - `c5f81982 fix: repo manifest 검증 gate 강화`는 origin/dev push 완료.
 - 해당 push의 dev workflows도 runner 배정 없이 실패:

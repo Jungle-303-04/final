@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 17:16 KST (incident fallback 테스트 추가)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:10 KST (evidence lineage/rollback 표시)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -9,6 +9,25 @@
 - 실제 토큰/비밀번호/세션 쿠키/API key는 사용자 요청이 있어도 커밋하지 않는다. Git 히스토리에서 완전 삭제가 어렵기 때문에 GitHub Actions secrets, 로컬 env, 승인된 secret store만 사용한다.
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
+- 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 최신 업데이트 (18:10 KST) — evidence lineage/rollback 표시
+
+- 사용자 지적: RCA `EvidenceItem.source`만으로는 버전 변경/롤백 판단이 어렵다.
+- 구현 방향:
+  - `source`는 룰 매칭용 안정 키로 유지한다.
+  - 새 최상위 event body 필드를 추가하지 않고 기존 evidence JSON payload 내부 `_lineage`에 `schema_version`, `collector`, `collector_version`, `source_id`, `agent_id`, `window_start`, `evidence_key`, `collected_at` 등을 저장한다. 이유: `EventBody.from_body()`는 unknown field를 DLQ로 보내므로, rolling deploy 중 구버전 워커가 죽지 않게 하기 위해서다.
+  - `/rca-reports` 요약 API는 raw evidence payload를 노출하지 않고, `evidence_bundle.items[].value._lineage`에서 허용 필드만 `supporting_evidence_refs[]`로 승격한다.
+  - 인시던트 상세의 RCA 리포트 근거 목록에 `schema vN`, collector/version/evidence key/window/agent 메타를 표시한다.
+  - recovery action 후보 row에 `rollback_plan`을 표시한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_rca_evidence.py tests/test_evidence_query_api.py` → 17 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `git diff --check` → passed.
+- DB 초기화:
+  - 최종 기능/배포/E2E 완료 후 1회 실행한다.
+  - 필수 순서: 백업/스냅샷 → restore 가능성 확인 → reset/migrate/bootstrap → 실제 cluster-1/cluster-2/repo 재등록 → 새 evidence 수집 확인.
 
 ## 최신 업데이트 (17:16 KST) — incident fallback 테스트 추가
 

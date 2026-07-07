@@ -126,6 +126,30 @@ def report_row(row_id: int = 1) -> dict:
                     }
                 ],
             },
+            "evidence_bundle": {
+                "items": [
+                    {
+                        "source": "kubernetes",
+                        "name": "events",
+                        "check_id": "events",
+                        "evidence_ref": "evidence://cluster-1/incident-1",
+                        "value": {
+                            "_lineage": {
+                                "schema_version": 1,
+                                "source_version": "kubernetes",
+                                "collector": "cluster-agent",
+                                "collector_version": "agent:v1",
+                                "query_version": "policy:v2",
+                                "collected_at": "2026-07-07T09:59:59+00:00",
+                                "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
+                                "source_id": "cluster-snapshot",
+                                "agent_id": "agent-1",
+                                "window_start": "window-1",
+                            }
+                        },
+                    }
+                ]
+            },
             # 응답으로 새 나가면 안 되는 원문 payload 내용물
             "evidence": {"kubernetes": {"token": SECRET_MARKER}},
         },
@@ -247,6 +271,10 @@ def test_rca_reports_return_summary_without_raw_payload() -> None:
     ref = item["supporting_evidence_refs"][0]
     assert ref["source"] == "kubernetes"
     assert ref["query"] == "events(namespace=sandbox)"
+    assert ref["schema_version"] == 1
+    assert ref["collector_version"] == "agent:v1"
+    assert ref["evidence_key"] == "workspace-1:cluster-1:cluster-snapshot:window-1"
+    assert ref["agent_id"] == "agent-1"
     assert item["missing_evidence_checks"][0]["check_id"] == "loki:app-logs"
     # 후보의 signals DSL 원문·payload 원문(secret 포함 가능)은 응답 어디에도 실리지 않는다.
     assert "signals" not in top
