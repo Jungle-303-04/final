@@ -75,9 +75,13 @@ class Settings:
     SIGNATURE_HEADER = "x-hub-signature-256"
     SIGNATURE_PREFIX = "sha256="
 
-    # 폴링 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
-    HTTP_TIMEOUT_SECONDS_ENV = "HTTP_TIMEOUT_SECONDS"  # GitHub/webhook HTTP 타임아웃 초(기본 20)
-    HTTP_TIMEOUT_SECONDS = int(env(HTTP_TIMEOUT_SECONDS_ENV, "20"))
+    # 폴링 튜닝값 — CronJob ReadTimeout 완화를 위해 기본 타임아웃은 30초 이상으로 둠.
+    HTTP_TIMEOUT_SECONDS_ENV = "HTTP_TIMEOUT_SECONDS"  # GitHub/webhook HTTP 타임아웃 초(기본 30)
+    HTTP_TIMEOUT_SECONDS = int(env(HTTP_TIMEOUT_SECONDS_ENV, "30"))
+    POLL_ONCE_MAX_ATTEMPTS_ENV = (
+        "POLL_ONCE_MAX_ATTEMPTS"  # once 모드 일시 오류 최대 시도 횟수(기본 3)
+    )
+    POLL_ONCE_MAX_ATTEMPTS = int(env(POLL_ONCE_MAX_ATTEMPTS_ENV, "3"))
     POLL_RETRY_DELAY_SECONDS_ENV = "POLL_RETRY_DELAY_SECONDS"  # 실패 재시도 기본 간격 초(기본 5)
     POLL_RETRY_DELAY_SECONDS = int(env(POLL_RETRY_DELAY_SECONDS_ENV, "5"))
     POLL_MAX_BACKOFF_SECONDS_ENV = (
@@ -88,6 +92,8 @@ class Settings:
         "POLL_BACKOFF_JITTER_SECONDS"  # thundering herd 완화용 지터 초(기본 3)
     )
     POLL_BACKOFF_JITTER_SECONDS = int(env(POLL_BACKOFF_JITTER_SECONDS_ENV, "3"))
+    # once 모드 재시도 대상 — 설정 오류성 4xx 는 제외하고 일시 서버 오류만 재시도.
+    TRANSIENT_RETRY_STATUS_CODES = {408, 500, 502, 503, 504}
     SOFT_SKIP_STATUS_CODES = {403, 429}
     # ETag(If-None-Match) 조건부 요청의 '변경 없음' — GitHub rate limit 을 소모하지 않음.
     NOT_MODIFIED_STATUS_CODE = 304

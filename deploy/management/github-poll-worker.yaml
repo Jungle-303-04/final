@@ -21,7 +21,7 @@ spec:
   schedule: "*/1 * * * *" # 1분마다(CronJob 최소 granularity).
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
       backoffLimit: 2

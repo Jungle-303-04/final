@@ -50,6 +50,9 @@ status: synced
 |---|---|---|
 | `RECOVERY_PLAN_STATUS_SELECTION_REQUESTED` | `"selection_requested"` | `src/domains/rca/repository.py :: RECOVERY_PLAN_STATUS_SELECTION_REQUESTED` |
 | `RECOVERY_PLAN_STATUS_SELECTED` | `"selected"` | `src/domains/rca/repository.py :: RECOVERY_PLAN_STATUS_SELECTED` |
+| `BACKLOG_STATUS_OPEN` | `"open"` | `src/domains/rca/repository.py :: BACKLOG_STATUS_OPEN` |
+| `BACKLOG_STATUS_RESOLVED` | `"resolved"` | `src/domains/rca/repository.py :: BACKLOG_STATUS_RESOLVED` |
+| `BACKLOG_RULE_RESOLVED_REASON` | `"matching RCA rule is now available"` | `src/domains/rca/repository.py :: BACKLOG_RULE_RESOLVED_REASON` |
 | `OPEN_RECOVERY_PLAN_STATUSES` | `(RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,)` | `src/domains/rca/repository.py :: OPEN_RECOVERY_PLAN_STATUSES` |
 
 ### `RcaRepository` — `src/domains/rca/repository.py :: RcaRepository`
@@ -60,6 +63,7 @@ status: synced
 |---|---|---|
 | `save_evidence(self, correlation_id: str, workspace_id: str, kind: str, body: JsonObject) -> None` | `evidence` 테이블에 단순 INSERT(pg_insert) | `src/domains/rca/repository.py :: RcaRepository.save_evidence` |
 | `upsert_rca_backlog_item(self, body: JsonObject) -> None` | `rca_backlog_items`에 `backlog_id` 충돌 시 UPDATE. `missing_evidence`는 `{"items": body["missing_evidence"]}` 로 감싸 저장. 신규 INSERT 시 `occurrence_count=1`, 충돌 시 `occurrence_count + 1` 증가. `incident_id/reason/evidence_ref/missing_evidence/status/payload/updated_at` 갱신(단, `symptom/title/workspace_id/created_at`은 최초값 유지) | `src/domains/rca/repository.py :: RcaRepository.upsert_rca_backlog_item` |
+| `resolve_rca_backlog_item_for_rule(self, workspace_id: str, symptom: str, reason: str = BACKLOG_RULE_RESOLVED_REASON) -> int` | `backlog_id="missing-cause-rule:{workspace_id}:{symptom}"` 이고 `status="open"` 인 backlog를 `status="resolved"`, `reason`, `updated_at=now()`로 전환. 매칭 룰이 생긴 증상의 과거 rule-missing 잔재를 닫는다 | `src/domains/rca/repository.py :: RcaRepository.resolve_rca_backlog_item_for_rule` |
 | `list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[JsonObject]` | `rca_reports`를 `workspace_id`로 필터, `created_at DESC, id DESC` 정렬, `limit` 건 조회(최신순). AI 도구 등 읽기 전용 소비자용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_reports` |
 | `list_evidence_records(self, workspace_id: str, *, correlation_id=None, kind=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `evidence`를 `workspace_id` 필수 + 선택 필터(`correlation_id/kind`, `created_at >= since`, `created_at < until`)로 조회. `created_at DESC, id DESC` 정렬. `cursor=(created_at, id)`가 있으면 keyset 조건(`created_at < cursor.created_at OR created_at = cursor.created_at AND id < cursor.id`)을 우선하고, 없으면 `offset` 하위호환을 쓴다. `created_at`은 ISO 문자열로 직렬화 — `/evidence` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_evidence_records` |
 | `list_rca_report_records(self, workspace_id: str, *, correlation_id=None, since=None, until=None, limit=50, offset=0, cursor=None) -> list[JsonObject]` | `rca_reports`를 같은 방식(워크스페이스 필수, 선택 필터, 최신순, cursor 우선/offset 하위호환)으로 조회. payload 요약은 라우터(`rca_report_summary`)가 수행 — `/rca-reports` 조회 API 용 | `src/domains/rca/repository.py :: RcaRepository.list_rca_report_records` |
@@ -730,6 +734,7 @@ rule 엔진 후보와 ai-fallback-worker 의 LLM 후보를 구분한다.
 - **증거 수신 멱등성**: 동일 `evidence_key` 재수신 시 새 이벤트를 만들지 않고 기존 `event_id`/`correlation_id`를 반환한다.
 - **복구 선택 단조성**: `recovery_plans.status`는 `selected`에서 되돌아가지 않는다. 선택은 조건부 UPDATE(`status IN open`)로만 이뤄져 동시 요청 중 하나만 성공한다.
 - **backlog upsert**: `backlog_id` 충돌 시 `occurrence_count`를 원자적으로 +1 하며 `symptom/title`은 최초값을 유지한다.
+- **backlog resolve**: 원인 룰이 매칭되는 증상은 `plan-worker`가 `resolve_rca_backlog_item_for_rule`을 호출해 과거 `missing-cause-rule` backlog를 닫는다. 임의 삭제가 아니라 `resolved` 상태 전환으로 이력을 남긴다.
 - **승인 참조 결정성**: `approval_ref`는 `(plan_id, action_id)`의 sha256 기반이라 같은 선택에 대해 항상 같은 값이다.
 - **원자성**: 복구 선택의 상태 전이·승인 레코드·이벤트 발행은 `unit_of_work_or_null(db)` 한 트랜잭션 안에서 수행된다.
 

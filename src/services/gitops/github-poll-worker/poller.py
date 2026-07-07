@@ -140,9 +140,34 @@ class GitHubPoller:
         # 프로덕션: CronJob 이 주기를 들고 POLL_ONCE 로 1회 실행 → 위임(겹침·복구는 k8s).
         # 데모: 상주 워커가 직접 interval 루프(replica 1 이라 중복발화 없음).
         if self.once:
-            await self.poll_once(client)
+            await self.poll_once_with_retry(client)
             return
         await self.loop(client)
+
+    async def poll_once_with_retry(self, client: httpx.AsyncClient) -> None:
+        # once 모드는 곧 프로세스가 끝나므로 일시 네트워크 오류만 짧게 자체 재시도.
+        max_attempts = max(1, Settings.POLL_ONCE_MAX_ATTEMPTS)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await self.poll_once(client)
+                return
+            except Exception as exc:
+                if attempt >= max_attempts or not self.is_transient_poll_error(exc):
+                    raise
+                backoff = self.retry_backoff_seconds(attempt)
+                LOGGER.warning(
+                    "github_poll_retrying",
+                    extra={
+                        CONTEXT_KEY: {
+                            "exception_type": type(exc).__name__,
+                            "status_code": self.http_status_code(exc),
+                            "attempt": attempt,
+                            "max_attempts": max_attempts,
+                            "backoff_seconds": round(backoff, 1),
+                        }
+                    },
+                )
+                await asyncio.sleep(backoff)
 
     async def loop(self, client: httpx.AsyncClient) -> None:
         failures = 0
@@ -152,11 +177,7 @@ class GitHubPoller:
             except Exception as exc:
                 failures += 1
                 # 지수 백오프(+지터, 상한) — 연속 실패 시 GitHub/게이트웨이를 두드리지 않게.
-                backoff = min(
-                    Settings.POLL_RETRY_DELAY_SECONDS * (2 ** (failures - 1)),
-                    Settings.POLL_MAX_BACKOFF_SECONDS,
-                )
-                backoff += random.uniform(0, Settings.POLL_BACKOFF_JITTER_SECONDS)
+                backoff = self.retry_backoff_seconds(failures)
                 LOGGER.warning(
                     "github_poll_failed",
                     extra={
@@ -171,6 +192,28 @@ class GitHubPoller:
                 continue
             failures = 0  # 성공 → 백오프 리셋
             await asyncio.sleep(self.interval)
+
+    @staticmethod
+    def retry_backoff_seconds(failures: int) -> float:
+        backoff = min(
+            Settings.POLL_RETRY_DELAY_SECONDS * (2 ** (failures - 1)),
+            Settings.POLL_MAX_BACKOFF_SECONDS,
+        )
+        return backoff + random.uniform(0, Settings.POLL_BACKOFF_JITTER_SECONDS)
+
+    @staticmethod
+    def is_transient_poll_error(exc: Exception) -> bool:
+        if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code in Settings.TRANSIENT_RETRY_STATUS_CODES
+        return False
+
+    @staticmethod
+    def http_status_code(exc: Exception) -> int | None:
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code
+        return None
 
     async def poll_once(self, client: httpx.AsyncClient) -> None:
         for target in self.poll_targets():

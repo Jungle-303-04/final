@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 import pytest
+import yaml
 from conftest import ROOT, load_file
 
 from packages.config.constants import Target
@@ -132,6 +133,88 @@ def test_poll_once_env_parses_only_truthy_values(monkeypatch) -> None:
 
     monkeypatch.setenv("POLL_ONCE", "true")
     assert module.GitHubPoller().once is True
+
+
+def test_http_timeout_default_is_at_least_thirty_seconds(monkeypatch) -> None:
+    monkeypatch.delenv("HTTP_TIMEOUT_SECONDS", raising=False)
+    module = _load_poller()
+
+    assert module.Settings.HTTP_TIMEOUT_SECONDS >= 30
+
+
+def test_once_mode_retries_read_timeout_then_posts(monkeypatch) -> None:
+    monkeypatch.setenv("POLL_ONCE", "1")
+    monkeypatch.setenv("POLL_ONCE_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("POLL_RETRY_DELAY_SECONDS", "1")
+    monkeypatch.setenv("POLL_MAX_BACKOFF_SECONDS", "10")
+    monkeypatch.setenv("POLL_BACKOFF_JITTER_SECONDS", "0")
+    module = _load_poller()
+    posted: list[dict[str, Any]] = []
+    sleeps: list[float] = []
+    github_calls = 0
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", fake_sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal github_calls
+        if request.url.host == "api.github.com":
+            github_calls += 1
+            if github_calls == 1:
+                raise httpx.ReadTimeout("github read timeout", request=request)
+            return httpx.Response(200, json=[{"sha": "retry-sha"}])
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"accepted": True})
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await module.GitHubPoller(client=client).run()
+
+    asyncio.run(go())
+    assert github_calls == 2
+    assert sleeps == [1.0]
+    assert posted[0]["commit_sha"] == "retry-sha"
+
+
+def test_once_mode_read_timeout_retry_is_bounded(monkeypatch) -> None:
+    monkeypatch.setenv("POLL_ONCE_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("POLL_RETRY_DELAY_SECONDS", "1")
+    monkeypatch.setenv("POLL_MAX_BACKOFF_SECONDS", "2")
+    monkeypatch.setenv("POLL_BACKOFF_JITTER_SECONDS", "0")
+    module = _load_poller()
+    sleeps: list[float] = []
+    github_calls = 0
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", fake_sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal github_calls
+        github_calls += 1
+        raise httpx.ReadTimeout("github read timeout", request=request)
+
+    async def go() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            poller = module.GitHubPoller(client=client)
+            poller.once = True
+            await poller.run()
+
+    with pytest.raises(httpx.ReadTimeout):
+        asyncio.run(go())
+    assert github_calls == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_cronjob_failed_history_limit_is_shrunk() -> None:
+    manifest = yaml.safe_load(
+        (ROOT / "deploy" / "management" / "github-poll-worker.yaml").read_text()
+    )
+
+    assert manifest["spec"]["failedJobsHistoryLimit"] == 1
 
 
 def test_dedup_guard_skips_unchanged_sha() -> None:

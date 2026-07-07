@@ -46,6 +46,10 @@ class RcaStore(Protocol):
 class RcaBacklogStore(Protocol):
     async def upsert_rca_backlog_item(self, body: JsonObject) -> None: ...
 
+    async def resolve_rca_backlog_item_for_rule(
+        self, workspace_id: str, symptom: str, reason: str
+    ) -> int: ...
+
 
 class RecoveryPlanStore(Protocol):
     async def upsert_recovery_selection_request(

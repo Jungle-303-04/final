@@ -116,10 +116,12 @@ class Settings:
 | `WEBHOOK_SECRET_ENV` | `"GITHUB_WEBHOOK_SECRET"` |
 | `SIGNATURE_HEADER` | `"x-hub-signature-256"` |
 | `SIGNATURE_PREFIX` | `"sha256="` |
-| `HTTP_TIMEOUT_SECONDS_ENV` / `HTTP_TIMEOUT_SECONDS` | `"HTTP_TIMEOUT_SECONDS"` / `int(env(..., "20"))` — import 시점 평가 |
+| `HTTP_TIMEOUT_SECONDS_ENV` / `HTTP_TIMEOUT_SECONDS` | `"HTTP_TIMEOUT_SECONDS"` / `int(env(..., "30"))` — import 시점 평가 |
+| `POLL_ONCE_MAX_ATTEMPTS_ENV` / `POLL_ONCE_MAX_ATTEMPTS` | `"POLL_ONCE_MAX_ATTEMPTS"` / `int(env(..., "3"))` — import 시점 평가 |
 | `POLL_RETRY_DELAY_SECONDS_ENV` / `POLL_RETRY_DELAY_SECONDS` | `"POLL_RETRY_DELAY_SECONDS"` / `int(env(..., "5"))` — import 시점 평가 |
 | `POLL_MAX_BACKOFF_SECONDS_ENV` / `POLL_MAX_BACKOFF_SECONDS` | `"POLL_MAX_BACKOFF_SECONDS"` / `int(env(..., "300"))` — import 시점 평가 |
 | `POLL_BACKOFF_JITTER_SECONDS_ENV` / `POLL_BACKOFF_JITTER_SECONDS` | `"POLL_BACKOFF_JITTER_SECONDS"` / `int(env(..., "3"))` — import 시점 평가 |
+| `TRANSIENT_RETRY_STATUS_CODES` | `{408, 500, 502, 503, 504}` |
 | `SOFT_SKIP_STATUS_CODES` | `{403, 429}` |
 | `NOT_MODIFIED_STATUS_CODE` | `304` — ETag(`If-None-Match`) 조건부 요청의 '변경 없음' 응답 코드 |
 | `ACCESS_ERROR_STATUS_CODES` | `{401, 404}` |
@@ -166,12 +168,19 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
    - `DATABASE_URL`이 있으면 DB target 조회용 `Database()`를 주입한다.
    - 없으면 DB 없이 env fallback만 사용한다.
    - 생성자에 클라이언트가 주입됐으면(`_client`) 그대로 `drive()`.
-   - 아니면 `httpx.AsyncClient(timeout=Settings.HTTP_TIMEOUT_SECONDS)`를 만들어 `drive()`.
+   - 아니면 `httpx.AsyncClient(timeout=Settings.HTTP_TIMEOUT_SECONDS)`를 만들어 `drive()`(기본 30초).
 
 ### `drive` — 실행 모드 분기
 
-- `self.once`(`POLL_ONCE` truthy) → `poll_once(client)` 1회 후 종료. (주석: 프로덕션은 k8s CronJob이 주기를 들고 1회 실행 — 겹침·복구는 k8s에 위임.)
+- `self.once`(`POLL_ONCE` truthy) → `poll_once_with_retry(client)` 후 종료. (주석: 프로덕션은 k8s CronJob이 주기를 들고 1회 실행 — 겹침·복구는 k8s에 위임.)
 - 아니면 `loop(client)` — 상주 무한 루프. (주석: 데모 Deployment, replica 1이라 중복 발화 없음.)
+
+### `poll_once_with_retry` — CronJob 일시 오류 재시도
+
+1. `max_attempts = max(1, Settings.POLL_ONCE_MAX_ATTEMPTS)`로 시도 횟수를 제한한다(기본 3).
+2. `poll_once`가 성공하면 즉시 종료한다.
+3. `httpx.TimeoutException`/`httpx.TransportError` 또는 `TRANSIENT_RETRY_STATUS_CODES`의 `HTTPStatusError`이면 `POLL_RETRY_DELAY_SECONDS * 2**(attempt-1)` 지수 백오프를 적용하되 `POLL_MAX_BACKOFF_SECONDS`로 상한을 둔다. 지터는 `0..POLL_BACKOFF_JITTER_SECONDS`.
+4. 한도를 넘거나 비일시 오류이면 예외를 다시 올려 CronJob 실패로 드러낸다.
 
 ### `loop` — 실패 백오프
 
@@ -209,9 +218,9 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 - 같은 target의 같은 commit SHA는 프로세스 생존 중 두 번 POST되지 않는다(`_last_sha_by_target` 메모리 가드). 재시작/CronJob 모드에서는 가드가 초기화되므로 최종 dedup은 downstream ledger 책임.
 - `_etag_by_target`도 프로세스 메모리 상태다 — 재시작/CronJob 1회 실행에서는 첫 요청이 항상 무조건부(rate limit 1회 소모)이고, 상주 loop 모드에서 변경 없는 주기는 304로 rate limit을 소모하지 않는다. 304 응답에서는 ETag가 갱신되지 않는다(성공 2xx 응답의 `etag` 헤더만 저장).
 - `emit_webhook` 성공 후에만 해당 target의 `_last_sha_by_target`이 갱신된다 — POST 실패 시 다음 주기에 같은 commit을 재시도한다.
-- 403/429/401/404는 예외가 아니라 skip(None)으로 처리된다 — 폴링 프로세스(특히 CronJob)를 죽이지 않는 fail-soft. 그 외 HTTP 오류·네트워크 예외는 loop 모드에서 지수 백오프(기본 5s, 상한 300s, 지터 0~3s), once 모드에서는 전파되어 실행 실패.
+- 403/429/401/404는 예외가 아니라 skip(None)으로 처리된다 — 폴링 프로세스(특히 CronJob)를 죽이지 않는 fail-soft. 그 외 HTTP 오류·네트워크 예외는 loop 모드에서 지수 백오프(기본 5s, 상한 300s, 지터 0~3s), once 모드에서는 일시 오류만 기본 3회까지 같은 백오프로 재시도한 뒤 전파한다.
 - `GITHUB_REPO`는 `owner/repo` 형식이 강제된다(`require_poll_config`), `GITOPS_WEBHOOK_IMAGE`는 emit 시점에 필수.
-- `HTTP_TIMEOUT_SECONDS` 등 튜닝 상수 4종은 settings 모듈 import 시점에 평가된다 — env 변경은 재시작 필요.
+- `HTTP_TIMEOUT_SECONDS` 등 튜닝 상수 5종은 settings 모듈 import 시점에 평가된다 — env 변경은 재시작 필요.
 - 무인증 폴링은 GitHub 공개 repo 시간당 60회 제한에 걸린다(데모 30초 주기=120회/시) — 토큰 설정 시 5000회(주석 명시).
 
 ## 설정 (Settings)
@@ -234,7 +243,8 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 | `GITHUB_API_BASE` | str | `"https://api.github.com"` | GitHub API base(GHE 교체용) |
 | `GITHUB_WEBHOOK_SECRET` | str | `""` | webhook HMAC-SHA256 서명 키(게이트웨이와 동일 키) |
 | `GITOPS_WEBHOOK_IMAGE` | str | `""` (emit 시 필수) | webhook body의 image |
-| `HTTP_TIMEOUT_SECONDS` | int | `20` | GitHub/webhook HTTP 타임아웃 초 |
+| `HTTP_TIMEOUT_SECONDS` | int | `30` | GitHub/webhook HTTP 타임아웃 초 |
+| `POLL_ONCE_MAX_ATTEMPTS` | int | `3` | CronJob once 모드 일시 오류 최대 시도 횟수 |
 | `POLL_RETRY_DELAY_SECONDS` | int | `5` | 실패 재시도 기본 간격 초(지수 백오프 밑변) |
 | `POLL_MAX_BACKOFF_SECONDS` | int | `300` | 지수 백오프 상한 초 |
 | `POLL_BACKOFF_JITTER_SECONDS` | int | `3` | 백오프 지터 상한 초 |

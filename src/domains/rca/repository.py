@@ -14,6 +14,9 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 
 RECOVERY_PLAN_STATUS_SELECTION_REQUESTED = "selection_requested"
 RECOVERY_PLAN_STATUS_SELECTED = "selected"
+BACKLOG_STATUS_OPEN = "open"
+BACKLOG_STATUS_RESOLVED = "resolved"
+BACKLOG_RULE_RESOLVED_REASON = "matching RCA rule is now available"
 OPEN_RECOVERY_PLAN_STATUSES = (RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,)
 
 
@@ -83,6 +86,28 @@ class RcaRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             conn.execute(statement)
+
+    def resolve_rca_backlog_item_for_rule(
+        self,
+        workspace_id: str,
+        symptom: str,
+        reason: str = BACKLOG_RULE_RESOLVED_REASON,
+    ) -> int:
+        """매칭 룰이 생긴 symptom 의 missing-rule backlog 를 닫는다."""
+        table = RcaBacklogItem.__table__
+        backlog_id = f"missing-cause-rule:{workspace_id}:{symptom}"
+        statement = (
+            table.update()
+            .where(
+                table.c.backlog_id == backlog_id,
+                table.c.workspace_id == workspace_id,
+                table.c.status == BACKLOG_STATUS_OPEN,
+            )
+            .values(status=BACKLOG_STATUS_RESOLVED, reason=reason, updated_at=func.now())
+            .returning(table.c.backlog_id)
+        )
+        with self.connection() as conn:
+            return len(conn.execute(statement).all())
 
     def list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[JsonObject]:
         """최근 RCA 리포트 조회(최신순) — AI 도구 등 읽기 전용 소비자용."""
