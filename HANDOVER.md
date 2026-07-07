@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:01 KST (설정/조직 디자인 시스템 이관 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:05 KST (설정/조직 디자인 시스템 이관 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -25,8 +25,13 @@
   - `make check` passed, 795 passed / 3 skipped.
   - `make manifest-check` passed.
   - Playwright mock: `/settings/members`, `/settings/orgs`, `/settings/groups`, `/settings/access`, `/settings/ops`를 1440/1024/390 폭에서 순회했다. 멤버 검색 0건+필터 초기화, 조직/그룹 중복 이름 제출 차단, `last_admin` 인라인 오류, 권한 회수 요약 모달, DLQ 재처리 요약 모달, horizontal overflow 0, console error 0 확인.
-- 남은 확인:
-  - 커밋/푸시 후 Actions 확인. Actions `steps: []` 실패가 반복되면 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
+- CI/CD:
+  - `c1c7bf87` push 후 GitHub Actions `28904733598`(CI), `28904733556`(AWS CD), `28904733554`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:c1c7bf87-settings-org-ui-20260708080409`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-ChbApw0I.js`에서 `SettingsNav-pJa8SI4Z.js`, `MembersView-DV7RiuYl.js`, `OrganizationsView-CGIBTe7s.js`, `GroupsView-Cmkv8ZxM.js`, `AccessView-B6cC__lV.js`, `OpsView-Dkcm3vR-.js` 참조 확인. lazy chunk 본문에서 `필터 초기화`, `이미 사용 중인 조직 이름입니다`, `이미 사용 중인 그룹 이름입니다`, `최소 1명의 관리자 필요`, `권한 회수`, `Dead Letter 재처리`, `설정 -` 문구 확인.
 
 ## 체크포인트 — AI 채팅 디자인 시스템 이관
 

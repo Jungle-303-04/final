@@ -207,6 +207,7 @@
 - 권한 부여/회수와 DLQ 재처리는 확인 모달에 대상 요약을 표시하고, 실행 중 해당 버튼만 pending 상태가 된다.
 - 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q`, `make check`, `make manifest-check` 통과.
 - Playwright mock: `/settings/members`, `/settings/orgs`, `/settings/groups`, `/settings/access`, `/settings/ops`를 1440/1024/390 폭에서 순회했다. 멤버 검색 0건+필터 초기화, 조직/그룹 중복 이름 제출 차단, `last_admin` 인라인 오류, 권한 회수 요약 모달, DLQ 재처리 요약 모달, horizontal overflow 0, console error 0 확인.
+- 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `c1c7bf87-settings-org-ui-20260708080409`, 설정/조직 lazy chunk 6종 서빙 확인.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
