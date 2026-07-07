@@ -7,6 +7,7 @@ import {
   useRepositoryManifestCandidates,
   useRepositoryManifestValidation,
   useRepositoryProbe,
+  type RepositoryManifestCandidate,
 } from '@/features/repo/api';
 import { useClusters } from '@/features/cluster/api';
 import { useIsAdmin } from '@/features/auth/api';
@@ -20,7 +21,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const [step, setStep] = useState(0);
   const [repoRef, setRepoRef] = useState('');
   const [branch, setBranch] = useState('');
-  const [manifestPath, setManifestPath] = useState('');
+  const [manifestSelection, setManifestSelection] = useState('');
   const [clusterId, setClusterId] = useState('');
   const clustersQ = useClusters();
   const create = useCreateApplication();
@@ -34,7 +35,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   const selectedBranch = branch || branchesQ.data?.default_branch || probeQ.data?.default_branch || '';
   const manifestsQ = useRepositoryManifestCandidates(normalizedRepoRef, selectedBranch, open && Boolean(normalizedRepoRef && selectedBranch && probeQ.data?.reachable));
   const candidates = useMemo(() => manifestsQ.data?.candidates ?? [], [manifestsQ.data?.candidates]);
-  const selectedCandidate = candidates.find(c => c.path === manifestPath);
+  const selectedCandidate = candidates.find(c => repositoryManifestCandidateValue(c) === manifestSelection);
+  const manifestPath = selectedCandidate?.path ?? '';
   const validationQ = useRepositoryManifestValidation(
     normalizedRepoRef,
     selectedBranch,
@@ -52,7 +54,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
     setStep(0);
     setRepoRef('');
     setBranch('');
-    setManifestPath('');
+    setManifestSelection('');
     setClusterId('');
     create.reset();
     onClose();
@@ -60,7 +62,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
 
   useEffect(() => {
     setBranch('');
-    setManifestPath('');
+    setManifestSelection('');
   }, [trimmedRepoRef]);
 
   useEffect(() => {
@@ -74,13 +76,13 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
   useEffect(() => {
     if (!open) return;
     if (candidates.length === 0) {
-      if (manifestPath) setManifestPath('');
+      if (manifestSelection) setManifestSelection('');
       return;
     }
-    if (!candidates.some(candidate => candidate.path === manifestPath)) {
-      setManifestPath(candidates[0].path);
+    if (!candidates.some(candidate => repositoryManifestCandidateValue(candidate) === manifestSelection)) {
+      setManifestSelection(repositoryManifestCandidateValue(candidates[0]));
     }
-  }, [candidates, manifestPath, open]);
+  }, [candidates, manifestSelection, open]);
 
   return (
     <Modal open={open} title="레포 연결" onClose={reset} size="lg">
@@ -109,7 +111,7 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           <Field label="브랜치">
             {branchesQ.isPending ? <Skeleton lines={1} /> : (
               <select className="input" value={selectedBranch} disabled={!probeQ.data?.reachable || (branchesQ.data?.branches ?? []).length === 0}
-                onChange={e => { setBranch(e.target.value); setManifestPath(''); }}>
+                onChange={e => { setBranch(e.target.value); setManifestSelection(''); }}>
                 {(branchesQ.data?.branches ?? []).map(item => (
                   <option key={item.name} value={item.name}>{item.name}{item.protected ? ' · protected' : ''}</option>
                 ))}
@@ -123,9 +125,9 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
           )}
           <Field label="manifest">
             {manifestsQ.isPending ? <Skeleton lines={1} /> : (
-              <select className="input" value={manifestPath} disabled={candidates.length === 0} onChange={e => setManifestPath(e.target.value)}>
+              <select className="input" value={manifestSelection} disabled={candidates.length === 0} onChange={e => setManifestSelection(e.target.value)}>
                 {candidates.map(candidate => (
-                  <option key={`${candidate.source_type}:${candidate.path}`} value={candidate.path}>{candidate.display_name}</option>
+                  <option key={repositoryManifestCandidateValue(candidate)} value={repositoryManifestCandidateValue(candidate)}>{candidate.display_name}</option>
                 ))}
               </select>
             )}
@@ -218,4 +220,8 @@ export function ConnectRepoWizard({ open, onClose }: { open: boolean; onClose: (
       )}
     </Modal>
   );
+}
+
+export function repositoryManifestCandidateValue(candidate: RepositoryManifestCandidate): string {
+  return `${candidate.source_type}:${candidate.path}`;
 }

@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:45 KST (AI 채팅 prefill/갱신/UX polish)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-07 18:54 KST (레포/클러스터 위저드 선택 안정화)
 
 ## 절대 운영 원칙 — mock/fake/hardcoding 금지
 
@@ -10,6 +10,24 @@
 - 평상시 DB 정리는 전체 삭제가 아니라 원인과 시간 범위가 확인된 과거 실패 레코드만 상태 전환으로 아카이브한다.
 - 단, 이번 사용자 명시 지시로 최종 완료 후 1회 DB 초기화를 수행한다. 순서: 백업/스냅샷 → 스키마 재생성/마이그레이션 → `service_admin` bootstrap → 실제 클러스터/레포 재등록 → 실제 데이터 재수집/검증. 초기화 후에도 운영 화면에는 mock/fake/hardcoding 금지.
 - 신버전 evidence lineage가 배포·검증되면 구버전/신버전 evidence 혼재를 피하기 위해 최종 전환 단계에서 DB를 새로 시작한다. 지금 즉시 초기화하지 않는다.
+
+## 체크포인트 (18:54 KST) — 레포/클러스터 위저드 선택 안정화
+
+- 구현:
+  - 레포 연결 위저드의 manifest 후보 선택값을 `path` 단독에서 `source_type:path`로 변경했다. 같은 경로가 raw/kustomize/helm 등 여러 후보로 잡혀도 사용자가 선택한 attach 방식 그대로 validation에 들어간다.
+  - 클러스터 등록 위저드는 flow 기본 deploy provider가 unavailable이면 첫 available deploy provider로 대체한다.
+  - available deploy provider가 하나도 없는 flow는 provider 단계에서 다음으로 진행하지 못한다.
+  - 설치 방식 select는 unavailable 옵션을 disabled 처리하고 `unavailable_reason`을 표시한다.
+  - 문서 `docs/fd/views/resources.md`, `docs/spec/frontend/repo.md`, `docs/spec/frontend/resources.md`를 실제 흐름 기준으로 갱신했다.
+- 검증:
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `cd frontend && npm test` → 6 passed.
+  - `cd frontend && npm run build` → passed. 기존 large chunk warning 만 있음.
+  - `git diff --check` → passed.
+- 남은 백엔드 차이:
+  - API 직접 호출 우회를 막으려면 `POST /applications` 서버 측에서 repository validation을 재실행하거나 validation receipt/source_type을 받아 강제해야 한다.
+  - cluster import 후보의 non-secret metadata(`source`, `external_handle`, `console_url`, `labels`)는 아직 `/targets` 저장 계약에 보존되지 않는다.
 
 ## 체크포인트 (18:45 KST) — AI 채팅 prefill/갱신/UX polish
 

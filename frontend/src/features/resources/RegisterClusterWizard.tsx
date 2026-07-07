@@ -1,5 +1,5 @@
 // 클러스터 등록 위저드 — provider discovery/preflight 기반 동적 등록 흐름
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import { Badge, Button, CodeBlock, copyToClipboard, Field, KeyValue, Modal, Skeleton, Stepper } from '@/shared/ui';
@@ -89,7 +89,8 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const flows = discovery.data?.flows ?? [];
   const selectedFlow = flows.find(flow => flow.cloud_provider === provider) ?? flows[0];
   const activeProvider = selectedFlow?.cloud_provider ?? provider;
-  const deployOptions = selectedFlow?.deploy_providers ?? [];
+  const deployOptions = useMemo(() => selectedFlow?.deploy_providers ?? [], [selectedFlow]);
+  const selectedDeployOption = deployOptions.find(option => option.key === deployProvider);
   const selectedCandidate = selectedFlow?.import_candidates.find(candidate => candidateKey(candidate) === selectedImportKey);
   const directApply = deployProvider === 'kube-context';
 
@@ -131,13 +132,15 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const connected = isAgentOnline(connQ.data?.connection_status);
   const slugOk = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(clusterId);
   const providerReady = selectedFlow?.status === 'available';
-  const canContinueProvider = discovery.isSuccess && !!selectedFlow && providerReady;
-  const canPreflight = slugOk && canContinueProvider && !!deployProvider;
+  const deployReady = selectedDeployOption?.status === 'available';
+  const canContinueProvider = discovery.isSuccess && !!selectedFlow && providerReady && deployOptions.some(option => option.status === 'available');
+  const canPreflight = slugOk && canContinueProvider && !!deployProvider && deployReady;
 
   const reset = () => {
     setStep(0);
-    setProvider(discovery.data?.default_cloud_provider ?? DEFAULT_CLOUD_PROVIDER);
-    setDeployProvider(discovery.data?.default_deploy_provider ?? DEFAULT_DEPLOY_PROVIDER);
+    const defaultFlow = discovery.data?.flows.find(flow => flow.cloud_provider === discovery.data?.default_cloud_provider) ?? discovery.data?.flows[0];
+    setProvider(defaultFlow?.cloud_provider ?? DEFAULT_CLOUD_PROVIDER);
+    setDeployProvider(defaultFlow ? preferredDeployProvider(defaultFlow) : DEFAULT_DEPLOY_PROVIDER);
     setKubeContext('');
     setSelectedImportKey('');
     setIssued(null);
@@ -159,7 +162,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
 
   const chooseProvider = (flow: RegistrationFlow) => {
     setProvider(flow.cloud_provider);
-    setDeployProvider(flow.default_deploy_provider || DEFAULT_DEPLOY_PROVIDER);
+    setDeployProvider(preferredDeployProvider(flow));
     setSelectedImportKey('');
     setKubeContext('');
     preflight.reset();
@@ -171,7 +174,7 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
     if (!candidate) return;
     setClusterId(candidate.cluster_id);
     setName(candidate.name);
-    setDeployProvider(candidate.deploy_provider || selectedFlow?.default_deploy_provider || DEFAULT_DEPLOY_PROVIDER);
+    setDeployProvider(candidate.deploy_provider || (selectedFlow ? preferredDeployProvider(selectedFlow) : DEFAULT_DEPLOY_PROVIDER));
     setKubeContext(candidate.kube_context ?? '');
     preflight.reset();
   };
@@ -179,6 +182,13 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   const runPreflight = () => {
     preflight.mutate(undefined, { onSuccess: () => setStep(2) });
   };
+
+  useEffect(() => {
+    if (!open || !selectedFlow || deployOptions.length === 0) return;
+    if (!deployOptions.some(option => option.key === deployProvider)) {
+      setDeployProvider(preferredDeployProvider(selectedFlow));
+    }
+  }, [deployOptions, deployProvider, open, selectedFlow]);
 
   return (
     <Modal open={open} title="클러스터 등록" onClose={guardedClose} size="lg">
@@ -256,9 +266,12 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
           </Field>
           <Field label="설치 방식">
             <select className="input" value={deployProvider} onChange={e => { setDeployProvider(e.target.value); preflight.reset(); }}>
-              {deployOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+              {deployOptions.map(option => <option key={option.key} value={option.key} disabled={option.status !== 'available'}>{option.label}</option>)}
             </select>
           </Field>
+          {selectedDeployOption?.unavailable_reason && (
+            <p style={{ color: 'var(--warn)', fontSize: 'var(--fs-sm)' }}>{selectedDeployOption.unavailable_reason}</p>
+          )}
           {directApply && (
             <Field label="kube context">
               <select className="input" value={kubeContext} onChange={e => { setKubeContext(e.target.value); preflight.reset(); }}>
@@ -378,4 +391,11 @@ function candidateKey(candidate: ImportCandidate): string {
 
 function isAgentOnline(status: string | undefined): boolean {
   return !!status && ONLINE_STATUSES.has(status);
+}
+
+export function preferredDeployProvider(flow: Pick<RegistrationFlow, 'default_deploy_provider' | 'deploy_providers'>): string {
+  return flow.deploy_providers.find(option => option.key === flow.default_deploy_provider && option.status === 'available')?.key
+    ?? flow.deploy_providers.find(option => option.status === 'available')?.key
+    ?? flow.default_deploy_provider
+    ?? DEFAULT_DEPLOY_PROVIDER;
 }

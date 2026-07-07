@@ -65,3 +65,23 @@ test('cluster drill actions keep real subject context across events metrics and 
   assert.equal(hrefs.metrics, '/metrics?cluster=cluster-1&subject=pod&name=checkout-abc&namespace=prod');
   assert.equal(decodeURIComponent(hrefs.ai), '/ai?prefill=cluster-1 prod/checkout-abc pod 상태 분석');
 });
+
+test('resource wizards keep exact real discovery selections', async () => {
+  const { repositoryManifestCandidateValue } = await vite.ssrLoadModule('/src/features/resources/ConnectRepoWizard.tsx');
+  const { preferredDeployProvider } = await vite.ssrLoadModule('/src/features/resources/RegisterClusterWizard.tsx');
+
+  assert.equal(
+    repositoryManifestCandidateValue({ source_type: 'kustomize', path: 'deploy', display_name: 'deploy', reason: 'kustomization' }),
+    'kustomize:deploy',
+  );
+  assert.equal(
+    preferredDeployProvider({
+      default_deploy_provider: 'kube-context',
+      deploy_providers: [
+        { key: 'kube-context', label: 'direct', status: 'unavailable' },
+        { key: 'manual-manifest', label: 'manual', status: 'available' },
+      ],
+    }),
+    'manual-manifest',
+  );
+});

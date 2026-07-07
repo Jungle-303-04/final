@@ -27,12 +27,20 @@ status: synced
 
 | 심볼 | 앵커 | API | 폴링/옵션 |
 |---|---|---|---|
-| `repoKeys` | `frontend/src/features/repo/api.ts :: repoKeys` | — | `apps() = ['applications']`, `runs(id) = ['applications', id, 'runs']`, `deployments(id) = ['applications', id, 'deployments']` |
+| `repoKeys` | `frontend/src/features/repo/api.ts :: repoKeys` | — | `apps() = ['applications']`, `runs(id) = ['applications', id, 'runs']`, `deployments(id) = ['applications', id, 'deployments']`, `probe(repoRef)`, `branches(repoRef)`, `manifests(repoRef, branch)`, `validation(repoRef, branch, manifestPath, sourceType)` |
 | `useApplications` | `frontend/src/features/repo/api.ts :: useApplications` | GET `/applications` | 30s, select `d.applications.map(adaptApplication)` |
 | `useApplication` | `frontend/src/features/repo/api.ts :: useApplication` | GET `/applications/${id}` → `{application: raw}` | 쿼리키 `['applications', id]`, `select: d => adaptApplication(d.application)` |
 | `useRuns` | `frontend/src/features/repo/api.ts :: useRuns` | GET `/applications/${appId}/runs` | select `d.runs.map(adaptRun)`. **적응 폴링**: raw runs 중 상태(대문자화)가 ACTIVE 집합에 있으면 10s, 아니면 60s |
 | `useRunsAll` | `frontend/src/features/repo/api.ts :: useRunsAll` | 앱별 GET `/applications/${id}/runs` (useQueries) | `(apps: Application[])` → `combine` 으로 `{ appId, runs: adaptRun[] }[]` 반환. 활성 run 있으면 10s, 아니면 30s |
 | `useDeployments` | `frontend/src/features/repo/api.ts :: useDeployments` | GET `/applications/${appId}/deployments` | select `d.deployments.map(adaptDeployment)` |
+| `RepositoryProbe` | `frontend/src/features/repo/api.ts :: RepositoryProbe` | — | `{repo_ref, normalized_repo_ref, valid, reachable, default_branch?, private?, html_url?, warnings, errors}` |
+| `RepositoryBranch` | `frontend/src/features/repo/api.ts :: RepositoryBranch` | — | `{name, protected, default}` |
+| `RepositoryManifestCandidate` | `frontend/src/features/repo/api.ts :: RepositoryManifestCandidate` | — | `{path, source_type, display_name, reason}`. `source_type` 은 raw-yaml/raw-json/kustomize/helm 등 문자열 |
+| `RepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: RepositoryManifestValidation` | — | `{repo_ref, branch, manifest_path, valid, status, validation_mode, resource_count, resources[], warnings, errors}` |
+| `useRepositoryProbe` | `frontend/src/features/repo/api.ts :: useRepositoryProbe` | POST `/repositories/discovery/probe` body `{repo_ref}` | 쿼리키 `repoKeys.probe(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
+| `useRepositoryBranches` | `frontend/src/features/repo/api.ts :: useRepositoryBranches` | GET `/repositories/discovery/branches?repo_ref=...` | 쿼리키 `repoKeys.branches(repoRef)`, `enabled`, `retry:false`, `staleTime:60s` |
+| `useRepositoryManifestCandidates` | `frontend/src/features/repo/api.ts :: useRepositoryManifestCandidates` | GET `/repositories/discovery/manifests?repo_ref=...&branch=...` | 쿼리키 `repoKeys.manifests(repoRef, branch)`, `enabled`, `retry:false`, `staleTime:30s` |
+| `useRepositoryManifestValidation` | `frontend/src/features/repo/api.ts :: useRepositoryManifestValidation` | POST `/repositories/discovery/validate` body `{repo_ref, branch, manifest_path, source_type}` | 쿼리키 `repoKeys.validation(repoRef, branch, manifestPath, sourceType)`, `enabled`, `retry:false`, `staleTime:30s` |
 | `useApproval` | `frontend/src/features/repo/api.ts :: useApproval` | POST `/approvals/${approvalId}/${action}` (`action: 'grant'\|'reject'`) | 성공: toast(`grant → ok '승인 완료 — 배포가 진행됩니다'` / `reject → warn '거절했습니다'`) + `['applications']`·`applications*` predicate·`ai*` predicate invalidate |
 | `CreateApplicationInput` | `frontend/src/features/repo/api.ts :: CreateApplicationInput` | — | `{ name; repo_ref; branch; manifest_path; cluster_id }` — 레포 연결 위저드 입력 계약 |
 | `useCreateApplication` | `frontend/src/features/repo/api.ts :: useCreateApplication` | ① POST `/applications` body `{name, repo_ref, default_branch: branch, manifest_path}` → `{application: raw}` ② POST `/applications/${id}/deployments` body `{cluster_id, namespace:'sandbox', environment:'sandbox', manifest_path}` | `(input: CreateApplicationInput)` — 앱 생성 후 배포 대상 등록까지 2단계 순차 실행. 반환은 `adaptApplication` 결과에 `branch`/`cluster_id` 를 덮어쓴 값. 성공 시 apps invalidate. [resources/ConnectRepoWizard](./resources.md) 가 사용 |
