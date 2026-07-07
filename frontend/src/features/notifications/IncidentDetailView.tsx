@@ -152,8 +152,11 @@ export default function IncidentDetailView() {
           파이프라인 상태 행이 정리됐을 수 있습니다. 아래는 동일 correlation 으로 저장된 RCA 리포트·증거입니다.
         </p>
         <div className="split split--even">
+          <Card><RecoveryPlanPanel correlationId={incidentId} standalone /></Card>
           <RcaReportsPanel correlationId={incidentId} onShowEvidence={() => evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-          <div ref={evidenceRef}><EvidencePanel correlationId={incidentId} /></div>
+        </div>
+        <div ref={evidenceRef} style={{ marginTop: 16 }}>
+          <EvidencePanel correlationId={incidentId} />
         </div>
       </FadeSlideIn>
     );
@@ -201,12 +204,12 @@ export default function IncidentDetailView() {
 }
 
 /* ── Recovery plan 상태 — RCA 완료 후 selection/requested/selected 상태 노출 ── */
-function RecoveryPlanPanel({ correlationId }: { correlationId: string }) {
+function RecoveryPlanPanel({ correlationId, standalone = false }: { correlationId: string; standalone?: boolean }) {
   const q = useRecoveryPlan(correlationId || undefined);
   const missing = q.isError && (q.error as { kind?: string }).kind === 'not_found';
   const plan = q.data;
   return (
-    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+    <div style={standalone ? undefined : { marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <strong style={{ fontSize: 'var(--fs-sm)' }}>복구 계획</strong>
         {plan && <Badge tone={recoveryPlanTone(plan)}>{plan.status}</Badge>}
