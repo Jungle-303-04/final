@@ -475,7 +475,6 @@ frontend/
         query.ts
         types.ts
         ui-store.ts
-        mock/
       ui/
         index.tsx
         charts.tsx

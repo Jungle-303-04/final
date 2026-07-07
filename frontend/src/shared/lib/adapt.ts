@@ -1,4 +1,4 @@
-// 실백엔드 응답 형태 → 프론트 타입 정규화. mock 은 이미 프론트 형태라 통과.
+// 실백엔드 응답 형태 → 프론트 타입 정규화.
 // 백엔드가 필드를 덜 주면 안전한 기본값으로 채움(프론트 렌더 크래시 방지).
 import type { Application, Cluster, ClusterSummary, Conversation, Deployment, Incident, IncidentDetail, InventoryResource, K8sEvent, RunStep, ServiceInfo, Workload, WorkflowRun } from '@/shared/lib/types';
 
@@ -158,7 +158,7 @@ const STEP_NAME_MAP: Record<string, string> = {
 };
 
 function adaptRunStep(raw: Record<string, unknown>): RunStep {
-  // mock 은 이미 프론트 형태({name:'DIFFING', detail}) — 그대로 통과.
+  // 이미 프론트 형태({name:'DIFFING', detail})면 그대로 통과.
   if (typeof raw.detail === 'string' || raw.message === undefined && raw.details === undefined) {
     return raw as unknown as RunStep;
   }

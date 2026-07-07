@@ -15,8 +15,8 @@ npx tsc --noEmit
 echo "[frontend-check] eslint (경고 0 강제)"
 npx eslint src/ --max-warnings 0
 
-echo "[frontend-check] production build (VITE_API_MODE=real)"
-VITE_API_MODE=real npx vite build --logLevel error
+echo "[frontend-check] production build"
+npx vite build --logLevel error
 
 # 빌드 산출물 최소 무결성 — index.html 과 JS 번들이 실제로 존재해야 한다.
 test -s dist/index.html

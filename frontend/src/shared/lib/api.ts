@@ -1,6 +1,4 @@
 // API 접근 단일 지점 — 뷰/컴포넌트의 직접 fetch 금지 (docs/fd/03 D5)
-import { mockRequest } from '@/shared/lib/mock/router';
-
 export type ApiErrorKind = 'unauthorized' | 'forbidden' | 'not_found' | 'invalid' | 'rate_limited' | 'server' | 'network';
 export class ApiError extends Error {
   kind: ApiErrorKind; status: number; detail: string;
@@ -12,15 +10,12 @@ export class ApiError extends Error {
   }
 }
 
-// 기본은 real — 데모 목데이터는 VITE_API_MODE=mock 을 명시한 빌드에서만 동작한다(우발적 페이크 차단).
-export const API_MODE = (import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'real') as 'mock' | 'real';
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
 
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
-  if (API_MODE === 'mock') return mockRequest<T>(method, path, body);
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
