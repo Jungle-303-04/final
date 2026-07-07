@@ -99,6 +99,24 @@ cluster-agent가 10초 주기 snapshot으로 실패 상태를 evidence에 실어
 - 로그: `checkout-gateway unreachable: connection refused or timeout` 반복
 - RCA 후보 정합: service_dns_resolution_failure / upstream_unavailable 계열
 
+## evidence policy와 sandbox 관측 범위
+
+agent가 무엇을 수집하는지는 management DB의 `agent_policies`(cluster별, generation 기반)가 정한다.
+기본 policy(`src/domains/target/evidence_policy.py`)는 kubernetes snapshot을 `target` namespace만 보게 되어 있어
+sandbox 장애가 evidence에 실리지 않는다. 그래서 운영 policy를 generation 3으로 올려 다음을 적용했다.
+
+- kubernetes snapshot query: `sandbox` namespace (usage 롤업과 inventory가 shop 워크로드·장애 pod를 반영)
+- logs query 추가: `{k8s_namespace_name="sandbox"} |~ "ERROR|FATAL|error"`
+- metrics query 추가: `kube_pod_info{namespace="sandbox"}`, `kube_pod_container_status_restarts_total{namespace="sandbox"}`, `container_memory_working_set_bytes{namespace="sandbox", container!=""}`
+
+target namespace 관측은 기존 metrics/logs provider query가 계속 담당한다.
+
+주의: kubernetes provider에 namespace snapshot query를 2개 이상 넣으면 node 리소스가
+query마다 중복 수집되고, gateway의 inventory 배치 upsert
+(`src/domains/inventory/repository.py`의 `save_inventory_snapshot`)가
+`CardinalityViolation`(같은 문에서 같은 행 중복 갱신)으로 500을 반환해 evidence 적재가 멈춘다.
+namespace query를 늘리려면 먼저 `normalized`를 `inventory_key` 기준으로 dedupe해야 한다.
+
 ## 파이프라인에서 확인하는 위치
 
 1. target cluster: `kubectl --context target1 -n sandbox get pods -l scenario` 로 실제 실패 확인
