@@ -391,11 +391,7 @@ def test_static_management_agent_manifest_is_read_only() -> None:
     for doc in docs:
         if doc.get("kind") not in {"Role", "ClusterRole"}:
             continue
-        verbs = {
-            verb
-            for rule in doc.get("rules", [])
-            for verb in rule.get("verbs", [])
-        }
+        verbs = {verb for rule in doc.get("rules", []) for verb in rule.get("verbs", [])}
         assert verbs.isdisjoint(forbidden_verbs)
 
     deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")

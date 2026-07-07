@@ -81,5 +81,8 @@ def has_write_or_command_policy(policy: AgentPolicy) -> bool:
 
 
 def management_policy_update_is_forbidden(payload: AgentPolicy) -> bool:
-    role_changed = "cluster_role" in payload.model_fields_set and payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
+    role_changed = (
+        "cluster_role" in payload.model_fields_set
+        and payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
+    )
     return role_changed or has_write_or_command_policy(payload)

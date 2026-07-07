@@ -520,7 +520,7 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 | 확정 | 실제 event_id | 종결 — 이후 요청은 항상 기존 event_id 반환(duplicate) |
 
 ### 4. agent 정책 배포
-1. 관리자: `PUT /clusters/{cluster_id}/policy` — path와 body의 `cluster_id` 불일치 시 409. 기존 정책(없으면 `default_agent_policy`)에 `merge_agent_policy`로 머지 후 `upsert_cluster_policy`. generation이 기존 이하이면 `ValueError` → 409. registration settings 또는 기존 policy가 role=`management`이면 payload가 `cluster_role="management"`이고 bootstrap/desired_state resources가 비어 있을 때만 허용하며, 저장 직전 `freeze_management_policy`로 write/command policy를 빈 값으로 강제한다. role 변경 또는 리소스 추가 시 HTTP 400 `{code:"management_readonly"}`.
+1. 관리자: `PUT /clusters/{cluster_id}/policy` — path와 body의 `cluster_id` 불일치 시 409. 기존 정책(없으면 `default_agent_policy`)에 `merge_agent_policy`로 머지 후 `upsert_cluster_policy`. generation이 기존 이하이면 `ValueError` → 409. registration settings 또는 기존 policy가 role=`management`이면 payload가 `cluster_role`을 명시적으로 `target`으로 바꾸거나 bootstrap/desired_state resources를 추가할 때만 HTTP 400 `{code:"management_readonly"}`로 거부한다. evidence provider 간격처럼 읽기 전용 수집 정책만 바꾸는 payload는 허용하되, 저장 직전 `freeze_management_policy`로 `cluster_role="management"`와 빈 write/command policy를 다시 강제한다.
 2. agent: `GET /agent/policy?cluster_id&generation=N` — 토큰 identity의 cluster_id와 다르면 403. 저장 정책이 없거나 `generation <= N`이면 `policy=None`(변경 없음), 아니면 전체 정책 반환.
 3. agent 보고: `POST /agent/policy/status`·`POST /agent/reconcile/status` — body의 `cluster_id`는 **항상 토큰 identity의 값으로 덮어써서** append-only 저장.
 
