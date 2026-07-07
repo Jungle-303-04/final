@@ -16,9 +16,26 @@
 
 ## 1. 현재 상태 요약
 
-### 2026-07-07 17:10 KST 체크포인트
+### 2026-07-07 17:14 KST 체크포인트
 
 이 섹션이 이 문서 안에서 가장 최신 상태다. 아래의 오래된 SHA/run ID는 당시 기록으로 보존하고, 실제 재개 시에는 이 체크포인트와 `HANDOVER.md` 상단을 먼저 본다.
+
+- `ec00ea77 feat: target preflight 연결성 확인`은 origin/dev push 완료.
+- 해당 push의 dev workflows도 runner 배정 없이 실패:
+  - CI run `28851671441`: failure.
+  - AWS CD run `28851671409`: failure.
+  - Promote Dev To Main run `28851671384`: failure.
+  - 기존과 같은 runner allocation 계층 문제로 본다.
+- repo 연결 위저드 개선:
+  - `frontend/src/features/resources/ConnectRepoWizard.tsx`.
+  - legacy placeholder인 `validation.status === "not_run"`으로는 진행하지 못하게 막고, `validation.valid === true`일 때만 app/binding 생성 단계로 진행한다.
+- 검증:
+  - `python -m pytest -q tests/test_repository_discovery.py tests/test_manifest_render_worker.py` → 28 passed.
+  - `cd frontend && npm run typecheck` → passed.
+  - `cd frontend && npm run lint` → passed.
+  - `git diff --check` → passed.
+
+### 2026-07-07 17:10 KST 체크포인트
 
 - `2107376f feat: incident 복구계획 fallback 연결`은 origin/dev push 완료.
 - 해당 push의 dev workflows도 runner 배정 없이 실패:
