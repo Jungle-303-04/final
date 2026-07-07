@@ -42,10 +42,10 @@ status: synced
 ### `frontend/src/features/auth/LoginView.tsx :: LoginView` (default export)
 
 - 라우트: `/login` (가드 `RequireGuest`).
-- state: `email`(초기값 `'admin.local@example.com'`), `password`. 훅: `useLogin`, `useNavigate`, `useSearchParams`.
+- state: `email`, `password`. 훅: `useLogin`, `useNavigate`, `useLocation`, `useSearchParams`.
 - 트리: `AuthLayout(title='로그인', subtitle='운영 콘솔에 접속합니다')` → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
 - submit: `login.mutate({email, password})`
-  - 성공: `nav(sp.get('returnTo') ?? '/', { replace: true })`
+  - 성공: query `returnTo` 또는 보호 경로에서 렌더된 현재 `pathname+search+hash` 를 `safeReturnTo` 로 검증한 뒤 `nav(..., { replace: true })`
   - 실패: `status === 403 && detail.includes('approval')` → `nav('/pending?email=<encoded>')`
 - 비밀번호 필드 error 메시지: 401 → `'이메일 또는 비밀번호가 올바르지 않습니다'`; 429 → `'잠시 후 다시 시도해주세요'`; 403(approval 아님) → `'이메일 검증이 필요합니다'`.
 - input 제약: email required, password `minLength={8}` required.

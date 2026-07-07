@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLogin } from '@/features/auth/api';
 import { ApiError } from '@/shared/lib/api';
 import { Button, Field } from '@/shared/ui';
@@ -10,12 +10,14 @@ export default function LoginView() {
   const [password, setPassword] = useState('');
   const login = useLogin();
   const nav = useNavigate();
+  const loc = useLocation();
   const [sp] = useSearchParams();
+  const returnTo = sp.get('returnTo') ?? impliedReturnTo(loc.pathname, loc.search, loc.hash);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     login.mutate({ email, password }, {
-      onSuccess: () => nav(safeReturnTo(sp.get('returnTo')), { replace: true }),
+      onSuccess: () => nav(safeReturnTo(returnTo), { replace: true }),
       onError: (err) => {
         const a = err as ApiError;
         if (a.status === 403 && a.detail.includes('approval')) nav(`/pending?email=${encodeURIComponent(email)}`);
@@ -37,6 +39,11 @@ export default function LoginView() {
       </p>
     </AuthLayout>
   );
+}
+
+function impliedReturnTo(pathname: string, search: string, hash: string): string | null {
+  if (['/login', '/signup', '/pending', '/verify-email'].includes(pathname)) return null;
+  return `${pathname}${search}${hash}`;
 }
 
 function safeReturnTo(value: string | null): string {
