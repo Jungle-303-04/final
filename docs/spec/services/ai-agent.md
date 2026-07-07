@@ -424,7 +424,7 @@ rules:
 
 **deployment_gitops.yaml** — `src/services/ai/agent/causes/catalog/deployment_gitops.yaml`
 - `deployment_rollout_failed`: symptoms `ProgressDeadlineExceeded`, `Rollout failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `deployment_progress_deadline_exceeded`, `replica_unavailable_after_rollout`
-- `argocd_sync_failed`: symptoms `ArgoCD Sync Failed`, `Sync Failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `gitops_sync_failed`, `manifest_validation_failed`
+- `gitops_controller_sync_failed`: symptoms `GitOps Sync Failed`, `Sync Failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `gitops_sync_failed`, `manifest_validation_failed`
 
 **image_pull.yaml** — `src/services/ai/agent/causes/catalog/image_pull.yaml`
 - `image_pull_backoff`: symptoms `ImagePullBackOff`, `ErrImagePull`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `wrong_image_tag`, `missing_image_pull_secret`, `registry_unavailable`

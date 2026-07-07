@@ -90,7 +90,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["deployment_progress_deadline_exceeded", "replica_unavailable_after_rollout"],
         ["kubernetes", "metrics", "logs", "metadata"],
     ),
-    "ArgoCD Sync Failed": (
+    "GitOps Sync Failed": (
         ["gitops_sync_failed", "manifest_validation_failed"],
         ["kubernetes", "metrics", "logs", "metadata"],
     ),

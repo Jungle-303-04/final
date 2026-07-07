@@ -10,7 +10,7 @@ status: synced
 ## 책임 (Responsibility)
 
 - GitHub REST API를 주기적으로 폴링해 대상 repo/branch의 최신 commit을 감지하고, 새 commit이면 [api-gateway](gateway-api-gateway.md)의 `/github/webhook`으로 HMAC 서명된 POST를 보낸다. 이후 경로는 실제 webhook과 동일하다(outbox → NATS `git.webhook.received` → [git-pull-worker](gitops-git-pull-worker.md) → pipeline).
-- 모듈 docstring 명시: ArgoCD와 같은 방향("polling 기본 + webhook 가속(옵션)"), cluster-agent와 같은 timer producer 형태. 외부 endpoint를 못 여는 환경이나 webhook 누락 보정용.
+- 모듈 docstring 명시: GitOps 컨트롤러류와 같은 방향("polling 기본 + webhook 가속(옵션)"), cluster-agent와 같은 timer producer 형태. 외부 endpoint를 못 여는 환경이나 webhook 누락 보정용.
 - 현재 구현은 최신 commit 1건만 조회하며, 같은 commit 반복은 메모리 가드(`_last_sha`)와 ledger dedup으로 흡수한다. **ETag 조건부 요청**을 지원한다 — 직전 응답의 `ETag`를 기억해 `If-None-Match`로 보내고, `304 Not Modified`면 새 커밋 없음으로 처리한다(304 응답은 GitHub rate limit을 소모하지 않음 — SCM provider를 압박하지 않는 폴링 원칙).
 - 하지 않는 것: NATS 이벤트 직접 발행/구독(이 워커는 이벤트 버스에 붙지 않는 HTTP 클라이언트다), commit 내용 해석, manifest 처리.
 
