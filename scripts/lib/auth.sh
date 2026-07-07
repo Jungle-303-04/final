@@ -24,6 +24,7 @@ PY
 
   curl -fsS -X POST "${base_url}/auth/login" \
     -H "content-type: application/json" \
+    -H "x-service-csrf: same-origin" \
     -c "${cookie_jar}" \
     -d "${login_body}" >/dev/null
 }

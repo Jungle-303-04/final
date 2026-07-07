@@ -40,6 +40,9 @@ class Settings:
     DEFAULT_CORS_ALLOW_ORIGINS = (
         "http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173"
     )
+    CSRF_INTENT_HEADER = "x-service-csrf"
+    CSRF_INTENT_VALUE = "same-origin"
+    CSRF_REJECT_MESSAGE = "same-origin session request required"
     REDIS_URL_ENV = "REDIS_URL"
     SESSION_TTL_ENV = "SESSION_TTL_SECONDS"
     SESSION_KEY_PREFIX = "session"

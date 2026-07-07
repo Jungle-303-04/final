@@ -4,6 +4,7 @@ import asyncio
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from urllib.parse import urlsplit
 
 import httpx
 import websockets
@@ -62,6 +63,7 @@ from packages.storage.engine import unit_of_work_or_null
 from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig
 
 LOGGER = get_logger(__name__)
+STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def agent_connected_body_from_request(
@@ -89,6 +91,7 @@ class ApiGateway:
             title=Settings.APP_TITLE, version=Settings.APP_VERSION, lifespan=self.lifespan
         )
         self._configure_cors(self.app)
+        self._configure_session_origin_guard(self.app)
         # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
         self.app.state.db = self.db
         self.app.state.events = self.events
@@ -113,6 +116,53 @@ class ApiGateway:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    @staticmethod
+    def _configure_session_origin_guard(app: FastAPI) -> None:
+        @app.middleware("http")
+        async def session_origin_guard(request: Request, call_next):
+            if ApiGateway._session_origin_guard_rejects(request):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": Settings.CSRF_REJECT_MESSAGE},
+                )
+            return await call_next(request)
+
+    @staticmethod
+    def _session_origin_guard_rejects(request: Request) -> bool:
+        if request.method.upper() not in STATE_CHANGING_METHODS:
+            return False
+        if Auth.SESSION_COOKIE_NAME not in request.cookies:
+            return False
+        if request.headers.get(Settings.CSRF_INTENT_HEADER) == Settings.CSRF_INTENT_VALUE:
+            return False
+        return not ApiGateway._has_same_origin_browser_header(request)
+
+    @staticmethod
+    def _has_same_origin_browser_header(request: Request) -> bool:
+        origin = request.headers.get("origin")
+        if origin:
+            return ApiGateway._is_allowed_browser_origin(request, origin)
+        referer = request.headers.get("referer")
+        if referer:
+            return ApiGateway._is_allowed_browser_origin(request, referer)
+        return False
+
+    @staticmethod
+    def _is_allowed_browser_origin(request: Request, value: str) -> bool:
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return False
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin in ApiGateway._configured_browser_origins():
+            return True
+        host = request.headers.get("host", "").split(",", 1)[0].strip().lower()
+        return bool(host) and parsed.netloc.lower() == host
+
+    @staticmethod
+    def _configured_browser_origins() -> set[str]:
+        raw = env(Settings.CORS_ALLOW_ORIGINS_ENV, Settings.DEFAULT_CORS_ALLOW_ORIGINS)
+        return {origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()}
 
     @staticmethod
     def _session_store_config() -> RedisSessionStoreConfig:
