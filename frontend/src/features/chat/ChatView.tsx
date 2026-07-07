@@ -80,11 +80,16 @@ export default function ChatView() {
 }
 
 function MessageRenderer({ m }: { m: ChatMessage }) {
+  // 새 메시지가 append 될 때 fade+rise 로 등장(키 고정 — 폴링 리렌더 시 재애니메이션 없음)
   if (m.role === 'user') {
-    return <div style={{ alignSelf: 'flex-end', maxWidth: '76%', background: 'var(--brand)', borderRadius: '12px 12px 2px 12px', padding: '10px 14px', fontSize: 'var(--fs-sm)', whiteSpace: 'pre-wrap' }}>{m.content}</div>;
+    return (
+      <FadeSlideIn style={{ alignSelf: 'flex-end', maxWidth: '76%' }}>
+        <div style={{ background: 'var(--brand)', borderRadius: '12px 12px 2px 12px', padding: '10px 14px', fontSize: 'var(--fs-sm)', whiteSpace: 'pre-wrap' }}>{m.content}</div>
+      </FadeSlideIn>
+    );
   }
   return (
-    <div style={{ alignSelf: 'flex-start', maxWidth: '82%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <FadeSlideIn style={{ alignSelf: 'flex-start', maxWidth: '82%', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ background: 'var(--surface-2)', borderRadius: '12px 12px 12px 2px', padding: '10px 14px', fontSize: 'var(--fs-sm)', whiteSpace: 'pre-wrap' }}>
         {m.content.split('**').map((part, i) => i % 2 ? <b key={i}>{part}</b> : <span key={i}>{part}</span>)}
       </div>
@@ -95,7 +100,7 @@ function MessageRenderer({ m }: { m: ChatMessage }) {
       ))}
       {m.actions && <ActionSelectCard actions={m.actions} />}
       {m.approval_ref && <ApprovalCard approvalId={m.approval_ref.approval_id} summary={m.approval_ref.summary} resolved={m.approval_ref.resolved} compact />}
-    </div>
+    </FadeSlideIn>
   );
 }
 
