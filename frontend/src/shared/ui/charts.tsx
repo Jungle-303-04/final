@@ -10,6 +10,7 @@ const theme = {
   grid: { line: { stroke: 'var(--border)', strokeWidth: 1 } },
   tooltip: { container: { background: 'var(--surface-2)', color: 'var(--text-1)', fontSize: 12, borderRadius: 6 } },
 } as const;
+const LINE_COLORS = ['var(--info)', 'var(--ok)', 'var(--warn)', 'var(--color-graph-lilac)', 'var(--color-graph-red)'];
 
 /* 차트 툴팁 공통 룩 — 라인 slice/트리맵 동일(surface-2 + border + shadow) */
 const tooltipStyle: CSSProperties = {
@@ -63,32 +64,42 @@ export function TimeSeriesChart({ series, height = 220 }: { series: Series[]; he
   const usesLinearTime = drawable.every(item => item.data.every(point => typeof point.x === 'number'));
   const xTickValues = sampleAxisTicks(drawable, MAX_X_AXIS_TICKS);
   return (
-    <div style={{ height }}>
-      <ResponsiveLine
-        data={drawable} theme={theme} margin={{ top: 12, right: 18, bottom: 34, left: 42 }}
-        xScale={usesLinearTime ? { type: 'linear', min: 'auto', max: 'auto' } : { type: 'point' }}
-        yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
-        axisBottom={{ tickValues: xTickValues, tickSize: 0, tickPadding: 8, format: formatAxisTick }}
-        enablePoints={false} enableGridX={false}
-        colors={['var(--info)', 'var(--ok)', 'var(--warn)']} lineWidth={2}
-        // 시리즈 전환 부드럽게 + x 기준 crosshair/슬라이스 툴팁(전 시리즈 동시 표시)
-        animate={!reduced} motionConfig="gentle" isInteractive
-        enableSlices="x" crosshairType="x"
-        sliceTooltip={({ slice }) => (
-          <div style={tooltipStyle}>
-            <div style={{ color: 'var(--text-3)', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
-              {formatAxisTick(slice.points[0]?.data.x as number | string)}
-            </div>
-            {slice.points.map(p => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-1)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 2, background: p.serieColor }} />
-                <span style={{ color: 'var(--text-2)' }}>{String(p.serieId)}</span>
-                <b style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{String(p.data.yFormatted)}</b>
+    <div style={{ height, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div className="chart-legend">
+        {drawable.map((item, index) => (
+          <span key={item.id} className="chart-legend__item">
+            <i style={{ background: LINE_COLORS[index % LINE_COLORS.length] }} />
+            {item.id}
+          </span>
+        ))}
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ResponsiveLine
+          data={drawable} theme={theme} margin={{ top: 8, right: 18, bottom: 34, left: 42 }}
+          xScale={usesLinearTime ? { type: 'linear', min: 'auto', max: 'auto' } : { type: 'point' }}
+          yScale={{ type: 'linear', min: 0, max: 'auto' }}
+          axisBottom={{ tickValues: xTickValues, tickSize: 0, tickPadding: 8, format: formatAxisTick }}
+          enablePoints={false} enableGridX={false}
+          colors={LINE_COLORS} lineWidth={2}
+          // 시리즈 전환 부드럽게 + x 기준 crosshair/슬라이스 툴팁(전 시리즈 동시 표시)
+          animate={!reduced} motionConfig="gentle" isInteractive
+          enableSlices="x" crosshairType="x"
+          sliceTooltip={({ slice }) => (
+            <div style={tooltipStyle}>
+              <div style={{ color: 'var(--text-3)', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
+                {formatAxisTick(slice.points[0]?.data.x as number | string)}
               </div>
-            ))}
-          </div>
-        )}
-      />
+              {slice.points.map(p => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-1)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: p.serieColor }} />
+                  <span style={{ color: 'var(--text-2)' }}>{String(p.serieId)}</span>
+                  <b style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>{String(p.data.yFormatted)}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        />
+      </div>
     </div>
   );
 }
