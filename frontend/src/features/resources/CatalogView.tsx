@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import { Button, Card, QueryBoundary } from '@/shared/ui';
+import { PageHeader } from '@/plural-ui';
 import { uiStore } from '@/shared/lib/ui-store';
 import { FadeSlideIn, Stagger } from '@/shared/motion';
 import type { CatalogItem } from '@/shared/lib/types';
@@ -14,7 +15,7 @@ export default function CatalogView() {
   });
   return (
     <FadeSlideIn>
-      <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>카탈로그</h1>
+      <PageHeader title="카탈로그" sub="설치 요청은 워크플로우 run 으로 실행됩니다" />
       <QueryBoundary query={q}>{items => (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
           <Stagger>{items.map(i => (

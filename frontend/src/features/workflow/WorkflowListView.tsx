@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { Badge, Card, EmptyState, ResourceTable, Skeleton } from '@/shared/ui';
+import { PageHeader } from '@/plural-ui';
 import { shortSha, timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 
@@ -15,7 +16,7 @@ export default function WorkflowListView() {
   const loading = apps.isPending || ((apps.data ?? []).length > 0 && all.pending);
   return (
     <FadeSlideIn>
-      <h1 style={{ marginTop: 0, fontSize: 'var(--fs-xl)' }}>워크플로우</h1>
+      <PageHeader title="워크플로우" sub="커밋 → 렌더 → diff → 정책 → 승인 → 적용 파이프라인 run" />
       <Card>
         {loading ? <Skeleton lines={4} /> :
         rows.length === 0 ? <EmptyState icon="⇶" title="실행된 워크플로우가 없습니다" description="레포에 커밋이 감지되면 run 이 생성됩니다" /> :

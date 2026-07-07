@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useClusterEvents, useClusters, useClusterSummary, useResources, useRestart, useScale, useServices, useWorkloads } from '@/features/cluster/api';
+import { useClusterAgg } from '@/features/fleet/api';
 import { useTimeline } from '@/features/notifications/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { Badge, Breadcrumbs, Button, Card, Drawer, EmptyState, KeyValue, Modal, QueryBoundary, ResourceTable, StatBox, Tabs } from '@/shared/ui';
@@ -59,6 +60,7 @@ export default function ClusterDetailView() {
         <StatBox label="비정상 팟" value={(phases['CrashLoopBackOff'] ?? 0) + (phases['Pending'] ?? 0)} tone={(phases['CrashLoopBackOff'] ?? 0) > 0 ? 'danger' : 'neutral'} />
         <StatBox label="서비스" value={summaryQ.data?.services ?? 0} />
       </div>
+      <ClusterAggPanel clusterId={clusterId} />
       <Tabs items={TABS} current={tab} onChange={k => setSp({ tab: k })} />
       {tab === 'workloads' && <WorkloadsTab clusterId={clusterId} admin={admin} onScale={w => { setScaleTarget(w); setReplicas(2); }} onRestart={setRestartTarget} />}
       {tab === 'pods' && (
@@ -208,5 +210,55 @@ function EventsTab({ clusterId }: { clusterId: string }) {
       ]} />
   )}</QueryBoundary></Card>;
 }
+/* 집계 요약 — GET /clusters/{id}/summary (사용량 + 열린 인시던트). 실패해도 화면 흐름을 막지 않는다 */
+function ClusterAggPanel({ clusterId }: { clusterId: string }) {
+  const aggQ = useClusterAgg(clusterId);
+  if (aggQ.isPending) return null; // 보조 패널 — 첫 로딩은 조용히(본문 스켈레톤과 중복 방지)
+  if (aggQ.isError) {
+    return (
+      <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: '0 0 12px' }}>
+        집계 요약을 불러오지 못했습니다 — {(aggQ.error as Error).message}{' '}
+        <Button size="sm" variant="ghost" onClick={() => aggQ.refetch()}>다시 시도</Button>
+      </p>
+    );
+  }
+  const agg = aggQ.data;
+  const usage = agg?.usage;
+  const incidents = agg?.open_incidents ?? [];
+  return (
+    <Card title="집계 요약 — 사용량 · 열린 인시던트" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: incidents.length ? 12 : 0 }}>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>
+          CPU <b style={{ color: usage?.cpu_pct != null && usage.cpu_pct >= 85 ? 'var(--danger)' : 'var(--text-1)' }}>{usage?.cpu_pct != null ? `${Math.round(usage.cpu_pct)}%` : '—'}</b>
+        </span>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>
+          MEM <b style={{ color: usage?.mem_pct != null && usage.mem_pct >= 85 ? 'var(--danger)' : 'var(--text-1)' }}>{usage?.mem_pct != null ? `${Math.round(usage.mem_pct)}%` : '—'}</b>
+        </span>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>
+          재시작 누적 <b style={{ color: 'var(--text-1)' }}>{usage?.restarts_total ?? '—'}</b>
+        </span>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>
+          열린 인시던트 <b style={{ color: incidents.length ? 'var(--danger)' : 'var(--text-1)' }}>{incidents.length}</b>
+        </span>
+      </div>
+      {incidents.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {incidents.slice(0, 5).map(i => (
+            <div key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
+              <Badge status={i.status} />
+              <Link to={`/incidents/${i.id}`} style={{ color: 'var(--brand)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {i.symptom}{i.root_cause ? ` — ${i.root_cause}` : ''}
+              </Link>
+              <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 'var(--fs-xs)', flex: 'none' }}>
+                {i.created_at ? timeAgo(i.created_at) : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // timeline 폴링 공유(알림과 캐시 공유) — 사용 안 하는 화면에서 임포트 방지용 참조
 void useTimeline;

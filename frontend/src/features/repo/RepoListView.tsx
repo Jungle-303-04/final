@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApplications } from '@/features/repo/api';
 import { ConnectRepoWizard } from '@/features/resources/ConnectRepoWizard';
 import { Badge, Button, Card, EmptyState, QueryBoundary, ResourceTable } from '@/shared/ui';
+import { PageHeader } from '@/plural-ui';
 import { timeAgo } from '@/shared/lib/format';
 import { FadeSlideIn } from '@/shared/motion';
 import type { Application } from '@/shared/lib/types';
@@ -13,10 +14,8 @@ export default function RepoListView() {
   const [wizard, setWizard] = useState(false);
   return (
     <FadeSlideIn>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)' }}>레포</h1>
-        <Button variant="primary" onClick={() => setWizard(true)}>+ 레포 연결</Button>
-      </div>
+      <PageHeader title="레포 (GitOps)" sub="Git 이 원본 — 커밋이 감지되면 워크플로우 run 이 생성됩니다"
+        actions={<Button variant="primary" onClick={() => setWizard(true)}>+ 레포 연결</Button>} />
       <Card>
         <QueryBoundary query={q}>{apps => (
           <ResourceTable<Application>
