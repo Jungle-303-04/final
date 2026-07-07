@@ -17,7 +17,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/adapt`(`adaptIncident`, `adaptIncidentDetail`), `@/shared/lib/format`, `@/shared/ui`, `@/shared/ui/status`, `@/shared/ui/icons`, `@/shared/flow`, `@/shared/motion` | [shared](shared.md) | API·그래프·UI |
+| import | `@/shared/lib/api`, `@/shared/lib/types`, `@/shared/lib/adapt`(`adaptIncident`, `adaptIncidentDetail`), `@/shared/lib/format`, `@/shared/flow`, `@/ui` | [shared](shared.md) | API·그래프·UI |
 | import | `@/features/repo/api`(`useApplications`, `useRunsAll`) | [repo](./repo.md) | 승인 대기 알림 소스 |
 | import | `@/features/auth/api`(`useIsAdmin`) | [auth](./auth.md) | DLQ 쿼리는 admin 만 |
 | import | `@/features/org/SettingsNav` | [org](./org.md) | OpsView 레이아웃 |
@@ -36,7 +36,7 @@ status: synced
 | `useRcaReports` | `frontend/src/features/notifications/api.ts :: useRcaReports` | GET `/rca-reports?correlation_id=...&limit=50` with `{timeoutMs: 8_000}` | 쿼리키 `['rca-reports', correlationId]`, `enabled: !!correlationId`, 30s, `retry:false`, select `d.items` |
 | `useDeadLetters` | `frontend/src/features/notifications/api.ts :: useDeadLetters` | GET `/dead-letters?limit=20` with `{timeoutMs: 8_000}` | `(enabled: boolean)`, 쿼리키 `['dead-letters']`, 60s, `retry:false`, select `.dead_letters` |
 | `useRecoveryPlan` | `frontend/src/features/notifications/api.ts :: useRecoveryPlan` | GET `/rca/recovery-plans/by-correlation/${correlationId}` with `{timeoutMs: 8_000}` | 쿼리키 `['recovery-plan', correlationId]`, `enabled: !!correlationId`, 30s. `not_found`은 재시도하지 않고 그 외 오류는 2회 미만 재시도 |
-| `useReplayDeadLetter` | `frontend/src/features/notifications/api.ts :: useReplayDeadLetter` | POST `/dead-letters/${id}/replay` | mutation `(id: number)`, 성공 시 `['dead-letters']` invalidate |
+| `useReplayDeadLetter` | `frontend/src/features/notifications/api.ts :: useReplayDeadLetter` | POST `/dead-letters/${id}/replay` | mutation `(id: number)`, 성공/실패 `@/ui` toast, 성공 시 `['dead-letters']` invalidate |
 | `useNotices` | `frontend/src/features/notifications/api.ts :: useNotices` | (합성 — 아래) | `() => { notices: Notice[]; unread: number; markAllSeen: (kind?: string) => void }` |
 | `timeAgo` (re-export) | `frontend/src/features/notifications/api.ts :: timeAgo` | — | shared/lib/format 재수출 |
 
@@ -52,9 +52,9 @@ status: synced
 ### `frontend/src/features/notifications/NotificationsView.tsx :: NotificationsView` (default export)
 
 - 라우트: `/incidents`. 구 경로 `/notifications` 는 router 에서 `/incidents` 로 redirect.
-- 모듈 상수 `FILTERS`: `[['all','전체'],['approval','승인'],['incident','인시던트'],['dlq','운영(DLQ)'],['cluster','클러스터']]`.
+- 모듈 상수 `FILTERS`: `[{value:'all',label:'전체'}, {value:'approval',label:'승인'}, {value:'incident',label:'인시던트'}, {value:'dlq',label:'운영'}, {value:'cluster',label:'클러스터'}]`.
 - state: `filter`(기본 'all'). 마운트 시 `markAllSeen()` 1회(진입 시 워터마크 갱신).
-- 트리: `PageHeader('인시던트 & 알림')` → 필터 버튼 행(`btn btn--sm`, 비활성은 `btn--ghost` 추가, flex wrap) → 비면 `EmptyState(IconBell, title=전체면 '알림이 없습니다'/필터면 '<라벨> 알림이 없습니다')`, 아니면 `AnimatedList(key=n.id)`: `Card` 행 = `Badge(tone, KIND_LABEL[kind] ?? kind)`(한국어 라벨 — 셸 플라이오버와 동일 어휘) + title(read 면 opacity 0.6) + timeAgo + `Link(pathFor(n.link))` '바로가기 →'.
+- 트리: `PageHeader('인시던트')` → `Card('알림 목록', '<필터 라벨> N건')` → `Tabs`(필터별 count) → 비면 `EmptyState(BellIcon, title=전체면 '알림 없음'/필터면 '<라벨> 알림 없음')`, 아니면 토큰 surface row 목록. 각 row는 `Badge(toneSeverity(notice.tone))`, title(read 면 muted), timeAgo, `Button('바로가기')`를 렌더하고 `navigate(pathFor(notice.link))`로 이동한다.
 
 ### `frontend/src/features/notifications/IncidentDetailView.tsx :: IncidentDetailView` (default export)
 
@@ -72,20 +72,22 @@ status: synced
     - 그룹 자식은 collapsed 시 노드·edge 생략. 자식 edge 는 해당 그룹이 현재 단계이고 running 일 때 active.
     - 메인 edge(incident→evidence→analysis→actions): `targetIdx < cur`→ok, `=== cur && failed`→danger, `=== cur && !running`→ok, running && `=== cur`→active.
   - 좌표: `useAutoLayout(raw, 'LR')`.
-- 트리: Breadcrumbs [`pathFor('/incidents')` 알림 → `인시던트 <id>`] → `QueryBoundary(skeleton 6)`: h1(summary)+Badge(status) → 그리드(1fr 300px): `Card(h 420) > FlowCanvas(nodes, edges, nodeTypes)` · `Card('상세') > KeyValue`(클러스터는 있으면 `pathFor('/clusters/<id>')` 링크/현재 단계/근본 원인(null 은 '분석 중')/신뢰도 %/PR 링크/갱신 timeAgo) → 하단 2열 `RcaReportsPanel`/`EvidencePanel`.
-- 타임라인 상세가 404 여도 동일 문자열을 correlation id 로 보고 `RcaReportsPanel` 과 `EvidencePanel` 은 계속 렌더한다.
+- 트리: `PageHeader(summary)` + `Breadcrumb(인시던트 → 인시던트 <id>)` + correlation 복사 버튼 → 그리드: `Card('RCA 파이프라인') > FlowCanvas(nodes, edges, nodeTypes)`(모바일은 내부 가로 스크롤) · `Card('상세') > KeyValueList`(상태/클러스터 링크/현재 단계/근본 원인/신뢰도/correlation/커맨드/PR/갱신) + `RecoveryPlanPanel` → 하단 2열 `RcaReportsPanel`/`EvidencePanel`.
+- pending 은 `PageHeader('인시던트')` + `Card><Skeleton lines=6>`, 일반 오류는 `PageHeader('인시던트 조회 실패')` + `EmptyState('인시던트 조회 실패', 다시 시도)`.
+- 타임라인 상세가 404 여도 동일 문자열을 correlation id 로 보고 `RecoveryPlanPanel`, `RcaReportsPanel`, `EvidencePanel` 은 계속 렌더한다.
 - `RecoveryPlanPanel`: 복구 계획이 아직 없으면 설명 문단 대신 `Badge(tone="neutral", "생성 전")`만 표시한다.
-- `RcaReportsPanel`: `useRcaReports(correlationId)` 결과를 카드 목록으로 표시한다. 결과가 없으면 `EmptyState(IconFile, '생성된 RCA 리포트가 아직 없습니다')`. `RcaReportCard` 는 root cause, 대상(`namespace/resource_kind/resource_name`), 주 증상과 `secondary_symptoms`, reason, 후보 평가, 근거 참조, 미수집 체크를 보여준다.
-- `CandidateScores`: `report.candidates` 를 점수 내림차순 그대로 최대 2개 우선 표시하고, `selected_candidate_id` 와 같은 후보는 좌측 보더와 `선정` badge 로 강조한다. `source === 'ai_fallback'` 은 `AI` badge 로 표시한다.
+- `RcaReportsPanel`: `useRcaReports(correlationId)` 결과를 카드 목록으로 표시한다. 결과가 없으면 `EmptyState(IconFile, 'RCA 리포트 없음')`. `RcaReportCard` 는 root cause, 대상(`namespace/resource_kind/resource_name`), 주 증상과 `secondary_symptoms`, reason, 후보 평가, 근거 참조, 미수집 체크를 보여준다.
+- `CandidateScores`: `report.candidates` 를 입력 순서 그대로 2개 우선 표시하고, 더 있으면 "후보 N개 더 보기"로 펼친다. `selected_candidate_id` 와 같은 후보는 좌측 보더와 `선정` badge 로 강조한다. `source === 'ai_fallback'` 은 `AI` badge 로 표시한다.
 - `EvidenceRefList`: `supporting_evidence_refs` 가 있으면 기존 문자열 badge 대신 source/name/summary/query 트레일을 표시한다. 참조가 없을 때만 `supporting_evidence` 문자열 badge 로 fallback 한다.
-- `EvidencePanel`: `useEvidence(correlationId)` 결과를 kind 필터(kubernetes/prometheus/loki/tempo)와 접힘 가능한 payload row 로 표시한다. 증거가 없으면 `EmptyState(IconFile, '저장된 증거가 아직 없습니다')`. 각 evidence row 토글은 `aria-expanded`가 달린 실제 `button`이다.
+- `EvidencePanel`: `useEvidence(correlationId)` 결과를 kind 필터(kubernetes/prometheus/loki/tempo)와 접힘 가능한 evidence row 로 표시한다. 증거가 없으면 `EmptyState(IconFile, '저장된 증거 없음')`. 각 evidence row 토글은 `aria-expanded`가 달린 실제 `button`이고, 펼치면 수집 시각/evidence_ref/source trail을 보여준다.
 
 ### `frontend/src/features/notifications/OpsView.tsx :: OpsView` (default export)
 
-- 라우트: `/settings/ops` (가드 `RequireAdmin`). 레이아웃: `SettingsNav(title='운영 (Dead Letter)')`.
+- 라우트: `/settings/ops` (가드 `RequireAdmin`). 레이아웃: `SettingsNav(title='운영 DLQ')`.
 - 데이터: `useDeadLetters(true)`, `useReplayDeadLetter`. state: `confirming: DeadLetter | null`.
-- 테이블 열: ID / Subject(code) / Consumer / 오류 / 상태 Badge / 발생(timeAgo) / (`status==='open'` 이면 "재처리" sm 버튼 → confirm 모달).
-- 확인 모달('Dead Letter 재처리'): 경고문 "원인이 해결됐는지 확인했나요? 같은 이벤트가 event bus 로 다시 들어갑니다." → 재처리 실행(`replay.mutate(id)`).
+- 레이아웃: `Card('Dead Letter')` 안에 `@/ui Table`. loading Skeleton, 오류+재시도, 빈 상태('Dead Letter 없음') 구분.
+- 테이블 열: ID / Subject(code) / Consumer / 오류 / 상태 Badge(open → 열림, 그 외 처리됨) / 발생(timeAgo) / (`status==='open'` 이면 "재처리" sm 버튼 → confirm 모달). 실행 중에는 해당 행 버튼만 pending.
+- 확인 모달('Dead Letter 재처리'): ID/Subject/Consumer/오류 요약을 보여주고, "원인이 해결된 뒤에만 같은 이벤트를 event bus로 다시 넣으세요" 문구를 표시한다. 재처리 실행(`replay.mutate(id)`) 성공 시 모달을 닫는다.
 
 ## 라우트
 

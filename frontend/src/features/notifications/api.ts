@@ -6,8 +6,8 @@ import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, RecoveryPlan
 import { adaptIncident, adaptIncidentDetail } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
-import { uiStore } from '@/shared/lib/ui-store';
 import { timeAgo } from '@/shared/lib/format';
+import { useToast } from '@/ui';
 
 const NOTIFICATION_QUERY_TIMEOUT_MS = 8_000;
 
@@ -73,10 +73,14 @@ export const useDeadLetters = (enabled: boolean) =>
   });
 export const useReplayDeadLetter = () => {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (id: number) => post(`/dead-letters/${id}/replay`),
-    onSuccess: () => { uiStore.getState().toast('ok', '재처리 이벤트를 발행했습니다'); qc.invalidateQueries({ queryKey: ['dead-letters'] }); },
-    onError: err => uiStore.getState().toast('danger', `재처리 실패 — ${(err as Error).message}`),
+    onSuccess: () => {
+      push({ tone: 'success', title: '재처리 요청 완료', description: '이벤트를 다시 발행했습니다' });
+      qc.invalidateQueries({ queryKey: ['dead-letters'] });
+    },
+    onError: err => push({ tone: 'danger', title: '재처리 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' }),
   });
 };
 

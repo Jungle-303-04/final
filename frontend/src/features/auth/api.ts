@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/shared/lib/api';
 import type { Session } from '@/shared/lib/types';
-import { uiStore } from '@/shared/lib/ui-store';
+import { useToast } from '@/ui';
 
 export const sessionKey = ['session'] as const;
 const SESSION_CHECK_TIMEOUT_MS = 20_000;
@@ -60,10 +60,17 @@ export function useLogout() {
 export const useSignup = () => useMutation({ mutationFn: (b: { email: string; password: string; password_confirm: string }) => post('/auth/signup', b) });
 export const useApproveUser = () => {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (userId: string) => post(`/auth/users/${userId}/approve`),
-    onSuccess: () => { uiStore.getState().toast('ok', '가입을 승인했습니다'); qc.invalidateQueries({ queryKey: ['users'] }); },
-    onError: err => { uiStore.getState().toast('danger', `승인 실패 — ${(err as Error).message}`); qc.invalidateQueries({ queryKey: ['users'] }); },
+    onSuccess: () => {
+      push({ tone: 'success', title: '가입 승인 완료', description: '멤버가 콘솔에 입장할 수 있습니다' });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: err => {
+      push({ tone: 'danger', title: '가입 승인 실패', description: (err as Error).message || '잠시 후 다시 시도해주세요' });
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
   });
 };
 export function useIsAdmin(): boolean {

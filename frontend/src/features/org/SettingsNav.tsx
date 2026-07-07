@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FadeSlideIn } from '@/shared/motion';
-import { PageHeader } from '@/plural-ui';
+import { motion } from 'motion/react';
 import { useConsolePath } from '@/features/console/ui';
+import { PageHeader, cx } from '@/ui';
+import { fadeInUp } from '@/ui/motion';
 
 const ITEMS = [
   ['/settings/members', '멤버'], ['/settings/orgs', '조직'], ['/settings/groups', '그룹'],
@@ -12,15 +13,23 @@ const ITEMS = [
 export function SettingsNav({ title, children }: { title: string; children: ReactNode }) {
   const pathFor = useConsolePath();
   return (
-    <FadeSlideIn>
-      <PageHeader title={`설정 — ${title}`} />
-      {/* 스타일은 .tabs a 공통 규칙 사용 — 인라인 color 가 active 색을 덮지 않게 제거 */}
-      <div className="tabs">
+    <motion.div variants={fadeInUp} initial="initial" animate="animate" className="grid gap-6">
+      <PageHeader title={`설정 - ${title}`} description="조직, 멤버, 권한, 운영 큐를 한 곳에서 관리합니다" />
+      <nav className="flex max-w-full gap-1 overflow-x-auto border-b border-border" aria-label="설정">
         {ITEMS.map(([to, label]) => (
-          <NavLink key={to} to={pathFor(to)} className={({ isActive }) => isActive ? 'active' : ''}>{label}</NavLink>
+          <NavLink
+            key={to}
+            to={pathFor(to)}
+            className={({ isActive }) => cx(
+              'h-10 shrink-0 rounded-t-control border-b-2 px-4 text-body font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              isActive ? 'border-accent text-primary' : 'border-transparent text-secondary hover:text-primary',
+            )}
+          >
+            {label}
+          </NavLink>
         ))}
-      </div>
+      </nav>
       {children}
-    </FadeSlideIn>
+    </motion.div>
   );
 }

@@ -1,11 +1,32 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:00 KST (AI 채팅 라이브 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:20 KST (설정/조직 디자인 시스템 이관 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 설정/조직 디자인 시스템 이관
+
+- 구현:
+  - `SettingsNav`, `MembersView`, `OrganizationsView`, `GroupsView`, `AccessView`, `OpsView`를 `@/ui` PageHeader/Card/Table/Field/Input/Select/Modal/Drawer/Badge/EmptyState/Skeleton/Toast 기반으로 재구성했다.
+  - 설정/조직 범위의 `@/shared/ui`, `@/shared/motion`, 레거시 UI 계층, inline style, raw hex 의존을 제거했다.
+  - 멤버 검색 0건은 `필터 초기화` CTA를 제공한다.
+  - 조직/그룹 생성은 현재 목록 기준 이름 중복을 입력 중 인라인으로 차단하고, valid일 때만 제출 버튼을 활성화한다.
+  - 그룹 멤버 Drawer는 로딩/빈/오류+재시도 상태를 갖고, 400 `last_admin`은 "최소 1명의 관리자 필요" 인라인 사유로 표시한다.
+  - 권한 부여/회수와 DLQ 재처리는 확인 모달에 대상 요약을 표시하고, 실행 중 해당 행 버튼만 pending 상태가 된다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q` passed, 17 tests.
+  - `make check` passed, 795 passed / 3 skipped.
+  - `make manifest-check` passed.
+- 남은 확인:
+  - Playwright 1440/1024/390 mock visual smoke.
+  - 커밋/푸시 후 Actions 확인. Actions `steps: []` 실패가 반복되면 수동 ECR/rollout 경로로 console image 배포 후 live asset smoke를 남긴다.
 
 ## 체크포인트 — AI 채팅 디자인 시스템 이관
 

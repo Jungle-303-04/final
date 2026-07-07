@@ -16,7 +16,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`(`get/post/put/del`), `@/shared/lib/types`, `@/shared/lib/ui-store`, `@/shared/lib/format`, `@/shared/ui`, `@/shared/motion` | [shared](shared.md) | API·UI |
+| import | `@/shared/lib/api`(`get/post/put/del`), `@/shared/lib/types`, `@/shared/lib/format`, `@/ui`, `@/ui/motion` | [shared](shared.md) | API·UI |
 | import | `@/features/auth/api`(`useApproveUser`) | [auth](./auth.md) | 멤버 승인 |
 | import | `@/features/cluster/api`(`useClusters`), `@/features/repo/api`(`useApplications`) | [cluster](./cluster.md), [repo](./repo.md) | AccessView 리소스 선택지 |
 | import | `@/features/console/ui`(`useConsolePath`) | [app](./app.md) | `/console` base path 보존 설정 탭 |
@@ -32,14 +32,14 @@ status: synced
 | `useGroups` | `frontend/src/features/org/api.ts :: useGroups` | GET `/groups` with `{timeoutMs: 8_000}` | 키 `['groups']`, `retry:false`, select `.groups` |
 | `useUsers` | `frontend/src/features/org/api.ts :: useUsers` | GET `/users` with `{timeoutMs: 8_000}` | 키 `['users']`, `retry:false`, select `.users` |
 | `useGrants` | `frontend/src/features/org/api.ts :: useGrants` | GET `/access[?resource_id=]` with `{timeoutMs: 8_000}` | `(resourceId?)`, 키 `['access', resourceId ?? 'all']`, `retry:false`, select `.grants` |
-| `useCreateOrg` | `frontend/src/features/org/api.ts :: useCreateOrg` | POST `/orgs` body `{name; description?}` | 성공: `['orgs']` invalidate + toast ok `'조직을 만들었습니다'` |
-| `useDeleteOrg` | `frontend/src/features/org/api.ts :: useDeleteOrg` | DELETE `/orgs/${id}` | 실패(onError): toast danger `'소속 그룹을 먼저 정리해야 합니다'`(422 `groups_exist`) |
-| `useCreateGroup` | `frontend/src/features/org/api.ts :: useCreateGroup` | POST `/groups` body `{org_id; name}` | 성공: `['groups']`+`['orgs']` invalidate + toast ok `'그룹을 만들었습니다'` |
+| `useCreateOrg` | `frontend/src/features/org/api.ts :: useCreateOrg` | POST `/orgs` body `{name; description?}` | 성공: `['orgs']` invalidate + `@/ui` toast success |
+| `useDeleteOrg` | `frontend/src/features/org/api.ts :: useDeleteOrg` | DELETE `/orgs/${id}` | 성공: `['orgs']` invalidate + toast. 실패: `groups_exist`면 "소속 그룹을 먼저 정리해야 합니다" |
+| `useCreateGroup` | `frontend/src/features/org/api.ts :: useCreateGroup` | POST `/groups` body `{org_id; name}` | 성공: `['groups']`+`['orgs']` invalidate + `@/ui` toast success |
 | `useGroupMembers` | `frontend/src/features/org/api.ts :: useGroupMembers` | GET `/groups/${groupId}/members` with `{timeoutMs: 8_000}` → `{members: {user_id; email}[]}` | `enabled: !!groupId`, `retry:false`, 키 `['groups', id, 'members']` |
-| `useToggleMembership` | `frontend/src/features/org/api.ts :: useToggleMembership` | PUT / DELETE `/groups/${groupId}/members/${userId}` | mutation `({userId, add: boolean})` — add 면 PUT, 아니면 DELETE. 성공: `['groups']`+`['users']` invalidate |
+| `useToggleMembership` | `frontend/src/features/org/api.ts :: useToggleMembership` | PUT / DELETE `/groups/${groupId}/members/${userId}` | mutation `({userId, add: boolean})` — add 면 PUT, 아니면 DELETE. 성공/실패 toast + `['groups']`+`['users']` invalidate. 400 `last_admin`은 한국어 사유로 표시 |
 | `GrantPayload` | `frontend/src/features/org/api.ts :: GrantPayload` | — | `{ subject_type: 'user'\|'group'; subject_id: string; subject_label?: string; resource_type: string; resource_id: string; role: string }` |
-| `useGrantAccess` | `frontend/src/features/org/api.ts :: useGrantAccess` | POST `/access` body `GrantPayload` | 성공: `['access']` invalidate + toast ok `'권한을 부여했습니다'` |
-| `useRevokeAccess` | `frontend/src/features/org/api.ts :: useRevokeAccess` | DELETE `/access/${id}` | 성공: `['access']` invalidate |
+| `useGrantAccess` | `frontend/src/features/org/api.ts :: useGrantAccess` | POST `/access` body `GrantPayload` | 성공/실패 toast + `['access']` invalidate |
+| `useRevokeAccess` | `frontend/src/features/org/api.ts :: useRevokeAccess` | DELETE `/access/${id}` | 성공/실패 toast + `['access']` invalidate |
 
 내부 헬퍼 `useInvalidator(keys)` — 성공 시 여러 쿼리키 invalidate 하는 클로저(비공개). 내부에서 `useQueryClient` 를 호출하므로 hooks 규칙 준수를 위해 `use` 접두사 커스텀 훅으로 명명한다.
 
@@ -47,26 +47,27 @@ status: synced
 
 ### `frontend/src/features/org/SettingsNav.tsx :: SettingsNav`
 
-`{ title: string; children: ReactNode }` — `PageHeader(title='설정 — <title>')` + `.tabs` 탭 NavLink 5개(`pathFor('/settings/members')` 멤버, `pathFor('/settings/orgs')` 조직, `pathFor('/settings/groups')` 그룹, `pathFor('/settings/access')` 리소스 권한, `pathFor('/settings/ops')` 운영(DLQ)) + children. 탭 링크 스타일은 공통 `.tabs a` 규칙에 맡기며 active 색을 덮는 인라인 color 를 두지 않는다. `FadeSlideIn` 래핑. 설정 5개 화면이 모두 이 레이아웃을 사용.
+`{ title: string; children: ReactNode }` — `motion.div(fadeInUp)` 안에서 `PageHeader(title='설정 - <title>')` + Tailwind 토큰 기반 탭 NavLink 5개(`pathFor('/settings/members')` 멤버, `pathFor('/settings/orgs')` 조직, `pathFor('/settings/groups')` 그룹, `pathFor('/settings/access')` 리소스 권한, `pathFor('/settings/ops')` 운영 DLQ) + children. `.tabs`나 이전 UI/motion 계층 의존은 없다.
 
 ### `frontend/src/features/org/MembersView.tsx :: MembersView` (default export) — `/settings/members`
 
-- 데이터: `useUsers`, `useGroups`(그룹 id→이름), `useApproveUser`, `useSearchFilter`(email).
-- 테이블 열: 멤버(`Avatar`+email) / 역할(`Badge` — service_admin 은 info, 그 외 neutral) / 상태(`Badge status` + 라벨: active '활성', pending_approval '승인 대기', 그 외 '검증 대기') / 그룹(이름 join ', ', 없으면 '—') / 가입(timeAgo) / 액션: `pending_approval` 이면 "승인" primary sm 버튼(`approve.mutate(user_id)`, `data-testid="approve-<email>"`).
+- 데이터: `useUsers`, `useGroups`(그룹 id→이름), `useApproveUser`, local search state(email).
+- 레이아웃: `Card('멤버')` actions 슬롯에 `Field + Input` 검색. `Table`은 loading/error/empty를 직접 받는다.
+- 테이블 열: 멤버(token avatar+email) / 역할(`service_admin` → `서비스 관리자`) / 상태(`활성`, `승인 대기`, `인증 대기`) / 그룹(이름 join, 없으면 `없음`) / 가입(timeAgo) / 액션. `pending_approval`이면 "승인" primary sm 버튼(`approve.mutate(user_id)`, `data-testid="approve-<email>"`). 검색 결과 0건은 `필터 초기화` CTA.
 
 ### `frontend/src/features/org/OrganizationsView.tsx :: OrganizationsView` (default export) — `/settings/orgs`
 
 - state: `open`(생성 모달), `name`, `desc`, `confirming: Org | null`, `confirmText`(삭제 확인 입력).
-- 테이블 열: 이름/설명('—')/멤버/그룹/생성(timeAgo)/삭제(danger sm). 빈 목록 EmptyState('🏢 아직 조직이 없습니다').
-- 생성 모달: 이름(minLength 3, maxLength 40, required, `data-testid="org-name"`) + 설명 → `create.mutate({name, description: desc})`. `data-testid="new-org"`, `"org-submit"`.
+- 테이블 열: 이름/설명(`없음`)/멤버/그룹/생성(timeAgo)/삭제(danger sm). 빈 목록 EmptyState('조직 없음').
+- 생성 모달: 이름(minLength 3, maxLength 40, required, `data-testid="org-name"`) + 설명 → 현재 `useOrgs` 목록 기준 이름 중복을 입력 중 Field error로 차단하고 valid일 때만 `create.mutate({name, description})`. `data-testid="new-org"`, `"org-submit"`.
 - 삭제 모달: **조직 이름을 그대로 입력해야 삭제 버튼 활성**(`confirmText !== confirming.name` 이면 disabled) → `remove.mutate(org_id)`(onSettled 로 모달 닫기).
 
 ### `frontend/src/features/org/GroupsView.tsx :: GroupsView` (default export) — `/settings/groups`
 
 - state: `open`, `name`, `orgId`(생성 모달 — 열 때 첫 조직으로 초기화), `selected: Group | null`(멤버 Drawer).
 - 테이블 열: 이름 / 조직(orgs 에서 이름 해석, 못 찾으면 org_id) / 멤버 수. 행 클릭 → Drawer.
-- 생성 모달: 조직 select + 이름 → `create.mutate({org_id, name})`.
-- Drawer(`그룹: <name>`) → 내부 `GroupMembers { group: Group }` (비공개): `useGroupMembers`+`useUsers`+`useToggleMembership`. 전체 사용자 checkbox 목록 — 체크 상태는 멤버 여부, 변경 시 `toggle.mutate({userId, add})`.
+- 생성 모달: 조직 select + 이름 → 같은 조직 내 `useGroups` 목록 기준 이름 중복을 Field error로 차단하고 valid일 때만 `create.mutate({org_id, name})`.
+- Drawer(`그룹: <name>`) → 내부 `GroupMembers { group: Group }` (비공개): `useGroupMembers`+`useUsers`+`useToggleMembership`. 전체 사용자 checkbox 목록 — 체크 상태는 멤버 여부, 변경 시 `toggle.mutate({userId, add})`. 멤버/사용자 조회는 Skeleton/오류+재시도/빈 상태를 구분한다. 서버가 `last_admin`을 반환하면 "최소 1명의 관리자 필요"를 인라인 표시한다.
 
 ### `frontend/src/features/org/AccessView.tsx :: AccessView` (default export) — `/settings/access`
 
@@ -74,7 +75,8 @@ status: synced
 - state: `open`, `subjectType`('user'|'group', 기본 'group'), `subjectId`, `resourceType`(기본 'cluster'), `resourceId`, `role`(기본 'observer'). 유형 변경 시 대상 id 리셋.
 - 선택지: subject — user 면 users(`[user_id, email]`), group 이면 groups(`[group_id, name]`); resource — cluster 면 clusters(`[cluster_id, name]`), application 이면 apps(`[application_id, name]`).
 - 테이블 열: 대상(`Badge neutral subject_type` + subject_label) / 리소스(`code resource_type/resource_id`) / 역할(`Badge info`) / 부여(timeAgo) / "회수"(danger sm → 확인 모달 `revoking` 오픈 후 "회수 실행" 이 `revoke.mutate(access_id)` — 파괴 동작 공통 패턴).
-- 부여 모달 폼: 대상 유형/대상/리소스 유형/리소스/역할 select 5개 → `grant.mutate({subject_type, subject_id, subject_label(선택지에서 역해석), resource_type, resource_id, role})`.
+- 부여 모달 폼: 선택지 로딩은 Skeleton, 선택지 조회 실패는 오류+재시도. 대상 유형/대상/리소스 유형/리소스/역할 select 5개가 모두 유효할 때만 제출 활성 → `grant.mutate({subject_type, subject_id, subject_label(선택지에서 역해석), resource_type, resource_id, role})`.
+- 회수 모달: 대상/리소스/역할 요약을 표시하고 실행 중 해당 행 버튼만 pending.
 
 ## 라우트
 

@@ -506,7 +506,9 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     assert "http://prometheus.target.svc:9090" not in response.install_manifest
     assert "http://loki-gateway.target.svc" not in response.install_manifest
     assert "http://tempo.target.svc:3200" not in response.install_manifest
-    assert "http://opentelemetry-collector.target.svc:4318/v1/traces" not in response.install_manifest
+    assert (
+        "http://opentelemetry-collector.target.svc:4318/v1/traces" not in response.install_manifest
+    )
     agent_state = next(item for item in db.desired_states if item["component"] == "cluster-agent")
     assert agent_state["spec"]["prometheus_base_url"] == ""
     assert agent_state["spec"]["loki_base_url"] == ""

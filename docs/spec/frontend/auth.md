@@ -16,7 +16,7 @@ status: synced
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `@/shared/lib/api`(`get/post/ApiError`), `@/shared/lib/types`(`Session`), `@/shared/ui`, `@/shared/ui/icons`, `@/shared/motion` | [shared](shared.md) | API·타입·UI |
+| import | `@/shared/lib/api`(`get/post/ApiError`), `@/shared/lib/types`(`Session`), `@/ui`, `@/ui/motion` | [shared](shared.md) | API·타입·UI |
 | import ← | [app](app.md), [org](./org.md)(useApproveUser), [repo](./repo.md)·[chat](./chat.md)·[cluster](./cluster.md)·[notifications](./notifications.md)(useIsAdmin) | — | 소비자 |
 | 백엔드 | `/auth/*` | [api-gateway](../services/gateway-api-gateway.md) | 인증 API |
 
@@ -33,7 +33,7 @@ status: synced
 | `useLogin` | `frontend/src/features/auth/api.ts :: useLogin` | mutation `(b: {email; password}) => Session` | POST `/auth/login` | 성공 응답이 authenticated 면 `markSessionSeen()` 후 `queryClient.setQueryData(sessionKey, session)`로 즉시 반영 |
 | `useLogout` | `frontend/src/features/auth/api.ts :: useLogout` | mutation `() => void` | POST `/auth/logout` | 성공 시 `clearSessionHint()` + `qc.clear()` (캐시 전체 삭제) |
 | `useSignup` | `frontend/src/features/auth/api.ts :: useSignup` | mutation `(b: {email; password; password_confirm})` | POST `/auth/signup` | |
-| `useApproveUser` | `frontend/src/features/auth/api.ts :: useApproveUser` | mutation `(userId: string)` | POST `/auth/users/${userId}/approve` | 성공 시 `['users']` invalidate — [org/MembersView](./org.md) 에서 사용 |
+| `useApproveUser` | `frontend/src/features/auth/api.ts :: useApproveUser` | mutation `(userId: string)` | POST `/auth/users/${userId}/approve` | 성공/실패 `@/ui` toast, 성공·실패 모두 `['users']` invalidate — [org/MembersView](./org.md) 에서 사용 |
 | `useIsAdmin` | `frontend/src/features/auth/api.ts :: useIsAdmin` | `() => boolean` | — | `session.roles.includes('service_admin') ?? false` |
 | `useResendVerification` | `frontend/src/features/auth/api.ts :: useResendVerification` | mutation `(b: {email; password})` | POST `/auth/resend-verification` | |
 
@@ -41,16 +41,16 @@ status: synced
 
 ### `frontend/src/features/auth/AuthLayout.tsx :: AuthLayout`
 
-`{ title: string; subtitle?: string; children: ReactNode }` — 전체 화면 중앙 정렬(라디얼 그라디언트 배경), `FadeSlideIn` 안에 `.card`(min(440px, 92vw), padding `--sp-8`): 브랜드 마크 아이콘 + h1 title + subtitle(옵션) + children.
+`{ title: string; subtitle?: string; children: ReactNode }` — `bg-bg` 전체 화면 2열 레이아웃. 데스크톱 왼쪽은 `motion` list preset으로 브랜드/운영 흐름 설명을 보여주고, 오른쪽은 `@/ui Card` 안에 모바일 브랜드 마크 + h1 title + subtitle(옵션) + children을 배치한다.
 
 ### `frontend/src/features/auth/LoginView.tsx :: LoginView` (default export)
 
 - 라우트: `/login` (가드 `RequireGuest`).
-- state: `email`, `password`. 훅: `useLogin`, `useNavigate`, `useLocation`, `useSearchParams`.
+- state: `email`, `password`. 훅: `useLogin`, `useNavigate`, `useLocation`, `useSearchParams`, `useToast`.
 - 트리: `AuthLayout(title='로그인')` → form(`Field` 이메일/비밀번호 + primary `Button` "로그인", 전체폭) → 하단 `/signup` 링크.
 - submit: `login.mutate({email, password})`
-  - 성공: query `returnTo` 또는 보호 경로에서 렌더된 현재 `pathname+search+hash` 를 `safeReturnTo` 로 검증한 뒤 `nav(..., { replace: true })`
-  - 실패: `status === 403 && detail.includes('approval')` → `nav('/pending?email=<encoded>')`
+  - 성공: success toast "로그인 완료" 후 query `returnTo` 또는 보호 경로에서 렌더된 현재 `pathname+search+hash` 를 `safeReturnTo` 로 검증한 뒤 `nav(..., { replace: true })`
+  - 실패: `status === 403 && detail.includes('approval')` → warning toast "승인 대기" 후 `nav('/pending?email=<encoded>')`; 그 외는 danger toast + 필드 error
 - 비밀번호 필드 error 메시지: 401 → `'이메일 또는 비밀번호가 올바르지 않습니다'`; 429 → `'잠시 후 다시 시도해주세요'`; 403(approval 아님) → `'이메일 검증이 필요합니다'`.
 - input 제약: email required, password `minLength={8}` required.
 
@@ -58,20 +58,21 @@ status: synced
 
 - 라우트: `/signup` (가드 `RequireGuest`).
 - state: `email`, `pw`, `pw2`. 파생 `mismatch = pw2 !== '' && pw !== pw2`.
-- `signup.isSuccess` 이면 `AuthLayout('검증 메일 발송됨')` + `EmptyState(icon '✉️', '메일함을 확인해주세요', description에 email 포함)` + "로그인으로" 버튼으로 전환.
-- 폼: 이메일(409 시 `'이미 가입된 이메일입니다'` error) / 비밀번호(8자 이상) / 비밀번호 확인(mismatch 시 error). submit 은 mismatch 아니면 `signup.mutate({email, password: pw, password_confirm: pw2})`. 제출 버튼은 mismatch 시 disabled.
+- `signup.isSuccess` 이면 `AuthLayout('검증 메일 발송됨')` + `EmptyState(MailGlyph, '메일함 확인', description에 email 포함)` + "로그인" 버튼으로 전환.
+- 폼: 이메일(409 시 `'이미 가입된 이메일입니다'` error) / 비밀번호(8자 이상) / 비밀번호 확인(mismatch 시 error). submit 은 mismatch 아니면 `signup.mutate({email, password: pw, password_confirm: pw2})`. 성공은 success toast, 실패는 danger toast와 인라인 오류. 제출 버튼은 mismatch 시 disabled.
 
 ### `frontend/src/features/auth/PendingView.tsx :: PendingView` (default export)
 
 - 라우트: `/pending` (가드 `RequireGuest`). 쿼리스트링 `email`.
-- `AuthLayout('승인 대기 중')` + `EmptyState(IconClock, '관리자 승인 대기 중', '"<email ?? 계정> 은(는) 승인 후 로그인할 수 있습니다.')` + "/login 로그인 다시 시도" primary 버튼.
+- `AuthLayout('승인 대기 중')` + `EmptyState(ClockGlyph, '관리자 승인 대기', '"<email ?? 계정> 은(는) 승인 후 로그인할 수 있습니다.')` + `/login` "로그인 재시도" primary 버튼.
 
 ### `frontend/src/features/auth/VerifyEmailView.tsx :: VerifyEmailView` (default export)
 
-- 라우트: `/verify-email` (가드 `RequireGuest`). 쿼리스트링 `verified`.
+- 라우트: `/verify-email` (가드 `RequireGuest`). 쿼리스트링 `verified`, `token`.
+- `token` 이 있으면 클라이언트가 `/api/auth/verify-email?token=<token>` 으로 replace 이동하고, 이동 전 `AuthLayout('이메일 검증')` + `EmptyState(CheckGlyph, '검증 중')`을 표시한다.
 - `ok = sp.get('verified') === '1'`:
-  - true → `EmptyState(IconCheckCircle, '검증 완료', '관리자 승인 후 로그인할 수 있습니다.')` + 로그인 버튼.
-  - false → `EmptyState(IconAlertTriangle, '링크가 만료되었거나 잘못되었습니다', …)` + 이메일/비밀번호 입력 폼(`useResendVerification` mutate). 전송 성공/실패 안내 문구, "로그인으로" ghost 버튼.
+  - true → `EmptyState(CheckGlyph, '검증 완료', '관리자 승인 후 로그인할 수 있습니다.')` + 로그인 버튼.
+  - false → `EmptyState(AlertGlyph, '검증 링크 만료', '검증 메일을 다시 요청할 수 있습니다.')` + 이메일/비밀번호 입력 폼(`useResendVerification` mutate). 성공/실패 toast와 하단 안내 문구, "로그인" ghost 버튼.
 - state: `email`, `password`. 재전송 버튼은 `resend.isPending || !email || password.length < 8` 시 disabled.
 
 ## 라우트
