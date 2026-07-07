@@ -16,6 +16,10 @@ from config import (
     KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH,
     KUBERNETES_SERVICEACCOUNT_TOKEN_PATH,
 )
+from packages.config.control import (
+    CONTROL_NAMESPACE_DENIED_MESSAGE,
+    control_namespace_allowed,
+)
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.requests import StrictModel
@@ -59,8 +63,14 @@ class KubernetesCommandPolicy:
         self.cluster_role = cluster_role
 
     def ensure_allowed(self, spec: KubernetesCommandSpec, payload: object) -> None:
+        if spec.scope == "user-workload":
+            self.ensure_user_workload_allowed(spec, payload)
+            return
         if spec.scope != "target-agent":
             raise PermissionError(f"{spec.scope} Kubernetes commands are not enabled")
+        self.ensure_target_agent_allowed(spec, payload)
+
+    def ensure_target_agent_allowed(self, spec: KubernetesCommandSpec, payload: object) -> None:
         if spec.verb not in TARGET_AGENT_ALLOWED_VERBS:
             raise PermissionError(f"{spec.verb} Kubernetes commands are not enabled")
         if spec.resource not in {"deployments", "configmaps"}:
@@ -76,6 +86,18 @@ class KubernetesCommandPolicy:
             raise PermissionError("target-agent deployment control is name-scoped")
         if spec.resource == "configmaps" and name != TARGET_AGENT_POLICY_CONFIGMAP_NAME:
             raise PermissionError("target-agent configmap control is name-scoped")
+
+    def ensure_user_workload_allowed(self, spec: KubernetesCommandSpec, payload: object) -> None:
+        if self.cluster_role != TARGET_CLUSTER_ROLE:
+            raise PermissionError("user workload control is only enabled on target clusters")
+        if spec.verb != "patch":
+            raise PermissionError(f"{spec.verb} user workload commands are not enabled")
+        if spec.resource != "deployments":
+            raise PermissionError(f"user workload control is not enabled: {spec.resource}")
+        namespace = str(self.field(payload, "namespace"))
+        self.field(payload, "name")
+        if not control_namespace_allowed(namespace):
+            raise PermissionError(CONTROL_NAMESPACE_DENIED_MESSAGE)
 
     def target_agent_namespace(self) -> str:
         if self.cluster_role == MANAGEMENT_CLUSTER_ROLE:

@@ -16,6 +16,21 @@
 
 ## 1. 현재 상태 요약
 
+### 2026-07-07 19:12 KST 체크포인트
+
+- Workload scale 실행 정책 정합성.
+- 구현:
+  - target-agent Kubernetes policy에 `user-workload` scope를 추가했다.
+  - `k8s.apps.v1.deployments.scale`은 target-agent 자체 deployment가 아니라 실제 workload deployment를 대상으로 실행된다.
+  - 허용 조건은 target cluster, `patch`, `deployments`, `CONTROL_ALLOWED_NAMESPACES` 안의 namespace다.
+  - gateway scale endpoint와 target-agent 실행 정책이 같은 namespace allowlist 기준을 사용한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_target_agent_commands.py tests/test_command_worker.py tests/test_command_router.py` → 40 passed.
+  - `.venv/bin/ruff check src/services/target/cluster-agent/commands/kubernetes.py src/services/target/cluster-agent/agent.py src/domains/command/handler.py tests/test_target_agent_commands.py` → passed.
+- 다음 백엔드 P0:
+  - Telemetry truthfulness: stale/provider-error/unknown 상태와 실제 incident count projection.
+  - RCA/realtime RBAC: workspace-only read를 cluster grant/access filter로 제한.
+
 ### 2026-07-07 19:06 KST 체크포인트
 
 - 운영 UI 표면 정리와 병렬 감사 반영.

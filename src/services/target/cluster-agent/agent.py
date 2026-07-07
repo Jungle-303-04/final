@@ -900,6 +900,7 @@ class TargetClusterAgent:
         version="v1",
         resource="deployments",
         verb="patch",
+        scope="user-workload",
         payload_model=KubernetesScalePayload,
     )
     async def scale_deployment_command(
