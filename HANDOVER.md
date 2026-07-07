@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:50 KST (카탈로그 디자인 시스템 이관 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:54 KST (카탈로그 디자인 시스템 이관 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -23,8 +23,13 @@
   - `cd frontend && npm run build` passed.
   - grep: `CatalogView.tsx`의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`, Tailwind arbitrary value 0건.
   - Playwright mock: `/catalog`를 1440/1024/390 폭에서 순회했다. 카탈로그 카드/태그/설치 요청 toast, POST body `{application_name:"postgresql", values:{}}`, horizontal overflow 0, console error 0 확인. screenshots: `/tmp/catalog-desktop.png`, `/tmp/catalog-tablet.png`, `/tmp/catalog-mobile.png`.
-- 남은 확인:
-  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
+- CI/CD:
+  - `b3c86e1c` push 후 GitHub Actions `28906923338`(CI), `28906923330`(AWS CD), `28906923340`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:b3c86e1c-catalog-ui-20260708085319`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-Dvv48fCl.js`에서 `CatalogView-D9Tir7kG.js` 참조 확인. lazy chunk 본문에서 `설치 요청`, `카탈로그 조회 실패`, `설치 항목 없음`, `application_name`, `설치 요청 등록`, `데이터베이스` 문구 확인.
 
 ## 체크포인트 — 레포 상세 디자인 시스템 이관
 
