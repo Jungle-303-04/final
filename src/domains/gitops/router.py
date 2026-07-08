@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from domains.command.events import CommandRequestedBody
 from domains.gitops.dependencies import verify_github_signature
@@ -17,11 +19,26 @@ from domains.gitops.events import (
 )
 from domains.identity.dependencies import require_cluster_access, require_session
 from packages.config.constants import Command, Sandbox, Target
+from packages.config.settings import env
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
-from packages.contracts.gateway.requests import ApprovalDecisionRequest, GitHubWebhookRequest
+from packages.contracts.gateway.requests import (
+    DEFAULT_WEBHOOK_REPLICAS,
+    ApprovalDecisionRequest,
+    GitHubWebhookRequest,
+)
 from packages.contracts.gateway.responses import AcceptedEventResponse, AcceptedResponse
-from packages.contracts.gitops import ApprovalStatus
+from packages.contracts.gitops import (
+    DEFAULT_APPLICATION_ID,
+    DEFAULT_DEPLOYMENT_BINDING_ID,
+    DEFAULT_ENVIRONMENT,
+    DEFAULT_MANIFEST_PATH,
+    DEFAULT_REPO_BRANCH,
+    DEFAULT_REPO_REF,
+    DEFAULT_REPOSITORY_ID,
+    DEFAULT_WATCH_TARGET_ID,
+    ApprovalStatus,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
@@ -35,23 +52,149 @@ APPROVAL_ACCESS_DENIED = "approval access denied"
 APPROVAL_CONFLICT = "approval already resolved"
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
+GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
+GITHUB_PUSH_EVENT = "push"
+GITHUB_PULL_REQUEST_EVENT = "pull_request"
 
 
 def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody:
     return GitWebhookReceivedBody(**payload.model_dump())
 
 
-@router.post(gateway_routes.GITHUB_WEBHOOK_PATH, response_model=AcceptedEventResponse)
-async def github_webhook(
-    payload: GitHubWebhookRequest, events: Any = Depends(get_events)
-) -> AcceptedEventResponse:
-    accepted = await events.accept_body(build_git_webhook_body(payload))
+def github_repo_ref(payload: Mapping[str, Any]) -> str:
+    repository = payload.get("repository")
+    if not isinstance(repository, Mapping):
+        return ""
+    return str(repository.get("full_name") or "").strip()
+
+
+def github_branch_from_ref(ref: str) -> str:
+    prefix = "refs/heads/"
+    return ref.removeprefix(prefix) if ref.startswith(prefix) else ref
+
+
+def github_push_commit(payload: Mapping[str, Any]) -> tuple[str, str] | None:
+    ref = str(payload.get("ref") or "")
+    commit_sha = str(payload.get("after") or "")
+    if not ref.startswith("refs/heads/") or not commit_sha or set(commit_sha) == {"0"}:
+        return None
+    return github_branch_from_ref(ref), commit_sha
+
+
+def github_merged_pr_commit(payload: Mapping[str, Any]) -> tuple[str, str] | None:
+    if str(payload.get("action") or "") != "closed":
+        return None
+    pull_request = payload.get("pull_request")
+    if not isinstance(pull_request, Mapping) or pull_request.get("merged") is not True:
+        return None
+    base = pull_request.get("base")
+    branch = str(base.get("ref") or "") if isinstance(base, Mapping) else ""
+    commit_sha = str(pull_request.get("merge_commit_sha") or "")
+    if not branch or not commit_sha:
+        return None
+    return branch, commit_sha
+
+
+def github_raw_change(payload: Mapping[str, Any], event_name: str) -> tuple[str, str, str] | None:
+    repo_ref = github_repo_ref(payload)
+    if not repo_ref:
+        return None
+    if event_name == GITHUB_PULL_REQUEST_EVENT:
+        changed = github_merged_pr_commit(payload)
+    else:
+        changed = github_push_commit(payload)
+    if changed is None:
+        return None
+    branch, commit_sha = changed
+    return repo_ref, branch, commit_sha
+
+
+def body_for_poll_target(
+    target: Mapping[str, Any],
+    *,
+    commit_sha: str,
+    image: str,
+) -> GitWebhookReceivedBody:
+    return GitWebhookReceivedBody(
+        commit_sha=commit_sha,
+        image=image,
+        replicas=DEFAULT_WEBHOOK_REPLICAS,
+        workspace_id=str(target.get("workspace_id") or DEFAULT_WORKSPACE_ID),
+        repository_id=str(target.get("repository_id") or DEFAULT_REPOSITORY_ID),
+        repo_ref=str(target.get("repo_ref") or DEFAULT_REPO_REF),
+        branch=str(target.get("branch") or DEFAULT_REPO_BRANCH),
+        watch_target_id=str(target.get("watch_target_id") or DEFAULT_WATCH_TARGET_ID),
+        binding_id=str(target.get("binding_id") or DEFAULT_DEPLOYMENT_BINDING_ID),
+        application_id=str(target.get("application_id") or DEFAULT_APPLICATION_ID),
+        environment=str(target.get("environment") or DEFAULT_ENVIRONMENT),
+        cluster_id=str(target.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
+        manifest_path=str(target.get("manifest_path") or DEFAULT_MANIFEST_PATH),
+        source_type=str(target.get("source_type") or ""),
+        force=True,
+    )
+
+
+def build_git_webhook_bodies(
+    payload: Mapping[str, Any],
+    *,
+    db: Any | None = None,
+    event_name: str = "",
+) -> list[GitWebhookReceivedBody]:
+    try:
+        return [build_git_webhook_body(GitHubWebhookRequest(**dict(payload)))]
+    except ValidationError:
+        pass
+    raw_change = github_raw_change(payload, event_name)
+    if raw_change is None:
+        return []
+    image = env(GITOPS_WEBHOOK_IMAGE_ENV, "")
+    if not image:
+        raise HTTPException(status_code=503, detail="gitops webhook image not configured")
+    if db is None or not hasattr(db, "list_active_github_poll_targets"):
+        return []
+    repo_ref, branch, commit_sha = raw_change
+    targets = db.list_active_github_poll_targets(limit=1000)
+    matched = [
+        body_for_poll_target(target, commit_sha=commit_sha, image=image)
+        for target in targets
+        if str(target.get("repo_ref") or "").lower() == repo_ref.lower()
+        and str(target.get("branch") or "") == branch
+    ]
+    return matched
+
+
+def accepted_event_response(accepted: Any) -> AcceptedEventResponse:
     return AcceptedEventResponse(
         accepted=True,
         event_id=accepted.event.event_id,
         correlation_id=accepted.event.correlation_id,
         event=accepted.event.to_dict(),
     )
+
+
+@router.post(gateway_routes.GITHUB_WEBHOOK_PATH, response_model=AcceptedEventResponse)
+async def github_webhook(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+    events: Any = Depends(get_events),
+    db: Any = Depends(get_db),
+) -> AcceptedEventResponse | JSONResponse:
+    bodies = build_git_webhook_bodies(
+        payload,
+        db=db,
+        event_name=request.headers.get("x-github-event", ""),
+    )
+    if not bodies:
+        return JSONResponse(
+            status_code=202,
+            content={"accepted": True, "ignored": True, "reason": "no deployable git change"},
+        )
+    first = None
+    for body in bodies:
+        accepted = await events.accept_body(body)
+        if first is None:
+            first = accepted
+    return accepted_event_response(first)
 
 
 def approval_details(record: Mapping[str, Any]) -> dict[str, Any]:

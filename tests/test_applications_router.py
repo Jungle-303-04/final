@@ -30,6 +30,7 @@ class FakeApplicationsDb:
         self.registered_repositories: list[dict[str, object]] = []
         self.registered_watch_targets: list[dict[str, object]] = []
         self.registered_bindings: list[dict[str, object]] = []
+        self.credentials: list[dict[str, object]] = []
         self.registration_calls: list[str] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
         self.connected_cluster_ids = (
@@ -79,6 +80,9 @@ class FakeApplicationsDb:
         self.registration_calls.append("repository")
         self.registered_repositories.append(payload)
         return {**payload, "repository_id": "repo-1"}
+
+    def upsert_workspace_credential(self, payload: dict[str, object]) -> None:
+        self.credentials.append(payload)
 
     def upsert_application(self, payload: dict[str, object]) -> dict[str, object]:
         return {**payload, "application_id": "app-1", "repository_id": "repo-1"}
@@ -230,6 +234,35 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
     assert db.access_checks == [
         ("user-1", "ws-1", "cluster", "cluster-1", "deploy.run"),
     ]
+
+
+def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) -> None:
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
+    db = FakeApplicationsDb()
+
+    async def run():
+        return await connect_application(
+            ApplicationConnectRequest(
+                name="checkout-api",
+                repo_ref="org/checkout",
+                token="ghp_secret-token",
+                branch="release",
+                manifest_path="deploy/kustomization.yaml",
+                source_type="kustomize",
+                cluster_id="cluster-1",
+            ),
+            current=current_session(),
+            db=db,
+            discovery=FakeRepositoryDiscovery(),
+        )
+
+    asyncio.run(run())
+
+    assert db.credentials
+    assert db.credentials[0]["provider"] == "github"
+    assert db.credentials[0]["scope"] == "github"
+    assert db.credentials[0]["encrypted_value"] != "ghp_secret-token"
+    assert db.registered_repositories[0]["credential_ref"] == "db:github:github"
 
 
 def test_connect_application_rejects_disconnected_cluster_before_write() -> None:
