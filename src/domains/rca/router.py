@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.exc import OperationalError
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -509,4 +510,20 @@ def recovery_plan_status_response(
 
 
 async def db_call(func: Any, *args: Any, **kwargs: Any) -> Any:
-    return await asyncio.to_thread(func, *args, **kwargs)
+    for attempt in range(3):
+        try:
+            return await asyncio.to_thread(func, *args, **kwargs)
+        except OperationalError as exc:
+            if not retryable_db_conflict(exc) or attempt == 2:
+                raise
+            await asyncio.sleep(0.05 * (attempt + 1))
+    raise RuntimeError("unreachable db retry state")
+
+
+def retryable_db_conflict(exc: OperationalError) -> bool:
+    original = getattr(exc, "orig", None)
+    sqlstate = getattr(original, "sqlstate", None)
+    if sqlstate in {"40P01", "40001"}:
+        return True
+    text = str(exc).lower()
+    return "deadlock detected" in text or "could not serialize access" in text

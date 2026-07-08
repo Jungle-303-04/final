@@ -9,11 +9,13 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from domains.identity.dependencies import ClusterAgentIdentity
 from domains.target.evidence_jobs import PENDING_EVIDENCE_EVENT_ID_PREFIX
 from domains.target.router import (
     complete_evidence_payload,
+    db_call,
     evidence_job_result,
     poll_evidence_job,
     schedule_evidence_jobs,
@@ -26,6 +28,10 @@ from packages.contracts.gateway.requests import (
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_DIR = ROOT_DIR / "src" / "services" / "target" / "cluster-agent"
 IDENTITY = ClusterAgentIdentity(workspace_id="workspace-1", cluster_id="cluster-1")
+
+
+class DeadlockOrig(Exception):
+    sqlstate = "40P01"
 
 
 def load_evidence_module():
@@ -601,6 +607,20 @@ def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
     assert event_payload["metrics"] == {}
     assert event_payload["traces"] == {}
     assert events.body is None
+
+
+def test_db_call_retries_deadlock_once() -> None:
+    calls = 0
+
+    def flaky() -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OperationalError("insert", {}, DeadlockOrig())
+        return "ok"
+
+    assert asyncio.run(db_call(flaky)) == "ok"
+    assert calls == 2
 
 
 def test_complete_evidence_payload_defaults_missing_provider_bodies() -> None:
