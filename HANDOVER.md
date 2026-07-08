@@ -2441,3 +2441,20 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 - 배포 전 주의:
   - service 이미지는 management worker들과 cluster-1 target-agent 모두에 반영해야 pod/node metrics가 live usage sample에 들어온다.
   - console 이미지를 함께 반영해야 service/resource 필터와 mCPU/MiB 표시가 보인다.
+
+## 라이브 데모 안정화 핫픽스 (2026-07-08)
+
+- RegisterClusterWizard:
+  - preflight 요청은 `TargetPreflightRequest` 계약에 맞춰 `cluster_id/apply/cloud_provider/deploy_provider/provider_config/management_base_url/kube_context`만 전송한다.
+  - 등록 요청(`/targets`)에는 기존처럼 `name/environment`를 포함한다.
+  - kind/minikube의 `환경` 입력은 `운영 구분` 라벨로 바꾸고 local provider는 `dev`로 고정 표시한다.
+- GitOps 배포 관계:
+  - `list_application_deployment_bindings`가 `app_name` 완전 일치뿐 아니라 같은 repository의 `manifest_path` 일치도 허용한다.
+  - live DB처럼 application name(`storefront-web`)과 binding app_name(`k8s-incident-demo-target`)이 다른 과거 데이터도 cluster detail의 `배포된 레포`에 다시 노출된다.
+- URL 상태 갱신:
+  - 클러스터 상세 필터/드릴다운, 메트릭 cluster 선택, AI prefill 제거, 레포 상세 tab 변경은 `preventScrollReset`을 사용한다.
+  - 입력 중 화면이 위로 튀는 버그를 방지한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_database_unit.py::test_application_deployment_bindings_match_manifest_when_app_name_drifted tests/test_database_unit.py::test_gitops_registration_stores_workspace_scoped_default_ids tests/test_rca_evidence.py tests/test_target_kubernetes_evidence.py tests/test_inventory_domain.py tests/test_fleet_router.py -q` → 50 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src tests` → passed.
+  - `bash scripts/frontend-check.sh` → design guard/typecheck/eslint/unit/build passed.
