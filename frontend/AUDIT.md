@@ -468,3 +468,15 @@
   prefers-reduced-motion 경로는 기존 프리셋을 유지한다.
 - 검증: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py tests/test_target_kubernetes_evidence.py tests/test_inventory_domain.py tests/test_fleet_router.py -q`
   48 passed, `PYTHONPATH=src .venv/bin/python -m ruff check src tests` passed, `bash scripts/frontend-check.sh` passed.
+
+## N. 라이브 데모 안정화 핫픽스 (2026-07-08)
+
+- 클러스터 등록 위저드: `/targets/preflight`에는 `name`/`environment`를 보내지 않고, `/targets` 등록 요청에만 포함한다.
+  `extra_forbidden` 422가 다시 나지 않도록 payload 함수를 분리했다.
+- kind/minikube 등록의 `환경` 라벨은 설치 환경으로 오해되지 않게 `운영 구분`으로 변경했고,
+  로컬 provider는 `dev`로 고정 표시한다. 설치 방식은 raw key(`manual-manifest`) 대신 `수동 manifest`로 표시한다.
+- 클러스터 상세/메트릭/AI/레포 상세의 URL search param 갱신은 `preventScrollReset`을 사용한다.
+  필터나 입력값 변경 시 화면이 맨 위로 튀는 현상을 막는다.
+- 클러스터 상세의 `배포된 레포`가 비는 원인은 application name과 deployment binding app_name이 drift된 데이터였다.
+  같은 repository + manifest_path binding도 같은 배포 정의로 조회해, GitOps가 만든 관계가 UI에서 사라지지 않게 했다.
+- 검증: backend focused suite 50 passed, `ruff check src tests` passed, `bash scripts/frontend-check.sh` passed.
