@@ -693,6 +693,55 @@ def test_node_pods_summary_filters_node_and_links_incident() -> None:
     }
 
 
+def test_node_pods_summary_hides_agent_and_management_pods() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        nodes=[{"name": "node-a", "status": "Ready", "health": "healthy", "summary": {}}],
+        pods=[
+            {
+                "name": "orders-api-7c9d5",
+                "namespace": "sandbox",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a", "phase": "Running"},
+            },
+            {
+                "name": "cluster-agent-6f8c9",
+                "namespace": "target",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a", "owner_name": "cluster-agent"},
+            },
+            {
+                "name": "api-gateway-5c4d",
+                "namespace": "management",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a", "owner_name": "api-gateway"},
+            },
+            {
+                "name": "coredns-abc",
+                "namespace": "kube-system",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {"node_name": "node-a", "owner_name": "coredns"},
+            },
+        ],
+    )
+    client = make_client(db, session=_session())
+
+    pods_response = client.get(f"/clusters/{CLUSTER_ID}/nodes/node-a/pods/summary")
+    nodes_response = client.get(f"/clusters/{CLUSTER_ID}/nodes/summary")
+
+    assert pods_response.status_code == 200
+    assert [pod["namespace"] + "/" + pod["name"] for pod in pods_response.json()["pods"]] == [
+        "sandbox/orders-api-7c9d5"
+    ]
+    assert nodes_response.status_code == 200
+    assert nodes_response.json()["nodes"][0]["pods_running"] == 1
+    assert nodes_response.json()["nodes"][0]["restarts_recent"] == 0
+
+
 def test_node_pods_summary_returns_empty_for_node_without_pods() -> None:
     db = FleetApiDb(
         registrations=[_registration()],
