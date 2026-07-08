@@ -48,25 +48,25 @@ class OomKilledRecoveryActions:
     root_causes=("application_5xx_spike",),
     actions=(
         RecoveryActionSpec(
-            action_type="gitops_demo_recovery",
-            title="데모 설정 정상화 PR",
+            action_type="gitops_recovery_review",
+            title="GitOps 복구 검토 PR",
             description=(
-                "demo-target-config를 정상 모드로 되돌리고 orders-api를 GitOps 롤아웃으로 "
-                "재배포해 5xx 시나리오를 해소합니다."
+                "연결된 GitOps 레포에 복구 검토 문서를 생성해 원인, 대상, 검증 조건을 "
+                "운영자가 확인한 뒤 실제 manifest 변경으로 이어가게 합니다."
             ),
             route=routes.safe_pr,
             risk_level="medium",
-            score=0.78,
+            score=0.56,
             blast_radius="target_workload",
             approval_required=True,
-            prerequisites=("sandbox 데모 워크로드이고 GitOps 레포가 연결됨",),
+            prerequisites=("대상 워크로드와 연결된 GitOps 레포가 있음", "변경 대상 manifest를 운영자가 확인함"),
             validation_checks=(
-                "DEMO_MODE normal",
-                "orders-api Ready replica 회복",
+                "RCA 근거와 대상 manifest 일치",
+                "변경 전후 Ready replica 회복 기준 확인",
                 "5xx 로그 감소",
             ),
             rollback_plan="생성된 PR 또는 merge commit을 revert합니다.",
-            params={"patch": "demo_config_reset"},
+            params={"patch": "recovery_review"},
         ),
         RecoveryActionSpec(
             action_type="deployment_scale",

@@ -53,7 +53,7 @@ export function adaptPodResource(raw: RawInventoryResource): Workload {
   return {
     name: String(raw.name ?? ''),
     kind: String(summary.owner_kind ?? raw.kind ?? 'Pod'),
-    namespace: String(raw.namespace ?? 'default'),
+    namespace: String(raw.namespace ?? ''),
     ready: String(summary.ready ?? raw.status ?? ''),
     restarts: Number(summary.restart_total ?? 0),
     image,
@@ -73,7 +73,7 @@ export function adaptWorkloadResource(raw: RawInventoryResource): WorkloadResour
   return {
     name: String(raw.name ?? ''),
     kind: String(raw.kind ?? summary.kind ?? 'Workload'),
-    namespace: String(raw.namespace ?? 'default'),
+    namespace: String(raw.namespace ?? ''),
     status: String(raw.status ?? `${ready}/${desired}`),
     health: String(raw.health ?? 'unknown'),
     desired,
@@ -96,7 +96,7 @@ export function adaptServiceResource(raw: RawInventoryResource): ServiceInfo {
     : '';
   return {
     name: String(raw.name ?? ''),
-    namespace: String(raw.namespace ?? 'default'),
+    namespace: String(raw.namespace ?? ''),
     type: String(summary.type ?? raw.status ?? ''),
     cluster_ip: String(summary.cluster_ip ?? ''),
     ports,
