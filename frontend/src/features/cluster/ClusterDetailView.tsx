@@ -766,17 +766,20 @@ function WorkloadsTab({ clusterId, admin, readOnly, filter, onResetFilter, onIns
       id: 'actions',
       header: '작업',
       width: 'lg',
-      cell: (row) => (
-        <div className="flex min-w-0 flex-wrap justify-end gap-2" onClick={(event) => event.stopPropagation()}>
-          {!readOnly && (
-            <>
-              <Button size="sm" disabled={!admin || row.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale(row)}>스케일</Button>
-              <Button size="sm" variant="danger" disabled={!admin || row.kind !== 'Deployment'} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart(row)}>재시작</Button>
-            </>
-          )}
-          <Button size="sm" onClick={() => onDrillPods(row)}>팟</Button>
-        </div>
-      ),
+      cell: (row) => {
+        const controllable = row.kind === 'Deployment';
+        return (
+          <div className="flex min-w-0 flex-wrap justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+            {!readOnly && controllable && (
+              <>
+                <Button size="sm" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onScale(row)}>스케일</Button>
+                <Button size="sm" variant="danger" disabled={!admin} title={admin ? '' : 'release_operator 권한 필요'} onClick={() => onRestart(row)}>재시작</Button>
+              </>
+            )}
+            <Button size="sm" onClick={() => onDrillPods(row)}>팟</Button>
+          </div>
+        );
+      },
     },
   ], [admin, onDrillPods, onRestart, onScale, readOnly]);
   return (

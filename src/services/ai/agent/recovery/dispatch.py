@@ -134,13 +134,16 @@ def build_command_request_body(
         return None
     workspace_id = str(plan.target.get("workspace_id") or draft.params.get("workspace_id"))
     namespace = draft.namespace or Sandbox.NAMESPACE
+    command_target = command_target_name(draft.resource_kind, draft.resource_name, draft.params)
     return CommandRequestedBody(
         cluster_id=str(plan.target.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
         action=action,
         namespace=namespace,
         reason=selected.description,
         diff=Diff(
-            resource=f"{draft.resource_kind}/{draft.resource_name}",
+            resource=command_diff_resource(
+                action, command_target, draft.resource_kind, draft.resource_name
+            ),
             namespace=namespace,
             desired_image="",
             actual_image="",
@@ -168,7 +171,7 @@ def build_command_request_body(
             "action_id": selected.action_id,
             "auto_selected": auto_selected,
         },
-        payload=command_payload_for(action, draft.resource_name, namespace, draft.params),
+        payload=command_payload_for(action, command_target, namespace, draft.params),
     )
 
 
@@ -197,6 +200,54 @@ def command_payload_for(
         "name": resource_name,
         "replicas": replica_count,
     }
+
+
+def command_diff_resource(
+    action: str,
+    command_target: str,
+    source_kind: str,
+    source_name: str,
+) -> str:
+    if action in {Command.DEFAULT_ACTION, Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION}:
+        return f"deployment/{command_target}"
+    return f"{source_kind}/{source_name}"
+
+
+def command_target_name(kind: str, name: str, params: JsonObject) -> str:
+    explicit = first_str(
+        params.get("deployment"),
+        params.get("deployment_name"),
+        params.get("workload_name"),
+        params.get("target_deployment"),
+    )
+    if explicit:
+        return explicit
+    normalized_kind = kind.strip().lower()
+    normalized_name = name.strip()
+    if normalized_kind in {"deployment", "deployments"}:
+        return normalized_name
+    if normalized_kind in {"replicaset", "replicasets"}:
+        return deployment_from_replicaset_name(normalized_name) or normalized_name
+    if normalized_kind in {"pod", "pods"}:
+        return deployment_from_pod_name(normalized_name) or normalized_name
+    return normalized_name
+
+
+def first_str(*values: object) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def deployment_from_pod_name(name: str) -> str:
+    match = re.match(r"^(.+)-[a-f0-9]{8,10}-[a-z0-9]{5}$", name)
+    return match.group(1) if match else ""
+
+
+def deployment_from_replicaset_name(name: str) -> str:
+    match = re.match(r"^(.+)-[a-f0-9]{8,10}$", name)
+    return match.group(1) if match else ""
 
 
 def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:

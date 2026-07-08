@@ -16,8 +16,10 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     compact_cluster_evidence_payload,
 )
+from packages.config.constants import Command
 from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EvidenceBuilder
 from services.ai.agent.pipeline.evidence_bundle import MAX_LOG_ENTRIES, MAX_TEXT_LENGTH
+from services.ai.agent.recovery.dispatch import command_diff_resource, command_target_name
 
 PR_URL_PREFIX = "https://github.test.local/project/repo/pull"
 PR_HTML_URL = f"{PR_URL_PREFIX}/7"
@@ -197,17 +199,22 @@ def test_incident_worker_hydrates_reference_evidence_built_event() -> None:
     assert db.called("get_evidence_payload")
 
 
-def report_for(root_cause: str) -> RcaCompletedBody:
+def report_for(
+    root_cause: str,
+    *,
+    resource_kind: str = "deployment",
+    resource_name: str = "checkout-api",
+) -> RcaCompletedBody:
     incident = IncidentRecord(
         incident_id="inc-safe-pr",
         cluster_id="target-cluster-01",
-        resource_kind="deployment",
-        resource_name="checkout-api",
+        resource_kind=resource_kind,
+        resource_name=resource_name,
         namespace="sandbox",
         symptom="CrashLoopBackOff",
         severity="high",
         first_seen_at=None,
-        summary="deployment checkout-api has CrashLoopBackOff",
+        summary=f"{resource_kind} {resource_name} has CrashLoopBackOff",
         workspace_id="workspace-1",
     )
     detail = RcaReportDetail(
@@ -307,6 +314,7 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     auto_command = dispatch_outs[0]
     assert auto_command.action == "rollout_restart"
     assert auto_command.namespace == "sandbox"
+    assert auto_command.diff.resource == "deployment/checkout-api"
     assert auto_command.workspace_id == "workspace-1"
     assert auto_command.approval_ref is None
     assert auto_command.policy_decision_ref is None
@@ -363,11 +371,87 @@ def test_application_5xx_recovery_offers_restart_and_scale_payload() -> None:
     scale_command = dispatch_outs[0]
     assert scale_command.action == "k8s.apps.v1.deployments.scale"
     assert scale_command.namespace == "sandbox"
+    assert scale_command.diff.resource == "deployment/checkout-api"
     assert scale_command.payload == {
         "namespace": "sandbox",
         "name": "checkout-api",
         "replicas": 3,
     }
+
+
+def test_recovery_command_targets_owner_deployment_from_pod_or_replicaset() -> None:
+    assert command_target_name("Pod", "checkout-api-7d9f8c9b7c-abcde", {}) == "checkout-api"
+    assert command_target_name("ReplicaSet", "checkout-api-7d9f8c9b7c", {}) == "checkout-api"
+    assert command_target_name("Deployment", "checkout-api", {}) == "checkout-api"
+    assert (
+        command_target_name(
+            "Pod",
+            "checkout-api-7d9f8c9b7c-abcde",
+            {"deployment_name": "orders-api"},
+        )
+        == "orders-api"
+    )
+    assert (
+        command_diff_resource(
+            Command.DEFAULT_ACTION,
+            "checkout-api",
+            "Pod",
+            "checkout-api-7d9f8c9b7c-abcde",
+        )
+        == "deployment/checkout-api"
+    )
+    assert (
+        command_diff_resource("apply_manifest", "checkout-api", "Pod", "checkout-api-pod")
+        == "Pod/checkout-api-pod"
+    )
+
+
+def test_recovery_command_targets_owner_deployment_for_pod_and_replicaset() -> None:
+    recovery_worker = load_service("ai/recovery-worker")
+    dispatch_worker = load_service("ai/dispatch-worker")
+
+    cases = [
+        ("Pod", "orders-api-96876968-rlqwg", "orders-api"),
+        ("ReplicaSet", "storefront-web-7b94fc878c", "storefront-web"),
+        ("Deployment", "orders-api", "orders-api"),
+    ]
+    for resource_kind, resource_name, deployment in cases:
+        recovery_outs = run_handler(
+            recovery_worker.on_rca_completed,
+            report_for(
+                "backend_readiness_failure",
+                resource_kind=resource_kind,
+                resource_name=resource_name,
+            ),
+        )
+        plan = recovery_outs[0].plan
+
+        restart_command = run_handler(
+            dispatch_worker.on_recovery_action_selected,
+            RecoveryActionSelectedBody(
+                plan=plan,
+                selected=plan.candidates[0],
+                selected_by="agent-select",
+                auto_selected=True,
+                reason="auto selected restart",
+                workspace_id="workspace-1",
+            ),
+        )[0]
+        assert restart_command.diff.resource == f"deployment/{deployment}"
+
+        scale_command = run_handler(
+            dispatch_worker.on_recovery_action_selected,
+            RecoveryActionSelectedBody(
+                plan=plan,
+                selected=plan.candidates[1],
+                selected_by="operator-1",
+                auto_selected=False,
+                reason="operator selected scale",
+                workspace_id="workspace-1",
+            ),
+        )[0]
+        assert scale_command.diff.resource == f"deployment/{deployment}"
+        assert scale_command.payload["name"] == deployment
 
 
 def test_evidence_lineage_is_attached_without_mutating_source_payload(monkeypatch) -> None:

@@ -310,6 +310,9 @@ export default function IncidentDetailView() {
         )}
       />
       <IncidentSituationCard incident={incident} onAskAi={startAiAnalysis} aiPending={askAi.isPending} />
+      <Card>
+        <RecoveryPlanPanel correlationId={incident.correlation_id} standalone />
+      </Card>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,0.75fr)]">
         <Card title="RCA 파이프라인">
@@ -334,7 +337,6 @@ export default function IncidentDetailView() {
               { label: '갱신', value: incident.updated_at ? <span title={fmtAbs(incident.updated_at)}>{timeAgo(incident.updated_at)} · {fmtAbs(incident.updated_at)}</span> : '없음' },
             ]} />
             {incident.error_reason && <p className="text-caption font-medium text-danger">실패 사유: {incident.error_reason}</p>}
-            <RecoveryPlanPanel correlationId={incident.correlation_id} />
           </div>
         </Card>
       </section>
@@ -417,16 +419,36 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
   const recommended = plan.candidates.find((candidate) => candidate.action_id === plan.recommended_action_id) ?? null;
   const visible = [
     ...(selected ? [selected] : []),
-    ...plan.candidates.filter((candidate) => candidate.action_id !== selected?.action_id).slice(0, selected ? 2 : 3),
+    ...plan.candidates.filter((candidate) => candidate.action_id !== selected?.action_id),
   ];
-  const locked = Boolean(plan.selected_action_id) || plan.status === 'selected';
   return (
     <div className="grid gap-3">
-      <p className="text-caption text-secondary">{plan.summary}</p>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.55fr)]">
+        <div className="grid gap-2">
+          <p className="text-body font-semibold text-primary">{plan.summary}</p>
+          <p className="text-caption text-secondary">{recoveryTargetLabel(plan)}</p>
+        </div>
+        <KeyValueList items={[
+          { label: '경로', value: routeLabel(plan.execution_route) },
+          { label: '추천', value: recommended ? recommended.title : plan.recommended_action_id },
+          { label: '상태', value: selected ? `${selected.title} 선택됨` : plan.selection_required ? '조치 선택 대기' : '자동 진행' },
+        ]} />
+      </div>
+      <div className="grid gap-2 rounded-control border border-border bg-bg p-3 md:grid-cols-4">
+        {recoveryFlowSteps(plan).map((step) => (
+          <div key={step.label} className="flex min-w-0 items-center gap-2">
+            <span className={cx('size-2 shrink-0 rounded-full', step.tone === 'ok' ? 'bg-success' : step.tone === 'warn' ? 'bg-warning' : step.tone === 'danger' ? 'bg-danger' : step.tone === 'info' ? 'bg-info' : 'bg-muted')} />
+            <div className="min-w-0">
+              <p className="truncate text-label font-semibold text-primary">{step.label}</p>
+              <p className="truncate text-caption text-muted">{step.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
       <KeyValueList items={[
-        { label: '경로', value: routeLabel(plan.execution_route) },
-        { label: '추천', value: recommended ? recommended.title : plan.recommended_action_id },
-        { label: '선택', value: selected ? selected.title : plan.selection_required ? '선택 대기' : '자동 진행' },
+        { label: '후보', value: `${plan.candidates.length.toLocaleString()}개` },
+        { label: '승인', value: visible.some((candidate) => candidate.approval_required) ? '필요 후보 있음' : '자동 가능' },
+        { label: '검증', value: selected ? selected.validation_checks.join(', ') || '상태 확인' : '선택 후 시작' },
       ]} />
       <div className="grid gap-2">
         {visible.map((candidate) => (
@@ -435,7 +457,6 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
             candidate={candidate}
             recommended={candidate.action_id === plan.recommended_action_id}
             selected={candidate.action_id === plan.selected_action_id}
-            locked={locked}
             pending={selectAction.isPending}
             onSelect={() => selectAction.mutate({
               planId: plan.plan_id,
@@ -450,18 +471,42 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
   );
 }
 
+function recoveryFlowSteps(plan: RecoveryPlanStatus): Array<{ label: string; value: string; tone: Tone }> {
+  const selected = plan.selected_action;
+  return [
+    { label: '감지', value: '인시던트 생성', tone: 'ok' },
+    { label: '분석', value: plan.summary ? '원인 산출' : '진행 중', tone: plan.summary ? 'ok' : 'neutral' },
+    {
+      label: '조치',
+      value: selected ? selected.title : plan.selection_required ? '선택 대기' : '자동 선택 대기',
+      tone: selected ? 'ok' : plan.selection_required ? 'warn' : 'info',
+    },
+    {
+      label: '실행',
+      value: selected ? routeLabel(selected.route) : '대기',
+      tone: selected ? (selected.approval_required ? 'warn' : 'info') : 'neutral',
+    },
+  ];
+}
+
+function recoveryTargetLabel(plan: RecoveryPlanStatus): string {
+  const kind = String(plan.target.resource_kind ?? plan.target.kind ?? 'workload');
+  const name = String(plan.target.resource_name ?? plan.target.name ?? '');
+  const namespace = String(plan.target.namespace ?? 'sandbox');
+  const cluster = String(plan.target.cluster_id ?? '');
+  return [cluster, namespace, kind && name ? `${kind}/${name}` : name].filter(Boolean).join(' · ');
+}
+
 function RecoveryCandidateRow({
   candidate,
   recommended,
   selected,
-  locked,
   pending,
   onSelect,
 }: {
   candidate: RecoveryActionCandidate;
   recommended: boolean;
   selected: boolean;
-  locked: boolean;
   pending: boolean;
   onSelect: () => void;
 }) {
@@ -478,13 +523,11 @@ function RecoveryCandidateRow({
         {candidate.description} · 위험 {riskLabel(candidate.risk_level)} · 영향 {blastRadiusLabel(candidate.blast_radius)}
       </p>
       {candidate.rollback_plan && <p className="text-caption text-secondary">롤백: {candidate.rollback_plan}</p>}
-      {!locked && (
-        <div className="flex justify-end">
-          <Button size="sm" variant={recommended ? 'primary' : 'secondary'} loading={pending} onClick={onSelect}>
-            복구 선택
-          </Button>
-        </div>
-      )}
+      <div className="flex justify-end">
+        <Button size="sm" variant={selected || recommended ? 'primary' : 'secondary'} loading={pending} onClick={onSelect}>
+          {selected ? '다시 실행' : '복구 선택'}
+        </Button>
+      </div>
     </div>
   );
 }
