@@ -692,7 +692,7 @@ curl --max-time 8 -fsS https://k8s.woonyong.org/api/healthz
 새 AI가 이어받으면 바로 아래 순서대로 현재 상태를 확인한다.
 
 ```bash
-cd /Users/woonyong/workspace/Krafton-Jungle/SW_AI_W17-21-final
+cd .
 
 git status --short --branch
 git log --oneline -5
