@@ -1,11 +1,28 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:09 KST (레거시 toast 경로 제거 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:15 KST (레거시 CSS import 제거 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 레거시 CSS import 제거
+
+- 구현:
+  - `frontend/src/main.tsx`에서 `@/shared/tokens.css`, `@/shared/ui/app.css`, `@/plural-ui/tokens.css`, `@/shared/theme-bridge.css` import를 제거하고 `@/ui/theme.css`만 남겼다.
+  - `frontend/src/plural-ui/index.tsx`의 `./tokens.css`, `./plural.css` side-effect import를 제거했다.
+  - 삭제: `frontend/src/shared/tokens.css`, `frontend/src/shared/ui/app.css`, `frontend/src/shared/theme-bridge.css`, `frontend/src/plural-ui/tokens.css`, `frontend/src/plural-ui/plural.css`, `frontend/src/features/console-archive/archive.css`.
+- 로컬 검증:
+  - `rg "shared/tokens.css|shared/ui/app.css|shared/theme-bridge.css|plural-ui/tokens.css|plural-ui/plural.css|archive.css|@/shared/ui|@/plural-ui" frontend/src`는 dev showcase icon/shared-ui 내부 잔존 import 외 목표 CSS import 0건.
+  - CSS import scan: `@/ui/theme.css`, `@xyflow/react/dist/style.css`, `shared/flow/flow.css`만 남음.
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed. CSS bundle `index-BRxn7xco.css` 35.33 kB gzip 7.19 kB로 감소.
+  - Playwright mock: `/login`과 `/`를 1440/1024/390 폭에서 확인. home marker, login marker, horizontal overflow 0. 로그인은 의도적 401 session mock 때문에 console resource error 1건.
+- 남은 확인:
+  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
 
 ## 체크포인트 — 레거시 toast 경로 제거
 

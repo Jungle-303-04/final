@@ -5,10 +5,6 @@ import { MotionConfig } from 'motion/react';
 import { Providers } from '@/app/providers';
 import { router } from '@/app/router';
 import '@/ui/theme.css';
-import '@/shared/tokens.css';
-import '@/shared/ui/app.css';
-import '@/plural-ui/tokens.css';
-import '@/shared/theme-bridge.css';
 
 // 테마는 첫 페인트 전에 적용 — 로그인 등 셸 밖 화면도 같은 다크/라이트 팔레트를 쓴다
 const initialThemeMode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
