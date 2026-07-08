@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:07 KST (레거시 toast 경로 제거 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:09 KST (레거시 toast 경로 제거 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -21,8 +21,13 @@
   - `cd frontend && npm run lint` passed.
   - `cd frontend && npm test` passed, 11 tests.
   - `cd frontend && npm run build` passed.
-- 남은 확인:
-  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
+- CI/CD:
+  - `2f18aada` push 후 GitHub Actions `28907584019`(CI), `28907584024`(AWS CD), `28907584045`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:2f18aada-toast-cleanup-20260708090840`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-E7PZPsPU.js`에서 `스케일 명령 등록`, `재시작 명령 등록`, `클러스터 등록 해제 완료`, `복구 액션 등록`, `액션 실행 실패` 확인. `MetricsView-B2CuNqJu.js`에서 `쿼리 저장 완료`, `쿼리 실행 등록` 확인.
 
 ## 체크포인트 — 히트맵 드릴다운 Motion 보강
 
