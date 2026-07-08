@@ -139,11 +139,12 @@ def resolve_approval_or_409(
 @approval_router.post(gateway_routes.APPROVAL_GRANT_PATH, response_model=AcceptedResponse)
 async def grant_approval(
     approval_id: str,
-    payload: ApprovalDecisionRequest,
+    payload: ApprovalDecisionRequest | None = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> AcceptedResponse:
+    payload = payload or ApprovalDecisionRequest()
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     record = approval_record_or_404(db, approval_id, workspace_id)
     ensure_approval_is_open(record)
@@ -191,11 +192,12 @@ async def grant_approval(
 @approval_router.post(gateway_routes.APPROVAL_REJECT_PATH, response_model=AcceptedResponse)
 async def reject_approval(
     approval_id: str,
-    payload: ApprovalDecisionRequest,
+    payload: ApprovalDecisionRequest | None = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> AcceptedResponse:
+    payload = payload or ApprovalDecisionRequest()
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     record = approval_record_or_404(db, approval_id, workspace_id)
     ensure_approval_is_open(record)

@@ -643,9 +643,10 @@ oom_killed 의 rollout_restart 후보가 자동 선택되어 auto 실행된다.
 
 `src/services/ai/agent/recovery/dispatch.py :: build_safe_pr_request_body`
 
-- `patches = safe_pr_patches(selected)` 가 비면
-  `RcaActionRequiredBody(reason=f"{MISSING_SAFE_PR_PATCH_REASON}: {title}", reason_code="safe_pr_patch_missing", missing_evidence=["manifest_patch"], next_actions=[{"action_type": "collect_manifest_context", "reason": "Recovery Safe PR requires concrete file patches before PR creation.", "target": draft.params}], diagnostics={"plan_id", "action_id", "route"})`.
-- 패치가 있으면 PR 본문(요약, 선택 조치, 대상 `namespace/kind/name`, 위험도, 영향 범위,
+- `patches = safe_pr_patches(selected)` 는 `draft.params["patches"]` 가 없거나 유효한 패치가 없으면
+  `.gitops/recovery/{hash}-{action}.md` 검토 패치를 만든다. 이 fallback 문서는 대상, 원인, 위험도,
+  영향 범위, 조치, 검증, 롤백 텍스트만 담고 실제 manifest 변경을 가장하지 않는다.
+- PR 본문(요약, 선택 조치, 대상 `namespace/kind/name`, 위험도, 영향 범위,
   이유, 검증 체크리스트, 롤백 계획을 개행으로 조합)을 만들고
   `SafePrRequestedBody(title=f"{selected.title}: {draft.resource_name}", body, provider=GitHub.PROVIDER("github"), patches, workspace_id)` 반환.
 
@@ -655,12 +656,17 @@ oom_killed 의 rollout_restart 후보가 자동 선택되어 auto 실행된다.
 - `workspace_id = str(plan.target["workspace_id"] or draft.params["workspace_id"])`,
   `namespace = draft.namespace or Sandbox.NAMESPACE("sandbox")`,
   `cluster_id = str(plan.target["cluster_id"] or Target.DEFAULT_CLUSTER_ID)`.
-- `CommandRequestedBody(cluster_id, action, namespace, reason=selected.description, diff=Diff(resource=f"{kind}/{name}", namespace, desired_image="", actual_image="", risk=Sandbox.RISK_TAG(RiskLevel.SANDBOX_ONLY), workspace_id, status="recovery_action", has_changes=True, basis={"source": "rca_recovery", "plan_id", "action_id", "root_cause"}), workspace_id, application_id/workflow_run_id/binding_id=draft.params에서(없으면 ""), environment=draft.params.get("environment") or "sandbox", requested_by=selected_by, approval_ref/policy_decision_ref=as_optional_str(draft.params...), actor={"plan_id", "action_id", "auto_selected"})`.
+- `rollout_restart` 와 `k8s.apps.v1.deployments.scale` 은 `draft.params` 의
+  `deployment`/`deployment_name`/`workload_name`/`target_deployment` 을 우선 사용하고, 없으면
+  Pod(`name-hash-suffix`) 또는 ReplicaSet(`name-hash`) 이름에서 Deployment 이름을 추정한다.
+- `CommandRequestedBody(cluster_id, action, namespace, reason=selected.description, diff=Diff(resource="deployment/{target}" for restart/scale else f"{kind}/{name}", namespace, desired_image="", actual_image="", risk=Sandbox.RISK_TAG(RiskLevel.SANDBOX_ONLY), workspace_id, status="recovery_action", has_changes=True, basis={"source": "rca_recovery", "plan_id", "action_id", "root_cause"}), workspace_id, application_id/workflow_run_id/binding_id=draft.params에서(없으면 ""), environment=draft.params.get("environment") or "sandbox", requested_by=selected_by, approval_ref/policy_decision_ref=as_optional_str(draft.params...), actor={"plan_id", "action_id", "auto_selected"})`.
 
 | 함수 | 앵커 | 동작 |
 |---|---|---|
 | `command_action_for(selected)` | `src/services/ai/agent/recovery/dispatch.py :: command_action_for` | `params["command"] or action_type` → `command_action_for_recovery` |
-| `safe_pr_patches(selected)` | `src/services/ai/agent/recovery/dispatch.py :: safe_pr_patches` | `draft.params["patches"]` 가 list일 때만, `path`·`content` 가 str인 dict만 `SafePrFilePatch(path, content, description=item["description"] or selected.title)` 로 변환 |
+| `safe_pr_patches(selected)` | `src/services/ai/agent/recovery/dispatch.py :: safe_pr_patches` | `draft.params["patches"]` 가 list이면 `path`·`content` 가 str인 dict를 `SafePrFilePatch`로 변환하고, 없거나 비면 `fallback_recovery_patch` 1건을 반환 |
+| `fallback_recovery_patch(selected)` | `src/services/ai/agent/recovery/dispatch.py :: fallback_recovery_patch` | `.gitops/recovery/{sha16}-{action}.md` 경로의 검토용 Markdown 패치 생성 |
+| `command_target_name(kind, name, params)` | `src/services/ai/agent/recovery/dispatch.py :: command_target_name` | 명시 deployment 파라미터 우선, 없으면 Deployment/ReplicaSet/Pod 이름에서 조치 대상 Deployment 이름 추정 |
 | `as_optional_str(value)` | `src/services/ai/agent/recovery/dispatch.py :: as_optional_str` | `None`/`""` → None, 그 외 `str(value)` |
 
 ## 동작 (Behavior) — 전체 파이프라인 상태 흐름

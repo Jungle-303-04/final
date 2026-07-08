@@ -219,7 +219,7 @@ export function useRestart(clusterId: string) {
   const { push } = useToast();
   return useMutation({
     mutationFn: ({ ns, name }: { ns: string; name: string }) =>
-      post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart`),
+      post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart`, {}),
     onSuccess: () => push({ tone: 'info', title: '재시작 명령 등록', description: '대상 행의 상태가 갱신되면 목록에 반영됩니다' }),
     onError: err => push({ tone: 'danger', title: '재시작 실패', description: commandFailureMessage('재시작', err) }),
   });

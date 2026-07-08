@@ -1224,9 +1224,13 @@ class TargetClusterAgent:
 
 
 def deployment_name_from_resource(resource: str) -> str:
-    if resource.startswith("deployment/"):
-        return resource.split("/", 1)[1]
-    return resource
+    value = resource.strip()
+    if "/" not in value:
+        return value
+    kind, name = value.split("/", 1)
+    if kind.lower() in {"deployment", "deployments"}:
+        return name
+    return ""
 
 
 def build_apply_manifest_patch(deployment: str, image: str) -> JsonObject:

@@ -173,6 +173,9 @@ def test_target_agent_builds_apply_manifest_patch() -> None:
     patch = agent_module.build_apply_manifest_patch("checkout-api", "img:new")
 
     assert agent_module.deployment_name_from_resource("deployment/checkout-api") == "checkout-api"
+    assert agent_module.deployment_name_from_resource("deployments/checkout-api") == "checkout-api"
+    assert agent_module.deployment_name_from_resource("checkout-api") == "checkout-api"
+    assert agent_module.deployment_name_from_resource("pod/checkout-api-7d9f8c9b7c-abcde") == ""
     assert patch["spec"]["template"]["spec"]["containers"] == [
         {"name": "checkout-api", "image": "img:new"}
     ]

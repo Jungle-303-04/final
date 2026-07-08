@@ -321,7 +321,7 @@ function useWorkflowApproval() {
   const queryClient = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: ({ approvalId, action }: { approvalId: string; action: 'grant' | 'reject' }) => post(`/approvals/${approvalId}/${action}`),
+    mutationFn: ({ approvalId, action }: { approvalId: string; action: 'grant' | 'reject' }) => post(`/approvals/${approvalId}/${action}`, {}),
     onSuccess: (_data, variables) => {
       toast.push({
         tone: variables.action === 'grant' ? 'success' : 'warning',

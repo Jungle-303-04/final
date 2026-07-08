@@ -49,7 +49,7 @@ status: synced
 | route | 이벤트 | 라우팅 키 | 비고 |
 |---|---|---|---|
 | `auto` | `CommandRequestedBody` | `command.requested` | 카탈로그 매핑 실패 시 대신 `rca.action_required`(reason=`"자동 실행 대상 command action으로 변환할 수 없습니다.: {action_type}"`) |
-| `draft_pr` | `SafePrRequestedBody(title=f"{selected.title}: {resource_name}", body=요약/조치/대상/위험도/검증/롤백 텍스트, provider="github", patches)` | `safe_pr.requested` | `draft.params["patches"]` 가 비면 대신 `rca.action_required`(reason_code=`"safe_pr_patch_missing"`, `missing_evidence=["manifest_patch"]`, next_actions=`collect_manifest_context`) |
+| `draft_pr` | `SafePrRequestedBody(title=f"{selected.title}: {resource_name}", body=요약/조치/대상/위험도/검증/롤백 텍스트, provider="github", patches)` | `safe_pr.requested` | `draft.params["patches"]` 가 없거나 비어 있으면 `.gitops/recovery/{hash}-{action}.md` 검토 패치를 자동 생성한다. |
 | `approval_required` | `RcaActionRequiredBody(reason=f"승인 필요: {title}")` | `rca.action_required` | |
 | `forbidden` | `RcaActionRequiredBody(reason=f"자동 조치 차단: {title}")` | `rca.action_required` | |
 | 미지 route | `RcaActionRequiredBody(reason=f"선택된 복구 후보의 route를 처리할 수 없습니다.: {route}")` | `rca.action_required` | |
@@ -62,6 +62,9 @@ status: synced
    `namespace = draft.namespace or "sandbox"`, `diff.status="recovery_action"`,
    `diff.risk=RiskLevel.SANDBOX_ONLY`, `diff.basis={"source": "rca_recovery", plan_id, action_id, root_cause}`,
    `actor={"plan_id", "action_id", "auto_selected"}`, `environment` 기본 `"sandbox"`.
+   `rollout_restart` 와 `deployment_scale` 은 조치 대상이 Pod/ReplicaSet이면 이름 패턴에서 소유 Deployment를 추정해
+   `diff.resource="deployment/{deployment}"` 와 payload `name` 에 사용한다. `draft.params` 의
+   `deployment`/`deployment_name`/`workload_name`/`target_deployment` 값이 있으면 이를 우선한다.
 
 ## 불변식·오류 (Invariants & Errors)
 

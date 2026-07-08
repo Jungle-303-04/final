@@ -197,7 +197,7 @@ export function useApproval() {
   const qc = useQueryClient();
   const { push } = useToast();
   return useMutation({
-    mutationFn: ({ approvalId, action }: { approvalId: string; action: 'grant' | 'reject' }) => post(`/approvals/${approvalId}/${action}`),
+    mutationFn: ({ approvalId, action }: { approvalId: string; action: 'grant' | 'reject' }) => post(`/approvals/${approvalId}/${action}`, {}),
     onSuccess: (_d, v) => {
       push({
         tone: v.action === 'grant' ? 'success' : 'warning',
