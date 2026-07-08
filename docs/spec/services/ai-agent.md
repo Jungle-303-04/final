@@ -438,15 +438,15 @@ rules:
 - `gitops_controller_sync_failed`: symptoms `GitOps Sync Failed`, `Sync Failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `gitops_sync_failed`, `manifest_validation_failed`
 
 **image_pull.yaml** — `src/services/ai/agent/causes/catalog/image_pull.yaml`
-- `image_pull_backoff`: symptoms `ImagePullBackOff`, `ErrImagePull`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `wrong_image_tag`, `missing_image_pull_secret`, `registry_unavailable`
+- `image_pull_backoff`: symptoms `ImagePullBackOff`, `ErrImagePull`; required `kubernetes`; 후보 `wrong_image_tag`, `missing_image_pull_secret`, `registry_unavailable` 모두 expected evidence `kubernetes`와 이벤트 기반 `signals`로 판별한다.
 
 **network.yaml** — `src/services/ai/agent/causes/catalog/network.yaml`
 - `dns_lookup_failed`: symptoms `DNS lookup failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `service_dns_resolution_failure`
 - `connection_timeout`: symptoms `Connection timeout`; required `kubernetes`, `metrics`, `logs`, `traces`, `metadata`; 후보 `network_path_timeout`
-- `ingress_5xx`: symptoms `Ingress 502/503`, `Ingress 502`, `Ingress 503`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `upstream_unavailable`, `backend_readiness_failure`
+- `ingress_5xx`: symptoms `Ingress 502/503`, `Ingress 502`, `Ingress 503`; required `kubernetes`, `metrics`, `logs`; 후보 `upstream_unavailable`, `backend_readiness_failure`, `application_5xx_spike`
 
 **scheduling.yaml** — `src/services/ai/agent/causes/catalog/scheduling.yaml`
-- `failed_scheduling`: symptoms `FailedScheduling`, `Pending`; required `kubernetes`, `metrics`, `metadata`; 후보 `insufficient_cpu`, `insufficient_memory`, `node_affinity_or_taint_mismatch`, `pvc_pending`
+- `failed_scheduling`: symptoms `FailedScheduling`, `Pending`; required `kubernetes`; 후보 `insufficient_cpu`, `insufficient_memory`, `node_affinity_or_taint_mismatch`, `pvc_pending`
 
 **security_policy.yaml** — `src/services/ai/agent/causes/catalog/security_policy.yaml`
 - `secret_not_found`: symptoms `Secret not found`; required `kubernetes`, `logs`, `metadata`; 후보 `missing_secret_reference`, `secret_key_missing`

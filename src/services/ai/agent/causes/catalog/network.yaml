@@ -68,7 +68,7 @@ rules:
           - "kube_endpoint_address_available 또는 ready endpoint 수 감소 확인"
           - "readiness probe 실패 이벤트와 app log 확인"
         signals:
-          # upstream_unavailable(metadata 기대)과 달리 소스만으로 완결 가능하던 후보 —
+          # 소스만으로 완결 가능하던 후보 —
           # probe 실패 정황의 관측을 완결 조건으로 요구한다.
           - id: "probe_failure_signal"
             any_of:
