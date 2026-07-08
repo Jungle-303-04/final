@@ -66,12 +66,7 @@ function connect(workspaceId: string, attempt = 0, seq: number) {
   ws.onmessage = (e) => {
     if (seq !== connectionSeq) return;
     try {
-      const message = JSON.parse(e.data);
-      if (message?.type === 'live.summary') {
-        liveStore.getState().applyCounts(String(message.cluster_id ?? message.summary?.cluster_id ?? '') || null, Number(message.summary?.restart_delta ?? 0), Number(message.summary?.pods_ready ?? 0));
-        return;
-      }
-      if (message?.namespaces) liveStore.getState().apply(message);
+      applyRealtimeMessage(JSON.parse(e.data));
     } catch { /* 스키마 미스매치 무시 */ }
   };
   ws.onclose = () => {
@@ -79,4 +74,51 @@ function connect(workspaceId: string, attempt = 0, seq: number) {
     liveStore.getState().setStatus('closed');
     reconnectTimer = window.setTimeout(() => { connect(workspaceId, attempt + 1, seq); }, Math.min(15000, 1000 * 2 ** attempt) * (0.7 + Math.random() * 0.6));
   };
+}
+
+export function applyRealtimeMessage(rawMessage: unknown) {
+  const message = asRecord(rawMessage);
+  if (!message) return;
+  if (message.type === 'snapshot') {
+    applyRealtimeSnapshot(message);
+    return;
+  }
+  if (message.type === 'live.summary') {
+    const summary = asRecord(message.summary) ?? message;
+    applyLiveSummary(summary, stringOrNull(message.cluster_id));
+    return;
+  }
+  if (Array.isArray(message.namespaces)) liveStore.getState().apply(message as unknown as LiveSnapshot);
+}
+
+function applyRealtimeSnapshot(message: Record<string, unknown>) {
+  const state = asRecord(message.state);
+  const clusters = asRecord(state?.clusters);
+  if (!clusters) return;
+  for (const [clusterId, summary] of Object.entries(clusters)) {
+    const summaryRecord = asRecord(summary);
+    if (summaryRecord) applyLiveSummary(summaryRecord, clusterId);
+  }
+}
+
+function applyLiveSummary(summary: Record<string, unknown>, fallbackClusterId: string | null) {
+  const clusterId = stringOrNull(summary.cluster_id) ?? fallbackClusterId;
+  liveStore.getState().applyCounts(
+    clusterId,
+    numberOrZero(summary.restart_delta),
+    numberOrZero(summary.pods_ready ?? summary.pod_running ?? summary.pods_running),
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberOrZero(value: unknown): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
 }

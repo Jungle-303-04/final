@@ -2,7 +2,7 @@
 import { useMemo, useState, type ComponentProps, type SVGProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, Skeleton, StatCard, Table, Tabs, type TableColumn } from '@/ui';
-import { Sparkline } from '@/ui/charts';
+import { hasSparklinePoints, Sparkline } from '@/ui/charts';
 import { useClusters } from '@/features/cluster/api';
 import { healthLabel, useFleetSummary, type FleetClusterSummary, type FleetHealth } from '@/features/fleet/api';
 import { DrilldownHeatmap } from '@/features/fleet/DrilldownHeatmap';
@@ -182,14 +182,18 @@ function FleetStatCards({ totals, clusters }: { totals: FleetStatTotals; cluster
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} spark={<Sparkline points={healthDistribution} tone={clusterChip.severity as StatTone} ariaLabel="클러스터 상태 분포" />} />
       <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} spark={<Sparkline points={podDistribution} tone="info" ariaLabel="클러스터별 팟 분포" />} />
-      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} spark={<Sparkline points={cpuDistribution} tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} ariaLabel="클러스터별 CPU 분포" />} />
+      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} spark={sparkFor(cpuDistribution, avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral', '클러스터별 CPU 분포')} />
       <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} spark={<Sparkline points={[totals.open_incidents, totals.dead_letters]} tone={activeAlerts > 0 ? 'danger' : 'success'} ariaLabel="인시던트와 DLQ 분포" />} />
-      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} spark={<Sparkline points={memDistribution} tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} ariaLabel="클러스터별 메모리 분포" />} />
+      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} spark={sparkFor(memDistribution, avgMem != null && avgMem >= 80 ? 'warning' : 'neutral', '클러스터별 메모리 분포')} />
       <StatCard label="인시던트" value={totals.open_incidents.toLocaleString()} delta="열린 항목" tone={totals.open_incidents > 0 ? 'danger' : 'success'} spark={<Sparkline points={incidentDistribution} tone={totals.open_incidents > 0 ? 'danger' : 'success'} ariaLabel="클러스터별 열린 인시던트 분포" />} />
       <StatCard label="승인 대기" value={totals.pending_approvals.toLocaleString()} delta="배포 승인" tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} />
       <StatCard label="워크플로우" value={totals.running_workflows.toLocaleString()} delta="실행 중" tone={totals.running_workflows > 0 ? 'info' : 'neutral'} />
     </div>
   );
+}
+
+function sparkFor(points: Array<number | null | undefined>, tone: StatTone, ariaLabel: string) {
+  return hasSparklinePoints(points) ? <Sparkline points={points} tone={tone} ariaLabel={ariaLabel} /> : undefined;
 }
 
 function FleetHeatmap({
