@@ -26,6 +26,10 @@ from providers.base import ConfigReader
     query_type=KubernetesSnapshotQuery,
 )
 class KubernetesSnapshotProvider:
+    """Collect Kubernetes state for one target cluster.
+    It builds the kubernetes evidence bucket.
+    """
+
     span_name = "kubernetes.collect"
     query_count_attribute = "kubernetes.query_count"
     result_count_attribute = "kubernetes.result_count"
@@ -39,11 +43,13 @@ class KubernetesSnapshotProvider:
         cluster_id: str,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        """Store the cluster id and an optional HTTP transport for tests."""
         self.cluster_id = cluster_id
         self.transport = transport
 
     @classmethod
     def from_config(cls, read_config: ConfigReader) -> KubernetesSnapshotProvider:
+        """Create the provider from agent config values."""
         return cls(cluster_id=read_config(TARGET_CLUSTER_ID_ENV, Target.DEFAULT_CLUSTER_ID))
 
     async def query(
@@ -51,6 +57,9 @@ class KubernetesSnapshotProvider:
         _client: httpx.AsyncClient,
         telemetry_query: KubernetesSnapshotQuery,
     ) -> JsonObject:
+        """Read Kubernetes objects from the target namespace.
+        Return the raw API results in one payload.
+        """
         base_url = kubernetes_api_base_url()
         token = service_account_token()
         namespace = telemetry_query.namespace or TARGET_NAMESPACE
@@ -144,6 +153,7 @@ class KubernetesSnapshotProvider:
         *,
         allow_not_found: bool = False,
     ) -> JsonObject:
+        """Call one Kubernetes API path and return a JSON object."""
         response = await client.get(f"{base_url}{path}", headers=headers)
         if allow_not_found and response.status_code in {403, 404}:
             return {"items": []}
@@ -152,6 +162,7 @@ class KubernetesSnapshotProvider:
         return payload if isinstance(payload, dict) else {"items": []}
 
     def empty_results(self) -> JsonObject:
+        """Create an empty Kubernetes evidence bucket for this cluster."""
         return empty_snapshot(self.cluster_id)
 
     def append_result(
@@ -160,10 +171,12 @@ class KubernetesSnapshotProvider:
         telemetry_query: KubernetesSnapshotQuery,
         payload: JsonObject,
     ) -> None:
+        """Normalize one query payload and merge it into the bucket."""
         normalized = self.normalize_payload(payload, telemetry_query)
         merge_snapshot(results, normalized)
 
     def build_response(self, results: JsonObject) -> JsonObject:
+        """Return the finished Kubernetes evidence bucket."""
         return results
 
     def normalize_payload(
@@ -171,6 +184,7 @@ class KubernetesSnapshotProvider:
         payload: JsonObject,
         telemetry_query: KubernetesSnapshotQuery,
     ) -> JsonObject:
+        """Turn raw Kubernetes API lists into small evidence summaries."""
         snapshot = empty_snapshot(self.cluster_id)
         status = str(payload.get("status") or "success")
         namespace = str(payload.get("namespace") or telemetry_query.namespace or TARGET_NAMESPACE)
@@ -229,6 +243,7 @@ class KubernetesSnapshotProvider:
 
 
 def empty_snapshot(cluster_id: str) -> JsonObject:
+    """Build the empty shape used by Kubernetes evidence."""
     return {
         "cluster": {"cluster_id": cluster_id},
         "workloads": [],
@@ -242,6 +257,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 
 
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
+    """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
     for key in ("workloads", "pods", "events", "services", "endpoints"):
         target.setdefault(key, [])
@@ -265,6 +281,7 @@ def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
 
 
 def items(payload: Any) -> list[JsonObject]:
+    """Return list items from a Kubernetes list response."""
     if not isinstance(payload, dict):
         return []
     raw_items = payload.get("items", [])
@@ -274,21 +291,25 @@ def items(payload: Any) -> list[JsonObject]:
 
 
 def metadata(item: JsonObject) -> JsonObject:
+    """Return object metadata, or an empty dict when it is missing."""
     value = item.get("metadata", {})
     return value if isinstance(value, dict) else {}
 
 
 def status(item: JsonObject) -> JsonObject:
+    """Return object status, or an empty dict when it is missing."""
     value = item.get("status", {})
     return value if isinstance(value, dict) else {}
 
 
 def spec(item: JsonObject) -> JsonObject:
+    """Return object spec, or an empty dict when it is missing."""
     value = item.get("spec", {})
     return value if isinstance(value, dict) else {}
 
 
 def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
+    """Copy a small set of labels so the evidence stays small."""
     labels = metadata(item).get("labels", {})
     if not isinstance(labels, dict):
         return {}
@@ -296,6 +317,7 @@ def safe_labels(item: JsonObject, limit: int = 12) -> JsonObject:
 
 
 def owner_ref(item: JsonObject) -> tuple[str | None, str | None]:
+    """Return the first owner kind and name for a Kubernetes object."""
     refs = metadata(item).get("ownerReferences", [])
     if not isinstance(refs, list) or not refs:
         return None, None
@@ -304,10 +326,12 @@ def owner_ref(item: JsonObject) -> tuple[str | None, str | None]:
 
 
 def as_text(value: Any) -> str | None:
+    """Turn a value into text while keeping None as None."""
     return str(value) if value is not None else None
 
 
 def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:
+    """Build a small pod summary for evidence consumers."""
     meta = metadata(item)
     pod_status = status(item)
     pod_spec = spec(item)
@@ -362,6 +386,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
 
 
 def container_summary(item: JsonObject) -> JsonObject:
+    """Build a small container status summary from Kubernetes status data."""
     state_name, state_payload = container_state(item, "state")
     # crashloop 파드는 현재 state 가 waiting(CrashLoopBackOff)이고 직전 크래시의
     # 종료 사유/exit code 는 lastState.terminated 에 있다 — RCA 원인 판별
@@ -394,6 +419,7 @@ def container_state(item: JsonObject, key: str) -> tuple[str | None, JsonObject]
 
 
 def event_summary(item: JsonObject) -> JsonObject:
+    """Build a small event summary with reason, message, and target object."""
     meta = metadata(item)
     involved = item.get("involvedObject", {})
     if not isinstance(involved, dict):
@@ -418,6 +444,7 @@ def event_summary(item: JsonObject) -> JsonObject:
 
 
 def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:
+    """Build a node summary with readiness, taints, and capacity data."""
     node_status = status(item)
     allocatable = node_status.get("allocatable", {}) if isinstance(node_status, dict) else {}
     measured = dict(metrics or {})
@@ -558,10 +585,12 @@ def as_float(value: Any) -> float | None:
 
 
 def workload_summaries(kind: str, rows: list[JsonObject]) -> list[JsonObject]:
+    """Build workload summaries for all objects of one workload kind."""
     return [workload_summary(kind, item) for item in rows]
 
 
 def workload_summary(kind: str, item: JsonObject) -> JsonObject:
+    """Build a small workload summary for deployments and similar objects."""
     meta = metadata(item)
     workload_status = status(item)
     return {
@@ -581,6 +610,7 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
 
 
 def service_summary(item: JsonObject) -> JsonObject:
+    """Build a small service summary with ports and selector data."""
     service_spec = spec(item)
     service_status = status(item)
     load_balancer = service_status.get("loadBalancer", {})
@@ -604,6 +634,7 @@ def service_summary(item: JsonObject) -> JsonObject:
 
 
 def endpoint_slice_summary(item: JsonObject) -> JsonObject:
+    """Build a small endpoint slice summary with endpoint and port counts."""
     endpoint_spec = item
     return {
         "namespace": metadata(item).get("namespace"),
@@ -615,6 +646,7 @@ def endpoint_slice_summary(item: JsonObject) -> JsonObject:
 
 
 def workload_key(namespace: Any, kind: str | None, name: str | None) -> str | None:
+    """Build a stable workload key when namespace, kind, and name exist."""
     if not namespace or not kind or not name:
         return None
     return f"{namespace}/{kind}/{name}"
