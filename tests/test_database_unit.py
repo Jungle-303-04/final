@@ -20,6 +20,7 @@ from domains.audit.repository import AuditLogRepository
 from domains.dashboard.repository import DashboardRepository
 from domains.gitops.repository import (
     RepoChangeRepository,
+    current_workflow_approval,
     derive_application_id,
     derive_deployment_binding_id,
     derive_repository_id,
@@ -702,6 +703,18 @@ def test_request_workflow_approval_upsert_only_refreshes_open_rows() -> None:
     # 재전달된 정책 판정이 이미 granted/rejected 된 승인을 requested 로 되돌리지 않음
     assert "ON CONFLICT (approval_id) DO UPDATE" in sql
     assert "WHERE approvals.status IN" in sql
+
+
+def test_current_workflow_approval_prefers_open_then_latest() -> None:
+    approvals = [
+        {"approval_id": "approval-granted", "status": "granted"},
+        {"approval_id": "approval-requested", "status": "requested"},
+        {"approval_id": "approval-not-required", "status": "not_required"},
+    ]
+
+    assert current_workflow_approval(approvals)["approval_id"] == "approval-requested"
+    assert current_workflow_approval(approvals[:1])["approval_id"] == "approval-granted"
+    assert current_workflow_approval([]) is None
 
 
 def test_update_workflow_run_guards_only_when_status_changes() -> None:
