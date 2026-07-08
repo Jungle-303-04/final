@@ -16,6 +16,12 @@
   - 클러스터 목록 초기화 라벨을 `필터 초기화`로 통일했다.
 - 검증:
   - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
+- 배포 확인:
+  - 커밋/푸시: `c7cda4f9 feat: 목록 필터 초기화 CTA 보강`.
+  - GitHub Actions는 코드 실행 전 실패: CI `28908671536`, AWS CD `28908671507`, Promote `28908671501` 모두 실패 job의 `steps: []` 확인.
+  - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:c7cda4f9-filter-empty-cta-20260708093449`, rollout `1/1 ready`.
+  - live `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-Bv-9tLfC.js`, `ClusterDetailView-CXr8xJRH.js`, `NotificationsView-Cxy-T93Z.js`, `IncidentDetailView-D3TNiu6s.js`, `ClusterListView--64r7jUb.js`에서 `필터 초기화` 문구 서빙 확인.
 
 ## 체크포인트 — 인시던트 evidence 상태 구분
 
