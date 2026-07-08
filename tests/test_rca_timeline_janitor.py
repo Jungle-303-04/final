@@ -28,3 +28,20 @@ def test_rca_timeline_janitor_expires_stale_open_incidents(monkeypatch) -> None:
 
     assert count == 2
     assert db.calls == [{"max_age_days": 5, "limit": 50}]
+
+
+def test_rca_timeline_janitor_refreshes_heartbeat_during_long_wait() -> None:
+    janitor = load_service("projection/rca-timeline-janitor")
+    touches: list[object] = []
+
+    async def scenario() -> None:
+        await janitor.wait_for_next_sweep(
+            asyncio.Event(),
+            0.035,
+            heartbeat_interval=0.01,
+            touch=lambda: touches.append(object()),
+        )
+
+    asyncio.run(scenario())
+
+    assert len(touches) >= 3
