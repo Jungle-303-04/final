@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:01 KST (히트맵 드릴다운 Motion 보강 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:04 KST (히트맵 드릴다운 Motion 보강 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -22,8 +22,13 @@
   - grep: 히트맵/클러스터 상세 변경 범위의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css` 0건. Tailwind arbitrary scan은 `removeCommand`/`namespaceHash` 문자열의 `rem` 때문에 기존 오탐 2건만 확인됐다.
   - Playwright mock: `/clusters/cluster-1`에서 노드 타일 클릭 → 팟 타일 클릭 → Drawer/인시던트 CTA/pulse border 확인 → 브라우저 뒤로가기 2회로 `?node`/base 복귀 확인. reduced-motion 환경, overflow 0, console error 0.
   - Playwright mock: `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 직접 진입을 1440/1024/390 폭에서 확인. Drawer/CTA/breadcrumb 복원, overflow 0, console error 0.
-- 남은 확인:
-  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
+- CI/CD:
+  - `62a28572` push 후 GitHub Actions `28907329141`(CI), `28907329124`(AWS CD), `28907329140`(Promote Dev To Main)는 모두 failure. 각 failed job의 `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 판단한다.
+  - 자동 CD가 막혀 수동 console image 롤아웃을 수행했다.
+  - image: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:62a28572-heatmap-motion-20260708090258`.
+  - `kubectl --context mgmt -n management set image deploy/console console=<image>` 후 rollout 완료, Ready `1/1`.
+  - live smoke: `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-C3Nbo9kQ.js`에서 `ClusterDetailView-BMnacLsD.js` 참조 확인. lazy chunk 본문에서 `zoomContext`, `heatmap-`, `인시던트 보기`, `팟 상세 없음`, `이 노드에 팟 없음`, `ring-danger` 문구 확인.
 
 ## 체크포인트 — 카탈로그 디자인 시스템 이관
 
