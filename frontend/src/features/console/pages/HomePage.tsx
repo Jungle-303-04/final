@@ -124,7 +124,6 @@ export function HomePage() {
         <EmptyState
           icon={<GlobeIcon />}
           title="클러스터 없음"
-          description="등록된 클러스터가 아직 없습니다"
           action={admin ? <Button variant="primary" onClick={() => navigate(pathFor('/clusters'))}>클러스터 등록</Button> : undefined}
         />
       </Card>
@@ -136,7 +135,6 @@ export function HomePage() {
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <h1 className="text-page font-semibold text-primary">홈</h1>
-          <p className="mt-1 text-body text-secondary">플릿 상태, 인시던트, 승인 대기 흐름</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" leadingIcon={<PlusIcon />} onClick={() => navigate(pathFor('/repos'))}>레포 연결</Button>
@@ -157,7 +155,7 @@ export function HomePage() {
         <ApprovalCard approvals={approvals} pathFor={pathFor} />
       </div>
 
-      <Card title="클러스터" description="클릭하면 상세 화면으로 이동합니다">
+      <Card title="클러스터">
         <Table
           columns={clusterColumns}
           rows={fleet.clusters}
@@ -181,7 +179,7 @@ function FleetStatCards({ totals, clusters }: { totals: FleetStatTotals; cluster
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} />
-      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} />
+      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown} 미확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} />
       <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} />
       <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} />
       <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} />
@@ -219,7 +217,7 @@ function FleetTrendCharts({ clusters }: { clusters: FleetClusterSummary[] }) {
   if (trackedClusters.length === 0) {
     return (
       <Card>
-        <EmptyState title="시계열 없음" description="수집된 클러스터 usage가 아직 없습니다" icon={<ChartIcon />} />
+        <EmptyState title="시계열 없음" icon={<ChartIcon />} />
       </Card>
     );
   }
@@ -231,7 +229,7 @@ function FleetTrendCharts({ clusters }: { clusters: FleetClusterSummary[] }) {
         loading={loading}
         error={error}
         onRetry={refetch}
-        empty={podSeries.length === 0 ? <EmptyState title="팟 시계열 없음" description="실행 팟 샘플이 아직 없습니다" icon={<ChartIcon />} /> : undefined}
+        empty={podSeries.length === 0 ? <EmptyState title="팟 시계열 없음" icon={<ChartIcon />} /> : undefined}
       >
         <TimeSeriesChart series={podSeries} />
       </Card>
@@ -240,7 +238,7 @@ function FleetTrendCharts({ clusters }: { clusters: FleetClusterSummary[] }) {
         loading={loading}
         error={error}
         onRetry={refetch}
-        empty={restartSeries.length === 0 ? <EmptyState title="재시작 시계열 없음" description="재시작 샘플이 아직 없습니다" icon={<ChartIcon />} /> : undefined}
+        empty={restartSeries.length === 0 ? <EmptyState title="재시작 시계열 없음" icon={<ChartIcon />} /> : undefined}
       >
         <TimeSeriesChart series={restartSeries} />
       </Card>
@@ -277,7 +275,6 @@ function FleetHeatmap({
   return (
     <Card
       title="플릿 맵"
-      description="렌즈를 전환해 클러스터 위험 신호를 확인합니다"
       actions={<Tabs items={FLEET_LENSES.map(item => ({ value: item.key, label: item.label }))} value={lens} onValueChange={value => onLensChange(value as FleetLens)} />}
     >
       <DrilldownHeatmap
@@ -298,7 +295,7 @@ function RecentIncidentCard({ query, pathFor }: { query: ReturnType<typeof useTi
       loading={query.isPending}
       error={query.isError ? query.error as Error : null}
       onRetry={() => void query.refetch()}
-      empty={items.length === 0 ? <EmptyState title="열린 인시던트 없음" description="최근 타임라인에 열린 인시던트가 없습니다" icon={<ShieldIcon />} /> : undefined}
+      empty={items.length === 0 ? <EmptyState title="열린 인시던트 없음" icon={<ShieldIcon />} /> : undefined}
     >
       <div className="grid gap-2">
         {items.slice(0, 5).map(item => (
@@ -320,7 +317,7 @@ function ApprovalCard({ approvals, pathFor }: { approvals: ReturnType<typeof use
     <Card
       title="승인 대기 배포"
       actions={<Link to={pathFor('/workflows')}><Button size="sm">워크플로우</Button></Link>}
-      empty={approvals.length === 0 ? <EmptyState title="승인 대기 없음" description="대기 중인 배포 승인이 없습니다" icon={<SendIcon />} /> : undefined}
+      empty={approvals.length === 0 ? <EmptyState title="승인 대기 없음" icon={<SendIcon />} /> : undefined}
     >
       <div className="grid gap-2">
         {approvals.map(approval => (
@@ -346,7 +343,7 @@ function RecentConversationCard({ query, pathFor }: { query: ReturnType<typeof u
       loading={query.isPending}
       error={query.isError ? query.error as Error : null}
       onRetry={() => void query.refetch()}
-      empty={conversations.length === 0 ? <EmptyState title="대화 없음" description="최근 AI 대화가 없습니다" icon={<TerminalIcon />} /> : undefined}
+      empty={conversations.length === 0 ? <EmptyState title="대화 없음" icon={<TerminalIcon />} /> : undefined}
     >
       <div className="grid gap-2">
         {conversations.slice(0, 3).map(conversation => (

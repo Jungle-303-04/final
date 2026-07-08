@@ -371,6 +371,12 @@
 - 홈 상단 StatCard의 장식성 스파크라인 제거. 홈의 차트는 연결된 클러스터의
   `GET /clusters/{id}/usage?limit=120` 샘플을 30초 간격으로 조회해 `TimeSeriesChart` 두 장
   (실행 팟 추이, 재시작 증가)으로 표시한다. `restart_total`은 누적 카운터라 샘플 간 증가분으로 변환한다.
+- 2026-07-08 라이브 확인: 기본 워크스페이스의 `cluster-1`은 `pending_install`, `node_count=0`,
+  `pod_count=0`, `/nodes/summary=[]`, pod inventory `0`으로 응답한다. 상세 화면은 이 상태를
+  빈 리소스가 아니라 `Agent 미연결`/`설치 대기`로 표기한다.
+- 클러스터 상세/목록/Home 핵심 운영 화면의 설명성 문구와 StatCard 미니 스파크라인을 제거했다.
+  노드/팟 드릴다운은 `/nodes/summary` 또는 `/nodes/{node}/pods/summary`가 빈 배열을 반환해도
+  inventory summary/resources fallback으로 한 번 더 복구한다.
 
 ## G. MISSING-BACKEND
 

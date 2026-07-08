@@ -51,6 +51,7 @@ export const useFleetSummary = () =>
     queryFn: () => get<FleetSummary>('/fleet/summary', { timeoutMs: FLEET_QUERY_TIMEOUT_MS }),
     refetchInterval: 30_000,
     retry: false,
+    select: adaptFleetSummary,
   });
 
 export interface ClusterAggWorkload {
@@ -93,3 +94,23 @@ export const HEALTH_SCORE: Record<FleetHealth, number> = { healthy: 0.92, warnin
 export const HEALTH_LABEL: Record<FleetHealth, string> = { healthy: '정상', warning: '주의', critical: '위험', stale: '스테일', unknown: '미확인' };
 export const healthScore = (h: FleetHealth | string): number => HEALTH_SCORE[h as FleetHealth] ?? 0.5;
 export const healthLabel = (h: FleetHealth | string): string => HEALTH_LABEL[h as FleetHealth] ?? String(h);
+
+function adaptFleetSummary(raw: FleetSummary): FleetSummary {
+  return {
+    totals: raw.totals,
+    clusters: raw.clusters.map((cluster) => {
+      const loose = cluster as FleetClusterSummary & { last_seen_at?: string | null };
+      return {
+        ...cluster,
+        last_seen: cluster.last_seen ?? loose.last_seen_at ?? null,
+        cpu_pct: normalizePct(cluster.cpu_pct),
+        mem_pct: normalizePct(cluster.mem_pct),
+      };
+    }),
+  };
+}
+
+function normalizePct(value: number | null): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value <= 1 ? value * 100 : value;
+}
