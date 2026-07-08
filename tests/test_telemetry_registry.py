@@ -1,6 +1,6 @@
 """텔레메트리 소스 레지스트리(@telemetry.source) 검증.
 
-소스 계약(prometheus/loki/tempo)이 provider 데코레이터 선언에서 자동 등록되고,
+소스 계약(kubernetes/loki/metadata/prometheus/tempo)이 provider 데코레이터 선언에서 자동 등록되고,
 queries/collector/agent 가 registry 기반으로 레지스트리를 읽는지 확인.
 """
 
@@ -31,11 +31,18 @@ def telemetry_module():
 def test_builtin_sources_registered_by_decorator(telemetry_module) -> None:
     telemetry = telemetry_module.telemetry
 
-    assert telemetry.source_names() == ("kubernetes", "loki", "prometheus", "tempo")
+    assert telemetry.source_names() == (
+        "kubernetes",
+        "loki",
+        "metadata",
+        "prometheus",
+        "tempo",
+    )
     assert telemetry.evidence_keys() == {
         "kubernetes": "kubernetes",
-        "prometheus": "metrics",
         "loki": "logs",
+        "metadata": "metadata",
+        "prometheus": "metrics",
         "tempo": "traces",
     }
 
@@ -58,7 +65,10 @@ def test_reverse_lookup_by_provider_key(telemetry_module) -> None:
 
 
 def test_unknown_source_fails_with_supported_list(telemetry_module) -> None:
-    with pytest.raises(ValueError, match="supported: kubernetes, loki, prometheus, tempo"):
+    with pytest.raises(
+        ValueError,
+        match="supported: kubernetes, loki, metadata, prometheus, tempo",
+    ):
         telemetry_module.telemetry.spec("elasticsearch")
 
 
