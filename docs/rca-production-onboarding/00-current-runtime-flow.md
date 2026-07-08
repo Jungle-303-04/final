@@ -67,6 +67,7 @@ Management plane
 | `metrics` | `PrometheusMetricsProvider` | `prometheus` | `PrometheusInstantQuery`, `PrometheusRangeQuery` | `metrics` |
 | `logs` | `LokiLogsProvider` | `loki` | `LokiLogQuery` | `logs` |
 | `traces` | `TempoTracesProvider` | `tempo` | `OpenTelemetrySpanQuery` | `traces` |
+| `metadata` | `MetadataProvider` | `metadata` | `MetadataSnapshotQuery` | `metadata` |
 
 왜 provider별 job으로 나누는가:
 
