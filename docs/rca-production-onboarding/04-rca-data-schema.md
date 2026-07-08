@@ -121,6 +121,7 @@ consumer:
 | `LokiLogQuery` | `loki` | `LokiLogsProvider` | 오류 로그 snippet을 가져온다. |
 | `OpenTelemetrySpanQuery` | `tempo` | `TempoTracesProvider` | trace/span 기반 병목을 본다. |
 | `KubernetesSnapshotQuery` | `kubernetes` | `KubernetesSnapshotProvider` | Kubernetes API snapshot을 가져온다. |
+| `MetadataSnapshotQuery` | `metadata` | `MetadataProvider` | 변경 맥락 metadata bucket을 만든다. |
 
 Prometheus range query는 현재 구현되어 있다.
 

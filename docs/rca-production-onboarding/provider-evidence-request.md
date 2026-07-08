@@ -176,7 +176,18 @@ policy상 traces query는 존재한다.
 
 ### 현재 있는 것
 
-일부 metadata는 Kubernetes object에서 얻을 수 있다.
+현재 target agent에는 `MetadataProvider`가 있고 `@telemetry.source(source="metadata", evidence_key="metadata", query_type=MetadataSnapshotQuery)`로 등록된다.
+기본 policy는 `metadata` provider에 `change_context` query를 넣는다.
+현재 provider가 최종 bucket에 남기는 필드는 아래 최소 구조다.
+
+- change_context.recent_changes
+- change_context.rollback_available
+- change_context.risk_level
+
+기본값은 각각 `[]`, `null`, `"unknown"`이다.
+
+Kubernetes object에서도 일부 metadata를 참고할 수 있지만, 이것은 `metadata` bucket이 아니라
+`kubernetes` bucket summary 안에 남는 값이다.
 
 - metadata.name
 - metadata.namespace
@@ -199,6 +210,7 @@ policy상 traces query는 존재한다.
 - actor/manager
 - rollback_available
 - risk_level
+- metadata bucket을 RCA evidence item으로 승격하는 단계
 
 주의:
 
@@ -208,4 +220,5 @@ policy상 traces query는 존재한다.
 ## 요약
 
 Kubernetes provider는 pods, events, workloads, services, endpointslices를 이미 수집한다.
+Metadata provider는 최소 `change_context` bucket을 만든다.
 다만 RCA가 세부 원인을 판단하려면 일부 데이터가 더 필요하다.
