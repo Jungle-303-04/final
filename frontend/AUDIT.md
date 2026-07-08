@@ -155,7 +155,7 @@
 | AI 채팅 | `GET /ai/conversations`, `GET /ai/conversations/:id`, create/send mutation 오류에서 LLM provider/API key/quota 계열 사유 감지; `conversation.status=failed`도 설정 안내 카드 선행; 정상일 때만 채팅 입력 표시 | 완료 |
 | 메트릭 PromQL | 입력 debounce -> `POST /metrics/validate`; valid일 때만 저장/실행 활성; 실행 클릭 시 동일 dry-run 재검증 -> `POST /agent/debug/query` 또는 `POST /clusters/{id}/metric-query-presets/{preset_id}/run`; 결과는 `GET /commands/{id}` 폴링; 0건 -> 시간범위 확장 CTA | 완료 |
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리. 비종결 인시던트가 evidence 단계이거나 `missing_evidence`가 남아 있고 저장 evidence가 0건이면 `증거 수집 중`, 종결/근거 없음이면 `증거 없음` | 완료 |
-| 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
+| 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA. 클러스터/멤버 목록, 알림 탭, 인시던트 evidence kind, 클러스터 상세 인벤토리 탭(워크로드/팟/노드/서비스/리소스/이벤트)에 `필터 초기화` 제공 | 완료 |
 
 인시던트 evidence 배포 확인(2026-07-08 09:30 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `fba2a457-incident-evidence-ux-20260708092931`, `IncidentDetailView-DKFsSrY7.js`에서 `증거 수집 중`/`증거 없음` 문구 서빙 확인.
 

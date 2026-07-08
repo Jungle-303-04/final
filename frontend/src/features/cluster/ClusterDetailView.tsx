@@ -145,6 +145,7 @@ export default function ClusterDetailView() {
     else next.delete('q');
     setSp(next);
   };
+  const resetInventoryFilter = () => showTab(tab);
   const openDetail = (subject: DetailSubject, name: string, ns?: string, kind?: string) => {
     const next = new URLSearchParams(sp);
     next.set('detail', subject);
@@ -262,6 +263,7 @@ export default function ClusterDetailView() {
             admin={admin}
             readOnly={Boolean(managementCluster)}
             filter={filter}
+            onResetFilter={resetInventoryFilter}
             onInspect={(row) => openDetail('workload', row.name, row.namespace, row.kind)}
             onDrillPods={(row) => showTab('pods', row.name)}
             onScale={(row) => {
@@ -283,6 +285,8 @@ export default function ClusterDetailView() {
             rows={podRows}
             selectedKeys={selectedServicePodKeys}
             clusterId={clusterId}
+            filter={filter}
+            onResetFilter={resetInventoryFilter}
             onOpen={(row) => nav(pathFor(`/clusters/${clusterId}/pods/${row.namespace}/${row.name}?tab=pods`))}
           />
         )}
@@ -292,12 +296,13 @@ export default function ClusterDetailView() {
             filter={filter}
             nodeNamespaces={nodeNamespaces}
             selectedNodeNames={selectedServiceNodeNames}
+            onResetFilter={resetInventoryFilter}
             onInspect={(node) => openDetail('node', node.name, undefined, 'Node')}
           />
         )}
-        {tab === 'services' && <ServicesTab clusterId={clusterId} filter={filter} onInspect={(row) => openDetail('service', row.name, row.namespace, 'Service')} />}
-        {tab === 'resources' && <ResourcesTab clusterId={clusterId} filter={filter} />}
-        {tab === 'events' && <EventsTab clusterId={clusterId} filter={filter} />}
+        {tab === 'services' && <ServicesTab clusterId={clusterId} filter={filter} onResetFilter={resetInventoryFilter} onInspect={(row) => openDetail('service', row.name, row.namespace, 'Service')} />}
+        {tab === 'resources' && <ResourcesTab clusterId={clusterId} filter={filter} onResetFilter={resetInventoryFilter} />}
+        {tab === 'events' && <EventsTab clusterId={clusterId} filter={filter} onResetFilter={resetInventoryFilter} />}
       </Card>
 
       <ResourceDetailDrawer
@@ -636,11 +641,12 @@ function ClusterUnregisterModal({
   );
 }
 
-function WorkloadsTab({ clusterId, admin, readOnly, filter, onInspect, onDrillPods, onScale, onRestart }: {
+function WorkloadsTab({ clusterId, admin, readOnly, filter, onResetFilter, onInspect, onDrillPods, onScale, onRestart }: {
   clusterId: string;
   admin: boolean;
   readOnly: boolean;
   filter: string;
+  onResetFilter: () => void;
   onInspect: (row: WorkloadResource) => void;
   onDrillPods: (row: WorkloadResource) => void;
   onScale: (row: WorkloadResource) => void;
@@ -678,18 +684,20 @@ function WorkloadsTab({ clusterId, admin, readOnly, filter, onInspect, onDrillPo
       rowKey={(row) => `${row.namespace}/${row.kind}/${row.name}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<EmptyState icon={<BoxIcon />} title="워크로드 없음" description="조건에 맞는 워크로드가 없습니다" />}
+      empty={<FilteredEmptyState icon={<BoxIcon />} title="워크로드 없음" description="표시할 워크로드가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
       onRowClick={onInspect}
     />
   );
 }
 
-function PodsTab({ query, rows, selectedKeys, clusterId, onOpen }: {
+function PodsTab({ query, rows, selectedKeys, clusterId, filter, onResetFilter, onOpen }: {
   query: ReturnType<typeof usePods>;
   rows: Workload[];
   selectedKeys: Set<string>;
   clusterId: string;
+  filter: string;
+  onResetFilter: () => void;
   onOpen: (row: Workload) => void;
 }) {
   const columns = useMemo<TableColumn<Workload>[]>(() => [
@@ -718,18 +726,19 @@ function PodsTab({ query, rows, selectedKeys, clusterId, onOpen }: {
       rowKey={(row) => `${clusterId}/${row.namespace}/${row.name}`}
       loading={query.isPending}
       error={query.isError ? query.error : null}
-      empty={<EmptyState icon={<BoxIcon />} title="팟 없음" description="조건에 맞는 팟이 없습니다" />}
+      empty={<FilteredEmptyState icon={<BoxIcon />} title="팟 없음" description="표시할 팟이 없습니다" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void query.refetch()}
       onRowClick={onOpen}
     />
   );
 }
 
-function NodesTab({ query, filter, nodeNamespaces, selectedNodeNames, onInspect }: {
+function NodesTab({ query, filter, nodeNamespaces, selectedNodeNames, onResetFilter, onInspect }: {
   query: ReturnType<typeof useClusterSummary>;
   filter: string;
   nodeNamespaces: Map<string, Set<string>>;
   selectedNodeNames: Set<string>;
+  onResetFilter: () => void;
   onInspect: (node: ClusterSummary['nodes'][number]) => void;
 }) {
   const rows = (query.data?.nodes ?? []).filter((node) => nodeMatches(node, filter, nodeNamespaces));
@@ -760,14 +769,14 @@ function NodesTab({ query, filter, nodeNamespaces, selectedNodeNames, onInspect 
       rowKey={(node) => node.name}
       loading={query.isPending}
       error={query.isError ? query.error : null}
-      empty={<EmptyState icon={<ServerIcon />} title="노드 없음" description="조건에 맞는 노드가 없습니다" />}
+      empty={<FilteredEmptyState icon={<ServerIcon />} title="노드 없음" description="표시할 노드가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void query.refetch()}
       onRowClick={onInspect}
     />
   );
 }
 
-function ServicesTab({ clusterId, filter, onInspect }: { clusterId: string; filter: string; onInspect: (service: ServiceInfo) => void }) {
+function ServicesTab({ clusterId, filter, onResetFilter, onInspect }: { clusterId: string; filter: string; onResetFilter: () => void; onInspect: (service: ServiceInfo) => void }) {
   const q = useServices(clusterId);
   const rows = (q.data ?? []).filter((row) => serviceMatches(row, filter));
   const columns = useMemo<TableColumn<ServiceInfo>[]>(() => [
@@ -785,14 +794,14 @@ function ServicesTab({ clusterId, filter, onInspect }: { clusterId: string; filt
       rowKey={(row) => `${row.namespace}/${row.name}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<EmptyState icon={<RouteIcon />} title="서비스 없음" description="조건에 맞는 서비스가 없습니다" />}
+      empty={<FilteredEmptyState icon={<RouteIcon />} title="서비스 없음" description="표시할 서비스가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
       onRowClick={onInspect}
     />
   );
 }
 
-function ResourcesTab({ clusterId, filter }: { clusterId: string; filter: string }) {
+function ResourcesTab({ clusterId, filter, onResetFilter }: { clusterId: string; filter: string; onResetFilter: () => void }) {
   const q = useResources(clusterId);
   const rows = (q.data ?? []).filter((row) => textMatches(filter, row.name, row.namespace, row.kind, row.status, row.health, ...Object.values(row.labels)));
   const columns = useMemo<TableColumn<InventoryResource>[]>(() => [
@@ -809,13 +818,13 @@ function ResourcesTab({ clusterId, filter }: { clusterId: string; filter: string
       rowKey={(row) => `${row.kind}/${row.namespace ?? 'cluster'}/${row.name}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<EmptyState icon={<BoxIcon />} title="리소스 없음" description="조건에 맞는 리소스가 없습니다" />}
+      empty={<FilteredEmptyState icon={<BoxIcon />} title="리소스 없음" description="표시할 리소스가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
     />
   );
 }
 
-function EventsTab({ clusterId, filter }: { clusterId: string; filter: string }) {
+function EventsTab({ clusterId, filter, onResetFilter }: { clusterId: string; filter: string; onResetFilter: () => void }) {
   const q = useClusterEvents(clusterId);
   const rows = (q.data ?? []).filter((row) => textMatches(filter, row.reason, row.target, row.message, row.type));
   const columns = useMemo<TableColumn<K8sEvent>[]>(() => [
@@ -832,8 +841,26 @@ function EventsTab({ clusterId, filter }: { clusterId: string; filter: string })
       rowKey={(row, index) => `${row.at}/${row.reason}/${index}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<EmptyState icon={<FileIcon />} title="이벤트 없음" description="조건에 맞는 이벤트가 없습니다" />}
+      empty={<FilteredEmptyState icon={<FileIcon />} title="이벤트 없음" description="표시할 이벤트가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
+    />
+  );
+}
+
+function FilteredEmptyState({ icon, title, description, filter, onResetFilter }: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  filter: string;
+  onResetFilter: () => void;
+}) {
+  const hasFilter = Boolean(filter.trim());
+  return (
+    <EmptyState
+      icon={icon}
+      title={title}
+      description={hasFilter ? `현재 필터 '${filter.trim()}'와 일치하는 항목이 없습니다` : description}
+      action={hasFilter ? <Button size="sm" onClick={onResetFilter}>필터 초기화</Button> : undefined}
     />
   );
 }

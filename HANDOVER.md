@@ -1,11 +1,21 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:30 KST (인시던트 evidence 상태 구분)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:36 KST (목록 필터 초기화 CTA)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 목록 필터 초기화 CTA
+
+- 구현:
+  - 알림 목록의 kind 탭에서 0건이면 `필터 초기화` CTA로 전체 탭에 복귀한다.
+  - 인시던트 evidence kind 필터에서 0건이면 EmptyState와 `필터 초기화` CTA를 표시한다.
+  - 클러스터 상세 인벤토리 탭(워크로드/팟/노드/서비스/리소스/이벤트)은 검색어/드릴다운 필터가 걸린 0건 상태에서 `필터 초기화` CTA를 표시한다.
+  - 클러스터 목록 초기화 라벨을 `필터 초기화`로 통일했다.
+- 검증:
+  - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
 
 ## 체크포인트 — 인시던트 evidence 상태 구분
 

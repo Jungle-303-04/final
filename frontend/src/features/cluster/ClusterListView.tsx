@@ -120,7 +120,7 @@ export default function ClusterListView() {
       icon={<SearchIcon />}
       title="검색 결과 없음"
       description={`'${search}' 조건에 맞는 클러스터가 없습니다`}
-      action={<Button size="sm" onClick={() => setSearch('')}>검색 초기화</Button>}
+      action={<Button size="sm" onClick={() => setSearch('')}>필터 초기화</Button>}
     />
   ) : (
     <EmptyState
