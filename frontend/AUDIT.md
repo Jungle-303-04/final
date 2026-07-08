@@ -156,7 +156,7 @@
   - 브라우저 live WS의 초기 `snapshot.state.clusters`를 메트릭 history에 반영한다. 접속 직후 `live.summary` 새 이벤트를 기다리지 않아도 실시간 그래프 초기값이 채워진다.
   - 라이브 API 확인: `/fleet/summary`의 CPU/MEM은 전부 `null`, `1`/`2`는 각각 `never_connected`/`install_expired` 등록으로 서버가 반환 중이다. UI는 합성값을 만들지 않고 미확인/미연결 상태를 표시한다.
   - `bash scripts/frontend-check.sh` passed. unit tests 14건, production build 통과.
-  - 푸시 후 GitHub Actions 확인: `959820f9`의 CI `28911051896`, AWS CD `28911051890`, Promote `28911051958` 모두 4~6초 내 `steps: []`로 실패했다. 로컬 검증은 green이나 live 배포 반영은 미확인이다.
+  - 푸시 후 GitHub Actions 확인: `959820f9`의 CI `28911051896`, AWS CD `28911051890`, Promote `28911051958` 모두 4~6초 내 `steps: []`로 실패했다. 이후 `a58ff950` CI `28911155725` annotation에서 "recent account payments have failed or your spending limit needs to be increased" 확인. 로컬 검증은 green이나 live 배포 반영은 미확인이다.
 
 ## 전개형 검증 UX 패스 범위 (디자인 시스템 완료 후)
 
