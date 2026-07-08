@@ -29,6 +29,7 @@
 - 남은 CSS import는 `@/ui/theme.css`, React Flow 라이브러리 스타일, `shared/flow/flow.css`뿐이다. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/login`과 `/`를 1440/1024/390 폭에서 확인했고 marker와 horizontal overflow 0을 확인했다.
 - 배포 확인(2026-07-08 09:19 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `ab014c10-css-cleanup-20260708091722`, main `/assets/index-BtlDgMJr.js`, CSS `/assets/index-BRxn7xco.css` 서빙 및 삭제한 레거시 CSS marker 0건 확인.
 - CI 가드(2026-07-08 09:22 KST): `scripts/frontend-check.sh`가 `frontend/src/features` 아래 새 `.css` 파일, inline `style=`, raw hex 색상을 배포 전 차단한다. `bash scripts/frontend-check.sh` 전체 통과.
+- 미사용 레거시 UI 스윕(2026-07-08 09:25 KST): 앱 경로에서 참조가 끊긴 `src/plural-ui/*`, `src/shared/ui/*`, `src/shared/motion/index.tsx`, `src/shared/lib/ui-store.ts`를 삭제했다. 남은 `src/shared`는 flow wrapper와 API/lib 유틸뿐이며 legacy UI import grep 0건, `bash scripts/frontend-check.sh` 전체 통과.
 
 ## 사용 규칙
 
