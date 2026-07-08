@@ -64,6 +64,25 @@ OPEN_INCIDENT_LIMIT = 20
 NODE_LIMIT = 1000
 POD_LIMIT = 1000
 NOT_FOUND_CODE = 404
+OBSERVABILITY_SYSTEM_NAMESPACES = {
+    "cert-manager",
+    "kube-node-lease",
+    "kube-public",
+    "kube-system",
+    "management",
+    "monitoring",
+    "target",
+}
+OBSERVABILITY_AGENT_NAME_MARKERS = (
+    "cluster-agent",
+    "node-collector",
+    "opentelemetry",
+    "prometheus",
+    "loki",
+    "tempo",
+    "grafana",
+    "kube-state-metrics",
+)
 
 router = APIRouter()
 
@@ -284,13 +303,15 @@ def build_nodes_summary(
         include_deleted=False,
         limit=NODE_LIMIT,
     )
-    pods = db.list_inventory_resources(
-        workspace_id=workspace_id,
-        cluster_id=cluster_id,
-        resource_type="pod",
-        namespace=None,
-        include_deleted=False,
-        limit=POD_LIMIT,
+    pods = observable_workload_pods(
+        db.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type="pod",
+            namespace=None,
+            include_deleted=False,
+            limit=POD_LIMIT,
+        )
     )
     latest_usage = _latest_usage(
         db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
@@ -328,16 +349,19 @@ def build_node_pods_summary(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="node not found")
     pods = [
         pod
-        for pod in db.list_inventory_resources(
-            workspace_id=workspace_id,
-            cluster_id=cluster_id,
-            resource_type="pod",
-            namespace=None,
-            include_deleted=False,
-            limit=POD_LIMIT,
+        for pod in observable_workload_pods(
+            db.list_inventory_resources(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                resource_type="pod",
+                namespace=None,
+                include_deleted=False,
+                limit=POD_LIMIT,
+            )
         )
         if pod_node_name(pod) == node_name
     ]
+
     latest_usage = _latest_usage(
         db.latest_cluster_usage_rollups(workspace_id, {cluster_id}, samples_per_cluster=1).get(
             cluster_id, []
@@ -349,6 +373,26 @@ def build_node_pods_summary(
         node_name=node_name,
         pods=[pod_summary_item(pod, latest_usage, incident_lookup) for pod in pods],
     )
+
+
+def observable_workload_pods(pods: list[JsonObject]) -> list[JsonObject]:
+    return [pod for pod in pods if is_observable_workload_pod(pod)]
+
+
+def is_observable_workload_pod(pod: JsonObject) -> bool:
+    summary = _summary(pod)
+    namespace = str(pod.get("namespace") or summary.get("namespace") or "").lower()
+    if namespace in OBSERVABILITY_SYSTEM_NAMESPACES:
+        return False
+    values = (
+        pod.get("name"),
+        pod.get("kind"),
+        summary.get("name"),
+        summary.get("owner_name"),
+        summary.get("owner_kind"),
+    )
+    haystack = " ".join(str(value).lower() for value in values if value not in (None, ""))
+    return not any(marker in haystack for marker in OBSERVABILITY_AGENT_NAME_MARKERS)
 
 
 def rollup_health(

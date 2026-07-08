@@ -5,6 +5,25 @@ import type { Workload } from '@/shared/lib/types';
 import { useToast } from '@/ui';
 
 const CLUSTER_QUERY_TIMEOUT_MS = 8_000;
+const OBSERVABILITY_SYSTEM_NAMESPACES = new Set([
+  'cert-manager',
+  'kube-node-lease',
+  'kube-public',
+  'kube-system',
+  'management',
+  'monitoring',
+  'target',
+]);
+const OBSERVABILITY_AGENT_NAME_MARKERS = [
+  'cluster-agent',
+  'node-collector',
+  'opentelemetry',
+  'prometheus',
+  'loki',
+  'tempo',
+  'grafana',
+  'kube-state-metrics',
+];
 
 export interface InventoryResourceIdentity {
   resource_type: string;
@@ -117,7 +136,7 @@ export const usePods = (id: string) =>
     enabled: !!id,
     refetchInterval: 30_000,
     retry: false,
-    select: d => d.resources.map(adaptPodResource),
+    select: d => d.resources.map(adaptPodResource).filter(isObservableWorkloadPod),
   });
 export const useWorkloads = (id: string) =>
   useQuery({
@@ -259,7 +278,7 @@ async function loadFallbackNodeSummaries(id: string | undefined): Promise<NodeHe
   const [summary, pods] = await Promise.all([
     get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }).then(adaptInventorySummary),
     get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS })
-      .then((response) => response.resources.map(adaptPodResource)),
+      .then((response) => response.resources.map(adaptPodResource).filter(isObservableWorkloadPod)),
   ]);
   return fallbackNodeSummaries(summary.nodes, pods);
 }
@@ -267,7 +286,9 @@ async function loadFallbackNodeSummaries(id: string | undefined): Promise<NodeHe
 async function loadFallbackNodePodSummaries(id: string | undefined, node: string | undefined): Promise<PodHeatmapSummary[]> {
   if (!id || !node) return [];
   const response = await get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
-  return response.resources.map(adaptPodHeatmapSummary).filter((pod) => pod.node === node);
+  return response.resources
+    .map(adaptPodHeatmapSummary)
+    .filter((pod) => pod.node === node && isObservableHeatmapPod(pod));
 }
 
 type FallbackNodeSummary = { name: string; ready: boolean; pod_count: number; cpu_ratio?: number; mem_ratio?: number };
@@ -295,6 +316,24 @@ function nodesFromPods(pods: Workload[]): FallbackNodeSummary[] {
     ready: true,
     pod_count: pods.filter((pod) => pod.node === name).length,
   }));
+}
+
+function isObservableWorkloadPod(pod: Workload): boolean {
+  const namespace = pod.namespace.toLowerCase();
+  if (OBSERVABILITY_SYSTEM_NAMESPACES.has(namespace)) return false;
+  const haystack = [
+    pod.name,
+    pod.workload_name,
+    pod.kind,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return !OBSERVABILITY_AGENT_NAME_MARKERS.some(marker => haystack.includes(marker));
+}
+
+function isObservableHeatmapPod(pod: PodHeatmapSummary): boolean {
+  const namespace = pod.namespace.toLowerCase();
+  if (OBSERVABILITY_SYSTEM_NAMESPACES.has(namespace)) return false;
+  const haystack = [pod.name, pod.owner, pod.owner_kind].filter(Boolean).join(' ').toLowerCase();
+  return !OBSERVABILITY_AGENT_NAME_MARKERS.some(marker => haystack.includes(marker));
 }
 
 function numberOrNull(value: unknown): number | null {
