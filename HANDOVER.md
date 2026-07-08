@@ -1,11 +1,28 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:04 KST (히트맵 드릴다운 Motion 보강 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:07 KST (레거시 toast 경로 제거 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 레거시 toast 경로 제거
+
+- 구현:
+  - `frontend/src/app/providers.tsx`에서 `@/shared/ui`의 `<Toasts />` 렌더를 제거하고 `@/ui` `ToastProvider`/`ToastViewport`만 남겼다.
+  - `frontend/src/features/cluster/api.ts`의 스케일/재시작/등록 해제 mutation toast를 `uiStore`에서 `useToast()`로 이관했다.
+  - `frontend/src/features/metrics/api.ts`의 쿼리/위젯 저장·삭제, 저장 쿼리 실행 mutation toast를 `useToast()`로 이관했다.
+  - `frontend/src/features/chat/api.ts`의 복구 액션 선택 mutation toast를 `useToast()`로 이관했다.
+- 로컬 검증:
+  - `rg "uiStore|@/shared/ui|Toasts" frontend/src/app frontend/src/features` 0건.
+  - `rg "@/shared/lib/ui-store" frontend/src`는 사용되지 않는 `frontend/src/shared/ui/index.tsx` 내부 잔존만 확인됐다.
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+- 남은 확인:
+  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
 
 ## 체크포인트 — 히트맵 드릴다운 Motion 보강
 

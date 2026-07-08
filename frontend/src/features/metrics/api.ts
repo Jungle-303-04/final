@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { del, get, post, type ApiOptions } from '@/shared/lib/api';
 import type { MetricQueryPreset, MetricWidget } from '@/shared/lib/types';
-import { uiStore } from '@/shared/lib/ui-store';
+import { useToast } from '@/ui';
 
 const METRIC_QUERY_TIMEOUT_MS = 8_000;
 
@@ -117,60 +117,66 @@ export function useMetricWidgets(clusterId: string | undefined) {
 
 export function useUpsertMetricQueryPreset(clusterId: string | undefined) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (payload: MetricQueryPresetPayload) =>
       post<{ item: MetricQueryPreset }>(`/clusters/${clusterId}/metric-query-presets`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: metricKeys.queryPresets(clusterId) });
-      uiStore.getState().toast('ok', '쿼리를 저장했습니다');
+      push({ tone: 'success', title: '쿼리 저장 완료', description: '저장된 PromQL 쿼리를 다시 실행할 수 있습니다' });
     },
-    onError: err => uiStore.getState().toast('danger', metricMutationError('쿼리 저장', err)),
+    onError: err => push({ tone: 'danger', title: '쿼리 저장 실패', description: metricMutationError('쿼리 저장', err) }),
   });
 }
 
 export function useDeleteMetricQueryPreset(clusterId: string | undefined) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (presetId: string) => del<void>(`/clusters/${clusterId}/metric-query-presets/${presetId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: metricKeys.queryPresets(clusterId) });
       qc.invalidateQueries({ queryKey: metricKeys.widgets(clusterId) });
-      uiStore.getState().toast('ok', '쿼리를 삭제했습니다');
+      push({ tone: 'success', title: '쿼리 삭제 완료', description: '연결된 위젯 목록도 갱신했습니다' });
     },
-    onError: err => uiStore.getState().toast('danger', metricMutationError('쿼리 삭제', err)),
+    onError: err => push({ tone: 'danger', title: '쿼리 삭제 실패', description: metricMutationError('쿼리 삭제', err) }),
   });
 }
 
 export function useRunMetricQueryPreset(clusterId: string | undefined) {
+  const { push } = useToast();
   return useMutation({
     mutationFn: (presetId: string) =>
       post<CommandAcceptedResponse>(`/clusters/${clusterId}/metric-query-presets/${presetId}/run`),
-    onError: err => uiStore.getState().toast('danger', metricMutationError('쿼리 실행', err)),
+    onSuccess: () => push({ tone: 'info', title: '쿼리 실행 등록', description: '명령 상태를 폴링해 결과를 표시합니다' }),
+    onError: err => push({ tone: 'danger', title: '쿼리 실행 실패', description: metricMutationError('쿼리 실행', err) }),
   });
 }
 
 export function useUpsertMetricWidget(clusterId: string | undefined) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (payload: MetricWidgetPayload) =>
       post<{ item: MetricWidget }>(`/clusters/${clusterId}/metric-widgets`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: metricKeys.widgets(clusterId) });
-      uiStore.getState().toast('ok', '위젯을 저장했습니다');
+      push({ tone: 'success', title: '위젯 저장 완료', description: '대시보드 위젯 목록을 갱신했습니다' });
     },
-    onError: err => uiStore.getState().toast('danger', metricMutationError('위젯 저장', err)),
+    onError: err => push({ tone: 'danger', title: '위젯 저장 실패', description: metricMutationError('위젯 저장', err) }),
   });
 }
 
 export function useDeleteMetricWidget(clusterId: string | undefined) {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: (widgetId: string) => del<void>(`/clusters/${clusterId}/metric-widgets/${widgetId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: metricKeys.widgets(clusterId) });
-      uiStore.getState().toast('ok', '위젯을 삭제했습니다');
+      push({ tone: 'success', title: '위젯 삭제 완료', description: '대시보드 위젯 목록을 갱신했습니다' });
     },
-    onError: err => uiStore.getState().toast('danger', metricMutationError('위젯 삭제', err)),
+    onError: err => push({ tone: 'danger', title: '위젯 삭제 실패', description: metricMutationError('위젯 삭제', err) }),
   });
 }
 
