@@ -67,7 +67,7 @@ status: synced
 | `AgentConfig` | 클래스 상수 모음(아래) | `src/services/target/cluster-agent/agent.py :: AgentConfig` |
 | `HttpManagementPlaneClient` | `ManagementPlaneClient` 프로토콜의 httpx 구현(아래) | `src/services/target/cluster-agent/agent.py :: HttpManagementPlaneClient` |
 | `TargetClusterAgent` | 에이전트 본체(아래) | `src/services/target/cluster-agent/agent.py :: TargetClusterAgent` |
-| `deployment_name_from_resource` | `def deployment_name_from_resource(resource: str) -> str` — `"deployment/x"`/`"deployments/x"` → `"x"`, `/` 없는 값은 그대로, 그 외 kind는 `""` | `src/services/target/cluster-agent/agent.py :: deployment_name_from_resource` |
+| `deployment_name_from_resource` | `def deployment_name_from_resource(resource: str) -> str` — `"deployment/x"`/`"deployments/x"` → `"x"`, `"pod/name-hash-suffix"`/`"replicaset/name-hash"` → 소유 Deployment 추정 이름, `/` 없는 값은 그대로, 그 외 kind는 `""` | `src/services/target/cluster-agent/agent.py :: deployment_name_from_resource` |
 | `build_apply_manifest_patch` | `def build_apply_manifest_patch(deployment: str, image: str) -> JsonObject` — pod template에 annotation `ops.service/apply-at=<epoch>` + `containers[{name: deployment, image}]` strategic-merge patch | `src/services/target/cluster-agent/agent.py :: build_apply_manifest_patch` |
 | `build_rollout_restart_patch` | `def build_rollout_restart_patch() -> JsonObject` — annotation `ops.service/restarted-at=<epoch>`만 갱신 | `src/services/target/cluster-agent/agent.py :: build_rollout_restart_patch` |
 | `deployment_rollout_status` | `def deployment_rollout_status(body: JsonObject) -> JsonObject` — Deployment 본문 → `{resource, ready, desired_replicas, updated_replicas, ready_replicas, available_replicas, observed_generation, generation, conditions}` | `src/services/target/cluster-agent/agent.py :: deployment_rollout_status` |
@@ -528,8 +528,8 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 | `k8s.apps.v1.deployments.patch` | `KubernetesPatchPayload{namespace, name, patch?, body?}` | `patch_deployment_command` |
 | `k8s.apps.v1.deployments.scale` | `KubernetesScalePayload{namespace, name, replicas>=0}` | `scale_deployment_command` |
 | `k8s.core.v1.configmaps.patch` | `KubernetesPatchPayload{namespace, name, patch?, body?}` | `patch_configmap_command` |
-| `apply_manifest` | raw payload의 `diff: {namespace?, desired_manifest?: dict, resource?: "deployment/<name>" 또는 bare name, desired_image?}`. `pod/<name>` 같은 비 Deployment kind는 대상 없음으로 실패한다. | `apply_manifest_command` |
-| `rollout_restart` | raw payload의 `diff: {namespace?, resource: "deployment/<name>" 또는 bare name}`. `pod/<name>` 같은 비 Deployment kind는 대상 없음으로 실패한다. | `rollout_restart_command` |
+| `apply_manifest` | raw payload의 `diff: {namespace?, desired_manifest?: dict, resource?: "deployment/<name>" / "pod/<deployment-hash-suffix>" / "replicaset/<deployment-hash>" / bare name, desired_image?}`. Deployment 이름을 추정할 수 없는 kind는 대상 없음으로 실패한다. | `apply_manifest_command` |
+| `rollout_restart` | raw payload의 `diff: {namespace?, resource: "deployment/<name>" / "pod/<deployment-hash-suffix>" / "replicaset/<deployment-hash>" / bare name}`. Deployment 이름을 추정할 수 없는 kind는 대상 없음으로 실패한다. | `rollout_restart_command` |
 | 그 외 | — | `apply_default_command` → `fail("unsupported action: {action}")` |
 
 ## 동작 (Behavior)

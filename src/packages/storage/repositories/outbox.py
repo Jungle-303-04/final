@@ -13,6 +13,7 @@ from packages.storage.engine import (
     DatabaseConnection,
     compact_error,
 )
+from packages.storage.retry import async_retry_db_conflict
 from packages.storage.schema import (
     EventDeadLetter,
     OutboxModel,
@@ -65,8 +66,12 @@ class OutboxRepository(DatabaseConnection):
             .values(lease_id=lease_id, leased_until=leased_until)
             .returning(table)
         )
-        async with self.async_connection() as conn:
-            rows = (await conn.execute(stmt)).mappings().all()
+
+        async def claim_rows() -> list[dict[str, object]]:
+            async with self.async_connection() as conn:
+                return list((await conn.execute(stmt)).mappings().all())
+
+        rows = await async_retry_db_conflict(claim_rows)
         return [
             EventEnvelope.from_mapping(
                 {

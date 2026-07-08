@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from contextlib import suppress
 from dataclasses import dataclass
@@ -1228,9 +1229,24 @@ def deployment_name_from_resource(resource: str) -> str:
     if "/" not in value:
         return value
     kind, name = value.split("/", 1)
-    if kind.lower() in {"deployment", "deployments"}:
+    normalized_kind = kind.lower()
+    if normalized_kind in {"deployment", "deployments"}:
         return name
+    if normalized_kind in {"replicaset", "replicasets"}:
+        return deployment_name_from_replicaset(name)
+    if normalized_kind in {"pod", "pods"}:
+        return deployment_name_from_pod(name)
     return ""
+
+
+def deployment_name_from_pod(name: str) -> str:
+    match = re.match(r"^(.+)-[a-f0-9]{8,10}-[a-z0-9]{5}$", name.strip())
+    return match.group(1) if match else ""
+
+
+def deployment_name_from_replicaset(name: str) -> str:
+    match = re.match(r"^(.+)-[a-f0-9]{8,10}$", name.strip())
+    return match.group(1) if match else ""
 
 
 def build_apply_manifest_patch(deployment: str, image: str) -> JsonObject:

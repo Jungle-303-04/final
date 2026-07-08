@@ -16,6 +16,8 @@ from packages.contracts.event_bus.interfaces import (
 from packages.contracts.gateway.fields import Gateway
 from packages.events.bus import RecordedEventClient
 from packages.events.envelope import event
+from packages.storage.engine import has_active_connection
+from packages.storage.retry import to_thread_db_retry
 
 
 @dataclass(frozen=True)
@@ -87,7 +89,10 @@ class ApiEventGateway:
                 recorder.record_event(evt)
                 stage_events(conn, [evt])
 
-        await asyncio.to_thread(stage)
+        if has_active_connection():
+            await asyncio.to_thread(stage)
+        else:
+            await to_thread_db_retry(stage)
         return AcceptedEvent(evt)
 
     async def accept_body(

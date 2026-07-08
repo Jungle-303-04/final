@@ -42,6 +42,7 @@ from packages.contracts.identity import (
     WorkspaceStatus,
 )
 from packages.storage.engine import DatabaseConnection, iso_or_none
+from packages.storage.retry import sync_retry_db_conflict
 
 
 class IdentityAccessRepository(DatabaseConnection):
@@ -522,18 +523,21 @@ class IdentityAccessRepository(DatabaseConnection):
         }
 
     def is_service_admin(self, user_id: str) -> bool:
-        table = UserAccount.__table__
-        statement = (
-            select(table.c.user_id)
-            .where(
-                table.c.user_id == user_id,
-                table.c.role == ServiceRole.SERVICE_ADMIN.value,
-                table.c.status == UserStatus.ACTIVE.value,
+        def lookup() -> bool:
+            table = UserAccount.__table__
+            statement = (
+                select(table.c.user_id)
+                .where(
+                    table.c.user_id == user_id,
+                    table.c.role == ServiceRole.SERVICE_ADMIN.value,
+                    table.c.status == UserStatus.ACTIVE.value,
+                )
+                .limit(1)
             )
-            .limit(1)
-        )
-        with self.connection() as conn:
-            return conn.execute(statement).first() is not None
+            with self.connection() as conn:
+                return conn.execute(statement).first() is not None
+
+        return sync_retry_db_conflict(lookup)
 
     def get_organization_member(self, organization_id: str, user_id: str) -> JsonObject | None:
         table = OrganizationMember.__table__
@@ -703,47 +707,55 @@ class IdentityAccessRepository(DatabaseConnection):
         resource_type: str,
         action: str,
     ) -> set[str] | None:
-        if self.is_service_admin(user_id):
-            return None
-        permission = Permission(action).value
-        assignment = ResourceAssignment.__table__
-        group_member = GroupMember.__table__
-        member_role = MemberResourceRole.__table__
-        statement = (
-            select(
-                assignment.c.resource_id,
-                member_role.c.role,
-            )
-            .select_from(
-                assignment.join(
-                    group_member,
-                    (group_member.c.group_id == assignment.c.group_id)
-                    & (group_member.c.user_id == user_id)
-                    & (group_member.c.status == AccessStatus.ACTIVE.value),
-                ).join(
-                    member_role,
-                    (member_role.c.resource_assignment_id == assignment.c.resource_assignment_id)
-                    & (member_role.c.user_id == user_id)
-                    & (member_role.c.status == AccessStatus.ACTIVE.value),
+        def lookup() -> set[str] | None:
+            if self.is_service_admin(user_id):
+                return None
+            permission = Permission(action).value
+            assignment = ResourceAssignment.__table__
+            group_member = GroupMember.__table__
+            member_role = MemberResourceRole.__table__
+            statement = (
+                select(
+                    assignment.c.resource_id,
+                    member_role.c.role,
+                )
+                .select_from(
+                    assignment.join(
+                        group_member,
+                        (group_member.c.group_id == assignment.c.group_id)
+                        & (group_member.c.user_id == user_id)
+                        & (group_member.c.status == AccessStatus.ACTIVE.value),
+                    ).join(
+                        member_role,
+                        (
+                            member_role.c.resource_assignment_id
+                            == assignment.c.resource_assignment_id
+                        )
+                        & (member_role.c.user_id == user_id)
+                        & (member_role.c.status == AccessStatus.ACTIVE.value),
+                    )
+                )
+                .where(
+                    assignment.c.organization_id == workspace_id,
+                    assignment.c.resource_type == resource_type,
+                    assignment.c.status == AccessStatus.ACTIVE.value,
                 )
             )
-            .where(
-                assignment.c.organization_id == workspace_id,
-                assignment.c.resource_type == resource_type,
-                assignment.c.status == AccessStatus.ACTIVE.value,
-            )
-        )
-        with self.connection() as conn:
-            candidates = list(conn.execute(statement).mappings())
-        role_permissions = {
-            str(role): self.role_has_permission(resource_type, str(role), permission, workspace_id)
-            for role in {row["role"] for row in candidates}
-        }
-        return {
-            str(row["resource_id"])
-            for row in candidates
-            if role_permissions.get(str(row["role"]), False)
-        }
+            with self.connection() as conn:
+                candidates = list(conn.execute(statement).mappings())
+            role_permissions = {
+                str(role): self.role_has_permission(
+                    resource_type, str(role), permission, workspace_id
+                )
+                for role in {row["role"] for row in candidates}
+            }
+            return {
+                str(row["resource_id"])
+                for row in candidates
+                if role_permissions.get(str(row["role"]), False)
+            }
+
+        return sync_retry_db_conflict(lookup)
 
     def authenticate_cluster_agent(self, token_hash: str) -> JsonObject | None:
         if not token_hash:
