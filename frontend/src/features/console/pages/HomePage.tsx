@@ -1,7 +1,8 @@
 // 홈 대시보드 — 플릿 집계(/fleet/summary) + 인시던트 타임라인 + 승인 대기 + 최근 AI 대화 (전부 실데이터)
 import { useMemo, useState, type ComponentProps, type SVGProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, EmptyState, Skeleton, StatCard, Table, Tabs, cx, type TableColumn } from '@/ui';
+import { Badge, Button, Card, EmptyState, Skeleton, StatCard, Table, Tabs, type TableColumn } from '@/ui';
+import { Sparkline } from '@/ui/charts';
 import { useClusters } from '@/features/cluster/api';
 import { healthLabel, useFleetSummary, type FleetClusterSummary, type FleetHealth } from '@/features/fleet/api';
 import { DrilldownHeatmap } from '@/features/fleet/DrilldownHeatmap';
@@ -23,6 +24,7 @@ const HEALTH_TONE: Record<FleetHealth, BadgeTone> = {
 
 type FleetHealthTotals = {
   clusters: number;
+  healthy: number;
   critical: number;
   warning: number;
   stale: number;
@@ -170,17 +172,22 @@ function FleetStatCards({ totals, clusters }: { totals: FleetStatTotals; cluster
   const avgMem = avgMetric(clusters.map(cluster => cluster.mem_pct));
   const activeAlerts = totals.open_incidents + totals.dead_letters;
   const clusterChip = fleetClusterChip(totals);
+  const healthDistribution = [totals.healthy, totals.warning, totals.critical, totals.stale + totals.unknown];
+  const podDistribution = clusters.map(cluster => cluster.pods_total);
+  const cpuDistribution = clusters.map(cluster => cluster.cpu_pct);
+  const memDistribution = clusters.map(cluster => cluster.mem_pct);
+  const incidentDistribution = clusters.map(cluster => cluster.open_incidents);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} spark={<SparkBars tone={clusterChip.severity as StatTone} />} />
-      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} spark={<SparkBars tone="info" />} />
-      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} spark={<SparkBars tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} />} />
-      <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} spark={<SparkBars tone={activeAlerts > 0 ? 'danger' : 'success'} />} />
-      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} spark={<SparkBars tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} />} />
-      <StatCard label="인시던트" value={totals.open_incidents.toLocaleString()} delta="열린 항목" tone={totals.open_incidents > 0 ? 'danger' : 'success'} spark={<SparkBars tone={totals.open_incidents > 0 ? 'danger' : 'success'} />} />
-      <StatCard label="승인 대기" value={totals.pending_approvals.toLocaleString()} delta="배포 승인" tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} spark={<SparkBars tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} />} />
-      <StatCard label="워크플로우" value={totals.running_workflows.toLocaleString()} delta="실행 중" tone={totals.running_workflows > 0 ? 'info' : 'neutral'} spark={<SparkBars tone={totals.running_workflows > 0 ? 'info' : 'neutral'} />} />
+      <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} spark={<Sparkline points={healthDistribution} tone={clusterChip.severity as StatTone} ariaLabel="클러스터 상태 분포" />} />
+      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} spark={<Sparkline points={podDistribution} tone="info" ariaLabel="클러스터별 팟 분포" />} />
+      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} spark={<Sparkline points={cpuDistribution} tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} ariaLabel="클러스터별 CPU 분포" />} />
+      <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} spark={<Sparkline points={[totals.open_incidents, totals.dead_letters]} tone={activeAlerts > 0 ? 'danger' : 'success'} ariaLabel="인시던트와 DLQ 분포" />} />
+      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} spark={<Sparkline points={memDistribution} tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} ariaLabel="클러스터별 메모리 분포" />} />
+      <StatCard label="인시던트" value={totals.open_incidents.toLocaleString()} delta="열린 항목" tone={totals.open_incidents > 0 ? 'danger' : 'success'} spark={<Sparkline points={incidentDistribution} tone={totals.open_incidents > 0 ? 'danger' : 'success'} ariaLabel="클러스터별 열린 인시던트 분포" />} />
+      <StatCard label="승인 대기" value={totals.pending_approvals.toLocaleString()} delta="배포 승인" tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} />
+      <StatCard label="워크플로우" value={totals.running_workflows.toLocaleString()} delta="실행 중" tone={totals.running_workflows > 0 ? 'info' : 'neutral'} />
     </div>
   );
 }
@@ -297,16 +304,6 @@ function RecentConversationCard({ query, pathFor }: { query: ReturnType<typeof u
   );
 }
 
-function SparkBars({ tone }: { tone: StatTone }) {
-  return (
-    <div className="flex h-full items-end gap-1 p-2">
-      {[3, 5, 4, 7, 6].map((height, index) => (
-        <span key={index} className={cx('w-full rounded-control', sparkClass(tone), heightClass(height))} />
-      ))}
-    </div>
-  );
-}
-
 function HealthBadge({ health }: { health: FleetHealth | string }) {
   return <Badge tone={HEALTH_TONE[health as FleetHealth] ?? 'neutral'}>{healthLabel(health)}</Badge>;
 }
@@ -326,24 +323,6 @@ function heatSummary(cluster: FleetClusterSummary, lens: FleetLens): string {
   if (lens === 'memory') return `메모리 ${pct(cluster.mem_pct)}`;
   if (lens === 'incidents') return `인시던트 ${cluster.open_incidents.toLocaleString()}건`;
   return `상태 ${healthLabel(cluster.health)}`;
-}
-
-function sparkClass(tone: StatTone) {
-  if (tone === 'danger') return 'bg-danger/70';
-  if (tone === 'warning') return 'bg-warning/70';
-  if (tone === 'success') return 'bg-success/70';
-  if (tone === 'info') return 'bg-info/70';
-  return 'bg-muted/50';
-}
-
-function heightClass(value: number) {
-  return {
-    3: 'h-3',
-    4: 'h-4',
-    5: 'h-5',
-    6: 'h-6',
-    7: 'h-7',
-  }[value] ?? 'h-4';
 }
 
 type IconProps = SVGProps<SVGSVGElement>;

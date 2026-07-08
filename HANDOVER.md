@@ -1,11 +1,23 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:36 KST (목록 필터 초기화 CTA)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 10:12 KST (더미 차트 제거)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 더미 차트 제거
+
+- 구현:
+  - `frontend/src/ui/charts.tsx`에 카드용 `Sparkline` 프리미티브를 추가했다. feature 화면은 실측 숫자 배열만 넘기고, 차트 시각 표현은 UI 레이어에서 통제한다.
+  - 홈 카드의 `SparkBars` 더미 막대를 제거하고 `/fleet/summary`의 클러스터 health/pod/cpu/memory/incident 분포를 표시한다. 승인 대기/워크플로우처럼 단일 합계만 있는 항목은 차트를 숨긴다.
+  - 클러스터 목록의 `ClusterSpark` 더미 막대를 제거하고 `/clusters`의 연결 상태, 인시던트, 노드, 팟 분포를 표시한다.
+  - 클러스터 상세와 메트릭의 `MiniBars` 더미 막대를 제거했다. 상세는 `/clusters/{id}/usage`, 메트릭은 WS history 우선 + `/usage` fallback으로 스파크라인을 만든다.
+  - `StatCard`는 `spark`가 있을 때만 차트 영역을 렌더링한다. 데이터 계약이 없는 카드에 빈 차트 박스가 남지 않는다.
+- 검증:
+  - `rg "SparkBars|ClusterSpark|MiniBars|barToneClass|sparkClass|heightClass" frontend/src/features` 0건.
+  - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
 
 ## 체크포인트 — 목록 필터 초기화 CTA
 

@@ -4,6 +4,7 @@ import {
   useClusterEvents,
   useClusters,
   useClusterSummary,
+  useClusterUsage,
   useInventoryResourceDetail,
   useNodePodSummaries,
   useNodeSummaries,
@@ -18,6 +19,7 @@ import {
   type NodeHeatmapSummary,
   type PodHeatmapSummary,
   type InventoryResourceIdentity,
+  type UsageSample,
 } from '@/features/cluster/api';
 import { useClusterAgg, type ClusterAggIncident } from '@/features/fleet/api';
 import { DrilldownHeatmap, type DrilldownTile } from '@/features/fleet/DrilldownHeatmap';
@@ -49,6 +51,7 @@ import {
   cx,
   type TableColumn,
 } from '@/ui';
+import { Sparkline } from '@/ui/charts';
 
 type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 type DetailSubject = 'node' | 'service' | 'workload';
@@ -75,6 +78,7 @@ export default function ClusterDetailView() {
   const detailKind = sp.get('kind') ?? '';
   const clustersQ = useClusters();
   const summaryQ = useClusterSummary(clusterId);
+  const usageQ = useClusterUsage(clusterId);
   const podsQ = usePods(clusterId);
   const cluster = clustersQ.data?.find((item) => item.cluster_id === clusterId);
   const managementCluster = cluster?.role === 'management';
@@ -102,6 +106,10 @@ export default function ClusterDetailView() {
     [filter, hotPods, podsQ.data]);
   const openPod = pod ? podRows.find((row) => row.name === pod && row.namespace === namespace) : null;
   const phases = summaryQ.data?.pod_phases ?? {};
+  const usageSamples = usageQ.data ?? [];
+  const nodeSpark = usageMetricPoints(usageSamples, 'node_ready');
+  const runningPodSpark = usageMetricPoints(usageSamples, 'pod_running');
+  const restartSpark = usageRestartDeltaPoints(usageSamples);
   const selectedDetail = useMemo<InventoryResourceIdentity | null>(() => {
     if (openPod) return { resource_type: 'pod', kind: 'Pod', name: openPod.name, namespace: openPod.namespace };
     if (detailSubject === 'node' && detailName) return { resource_type: 'node', kind: 'Node', name: detailName };
@@ -192,16 +200,16 @@ export default function ClusterDetailView() {
       )}
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="클러스터 요약">
-        <StatCard label="노드" value={statValue(summaryQ, summaryQ.data?.nodes.length)} spark={<MiniBars />} />
-        <StatCard label="실행 팟" value={statValue(summaryQ, phases.Running)} delta="Running" tone="success" spark={<MiniBars tone="success" />} />
+        <StatCard label="노드" value={statValue(summaryQ, summaryQ.data?.nodes.length)} spark={sparkFor(nodeSpark, 'info', '준비 노드 추이')} />
+        <StatCard label="실행 팟" value={statValue(summaryQ, phases.Running)} delta="Running" tone="success" spark={sparkFor(runningPodSpark, 'success', '실행 팟 추이')} />
         <StatCard
           label="비정상 팟"
           value={statValue(summaryQ, (phases.CrashLoopBackOff ?? 0) + (phases.Pending ?? 0))}
           delta="CrashLoopBackOff · Pending"
           tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'}
-          spark={<MiniBars tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} />}
+          spark={sparkFor(restartSpark.length ? restartSpark : [phases.Pending, phases.CrashLoopBackOff], (phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral', '재시작 증가 추이')}
         />
-        <StatCard label="서비스" value={statValue(summaryQ, summaryQ.data?.services)} spark={<MiniBars />} />
+        <StatCard label="서비스" value={statValue(summaryQ, summaryQ.data?.services)} />
       </section>
 
       <ClusterDrilldownPanel
@@ -1293,6 +1301,24 @@ function statValue(query: { isPending: boolean; isError: boolean }, value: numbe
   return (value ?? 0).toLocaleString();
 }
 
+type UsageMetricKey = 'pod_running' | 'node_ready' | 'restart_total';
+
+function usageMetricPoints(samples: UsageSample[], key: UsageMetricKey): number[] {
+  return samples.map((sample) => Number(sample.usage[key] ?? 0)).filter(Number.isFinite);
+}
+
+function usageRestartDeltaPoints(samples: UsageSample[]): number[] {
+  return samples.map((sample, index) => {
+    const current = Number(sample.usage.restart_total ?? 0);
+    const previous = index > 0 ? Number(samples[index - 1].usage.restart_total ?? 0) : current;
+    return Math.max(0, current - previous);
+  }).filter(Number.isFinite);
+}
+
+function sparkFor(points: Array<number | null | undefined>, tone: BadgeTone, label: string): ReactNode | undefined {
+  return points.some((value) => Number.isFinite(Number(value))) ? <Sparkline points={points} tone={tone} ariaLabel={label} /> : undefined;
+}
+
 function StatusBadge({ status, label }: { status: string; label?: string }) {
   const meta = statusMeta(status);
   return <Badge tone={meta.tone}>{label ?? meta.label}</Badge>;
@@ -1483,18 +1509,6 @@ function CodeText({ children }: { children: ReactNode }) {
     <code className="inline-flex max-w-full items-center truncate rounded-control border border-border bg-raised px-2 py-1 font-mono text-caption text-secondary">
       {children}
     </code>
-  );
-}
-
-function MiniBars({ tone = 'neutral' }: { tone?: 'neutral' | 'success' | 'danger' }) {
-  return (
-    <div className={cx('flex h-full items-end gap-1 px-2 py-2', tone === 'success' && 'text-success', tone === 'danger' && 'text-danger', tone === 'neutral' && 'text-muted')}>
-      <span className="h-4 w-full rounded-control bg-current opacity-30" />
-      <span className="h-6 w-full rounded-control bg-current opacity-50" />
-      <span className="h-5 w-full rounded-control bg-current opacity-40" />
-      <span className="h-7 w-full rounded-control bg-current opacity-70" />
-      <span className="h-6 w-full rounded-control bg-current opacity-60" />
-    </div>
   );
 }
 

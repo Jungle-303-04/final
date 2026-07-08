@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { post } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
-import { useClusters, useClusterSummary, useClusterUsage, usePods } from '@/features/cluster/api';
+import { useClusters, useClusterSummary, useClusterUsage, usePods, type UsageSample } from '@/features/cluster/api';
 import { buildUsageSeries } from '@/features/metrics/usageSeries';
 import { useIsAdmin } from '@/features/auth/api';
 import {
@@ -42,7 +42,7 @@ import {
   cx,
   useToast,
 } from '@/ui';
-import { TimeSeriesChart, type Series } from '@/ui/charts';
+import { Sparkline, TimeSeriesChart, type Series } from '@/ui/charts';
 import { AnimatePresence, listItem, listStagger } from '@/ui/motion';
 import { useConsolePath } from '@/features/console/ui';
 
@@ -199,6 +199,10 @@ export default function MetricsView() {
     ];
   }, [clusterId, paused, frozen, history]);
   const usageSeries: Series[] = useMemo(() => buildUsageSeries(usageQ.data ?? []), [usageQ.data]);
+  const usageSamples = usageQ.data ?? [];
+  const runningSpark = seriesPoints(series, '실행 팟', usageMetricPoints(usageSamples, 'pod_running'));
+  const restartSpark = seriesPoints(series, '재시작', usageRestartDeltaPoints(usageSamples));
+  const nodeSpark = usageMetricPoints(usageSamples, 'node_ready');
 
   const run = useMutation({
     mutationFn: ({ q, rangeSeconds }: { q: string; rangeSeconds: number }) => post<CommandAcceptedResponse>('/agent/debug/query', {
@@ -379,11 +383,11 @@ export default function MetricsView() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricStatCard label="실행" value={phases.Running ?? 0} tone="success" loading={statPending} />
+          <MetricStatCard label="실행" value={phases.Running ?? 0} tone="success" loading={statPending} sparkPoints={runningSpark} />
           <MetricStatCard label="대기" value={phases.Pending ?? 0} tone="warning" loading={statPending} />
-          <MetricStatCard label="재시작 오류" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} />
-          <MetricStatCard label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} />
-          {snapshot?.rollout && <StatCard label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" spark={<MiniBars tone="info" />} />}
+          <MetricStatCard label="재시작 오류" value={phases.CrashLoopBackOff ?? 0} tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'} loading={statPending} sparkPoints={restartSpark} />
+          <MetricStatCard label="노드" value={summary?.nodes.length ?? 0} tone="info" loading={statPending} sparkPoints={nodeSpark} />
+          {snapshot?.rollout && <StatCard label={`rollout ${snapshot.rollout.name}`} value={snapshot.rollout.progress} tone="info" />}
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
@@ -636,37 +640,48 @@ export function metricWidgetPayload(input: {
   };
 }
 
-function MetricStatCard({ label, value, tone, loading }: { label: string; value: number; tone: StatTone; loading: boolean }) {
+function MetricStatCard({
+  label,
+  value,
+  tone,
+  loading,
+  sparkPoints,
+}: {
+  label: string;
+  value: number;
+  tone: StatTone;
+  loading: boolean;
+  sparkPoints?: Array<number | null | undefined>;
+}) {
+  const hasSpark = sparkPoints?.some((point) => Number.isFinite(Number(point))) ?? false;
   return (
     <StatCard
       label={label}
       value={loading ? '확인 중' : value.toLocaleString('ko-KR')}
       tone={tone}
-      spark={<MiniBars tone={tone} muted={loading} />}
+      spark={!loading && hasSpark ? <Sparkline points={sparkPoints ?? []} tone={tone} ariaLabel={`${label} 추이`} /> : undefined}
     />
   );
 }
 
-function MiniBars({ tone, muted = false }: { tone: StatTone; muted?: boolean }) {
-  return (
-    <div className="flex h-full items-end justify-center gap-1 p-2" aria-hidden="true">
-      <span className={cx('h-3 w-2 rounded-control', barToneClass(tone, muted))} />
-      <span className={cx('h-5 w-2 rounded-control', barToneClass(tone, muted))} />
-      <span className={cx('h-7 w-2 rounded-control', barToneClass(tone, muted))} />
-      <span className={cx('h-4 w-2 rounded-control', barToneClass(tone, muted))} />
-    </div>
-  );
+type UsageMetricKey = 'pod_running' | 'node_ready' | 'restart_total';
+
+function usageMetricPoints(samples: UsageSample[], key: UsageMetricKey): number[] {
+  return samples.map((sample) => Number(sample.usage[key] ?? 0)).filter(Number.isFinite);
 }
 
-function barToneClass(tone: StatTone, muted: boolean) {
-  if (muted) return 'bg-muted/30';
-  return {
-    neutral: 'bg-muted/60',
-    success: 'bg-success/60',
-    warning: 'bg-warning/60',
-    danger: 'bg-danger/60',
-    info: 'bg-info/60',
-  }[tone];
+function usageRestartDeltaPoints(samples: UsageSample[]): number[] {
+  return samples.map((sample, index) => {
+    const current = Number(sample.usage.restart_total ?? 0);
+    const previous = index > 0 ? Number(samples[index - 1].usage.restart_total ?? 0) : current;
+    return Math.max(0, current - previous);
+  }).filter(Number.isFinite);
+}
+
+function seriesPoints(series: Series[], id: string, fallback: number[]): number[] {
+  const item = series.find((candidate) => candidate.id === id);
+  const points = item?.data.map((point) => point.y).filter(Number.isFinite) ?? [];
+  return points.length ? points : fallback;
 }
 
 function RowShell({ children, className, testId }: { children: ReactNode; className?: string; testId?: string }) {

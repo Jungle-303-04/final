@@ -40,6 +40,39 @@ export interface Series {
 }
 
 const MAX_X_AXIS_TICKS = 5;
+type SparklineTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+
+export function Sparkline({
+  points,
+  tone = 'neutral',
+  ariaLabel = '실데이터 추이',
+  className,
+}: {
+  points: Array<number | null | undefined>;
+  tone?: SparklineTone;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  const values = normalizeSparkPoints(points);
+  const drawable = values.length === 1 ? [values[0], values[0]] : values;
+  const path = drawable.length > 0 ? sparkPath(drawable) : '';
+  const areaPath = path ? `${path} L 92 28 L 8 28 Z` : '';
+
+  if (!path) {
+    return (
+      <svg className={cx('h-full w-full text-muted', className)} viewBox="0 0 100 32" role="img" aria-label={`${ariaLabel} 없음`} preserveAspectRatio="none">
+        <path d="M8 16 H92" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" vectorEffect="non-scaling-stroke" className="opacity-40" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className={cx('h-full w-full', sparklineToneClass(tone), className)} viewBox="0 0 100 32" role="img" aria-label={ariaLabel} preserveAspectRatio="none">
+      <path d={areaPath} fill="currentColor" className="opacity-10" />
+      <path d={path} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
 
 export function TimeSeriesChart({ series, className }: { series: Series[]; className?: string }) {
   const reduced = useReducedMotion();
@@ -111,6 +144,39 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
       </div>
     </div>
   );
+}
+
+function normalizeSparkPoints(points: Array<number | null | undefined>): number[] {
+  return points
+    .map((point) => Number(point))
+    .filter((point) => Number.isFinite(point) && point >= 0);
+}
+
+function sparkPath(values: number[]): string {
+  if (values.length === 0) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || Math.max(max, 1);
+  const flat = max === min;
+  return values.map((value, index) => {
+    const x = values.length === 1 ? 50 : 8 + (index / (values.length - 1)) * 84;
+    const y = flat ? 16 : 28 - ((value - min) / range) * 24;
+    return `${index === 0 ? 'M' : 'L'} ${roundCoord(x)} ${roundCoord(y)}`;
+  }).join(' ');
+}
+
+function roundCoord(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function sparklineToneClass(tone: SparklineTone): string {
+  return {
+    neutral: 'text-muted',
+    success: 'text-success',
+    warning: 'text-warning',
+    danger: 'text-danger',
+    info: 'text-info',
+  }[tone];
 }
 
 function sampleAxisTicks(series: Series[], maxTicks: number): Array<number | string> {

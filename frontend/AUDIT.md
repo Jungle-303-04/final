@@ -25,6 +25,7 @@
 - Phase 2 인시던트 상세(`features/notifications/IncidentDetailView.tsx`)는 `src/ui` PageHeader/Breadcrumb/Card/KeyValueList/Badge/Button/Collapsible/EmptyState 기반으로 이관했다. RCA 파이프라인 그래프, 후보 점수바, evidence trail, 복구 계획 기능은 유지하고 상세 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 워크플로우(`features/workflow/WorkflowListView.tsx`, `features/workflow/WorkflowGraphView.tsx`)는 `src/ui` PageHeader/Breadcrumb/Card/Table/Badge/Button/Collapsible/Tooltip/EmptyState 기반으로 이관했다. React Flow 공용 wrapper(`shared/flow`)도 새 토큰과 reduced-motion 대응으로 정렬했고, 워크플로 화면의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - Phase 2 메트릭(`features/metrics/MetricsView.tsx`)은 `src/ui` PageHeader/Card/StatCard/Field/Input/Select/Textarea/Badge/StatusChip/EmptyState 기반으로 이관했다. Nivo line chart wrapper는 `src/ui/charts.tsx`로 승격했고, 메트릭 feature의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
+- 차트 정본은 `src/ui/charts.tsx`다. 전체 선형 차트는 `TimeSeriesChart`, 카드형 미니 차트는 `Sparkline`을 사용한다. feature 화면은 실제 API/WS/집계 배열만 전달하고, 더미 높이 배열이나 장식용 차트는 금지한다.
 - 레거시 CSS import 제거(2026-07-08 09:15 KST): `main.tsx` 전역 스타일 import는 `@/ui/theme.css` 단독이다. 삭제 파일: `frontend/src/shared/tokens.css`, `frontend/src/shared/ui/app.css`, `frontend/src/shared/theme-bridge.css`, `frontend/src/plural-ui/tokens.css`, `frontend/src/plural-ui/plural.css`, `frontend/src/features/console-archive/archive.css`.
 - 남은 CSS import는 `@/ui/theme.css`, React Flow 라이브러리 스타일, `shared/flow/flow.css`뿐이다. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/login`과 `/`를 1440/1024/390 폭에서 확인했고 marker와 horizontal overflow 0을 확인했다.
 - 배포 확인(2026-07-08 09:19 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `ab014c10-css-cleanup-20260708091722`, main `/assets/index-BtlDgMJr.js`, CSS `/assets/index-BRxn7xco.css` 서빙 및 삭제한 레거시 CSS marker 0건 확인.
@@ -39,6 +40,7 @@
 - 상태 어휘는 `healthy`, `warning`, `critical`, `pending`, `running`, `failed`로 고정하고 사용자 노출 라벨은 한국어 명사형으로 쓴다.
 - 리스트/카드/테이블은 로딩, 빈 상태, 오류+재시도 상태를 반드시 제공한다.
 - 뮤테이션은 pending, 성공 토스트, 실패 사유 토스트를 함께 설계한다.
+- 차트는 실측 데이터, 서버 집계, 브라우저 실시간 스트림 중 하나가 있을 때만 표시한다. 단일 합계만 있는 항목은 차트를 숨기고, feature 코드에서 더미 차트나 고정 높이 배열을 만들지 않는다.
 
 ## Phase 2 인증 화면 검증 (2026-07-08 04:20 KST)
 
@@ -132,6 +134,18 @@
 - `POST /metrics/validate` dry-run을 debounce 검증과 실행 직전 재검증 양쪽에 연결했다. 저장/실행 버튼은 valid 상태에서만 활성화되고, 0건 결과는 "시간범위 넓히기" CTA로 이어진다.
 - Playwright route mocking 검수: 인증 세션/알림/클러스터/usage/metric preset/widget/metrics validate 최소 응답으로 `/metrics?cluster=cluster-1`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, button overflow 0, unexpected card overflow 0.
 - screenshots: `/tmp/k8s-metrics-desktop.png`, `/tmp/k8s-metrics-tablet.png`, `/tmp/k8s-metrics-mobile.png`.
+
+## 체크포인트 — 더미 차트 제거 (2026-07-08 10:12 KST)
+
+- 구현:
+  - `src/ui/charts.tsx`에 `Sparkline` 프리미티브를 추가했다. feature 화면은 숫자 배열만 전달하고 색/라인/빈 상태 표현은 UI 프리미티브가 맡는다.
+  - 홈 StatCard의 고정 막대(`SparkBars`)를 제거하고 `GET /fleet/summary`의 health/pod/cpu/memory/incident 분포로 교체했다.
+  - 클러스터 목록 StatCard의 고정 막대(`ClusterSpark`)를 제거하고 `GET /clusters`의 연결 상태, 인시던트, 노드, 팟 분포로 교체했다.
+  - 클러스터 상세 StatCard의 고정 막대(`MiniBars`)를 제거하고 `GET /clusters/{id}/usage`의 `node_ready`, `pod_running`, `restart_total` delta를 사용한다. 서비스처럼 단일 합계만 있는 항목은 차트를 숨긴다.
+  - 메트릭 StatCard의 고정 막대(`MiniBars`)를 제거했다. WS history가 있으면 실시간 `실행 팟`/`재시작` 시리즈를 우선 사용하고, 없으면 `/usage` 롤업으로 fallback한다. rollout은 단일 진행률이라 차트를 숨긴다.
+- 검증:
+  - `rg "SparkBars|ClusterSpark|MiniBars|barToneClass|sparkClass|heightClass" frontend/src/features` 0건.
+  - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
 
 ## 전개형 검증 UX 패스 범위 (디자인 시스템 완료 후)
 

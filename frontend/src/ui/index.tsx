@@ -193,9 +193,11 @@ export function StatCard({
           <p className="mt-2 truncate text-page font-semibold tabular-nums text-primary">{value}</p>
           {delta && <p className={cx('mt-1 text-caption font-medium', toneClass(tone))}>{delta}</p>}
         </div>
-        <div className="h-10 w-24 shrink-0 overflow-hidden rounded-control border border-border bg-raised">
-          {spark}
-        </div>
+        {spark && (
+          <div className="h-10 w-24 shrink-0 overflow-hidden rounded-control border border-border bg-raised">
+            {spark}
+          </div>
+        )}
       </div>
     </Card>
   );
