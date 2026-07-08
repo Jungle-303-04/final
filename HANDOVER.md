@@ -2346,7 +2346,7 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 - GitHub poll fallback이 `Jungle-303-04/final`/`default-target-cluster` workflow를 재생성하던 문제를 운영 config에서 차단했다.
   - `management-runtime-config`: `GITHUB_REPO=""`, `SCM_REPO="Jungle-303-04/k8s-incident-demo-target"`, `MANIFEST_PATH="deploy/k8s"`.
   - 수동 `github-poll-worker` Job 검증: DB watch target만 사용해 target repo webhook 발행, 신규 orphan/default-target workflow 없음.
-- 프론트는 현재 live console image `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:b380ba97-prod-ui-20260708111551`.
+- 프론트는 현재 live console image `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:ffd7712f-workflow-approval-ui-20260708113327`.
   - `npm run typecheck`, `npm run build`, `npm test` 통과.
   - Playwright live smoke: `/`, `/clusters`, `/clusters/cluster-1`, `/clusters/kubernetes-ops` 모두 `Unexpected Application Error` 없음.
   - cluster 삭제 후 발생했던 `Cannot read properties of undefined (reading 'tone')` 계열 crash는 live `ClusterListView` 번들에서 재현되지 않음.
