@@ -251,6 +251,7 @@ function adaptRunStep(raw: Record<string, unknown>): RunStep {
 export function adaptRun(raw: Record<string, unknown>): WorkflowRun {
   // 실백엔드: workflow_run_id / created_at / 소문자 status → 프론트 계약으로 정규화.
   const metadata = (raw.metadata ?? {}) as Record<string, unknown>;
+  const approval = recordValue(raw.approval) ?? firstOpenApproval(raw.approvals);
   return {
     run_id: String(raw.run_id ?? raw.workflow_run_id ?? ''),
     application_id: String(raw.application_id ?? ''),
@@ -259,9 +260,23 @@ export function adaptRun(raw: Record<string, unknown>): WorkflowRun {
     current_step: String(raw.current_step ?? ''),
     started_at: String(raw.started_at ?? raw.created_at ?? ''),
     steps: Array.isArray(raw.steps) ? (raw.steps as Record<string, unknown>[]).map(adaptRunStep) : [],
-    approval_id: (raw.approval_id ?? metadata.approval_id) as string | undefined,
+    approval_id: (raw.approval_id ?? metadata.approval_id ?? approval?.approval_id) as string | undefined,
     safe_pr: raw.safe_pr as WorkflowRun['safe_pr'],
   };
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function firstOpenApproval(value: unknown): Record<string, unknown> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .map(recordValue)
+    .find(item => {
+      const status = String(item?.status ?? '').toLowerCase();
+      return item && (!status || status === 'requested' || status === 'not_required');
+    });
 }
 
 export function adaptIncident(raw: Record<string, unknown>): Incident {

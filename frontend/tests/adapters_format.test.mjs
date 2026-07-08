@@ -90,6 +90,25 @@ test('timeline evidence-only rows are not presented as incidents', async () => {
   assert.equal(adaptIncident(completed).summary, 'config_env_error');
 });
 
+test('workflow adapter reads open approval references from backend run payloads', async () => {
+  const { adaptRun } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');
+
+  assert.equal(adaptRun({
+    workflow_run_id: 'workflow-1',
+    status: 'waiting_for_approval',
+    approval: { approval_id: 'approval-direct', status: 'requested' },
+  }).approval_id, 'approval-direct');
+
+  assert.equal(adaptRun({
+    workflow_run_id: 'workflow-2',
+    status: 'waiting_for_approval',
+    approvals: [
+      { approval_id: 'approval-old', status: 'granted' },
+      { approval_id: 'approval-open', status: 'requested' },
+    ],
+  }).approval_id, 'approval-open');
+});
+
 test('ai message payload keeps title out of existing conversation sends', async () => {
   const { aiMessagePayload } = await vite.ssrLoadModule('/src/features/chat/api.ts');
 

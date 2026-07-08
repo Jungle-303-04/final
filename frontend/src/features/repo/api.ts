@@ -108,6 +108,9 @@ export function useRunsAll(apps: Application[]) {
       pending: results.some(r => r.isPending),
       failed: results.some(r => r.isError),
       error: results.find(r => r.isError)?.error,
+      refetchAll: () => {
+        results.forEach(result => void result.refetch());
+      },
       items: results.map((r, i) => ({
         appId: apps[i]?.application_id ?? '',
         runs: (r.data?.runs ?? []).map(adaptRun),
