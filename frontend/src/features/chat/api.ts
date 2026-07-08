@@ -12,8 +12,8 @@ import type {
   Tone,
 } from '@/shared/lib/types';
 import { adaptConversationSummary } from '@/shared/lib/adapt';
-import { uiStore } from '@/shared/lib/ui-store';
 import type { AiChatContext } from '@/features/chat/context';
+import { useToast } from '@/ui';
 
 const CHAT_QUERY_TIMEOUT_MS = 8_000;
 
@@ -85,18 +85,23 @@ export function useDeleteConversation() {
 }
 export function useSelectAction() {
   const qc = useQueryClient();
+  const { push } = useToast();
   return useMutation({
     mutationFn: ({ planId, actionId }: { planId: string; actionId: string }) =>
       post(`/rca/recovery-plans/${planId}/actions/${actionId}/select`),
     onSuccess: () => {
-      uiStore.getState().toast('ok', '복구 액션을 실행 큐에 등록했습니다 — 진행은 워크플로우에서 확인');
+      push({ tone: 'success', title: '복구 액션 등록', description: '진행 상태는 워크플로우에서 확인할 수 있습니다' });
       qc.invalidateQueries({ queryKey: chatKeys.list() });
     },
     onError: err => {
       const e = err as { kind?: string; detail?: string };
-      uiStore.getState().toast('danger', e.kind === 'forbidden'
-        ? '실행 거부 — release_operator 권한이 필요합니다'
-        : `액션 실행 실패 — ${e.detail ?? '잠시 후 다시 시도해주세요'}`);
+      push({
+        tone: 'danger',
+        title: '액션 실행 실패',
+        description: e.kind === 'forbidden'
+          ? 'release_operator 권한이 필요합니다'
+          : e.detail ?? '잠시 후 다시 시도해주세요',
+      });
       // 다른 세션에서 이미 선택됐을 수 있음 — 대화 최신화
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'ai' });
     },

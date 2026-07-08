@@ -212,6 +212,12 @@
 - 검증(2026-07-08 08:50 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`, Tailwind arbitrary value) 0건. Playwright mock으로 `/catalog`를 1440/1024/390 폭에서 순회했고 카탈로그 카드/태그/설치 요청 toast, POST body `{application_name:"postgresql", values:{}}`, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/catalog-desktop.png`, `/tmp/catalog-tablet.png`, `/tmp/catalog-mobile.png`.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `b3c86e1c-catalog-ui-20260708085319`, `CatalogView-D9Tir7kG.js` lazy chunk 서빙 확인.
 
+## 레거시 toast 경로 제거 (2026-07-08)
+
+- `app/providers.tsx`에서 `@/shared/ui` `<Toasts />`를 제거하고 `@/ui` ToastProvider/ToastViewport만 사용한다.
+- `cluster/api.ts`, `metrics/api.ts`, `chat/api.ts`의 mutation toast를 legacy `uiStore`에서 `useToast()`로 이관했다. 스케일/재시작/등록 해제, 메트릭 쿼리/위젯 저장·삭제·실행, AI 복구 액션 선택 성공/실패가 모두 `@/ui` toast를 사용한다.
+- 검증(2026-07-08 09:07 KST): `rg "uiStore|@/shared/ui|Toasts" frontend/src/app frontend/src/features` 0건. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과.
+
 ## 클러스터 제어 UX 변경 (2026-07-08)
 
 - `role=management` 클러스터는 목록과 홈 플릿 히트맵에서 "관리 클러스터" 뱃지를 표시한다.

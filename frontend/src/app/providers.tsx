@@ -4,7 +4,6 @@ import { queryClient } from '@/shared/lib/query';
 import { setUnauthorizedHandler } from '@/shared/lib/api';
 import { clearSessionHint, sessionKey } from '@/features/auth/api';
 import { installSessionRefresh } from '@/features/auth/sessionRefresh';
-import { Toasts } from '@/shared/ui';
 import { ToastProvider, ToastViewport } from '@/ui';
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -19,7 +18,6 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         {children}
-        <Toasts />
         <ToastViewport />
       </ToastProvider>
     </QueryClientProvider>
