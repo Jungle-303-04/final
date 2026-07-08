@@ -253,7 +253,11 @@ def test_kubernetes_snapshot_provider_deduplicates_cluster_scoped_nodes(monkeypa
                 json={
                     "items": [
                         {
-                            "metadata": {"uid": f"pod-{namespace}", "name": f"pod-{namespace}", "namespace": namespace},
+                            "metadata": {
+                                "uid": f"pod-{namespace}",
+                                "name": f"pod-{namespace}",
+                                "namespace": namespace,
+                            },
                             "spec": {"nodeName": "node-a"},
                             "status": {"phase": "Running", "containerStatuses": []},
                         }
