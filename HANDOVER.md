@@ -1,11 +1,21 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:22 KST (디자인 시스템 CI 가드)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:25 KST (미사용 레거시 UI 스윕)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 미사용 레거시 UI 스윕
+
+- 구현:
+  - 앱 경로에서 참조가 끊긴 `frontend/src/plural-ui/*`, `frontend/src/shared/ui/*`, `frontend/src/shared/motion/index.tsx`, `frontend/src/shared/lib/ui-store.ts`를 삭제했다.
+  - 개발용 `/dev/ui` showcase는 레거시 `shared/ui/icons` import 대신 로컬 currentColor SVG 아이콘을 사용한다.
+  - 남은 `frontend/src/shared`는 flow wrapper와 API/lib 유틸만이다.
+- 검증:
+  - `rg "@/shared/ui|@/shared/motion|@/plural-ui|plural-ui|shared/ui|shared/motion|ui-store" frontend/src` 0건.
+  - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 11건, production build 모두 통과.
 
 ## 체크포인트 — 디자인 시스템 CI 가드
 
