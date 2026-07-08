@@ -42,6 +42,14 @@ export interface Series {
 const MAX_X_AXIS_TICKS = 5;
 type SparklineTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
+export function hasSparklinePoints(points: Array<number | null | undefined>): boolean {
+  return points.some((point) => {
+    if (point == null) return false;
+    const value = Number(point);
+    return Number.isFinite(value) && value >= 0;
+  });
+}
+
 export function Sparkline({
   points,
   tone = 'neutral',
@@ -147,9 +155,13 @@ export function TimeSeriesChart({ series, className }: { series: Series[]; class
 }
 
 function normalizeSparkPoints(points: Array<number | null | undefined>): number[] {
-  return points
-    .map((point) => Number(point))
-    .filter((point) => Number.isFinite(point) && point >= 0);
+  const values: number[] = [];
+  for (const point of points) {
+    if (point == null) continue;
+    const value = Number(point);
+    if (Number.isFinite(value) && value >= 0) values.push(value);
+  }
+  return values;
 }
 
 function sparkPath(values: number[]): string {

@@ -23,6 +23,11 @@
   - GitHub Actions는 코드 실행 전 실패: CI `28910247958`, AWS CD `28910247957`, Promote `28910248008` 모두 failed job의 `steps: []` 확인.
   - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:3f98a7d0-real-charts-20260708101622`, rollout `1/1 ready`.
   - live `https://k8s.woonyong.org/`와 `/api/healthz` 200. live assets에서 real chart aria marker 5건, legacy dummy marker(`SparkBars`, `ClusterSpark`, `MiniBars`) 0건 확인.
+- 보강(2026-07-08 10:33 KST):
+  - 홈/메트릭/클러스터 상세 스파크라인이 `null` telemetry를 0처럼 그리던 문제를 수정했다. CPU/MEM처럼 서버가 `null`을 주는 항목은 차트를 숨기고 `미확인`만 표시한다.
+  - `frontend/src/shared/lib/live.ts`가 realtime-gateway의 초기 `snapshot.state.clusters`를 history에 반영하도록 수정했다. 메트릭 그래프는 WebSocket 접속 직후 최신 live summary로 초기화된다.
+  - 라이브 API 샘플: `/fleet/summary`가 `management-cluster`, `1`, `2`, `cluster-1`, `cluster-2` 5개를 반환하며, `1`은 `never_connected`, `2`는 `install_expired`, `cluster-1/2`는 online이지만 CPU/MEM usage 키는 아직 없다. 화면의 `미확인`/`1`/`2`는 프론트 더미가 아니라 서버 원본 데이터다.
+  - `bash scripts/frontend-check.sh` 통과(unit tests 14건 + production build).
 
 ## 체크포인트 — 목록 필터 초기화 CTA
 

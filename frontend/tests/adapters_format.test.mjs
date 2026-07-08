@@ -134,6 +134,53 @@ test('usage series renders restart_total as per-sample delta', async () => {
   assert.deepEqual(series[2].data.map(point => point.y), [0, 3, 0, 5]);
 });
 
+test('sparkline presence requires measured numeric points', async () => {
+  const { hasSparklinePoints } = await vite.ssrLoadModule('/src/ui/charts.tsx');
+
+  assert.equal(hasSparklinePoints([null, undefined]), false);
+  assert.equal(hasSparklinePoints([null, undefined, Number.NaN]), false);
+  assert.equal(hasSparklinePoints([-1, null]), false);
+  assert.equal(hasSparklinePoints([null, 0]), true);
+  assert.equal(hasSparklinePoints([undefined, 42]), true);
+});
+
+test('live stream applies initial snapshot summaries to chart history', async () => {
+  const { applyRealtimeMessage, liveStore } = await vite.ssrLoadModule('/src/shared/lib/live.ts');
+
+  liveStore.setState({ status: 'closed', snapshot: null, history: [] });
+  applyRealtimeMessage({
+    type: 'snapshot',
+    seq: 12,
+    state: {
+      clusters: {
+        'cluster-1': { cluster_id: 'cluster-1', pods_ready: 17, restart_delta: 2 },
+        'cluster-2': { pods_ready: 13, restart_delta: 0 },
+      },
+      resources: {},
+    },
+  });
+
+  assert.deepEqual(
+    liveStore.getState().history.map(({ clusterId, restarts, running }) => ({ clusterId, restarts, running })),
+    [
+      { clusterId: 'cluster-1', restarts: 2, running: 17 },
+      { clusterId: 'cluster-2', restarts: 0, running: 13 },
+    ],
+  );
+
+  applyRealtimeMessage({
+    type: 'live.summary',
+    cluster_id: 'cluster-1',
+    summary: { cluster_id: 'cluster-1', pods_ready: 18, restart_delta: 1 },
+  });
+
+  const lastPoint = liveStore.getState().history.at(-1);
+  assert.equal(lastPoint.clusterId, 'cluster-1');
+  assert.equal(lastPoint.restarts, 1);
+  assert.equal(lastPoint.running, 18);
+  liveStore.setState({ status: 'closed', snapshot: null, history: [] });
+});
+
 test('cluster drill actions keep real subject context across events metrics and ai', async () => {
   const { contextActionHrefs, deploymentTargetFromWorkload } = await vite.ssrLoadModule('/src/features/cluster/ClusterDetailView.tsx');
   const { adaptWorkloadResource } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');

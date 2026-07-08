@@ -42,7 +42,7 @@ import {
   cx,
   useToast,
 } from '@/ui';
-import { Sparkline, TimeSeriesChart, type Series } from '@/ui/charts';
+import { hasSparklinePoints, Sparkline, TimeSeriesChart, type Series } from '@/ui/charts';
 import { AnimatePresence, listItem, listStagger } from '@/ui/motion';
 import { useConsolePath } from '@/features/console/ui';
 
@@ -653,7 +653,7 @@ function MetricStatCard({
   loading: boolean;
   sparkPoints?: Array<number | null | undefined>;
 }) {
-  const hasSpark = sparkPoints?.some((point) => Number.isFinite(Number(point))) ?? false;
+  const hasSpark = sparkPoints ? hasSparklinePoints(sparkPoints) : false;
   return (
     <StatCard
       label={label}

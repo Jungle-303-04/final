@@ -51,7 +51,7 @@ import {
   cx,
   type TableColumn,
 } from '@/ui';
-import { Sparkline } from '@/ui/charts';
+import { hasSparklinePoints, Sparkline } from '@/ui/charts';
 
 type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 type DetailSubject = 'node' | 'service' | 'workload';
@@ -1316,7 +1316,7 @@ function usageRestartDeltaPoints(samples: UsageSample[]): number[] {
 }
 
 function sparkFor(points: Array<number | null | undefined>, tone: BadgeTone, label: string): ReactNode | undefined {
-  return points.some((value) => Number.isFinite(Number(value))) ? <Sparkline points={points} tone={tone} ariaLabel={label} /> : undefined;
+  return hasSparklinePoints(points) ? <Sparkline points={points} tone={tone} ariaLabel={label} /> : undefined;
 }
 
 function StatusBadge({ status, label }: { status: string; label?: string }) {

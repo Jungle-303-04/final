@@ -151,6 +151,11 @@
   - GitHub Actions는 코드 실행 전 실패: CI `28910247958`, AWS CD `28910247957`, Promote `28910248008` 모두 failed job의 `steps: []` 확인.
   - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:3f98a7d0-real-charts-20260708101622`, rollout `1/1 ready`.
   - live `https://k8s.woonyong.org/`와 `/api/healthz` 200. live assets에서 real chart aria marker 5건, legacy dummy marker(`SparkBars`, `ClusterSpark`, `MiniBars`) 0건 확인.
+- 실시간/미확인 차트 보정(2026-07-08 10:33 KST):
+  - `Sparkline`은 `null`/`undefined`를 0으로 변환하지 않고, 실제 측정 숫자가 있을 때만 차트 근거로 사용한다. 홈/메트릭/클러스터 상세 StatCard도 같은 `hasSparklinePoints` 기준을 공유한다.
+  - 브라우저 live WS의 초기 `snapshot.state.clusters`를 메트릭 history에 반영한다. 접속 직후 `live.summary` 새 이벤트를 기다리지 않아도 실시간 그래프 초기값이 채워진다.
+  - 라이브 API 확인: `/fleet/summary`의 CPU/MEM은 전부 `null`, `1`/`2`는 각각 `never_connected`/`install_expired` 등록으로 서버가 반환 중이다. UI는 합성값을 만들지 않고 미확인/미연결 상태를 표시한다.
+  - `bash scripts/frontend-check.sh` passed. unit tests 14건, production build 통과.
 
 ## 전개형 검증 UX 패스 범위 (디자인 시스템 완료 후)
 
