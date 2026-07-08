@@ -10,6 +10,7 @@ from domains.rca.events import (
     Evidence,
     EvidenceBundle,
     IncidentRecord,
+    RcaAnalysisBlockedBody,
     RcaCompletedBody,
     RcaReportDetail,
     RecoveryActionSelectedBody,
@@ -605,6 +606,70 @@ def test_unknown_symptom_creates_backlog_and_manual_selection_flow() -> None:
     assert feedback_outs[0].next_actions[0]["action_type"] == "collect_evidence"
 
 
+def test_blocked_rca_with_root_cause_still_offers_recovery_selection() -> None:
+    feedback_worker = load_service("ai/rca-feedback-worker")
+    select_worker = load_service("ai/select-worker")
+    incident = IncidentRecord(
+        incident_id="inc-upstream",
+        cluster_id="cluster-1",
+        resource_kind="Deployment",
+        resource_name="orders-api",
+        namespace="sandbox",
+        symptom="사용자 요청 5xx 오류",
+        severity="high",
+        first_seen_at=None,
+        summary="orders-api 5xx spike",
+        workspace_id="workspace-1",
+    )
+    detail = RcaReportDetail(
+        root_cause="upstream_unavailable",
+        confidence=0.62,
+        selected_candidate_id="upstream_unavailable",
+        supporting_evidence=["kubernetes", "metrics", "logs"],
+        missing_evidence=["signal:upstream_failure_signal"],
+        reason="upstream failure candidate is most likely, but one signal is still missing",
+    )
+    blocked = RcaAnalysisBlockedBody(
+        reason_code="evidence_missing",
+        reason="missing signal:upstream_failure_signal",
+        evidence_ref="object://evidence/corr-upstream.json",
+        rca_detail=detail,
+        workspace_id="workspace-1",
+        evidence=Evidence(
+            cluster_id="cluster-1",
+            kubernetes={},
+            metrics={},
+            logs=[],
+            traces={},
+            object_ref="object://evidence/corr-upstream.json",
+            workspace_id="workspace-1",
+        ),
+        incident=incident,
+        evidence_bundle=EvidenceBundle(
+            incident_id=incident.incident_id,
+            items=[],
+            missing_evidence=["signal:upstream_failure_signal"],
+            complete=False,
+        ),
+        missing_evidence=["signal:upstream_failure_signal"],
+    )
+
+    feedback_outs = run_handler(feedback_worker.on_rca_analysis_blocked, blocked)
+
+    assert subjects_of(feedback_outs) == ["rca.followup.required", "recovery.planned"]
+    plan = feedback_outs[1].plan
+    assert plan.selection_required is True
+    assert [candidate.draft.action_type for candidate in plan.candidates[:2]] == [
+        "rollout_restart",
+        "deployment_scale",
+    ]
+    assert all(candidate.approval_required for candidate in plan.candidates)
+    assert plan.candidates[0].draft.params["analysis_blocked_fallback"] is True
+
+    select_outs = run_handler(select_worker.on_recovery_planned, feedback_outs[1])
+    assert subjects_of(select_outs) == ["recovery.selection_requested"]
+
+
 def test_plan_worker_resolves_backlog_when_rule_exists() -> None:
     db = SpyDb()
     evidence_worker = load_service("ai/evidence-worker")
@@ -640,7 +705,7 @@ def test_plan_worker_resolves_backlog_when_rule_exists() -> None:
     )
 
 
-def test_user_selected_safe_pr_flow_requires_concrete_patch(monkeypatch) -> None:
+def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.setenv("SCM_REPO", "project/repo")
     db = SpyDb()
@@ -680,9 +745,11 @@ def test_user_selected_safe_pr_flow_requires_concrete_patch(monkeypatch) -> None
         "recovery.planned",
         "recovery.selection_requested",
         "approval.recommended",
-        "rca.action_required",
+        "safe_pr.requested",
     ]
-    assert dispatch_outs[0].reason_code == "safe_pr_patch_missing"
+    assert dispatch_outs[0].patches
+    assert dispatch_outs[0].patches[0].path.startswith(".gitops/recovery/")
+    assert dispatch_outs[0].approval_ref is None
     assert not db.called("save_pull_request")
 
 

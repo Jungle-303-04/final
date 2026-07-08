@@ -149,6 +149,8 @@ type TargetPayload = {
   kube_context?: string;
 };
 
+type TargetPreflightPayload = Omit<TargetPayload, 'name' | 'environment'>;
+
 const providerOptions: Array<{
   key: ProviderKind | 'local';
   label: string;
@@ -235,9 +237,10 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
   );
   const installSteps = useMemo(() => installStepBlocks(issued), [issued]);
   const prerequisites = providerPrerequisites(activeCloudProvider);
+  const localInstall = activeCloudProvider === 'kind' || activeCloudProvider === 'minikube';
 
   const preflight = useMutation({
-    mutationFn: () => post<TargetPreflight>('/targets/preflight', targetPayload(form, activeCloudProvider), {
+    mutationFn: () => post<TargetPreflight>('/targets/preflight', targetPreflightPayload(form, activeCloudProvider), {
       timeoutMs: CLUSTER_REGISTRATION_TIMEOUT_MS,
     }),
     onSuccess: (data) => {
@@ -423,15 +426,23 @@ export function RegisterClusterWizard({ open, onClose }: { open: boolean; onClos
                       placeholder={form.cluster_id || '운영 클러스터'}
                     />
                   </Field>
-                  <Field label="환경" error={validation.errors.environment}>
-                    <Input
+                  <Field
+                    label="운영 구분"
+                    error={validation.errors.environment}
+                    help={localInstall ? '로컬 클러스터는 dev로 기록됩니다' : '목록과 배포 필터에 쓰는 환경 라벨입니다'}
+                  >
+                    <Select
                       value={form.environment}
                       onChange={(event) => setField('environment', event.target.value)}
-                      placeholder="dev / stage / prod"
-                    />
+                      disabled={localInstall}
+                    >
+                      <option value="dev">dev</option>
+                      <option value="stage">stage</option>
+                      <option value="prod">prod</option>
+                    </Select>
                   </Field>
                   <Field label="설치 방식" help="수동 manifest 설치 흐름으로 고정됩니다">
-                    <Input value="manual-manifest" readOnly />
+                    <Input value="수동 manifest" readOnly />
                   </Field>
                 </div>
               </Card>
@@ -673,7 +684,7 @@ function ProviderSection({
           items={[
             { label: '선택 provider', value: activeCloudProvider },
             { label: '서버 discovery', value: selectedFlow ? registrationStatusLabel(selectedFlow.status) : 'preflight에서 확인' },
-            { label: '설치 방식', value: DEFAULT_DEPLOY_PROVIDER },
+            { label: '설치 방식', value: '수동 manifest' },
           ]}
         />
       </div>
@@ -900,6 +911,19 @@ function targetPayload(form: FormState, provider: ProviderKind): TargetPayload {
   return payload;
 }
 
+function targetPreflightPayload(form: FormState, provider: ProviderKind): TargetPreflightPayload {
+  const payload = targetPayload(form, provider);
+  return {
+    cluster_id: payload.cluster_id,
+    apply: payload.apply,
+    cloud_provider: payload.cloud_provider,
+    deploy_provider: payload.deploy_provider,
+    provider_config: payload.provider_config,
+    ...(payload.management_base_url ? { management_base_url: payload.management_base_url } : {}),
+    ...(payload.kube_context ? { kube_context: payload.kube_context } : {}),
+  };
+}
+
 function providerConfig(form: FormState, provider: ProviderKind): Record<string, string> {
   if (provider === 'eks') {
     return compactConfig({
@@ -1012,9 +1036,11 @@ function applyProviderDefaults(form: FormState, provider: ProviderKind): FormSta
   const next = { ...form };
   if (!next.name && next.cluster_id) next.name = next.cluster_id;
   if (provider === 'kind') {
+    next.environment = 'dev';
     if (!next.kind_cluster_name) next.kind_cluster_name = next.cluster_id;
     next.context_alias = kindContext(next);
   } else if (provider === 'minikube') {
+    next.environment = 'dev';
     if (!next.minikube_profile) next.minikube_profile = 'minikube';
     next.context_alias = next.minikube_profile;
   } else if (provider === 'eks' || provider === 'gke' || provider === 'aks') {

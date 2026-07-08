@@ -471,6 +471,9 @@ class ClusterOpenIncidentItem(StrictModel):
     correlation_id: str
     symptom: str | None = None
     root_cause: str | None = None
+    namespace: str | None = None
+    resource_kind: str | None = None
+    resource_name: str | None = None
     status: str
     created_at: str | None = None
 

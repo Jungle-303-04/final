@@ -449,3 +449,22 @@
 - 라이브 반영: service image `0aa81ea5-drilldown-agent-filter-20260708125500`, console image
   `0aa81ea5-drilldown-agent-filter-20260708125500`로 management deployment 전체 rollout 완료.
   live `/api/healthz` 200, root asset `/assets/index-YIJZma8H.js`, cluster detail chunk `ClusterDetailView-CwucS_FI.js` 서빙 확인.
+
+## M. 데모 RCA 복구계획·토폴로지 실측 패스 (2026-07-08)
+
+- RCA가 `rca.analysis_blocked`로 끝나도 root cause 후보가 식별된 경우 기존 `RecoveryPlanner`를 재사용해
+  `recovery.planned`를 추가 발행한다. 단, blocked 경로는 자동 실행하지 않고 모든 후보를 `selection_required`
+  상태로 강제해 운영자가 복구 버튼을 선택해야 진행된다.
+- Safe PR 복구 후보가 구체 patch 없이 끝나는 경우에도 `.gitops/recovery/*.md` 검토 패치를 생성해
+  기존 safe-pr-worker/scm-worker 경로가 끊기지 않는다. 실제 cluster 변경은 기존 command approval 경로
+  (restart/scale)와 GitOps manifest diff 경로가 맡는다.
+- 클러스터 상세는 Pod summary의 `cpu_mcores`/`mem_mib`를 읽어 mCPU/MiB로 표시한다. 퍼센트 실측이 있으면
+  기존 gauge를 우선 사용하고, 없으면 수치 fallback을 보여준다.
+- `target`, `management`, `kube-system`, `monitoring` 등 운영 namespace와 agent/telemetry 이름 마커는
+  Pod뿐 아니라 워크로드/서비스/리소스/이벤트 탭에서도 동일하게 제외한다. `sandbox` 데모 워크로드는 계속 표시한다.
+- `집계 요약` 500 원인은 열린 인시던트 row의 대상 필드(`namespace/resource_kind/resource_name`)가 응답 모델에서
+  허용되지 않았기 때문이다. 계약에 필드를 추가하고, router에서 허용 필드만 정규화해 extra field가 다시 500을 만들지 않게 했다.
+- Motion 토큰은 시연 화면의 과한 이동감을 줄이기 위해 fast/base/slow를 100/160/240ms 계열로 낮췄고,
+  prefers-reduced-motion 경로는 기존 프리셋을 유지한다.
+- 검증: `PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py tests/test_target_kubernetes_evidence.py tests/test_inventory_domain.py tests/test_fleet_router.py -q`
+  48 passed, `PYTHONPATH=src .venv/bin/python -m ruff check src tests` passed, `bash scripts/frontend-check.sh` passed.

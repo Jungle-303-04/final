@@ -80,7 +80,7 @@ export default function RepoDetailView() {
 
       <Tabs
         value={tab}
-        onValueChange={(value) => setSp({ tab: normalizeTab(value) })}
+        onValueChange={(value) => setSp({ tab: normalizeTab(value) }, { preventScrollReset: true })}
         items={[
           { value: 'runs', label: '실행', count: runs.length },
           { value: 'deployments', label: '배포 대상', count: deploymentsQ.data?.length },

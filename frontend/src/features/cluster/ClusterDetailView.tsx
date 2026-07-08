@@ -131,12 +131,15 @@ export default function ClusterDetailView() {
     }
     return byNode;
   }, [podsQ.data]);
+  const updateSearchParams = (next: URLSearchParams, replace = false) => {
+    setSp(next, { replace, preventScrollReset: true });
+  };
 
   const setTab = (nextTab: string) => {
     const next = new URLSearchParams(sp);
     next.set('tab', nextTab);
     clearDetailParams(next);
-    setSp(next);
+    updateSearchParams(next);
   };
   const showTab = (nextTab: string, q?: string) => {
     const next = new URLSearchParams(sp);
@@ -144,13 +147,13 @@ export default function ClusterDetailView() {
     if (q) next.set('q', q);
     else next.delete('q');
     clearDetailParams(next);
-    setSp(next);
+    updateSearchParams(next);
   };
   const setFilter = (q: string) => {
     const next = new URLSearchParams(sp);
     if (q.trim()) next.set('q', q.trim());
     else next.delete('q');
-    setSp(next);
+    updateSearchParams(next, true);
   };
   const resetInventoryFilter = () => showTab(tab);
   const openDetail = (subject: DetailSubject, name: string, ns?: string, kind?: string) => {
@@ -161,12 +164,12 @@ export default function ClusterDetailView() {
     else next.delete('namespace');
     if (kind) next.set('kind', kind);
     else next.delete('kind');
-    setSp(next);
+    updateSearchParams(next);
   };
   const closeDetail = () => {
     const next = new URLSearchParams(sp);
     clearDetailParams(next);
-    setSp(next);
+    updateSearchParams(next);
   };
   const closeResourceDetail = () => {
     if (openPod) nav(pathFor(`/clusters/${clusterId}?tab=pods`));
@@ -230,13 +233,13 @@ export default function ClusterDetailView() {
             if (node) next.set('node', node);
             else next.delete('node');
             next.delete('pod');
-            setSp(next);
+            updateSearchParams(next);
           }}
           onSelectPod={(podId) => {
             const next = new URLSearchParams(sp);
             if (podId) next.set('pod', podId);
             else next.delete('pod');
-            setSp(next);
+            updateSearchParams(next);
           }}
         />
         <PodObservationCard
@@ -526,8 +529,8 @@ function ClusterDrilldownPanel({
                   { label: 'ready', value: selectedPod.ready || '없음' },
                   { label: 'owner', value: `${selectedPod.owner_kind}/${selectedPod.owner || '없음'}` },
                   { label: '재시작', value: selectedPod.restarts.toLocaleString() },
-                  { label: 'CPU', value: pctText(selectedPod.cpu_pct) },
-                  { label: '메모리', value: pctText(selectedPod.mem_pct) },
+                  { label: 'CPU', value: podCpuText(selectedPod) },
+                  { label: '메모리', value: podMemoryText(selectedPod) },
                 ]}
               />
             </Card>
@@ -1412,7 +1415,7 @@ function podTiles(pods: PodHeatmapSummary[]): DrilldownTile[] {
   return pods.map((pod) => ({
     id: pod.id,
     label: pod.name,
-    size: pod.cpu_pct ?? pod.mem_pct ?? 1,
+    size: pod.cpu_pct ?? pod.mem_pct ?? pod.cpu_mcores ?? pod.mem_mib ?? 1,
     health: pod.incident_correlation_id ? 'critical' : pod.health,
     pulse: Boolean(pod.incident_correlation_id),
     badge: pod.restarts > 0 ? <Badge tone="warning">재시작 {pod.restarts}</Badge> : undefined,
@@ -1443,12 +1446,25 @@ function PodTileMeta({ pod }: { pod: PodHeatmapSummary }) {
     <>
       <span className="min-w-0 truncate">{pod.namespace} · {pod.phase}</span>
       <span className="grid gap-1">
-        <MiniGauge label="CPU" value={pod.cpu_pct} />
-        <MiniGauge label="MEM" value={pod.mem_pct} />
+        <UsageGauge label="CPU" pct={pod.cpu_pct} fallback={pod.cpu_mcores == null ? null : `${Math.round(pod.cpu_mcores)}m`} />
+        <UsageGauge label="MEM" pct={pod.mem_pct} fallback={pod.mem_mib == null ? null : `${Math.round(pod.mem_mib)}MiB`} />
       </span>
       {pod.incident_correlation_id && <Badge tone="danger">인시던트</Badge>}
     </>
   );
+}
+
+function UsageGauge({ label, pct, fallback }: { label: string; pct: number | null; fallback: string | null }) {
+  if (pct != null) return <MiniGauge label={label} value={pct} />;
+  if (fallback) {
+    return (
+      <span className="flex items-center justify-between gap-2 text-caption text-muted">
+        <span>{label}</span>
+        <span className="tabular-nums text-secondary">{fallback}</span>
+      </span>
+    );
+  }
+  return <span className="text-caption text-muted">{label} 없음</span>;
 }
 
 function MiniGauge({ label, value }: { label: string; value: number | null }) {
@@ -1479,6 +1495,18 @@ function gaugeWidthClass(value: number) {
 
 function pctText(value: number | null) {
   return value == null ? '없음' : `${Math.round(value)}%`;
+}
+
+function podCpuText(pod: PodHeatmapSummary) {
+  if (pod.cpu_pct != null) return pctText(pod.cpu_pct);
+  if (pod.cpu_mcores != null) return `${Math.round(pod.cpu_mcores)}m`;
+  return '없음';
+}
+
+function podMemoryText(pod: PodHeatmapSummary) {
+  if (pod.mem_pct != null) return pctText(pod.mem_pct);
+  if (pod.mem_mib != null) return `${Math.round(pod.mem_mib)}MiB`;
+  return '없음';
 }
 
 function clusterDeploymentRows(apps: Application[], items: Array<{ appId: string; deployments: Deployment[] }>, clusterId: string): ClusterDeploymentRow[] {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass, field
 
 from domains.command.actions import command_action_for_recovery
@@ -19,6 +21,7 @@ from services.ai.agent.defaults import ActionRoutes
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."
 UNSUPPORTED_AUTO_ACTION_REASON = "자동 실행 대상 command action으로 변환할 수 없습니다."
 MISSING_SAFE_PR_PATCH_REASON = "Safe PR에 적용할 구체적인 파일 패치가 없습니다."
+SAFE_PR_FALLBACK_PATCH_DIR = ".gitops/recovery"
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,14 @@ def build_safe_pr_request_body(
         provider=GitHub.PROVIDER,
         patches=patches,
         workspace_id=workspace_id,
+        repository_id=str(draft.params.get("repository_id") or ""),
+        binding_id=str(draft.params.get("binding_id") or ""),
+        application_id=str(draft.params.get("application_id") or ""),
+        workflow_run_id=str(draft.params.get("workflow_run_id") or ""),
+        environment=str(draft.params.get("environment") or Sandbox.NAMESPACE),
+        manifest_path=str(draft.params.get("manifest_path") or "deploy/k8s"),
+        approval_ref=as_optional_str(draft.params.get("approval_ref")),
+        policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
     )
 
 
@@ -191,7 +202,7 @@ def command_payload_for(
 def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
     raw = selected.draft.params.get("patches")
     if not isinstance(raw, list):
-        return []
+        return [fallback_recovery_patch(selected)]
     patches: list[SafePrFilePatch] = []
     for item in raw:
         if not isinstance(item, dict):
@@ -207,7 +218,40 @@ def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
                 description=str(item.get("description") or selected.title),
             )
         )
-    return patches
+    return patches or [fallback_recovery_patch(selected)]
+
+
+def fallback_recovery_patch(selected: RecoveryActionCandidate) -> SafePrFilePatch:
+    draft = selected.draft
+    token = hashlib.sha256(selected.action_id.encode()).hexdigest()[:16]
+    action = safe_path_segment(draft.action_type or "recovery")
+    path = f"{SAFE_PR_FALLBACK_PATCH_DIR}/{token}-{action}.md"
+    target = f"{draft.namespace}/{draft.resource_kind}/{draft.resource_name}"
+    checks = "\n".join(f"- {check}" for check in selected.validation_checks) or "- 상태 확인"
+    content = (
+        f"# {selected.title}\n\n"
+        "## 대상\n\n"
+        f"- 리소스: `{target}`\n"
+        f"- 원인: `{draft.params.get('root_cause', '')}`\n"
+        f"- 위험도: `{selected.risk_level}`\n"
+        f"- 영향 범위: `{selected.blast_radius}`\n\n"
+        "## 조치\n\n"
+        f"{selected.description}\n\n"
+        "## 검증\n\n"
+        f"{checks}\n\n"
+        "## 롤백\n\n"
+        f"{selected.rollback_plan}\n"
+    )
+    return SafePrFilePatch(
+        path=path,
+        content=content,
+        description=f"{selected.title} 복구 검토 기록",
+    )
+
+
+def safe_path_segment(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "-", value.strip()).strip("-._")
+    return cleaned or "recovery"
 
 
 def as_optional_str(value: object) -> str | None:

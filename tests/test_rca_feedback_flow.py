@@ -116,9 +116,12 @@ def test_insufficient_candidate_evidence_is_blocked_not_completed() -> None:
     assert rca_outs[0].reason_code == "insufficient_evidence"
     assert rca_outs[0].rca_detail.missing_evidence == ["logs"]
     assert rca_outs[0].rca_detail.missing_evidence_checks[0].check_id
-    assert subjects_of(feedback_outs) == ["rca.followup.required"]
+    assert subjects_of(feedback_outs) == ["rca.followup.required", "recovery.planned"]
     assert feedback_outs[0].missing_evidence == ["logs"]
     assert feedback_outs[0].next_actions[0]["action_type"] == "collect_evidence"
+    assert feedback_outs[1].plan.selection_required is True
+    assert feedback_outs[1].plan.candidates[0].approval_required is True
+    assert feedback_outs[1].plan.candidates[0].draft.params["analysis_blocked_fallback"] is True
 
 
 def test_no_candidate_analysis_is_blocked_and_does_not_save_report() -> None:

@@ -72,7 +72,7 @@ export default function ChatView() {
     if (!sp.has('prefill')) return;
     const next = new URLSearchParams(sp);
     next.delete('prefill');
-    setSp(next, { replace: true });
+    setSp(next, { replace: true, preventScrollReset: true });
   };
 
   const submit = () => {

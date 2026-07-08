@@ -257,7 +257,7 @@ def build_cluster_summary_detail(
         )
     ]
     open_incidents = [
-        ClusterOpenIncidentItem(**row)
+        open_incident_item(row)
         for row in db.list_open_rca_incidents(workspace_id, cluster_id, limit=OPEN_INCIDENT_LIMIT)
     ]
 
@@ -521,6 +521,20 @@ def warning_event_item(row: JsonObject) -> ClusterWarningEventItem:
         involved_name=summary.get("involved_name"),
         count=_int_or_zero(summary.get("count")),
         last_seen_at=row.get("last_seen_at"),
+    )
+
+
+def open_incident_item(row: JsonObject) -> ClusterOpenIncidentItem:
+    return ClusterOpenIncidentItem(
+        incident_id=str(row.get("incident_id") or row.get("correlation_id") or ""),
+        correlation_id=str(row.get("correlation_id") or row.get("incident_id") or ""),
+        symptom=_optional_text(row.get("symptom")),
+        root_cause=_optional_text(row.get("root_cause")),
+        namespace=_optional_text(row.get("namespace")),
+        resource_kind=_optional_text(row.get("resource_kind")),
+        resource_name=_optional_text(row.get("resource_name")),
+        status=str(row.get("status") or ""),
+        created_at=_optional_text(row.get("created_at")),
     )
 
 

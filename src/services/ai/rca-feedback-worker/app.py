@@ -3,20 +3,33 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 
 from domains.rca.events import (
     RcaActionRequiredBody,
     RcaAiFallbackRequestedBody,
     RcaAnalysisBlockedBody,
+    RcaCompletedBody,
     RcaFollowupRequiredBody,
+    RecoveryPlannedBody,
 )
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.event_bus.bodies.platform import PipelineContractFailedBody
 from packages.runtime.app import App
+from services.ai.agent.recovery.engine import RecoveryPlanner
 
 app = App("rca-feedback-worker")
 
 SEVERITY_WARNING = "warning"
+NON_ACTIONABLE_ROOT_CAUSES = {
+    "",
+    "unknown",
+    "insufficient_evidence",
+    "none",
+    "분석 가능한 원인 후보 없음",
+}
+
+planner = RecoveryPlanner()
 
 
 def collect_actions_for_missing(missing_evidence: list[str]) -> list[JsonObject]:
@@ -63,6 +76,64 @@ async def on_rca_analysis_blocked(evt: RcaAnalysisBlockedBody) -> AsyncIterator[
             "agent_safe": True,
         },
     )
+    planned = blocked_recovery_plan(evt)
+    if planned is not None:
+        yield planned
+
+
+def blocked_recovery_plan(evt: RcaAnalysisBlockedBody) -> RecoveryPlannedBody | None:
+    """근거가 일부 부족해도 원인 후보가 식별되면 승인형 복구 후보를 노출한다.
+
+    analysis_blocked 경로에서는 자동 실행을 절대 하지 않고 selection_required 계획만 만든다.
+    """
+
+    if evt.incident is None or evt.rca_detail is None or evt.rule_missing is not None:
+        return None
+    if evt.rca_detail.root_cause.strip().lower() in NON_ACTIONABLE_ROOT_CAUSES:
+        return None
+    report = RcaCompletedBody(
+        root_cause=evt.rca_detail.root_cause,
+        action="plan_recovery",
+        evidence_ref=evt.evidence_ref,
+        workspace_id=evt.workspace_id,
+        evidence=evt.evidence,
+        incident=evt.incident,
+        evidence_bundle=evt.evidence_bundle,
+        candidates=evt.candidates,
+        evaluations=evt.evaluations,
+        rca_detail=evt.rca_detail,
+        rule_missing=evt.rule_missing,
+    )
+    plan_event = planner.plan_body(report)
+    if not isinstance(plan_event, RecoveryPlannedBody) or plan_event.plan is None:
+        return None
+    candidates = [
+        replace(
+            candidate,
+            approval_required=True,
+            draft=replace(
+                candidate.draft,
+                params={
+                    **candidate.draft.params,
+                    "analysis_blocked_fallback": True,
+                    "analysis_blocked_reason": evt.reason_code,
+                    "missing_evidence": evt.missing_evidence,
+                },
+            ),
+        )
+        for candidate in plan_event.plan.candidates
+    ]
+    if not candidates:
+        return None
+    plan = replace(
+        plan_event.plan,
+        summary=f"{plan_event.plan.summary} 추가 근거 수집이 필요해 운영자 선택 후 진행합니다.",
+        selection_required=True,
+        candidates=candidates,
+        recommended_action_id=candidates[0].action_id,
+        execution_route=candidates[0].route,
+    )
+    return replace(plan_event, draft=candidates[0].draft, plan=plan)
 
 
 @app.on(RcaActionRequiredBody)

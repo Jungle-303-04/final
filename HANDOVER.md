@@ -2417,3 +2417,27 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
     - live root asset: `/assets/index-YIJZma8H.js`, `/assets/index-Bb-8VGfS.css`.
     - 신규 cluster detail chunk `ClusterDetailView-CwucS_FI.js`가 live index에서 참조됨.
     - api-gateway log tail에서 `/readyz` 200, cluster agent policy/commands/evidence poll 200 확인. 로그인 전 `/auth/session`/AI 조회 401은 expected.
+
+## 데모 RCA 복구계획·실측 토폴로지 보강 (2026-07-08)
+
+- 사용자 지적 재현 원인:
+  - 데모 트래픽은 들어왔지만 일부 5xx 시나리오가 `rca.analysis_blocked`에서 끝나 `recovery.planned`가 생성되지 않았다.
+  - target-agent가 metrics-server 값을 snapshot에 싣지 않아 usage chart와 pod drilldown에 CPU/MEM이 비어 보였다.
+  - 프론트는 pod 목록만 운영 namespace를 필터했고 서비스/리소스/이벤트 탭에는 `target` 리소스가 남았다.
+  - `GET /clusters/cluster-1/summary`는 열린 인시던트 row의 `namespace/resource_kind/resource_name`을 extra field로
+    보고 `ClusterOpenIncidentItem` 검증에서 500을 냈다.
+- 조치:
+  - `rca-feedback-worker`가 blocked RCA 중 root cause가 있는 건은 기존 `RecoveryPlanner`를 재사용해 선택형 복구 계획을 발행한다.
+    blocked 경로의 후보는 모두 `approval_required=true`, `selection_required=true`로 강제해 자동 실행하지 않는다.
+  - Safe PR 복구 후보는 구체 manifest patch가 없을 때도 `.gitops/recovery/*.md` 검토 패치를 생성해 safe-pr/scm 파이프라인이 끊기지 않는다.
+  - target-agent Kubernetes provider가 pod/node metrics를 수집하고 inventory usage rollup에 pod/node별 실측을 저장한다.
+  - 클러스터 상세는 `cpu_mcores`/`mem_mib`를 mCPU/MiB로 표시하고, 서비스/워크로드/리소스/이벤트 탭에도 운영 namespace 필터를 동일 적용한다.
+  - cluster summary open incident 응답 계약에 대상 필드를 추가하고, router가 허용 필드만 정규화해 extra payload로 500이 나지 않게 했다.
+  - Motion duration을 낮춰 시연 화면의 과한 애니메이션을 줄였다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py tests/test_target_kubernetes_evidence.py tests/test_inventory_domain.py tests/test_fleet_router.py -q` → 48 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src tests` → passed.
+  - `bash scripts/frontend-check.sh` → design guard/typecheck/eslint/unit/build passed.
+- 배포 전 주의:
+  - service 이미지는 management worker들과 cluster-1 target-agent 모두에 반영해야 pod/node metrics가 live usage sample에 들어온다.
+  - console 이미지를 함께 반영해야 service/resource 필터와 mCPU/MiB 표시가 보인다.
