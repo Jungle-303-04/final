@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 
 from fastapi import HTTPException
+from sqlalchemy.exc import OperationalError
 
 from domains.gitops.router import grant_approval, reject_approval
 from packages.contracts.gateway.requests import ApprovalDecisionRequest
@@ -83,6 +84,10 @@ class ApprovalEvents:
 
 def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="workspace-1")
+
+
+class LockTimeoutOrig(Exception):
+    sqlstate = "55P03"
 
 
 def test_grant_approval_emits_granted_event_with_command_request() -> None:
@@ -231,3 +236,35 @@ def test_grant_approval_wraps_resolution_and_event_in_single_transaction() -> No
     assert db.resolved_in_uow == [True]
     assert events.accepted_in_uow == [True]
     assert db.uow_active is False
+
+
+def test_grant_approval_retries_transient_lock_for_whole_transaction() -> None:
+    class FlakyApprovalDb(TransactionalApprovalDb):
+        def __init__(self) -> None:
+            super().__init__()
+            self.resolve_attempts = 0
+
+        def resolve_workflow_approval_if_open(self, *args: object, **kwargs: object) -> bool:
+            self.resolve_attempts += 1
+            if self.resolve_attempts == 1:
+                raise OperationalError("update", {}, LockTimeoutOrig())
+            return super().resolve_workflow_approval_if_open(*args, **kwargs)
+
+    async def run() -> tuple[FlakyApprovalDb, UowTrackingApprovalEvents]:
+        db = FlakyApprovalDb()
+        events = UowTrackingApprovalEvents(db)
+        await grant_approval(
+            "approval-1",
+            ApprovalDecisionRequest(reason="retry lock"),
+            current_session(),
+            db,
+            events,
+        )
+        return db, events
+
+    db, events = asyncio.run(run())
+
+    assert db.resolve_attempts == 2
+    assert db.resolved_in_uow == [True]
+    assert events.accepted_in_uow == [True]
+    assert events.body is not None

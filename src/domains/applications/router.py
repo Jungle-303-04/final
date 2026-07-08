@@ -40,6 +40,7 @@ from packages.contracts.identity import (
 )
 from packages.runtime.dependencies import get_db
 from packages.storage.engine import unit_of_work_or_null
+from packages.storage.retry import to_thread_db_retry
 
 router = APIRouter()
 # 글로벌 서비스 선언 — cluster_id 자리에 쓰는 특수값(등록된 전 클러스터로 확장).
@@ -125,13 +126,19 @@ async def list_applications(
     db: Any = Depends(get_db),
 ) -> ApplicationListResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    accessible_ids = db.accessible_resource_ids(
+    accessible_ids = await to_thread_db_retry(
+        db.accessible_resource_ids,
         current.user_id,
         workspace_id,
         AccessResourceType.APPLICATION.value,
         Permission.APPLICATION_READ.value,
     )
-    applications = db.list_applications(workspace_id, application_ids=accessible_ids, limit=limit)
+    applications = await to_thread_db_retry(
+        db.list_applications,
+        workspace_id,
+        application_ids=accessible_ids,
+        limit=limit,
+    )
     return ApplicationListResponse(applications=applications)
 
 

@@ -25,6 +25,7 @@ from packages.contracts.gitops import ApprovalStatus
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.dependencies import get_db, get_events
 from packages.storage.engine import unit_of_work_or_null
+from packages.storage.retry import async_retry_db_conflict
 
 router = APIRouter(dependencies=[Depends(verify_github_signature)])
 approval_router = APIRouter()
@@ -146,42 +147,46 @@ async def grant_approval(
 ) -> AcceptedResponse:
     payload = payload or ApprovalDecisionRequest()
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    record = approval_record_or_404(db, approval_id, workspace_id)
-    ensure_approval_is_open(record)
-    diff = approval_diff(record)
-    require_approval_deploy_access(db, current, workspace_id, diff)
-    command = approval_command_request(record, diff, payload.reason, current.user_id)
-    details = {
-        **approval_details(record),
-        "decision_reason": payload.reason,
-        "command_requested": command.to_body(),
-    }
-    # 승인 해결(원자 UPDATE)과 이벤트 스테이징을 한 트랜잭션으로 — 이벤트 스테이징이
-    # 실패하면 해결도 롤백되어 '해결됐지만 후속 이벤트 없는' 고아 승인 방지.
-    with unit_of_work_or_null(db):
-        resolve_approval_or_409(
-            db,
-            approval_id,
-            workspace_id,
-            ApprovalStatus.GRANTED.value,
-            current.user_id,
-            "granted",
-            details,
-        )
-        accepted = await events.accept_body(
-            ApprovalGrantedBody(
-                approval_id=approval_id,
-                workflow_run_id=str(record["workflow_run_id"]),
-                application_id=str(record["application_id"]),
-                workspace_id=workspace_id,
-                binding_id=str(record["binding_id"]),
-                environment=str(record["environment"]),
-                decided_by=current.user_id,
-                decision="granted",
-                details=details,
-            ),
-            actor=Actor(current.user_id, tuple(current.roles)),
-        )
+
+    async def resolve_and_emit() -> Any:
+        record = approval_record_or_404(db, approval_id, workspace_id)
+        ensure_approval_is_open(record)
+        diff = approval_diff(record)
+        require_approval_deploy_access(db, current, workspace_id, diff)
+        command = approval_command_request(record, diff, payload.reason, current.user_id)
+        details = {
+            **approval_details(record),
+            "decision_reason": payload.reason,
+            "command_requested": command.to_body(),
+        }
+        # 승인 해결(원자 UPDATE)과 이벤트 스테이징을 한 트랜잭션으로 — 이벤트 스테이징이
+        # 실패하면 해결도 롤백되어 '해결됐지만 후속 이벤트 없는' 고아 승인 방지.
+        with unit_of_work_or_null(db):
+            resolve_approval_or_409(
+                db,
+                approval_id,
+                workspace_id,
+                ApprovalStatus.GRANTED.value,
+                current.user_id,
+                "granted",
+                details,
+            )
+            return await events.accept_body(
+                ApprovalGrantedBody(
+                    approval_id=approval_id,
+                    workflow_run_id=str(record["workflow_run_id"]),
+                    application_id=str(record["application_id"]),
+                    workspace_id=workspace_id,
+                    binding_id=str(record["binding_id"]),
+                    environment=str(record["environment"]),
+                    decided_by=current.user_id,
+                    decision="granted",
+                    details=details,
+                ),
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+
+    accepted = await async_retry_db_conflict(resolve_and_emit)
     return AcceptedResponse(
         accepted=True,
         event_id=accepted.event.event_id,
@@ -199,37 +204,41 @@ async def reject_approval(
 ) -> AcceptedResponse:
     payload = payload or ApprovalDecisionRequest()
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    record = approval_record_or_404(db, approval_id, workspace_id)
-    ensure_approval_is_open(record)
-    diff = approval_diff(record)
-    require_approval_deploy_access(db, current, workspace_id, diff)
-    reason = payload.reason or "approval rejected"
-    details = {**approval_details(record), "decision_reason": reason}
-    # grant 와 동일 — 해결과 이벤트 스테이징을 한 트랜잭션으로 묶음.
-    with unit_of_work_or_null(db):
-        resolve_approval_or_409(
-            db,
-            approval_id,
-            workspace_id,
-            ApprovalStatus.REJECTED.value,
-            current.user_id,
-            "rejected",
-            details,
-        )
-        accepted = await events.accept_body(
-            ApprovalRejectedBody(
-                approval_id=approval_id,
-                workflow_run_id=str(record["workflow_run_id"]),
-                application_id=str(record["application_id"]),
-                reason=reason,
-                workspace_id=workspace_id,
-                binding_id=str(record["binding_id"]),
-                environment=str(record["environment"]),
-                decided_by=current.user_id,
-                details=details,
-            ),
-            actor=Actor(current.user_id, tuple(current.roles)),
-        )
+
+    async def resolve_and_emit() -> Any:
+        record = approval_record_or_404(db, approval_id, workspace_id)
+        ensure_approval_is_open(record)
+        diff = approval_diff(record)
+        require_approval_deploy_access(db, current, workspace_id, diff)
+        reason = payload.reason or "approval rejected"
+        details = {**approval_details(record), "decision_reason": reason}
+        # grant 와 동일 — 해결과 이벤트 스테이징을 한 트랜잭션으로 묶음.
+        with unit_of_work_or_null(db):
+            resolve_approval_or_409(
+                db,
+                approval_id,
+                workspace_id,
+                ApprovalStatus.REJECTED.value,
+                current.user_id,
+                "rejected",
+                details,
+            )
+            return await events.accept_body(
+                ApprovalRejectedBody(
+                    approval_id=approval_id,
+                    workflow_run_id=str(record["workflow_run_id"]),
+                    application_id=str(record["application_id"]),
+                    reason=reason,
+                    workspace_id=workspace_id,
+                    binding_id=str(record["binding_id"]),
+                    environment=str(record["environment"]),
+                    decided_by=current.user_id,
+                    details=details,
+                ),
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+
+    accepted = await async_retry_db_conflict(resolve_and_emit)
     return AcceptedResponse(
         accepted=True,
         event_id=accepted.event.event_id,

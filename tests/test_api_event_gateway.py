@@ -4,6 +4,8 @@ import asyncio
 from contextlib import contextmanager
 from typing import Any
 
+from sqlalchemy.exc import OperationalError
+
 from domains.target.events import AgentConnectedBody
 from packages.contracts.auth import Actor
 from packages.contracts.event_bus.interfaces import EventEnvelope
@@ -51,6 +53,10 @@ class DurableRecorder(MemoryRecorder):
         self.staged.extend(events)
 
 
+class LockTimeoutOrig(Exception):
+    sqlstate = "55P03"
+
+
 def test_api_event_gateway_attaches_actor_and_records_event() -> None:
     async def run() -> None:
         publisher = MemoryPublisher()
@@ -84,6 +90,33 @@ def test_api_event_gateway_stages_supported_recorder_without_direct_publish() ->
         assert recorder.staged == [accepted.event]
 
     asyncio.run(run())
+
+
+def test_api_event_gateway_retries_transient_outbox_lock() -> None:
+    class FlakyDurableRecorder(DurableRecorder):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stage_attempts = 0
+
+        def stage_events(self, _conn: Any, events: list[EventEnvelope]) -> None:
+            self.stage_attempts += 1
+            if self.stage_attempts == 1:
+                raise OperationalError("update", {}, LockTimeoutOrig())
+            super().stage_events(_conn, events)
+
+    async def run() -> FlakyDurableRecorder:
+        publisher = MemoryPublisher()
+        recorder = FlakyDurableRecorder()
+        gateway = ApiEventGateway(publisher, recorder, "api-gateway")
+
+        accepted = await gateway.accept_body(AgentConnectedBody(cluster_id="c1", agent_id="a1"))
+
+        assert publisher.events == []
+        assert recorder.staged == [accepted.event]
+        return recorder
+
+    recorder = asyncio.run(run())
+    assert recorder.stage_attempts == 2
 
 
 def test_nats_publish_uses_event_id_as_message_id_header() -> None:

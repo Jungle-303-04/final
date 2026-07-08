@@ -175,9 +175,51 @@ def test_target_agent_builds_apply_manifest_patch() -> None:
     assert agent_module.deployment_name_from_resource("deployment/checkout-api") == "checkout-api"
     assert agent_module.deployment_name_from_resource("deployments/checkout-api") == "checkout-api"
     assert agent_module.deployment_name_from_resource("checkout-api") == "checkout-api"
-    assert agent_module.deployment_name_from_resource("pod/checkout-api-7d9f8c9b7c-abcde") == ""
+    assert (
+        agent_module.deployment_name_from_resource("pod/checkout-api-7d9f8c9b7c-abcde")
+        == "checkout-api"
+    )
+    assert (
+        agent_module.deployment_name_from_resource("replicaset/checkout-api-7d9f8c9b7c")
+        == "checkout-api"
+    )
     assert patch["spec"]["template"]["spec"]["containers"] == [
         {"name": "checkout-api", "image": "img:new"}
+    ]
+
+
+def test_target_agent_rollout_restart_normalizes_pod_resource(monkeypatch) -> None:
+    agent_module = load_agent_module()
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "kubernetes.local")
+    monkeypatch.setenv("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    monkeypatch.setattr(agent_module.AgentConfig, "KUBERNETES_ROLLOUT_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(agent_module, "service_account_token", lambda: "token")
+    requests: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url.path))
+        return httpx.Response(200, json=ready_deployment("orders-api"), request=request)
+
+    agent = agent_module.TargetClusterAgent(kubernetes_transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": "rollout_restart",
+                "payload": {
+                    "diff": {
+                        "resource": "pod/orders-api-96876968-rlqwg",
+                        "namespace": "sandbox",
+                    }
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert requests == [
+        ("PATCH", "/apis/apps/v1/namespaces/sandbox/deployments/orders-api"),
     ]
 
 

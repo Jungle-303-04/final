@@ -61,6 +61,7 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.command_wakeup import WAKEUP
 from packages.runtime.dependencies import get_db, get_events
+from packages.storage.retry import async_retry_db_conflict
 
 # 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_POLL_SECONDS_ENV = "COMMAND_POLL_DEFAULT_SECONDS"  # 롱폴 기본 대기 초(기본 10)
@@ -262,13 +263,15 @@ async def lease_next_command(
     """
     deadline = time.time() + min(timeout, MAX_POLL_SECONDS)
     while time.time() < deadline:
-        row = await db.lease_agent_command(
-            cluster_id,
-            workspace_id,
-            CommandStatus.QUEUED,
-            CommandStatus.LEASED,
-            agent_id,
-            LEASE_SECONDS,
+        row = await async_retry_db_conflict(
+            lambda: db.lease_agent_command(
+                cluster_id,
+                workspace_id,
+                CommandStatus.QUEUED,
+                CommandStatus.LEASED,
+                agent_id,
+                LEASE_SECONDS,
+            )
         )
         if row:
             return row
@@ -442,14 +445,16 @@ async def command_start(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> CommandStartedResponse:
-    correlation_id = await db.start_agent_command(
-        command_id,
-        identity.workspace_id,  # body 가 아닌 토큰 identity 의 workspace
-        identity.cluster_id,  # body 가 아닌 토큰 identity 의 cluster
-        payload.lease_id,
-        payload.agent_id,
-        CommandStatus.RUNNING,
-        LEASE_SECONDS,
+    correlation_id = await async_retry_db_conflict(
+        lambda: db.start_agent_command(
+            command_id,
+            identity.workspace_id,  # body 가 아닌 토큰 identity 의 workspace
+            identity.cluster_id,  # body 가 아닌 토큰 identity 의 cluster
+            payload.lease_id,
+            payload.agent_id,
+            CommandStatus.RUNNING,
+            LEASE_SECONDS,
+        )
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
@@ -465,13 +470,15 @@ async def command_heartbeat(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> CommandHeartbeatResponse:
-    correlation_id = await db.heartbeat_agent_command(
-        command_id,
-        identity.workspace_id,
-        identity.cluster_id,
-        payload.lease_id,
-        payload.agent_id,
-        LEASE_SECONDS,
+    correlation_id = await async_retry_db_conflict(
+        lambda: db.heartbeat_agent_command(
+            command_id,
+            identity.workspace_id,
+            identity.cluster_id,
+            payload.lease_id,
+            payload.agent_id,
+            LEASE_SECONDS,
+        )
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
@@ -488,14 +495,16 @@ async def command_result(
     result = payload.model_dump()
     result["workspace_id"] = identity.workspace_id
     result["cluster_id"] = identity.cluster_id
-    completed = await db.complete_agent_command_and_stage_event(
-        command_id,
-        identity.workspace_id,
-        identity.cluster_id,
-        result,
-        payload.lease_id,
-        payload.agent_id,
-        "api-gateway",
+    completed = await async_retry_db_conflict(
+        lambda: db.complete_agent_command_and_stage_event(
+            command_id,
+            identity.workspace_id,
+            identity.cluster_id,
+            result,
+            payload.lease_id,
+            payload.agent_id,
+            "api-gateway",
+        )
     )
     if completed is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
