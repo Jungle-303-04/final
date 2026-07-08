@@ -39,10 +39,12 @@ status: synced
 | `MANIFEST_VALIDATION_FAILED` | `"manifest validation failed"` | `src/domains/applications/router.py :: MANIFEST_VALIDATION_FAILED` |
 | `CLUSTER_NOT_CONNECTED_CODE` | `"cluster_not_connected"` | `src/domains/applications/router.py :: CLUSTER_NOT_CONNECTED_CODE` |
 | `CLUSTER_NOT_CONNECTED_DETAIL` | `"에이전트가 연결되지 않은 클러스터입니다"` | `src/domains/applications/router.py :: CLUSTER_NOT_CONNECTED_DETAIL` |
+| `GITHUB_CREDENTIAL_SCOPE` | `"github"` | `src/domains/applications/router.py :: GITHUB_CREDENTIAL_SCOPE` |
 | `repository_discovery_service` | `def repository_discovery_service() -> RepositoryDiscoveryService` — 기본 discovery service DI factory | `src/domains/applications/router.py :: repository_discovery_service` |
 | `require_application_access` | `def require_application_access(db: Any, current: Any, workspace_id: str, application_id: str, permission: str) -> None` — `require_resource_access(db, current, workspace_id, AccessResourceType.APPLICATION.value, application_id, permission)` 위임 | `src/domains/applications/router.py :: require_application_access` |
 | `get_application_or_404` | `def get_application_or_404(db: Any, workspace_id: str, application_id: str) -> dict[str, Any]` — `db.get_application` None이면 404 | `src/domains/applications/router.py :: get_application_or_404` |
 | `require_connected_clusters` | `(db, workspace_id, cluster_ids) -> None` — 최신 agent 상태가 `online`이 아닌 대상이 있으면 400 `{"code":"cluster_not_connected","detail":"에이전트가 연결되지 않은 클러스터입니다","clusters":[...]}` | `src/domains/applications/router.py :: require_connected_clusters` |
+| `store_repo_token_if_present` | `def store_repo_token_if_present(db: Any, workspace_id: str, token: str \| None) -> str \| None` — token이 있으면 `credential_ref("github", "github")` ref를 만들고 `db.upsert_workspace_credential`이 있을 때 encrypted value를 저장한 뒤 ref만 반환 | `src/domains/applications/router.py :: store_repo_token_if_present` |
 
 ### 엔드포인트
 
@@ -84,8 +86,9 @@ status: synced
 4. validation 결과가 `valid=False`이면 첫 `errors[0]`, 없으면 `"manifest validation failed"`로 422를 반환한다.
 5. `source_type = normalize_source_type(payload.source_type) or source_type_from_path(validation.manifest_path)`로 manifest source를 결정한다.
 6. `metadata`에는 validation의 `branch`, `source_type`, `validation_mode`, `validated_resource_count`, `validation_warnings`를 병합한다. `deploy_policy`에는 `manifest_source`, `validation_mode`를 병합한다. `settings.source_type`에도 같은 값을 넣어 watch target → github poller → webhook → git-pull → manifest-render 경로에서 선택한 렌더러가 유지되게 한다.
-7. `unit_of_work_or_null(db)` 안에서 `db.register_repository(body)` → `db.upsert_application(body)` → 최신 application 조회 → `db.register_watch_target(binding_body)` → `db.register_deployment_binding(binding_body)` 순서로 app/watch/binding을 함께 등록한다.
-8. 반환은 `ApplicationResponse(application=application)`이다.
+7. `payload.token`이 있으면 `store_repo_token_if_present`가 workspace credential vault에 encrypted value를 upsert하고 body에는 `credential_ref`만 넣는다. DB 파사드에 `upsert_workspace_credential`이 없으면 저장은 건너뛰지만 ref는 동일하게 반환한다.
+8. `unit_of_work_or_null(db)` 안에서 `db.register_repository(body)` → `db.upsert_application(body)` → 최신 application 조회 → `db.register_watch_target(binding_body)` → `db.register_deployment_binding(binding_body)` 순서로 app/watch/binding을 함께 등록한다.
+9. 반환은 `ApplicationResponse(application=application)`이다.
 
 ### deployment binding 업서트 (`POST /applications/{application_id}/deployments`)
 
@@ -112,6 +115,7 @@ status: synced
 - 권한 부족 → identity 의존성이 던지는 HTTPException ([identity](./identity.md)).
 - repo 등록과 애플리케이션 업서트는 같은 트랜잭션(`unit_of_work_or_null`) — 부분 실패 시 둘 다 롤백.
 - `/applications/connect`는 repo/app/watch/deployment binding 등록을 같은 트랜잭션에서 처리한다.
+- `/applications/connect`의 `token` 원문은 application/repository body나 응답에 싣지 않고, 있으면 encrypted workspace credential로 저장한 뒤 `credential_ref`만 전달한다.
 - `/applications/connect`에서 검증한 `source_type`은 application metadata, binding deploy_policy(`manifest_source`), watch target settings 모두에 남아야 한다. validate 단계와 실제 render-worker 단계가 다른 렌더러를 쓰면 안 된다.
 - binding의 `repository_id`/`app_name`은 항상 소속 애플리케이션에서 파생(클라이언트 입력을 신뢰하지 않음).
 - 글로벌 바인딩(`cluster_id="*"`)은 권한 전수 검증 후에만 확장 생성 — 부분 권한으로는 아무 바인딩도 생기지 않는다. 등록 클러스터가 없으면 422 `"no registered clusters to expand global binding"`.

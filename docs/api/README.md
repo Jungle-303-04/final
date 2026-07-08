@@ -309,6 +309,7 @@ CPU/MEM 실측이 없는 노드는 값을 합성하지 않고 `null`로 둔다.
 `01-github-webhook`은 외부 Git webhook을 받아 workflow event로 바꾸는 API다.
 HMAC signature가 맞아야만 통과한다.
 body를 수정하면 `github_webhook_signature`도 반드시 다시 계산해야 한다.
+현재 Bruno 요청은 내부 표준 `GitHubWebhookRequest` body를 보낸다. 실제 GitHub raw `push` 또는 merge된 `pull_request` payload도 같은 endpoint로 들어올 수 있고, active poll target과 repo/branch가 매칭될 때만 `git.webhook.received`로 변환된다. 매칭할 배포 변경이 없으면 202 ignored 응답이 정상이다.
 
 `02-grant-approval`은 열린 approval을 승인하고, 승인된 diff를 실제 command 요청으로 이어주는 API다.
 deploy 권한이 있는 사용자만 호출할 수 있다.

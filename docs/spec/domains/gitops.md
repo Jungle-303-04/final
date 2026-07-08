@@ -47,8 +47,12 @@ status: synced
 | `APPROVAL_CONFLICT` | `= "approval already resolved"` | `src/domains/gitops/router.py :: APPROVAL_CONFLICT` |
 | `HTTP_NOT_FOUND` | `= 404` | `src/domains/gitops/router.py :: HTTP_NOT_FOUND` |
 | `HTTP_CONFLICT` | `= 409` | `src/domains/gitops/router.py :: HTTP_CONFLICT` |
+| `GITOPS_WEBHOOK_IMAGE_ENV` | `= "GITOPS_WEBHOOK_IMAGE"` | `src/domains/gitops/router.py :: GITOPS_WEBHOOK_IMAGE_ENV` |
 | `build_git_webhook_body` | `def build_git_webhook_body(payload: GitHubWebhookRequest) -> GitWebhookReceivedBody` — `payload.model_dump()`를 그대로 body 로 | `src/domains/gitops/router.py :: build_git_webhook_body` |
-| `github_webhook` | `async def github_webhook(payload: GitHubWebhookRequest, events: Any = Depends(get_events)) -> AcceptedEventResponse` | `src/domains/gitops/router.py :: github_webhook` |
+| `github_raw_change` | `def github_raw_change(payload: Mapping[str, Any], event_name: str) -> tuple[str, str, str] \| None` — GitHub `push` 또는 merge된 `pull_request` payload에서 `(repo_ref, branch, commit_sha)` 추출 | `src/domains/gitops/router.py :: github_raw_change` |
+| `build_git_webhook_bodies` | `def build_git_webhook_bodies(payload: Mapping[str, Any], *, db: Any \| None = None, event_name: str = "") -> list[GitWebhookReceivedBody]` — 표준 `GitHubWebhookRequest`면 1개 변환, raw GitHub payload면 active poll target과 매칭해 0..N개 변환 | `src/domains/gitops/router.py :: build_git_webhook_bodies` |
+| `accepted_event_response` | `def accepted_event_response(accepted: Any) -> AcceptedEventResponse` | `src/domains/gitops/router.py :: accepted_event_response` |
+| `github_webhook` | `async def github_webhook(request: Request, payload: dict[str, Any] = Body(...), events: Any = Depends(get_events), db: Any = Depends(get_db)) -> AcceptedEventResponse \| JSONResponse` | `src/domains/gitops/router.py :: github_webhook` |
 | `approval_details` | `def approval_details(record: Mapping[str, Any]) -> dict[str, Any]` — record["details"]가 Mapping 이면 dict 복사, 아니면 `{}` | `src/domains/gitops/router.py :: approval_details` |
 | `approval_diff` | `def approval_diff(record: Mapping[str, Any]) -> Diff` — details["diff"]를 `Diff.from_body`로 복원, 없으면 409 | `src/domains/gitops/router.py :: approval_diff` |
 | `ensure_approval_is_open` | `def ensure_approval_is_open(record: Mapping[str, Any]) -> None` — status가 `{"requested", "not_required"}` 밖이면 409 | `src/domains/gitops/router.py :: ensure_approval_is_open` |
@@ -63,7 +67,7 @@ status: synced
 
 | 메서드+경로 | 핸들러 | 요청 모델 | 응답 모델 | 권한/의존성 |
 |---|---|---|---|---|
-| `POST /github/webhook` (`gateway_routes.GITHUB_WEBHOOK_PATH`) | `github_webhook` | `GitHubWebhookRequest` | `AcceptedEventResponse` | 라우터 의존성 `verify_github_signature` (HMAC-SHA256, fail-closed) |
+| `POST /github/webhook` (`gateway_routes.GITHUB_WEBHOOK_PATH`) | `github_webhook` | `dict[str, Any]` (`GitHubWebhookRequest` 또는 GitHub raw `push`/`pull_request`) | `AcceptedEventResponse` 또는 202 ignored JSON | 라우터 의존성 `verify_github_signature` (HMAC-SHA256, fail-closed) |
 | `POST /approvals/{approval_id}/grant` (`gateway_routes.APPROVAL_GRANT_PATH`) | `grant_approval` | `ApprovalDecisionRequest` (`reason: str | None = None`) | `AcceptedResponse` | `require_session` + 클러스터 권한 `Permission.DEPLOY_RUN`(`"deploy.run"`) — `require_cluster_access` |
 | `POST /approvals/{approval_id}/reject` (`gateway_routes.APPROVAL_REJECT_PATH`) | `reject_approval` | `ApprovalDecisionRequest` | `AcceptedResponse` | `require_session` + `Permission.DEPLOY_RUN` |
 
@@ -424,7 +428,7 @@ status: synced
 
 | 이벤트 | 발행 위치 | 조건 |
 |---|---|---|
-| `git.webhook.received` (`GitWebhookReceivedBody`) | `github_webhook` | HMAC 검증 통과한 webhook 요청마다 `events.accept_body` |
+| `git.webhook.received` (`GitWebhookReceivedBody`) | `github_webhook` | HMAC 검증 통과 후 표준 body로 검증되거나, raw GitHub `push`/merge된 `pull_request`가 active poll target과 매칭될 때 `events.accept_body` |
 | `approval.granted` (`ApprovalGrantedBody`) | `grant_approval` | 원자 UPDATE 성공 시에만, `Actor(current.user_id, tuple(current.roles))` 로 발행. `details` 에 `decision_reason`·`command_requested`(=`CommandRequestedBody.to_body()`) 포함 |
 | `approval.rejected` (`ApprovalRejectedBody`) | `reject_approval` | 원자 UPDATE 성공 시에만, `details` 에 `decision_reason` 포함 |
 
@@ -437,8 +441,11 @@ status: synced
 ### 1. GitHub webhook 수신 (`POST /github/webhook`)
 
 1. 라우터 의존성 `verify_github_signature`: `GITHUB_WEBHOOK_SECRET` env 미설정 → 503 `"webhook secret not configured"`; 원시 body 에 대한 `sha256=<HMAC-SHA256(secret, body)>` 를 `x-hub-signature-256` 헤더와 `hmac.compare_digest` 비교, 불일치/누락 → 401 `"invalid webhook signature"`. fail-closed.
-2. `GitHubWebhookRequest` 를 `build_git_webhook_body` 로 `GitWebhookReceivedBody` 로 변환해 `events.accept_body` 로 수락(발행 스테이징). `source_type`을 포함한 요청 body 필드는 `payload.model_dump()` 그대로 보존한다.
-3. `AcceptedEventResponse(accepted=True, event_id, correlation_id, event=<이벤트 dict>)` 반환.
+2. 본문이 `GitHubWebhookRequest` 로 바로 검증되면 `build_git_webhook_body` 로 `GitWebhookReceivedBody` 1개를 만든다. `source_type`을 포함한 요청 body 필드는 `payload.model_dump()` 그대로 보존한다.
+3. 표준 body 검증이 실패하면 `x-github-event` 기준으로 raw GitHub payload를 해석한다. `push`는 `ref=refs/heads/<branch>`와 `after` commit을 사용하고, `pull_request`는 `action="closed"`, `merged=true`일 때 base branch와 `merge_commit_sha`를 사용한다.
+4. raw payload는 `repository.full_name` + branch로 `db.list_active_github_poll_targets(limit=1000)` 결과를 매칭한다. 매칭 target마다 `body_for_poll_target`이 workspace/repository/watch/binding/application/environment/cluster/manifest/source_type 좌표를 복원하고 `force=True`, `replicas=DEFAULT_WEBHOOK_REPLICAS`, `image=GITOPS_WEBHOOK_IMAGE`로 `GitWebhookReceivedBody`를 만든다.
+5. raw deployable change인데 `GITOPS_WEBHOOK_IMAGE`가 비어 있으면 503 `"gitops webhook image not configured"`로 fail-closed한다. deployable change가 아니거나 매칭 target이 없으면 이벤트를 만들지 않고 202 `{"accepted": true, "ignored": true, "reason": "no deployable git change"}`를 반환한다.
+6. 생성된 body가 1개 이상이면 각각 `events.accept_body`로 스테이징하고, 첫 accepted event 기준 `AcceptedEventResponse(accepted=True, event_id, correlation_id, event=<이벤트 dict>)`를 반환한다.
 
 ### 2. 승인 grant/reject (`POST /approvals/{approval_id}/grant|reject`)
 
@@ -488,6 +495,7 @@ diff-worker 가 (a) 직전 승인 스냅샷(old_desired), (b) live 객체, (c) �
 ## 불변식·오류 (Invariants & Errors)
 
 - **웹훅 fail-closed**: 시크릿 미설정(503)·서명 불일치/누락(401)이면 파이프라인이 절대 열리지 않는다. 서명 비교는 `hmac.compare_digest`(타이밍 안전).
+- **웹훅 raw fast-path**: raw GitHub payload는 deployable `push`/merge된 `pull_request`이면서 repo+branch가 active poll target에 매칭될 때만 `git.webhook.received`로 변환된다. 단순 PR open/update, branch delete, target 미매칭은 202 ignored로 끝난다.
 - **워크플로 상태 회귀 금지**: 종결 상태(`succeeded`/`failed`)는 어떤 값으로도 갱신 불가, 비종결 상태는 순위가 같거나 높은 상태로만 갱신. 위반 시도는 오류가 아니라 무시(UPDATE 0건)된다.
 - **승인 단일 해결**: 열린 승인은 정확히 한 번만 해결된다(원자 UPDATE). 두 번째 이후 결정 요청은 409 `"approval already resolved"`. 라우터의 open 판정 집합(`{"requested", "not_required"}`)은 `OPEN_APPROVAL_STATUSES` 와 항상 동일해야 한다(코드 주석으로 강제되는 계약).
 - **승인 해결과 이벤트의 원자성**: 해결 UPDATE 와 후속 이벤트 스테이징은 한 트랜잭션(`unit_of_work_or_null`) — 둘 중 하나만 반영되는 상태 없음.
@@ -502,3 +510,4 @@ diff-worker 가 (a) 직전 승인 스냅샷(old_desired), (b) live 객체, (c) �
 | 환경변수 | 타입 | 기본값 | 의미 |
 |---|---|---|---|
 | `GITHUB_WEBHOOK_SECRET` (`WEBHOOK_SECRET_ENV`) | str | `""` (미설정 시 웹훅 503 거부) | GitHub webhook HMAC-SHA256 서명 검증 시크릿. `packages/config/settings.py :: env` 로 조회 ([config](../packages/config.md)) |
+| `GITOPS_WEBHOOK_IMAGE` (`GITOPS_WEBHOOK_IMAGE_ENV`) | str | `""` | raw GitHub payload fast-path에서 `GitWebhookReceivedBody.image`에 넣는 배포 이미지. deployable raw change가 들어왔는데 비어 있으면 503. |
