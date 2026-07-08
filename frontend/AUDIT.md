@@ -480,3 +480,7 @@
 - 클러스터 상세의 `배포된 레포`가 비는 원인은 application name과 deployment binding app_name이 drift된 데이터였다.
   같은 repository + manifest_path binding도 같은 배포 정의로 조회해, GitOps가 만든 관계가 UI에서 사라지지 않게 했다.
 - 검증: backend focused suite 50 passed, `ruff check src tests` passed, `bash scripts/frontend-check.sh` passed.
+- 라이브 반영: service/console image `d6a27854-demo-hotfix-20260708142734` rollout 완료.
+  `TARGET_AGENT_IMAGE`, `GITOPS_WEBHOOK_IMAGE`, target-agent `NODE_COLLECTOR_IMAGE` runtime 값도 같은 service image로 맞췄다.
+  배포 직후 startup DDL 경합으로 `/nodes/summary` lock timeout이 일시 발생했으나, 30초 관찰에서 DB blocked lock 0,
+  긴 idle transaction 0, `/api/healthz` OK, 최근 api-gateway 500/validation/lock 로그 0건을 확인했다.
