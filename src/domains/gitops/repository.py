@@ -518,6 +518,7 @@ class RepoChangeRepository(DatabaseConnection):
             .limit(max(1, min(limit, 500)))
         )
         step_table = WorkflowRunStep.__table__
+        approval_table = Approval.__table__
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
             runs = [serialize_workflow_run(row) for row in rows]
@@ -554,6 +555,56 @@ class RepoChangeRepository(DatabaseConnection):
                     )
                 for run in runs:
                     run["steps"] = steps_by_run.get(str(run["workflow_run_id"]), [])
+                approval_rows = (
+                    conn.execute(
+                        select(
+                            approval_table.c.approval_id,
+                            approval_table.c.workflow_run_id,
+                            approval_table.c.status,
+                            approval_table.c.reason,
+                            approval_table.c.requested_role,
+                            approval_table.c.requested_by,
+                            approval_table.c.decided_by,
+                            approval_table.c.decision,
+                            approval_table.c.details,
+                            approval_table.c.updated_at,
+                        )
+                        .where(
+                            approval_table.c.workspace_id == workspace_id,
+                            approval_table.c.workflow_run_id.in_(run_ids),
+                        )
+                        .order_by(approval_table.c.updated_at.desc())
+                    )
+                    .mappings()
+                    .all()
+                )
+                approvals_by_run: dict[str, list[JsonObject]] = {}
+                for approval in approval_rows:
+                    details = dict(approval["details"] or {})
+                    approvals_by_run.setdefault(str(approval["workflow_run_id"]), []).append(
+                        {
+                            "approval_id": approval["approval_id"],
+                            "status": approval["status"],
+                            "reason": approval["reason"],
+                            "requested_role": approval["requested_role"],
+                            "requested_by": approval["requested_by"],
+                            "decided_by": approval["decided_by"],
+                            "decision": approval["decision"],
+                            "details": details,
+                            "updated_at": iso_or_none(approval["updated_at"]),
+                        }
+                    )
+                for run in runs:
+                    approvals = approvals_by_run.get(str(run["workflow_run_id"]), [])
+                    run["approvals"] = approvals
+                    current = current_workflow_approval(approvals)
+                    if current is not None:
+                        run["approval_id"] = current["approval_id"]
+                        run["approval_status"] = current["status"]
+                        run["approval_reason"] = current["reason"]
+                        run["requested_role"] = current["requested_role"]
+                        run["approval_details"] = current["details"]
+                        run["approval_updated_at"] = current["updated_at"]
         return runs
 
     def get_deployment_binding(self, workspace_id: str, binding_id: str) -> JsonObject | None:
@@ -1358,3 +1409,17 @@ def serialize_workflow_run(row: Any) -> JsonObject:
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item
+
+
+def current_workflow_approval(approvals: list[JsonObject]) -> JsonObject | None:
+    """Run list 대표 approval — 열린 approval 우선, 없으면 최신 approval.
+
+    Approval id는 resource qualifier를 포함할 수 있어 클라이언트가 추정하면 안 된다.
+    """
+    if not approvals:
+        return None
+    for status in OPEN_APPROVAL_STATUSES:
+        for approval in approvals:
+            if str(approval.get("status")) == status:
+                return approval
+    return approvals[0]
