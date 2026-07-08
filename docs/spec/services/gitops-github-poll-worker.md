@@ -172,8 +172,8 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 
 ### `drive` — 실행 모드 분기
 
-- `self.once`(`POLL_ONCE` truthy) → `poll_once_with_retry(client)` 후 종료. (주석: 프로덕션은 k8s CronJob이 주기를 들고 1회 실행 — 겹침·복구는 k8s에 위임.)
-- 아니면 `loop(client)` — 상주 무한 루프. (주석: 데모 Deployment, replica 1이라 중복 발화 없음.)
+- `self.once`(`POLL_ONCE` truthy) → `poll_once_with_retry(client)` 후 종료. 1분 이상 주기가 충분한 환경의 CronJob 호환 모드다.
+- 아니면 `loop(client)` — 상주 무한 루프. 운영 fallback polling은 Deployment replica 1 + `POLL_INTERVAL_SECONDS=30`으로 실행한다. Kubernetes CronJob은 표준적으로 초 단위 schedule을 지원하지 않으므로 30초 감지는 이 모드를 쓴다.
 
 ### `poll_once_with_retry` — CronJob 일시 오류 재시도
 
@@ -238,7 +238,7 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 | `MANIFEST_PATH` | str | `"deploy.yaml"` | webhook body의 manifest_path |
 | `GIT_MANIFEST_SOURCE_TYPE` | str | `""` | env fallback webhook body의 source_type. DB target 은 저장된 source_type 을 사용 |
 | `POLL_INTERVAL_SECONDS` | int | `30` | 상주 루프 폴링 주기 초 |
-| `POLL_ONCE` | bool 문자열(`1/true/yes/on`) | 꺼짐 | 1회 폴링 후 종료(CronJob 모드) |
+| `POLL_ONCE` | bool 문자열(`1/true/yes/on`) | 꺼짐 | 1회 폴링 후 종료(CronJob 호환 모드). 30초 fallback은 Deployment 상주 루프를 사용 |
 | `GITHUB_TOKEN` | str | `""` | GitHub API Bearer 토큰(무인증 60회/시 → 인증 5000회/시) |
 | `GITHUB_API_BASE` | str | `"https://api.github.com"` | GitHub API base(GHE 교체용) |
 | `GITHUB_WEBHOOK_SECRET` | str | `""` | webhook HMAC-SHA256 서명 키(게이트웨이와 동일 키) |

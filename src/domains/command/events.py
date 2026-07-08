@@ -32,6 +32,7 @@ class CommandRequestedBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
+    priority: int = 100
     requested_by: str | None = None
     actor: JsonObject | None = None
     approval_ref: str | None = None
@@ -85,6 +86,7 @@ class Plan(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
+    priority: int = 100
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
 
@@ -122,6 +124,7 @@ class CommandQueuedForAgentBody(EventBody):
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID
     environment: str = DEFAULT_ENVIRONMENT
+    priority: int = 100
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
 

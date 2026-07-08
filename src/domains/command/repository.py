@@ -31,6 +31,7 @@ from packages.storage.schema import EventModel, OutboxModel
 # 건드리지 않고, 이 유예가 지나도록 어떤 에이전트도 집지 않은 명령만 소진으로 간주함.
 EXPIRED_COMMAND_GRACE_SECONDS = 300
 EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the command"
+COMMAND_PRIORITY_HIGH = 100
 
 
 class AgentCommandRepository(DatabaseConnection):
@@ -38,6 +39,7 @@ class AgentCommandRepository(DatabaseConnection):
         table = AgentCommand.__table__
         workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
         cluster_id = str(plan["cluster_id"])
+        priority = int(plan.get("priority") or COMMAND_PRIORITY_HIGH)
         statement = (
             pg_insert(table)
             .values(
@@ -46,6 +48,7 @@ class AgentCommandRepository(DatabaseConnection):
                 correlation_id=correlation_id,
                 cluster_id=cluster_id,
                 action=plan["action"],
+                priority=priority,
                 payload=plan,
                 status=status,
                 lease_id=None,
@@ -126,7 +129,7 @@ class AgentCommandRepository(DatabaseConnection):
             .where(
                 table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id, available
             )
-            .order_by(table.c.created_at)
+            .order_by(table.c.priority.desc(), table.c.created_at)
             .limit(1)
             .with_for_update(skip_locked=True)
             .scalar_subquery()

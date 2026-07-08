@@ -1,4 +1,5 @@
 // 브라우저 스냅샷 스트림 스토어 — WS 단일 연결(D6)
+import type { QueryClient } from '@tanstack/react-query';
 import { create } from 'zustand';
 import type { LiveSnapshot } from '@/shared/lib/types';
 
@@ -28,6 +29,21 @@ let activeWorkspaceId: string | null = null;
 let activeSocket: WebSocket | null = null;
 let reconnectTimer = 0;
 let connectionSeq = 0;
+let queryClient: QueryClient | null = null;
+let frameHandle = 0;
+const pendingDeltas = new Map<string, ResourceDeltaMessage>();
+
+interface ResourceDeltaMessage {
+  type: 'resource.delta';
+  seq?: number;
+  op: 'replace' | 'remove';
+  key: string;
+  value?: Record<string, unknown> | null;
+}
+
+export function bindLiveQueryClient(client: QueryClient | null) {
+  queryClient = client;
+}
 
 export function startLive(workspaceId: string | null | undefined) {
   if (!workspaceId) {
@@ -88,6 +104,11 @@ export function applyRealtimeMessage(rawMessage: unknown) {
     applyLiveSummary(summary, stringOrNull(message.cluster_id));
     return;
   }
+  if (message.type === 'resource.delta') {
+    const delta = asResourceDelta(message);
+    if (delta) enqueueResourceDelta(delta);
+    return;
+  }
   if (Array.isArray(message.namespaces)) liveStore.getState().apply(message as unknown as LiveSnapshot);
 }
 
@@ -98,6 +119,13 @@ function applyRealtimeSnapshot(message: Record<string, unknown>) {
   for (const [clusterId, summary] of Object.entries(clusters)) {
     const summaryRecord = asRecord(summary);
     if (summaryRecord) applyLiveSummary(summaryRecord, clusterId);
+  }
+  const resources = asRecord(state?.resources);
+  if (resources) {
+    for (const [key, value] of Object.entries(resources)) {
+      const record = asRecord(value);
+      if (record) enqueueResourceDelta({ type: 'resource.delta', op: 'replace', key, value: record });
+    }
   }
 }
 
@@ -121,4 +149,91 @@ function stringOrNull(value: unknown): string | null {
 function numberOrZero(value: unknown): number {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+}
+
+function asResourceDelta(message: Record<string, unknown>): ResourceDeltaMessage | null {
+  if (typeof message.key !== 'string') return null;
+  if (message.op !== 'replace' && message.op !== 'remove') return null;
+  return {
+    type: 'resource.delta',
+    seq: typeof message.seq === 'number' ? message.seq : undefined,
+    op: message.op,
+    key: message.key,
+    value: asRecord(message.value),
+  };
+}
+
+function enqueueResourceDelta(delta: ResourceDeltaMessage) {
+  pendingDeltas.set(delta.key, delta);
+  if (frameHandle) return;
+  frameHandle = window.requestAnimationFrame(flushResourceDeltas);
+}
+
+function flushResourceDeltas() {
+  frameHandle = 0;
+  const client = queryClient;
+  if (!client || pendingDeltas.size === 0) return;
+  const deltas = [...pendingDeltas.values()];
+  pendingDeltas.clear();
+  const touchedClusters = new Set<string>();
+  for (const delta of deltas) {
+    const [clusterId, namespace, kind, name] = delta.key.split('/', 4);
+    if (!clusterId || kind !== 'pod' || !name) continue;
+    touchedClusters.add(clusterId);
+    patchPodInventory(client, clusterId, namespace, name, delta);
+    patchNodePodSummaries(client, clusterId, namespace, name, delta);
+  }
+  for (const clusterId of touchedClusters) {
+    client.invalidateQueries({ queryKey: ['clusters', clusterId, 'summary'], exact: true });
+    client.invalidateQueries({ queryKey: ['clusters', clusterId, 'inv', 'workloads'], exact: true });
+  }
+}
+
+function patchPodInventory(
+  client: QueryClient,
+  clusterId: string,
+  namespace: string,
+  name: string,
+  delta: ResourceDeltaMessage,
+) {
+  client.setQueryData<{ resources: Record<string, unknown>[] }>(
+    ['clusters', clusterId, 'inv', 'pods'],
+    (current) => {
+      if (!current?.resources) return current;
+      const resources = upsertResource(current.resources, namespace, name, delta);
+      return resources === current.resources ? current : { ...current, resources };
+    },
+  );
+}
+
+function patchNodePodSummaries(
+  client: QueryClient,
+  clusterId: string,
+  namespace: string,
+  name: string,
+  delta: ResourceDeltaMessage,
+) {
+  client.setQueriesData<Record<string, unknown>[]>(
+    { queryKey: ['clusters', clusterId, 'nodes'] },
+    (current) => {
+      if (!Array.isArray(current)) return current;
+      return upsertResource(current, namespace, name, delta);
+    },
+  );
+}
+
+function upsertResource(
+  rows: Record<string, unknown>[],
+  namespace: string,
+  name: string,
+  delta: ResourceDeltaMessage,
+) {
+  const index = rows.findIndex((row) => row.name === name && row.namespace === namespace);
+  if (delta.op === 'remove') {
+    return index >= 0 ? rows.filter((_, rowIndex) => rowIndex !== index) : rows;
+  }
+  const value = delta.value ?? {};
+  const next = { ...value, name, namespace };
+  if (index < 0) return [next, ...rows];
+  return rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...next } : row));
 }

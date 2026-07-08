@@ -33,6 +33,7 @@ from packages.contracts.realtime import (
     HotPod,
     LiveSummary,
     LiveSummaryMessage,
+    ResourceDelta,
 )
 
 LOGGER = get_logger(__name__)
@@ -89,6 +90,8 @@ class KubernetesPodSummaryCollector:
         self.window_ms = window_ms
         self.transport = transport
         self._last_restart_total: int | None = None
+        self._last_resources: dict[str, dict[str, Any]] = {}
+        self._pending_deltas: list[ResourceDelta] = []
 
     async def __call__(self) -> LiveSummary | None:
         base_url = kubernetes_api_base_url()
@@ -112,12 +115,16 @@ class KubernetesPodSummaryCollector:
         restart_total = 0
         crash_looping = False
         hot_pods: list[HotPod] = []
+        next_resources: dict[str, dict[str, Any]] = {}
         for pod in pods:
             namespace = pod.get("metadata", {}).get("namespace", "")
             name = pod.get("metadata", {}).get("name", "")
             statuses = pod.get("status", {}).get("containerStatuses", [])
             ready = bool(statuses) and all(status.get("ready", False) for status in statuses)
             restarts = sum(int(status.get("restartCount", 0)) for status in statuses)
+            phase = str(pod.get("status", {}).get("phase") or "Unknown")
+            node_name = str(pod.get("spec", {}).get("nodeName") or "")
+            owner_kind, owner_name = pod_owner(pod)
             crash = any(
                 status.get("state", {}).get("waiting", {}).get("reason", "") == CRASH_LOOP_REASON
                 for status in statuses
@@ -129,6 +136,23 @@ class KubernetesPodSummaryCollector:
                 hot_pods.append(
                     HotPod(namespace=namespace, pod=name, restart_count=restarts, ready=ready)
                 )
+            if namespace and name:
+                key = f"{self.cluster_id}/{namespace}/pod/{name}"
+                next_resources[key] = {
+                    "resource_type": "pod",
+                    "kind": "Pod",
+                    "name": name,
+                    "namespace": namespace,
+                    "phase": phase,
+                    "ready": "1/1" if ready else "0/1",
+                    "restarts": restarts,
+                    "node": node_name,
+                    "owner_kind": owner_kind,
+                    "owner_name": owner_name,
+                    "health": pod_health(phase, ready, restarts),
+                }
+        self._pending_deltas = resource_deltas(self._last_resources, next_resources)
+        self._last_resources = next_resources
         restart_delta = (
             max(0, restart_total - self._last_restart_total)
             if self._last_restart_total is not None
@@ -150,6 +174,11 @@ class KubernetesPodSummaryCollector:
             rollout_phase=phase,
             hot_pods=hot_pods,
         )
+
+    def drain_deltas(self) -> list[ResourceDelta]:
+        deltas = self._pending_deltas
+        self._pending_deltas = []
+        return deltas
 
 
 class LiveSummaryPublisher:
@@ -245,4 +274,36 @@ class LiveSummaryPublisher:
             if summary is not None:
                 message = LiveSummaryMessage(cluster_id=self.cluster_id, summary=summary)
                 await connection.send(message.model_dump_json())
+                drain = getattr(self.collector, "drain_deltas", None)
+                if callable(drain):
+                    for delta in drain():
+                        await connection.send(delta.model_dump_json())
             await asyncio.sleep(self.interval_seconds)
+
+
+def resource_deltas(
+    before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]]
+) -> list[ResourceDelta]:
+    deltas: list[ResourceDelta] = []
+    for key, value in after.items():
+        if before.get(key) != value:
+            deltas.append(ResourceDelta(op="replace", key=key, value=value))
+    for key in before.keys() - after.keys():
+        deltas.append(ResourceDelta(op="remove", key=key, value=None))
+    return deltas
+
+
+def pod_owner(pod: dict[str, Any]) -> tuple[str, str]:
+    owners = pod.get("metadata", {}).get("ownerReferences", [])
+    if isinstance(owners, list) and owners:
+        owner = owners[0] if isinstance(owners[0], dict) else {}
+        return str(owner.get("kind") or ""), str(owner.get("name") or "")
+    return "", ""
+
+
+def pod_health(phase: str, ready: bool, restarts: int) -> str:
+    if phase != "Running" or not ready:
+        return "critical"
+    if restarts > 0:
+        return "warning"
+    return "healthy"

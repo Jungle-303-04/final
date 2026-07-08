@@ -433,14 +433,15 @@ def test_target_agent_patches_deployment_replicas_and_image(monkeypatch) -> None
     )
 
     assert result["applied"] is True
-    assert result["rollout"]["ready"] is True
+    assert result["rollout"]["ready"] is None
+    assert result["rollout"]["waited"] is False
     assert result["resources"][0]["resource"] == "deployment/checkout-api"
     assert result["resources"][0]["status"] == "completed"
-    assert [call[0] for call in calls] == ["GET", "PATCH", "GET"]
+    assert [call[0] for call in calls] == ["GET", "PATCH"]
     assert calls[1][1] == "/apis/apps/v1/namespaces/sandbox/deployments/checkout-api"
     assert calls[1][2]["spec"]["replicas"] == 5
     assert calls[1][2]["spec"]["template"]["spec"]["containers"][0]["image"].endswith(":v2")
-    assert get_count == 2
+    assert get_count == 1
 
 
 def test_deployment_rollout_status_allows_scale_to_zero() -> None:

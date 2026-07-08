@@ -2512,3 +2512,39 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
     cluster-1 `cluster-agent`의 explicit `NODE_COLLECTOR_IMAGE`를 위 service image로 맞춤.
   - 배포 직후 startup DDL 경합으로 `/clusters/cluster-1/nodes/summary` lock timeout 500이 일시 발생했으나,
     30초 관찰에서 `pg_locks` blocked 0, 긴 idle transaction 0, `/api/healthz` OK, 최근 api-gateway 500/validation/lock 로그 0건.
+
+## 실시간 제어 체감 개선 패스 (2026-07-08)
+
+- 사용자 요구:
+  - Git polling을 60초보다 빠르게 하되 부하를 통제한다.
+  - 우리 시스템이 만든 Git 변경은 polling을 기다리지 않는 fast-path로 보낸다.
+  - 브라우저는 60fps 렌더가 아니라 이벤트를 모아 cache patch한다.
+  - GitOps/Kubernetes 제어 명령은 background성 작업보다 최상위 우선순위를 갖는다.
+  - Kubernetes API가 patch/create를 수락하면 즉시 `applied`로 보고, rollout 완료는 별도 진행 상태로 본다.
+  - 구버전 `rollout_restart requires deployment resource` 실패 명령 잔재를 삭제한다.
+- 적용:
+  - `deploy/management/github-poll-worker.yaml`을 CronJob에서 Deployment 내부 루프 모드로 전환했다.
+    Kubernetes CronJob은 표준적으로 초 단위 schedule을 지원하지 않으므로, `POLL_INTERVAL_SECONDS=30` 상주 워커가 30초 fallback polling을 수행한다.
+    GitHub webhook/내부 Git write fast-path가 주 경로이고, 이 워커는 외부 변경/누락 보정용이다.
+  - `agent_commands.priority` 컬럼과 `ix_agent_commands_available_priority` 인덱스를 추가했다.
+    lease 정렬은 `priority DESC, created_at`이며 사용자 클릭/GitOps/복구 command는 기본 high priority(100)다.
+  - target-agent의 Deployment apply/restart는 Kubernetes API patch/create 수락 즉시 `applied=true`를 반환한다.
+    `rollout.ready`는 `null`, `rollout.phase="progressing"`, `rollout.waited=false`로 내려가며, rollout 완료/변화는 realtime summary/resource delta와 inventory가 후속 반영한다.
+  - realtime 경로는 기존 `resource.delta` 계약을 사용한다.
+    target-agent live summary collector가 pod의 bounded 필드만 비교해 변경된 pod는 `replace`, 사라진 pod는 `remove` delta로 보낸다.
+    browser는 delta를 `requestAnimationFrame` 단위로 모아 React Query cache에 patch하고, summary/workload는 invalidate로 보정한다.
+  - scale/restart mutation 성공 시 cluster list만 갱신하던 것을 cluster 범위 query 전체 invalidate로 변경했다.
+  - 라이브 DB에서 `action='rollout_restart'`, `status='failed'`, `result.message='rollout_restart requires deployment resource'`인 구버전 실패 명령 59건을 삭제했다.
+- 논리 주의:
+  - PR 생성은 아직 base branch에 반영된 상태가 아니므로 즉시 Kubernetes desired로 확정하면 GitOps 불변식이 깨진다.
+    fast-path는 GitHub가 direct commit 또는 merge 성공 SHA를 반환한 경우에만 `git.webhook.received(force=true)`와 같은 입구로 태워야 한다.
+    PR 생성은 검증/승인 대기 상태로 보존한다.
+  - CronJob 30초는 잘못된 Kubernetes 계약이다. 30초가 필요하면 Deployment 내부 loop 또는 webhook을 사용한다.
+- 검증:
+  - `.venv/bin/python -m pytest tests/test_command_worker.py tests/test_command_router.py tests/test_target_agent_client.py tests/test_git_pull_worker.py -q` → 63 passed.
+  - `.venv/bin/python -m ruff check src/domains/command src/services/target/cluster-agent/live_summary.py src/services/target/cluster-agent/agent.py tests/test_target_agent_client.py` → passed.
+  - `npm --prefix frontend run build` → passed.
+  - `kubectl kustomize deploy/management` → github-poll-worker가 Deployment로 렌더됨.
+- 배포 주의:
+  - 기존 live CronJob `github-poll-worker`는 Deployment와 kind가 다르므로 CD apply만으로는 제거되지 않을 수 있다.
+    배포 시 `kubectl --context kubernetes-ops -n management delete cronjob github-poll-worker --ignore-not-found` 후 새 Deployment rollout을 확인한다.
