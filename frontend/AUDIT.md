@@ -484,3 +484,24 @@
   `TARGET_AGENT_IMAGE`, `GITOPS_WEBHOOK_IMAGE`, target-agent `NODE_COLLECTOR_IMAGE` runtime 값도 같은 service image로 맞췄다.
   배포 직후 startup DDL 경합으로 `/nodes/summary` lock timeout이 일시 발생했으나, 30초 관찰에서 DB blocked lock 0,
   긴 idle transaction 0, `/api/healthz` OK, 최근 api-gateway 500/validation/lock 로그 0건을 확인했다.
+
+## O. 데모 RCA/GitOps 복구 흐름 안정화 (2026-07-08)
+
+- 데모 앱의 `orders-api` 5xx 로그는 실제 live 로그 형태인 `event=intentional_error_endpoint` 또는
+  `intentional error endpoint called` 문자열만으로도 `application_5xx_spike` 증상으로 감지한다.
+- evidence 수집 시각 기준 5분을 넘긴 로그는 새 장애 신호로 사용하지 않는다. 정상화 후 과거 5xx 로그가
+  1분마다 새 인시던트처럼 반복 생성되는 회귀를 막는다.
+- `application_5xx_spike` 복구 후보 순서:
+  1. `gitops_demo_recovery` — 승인 필요, route `draft_pr`, `deploy/k8s/configmap.yaml`과
+     `deploy/k8s/orders-api-deployment.yaml`을 실제 GitOps 패치로 생성한다.
+  2. `deployment_scale` — 승인 필요, 임시 replica 3 증설 command.
+  3. `rollout_restart` — 보조 재시작 command.
+- 승인 후 Safe PR 요청은 plan target과 action params를 함께 사용해 repository/binding/application/workflow 식별자를
+  이벤트에 담는다. SCM worker는 기존 `safe_pr.requested -> safe_pr.patch_prepared -> safe_pr.ready_for_creation`
+  경로로 실제 PR branch와 manifest patch commit을 생성한다.
+- 드릴다운 히트맵은 과한 zoom/layout 애니메이션과 health 색 채움을 줄였다. 같은 컴포넌트와 상태 토큰은 유지하되,
+  타일은 중립 surface + health bar/left border로 표시해 노드/팟 관찰 화면이 깨지지 않게 했다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py tests/test_rca_rule_catalog.py -q` → 60 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/services/ai/agent/pipeline/incident.py src/services/ai/agent/recovery/dispatch.py src/services/ai/agent/recovery/builtin.py tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py` → passed.
+  - `cd frontend && npm run test -- --test-name-pattern="cluster drilldown|home fleet charts|live stream"` → 17 passed.

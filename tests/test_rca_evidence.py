@@ -335,7 +335,7 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert queue_db.called("queue_agent_command")
 
 
-def test_application_5xx_recovery_offers_restart_and_scale_payload() -> None:
+def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() -> None:
     recovery_worker = load_service("ai/recovery-worker")
     select_worker = load_service("ai/select-worker")
     dispatch_worker = load_service("ai/dispatch-worker")
@@ -347,13 +347,13 @@ def test_application_5xx_recovery_offers_restart_and_scale_payload() -> None:
     plan = recovery_outs[0].plan
 
     assert [candidate.draft.action_type for candidate in plan.candidates[:2]] == [
-        "rollout_restart",
+        "gitops_demo_recovery",
         "deployment_scale",
     ]
+    assert plan.selection_required is True
 
     select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
-    assert subjects_of(select_outs) == ["recovery.action_selected"]
-    assert select_outs[0].selected.draft.action_type == "rollout_restart"
+    assert subjects_of(select_outs) == ["recovery.selection_requested"]
 
     scale_candidate = plan.candidates[1]
     dispatch_outs = run_handler(
@@ -835,6 +835,53 @@ def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
     assert dispatch_outs[0].patches[0].path.startswith(".gitops/recovery/")
     assert dispatch_outs[0].approval_ref is None
     assert not db.called("save_pull_request")
+
+
+def test_application_5xx_recovery_prefers_gitops_demo_reset_patch(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "token-1")
+    monkeypatch.setenv("SCM_REPO", "project/repo")
+    recovery_worker = load_service("ai/recovery-worker")
+    select_worker = load_service("ai/select-worker")
+    dispatch_worker = load_service("ai/dispatch-worker")
+
+    recovery_outs = run_handler(
+        recovery_worker.on_rca_completed,
+        report_for(
+            "application_5xx_spike",
+            resource_kind="Deployment",
+            resource_name="orders-api",
+        ),
+    )
+    plan = recovery_outs[0].plan
+
+    assert plan.selection_required is True
+    assert plan.candidates[0].draft.action_type == "gitops_demo_recovery"
+    assert plan.candidates[0].route == "draft_pr"
+
+    select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
+    assert subjects_of(select_outs) == ["recovery.selection_requested"]
+
+    dispatch_outs = run_handler(
+        dispatch_worker.on_recovery_action_selected,
+        RecoveryActionSelectedBody(
+            plan=plan,
+            selected=plan.candidates[0],
+            selected_by="operator",
+            auto_selected=False,
+            reason="operator approved demo recovery",
+            workspace_id="workspace-1",
+        ),
+    )
+
+    assert subjects_of(dispatch_outs) == ["safe_pr.requested"]
+    patches = {patch.path: patch.content for patch in dispatch_outs[0].patches}
+    assert set(patches) == {
+        "deploy/k8s/configmap.yaml",
+        "deploy/k8s/orders-api-deployment.yaml",
+    }
+    assert "DEMO_MODE: normal" in patches["deploy/k8s/configmap.yaml"]
+    assert "replicas: 3" in patches["deploy/k8s/orders-api-deployment.yaml"]
+    assert "kubeheal.io/recovery-token" in patches["deploy/k8s/orders-api-deployment.yaml"]
 
 
 def test_rollout_completion_flows_to_approval_recommendation() -> None:

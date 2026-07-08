@@ -443,7 +443,7 @@ rules:
 **network.yaml** — `src/services/ai/agent/causes/catalog/network.yaml`
 - `dns_lookup_failed`: symptoms `DNS lookup failed`; required `kubernetes`, `metrics`, `logs`, `metadata`; 후보 `service_dns_resolution_failure`
 - `connection_timeout`: symptoms `Connection timeout`; required `kubernetes`, `metrics`, `logs`, `traces`, `metadata`; 후보 `network_path_timeout`
-- `ingress_5xx`: symptoms `Ingress 502/503`, `Ingress 502`, `Ingress 503`; required `kubernetes`, `metrics`, `logs`; 후보 `upstream_unavailable`, `backend_readiness_failure`, `application_5xx_spike`
+- `ingress_5xx`: symptoms `Ingress 502/503`, `Ingress 502`, `Ingress 503`; required `kubernetes`, `metrics`, `logs`; 후보 `upstream_unavailable`, `backend_readiness_failure`, `application_5xx_spike`. `application_5xx_spike` 신호는 5xx status/upstream_status, dependency timeout, `/api/orders/error`, `intentional_error_endpoint`, `intentional error endpoint called` 로그 패턴을 본다. 로그 timestamp가 evidence `cluster.collected_at`보다 5분 넘게 멀면 새 incident 신호로 쓰지 않는다.
 
 **scheduling.yaml** — `src/services/ai/agent/causes/catalog/scheduling.yaml`
 - `failed_scheduling`: symptoms `FailedScheduling`, `Pending`; required `kubernetes`; 후보 `insufficient_cpu`, `insufficient_memory`, `node_affinity_or_taint_mismatch`, `pvc_pending`
@@ -552,6 +552,23 @@ approval_required=`"approval_required"`.
 |---|---|---|---|---|---|---|
 | `config_fix` | 설정 보정 PR | `draft_pr` | medium | 0.68 | True | `{"patch": "config"}` |
 
+**`src/services/ai/agent/recovery/builtin.py :: Application5xxRecoveryActions`** —
+`@rca.recovery(root_causes=("application_5xx_spike",))`:
+
+| action_type | title | route | risk | score | approval_required | params |
+|---|---|---|---|---|---|---|
+| `gitops_demo_recovery` | 데모 설정 정상화 PR | `draft_pr` | medium | 0.78 | True | `{"patch": "demo_config_reset"}` |
+| `deployment_scale` | 임시 replica 증설 | `auto` | medium | 0.6 | True | `{"command": "deployment_scale", "replicas": 3}` |
+| `rollout_restart` | 대상 워크로드 재시작 | `auto` | low | 0.5 | False | `{"command": "rollout_restart"}` |
+
+**`src/services/ai/agent/recovery/builtin.py :: NetworkRecoveryActions`** —
+`@rca.recovery(root_causes=("backend_readiness_failure", "upstream_unavailable"))`:
+
+| action_type | title | route | risk | score | approval_required | params |
+|---|---|---|---|---|---|---|
+| `rollout_restart` | 대상 워크로드 재시작 | `auto` | low | 0.66 | False | `{"command": "rollout_restart"}` |
+| `deployment_scale` | 임시 replica 증설 | `auto` | medium | 0.54 | True | `{"command": "deployment_scale", "replicas": 3}` |
+
 **`src/services/ai/agent/recovery/builtin.py :: FallbackRecoveryActions`** — `@rca.fallback`:
 
 | action_type | title | route | risk | score | approval_required | params |
@@ -646,9 +663,12 @@ oom_killed 의 rollout_restart 후보가 자동 선택되어 auto 실행된다.
 - `patches = safe_pr_patches(selected)` 는 `draft.params["patches"]` 가 없거나 유효한 패치가 없으면
   `.gitops/recovery/{hash}-{action}.md` 검토 패치를 만든다. 이 fallback 문서는 대상, 원인, 위험도,
   영향 범위, 조치, 검증, 롤백 텍스트만 담고 실제 manifest 변경을 가장하지 않는다.
+- `draft.params["patch"] == "demo_config_reset"` 이면 fallback 문서 대신
+  `deploy/k8s/configmap.yaml`(`DEMO_MODE: normal`, `DEPENDENCY_MODE: normal`)과
+  `deploy/k8s/orders-api-deployment.yaml`(orders-api replica 3, recovery token annotation) 패치를 만든다.
 - PR 본문(요약, 선택 조치, 대상 `namespace/kind/name`, 위험도, 영향 범위,
   이유, 검증 체크리스트, 롤백 계획을 개행으로 조합)을 만들고
-  `SafePrRequestedBody(title=f"{selected.title}: {draft.resource_name}", body, provider=GitHub.PROVIDER("github"), patches, workspace_id)` 반환.
+  `SafePrRequestedBody(title=f"{selected.title}: {draft.resource_name}", body, provider=GitHub.PROVIDER("github"), patches, workspace_id)` 반환. repository/binding/application/workflow/environment/manifest_path 값은 `draft.params`를 먼저 보고, 없으면 `plan.target`, 그래도 없으면 기본값을 쓴다.
 
 `src/services/ai/agent/recovery/dispatch.py :: build_command_request_body`
 
@@ -664,8 +684,10 @@ oom_killed 의 rollout_restart 후보가 자동 선택되어 auto 실행된다.
 | 함수 | 앵커 | 동작 |
 |---|---|---|
 | `command_action_for(selected)` | `src/services/ai/agent/recovery/dispatch.py :: command_action_for` | `params["command"] or action_type` → `command_action_for_recovery` |
-| `safe_pr_patches(selected)` | `src/services/ai/agent/recovery/dispatch.py :: safe_pr_patches` | `draft.params["patches"]` 가 list이면 `path`·`content` 가 str인 dict를 `SafePrFilePatch`로 변환하고, 없거나 비면 `fallback_recovery_patch` 1건을 반환 |
+| `safe_pr_patches(selected)` | `src/services/ai/agent/recovery/dispatch.py :: safe_pr_patches` | `draft.params["patch"] == "demo_config_reset"`이면 demo ConfigMap/Deployment 패치 2건, `draft.params["patches"]` 가 list이면 유효한 `SafePrFilePatch`, 없거나 비면 `fallback_recovery_patch` 1건을 반환 |
+| `demo_config_reset_patches(selected)` | `src/services/ai/agent/recovery/dispatch.py :: demo_config_reset_patches` | `deploy/k8s/configmap.yaml`, `deploy/k8s/orders-api-deployment.yaml` 패치 생성 |
 | `fallback_recovery_patch(selected)` | `src/services/ai/agent/recovery/dispatch.py :: fallback_recovery_patch` | `.gitops/recovery/{sha16}-{action}.md` 경로의 검토용 Markdown 패치 생성 |
+| `target_value(plan, params, key, default)` | `src/services/ai/agent/recovery/dispatch.py :: target_value` | Safe PR metadata 값을 `params` → `plan.target` → 기본값 순서로 선택 |
 | `command_target_name(kind, name, params)` | `src/services/ai/agent/recovery/dispatch.py :: command_target_name` | 명시 deployment 파라미터 우선, 없으면 Deployment/ReplicaSet/Pod 이름에서 조치 대상 Deployment 이름 추정 |
 | `as_optional_str(value)` | `src/services/ai/agent/recovery/dispatch.py :: as_optional_str` | `None`/`""` → None, 그 외 `str(value)` |
 

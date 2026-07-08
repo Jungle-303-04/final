@@ -546,6 +546,85 @@ def test_sandbox_application_5xx_log_opens_incident_and_completes_rca() -> None:
     assert completed.rca_detail.confidence == 1.0
 
 
+def test_demo_intentional_error_log_opens_incident_and_completes_rca() -> None:
+    """라이브 데모 orders-api 오류 로그 모양(status 없이 event만 있음)을 5xx로 승격한다."""
+    healthy = snapshot(
+        pods=(pod("orders-api-1", owner=("ReplicaSet", "orders-api-96876968")),),
+        services=(
+            {
+                "namespace": NAMESPACE,
+                "name": "orders-api",
+                "type": "ClusterIP",
+                "cluster_ip": "10.96.0.10",
+                "ports": [],
+                "selector": {"app.kubernetes.io/name": "orders-api"},
+            },
+        ),
+        endpoints=(
+            {
+                "namespace": NAMESPACE,
+                "name": "orders-api-abc12",
+                "address_type": "IPv4",
+                "endpoint_count": 2,
+                "ports": [],
+            },
+        ),
+    )
+    healthy["cluster"]["collected_at"] = "2026-07-08T06:18:30Z"
+    payload = evidence_payload(
+        healthy,
+        metrics={"demo_orders_api_errors_total": {"value": 9}},
+        logs=[
+            {
+                "line": (
+                    '{"timestamp":"2026-07-08T06:18:00Z","level":"ERROR",'
+                    '"service":"orders-api","message":"intentional error endpoint called",'
+                    '"event":"intentional_error_endpoint"}'
+                ),
+                "timestamp": "2026-07-08T06:18:00Z",
+            }
+        ],
+    )
+    db = SpyDb()
+
+    events = run_to_rca_completion(payload, db=db, correlation_id="corr-demo-5xx")
+
+    assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.incident.resource_name == "orders-api"
+    completed = events[-1]
+    assert completed.root_cause == "application_5xx_spike"
+    assert completed.rca_detail.confidence == 1.0
+
+
+def test_stale_demo_error_log_does_not_open_incident_after_recovery() -> None:
+    """정상으로 돌아온 뒤 오래된 demo 오류 로그가 계속 새 인시던트를 만들지 않는다."""
+    healthy = snapshot(
+        pods=(pod("orders-api-1", owner=("ReplicaSet", "orders-api-96876968")),),
+    )
+    healthy["cluster"]["collected_at"] = "2026-07-08T06:40:00Z"
+    payload = evidence_payload(
+        healthy,
+        metrics={"demo_orders_api_errors_total": {"value": 9}},
+        logs=[
+            {
+                "line": (
+                    '{"timestamp":"2026-07-08T06:18:00Z","level":"ERROR",'
+                    '"service":"orders-api","message":"intentional error endpoint called",'
+                    '"event":"intentional_error_endpoint"}'
+                ),
+                "timestamp": "2026-07-08T06:18:00Z",
+            }
+        ],
+    )
+    events = run_to_plan(payload, correlation_id="corr-stale-demo-5xx")
+
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.detected is False
+    assert detected.incident is None
+    assert "evidence.bundle.built" not in subjects_of(events)
+
+
 FAULT_COMPLETION_CASES: dict[str, tuple[ClusterEvidenceReceivedBody, str]] = {
     "crashloop": (
         evidence_payload(

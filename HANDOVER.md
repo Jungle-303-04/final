@@ -1,11 +1,33 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 10:21 KST (더미 차트 제거 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 15:50 KST (데모 RCA/GitOps 복구 흐름 안정화)
 
-## 현재 범위 고정 — target-01 배포 제외
+## 최신 체크포인트 — 데모 RCA/GitOps 복구 흐름 안정화
 
-- 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
-- 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+- 현재 최우선 목표는 live 데모에서 `orders-api` 5xx가 실제 장애로 감지되고, RCA 리포트가 생성되며,
+  운영자 승인 후 Safe PR/GitOps 경로로 복구 패치가 생성되는 것이다.
+- 데모 앱 live 로그 형태를 감지하도록 `application_5xx_spike` 패턴에 `intentional_error_endpoint`,
+  `intentional error endpoint called`를 추가했다. status/path 필드가 없는 JSON 로그도 감지한다.
+- evidence 수집 시각 기준 5분을 넘긴 로그 샘플은 새 인시던트 신호로 쓰지 않는다. 정상화 후 stale 5xx 로그가
+  1분마다 `rca.analysis_blocked` 인시던트를 만드는 문제를 차단한다.
+- `application_5xx_spike` 복구 후보는 이제 `gitops_demo_recovery`가 1순위다. 승인 필요, route `draft_pr`,
+  실제 패치 대상은 `deploy/k8s/configmap.yaml`, `deploy/k8s/orders-api-deployment.yaml`이다.
+- Safe PR 요청은 plan target과 action params를 함께 사용해 repository/binding/application/workflow 식별자를
+  채운다. SCM worker는 기존 safe-pr 파이프라인을 그대로 사용해 GitHub branch, manifest patch commit, PR을 만든다.
+- 드릴다운 히트맵은 과한 zoom/layout 효과와 health 전체 배경색을 줄이고, surface tile + health bar/left border로
+  안정화했다. 노드/팟 타일 관찰 UX는 유지한다.
+- 검증 완료:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py tests/test_rca_rule_catalog.py -q` → 60 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/services/ai/agent/pipeline/incident.py src/services/ai/agent/recovery/dispatch.py src/services/ai/agent/recovery/builtin.py tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py` → passed.
+  - `cd frontend && npm run test -- --test-name-pattern="cluster drilldown|home fleet charts|live stream"` → 17 passed.
+- 이어서 필요한 검증: `bash scripts/frontend-check.sh`, service/console image build/push, management worker와 console rollout,
+  새 5xx 트래픽 1회 주입 후 최신 `incident.detected -> rca.completed -> recovery.selection_requested` 확인.
+
+## 이전 범위 기록 — target-01 배포 제외
+
+- 아래 두 줄은 2026-07-08 오전 범위 기록이다. 15:50 KST 이후 작업은 위 최신 체크포인트가 우선이다.
+- 당시 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 다른 스레드 담당.
+- 당시 범위: `target-01.woonyong.org` 배포 제외, `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업.
 
 ## 체크포인트 — 더미 차트 제거
 

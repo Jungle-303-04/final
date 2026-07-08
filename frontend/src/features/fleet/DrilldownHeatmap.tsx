@@ -89,14 +89,13 @@ export function DrilldownHeatmap({
       ) : zoomContext ? (
         <motion.div
           layout={motionLayout}
-          layoutId={motionLayout ? `heatmap-${zoomContext.id}` : undefined}
           transition={motionTransition}
-          className={cx('grid min-h-64 gap-4 rounded-panel border p-4', tileClass(zoomContext.health))}
+          className="grid min-h-48 gap-4 rounded-panel border border-border bg-bg p-4"
         >
-          <span className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <span className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-control border border-border bg-surface px-3 py-2">
             <span className="grid min-w-0 gap-1">
-              <span className="min-w-0 truncate text-title font-semibold text-primary">{zoomContext.label}</span>
-              {zoomContext.meta && <span className="grid gap-2 text-body text-secondary">{zoomContext.meta}</span>}
+              <span className="min-w-0 truncate text-body font-semibold text-primary">{zoomContext.label}</span>
+              {zoomContext.meta && <span className="grid gap-1 text-caption text-secondary">{zoomContext.meta}</span>}
             </span>
             <span className="flex shrink-0 items-center gap-1">
               {zoomContext.badge}
@@ -150,7 +149,10 @@ function TileGrid({
       variants={motionLayout ? listStagger : undefined}
       initial={motionLayout ? 'initial' : false}
       animate={motionLayout ? 'animate' : undefined}
-      className={cx('grid grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12', compact ? 'min-h-48' : 'min-h-64')}
+      className={cx(
+        'grid grid-cols-1 gap-2',
+        compact ? 'min-h-40 lg:grid-cols-2 2xl:grid-cols-3' : 'min-h-56 sm:grid-cols-6 xl:grid-cols-12',
+      )}
     >
       <AnimatePresence mode={presenceMode}>
         {tiles.map((tile) => (
@@ -158,28 +160,28 @@ function TileGrid({
             key={tile.id}
             type="button"
             layout={motionLayout}
-            layoutId={motionLayout ? `heatmap-${tile.id}` : undefined}
             variants={motionLayout ? listItem : undefined}
             transition={motionTransition}
             className={cx(
-              'group grid min-h-24 content-between rounded-panel border p-4 text-left transition-colors motion-reduce:transition-none hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-              tileClass(tile.health),
-              sizeClass(safeSize(tile.size), max),
-              tile.pulse && 'border-danger ring-2 ring-danger/50 motion-safe:animate-pulse',
+              'group relative grid min-h-24 content-between overflow-hidden rounded-panel border border-border bg-surface p-4 text-left shadow-soft transition-colors motion-reduce:transition-none hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              healthBorderClass(tile.health),
+              compact ? 'min-h-28' : sizeClass(safeSize(tile.size), max),
+              tile.pulse && 'ring-2 ring-danger/40',
             )}
             onClick={() => onTileClick(tile)}
           >
+            <span aria-hidden className={cx('absolute inset-x-0 top-0 h-1', healthBarClass(tile.health, tile.pulse))} />
             <span className="flex min-w-0 items-start justify-between gap-3">
-              <span className="min-w-0 truncate text-title font-semibold text-primary">{tile.label}</span>
+              <span className="min-w-0 truncate text-body font-semibold text-primary">{tile.label}</span>
               <span className="flex shrink-0 items-center gap-1">
                 {tile.badge}
                 <HealthBadge health={tile.health} />
               </span>
             </span>
             <span className="mt-4 grid gap-3">
-              {tile.meta && <span className="grid gap-2 text-body text-secondary">{tile.meta}</span>}
+              {tile.meta && <span className="grid gap-2 text-caption text-secondary">{tile.meta}</span>}
               {tile.actionLabel && (
-                <span className="inline-flex w-fit items-center rounded-control border border-accent/40 bg-accent/10 px-2 py-1 text-label font-semibold text-accent transition-colors group-hover:bg-accent/15">
+                <span className="inline-flex w-fit items-center rounded-control border border-accent/40 bg-accent/10 px-2 py-1 text-caption font-semibold text-accent transition-colors group-hover:bg-accent/15">
                   {tile.actionLabel}
                 </span>
               )}
@@ -211,12 +213,21 @@ function healthKey(health: DrilldownHealth) {
   return 'unknown';
 }
 
-function tileClass(health: DrilldownHealth) {
+function healthBorderClass(health: DrilldownHealth) {
   const key = healthKey(health);
-  if (key === 'critical') return 'border-danger/50 bg-danger/10';
-  if (key === 'warning') return 'border-warning/50 bg-warning/10';
-  if (key === 'healthy') return 'border-success/50 bg-success/10';
-  return 'border-border bg-bg';
+  if (key === 'critical') return 'border-l-4 border-l-danger';
+  if (key === 'warning') return 'border-l-4 border-l-warning';
+  if (key === 'healthy') return 'border-l-4 border-l-success';
+  return 'border-l-4 border-l-border';
+}
+
+function healthBarClass(health: DrilldownHealth, pulse?: boolean) {
+  if (pulse) return 'bg-danger';
+  const key = healthKey(health);
+  if (key === 'critical') return 'bg-danger';
+  if (key === 'warning') return 'bg-warning';
+  if (key === 'healthy') return 'bg-success';
+  return 'bg-raised';
 }
 
 function sizeClass(size: number, max: number) {
