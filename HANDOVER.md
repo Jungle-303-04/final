@@ -2458,3 +2458,11 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_database_unit.py::test_application_deployment_bindings_match_manifest_when_app_name_drifted tests/test_database_unit.py::test_gitops_registration_stores_workspace_scoped_default_ids tests/test_rca_evidence.py tests/test_target_kubernetes_evidence.py tests/test_inventory_domain.py tests/test_fleet_router.py -q` → 50 passed.
   - `PYTHONPATH=src .venv/bin/python -m ruff check src tests` → passed.
   - `bash scripts/frontend-check.sh` → design guard/typecheck/eslint/unit/build passed.
+- 라이브 배포:
+  - service `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:d6a27854-demo-hotfix-20260708142734`
+  - console `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:d6a27854-demo-hotfix-20260708142734`
+  - management service 계열, console, cluster-1 target-agent rollout 완료.
+  - `management-runtime-config`의 `TARGET_AGENT_IMAGE/GITOPS_WEBHOOK_IMAGE`, management/cluster-1 `target-runtime-config`,
+    cluster-1 `cluster-agent`의 explicit `NODE_COLLECTOR_IMAGE`를 위 service image로 맞춤.
+  - 배포 직후 startup DDL 경합으로 `/clusters/cluster-1/nodes/summary` lock timeout 500이 일시 발생했으나,
+    30초 관찰에서 `pg_locks` blocked 0, 긴 idle transaction 0, `/api/healthz` OK, 최근 api-gateway 500/validation/lock 로그 0건.
