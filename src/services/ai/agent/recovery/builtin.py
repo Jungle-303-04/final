@@ -45,6 +45,43 @@ class OomKilledRecoveryActions:
 
 
 @rca.recovery(
+    root_causes=("application_5xx_spike", "backend_readiness_failure", "upstream_unavailable"),
+    actions=(
+        RecoveryActionSpec(
+            action_type="rollout_restart",
+            title="대상 워크로드 재시작",
+            description="최근 5xx/timeout을 내는 대상 워크로드를 재시작해 연결과 런타임 상태를 초기화합니다.",
+            route=routes.auto,
+            risk_level="low",
+            score=0.66,
+            blast_radius="target_workload",
+            approval_required=False,
+            prerequisites=("대상 워크로드가 sandbox namespace에 한정됨",),
+            validation_checks=("5xx/timeout 로그 감소", "Ready replica 유지", "요청 성공률 회복"),
+            rollback_plan="재시작은 되돌릴 변경이 없으며, 실패 시 scale 또는 수동 조사로 전환합니다.",
+            params={"command": "rollout_restart"},
+        ),
+        RecoveryActionSpec(
+            action_type="deployment_scale",
+            title="임시 replica 증설",
+            description="장애 중인 sandbox Deployment를 3 replicas로 증설해 요청 처리 여유를 확보합니다.",
+            route=routes.auto,
+            risk_level="medium",
+            score=0.6,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("sandbox 워크로드이고 리소스 여유가 있음",),
+            validation_checks=("pod 수 증가", "Ready replica 3 도달", "5xx/timeout 감소"),
+            rollback_plan="replica 수를 기존 값으로 되돌립니다.",
+            params={"command": "deployment_scale", "replicas": 3},
+        ),
+    ),
+)
+class Application5xxRecoveryActions:
+    pass
+
+
+@rca.recovery(
     root_causes=("bad_image_rollout", "app_startup_failure"),
     actions=(
         RecoveryActionSpec(

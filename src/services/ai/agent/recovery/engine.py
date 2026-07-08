@@ -63,7 +63,15 @@ def ranked_candidates(context, rules: tuple[RecoveryRule, ...]) -> list[Recovery
     for rule in rules:
         if rule.supports(context):
             candidates.extend(rule.candidates(context))
-    return sorted(candidates, key=lambda candidate: (candidate.rank, -candidate.score))
+    return sorted(candidates, key=recovery_candidate_sort_key)
+
+
+def recovery_candidate_sort_key(candidate: RecoveryActionCandidate) -> tuple[bool, int, float]:
+    return (
+        bool(candidate.draft.params.get("manual")),
+        candidate.rank,
+        -candidate.score,
+    )
 
 
 def first_draft_or_default(

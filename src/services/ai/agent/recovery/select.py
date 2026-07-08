@@ -10,6 +10,7 @@ from domains.rca.events import (
     RecoverySelectionRequestedBody,
 )
 from packages.contracts.event_bus.bodies import EventBody
+from services.ai.agent.recovery.engine import recovery_candidate_sort_key
 
 NO_PLAN_REASON = "복구 계획이 없습니다."
 SELECTION_REQUIRED_REASON = "사용자 복구 조치 선택이 필요합니다."
@@ -29,7 +30,7 @@ class RecoverySelector:
                 workspace_id=evt.workspace_id,
             )
 
-        sorted_candidates = sorted(evt.plan.candidates, key=lambda item: (item.rank, -item.score))
+        sorted_candidates = sorted(evt.plan.candidates, key=recovery_candidate_sort_key)
         selected = sorted_candidates[0] if sorted_candidates else None
         if selected is None:
             return RecoverySelectionRequestedBody(

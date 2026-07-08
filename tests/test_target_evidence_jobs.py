@@ -13,6 +13,7 @@ import pytest
 from domains.identity.dependencies import ClusterAgentIdentity
 from domains.target.evidence_jobs import PENDING_EVIDENCE_EVENT_ID_PREFIX
 from domains.target.router import (
+    complete_evidence_payload,
     evidence_job_result,
     poll_evidence_job,
     schedule_evidence_jobs,
@@ -600,6 +601,25 @@ def test_evidence_job_result_emits_window_once_when_all_jobs_ready() -> None:
     assert event_payload["metrics"] == {}
     assert event_payload["traces"] == {}
     assert events.body is None
+
+
+def test_complete_evidence_payload_defaults_missing_provider_bodies() -> None:
+    payload = complete_evidence_payload(
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "kubernetes-ops",
+            "source_id": "cluster-snapshot",
+            "window_start": "window-1",
+            "evidence_key": "workspace-1:kubernetes-ops:cluster-snapshot:window-1",
+            "agent_id": "mgmt-agent",
+            "kubernetes": {"cluster": {"cluster_id": "kubernetes-ops"}},
+        }
+    )
+
+    assert payload["kubernetes"] == {"cluster": {"cluster_id": "kubernetes-ops"}}
+    assert payload["metrics"] == {}
+    assert payload["logs"] == []
+    assert payload["traces"] == {}
 
 
 def test_evidence_job_result_rejects_oversized_provider_result() -> None:
