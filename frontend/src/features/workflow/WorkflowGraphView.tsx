@@ -104,9 +104,15 @@ export default function WorkflowGraphView() {
           diffStep={diffStep}
         />
       )}
+      {found.status === 'WAITING_FOR_APPROVAL' && !found.approval_id && (
+        <ApprovalReferenceMissingPanel
+          run={found}
+          onRetry={() => all.refetchAll()}
+        />
+      )}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,0.75fr)]">
-        <Card title="실행 흐름" description="단계를 선택하면 오른쪽에서 상세와 적용 계획을 확인할 수 있습니다">
+        <Card title="실행 흐름">
           <div className="max-w-full overflow-x-auto">
             <div className="h-96 min-w-[42rem] overflow-hidden rounded-panel border border-border bg-bg">
               <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={setSelected} />
@@ -155,6 +161,33 @@ function buildGraph(found?: WorkflowWithApp) {
     edges.push({ id: 'ef', source: failedAt, target: 'FAILED', type: 'animated', data: { active: false, tone: 'danger' } });
   }
   return { nodes, edges };
+}
+
+function ApprovalReferenceMissingPanel({ run, onRetry }: { run: WorkflowWithApp; onRetry: () => void }) {
+  const diffStep = run.steps.find((step) => step.name === 'DIFFING');
+  const pathFor = useConsolePath();
+  const reason = diffStep?.detail || '승인 요청 식별자가 실행 정보에 연결되지 않았습니다';
+  return (
+    <Card
+      title="승인 요청 확인 필요"
+      actions={<Badge tone="danger">승인 불가</Badge>}
+    >
+      <div className="grid gap-4">
+        <KeyValueList items={[
+          { label: '앱', value: <CodeText>{run.appId}</CodeText> },
+          { label: '커밋', value: <CodeText>{shortSha(run.commit_sha)}</CodeText> },
+          { label: '상태', value: <WorkflowStatusBadge status={run.status} /> },
+          { label: '사유', value: reason },
+        ]} />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={onRetry}>새로고침</Button>
+          <Link to={pathFor(`/repos/${run.application_id}`)}>
+            <Button variant="primary">배포 보기</Button>
+          </Link>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function ApprovalPanel({ run, approvalId, diffStep }: { run: WorkflowWithApp; approvalId: string; diffStep?: RunStep }) {
