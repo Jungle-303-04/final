@@ -1,11 +1,20 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:19 KST (레거시 CSS import 제거 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:22 KST (디자인 시스템 CI 가드)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 디자인 시스템 CI 가드
+
+- 구현:
+  - `scripts/frontend-check.sh` 초반에 design-system guard를 추가했다.
+  - `frontend/src/features` 아래 새 `.css` 파일, TS/TSX inline `style=`, raw hex 색상을 발견하면 CI/CD gate가 실패한다.
+  - 메시지는 금지 사유와 대체 경로(`src/ui` 프리미티브, `src/ui/theme.css` semantic token)를 함께 출력한다.
+- 검증:
+  - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 11건, production build 모두 통과.
 
 ## 체크포인트 — 레거시 CSS import 제거
 

@@ -28,11 +28,13 @@
 - 레거시 CSS import 제거(2026-07-08 09:15 KST): `main.tsx` 전역 스타일 import는 `@/ui/theme.css` 단독이다. 삭제 파일: `frontend/src/shared/tokens.css`, `frontend/src/shared/ui/app.css`, `frontend/src/shared/theme-bridge.css`, `frontend/src/plural-ui/tokens.css`, `frontend/src/plural-ui/plural.css`, `frontend/src/features/console-archive/archive.css`.
 - 남은 CSS import는 `@/ui/theme.css`, React Flow 라이브러리 스타일, `shared/flow/flow.css`뿐이다. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/login`과 `/`를 1440/1024/390 폭에서 확인했고 marker와 horizontal overflow 0을 확인했다.
 - 배포 확인(2026-07-08 09:19 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `ab014c10-css-cleanup-20260708091722`, main `/assets/index-BtlDgMJr.js`, CSS `/assets/index-BRxn7xco.css` 서빙 및 삭제한 레거시 CSS marker 0건 확인.
+- CI 가드(2026-07-08 09:22 KST): `scripts/frontend-check.sh`가 `frontend/src/features` 아래 새 `.css` 파일, inline `style=`, raw hex 색상을 배포 전 차단한다. `bash scripts/frontend-check.sh` 전체 통과.
 
 ## 사용 규칙
 
 - feature 코드는 `src/ui` 프리미티브와 Tailwind semantic token만 사용한다.
 - feature 코드에서 새 CSS 파일, inline `style=`, hex 색상, px 하드코딩을 추가하지 않는다.
+- 새 CSS 파일, inline `style=`, hex 색상은 CI gate에서 차단된다.
 - 상태 어휘는 `healthy`, `warning`, `critical`, `pending`, `running`, `failed`로 고정하고 사용자 노출 라벨은 한국어 명사형으로 쓴다.
 - 리스트/카드/테이블은 로딩, 빈 상태, 오류+재시도 상태를 반드시 제공한다.
 - 뮤테이션은 pending, 성공 토스트, 실패 사유 토스트를 함께 설계한다.
