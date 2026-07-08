@@ -169,7 +169,7 @@ export default function MetricsView() {
     setWidgetTitle('');
     const next = new URLSearchParams(sp);
     next.set('cluster', nextClusterId);
-    setSp(next, { replace: true });
+    setSp(next, { replace: true, preventScrollReset: true });
   };
 
   const summary = summaryQ.data;

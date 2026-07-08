@@ -54,6 +54,8 @@ export interface PodHeatmapSummary {
   restarts: number;
   cpu_pct: number | null;
   mem_pct: number | null;
+  cpu_mcores: number | null;
+  mem_mib: number | null;
   health: 'healthy' | 'warning' | 'critical' | 'unknown' | string;
   incident_correlation_id?: string | null;
   incident_id?: string | null;
@@ -145,7 +147,7 @@ export const useWorkloads = (id: string) =>
     enabled: !!id,
     refetchInterval: 30_000,
     retry: false,
-    select: d => d.resources.map(adaptWorkloadResource),
+    select: d => d.resources.map(adaptWorkloadResource).filter(isObservableConsoleResource),
   });
 export const useResources = (id: string, kind?: string) =>
   useQuery({
@@ -153,7 +155,7 @@ export const useResources = (id: string, kind?: string) =>
     queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources${kind ? `?resource_type=${kind}` : ''}`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
     enabled: !!id,
     retry: false,
-    select: d => d.resources.map(adaptInventoryResource),
+    select: d => d.resources.map(adaptInventoryResource).filter(isObservableConsoleResource),
   });
 export const useServices = (id: string) =>
   useQuery({
@@ -161,7 +163,7 @@ export const useServices = (id: string) =>
     queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/services`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
     enabled: !!id,
     retry: false,
-    select: d => d.resources.map(adaptServiceResource),
+    select: d => d.resources.map(adaptServiceResource).filter(isObservableConsoleResource),
   });
 export interface UsageSample { sampled_at: string | null; usage: Record<string, number> }
 // 스냅샷마다 적재되는 실측 usage 롤업 시계열 — 인벤토리 기반 장기 추이(브라우저 스트림과 별개)
@@ -180,7 +182,7 @@ export const useClusterEvents = (id: string) =>
     queryFn: () => get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/events`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }),
     enabled: !!id,
     retry: false,
-    select: d => d.resources.map(adaptK8sEventResource),
+    select: d => d.resources.filter(isObservableRawResource).map(adaptK8sEventResource).filter(isObservableConsoleResource),
   });
 export const useInventoryResourceDetail = (id: string, identity: InventoryResourceIdentity | null) =>
   useQuery({
@@ -267,6 +269,8 @@ function adaptPodHeatmapSummary(raw: Record<string, unknown>): PodHeatmapSummary
     restarts,
     cpu_pct: numberOrNull(raw.cpu_pct ?? raw.cpu_percent ?? summary.cpu_pct ?? summary.cpu_ratio),
     mem_pct: numberOrNull(raw.mem_pct ?? raw.memory_pct ?? summary.mem_pct ?? summary.mem_ratio),
+    cpu_mcores: measuredNumber(raw.cpu_mcores ?? summary.cpu_mcores),
+    mem_mib: measuredNumber(raw.mem_mib ?? raw.memory_mib ?? summary.mem_mib ?? summary.memory_mib),
     health: String(raw.health ?? podHealth(phase, restarts)),
     incident_correlation_id: (raw.incident_correlation_id ?? summary.incident_correlation_id ?? null) as string | null,
     incident_id: (raw.incident_id ?? summary.incident_id ?? null) as string | null,
@@ -336,9 +340,50 @@ function isObservableHeatmapPod(pod: PodHeatmapSummary): boolean {
   return !OBSERVABILITY_AGENT_NAME_MARKERS.some(marker => haystack.includes(marker));
 }
 
+function isObservableConsoleResource(resource: { namespace?: string | null; name?: string; kind?: string; resource_type?: string; target?: string }): boolean {
+  const namespace = String(resource.namespace ?? '').toLowerCase();
+  if (namespace && OBSERVABILITY_SYSTEM_NAMESPACES.has(namespace)) return false;
+  const haystack = [
+    resource.name,
+    resource.kind,
+    resource.resource_type,
+    resource.target,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return !OBSERVABILITY_AGENT_NAME_MARKERS.some(marker => haystack.includes(marker));
+}
+
+function isObservableRawResource(resource: Record<string, unknown>): boolean {
+  const summary = (resource.summary ?? {}) as Record<string, unknown>;
+  const namespace = String(
+    resource.namespace ??
+    summary.namespace ??
+    summary.involved_namespace ??
+    '',
+  ).toLowerCase();
+  if (namespace && OBSERVABILITY_SYSTEM_NAMESPACES.has(namespace)) return false;
+  const haystack = [
+    resource.name,
+    resource.kind,
+    resource.resource_type,
+    summary.name,
+    summary.owner_name,
+    summary.involved_name,
+    summary.involved_kind,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return !OBSERVABILITY_AGENT_NAME_MARKERS.some(marker => haystack.includes(marker));
+}
+
 function numberOrNull(value: unknown): number | null {
-  if (typeof value !== 'number') return null;
-  return value <= 1 ? value * 100 : value;
+  const parsed = measuredNumber(value);
+  if (parsed == null) return null;
+  return parsed <= 1 ? parsed * 100 : parsed;
+}
+
+function measuredNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizeConditions(value: unknown): string[] {

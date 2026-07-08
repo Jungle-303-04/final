@@ -458,6 +458,10 @@ class RepoChangeRepository(DatabaseConnection):
         if application is None:
             return []
         table = DeploymentBinding.__table__
+        binding_identity = [table.c.app_name == application["name"]]
+        manifest_path = str(application.get("manifest_path") or "").strip()
+        if manifest_path:
+            binding_identity.append(table.c.manifest_path == manifest_path)
         statement = (
             select(
                 table.c.binding_id,
@@ -479,7 +483,7 @@ class RepoChangeRepository(DatabaseConnection):
             .where(
                 table.c.workspace_id == workspace_id,
                 table.c.repository_id == application["repository_id"],
-                table.c.app_name == application["name"],
+                or_(*binding_identity),
             )
             .order_by(table.c.environment, table.c.cluster_id, table.c.namespace)
             .limit(max(1, min(limit, 500)))

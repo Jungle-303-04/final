@@ -51,7 +51,7 @@ def _usage_rollup(kubernetes: JsonObject) -> JsonObject:
     if not pods and not nodes:
         return {}
     phases = Counter(_text(pod.get("phase"), "Unknown") for pod in pods)
-    return {
+    usage = {
         "pod_total": len(pods),
         "pod_running": phases.get("Running", 0),
         "pod_pending": phases.get("Pending", 0),
@@ -60,6 +60,72 @@ def _usage_rollup(kubernetes: JsonObject) -> JsonObject:
         "node_total": len(nodes),
         "node_ready": sum(1 for node in nodes if bool(node.get("ready"))),
     }
+    pod_usage = _pod_usage(pods)
+    node_usage = _node_usage(nodes)
+    if pod_usage:
+        usage["pods"] = pod_usage
+    if node_usage:
+        usage["nodes"] = node_usage
+
+    cpu_pct = _cluster_pct(nodes, "cpu_mcores", "cpu_ratio")
+    mem_pct = _cluster_pct(nodes, "mem_mib", "mem_ratio")
+    if cpu_pct is not None:
+        usage["cpu_pct"] = cpu_pct
+    if mem_pct is not None:
+        usage["mem_pct"] = mem_pct
+    return usage
+
+
+def _pod_usage(pods: list[JsonObject]) -> JsonObject:
+    usage: JsonObject = {}
+    for pod in pods:
+        namespace = _text(pod.get("namespace"), "default")
+        name = _text(pod.get("name"))
+        if not name:
+            continue
+        payload: JsonObject = {}
+        for source_key, target_key in (("cpu_mcores", "cpu_mcores"), ("mem_mib", "mem_mib")):
+            value = _float_or_none(pod.get(source_key))
+            if value is not None:
+                payload[target_key] = value
+        if payload:
+            usage[f"{namespace}/{name}"] = payload
+    return usage
+
+
+def _node_usage(nodes: list[JsonObject]) -> JsonObject:
+    usage: JsonObject = {}
+    for node in nodes:
+        name = _text(node.get("name"))
+        if not name:
+            continue
+        payload: JsonObject = {}
+        for source_key, target_key in (
+            ("cpu_mcores", "cpu_mcores"),
+            ("mem_mib", "mem_mib"),
+            ("cpu_ratio", "cpu_ratio"),
+            ("mem_ratio", "mem_ratio"),
+        ):
+            value = _float_or_none(node.get(source_key))
+            if value is not None:
+                payload[target_key] = value
+        if payload:
+            if "cpu_ratio" in payload:
+                payload["cpu_pct"] = round(float(payload["cpu_ratio"]) * 100, 1)
+            if "mem_ratio" in payload:
+                payload["mem_pct"] = round(float(payload["mem_ratio"]) * 100, 1)
+            usage[name] = payload
+    return usage
+
+
+def _cluster_pct(nodes: list[JsonObject], usage_key: str, ratio_key: str) -> float | None:
+    observed = [
+        (_float_or_none(node.get(usage_key)), _float_or_none(node.get(ratio_key))) for node in nodes
+    ]
+    ratios = [ratio for value, ratio in observed if value is not None and ratio is not None]
+    if not ratios:
+        return None
+    return round(sum(ratios) / len(ratios) * 100, 1)
 
 
 def _mapping(value: Any) -> JsonObject:
@@ -73,6 +139,15 @@ def _items(payload: JsonObject, key: str) -> list[JsonObject]:
 
 def _text(value: Any, default: str = "") -> str:
     return str(value) if value is not None else default
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _health(ok: bool) -> str:

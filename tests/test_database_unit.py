@@ -851,6 +851,43 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
     assert compiled[2].params["binding_id"] == binding["binding_id"]
 
 
+def test_application_deployment_bindings_match_manifest_when_app_name_drifted() -> None:
+    recorded: list[Any] = []
+
+    class FakeResult:
+        def mappings(self) -> FakeResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class FakeConnection:
+        def execute(self, statement: Any) -> FakeResult:
+            recorded.append(statement)
+            return FakeResult()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection()
+
+    repository = object.__new__(RepoChangeRepository)
+    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.get_application = lambda workspace_id, application_id: {  # type: ignore[method-assign]
+        "workspace_id": workspace_id,
+        "application_id": application_id,
+        "repository_id": "repo-1",
+        "name": "storefront-web",
+        "manifest_path": "deploy/k8s",
+    }
+
+    assert repository.list_application_deployment_bindings("ws-1", "app-1") == []
+
+    sql = str(recorded[0].compile(dialect=postgresql.dialect()))
+    assert "deployment_bindings.app_name" in sql
+    assert "deployment_bindings.manifest_path" in sql
+    assert " OR " in sql
+
+
 def test_gitops_poll_targets_join_active_repository_application_binding() -> None:
     recorded: list[Any] = []
 

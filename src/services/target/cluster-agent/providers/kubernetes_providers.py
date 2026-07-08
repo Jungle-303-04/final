@@ -82,6 +82,20 @@ class KubernetesSnapshotProvider:
                     f"/api/v1/namespaces/{namespace}/events",
                 ),
                 "nodes": await self.get_json(client, base_url, headers, "/api/v1/nodes"),
+                "pod_metrics": await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    f"/apis/metrics.k8s.io/v1beta1/namespaces/{namespace}/pods",
+                    allow_not_found=True,
+                ),
+                "node_metrics": await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    "/apis/metrics.k8s.io/v1beta1/nodes",
+                    allow_not_found=True,
+                ),
                 "deployments": await self.get_json(
                     client,
                     base_url,
@@ -165,9 +179,25 @@ class KubernetesSnapshotProvider:
             "namespace": namespace,
             "collected_at": str(payload.get("collected_at") or datetime.now(UTC).isoformat()),
         }
-        snapshot["pods"] = [pod_summary(item) for item in items(payload.get("pods"))]
+        pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
+        node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
+        snapshot["pods"] = [
+            pod_summary(
+                item,
+                pod_metrics.get(
+                    (
+                        str(metadata(item).get("namespace") or namespace),
+                        str(metadata(item).get("name") or ""),
+                    )
+                ),
+            )
+            for item in items(payload.get("pods"))
+        ]
         snapshot["events"] = [event_summary(item) for item in items(payload.get("events"))]
-        snapshot["nodes"] = [node_summary(item) for item in items(payload.get("nodes"))]
+        snapshot["nodes"] = [
+            node_summary(item, node_metrics.get(str(metadata(item).get("name") or "")))
+            for item in items(payload.get("nodes"))
+        ]
         snapshot["workloads"] = [
             *workload_summaries("Deployment", items(payload.get("deployments"))),
             *workload_summaries("StatefulSet", items(payload.get("statefulsets"))),
@@ -187,6 +217,8 @@ class KubernetesSnapshotProvider:
                     "pods": len(snapshot["pods"]),
                     "events": len(snapshot["events"]),
                     "nodes": len(snapshot["nodes"]),
+                    "pod_metrics": len(pod_metrics),
+                    "node_metrics": len(node_metrics),
                     "workloads": len(snapshot["workloads"]),
                     "services": len(snapshot["services"]),
                     "endpoints": len(snapshot["endpoints"]),
@@ -275,11 +307,12 @@ def as_text(value: Any) -> str | None:
     return str(value) if value is not None else None
 
 
-def pod_summary(item: JsonObject) -> JsonObject:
+def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:
     meta = metadata(item)
     pod_status = status(item)
     pod_spec = spec(item)
     owner_kind, owner_name = owner_ref(item)
+    measured = dict(metrics or {})
     containers = [
         container_summary(container)
         for container in pod_status.get("containerStatuses", [])
@@ -302,6 +335,8 @@ def pod_summary(item: JsonObject) -> JsonObject:
         "host_ip": pod_status.get("hostIP"),
         "conditions": pod_status.get("conditions", []),
         "containers": containers,
+        "cpu_mcores": measured.get("cpu_mcores"),
+        "mem_mib": measured.get("mem_mib"),
         "restart_total": sum(int(container.get("restart_count", 0)) for container in containers),
         "waiting_reasons": [
             container.get("state_reason")
@@ -382,8 +417,18 @@ def event_summary(item: JsonObject) -> JsonObject:
     }
 
 
-def node_summary(item: JsonObject) -> JsonObject:
+def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObject:
     node_status = status(item)
+    allocatable = node_status.get("allocatable", {}) if isinstance(node_status, dict) else {}
+    measured = dict(metrics or {})
+    cpu_mcores = as_float(measured.get("cpu_mcores"))
+    mem_mib = as_float(measured.get("mem_mib"))
+    allocatable_cpu = parse_cpu_mcores(
+        allocatable.get("cpu") if isinstance(allocatable, dict) else None
+    )
+    allocatable_mem = parse_memory_mib(
+        allocatable.get("memory") if isinstance(allocatable, dict) else None
+    )
     conditions = node_status.get("conditions", [])
     ready_condition = next(
         (
@@ -399,9 +444,117 @@ def node_summary(item: JsonObject) -> JsonObject:
         "conditions": conditions,
         "taints": spec(item).get("taints", []),
         "capacity": node_status.get("capacity", {}),
-        "allocatable": node_status.get("allocatable", {}),
+        "allocatable": allocatable,
+        "cpu_mcores": cpu_mcores,
+        "mem_mib": mem_mib,
+        "cpu_ratio": safe_ratio(cpu_mcores, allocatable_cpu),
+        "mem_ratio": safe_ratio(mem_mib, allocatable_mem),
         "node_info": node_status.get("nodeInfo", {}),
     }
+
+
+def pod_metrics_by_key(rows: list[JsonObject]) -> dict[tuple[str, str], JsonObject]:
+    result: dict[tuple[str, str], JsonObject] = {}
+    for item in rows:
+        meta = metadata(item)
+        namespace = str(meta.get("namespace") or "")
+        name = str(meta.get("name") or "")
+        if namespace and name:
+            result[(namespace, name)] = pod_metric_summary(item)
+    return result
+
+
+def node_metrics_by_name(rows: list[JsonObject]) -> dict[str, JsonObject]:
+    result: dict[str, JsonObject] = {}
+    for item in rows:
+        name = str(metadata(item).get("name") or "")
+        if name:
+            result[name] = metric_usage_summary(item)
+    return result
+
+
+def pod_metric_summary(item: JsonObject) -> JsonObject:
+    containers = item.get("containers") if isinstance(item.get("containers"), list) else []
+    cpu = 0.0
+    memory = 0.0
+    seen = False
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        usage = container.get("usage") if isinstance(container.get("usage"), dict) else {}
+        cpu_value = parse_cpu_mcores(usage.get("cpu"))
+        mem_value = parse_memory_mib(usage.get("memory"))
+        if cpu_value is not None:
+            cpu += cpu_value
+            seen = True
+        if mem_value is not None:
+            memory += mem_value
+            seen = True
+    return {"cpu_mcores": cpu if seen else None, "mem_mib": memory if seen else None}
+
+
+def metric_usage_summary(item: JsonObject) -> JsonObject:
+    usage = item.get("usage") if isinstance(item.get("usage"), dict) else {}
+    return {
+        "cpu_mcores": parse_cpu_mcores(usage.get("cpu")),
+        "mem_mib": parse_memory_mib(usage.get("memory")),
+    }
+
+
+def parse_cpu_mcores(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("n"):
+            return float(text[:-1]) / 1_000_000
+        if text.endswith("u"):
+            return float(text[:-1]) / 1_000
+        if text.endswith("m"):
+            return float(text[:-1])
+        return float(text) * 1000
+    except ValueError:
+        return None
+
+
+def parse_memory_mib(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    units = {
+        "Ki": 1 / 1024,
+        "Mi": 1,
+        "Gi": 1024,
+        "Ti": 1024 * 1024,
+        "K": 1000 / 1024 / 1024,
+        "M": 1000 * 1000 / 1024 / 1024,
+        "G": 1000 * 1000 * 1000 / 1024 / 1024,
+    }
+    for suffix, multiplier in units.items():
+        if text.endswith(suffix):
+            try:
+                return float(text[: -len(suffix)]) * multiplier
+            except ValueError:
+                return None
+    try:
+        return float(text) / 1024 / 1024
+    except ValueError:
+        return None
+
+
+def safe_ratio(value: float | None, total: float | None) -> float | None:
+    if value is None or total is None or total <= 0:
+        return None
+    return value / total
+
+
+def as_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def workload_summaries(kind: str, rows: list[JsonObject]) -> list[JsonObject]:

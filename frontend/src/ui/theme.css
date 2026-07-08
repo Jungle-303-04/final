@@ -68,9 +68,9 @@
   --ui-ring: #06a0f9;
   --ui-shadow-soft: 0 1px 2px rgb(14 16 21 / 0.08);
   --ui-shadow-elevated: 0 16px 40px rgb(14 16 21 / 0.14);
-  --ui-duration-fast: 120ms;
-  --ui-duration-base: 200ms;
-  --ui-duration-slow: 320ms;
+  --ui-duration-fast: 100ms;
+  --ui-duration-base: 160ms;
+  --ui-duration-slow: 240ms;
 
   color-scheme: light;
 }

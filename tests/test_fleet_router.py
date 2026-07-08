@@ -513,6 +513,10 @@ def test_cluster_summary_groups_workloads_and_lists_incidents() -> None:
                 "symptom": "CrashLoopBackOff",
                 "root_cause": "oom_killed",
                 "status": "rca_completed",
+                "namespace": "jobs",
+                "resource_kind": "StatefulSet",
+                "resource_name": "worker",
+                "debug_payload": {"raw": "not public"},
                 "created_at": "2026-07-07T09:50:00+00:00",
             }
         ],
@@ -545,6 +549,9 @@ def test_cluster_summary_groups_workloads_and_lists_incidents() -> None:
 
     assert body["open_incidents"][0]["incident_id"] == "incident-1"
     assert body["open_incidents"][0]["symptom"] == "CrashLoopBackOff"
+    assert body["open_incidents"][0]["namespace"] == "jobs"
+    assert body["open_incidents"][0]["resource_kind"] == "StatefulSet"
+    assert body["open_incidents"][0]["resource_name"] == "worker"
 
     assert body["usage"] == {
         "sampled_at": "2026-07-07T10:00:00+00:00",

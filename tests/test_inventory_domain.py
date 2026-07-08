@@ -458,13 +458,34 @@ def test_kubernetes_evidence_snapshot_fills_measured_usage_rollup() -> None:
     snapshot = kubernetes_evidence_to_inventory_snapshot(
         {
             "pods": [
-                {"name": "a", "phase": "Running", "restart_total": 2},
+                {
+                    "name": "a",
+                    "namespace": "default",
+                    "phase": "Running",
+                    "restart_total": 2,
+                    "cpu_mcores": 120.5,
+                    "mem_mib": 64,
+                },
                 {"name": "b", "phase": "Pending", "restart_total": 0},
                 {"name": "c", "phase": "Running", "restart_total": 5},
             ],
             "nodes": [
-                {"name": "n1", "ready": True},
-                {"name": "n2", "ready": False},
+                {
+                    "name": "n1",
+                    "ready": True,
+                    "cpu_mcores": 200,
+                    "mem_mib": 512,
+                    "cpu_ratio": 0.1,
+                    "mem_ratio": 0.25,
+                },
+                {
+                    "name": "n2",
+                    "ready": False,
+                    "cpu_mcores": 300,
+                    "mem_mib": 1024,
+                    "cpu_ratio": 0.3,
+                    "mem_ratio": 0.5,
+                },
             ],
         },
         cluster_id="cluster-1",
@@ -479,6 +500,27 @@ def test_kubernetes_evidence_snapshot_fills_measured_usage_rollup() -> None:
         "restart_total": 7,
         "node_total": 2,
         "node_ready": 1,
+        "pods": {"default/a": {"cpu_mcores": 120.5, "mem_mib": 64.0}},
+        "nodes": {
+            "n1": {
+                "cpu_mcores": 200.0,
+                "mem_mib": 512.0,
+                "cpu_ratio": 0.1,
+                "mem_ratio": 0.25,
+                "cpu_pct": 10.0,
+                "mem_pct": 25.0,
+            },
+            "n2": {
+                "cpu_mcores": 300.0,
+                "mem_mib": 1024.0,
+                "cpu_ratio": 0.3,
+                "mem_ratio": 0.5,
+                "cpu_pct": 30.0,
+                "mem_pct": 50.0,
+            },
+        },
+        "cpu_pct": 20.0,
+        "mem_pct": 37.5,
     }
 
 

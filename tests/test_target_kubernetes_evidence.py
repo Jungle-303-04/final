@@ -108,10 +108,25 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                         "status": {
                             "conditions": [{"type": "Ready", "status": "True"}],
                             "capacity": {"cpu": "4"},
-                            "allocatable": {"cpu": "3900m"},
+                            "allocatable": {"cpu": "3900m", "memory": "8Gi"},
                             "nodeInfo": {"kubeletVersion": "v1.30.0"},
                         },
                     }
+                ]
+            },
+            "/apis/metrics.k8s.io/v1beta1/namespaces/target/pods": {
+                "items": [
+                    {
+                        "metadata": {"name": "checkout-api-7f5c", "namespace": "target"},
+                        "containers": [
+                            {"name": "checkout-api", "usage": {"cpu": "125m", "memory": "64Mi"}}
+                        ],
+                    }
+                ]
+            },
+            "/apis/metrics.k8s.io/v1beta1/nodes": {
+                "items": [
+                    {"metadata": {"name": "node-a"}, "usage": {"cpu": "390m", "memory": "1Gi"}}
                 ]
             },
             "/apis/apps/v1/namespaces/target/deployments": {
@@ -202,13 +217,18 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         }
     )
 
-    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 9
+    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 11
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["pods"][0]["name"] == "checkout-api-7f5c"
     assert validated.kubernetes["pods"][0]["restart_total"] == 2
+    assert validated.kubernetes["pods"][0]["cpu_mcores"] == 125.0
+    assert validated.kubernetes["pods"][0]["mem_mib"] == 64.0
     assert validated.kubernetes["events"][0]["reason"] == "BackOff"
     assert validated.kubernetes["nodes"][0]["ready"] is True
+    assert validated.kubernetes["nodes"][0]["cpu_mcores"] == 390.0
+    assert validated.kubernetes["nodes"][0]["cpu_ratio"] == 0.1
+    assert validated.kubernetes["nodes"][0]["mem_ratio"] == 0.125
     assert validated.kubernetes["workloads"][0]["kind"] == "Deployment"
     assert validated.kubernetes["workloads"][0]["ready_replicas"] == 1
     assert validated.kubernetes["services"][0]["name"] == "checkout-api"
@@ -224,6 +244,8 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         "pods": 1,
         "events": 1,
         "nodes": 1,
+        "pod_metrics": 1,
+        "node_metrics": 1,
         "workloads": 1,
         "services": 1,
         "endpoints": 1,
