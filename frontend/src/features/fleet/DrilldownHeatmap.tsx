@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Badge, Button, EmptyState, Skeleton, cx } from '@/ui';
 import { AnimatePresence, listItem, listStagger, transitions } from '@/ui/motion';
 
@@ -21,10 +21,19 @@ export interface DrilldownCrumb {
   onClick?: () => void;
 }
 
+export interface DrilldownZoomContext {
+  id: string;
+  label: string;
+  health: DrilldownHealth;
+  meta?: ReactNode;
+  badge?: ReactNode;
+}
+
 export function DrilldownHeatmap({
   tiles,
   onTileClick,
   breadcrumb,
+  zoomContext,
   loading,
   error,
   empty,
@@ -33,12 +42,17 @@ export function DrilldownHeatmap({
   tiles: DrilldownTile[];
   onTileClick: (tile: DrilldownTile) => void;
   breadcrumb: DrilldownCrumb[];
+  zoomContext?: DrilldownZoomContext | null;
   loading?: boolean;
   error?: Error | null;
   empty?: ReactNode;
   onRetry?: () => void;
 }) {
   const max = Math.max(1, ...tiles.map((tile) => safeSize(tile.size)));
+  const reducedMotion = useReducedMotion();
+  const motionLayout = !reducedMotion;
+  const motionTransition = reducedMotion ? transitions.reduced : transitions.spring;
+  const presenceMode = reducedMotion ? 'sync' : 'popLayout';
   return (
     <div className="grid gap-4">
       <nav aria-label="히트맵 경로" className="flex min-w-0 flex-wrap items-center gap-2 text-label text-muted">
@@ -71,45 +85,101 @@ export function DrilldownHeatmap({
         <EmptyState title="히트맵 조회 실패" description={error.message} action={onRetry ? <Button size="sm" onClick={onRetry}>다시 시도</Button> : undefined} />
       ) : tiles.length === 0 ? (
         empty ?? <EmptyState title="표시할 타일 없음" description="현재 범위에 표시할 항목이 없습니다" />
-      ) : (
+      ) : zoomContext ? (
         <motion.div
-          layout
-          variants={listStagger}
-          initial="initial"
-          animate="animate"
-          className="grid min-h-80 grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12"
+          layout={motionLayout}
+          layoutId={motionLayout ? `heatmap-${zoomContext.id}` : undefined}
+          transition={motionTransition}
+          className={cx('grid min-h-80 gap-4 rounded-panel border p-4', tileClass(zoomContext.health))}
         >
-          <AnimatePresence mode="popLayout">
-            {tiles.map((tile) => (
-              <motion.button
-                key={tile.id}
-                type="button"
-                layout
-                layoutId={`heatmap-${tile.id}`}
-                variants={listItem}
-                transition={transitions.spring}
-                className={cx(
-                  'group grid min-h-28 content-between rounded-panel border p-4 text-left transition-colors hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-                  tileClass(tile.health),
-                  sizeClass(safeSize(tile.size), max),
-                  tile.pulse && 'motion-safe:animate-pulse',
-                )}
-                onClick={() => onTileClick(tile)}
-              >
-                <span className="flex min-w-0 items-start justify-between gap-3">
-                  <span className="min-w-0 truncate text-title font-semibold text-primary">{tile.label}</span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    {tile.badge}
-                    <HealthBadge health={tile.health} />
-                  </span>
-                </span>
-                {tile.meta && <span className="mt-4 grid gap-2 text-body text-secondary">{tile.meta}</span>}
-              </motion.button>
-            ))}
-          </AnimatePresence>
+          <span className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <span className="grid min-w-0 gap-1">
+              <span className="min-w-0 truncate text-title font-semibold text-primary">{zoomContext.label}</span>
+              {zoomContext.meta && <span className="grid gap-2 text-body text-secondary">{zoomContext.meta}</span>}
+            </span>
+            <span className="flex shrink-0 items-center gap-1">
+              {zoomContext.badge}
+              <HealthBadge health={zoomContext.health} />
+            </span>
+          </span>
+          <TileGrid
+            tiles={tiles}
+            max={max}
+            onTileClick={onTileClick}
+            motionLayout={motionLayout}
+            motionTransition={motionTransition}
+            presenceMode={presenceMode}
+            compact
+          />
         </motion.div>
+      ) : (
+        <TileGrid
+          tiles={tiles}
+          max={max}
+          onTileClick={onTileClick}
+          motionLayout={motionLayout}
+          motionTransition={motionTransition}
+          presenceMode={presenceMode}
+        />
       )}
     </div>
+  );
+}
+
+function TileGrid({
+  tiles,
+  max,
+  onTileClick,
+  motionLayout,
+  motionTransition,
+  presenceMode,
+  compact = false,
+}: {
+  tiles: DrilldownTile[];
+  max: number;
+  onTileClick: (tile: DrilldownTile) => void;
+  motionLayout: boolean;
+  motionTransition: typeof transitions.spring | typeof transitions.reduced;
+  presenceMode: 'sync' | 'popLayout';
+  compact?: boolean;
+}) {
+  return (
+    <motion.div
+      layout={motionLayout}
+      variants={motionLayout ? listStagger : undefined}
+      initial={motionLayout ? 'initial' : false}
+      animate={motionLayout ? 'animate' : undefined}
+      className={cx('grid grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12', compact ? 'min-h-52' : 'min-h-80')}
+    >
+      <AnimatePresence mode={presenceMode}>
+        {tiles.map((tile) => (
+          <motion.button
+            key={tile.id}
+            type="button"
+            layout={motionLayout}
+            layoutId={motionLayout ? `heatmap-${tile.id}` : undefined}
+            variants={motionLayout ? listItem : undefined}
+            transition={motionTransition}
+            className={cx(
+              'group grid min-h-28 content-between rounded-panel border p-4 text-left transition-colors motion-reduce:transition-none hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              tileClass(tile.health),
+              sizeClass(safeSize(tile.size), max),
+              tile.pulse && 'border-danger ring-2 ring-danger/50 motion-safe:animate-pulse',
+            )}
+            onClick={() => onTileClick(tile)}
+          >
+            <span className="flex min-w-0 items-start justify-between gap-3">
+              <span className="min-w-0 truncate text-title font-semibold text-primary">{tile.label}</span>
+              <span className="flex shrink-0 items-center gap-1">
+                {tile.badge}
+                <HealthBadge health={tile.health} />
+              </span>
+            </span>
+            {tile.meta && <span className="mt-4 grid gap-2 text-body text-secondary">{tile.meta}</span>}
+          </motion.button>
+        ))}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 

@@ -19,6 +19,7 @@ export const transitions = {
   base: { duration: durations.base, ease: easing.decelerate },
   slow: { duration: durations.slow, ease: easing.decelerate },
   spring: { type: 'spring', stiffness: 420, damping: 34 },
+  reduced: { duration: 0 },
 } satisfies Record<string, Transition>;
 
 export const fadeInUp: Variants = {

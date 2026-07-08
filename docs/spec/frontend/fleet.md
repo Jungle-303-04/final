@@ -55,7 +55,7 @@ status: synced
 - 홈 KPI strip 은 `FleetTotals`와 `FleetClusterSummary[]`에서 팟 수, 평균 CPU, 평균 메모리, 활성 알림(`open_incidents + dead_letters`)을 계산한다. CPU/MEM 관측값이 없으면 합성하지 않고 `—`로 표시한다.
 - 홈 dashboard grid 의 저장 위젯/사용량 추이 카드는 선택 클러스터 기준 `useMetricWidgets`, `useMetricQueryPresets`, `useClusterUsage` 결과를 사용한다. fleet API가 제공하지 않는 위젯/시계열을 여기서 만들어 넣지 않는다.
 - 홈 사용량 추이 카드는 [metrics](./metrics.md)의 `buildUsageSeries()`와 같은 규칙을 쓴다. `restart_total` 누적값을 직접 그리지 않고 샘플 간 증가분으로 표시한다.
-- `ClusterDetailView`는 같은 `DrilldownHeatmap` 컴포넌트를 L2/L3에 재사용한다. L2 노드 요약은 `GET /clusters/{id}/nodes/summary`, L3 팟 요약은 `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 미배포 404는 inventory API fallback을 사용한다. L3에서 `incident_correlation_id`가 있는 팟은 critical + pulse tile이며 Drawer의 "인시던트 보기" 버튼으로 상세 이동한다. 선택 상태는 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 복원된다.
+- `ClusterDetailView`는 같은 `DrilldownHeatmap` 컴포넌트를 L2/L3에 재사용한다. L2 노드 요약은 `GET /clusters/{id}/nodes/summary`, L3 팟 요약은 `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 미배포 404는 inventory API fallback을 사용한다. 노드 선택 시 선택 노드가 같은 `layoutId`의 zoom shell로 확장되고 그 안에서 팟 타일이 나타난다. `prefers-reduced-motion`이면 layout/stagger 전환을 끈다. L3에서 `incident_correlation_id`가 있는 팟은 critical + pulse border tile이며 Drawer의 "인시던트 보기" 버튼으로 상세 이동한다. 선택 상태는 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 복원된다.
 - `ClusterDetailView`는 `useClusterAgg(clusterId)`로 `ClusterAggPanel`을 렌더한다. 이 보조 패널은 pending 이면 null, 실패하면 본문을 막지 않고 재시도 문구를 표시한다.
 
 ## 라우트

@@ -1,11 +1,29 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 08:54 KST (카탈로그 디자인 시스템 이관 배포 확인)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:01 KST (히트맵 드릴다운 Motion 보강 로컬 검증)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 히트맵 드릴다운 Motion 보강
+
+- 구현:
+  - `frontend/src/features/fleet/DrilldownHeatmap.tsx`에 `zoomContext`를 추가했다. 클러스터 상세에서 노드를 선택하면 선택 노드의 `layoutId`가 zoom shell로 재사용되고, 그 안에서 팟 타일이 같은 treemap 레이아웃으로 나타난다.
+  - `useReducedMotion()`을 사용해 reduced-motion 환경에서는 layout/stagger 전환을 끄고 `@/ui/motion`의 `transitions.reduced`만 사용한다.
+  - 인시던트 correlation이 있는 팟 타일은 critical 색상과 `ring-danger` pulse border로 표시한다.
+  - `docs/spec/frontend/fleet.md`, `docs/spec/frontend/cluster.md`, `frontend/AUDIT.md`에 zoom shell/reduced-motion 계약을 반영했다.
+- 로컬 검증:
+  - `cd frontend && npm run typecheck` passed.
+  - `cd frontend && npm run lint` passed.
+  - `cd frontend && npm test` passed, 11 tests.
+  - `cd frontend && npm run build` passed.
+  - grep: 히트맵/클러스터 상세 변경 범위의 `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css` 0건. Tailwind arbitrary scan은 `removeCommand`/`namespaceHash` 문자열의 `rem` 때문에 기존 오탐 2건만 확인됐다.
+  - Playwright mock: `/clusters/cluster-1`에서 노드 타일 클릭 → 팟 타일 클릭 → Drawer/인시던트 CTA/pulse border 확인 → 브라우저 뒤로가기 2회로 `?node`/base 복귀 확인. reduced-motion 환경, overflow 0, console error 0.
+  - Playwright mock: `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 직접 진입을 1440/1024/390 폭에서 확인. Drawer/CTA/breadcrumb 복원, overflow 0, console error 0.
+- 남은 확인:
+  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
 
 ## 체크포인트 — 카탈로그 디자인 시스템 이관
 
