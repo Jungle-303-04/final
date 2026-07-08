@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { del, get, post, type ApiError } from '@/shared/lib/api';
+import { del, get, post } from '@/shared/lib/api';
 import { adaptCluster, adaptInventoryResource, adaptInventoryResourceDetail, adaptInventorySummary, adaptK8sEventResource, adaptPodResource, adaptServiceResource, adaptWorkloadResource } from '@/shared/lib/adapt';
 import type { Workload } from '@/shared/lib/types';
 import { useToast } from '@/ui';
@@ -97,16 +97,8 @@ export const useClusterSummary = (id: string | undefined) =>
 export const useNodeSummaries = (id: string | undefined) =>
   useQuery({
     queryKey: clusterKeys.nodesSummary(id ?? ''),
-    queryFn: async () => {
-      try {
-        const response = await get<{ nodes: Record<string, unknown>[] }>(`/clusters/${id}/nodes/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
-        const nodes = response.nodes.map(adaptNodeHeatmapSummary);
-        return nodes.length > 0 ? nodes : loadFallbackNodeSummaries(id);
-      } catch (error) {
-        if ((error as ApiError).status !== 404) throw error;
-        return loadFallbackNodeSummaries(id);
-      }
-    },
+    queryFn: () => get<{ nodes: Record<string, unknown>[] }>(`/clusters/${id}/nodes/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS })
+      .then(response => response.nodes.map(adaptNodeHeatmapSummary)),
     enabled: !!id,
     refetchInterval: 30_000,
     retry: false,
@@ -114,19 +106,10 @@ export const useNodeSummaries = (id: string | undefined) =>
 export const useNodePodSummaries = (id: string | undefined, node: string | undefined) =>
   useQuery({
     queryKey: clusterKeys.nodePodsSummary(id ?? '', node ?? ''),
-    queryFn: async () => {
-      try {
-        const response = await get<{ pods: Record<string, unknown>[] }>(
-          `/clusters/${id}/nodes/${encodeURIComponent(node ?? '')}/pods/summary`,
-          { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS },
-        );
-        const pods = response.pods.map(adaptPodHeatmapSummary);
-        return pods.length > 0 ? pods : loadFallbackNodePodSummaries(id, node);
-      } catch (error) {
-        if ((error as ApiError).status !== 404) throw error;
-        return loadFallbackNodePodSummaries(id, node);
-      }
-    },
+    queryFn: () => get<{ pods: Record<string, unknown>[] }>(
+      `/clusters/${id}/nodes/${encodeURIComponent(node ?? '')}/pods/summary`,
+      { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS },
+    ).then(response => response.pods.map(adaptPodHeatmapSummary).filter(isObservableHeatmapPod)),
     enabled: !!id && !!node,
     refetchInterval: 30_000,
     retry: false,
@@ -243,7 +226,7 @@ function adaptNodeHeatmapSummary(raw: Record<string, unknown>): NodeHeatmapSumma
   return {
     id: String(raw.id ?? raw.node ?? raw.name ?? raw.node_name ?? ''),
     name: String(raw.name ?? raw.node_name ?? raw.node ?? ''),
-    pods_running: Number(raw.pods_running ?? raw.running_pods ?? raw.pod_count ?? raw.pods_total ?? 1),
+    pods_running: measuredNumber(raw.pods_running ?? raw.running_pods ?? raw.pod_count ?? raw.pods_total) ?? 0,
     health: String(raw.health ?? nodeHealthFromConditions(conditions, raw.ready)),
     cpu_pct: numberOrNull(raw.cpu_pct ?? raw.cpu_percent ?? raw.cpu_ratio),
     mem_pct: numberOrNull(raw.mem_pct ?? raw.memory_pct ?? raw.mem_ratio),
@@ -253,7 +236,7 @@ function adaptNodeHeatmapSummary(raw: Record<string, unknown>): NodeHeatmapSumma
 
 function adaptPodHeatmapSummary(raw: Record<string, unknown>): PodHeatmapSummary {
   const summary = (raw.summary ?? {}) as Record<string, unknown>;
-  const namespace = String(raw.namespace ?? summary.namespace ?? 'default');
+  const namespace = String(raw.namespace ?? summary.namespace ?? '');
   const name = String(raw.name ?? summary.name ?? '');
   const phase = String(raw.phase ?? raw.status ?? summary.phase ?? 'Unknown');
   const restarts = Number(raw.restarts ?? raw.restart_count ?? raw.restart_total ?? summary.restart_total ?? 0);
@@ -264,7 +247,7 @@ function adaptPodHeatmapSummary(raw: Record<string, unknown>): PodHeatmapSummary
     phase,
     ready: String(raw.ready ?? summary.ready ?? ''),
     owner: String(raw.owner ?? raw.owner_name ?? summary.owner_name ?? raw.node ?? summary.node_name ?? ''),
-    owner_kind: String(raw.owner_kind ?? summary.owner_kind ?? 'Pod'),
+    owner_kind: String(raw.owner_kind ?? summary.owner_kind ?? ''),
     node: String(raw.node ?? summary.node_name ?? '') || undefined,
     restarts,
     cpu_pct: numberOrNull(raw.cpu_pct ?? raw.cpu_percent ?? summary.cpu_pct ?? summary.cpu_ratio),
@@ -275,51 +258,6 @@ function adaptPodHeatmapSummary(raw: Record<string, unknown>): PodHeatmapSummary
     incident_correlation_id: (raw.incident_correlation_id ?? summary.incident_correlation_id ?? null) as string | null,
     incident_id: (raw.incident_id ?? summary.incident_id ?? null) as string | null,
   };
-}
-
-async function loadFallbackNodeSummaries(id: string | undefined): Promise<NodeHeatmapSummary[]> {
-  if (!id) return [];
-  const [summary, pods] = await Promise.all([
-    get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }).then(adaptInventorySummary),
-    get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS })
-      .then((response) => response.resources.map(adaptPodResource).filter(isObservableWorkloadPod)),
-  ]);
-  return fallbackNodeSummaries(summary.nodes, pods);
-}
-
-async function loadFallbackNodePodSummaries(id: string | undefined, node: string | undefined): Promise<PodHeatmapSummary[]> {
-  if (!id || !node) return [];
-  const response = await get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
-  return response.resources
-    .map(adaptPodHeatmapSummary)
-    .filter((pod) => pod.node === node && isObservableHeatmapPod(pod));
-}
-
-type FallbackNodeSummary = { name: string; ready: boolean; pod_count: number; cpu_ratio?: number; mem_ratio?: number };
-
-function fallbackNodeSummaries(nodes: FallbackNodeSummary[], pods: Workload[]): NodeHeatmapSummary[] {
-  const sourceNodes = nodes.length > 0 ? nodes : nodesFromPods(pods);
-  return sourceNodes.map((node) => {
-    const nodePods = pods.filter((pod) => pod.node === node.name);
-    return {
-      id: node.name,
-      name: node.name,
-      pods_running: nodePods.filter((pod) => pod.phase === 'Running').length || node.pod_count || 1,
-      health: node.ready ? 'healthy' : 'critical',
-      cpu_pct: numberOrNull(node.cpu_ratio),
-      mem_pct: numberOrNull(node.mem_ratio),
-      conditions: node.ready ? [] : ['NotReady'],
-    };
-  });
-}
-
-function nodesFromPods(pods: Workload[]): FallbackNodeSummary[] {
-  const names = Array.from(new Set(pods.map((pod) => pod.node).filter((node): node is string => Boolean(node))));
-  return names.map((name) => ({
-    name,
-    ready: true,
-    pod_count: pods.filter((pod) => pod.node === name).length,
-  }));
 }
 
 function isObservableWorkloadPod(pod: Workload): boolean {

@@ -1,6 +1,29 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 15:50 KST (데모 RCA/GitOps 복구 흐름 안정화)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 16:35 KST (시연 실패 원인 분석 / 하드코딩 제거)
+
+## 최신 체크포인트 — 시연 실패 원인 분석 / 하드코딩 제거
+
+- 확인한 직접 원인:
+  - 노드/팟 드릴다운 API가 비어 있거나 404일 때 프론트가 inventory 기반 fallback 데이터를 자체 생성했다. 사용자는 실데이터만 요구했으므로 운영 화면에서 거짓 타일이 보일 수 있었다.
+  - usage 시계열과 스파크라인이 누락 metric을 0으로 합성했다. 미수집과 실제 0을 구분하지 못해 그래프가 잘못 보일 수 있었다.
+  - `application_5xx_spike` Safe PR 경로가 `deploy/k8s/configmap.yaml`, `deploy/k8s/orders-api-deployment.yaml`, 고정 ECR image tag를 생성하는 demo 전용 하드코딩에 묶여 있었다.
+- 반영:
+  - `frontend/src/features/cluster/api.ts`: 노드/팟 summary fallback 제거. API 응답이 비면 빈 상태, 실패하면 에러 상태로 드러난다. `pods_running` 누락 기본값도 1이 아니라 0으로 변경.
+  - `frontend/src/features/console/pages/homeCharts.ts`, `frontend/src/features/metrics/usageSeries.ts`, `frontend/src/features/metrics/MetricsView.tsx`: 누락 usage metric을 0으로 그리지 않고 시계열 포인트에서 제외.
+  - `src/services/ai/agent/recovery/builtin.py`: `gitops_demo_recovery`를 `gitops_recovery_review`로 교체. 실제 manifest patch를 계산하지 못하는 상황에서 데모 전용 파일을 생성하지 않는다.
+  - `src/services/ai/agent/recovery/dispatch.py`: `demo_config_reset` 분기와 고정 ConfigMap/Deployment patch 생성 함수 삭제. 명시 `draft.params["patches"]`가 없으면 검토용 `.gitops/recovery/*.md`만 생성.
+- 검증:
+  - `cd frontend && npm run typecheck` 통과.
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py -q` → 20 passed.
+  - `bash scripts/frontend-check.sh` → OK.
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py tests/test_rca_rule_catalog.py tests/test_target_evidence_jobs.py -q` → 75 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/services/ai/agent/recovery/builtin.py src/services/ai/agent/recovery/dispatch.py tests/test_rca_evidence.py` → passed.
+- 라이브 확인:
+  - `https://k8s.woonyong.org/api/healthz` → 200 `{"status":"ok","service":"api-gateway"}`.
+  - `kubernetes-ops` management deployments 전부 Ready, `api-gateway` 2/2 Ready, 최근 20분 gateway 오류 로그 없음.
+  - `cluster-1` target agent/Prometheus/Loki/Tempo 및 `sandbox`의 `orders-api`, `storefront-web` Running.
+  - unauthenticated `/api/clusters`는 401로 빠르게 응답. 인증 세션 기반 브라우저 드릴다운 확인은 후속 live E2E에서 진행.
 
 ## 최신 체크포인트 — 데모 RCA/GitOps 복구 흐름 안정화
 
@@ -10,8 +33,9 @@
   `intentional error endpoint called`를 추가했다. status/path 필드가 없는 JSON 로그도 감지한다.
 - evidence 수집 시각 기준 5분을 넘긴 로그 샘플은 새 인시던트 신호로 쓰지 않는다. 정상화 후 stale 5xx 로그가
   1분마다 `rca.analysis_blocked` 인시던트를 만드는 문제를 차단한다.
-- `application_5xx_spike` 복구 후보는 이제 `gitops_demo_recovery`가 1순위다. 승인 필요, route `draft_pr`,
-  실제 패치 대상은 `deploy/k8s/configmap.yaml`, `deploy/k8s/orders-api-deployment.yaml`이다.
+- 이 섹션의 옛 기록: 당시 `application_5xx_spike` 복구 후보는 `gitops_demo_recovery`가 1순위였고
+  demo 전용 manifest patch를 생성했다. 2026-07-08 16:35 KST 이후 이 하드코딩은 제거됐고,
+  현재는 `gitops_recovery_review`가 검토용 Safe PR 문서를 생성한다.
 - Safe PR 요청은 plan target과 action params를 함께 사용해 repository/binding/application/workflow 식별자를
   채운다. SCM worker는 기존 safe-pr 파이프라인을 그대로 사용해 GitHub branch, manifest patch commit, PR을 만든다.
 - 드릴다운 히트맵은 과한 zoom/layout 효과와 health 전체 배경색을 줄이고, surface tile + health bar/left border로

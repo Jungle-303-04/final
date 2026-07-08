@@ -667,15 +667,22 @@ function MetricStatCard({
 type UsageMetricKey = 'pod_running' | 'node_ready' | 'restart_total';
 
 function usageMetricPoints(samples: UsageSample[], key: UsageMetricKey): number[] {
-  return samples.map((sample) => Number(sample.usage[key] ?? 0)).filter(Number.isFinite);
+  return samples
+    .filter((sample) => key in sample.usage)
+    .map((sample) => Number(sample.usage[key]))
+    .filter((value) => Number.isFinite(value) && value >= 0);
 }
 
 function usageRestartDeltaPoints(samples: UsageSample[]): number[] {
-  return samples.map((sample, index) => {
-    const current = Number(sample.usage.restart_total ?? 0);
-    const previous = index > 0 ? Number(samples[index - 1].usage.restart_total ?? 0) : current;
-    return Math.max(0, current - previous);
-  }).filter(Number.isFinite);
+  let previous: number | null = null;
+  return samples.flatMap((sample) => {
+    if (!('restart_total' in sample.usage)) return [];
+    const current = Number(sample.usage.restart_total);
+    if (!Number.isFinite(current) || current < 0) return [];
+    const delta = previous == null ? 0 : Math.max(0, current - previous);
+    previous = current;
+    return [delta];
+  });
 }
 
 function seriesPoints(series: Series[], id: string, fallback: number[]): number[] {

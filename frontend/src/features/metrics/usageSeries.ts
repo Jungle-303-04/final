@@ -13,23 +13,34 @@ export function buildUsageSeries(samples: UsageSample[]): Series[] {
 }
 
 function metricSeries(id: string, samples: UsageSample[], key: UsageMetricKey): Series {
-  return { id, data: samples.map((sample, index) => ({ x: pointTime(sample, index), y: valueOf(sample, key) })) };
-}
-
-// restart_total 은 누적 카운터다. 같은 y축에서 팟/노드 수와 비교하려면 샘플 간 증가분으로 표시해야 한다.
-function restartDeltaSeries(samples: UsageSample[]): Series {
   return {
-    id: '재시작 증가',
-    data: samples.map((sample, index) => {
-      const current = valueOf(sample, 'restart_total');
-      const previous = index > 0 ? valueOf(samples[index - 1], 'restart_total') : current;
-      return { x: pointTime(sample, index), y: Math.max(0, current - previous) };
+    id,
+    data: samples.flatMap((sample, index) => {
+      const value = valueOf(sample, key);
+      return value == null ? [] : [{ x: pointTime(sample, index), y: value }];
     }),
   };
 }
 
-function valueOf(sample: UsageSample, key: UsageMetricKey): number {
-  return Number(sample.usage[key] ?? 0);
+// restart_total 은 누적 카운터다. 같은 y축에서 팟/노드 수와 비교하려면 샘플 간 증가분으로 표시해야 한다.
+function restartDeltaSeries(samples: UsageSample[]): Series {
+  let previous: number | null = null;
+  return {
+    id: '재시작 증가',
+    data: samples.flatMap((sample, index) => {
+      const current = valueOf(sample, 'restart_total');
+      if (current == null) return [];
+      const delta = previous == null ? 0 : Math.max(0, current - previous);
+      previous = current;
+      return [{ x: pointTime(sample, index), y: delta }];
+    }),
+  };
+}
+
+function valueOf(sample: UsageSample, key: UsageMetricKey): number | null {
+  if (!(key in sample.usage)) return null;
+  const value = Number(sample.usage[key]);
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function pointTime(sample: UsageSample, index: number): number {

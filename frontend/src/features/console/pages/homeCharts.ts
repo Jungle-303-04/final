@@ -31,24 +31,31 @@ export function buildFleetRestartSeries(
 function metricSeries(id: string, samples: UsageSample[], key: keyof UsageSample['usage']): Series {
   return {
     id,
-    data: samples.map((sample, index) => ({ x: pointTime(sample, index), y: usageValue(sample, key) })),
-  };
-}
-
-function restartDeltaSeries(id: string, samples: UsageSample[]): Series {
-  return {
-    id,
-    data: samples.map((sample, index) => {
-      const current = usageValue(sample, 'restart_total');
-      const previous = index > 0 ? usageValue(samples[index - 1], 'restart_total') : current;
-      return { x: pointTime(sample, index), y: Math.max(0, current - previous) };
+    data: samples.flatMap((sample, index) => {
+      const value = usageValue(sample, key);
+      return value == null ? [] : [{ x: pointTime(sample, index), y: value }];
     }),
   };
 }
 
-function usageValue(sample: UsageSample, key: keyof UsageSample['usage']): number {
-  const value = Number(sample.usage[key] ?? 0);
-  return Number.isFinite(value) && value >= 0 ? value : 0;
+function restartDeltaSeries(id: string, samples: UsageSample[]): Series {
+  let previous: number | null = null;
+  return {
+    id,
+    data: samples.flatMap((sample, index) => {
+      const current = usageValue(sample, 'restart_total');
+      if (current == null) return [];
+      const delta = previous == null ? 0 : Math.max(0, current - previous);
+      previous = current;
+      return [{ x: pointTime(sample, index), y: delta }];
+    }),
+  };
+}
+
+function usageValue(sample: UsageSample, key: keyof UsageSample['usage']): number | null {
+  if (!(key in sample.usage)) return null;
+  const value = Number(sample.usage[key]);
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function pointTime(sample: UsageSample, index: number): number {

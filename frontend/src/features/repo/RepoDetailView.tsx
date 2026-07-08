@@ -240,7 +240,7 @@ function DeploymentsCard({
       sortValue: (row) => row.cluster_id,
       cell: (row) => <Link className="font-semibold text-accent hover:text-accent-hover" to={pathFor(`/clusters/${row.cluster_id}?tab=workloads`)}>{row.cluster_id}</Link>,
     },
-    { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => row.namespace || 'default' },
+    { id: 'namespace', header: '네임스페이스', sortValue: (row) => row.namespace, cell: (row) => row.namespace || '미지정' },
     { id: 'name', header: '이름', sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-primary">{row.name}</span>, width: 'md' },
     { id: 'image', header: '이미지', sortValue: (row) => row.image, cell: (row) => <CodeText>{row.image || '없음'}</CodeText>, width: 'lg' },
     { id: 'replicas', header: 'Replicas', sortValue: (row) => row.replicas, align: 'right', cell: (row) => <span className="tabular-nums text-primary">{row.replicas.toLocaleString()}</span> },

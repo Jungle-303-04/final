@@ -347,7 +347,7 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
     plan = recovery_outs[0].plan
 
     assert [candidate.draft.action_type for candidate in plan.candidates[:2]] == [
-        "gitops_demo_recovery",
+        "gitops_recovery_review",
         "deployment_scale",
     ]
     assert plan.selection_required is True
@@ -837,7 +837,7 @@ def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
     assert not db.called("save_pull_request")
 
 
-def test_application_5xx_recovery_prefers_gitops_demo_reset_patch(monkeypatch) -> None:
+def test_application_5xx_recovery_uses_review_patch_without_hardcoded_manifest(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.setenv("SCM_REPO", "project/repo")
     recovery_worker = load_service("ai/recovery-worker")
@@ -855,7 +855,7 @@ def test_application_5xx_recovery_prefers_gitops_demo_reset_patch(monkeypatch) -
     plan = recovery_outs[0].plan
 
     assert plan.selection_required is True
-    assert plan.candidates[0].draft.action_type == "gitops_demo_recovery"
+    assert plan.candidates[0].draft.action_type == "gitops_recovery_review"
     assert plan.candidates[0].route == "draft_pr"
 
     select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
@@ -875,13 +875,13 @@ def test_application_5xx_recovery_prefers_gitops_demo_reset_patch(monkeypatch) -
 
     assert subjects_of(dispatch_outs) == ["safe_pr.requested"]
     patches = {patch.path: patch.content for patch in dispatch_outs[0].patches}
-    assert set(patches) == {
-        "deploy/k8s/configmap.yaml",
-        "deploy/k8s/orders-api-deployment.yaml",
-    }
-    assert "DEMO_MODE: normal" in patches["deploy/k8s/configmap.yaml"]
-    assert "replicas: 3" in patches["deploy/k8s/orders-api-deployment.yaml"]
-    assert "kubeheal.io/recovery-token" in patches["deploy/k8s/orders-api-deployment.yaml"]
+    assert len(patches) == 1
+    path, content = next(iter(patches.items()))
+    assert path.startswith(".gitops/recovery/")
+    assert "GitOps 복구 검토 PR" in content
+    assert "Deployment/orders-api" in content
+    assert "DEMO_MODE: normal" not in content
+    assert "final-demo-target" not in content
 
 
 def test_rollout_completion_flows_to_approval_recommendation() -> None:

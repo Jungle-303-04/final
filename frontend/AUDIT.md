@@ -492,8 +492,8 @@
 - evidence 수집 시각 기준 5분을 넘긴 로그는 새 장애 신호로 사용하지 않는다. 정상화 후 과거 5xx 로그가
   1분마다 새 인시던트처럼 반복 생성되는 회귀를 막는다.
 - `application_5xx_spike` 복구 후보 순서:
-  1. `gitops_demo_recovery` — 승인 필요, route `draft_pr`, `deploy/k8s/configmap.yaml`과
-     `deploy/k8s/orders-api-deployment.yaml`을 실제 GitOps 패치로 생성한다.
+  1. `gitops_recovery_review` — 승인 필요, route `draft_pr`, 실제 manifest patch가 명시되지 않으면
+     `.gitops/recovery/*.md` 검토 문서만 생성한다. 특정 demo 파일명·이미지 태그를 하드코딩하지 않는다.
   2. `deployment_scale` — 승인 필요, 임시 replica 3 증설 command.
   3. `rollout_restart` — 보조 재시작 command.
 - 승인 후 Safe PR 요청은 plan target과 action params를 함께 사용해 repository/binding/application/workflow 식별자를
