@@ -343,6 +343,7 @@ class ApplicationUpsertRequest(StrictModel):
 class ApplicationConnectRequest(StrictModel):
     name: str = Field(min_length=1, max_length=120)
     repo_ref: str = Field(min_length=1, max_length=240)
+    token: str | None = Field(default=None, min_length=1, max_length=500)
     branch: str = Field(default=DEFAULT_REPO_BRANCH, min_length=1, max_length=200)
     manifest_path: str = Field(default=DEFAULT_MANIFEST_PATH, min_length=1, max_length=500)
     source_type: str = Field(default="", max_length=40)

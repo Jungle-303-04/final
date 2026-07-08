@@ -39,6 +39,7 @@ from packages.contracts.identity import (
     Permission,
 )
 from packages.runtime.dependencies import get_db
+from packages.security.credentials import credential_ref, encrypt_credential
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
 
@@ -52,6 +53,7 @@ APPLICATION_NOT_FOUND = "application not found"
 MANIFEST_VALIDATION_FAILED = "manifest validation failed"
 CLUSTER_NOT_CONNECTED_CODE = "cluster_not_connected"
 CLUSTER_NOT_CONNECTED_DETAIL = "에이전트가 연결되지 않은 클러스터입니다"
+GITHUB_CREDENTIAL_SCOPE = "github"
 
 
 def repository_discovery_service() -> RepositoryDiscoveryService:
@@ -117,6 +119,25 @@ def require_connected_clusters(db: Any, workspace_id: str, cluster_ids: list[str
                 "clusters": disconnected,
             },
         )
+
+
+def store_repo_token_if_present(db: Any, workspace_id: str, token: str | None) -> str | None:
+    """레포 연결 토큰을 워크스페이스 credential vault에 저장하고 ref만 반환."""
+    if not token:
+        return None
+    ref = credential_ref("github", GITHUB_CREDENTIAL_SCOPE)
+    upsert = getattr(db, "upsert_workspace_credential", None)
+    if callable(upsert):
+        upsert(
+            {
+                "workspace_id": workspace_id,
+                "provider": "github",
+                "scope": GITHUB_CREDENTIAL_SCOPE,
+                "encrypted_value": encrypt_credential(token),
+                "metadata": {"credential_ref": ref},
+            }
+        )
+    return ref
 
 
 @router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationListResponse)
@@ -216,6 +237,7 @@ async def connect_application(
         "validation_mode": validation.validation_mode,
     }
     settings = {"source_type": source_type}
+    credential = store_repo_token_if_present(db, workspace_id, payload.token)
     body = {
         "workspace_id": workspace_id,
         "user_id": current.user_id,
@@ -232,6 +254,8 @@ async def connect_application(
         "settings": settings,
         "access_policy": payload.access_policy,
     }
+    if credential is not None:
+        body["credential_ref"] = credential
     with unit_of_work_or_null(db):
         db.register_repository(body)
         stored = db.upsert_application(body)

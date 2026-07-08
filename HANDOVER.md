@@ -2548,3 +2548,29 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
 - 배포 주의:
   - 기존 live CronJob `github-poll-worker`는 Deployment와 kind가 다르므로 CD apply만으로는 제거되지 않을 수 있다.
     배포 시 `kubectl --context kubernetes-ops -n management delete cronjob github-poll-worker --ignore-not-found` 후 새 Deployment rollout을 확인한다.
+
+## GitHub webhook fast-path + repo token 계약 (2026-07-08)
+
+- 사용자 요구:
+  - PR 생성 직후가 아니라 direct commit 성공 또는 PR merge 성공 SHA가 확정된 순간에만 즉시 dispatch한다.
+  - 범용 제품이므로 repo 접근 token을 입력받아야 하며, webhook 인증과 GitHub API token을 혼동하지 않는다.
+- 적용:
+  - `/github/webhook`은 기존 내부 정규화 payload(`commit_sha/image/...`)와 GitHub 원본 payload를 모두 받는다.
+  - GitHub 원본 `push` payload는 `repository.full_name + refs/heads/<branch> + after`를 읽고,
+    활성 deployment binding의 `repo_ref/branch`와 매칭되면 `git.webhook.received(force=true)`를 즉시 발행한다.
+  - GitHub 원본 `pull_request` payload는 `action=closed`, `pull_request.merged=true`일 때만
+    `pull_request.merge_commit_sha`를 사용한다. PR 생성/오픈 상태는 Kubernetes dispatch로 보내지 않는다.
+  - 매칭은 `RepoChangeRepository.list_active_github_poll_targets()`를 재사용한다. GitHub webhook은 repo token을 쓰지 않고
+    기존 `GITHUB_WEBHOOK_SECRET` HMAC(`x-hub-signature-256`)으로 검증한다.
+  - `/applications/connect`가 `token`을 받을 수 있게 확장됐다. token이 있으면 `CREDENTIAL_ENCRYPTION_KEY`로 암호화해
+    workspace credential에 저장하고, repository row에는 `credential_ref=db:github:github`만 남긴다.
+  - polling/manifest render/GitHub API 호출은 repository `credential_ref`를 통해 token vault에서 토큰을 읽는다. 원문 token은 응답/로그/DB 평문에 남기지 않는다.
+- 운영 설정:
+  - GitHub repo webhook에는 URL `https://k8s.woonyong.org/api/github/webhook`, Content type `application/json`,
+    Secret 값은 live `management-runtime-secret.GITHUB_WEBHOOK_SECRET`와 동일하게 설정한다.
+  - private repo 또는 API rate limit 회피가 필요한 repo는 연결 시 token을 입력하거나 `/repos/validate`를 먼저 호출해 token을 저장한다.
+  - raw GitHub webhook fast-path는 `GITOPS_WEBHOOK_IMAGE`가 필요하다. 현재 live에서는 management config에 service image로 설정되어 있다.
+- 검증:
+  - `.venv/bin/python -m pytest tests/test_gitops_webhook_router.py tests/test_applications_router.py tests/test_github_poller.py tests/test_git_pull_worker.py -q` → 29 passed.
+  - `.venv/bin/python -m ruff check src/domains/gitops/router.py src/domains/applications/router.py src/packages/contracts/gateway/requests.py tests/test_gitops_webhook_router.py tests/test_applications_router.py` → passed.
+  - `npm --prefix frontend run build` → passed.
