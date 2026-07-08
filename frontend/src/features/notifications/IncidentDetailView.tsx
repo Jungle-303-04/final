@@ -401,7 +401,14 @@ function EvidencePanel({ correlationId, incident }: { correlationId: string; inc
           </div>
           <div className="grid gap-2">
             {rows.map((record) => <EvidenceRow key={record.id} record={record} />)}
-            {rows.length === 0 && <p className="text-body text-muted">선택한 종류의 증거가 없습니다</p>}
+            {rows.length === 0 && (
+              <EmptyState
+                icon={<FileIcon />}
+                title="선택한 증거 없음"
+                description="선택한 종류의 증거가 없습니다"
+                action={<Button size="sm" onClick={() => setKindFilter('all')}>필터 초기화</Button>}
+              />
+            )}
           </div>
         </div>
       )}

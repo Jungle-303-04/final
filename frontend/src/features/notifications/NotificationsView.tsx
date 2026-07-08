@@ -37,6 +37,7 @@ export default function NotificationsView() {
             icon={<BellIcon />}
             title={filter === 'all' ? '알림 없음' : `${currentLabel} 알림 없음`}
             description="새 인시던트나 승인 요청이 생기면 이곳에 표시됩니다"
+            action={filter !== 'all' ? <Button size="sm" onClick={() => setFilter('all')}>필터 초기화</Button> : undefined}
           />
         ) : (
           <div className="grid gap-2">
