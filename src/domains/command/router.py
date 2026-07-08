@@ -79,6 +79,7 @@ UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
 # 제어 허용 네임스페이스는 packages.config.control 단일 기준(기본 sandbox 만).
 CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
+COMMAND_PRIORITY_HIGH = 100
 
 router = APIRouter()
 
@@ -178,6 +179,7 @@ async def accept_deployment_control(
             diff=diff,
             payload=payload,
             workspace_id=workspace_id,
+            priority=COMMAND_PRIORITY_HIGH,
             requested_by=current.user_id,
             approval_ref=approval_ref,
             policy_decision_ref=policy_decision_ref,
@@ -246,6 +248,7 @@ def debug_query_plan(
             "required_capability": "collector",
         },
         "workspace_id": workspace_id,
+        "priority": COMMAND_PRIORITY_HIGH,
         "requested_by": requested_by,
         "reason": payload.reason or "telemetry debug query",
         "correlation_id": correlation_id,
@@ -297,6 +300,7 @@ async def commands(
             reason=payload.reason or "manual command request",
             diff=command_diff(payload, workspace_id),
             workspace_id=workspace_id,
+            priority=COMMAND_PRIORITY_HIGH,
             requested_by=current.user_id,
             approval_ref=payload.approval_ref,
             policy_decision_ref=payload.policy_decision_ref,

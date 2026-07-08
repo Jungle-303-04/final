@@ -193,19 +193,28 @@ export function useScale(clusterId: string) {
       post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/scale`, { replicas }),
     onSuccess: () => {
       push({ tone: 'info', title: '스케일 명령 등록', description: '명령 상태는 워크로드 상태에서 이어서 확인됩니다' });
-      qc.invalidateQueries({ queryKey: clusterKeys.list() });
+      invalidateClusterRuntime(qc, clusterId);
     },
     onError: err => push({ tone: 'danger', title: '스케일 실패', description: commandFailureMessage('스케일', err) }),
   });
 }
 export function useRestart(clusterId: string) {
+  const qc = useQueryClient();
   const { push } = useToast();
   return useMutation({
     mutationFn: ({ ns, name }: { ns: string; name: string }) =>
       post(`/clusters/${clusterId}/namespaces/${ns}/deployments/${name}/restart`, {}),
-    onSuccess: () => push({ tone: 'info', title: '재시작 명령 등록', description: '대상 행의 상태가 갱신되면 목록에 반영됩니다' }),
+    onSuccess: () => {
+      push({ tone: 'info', title: '재시작 명령 등록', description: '대상 행의 상태가 갱신되면 목록에 반영됩니다' });
+      invalidateClusterRuntime(qc, clusterId);
+    },
     onError: err => push({ tone: 'danger', title: '재시작 실패', description: commandFailureMessage('재시작', err) }),
   });
+}
+
+function invalidateClusterRuntime(qc: ReturnType<typeof useQueryClient>, clusterId: string) {
+  qc.invalidateQueries({ queryKey: clusterKeys.list() });
+  qc.invalidateQueries({ queryKey: ['clusters', clusterId] });
 }
 
 export function useUnregisterCluster(clusterId: string) {

@@ -59,6 +59,9 @@ UNKNOWN_AGENT_ID = "unknown-agent"
 AGENT_COMMAND_COMPAT_COLUMNS = {
     "lease_id": "alter table agent_commands add column if not exists lease_id text",
     "agent_id": "alter table agent_commands add column if not exists agent_id text",
+    "priority": (
+        "alter table agent_commands add column if not exists priority integer not null default 100"
+    ),
     "leased_until": "alter table agent_commands add column if not exists leased_until timestamptz",
     "started_at": "alter table agent_commands add column if not exists started_at timestamptz",
     "completed_at": "alter table agent_commands add column if not exists completed_at timestamptz",
@@ -141,7 +144,7 @@ CLUSTER_AGENT_TOKEN_HASH_INDEX = (
 OPERATIONAL_INDEXES = (
     (
         "create index if not exists ix_agent_commands_available "
-        "on agent_commands (workspace_id, cluster_id, status, created_at) "
+        "on agent_commands (workspace_id, cluster_id, status, priority desc, created_at) "
         f"where status in ('{CommandStatus.QUEUED}', '{CommandStatus.LEASED}', "
         f"'{CommandStatus.RUNNING}')"
     ),

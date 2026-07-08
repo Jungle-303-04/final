@@ -131,6 +131,7 @@ AUTO_APPROVE_ACTIONS_ENV = "COMMAND_AUTO_APPROVE_ACTIONS"
 AUTO_APPROVE_ENVIRONMENTS_ENV = "COMMAND_AUTO_APPROVE_ENVIRONMENTS"
 DEFAULT_AUTO_APPROVE_ACTIONS = Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION
 DEFAULT_AUTO_APPROVE_ENVIRONMENTS = "sandbox"
+COMMAND_PRIORITY_HIGH = 100
 
 
 def _csv_values(value: str) -> set[str]:
@@ -286,6 +287,7 @@ def build_plan(command: CommandRequestedBody, correlation_id: str) -> Plan:
         workflow_run_id=command.workflow_run_id,
         binding_id=command.binding_id,
         environment=command.environment,
+        priority=max(COMMAND_PRIORITY_HIGH, int(command.priority or COMMAND_PRIORITY_HIGH)),
         approval_ref=command.approval_ref,
         policy_decision_ref=command.policy_decision_ref,
     )
@@ -343,6 +345,7 @@ async def handle_command_requested(
         workflow_run_id=plan.workflow_run_id,
         binding_id=plan.binding_id,
         environment=plan.environment,
+        priority=plan.priority,
         approval_ref=plan.approval_ref,
         policy_decision_ref=plan.policy_decision_ref,
     )

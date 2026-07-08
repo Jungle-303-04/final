@@ -1094,12 +1094,10 @@ class TargetClusterAgent:
                 if created.is_error:
                     return False, kubernetes_failure_message("create", created), {}
                 if resource.kind == "Deployment":
-                    return await self.wait_for_deployment_rollout(
-                        client,
-                        base_url,
-                        token,
-                        resource.namespace,
-                        resource.name,
+                    return (
+                        True,
+                        AgentConfig.COMMAND_RESULT_MESSAGE,
+                        rollout_progress(resource.name, waited=False),
                     )
                 return True, AgentConfig.MANIFEST_CREATED_MESSAGE, {}
 
@@ -1113,12 +1111,10 @@ class TargetClusterAgent:
             if patched.is_error:
                 return False, kubernetes_failure_message("patch", patched), {}
             if resource.kind == "Deployment":
-                return await self.wait_for_deployment_rollout(
-                    client,
-                    base_url,
-                    token,
-                    resource.namespace,
-                    resource.name,
+                return (
+                    True,
+                    AgentConfig.COMMAND_RESULT_MESSAGE,
+                    rollout_progress(resource.name, waited=False),
                 )
         return True, AgentConfig.MANIFEST_PATCHED_MESSAGE, {}
 
@@ -1171,13 +1167,7 @@ class TargetClusterAgent:
             response = await client.patch(url, json=patch, headers=headers)
             if response.is_error:
                 return False, kubernetes_failure_message("patch", response), {}
-            return await self.wait_for_deployment_rollout(
-                client,
-                base_url,
-                token,
-                namespace,
-                deployment,
-            )
+            return True, AgentConfig.COMMAND_RESULT_MESSAGE, rollout_progress(deployment, waited=False)
 
     async def wait_for_deployment_rollout(
         self,
@@ -1237,6 +1227,15 @@ def deployment_name_from_resource(resource: str) -> str:
     if normalized_kind in {"pod", "pods"}:
         return deployment_name_from_pod(name)
     return ""
+
+
+def rollout_progress(deployment: str, *, waited: bool) -> JsonObject:
+    return {
+        "resource": f"deployment/{deployment}",
+        "ready": None,
+        "phase": "progressing",
+        "waited": waited,
+    }
 
 
 def deployment_name_from_pod(name: str) -> str:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Text
+from sqlalchemy import Integer, Text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,7 @@ class AgentCommand(Base):
     correlation_id: Mapped[str] = text_column()
     cluster_id: Mapped[str] = text_column()
     action: Mapped[str] = text_column()
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
     payload: Mapped[dict[str, Any]] = jsonb_column()
     status: Mapped[str] = text_column()
     lease_id: Mapped[str | None] = mapped_column(Text, nullable=True)

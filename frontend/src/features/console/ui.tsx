@@ -1,8 +1,9 @@
 // 운영 콘솔 셸 — 사이드바/헤더/브레드크럼/알림. 모든 표시는 실데이터(세션·알림)만 사용
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ComponentProps, type SVGProps } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { startLive } from '@/shared/lib/live';
+import { bindLiveQueryClient, startLive } from '@/shared/lib/live';
 import { useIsAdmin, useLogout, useSession } from '@/features/auth/api';
 import { timeAgo, useNotices } from '@/features/notifications/api';
 import { Badge, Button, Drawer, EmptyState, IconButton, cx, useToast } from '@/ui';
@@ -94,12 +95,15 @@ export function ConsoleLayout({ basePath }: { basePath?: string }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const admin = useIsAdmin();
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
   const logout = useLogout();
   const { notices, unread, markAllSeen } = useNotices();
   const { push } = useToast();
   useEffect(() => {
+    bindLiveQueryClient(queryClient);
     startLive(session?.workspace_id);
-  }, [session?.workspace_id]);
+    return () => bindLiveQueryClient(null);
+  }, [queryClient, session?.workspace_id]);
   const localPath =
     routeBase && (location.pathname === routeBase || location.pathname.startsWith(`${routeBase}/`))
       ? location.pathname.slice(routeBase.length) || '/'
