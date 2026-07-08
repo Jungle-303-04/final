@@ -66,6 +66,31 @@ test('incident not_found fallback still renders the recovery plan for the correl
   assert.ok(html.includes('manual_approval'), 'expected the recovery plan route to render');
 });
 
+test('incident evidence empty state distinguishes collecting from none', async () => {
+  const { isEvidenceCollecting } = await vite.ssrLoadModule('/src/features/notifications/IncidentDetailView.tsx');
+  const baseIncident = {
+    incident_id: 'incident-1',
+    correlation_id: 'corr-1',
+    cluster_id: 'cluster-1',
+    status: 'running',
+    current_subject: 'evidence.collect',
+    summary: 'checkout latency',
+    root_cause: null,
+    confidence: null,
+    supporting_evidence: [],
+    missing_evidence: [],
+    action_route: null,
+    command_id: null,
+    pr_url: null,
+    error_reason: null,
+    updated_at: '2026-07-08T00:00:00Z',
+  };
+
+  assert.equal(isEvidenceCollecting({ ...baseIncident, missing_evidence: ['logs'] }), true);
+  assert.equal(isEvidenceCollecting({ ...baseIncident, status: 'completed', missing_evidence: ['logs'] }), false);
+  assert.equal(isEvidenceCollecting({ ...baseIncident, current_subject: 'analysis', supporting_evidence: ['kubernetes'] }), false);
+});
+
 async function setIncidentNotFound(queryClient, correlationId) {
   const error = Object.assign(new Error('Incident not found'), {
     detail: 'Incident not found',

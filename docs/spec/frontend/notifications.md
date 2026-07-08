@@ -84,7 +84,7 @@ status: synced
 - `RcaReportsPanel`: `useRcaReports(correlationId)` 결과를 카드 목록으로 표시한다. 결과가 없으면 `EmptyState(IconFile, 'RCA 리포트 없음')`. `RcaReportCard` 는 root cause, 대상(`namespace/resource_kind/resource_name`), 주 증상과 `secondary_symptoms`, reason, 후보 평가, 근거 참조, 미수집 체크를 보여준다.
 - `CandidateScores`: `report.candidates` 를 입력 순서 그대로 2개 우선 표시하고, 더 있으면 "후보 N개 더 보기"로 펼친다. `selected_candidate_id` 와 같은 후보는 좌측 보더와 `선정` badge 로 강조한다. `source === 'ai_fallback'` 은 `AI` badge 로 표시한다.
 - `EvidenceRefList`: `supporting_evidence_refs` 가 있으면 기존 문자열 badge 대신 source/name/summary/query 트레일을 표시한다. 참조가 없을 때만 `supporting_evidence` 문자열 badge 로 fallback 한다.
-- `EvidencePanel`: `useEvidence(correlationId)` 결과를 kind 필터(kubernetes/prometheus/loki/tempo)와 접힘 가능한 evidence row 로 표시한다. 증거가 없으면 `EmptyState(IconFile, '저장된 증거 없음')`. 각 evidence row 토글은 `aria-expanded`가 달린 실제 `button`이고, 펼치면 수집 시각/evidence_ref/source trail을 보여준다.
+- `EvidencePanel`: `useEvidence(correlationId)` 결과를 kind 필터(kubernetes/prometheus/loki/tempo)와 접힘 가능한 evidence row 로 표시한다. 증거가 없을 때도 인시던트 상태를 함께 본다. 비종결 인시던트가 evidence 단계이거나 `missing_evidence`가 남아 있으면 `증거 수집 중` + 다시 확인 CTA, 종결/근거 없음이면 `증거 없음`으로 표시한다. 각 evidence row 토글은 `aria-expanded`가 달린 실제 `button`이고, 펼치면 수집 시각/evidence_ref/source trail을 보여준다.
 
 ### `frontend/src/features/notifications/OpsView.tsx :: OpsView` (default export)
 
