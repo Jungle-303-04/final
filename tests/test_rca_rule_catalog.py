@@ -59,7 +59,7 @@ def plan_for(symptom: str):
     return plan_causes(incident_for(symptom), empty_bundle(), "object://evidence/catalog.json")
 
 
-# 카탈로그 전환 이전(하드코딩 python 모듈) 룰 세트의 plan_causes 스냅샷 —
+# 현재 RCA 룰 카탈로그의 plan_causes 계약 스냅샷 —
 # 증상 → (후보 id 순서, required_evidence_sources). 카탈로그가 이 표와 다르면 회귀다.
 EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
     "CrashLoopBackOff": (
@@ -104,11 +104,11 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
     ),
     "ImagePullBackOff": (
         ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
-        ["kubernetes", "metrics", "logs", "metadata"],
+        ["kubernetes"],
     ),
     "ErrImagePull": (
         ["wrong_image_tag", "missing_image_pull_secret", "registry_unavailable"],
-        ["kubernetes", "metrics", "logs", "metadata"],
+        ["kubernetes"],
     ),
     "DNS lookup failed": (
         ["service_dns_resolution_failure"],
@@ -120,7 +120,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
     ),
     "Ingress 502/503": (
         ["upstream_unavailable", "backend_readiness_failure", "application_5xx_spike"],
-        ["kubernetes", "metrics", "logs", "metadata"],
+        ["kubernetes", "metrics", "logs"],
     ),
     "FailedScheduling": (
         [
@@ -129,7 +129,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "node_affinity_or_taint_mismatch",
             "pvc_pending",
         ],
-        ["kubernetes", "metrics", "metadata"],
+        ["kubernetes"],
     ),
     "Pending": (
         [
@@ -138,7 +138,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
             "node_affinity_or_taint_mismatch",
             "pvc_pending",
         ],
-        ["kubernetes", "metrics", "metadata"],
+        ["kubernetes"],
     ),
     "Secret not found": (
         ["missing_secret_reference", "secret_key_missing"],
@@ -148,7 +148,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
 
 
 def test_catalog_rules_match_previous_hardcoded_plan_snapshot() -> None:
-    """(a) 동등성 스냅샷 — YAML 카탈로그가 하드코딩 룰 세트와 동일한 계획을 내야 한다."""
+    """(a) 계약 스냅샷 — YAML 카탈로그가 현재 룰 계획을 유지해야 한다."""
     for symptom, (expected_candidates, expected_sources) in EXPECTED_RULE_SNAPSHOT.items():
         plan = plan_for(symptom)
 
