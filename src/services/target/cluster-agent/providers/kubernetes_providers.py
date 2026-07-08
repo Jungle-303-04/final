@@ -211,11 +211,25 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
-    for key in ("workloads", "pods", "events", "nodes", "services", "endpoints"):
+    for key in ("workloads", "pods", "events", "services", "endpoints"):
         target.setdefault(key, [])
         target[key].extend(source.get(key, []))
+    merge_cluster_scoped_nodes(target, source)
     target.setdefault("provider_status", {})
     target["provider_status"].update(source.get("provider_status", {}))
+
+
+def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:
+    # namespace별 snapshot이 같은 /api/v1/nodes 결과를 반복 수집하므로 node는 cluster scope로 병합한다.
+    by_key: dict[str, JsonObject] = {}
+    for node in [*target.get("nodes", []), *source.get("nodes", [])]:
+        if not isinstance(node, dict):
+            continue
+        key = str(node.get("uid") or node.get("name") or "")
+        if not key:
+            continue
+        by_key[key] = node
+    target["nodes"] = list(by_key.values())
 
 
 def items(payload: Any) -> list[JsonObject]:

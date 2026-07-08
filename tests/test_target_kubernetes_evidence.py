@@ -228,3 +228,65 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         "services": 1,
         "endpoints": 1,
     }
+
+
+def test_kubernetes_snapshot_provider_deduplicates_cluster_scoped_nodes(monkeypatch) -> None:
+    module, kubernetes_module = load_evidence_modules()
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        namespace = "sandbox" if "/sandbox/" in request.url.path else "target"
+        if request.url.path == "/api/v1/nodes":
+            return httpx.Response(
+                status_code=200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {"uid": "node-uid-a", "name": "node-a"},
+                            "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+                        }
+                    ]
+                },
+            )
+        if request.url.path.endswith("/pods"):
+            return httpx.Response(
+                status_code=200,
+                json={
+                    "items": [
+                        {
+                            "metadata": {"uid": f"pod-{namespace}", "name": f"pod-{namespace}", "namespace": namespace},
+                            "spec": {"nodeName": "node-a"},
+                            "status": {"phase": "Running", "containerStatuses": []},
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(status_code=200, json={"items": []})
+
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    for namespace in ("target", "sandbox"):
+        collector.register_query(
+            module.TelemetryQueryDefinition.from_mapping(
+                {
+                    "source": "kubernetes",
+                    "name": f"{namespace}_snapshot",
+                    "description": f"{namespace} namespace snapshot.",
+                    "query": namespace,
+                }
+            )
+        )
+
+    kubernetes = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+
+    assert [node["name"] for node in kubernetes["nodes"]] == ["node-a"]
+    assert sorted(pod["namespace"] for pod in kubernetes["pods"]) == ["sandbox", "target"]

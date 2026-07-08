@@ -2327,3 +2327,38 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - 전체 시나리오(리셋 -> 클러스터 등록 -> 레포 연결 -> 자동 배포 -> 장애 -> RCA/복구 제안 -> 승인 -> 자동 복구) 2회 연속 리허설은 아직 완료하지 못했다.
   - 특히 장애/RCA/recovery-worker 승인 실행은 별도 리허설이 필요하다. 발표 직전에는 `docs/demo-runbook.md`의 플랜B를 유지하고, 복구 제안 조회/승인 UI가 실제 incident에서 보이는지 확인해야 한다.
   - 현재 작업 중 워킹트리에 `deploy/management/kustomization.yaml`, `deploy/management/target-agent.yaml` 미커밋 변경이 남아 있었는데, 이 섹션 작업에서는 건드리지 않았다.
+
+## 라이브 운영 리셋/기본 연결 복구 및 node usage 중복 수정 (2026-07-08 11:35 KST)
+
+- 운영 DB는 사용자 계정/워크스페이스/권한 기본 테이블을 보존하고 이벤트·워크플로우·인시던트·evidence·repo/app·target operational 테이블을 초기화했다.
+  - 보존: `user_accounts`, `workspaces`, `organizations`, `organization_members`, `groups`, `group_members`, `role_permissions` 등 인증/권한 기본 데이터.
+  - 초기화 후 기본 등록: `kubernetes-ops`(role=`management`)와 `cluster-1`(role=`target`)만 `registered/connected`.
+  - 최종 API: `fleet/summary` 기준 clusters 2, healthy 2, open_incidents 0, pending_approvals 0, running_workflows 0, dead_letters 0.
+- agent 연결 장애 원인은 Cloudflare challenge였다. public `https://k8s.woonyong.org/api` 대신 console ELB same-origin proxy API로 agent `MANAGEMENT_BASE_URL`을 운영 패치했다.
+  - 적용 URL: `http://a5932a191762b424ebf51925ac0bca8d-63690234.ap-northeast-2.elb.amazonaws.com/api`
+  - 두 cluster-agent가 `/agent/connect`, policy, command poll, evidence job poll/result 200 OK.
+  - management agent RBAC 확인: `patch deployment`/`delete pod`는 `no`, `list pods -A`는 `yes`.
+- `Jungle-303-04/k8s-incident-demo-target`는 DB상 repo/app/watch/binding 1개로 정리했다.
+  - repo: `Jungle-303-04/k8s-incident-demo-target`, branch `main`, manifest `deploy/k8s`.
+  - binding: cluster `cluster-1`, namespace `sandbox`, app `k8s-incident-demo-target`.
+  - 실제 cluster-1 `sandbox`에는 `orders-api` 2/2, `storefront-web` 2/2, `demo-target-config`만 기준 리소스로 유지했다.
+  - 오래된 `bot-service-*`, `shop-*`, `checkout-api` 리소스와 관련 Warning Event는 삭제했다.
+- GitHub poll fallback이 `Jungle-303-04/final`/`default-target-cluster` workflow를 재생성하던 문제를 운영 config에서 차단했다.
+  - `management-runtime-config`: `GITHUB_REPO=""`, `SCM_REPO="Jungle-303-04/k8s-incident-demo-target"`, `MANIFEST_PATH="deploy/k8s"`.
+  - 수동 `github-poll-worker` Job 검증: DB watch target만 사용해 target repo webhook 발행, 신규 orphan/default-target workflow 없음.
+- 프론트는 현재 live console image `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:b380ba97-prod-ui-20260708111551`.
+  - `npm run typecheck`, `npm run build`, `npm test` 통과.
+  - Playwright live smoke: `/`, `/clusters`, `/clusters/cluster-1`, `/clusters/kubernetes-ops` 모두 `Unexpected Application Error` 없음.
+  - cluster 삭제 후 발생했던 `Cannot read properties of undefined (reading 'tone')` 계열 crash는 live `ClusterListView` 번들에서 재현되지 않음.
+- node usage 중복 원인과 수정:
+  - 원인: target-agent가 namespace별 Kubernetes snapshot마다 cluster-scoped `/api/v1/nodes` 결과를 포함하고, `merge_snapshot`이 `nodes`를 그대로 append해 node_total이 namespace 수만큼 부풀었다.
+  - 수정 파일: `src/services/target/cluster-agent/providers/kubernetes_providers.py` — `merge_cluster_scoped_nodes()`로 uid/name 기준 de-dupe.
+  - 테스트: `tests/test_target_kubernetes_evidence.py::test_kubernetes_snapshot_provider_deduplicates_cluster_scoped_nodes`.
+  - 검증: `.venv/bin/python -m pytest tests/test_target_kubernetes_evidence.py -q` 2 passed, `ruff check` 통과.
+  - 배포 이미지: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:ca60aec3-service-node-dedupe-20260708113223`.
+  - management/cluster-1 `cluster-agent` 모두 위 이미지로 rollout 완료. `TARGET_AGENT_IMAGE`와 DB `cluster_registrations.settings.image`도 같은 태그로 갱신.
+  - 최신 usage sample: cluster-1 `node_ready=2`, `node_total=2`, pods 20/20. management도 `node_ready=2`, `node_total=2`.
+  - 과거 잘못 저장된 `node_total=4` usage samples는 양쪽 클러스터에서 삭제했다.
+- 현재 남은 주의:
+  - live browser smoke에서 로그인 직전 `/api/auth/session` 401 리소스 로그가 한 번 보이지만, 인증 전 session check로 보이며 page error는 아니다.
+  - 워킹트리에는 다른 프론트 세션의 변경 파일이 남아 있다. 이번 backend 커밋에는 `src/services/target/cluster-agent/providers/kubernetes_providers.py`, `tests/test_target_kubernetes_evidence.py`, `HANDOVER.md`만 포함해야 한다.
