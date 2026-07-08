@@ -157,6 +157,8 @@
 | 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리. 비종결 인시던트가 evidence 단계이거나 `missing_evidence`가 남아 있고 저장 evidence가 0건이면 `증거 수집 중`, 종결/근거 없음이면 `증거 없음` | 완료 |
 | 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
 
+인시던트 evidence 배포 확인(2026-07-08 09:30 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `fba2a457-incident-evidence-ux-20260708092931`, `IncidentDetailView-DKFsSrY7.js`에서 `증거 수집 중`/`증거 없음` 문구 서빙 확인.
+
 ## 인증 전개형 검증 UX 변경 (2026-07-08)
 
 - `SignupView`는 이메일 입력을 450ms debounce 후 `POST /auth/check-email`로 선검증한다. 중복이면 "로그인하기" 링크를 인라인으로 표시하고, 사용 가능 응답 전에는 비밀번호 필드와 가입 제출이 열리지 않는다.
