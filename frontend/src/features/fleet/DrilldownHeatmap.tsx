@@ -75,9 +75,9 @@ export function DrilldownHeatmap({
       </nav>
 
       {loading ? (
-        <div className="grid min-h-64 grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12">
+        <div className="grid min-h-56 grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12">
           {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className={cx('rounded-panel border border-border bg-raised p-4', index < 2 ? 'sm:col-span-3 xl:col-span-4' : 'sm:col-span-3 xl:col-span-2')}>
+            <div key={index} className={cx('rounded-panel border border-border bg-raised p-4', index < 2 ? 'sm:col-span-3 xl:col-span-3' : 'sm:col-span-2 xl:col-span-2')}>
               <Skeleton lines={3} />
             </div>
           ))}
@@ -90,12 +90,12 @@ export function DrilldownHeatmap({
         <motion.div
           layout={motionLayout}
           transition={motionTransition}
-          className="grid min-h-48 gap-4 rounded-panel border border-border bg-bg p-4"
+          className="grid gap-3"
         >
-          <span className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-control border border-border bg-surface px-3 py-2">
+          <span className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-control border border-border bg-raised px-3 py-2">
             <span className="grid min-w-0 gap-1">
               <span className="min-w-0 truncate text-body font-semibold text-primary">{zoomContext.label}</span>
-              {zoomContext.meta && <span className="grid gap-1 text-caption text-secondary">{zoomContext.meta}</span>}
+              {zoomContext.meta && <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-caption text-secondary">{zoomContext.meta}</span>}
             </span>
             <span className="flex shrink-0 items-center gap-1">
               {zoomContext.badge}
@@ -151,7 +151,7 @@ function TileGrid({
       animate={motionLayout ? 'animate' : undefined}
       className={cx(
         'grid grid-cols-1 gap-2',
-        compact ? 'min-h-40 lg:grid-cols-2 2xl:grid-cols-3' : 'min-h-56 sm:grid-cols-6 xl:grid-cols-12',
+        compact ? 'min-h-32 sm:grid-cols-6 xl:grid-cols-12' : 'min-h-48 sm:grid-cols-6 xl:grid-cols-12',
       )}
     >
       <AnimatePresence mode={presenceMode}>
@@ -163,14 +163,14 @@ function TileGrid({
             variants={motionLayout ? listItem : undefined}
             transition={motionTransition}
             className={cx(
-              'group relative grid min-h-24 content-between overflow-hidden rounded-panel border border-border bg-surface p-4 text-left shadow-soft transition-colors motion-reduce:transition-none hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              'group relative grid min-h-24 content-between overflow-hidden rounded-panel border bg-surface p-4 pl-5 text-left shadow-soft transition-colors motion-reduce:transition-none hover:border-border-strong hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               healthBorderClass(tile.health),
-              compact ? 'min-h-28' : sizeClass(safeSize(tile.size), max),
-              tile.pulse && 'ring-2 ring-danger/40',
+              compact ? compactSizeClass(safeSize(tile.size), max) : sizeClass(safeSize(tile.size), max),
+              tile.pulse && 'ring-1 ring-danger/60',
             )}
             onClick={() => onTileClick(tile)}
           >
-            <span aria-hidden className={cx('absolute inset-x-0 top-0 h-1', healthBarClass(tile.health, tile.pulse))} />
+            <span aria-hidden className={cx('absolute inset-y-0 left-0 w-1', healthBarClass(tile.health, tile.pulse))} />
             <span className="flex min-w-0 items-start justify-between gap-3">
               <span className="min-w-0 truncate text-body font-semibold text-primary">{tile.label}</span>
               <span className="flex shrink-0 items-center gap-1">
@@ -178,10 +178,10 @@ function TileGrid({
                 <HealthBadge health={tile.health} />
               </span>
             </span>
-            <span className="mt-4 grid gap-3">
-              {tile.meta && <span className="grid gap-2 text-caption text-secondary">{tile.meta}</span>}
+            <span className="mt-3 grid gap-2">
+              {tile.meta && <span className="grid gap-1.5 text-caption text-secondary">{tile.meta}</span>}
               {tile.actionLabel && (
-                <span className="inline-flex w-fit items-center rounded-control border border-accent/40 bg-accent/10 px-2 py-1 text-caption font-semibold text-accent transition-colors group-hover:bg-accent/15">
+                <span className="inline-flex w-fit items-center rounded-control border border-border bg-bg px-2 py-1 text-caption font-semibold text-secondary transition-colors group-hover:border-accent/40 group-hover:text-accent">
                   {tile.actionLabel}
                 </span>
               )}
@@ -215,10 +215,9 @@ function healthKey(health: DrilldownHealth) {
 
 function healthBorderClass(health: DrilldownHealth) {
   const key = healthKey(health);
-  if (key === 'critical') return 'border-l-4 border-l-danger';
-  if (key === 'warning') return 'border-l-4 border-l-warning';
-  if (key === 'healthy') return 'border-l-4 border-l-success';
-  return 'border-l-4 border-l-border';
+  if (key === 'critical') return 'border-danger/50';
+  if (key === 'warning') return 'border-warning/50';
+  return 'border-border';
 }
 
 function healthBarClass(health: DrilldownHealth, pulse?: boolean) {
@@ -232,8 +231,16 @@ function healthBarClass(health: DrilldownHealth, pulse?: boolean) {
 
 function sizeClass(size: number, max: number) {
   const ratio = size / max;
-  if (ratio >= 0.72) return 'sm:col-span-3 xl:col-span-4 min-h-36';
-  if (ratio >= 0.38) return 'sm:col-span-3 xl:col-span-3 min-h-32';
-  if (ratio >= 0.18) return 'sm:col-span-2 xl:col-span-3 min-h-28';
+  if (ratio >= 0.72) return 'sm:col-span-3 xl:col-span-3 min-h-32';
+  if (ratio >= 0.38) return 'sm:col-span-3 xl:col-span-3 min-h-28';
+  if (ratio >= 0.18) return 'sm:col-span-2 xl:col-span-3 min-h-24';
+  return 'sm:col-span-2 xl:col-span-2 min-h-24';
+}
+
+function compactSizeClass(size: number, max: number) {
+  const ratio = size / max;
+  if (ratio >= 0.72) return 'sm:col-span-3 xl:col-span-4 min-h-28';
+  if (ratio >= 0.38) return 'sm:col-span-3 xl:col-span-3 min-h-24';
+  if (ratio >= 0.18) return 'sm:col-span-2 xl:col-span-3 min-h-24';
   return 'sm:col-span-2 xl:col-span-2 min-h-24';
 }
