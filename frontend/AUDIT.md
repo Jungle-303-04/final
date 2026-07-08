@@ -230,6 +230,7 @@
 - 검증(2026-07-08 07:19 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 1440/1024/390 폭에서 `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 복원 확인, overflow 0. 클릭 왕복은 `/clusters/cluster-1` → `?node=node-a` → `?node=node-a&pod=prod%2Fcheckout-api-7f9f8` → 뒤로가기 2회까지 확인.
 - 보강(2026-07-08 09:01 KST): `DrilldownHeatmap`은 선택 노드 `layoutId`를 zoom shell로 재사용해 노드 타일이 부모 영역으로 확장된 뒤 팟 타일이 같은 그리드 안에 나타난다. `useReducedMotion()`이 true면 layout/stagger를 끄고 `@/ui/motion`의 `transitions.reduced`만 사용한다. 인시던트 팟은 `ring-danger` pulse border로 표시한다.
 - 보강 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/clusters/cluster-1` 클릭 왕복에서 `?node`/`?pod` URL, Drawer, "인시던트 보기", pulse border, 뒤로가기 2회, reduced-motion 환경, overflow 0, console error 0을 확인했다. `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 직접 진입은 1440/1024/390 폭에서 Drawer/CTA/breadcrumb 복원과 overflow 0을 확인했다.
+- 보강 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `62a28572-heatmap-motion-20260708090258`, `ClusterDetailView-BMnacLsD.js` lazy chunk 서빙 확인.
 
 ## AI 채팅 디자인 시스템 이관 (2026-07-08)
 
