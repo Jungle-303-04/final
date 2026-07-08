@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 10:12 KST (더미 차트 제거)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 10:21 KST (더미 차트 제거 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -18,6 +18,11 @@
 - 검증:
   - `rg "SparkBars|ClusterSpark|MiniBars|barToneClass|sparkClass|heightClass" frontend/src/features` 0건.
   - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
+- 배포 확인:
+  - 커밋/푸시: `3f98a7d0 feat: 더미 차트 실데이터 스파크라인 교체`.
+  - GitHub Actions는 코드 실행 전 실패: CI `28910247958`, AWS CD `28910247957`, Promote `28910248008` 모두 failed job의 `steps: []` 확인.
+  - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:3f98a7d0-real-charts-20260708101622`, rollout `1/1 ready`.
+  - live `https://k8s.woonyong.org/`와 `/api/healthz` 200. live assets에서 real chart aria marker 5건, legacy dummy marker(`SparkBars`, `ClusterSpark`, `MiniBars`) 0건 확인.
 
 ## 체크포인트 — 목록 필터 초기화 CTA
 
