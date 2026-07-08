@@ -436,3 +436,16 @@
   관련 Pod 타일을 critical+pulse로 표시한다. 새 API 없이 기존 timeline projection과 pod summary를 연결한다.
 - RCA 6개 데모 시나리오(crashloop, oom, imagepull, probe-fail, sched-fail, svc-selector)는 모두
   RCA completed + recovery planned 경로를 focused test로 고정했다.
+
+## L. 드릴다운 관찰 대상 정리 및 라이브 반영 (2026-07-08)
+
+- 드릴다운의 node/pod summary는 운영자가 조치할 워크로드만 보이도록 조정했다. `target`, `management`,
+  `kube-system`, `monitoring` 등 운영 namespace와 `cluster-agent`, `node-collector`, telemetry stack 이름 마커는
+  backend summary와 frontend fallback 양쪽에서 제외한다.
+- `default`/`sandbox`의 데모 워크로드는 유지하므로 장애 주입 시 Pod 타일, 색상, pulse, 인시던트 이동 흐름은 계속 보인다.
+- 검증: `tests/test_fleet_router.py::test_node_pods_summary_hides_agent_and_management_pods`,
+  `tests/test_fleet_router.py::test_node_pods_summary_filters_node_and_links_incident`, RCA/AI/드릴다운 관련 focused suite 105 passed,
+  `bash scripts/frontend-check.sh` passed.
+- 라이브 반영: service image `0aa81ea5-drilldown-agent-filter-20260708125500`, console image
+  `0aa81ea5-drilldown-agent-filter-20260708125500`로 management deployment 전체 rollout 완료.
+  live `/api/healthz` 200, root asset `/assets/index-YIJZma8H.js`, cluster detail chunk `ClusterDetailView-CwucS_FI.js` 서빙 확인.
