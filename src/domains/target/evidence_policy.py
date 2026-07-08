@@ -17,6 +17,8 @@ MANAGEMENT_CLUSTER_ROLE = "management"
 DEFAULT_BOOTSTRAP_MODE = "target"
 MANAGEMENT_DEFAULT_EVIDENCE_PROVIDERS = {"kubernetes"}
 
+# Default evidence queries sent to each provider.
+# These values seed the agent policy for a target cluster.
 DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
     "kubernetes": [
         {
@@ -140,6 +142,13 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "query": '{ resource.service.name = "api-gateway" }',
         },
     ],
+    "metadata": [
+        {
+            "name": "change_context",
+            "description": "Change context metadata for RCA",
+            "query": "change_context",
+        },
+    ],
 }
 
 
@@ -149,6 +158,7 @@ def default_evidence_provider_policy(
     *,
     enabled: bool = True,
 ) -> EvidenceProviderPolicy:
+    """Build the default policy for one evidence provider."""
     return EvidenceProviderPolicy(
         enabled=enabled,
         interval_seconds=interval_seconds,
@@ -163,6 +173,7 @@ def default_evidence_providers(
     *,
     cluster_role: str = DEFAULT_CLUSTER_ROLE,
 ) -> dict[str, EvidenceProviderPolicy]:
+    """Build default provider policies for all known providers."""
     return {
         provider_key: default_evidence_provider_policy(
             provider_key,
@@ -185,6 +196,7 @@ def default_agent_policy(
     bootstrap_mode: str = DEFAULT_BOOTSTRAP_MODE,
     generation: int = 1,
 ) -> AgentPolicy:
+    """Build the default policy used by a target cluster agent."""
     return AgentPolicy(
         cluster_id=cluster_id,
         cluster_role=cluster_role,
@@ -202,6 +214,7 @@ def default_agent_policy(
 
 
 def enabled_provider_keys(policy: AgentPolicy, requested_provider_keys: list[str]) -> list[str]:
+    """Return requested provider keys that are enabled by policy."""
     keys: list[str] = []
     for provider_key in dict.fromkeys(requested_provider_keys):
         provider_policy = policy.evidence.providers.get(provider_key)
@@ -214,6 +227,7 @@ def provider_policy_snapshots(
     policy: AgentPolicy,
     provider_keys: list[str],
 ) -> dict[str, dict[str, object]]:
+    """Return serializable policy data for each queued provider job."""
     return {
         provider_key: policy.evidence.providers.get(
             provider_key,

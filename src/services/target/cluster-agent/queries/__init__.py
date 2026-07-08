@@ -4,6 +4,7 @@ from queries.payloads import TelemetryQueryCommandPayload
 from queries.registry import (
     KubernetesSnapshotQuery,
     LokiLogQuery,
+    MetadataSnapshotQuery,
     OpenTelemetrySpanQuery,
     PrometheusInstantQuery,
     PrometheusRangeQuery,
@@ -15,6 +16,7 @@ from queries.registry import (
 __all__ = [
     "KubernetesSnapshotQuery",
     "LokiLogQuery",
+    "MetadataSnapshotQuery",
     "OpenTelemetrySpanQuery",
     "PrometheusInstantQuery",
     "PrometheusRangeQuery",

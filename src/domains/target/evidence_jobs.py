@@ -31,6 +31,7 @@ def evidence_key(
     source_id: str,
     window_start: str,
 ) -> str:
+    """Build the shared key for one evidence window."""
     return ":".join([workspace_id, cluster_id, source_id, window_start])
 
 
@@ -41,16 +42,21 @@ def evidence_job_id(
     window_start: str,
     provider_key: str,
 ) -> str:
+    """Build the unique job id for one provider in one window."""
     return ":".join([evidence_key(workspace_id, cluster_id, source_id, window_start), provider_key])
 
 
 def empty_provider_payload(provider_key: str) -> object:
+    """Return the empty payload shape for a failed provider."""
     if provider_key == "logs":
         return []
     return {}
 
 
 def aggregate_evidence_payload(rows: list[JsonObject]) -> JsonObject | None:
+    """Merge provider job results into one evidence payload.
+    Return None until the window is ready to emit.
+    """
     if not rows:
         return None
     if any(row["status"] not in TERMINAL_EVIDENCE_JOB_STATUSES for row in rows):

@@ -34,6 +34,7 @@ class TelemetryRegistry:
     """소스 계약의 주소록. 등록은 @telemetry.source, 조회는 spec()/sources()."""
 
     def __init__(self) -> None:
+        """Create an empty registry for telemetry source contracts."""
         self._specs: dict[str, TelemetrySourceSpec] = {}
 
     def source(
@@ -68,6 +69,7 @@ class TelemetryRegistry:
         return decorate
 
     def spec(self, source: str) -> TelemetrySourceSpec:
+        """Return the source contract or fail if the source is unknown."""
         try:
             return self._specs[source]
         except KeyError as exc:
@@ -77,9 +79,11 @@ class TelemetryRegistry:
             ) from exc
 
     def sources(self) -> tuple[TelemetrySourceSpec, ...]:
+        """Return all registered source contracts in name order."""
         return tuple(self._specs[name] for name in self.source_names())
 
     def source_names(self) -> tuple[str, ...]:
+        """Return all registered source names in sorted order."""
         return tuple(sorted(self._specs))
 
     def evidence_keys(self) -> dict[str, str]:
@@ -94,12 +98,15 @@ class TelemetryRegistry:
         return None
 
     def query_type_for(self, source: str) -> type:
+        """Return the query value type for one source."""
         return self.spec(source).query_type
 
     def range_query_type_for(self, source: str) -> type | None:
+        """Return the range query value type when the source supports it."""
         return self.spec(source).range_query_type
 
     def describe(self) -> str:
+        """Build a short text table of registered sources."""
         rows = ["TELEMETRY SOURCES (한눈에 보기)", ""]
         for spec in self.sources():
             rows.append(
@@ -120,6 +127,7 @@ def _same_contract(a: TelemetrySourceSpec, b: TelemetrySourceSpec) -> bool:
 
 
 def _type_name(value: type | None) -> str | None:
+    """Return a type name while keeping None as None."""
     return value.__name__ if value is not None else None
 
 

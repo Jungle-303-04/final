@@ -29,6 +29,7 @@ from node_collector_manager import NodeCollectorManager
 from providers import (
     KubernetesSnapshotProvider,
     LokiLogsProvider,
+    MetadataProvider,
     PrometheusMetricsProvider,
     TelemetryProvider,
     TempoTracesProvider,
@@ -443,6 +444,7 @@ class TargetClusterAgent:
                 PrometheusMetricsProvider.from_config(env),
                 LokiLogsProvider.from_config(env),
                 TempoTracesProvider.from_config(env),
+                MetadataProvider.from_config(env),
             )
         self.query_registry = TelemetryQueryRegistry()
         self.evidence_collector = EvidenceCollector(providers, self.query_registry)
