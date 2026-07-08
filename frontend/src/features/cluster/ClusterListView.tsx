@@ -4,6 +4,7 @@ import { useClusters } from '@/features/cluster/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
 import { Badge, Button, Card, EmptyState, Input, PageHeader, StatCard, Table, cx, type TableColumn } from '@/ui';
+import { Sparkline } from '@/ui/charts';
 import { timeAgo } from '@/shared/lib/format';
 import type { Cluster } from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
@@ -45,10 +46,11 @@ export default function ClusterListView() {
 
   const stats = useMemo(() => {
     const connected = clusters.filter((cluster) => connectedStatuses.has(cluster.connection_status)).length;
+    const disconnected = clusters.length - connected;
     const incidents = clusters.reduce((sum, cluster) => sum + cluster.incident_count, 0);
     const nodes = clusters.reduce((sum, cluster) => sum + cluster.node_count, 0);
     const pods = clusters.reduce((sum, cluster) => sum + cluster.pod_count, 0);
-    return { connected, incidents, nodes, pods };
+    return { connected, disconnected, incidents, nodes, pods };
   }, [clusters]);
 
   const columns = useMemo<TableColumn<Cluster>[]>(() => [
@@ -144,10 +146,10 @@ export default function ClusterListView() {
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="클러스터 요약">
-        <StatCard label="전체 클러스터" value={clusters.length.toLocaleString()} delta={`${stats.connected.toLocaleString()} 연결`} tone="success" spark={<ClusterSpark tone="success" />} />
-        <StatCard label="열린 인시던트" value={stats.incidents.toLocaleString()} delta={stats.incidents > 0 ? '확인 필요' : '정상'} tone={stats.incidents > 0 ? 'danger' : 'success'} spark={<ClusterSpark tone={stats.incidents > 0 ? 'danger' : 'success'} />} />
-        <StatCard label="노드" value={stats.nodes.toLocaleString()} delta="등록 인벤토리 합계" spark={<ClusterSpark />} />
-        <StatCard label="팟" value={stats.pods.toLocaleString()} delta="등록 인벤토리 합계" spark={<ClusterSpark />} />
+        <StatCard label="전체 클러스터" value={clusters.length.toLocaleString()} delta={`${stats.connected.toLocaleString()} 연결`} tone="success" spark={<Sparkline points={[stats.connected, stats.disconnected]} tone="success" ariaLabel="연결 상태 분포" />} />
+        <StatCard label="열린 인시던트" value={stats.incidents.toLocaleString()} delta={stats.incidents > 0 ? '확인 필요' : '정상'} tone={stats.incidents > 0 ? 'danger' : 'success'} spark={<Sparkline points={clusters.map((cluster) => cluster.incident_count)} tone={stats.incidents > 0 ? 'danger' : 'success'} ariaLabel="클러스터별 인시던트 분포" />} />
+        <StatCard label="노드" value={stats.nodes.toLocaleString()} delta="등록 인벤토리 합계" spark={<Sparkline points={clusters.map((cluster) => cluster.node_count)} ariaLabel="클러스터별 노드 분포" />} />
+        <StatCard label="팟" value={stats.pods.toLocaleString()} delta="등록 인벤토리 합계" spark={<Sparkline points={clusters.map((cluster) => cluster.pod_count)} ariaLabel="클러스터별 팟 분포" />} />
       </section>
 
       <Card title="클러스터 목록" description="행을 선택하면 인벤토리 상세로 이동합니다">
@@ -184,18 +186,6 @@ export default function ClusterListView() {
 function environmentLabel(value: string) {
   if (!value || value === 'unknown') return '미지정';
   return value;
-}
-
-function ClusterSpark({ tone = 'neutral' }: { tone?: 'neutral' | 'success' | 'danger' }) {
-  return (
-    <div className={cx('flex h-full items-end gap-1 px-2 py-2', tone === 'success' && 'text-success', tone === 'danger' && 'text-danger', tone === 'neutral' && 'text-muted')}>
-      <span className="h-3 w-full rounded-control bg-current opacity-30" />
-      <span className="h-5 w-full rounded-control bg-current opacity-50" />
-      <span className="h-4 w-full rounded-control bg-current opacity-40" />
-      <span className="h-7 w-full rounded-control bg-current opacity-70" />
-      <span className="h-6 w-full rounded-control bg-current opacity-60" />
-    </div>
-  );
 }
 
 function PlusIcon() {
