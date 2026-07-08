@@ -62,7 +62,8 @@ export interface AccessGrant { access_id: string; subject_type: 'user'|'group'; 
 export interface Notice { id: string; kind: 'approval'|'incident'|'dlq'|'cluster'; tone: Tone; title: string; at: string; link: string; read: boolean }
 export interface IncidentDetail { incident_id: string; correlation_id: string; cluster_id: string; status: string; current_subject: string; summary: string;
   root_cause: string | null; confidence: number | null; supporting_evidence: string[]; missing_evidence: string[];
-  action_route: string | null; command_id: string | null; pr_url: string | null; error_reason: string | null; updated_at: string }
+  action_route: string | null; command_id: string | null; pr_url: string | null; error_reason: string | null; updated_at: string;
+  namespace: string | null; resource_kind: string | null; resource_name: string | null; symptom: string | null }
 // GET /evidence — raw payload 제외 안전 요약 (EvidenceQueryResponse.items[])
 export interface EvidenceSourceSummary { source: string; summary: string;
   schema_version?: number | null; collector?: string | null; collector_version?: string | null;

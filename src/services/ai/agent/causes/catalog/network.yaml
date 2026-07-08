@@ -41,12 +41,12 @@ rules:
               - event_pattern: "timeout"
   - id: "ingress_5xx"
     symptoms: ["Ingress 502/503", "Ingress 502", "Ingress 503"]
-    required_sources: ["kubernetes", "metrics", "logs", "metadata"]
+    required_sources: ["kubernetes", "metrics", "logs"]
     candidates:
       - candidate_id: "upstream_unavailable"
         title: "Ingress upstream 불가"
         description: "Ingress가 연결할 Service endpoint가 없거나 upstream 연결 실패로 502/503이 발생했을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metrics", "logs", "metadata"]
+        expected_evidence: ["kubernetes", "metrics", "logs"]
         checks:
           - "Ingress.status, Service.spec.selector, EndpointSlice.endpoints 확인"
           - "ingress 502/503 metric 또는 upstream connect failure 증가 확인"

@@ -422,3 +422,17 @@
   구 응답(필드 없음)에도 안전(optional + fallback 렌더).
 - 메트릭: 실측 계열 프리셋 6종(%, count 단위 자동 포맷), range 5m~6h, agent 실측 결과만 표시.
 - 카탈로그 문서: `docs/frontend-metrics-queries.md`(색인 등재, test_docs_index 그린).
+
+## K. 인시던트 복구/AI/드릴다운 연결 패스 (2026-07-08)
+
+- 인시던트 상세는 raw key 중심 표시를 줄이고 `상황 요약` 카드에서 대상, 증상, 근본 원인, 신뢰도,
+  다음 조치를 한국어 운영 용어로 보여준다. correlation/command id는 복사 보조 정보로만 유지한다.
+- `GET /rca/recovery-plans/by-correlation/{id}` 후보를 같은 화면에서 선택할 수 있다.
+  선택은 기존 `POST /rca/recovery-plans/{plan_id}/actions/{action_id}/select`만 사용하며,
+  성공/실패 토스트와 recovery/timeline/incident 재조회로 상태를 갱신한다.
+- `AI 분석`은 기존 `/ai/conversations`로 새 대화를 만들고 incident/correlation/resource context를 전달한다.
+  AI 화면은 같은 context를 표시하고, 기존 action card는 recovery action select API를 그대로 사용한다.
+- 클러스터 드릴다운은 열린 인시던트가 Pod가 아니라 Deployment/ReplicaSet/Service로 잡혀도 owner/prefix/label 관계로
+  관련 Pod 타일을 critical+pulse로 표시한다. 새 API 없이 기존 timeline projection과 pod summary를 연결한다.
+- RCA 6개 데모 시나리오(crashloop, oom, imagepull, probe-fail, sched-fail, svc-selector)는 모두
+  RCA completed + recovery planned 경로를 focused test로 고정했다.

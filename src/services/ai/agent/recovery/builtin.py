@@ -127,6 +127,160 @@ class ConfigRecoveryActions:
     pass
 
 
+@rca.recovery(
+    root_causes=("wrong_image_tag",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="image_tag_fix",
+            title="이미지 태그 보정 PR",
+            description="존재하지 않는 이미지 태그를 이전 정상 태그 또는 검증된 digest로 보정하는 PR을 제안합니다.",
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.7,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("정상 이미지 태그 또는 digest 확인",),
+            validation_checks=(
+                "새 pod image pull 성공",
+                "Ready 상태 회복",
+                "ImagePullBackOff 이벤트 소멸",
+            ),
+            rollback_plan="이미지 태그 보정 commit revert",
+            params={"patch": "image_tag"},
+        ),
+    ),
+)
+class ImageTagRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("missing_image_pull_secret",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="image_pull_secret_fix",
+            title="이미지 pull Secret 보정",
+            description="대상 namespace의 imagePullSecret 참조와 registry 인증 정보를 보정합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.66,
+            blast_radius="target_namespace",
+            approval_required=True,
+            prerequisites=("registry 접근 권한 확인", "Secret 이름과 namespace 확인"),
+            validation_checks=("image pull 성공", "Pod Ready 전환", "인증 실패 이벤트 소멸"),
+            rollback_plan="변경한 Secret 참조 또는 Secret 값을 이전 상태로 되돌립니다.",
+            params={"manual": True, "fix": "image_pull_secret"},
+        ),
+    ),
+)
+class ImagePullSecretRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("registry_unavailable",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="registry_recovery",
+            title="Registry 경로 복구",
+            description="registry/LB 상태를 확인하고 pull 재시도 또는 mirror 전환을 승인형 조치로 진행합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_namespace",
+            approval_required=True,
+            prerequisites=("registry 상태 확인", "mirror 또는 캐시 registry 사용 가능 여부 확인"),
+            validation_checks=("registry 응답 정상", "image pull 재시도 성공", "Pending Pod 감소"),
+            rollback_plan="mirror 전환 시 원 registry 참조로 되돌립니다.",
+            params={"manual": True, "fix": "registry_path"},
+        ),
+    ),
+)
+class RegistryRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("insufficient_cpu", "insufficient_memory"),
+    actions=(
+        RecoveryActionSpec(
+            action_type="resource_request_tuning",
+            title="리소스 요청값 조정 PR",
+            description="스케줄 가능한 범위로 CPU/메모리 request를 조정하거나 replica 배치를 나누는 PR을 제안합니다.",
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.64,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("현재 request/limit과 노드 allocatable 확인",),
+            validation_checks=(
+                "Pod Scheduled 전환",
+                "Ready 상태 회복",
+                "FailedScheduling 이벤트 소멸",
+            ),
+            rollback_plan="리소스 request 조정 commit revert",
+            params={"patch": "resource_requests"},
+        ),
+    ),
+)
+class SchedulingCapacityRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("node_affinity_or_taint_mismatch",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="scheduling_constraint_fix",
+            title="스케줄링 조건 보정 PR",
+            description="nodeSelector, affinity, toleration 조건을 현재 노드 라벨과 정책에 맞게 보정합니다.",
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.68,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("허용 노드 라벨과 taint/toleration 정책 확인",),
+            validation_checks=(
+                "Pod Scheduled 전환",
+                "Ready 상태 회복",
+                "affinity/taint 이벤트 소멸",
+            ),
+            rollback_plan="스케줄링 조건 보정 commit revert",
+            params={"patch": "scheduling_constraints"},
+        ),
+    ),
+)
+class SchedulingConstraintRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("pvc_pending",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="pvc_binding_fix",
+            title="PVC 바인딩 복구",
+            description="PVC, StorageClass, zone binding 상태를 확인하고 바인딩 가능한 설정으로 보정합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_namespace",
+            approval_required=True,
+            prerequisites=("PVC와 StorageClass 상태 확인", "데이터 보존 정책 확인"),
+            validation_checks=(
+                "PVC Bound 전환",
+                "Pod Scheduled 전환",
+                "volume binding 이벤트 소멸",
+            ),
+            rollback_plan="StorageClass/PVC 설정 변경을 이전 값으로 되돌립니다.",
+            params={"manual": True, "fix": "pvc_binding"},
+        ),
+    ),
+)
+class PvcBindingRecoveryActions:
+    pass
+
+
 @rca.fallback(
     actions=(
         RecoveryActionSpec(

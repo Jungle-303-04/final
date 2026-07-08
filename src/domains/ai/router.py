@@ -35,6 +35,10 @@ CONTEXT_STRING_FIELDS = (
     "namespace",
     "name",
     "uid",
+    "incident_id",
+    "correlation_id",
+    "symptom",
+    "root_cause",
     "locale",
 )
 MAX_CONTEXT_VALUE_LENGTH = 253

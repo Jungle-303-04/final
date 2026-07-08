@@ -33,6 +33,10 @@ class ToolContext:
     namespace: str | None = None
     name: str | None = None
     uid: str | None = None
+    incident_id: str | None = None
+    correlation_id: str | None = None
+    symptom: str | None = None
+    root_cause: str | None = None
     resource_context: dict[str, Any] | None = None
     locale: str | None = None
 

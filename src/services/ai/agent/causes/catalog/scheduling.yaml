@@ -3,7 +3,7 @@
 rules:
   - id: "failed_scheduling"
     symptoms: ["FailedScheduling", "Pending"]
-    required_sources: ["kubernetes", "metrics", "metadata"]
+    required_sources: ["kubernetes"]
     candidates:
       - candidate_id: "insufficient_cpu"
         title: "노드 CPU 부족"
@@ -32,7 +32,7 @@ rules:
       - candidate_id: "node_affinity_or_taint_mismatch"
         title: "노드 affinity 또는 taint/toleration 불일치"
         description: "nodeSelector, affinity, taint/toleration 조건이 맞지 않아 스케줄링이 실패했을 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metadata"]
+        expected_evidence: ["kubernetes"]
         checks:
           - "events.reason/message에 node affinity 또는 taint 관련 실패가 있는지 확인"
           - "Pod.spec.nodeSelector/affinity와 Node.labels 비교"
@@ -46,7 +46,7 @@ rules:
       - candidate_id: "pvc_pending"
         title: "PVC 바인딩 대기"
         description: "PVC가 바인딩되지 않아 Pod가 Pending 상태에 머무를 가능성이 있습니다."
-        expected_evidence: ["kubernetes", "metadata"]
+        expected_evidence: ["kubernetes"]
         checks:
           - "events.reason/message에 unbound immediate PersistentVolumeClaims 확인"
           - "PersistentVolumeClaim.status.phase가 Pending인지 확인"

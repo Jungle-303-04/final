@@ -652,13 +652,72 @@ def latest_open_incident_lookup(
     }
     lookup = getattr(db, "latest_open_incidents_by_resource", None)
     if not callable(lookup):
-        return {}
-    return lookup(
+        exact: dict[tuple[str, str], str] = {}
+    else:
+        exact = lookup(
+            workspace_id,
+            cluster_id,
+            resource_kind="Pod",
+            resources=resources,
+        )
+    open_incidents = getattr(db, "list_open_cluster_incidents", None)
+    if not callable(open_incidents):
+        return exact
+    incidents = open_incidents(
         workspace_id,
         cluster_id,
-        resource_kind="Pod",
-        resources=resources,
+        limit=OPEN_INCIDENT_LIMIT,
     )
+    mapped = dict(exact)
+    for incident in incidents:
+        correlation_id = str(incident.get("correlation_id") or incident.get("incident_id") or "")
+        if not correlation_id:
+            continue
+        for pod in pods:
+            namespace = str(pod.get("namespace") or _summary(pod).get("namespace") or "default")
+            name = str(pod.get("name") or "")
+            if not name:
+                continue
+            key = (namespace, name)
+            if key in mapped:
+                continue
+            if incident_matches_pod(incident, pod):
+                mapped[key] = correlation_id
+    return mapped
+
+
+def incident_matches_pod(incident: JsonObject, pod: JsonObject) -> bool:
+    summary = _summary(pod)
+    namespace = str(pod.get("namespace") or summary.get("namespace") or "default")
+    incident_namespace = str(incident.get("namespace") or "")
+    if incident_namespace and incident_namespace != namespace:
+        return False
+
+    resource_name = str(incident.get("resource_name") or "")
+    if not resource_name:
+        return False
+    resource_kind = str(incident.get("resource_kind") or "").casefold()
+    pod_name = str(pod.get("name") or "")
+    owner_kind = str(summary.get("owner_kind") or pod.get("owner_kind") or "").casefold()
+    owner_name = str(summary.get("owner_name") or pod.get("owner_name") or "")
+    labels = pod.get("labels") if isinstance(pod.get("labels"), dict) else {}
+    label_values = {str(value) for value in labels.values() if value not in (None, "")}
+
+    if resource_kind == "pod":
+        return pod_name == resource_name
+    if resource_kind == owner_kind and owner_name == resource_name:
+        return True
+    if resource_kind == "replicaset":
+        return owner_name == resource_name or pod_name.startswith(f"{resource_name}-")
+    if resource_kind == "deployment":
+        return (
+            owner_name.startswith(f"{resource_name}-")
+            or pod_name.startswith(f"{resource_name}-")
+            or resource_name in label_values
+        )
+    if resource_kind == "service":
+        return resource_name in label_values or pod_name.startswith(f"{resource_name}-")
+    return owner_name == resource_name or pod_name.startswith(f"{resource_name}-")
 
 
 def _pod_counts(rollup: JsonObject, latest_usage: JsonObject) -> tuple[int, int]:

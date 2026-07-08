@@ -53,7 +53,17 @@ def request_cluster_id(evt: AiMessageReceivedBody) -> str | None:
 
 def request_resource_context(evt: AiMessageReceivedBody) -> dict[str, str]:
     context = evt.context or {}
-    keys = ("resource_type", "kind", "namespace", "name", "uid")
+    keys = (
+        "resource_type",
+        "kind",
+        "namespace",
+        "name",
+        "uid",
+        "incident_id",
+        "correlation_id",
+        "symptom",
+        "root_cause",
+    )
     return {
         key: str(context[key]).strip()
         for key in keys
@@ -86,6 +96,10 @@ async def on_ai_message_received(
                     namespace=resource_context.get("namespace"),
                     name=resource_context.get("name"),
                     uid=resource_context.get("uid"),
+                    incident_id=resource_context.get("incident_id"),
+                    correlation_id=resource_context.get("correlation_id"),
+                    symptom=resource_context.get("symptom"),
+                    root_cause=resource_context.get("root_cause"),
                     resource_context=resource_context,
                     locale=locale,
                 ),
