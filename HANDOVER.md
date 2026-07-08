@@ -28,6 +28,7 @@
   - `frontend/src/shared/lib/live.ts`가 realtime-gateway의 초기 `snapshot.state.clusters`를 history에 반영하도록 수정했다. 메트릭 그래프는 WebSocket 접속 직후 최신 live summary로 초기화된다.
   - 라이브 API 샘플: `/fleet/summary`가 `management-cluster`, `1`, `2`, `cluster-1`, `cluster-2` 5개를 반환하며, `1`은 `never_connected`, `2`는 `install_expired`, `cluster-1/2`는 online이지만 CPU/MEM usage 키는 아직 없다. 화면의 `미확인`/`1`/`2`는 프론트 더미가 아니라 서버 원본 데이터다.
   - `bash scripts/frontend-check.sh` 통과(unit tests 14건 + production build).
+  - 푸시 후 GitHub Actions 확인: `959820f9`의 CI `28911051896`, AWS CD `28911051890`, Promote `28911051958` 모두 4~6초 내 `steps: []`로 실패했다. 로컬 검증은 green이나 live 배포 반영은 미확인이다.
 
 ## 체크포인트 — 목록 필터 초기화 CTA
 
