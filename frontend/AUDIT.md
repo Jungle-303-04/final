@@ -228,6 +228,8 @@
 - 클러스터 상세 URL은 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 노드/팟 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
 - 팟 Drawer는 search param에서 파생한다. 팟 목록 로딩 중에는 Skeleton, 조회 실패는 재시도, stale URL은 "팟 상세 없음" EmptyState로 처리한다.
 - 검증(2026-07-08 07:19 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 1440/1024/390 폭에서 `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 복원 확인, overflow 0. 클릭 왕복은 `/clusters/cluster-1` → `?node=node-a` → `?node=node-a&pod=prod%2Fcheckout-api-7f9f8` → 뒤로가기 2회까지 확인.
+- 보강(2026-07-08 09:01 KST): `DrilldownHeatmap`은 선택 노드 `layoutId`를 zoom shell로 재사용해 노드 타일이 부모 영역으로 확장된 뒤 팟 타일이 같은 그리드 안에 나타난다. `useReducedMotion()`이 true면 layout/stagger를 끄고 `@/ui/motion`의 `transitions.reduced`만 사용한다. 인시던트 팟은 `ring-danger` pulse border로 표시한다.
+- 보강 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/clusters/cluster-1` 클릭 왕복에서 `?node`/`?pod` URL, Drawer, "인시던트 보기", pulse border, 뒤로가기 2회, reduced-motion 환경, overflow 0, console error 0을 확인했다. `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 직접 진입은 1440/1024/390 폭에서 Drawer/CTA/breadcrumb 복원과 overflow 0을 확인했다.
 
 ## AI 채팅 디자인 시스템 이관 (2026-07-08)
 

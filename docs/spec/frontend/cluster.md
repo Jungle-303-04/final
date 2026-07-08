@@ -72,7 +72,7 @@ status: synced
   ├─ 헤더: h1(이름 + Badge(environment) + Badge(connection_status), flex wrap) · ContextActions(cluster) · admin target only "등록 해제"
   ├─ role=management 안내 Card: "관리 클러스터는 콘솔에서 제어할 수 없습니다"
   ├─ StatBox ×4: 노드 / 실행 팟(pod_phases['Running'], ok) / 비정상 팟(CrashLoopBackOff+Pending, Crash>0 이면 danger) / 서비스 (flex wrap)
-  ├─ ClusterDrilldownPanel: 공용 DrilldownHeatmap으로 노드→팟 줌인. L2는 GET /clusters/{id}/nodes/summary, L3는 GET /clusters/{id}/nodes/{node}/pods/summary. 각 엔드포인트 404 시 기존 inventory API fallback. 선택 노드와 선택 팟 Drawer는 search param에서 복원.
+  ├─ ClusterDrilldownPanel: 공용 DrilldownHeatmap으로 노드→팟 줌인. L2는 GET /clusters/{id}/nodes/summary, L3는 GET /clusters/{id}/nodes/{node}/pods/summary. 각 엔드포인트 404 시 기존 inventory API fallback. 선택 노드는 같은 layoutId의 zoom shell로 확장되고, prefers-reduced-motion에서는 layout/stagger 전환을 끈다. 선택 노드와 선택 팟 Drawer는 search param에서 복원.
   ├─ ClusterAggPanel: GET /clusters/{id}/summary 보조 패널(사용량 + 열린 인시던트, 실패해도 본문 차단 안 함)
   ├─ "이 클러스터에 배포된 레포": useApplications + useDeploymentsAll 결과에서 cluster_id 매칭
   ├─ ContextEvents('클러스터 이벤트', 최근 3개)

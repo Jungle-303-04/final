@@ -422,6 +422,7 @@ function ClusterDrilldownPanel({
   const node = nodesQ.data?.find((item) => item.id === selectedNode || item.name === selectedNode);
   const selectedPod = selectedPodId ? (podsQ.data ?? []).find((pod) => pod.id === selectedPodId) ?? null : null;
   const tiles = selectedNode ? podTiles(podsQ.data ?? []) : nodeTiles(nodesQ.data ?? []);
+  const zoomNodeTile = node ? nodeTiles([node])[0] : null;
   const loading = selectedNode ? podsQ.isPending : nodesQ.isPending;
   const error = selectedNode ? podsQ.error : nodesQ.error;
   return (
@@ -436,6 +437,13 @@ function ClusterDrilldownPanel({
           error={(selectedNode ? podsQ.isError : nodesQ.isError) ? error as Error : null}
           onRetry={() => selectedNode ? void podsQ.refetch() : void nodesQ.refetch()}
           empty={<EmptyState icon={<BoxIcon />} title={selectedNode ? '이 노드에 팟 없음' : '노드 없음'} description={selectedNode ? '선택한 노드에 표시할 팟이 없습니다' : '표시할 노드 요약이 없습니다'} />}
+          zoomContext={zoomNodeTile ? {
+            id: zoomNodeTile.id,
+            label: zoomNodeTile.label,
+            health: zoomNodeTile.health,
+            meta: zoomNodeTile.meta,
+            badge: zoomNodeTile.badge,
+          } : null}
           breadcrumb={[
             { id: 'fleet', label: 'fleet', onClick: () => nav(pathFor('/')) },
             { id: clusterId, label: clusterName, onClick: selectedNode ? () => onSelectNode('') : undefined },
