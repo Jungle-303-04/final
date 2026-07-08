@@ -2391,3 +2391,21 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
     - service `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:779b4f01-incident-recovery-ai-20260708120544`
     - console `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:779b4f01-incident-recovery-ai-20260708120544`
   - live `https://k8s.woonyong.org/`와 `/api/healthz`는 200 OK이나, AWS SSO 세션 만료로 `kubectl --context mgmt` rollout은 아직 미적용. `aws login` 완료 후 `management` namespace의 service deployments와 `console` deployment를 위 이미지로 `set image`하면 된다.
+
+## 드릴다운 에이전트 팟 제외 패스 (2026-07-08)
+
+- 사용자 피드백: 관리 클러스터 팟처럼 target cluster의 에이전트/운영 팟도 드릴다운에서 보이면 안 된다.
+- 적용:
+  - `src/domains/dashboard/fleet_router.py`에서 node/pod summary 생성 시 `target`, `management`, `kube-system`, `monitoring` 등 운영 namespace와 `cluster-agent`, `node-collector`, telemetry stack 이름 마커를 제외한다.
+  - `frontend/src/features/cluster/api.ts`에서도 동일 기준으로 inventory/fallback pod 목록을 필터링해 구버전 응답이나 fallback에서도 에이전트 팟이 새지 않게 했다.
+  - `default`/`sandbox` 워크로드는 관찰 대상이므로 유지한다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_fleet_router.py::test_node_pods_summary_hides_agent_and_management_pods tests/test_fleet_router.py::test_node_pods_summary_filters_node_and_links_incident -q` → 2 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py tests/test_dashboard_projection.py tests/test_fleet_router.py tests/test_ai_platform_tools.py tests/test_ai_conversation.py tests/test_rca_rule_catalog.py -q` → 105 passed.
+  - `bash scripts/frontend-check.sh` → passed.
+- 배포 준비:
+  - `dev` push commit `0aa81ea5 fix: 드릴다운에서 에이전트 팟 제외`.
+  - ECR push 완료:
+    - service `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:0aa81ea5-drilldown-agent-filter-20260708125500`
+    - console `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:0aa81ea5-drilldown-agent-filter-20260708125500`
+  - live rollout은 AWS authorization code 또는 임시 AWS token env(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) 대기 상태다.
