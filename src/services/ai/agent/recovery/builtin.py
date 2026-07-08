@@ -59,7 +59,10 @@ class OomKilledRecoveryActions:
             score=0.56,
             blast_radius="target_workload",
             approval_required=True,
-            prerequisites=("대상 워크로드와 연결된 GitOps 레포가 있음", "변경 대상 manifest를 운영자가 확인함"),
+            prerequisites=(
+                "대상 워크로드와 연결된 GitOps 레포가 있음",
+                "변경 대상 manifest를 운영자가 확인함",
+            ),
             validation_checks=(
                 "RCA 근거와 대상 manifest 일치",
                 "변경 전후 Ready replica 회복 기준 확인",
