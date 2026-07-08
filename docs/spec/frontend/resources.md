@@ -31,7 +31,7 @@ status: synced
 - 트리: `PageHeader('카탈로그')` → loading이면 6개 Skeleton 카드 그리드 → 오류면 `Card > EmptyState('카탈로그 조회 실패', 다시 시도)` → 항목 0개면 `Card > EmptyState('설치 항목 없음', 새로고침)` → 항목이 있으면 `motion.div(listStagger)` 카드 그리드(`md:grid-cols-2`, `xl:grid-cols-3`)로 렌더한다.
 - 항목 카드: `@/ui Card(title=name, description, actions=설치 요청 primary sm)` → category Badge(데이터베이스/애플리케이션/캐시), default version Badge, status Badge(비활성일 때), 식별자, 설치 이름, metadata tags 최대 4개.
 - 설치 버튼은 클릭한 카드만 `loading={install.isPending && install.variables?.item_id === item_id}` 로 표시하고, 다른 카드 버튼은 같은 mutation 이 pending 인 동안 disabled 처리한다. 성공/실패는 `@/ui` toast로 한국어 사유를 표시한다.
-- `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, legacy `uiStore`, inline style 의존은 없다.
+- `@/shared/ui`, `@/shared/motion`, 구 레거시 UI 패키지, legacy `uiStore`, inline style 의존은 없다.
 
 ### `frontend/src/features/resources/RegisterClusterWizard.tsx :: RegisterClusterWizard`
 

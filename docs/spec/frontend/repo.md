@@ -92,7 +92,7 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
   └─ [설정] Card + KeyValueList: application_id/레포/브랜치/manifest/기본 클러스터
   ```
 
-- `RepoDetailView`는 `@/ui` 프리미티브와 `@/ui/motion` preset만 사용한다. `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline style 의존은 없다.
+- `RepoDetailView`는 `@/ui` 프리미티브와 `@/ui/motion` preset만 사용한다. `@/shared/ui`, `@/shared/motion`, 구 레거시 UI 패키지, inline style 의존은 없다.
 
 ## 라우트
 
