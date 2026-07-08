@@ -281,6 +281,14 @@ export function adaptIncident(raw: Record<string, unknown>): Incident {
   };
 }
 
+export function isIncidentTimelineItem(raw: Record<string, unknown>): boolean {
+  if (raw.incident_id) return true;
+  if (raw.root_cause || raw.action_route || raw.command_id || raw.pr_url || raw.error_reason) return true;
+  const subject = String(raw.current_subject ?? raw.status ?? '').toLowerCase();
+  if (subject.startsWith('evidence.')) return false;
+  return /incident|rca|recovery|command|safe_pr/.test(subject);
+}
+
 export function adaptIncidentDetail(raw: Record<string, unknown>): IncidentDetail {
   // RCA incident 상세(RcaTimelineItem) → 파이프라인 그래프 표현. 필드 누락은 안전 기본값으로 방어.
   const str = (v: unknown) => (v == null || v === '' ? null : String(v));

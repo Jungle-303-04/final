@@ -218,26 +218,34 @@ export default function ClusterDetailView() {
         <StatCard label="서비스" value={statValue(summaryQ, summaryQ.data?.services)} />
       </section>
 
-      <ClusterDrilldownPanel
-        clusterId={clusterId}
-        clusterName={cluster?.name ?? clusterId}
-        selectedNode={sp.get('node') ?? ''}
-        selectedPodId={sp.get('pod') ?? ''}
-        connected={connected}
-        onSelectNode={(node) => {
-          const next = new URLSearchParams(sp);
-          if (node) next.set('node', node);
-          else next.delete('node');
-          next.delete('pod');
-          setSp(next);
-        }}
-        onSelectPod={(podId) => {
-          const next = new URLSearchParams(sp);
-          if (podId) next.set('pod', podId);
-          else next.delete('pod');
-          setSp(next);
-        }}
-      />
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <ClusterDrilldownPanel
+          clusterId={clusterId}
+          clusterName={cluster?.name ?? clusterId}
+          selectedNode={sp.get('node') ?? ''}
+          selectedPodId={sp.get('pod') ?? ''}
+          connected={connected}
+          onSelectNode={(node) => {
+            const next = new URLSearchParams(sp);
+            if (node) next.set('node', node);
+            else next.delete('node');
+            next.delete('pod');
+            setSp(next);
+          }}
+          onSelectPod={(podId) => {
+            const next = new URLSearchParams(sp);
+            if (podId) next.set('pod', podId);
+            else next.delete('pod');
+            setSp(next);
+          }}
+        />
+        <PodObservationCard
+          query={podsQ}
+          rows={podRows}
+          selectedNode={sp.get('node') ?? ''}
+          onOpen={(row) => nav(pathFor(`/clusters/${clusterId}/pods/${row.namespace}/${row.name}?tab=pods`))}
+        />
+      </div>
       <ClusterAggPanel clusterId={clusterId} />
       <ClusterRepositoriesPanel
         rows={clusterDeployments}
@@ -541,6 +549,57 @@ function ClusterDrilldownPanel({
         )}
       </Drawer>
     </>
+  );
+}
+
+function PodObservationCard({
+  query,
+  rows,
+  selectedNode,
+  onOpen,
+}: {
+  query: ReturnType<typeof usePods>;
+  rows: Workload[];
+  selectedNode: string;
+  onOpen: (row: Workload) => void;
+}) {
+  const sourceRows = selectedNode ? rows.filter((row) => row.node === selectedNode) : rows;
+  const visibleRows = sourceRows.slice(0, 18);
+  const hiddenCount = Math.max(0, sourceRows.length - visibleRows.length);
+  return (
+    <Card
+      title={selectedNode ? `팟 · ${selectedNode}` : `팟 ${rows.length.toLocaleString()}`}
+      loading={query.isPending}
+      error={query.isError ? query.error : null}
+      onRetry={() => void query.refetch()}
+      empty={rows.length === 0 ? <EmptyState icon={<BoxIcon />} title="팟 없음" /> : undefined}
+    >
+      <div className="grid max-h-[32rem] gap-2 overflow-y-auto pr-1">
+        {visibleRows.map((row) => (
+          <button
+            key={`${row.namespace}/${row.name}`}
+            type="button"
+            className="grid min-w-0 gap-2 rounded-panel border border-border bg-bg p-3 text-left transition-colors hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onClick={() => onOpen(row)}
+          >
+            <span className="flex min-w-0 items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-body font-semibold text-primary">{row.name}</span>
+              <StatusBadge status={row.phase} />
+            </span>
+            <span className="flex min-w-0 flex-wrap items-center gap-2 text-caption text-muted">
+              <NamespaceChip namespace={row.namespace} />
+              {row.node && <span className="min-w-0 truncate">{row.node}</span>}
+              <span className="tabular-nums">재시작 {row.restarts.toLocaleString()}</span>
+            </span>
+          </button>
+        ))}
+        {hiddenCount > 0 && (
+          <div className="rounded-panel border border-border bg-raised px-3 py-2 text-center text-caption text-muted">
+            +{hiddenCount.toLocaleString()}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 
