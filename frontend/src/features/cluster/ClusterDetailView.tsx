@@ -4,7 +4,6 @@ import {
   useClusterEvents,
   useClusters,
   useClusterSummary,
-  useClusterUsage,
   useInventoryResourceDetail,
   useNodePodSummaries,
   useNodeSummaries,
@@ -19,8 +18,8 @@ import {
   type NodeHeatmapSummary,
   type PodHeatmapSummary,
   type InventoryResourceIdentity,
-  type UsageSample,
 } from '@/features/cluster/api';
+import { clusterConnectionMeta, isClusterConnected } from '@/features/cluster/status';
 import { useClusterAgg, type ClusterAggIncident } from '@/features/fleet/api';
 import { DrilldownHeatmap, type DrilldownTile } from '@/features/fleet/DrilldownHeatmap';
 import { useApplications, useDeploymentsAll } from '@/features/repo/api';
@@ -28,7 +27,7 @@ import { useIsAdmin } from '@/features/auth/api';
 import { ApiError } from '@/shared/lib/api';
 import { liveStore } from '@/shared/lib/live';
 import { timeAgo } from '@/shared/lib/format';
-import type { Application, ClusterSummary, Deployment, InventoryResource, InventoryResourceDetail, K8sEvent, ServiceInfo, Workload, WorkloadResource } from '@/shared/lib/types';
+import type { Application, Cluster, ClusterSummary, Deployment, InventoryResource, InventoryResourceDetail, K8sEvent, ServiceInfo, Workload, WorkloadResource } from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
 import { encodeChatContext } from '@/features/chat/context';
 import {
@@ -51,7 +50,6 @@ import {
   cx,
   type TableColumn,
 } from '@/ui';
-import { hasSparklinePoints, Sparkline } from '@/ui/charts';
 
 type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 type DetailSubject = 'node' | 'service' | 'workload';
@@ -78,9 +76,10 @@ export default function ClusterDetailView() {
   const detailKind = sp.get('kind') ?? '';
   const clustersQ = useClusters();
   const summaryQ = useClusterSummary(clusterId);
-  const usageQ = useClusterUsage(clusterId);
   const podsQ = usePods(clusterId);
   const cluster = clustersQ.data?.find((item) => item.cluster_id === clusterId);
+  const connection = clusterConnectionMeta(cluster?.connection_status);
+  const connected = isClusterConnected(cluster?.connection_status);
   const managementCluster = cluster?.role === 'management';
   const snapshot = liveStore((state) => state.snapshot);
   const hotPods = useMemo(() => new Set(snapshot?.namespaces.flatMap((item) => item.pods.filter((row) => row.hot).map((row) => row.name)) ?? []), [snapshot]);
@@ -106,10 +105,10 @@ export default function ClusterDetailView() {
     [filter, hotPods, podsQ.data]);
   const openPod = pod ? podRows.find((row) => row.name === pod && row.namespace === namespace) : null;
   const phases = summaryQ.data?.pod_phases ?? {};
-  const usageSamples = usageQ.data ?? [];
-  const nodeSpark = usageMetricPoints(usageSamples, 'node_ready');
-  const runningPodSpark = usageMetricPoints(usageSamples, 'pod_running');
-  const restartSpark = usageRestartDeltaPoints(usageSamples);
+  const phaseTotal = Object.values(phases).reduce((sum, value) => sum + value, 0);
+  const nodeTotal = summaryQ.data?.nodes.length ?? cluster?.node_count;
+  const podTotal = phaseTotal || cluster?.pod_count;
+  const abnormalPods = (phases.CrashLoopBackOff ?? 0) + (phases.Pending ?? 0) + (phases.Failed ?? 0);
   const selectedDetail = useMemo<InventoryResourceIdentity | null>(() => {
     if (openPod) return { resource_type: 'pod', kind: 'Pod', name: openPod.name, namespace: openPod.namespace };
     if (detailSubject === 'node' && detailName) return { resource_type: 'node', kind: 'Node', name: detailName };
@@ -178,10 +177,10 @@ export default function ClusterDetailView() {
     <div className="grid gap-6">
       <PageHeader
         title={cluster?.name ?? clusterId}
-        description="워크로드, 팟, 노드, 서비스, 이벤트를 같은 인벤토리 맥락에서 확인합니다"
         breadcrumb={<Breadcrumb items={[{ label: '클러스터', href: pathFor('/clusters') }, { label: cluster?.name ?? clusterId }]} />}
         actions={(
           <>
+            <Badge tone={connection.tone}>{connection.label}</Badge>
             <ContextActions clusterId={clusterId} subject="cluster" subjectName={clusterId} kind="Cluster" compact />
             {admin && !managementCluster && (
               <Button variant="danger" size="sm" onClick={() => setUnregisterOpen(true)}>등록 해제</Button>
@@ -194,20 +193,27 @@ export default function ClusterDetailView() {
         <Card>
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <Badge tone="info">관리 클러스터</Badge>
-            <p className="text-body text-secondary">관리 클러스터는 콘솔에서 제어할 수 없습니다. 조회 화면만 제공하며 스케일, 재시작, 등록 해제 액션은 숨겨집니다.</p>
+            <p className="text-body text-secondary">조회 전용</p>
           </div>
         </Card>
       )}
 
+      {cluster && (
+        <ClusterRuntimePanel
+          cluster={cluster}
+          nodeTotal={nodeTotal}
+          podTotal={podTotal}
+        />
+      )}
+
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="클러스터 요약">
-        <StatCard label="노드" value={statValue(summaryQ, summaryQ.data?.nodes.length)} spark={sparkFor(nodeSpark, 'info', '준비 노드 추이')} />
-        <StatCard label="실행 팟" value={statValue(summaryQ, phases.Running)} delta="Running" tone="success" spark={sparkFor(runningPodSpark, 'success', '실행 팟 추이')} />
+        <StatCard label="노드" value={statValue(summaryQ, nodeTotal)} />
+        <StatCard label="팟" value={statValue(summaryQ, podTotal)} delta={phases.Running != null ? `${phases.Running} Running` : '인벤토리'} tone="success" />
         <StatCard
           label="비정상 팟"
-          value={statValue(summaryQ, (phases.CrashLoopBackOff ?? 0) + (phases.Pending ?? 0))}
-          delta="CrashLoopBackOff · Pending"
-          tone={(phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral'}
-          spark={sparkFor(restartSpark.length ? restartSpark : [phases.Pending, phases.CrashLoopBackOff], (phases.CrashLoopBackOff ?? 0) > 0 ? 'danger' : 'neutral', '재시작 증가 추이')}
+          value={statValue(summaryQ, abnormalPods)}
+          delta="Pending · Failed"
+          tone={abnormalPods > 0 ? 'danger' : 'neutral'}
         />
         <StatCard label="서비스" value={statValue(summaryQ, summaryQ.data?.services)} />
       </section>
@@ -217,6 +223,7 @@ export default function ClusterDetailView() {
         clusterName={cluster?.name ?? clusterId}
         selectedNode={sp.get('node') ?? ''}
         selectedPodId={sp.get('pod') ?? ''}
+        connected={connected}
         onSelectNode={(node) => {
           const next = new URLSearchParams(sp);
           if (node) next.set('node', node);
@@ -241,7 +248,7 @@ export default function ClusterDetailView() {
       />
       <ContextEvents clusterId={clusterId} title="최근 클러스터 이벤트" match="" compact />
 
-      <Card title="인벤토리 탐색" description="검색어와 탭을 조합해 관련 리소스를 좁혀봅니다">
+      <Card title="인벤토리">
         <div className="mb-4 grid gap-3">
           {filter && (
             <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-panel border border-border bg-raised p-3">
@@ -403,6 +410,30 @@ export function deploymentTargetFromWorkload(workload: WorkloadResource): Deploy
   return { ns: workload.namespace, name: workload.name, podCount: workload.ready || workload.desired };
 }
 
+function ClusterRuntimePanel({ cluster, nodeTotal, podTotal }: { cluster: Cluster; nodeTotal: number | undefined; podTotal: number | undefined }) {
+  const meta = clusterConnectionMeta(cluster.connection_status);
+  const connected = isClusterConnected(cluster.connection_status);
+  return (
+    <Card className={cx(!connected && 'border-warning/50 bg-warning/5')}>
+      <div className="grid gap-3 md:grid-cols-4">
+        <RuntimeCell label="Agent" value={<Badge tone={meta.tone}>{meta.label}</Badge>} />
+        <RuntimeCell label="노드" value={(nodeTotal ?? cluster.node_count).toLocaleString()} />
+        <RuntimeCell label="팟" value={(podTotal ?? cluster.pod_count).toLocaleString()} />
+        <RuntimeCell label="등록" value={timeAgo(cluster.registered_at)} />
+      </div>
+    </Card>
+  );
+}
+
+function RuntimeCell({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-panel border border-border bg-bg p-3">
+      <p className="text-label font-medium text-muted">{label}</p>
+      <div className="mt-1 text-title font-semibold tabular-nums text-primary">{value}</div>
+    </div>
+  );
+}
+
 interface ClusterDeploymentRow {
   appId: string;
   appName: string;
@@ -418,6 +449,7 @@ function ClusterDrilldownPanel({
   clusterName,
   selectedNode,
   selectedPodId,
+  connected,
   onSelectNode,
   onSelectPod,
 }: {
@@ -425,6 +457,7 @@ function ClusterDrilldownPanel({
   clusterName: string;
   selectedNode: string;
   selectedPodId: string;
+  connected: boolean;
   onSelectNode: (node: string) => void;
   onSelectPod: (podId: string) => void;
 }) {
@@ -441,15 +474,14 @@ function ClusterDrilldownPanel({
   return (
     <>
       <Card
-        title="히트맵 드릴다운"
-        description="클러스터에서 노드, 노드에서 팟까지 같은 레이아웃으로 확대합니다"
+        title="토폴로지"
       >
         <DrilldownHeatmap
           tiles={tiles}
           loading={loading}
           error={(selectedNode ? podsQ.isError : nodesQ.isError) ? error as Error : null}
           onRetry={() => selectedNode ? void podsQ.refetch() : void nodesQ.refetch()}
-          empty={<EmptyState icon={<BoxIcon />} title={selectedNode ? '이 노드에 팟 없음' : '노드 없음'} description={selectedNode ? '선택한 노드에 표시할 팟이 없습니다' : '표시할 노드 요약이 없습니다'} />}
+          empty={<EmptyState icon={<BoxIcon />} title={selectedNode ? '팟 없음' : connected ? '노드 없음' : 'Agent 미연결'} />}
           zoomContext={zoomNodeTile ? {
             id: zoomNodeTile.id,
             label: zoomNodeTile.label,
@@ -505,7 +537,7 @@ function ClusterDrilldownPanel({
         ) : podsQ.isError ? (
           <EmptyState title="팟 상세 조회 실패" description={(podsQ.error as Error).message} action={<Button size="sm" onClick={() => void podsQ.refetch()}>다시 시도</Button>} />
         ) : (
-          <EmptyState title="팟 상세 없음" description="선택한 노드에서 해당 팟을 찾을 수 없습니다" action={<Button size="sm" onClick={() => onSelectPod('')}>닫기</Button>} />
+          <EmptyState title="팟 상세 없음" action={<Button size="sm" onClick={() => onSelectPod('')}>닫기</Button>} />
         )}
       </Drawer>
     </>
@@ -543,7 +575,7 @@ function ClusterRepositoriesPanel({
     { id: 'status', header: '상태', sortValue: (row) => row.status, cell: (row) => <StatusBadge status={row.status} /> },
   ], [pathFor]);
   return (
-    <Card title="이 클러스터에 배포된 레포" description="배포 정의 기준으로 레포, 브랜치, manifest 관계를 확인합니다">
+    <Card title="배포된 레포">
       <Table
         columns={columns}
         rows={rows}
@@ -551,7 +583,7 @@ function ClusterRepositoriesPanel({
         loading={loading}
         error={error ? error as Error : null}
         onRetry={onRetry}
-        empty={<EmptyState icon={<RepoIcon />} title="배포된 레포 없음" description="이 클러스터를 대상으로 하는 배포 정의가 없습니다" />}
+        empty={<EmptyState icon={<RepoIcon />} title="배포된 레포 없음" />}
       />
     </Card>
   );
@@ -692,7 +724,7 @@ function WorkloadsTab({ clusterId, admin, readOnly, filter, onResetFilter, onIns
       rowKey={(row) => `${row.namespace}/${row.kind}/${row.name}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<FilteredEmptyState icon={<BoxIcon />} title="워크로드 없음" description="표시할 워크로드가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
+      empty={<FilteredEmptyState icon={<BoxIcon />} title="워크로드 없음" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
       onRowClick={onInspect}
     />
@@ -734,7 +766,7 @@ function PodsTab({ query, rows, selectedKeys, clusterId, filter, onResetFilter, 
       rowKey={(row) => `${clusterId}/${row.namespace}/${row.name}`}
       loading={query.isPending}
       error={query.isError ? query.error : null}
-      empty={<FilteredEmptyState icon={<BoxIcon />} title="팟 없음" description="표시할 팟이 없습니다" filter={filter} onResetFilter={onResetFilter} />}
+      empty={<FilteredEmptyState icon={<BoxIcon />} title="팟 없음" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void query.refetch()}
       onRowClick={onOpen}
     />
@@ -777,7 +809,7 @@ function NodesTab({ query, filter, nodeNamespaces, selectedNodeNames, onResetFil
       rowKey={(node) => node.name}
       loading={query.isPending}
       error={query.isError ? query.error : null}
-      empty={<FilteredEmptyState icon={<ServerIcon />} title="노드 없음" description="표시할 노드가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
+      empty={<FilteredEmptyState icon={<ServerIcon />} title="노드 없음" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void query.refetch()}
       onRowClick={onInspect}
     />
@@ -802,7 +834,7 @@ function ServicesTab({ clusterId, filter, onResetFilter, onInspect }: { clusterI
       rowKey={(row) => `${row.namespace}/${row.name}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<FilteredEmptyState icon={<RouteIcon />} title="서비스 없음" description="표시할 서비스가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
+      empty={<FilteredEmptyState icon={<RouteIcon />} title="서비스 없음" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
       onRowClick={onInspect}
     />
@@ -826,7 +858,7 @@ function ResourcesTab({ clusterId, filter, onResetFilter }: { clusterId: string;
       rowKey={(row) => `${row.kind}/${row.namespace ?? 'cluster'}/${row.name}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<FilteredEmptyState icon={<BoxIcon />} title="리소스 없음" description="표시할 리소스가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
+      empty={<FilteredEmptyState icon={<BoxIcon />} title="리소스 없음" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
     />
   );
@@ -849,16 +881,15 @@ function EventsTab({ clusterId, filter, onResetFilter }: { clusterId: string; fi
       rowKey={(row, index) => `${row.at}/${row.reason}/${index}`}
       loading={q.isPending}
       error={q.isError ? q.error : null}
-      empty={<FilteredEmptyState icon={<FileIcon />} title="이벤트 없음" description="표시할 이벤트가 없습니다" filter={filter} onResetFilter={onResetFilter} />}
+      empty={<FilteredEmptyState icon={<FileIcon />} title="이벤트 없음" filter={filter} onResetFilter={onResetFilter} />}
       onRetry={() => void q.refetch()}
     />
   );
 }
 
-function FilteredEmptyState({ icon, title, description, filter, onResetFilter }: {
+function FilteredEmptyState({ icon, title, filter, onResetFilter }: {
   icon: ReactNode;
   title: string;
-  description: string;
   filter: string;
   onResetFilter: () => void;
 }) {
@@ -867,7 +898,7 @@ function FilteredEmptyState({ icon, title, description, filter, onResetFilter }:
     <EmptyState
       icon={icon}
       title={title}
-      description={hasFilter ? `현재 필터 '${filter.trim()}'와 일치하는 항목이 없습니다` : description}
+      description={hasFilter ? `필터: ${filter.trim()}` : undefined}
       action={hasFilter ? <Button size="sm" onClick={onResetFilter}>필터 초기화</Button> : undefined}
     />
   );
@@ -905,7 +936,7 @@ function ResourceDetailDrawer({ clusterId, identity, open, onClose, admin, readO
           onRestart={onRestart}
         />
       ) : (
-        <EmptyState title="상세 없음" description="표시할 리소스 상세가 없습니다" />
+        <EmptyState title="상세 없음" />
       )}
     </Drawer>
   );
@@ -1077,7 +1108,7 @@ function deploymentTargetFromDetail(detail: InventoryResourceDetail): Deployment
 
 function DetailEvents({ title, rows }: { title: string; rows: K8sEvent[] }) {
   if (!rows.length) return (
-    <Card title={title} empty={<EmptyState icon={<FileIcon />} title="이벤트 없음" description="이 리소스에 연결된 이벤트가 없습니다" />}>
+    <Card title={title} empty={<EmptyState icon={<FileIcon />} title="이벤트 없음" />}>
       <span />
     </Card>
   );
@@ -1098,7 +1129,7 @@ function ServiceSelectorRelation({ detail }: { detail: InventoryResourceDetail }
   const nodes = [...new Set(detail.related_pods.map((row) => row.node).filter((node): node is string => Boolean(node)))].sort();
   const hasSelector = Object.keys(selector).length > 0;
   return (
-    <Card title="selector 매칭" description={hasSelector ? undefined : '서비스 selector가 없습니다'}>
+    <Card title="selector 매칭">
       <div className="grid gap-4">
         {hasSelector && <LabelChips labels={selector} />}
         {!hasSelector && <EmptyState icon={<FileIcon />} title="selector 없음" />}
@@ -1192,7 +1223,7 @@ function ContextEvents({ clusterId, title, match, compact = false }: { clusterId
       loading={q.isPending}
       error={q.isError ? q.error : null}
       onRetry={() => void q.refetch()}
-      empty={rows.length === 0 ? <EmptyState icon={<FileIcon />} title="최근 이벤트 없음" description="표시할 클러스터 이벤트가 없습니다" /> : undefined}
+      empty={rows.length === 0 ? <EmptyState icon={<FileIcon />} title="최근 이벤트 없음" /> : undefined}
     >
       <Table columns={columns} rows={rows} rowKey={(row, index) => `${row.at}/${row.reason}/${index}`} />
     </Card>
@@ -1244,7 +1275,6 @@ function ClusterAggPanel({ clusterId }: { clusterId: string }) {
   return (
     <Card
       title="집계 요약"
-      description="사용량과 열린 인시던트를 한 번에 확인합니다"
       loading={aggQ.isPending}
       error={aggQ.isError ? aggQ.error : null}
       onRetry={() => void aggQ.refetch()}
@@ -1257,7 +1287,7 @@ function ClusterAggPanel({ clusterId }: { clusterId: string }) {
           <MetricPill label="열린 인시던트" value={incidents.length} tone={incidents.length ? 'danger' : 'success'} />
         </div>
         {incidents.length === 0 ? (
-          <EmptyState icon={<ShieldIcon />} title="열린 인시던트 없음" description="이 클러스터에 연결된 열린 인시던트가 없습니다" />
+          <EmptyState icon={<ShieldIcon />} title="열린 인시던트 없음" />
         ) : (
           <IncidentList incidents={incidents} pathFor={pathFor} />
         )}
@@ -1296,27 +1326,10 @@ function MetricPill({ label, value, tone = 'neutral' }: { label: string; value: 
 }
 
 function statValue(query: { isPending: boolean; isError: boolean }, value: number | undefined) {
+  if (value !== undefined) return value.toLocaleString();
   if (query.isPending) return '확인 중';
   if (query.isError) return '오류';
-  return (value ?? 0).toLocaleString();
-}
-
-type UsageMetricKey = 'pod_running' | 'node_ready' | 'restart_total';
-
-function usageMetricPoints(samples: UsageSample[], key: UsageMetricKey): number[] {
-  return samples.map((sample) => Number(sample.usage[key] ?? 0)).filter(Number.isFinite);
-}
-
-function usageRestartDeltaPoints(samples: UsageSample[]): number[] {
-  return samples.map((sample, index) => {
-    const current = Number(sample.usage.restart_total ?? 0);
-    const previous = index > 0 ? Number(samples[index - 1].usage.restart_total ?? 0) : current;
-    return Math.max(0, current - previous);
-  }).filter(Number.isFinite);
-}
-
-function sparkFor(points: Array<number | null | undefined>, tone: BadgeTone, label: string): ReactNode | undefined {
-  return hasSparklinePoints(points) ? <Sparkline points={points} tone={tone} ariaLabel={label} /> : undefined;
+  return '0';
 }
 
 function StatusBadge({ status, label }: { status: string; label?: string }) {

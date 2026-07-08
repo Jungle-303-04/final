@@ -1,39 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClusters } from '@/features/cluster/api';
+import { clusterConnectionMeta, connectedStatuses } from '@/features/cluster/status';
 import { useIsAdmin } from '@/features/auth/api';
 import { RegisterClusterWizard } from '@/features/resources/RegisterClusterWizard';
 import { Badge, Button, Card, EmptyState, Input, PageHeader, StatCard, Table, cx, type TableColumn } from '@/ui';
-import { Sparkline } from '@/ui/charts';
 import { timeAgo } from '@/shared/lib/format';
 import type { Cluster } from '@/shared/lib/types';
 import { useConsolePath } from '@/features/console/ui';
-
-type ConnectionMeta = {
-  label: string;
-  tone: 'neutral' | 'success' | 'warning' | 'danger';
-};
-
-const connectedStatuses = new Set<Cluster['connection_status']>(['connected', 'online']);
-
-const connectionMeta: Record<Cluster['connection_status'], ConnectionMeta> = {
-  connected: { label: '연결', tone: 'success' },
-  online: { label: '연결', tone: 'success' },
-  stale: { label: '지연', tone: 'warning' },
-  never_connected: { label: '미연결', tone: 'warning' },
-  disconnected: { label: '끊김', tone: 'danger' },
-  unknown: { label: '미확인', tone: 'neutral' },
-};
-
-function clusterConnectionMeta(status: string | null | undefined): ConnectionMeta {
-  if (!status) return connectionMeta.unknown;
-  if (status === 'pending_install') return { label: '설치 대기', tone: 'warning' };
-  if (status === 'install_expired') return { label: '만료', tone: 'danger' };
-  return connectionMeta[status as Cluster['connection_status']] ?? {
-    label: status,
-    tone: 'neutral',
-  };
-}
 
 export default function ClusterListView() {
   const q = useClusters();
@@ -131,14 +105,12 @@ export default function ClusterListView() {
     <EmptyState
       icon={<SearchIcon />}
       title="검색 결과 없음"
-      description={`'${search}' 조건에 맞는 클러스터가 없습니다`}
       action={<Button size="sm" onClick={() => setSearch('')}>필터 초기화</Button>}
     />
   ) : (
     <EmptyState
       icon={<GlobeIcon />}
       title="등록된 클러스터 없음"
-      description="운영 대상 클러스터를 등록하면 인벤토리와 인시던트 흐름이 이곳에 표시됩니다"
       action={admin ? <Button variant="primary" onClick={() => setWizard(true)}>첫 클러스터 등록</Button> : undefined}
     />
   );
@@ -147,7 +119,6 @@ export default function ClusterListView() {
     <div className="grid gap-6">
       <PageHeader
         title="클러스터"
-        description="연결 상태, 리소스 규모, 열린 인시던트를 기준으로 운영 대상을 확인합니다"
         actions={admin ? (
           <Button variant="primary" leadingIcon={<PlusIcon />} onClick={() => setWizard(true)}>
             클러스터 등록
@@ -156,13 +127,13 @@ export default function ClusterListView() {
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="클러스터 요약">
-        <StatCard label="전체 클러스터" value={clusters.length.toLocaleString()} delta={`${stats.connected.toLocaleString()} 연결`} tone="success" spark={<Sparkline points={[stats.connected, stats.disconnected]} tone="success" ariaLabel="연결 상태 분포" />} />
-        <StatCard label="열린 인시던트" value={stats.incidents.toLocaleString()} delta={stats.incidents > 0 ? '확인 필요' : '정상'} tone={stats.incidents > 0 ? 'danger' : 'success'} spark={<Sparkline points={clusters.map((cluster) => cluster.incident_count)} tone={stats.incidents > 0 ? 'danger' : 'success'} ariaLabel="클러스터별 인시던트 분포" />} />
-        <StatCard label="노드" value={stats.nodes.toLocaleString()} delta="등록 인벤토리 합계" spark={<Sparkline points={clusters.map((cluster) => cluster.node_count)} ariaLabel="클러스터별 노드 분포" />} />
-        <StatCard label="팟" value={stats.pods.toLocaleString()} delta="등록 인벤토리 합계" spark={<Sparkline points={clusters.map((cluster) => cluster.pod_count)} ariaLabel="클러스터별 팟 분포" />} />
+        <StatCard label="전체 클러스터" value={clusters.length.toLocaleString()} delta={`${stats.connected.toLocaleString()} 연결`} tone={stats.disconnected > 0 ? 'warning' : 'success'} />
+        <StatCard label="열린 인시던트" value={stats.incidents.toLocaleString()} delta={stats.incidents > 0 ? '주의' : '정상'} tone={stats.incidents > 0 ? 'danger' : 'success'} />
+        <StatCard label="노드" value={stats.nodes.toLocaleString()} delta="인벤토리" />
+        <StatCard label="팟" value={stats.pods.toLocaleString()} delta="인벤토리" />
       </section>
 
-      <Card title="클러스터 목록" description="행을 선택하면 인벤토리 상세로 이동합니다">
+      <Card title="클러스터">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="relative w-full md:max-w-sm">
             <Input

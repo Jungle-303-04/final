@@ -84,7 +84,7 @@ export function DrilldownHeatmap({
       ) : error ? (
         <EmptyState title="히트맵 조회 실패" description={error.message} action={onRetry ? <Button size="sm" onClick={onRetry}>다시 시도</Button> : undefined} />
       ) : tiles.length === 0 ? (
-        empty ?? <EmptyState title="표시할 타일 없음" description="현재 범위에 표시할 항목이 없습니다" />
+        empty ?? <EmptyState title="타일 없음" />
       ) : zoomContext ? (
         <motion.div
           layout={motionLayout}

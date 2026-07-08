@@ -79,15 +79,11 @@ export const useNodeSummaries = (id: string | undefined) =>
     queryFn: async () => {
       try {
         const response = await get<{ nodes: Record<string, unknown>[] }>(`/clusters/${id}/nodes/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
-        return response.nodes.map(adaptNodeHeatmapSummary);
+        const nodes = response.nodes.map(adaptNodeHeatmapSummary);
+        return nodes.length > 0 ? nodes : loadFallbackNodeSummaries(id);
       } catch (error) {
         if ((error as ApiError).status !== 404) throw error;
-        const [summary, pods] = await Promise.all([
-          get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }).then(adaptInventorySummary),
-          get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS })
-            .then((response) => response.resources.map(adaptPodResource)),
-        ]);
-        return fallbackNodeSummaries(summary.nodes, pods);
+        return loadFallbackNodeSummaries(id);
       }
     },
     enabled: !!id,
@@ -103,11 +99,11 @@ export const useNodePodSummaries = (id: string | undefined, node: string | undef
           `/clusters/${id}/nodes/${encodeURIComponent(node ?? '')}/pods/summary`,
           { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS },
         );
-        return response.pods.map(adaptPodHeatmapSummary);
+        const pods = response.pods.map(adaptPodHeatmapSummary);
+        return pods.length > 0 ? pods : loadFallbackNodePodSummaries(id, node);
       } catch (error) {
         if ((error as ApiError).status !== 404) throw error;
-        const response = await get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
-        return response.resources.map(adaptPodHeatmapSummary).filter((pod) => pod.node === node);
+        return loadFallbackNodePodSummaries(id, node);
       }
     },
     enabled: !!id && !!node,
@@ -258,8 +254,27 @@ function adaptPodHeatmapSummary(raw: Record<string, unknown>): PodHeatmapSummary
   };
 }
 
-function fallbackNodeSummaries(nodes: Array<{ name: string; ready: boolean; pod_count: number; cpu_ratio?: number; mem_ratio?: number }>, pods: Workload[]): NodeHeatmapSummary[] {
-  return nodes.map((node) => {
+async function loadFallbackNodeSummaries(id: string | undefined): Promise<NodeHeatmapSummary[]> {
+  if (!id) return [];
+  const [summary, pods] = await Promise.all([
+    get<Record<string, unknown>>(`/clusters/${id}/inventory/summary`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS }).then(adaptInventorySummary),
+    get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS })
+      .then((response) => response.resources.map(adaptPodResource)),
+  ]);
+  return fallbackNodeSummaries(summary.nodes, pods);
+}
+
+async function loadFallbackNodePodSummaries(id: string | undefined, node: string | undefined): Promise<PodHeatmapSummary[]> {
+  if (!id || !node) return [];
+  const response = await get<{ resources: Record<string, unknown>[] }>(`/clusters/${id}/inventory/resources?resource_type=pod`, { timeoutMs: CLUSTER_QUERY_TIMEOUT_MS });
+  return response.resources.map(adaptPodHeatmapSummary).filter((pod) => pod.node === node);
+}
+
+type FallbackNodeSummary = { name: string; ready: boolean; pod_count: number; cpu_ratio?: number; mem_ratio?: number };
+
+function fallbackNodeSummaries(nodes: FallbackNodeSummary[], pods: Workload[]): NodeHeatmapSummary[] {
+  const sourceNodes = nodes.length > 0 ? nodes : nodesFromPods(pods);
+  return sourceNodes.map((node) => {
     const nodePods = pods.filter((pod) => pod.node === node.name);
     return {
       id: node.name,
@@ -271,6 +286,15 @@ function fallbackNodeSummaries(nodes: Array<{ name: string; ready: boolean; pod_
       conditions: node.ready ? [] : ['NotReady'],
     };
   });
+}
+
+function nodesFromPods(pods: Workload[]): FallbackNodeSummary[] {
+  const names = Array.from(new Set(pods.map((pod) => pod.node).filter((node): node is string => Boolean(node))));
+  return names.map((name) => ({
+    name,
+    ready: true,
+    pod_count: pods.filter((pod) => pod.node === name).length,
+  }));
 }
 
 function numberOrNull(value: unknown): number | null {
