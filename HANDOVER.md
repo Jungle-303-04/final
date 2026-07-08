@@ -1,6 +1,6 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:15 KST (레거시 CSS import 제거 로컬 검증)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:19 KST (레거시 CSS import 제거 배포 확인)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
@@ -21,8 +21,12 @@
   - `cd frontend && npm test` passed, 11 tests.
   - `cd frontend && npm run build` passed. CSS bundle `index-BRxn7xco.css` 35.33 kB gzip 7.19 kB로 감소.
   - Playwright mock: `/login`과 `/`를 1440/1024/390 폭에서 확인. home marker, login marker, horizontal overflow 0. 로그인은 의도적 401 session mock 때문에 console resource error 1건.
-- 남은 확인:
-  - 이 체크포인트 커밋/푸시 후 GitHub Actions 확인이 필요하다. 기존처럼 `steps: []`로 실패하면 수동 ECR/rollout과 live asset smoke를 수행한다.
+- 배포 확인:
+  - 커밋/푸시: `ab014c10 refactor: 레거시 CSS import 제거`.
+  - GitHub Actions는 코드 실행 전 실패: CI `28907924301`, AWS CD `28907924336`, Promote `28907924326` 모두 실패 job의 `steps: []` 확인.
+  - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:ab014c10-css-cleanup-20260708091722`, rollout `1/1 ready`.
+  - live `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-BtlDgMJr.js`, CSS `/assets/index-BRxn7xco.css` 35.33 kB. 삭제한 CSS의 marker(`--color-fill-zero`, `--surface-0`, legacy `.btn/.card`, `archive-treemap`, legacy css import 문자열) 0건.
 
 ## 체크포인트 — 레거시 toast 경로 제거
 

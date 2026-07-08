@@ -27,6 +27,7 @@
 - Phase 2 메트릭(`features/metrics/MetricsView.tsx`)은 `src/ui` PageHeader/Card/StatCard/Field/Input/Select/Textarea/Badge/StatusChip/EmptyState 기반으로 이관했다. Nivo line chart wrapper는 `src/ui/charts.tsx`로 승격했고, 메트릭 feature의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - 레거시 CSS import 제거(2026-07-08 09:15 KST): `main.tsx` 전역 스타일 import는 `@/ui/theme.css` 단독이다. 삭제 파일: `frontend/src/shared/tokens.css`, `frontend/src/shared/ui/app.css`, `frontend/src/shared/theme-bridge.css`, `frontend/src/plural-ui/tokens.css`, `frontend/src/plural-ui/plural.css`, `frontend/src/features/console-archive/archive.css`.
 - 남은 CSS import는 `@/ui/theme.css`, React Flow 라이브러리 스타일, `shared/flow/flow.css`뿐이다. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/login`과 `/`를 1440/1024/390 폭에서 확인했고 marker와 horizontal overflow 0을 확인했다.
+- 배포 확인(2026-07-08 09:19 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `ab014c10-css-cleanup-20260708091722`, main `/assets/index-BtlDgMJr.js`, CSS `/assets/index-BRxn7xco.css` 서빙 및 삭제한 레거시 CSS marker 0건 확인.
 
 ## 사용 규칙
 
