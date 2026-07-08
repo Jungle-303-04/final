@@ -12,6 +12,7 @@ export interface DrilldownTile {
   health: DrilldownHealth;
   meta?: ReactNode;
   badge?: ReactNode;
+  actionLabel?: string;
   pulse?: boolean;
 }
 
@@ -175,7 +176,14 @@ function TileGrid({
                 <HealthBadge health={tile.health} />
               </span>
             </span>
-            {tile.meta && <span className="mt-4 grid gap-2 text-body text-secondary">{tile.meta}</span>}
+            <span className="mt-4 grid gap-3">
+              {tile.meta && <span className="grid gap-2 text-body text-secondary">{tile.meta}</span>}
+              {tile.actionLabel && (
+                <span className="inline-flex w-fit items-center rounded-control border border-accent/40 bg-accent/10 px-2 py-1 text-label font-semibold text-accent transition-colors group-hover:bg-accent/15">
+                  {tile.actionLabel}
+                </span>
+              )}
+            </span>
           </motion.button>
         ))}
       </AnimatePresence>

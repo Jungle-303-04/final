@@ -1404,6 +1404,7 @@ function nodeTiles(nodes: NodeHeatmapSummary[]): DrilldownTile[] {
     health: node.health,
     meta: <NodeTileMeta node={node} />,
     badge: node.conditions.length > 0 ? <Badge tone="warning">{node.conditions[0]}</Badge> : undefined,
+    actionLabel: '팟 보기',
   }));
 }
 
@@ -1415,6 +1416,7 @@ function podTiles(pods: PodHeatmapSummary[]): DrilldownTile[] {
     health: pod.incident_correlation_id ? 'critical' : pod.health,
     pulse: Boolean(pod.incident_correlation_id),
     badge: pod.restarts > 0 ? <Badge tone="warning">재시작 {pod.restarts}</Badge> : undefined,
+    actionLabel: '상세 보기',
     meta: <PodTileMeta pod={pod} />,
   }));
 }
