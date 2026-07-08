@@ -25,6 +25,16 @@ const connectionMeta: Record<Cluster['connection_status'], ConnectionMeta> = {
   unknown: { label: '미확인', tone: 'neutral' },
 };
 
+function clusterConnectionMeta(status: string | null | undefined): ConnectionMeta {
+  if (!status) return connectionMeta.unknown;
+  if (status === 'pending_install') return { label: '설치 대기', tone: 'warning' };
+  if (status === 'install_expired') return { label: '만료', tone: 'danger' };
+  return connectionMeta[status as Cluster['connection_status']] ?? {
+    label: status,
+    tone: 'neutral',
+  };
+}
+
 export default function ClusterListView() {
   const q = useClusters();
   const nav = useNavigate();
@@ -39,7 +49,7 @@ export default function ClusterListView() {
     if (!normalizedSearch) return clusters;
     const tokens = normalizedSearch.split(/\s+/);
     return clusters.filter((cluster) => {
-      const haystack = `${cluster.name} ${cluster.cluster_id} ${cluster.environment} ${cluster.role} ${connectionMeta[cluster.connection_status].label}`.toLowerCase();
+      const haystack = `${cluster.name} ${cluster.cluster_id} ${cluster.environment} ${cluster.role} ${clusterConnectionMeta(cluster.connection_status).label}`.toLowerCase();
       return tokens.every((token) => haystack.includes(token));
     });
   }, [clusters, normalizedSearch]);
@@ -78,9 +88,9 @@ export default function ClusterListView() {
     {
       id: 'connection',
       header: '연결',
-      sortValue: (cluster) => connectionMeta[cluster.connection_status].label,
+      sortValue: (cluster) => clusterConnectionMeta(cluster.connection_status).label,
       cell: (cluster) => {
-        const meta = connectionMeta[cluster.connection_status];
+        const meta = clusterConnectionMeta(cluster.connection_status);
         return <Badge tone={meta.tone}>{meta.label}</Badge>;
       },
     },
