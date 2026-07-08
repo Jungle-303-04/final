@@ -67,6 +67,29 @@ test('ai conversation detail adapter unwraps real backend envelope and message m
   ]);
 });
 
+test('timeline evidence-only rows are not presented as incidents', async () => {
+  const { adaptIncident, isIncidentTimelineItem } = await vite.ssrLoadModule('/src/shared/lib/adapt.ts');
+
+  const evidenceOnly = {
+    correlation_id: 'corr-evidence',
+    incident_id: null,
+    current_subject: 'evidence.built',
+    status: 'evidence_built',
+    root_cause: null,
+  };
+  const completed = {
+    correlation_id: 'corr-rca',
+    incident_id: null,
+    current_subject: 'rca.completed',
+    status: 'rca_completed',
+    root_cause: 'config_env_error',
+  };
+
+  assert.equal(isIncidentTimelineItem(evidenceOnly), false);
+  assert.equal(isIncidentTimelineItem(completed), true);
+  assert.equal(adaptIncident(completed).summary, 'config_env_error');
+});
+
 test('ai message payload keeps title out of existing conversation sends', async () => {
   const { aiMessagePayload } = await vite.ssrLoadModule('/src/features/chat/api.ts');
 

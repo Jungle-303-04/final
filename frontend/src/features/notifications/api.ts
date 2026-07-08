@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
 import { del, get, post } from '@/shared/lib/api';
 import type { DeadLetter, EvidenceRecord, Notice, RcaReportSummary, RecoveryPlanStatus, WorkflowRun } from '@/shared/lib/types';
-import { adaptIncident, adaptIncidentDetail } from '@/shared/lib/adapt';
+import { adaptIncident, adaptIncidentDetail, isIncidentTimelineItem } from '@/shared/lib/adapt';
 import { useApplications, useRunsAll } from '@/features/repo/api';
 import { useIsAdmin } from '@/features/auth/api';
 import { timeAgo } from '@/shared/lib/format';
@@ -53,7 +53,7 @@ export const useTimeline = () =>
     queryFn: () => get<{ items: Record<string, unknown>[] }>('/dashboard/rca/timeline?limit=20', { timeoutMs: NOTIFICATION_QUERY_TIMEOUT_MS }),
     refetchInterval: 60_000,
     retry: false,
-    select: d => d.items.map(adaptIncident),
+    select: d => d.items.filter(isIncidentTimelineItem).map(adaptIncident),
   });
 export const useIncident = (incidentId: string) =>
   useQuery({

@@ -74,7 +74,7 @@ export function DrilldownHeatmap({
       </nav>
 
       {loading ? (
-        <div className="grid min-h-80 grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12">
+        <div className="grid min-h-64 grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12">
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className={cx('rounded-panel border border-border bg-raised p-4', index < 2 ? 'sm:col-span-3 xl:col-span-4' : 'sm:col-span-3 xl:col-span-2')}>
               <Skeleton lines={3} />
@@ -90,7 +90,7 @@ export function DrilldownHeatmap({
           layout={motionLayout}
           layoutId={motionLayout ? `heatmap-${zoomContext.id}` : undefined}
           transition={motionTransition}
-          className={cx('grid min-h-80 gap-4 rounded-panel border p-4', tileClass(zoomContext.health))}
+          className={cx('grid min-h-64 gap-4 rounded-panel border p-4', tileClass(zoomContext.health))}
         >
           <span className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <span className="grid min-w-0 gap-1">
@@ -149,7 +149,7 @@ function TileGrid({
       variants={motionLayout ? listStagger : undefined}
       initial={motionLayout ? 'initial' : false}
       animate={motionLayout ? 'animate' : undefined}
-      className={cx('grid grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12', compact ? 'min-h-52' : 'min-h-80')}
+      className={cx('grid grid-cols-1 gap-2 sm:grid-cols-6 xl:grid-cols-12', compact ? 'min-h-48' : 'min-h-64')}
     >
       <AnimatePresence mode={presenceMode}>
         {tiles.map((tile) => (
@@ -161,7 +161,7 @@ function TileGrid({
             variants={motionLayout ? listItem : undefined}
             transition={motionTransition}
             className={cx(
-              'group grid min-h-28 content-between rounded-panel border p-4 text-left transition-colors motion-reduce:transition-none hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+              'group grid min-h-24 content-between rounded-panel border p-4 text-left transition-colors motion-reduce:transition-none hover:bg-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
               tileClass(tile.health),
               sizeClass(safeSize(tile.size), max),
               tile.pulse && 'border-danger ring-2 ring-danger/50 motion-safe:animate-pulse',
@@ -213,8 +213,8 @@ function tileClass(health: DrilldownHealth) {
 
 function sizeClass(size: number, max: number) {
   const ratio = size / max;
-  if (ratio >= 0.72) return 'sm:col-span-6 xl:col-span-6 min-h-44';
-  if (ratio >= 0.38) return 'sm:col-span-3 xl:col-span-4 min-h-40';
-  if (ratio >= 0.18) return 'sm:col-span-3 xl:col-span-3 min-h-32';
-  return 'sm:col-span-2 xl:col-span-2 min-h-28';
+  if (ratio >= 0.72) return 'sm:col-span-3 xl:col-span-4 min-h-36';
+  if (ratio >= 0.38) return 'sm:col-span-3 xl:col-span-3 min-h-32';
+  if (ratio >= 0.18) return 'sm:col-span-2 xl:col-span-3 min-h-28';
+  return 'sm:col-span-2 xl:col-span-2 min-h-24';
 }
