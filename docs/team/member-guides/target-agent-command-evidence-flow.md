@@ -29,7 +29,7 @@ Target Agent는 NATS, JetStream, PostgreSQL을 직접 알면 안 된다. Agent �
 | Target evidence scheduler | `src/services/target/cluster-agent/evidence/jobs.py` | due provider 계산, schedule, provider별 worker pool |
 | Target evidence collector | `src/services/target/cluster-agent/evidence/collector.py` | provider query 실행과 payload 구성 |
 | Telemetry provider registry | `src/services/target/cluster-agent/telemetry_registry.py` | `source -> evidence_key -> query_type` 등록 |
-| Telemetry providers | `src/services/target/cluster-agent/providers/` | Kubernetes, Prometheus, Loki, Tempo provider |
+| Telemetry providers | `src/services/target/cluster-agent/providers/` | Kubernetes, Prometheus, Loki, Tempo, Metadata provider |
 | Query model | `src/services/target/cluster-agent/queries/` | query definition과 `telemetry.query.run` payload |
 
 ## Command 전체 흐름
@@ -530,9 +530,11 @@ Evidence job flow는 "Agent가 증거 전체를 한 번에 push"하는 구조가
 
 | provider_key | source | evidence payload key | provider |
 | --- | --- | --- | --- |
+| `kubernetes` | `kubernetes` | `kubernetes` | `KubernetesSnapshotProvider` |
 | `metrics` | `prometheus` | `metrics` | `PrometheusMetricsProvider` |
 | `logs` | `loki` | `logs` | `LokiLogsProvider` |
 | `traces` | `tempo` | `traces` | `TempoTracesProvider` |
+| `metadata` | `metadata` | `metadata` | `MetadataProvider` |
 
 `source`는 query definition이 사용하는 이름이고, `provider_key` 또는 `evidence_key`는 `cluster.evidence.received` payload의 bucket 이름이다.
 
@@ -792,7 +794,7 @@ class EvidenceRuntimePolicy(StrictModel):
     providers: dict[str, EvidenceProviderPolicy] = {}
 ```
 
-Management 기본 policy는 `src/domains/target/evidence_policy.py`의 `DEFAULT_EVIDENCE_PROVIDER_QUERIES`에서 만든다. 현재 기본 provider는 `kubernetes`, `metrics`, `logs`, `traces`다.
+Management 기본 policy는 `src/domains/target/evidence_policy.py`의 `DEFAULT_EVIDENCE_PROVIDER_QUERIES`에서 만든다. 현재 기본 provider는 `kubernetes`, `metrics`, `logs`, `traces`, `metadata`다.
 
 기본 provider key:
 
@@ -802,6 +804,7 @@ Management 기본 policy는 `src/domains/target/evidence_policy.py`의 `DEFAULT_
 | `metrics` | `prometheus` | `metrics` | `PrometheusMetricsProvider` | `PrometheusInstantQuery`, `PrometheusRangeQuery` |
 | `logs` | `loki` | `logs` | `LokiLogsProvider` | `LokiLogQuery` |
 | `traces` | `tempo` | `traces` | `TempoTracesProvider` | `OpenTelemetrySpanQuery` |
+| `metadata` | `metadata` | `metadata` | `MetadataProvider` | `MetadataSnapshotQuery` |
 
 Agent는 policy를 받으면 `apply_policy()`에서 다음을 수행한다.
 
