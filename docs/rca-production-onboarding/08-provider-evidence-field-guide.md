@@ -2,7 +2,7 @@
 
 이 문서는 현재 provider 코드가 RCA에 넘기는 evidence payload의 필드 사전이다.
 RCA가 받는 값은 `cluster.evidence.received` event body이며, provider는
-`kubernetes`, `metrics`, `logs`, `traces` bucket을 채운다.
+`kubernetes`, `metrics`, `logs`, `traces`, `metadata` bucket을 채운다.
 
 처음 읽을 때는 이 문서를 "JSON payload를 읽는 지도"라고 생각하면 된다.
 provider는 장애 원인을 문장으로 설명해서 보내지 않는다. 대신 "지금 클러스터에서 관측한 사실"을
@@ -32,8 +32,8 @@ provider가 수집한 사실
   별도 정규화 단계에서 파생해야 한다.
 - Kubernetes bucket에는 `raw` 원본 object가 없다. provider가 선택한 summary 필드만 남긴다.
   반대로 `metrics`, `logs`, `traces`는 query 결과별 `raw`를 보존한다.
-- 현재 RCA rule 중 일부는 `metadata` evidence source를 기대하지만, 현재 provider bucket과
-  evidence bundle builder는 `metadata` source를 만들지 않는다.
+- `metadata` bucket은 현재 `change_context` 최소 구조를 만든다. 다만 RCA evidence bundle builder는
+  아직 metadata bucket을 `metadata` evidence item으로 승격하지 않는다.
 
 ## 이 문서 읽는 순서
 
@@ -211,6 +211,7 @@ provider가 수집한 사실
 | `metrics` | object | Prometheus query 결과를 정규화한 bucket이다. |
 | `logs` | list<object> | Loki query 결과 목록이다. 로그 라인 목록 자체가 아니라 query별 결과 목록이다. |
 | `traces` | object | Tempo trace search 결과를 정규화한 bucket이다. |
+| `metadata` | object | `MetadataProvider`가 만든 변경 맥락 bucket이다. 현재는 `change_context` 최소 구조다. |
 
 HTTP `AgentEvidenceRequest`에는 `correlation_id`가 있지만, event body로는 들어가지 않는다.
 Gateway가 event envelope correlation으로 연결한다.
@@ -225,6 +226,7 @@ Gateway가 event envelope correlation으로 연결한다.
 | `logs` max length | 2000 | top-level `logs` list 항목 수 제한이다. Loki 내부 log line 총수 제한이 아니라 `logs[]` query result object 개수 제한이다. |
 | payload byte limit | 1 MiB | `kubernetes`, `metrics`, `logs`, `traces`를 JSON으로 직렬화한 크기 상한이다. 초과하면 request validation이 실패한다. |
 | bucket schema | loose dict/list | `kubernetes`, `metrics`, `traces`는 dict, `logs`는 list라는 큰 모양만 강제한다. 세부 provider-normalized shape는 코드 convention이다. |
+| direct `metadata` 입력 | 없음 | `AgentEvidenceRequest`에는 아직 `metadata` 필드가 없다. `metadata` bucket은 provider job path의 `MetadataProvider`에서 만들어진다. |
 
 Direct path에서도 `workspace_id`, `cluster_id`, `evidence_key` namespace는 agent token identity가 우선한다.
 body에 다른 workspace나 cluster를 넣어도 trusted identity로 덮어쓴다.
@@ -239,6 +241,7 @@ Provider registry는 source 이름과 evidence bucket 이름을 분리한다.
 | `prometheus` | `metrics` | `PrometheusMetricsProvider` | `PrometheusInstantQuery`, `PrometheusRangeQuery` |
 | `loki` | `logs` | `LokiLogsProvider` | `LokiLogQuery` |
 | `tempo` | `traces` | `TempoTracesProvider` | `OpenTelemetrySpanQuery` |
+| `metadata` | `metadata` | `MetadataProvider` | `MetadataSnapshotQuery` |
 
 ## Provider query policy
 
@@ -249,7 +252,7 @@ agent는 이 query definition을 provider별 query object로 바꿔 실행한다
 | query definition 필드 | 의미 |
 | --- | --- |
 | `source` | telemetry source다. policy에 없으면 provider key로 역조회해 채운다. 예: `metrics` provider는 `prometheus`. |
-| `name` | query 결과 key다. metrics/traces에서는 `results.<name>`, logs에서는 `logs[].query_name`, Kubernetes에서는 `provider_status.<name>`으로 쓰인다. |
+| `name` | query 결과 key다. metrics/traces에서는 `results.<name>`, logs에서는 `logs[].query_name`, Kubernetes에서는 `provider_status.<name>`으로 쓰인다. metadata는 현재 고정 `change_context` bucket으로 합쳐진다. |
 | `description` | 사람이 읽는 query 설명이다. provider payload에는 대부분 직접 들어가지 않는다. |
 | `query` | 실제 query 문자열이다. Prometheus는 PromQL, Loki는 LogQL, Tempo는 TraceQL/search query, Kubernetes는 namespace 문자열로 사용한다. |
 | `range_seconds` | Prometheus range query일 때만 쓴다. 있으면 `PrometheusRangeQuery`가 된다. |
@@ -257,6 +260,7 @@ agent는 이 query definition을 provider별 query object로 바꿔 실행한다
 
 query가 비어 있으면 provider는 빈 bucket을 반환한다.
 예를 들어 Prometheus query가 없으면 `{"source": "prometheus", "results": {}}`가 된다.
+metadata query가 비어 있으면 `{"change_context": {"recent_changes": [], "rollback_available": null, "risk_level": "unknown"}}`가 된다.
 
 ## Kubernetes bucket
 
@@ -746,12 +750,38 @@ RCA 파생 예시는 다음과 같다.
 | management plane 문제 | `target_agent_error_spans`, `management_gateway_spans` |
 | application error path | `application_error_spans.trace_count`, trace root service/operation |
 
+## Metadata bucket
+
+Metadata bucket은 `MetadataProvider`가 만든다.
+현재 구현은 외부 배포 시스템을 직접 조회하지 않고, target cluster id와 수집 시각,
+빈 change context 기본값을 RCA 입력에 붙인다.
+
+```json
+{
+  "change_context": {
+    "recent_changes": [],
+    "rollback_available": null,
+    "risk_level": "unknown"
+  }
+}
+```
+
+| 필드 | 타입 | 의미 |
+| --- | --- | --- |
+| `change_context` | object | 변경 맥락을 담는 묶음이다. |
+| `change_context.recent_changes` | list<object> | 최근 변경 목록이다. 현재 provider 기본값은 빈 목록이다. |
+| `change_context.rollback_available` | boolean 또는 null | 즉시 rollback 가능한지 나타낸다. 현재 provider 기본값은 null이다. |
+| `change_context.risk_level` | string | 변경 위험도다. 현재 provider 기본값은 `"unknown"`이다. |
+
+주의: `MetadataProvider.query()`의 내부 raw payload에는 `cluster_id`, `collected_at`도 있지만,
+`normalize_payload()` 결과 bucket에는 `change_context`만 남긴다.
+
 ## Evidence job 집계 규칙
 
 Provider job path에서는 provider별 결과가 따로 완료되고, Gateway가 같은 `evidence_key`의
 job들을 하나로 합친 뒤 `cluster.evidence.received`를 발행한다.
-초심자 관점에서는 "네 명의 조사 담당자가 각자 보고서를 제출하면 Gateway가 한 사건 파일로 묶는다"라고
-생각하면 된다. Kubernetes, metrics, logs, traces provider job이 각각 끝나고,
+초심자 관점에서는 "각 조사 담당자가 자기 보고서를 제출하면 Gateway가 한 사건 파일로 묶는다"라고
+생각하면 된다. Kubernetes, metrics, logs, traces, metadata provider job이 각각 끝나고,
 같은 `evidence_key`로 묶인 결과가 하나의 RCA 입력이 된다.
 
 | 규칙 | 의미 |
@@ -774,6 +804,7 @@ agent collector 내부에서 provider query 중 exception이 발생하면 provid
 | `metrics` | `{"source": "prometheus", "results": {}}` |
 | `logs` | `[]` |
 | `traces` | `{"source": "tempo", "results": {}}` |
+| `metadata` | `{"change_context": {"recent_changes": [], "rollback_available": null, "risk_level": "unknown"}}` |
 
 ## RCA에서 바로 쓸 수 있는 값과 파생해야 하는 값
 
@@ -793,6 +824,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | metric sample/range | `metrics.results.*.samples`, `metrics.results.*.series` |
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
+| 변경 맥락 기본값 | `metadata.change_context` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
@@ -828,21 +860,23 @@ RCA가 판단하려면 다음 값은 파생해야 한다.
 | `severity` | Warning event 반복 수, unavailable replica, restart_total, node pressure, error log count |
 | `first_seen_at` | `events[].first_timestamp`, `pods[].start_time`, earliest log timestamp |
 
-### `metadata` evidence source 갭
+### `metadata` evidence source 상태
 
 RCA cause rules의 여러 candidate는 `metadata` source를 expected evidence로 요구한다.
 예를 들어 image rollout, config/env error, scheduling taint mismatch, manifest validation 같은 후보는
 최근 배포 변경, git SHA, manifest diff, image digest, Secret/ConfigMap 참조 같은 metadata가 필요하다.
 
-현재 `collect_evidence_items`는 source를 `kubernetes`, `metrics`, `logs`, `traces` 네 가지만 만든다.
-따라서 지금 상태에서는 `metadata`가 required 또는 expected evidence에 들어간 후보는
-항상 `missing_evidence`에 `metadata`가 남고 confidence가 낮아질 수 있다.
+현재 provider job path에는 `metadata` bucket이 있고 기본 policy에도 `metadata.change_context` query가 있다.
+하지만 `collect_evidence_items`는 아직 source를 `kubernetes`, `metrics`, `logs`, `traces` 네 가지만
+evidence item으로 만든다. 따라서 RCA cause evaluation 단계에서는 `metadata`가 required 또는
+expected evidence에 들어간 후보가 여전히 `missing_evidence`에 `metadata`를 남길 수 있다.
 
-metadata를 채우려면 별도 bucket 또는 evidence item을 추가해야 한다.
+metadata를 confidence 계산에 쓰려면 metadata bucket을 evidence item으로 승격하고,
+아래 세부 값을 실제로 채우는 provider 확장이 필요하다.
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| recent git commit / deploy revision | 불충분 | GitOps event, manifest render, SCM metadata 연결 |
+| recent git commit / deploy revision | 기본 bucket은 있으나 값 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image만 제공한다. rollout history나 previous image가 필요하다. |
 | ConfigMap/Secret key reference | 불충분 | Pod spec env/envFrom/volumes, Secret/ConfigMap metadata summary 추가 |
 | resource requests/limits | 불충분 | Pod spec containers.resources summary 추가 |
