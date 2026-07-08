@@ -8,8 +8,6 @@ import {
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { flyoverSlide, overlayFade } from './motion';
-import './tokens.css';
-import './plural.css';
 import { CloseIcon } from './icons';
 
 /* ── 테마 ─────────────────────────────── */
