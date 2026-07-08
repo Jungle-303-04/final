@@ -2390,7 +2390,7 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - 수동 배포용 이미지는 ECR push 완료:
     - service `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:779b4f01-incident-recovery-ai-20260708120544`
     - console `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:779b4f01-incident-recovery-ai-20260708120544`
-  - live `https://k8s.woonyong.org/`와 `/api/healthz`는 200 OK이나, AWS SSO 세션 만료로 `kubectl --context mgmt` rollout은 아직 미적용. `aws login` 완료 후 `management` namespace의 service deployments와 `console` deployment를 위 이미지로 `set image`하면 된다.
+  - 최초 시도 시 AWS SSO 세션 만료로 rollout이 막혔으나, 아래 `0aa81ea5` 최종 이미지가 이 패스까지 포함해 라이브에 반영됐다.
 
 ## 드릴다운 에이전트 팟 제외 패스 (2026-07-08)
 
@@ -2403,9 +2403,17 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_fleet_router.py::test_node_pods_summary_hides_agent_and_management_pods tests/test_fleet_router.py::test_node_pods_summary_filters_node_and_links_incident -q` → 2 passed.
   - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_incident_symptom_derivation.py tests/test_rca_evidence.py tests/test_dashboard_projection.py tests/test_fleet_router.py tests/test_ai_platform_tools.py tests/test_ai_conversation.py tests/test_rca_rule_catalog.py -q` → 105 passed.
   - `bash scripts/frontend-check.sh` → passed.
-- 배포 준비:
+- 배포:
   - `dev` push commit `0aa81ea5 fix: 드릴다운에서 에이전트 팟 제외`.
   - ECR push 완료:
     - service `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:0aa81ea5-drilldown-agent-filter-20260708125500`
     - console `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:0aa81ea5-drilldown-agent-filter-20260708125500`
-  - live rollout은 AWS authorization code 또는 임시 AWS token env(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) 대기 상태다.
+  - AWS 재로그인 후 `management` namespace의 `kubernetes-ops-service` 계열 deployment 전체와 `console` deployment를 위 이미지로 수동 rollout 완료.
+  - rollout status 확인 대상: `api-gateway`, `realtime-gateway`, `console`, RCA/AI/recovery/evidence/workflow/target 관련 worker 전부 `successfully rolled out`.
+  - 라이브 검증:
+    - `kubectl --context mgmt -n management get deploy` 기준 service 계열은 위 service image, console은 위 console image로 Ready.
+    - 비정상 phase 파드 필터 결과 0건.
+    - `https://k8s.woonyong.org/api/healthz` → `{"status":"ok","service":"api-gateway"}`.
+    - live root asset: `/assets/index-YIJZma8H.js`, `/assets/index-Bb-8VGfS.css`.
+    - 신규 cluster detail chunk `ClusterDetailView-CwucS_FI.js`가 live index에서 참조됨.
+    - api-gateway log tail에서 `/readyz` 200, cluster agent policy/commands/evidence poll 200 확인. 로그인 전 `/auth/session`/AI 조회 401은 expected.
