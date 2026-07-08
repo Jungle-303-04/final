@@ -60,7 +60,7 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 TARGET_RUNTIME_CLUSTER_ID="${TARGET_RUNTIME_CLUSTER_ID:-${TARGET_CLUSTER}}"
 EVIDENCE_INTERVAL_SECONDS="${EVIDENCE_INTERVAL_SECONDS:-30}"
 UP_WORKER_SET="${UP_WORKER_SET:-smoke}"
-ENABLE_GITHUB_POLL_CRON="${ENABLE_GITHUB_POLL_CRON:-0}"
+ENABLE_GITHUB_POLL_WORKER="${ENABLE_GITHUB_POLL_WORKER:-${ENABLE_GITHUB_POLL_CRON:-0}}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 LLM_PROVIDER="${LLM_PROVIDER:-}"
 LLM_MODEL="${LLM_MODEL:-}"
@@ -214,9 +214,8 @@ kubectl_retry() {
 
 quiesce_existing_management_apps() {
   echo "==> quiescing existing management app workloads"
-  kubectl --context "kind-${MGMT_CLUSTER}" -n management patch cronjob/github-poll-worker \
-    --type=merge \
-    -p '{"spec":{"suspend":true}}' >/dev/null 2>&1 || true
+  kubectl --context "kind-${MGMT_CLUSTER}" -n management scale deploy/github-poll-worker \
+    --replicas=0 >/dev/null 2>&1 || true
 
   for job in $(
     kubectl --context "kind-${MGMT_CLUSTER}" -n management get job -o name 2>/dev/null \
@@ -632,10 +631,11 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 deployments = sys.argv[2:]
-for file_name in ("services.yaml", "ai-workers.yaml"):
+for file_name in ("services.yaml", "ai-workers.yaml", "github-poll-worker.yaml"):
     path = root / file_name
     text = path.read_text()
-    for deployment in deployments:
+    targets = ("github-poll-worker",) if file_name == "github-poll-worker.yaml" else deployments
+    for deployment in targets:
         pattern = (
             r"(kind: Deployment\nmetadata:\n  name: "
             + re.escape(deployment)
@@ -643,11 +643,6 @@ for file_name in ("services.yaml", "ai-workers.yaml"):
         )
         text = re.sub(pattern, r"\g<1>replicas: 0", text)
     path.write_text(text)
-
-cronjob_path = root / "github-poll-worker.yaml"
-cronjob = cronjob_path.read_text()
-cronjob = cronjob.replace("spec:\n  schedule:", "spec:\n  suspend: true\n  schedule:", 1)
-cronjob_path.write_text(cronjob)
 PY
 # ── local overrides: HTTP-only cookie, log-based mail ──
 kubectl --context "kind-${MGMT_CLUSTER}" -n management patch configmap management-runtime-config \
@@ -656,19 +651,18 @@ kubectl --context "kind-${MGMT_CLUSTER}" -n management patch configmap managemen
 kubectl --context "kind-${MGMT_CLUSTER}" apply -k "${MANAGEMENT_APP_OVERLAY}"
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/redis --timeout=120s
 kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management rollout status deploy/minio --timeout=120s
-kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management get cronjob/github-poll-worker >/dev/null
+kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management get deploy/github-poll-worker >/dev/null
 wait_management_pod_ready api-gateway 300s
 
 for deploy in "${WORKER_DEPLOYMENTS_TO_START[@]}"; do
   kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management scale "deploy/${deploy}" --replicas=1
   wait_management_pod_ready "${deploy}" 300s
 done
-if [ "${ENABLE_GITHUB_POLL_CRON}" = "1" ]; then
-  kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management patch cronjob/github-poll-worker \
-    --type=merge \
-    -p '{"spec":{"suspend":false}}'
+if [ "${ENABLE_GITHUB_POLL_WORKER}" = "1" ]; then
+  kubectl_retry --context "kind-${MGMT_CLUSTER}" -n management scale deploy/github-poll-worker --replicas=1
+  wait_management_pod_ready github-poll-worker 300s
 else
-  echo "==> leaving github-poll-worker CronJob suspended (set ENABLE_GITHUB_POLL_CRON=1 to enable)"
+  echo "==> leaving github-poll-worker Deployment scaled to 0 (set ENABLE_GITHUB_POLL_WORKER=1 to enable)"
 fi
 
 MGMT_NODE="${MGMT_CLUSTER}-control-plane"
@@ -721,7 +715,7 @@ else
 fi
 echo
 echo "Worker set:   ${UP_WORKER_SET}"
-echo "Poll cron:    ${ENABLE_GITHUB_POLL_CRON}"
+echo "Poll worker:  ${ENABLE_GITHUB_POLL_WORKER}"
 echo
 echo "Run smoke test:"
 echo "  bash ${ROOT_DIR}/scripts/smoke.sh"

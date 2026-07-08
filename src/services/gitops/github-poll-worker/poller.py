@@ -120,7 +120,7 @@ class GitHubPoller:
         ).rstrip("/")
         self.webhook_secret = env(Settings.WEBHOOK_SECRET_ENV, "")  # webhook 입구 HMAC 서명 키.
         self.image = env(Settings.WEBHOOK_IMAGE_ENV, Settings.DEFAULT_IMAGE)
-        self.once = env_truthy(Settings.POLL_ONCE_ENV)  # CronJob 모드면 1회 후 종료.
+        self.once = env_truthy(Settings.POLL_ONCE_ENV)  # CronJob 호환 모드면 1회 후 종료.
         self._client = client
         self.db = db
         self.token_vault = token_vault or build_token_vault()
@@ -137,8 +137,7 @@ class GitHubPoller:
             await self.drive(client)
 
     async def drive(self, client: httpx.AsyncClient) -> None:
-        # 프로덕션: CronJob 이 주기를 들고 POLL_ONCE 로 1회 실행 → 위임(겹침·복구는 k8s).
-        # 데모: 상주 워커가 직접 interval 루프(replica 1 이라 중복발화 없음).
+        # 기본 배포: Deployment 1개가 interval 루프를 돈다. POLL_ONCE 는 CronJob 호환 진입점이다.
         if self.once:
             await self.poll_once_with_retry(client)
             return
@@ -290,7 +289,7 @@ class GitHubPoller:
             )
             return None
         if response.status_code in Settings.ACCESS_ERROR_STATUS_CODES:
-            # 인증/접근 오류 → 예외로 CronJob 을 죽이지 않고 명확한 경고 후 스킵.
+            # 인증/접근 오류 → 폴링 프로세스를 죽이지 않고 명확한 경고 후 스킵.
             LOGGER.warning(
                 "github_poll_access_denied",
                 extra={

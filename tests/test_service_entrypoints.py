@@ -133,9 +133,14 @@ def test_up_script_starts_management_workers_after_gateway() -> None:
     assert "wait_management_pod_ready api-gateway" in up_script
     assert 'scale "deploy/${deploy}" --replicas=1' in up_script
     assert "--for=condition=ready pod" in up_script
-    assert "suspend: true" in up_script
-    assert 'ENABLE_GITHUB_POLL_CRON="${ENABLE_GITHUB_POLL_CRON:-0}"' in up_script
-    assert "leaving github-poll-worker CronJob suspended" in up_script
+    assert (
+        'ENABLE_GITHUB_POLL_WORKER="${ENABLE_GITHUB_POLL_WORKER:-${ENABLE_GITHUB_POLL_CRON:-0}}"'
+        in up_script
+    )
+    assert "scale deploy/github-poll-worker" in up_script
+    assert "--replicas=0" in up_script
+    assert "--replicas=1" in up_script
+    assert "leaving github-poll-worker Deployment scaled to 0" in up_script
     for deploy in (
         "workflow-controller",
         "alert-worker",

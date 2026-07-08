@@ -61,7 +61,7 @@ class Settings:
     POLL_INTERVAL_ENV = "POLL_INTERVAL_SECONDS"
     DEFAULT_POLL_INTERVAL_SECONDS = "30"
 
-    # POLL_ONCE=1 → 한 번 당기고 종료(프로덕션 CronJob 모드). 미설정 → 무한 루프(데모 Deployment).
+    # POLL_ONCE=1 → 한 번 당기고 종료(CronJob 호환 모드). 미설정 → Deployment 내부 루프.
     POLL_ONCE_ENV = "POLL_ONCE"
 
     # 공개 repo 는 무인증도 되나 시간당 60회 제한 → 토큰 있으면 인증(5000회). 데모 30초=120회/시.
@@ -75,7 +75,7 @@ class Settings:
     SIGNATURE_HEADER = "x-hub-signature-256"
     SIGNATURE_PREFIX = "sha256="
 
-    # 폴링 튜닝값 — CronJob ReadTimeout 완화를 위해 기본 타임아웃은 30초 이상으로 둠.
+    # 폴링 튜닝값 — once/loop 양쪽에서 ReadTimeout 완화를 위해 기본 타임아웃은 30초 이상으로 둠.
     HTTP_TIMEOUT_SECONDS_ENV = "HTTP_TIMEOUT_SECONDS"  # GitHub/webhook HTTP 타임아웃 초(기본 30)
     HTTP_TIMEOUT_SECONDS = int(env(HTTP_TIMEOUT_SECONDS_ENV, "30"))
     POLL_ONCE_MAX_ATTEMPTS_ENV = (
@@ -97,7 +97,7 @@ class Settings:
     SOFT_SKIP_STATUS_CODES = {403, 429}
     # ETag(If-None-Match) 조건부 요청의 '변경 없음' — GitHub rate limit 을 소모하지 않음.
     NOT_MODIFIED_STATUS_CODE = 304
-    # 인증/접근 오류 — CronJob 을 '실패'로 죽이지 않고 명확한 경고 후 스킵.
+    # 인증/접근 오류 — 폴링 프로세스를 '실패'로 죽이지 않고 명확한 경고 후 스킵.
     # (private repo 무인증 404, 토큰 만료 401 등 설정 문제 → 로그로 드러내되 파이프라인은 계속)
     ACCESS_ERROR_STATUS_CODES = {401, 404}
 

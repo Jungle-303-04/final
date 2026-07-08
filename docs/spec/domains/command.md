@@ -136,9 +136,9 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 | 메서드 | 시그니처 | 쿼리 의미 |
 |---|---|---|
-| `queue_agent_command` | `(self, correlation_id: str, plan: JsonObject, status: str) -> None` | `INSERT INTO agent_commands ... ON CONFLICT (command_id) DO NOTHING` (멱등). `payload=plan` 전문 저장, lease 필드 NULL, `result={}`. 같은 트랜잭션에서 `pg_notify(AGENT_COMMAND_CHANNEL, wakeup_key(workspace_id, cluster_id))`(`src/packages/runtime/command_wakeup.py :: AGENT_COMMAND_CHANNEL` = `"agent_command_queued"`, payload는 `wakeup_key`가 만드는 `"<workspace_id>/<cluster_id>"`)를 호출해 대기 중인 agent long-poll을 즉시 깨운다. 리스너가 없어도 DB row가 source of truth라 동작은 폴링으로 보장된다 |
+| `queue_agent_command` | `(self, correlation_id: str, plan: JsonObject, status: str) -> None` | `INSERT INTO agent_commands ... ON CONFLICT (command_id) DO NOTHING` (멱등). `payload=plan` 전문 저장, `priority=int(plan["priority"] or 100)`, lease 필드 NULL, `result={}`. 같은 트랜잭션에서 `pg_notify(AGENT_COMMAND_CHANNEL, wakeup_key(workspace_id, cluster_id))`(`src/packages/runtime/command_wakeup.py :: AGENT_COMMAND_CHANNEL` = `"agent_command_queued"`, payload는 `wakeup_key`가 만드는 `"<workspace_id>/<cluster_id>"`)를 호출해 대기 중인 agent long-poll을 즉시 깨운다. 리스너가 없어도 DB row가 source of truth라 동작은 폴링으로 보장된다 |
 | `get_agent_command` | `async (self, command_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID) -> JsonObject \| None` | 워크스페이스 범위 명령 단건 SELECT(`command_id, cluster_id, correlation_id, action, status, result, completed_at`) — 콘솔이 명령 상태·실제 결과를 폴링하는 용도. 없으면 None |
-| `lease_agent_command` | `async (self, cluster_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID, queued_status: str = CommandStatus.QUEUED, leased_status: str = CommandStatus.LEASED, agent_id: str = UNKNOWN_AGENT_ID, lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS) -> CommandRecord \| None` | 후보 = (status=queued) OR (status=leased AND leased_until<now()) OR (status=running AND leased_until<now())를 `workspace_id+cluster_id`로 필터, `ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED` 스칼라 서브쿼리 → `UPDATE ... SET status=leased, lease_id=uuid4, agent_id, leased_until=now+lease_seconds RETURNING`. 없으면 None, 있으면 `serialize_command(row_dict(...))` |
+| `lease_agent_command` | `async (self, cluster_id: str, workspace_id: str = DEFAULT_WORKSPACE_ID, queued_status: str = CommandStatus.QUEUED, leased_status: str = CommandStatus.LEASED, agent_id: str = UNKNOWN_AGENT_ID, lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS) -> CommandRecord \| None` | 후보 = (status=queued) OR (status=leased AND leased_until<now()) OR (status=running AND leased_until<now())를 `workspace_id+cluster_id`로 필터, `ORDER BY priority DESC, created_at LIMIT 1 FOR UPDATE SKIP LOCKED` 스칼라 서브쿼리 → `UPDATE ... SET status=leased, lease_id=uuid4, agent_id, leased_until=now+lease_seconds RETURNING`. 없으면 None, 있으면 `serialize_command(row_dict(...))` |
 | `start_agent_command` | `async (self, command_id: str, workspace_id: str, cluster_id: str, lease_id: str, agent_id: str, running_status: str = CommandStatus.RUNNING, lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS) -> str \| None` | lease_id+agent_id+status=LEASED+미만료 조건의 UPDATE → RUNNING, `started_at=now()`, lease 연장. RETURNING correlation_id(불일치 시 None) |
 | `heartbeat_agent_command` | `async (self, command_id, workspace_id, cluster_id, lease_id, agent_id, lease_seconds=DEFAULT_COMMAND_LEASE_SECONDS) -> str \| None` | status IN (LEASED, RUNNING) + 미만료 조건에서 `leased_until` 연장만. RETURNING correlation_id |
 | `complete_agent_command_and_stage_event` | `async (self, command_id, workspace_id, cluster_id, result: JsonObject, lease_id, agent_id, source: str) -> EventEnvelope \| None` | 단일 async 트랜잭션(`async_engine.begin()`): status=RUNNING+lease 유효 조건 UPDATE → `status=result["status"]`, result/completed_at 기록. 성공 시 `CommandCompletedBody`를 `event()`로 envelope화해 `events`·`outbox` 테이블에 `ON CONFLICT (event_id) DO NOTHING` insert 후 envelope 반환. 조건 불일치 시 None |
@@ -209,6 +209,7 @@ management 클러스터(role=`management`)는 제어 불가다. `commands`와 sc
 | correlation_id | Text | NOT NULL | 발행 이벤트 상관관계 |
 | cluster_id | Text | NOT NULL | 대상 클러스터 |
 | action | Text | NOT NULL | 명령 액션 |
+| priority | Integer | NOT NULL, server_default `100` | lease 후보 정렬 우선순위. 큰 값 먼저, 같은 값은 `created_at` 순 |
 | payload | JSONB | NOT NULL | Plan 전문 |
 | status | Text | NOT NULL | `queued`/`leased`/`running`/`completed`/`failed` (`CommandStatus`) |
 | lease_id | Text | nullable | 현재 리스 UUID |
@@ -230,7 +231,7 @@ management 클러스터(role=`management`)는 제어 불가다. `commands`와 sc
 | `LeaseMetadata` | `lease_seconds: int`, `heartbeat_interval_seconds: int` |
 | `RetryPolicy` | `max_attempts: int`, `retry_delay_seconds: int` |
 | `RoutingConstraint` | `channel: str`, `cluster_id: str`, `workspace_id: str`, `required_capability: str` |
-| `Plan` | `command_id`, `idempotency_key`, `cluster_id`, `action`, `namespace` (str) · `diff: JsonObject` · `payload: JsonObject` · `steps: list[str]` · `lease: LeaseMetadata` · `retry_policy: RetryPolicy` · `routing_constraint: RoutingConstraint` · `workspace_id=DEFAULT_WORKSPACE_ID` · `application_id=DEFAULT_APPLICATION_ID` · `workflow_run_id=DEFAULT_WORKFLOW_RUN_ID` · `binding_id=DEFAULT_DEPLOYMENT_BINDING_ID` · `environment=DEFAULT_ENVIRONMENT` · `approval_ref: str \| None = None` · `policy_decision_ref: str \| None = None` |
+| `Plan` | `command_id`, `idempotency_key`, `cluster_id`, `action`, `namespace` (str) · `diff: JsonObject` · `payload: JsonObject` · `steps: list[str]` · `lease: LeaseMetadata` · `retry_policy: RetryPolicy` · `routing_constraint: RoutingConstraint` · `workspace_id=DEFAULT_WORKSPACE_ID` · `application_id=DEFAULT_APPLICATION_ID` · `workflow_run_id=DEFAULT_WORKFLOW_RUN_ID` · `binding_id=DEFAULT_DEPLOYMENT_BINDING_ID` · `environment=DEFAULT_ENVIRONMENT` · `priority: int = 100` · `approval_ref: str \| None = None` · `policy_decision_ref: str \| None = None` |
 | `Route` | `channel: str`, `cluster_id: str` |
 
 ### 구독 (Consumes)
@@ -251,6 +252,7 @@ management 클러스터(role=`management`)는 제어 불가다. `commands`와 sc
 | workflow_run_id | str | `DEFAULT_WORKFLOW_RUN_ID` |
 | binding_id | str | `DEFAULT_DEPLOYMENT_BINDING_ID` |
 | environment | str | `DEFAULT_ENVIRONMENT` |
+| priority | int | `100` |
 | requested_by | str \| None | None |
 | actor | JsonObject \| None | None |
 | approval_ref | str \| None | None |
@@ -262,7 +264,7 @@ management 클러스터(role=`management`)는 제어 불가다. `commands`와 sc
 | 이벤트명(라우팅 키) | body(앵커) | 필드 |
 |---|---|---|
 | `command.dispatched` (`COMMAND_DISPATCHED`) | `src/domains/command/events.py :: CommandDispatchedBody` | `plan: Plan`, `route: Route` |
-| `command.queued_for_agent` (`COMMAND_QUEUED_FOR_AGENT`) | `src/domains/command/events.py :: CommandQueuedForAgentBody` | `command_id: str`, `cluster_id: str`, `workspace_id=DEFAULT_WORKSPACE_ID`, `application_id=DEFAULT_APPLICATION_ID`, `workflow_run_id=DEFAULT_WORKFLOW_RUN_ID`, `binding_id=DEFAULT_DEPLOYMENT_BINDING_ID`, `environment=DEFAULT_ENVIRONMENT`, `approval_ref: str \| None = None`, `policy_decision_ref: str \| None = None` |
+| `command.queued_for_agent` (`COMMAND_QUEUED_FOR_AGENT`) | `src/domains/command/events.py :: CommandQueuedForAgentBody` | `command_id: str`, `cluster_id: str`, `workspace_id=DEFAULT_WORKSPACE_ID`, `application_id=DEFAULT_APPLICATION_ID`, `workflow_run_id=DEFAULT_WORKFLOW_RUN_ID`, `binding_id=DEFAULT_DEPLOYMENT_BINDING_ID`, `environment=DEFAULT_ENVIRONMENT`, `priority: int = 100`, `approval_ref: str \| None = None`, `policy_decision_ref: str \| None = None` |
 | `command.rejected` (`COMMAND_REJECTED`) | `src/domains/command/events.py :: CommandRejectedBody` | `reason: str`, `requested: JsonObject` (원요청 `to_body()`) |
 | `command.completed` (`COMMAND_COMPLETED`) | `src/domains/command/events.py :: CommandCompletedBody` | `command_id: str`, `result: JsonObject` |
 
@@ -286,7 +288,7 @@ management 클러스터(role=`management`)는 제어 불가다. `commands`와 sc
 ### idempotency_key / build_plan
 
 - `idempotency_key`: `{correlation_id, workspace_id, application_id, workflow_run_id, binding_id, environment, cluster_id, action, namespace, approval_ref, policy_decision_ref, diff: command.diff.to_body(), payload}`를 `json.dumps(sort_keys=True, separators=(",", ":"))` 후 sha256 hexdigest.
-- `build_plan`: `command_id=f"cmd-{key[:32]}"`, cluster/action/namespace는 빈 값이면 `COMMAND_CONFIG` 기본값으로 대체, `steps=list(COMMAND_CONFIG.policy_steps)`, lease/retry/routing_constraint는 `COMMAND_CONFIG` 값(`channel="agent-poll"`, `required_capability="command_receiver"`).
+- `build_plan`: `command_id=f"cmd-{key[:32]}"`, cluster/action/namespace는 빈 값이면 `COMMAND_CONFIG` 기본값으로 대체, `steps=list(COMMAND_CONFIG.policy_steps)`, lease/retry/routing_constraint는 `COMMAND_CONFIG` 값(`channel="agent-poll"`, `required_capability="command_receiver"`), `priority=max(100, int(command.priority or 100))`.
 
 ### 만료 명령 janitor (`sweep_expired_agent_commands`)
 

@@ -59,10 +59,10 @@ body 스키마는 [command 도메인](../domains/command.md) 참조.
 
 | 구분 | subject | body | 조건 |
 |---|---|---|---|
-| 구독 | `command.requested` | `CommandRequestedBody(cluster_id, action, namespace, reason, diff, workspace_id, application_id, workflow_run_id, binding_id, environment, requested_by?, actor?, approval_ref?, policy_decision_ref?, payload)` | durable `command-worker` |
+| 구독 | `command.requested` | `CommandRequestedBody(cluster_id, action, namespace, reason, diff, workspace_id, application_id, workflow_run_id, binding_id, environment, priority=100, requested_by?, actor?, approval_ref?, policy_decision_ref?, payload)` | durable `command-worker` |
 | 발행 | `command.rejected` | `CommandRejectedBody(reason, requested=evt.to_body())` | 정책/승인 검증 실패 |
 | 발행 | `command.dispatched` | `CommandDispatchedBody(plan, route)` | 정책 통과·계획 수립 직후 |
-| 발행 | `command.queued_for_agent` | `CommandQueuedForAgentBody(command_id, cluster_id, workspace_id, application_id, workflow_run_id, binding_id, environment, approval_ref?, policy_decision_ref?)` | DB 큐 적재 후 |
+| 발행 | `command.queued_for_agent` | `CommandQueuedForAgentBody(command_id, cluster_id, workspace_id, application_id, workflow_run_id, binding_id, environment, priority=100, approval_ref?, policy_decision_ref?)` | DB 큐 적재 후 |
 | 발행 | `command.completed` | `CommandCompletedBody(command_id, result)` | sweep 이 만료 명령을 FAILED 종결할 때(각 행마다 1건) |
 
 승인 면제 rule: `COMMAND_AUTO_APPROVE_ACTIONS`(기본 `k8s.apps.v1.deployments.scale`) ×
@@ -88,7 +88,7 @@ body 스키마는 [command 도메인](../domains/command.md) 참조.
    - `record.status ∉ {granted, not_required}` → "write command approval_ref is not granted".
    - `record.details.policy_decision_ref`/`approval_ref` 가 기록돼 있고 요청값과 다르면 → "write command policy_decision_ref mismatch".
 3. 거부 시 `command.rejected` 1건으로 종료.
-4. **Plan 생성** `build_plan`: `idempotency_key = sha256(canonical JSON of {correlation_id, workspace/application/workflow_run/binding/environment, cluster_id, action, namespace, approval_ref, policy_decision_ref, diff, payload})` (sort_keys, 구분자 `(",",":")`), `command_id = "cmd-" + key[:32]`. 빈 값은 기본값 보정(cluster→`default-target-cluster`, action→`rollout_restart`, namespace→`sandbox`). lease 60s/heartbeat 20s, retry 3회/5s, routing `channel="agent-poll"`, `required_capability="command_receiver"`.
+4. **Plan 생성** `build_plan`: `idempotency_key = sha256(canonical JSON of {correlation_id, workspace/application/workflow_run/binding/environment, cluster_id, action, namespace, approval_ref, policy_decision_ref, diff, payload})` (sort_keys, 구분자 `(",",":")`), `command_id = "cmd-" + key[:32]`. 빈 값은 기본값 보정(cluster→`default-target-cluster`, action→`rollout_restart`, namespace→`sandbox`). lease 60s/heartbeat 20s, retry 3회/5s, routing `channel="agent-poll"`, `required_capability="command_receiver"`, priority는 `max(100, int(command.priority or 100))`.
 5. `command.dispatched`(route = channel+cluster) yield → `queue_agent_command`(같은 트랜잭션) → `command.queued_for_agent` yield.
 6. **sweep**: `sweep_expired_agent_commands` 가 만료 종결 행마다 `command.completed` yield — workflow 가 영구 APPLYING 에 갇히지 않게 함.
 

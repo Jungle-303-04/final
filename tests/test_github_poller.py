@@ -1,6 +1,6 @@
 """github-poll-worker 단위 검증 — 실제 GitHub/네트워크 없이 httpx MockTransport 로.
 
-once 모드(CronJob): 최신 커밋을 webhook 입구로 1회 POST.
+once 모드(CronJob 호환): 최신 커밋을 webhook 입구로 1회 POST.
 dedup 가드: 같은 커밋이면 두 번째 폴은 POST 안 함(최종 dedup 은 ledger 가 보장).
 """
 
@@ -86,7 +86,7 @@ def test_once_mode_posts_latest_commit_to_webhook() -> None:
     async def go() -> None:
         async with httpx.AsyncClient(transport=_transport(posted)) as client:
             poller = module.GitHubPoller(client=client)
-            poller.once = True  # CronJob 모드: 1회 당기고 종료
+            poller.once = True  # CronJob 호환 모드: 1회 당기고 종료
             await poller.run()
 
     asyncio.run(go())
@@ -209,12 +209,19 @@ def test_once_mode_read_timeout_retry_is_bounded(monkeypatch) -> None:
     assert sleeps == [1.0, 2.0]
 
 
-def test_cronjob_failed_history_limit_is_shrunk() -> None:
+def test_deployment_manifest_uses_bounded_loop_mode() -> None:
     manifest = yaml.safe_load(
         (ROOT / "deploy" / "management" / "github-poll-worker.yaml").read_text()
     )
 
-    assert manifest["spec"]["failedJobsHistoryLimit"] == 1
+    assert manifest["kind"] == "Deployment"
+    assert manifest["spec"]["replicas"] == 1
+    assert manifest["spec"]["strategy"]["type"] == "Recreate"
+    container = manifest["spec"]["template"]["spec"]["containers"][0]
+    assert container["command"] == ["python", "src/services/gitops/github-poll-worker/app.py"]
+    env = {item["name"]: item["value"] for item in container["env"]}
+    assert env["POLL_INTERVAL_SECONDS"] == "30"
+    assert "POLL_ONCE" not in env
 
 
 def test_dedup_guard_skips_unchanged_sha() -> None:
