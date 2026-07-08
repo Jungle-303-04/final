@@ -1,11 +1,21 @@
 # HANDOVER — 2026-07-07 밤샘 작업 인수인계
 
-다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:25 KST (미사용 레거시 UI 스윕)
+다른 AI/팀원이 이어받기 위한 문서. 작업마다 갱신한다. 최종 갱신: 2026-07-08 09:30 KST (인시던트 evidence 상태 구분)
 
 ## 현재 범위 고정 — target-01 배포 제외
 
 - 2026-07-08 사용자 최신 지시: `cluster-1`의 `target-01.woonyong.org` 배포와 [Jungle-303-04/k8s-incident-demo-target](https://github.com/Jungle-303-04/k8s-incident-demo-target) 레포 연결은 **다른 스레드 담당**이다.
 - 이 스레드는 `target-01.woonyong.org` 배포를 수행하지 않는다. 안정화 대상은 `k8s.woonyong.org` 관리 서비스의 evidence payload, DB 보존, keyset 조회, worker 분리, 프론트 품질 작업이다.
+
+## 체크포인트 — 인시던트 evidence 상태 구분
+
+- 구현:
+  - `IncidentDetailView`의 `EvidencePanel`이 인시던트 상태를 함께 받아 저장 evidence 0건 상태를 `증거 수집 중`과 `증거 없음`으로 분리한다.
+  - 비종결 인시던트가 evidence 단계이거나 `missing_evidence`가 남아 있으면 `증거 수집 중` EmptyState, missing evidence preview, `다시 확인` CTA를 표시한다.
+  - 종결 상태이거나 수집 신호가 없으면 `증거 없음`으로 표시한다.
+- 검증:
+  - `incident evidence empty state distinguishes collecting from none` 테스트 추가.
+  - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
 
 ## 체크포인트 — 미사용 레거시 UI 스윕
 

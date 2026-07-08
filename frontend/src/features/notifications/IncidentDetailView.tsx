@@ -270,7 +270,7 @@ export default function IncidentDetailView() {
 
       <section className="grid gap-4 xl:grid-cols-2">
         <RcaReportsPanel correlationId={incident.correlation_id} onShowEvidence={showEvidence} />
-        <div ref={evidenceRef}><EvidencePanel correlationId={incident.correlation_id} /></div>
+        <div ref={evidenceRef}><EvidencePanel correlationId={incident.correlation_id} incident={incident} /></div>
       </section>
     </div>
   );
@@ -355,7 +355,7 @@ function recoveryPlanTone(plan: RecoveryPlanStatus): Tone {
   return plan.selection_required ? 'info' : 'neutral';
 }
 
-function EvidencePanel({ correlationId }: { correlationId: string }) {
+function EvidencePanel({ correlationId, incident }: { correlationId: string; incident?: IncidentDetail }) {
   const q = useEvidence(correlationId || undefined);
   const [kindFilter, setKindFilter] = useState('all');
   if (!correlationId) {
@@ -365,14 +365,32 @@ function EvidencePanel({ correlationId }: { correlationId: string }) {
   const presentKinds = new Set(items.map((item) => item.kind));
   const rows = items.filter((item) => kindFilter === 'all' || item.kind === kindFilter);
   const title = q.data ? `증거 ${items.length.toLocaleString()}건${q.data.has_more ? ' · 최근 100건' : ''}` : '증거';
+  const collecting = items.length === 0 && isEvidenceCollecting(incident);
+  const missingPreview = incident?.missing_evidence.slice(0, 3) ?? [];
   return (
     <Card title={title}>
       {q.isPending ? (
         <Skeleton lines={4} />
       ) : q.isError ? (
         <EmptyState icon={<AlertIcon />} title="증거 조회 실패" description={(q.error as Error).message} action={<Button size="sm" onClick={() => q.refetch()}>다시 시도</Button>} />
+      ) : collecting ? (
+        <EmptyState
+          icon={<FileIcon />}
+          title="증거 수집 중"
+          description={
+            <span className="grid gap-2">
+              <span>수집 워커가 이 correlation의 증거를 아직 저장하지 않았습니다. 보통 수십 초 안에 갱신됩니다.</span>
+              {missingPreview.length > 0 && (
+                <span className="flex flex-wrap justify-center gap-2">
+                  {missingPreview.map((item) => <Badge key={item} tone="warning">미수집 {trunc(item, 28)}</Badge>)}
+                </span>
+              )}
+            </span>
+          }
+          action={<Button size="sm" onClick={() => q.refetch()} loading={q.isFetching}>다시 확인</Button>}
+        />
       ) : items.length === 0 ? (
-        <EmptyState icon={<FileIcon />} title="저장된 증거 없음" description="이 correlation에 저장된 증거가 아직 없습니다" />
+        <EmptyState icon={<FileIcon />} title="증거 없음" description="수집이 완료됐지만 이 correlation에 저장된 증거가 없습니다" />
       ) : (
         <div className="grid gap-4">
           <div className="flex flex-wrap gap-2">
@@ -389,6 +407,14 @@ function EvidencePanel({ correlationId }: { correlationId: string }) {
       )}
     </Card>
   );
+}
+
+export function isEvidenceCollecting(incident?: IncidentDetail) {
+  if (!incident) return false;
+  const status = incident.status.toLowerCase();
+  if (TERMINAL.has(status)) return false;
+  const stage = stageOfSubject(incident.current_subject);
+  return stage === 'evidence' || incident.missing_evidence.length > 0 || (stage !== 'actions' && incident.supporting_evidence.length === 0);
 }
 
 function EvidenceRow({ record }: { record: EvidenceRecord }) {

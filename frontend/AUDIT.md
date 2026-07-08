@@ -154,7 +154,7 @@
 | 조직/그룹 생성 | 이름 입력 -> 현재 목록 기준 실시간 중복 검증; 유효할 때만 `POST /orgs` 또는 `POST /groups`; 성공/실패 toast | 완료 |
 | AI 채팅 | `GET /ai/conversations`, `GET /ai/conversations/:id`, create/send mutation 오류에서 LLM provider/API key/quota 계열 사유 감지; `conversation.status=failed`도 설정 안내 카드 선행; 정상일 때만 채팅 입력 표시 | 완료 |
 | 메트릭 PromQL | 입력 debounce -> `POST /metrics/validate`; valid일 때만 저장/실행 활성; 실행 클릭 시 동일 dry-run 재검증 -> `POST /agent/debug/query` 또는 `POST /clusters/{id}/metric-query-presets/{preset_id}/run`; 결과는 `GET /commands/{id}` 폴링; 0건 -> 시간범위 확장 CTA | 완료 |
-| 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리 | 대기 |
+| 인시던트 evidence | evidence 상태 조회; `수집 중`과 `없음` 분리. 비종결 인시던트가 evidence 단계이거나 `missing_evidence`가 남아 있고 저장 evidence가 0건이면 `증거 수집 중`, 종결/근거 없음이면 `증거 없음` | 완료 |
 | 목록 필터 전반 | 필터 변경 -> 목록 query; 0건 -> 필터 초기화 CTA | 대기 |
 
 ## 인증 전개형 검증 UX 변경 (2026-07-08)
