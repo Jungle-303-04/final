@@ -119,7 +119,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
         ["kubernetes", "metrics", "logs", "traces", "metadata"],
     ),
     "Ingress 502/503": (
-        ["upstream_unavailable", "backend_readiness_failure"],
+        ["upstream_unavailable", "backend_readiness_failure", "application_5xx_spike"],
         ["kubernetes", "metrics", "logs", "metadata"],
     ),
     "FailedScheduling": (

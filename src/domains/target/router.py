@@ -1237,7 +1237,7 @@ async def emit_evidence_if_ready(
     if payload is None:
         return None
 
-    evidence_body = ClusterEvidenceReceivedBody(**payload)
+    evidence_body = ClusterEvidenceReceivedBody(**complete_evidence_payload(payload))
     correlation_id = payload.get("correlation_id")
     event_envelope = event(
         evidence_body.__subject__,
@@ -1267,6 +1267,18 @@ async def emit_evidence_if_ready(
         event_id=recorded["event_id"],
         correlation_id=recorded["correlation_id"],
     )
+
+
+def complete_evidence_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **payload,
+        "kubernetes": payload.get("kubernetes")
+        if isinstance(payload.get("kubernetes"), dict)
+        else {},
+        "metrics": payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {},
+        "logs": payload.get("logs") if isinstance(payload.get("logs"), list) else [],
+        "traces": payload.get("traces") if isinstance(payload.get("traces"), dict) else {},
+    }
 
 
 @agent_router.post(

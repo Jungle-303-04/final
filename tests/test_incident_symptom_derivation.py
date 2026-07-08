@@ -319,7 +319,7 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
     "probe-fail": (
         PROBE_FAIL_SNAPSHOT,
         "Ingress 502/503",  # backend readiness 실패 계열 — ingress_5xx 룰이 다룬다
-        ["upstream_unavailable", "backend_readiness_failure"],
+        ["upstream_unavailable", "backend_readiness_failure", "application_5xx_spike"],
     ),
     "sched-fail": (
         SCHED_FAIL_SNAPSHOT,
@@ -334,7 +334,7 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
     "svc-selector": (
         SVC_SELECTOR_SNAPSHOT,
         "Ingress 502/503",  # 빈 endpoint 배선 문제 — upstream_unavailable 후보와 정합
-        ["upstream_unavailable", "backend_readiness_failure"],
+        ["upstream_unavailable", "backend_readiness_failure", "application_5xx_spike"],
     ),
 }
 
@@ -493,6 +493,57 @@ def test_generic_exit1_crash_without_config_log_selects_app_startup_failure() ->
     assert completed.root_cause != "oom_killed"
     oom = evaluation_by_id(completed, "oom_killed")
     assert "signal:oom_evidence" in oom.missing_evidence
+
+
+def test_sandbox_application_5xx_log_opens_incident_and_completes_rca() -> None:
+    """브라우저 Scenario Console의 HTTP 500/timeout 신호도 결정적 incident로 승격한다."""
+    healthy = snapshot(
+        pods=(pod("orders-api-1", owner=("ReplicaSet", "orders-api-96876968")),),
+        services=(
+            {
+                "namespace": NAMESPACE,
+                "name": "orders-api",
+                "type": "ClusterIP",
+                "cluster_ip": "10.96.0.10",
+                "ports": [],
+                "selector": {"app.kubernetes.io/name": "orders-api"},
+            },
+        ),
+        endpoints=(
+            {
+                "namespace": NAMESPACE,
+                "name": "orders-api-abc12",
+                "address_type": "IPv4",
+                "endpoint_count": 2,
+                "ports": [],
+            },
+        ),
+    )
+    payload = evidence_payload(
+        healthy,
+        metrics={"demo_orders_api_errors_total": {"value": 4}},
+        logs=[
+            {
+                "line": (
+                    '{"level":"ERROR","service":"orders-api","event":"http_request",'
+                    '"path":"/api/orders/error","status":500}'
+                )
+            }
+        ],
+    )
+    db = SpyDb()
+
+    events = run_to_rca_completion(payload, db=db, correlation_id="corr-app-5xx")
+
+    assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.incident.symptom == "Ingress 502/503"
+    assert detected.incident.resource_kind == "Deployment"
+    assert detected.incident.resource_name == "orders-api"
+    assert detected.incident.namespace == NAMESPACE
+    completed = events[-1]
+    assert completed.root_cause == "application_5xx_spike"
+    assert completed.rca_detail.confidence == 1.0
 
 
 def test_explicit_symptom_always_beats_derived_signals() -> None:

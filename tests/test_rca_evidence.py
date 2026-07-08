@@ -326,6 +326,49 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert queue_db.called("queue_agent_command")
 
 
+def test_application_5xx_recovery_offers_restart_and_scale_payload() -> None:
+    recovery_worker = load_service("ai/recovery-worker")
+    select_worker = load_service("ai/select-worker")
+    dispatch_worker = load_service("ai/dispatch-worker")
+
+    recovery_outs = run_handler(
+        recovery_worker.on_rca_completed,
+        report_for("application_5xx_spike"),
+    )
+    plan = recovery_outs[0].plan
+
+    assert [candidate.draft.action_type for candidate in plan.candidates[:2]] == [
+        "rollout_restart",
+        "deployment_scale",
+    ]
+
+    select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
+    assert subjects_of(select_outs) == ["recovery.action_selected"]
+    assert select_outs[0].selected.draft.action_type == "rollout_restart"
+
+    scale_candidate = plan.candidates[1]
+    dispatch_outs = run_handler(
+        dispatch_worker.on_recovery_action_selected,
+        RecoveryActionSelectedBody(
+            plan=plan,
+            selected=scale_candidate,
+            selected_by="operator-1",
+            auto_selected=False,
+            reason="operator selected scale",
+            workspace_id="workspace-1",
+        ),
+    )
+
+    scale_command = dispatch_outs[0]
+    assert scale_command.action == "k8s.apps.v1.deployments.scale"
+    assert scale_command.namespace == "sandbox"
+    assert scale_command.payload == {
+        "namespace": "sandbox",
+        "name": "checkout-api",
+        "replicas": 3,
+    }
+
+
 def test_evidence_lineage_is_attached_without_mutating_source_payload(monkeypatch) -> None:
     monkeypatch.setenv("EVIDENCE_COLLECTOR_VERSION", "agent-sha-1")
     payload = crashloop_payload(source_id="cluster-snapshot", window_start="window-1")

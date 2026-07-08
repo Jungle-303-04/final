@@ -12,8 +12,8 @@ from domains.rca.events import (
     RecoveryPlan,
 )
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
-from packages.config.constants import GitHub, Sandbox, Target
-from packages.contracts.event_bus.bodies import EventBody
+from packages.config.constants import Command, GitHub, Sandbox, Target
+from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from services.ai.agent.defaults import ActionRoutes
 
 UNKNOWN_ROUTE_REASON = "선택된 복구 후보의 route를 처리할 수 없습니다."
@@ -157,12 +157,35 @@ def build_command_request_body(
             "action_id": selected.action_id,
             "auto_selected": auto_selected,
         },
+        payload=command_payload_for(action, draft.resource_name, namespace, draft.params),
     )
 
 
 def command_action_for(selected: RecoveryActionCandidate) -> str | None:
     requested = str(selected.draft.params.get("command") or selected.draft.action_type)
     return command_action_for_recovery(requested)
+
+
+def command_payload_for(
+    action: str,
+    resource_name: str,
+    namespace: str,
+    params: JsonObject,
+) -> JsonObject:
+    if action != Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION:
+        return {}
+    replicas = params.get("replicas")
+    if isinstance(replicas, bool):
+        replicas = None
+    try:
+        replica_count = int(replicas)
+    except (TypeError, ValueError):
+        replica_count = 3
+    return {
+        "namespace": namespace,
+        "name": resource_name,
+        "replicas": replica_count,
+    }
 
 
 def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
