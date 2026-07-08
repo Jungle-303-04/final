@@ -2384,3 +2384,10 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py tests/test_dashboard_projection.py tests/test_fleet_router.py tests/test_ai_platform_tools.py tests/test_ai_conversation.py -q` → 66 passed.
   - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/ai src/domains/dashboard src/packages/ai src/packages/contracts/gateway src/services/ai tests/test_incident_symptom_derivation.py` → passed.
   - `bash scripts/frontend-check.sh` → design guard, typecheck, ESLint, 17 unit tests, production build 모두 passed.
+- 배포 시도:
+  - `dev` push commit `779b4f01 fix: 인시던트 복구 선택과 드릴다운 RCA 연결`.
+  - GitHub Actions `CI`/`AWS CD`/`Promote Dev To Main`은 모두 4초 내 실패했고 failed job `steps: []`라 코드 실행 전 runner/Actions 계층 실패로 확인했다.
+  - 수동 배포용 이미지는 ECR push 완료:
+    - service `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubernetes-ops-service:779b4f01-incident-recovery-ai-20260708120544`
+    - console `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:779b4f01-incident-recovery-ai-20260708120544`
+  - live `https://k8s.woonyong.org/`와 `/api/healthz`는 200 OK이나, AWS SSO 세션 만료로 `kubectl --context mgmt` rollout은 아직 미적용. `aws login` 완료 후 `management` namespace의 service deployments와 `console` deployment를 위 이미지로 `set image`하면 된다.
