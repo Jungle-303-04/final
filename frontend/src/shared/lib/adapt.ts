@@ -325,6 +325,10 @@ export function adaptIncidentDetail(raw: Record<string, unknown>): IncidentDetai
     pr_url: str(raw.pr_url),
     error_reason: str(raw.error_reason),
     updated_at: base.at,
+    namespace: str(raw.incident_namespace ?? raw.namespace),
+    resource_kind: str(raw.incident_resource_kind ?? raw.resource_kind),
+    resource_name: str(raw.incident_resource_name ?? raw.resource_name),
+    symptom: str(raw.incident_symptom ?? raw.symptom),
   };
 }
 

@@ -2359,6 +2359,28 @@ Prometheus base URL이 env/request 어디에도 없으면 `code="prometheus_base
   - management/cluster-1 `cluster-agent` 모두 위 이미지로 rollout 완료. `TARGET_AGENT_IMAGE`와 DB `cluster_registrations.settings.image`도 같은 태그로 갱신.
   - 최신 usage sample: cluster-1 `node_ready=2`, `node_total=2`, pods 20/20. management도 `node_ready=2`, `node_total=2`.
   - 과거 잘못 저장된 `node_total=4` usage samples는 양쪽 클러스터에서 삭제했다.
-- 현재 남은 주의:
+  - 현재 남은 주의:
   - live browser smoke에서 로그인 직전 `/api/auth/session` 401 리소스 로그가 한 번 보이지만, 인증 전 session check로 보이며 page error는 아니다.
   - 워킹트리에는 다른 프론트 세션의 변경 파일이 남아 있다. 이번 backend 커밋에는 `src/services/target/cluster-agent/providers/kubernetes_providers.py`, `tests/test_target_kubernetes_evidence.py`, `HANDOVER.md`만 포함해야 한다.
+
+## 인시던트 복구/AI/드릴다운 기존 계약 연결 패스 (2026-07-08)
+
+- 새 데모 endpoint를 만들지 않고 기존 RCA/evidence/recovery/AI/드릴다운 계약을 보강했다.
+- RCA 카탈로그:
+  - ImagePullBackOff와 FailedScheduling 계열은 실제 수집 가능한 Kubernetes event 근거만으로 확정 가능하게 `metadata/logs` 필수 의존을 제거했다.
+  - ingress 5xx의 upstream 후보도 현행 evidence bundle 소스에 맞춰 metadata 필수 의존을 제거했다.
+- Recovery playbook:
+  - `wrong_image_tag`, `missing_image_pull_secret`, `registry_unavailable`, `insufficient_cpu`, `insufficient_memory`,
+    `node_affinity_or_taint_mismatch`, `pvc_pending`에 승인형/Safe PR 복구 후보를 추가했다.
+  - 위험한 자동 조치는 추가하지 않았다. 신규 후보는 운영자 선택/승인 흐름을 탄다.
+- Dashboard/drilldown:
+  - RCA timeline 상세 응답에 `incident_namespace`, `incident_resource_kind`, `incident_resource_name`, `incident_symptom`을 포함했다.
+  - node→pod drilldown은 열린 incident가 Pod뿐 아니라 Deployment/ReplicaSet/Service로 잡힌 경우도 owner/prefix/label 관계로 관련 Pod에 `incident_correlation_id`를 매핑한다.
+- Frontend:
+  - 인시던트 상세에 한국어 `상황 요약`, 복구 후보 선택 버튼, AI 분석 버튼을 추가했다.
+  - AI context에 `incident_id`, `correlation_id`, `symptom`, `root_cause`를 보존하고, AI 도구 `get_incident_rca_context`가 기존 RCA report/recovery plan을 correlation 기준으로 읽는다.
+- 검증:
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_incident_symptom_derivation.py -q` → 21 passed.
+  - `PYTHONPATH=src .venv/bin/python -m pytest tests/test_rca_evidence.py tests/test_dashboard_projection.py tests/test_fleet_router.py tests/test_ai_platform_tools.py tests/test_ai_conversation.py -q` → 66 passed.
+  - `PYTHONPATH=src .venv/bin/python -m ruff check src/domains/ai src/domains/dashboard src/packages/ai src/packages/contracts/gateway src/services/ai tests/test_incident_symptom_derivation.py` → passed.
+  - `bash scripts/frontend-check.sh` → design guard, typecheck, ESLint, 17 unit tests, production build 모두 passed.

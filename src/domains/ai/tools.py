@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from domains.command.actions import registered_command_actions
+from domains.rca.report_projection import rca_report_summary
 from packages.ai.tools import ToolContext, ai
 
 DEFAULT_INCIDENT_LIMIT = 5
@@ -45,6 +46,15 @@ def _clamp(value: Any, default: int) -> int:
 
 def _ctx_or_arg(value: str | None, fallback: str | None) -> str:
     return str(value or fallback or "").strip()
+
+
+def _context_value(context: ToolContext, key: str) -> str:
+    value = getattr(context, key, None)
+    if value not in (None, ""):
+        return str(value).strip()
+    resource_context = context.resource_context or {}
+    raw = resource_context.get(key)
+    return str(raw).strip() if raw not in (None, "") else ""
 
 
 def _public_inventory_resource(row: dict[str, Any]) -> dict[str, Any]:
@@ -200,6 +210,61 @@ async def list_resource_rca_reports(
             }
             for row in filtered[:MAX_ROWS]
         ]
+    }
+
+
+@ai.tool(
+    name="get_incident_rca_context",
+    description="RCA report and recovery plan for a specific incident correlation in the chat context.",
+    parameters={
+        "correlation_id": {
+            "type": "string",
+            "description": "incident correlation id; defaults to chat context",
+        },
+    },
+)
+async def get_incident_rca_context(
+    context: ToolContext, correlation_id: str = ""
+) -> dict[str, Any]:
+    resolved = _ctx_or_arg(correlation_id, _context_value(context, "correlation_id"))
+    if not resolved:
+        return {"found": False, "error": "correlation_id is required"}
+    rows = await context.db.list_rca_reports(context.workspace_id, limit=MAX_ROWS)
+    reports = [
+        rca_report_summary(dict(row))
+        for row in rows
+        if str(row.get("correlation_id") or "") == resolved
+    ]
+    recovery_record = await context.db.get_recovery_plan_by_correlation(
+        resolved, context.workspace_id
+    )
+    plan = recovery_record.get("payload") if isinstance(recovery_record, dict) else None
+    plan_payload = plan if isinstance(plan, dict) else {}
+    return {
+        "found": bool(reports or plan_payload),
+        "correlation_id": resolved,
+        "reports": reports,
+        "recovery_plan": {
+            "plan_id": plan_payload.get("plan_id"),
+            "status": recovery_record.get("status") if isinstance(recovery_record, dict) else None,
+            "recommended_action_id": plan_payload.get("recommended_action_id"),
+            "selection_required": plan_payload.get("selection_required"),
+            "target": plan_payload.get("target"),
+            "candidates": [
+                {
+                    "action_id": candidate.get("action_id"),
+                    "title": candidate.get("title"),
+                    "description": candidate.get("description"),
+                    "route": candidate.get("route"),
+                    "risk_level": candidate.get("risk_level"),
+                    "approval_required": candidate.get("approval_required"),
+                }
+                for candidate in plan_payload.get("candidates", [])
+                if isinstance(candidate, dict)
+            ],
+        }
+        if plan_payload
+        else None,
     }
 
 

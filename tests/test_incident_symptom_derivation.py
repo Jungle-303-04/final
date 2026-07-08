@@ -546,6 +546,96 @@ def test_sandbox_application_5xx_log_opens_incident_and_completes_rca() -> None:
     assert completed.rca_detail.confidence == 1.0
 
 
+FAULT_COMPLETION_CASES: dict[str, tuple[ClusterEvidenceReceivedBody, str]] = {
+    "crashloop": (
+        evidence_payload(
+            CRASHLOOP_SNAPSHOT,
+            metrics={"container_memory_working_set_bytes": "normal"},
+            logs=[{"line": "FATAL: required environment variable DATABASE_URL is not set"}],
+        ),
+        "config_env_error",
+    ),
+    "oom": (
+        evidence_payload(
+            snapshot(
+                pods=(
+                    pod(
+                        "report-generator-6c4b7d9f4-r8m2s",
+                        owner=("ReplicaSet", "report-generator-6c4b7d9f4"),
+                        restarts=5,
+                        terminated=("OOMKilled",),
+                        ready=False,
+                        containers=(
+                            crashed_container(
+                                "report-generator",
+                                last_exit_code=137,
+                                last_reason="OOMKilled",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            metrics={"container_memory_working_set_bytes": "near-limit"},
+            logs=[{"line": "java.lang.OutOfMemoryError: Java heap space"}],
+        ),
+        "oom_killed",
+    ),
+    "imagepull": (
+        evidence_payload(IMAGEPULL_SNAPSHOT),
+        "wrong_image_tag",
+    ),
+    "probe-fail": (
+        evidence_payload(
+            PROBE_FAIL_SNAPSHOT,
+            metrics={"ready_endpoints": 0},
+            logs=[{"line": "readiness probe failed: wrong health port"}],
+        ),
+        "backend_readiness_failure",
+    ),
+    "sched-fail": (
+        evidence_payload(SCHED_FAIL_SNAPSHOT),
+        "node_affinity_or_taint_mismatch",
+    ),
+    "svc-selector": (
+        evidence_payload(
+            SVC_SELECTOR_SNAPSHOT,
+            metrics={"ready_endpoints": 0},
+            logs=[
+                {
+                    "line": (
+                        '{"level":"error","service":"checkout-client",'
+                        '"action":"checkout-gateway unreachable: connection refused or timeout"}'
+                    )
+                }
+            ],
+        ),
+        "upstream_unavailable",
+    ),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(FAULT_COMPLETION_CASES))
+def test_fault_scenarios_complete_rca_and_offer_recovery(fault: str) -> None:
+    """6개 데모 시나리오가 RCA report와 복구 후보까지 이어지는지 고정한다."""
+    payload, expected_root_cause = FAULT_COMPLETION_CASES[fault]
+    db = SpyDb()
+
+    events = run_to_rca_completion(payload, db=db, correlation_id=f"corr-complete-{fault}")
+
+    assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
+    completed = events[-1]
+    assert completed.root_cause == expected_root_cause
+    assert completed.rca_detail.confidence == 1.0
+    assert db.called("save_rca_report")
+
+    recovery_worker = load_service("ai/recovery-worker")
+    recovery_outs = run_handler(recovery_worker.on_rca_completed, completed)
+    plan = recovery_outs[0].plan
+    assert subjects_of(recovery_outs) == ["recovery.planned"]
+    assert plan.candidates
+    assert plan.candidates[0].draft.action_type != "manual_analysis"
+
+
 def test_explicit_symptom_always_beats_derived_signals() -> None:
     """명시 > 유도 — webhook 등이 실어 준 symptom 은 snapshot 신호로 덮지 않는다."""
     kubernetes = {

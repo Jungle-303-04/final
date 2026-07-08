@@ -539,7 +539,10 @@ function Composer({
 function ContextSummary({ context }: { context: AiChatContext }) {
   const items = [
     { label: '클러스터', value: context.cluster_id },
+    { label: '인시던트', value: context.incident_id ?? context.correlation_id },
     { label: '대상', value: [context.kind, context.namespace, context.name].filter(Boolean).join(' / ') },
+    { label: '증상', value: context.symptom },
+    { label: '원인', value: context.root_cause },
     { label: '유형', value: context.resource_type },
   ].filter((item): item is { label: string; value: string } => Boolean(item.value));
   if (!items.length) return null;

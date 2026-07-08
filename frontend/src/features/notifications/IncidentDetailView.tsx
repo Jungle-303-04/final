@@ -1,8 +1,9 @@
 // RCA 인시던트 파이프라인 그래프 + 저장된 증거/RCA 리포트 실데이터 패널.
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
-import { useEvidence, useIncident, useRcaReports, useRecoveryPlan } from '@/features/notifications/api';
+import { useEvidence, useIncident, useRcaReports, useRecoveryPlan, useSelectRecoveryAction } from '@/features/notifications/api';
+import { useCreateConversation } from '@/features/chat/api';
 import { FlowCanvas, useAutoLayout, type CollapsibleGroupData, type FlowEdgeData } from '@/shared/flow';
 import { fmtAbs, timeAgo } from '@/shared/lib/format';
 import type {
@@ -40,6 +41,54 @@ const STAGE_LABEL: Record<Stage, string> = { incident: '인시던트', evidence:
 const TERMINAL = new Set(['completed', 'done', 'resolved', 'closed', 'failed', 'rejected']);
 const EVIDENCE_KINDS = ['kubernetes', 'prometheus', 'loki', 'tempo'] as const;
 const KIND_TONE: Record<string, Tone> = { kubernetes: 'info', prometheus: 'warn', loki: 'ok', tempo: 'neutral' };
+const ROOT_CAUSE_LABEL: Record<string, string> = {
+  oom_killed: '메모리 한도 초과로 컨테이너 재시작',
+  bad_image_rollout: '배포 이미지 문제',
+  config_env_error: '설정 또는 환경변수 오류',
+  app_startup_failure: '애플리케이션 시작 실패',
+  dependency_connection_failure: '의존성 연결 실패',
+  application_5xx_spike: '애플리케이션 5xx/timeout 급증',
+  backend_readiness_failure: '백엔드 readiness 실패',
+  upstream_unavailable: '서비스 endpoint 연결 불가',
+  wrong_image_tag: '잘못된 이미지 태그',
+  missing_image_pull_secret: '이미지 pull Secret 누락',
+  registry_unavailable: '이미지 registry 장애',
+  insufficient_cpu: '노드 CPU 부족',
+  insufficient_memory: '노드 메모리 부족',
+  node_affinity_or_taint_mismatch: '스케줄링 조건 불일치',
+  pvc_pending: 'PVC 바인딩 대기',
+  unknown: '원인 확인 필요',
+};
+const SYMPTOM_LABEL: Record<string, string> = {
+  CrashLoopBackOff: '컨테이너 반복 재시작',
+  ImagePullBackOff: '이미지 가져오기 실패',
+  ErrImagePull: '이미지 가져오기 실패',
+  FailedScheduling: '스케줄링 실패',
+  Pending: '스케줄 대기',
+  'Ingress 502/503': '사용자 요청 5xx 오류',
+  'Ingress 502': '사용자 요청 502 오류',
+  'Ingress 503': '사용자 요청 503 오류',
+};
+const ROUTE_LABEL: Record<string, string> = {
+  auto: '자동 조치',
+  safe_pr: 'Safe PR',
+  approval_required: '승인 필요',
+  forbidden: '정책 차단',
+};
+const SUBJECT_LABEL: Record<string, string> = {
+  'incident.detected': '인시던트 감지',
+  'evidence.bundle.built': '증거 정리',
+  'rca.candidates.planned': '원인 후보 생성',
+  'rca.candidates.evaluated': '원인 후보 평가',
+  'rca.completed': 'RCA 완료',
+  'rca.analysis_blocked': 'RCA 대기',
+  'recovery.planned': '복구 계획 생성',
+  'recovery.selection_requested': '복구 선택 대기',
+  'recovery.action_selected': '복구 조치 선택',
+  'command.requested': '명령 요청',
+  'command.completed': '명령 완료',
+  'safe_pr.created': 'Safe PR 생성',
+};
 
 const trunc = (value: string, size = 44) => (value.length > size ? `${value.slice(0, size - 1)}...` : value);
 const kindTone = (kind: string): Tone => KIND_TONE[kind] ?? 'neutral';
@@ -101,7 +150,7 @@ function buildGraph(incident: IncidentDetail, collapsed: Record<string, boolean>
     id: 'incident',
     type: 'stage',
     position: { x: 0, y: 0 },
-    data: { label: STAGE_LABEL.incident, sub: trunc(incident.summary), tone: stageTone(0), active: running && current === 0 },
+    data: { label: STAGE_LABEL.incident, sub: trunc(incidentTitle(incident)), tone: stageTone(0), active: running && current === 0 },
   });
 
   const evidence = [
@@ -130,14 +179,14 @@ function buildGraph(incident: IncidentDetail, collapsed: Record<string, boolean>
     position: { x: 0, y: 0 },
     data: {
       label: STAGE_LABEL.analysis,
-      sub: incident.root_cause ? `${trunc(incident.root_cause)}${confidence ? ` · ${confidence}` : ''}` : confidence,
+      sub: incident.root_cause ? `${trunc(rootCauseLabel(incident.root_cause))}${confidence ? ` · ${confidence}` : ''}` : confidence,
       tone: stageTone(2),
       active: running && current === 2,
     },
   });
 
   const actions = [
-    ...(incident.action_route ? [{ id: 'act-route', label: `경로: ${trunc(incident.action_route)}`, tone: 'info' as Tone }] : []),
+    ...(incident.action_route ? [{ id: 'act-route', label: `경로: ${trunc(routeLabel(incident.action_route))}`, tone: 'info' as Tone }] : []),
     ...(incident.command_id ? [{ id: 'act-cmd', label: `커맨드: ${trunc(incident.command_id)}`, tone: 'info' as Tone }] : []),
     ...(incident.pr_url ? [{ id: 'act-pr', label: `PR: ${trunc(incident.pr_url)}`, tone: 'ok' as Tone }] : []),
     ...(incident.error_reason ? [{ id: 'act-err', label: `실패: ${trunc(incident.error_reason)}`, tone: 'danger' as Tone }] : []),
@@ -167,8 +216,10 @@ function buildGraph(incident: IncidentDetail, collapsed: Record<string, boolean>
 
 export default function IncidentDetailView() {
   const { incidentId = '' } = useParams();
+  const nav = useNavigate();
   const q = useIncident(incidentId);
   const pathFor = useConsolePath();
+  const askAi = useCreateConversation();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = useCallback((id: string) => setCollapsed((value) => ({ ...value, [id]: !value[id] })), []);
   const evidenceRef = useRef<HTMLDivElement>(null);
@@ -231,18 +282,37 @@ export default function IncidentDetailView() {
       </Card>
     );
   }
+  const aiContext = incidentChatContext(incident);
+  const startAiAnalysis = () => {
+    askAi.mutate({
+      title: `인시던트 분석 - ${incidentTitle(incident)}`,
+      message: [
+        '이 인시던트의 현재 상태, 근본 원인, 증거, 가능한 복구 조치를 한국어로 요약해줘.',
+        '복구 후보가 있으면 어떤 조치를 먼저 선택해야 하는지도 운영 관점으로 설명해줘.',
+      ].join(' '),
+      context: aiContext,
+    }, {
+      onSuccess: (data) => nav(pathFor(`/ai/${data.conversation_id}`)),
+    });
+  };
 
   return (
     <div className="grid gap-6">
       <PageHeader
-        title={incident.summary}
-        description={`${STAGE_LABEL[stageOfSubject(incident.current_subject)]} · ${incident.updated_at ? fmtAbs(incident.updated_at) : '갱신 시각 없음'}`}
+        title={incidentTitle(incident)}
+        description={`${labelForSubject(incident.current_subject)} · ${incident.updated_at ? fmtAbs(incident.updated_at) : '갱신 시각 없음'}`}
         breadcrumb={<Breadcrumb items={[{ label: '인시던트', href: pathFor('/incidents') }, { label: `인시던트 ${incidentId}` }]} />}
-        actions={incident.correlation_id ? <CopyPill value={incident.correlation_id} display={`corr ${trunc(incident.correlation_id, 22)}`} /> : undefined}
+        actions={(
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="primary" onClick={startAiAnalysis} loading={askAi.isPending}>AI 분석</Button>
+            {incident.correlation_id && <CopyPill value={incident.correlation_id} display={`corr ${trunc(incident.correlation_id, 22)}`} />}
+          </span>
+        )}
       />
+      <IncidentSituationCard incident={incident} onAskAi={startAiAnalysis} aiPending={askAi.isPending} />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(22rem,0.75fr)]">
-        <Card title="RCA 파이프라인" description="단계와 근거 흐름을 그래프로 확인합니다">
+        <Card title="RCA 파이프라인">
           <div className="max-w-full overflow-x-auto">
             <div className="h-96 min-w-[42rem] overflow-hidden rounded-panel border border-border bg-bg">
               <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} />
@@ -254,8 +324,9 @@ export default function IncidentDetailView() {
             <KeyValueList items={[
               { label: '상태', value: <StatusBadge status={incident.status} /> },
               { label: '클러스터', value: incident.cluster_id ? <Link className="text-accent hover:text-accent-hover" to={pathFor(`/clusters/${incident.cluster_id}`)}>{incident.cluster_id}</Link> : '없음' },
-              { label: '현재 단계', value: incident.current_subject || '없음' },
-              { label: '근본 원인', value: incident.root_cause ?? '분석 중' },
+              { label: '대상', value: incidentTarget(incident) || '확인 중' },
+              { label: '현재 단계', value: labelForSubject(incident.current_subject) },
+              { label: '근본 원인', value: incident.root_cause ? rootCauseLabel(incident.root_cause) : '분석 중' },
               { label: '신뢰도', value: incident.confidence != null ? `${(incident.confidence * 100).toFixed(0)}%` : '없음' },
               { label: 'correlation', value: incident.correlation_id ? <CopyPill value={incident.correlation_id} display={trunc(incident.correlation_id, 18)} /> : '없음' },
               { label: '커맨드', value: incident.command_id ? <CodeText>{trunc(incident.command_id, 18)}</CodeText> : '없음' },
@@ -272,6 +343,45 @@ export default function IncidentDetailView() {
         <RcaReportsPanel correlationId={incident.correlation_id} onShowEvidence={showEvidence} />
         <div ref={evidenceRef}><EvidencePanel correlationId={incident.correlation_id} incident={incident} /></div>
       </section>
+    </div>
+  );
+}
+
+function IncidentSituationCard({ incident, onAskAi, aiPending }: { incident: IncidentDetail; onAskAi: () => void; aiPending: boolean }) {
+  const symptom = incident.symptom ? symptomLabel(incident.symptom) : '증상 확인 중';
+  const cause = incident.root_cause ? rootCauseLabel(incident.root_cause) : '원인 분석 중';
+  const target = incidentTarget(incident) || '대상 확인 중';
+  const confidence = incident.confidence != null ? `${(incident.confidence * 100).toFixed(0)}%` : '계산 중';
+  const nextAction = incident.action_route ? routeLabel(incident.action_route) : '복구 계획 대기';
+  return (
+    <Card title="상황 요약">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="grid gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <StatusBadge status={incident.status} />
+            <Badge tone="info">{symptom}</Badge>
+            {incident.root_cause && <Badge tone="warning">{cause}</Badge>}
+          </div>
+          <p className="text-title font-semibold text-primary">
+            {target}에서 {symptom} 신호가 감지됐고, 현재 {cause} 상태입니다.
+          </p>
+          <div className="grid gap-2 md:grid-cols-3">
+            <SummaryMetric label="대상" value={target} />
+            <SummaryMetric label="신뢰도" value={confidence} />
+            <SummaryMetric label="다음 조치" value={nextAction} />
+          </div>
+        </div>
+        <Button size="sm" variant="secondary" onClick={onAskAi} loading={aiPending}>AI에 묻기</Button>
+      </div>
+    </Card>
+  );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-control border border-border bg-raised px-3 py-2">
+      <p className="text-caption font-medium text-muted">{label}</p>
+      <p className="mt-1 min-w-0 truncate text-body font-semibold text-primary">{value}</p>
     </div>
   );
 }
@@ -302,17 +412,19 @@ function RecoveryPlanPanel({ correlationId, standalone = false }: { correlationI
 }
 
 function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
+  const selectAction = useSelectRecoveryAction();
   const selected = plan.selected_action;
   const recommended = plan.candidates.find((candidate) => candidate.action_id === plan.recommended_action_id) ?? null;
   const visible = [
     ...(selected ? [selected] : []),
     ...plan.candidates.filter((candidate) => candidate.action_id !== selected?.action_id).slice(0, selected ? 2 : 3),
   ];
+  const locked = Boolean(plan.selected_action_id) || plan.status === 'selected';
   return (
     <div className="grid gap-3">
       <p className="text-caption text-secondary">{plan.summary}</p>
       <KeyValueList items={[
-        { label: '경로', value: plan.execution_route },
+        { label: '경로', value: routeLabel(plan.execution_route) },
         { label: '추천', value: recommended ? recommended.title : plan.recommended_action_id },
         { label: '선택', value: selected ? selected.title : plan.selection_required ? '선택 대기' : '자동 진행' },
       ]} />
@@ -323,6 +435,13 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
             candidate={candidate}
             recommended={candidate.action_id === plan.recommended_action_id}
             selected={candidate.action_id === plan.selected_action_id}
+            locked={locked}
+            pending={selectAction.isPending}
+            onSelect={() => selectAction.mutate({
+              planId: plan.plan_id,
+              actionId: candidate.action_id,
+              reason: `운영자가 ${candidate.title} 조치를 선택했습니다`,
+            })}
           />
         ))}
       </div>
@@ -331,7 +450,21 @@ function RecoveryPlanSummary({ plan }: { plan: RecoveryPlanStatus }) {
   );
 }
 
-function RecoveryCandidateRow({ candidate, recommended, selected }: { candidate: RecoveryActionCandidate; recommended: boolean; selected: boolean }) {
+function RecoveryCandidateRow({
+  candidate,
+  recommended,
+  selected,
+  locked,
+  pending,
+  onSelect,
+}: {
+  candidate: RecoveryActionCandidate;
+  recommended: boolean;
+  selected: boolean;
+  locked: boolean;
+  pending: boolean;
+  onSelect: () => void;
+}) {
   return (
     <div className={cx('grid gap-2 rounded-control border bg-raised p-3', selected ? 'border-success/50' : recommended ? 'border-info/50' : 'border-border')}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -339,12 +472,19 @@ function RecoveryCandidateRow({ candidate, recommended, selected }: { candidate:
         {selected && <Badge tone="success">선택</Badge>}
         {recommended && !selected && <Badge tone="info">추천</Badge>}
         {candidate.approval_required && <Badge tone="warning">승인 필요</Badge>}
-        <span className="ms-auto text-caption text-muted">{candidate.route}</span>
+        <span className="ms-auto text-caption text-muted">{routeLabel(candidate.route)}</span>
       </div>
       <p className="text-caption text-muted">
-        {candidate.description} · 위험 {candidate.risk_level} · 영향 {candidate.blast_radius}
+        {candidate.description} · 위험 {riskLabel(candidate.risk_level)} · 영향 {blastRadiusLabel(candidate.blast_radius)}
       </p>
       {candidate.rollback_plan && <p className="text-caption text-secondary">롤백: {candidate.rollback_plan}</p>}
+      {!locked && (
+        <div className="flex justify-end">
+          <Button size="sm" variant={recommended ? 'primary' : 'secondary'} loading={pending} onClick={onSelect}>
+            복구 선택
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -607,6 +747,85 @@ function EvidenceFallbackChips({ items, tone }: { items: string[]; tone: BadgeTo
       {items.map((item, index) => <Badge key={`${item}-${index}`} tone={tone}>{trunc(item, 40)}</Badge>)}
     </div>
   );
+}
+
+function incidentTitle(incident: IncidentDetail) {
+  const target = incidentTarget(incident);
+  const symptom = incident.symptom ? symptomLabel(incident.symptom) : '';
+  const cause = incident.root_cause ? rootCauseLabel(incident.root_cause) : '';
+  if (target && symptom) return `${target} · ${symptom}`;
+  if (cause) return cause;
+  return incident.summary || '인시던트';
+}
+
+function incidentTarget(incident: IncidentDetail) {
+  return [incident.namespace, kindLabel(incident.resource_kind), incident.resource_name]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function incidentChatContext(incident: IncidentDetail) {
+  return {
+    cluster_id: incident.cluster_id,
+    resource_type: (incident.resource_kind ?? '').toLowerCase(),
+    kind: incident.resource_kind ?? undefined,
+    namespace: incident.namespace ?? undefined,
+    name: incident.resource_name ?? undefined,
+    incident_id: incident.incident_id,
+    correlation_id: incident.correlation_id,
+    symptom: incident.symptom ?? undefined,
+    root_cause: incident.root_cause ?? undefined,
+    locale: 'ko',
+  };
+}
+
+function labelFromMap(value: string | null | undefined, map: Record<string, string>) {
+  if (!value) return '';
+  return map[value] ?? map[value.toLowerCase()] ?? value;
+}
+
+function rootCauseLabel(value: string) {
+  return labelFromMap(value, ROOT_CAUSE_LABEL);
+}
+
+function symptomLabel(value: string) {
+  return labelFromMap(value, SYMPTOM_LABEL);
+}
+
+function routeLabel(value: string | null | undefined) {
+  return labelFromMap(value, ROUTE_LABEL) || '대기';
+}
+
+function labelForSubject(value: string) {
+  return labelFromMap(value, SUBJECT_LABEL) || STAGE_LABEL[stageOfSubject(value)];
+}
+
+function kindLabel(value: string | null | undefined) {
+  if (!value) return '';
+  const key = value.toLowerCase();
+  if (key === 'deployment') return 'Deployment';
+  if (key === 'replicaset') return 'ReplicaSet';
+  if (key === 'pod') return 'Pod';
+  if (key === 'service') return 'Service';
+  if (key === 'node') return 'Node';
+  return value;
+}
+
+function riskLabel(value: string) {
+  const key = value.toLowerCase();
+  if (key === 'low') return '낮음';
+  if (key === 'medium') return '중간';
+  if (key === 'high') return '높음';
+  if (key === 'unknown') return '확인 필요';
+  return value;
+}
+
+function blastRadiusLabel(value: string) {
+  const key = value.toLowerCase();
+  if (key === 'target_workload') return '대상 워크로드';
+  if (key === 'target_namespace') return '대상 네임스페이스';
+  if (key === 'unknown') return '확인 필요';
+  return value;
 }
 
 function StatusBadge({ status }: { status: string }) {

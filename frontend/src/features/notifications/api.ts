@@ -98,6 +98,32 @@ export const useRecoveryPlan = (correlationId: string | undefined) =>
     retry: (failureCount, error) =>
       (error as { kind?: string }).kind !== 'not_found' && failureCount < 2,
   });
+export const useSelectRecoveryAction = () => {
+  const qc = useQueryClient();
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: ({ planId, actionId, reason }: { planId: string; actionId: string; reason?: string }) =>
+      post(`/rca/recovery-plans/${planId}/actions/${actionId}/select`, reason ? { reason } : {}),
+    onSuccess: (_data, variables) => {
+      push({ tone: 'success', title: '복구 조치 선택', description: '선택한 조치를 실행 흐름에 등록했습니다' });
+      qc.invalidateQueries({ queryKey: ['recovery-plan'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
+      qc.invalidateQueries({ queryKey: ['incident'] });
+      qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'recovery-plan' && q.queryKey.includes(variables.planId) });
+    },
+    onError: err => {
+      const e = err as { kind?: string; detail?: string };
+      push({
+        tone: 'danger',
+        title: '복구 조치 선택 실패',
+        description: e.kind === 'forbidden'
+          ? 'release_operator 권한이 필요합니다'
+          : e.detail ?? '잠시 후 다시 시도해주세요',
+      });
+      qc.invalidateQueries({ queryKey: ['recovery-plan'] });
+    },
+  });
+};
 export const useDeadLetters = (enabled: boolean) =>
   useQuery({
     queryKey: ['dead-letters'],

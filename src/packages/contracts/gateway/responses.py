@@ -145,6 +145,10 @@ class RcaTimelineItem(StrictModel):
     correlation_id: str
     cluster_id: str | None = None
     incident_id: str | None = None
+    incident_namespace: str | None = None
+    incident_resource_kind: str | None = None
+    incident_resource_name: str | None = None
+    incident_symptom: str | None = None
     evidence_ref: str | None = None
     current_subject: str
     status: str

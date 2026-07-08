@@ -72,6 +72,10 @@ def _rca_timeline_response_columns() -> tuple[Any, ...]:
         table.c.correlation_id,
         table.c.cluster_id,
         table.c.incident_id,
+        table.c.incident_namespace,
+        table.c.incident_resource_kind,
+        table.c.incident_resource_name,
+        table.c.incident_symptom,
         table.c.evidence_ref,
         table.c.current_subject,
         table.c.status,
@@ -509,6 +513,9 @@ def open_incident_summary(row: JsonObject) -> JsonObject:
     return {
         "incident_id": row.get("incident_id"),
         "correlation_id": row.get("correlation_id"),
+        "namespace": row.get("incident_namespace"),
+        "resource_kind": row.get("incident_resource_kind"),
+        "resource_name": row.get("incident_resource_name"),
         "symptom": row.get("incident_symptom")
         or _first_string(payload, ("incident", "symptom"), ("symptom",)),
         "root_cause": row.get("root_cause"),

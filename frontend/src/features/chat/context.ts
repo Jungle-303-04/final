@@ -5,6 +5,10 @@ export interface AiChatContext {
   namespace?: string;
   name?: string;
   uid?: string;
+  incident_id?: string;
+  correlation_id?: string;
+  symptom?: string;
+  root_cause?: string;
   locale?: string;
 }
 
@@ -44,6 +48,10 @@ export function chatContextFromSearchParams(params: URLSearchParams): AiChatCont
         namespace: stringValue(parsed.namespace),
         name: stringValue(parsed.name),
         uid: stringValue(parsed.uid),
+        incident_id: stringValue(parsed.incident_id),
+        correlation_id: stringValue(parsed.correlation_id),
+        symptom: stringValue(parsed.symptom),
+        root_cause: stringValue(parsed.root_cause),
         locale: stringValue(parsed.locale),
       });
     } catch {
@@ -57,6 +65,10 @@ export function chatContextFromSearchParams(params: URLSearchParams): AiChatCont
     namespace: params.get('namespace') ?? undefined,
     name: params.get('name') ?? undefined,
     uid: params.get('uid') ?? undefined,
+    incident_id: params.get('incident_id') ?? undefined,
+    correlation_id: params.get('correlation_id') ?? undefined,
+    symptom: params.get('symptom') ?? undefined,
+    root_cause: params.get('root_cause') ?? undefined,
     locale: params.get('locale') ?? undefined,
   });
 }
