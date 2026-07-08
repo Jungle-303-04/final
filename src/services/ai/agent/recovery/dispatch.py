@@ -110,15 +110,25 @@ def build_safe_pr_request_body(
         provider=GitHub.PROVIDER,
         patches=patches,
         workspace_id=workspace_id,
-        repository_id=str(draft.params.get("repository_id") or ""),
-        binding_id=str(draft.params.get("binding_id") or ""),
-        application_id=str(draft.params.get("application_id") or ""),
-        workflow_run_id=str(draft.params.get("workflow_run_id") or ""),
-        environment=str(draft.params.get("environment") or Sandbox.NAMESPACE),
-        manifest_path=str(draft.params.get("manifest_path") or "deploy/k8s"),
+        repository_id=target_value(plan, draft.params, "repository_id"),
+        binding_id=target_value(plan, draft.params, "binding_id"),
+        application_id=target_value(plan, draft.params, "application_id"),
+        workflow_run_id=target_value(plan, draft.params, "workflow_run_id"),
+        environment=target_value(plan, draft.params, "environment", Sandbox.NAMESPACE),
+        manifest_path=target_value(plan, draft.params, "manifest_path", "deploy/k8s"),
         approval_ref=as_optional_str(draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
     )
+
+
+def target_value(
+    plan: RecoveryPlan,
+    params: JsonObject,
+    key: str,
+    default: str = "",
+) -> str:
+    value = params.get(key) or plan.target.get(key) or default
+    return str(value or "")
 
 
 def build_command_request_body(
@@ -251,6 +261,8 @@ def deployment_from_replicaset_name(name: str) -> str:
 
 
 def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
+    if selected.draft.params.get("patch") == "demo_config_reset":
+        return demo_config_reset_patches(selected)
     raw = selected.draft.params.get("patches")
     if not isinstance(raw, list):
         return [fallback_recovery_patch(selected)]
@@ -270,6 +282,108 @@ def safe_pr_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
             )
         )
     return patches or [fallback_recovery_patch(selected)]
+
+
+def demo_config_reset_patches(selected: RecoveryActionCandidate) -> list[SafePrFilePatch]:
+    token = hashlib.sha256(selected.action_id.encode()).hexdigest()[:16]
+    return [
+        SafePrFilePatch(
+            path="deploy/k8s/configmap.yaml",
+            content=demo_configmap_patch(token),
+            description="demo-target-config 정상 모드 복구",
+        ),
+        SafePrFilePatch(
+            path="deploy/k8s/orders-api-deployment.yaml",
+            content=orders_api_rollout_patch(token),
+            description="orders-api 롤아웃 및 replica 여유 확보",
+        ),
+    ]
+
+
+def demo_configmap_patch(token: str) -> str:
+    return (
+        "apiVersion: v1\n"
+        "kind: ConfigMap\n"
+        "metadata:\n"
+        "  name: demo-target-config\n"
+        "  annotations:\n"
+        f'    kubeheal.io/recovery-token: "{token}"\n'
+        "data:\n"
+        "  DEMO_MODE: normal\n"
+        "  DEPENDENCY_MODE: normal\n"
+        "  ORDERS_API_URL: http://orders-api:8000\n"
+    )
+
+
+def orders_api_rollout_patch(token: str) -> str:
+    return (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata:\n"
+        "  name: orders-api\n"
+        "  labels:\n"
+        "    app.kubernetes.io/name: orders-api\n"
+        "    app.kubernetes.io/part-of: final-demo-target\n"
+        "spec:\n"
+        "  replicas: 3\n"
+        "  selector:\n"
+        "    matchLabels:\n"
+        "      app.kubernetes.io/name: orders-api\n"
+        "  strategy:\n"
+        "    type: RollingUpdate\n"
+        "    rollingUpdate:\n"
+        "      maxUnavailable: 0\n"
+        "      maxSurge: 1\n"
+        "  template:\n"
+        "    metadata:\n"
+        "      labels:\n"
+        "        app.kubernetes.io/name: orders-api\n"
+        "        app.kubernetes.io/part-of: final-demo-target\n"
+        "      annotations:\n"
+        f'        kubeheal.io/recovery-token: "{token}"\n'
+        "    spec:\n"
+        "      containers:\n"
+        "        - name: orders-api\n"
+        "          image: 183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/final-demo-target/orders-api:cb47853c0367\n"
+        "          imagePullPolicy: IfNotPresent\n"
+        "          ports:\n"
+        "            - name: http\n"
+        "              containerPort: 8000\n"
+        "          env:\n"
+        "            - name: APP_VERSION\n"
+        '              value: "1.0.0"\n'
+        "            - name: DEMO_MODE\n"
+        "              valueFrom:\n"
+        "                configMapKeyRef:\n"
+        "                  name: demo-target-config\n"
+        "                  key: DEMO_MODE\n"
+        "            - name: DEPENDENCY_MODE\n"
+        "              valueFrom:\n"
+        "                configMapKeyRef:\n"
+        "                  name: demo-target-config\n"
+        "                  key: DEPENDENCY_MODE\n"
+        "            - name: LOG_LEVEL\n"
+        "              value: INFO\n"
+        "          readinessProbe:\n"
+        "            httpGet:\n"
+        "              path: /readyz\n"
+        "              port: http\n"
+        "            initialDelaySeconds: 3\n"
+        "            periodSeconds: 5\n"
+        "          livenessProbe:\n"
+        "            httpGet:\n"
+        "              path: /healthz\n"
+        "              port: http\n"
+        "            initialDelaySeconds: 5\n"
+        "            periodSeconds: 10\n"
+        "          resources:\n"
+        "            requests:\n"
+        "              cpu: 50m\n"
+        "              memory: 96Mi\n"
+        "            limits:\n"
+        "              cpu: 300m\n"
+        "              memory: 256Mi\n"
+    )
 
 
 def fallback_recovery_patch(selected: RecoveryActionCandidate) -> SafePrFilePatch:

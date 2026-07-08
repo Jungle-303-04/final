@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 from domains.rca.events import (
     Evidence,
@@ -45,12 +46,15 @@ APP_5XX_TEXT_PATTERNS = (
     'status":504',
     'status": 504',
     "/api/orders/error",
+    "intentional_error_endpoint",
+    "intentional error endpoint called",
 )
 APP_TIMEOUT_TEXT_PATTERNS = (
     "dependency_timeout",
     "dependency call timed out",
     "timeout",
 )
+MAX_LOG_SIGNAL_AGE = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
@@ -95,7 +99,8 @@ class IncidentDetector:
         derived = derive_symptom(evidence.kubernetes)
         if derived.signal is not None or derived.symptom != UNKNOWN_SYMPTOM:
             return True
-        if derive_log_incident_signal(evidence.logs) is not None:
+        collected_at = evidence_collected_at(evidence.kubernetes)
+        if derive_log_incident_signal(evidence.logs, collected_at=collected_at) is not None:
             return True
 
         # Alertmanager webhook evidence arrives through metrics, not the Kubernetes
@@ -117,7 +122,10 @@ class IncidentDetector:
         derived = derive_symptom(evidence.kubernetes)
         log_signal = None
         if derived.signal is None and derived.symptom == UNKNOWN_SYMPTOM:
-            log_signal = derive_log_incident_signal(evidence.logs)
+            log_signal = derive_log_incident_signal(
+                evidence.logs,
+                collected_at=evidence_collected_at(evidence.kubernetes),
+            )
         if log_signal is not None:
             resource_kind = log_signal.resource_kind
             resource_name = log_signal.resource_name
@@ -159,8 +167,12 @@ class IncidentDetector:
         ]
 
 
-def derive_log_incident_signal(logs: list[JsonObject]) -> LogIncidentSignal | None:
-    for sample in iter_log_samples(logs):
+def derive_log_incident_signal(
+    logs: list[JsonObject],
+    *,
+    collected_at: datetime | None = None,
+) -> LogIncidentSignal | None:
+    for sample in iter_log_samples(logs, collected_at=collected_at):
         parsed = parse_json_line(sample["line"])
         if has_5xx_status(parsed, sample["line"]):
             return LogIncidentSignal(
@@ -181,14 +193,23 @@ def derive_log_incident_signal(logs: list[JsonObject]) -> LogIncidentSignal | No
     return None
 
 
-def iter_log_samples(logs: list[JsonObject]) -> list[JsonObject]:
+def iter_log_samples(
+    logs: list[JsonObject],
+    *,
+    collected_at: datetime | None = None,
+) -> list[JsonObject]:
     samples: list[JsonObject] = []
     for entry in logs:
         if not isinstance(entry, dict):
             continue
         entry_namespace = namespace_from_query(entry.get("query"))
         line = entry.get("line")
-        if isinstance(line, str) and should_consider_log_namespace(entry_namespace):
+        entry_ts = log_timestamp(entry.get("timestamp"))
+        if (
+            isinstance(line, str)
+            and should_consider_log_namespace(entry_namespace)
+            and log_sample_is_current(entry_ts, collected_at)
+        ):
             samples.append(
                 {"namespace": entry_namespace, "container": entry.get("container"), "line": line}
             )
@@ -206,11 +227,66 @@ def iter_log_samples(logs: list[JsonObject]) -> list[JsonObject]:
             )
             for value in dict_items(stream.get("values")):
                 stream_line = value.get("line")
-                if isinstance(stream_line, str) and stream_line:
+                sample_ts = log_timestamp(value.get("timestamp"))
+                if (
+                    isinstance(stream_line, str)
+                    and stream_line
+                    and log_sample_is_current(sample_ts, collected_at)
+                ):
                     samples.append(
                         {"namespace": namespace, "container": container, "line": stream_line}
                     )
     return samples
+
+
+def evidence_collected_at(kubernetes: JsonObject) -> datetime | None:
+    cluster = kubernetes.get("cluster")
+    if not isinstance(cluster, dict):
+        return None
+    return parse_datetime(cluster.get("collected_at"))
+
+
+def log_sample_is_current(
+    timestamp: datetime | None,
+    collected_at: datetime | None,
+) -> bool:
+    if timestamp is None or collected_at is None:
+        return True
+    return abs(collected_at - timestamp) <= MAX_LOG_SIGNAL_AGE
+
+
+def log_timestamp(value: object) -> datetime | None:
+    parsed = parse_datetime(value)
+    if parsed is not None:
+        return parsed
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        raw = int(value)
+    except ValueError:
+        return None
+    if raw > 10_000_000_000_000_000:
+        seconds = raw / 1_000_000_000
+    elif raw > 10_000_000_000_000:
+        seconds = raw / 1_000
+    else:
+        seconds = raw
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def parse_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def should_consider_log_namespace(namespace: object) -> bool:
