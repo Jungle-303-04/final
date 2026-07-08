@@ -16,6 +16,12 @@
 - 검증:
   - `incident evidence empty state distinguishes collecting from none` 테스트 추가.
   - `bash scripts/frontend-check.sh` passed. design-system guard, `npm ci`, `tsc --noEmit`, `eslint --max-warnings 0`, `npm test` 12건, production build 모두 통과.
+- 배포 확인:
+  - 커밋/푸시: `fba2a457 feat: 인시던트 evidence 상태 구분`.
+  - GitHub Actions는 코드 실행 전 실패: CI `28908444602`, AWS CD `28908444599`, Promote `28908444583` 모두 실패 job의 `steps: []` 확인.
+  - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:fba2a457-incident-evidence-ux-20260708092931`, rollout `1/1 ready`.
+  - live `https://k8s.woonyong.org/` 200, `/api/healthz` 200.
+  - live asset smoke: main `/assets/index-CBfkPNmQ.js`, incident chunk `/assets/IncidentDetailView-DKFsSrY7.js`에서 `증거 수집 중`/`증거 없음` 문구 서빙 확인.
 
 ## 체크포인트 — 미사용 레거시 UI 스윕
 
