@@ -497,11 +497,12 @@ def test_gitops_flow():
         else:
             check("GitOps", f"{w} Ready", ready >= 1, f"ready={ready}/{replicas}")
 
-    # Check github-poll-worker CronJob exists (suspended for local)
-    cj = kubectl_json(KUBECTL_CTX, "-n", "management", "get", "cronjob/github-poll-worker")
-    exists = cj is not None
-    suspended = (cj or {}).get("spec", {}).get("suspend", False)
-    check("GitOps", "github-poll-worker CronJob 존재", exists, f"suspended={suspended}")
+    # Check github-poll-worker Deployment exists (scaled down by default for local)
+    poller = kubectl_json(KUBECTL_CTX, "-n", "management", "get", "deploy/github-poll-worker")
+    exists = poller is not None
+    replicas = (poller or {}).get("spec", {}).get("replicas", 0) or 0
+    ready = (poller or {}).get("status", {}).get("readyReplicas", 0) or 0
+    check("GitOps", "github-poll-worker Deployment 존재", exists, f"ready={ready}/{replicas}")
 
 
 # ══════════════════════════════════════════════════════════════

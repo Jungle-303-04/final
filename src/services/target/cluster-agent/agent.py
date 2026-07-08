@@ -1167,7 +1167,11 @@ class TargetClusterAgent:
             response = await client.patch(url, json=patch, headers=headers)
             if response.is_error:
                 return False, kubernetes_failure_message("patch", response), {}
-            return True, AgentConfig.COMMAND_RESULT_MESSAGE, rollout_progress(deployment, waited=False)
+            return (
+                True,
+                AgentConfig.COMMAND_RESULT_MESSAGE,
+                rollout_progress(deployment, waited=False),
+            )
 
     async def wait_for_deployment_rollout(
         self,

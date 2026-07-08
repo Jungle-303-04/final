@@ -202,7 +202,7 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 3. 상태 코드 처리:
    - `304`(`NOT_MODIFIED_STATUS_CODE`, ETag 일치) → 즉시 `None` — 새 커밋 없음, GitHub rate limit 미소모.
    - `403/429`(`SOFT_SKIP_STATUS_CODES`, rate limit 등) → `github_poll_skipped` info 로그 후 `None`.
-   - `401/404`(`ACCESS_ERROR_STATUS_CODES`, 인증/접근 오류) → `github_poll_access_denied` warning 로그(hint: "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요") 후 `None` — 예외로 CronJob을 죽이지 않음.
+   - `401/404`(`ACCESS_ERROR_STATUS_CODES`, 인증/접근 오류) → `github_poll_access_denied` warning 로그(hint: "GITHUB_TOKEN/GITHUB_REPO 확인 — private repo 는 읽기 토큰 필요") 후 `None` — 예외로 폴링 프로세스를 죽이지 않음.
    - 그 외 오류 → `response.raise_for_status()`로 예외(→ loop 백오프 또는 once 모드 실패).
 4. 성공 → response `etag`가 있으면 `_etag_by_target[target.key]` 갱신 후 `commits[0]["sha"]`, 빈 배열이면 `None`.
 
@@ -218,7 +218,7 @@ webhook POST body(JSON, 코드 그대로의 키 순서):
 - 같은 target의 같은 commit SHA는 프로세스 생존 중 두 번 POST되지 않는다(`_last_sha_by_target` 메모리 가드). 재시작/CronJob 모드에서는 가드가 초기화되므로 최종 dedup은 downstream ledger 책임.
 - `_etag_by_target`도 프로세스 메모리 상태다 — 재시작/CronJob 1회 실행에서는 첫 요청이 항상 무조건부(rate limit 1회 소모)이고, 상주 loop 모드에서 변경 없는 주기는 304로 rate limit을 소모하지 않는다. 304 응답에서는 ETag가 갱신되지 않는다(성공 2xx 응답의 `etag` 헤더만 저장).
 - `emit_webhook` 성공 후에만 해당 target의 `_last_sha_by_target`이 갱신된다 — POST 실패 시 다음 주기에 같은 commit을 재시도한다.
-- 403/429/401/404는 예외가 아니라 skip(None)으로 처리된다 — 폴링 프로세스(특히 CronJob)를 죽이지 않는 fail-soft. 그 외 HTTP 오류·네트워크 예외는 loop 모드에서 지수 백오프(기본 5s, 상한 300s, 지터 0~3s), once 모드에서는 일시 오류만 기본 3회까지 같은 백오프로 재시도한 뒤 전파한다.
+- 403/429/401/404는 예외가 아니라 skip(None)으로 처리된다 — 폴링 프로세스를 죽이지 않는 fail-soft. 그 외 HTTP 오류·네트워크 예외는 loop 모드에서 지수 백오프(기본 5s, 상한 300s, 지터 0~3s), once 모드에서는 일시 오류만 기본 3회까지 같은 백오프로 재시도한 뒤 전파한다.
 - `GITHUB_REPO`는 `owner/repo` 형식이 강제된다(`require_poll_config`), `GITOPS_WEBHOOK_IMAGE`는 emit 시점에 필수.
 - `HTTP_TIMEOUT_SECONDS` 등 튜닝 상수 5종은 settings 모듈 import 시점에 평가된다 — env 변경은 재시작 필요.
 - 무인증 폴링은 GitHub 공개 repo 시간당 60회 제한에 걸린다(데모 30초 주기=120회/시) — 토큰 설정 시 5000회(주석 명시).

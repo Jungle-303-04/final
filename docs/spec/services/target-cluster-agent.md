@@ -70,6 +70,7 @@ status: synced
 | `deployment_name_from_resource` | `def deployment_name_from_resource(resource: str) -> str` — `"deployment/x"`/`"deployments/x"` → `"x"`, `"pod/name-hash-suffix"`/`"replicaset/name-hash"` → 소유 Deployment 추정 이름, `/` 없는 값은 그대로, 그 외 kind는 `""` | `src/services/target/cluster-agent/agent.py :: deployment_name_from_resource` |
 | `build_apply_manifest_patch` | `def build_apply_manifest_patch(deployment: str, image: str) -> JsonObject` — pod template에 annotation `ops.service/apply-at=<epoch>` + `containers[{name: deployment, image}]` strategic-merge patch | `src/services/target/cluster-agent/agent.py :: build_apply_manifest_patch` |
 | `build_rollout_restart_patch` | `def build_rollout_restart_patch() -> JsonObject` — annotation `ops.service/restarted-at=<epoch>`만 갱신 | `src/services/target/cluster-agent/agent.py :: build_rollout_restart_patch` |
+| `rollout_progress` | `def rollout_progress(deployment: str, *, waited: bool) -> JsonObject` — 패치/생성 수락 직후 반환하는 진행 상태 `{resource:"deployment/<name>", ready: None, phase:"progressing", waited}` | `src/services/target/cluster-agent/agent.py :: rollout_progress` |
 | `deployment_rollout_status` | `def deployment_rollout_status(body: JsonObject) -> JsonObject` — Deployment 본문 → `{resource, ready, desired_replicas, updated_replicas, ready_replicas, available_replicas, observed_generation, generation, conditions}` | `src/services/target/cluster-agent/agent.py :: deployment_rollout_status` |
 | `deployment_condition` | `def deployment_condition(conditions: list[object], condition_type: str) -> JsonObject` | `src/services/target/cluster-agent/agent.py :: deployment_condition` |
 | `condition_status` | `def condition_status(condition: JsonObject) -> str` | `src/services/target/cluster-agent/agent.py :: condition_status` |
@@ -516,7 +517,7 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 | 정책 적용 상태 | `POST /agent/policy/status` | `{cluster_id, generation, status: "applied"\|"failed"\|"unchanged", message, details}` — details는 `apply_policy` 반환값 `{generation, cluster_role, bootstrap_mode, enabled_providers, evidence_worker_counts, registered_queries}` |
 | reconcile 상태 | `POST /agent/reconcile/status` | `{cluster_id, generation, status, message: "reconciled N resources", details: {resources: [ReconcileResult.__dict__]}}` |
 | (미사용) 인벤토리 스냅샷 | `POST /agent/inventory/snapshots` | `HttpManagementPlaneClient.record_inventory_snapshot`으로 구현만 존재, 이 서비스에서 호출 없음 |
-| live summary | WS `{gateway_url}/live/agent?cluster_id={cluster_id}` (`AGENT_LIVE_PATH`), 헤더 `x-agent-token` | `LiveSummaryMessage{type: "live.summary", seq: 0(gateway가 부여), cluster_id, summary: LiveSummary{cluster_id, window_ms, pods_ready, pods_total, restart_delta, rollout_phase: "idle"\|"progressing"\|"degraded", hot_pods: [HotPod{namespace, pod, cpu_ratio, restart_count, ready}] (최대 MAX_HOT_PODS=20)}}`를 `model_dump_json()`으로 interval마다 send |
+| live summary / resource delta | WS `{gateway_url}/live/agent?cluster_id={cluster_id}` (`AGENT_LIVE_PATH`), 헤더 `x-agent-token` | interval마다 `LiveSummaryMessage{type:"live.summary", seq:0(gateway가 부여), cluster_id, summary: LiveSummary{cluster_id, window_ms, pods_ready, pods_total, restart_delta, rollout_phase:"idle"\|"progressing"\|"degraded", hot_pods:[HotPod{namespace, pod, cpu_ratio, restart_count, ready}] (최대 MAX_HOT_PODS=20)}}` 전송 후, collector가 만든 `ResourceDelta{type:"resource.delta", op:"replace"\|"remove", key:"<cluster>/<namespace>/pod/<name>", value?}`를 이어 send |
 
 ### 커맨드 액션별 요청 payload 계약
 
@@ -571,10 +572,10 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 ### k8s 쓰기 커맨드 상세
 
-- `apply_manifest_command`: `diff.desired_manifest`가 있으면 `apply_kubernetes_manifest(manifest, namespace)` — manifest 정규화(`kubernetes_manifest_resource`), **namespace가 제어 허용목록에 없으면 거부**(`control_namespace_allowed`, 기본 `sandbox`만). GET으로 존재 확인 → 404면 POST 생성(`application/json`), 존재하면 PATCH(`application/merge-patch+json`). kind가 `Deployment`면 `wait_for_deployment_rollout`으로 완료 대기. manifest가 없으면 `diff.resource`(deployment)와 `diff.desired_image`로 strategic-merge patch(`build_apply_manifest_patch`) — 이 경로도 허용목록 외 거부.
+- `apply_manifest_command`: `diff.desired_manifest`가 있으면 `apply_kubernetes_manifest(manifest, namespace)` — manifest 정규화(`kubernetes_manifest_resource`), **namespace가 제어 허용목록에 없으면 거부**(`control_namespace_allowed`, 기본 `sandbox`만). GET으로 존재 확인 → 404면 POST 생성(`application/json`), 존재하면 PATCH(`application/merge-patch+json`). kind가 `Deployment`면 Kubernetes create/patch 수락 직후 성공 결과와 `rollout_progress(waited=False)`를 반환한다. manifest가 없으면 `diff.resource`(deployment)와 `diff.desired_image`로 strategic-merge patch(`build_apply_manifest_patch`) — 이 경로도 허용목록 외 거부.
 - `rollout_restart_command`: 허용 네임스페이스 검사(`control_namespace_allowed`) → `build_rollout_restart_patch`로 annotation만 갱신 → `patch_deployment`.
-- `patch_deployment(namespace, deployment, patch)`: `PATCH {base}/apis/apps/v1/namespaces/{ns}/deployments/{name}` (`application/strategic-merge-patch+json`) → `wait_for_deployment_rollout`.
-- `wait_for_deployment_rollout`: timeout(기본 30s)이 0 이하이면 대기 없이 성공 취급(`waited: False`). 이후 2초 간격으로 Deployment GET → `deployment_rollout_status`로 ready 판정(`desired==0` 이거나 `observed>=generation && updated>=desired && ready>=desired && available>=desired && Progressing/Available condition != "False"`). ready → `(True, DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE, status)`, deadline 초과 → `(False, "deployment rollout not ready before timeout: {name}", last_status)`.
+- `patch_deployment(namespace, deployment, patch)`: `PATCH {base}/apis/apps/v1/namespaces/{ns}/deployments/{name}` (`application/strategic-merge-patch+json`)이 성공하면 즉시 `(True, AgentConfig.COMMAND_RESULT_MESSAGE, rollout_progress(deployment, waited=False))`를 반환한다. command 결과는 API 수락을 기준으로 완료되고, 실제 ready 수렴은 `live.summary`/`resource.delta`와 후속 inventory 조회가 관측한다.
+- `wait_for_deployment_rollout`: 현재 patch/create command 경로에서는 호출하지 않는 보조 함수다. timeout(기본 30s)이 0 이하이면 대기 없이 성공 취급(`waited: False`). 이후 2초 간격으로 Deployment GET → `deployment_rollout_status`로 ready 판정(`desired==0` 이거나 `observed>=generation && updated>=desired && ready>=desired && available>=desired && Progressing/Available condition != "False"`). ready → `(True, DEPLOYMENT_ROLLOUT_COMPLETED_MESSAGE, status)`, deadline 초과 → `(False, "deployment rollout not ready before timeout: {name}", last_status)`.
 - k8s API 미구성(`kubernetes_api_base_url()` 또는 토큰 없음) 시 쓰기 경로는 전부 `(False, "kubernetes api not configured; dry-run only", {})`.
 - 데코레이터 기반 `k8s.*` 커맨드 3종은 `KubernetesApiClient.patch_namespaced_resource`(merge-patch) 사용: deployments.patch/`configmaps.patch`는 본문 patch, deployments.scale은 `subresource="scale"`에 `{"spec": {"replicas": n}}`. target role에서는 `target` 네임스페이스의 `cluster-agent` Deployment / `target-agent-policy` ConfigMap으로 name-scoped다. management role에서는 같은 self-control write도 정책층에서 Kubernetes 호출 전 거부한다.
 
@@ -640,10 +641,11 @@ Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{clu
 
 - `LiveSummaryPublisher.run`: `enabled=false`거나 gateway_url이 비면 `live_summary_disabled` info 후 즉시 반환(no-op). gateway_url은 `REALTIME_GATEWAY_URL` env, 미설정 시 `derive_gateway_url(MANAGEMENT_BASE_URL)`(같은 호스트 + NodePort 30090, http→ws/https→wss).
 - 연결: `websockets.connect(endpoint, additional_headers={"x-agent-token": token})` (지연 import). endpoint = `{gateway_url}/live/agent?cluster_id={cluster_id}`.
-- `_stream`: interval(기본 1.0s, 0.25~60 clamp)마다 `collector()` 호출 → `LiveSummary`가 나오면 `LiveSummaryMessage` JSON send. 연결/전송 예외 시 `live_summary_stream_retry` 경고 후 `LIVE_SUMMARY_RETRY_DELAY_SECONDS`(3s) 백오프 재접속. `CancelledError`는 그대로 전파.
+- `_stream`: interval(기본 1.0s, 0.25~60 clamp)마다 `collector()` 호출 → `LiveSummary`가 나오면 `LiveSummaryMessage` JSON send. collector가 `drain_deltas()`를 제공하면 직전 호출 대비 pod `ResourceDelta`를 이어 보낸다. 연결/전송 예외 시 `live_summary_stream_retry` 경고 후 `LIVE_SUMMARY_RETRY_DELAY_SECONDS`(3s) 백오프 재접속. `CancelledError`는 그대로 전파.
 - `KubernetesPodSummaryCollector.__call__`: k8s API 미구성이면 `None`. `target`·`sandbox` 두 네임스페이스에서 `GET /api/v1/namespaces/{ns}/pods?limit=200`(`LIVE_SUMMARY_POD_LIST_LIMIT`) 후 `summarize`:
   - pod마다 containerStatuses로 ready(전 컨테이너 ready)·restart 합·CrashLoopBackOff 여부 계산.
   - not-ready이거나 restart>0인 pod를 최대 `MAX_HOT_PODS`(20)개 `hot_pods`에 수집.
+  - pod별 bounded resource 값(`resource_type`, `kind`, `name`, `namespace`, `phase`, `ready`, `restarts`, `node`, `owner_kind`, `owner_name`, `health`)을 직전 호출과 비교해 `resource.delta` replace/remove를 만든다.
   - `restart_delta` = 직전 호출 대비 restart 총합 증가분(첫 호출은 0, 음수는 0으로 clamp).
   - `rollout_phase`: CrashLoop 존재 → `degraded`, `ready_count < len(pods)` → `progressing`, 그 외 → `idle`.
 

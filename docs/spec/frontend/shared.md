@@ -81,10 +81,11 @@ export const queryClient = new QueryClient({
 
 - `apply(snapshot)`: 전체 pods 를 flat 하여 `restarts` 합·`phase==='Running'` 수를 `history` 포인트(`at: Date.now(), clusterId: snapshot.cluster_id ?? null`)로 추가.
 - `applyCounts(clusterId, restarts, running)`: 스냅샷 없이 집계 숫자와 cluster id 를 history 포인트로 추가 — 게이트웨이의 `live.summary` 경량 메시지용.
+- `bindLiveQueryClient(client)`: console layout 이 React Query client 를 주입/해제한다. `resource.delta`가 도착하면 이 client 의 pod/node 캐시를 직접 patch 한다.
 - `startLive(workspaceId)` 동작:
   - `workspaceId`가 비어 있으면 기존 소켓과 재연결 타이머를 닫고 status 를 `'closed'`로 둔다.
   - 같은 workspace 이고 기존 socket 이 `CONNECTING` 또는 `OPEN`이면 아무것도 하지 않는다.
-  - workspace 가 바뀌면 기존 socket 을 닫고 `connectionSeq`를 증가시킨 뒤 `new WebSocket(`${wss|ws}://${location.host}/api/live/browser?workspace_id=<id>`)` (https→wss)을 연다. `onopen`→'open'; `onmessage`→`JSON.parse` 후 분기: `type === 'live.summary'` 면 `applyCounts(summary.restart_delta, summary.pods_ready)`, `namespaces` 필드가 있으면 전체 스냅샷으로 `apply`(그 외/파싱 실패는 무시). `onclose`는 현재 `connectionSeq`일 때만 `'closed'` 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결을 예약한다. 구독 채널은 현재 workspace 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
+  - workspace 가 바뀌면 기존 socket 을 닫고 `connectionSeq`를 증가시킨 뒤 `new WebSocket(`${wss|ws}://${location.host}/api/live/browser?workspace_id=<id>`)` (https→wss)을 연다. `onopen`→'open'; `onmessage`→`JSON.parse` 후 `applyRealtimeMessage`로 분기한다. `type === 'snapshot'`이면 `state.clusters`의 summary를 history에 반영하고 `state.resources`를 `resource.delta` replace처럼 큐잉한다. `type === 'live.summary'`이면 `summary.restart_delta`와 `summary.pods_ready`(구 필드 호환 포함)를 history에 추가한다. `type === 'resource.delta'`이면 key 형식 `<cluster>/<namespace>/pod/<name>`만 requestAnimationFrame 단위로 합쳐 `['clusters', clusterId, 'inv', 'pods']`와 `['clusters', clusterId, 'nodes']` 캐시를 patch 하고 summary/workloads query를 invalidate 한다. `namespaces` 필드가 있는 구형 전체 스냅샷은 `apply`로 처리하고, 그 외/파싱 실패는 무시한다. `onclose`는 현재 `connectionSeq`일 때만 `'closed'` 후 `min(15000, 1000*2^attempt) * (0.7 + random*0.6)` ms 지터 백오프 재연결을 예약한다. 구독 채널은 현재 workspace 소켓 하나뿐이다 → [realtime-gateway](../services/realtime-realtime-gateway.md).
 
 ## UI 전역 상태 (`lib/ui-store.ts`)
 
