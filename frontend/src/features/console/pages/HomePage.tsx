@@ -1,15 +1,18 @@
 // 홈 대시보드 — 플릿 집계(/fleet/summary) + 인시던트 타임라인 + 승인 대기 + 최근 AI 대화 (전부 실데이터)
 import { useMemo, useState, type ComponentProps, type SVGProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQueries } from '@tanstack/react-query';
 import { Badge, Button, Card, EmptyState, Skeleton, StatCard, Table, Tabs, type TableColumn } from '@/ui';
-import { hasSparklinePoints, Sparkline } from '@/ui/charts';
-import { useClusters } from '@/features/cluster/api';
+import { TimeSeriesChart } from '@/ui/charts';
+import { useClusters, type UsageSample } from '@/features/cluster/api';
 import { healthLabel, useFleetSummary, type FleetClusterSummary, type FleetHealth } from '@/features/fleet/api';
 import { DrilldownHeatmap } from '@/features/fleet/DrilldownHeatmap';
 import { timeAgo, useNotices, useTimeline } from '@/features/notifications/api';
 import { useConversations } from '@/features/chat/api';
 import { useIsAdmin } from '@/features/auth/api';
+import { get } from '@/shared/lib/api';
 import { useConsolePath } from '../ui';
+import { buildFleetPodSeries, buildFleetRestartSeries, trackedFleetChartClusters } from './homeCharts';
 
 type BadgeTone = ComponentProps<typeof Badge>['tone'];
 type StatTone = ComponentProps<typeof StatCard>['tone'];
@@ -145,6 +148,8 @@ export function HomePage() {
 
       <FleetStatCards totals={fleet.totals} clusters={fleet.clusters} />
 
+      <FleetTrendCharts clusters={fleet.clusters} />
+
       <FleetHeatmap clusters={fleet.clusters} clusterRoles={clusterRoles} lens={fleetLens} onLensChange={setFleetLens} onOpen={clusterId => navigate(pathFor(`/clusters/${clusterId}`))} />
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -172,28 +177,75 @@ function FleetStatCards({ totals, clusters }: { totals: FleetStatTotals; cluster
   const avgMem = avgMetric(clusters.map(cluster => cluster.mem_pct));
   const activeAlerts = totals.open_incidents + totals.dead_letters;
   const clusterChip = fleetClusterChip(totals);
-  const healthDistribution = [totals.healthy, totals.warning, totals.critical, totals.stale + totals.unknown];
-  const podDistribution = clusters.map(cluster => cluster.pods_total);
-  const cpuDistribution = clusters.map(cluster => cluster.cpu_pct);
-  const memDistribution = clusters.map(cluster => cluster.mem_pct);
-  const incidentDistribution = clusters.map(cluster => cluster.open_incidents);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} spark={<Sparkline points={healthDistribution} tone={clusterChip.severity as StatTone} ariaLabel="클러스터 상태 분포" />} />
-      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} spark={<Sparkline points={podDistribution} tone="info" ariaLabel="클러스터별 팟 분포" />} />
-      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} spark={sparkFor(cpuDistribution, avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral', '클러스터별 CPU 분포')} />
-      <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} spark={<Sparkline points={[totals.open_incidents, totals.dead_letters]} tone={activeAlerts > 0 ? 'danger' : 'success'} ariaLabel="인시던트와 DLQ 분포" />} />
-      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} spark={sparkFor(memDistribution, avgMem != null && avgMem >= 80 ? 'warning' : 'neutral', '클러스터별 메모리 분포')} />
-      <StatCard label="인시던트" value={totals.open_incidents.toLocaleString()} delta="열린 항목" tone={totals.open_incidents > 0 ? 'danger' : 'success'} spark={<Sparkline points={incidentDistribution} tone={totals.open_incidents > 0 ? 'danger' : 'success'} ariaLabel="클러스터별 열린 인시던트 분포" />} />
+      <StatCard label="클러스터" value={totals.clusters.toLocaleString()} delta={clusterChip.chip} tone={clusterChip.severity as StatTone} />
+      <StatCard label="팟 수" value={totalPods.toLocaleString()} delta={`${totals.stale + totals.unknown}개 수집 상태 확인`} tone={totals.stale + totals.unknown > 0 ? 'warning' : 'success'} />
+      <StatCard label="CPU 사용률" value={pct(avgCpu)} delta="평균" tone={avgCpu != null && avgCpu >= 80 ? 'warning' : 'neutral'} />
+      <StatCard label="활성 알림" value={`${activeAlerts.toLocaleString()}건`} delta="인시던트 + DLQ" tone={activeAlerts > 0 ? 'danger' : 'success'} />
+      <StatCard label="메모리 사용률" value={pct(avgMem)} delta="평균" tone={avgMem != null && avgMem >= 80 ? 'warning' : 'neutral'} />
+      <StatCard label="인시던트" value={totals.open_incidents.toLocaleString()} delta="열린 항목" tone={totals.open_incidents > 0 ? 'danger' : 'success'} />
       <StatCard label="승인 대기" value={totals.pending_approvals.toLocaleString()} delta="배포 승인" tone={totals.pending_approvals > 0 ? 'warning' : 'neutral'} />
       <StatCard label="워크플로우" value={totals.running_workflows.toLocaleString()} delta="실행 중" tone={totals.running_workflows > 0 ? 'info' : 'neutral'} />
     </div>
   );
 }
 
-function sparkFor(points: Array<number | null | undefined>, tone: StatTone, ariaLabel: string) {
-  return hasSparklinePoints(points) ? <Sparkline points={points} tone={tone} ariaLabel={ariaLabel} /> : undefined;
+function FleetTrendCharts({ clusters }: { clusters: FleetClusterSummary[] }) {
+  const trackedClusters = trackedFleetChartClusters(clusters);
+  const usageQueries = useQueries({
+    queries: trackedClusters.map(cluster => ({
+      queryKey: ['home', 'cluster-usage', cluster.cluster_id],
+      queryFn: () => get<{ samples: UsageSample[] }>(`/clusters/${cluster.cluster_id}/usage?limit=120`, { timeoutMs: 8_000 }),
+      refetchInterval: 30_000,
+      retry: false,
+      select: (response: { samples: UsageSample[] }) => response.samples,
+    })),
+  });
+  const samplesByCluster = trackedClusters.reduce<Record<string, UsageSample[]>>((acc, cluster, index) => {
+    acc[cluster.cluster_id] = usageQueries[index]?.data ?? [];
+    return acc;
+  }, {});
+  const podSeries = buildFleetPodSeries(trackedClusters, samplesByCluster);
+  const restartSeries = buildFleetRestartSeries(trackedClusters, samplesByCluster);
+  const loading = usageQueries.some(query => query.isPending) && podSeries.length === 0 && restartSeries.length === 0;
+  const allErrored = usageQueries.length > 0 && usageQueries.every(query => query.isError);
+  const error = allErrored ? usageQueries.find(query => query.error)?.error as Error : null;
+  const refetch = () => {
+    for (const query of usageQueries) void query.refetch();
+  };
+
+  if (trackedClusters.length === 0) {
+    return (
+      <Card>
+        <EmptyState title="시계열 없음" description="수집된 클러스터 usage가 아직 없습니다" icon={<ChartIcon />} />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <Card
+        title="실행 팟 추이"
+        loading={loading}
+        error={error}
+        onRetry={refetch}
+        empty={podSeries.length === 0 ? <EmptyState title="팟 시계열 없음" description="실행 팟 샘플이 아직 없습니다" icon={<ChartIcon />} /> : undefined}
+      >
+        <TimeSeriesChart series={podSeries} />
+      </Card>
+      <Card
+        title="재시작 증가"
+        loading={loading}
+        error={error}
+        onRetry={refetch}
+        empty={restartSeries.length === 0 ? <EmptyState title="재시작 시계열 없음" description="재시작 샘플이 아직 없습니다" icon={<ChartIcon />} /> : undefined}
+      >
+        <TimeSeriesChart series={restartSeries} />
+      </Card>
+    </div>
+  );
 }
 
 function FleetHeatmap({
@@ -360,6 +412,10 @@ function ShieldIcon(props: IconProps) {
 
 function SendIcon(props: IconProps) {
   return <svg {...iconProps(props)}><path d="M21 3 10.5 13.5" /><path d="m21 3-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>;
+}
+
+function ChartIcon(props: IconProps) {
+  return <svg {...iconProps(props)}><path d="M4 19V5" /><path d="M4 19h16" /><path d="m7 15 4-4 3 3 5-7" /></svg>;
 }
 
 function TerminalIcon(props: IconProps) {

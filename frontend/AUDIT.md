@@ -368,6 +368,9 @@
 
 - WS 단일 연결(`startLive`)은 콘솔 셸 마운트 시 1회 — 지수 백오프 재연결, `live.summary`/스냅샷 반영.
 - 반영 지점: 셸 LIVE 인디케이터(pulse), 메트릭 실시간 차트, 클러스터 상세 hot 팟 표시.
+- 홈 상단 StatCard의 장식성 스파크라인 제거. 홈의 차트는 연결된 클러스터의
+  `GET /clusters/{id}/usage?limit=120` 샘플을 30초 간격으로 조회해 `TimeSeriesChart` 두 장
+  (실행 팟 추이, 재시작 증가)으로 표시한다. `restart_total`은 누적 카운터라 샘플 간 증가분으로 변환한다.
 
 ## G. MISSING-BACKEND
 

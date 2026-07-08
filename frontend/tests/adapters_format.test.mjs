@@ -134,6 +134,31 @@ test('usage series renders restart_total as per-sample delta', async () => {
   assert.deepEqual(series[2].data.map(point => point.y), [0, 3, 0, 5]);
 });
 
+test('home fleet charts use real cluster usage samples', async () => {
+  const { buildFleetPodSeries, buildFleetRestartSeries, trackedFleetChartClusters } = await vite.ssrLoadModule('/src/features/console/pages/homeCharts.ts');
+  const clusters = [
+    { cluster_id: 'empty', name: 'empty', pods_total: 0, nodes_total: 0 },
+    { cluster_id: 'cluster-1', name: 'cluster-1', pods_total: 17, nodes_total: 2 },
+    { cluster_id: 'cluster-2', name: 'cluster-2', pods_total: 13, nodes_total: 1 },
+  ];
+  const tracked = trackedFleetChartClusters(clusters);
+  const samples = {
+    'cluster-1': [
+      { sampled_at: '2026-07-08T00:00:00Z', usage: { pod_running: 16, restart_total: 10 } },
+      { sampled_at: '2026-07-08T00:01:00Z', usage: { pod_running: 17, restart_total: 13 } },
+      { sampled_at: '2026-07-08T00:02:00Z', usage: { pod_running: 17, restart_total: 12 } },
+    ],
+    'cluster-2': [
+      { sampled_at: '2026-07-08T00:00:00Z', usage: { pod_running: 12, restart_total: 1 } },
+      { sampled_at: '2026-07-08T00:01:00Z', usage: { pod_running: 13, restart_total: 5 } },
+    ],
+  };
+
+  assert.deepEqual(tracked.map(cluster => cluster.cluster_id), ['cluster-1', 'cluster-2']);
+  assert.deepEqual(buildFleetPodSeries(tracked, samples).map(series => series.data.map(point => point.y)), [[16, 17, 17], [12, 13]]);
+  assert.deepEqual(buildFleetRestartSeries(tracked, samples).map(series => series.data.map(point => point.y)), [[0, 3, 0], [0, 4]]);
+});
+
 test('sparkline presence requires measured numeric points', async () => {
   const { hasSparklinePoints } = await vite.ssrLoadModule('/src/ui/charts.tsx');
 
