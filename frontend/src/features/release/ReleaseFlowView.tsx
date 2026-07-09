@@ -1359,6 +1359,7 @@ function RunSummary({ summary }: { summary?: ReleaseRunSummary }) {
     ['Live', summary.live_runs ?? 0],
     ['Rollback', summary.rollback_requested_runs ?? 0],
     ['Unhealthy', summary.unhealthy_runs ?? 0],
+    ['Verification failed', summary.verification_failed_runs ?? 0],
     ['Stale', summary.stale_runs ?? 0],
   ];
   return (

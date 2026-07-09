@@ -1824,6 +1824,23 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                 "settings": {"runtime_mode": "live"},
                 "health": {"status": "unhealthy"},
                 "attention": {"required": True, "reasons": ["Checkout failed."]},
+                "steps": [
+                    {
+                        "details": {
+                            "release_guard": {
+                                "verification_jobs": {
+                                    "jobs": [
+                                        {
+                                            "job_id": "release-verification-a",
+                                            "kind": "http_probe",
+                                            "status": "failed",
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ],
             },
             {
                 "run_id": "run-3",
@@ -1858,6 +1875,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
     assert summary["waiting_for_approval_runs"] == 1
     assert summary["live_runs"] == 2
     assert summary["unhealthy_runs"] == 1
+    assert summary["verification_failed_runs"] == 1
     assert summary["stale_runs"] == 1
     assert summary["last_run_status"] == "running"
     assert summary["recent_runs"][1] == {
