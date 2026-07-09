@@ -58,59 +58,71 @@ export default function ReactFlowWorkflowExample() {
     setSelectedId(id);
   }
 
+  function removeSelectedNode() {
+    if (!selectedNode) return;
+    setNodes((current) => current.filter((node) => node.id !== selectedNode.id));
+    setEdges((current) => current.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id));
+    setSelectedId(nodes.find((node) => node.id !== selectedNode.id)?.id ?? "");
+  }
+
   return (
     <div className="flow-workbench">
       <div className="flow-toolbar">
         <button className="command-trigger stable-wide" data-stable-control="flow-add-node" onClick={addNode} type="button">
           노드 추가
         </button>
+        <button className="command-trigger stable-wide" data-stable-control="flow-remove-node" disabled={!selectedNode} onClick={removeSelectedNode} type="button">
+          선택 삭제
+        </button>
         <span>노드 {nodes.length}개 · 엣지 {edges.length}개</span>
       </div>
 
-      <div className="flow-example interactive" data-testid="flow-workflow">
-        <ReactFlow
-          colorMode={colorMode}
-          defaultEdgeOptions={{ animated: true }}
-          deleteKeyCode={["Backspace", "Delete"]}
-          edges={edges}
-          fitView
-          fitViewOptions={{ padding: 0.18 }}
-          nodeTypes={nodeTypes}
-          nodes={nodes}
-          onConnect={onConnect}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={(_, node) => setSelectedId(node.id)}
-          onNodesChange={onNodesChange}
-          onNodesDelete={(deleted) => {
-            if (deleted.some((node) => node.id === selectedId)) setSelectedId(nodes[0]?.id ?? "");
-          }}
-        >
-          <Background />
-          <MiniMap pannable zoomable />
-          <Controls />
-          <Panel className="flow-panel" position="top-left">
-            <span>핸들을 끌어 새 연결을 만들 수 있습니다.</span>
-          </Panel>
-        </ReactFlow>
-      </div>
+      <div className="flow-workflow-layout">
+        <div className="flow-example interactive" data-testid="flow-workflow">
+          <ReactFlow
+            colorMode={colorMode}
+            defaultEdgeOptions={{ animated: true }}
+            deleteKeyCode={["Backspace", "Delete"]}
+            edges={edges}
+            fitView
+            fitViewOptions={{ padding: 0.18 }}
+            nodeTypes={nodeTypes}
+            nodes={nodes}
+            onConnect={onConnect}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={(_, node) => setSelectedId(node.id)}
+            onNodesChange={onNodesChange}
+            onNodesDelete={(deleted) => {
+              if (deleted.some((node) => node.id === selectedId)) setSelectedId(nodes[0]?.id ?? "");
+            }}
+          >
+            <Background />
+            <MiniMap pannable zoomable />
+            <Controls />
+            <Panel className="flow-panel" position="top-left">
+              <span>핸들을 끌어 새 연결을 만들 수 있습니다.</span>
+            </Panel>
+          </ReactFlow>
+        </div>
 
-      <aside className="flow-inspector" data-testid="flow-inspector">
-        <strong>{selectedNode?.data.title ?? "선택 없음"}</strong>
-        <span>{selectedNode?.data.detail ?? "노드를 선택하면 상세 정보가 표시됩니다."}</span>
-        <em>{selectedNode?.data.status ?? "대기"}</em>
-      </aside>
+        <aside className="flow-inspector" data-testid="flow-inspector">
+          <strong>{selectedNode?.data.title ?? "선택 없음"}</strong>
+          <span>{selectedNode?.data.detail ?? "노드를 선택하면 상세 정보가 표시됩니다."}</span>
+          <em>{selectedNode?.data.status ?? "대기"}</em>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function WorkflowCard({ data, selected }: NodeProps<WorkflowNode>) {
+function WorkflowCard({ data, id, selected }: NodeProps<WorkflowNode>) {
   return (
     <div className={selected ? "flow-card selected" : "flow-card"}>
-      <Handle aria-label={`${data.title} 입력 핸들`} type="target" position={Position.Left} />
+      <Handle aria-label={`${data.title} 입력 핸들`} data-testid={`flow-handle-${id}-target`} type="target" position={Position.Left} />
       <strong>{data.title}</strong>
       <span>{data.detail}</span>
       <em>{data.status}</em>
-      <Handle aria-label={`${data.title} 출력 핸들`} type="source" position={Position.Right} />
+      <Handle aria-label={`${data.title} 출력 핸들`} data-testid={`flow-handle-${id}-source`} type="source" position={Position.Right} />
     </div>
   );
 }
