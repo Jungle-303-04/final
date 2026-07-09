@@ -75,6 +75,7 @@
 - release readiness app context: 등록 application, repo, branch, manifest path, cluster context 누락을 dispatch 전에 차단
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 - release alerts panel: `/release-flows`에서 alert channel 개수/활성 채널/severity 요약을 확인하고 `/settings/alerts`로 이동
+- release approval card: waiting approval step에 기존 approval grant/reject UI를 노출하고 승인 후 release run/audit query 갱신
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

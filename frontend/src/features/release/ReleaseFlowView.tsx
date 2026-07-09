@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { useConsolePath } from '@/features/console/ui';
 import { useApplications } from '@/features/repo/api';
+import { ApprovalCard } from '@/features/repo/ApprovalCard';
 import { type AlertChannel, useAlertChannels } from '@/features/notifications/api';
 import {
   useAdvanceReleaseRun,
@@ -965,6 +966,16 @@ function RunPanel({
               {releaseStepMeta(step).map(item => <span key={item}>{item}</span>)}
               {commitUrl(step) && <a href={commitUrl(step)} target="_blank" rel="noreferrer">commit</a>}
             </div>
+            {approvalIdForStep(step) && (
+              <div className="release-flow__approval">
+                <ApprovalCard
+                  approvalId={approvalIdForStep(step)}
+                  summary={approvalSummaryForStep(step)}
+                  resolved={approvalDecisionForStep(step)}
+                  compact
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -1338,10 +1349,36 @@ function releaseStepMeta(step: ReleaseRun['steps'][number]): string[] {
   if (recoveryRoute) items.push(`recovery ${recoveryRoute}`);
   if (getString(safePr.pr_url)) items.push('Safe PR created');
   else if (getString(safePr.title)) items.push('Safe PR');
+  const approvalId = approvalIdForStep(step);
+  if (approvalId) items.push(`approval ${shortId(approvalId)}`);
   const commandStatus = getString(command.status);
   if (commandStatus) items.push(`command ${commandStatus}`);
   else if (getString(command.command_id)) items.push('command queued');
   return items;
+}
+
+function approvalIdForStep(step: ReleaseRun['steps'][number]): string {
+  const approval = recordValue(recordValue(step.details).approval);
+  return getString(step.approval_id, getString(approval.approval_id));
+}
+
+function approvalSummaryForStep(step: ReleaseRun['steps'][number]): string {
+  const approval = recordValue(recordValue(step.details).approval);
+  const reason = getString(approval.reason);
+  const gate = getString(step.details.gate);
+  const environment = getString(step.details.environment);
+  if (reason) return `${step.name}: ${reason}`;
+  return `${step.name} release approval${environment ? ` for ${environment}` : ''}${gate ? ` (${gate})` : ''}`;
+}
+
+function approvalDecisionForStep(step: ReleaseRun['steps'][number]): 'granted' | 'rejected' | undefined {
+  const approval = recordValue(recordValue(step.details).approval);
+  const decision = getString(approval.decision).toLowerCase();
+  if (decision === 'granted' || decision === 'approved') return 'granted';
+  if (decision === 'rejected' || decision === 'denied') return 'rejected';
+  const status = getString(step.status).toLowerCase();
+  if (status === 'rejected') return 'rejected';
+  return undefined;
 }
 
 function releaseEventMeta(event: ReleaseRun['events'][number]): string {
