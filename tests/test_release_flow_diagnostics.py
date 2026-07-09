@@ -161,6 +161,33 @@ def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
     }
 
 
+def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
+    db = ReleaseRunActionDb()
+    events = AcceptingEventGateway()
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.notify_release_run_attention(
+            "release-run-1",
+            release_router.ReleaseRunActionRequest(reason="page release owner"),
+            current=current,
+            db=db,
+            events=events,
+        )
+    )
+
+    alert = events.calls[0]["body"]
+    assert response.accepted is True
+    assert alert.severity == "warning"
+    assert alert.workspace_id == "workspace-a"
+    assert alert.cluster_id == "target"
+    assert alert.namespace == "sandbox"
+    assert alert.application_id == "checkout"
+    assert alert.reason == "release run needs attention"
+    assert "page release owner" in alert.message
+
+
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
@@ -761,14 +788,20 @@ class ReleaseRunActionDb:
             "status": "running",
             "current_wave": 1,
             "total_waves": 1,
+            "plan_name": "Checkout release",
             "settings": {"rollback_policy": self.rollback_policy},
             "rollback": {"policy": self.rollback_policy},
+            "attention": {"required": True, "reasons": ["Release run is paused by an operator."]},
             "steps": [
                 {
                     "application_id": "checkout",
                     "wave": 1,
                     "status": "succeeded",
-                    "details": {},
+                    "details": {
+                        "cluster_id": "target",
+                        "namespace": "sandbox",
+                        "environment": "staging",
+                    },
                 }
             ],
         }

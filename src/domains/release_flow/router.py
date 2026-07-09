@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from domains.alert.events import AlertRequestedBody
 from domains.gitops.events import GitWebhookReceivedBody
 from domains.gitops.repository import derive_workflow_run_id
 from domains.identity.dependencies import (
@@ -39,6 +40,7 @@ from packages.contracts.gateway.responses import (
     ReleasePlanPreviewResponse,
     ReleaseReadinessResponse,
     ReleasePlanResponse,
+    ReleaseRunAlertResponse,
     ReleaseRunListResponse,
     ReleaseRunSummaryResponse,
     ReleaseRunResponse,
@@ -689,6 +691,35 @@ async def cancel_release_run(
     )
 
 
+@router.post(gateway_routes.RELEASE_RUN_NOTIFY_PATH, response_model=ReleaseRunAlertResponse)
+async def notify_release_run_attention(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> ReleaseRunAlertResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_manage_access(db, current, workspace_id, run.get("steps", []))
+    alert = release_run_attention_alert_body(
+        run,
+        workspace_id,
+        reason=operator_action_reason(payload, "operator requested release run notification"),
+    )
+    accepted = await events.accept_body(
+        alert,
+        actor=Actor(current.user_id, tuple(current.roles)),
+    )
+    return ReleaseRunAlertResponse(
+        accepted=True,
+        event=accepted.event.to_dict(),
+        run=run,
+    )
+
+
 @router.post(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanResponse)
 async def create_release_plan(
     payload: ReleasePlanUpsertRequest,
@@ -1080,6 +1111,49 @@ def release_run_rollback_policy(run: dict[str, Any]) -> str:
         if policy:
             return policy
     return "manual"
+
+
+def release_run_attention_alert_body(
+    run: dict[str, Any],
+    workspace_id: str,
+    *,
+    reason: str,
+) -> AlertRequestedBody:
+    status = str(run.get("derived_status") or run.get("status") or "unknown")
+    attention = run.get("attention") if isinstance(run.get("attention"), dict) else {}
+    reasons = [
+        str(item)
+        for item in attention.get("reasons", [])
+        if str(item).strip()
+    ] if isinstance(attention.get("reasons"), list) else []
+    first_step = first_release_run_step(run)
+    step_details = first_step.get("details") if isinstance(first_step.get("details"), dict) else {}
+    step_config = step_details.get("config") if isinstance(step_details.get("config"), dict) else {}
+    severity = "critical" if status in {"failed", "rollback_requested"} or attention.get("stale") is True else "warning"
+    application_id = str(first_step.get("application_id") or "release")
+    message_parts = [f"{str(run.get('plan_name') or 'Release run')} is {status}"]
+    if reasons:
+        message_parts.append("; ".join(reasons[:3]))
+    message_parts.append(reason)
+    return AlertRequestedBody(
+        workspace_id=workspace_id,
+        cluster_id=str(step_details.get("cluster_id") or step_config.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
+        namespace=str(step_details.get("namespace") or step_config.get("namespace") or Sandbox.NAMESPACE),
+        severity=severity,
+        application_id=application_id,
+        workflow_run_id=str(first_step.get("workflow_run_id") or run.get("run_id") or ""),
+        environment=str(step_details.get("environment") or step_config.get("environment") or "production"),
+        message=f"{application_id}: {' | '.join(message_parts)}",
+        reason="release run needs attention",
+    )
+
+
+def first_release_run_step(run: dict[str, Any]) -> dict[str, Any]:
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    for step in steps:
+        if isinstance(step, dict):
+            return step
+    return {}
 
 
 def require_plan_application_manage_access(

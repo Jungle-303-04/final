@@ -814,6 +814,12 @@ class ReleaseRunResponse(StrictModel):
     run: JsonMap
 
 
+class ReleaseRunAlertResponse(StrictModel):
+    accepted: bool
+    event: JsonMap | None = None
+    run: JsonMap
+
+
 class ReleaseRunListResponse(StrictModel):
     runs: list[JsonMap]
 
