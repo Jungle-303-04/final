@@ -15,6 +15,15 @@ from services.ai.agent.pipeline.evidence import EVIDENCE_LINEAGE_KEY, EVIDENCE_S
 from services.ai.agent.pipeline.symptom import derive_symptom, resolve_resource
 
 EvidenceSource = ClusterEvidenceReceivedBody | Evidence
+SENSITIVE_CHANGE_TOKENS = (
+    "secret",
+    "token",
+    "password",
+    "credential",
+    "private",
+    "key",
+)
+REDACTED_CHANGE_VALUE = "redacted"
 
 MAX_KUBERNETES_PODS = 16
 MAX_KUBERNETES_EVENTS = 24
@@ -64,6 +73,7 @@ def compact_evidence_reference(evidence: Evidence) -> Evidence:
         logs=[],
         traces=compact_reference_payload(evidence.traces),
         object_ref=evidence.object_ref,
+        metadata=compact_reference_payload(evidence.metadata),
         workspace_id=evidence.workspace_id,
     )
 
@@ -177,6 +187,8 @@ def source_payload(evt: EvidenceSource, source: str) -> object:
         return evt.logs
     if source == "traces":
         return evt.traces
+    if source == "metadata":
+        return evt.metadata
     return {}
 
 
@@ -286,6 +298,92 @@ def stream_matches_namespace(stream: dict, namespace: str) -> bool:
     return True
 
 
+def change_context_payload(metadata: dict) -> dict:
+    raw = metadata.get("change_context")
+    if isinstance(raw, dict):
+        return dict(raw)
+    known_keys = {"recent_changes", "gitops", "image", "rollout", "config", "risk"}
+    if any(key in metadata for key in known_keys):
+        return dict(metadata)
+    return {}
+
+
+def sanitize_change_context(value: dict) -> dict:
+    sanitized = dict(value)
+    recent_changes = sanitized.get("recent_changes")
+    if isinstance(recent_changes, list):
+        sanitized["recent_changes"] = [
+            sanitize_recent_change(change)
+            for change in recent_changes
+            if isinstance(change, dict)
+        ]
+    return sanitized
+
+
+def sanitize_recent_change(change: dict) -> dict:
+    sanitized = dict(change)
+    if is_sensitive_change(sanitized):
+        for key in ("before", "after"):
+            if key in sanitized and sanitized[key] not in (None, ""):
+                sanitized[key] = REDACTED_CHANGE_VALUE
+    return sanitized
+
+
+def is_sensitive_change(change: dict) -> bool:
+    text = " ".join(
+        str(change.get(key) or "")
+        for key in ("change_type", "target_resource", "field", "source")
+    ).casefold()
+    return any(token in text for token in SENSITIVE_CHANGE_TOKENS)
+
+
+def has_change_context(value: dict) -> bool:
+    for key in ("recent_changes", "gitops", "image", "rollout", "config", "risk"):
+        section = value.get(key)
+        if isinstance(section, list) and section:
+            return True
+        if isinstance(section, dict) and section:
+            return True
+    return False
+
+
+def current_workload_snapshot_payload(metadata: dict) -> dict:
+    raw = metadata.get("current_workload_snapshot")
+    if isinstance(raw, dict) and raw:
+        return dict(raw)
+    return {}
+
+
+def current_workload_snapshots_payload(metadata: dict) -> dict:
+    raw = metadata.get("current_workload_snapshots")
+    if not isinstance(raw, list):
+        return {}
+    snapshots = [dict(item) for item in raw if isinstance(item, dict) and item]
+    return {"items": snapshots} if snapshots else {}
+
+
+def collect_change_context(
+    evt: EvidenceSource,
+    *,
+    resource_kind: str,
+    resource_name: str,
+    namespace: str | None,
+) -> dict | None:
+    payload = change_context_payload(evt.metadata)
+    if not payload:
+        return None
+    value = sanitize_change_context(payload)
+    value.setdefault(
+        "resource",
+        {
+            "namespace": namespace,
+            "workload_kind": resource_kind,
+            "workload_name": resource_name,
+        },
+    )
+    return value if has_change_context(value) else None
+
+
 def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
     resource_kind, resource_name, namespace = extract_resource(evt.kubernetes)
@@ -339,6 +437,44 @@ def collect_evidence_items(evt: EvidenceSource) -> list[EvidenceItem]:
                 name="related_traces",
                 value=compact_traces_value(evt.traces),
                 summary=f"{target_summary} Trace 근거입니다.",
+            )
+        )
+    workload_snapshots = current_workload_snapshots_payload(evt.metadata)
+    if workload_snapshots:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="current_workload_snapshots",
+                value=workload_snapshots,
+                summary=f"{target_summary} Workload snapshot 목록 근거입니다.",
+            )
+        )
+    workload_snapshot = current_workload_snapshot_payload(evt.metadata)
+    if workload_snapshot:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="current_workload_snapshot",
+                value=workload_snapshot,
+                summary=f"{target_summary} Workload snapshot 상세 근거입니다.",
+            )
+        )
+    change_context = collect_change_context(
+        evt,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+    if change_context:
+        items.append(
+            evidence_item(
+                evt,
+                source="metadata",
+                name="change_context",
+                value=change_context,
+                summary=f"{target_summary} Change context 근거입니다.",
             )
         )
     return items
