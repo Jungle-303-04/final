@@ -188,6 +188,33 @@ def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
     assert "page release owner" in alert.message
 
 
+def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -> None:
+    db = ReleaseRunActionDb()
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.get_release_run_handoff(
+            "release-run-1",
+            current=current,
+            db=db,
+        )
+    )
+
+    handoff = response.handoff
+    assert handoff["run_id"] == "release-run-1"
+    assert handoff["severity"] == "warning"
+    assert "needs operator attention" in handoff["headline"]
+    assert handoff["attention_reasons"] == ["Release run is paused by an operator."]
+    assert [action["action"] for action in handoff["next_actions"]] == [
+        "monitor",
+        "notify",
+        "rollback",
+        "cancel",
+    ]
+    assert {check["name"] for check in handoff["checks"]} == {"mode", "health", "attention", "rollback"}
+
+
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)

@@ -20,6 +20,7 @@ import {
   useReleasePreview,
   useReleaseAudit,
   useReleaseAuditExport,
+  useReleaseRunHandoff,
   useReleaseRunSummary,
   useDeleteReleasePlan,
   useArchiveReleasePlan,
@@ -43,6 +44,7 @@ import type {
   ReleaseReadiness,
   ReleasePlanStep,
   ReleaseRun,
+  ReleaseRunHandoff,
   ReleaseRunSummary,
   Tone as ReleaseFlowTone,
 } from '@/shared/lib/types';
@@ -937,6 +939,7 @@ function RunPanel({
   }, [onSelectedRunIdChange, runs, selectedRunId]);
   const selectedRun = selectedRunId ? runs.find(run => run.run_id === selectedRunId) : undefined;
   const run = selectedRun ?? runs[0];
+  const handoffQ = useReleaseRunHandoff(run?.run_id);
   if (loading && !run) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
   if (!run) {
     return (
@@ -995,6 +998,7 @@ function RunPanel({
           ))}
         </div>
       )}
+      <RunHandoffPanel handoff={handoffQ.data} loading={handoffQ.isPending} />
       <div className="release-flow__run-head">
         <div>
           <strong>{run.plan_name}</strong>
@@ -1118,6 +1122,61 @@ function RunPanel({
       </div>
     </Card>
   );
+}
+
+function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; loading: boolean }) {
+  if (loading && !handoff) {
+    return <p className="release-flow__hint">Loading operator handoff...</p>;
+  }
+  if (!handoff) return null;
+  return (
+    <div className="release-flow__handoff">
+      <div className="release-flow__handoff-head">
+        <div>
+          <strong>{handoff.headline}</strong>
+          <p className="release-flow__hint">
+            Wave {handoff.current_wave} of {handoff.total_waves} | {handoff.live_side_effects ? 'live side effects' : 'demo/dry-run'}
+          </p>
+        </div>
+        <Badge tone={handoffTone(handoff.severity)}>{handoff.severity}</Badge>
+      </div>
+      <div className="release-flow__handoff-grid">
+        <div>
+          <span className="release-flow__handoff-label">Next actions</span>
+          <div className="release-flow__handoff-list">
+            {handoff.next_actions.slice(0, 4).map(action => (
+              <span key={action.action} className={action.enabled ? '' : 'release-flow__handoff-disabled'}>
+                {action.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <span className="release-flow__handoff-label">Checks</span>
+          <div className="release-flow__handoff-list">
+            {handoff.checks.slice(0, 4).map(check => (
+              <span key={check.name}>
+                {check.name}: {check.status}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {handoff.last_event && (
+        <p className="release-flow__hint">
+          Last event: {getString(handoff.last_event.event_type)} {getString(handoff.last_event.message) && `- ${getString(handoff.last_event.message)}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function handoffTone(value?: string) {
+  if (value === 'danger') return 'danger' as const;
+  if (value === 'warning') return 'warning' as const;
+  if (value === 'success') return 'success' as const;
+  if (value === 'neutral') return 'neutral' as const;
+  return 'info' as const;
 }
 
 function RunFilterField({

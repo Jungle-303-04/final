@@ -9,6 +9,7 @@ import type {
   ReleasePlanPreview,
   ReleaseReadiness,
   ReleaseRun,
+  ReleaseRunHandoff,
   ReleaseRunSummary,
 } from '@/shared/lib/types';
 
@@ -18,6 +19,7 @@ export const releaseKeys = {
   plans: () => ['release-plans'] as const,
   plan: (id: string) => ['release-plans', id] as const,
   runs: (planId?: string, filter: ReleaseRunFilter = 'all') => ['release-runs', planId ?? 'all', filter] as const,
+  handoff: (runId?: string) => ['release-runs-handoff', runId ?? 'none'] as const,
   audit: (planId?: string, runId?: string, eventType?: string) =>
     ['release-audit', planId ?? 'all', runId ?? 'all', eventType ?? 'all'] as const,
 };
@@ -64,6 +66,15 @@ export const useReleaseRunSummary = (planId?: string) =>
   useQuery({
     queryKey: ['release-runs-summary', planId ?? 'all'] as const,
     queryFn: () => get<ReleaseRunSummary>(`/release-runs/summary${planId ? `?plan_id=${encodeURIComponent(planId)}` : ''}`),
+    refetchInterval: 15_000,
+  });
+
+export const useReleaseRunHandoff = (runId?: string) =>
+  useQuery({
+    queryKey: releaseKeys.handoff(runId),
+    queryFn: () => get<{ handoff: ReleaseRunHandoff }>(`/release-runs/${runId}/handoff`),
+    select: d => d.handoff,
+    enabled: Boolean(runId),
     refetchInterval: 15_000,
   });
 

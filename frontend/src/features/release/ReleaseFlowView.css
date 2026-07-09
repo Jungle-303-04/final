@@ -286,6 +286,57 @@
   margin-bottom: 12px;
 }
 
+.release-flow__handoff {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+}
+
+.release-flow__handoff-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.release-flow__handoff-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.release-flow__handoff-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.release-flow__handoff-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.release-flow__handoff-list span {
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+
+.release-flow__handoff-disabled {
+  opacity: 0.55;
+}
+
 .release-flow__summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -439,6 +490,8 @@
   }
 
   .release-flow__run-head,
+  .release-flow__handoff-head,
+  .release-flow__handoff-grid,
   .release-flow__run-grid,
   .release-flow__timeline-row {
     grid-template-columns: 1fr;
