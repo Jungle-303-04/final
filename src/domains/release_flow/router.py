@@ -3282,6 +3282,9 @@ def release_run_report_markdown(
         lines.extend(f"- {item}" for item in criteria[:3])
         if abort_criteria.get("override_reason"):
             lines.append(f"- override: {abort_criteria.get('override_reason')}")
+    audit_summary_lines = release_run_report_audit_summary_lines(audit_events)
+    if audit_summary_lines:
+        lines.extend(["", "Audit summary:", *audit_summary_lines])
     steps = run.get("steps") if isinstance(run.get("steps"), list) else []
     if steps:
         lines.extend(["", "Steps:"])
@@ -3309,6 +3312,25 @@ def release_run_report_markdown(
                 f"- {event.get('event_type') or 'event'}: {event.get('message') or 'recorded'}{created_suffix}"
             )
     return "\n".join(lines)
+
+
+def release_run_report_audit_summary_lines(audit_events: list[dict[str, Any]]) -> list[str]:
+    if not audit_events:
+        return []
+    counts: dict[str, int] = {}
+    for event in audit_events:
+        event_type = str(event.get("event_type") or "event")
+        counts[event_type] = counts.get(event_type, 0) + 1
+    latest = audit_events[0]
+    latest_label = str(latest.get("event_type") or "event")
+    latest_message = str(latest.get("message") or "recorded")
+    lines = [
+        f"- Events in report: {len(audit_events)}",
+        f"- Latest: {latest_label} - {latest_message}",
+    ]
+    for event_type, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:6]:
+        lines.append(f"- {event_type}: {count}")
+    return lines
 
 
 def release_run_report_target_lines(run: dict[str, Any]) -> list[str]:

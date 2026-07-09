@@ -1613,6 +1613,10 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
       if (handoff.abort_criteria.override_reason) lines.push(`- override: ${handoff.abort_criteria.override_reason}`);
     }
   }
+  const timelineSummary = releaseRunTimelineSummaryLines(run.events);
+  if (timelineSummary.length > 0) {
+    lines.push('', 'Timeline summary:', ...timelineSummary);
+  }
   lines.push('', 'Steps:');
   lines.push(...run.steps.slice(0, 12).map(step => {
     const health = getString(recordValue(step.health).status);
@@ -1626,6 +1630,25 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
     lines.push(...run.events.slice(0, 8).map(event => `- ${event.event_type}: ${event.message || 'recorded'}${event.created_at ? ` (${event.created_at})` : ''}`));
   }
   return lines.join('\n');
+}
+
+function releaseRunTimelineSummaryLines(events: ReleaseRun['events']): string[] {
+  if (events.length === 0) return [];
+  const counts = events.reduce<Record<string, number>>((acc, event) => {
+    const eventType = event.event_type || 'event';
+    acc[eventType] = (acc[eventType] ?? 0) + 1;
+    return acc;
+  }, {});
+  const latest = events[0];
+  const lines = [
+    `- Events in report: ${events.length}`,
+    `- Latest: ${latest.event_type || 'event'} - ${latest.message || 'recorded'}`,
+  ];
+  lines.push(...Object.entries(counts)
+    .sort(([aType, aCount], [bType, bCount]) => bCount - aCount || aType.localeCompare(bType))
+    .slice(0, 6)
+    .map(([eventType, count]) => `- ${eventType}: ${count}`));
+  return lines;
 }
 
 function releaseRunTargetLines(run: ReleaseRun): string[] {
