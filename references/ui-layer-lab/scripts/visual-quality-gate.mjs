@@ -889,6 +889,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/279-ai-citation-filter.example.tsx",
       fragments: [">Answer<", "Answer linked to"]
+    },
+    {
+      file: "src/examples/280-ai-review-resolution.example.tsx",
+      fragments: ["Rename ambiguous prop", "Add empty state", "Handle failed toast", ">resolved<"]
+    },
+    {
+      file: "src/examples/281-job-run-timeline-slider.example.tsx",
+      fragments: ['"queued"', '"checkout"', '"build"', '"smoke"', '"upload"']
+    },
+    {
+      file: "src/examples/282-job-runner-capacity.example.tsx",
+      fragments: ["Runners", "Schedule Job"]
+    },
+    {
+      file: "src/examples/283-job-rollback-timeline.example.tsx",
+      fragments: ['"detect"', '"freeze"', '"restore"', '"verify"', "Advance Rollback"]
+    },
+    {
+      file: "src/examples/284-job-environment-diff.example.tsx",
+      fragments: [">preview<", ">production<", "<strong>{env}</strong>"]
+    },
+    {
+      file: "src/examples/285-job-test-shard-progress.example.tsx",
+      fragments: ["Shard {shard}", ">done<", ">running<", ">Advance<"]
+    },
+    {
+      file: "src/examples/286-drilldown-related-entities.example.tsx",
+      fragments: ["relations[entity].length} related", "Object.keys(relations).map"]
+    },
+    {
+      file: "src/examples/287-drilldown-empty-branch.example.tsx",
+      fragments: ["visual-smoke", "deploy-preview", "bundle-size", "No items in this branch"]
+    },
+    {
+      file: "src/examples/288-heatmap-sparkline-detail.example.tsx",
+      fragments: ["key as keyof typeof rows", "<strong>{row}</strong>", "rows[row]"]
+    },
+    {
+      file: "src/examples/289-heatmap-severity-stacking.example.tsx",
+      fragments: ["Severity {severity}+"]
     }
   ];
   const matches = [];
@@ -1220,9 +1260,19 @@ async function inspectEnglishSamples(page, url) {
     ["AI 작업 레이어", "example-ai-token-budget-meter"],
     ["AI 작업 레이어", "example-ai-model-fallback-route"],
     ["AI 작업 레이어", "example-ai-eval-scorecard"],
-    ["AI 작업 레이어", "example-ai-citation-filter"]
+    ["AI 작업 레이어", "example-ai-citation-filter"],
+    ["AI 작업 레이어", "example-ai-review-resolution"],
+    ["작업 진행/로그", "example-job-run-timeline-slider"],
+    ["작업 진행/로그", "example-job-runner-capacity"],
+    ["작업 진행/로그", "example-job-rollback-timeline"],
+    ["작업 진행/로그", "example-job-environment-diff"],
+    ["작업 진행/로그", "example-job-test-shard-progress"],
+    ["드릴다운 탐색", "example-drilldown-related-entities"],
+    ["드릴다운 탐색", "example-drilldown-empty-branch"],
+    ["데이터 시각화", "example-heatmap-sparkline-detail"],
+    ["데이터 시각화", "example-heatmap-severity-stacking"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend|Executiond|Palette|Token|Budget|Fallback|Accuracy|Grounding|Actionability|Citation|Ribbon|Resize|Trace|Idle|Live)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier|Group|Ungroup|Environment|Environments|Context|Rows|Terms|Retry|Maintenance|Session|Webhook|Webhooks|Warn|Extend|Executiond|Palette|Token|Budget|Fallback|Accuracy|Grounding|Actionability|Citation|Ribbon|Resize|Trace|Idle|Live|Rename|Empty|Toast|Resolved|Queued|Checkout|Build|Upload|Runners|Schedule|Rollback|Detect|Freeze|Restore|Shard|Severity|Related|Failures|Warnings|Skipped)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {
