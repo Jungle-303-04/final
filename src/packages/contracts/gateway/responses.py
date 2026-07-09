@@ -842,6 +842,7 @@ class ReleaseRunSummaryResponse(StrictModel):
     active_runs: int = 0
     attention_required_runs: int = 0
     failed_runs: int = 0
+    paused_runs: int = 0
     rollback_requested_runs: int = 0
     waiting_for_approval_runs: int = 0
     live_runs: int = 0

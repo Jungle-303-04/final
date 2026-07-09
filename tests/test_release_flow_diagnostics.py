@@ -2014,21 +2014,24 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                     }
                 ],
             },
+            {"run_id": "run-8", "plan_id": "plan-f", "status": "paused"},
         ]
     )
 
-    assert summary["total_runs"] == 7
+    assert summary["total_runs"] == 8
     assert summary["status_breakdown"] == {
         "running": 3,
         "failed": 1,
+        "paused": 1,
         "succeeded": 1,
         "rollback_requested": 1,
         "waiting_for_approval": 1,
     }
-    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2, "plan-d": 1, "plan-e": 1}
-    assert summary["active_runs"] == 4
+    assert summary["plan_breakdown"] == {"plan-a": 2, "plan-b": 1, "plan-c": 2, "plan-d": 1, "plan-e": 1, "plan-f": 1}
+    assert summary["active_runs"] == 5
     assert summary["attention_required_runs"] == 5
     assert summary["failed_runs"] == 1
+    assert summary["paused_runs"] == 1
     assert summary["rollback_requested_runs"] == 1
     assert summary["waiting_for_approval_runs"] == 1
     assert summary["live_runs"] == 2
@@ -2186,6 +2189,11 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
             "steps": [],
         },
         {
+            "run_id": "run-paused",
+            "status": "paused",
+            "steps": [],
+        },
+        {
             "run_id": "run-unhealthy",
             "status": "running",
             "health": {"status": "unhealthy"},
@@ -2229,6 +2237,7 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         "run-verification-failed",
         "run-verification-status-timeout",
         "run-verification-timeout",
+        "run-paused",
         "run-unhealthy",
         "run-step-unhealthy",
     ]
@@ -2240,6 +2249,10 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, status="rollback_requested")
     ] == ["run-rollback-requested"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, status="paused")
+    ] == ["run-paused"]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, unhealthy_only=True)

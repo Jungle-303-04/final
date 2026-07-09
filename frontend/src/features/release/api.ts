@@ -20,6 +20,7 @@ export type ReleaseRunFilter =
   | 'active'
   | 'live'
   | 'failed'
+  | 'paused'
   | 'rollback_requested'
   | 'unhealthy'
   | 'waiting_for_approval'
@@ -72,7 +73,7 @@ function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
   if (filter === 'unhealthy') params.set('unhealthy_only', 'true');
   if (filter === 'verification_failed') params.set('verification_failed_only', 'true');
   if (filter === 'verification_pending_timeout') params.set('verification_pending_timeout_only', 'true');
-  if (filter === 'failed' || filter === 'rollback_requested' || filter === 'waiting_for_approval') {
+  if (filter === 'failed' || filter === 'paused' || filter === 'rollback_requested' || filter === 'waiting_for_approval') {
     params.set('status', filter);
   }
   const query = params.toString();

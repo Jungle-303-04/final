@@ -2978,6 +2978,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     recent_runs: list[dict[str, Any]] = []
     active_runs = 0
     failed_runs = 0
+    paused_runs = 0
     rollback_requested_runs = 0
     waiting_for_approval_runs = 0
     live_runs = 0
@@ -3000,6 +3001,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
             active_runs += 1
         if status == "failed":
             failed_runs += 1
+        if status == "paused":
+            paused_runs += 1
         if status == "rollback_requested":
             rollback_requested_runs += 1
         if status == "waiting_for_approval":
@@ -3044,6 +3047,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "active_runs": active_runs,
         "attention_required_runs": attention_required_runs,
         "failed_runs": failed_runs,
+        "paused_runs": paused_runs,
         "rollback_requested_runs": rollback_requested_runs,
         "waiting_for_approval_runs": waiting_for_approval_runs,
         "live_runs": live_runs,

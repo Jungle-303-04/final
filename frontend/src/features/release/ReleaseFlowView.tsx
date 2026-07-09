@@ -1357,6 +1357,7 @@ function RunFilterField({
         <option value="active">Active</option>
         <option value="live">Live</option>
         <option value="failed">Failed</option>
+        <option value="paused">Paused</option>
         <option value="rollback_requested">Rollback requested</option>
         <option value="unhealthy">Unhealthy</option>
         <option value="verification_failed">Verification failed</option>
@@ -1389,6 +1390,7 @@ function RunSummary({
     { label: 'Active', count: summary.active_runs ?? 0, filter: 'active' },
     { label: 'Live', count: summary.live_runs ?? 0, filter: 'live' },
     { label: 'Failed', count: summary.failed_runs ?? 0, filter: 'failed' },
+    { label: 'Paused', count: summary.paused_runs ?? 0, filter: 'paused' },
     { label: 'Rollback', count: summary.rollback_requested_runs ?? 0, filter: 'rollback_requested' },
     { label: 'Waiting approval', count: summary.waiting_for_approval_runs ?? 0, filter: 'waiting_for_approval' },
     { label: 'Unhealthy', count: summary.unhealthy_runs ?? 0, filter: 'unhealthy' },
