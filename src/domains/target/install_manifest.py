@@ -17,9 +17,9 @@ TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
 TARGET_INSTALL_RENDERER_NATIVE = "native"
 TARGET_INSTALL_RENDERER_KUSTOMIZE = "kustomize"
 CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
-FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
+FAST_LANE_PRIORITY_CLASS_NAME = "gitops-fast-lane"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
-FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
+FAST_LANE_NODE_LABEL_VALUE = "fast-lane"
 SUPPORTED_TARGET_INSTALL_RENDERERS = {
     TARGET_INSTALL_RENDERER_NATIVE,
     TARGET_INSTALL_RENDERER_KUSTOMIZE,
@@ -50,7 +50,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
         for block in [
             namespace_manifest(namespace),
             namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
-            priority_class_manifest(),
+            priority_class_manifest(include_fast_lane=role != MANAGEMENT_CLUSTER_ROLE),
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -73,8 +73,8 @@ metadata:
 	"""
 
 
-def priority_class_manifest() -> str:
-    return f"""
+def priority_class_manifest(*, include_fast_lane: bool = True) -> str:
+    control_priority = f"""
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -83,6 +83,10 @@ value: 1000000
 globalDefault: false
 preemptionPolicy: PreemptLowerPriority
 description: "GitOps 제어 경로와 target agent를 일반 workload보다 먼저 스케줄링한다."
+"""
+    if not include_fast_lane:
+        return control_priority
+    return f"""{control_priority}
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
