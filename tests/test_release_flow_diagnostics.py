@@ -655,6 +655,48 @@ def test_release_run_summary_counts_derived_statuses() -> None:
     }
 
 
+def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
+    runs = [
+        {
+            "run_id": "run-live",
+            "status": "running",
+            "settings": {"runtime_mode": "live"},
+            "attention": {"required": False},
+            "steps": [],
+        },
+        {
+            "run_id": "run-stale",
+            "status": "running",
+            "attention": {"required": True, "stale": True},
+            "steps": [],
+        },
+        {
+            "run_id": "run-failed",
+            "status": "running",
+            "derived_status": "failed",
+            "attention": {"required": True},
+            "steps": [{"details": {"side_effects": True}}],
+        },
+    ]
+
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, status="failed")
+    ] == ["run-failed"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, attention_only=True)
+    ] == ["run-stale", "run-failed"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, stale_only=True)
+    ] == ["run-stale"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, live_only=True)
+    ] == ["run-live", "run-failed"]
+
+
 class ReleaseDispatchDb:
     def __init__(self) -> None:
         self.dispatched: list[dict[str, object]] = []

@@ -82,6 +82,7 @@
 - run history selector: release run이 여러 개 쌓이면 최신 run뿐 아니라 이전 run의 상태, wave, timeline을 선택해서 확인하고 필요한 운영 액션을 수행
 - attention reasons: failed, waiting approval, rollback requested, paused, unhealthy run/step에서 `attention.required/reasons`를 파생해 API와 UI에서 왜 조치가 필요한지 바로 표시
 - stale run detection: active run의 `updated_at`이 `health_timeout_seconds` 또는 step timeout을 넘으면 stale attention reason과 `stale_runs` summary 카운터를 표시
+- run filters: `GET /release-runs`와 UI에서 all/attention/stale/live/failed/waiting approval 기준으로 run 목록을 빠르게 필터링
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

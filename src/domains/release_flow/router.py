@@ -75,6 +75,10 @@ async def list_release_plans(
 @router.get(gateway_routes.RELEASE_RUNS_PATH, response_model=ReleaseRunListResponse)
 async def list_release_runs(
     plan_id: str | None = Query(default=None),
+    status: str | None = Query(default=None, max_length=80),
+    attention_only: bool = Query(default=False),
+    stale_only: bool = Query(default=False),
+    live_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
@@ -83,6 +87,13 @@ async def list_release_runs(
     runs = db.list_release_runs(workspace_id, plan_id=plan_id, limit=limit)
     for run in runs:
         require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    runs = filter_release_runs(
+        runs,
+        status=status,
+        attention_only=attention_only,
+        stale_only=stale_only,
+        live_only=live_only,
+    )
     return ReleaseRunListResponse(runs=runs)
 
 
@@ -1193,6 +1204,44 @@ def require_plan_application_read_access(
         )
 
 
+def filter_release_runs(
+    runs: list[dict[str, Any]],
+    *,
+    status: str | None = None,
+    attention_only: bool = False,
+    stale_only: bool = False,
+    live_only: bool = False,
+) -> list[dict[str, Any]]:
+    expected_status = str(status or "").strip().lower()
+    filtered: list[dict[str, Any]] = []
+    for run in runs:
+        run_status = str(run.get("derived_status") or run.get("status") or "").lower()
+        attention = run.get("attention") if isinstance(run.get("attention"), dict) else {}
+        if expected_status and run_status != expected_status:
+            continue
+        if attention_only and attention.get("required") is not True:
+            continue
+        if stale_only and attention.get("stale") is not True:
+            continue
+        if live_only and not release_run_has_live_side_effects(run):
+            continue
+        filtered.append(run)
+    return filtered
+
+
+def release_run_has_live_side_effects(run: dict[str, Any]) -> bool:
+    settings = run.get("settings") if isinstance(run.get("settings"), dict) else {}
+    if settings.get("runtime_mode") == "live" or settings.get("provider_mode") == "live":
+        return True
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    return any(
+        isinstance(step, dict)
+        and isinstance(step.get("details"), dict)
+        and step["details"].get("side_effects") is True
+        for step in steps
+    )
+
+
 def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     status_breakdown: dict[str, int] = {}
     plan_breakdown: dict[str, int] = {}
@@ -1237,15 +1286,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
                 attention_required_runs += 1
         if attention.get("required") is True and not status_needs_attention and not health_needs_attention:
             attention_required_runs += 1
-        settings = run.get("settings") if isinstance(run.get("settings"), dict) else {}
-        steps = run.get("steps") if isinstance(run.get("steps"), list) else []
-        step_has_side_effects = any(
-            isinstance(step, dict)
-            and isinstance(step.get("details"), dict)
-            and step["details"].get("side_effects") is True
-            for step in steps
-        )
-        if settings.get("runtime_mode") == "live" or settings.get("provider_mode") == "live" or step_has_side_effects:
+        if release_run_has_live_side_effects(run):
             live_runs += 1
         if len(recent_runs) < 10:
             recent_runs.append(
