@@ -13,7 +13,7 @@ import type {
   ReleaseRunSummary,
 } from '@/shared/lib/types';
 
-export type ReleaseRunFilter = 'all' | 'attention' | 'stale' | 'live' | 'failed' | 'waiting_for_approval';
+export type ReleaseRunFilter = 'all' | 'attention' | 'stale' | 'live' | 'failed' | 'waiting_for_approval' | 'verification_failed';
 
 export const releaseKeys = {
   plans: () => ['release-plans'] as const,
@@ -57,6 +57,7 @@ function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
   if (filter === 'attention') params.set('attention_only', 'true');
   if (filter === 'stale') params.set('stale_only', 'true');
   if (filter === 'live') params.set('live_only', 'true');
+  if (filter === 'verification_failed') params.set('verification_failed_only', 'true');
   if (filter === 'failed' || filter === 'waiting_for_approval') params.set('status', filter);
   const query = params.toString();
   return `/release-runs${query ? `?${query}` : ''}`;

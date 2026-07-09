@@ -1344,6 +1344,7 @@ function RunFilterField({
         <option value="stale">Stale</option>
         <option value="live">Live</option>
         <option value="failed">Failed</option>
+        <option value="verification_failed">Verification failed</option>
         <option value="waiting_for_approval">Waiting approval</option>
       </select>
     </Field>
