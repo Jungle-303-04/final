@@ -769,6 +769,46 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/249-ai-agent-queue.example.tsx",
       fragments: ["Read logs", "Draft fix", "Run tests", ">Advance<"]
+    },
+    {
+      file: "src/examples/250-ai-response-rating.example.tsx",
+      fragments: ["AI answer", "The failure is caused", "Helpful", "Needs work", "Not rated"]
+    },
+    {
+      file: "src/examples/251-job-matrix-dashboard.example.tsx",
+      fragments: ['["mac", "linux", "windows"]', '"nodes18"', '"nodes20"', '"nodes22"', "linux/nodes20"]
+    },
+    {
+      file: "src/examples/252-job-cache-meter.example.tsx",
+      fragments: [">Cache<", ">Refresh<"]
+    },
+    {
+      file: "src/examples/253-job-flaky-detector.example.tsx",
+      fragments: ["visual-smoke", "auth-flow", "billing-webhook", "unstable"]
+    },
+    {
+      file: "src/examples/254-job-terminal-runner.example.tsx",
+      fragments: ["status: ready"]
+    },
+    {
+      file: "src/examples/255-job-health-score.example.tsx",
+      fragments: [">Recalculate<"]
+    },
+    {
+      file: "src/examples/256-drilldown-schema-fields.example.tsx",
+      fragments: ["fields.length} fields"]
+    },
+    {
+      file: "src/examples/257-drilldown-breadcrumb-history.example.tsx",
+      fragments: ['"workspace"', '"repository"', ">Depth"]
+    },
+    {
+      file: "src/examples/258-heatmap-window-brush.example.tsx",
+      fragments: ["Window {start", "No selection"]
+    },
+    {
+      file: "src/examples/259-heatmap-outlier-detail.example.tsx",
+      fragments: ['"Outlier"', '"Normal"']
     }
   ];
   const matches = [];
@@ -1070,9 +1110,19 @@ async function inspectEnglishSamples(page, url) {
     ["AI 작업 레이어", "example-ai-context-diff-picker"],
     ["AI 작업 레이어", "example-ai-command-suggestions"],
     ["AI 작업 레이어", "example-ai-safety-interruption"],
-    ["AI 작업 레이어", "example-ai-agent-queue"]
+    ["AI 작업 레이어", "example-ai-agent-queue"],
+    ["AI 작업 레이어", "example-ai-response-rating"],
+    ["작업 진행/로그", "example-job-matrix-dashboard"],
+    ["작업 진행/로그", "example-job-cache-meter"],
+    ["작업 진행/로그", "example-job-flaky-detector"],
+    ["작업 진행/로그", "example-job-terminal-runner"],
+    ["작업 진행/로그", "example-job-health-score"],
+    ["드릴다운 탐색", "example-drilldown-schema-fields"],
+    ["드릴다운 탐색", "example-drilldown-breadcrumb-history"],
+    ["데이터 시각화", "example-heatmap-window-brush"],
+    ["데이터 시각화", "example-heatmap-outlier-detail"]
   ];
-  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating)\b/i;
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Approved|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked|Owner|Online|Offline|Reconnect|Confirm|Delete|Danger|Safe|Ready|Exportable|Draft|Save|Move|Undo|Viewer|Maintainer|Admin|Snippets|Routes|Access|Good|Degraded|Archive|Import|Silent|Visible|Notify|Hover|Lifted|Resting|Plan|Patch|Verify|Ship|Comfortable|Dense|Alert|Alternative|Advance|Generating|Helpful|Needs|Work|Rated|Cache|Refresh|Recalculate|Terminal|Schema|Fields|Window|Brush|Outlier)\b/i;
   const violations = [];
 
   for (const [category, testId] of samples) {
