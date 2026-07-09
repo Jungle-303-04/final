@@ -905,8 +905,25 @@ def release_readiness_from_plan(
     )
     alert_channels = enabled_alert_channels(db, workspace_id)
     live_alert_channels = release_live_alert_channels(db, workspace_id)
+    validated_live_alert_channels = release_validated_live_alert_channels(db, workspace_id)
     alert_blockers = release_live_alert_channel_blockers(plan, db, workspace_id)
     retry_attempts = max(0, int_field(plan_settings_value(plan), "retry_attempts", 1))
+    if profile.side_effects and validated_live_alert_channels:
+        alert_message = (
+            f"{len(validated_live_alert_channels)} validated alert channel(s) can receive "
+            "warning-or-higher release events."
+        )
+    elif profile.side_effects and live_alert_channels:
+        alert_message = "Warning-capable alert channels exist, but none has a passing validation test."
+    elif live_alert_channels:
+        alert_message = (
+            f"{len(live_alert_channels)} enabled alert channel(s) can receive "
+            "warning-or-higher release events."
+        )
+    elif alert_channels:
+        alert_message = "Enabled alert channels exist, but none receive warning release events."
+    else:
+        alert_message = "No enabled alert channel is configured for release failure or approval events."
 
     checks = [
         readiness_check(
@@ -958,11 +975,7 @@ def release_readiness_from_plan(
             "alerts.enabled_channels",
             "Alert channels",
             "blocked" if alert_blockers else "passed" if alert_channels else "warning",
-            f"{len(live_alert_channels)} enabled alert channel(s) can receive warning-or-higher release events."
-            if live_alert_channels
-            else "Enabled alert channels exist, but none receive warning release events."
-            if alert_channels
-            else "No enabled alert channel is configured for release failure or approval events.",
+            alert_message,
             alert_blockers,
         ),
         readiness_check(
@@ -1095,8 +1108,12 @@ def release_live_alert_channel_blockers(
 ) -> list[str]:
     if not execution_profile(plan).side_effects:
         return []
-    if release_live_alert_channels(db, workspace_id):
+    if release_validated_live_alert_channels(db, workspace_id):
         return []
+    if release_live_alert_channels(db, workspace_id):
+        return [
+            "Live release dispatch requires at least one warning-capable alert channel with a passing validation test."
+        ]
     return [
         "Live release dispatch requires at least one enabled alert channel that receives warning-or-higher release events."
     ]
@@ -1107,6 +1124,14 @@ def release_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, An
         channel
         for channel in enabled_alert_channels(db, workspace_id)
         if severity_matches(str(channel.get("min_severity") or "warning"), "warning")
+    ]
+
+
+def release_validated_live_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:
+    return [
+        channel
+        for channel in release_live_alert_channels(db, workspace_id)
+        if str(channel.get("last_test_status") or "").lower() == "passed"
     ]
 
 
