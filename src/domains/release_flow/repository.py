@@ -21,6 +21,7 @@ from domains.release_flow.models import (
     ReleaseRunEvent,
     ReleaseRunStep,
 )
+from domains.release_flow.redaction import redact_release_value
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.storage.engine import DatabaseConnection, iso_or_none
@@ -1026,7 +1027,7 @@ def serialize_release_run_step(
 
 def serialize_release_run_event(row: Mapping[str, Any]) -> JsonObject:
     item = dict(row)
-    item["details"] = dict(item.get("details") or {})
+    item["details"] = redact_release_value(dict(item.get("details") or {}))
     item["created_at"] = iso_or_none(item.get("created_at"))
     return item
 

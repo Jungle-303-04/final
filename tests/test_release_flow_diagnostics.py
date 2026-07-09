@@ -24,6 +24,7 @@ from domains.release_flow.repository import (
     derive_release_plan_id,
     github_release_metadata,
     release_run_steps_from_plan,
+    serialize_release_run_event,
     release_step_values,
 )
 from domains.release_flow.router import dispatch_request_for_step, steps_for_wave
@@ -168,6 +169,9 @@ def test_release_audit_list_checks_read_access_and_hides_internal_steps(monkeypa
     assert seen == [("workspace-a", "checkout")]
     assert response.events[0]["audit_id"] == "audit-1"
     assert response.events[0]["application_ids"] == ["checkout"]
+    assert response.events[0]["details"]["token"] == "<redacted>"
+    assert response.events[0]["details"]["nested"]["client_secret"] == "<redacted>"
+    assert response.events[0]["details"]["nested"]["safe"] == "visible"
     assert "_steps" not in response.events[0]
     assert db.filters == {"plan_id": "plan-a", "run_id": None, "event_type": None, "limit": 10}
 
@@ -193,12 +197,36 @@ def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) ->
     assert "audit-1" in body
     assert "workflow.run.failed" in body
     assert "checkout" in body
+    assert "raw-token" not in body
+    assert "super-secret" not in body
+    assert "<redacted>" in body
     assert "_steps" not in body
     assert db.filters == {
         "plan_id": None,
         "run_id": "run-a",
         "event_type": "workflow.run.failed",
         "limit": 20,
+    }
+
+
+def test_release_run_event_serialization_redacts_sensitive_details() -> None:
+    event = serialize_release_run_event(
+        {
+            "audit_id": "audit-1",
+            "run_id": "run-a",
+            "event_type": "workflow.run.failed",
+            "message": "failed",
+            "details": {
+                "password": "secret-password",
+                "nested": {"api_key": "secret-api-key", "reason": "safe"},
+            },
+            "created_at": None,
+        }
+    )
+
+    assert event["details"] == {
+        "password": "<redacted>",
+        "nested": {"api_key": "<redacted>", "reason": "safe"},
     }
 
 
@@ -442,7 +470,11 @@ class ReleaseAuditDb:
                 "event_type": "workflow.run.failed",
                 "message": "checkout rollout failed",
                 "actor": "operator",
-                "details": {"reason": "rollout health failed"},
+                "details": {
+                    "reason": "rollout health failed",
+                    "token": "raw-token",
+                    "nested": {"client_secret": "super-secret", "safe": "visible"},
+                },
                 "application_ids": ["checkout"],
                 "created_at": "2026-07-09T10:00:00Z",
                 "_steps": [{"application_id": "checkout"}],
