@@ -1,5 +1,11 @@
-import { Background, MiniMap, Panel, ReactFlow, type Node } from "@xyflow/react";
+import {
+  Background,
+  MiniMap,
+  Panel,
+  type Node
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 import { flowMiniMapMask, flowMiniMapMaskInverse, flowMiniMapNode, flowMiniMapNodeInverse } from "./shared/flowTheme";
 
@@ -14,7 +20,7 @@ export default function ReactFlowMinimapStyleSwitchExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
         <MiniMap maskColor={inverse ? flowMiniMapMaskInverse : flowMiniMapMask} nodeColor={inverse ? flowMiniMapNodeInverse : flowMiniMapNode} />
         <Panel position="top-right" className="flow-panel">
@@ -22,7 +28,7 @@ export default function ReactFlowMinimapStyleSwitchExample() {
             지도 반전
           </button>
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">{inverse ? "반전" : "기본"} 미니맵</span>
     </div>
   );

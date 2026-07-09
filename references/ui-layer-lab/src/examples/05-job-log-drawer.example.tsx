@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
+
 const logs = [
   "원격 객체 18개 확인",
   "객체 수신 100%",
@@ -8,6 +10,7 @@ const logs = [
 
 export default function JobLogDrawerExample() {
   const [open, setOpen] = useState(false);
+  useEscapeClose(open, () => setOpen(false));
 
   return (
     <div className="example-stack">

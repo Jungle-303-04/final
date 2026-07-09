@@ -239,7 +239,7 @@ async function inspectSourceEnglishGuard() {
     },
     {
       file: "src/examples/84-job-floating-center.example.tsx",
-      fragments: ["Dashboard content", "Global work", "2 jobs running", "Close", "Pulling origin", "Show Job Center"]
+      fragments: ["Dashboard content", "Global work", "2 jobs running", ">Close<", "Pulling origin", "Show Job Center"]
     },
     {
       file: "src/examples/85-drilldown-log-search.example.tsx",

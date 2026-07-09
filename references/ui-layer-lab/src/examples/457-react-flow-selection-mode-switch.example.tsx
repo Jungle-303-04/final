@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -12,10 +13,10 @@ export default function ReactFlowSelectionModeSwitchExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
         <Panel position="top-right" className="flow-panel"><button onClick={() => setMode(mode === "노드" ? "영역" : "노드")} type="button">{mode}</button></Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       {mode === "영역" ? <div className="lasso-rect" /> : null}
       <span className="flow-status">{mode} 선택 모드</span>
     </div>

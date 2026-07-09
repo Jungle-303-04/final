@@ -1,8 +1,11 @@
 import { FormEvent, useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
+
 export default function AiQuickInputExample() {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("현재 화면에 대해 질문해 보세요.");
+  useEscapeClose(open, () => setOpen(false));
 
   function submit(event: FormEvent) {
     event.preventDefault();

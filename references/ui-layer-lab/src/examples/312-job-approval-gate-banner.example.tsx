@@ -5,9 +5,9 @@ export default function JobApprovalGateBannerExample() {
 
   return (
     <div className={approved ? "sla-card gate-card approved" : "sla-card gate-card"}>
-      <strong>{approved ? "Deployment approved" : "Approval required"}</strong>
-      <span>{approved ? "Production gate is open." : "A reviewer must approve before publish."}</span>
-      <button className="command-trigger" onClick={() => setApproved(true)}>Approve Gate</button>
+      <strong>{approved ? "배포 승인 완료" : "승인 필요"}</strong>
+      <span>{approved ? "운영 배포 게이트가 열렸습니다." : "게시 전에 검토자 승인이 필요합니다."}</span>
+      <button className="command-trigger stable-wide" onClick={() => setApproved(true)} type="button">게이트 승인</button>
     </div>
   );
 }

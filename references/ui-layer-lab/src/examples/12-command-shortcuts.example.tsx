@@ -1,5 +1,6 @@
 import { Command } from "cmdk";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
 
 const actions = [
   ["프로필 열기", "⌘P"],
@@ -11,17 +12,7 @@ const actions = [
 export default function CommandShortcutsExample() {
   const [open, setOpen] = useState(false);
   const [lastAction, setLastAction] = useState("선택한 액션 없음");
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useEscapeClose(open, () => setOpen(false));
 
   function run(action: string) {
     setLastAction(action);

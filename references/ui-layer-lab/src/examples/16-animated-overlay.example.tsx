@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
 
 export default function AnimatedOverlayExample() {
   const [open, setOpen] = useState(false);
+  useEscapeClose(open, () => setOpen(false));
 
   return (
     <div className="animation-demo">

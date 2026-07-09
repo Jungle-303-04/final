@@ -1,5 +1,6 @@
-import { Background, ReactFlow, type Node } from "@xyflow/react";
+import { Background, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -12,9 +13,9 @@ export default function ReactFlowWhiteboardNoteCardExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
       {visible ? <aside className="whiteboard-rect">Review before push</aside> : null}
       <button className="command-trigger floating-action" onClick={() => setVisible((value) => !value)}>
         Toggle Note

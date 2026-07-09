@@ -1,5 +1,6 @@
-import { Background, ReactFlow, useReactFlow } from "@xyflow/react";
+import { Background, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes = [
@@ -16,10 +17,10 @@ const edges = [
 export default function ReactFlowNodeSearchExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
         <NodeSearch />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

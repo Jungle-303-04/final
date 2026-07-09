@@ -1,5 +1,6 @@
-import { Background, Controls, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Controls, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -19,10 +20,10 @@ export default function ReactFlowInspectorExample() {
   return (
     <div className="flow-inspector-layout">
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges} onNodeClick={(_, nodes) => setSelected(nodes)} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={edges} onNodeClick={(_, nodes) => setSelected(nodes)} fitView>
           <Background />
           <Controls />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
       <aside className="detail-panel">
         <strong>{String(selected?.data.label ?? "선택 없음")}</strong>

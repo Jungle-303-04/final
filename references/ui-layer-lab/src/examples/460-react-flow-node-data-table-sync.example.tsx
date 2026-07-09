@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -13,12 +14,12 @@ export default function ReactFlowNodeDataTableSyncExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView onNodeClick={(_, nodes) => setSelected(String(nodes.data.label))}>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView onNodeClick={(_, nodes) => setSelected(String(nodes.data.label))}>
         <Background />
         <Panel position="top-left" className="flow-panel">
           {nodes.map((nodes) => <button key={nodes.id} onClick={() => setSelected(String(nodes.data.label))}>{String(nodes.data.label)}</button>)}
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">{selected} 행 선택됨</span>
     </div>
   );

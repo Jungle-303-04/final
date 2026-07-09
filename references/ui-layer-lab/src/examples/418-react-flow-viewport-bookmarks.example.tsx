@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -13,12 +14,12 @@ export default function ReactFlowViewportBookmarksExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
         <Panel position="top-right" className="flow-panel">
           {["queue", "worker", "artifact"].map((item) => <button key={item} onClick={() => setBookmark(item)}>{item}</button>)}
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">{bookmark} bookmark</span>
     </div>
   );

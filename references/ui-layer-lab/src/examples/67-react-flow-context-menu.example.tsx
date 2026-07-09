@@ -1,16 +1,19 @@
-import { Background, ReactFlow, type Node } from "@xyflow/react";
+import { addEdge, Background, ReactFlow, useEdgesState, useNodesState, type Connection, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
-const nodes: Node[] = [
-  { id: "pull", position: { x: 0, y: 80 }, data: { label: "Git Pull" } },
-  { id: "test", position: { x: 260, y: 80 }, data: { label: "Typecheck" } }
+const initialNodes: Node[] = [
+  { id: "pull", position: { x: 0, y: 80 }, data: { label: "깃 동기화" } },
+  { id: "test", position: { x: 260, y: 80 }, data: { label: "타입 검사" } }
 ];
 
-const edges = [{ id: "pull-test", source: "pull", target: "test" }];
+const initialEdges = [{ id: "pull-test", source: "pull", target: "test" }];
 
 export default function ReactFlowContextMenuExample() {
+  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [menu, setMenu] = useState<{ x: number; y: number; label: string } | null>(null);
+  const onConnect = useCallback((connection: Connection) => setEdges((items) => addEdge(connection, items)), [setEdges]);
 
   return (
     <div className="flow-menu-shell">
@@ -18,6 +21,9 @@ export default function ReactFlowContextMenuExample() {
         <ReactFlow
           nodes={nodes}
           edges={edges}
+          onConnect={onConnect}
+          onEdgesChange={onEdgesChange}
+          onNodesChange={onNodesChange}
           onPaneClick={() => setMenu(null)}
           onNodeContextMenu={(event, nodes) => {
             event.preventDefault();
@@ -31,8 +37,8 @@ export default function ReactFlowContextMenuExample() {
         {menu ? (
           <div className="flow-context-menu" style={{ left: menu.x, top: menu.y }}>
             <strong>{menu.label}</strong>
-            <button>Open logs</button>
-            <button>Retry step</button>
+            <button>로그 열기</button>
+            <button>단계 재시도</button>
           </div>
         ) : null}
       </div>

@@ -1,5 +1,14 @@
-import { Background, Controls, Handle, NodeToolbar, Position, ReactFlow, type Node, type NodeProps } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  Handle,
+  NodeToolbar,
+  Position,
+  type Node,
+  type NodeProps
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 type ToolbarNode = Node<{ label: string }, "toolcard">;
 
@@ -17,10 +26,10 @@ const nodeTypes = {
 export default function ReactFlowNodeToolbarExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
         <Background />
         <Controls />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

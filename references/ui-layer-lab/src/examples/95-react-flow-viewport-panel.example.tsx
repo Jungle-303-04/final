@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, useReactFlow } from "@xyflow/react";
+import { Background, Panel, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes = [
   { id: "1", position: { x: 0, y: 80 }, data: { label: "Top layer" } },
@@ -11,10 +12,10 @@ const edges = [{ id: "1-2", source: "1", target: "2" }];
 export default function ReactFlowViewportPanelExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
         <ViewportButtons />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

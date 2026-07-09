@@ -1,5 +1,6 @@
-import { Background, ReactFlow, type Edge, type Node } from "@xyflow/react";
+import { Background, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useMemo, useState } from "react";
 
 const nodes: Node[] = [
@@ -25,9 +26,9 @@ export default function ReactFlowComputingFlowsExample() {
   return (
     <div className="flow-inspector-layout">
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges} onNodeClick={(_, node) => setSelected(node.id)} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={edges} onNodeClick={(_, node) => setSelected(node.id)} fitView>
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
       <aside className="detail-panel">
         <strong>{labelsById[selected]}</strong>

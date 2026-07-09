@@ -43,5 +43,7 @@ The remaining catalog work is quality curation, not hiding examples:
 - `npm run typecheck`: passed
 - `npm run build`: passed
 - `npm run visual-quality`: passed
-- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, category counts 71 / 64 / 129 / 42 / 53 / 55 / 65 / 21, design token violations 0, data-viz search 55 -> 18, theme/code button delta 0, code panel closed height 65px, code source visible in 62ms in the latest verified run, light command preview `rgb(255, 255, 255)`, dark command preview `rgb(11, 11, 13)`, React Flow drag 105px, edge count 2 -> 3, source English matches 0, visible English samples checked 167 / violations 0, mobile overflow 0
+- `npm run exhaustive-audit`: passed
+- Exhaustive audit evidence: 8 categories, 500 examples, 500 code panels opened, 1,228 controls discovered, 1,044 clicked, 81 filled, 6 selected, 13 adjusted, 84 intentionally skipped, 54 React Flow drag checks, console errors 0, request failures 0, failures 0
+- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, category counts 71 / 64 / 129 / 42 / 53 / 55 / 65 / 21, design token violations 0, data-viz search 55 -> 18, theme/code button delta 0, code panel closed height 65px, code source visible in 90ms in the latest verified run, light command preview `rgb(255, 255, 255)`, dark command preview `rgb(11, 11, 13)`, React Flow drag 105px, edge count 2 -> 3, source English matches 0, visible English samples checked 167 / violations 0, mobile overflow 0
 - Screenshots: `output/playwright/visual-light-command.png`, `output/playwright/visual-dark-command.png`, `output/playwright/visual-flow.png`, `output/playwright/visual-mobile.png`

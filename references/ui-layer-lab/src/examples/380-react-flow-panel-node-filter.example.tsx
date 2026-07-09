@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -14,12 +15,12 @@ export default function ReactFlowPanelNodeFilterExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={visible} edges={[]} fitView>
+      <InteractiveReactFlow nodes={visible} edges={[]} fitView>
         <Background />
         <Panel position="top-right" className="flow-panel">
           <button onClick={() => setFilter(filter === "all" ? "agent" : "all")}>{filter === "all" ? "Agent only" : "Show all"}</button>
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">{visible.length} nodes visible</span>
     </div>
   );

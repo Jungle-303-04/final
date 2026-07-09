@@ -1,5 +1,12 @@
-import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  MiniMap,
+  type Edge,
+  type Node
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes: Node[] = [
   { id: "1", position: { x: 0, y: 0 }, data: { label: "AI 입력" } },
@@ -20,11 +27,11 @@ const edges: Edge[] = [
 export default function ReactFlowMinimapExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
         <MiniMap pannable zoomable />
         <Controls />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

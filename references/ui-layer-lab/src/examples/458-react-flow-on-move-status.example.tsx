@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -11,10 +12,10 @@ export default function ReactFlowOnMoveStatusExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView onMoveEnd={() => setMoves((value) => value + 1)}>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView onMoveEnd={() => setMoves((value) => value + 1)}>
         <Background />
         <Panel position="top-right" className="flow-panel"><button onClick={() => setMoves((value) => value + 1)}>Move</button></Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">{moves} viewport moves</span>
     </div>
   );
