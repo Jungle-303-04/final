@@ -401,6 +401,7 @@ export default function ReleaseFlowView() {
   }, [yamlDiagnosticsData]);
 
   const preview = releasePreviewData?.preview;
+  const planLiveSideEffects = releasePlanHasLiveSideEffects(plan);
   const raw = useMemo(
     () => buildFlow(plan, apps, selectedIndex, planDiagnosticsData?.diagnostics ?? [], preview),
     [apps, plan, planDiagnosticsData, preview, selectedIndex],
@@ -560,6 +561,7 @@ export default function ReleaseFlowView() {
                 preview={preview}
                 loading={releasePreviewPending}
                 dispatching={dispatchRelease.isPending || startRelease.isPending}
+                liveSideEffects={planLiveSideEffects}
                 onDispatch={wave => dispatchRelease.mutate({ plan: normalizePlan(plan), wave })}
                 onStart={() => startRelease.mutate(normalizePlan(plan))}
               />
@@ -813,12 +815,14 @@ function PreviewPanel({
   preview,
   loading,
   dispatching,
+  liveSideEffects,
   onDispatch,
   onStart,
 }: {
   preview?: ReleasePlanPreview;
   loading: boolean;
   dispatching: boolean;
+  liveSideEffects: boolean;
   onDispatch: (wave: number) => void;
   onStart: () => void;
 }) {
@@ -837,7 +841,10 @@ function PreviewPanel({
           variant="primary"
           loading={dispatching}
           disabled={!preview.executable || preview.waves.length === 0}
-          onClick={() => onDispatch(firstWave)}
+          onClick={() => {
+            if (liveSideEffects && !window.confirm(`Dispatch live release wave ${firstWave}? This can publish real GitOps events.`)) return;
+            onDispatch(firstWave);
+          }}
         >
           Dispatch wave {firstWave}
         </Button>
@@ -845,7 +852,10 @@ function PreviewPanel({
           size="sm"
           loading={dispatching}
           disabled={!preview.executable || preview.waves.length === 0}
-          onClick={onStart}
+          onClick={() => {
+            if (liveSideEffects && !window.confirm('Start tracked live release run? This can begin real GitOps dispatch for the plan.')) return;
+            onStart();
+          }}
         >
           Start tracked run
         </Button>
@@ -1968,6 +1978,16 @@ function shortId(value: string): string {
 
 function firstReason(...reasons: string[]): string | undefined {
   return reasons.find(reason => reason.trim().length > 0);
+}
+
+function releasePlanHasLiveSideEffects(plan: ReleasePlan | null): boolean {
+  if (!plan) return false;
+  const settings = recordValue(plan.settings);
+  if (getString(settings.runtime_mode, getString(settings.provider_mode)) === 'live') return true;
+  return plan.steps.some(step => {
+    const config = recordValue(step.config);
+    return getString(config.runtime_mode, getString(config.provider_mode)) === 'live' || config.live_side_effects === true;
+  });
 }
 
 type ReleaseOperatorAction = 'retry' | 'resume' | 'pause' | 'rollback' | 'cancel' | 'notify';

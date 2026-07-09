@@ -113,6 +113,7 @@
 - operator action disabled hints: advance/retry/pause/rollback/cancel/notify/delete 버튼이 비활성화된 이유를 tooltip으로 표시
 - destructive action confirmation: rollback/cancel은 운영 사유 입력 후 확인 dialog를 한 번 더 통과해야 API를 호출
 - live action confirmation: live side effect가 있는 run의 advance/retry는 실제 GitOps wave dispatch 가능성을 확인한 뒤 실행
+- live start confirmation: live side effect가 있는 plan의 dispatch/start도 실제 GitOps event 발행 가능성을 확인한 뒤 실행
 - run history selector: release run이 여러 개 쌓이면 최신 run뿐 아니라 이전 run의 상태, wave, timeline을 선택해서 확인하고 필요한 운영 액션을 수행
 - run deep link: 선택한 release run을 `run_id` query parameter로 보존하고 Copy link로 handoff/audit/timeline 컨텍스트를 공유
 - attention reasons: failed, waiting approval, rollback requested, paused, unhealthy run/step에서 `attention.required/reasons`를 파생해 API와 UI에서 왜 조치가 필요한지 바로 표시
