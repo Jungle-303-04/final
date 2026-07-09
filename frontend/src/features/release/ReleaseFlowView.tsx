@@ -1216,7 +1216,12 @@ function RunPanel({
             loading={busy}
             disabled={busy || isTerminal || rollbackPolicy === 'disabled'}
             title={rollbackBlockedReason}
-            onClick={() => withOperatorReason('Request rollback', operatorActionReason('rollback', run, status, attentionReasons), reason => onRollback(run.run_id, reason))}
+            onClick={() => withConfirmedOperatorReason(
+              'Request rollback',
+              operatorActionReason('rollback', run, status, attentionReasons),
+              `Request rollback for run ${shortId(run.run_id)}? This should only be used when user impact or rollback criteria are confirmed.`,
+              reason => onRollback(run.run_id, reason),
+            )}
           >
             Rollback
           </Button>
@@ -1226,7 +1231,12 @@ function RunPanel({
             loading={busy}
             disabled={busy || isTerminal}
             title={cancelBlockedReason}
-            onClick={() => withOperatorReason('Cancel release run', operatorActionReason('cancel', run, status, attentionReasons), reason => onCancel(run.run_id, reason))}
+            onClick={() => withConfirmedOperatorReason(
+              'Cancel release run',
+              operatorActionReason('cancel', run, status, attentionReasons),
+              `Cancel run ${shortId(run.run_id)}? This stops further release progress for this run.`,
+              reason => onCancel(run.run_id, reason),
+            )}
           >
             Cancel
           </Button>
@@ -1967,10 +1977,23 @@ function operatorActionReason(action: ReleaseOperatorAction, run: ReleaseRun, st
 }
 
 function withOperatorReason(title: string, fallback: string, submit: (reason: string) => void) {
-  const reason = window.prompt(`${title} reason`, fallback);
+  const reason = promptOperatorReason(title, fallback);
   if (reason === null) return;
+  submit(reason);
+}
+
+function withConfirmedOperatorReason(title: string, fallback: string, confirmation: string, submit: (reason: string) => void) {
+  const reason = promptOperatorReason(title, fallback);
+  if (reason === null) return;
+  if (!window.confirm(`${confirmation}\n\nReason:\n${reason}`)) return;
+  submit(reason);
+}
+
+function promptOperatorReason(title: string, fallback: string): string | null {
+  const reason = window.prompt(`${title} reason`, fallback);
+  if (reason === null) return null;
   const normalized = reason.trim();
-  submit(normalized || fallback);
+  return normalized || fallback;
 }
 
 function releaseStepMeta(step: ReleaseRun['steps'][number]): string[] {
