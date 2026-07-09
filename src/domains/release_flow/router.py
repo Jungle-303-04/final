@@ -640,11 +640,20 @@ async def rollback_release_run(
             },
         )
     require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    rollback_policy = release_run_rollback_policy(existing)
+    if rollback_policy == "disabled":
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_RUN_BLOCKED,
+                "blockers": ["rollback is disabled for this release run"],
+            },
+        )
     run = db.request_release_run_rollback(
         workspace_id,
         run_id,
         actor=current.user_id,
-        reason=payload.reason or "operator requested rollback",
+        reason=operator_action_reason(payload, "operator requested rollback"),
     )
     if run is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
@@ -665,7 +674,7 @@ async def cancel_release_run(
         db,
         "cancelled",
         "Release run cancelled.",
-        "operator requested cancel",
+        "release run is already terminal",
     )
 
 
@@ -1031,14 +1040,35 @@ def release_run_status_action(
             detail={"message": RELEASE_RUN_BLOCKED, "blockers": [terminal_block_message]},
         )
     require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    reason = operator_action_reason(payload, default_message)
     run = db.update_release_run_status(
         workspace_id,
         run_id,
         status,
         actor=current.user_id,
-        message=payload.reason or default_message,
+        message=default_message,
+        details={"reason": reason, "operator_action": status},
     )
     return ReleaseRunResponse(run=run or existing)
+
+
+def operator_action_reason(payload: ReleaseRunActionRequest, fallback: str) -> str:
+    reason = str(payload.reason or "").strip()
+    return reason or fallback
+
+
+def release_run_rollback_policy(run: dict[str, Any]) -> str:
+    rollback = run.get("rollback")
+    if isinstance(rollback, dict):
+        policy = str(rollback.get("policy") or "").strip()
+        if policy:
+            return policy
+    settings = run.get("settings")
+    if isinstance(settings, dict):
+        policy = str(settings.get("rollback_policy") or "").strip()
+        if policy:
+            return policy
+    return "manual"
 
 
 def require_plan_application_manage_access(
