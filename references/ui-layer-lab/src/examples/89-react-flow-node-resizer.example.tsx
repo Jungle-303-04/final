@@ -1,5 +1,13 @@
-import { Background, Handle, NodeResizer, Position, ReactFlow, type Node, type NodeProps } from "@xyflow/react";
+import {
+  Background,
+  Handle,
+  NodeResizer,
+  Position,
+  type Node,
+  type NodeProps
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 type ResizableNode = Node<{ label: string }, "resizable">;
 
@@ -12,9 +20,9 @@ const nodeTypes = { resizable: ResizableCard };
 export default function ReactFlowNodeResizerExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} nodeTypes={nodeTypes} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} nodeTypes={nodeTypes} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

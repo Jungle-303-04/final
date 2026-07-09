@@ -1,5 +1,6 @@
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
 
 const pages = [
   { id: "dashboard", label: "대시보드", icon: "대" },
@@ -12,16 +13,13 @@ const pages = [
 export default function CommandBasicExample() {
   const [open, setOpen] = useState(false);
   const [selectedPage, setSelectedPage] = useState(pages[0]);
+  useEscapeClose(open, () => setOpen(false));
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setOpen((value) => !value);
-      }
-
-      if (event.key === "Escape") {
-        setOpen(false);
       }
     }
 

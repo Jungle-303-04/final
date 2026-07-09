@@ -1,5 +1,6 @@
-import { Background, ReactFlow } from "@xyflow/react";
+import { Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes = [
@@ -16,9 +17,9 @@ export default function ReactFlowWhiteboardRectangleExample() {
         {rect ? "선택 영역 숨기기" : "선택 영역 보기"}
       </button>
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={[]} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
         {rect ? <div className="whiteboard-rect" /> : null}
       </div>
     </div>

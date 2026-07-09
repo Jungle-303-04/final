@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
+
 const messages = [
   { role: "user", text: "최근 실행이 왜 실패했나요?" },
   { role: "assistant", text: "시각 스모크 단계가 더 이상 마운트되지 않은 라우트를 기다렸습니다." }
@@ -6,6 +8,7 @@ const messages = [
 
 export default function AssistantDrawerExample() {
   const [open, setOpen] = useState(true);
+  useEscapeClose(open, () => setOpen(false));
 
   return (
     <div className="split-demo">

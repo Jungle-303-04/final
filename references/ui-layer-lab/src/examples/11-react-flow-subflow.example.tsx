@@ -3,11 +3,11 @@ import {
   Controls,
   Handle,
   Position,
-  ReactFlow,
   type Node,
   type NodeProps
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 type StepNode = Node<{ title: string; status: string }, "step">;
 type GroupNode = Node<{ label: string }, "group">;
 
@@ -36,10 +36,10 @@ const nodeTypes = {
 export default function ReactFlowSubflowExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
         <Background />
         <Controls />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

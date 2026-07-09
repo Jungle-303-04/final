@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const baseNodes: Node[] = [
@@ -14,10 +15,10 @@ export default function ReactFlowNodeCountPanelExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
         <Panel position="top-right" className="flow-panel"><button onClick={() => setCount(count === 2 ? 3 : 2)} type="button">노드 수 전환</button></Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">노드 {nodes.length}개</span>
     </div>
   );

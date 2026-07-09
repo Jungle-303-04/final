@@ -1,5 +1,6 @@
-import { Background, ReactFlow, type Edge } from "@xyflow/react";
+import { Background, type Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes = [
   { id: "a", position: { x: 0, y: 40 }, data: { label: "입력 A" } },
@@ -16,9 +17,9 @@ const edges: Edge[] = [
 export default function ReactFlowEdgeTypesExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

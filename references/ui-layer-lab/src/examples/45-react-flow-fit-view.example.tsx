@@ -1,5 +1,12 @@
-import { Background, Controls, ReactFlow, useReactFlow, ReactFlowProvider, type Node } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  useReactFlow,
+  ReactFlowProvider,
+  type Node
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes: Node[] = [
   { id: "1", position: { x: -500, y: -200 }, data: { label: "Far left" } },
@@ -29,10 +36,10 @@ function FitViewFlow() {
         Fit View
       </button>
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges}>
+        <InteractiveReactFlow nodes={nodes} edges={edges}>
           <Background />
           <Controls />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
     </div>
   );

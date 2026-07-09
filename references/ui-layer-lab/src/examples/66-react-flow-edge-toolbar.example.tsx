@@ -2,12 +2,12 @@ import {
   Background,
   BaseEdge,
   EdgeLabelRenderer,
-  ReactFlow,
   getBezierPath,
   type Edge,
   type EdgeProps
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 type ToolbarEdge = Edge<{ action: string }, "toolbar">;
 
@@ -23,9 +23,9 @@ const edgeTypes = { toolbar: ToolbarEdgeComponent };
 export default function ReactFlowEdgeToolbarExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} edgeTypes={edgeTypes} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} edgeTypes={edgeTypes} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

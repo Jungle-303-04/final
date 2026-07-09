@@ -3,10 +3,10 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   Background,
-  ReactFlow,
   type EdgeProps
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes = [
   { id: "pull", position: { x: 0, y: 80 }, data: { label: "git pull" } },
@@ -22,9 +22,9 @@ const edgeTypes = {
 export default function ReactFlowEdgeLabelExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} edgeTypes={edgeTypes} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} edgeTypes={edgeTypes} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

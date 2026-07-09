@@ -10,10 +10,15 @@
 }
 
 .flow-workbench,
-.flow-shell {
+.flow-shell,
+.flow-menu-shell {
   display: grid;
   width: min(1040px, 100%);
   gap: 14px;
+}
+
+.flow-menu-shell .flow-example {
+  width: 100%;
 }
 
 .flow-toolbar {
@@ -154,6 +159,8 @@
 }
 
 .flow-panel {
+  position: relative;
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   min-height: 32px;
@@ -165,6 +172,18 @@
   font-size: var(--text-xs);
   font-weight: 700;
   white-space: nowrap;
+}
+
+.nodes-search-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: calc(100% - 24px);
+  pointer-events: auto;
 }
 
 .react-flow__handle {

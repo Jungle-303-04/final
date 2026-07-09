@@ -958,10 +958,20 @@
 }
 
 .connector-stepper button {
+  min-width: 0;
   min-height: 96px;
+  padding: 10px;
+  overflow: hidden;
   color: var(--muted);
   background: var(--panel-soft);
   line-height: var(--line-button);
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+.connector-stepper button::after {
+  display: none;
 }
 
 .connector-stepper button[aria-pressed="true"] {
@@ -976,6 +986,31 @@
 .density-panel span {
   color: var(--text);
   background: var(--panel-soft);
+}
+
+.component-switch {
+  width: fit-content;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.component-switch span {
+  flex: 0 0 auto;
+  background: var(--panel-soft);
+}
+
+.component-switch[aria-checked="true"] span {
+  background: var(--surface-raised);
+}
+
+.component-switch[aria-checked="true"] span::after {
+  transform: translateX(18px);
+  background: var(--text);
 }
 
 .loading-dots-card i {

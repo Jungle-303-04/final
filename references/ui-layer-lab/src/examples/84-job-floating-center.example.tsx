@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useEscapeClose } from "./shared/useEscapeClose";
 
 export default function JobFloatingCenterExample() {
   const [open, setOpen] = useState(true);
+  useEscapeClose(open, () => setOpen(false));
 
   return (
     <div className="fake-page">

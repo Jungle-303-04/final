@@ -1,5 +1,6 @@
-import { Background, ReactFlow, type Edge } from "@xyflow/react";
+import { Background, type Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes = [
@@ -17,9 +18,9 @@ export default function ReactFlowTemporaryEdgeExample() {
         {show ? "임시 엣지 숨기기" : "임시 엣지 보기"}
       </button>
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
     </div>
   );

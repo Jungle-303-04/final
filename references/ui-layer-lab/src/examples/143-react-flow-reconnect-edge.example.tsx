@@ -1,5 +1,6 @@
-import { Background, ReactFlow, useEdgesState, type Edge } from "@xyflow/react";
+import { Background, useEdgesState, type Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes = [
   { id: "source", position: { x: 0, y: 120 }, data: { label: "시작 노드" } },
@@ -26,9 +27,9 @@ export default function ReactFlowReconnectEdgeExample() {
         </button>
       </div>
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges} onEdgesChange={onEdgesChange} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={edges} onEdgesChange={onEdgesChange} fitView>
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
     </div>
   );

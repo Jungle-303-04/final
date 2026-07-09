@@ -1,5 +1,6 @@
-import { Background, MarkerType, ReactFlow } from "@xyflow/react";
+import { Background, MarkerType } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes = [
   { id: "1", position: { x: 0, y: 80 }, data: { label: "Build" } },
@@ -15,9 +16,9 @@ const edges = [
 export default function ReactFlowEdgeMarkersExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

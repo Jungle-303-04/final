@@ -1,5 +1,6 @@
-import { Background, ReactFlow } from "@xyflow/react";
+import { Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 const nodes = [
   {
@@ -13,9 +14,9 @@ const nodes = [
 export default function ReactFlowDragHandleExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }

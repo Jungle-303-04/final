@@ -1,5 +1,11 @@
-import { Background, Panel, ReactFlow, type Edge, type Node } from "@xyflow/react";
+import {
+  Background,
+  Panel,
+  type Edge,
+  type Node
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 import { flowEdgeFailed, flowEdgeHealthy } from "./shared/flowTheme";
 
@@ -20,14 +26,14 @@ export default function ReactFlowEdgeStatusLegendExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={visibleEdges} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={visibleEdges} fitView>
         <Background />
         <Panel position="top-right" className="flow-panel">
           <button className="stable-wide" onClick={() => setShowFailed((value) => !value)} type="button">
             {showFailed ? "실패 숨기기" : "실패 보기"}
           </button>
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">표시 중인 엣지 {visibleEdges.length}개</span>
     </div>
   );

@@ -1,5 +1,6 @@
-import { Background, ReactFlow } from "@xyflow/react";
+import { Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useMemo, useState } from "react";
 
 export default function ReactFlowExpandCollapseExample() {
@@ -30,9 +31,9 @@ export default function ReactFlowExpandCollapseExample() {
         {expanded ? "접기" : "펼치기"}
       </button>
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -12,12 +13,12 @@ export default function ReactFlowDevtoolsToggleExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={[]} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={[]} fitView>
         <Background />
         <Panel position="top-right" className="flow-panel">
           <button onClick={() => setOpen((value) => !value)}>{open ? "Hide Devtools" : "Show Devtools"}</button>
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       {open ? <span className="flow-status">2 nodes inspected</span> : null}
     </div>
   );

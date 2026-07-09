@@ -1,5 +1,6 @@
-import { Background, ReactFlow, type Node } from "@xyflow/react";
+import { Background, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const nodes: Node[] = [
@@ -15,14 +16,14 @@ export default function ReactFlowSelectionSummaryExample() {
     <div className="flow-shell">
       <span className="muted">선택: {selected}</span>
       <div className="flow-example">
-        <ReactFlow
+        <InteractiveReactFlow
           nodes={nodes}
           edges={[]}
           onSelectionChange={({ nodes: selectedNodes }) => setSelected(selectedNodes.map((nodes) => String(nodes.data.label)).join(", ") || "선택 없음")}
           fitView
         >
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
     </div>
   );

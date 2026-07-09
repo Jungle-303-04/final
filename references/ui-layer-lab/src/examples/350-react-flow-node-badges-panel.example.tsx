@@ -1,5 +1,6 @@
-import { Background, Panel, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Panel, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useState } from "react";
 
 const baseNodes: Node[] = [
@@ -13,12 +14,12 @@ export default function ReactFlowNodeBadgesPanelExample() {
 
   return (
     <div className="flow-example">
-      <ReactFlow nodes={baseNodes} edges={[]} fitView onNodeClick={(_, nodes) => setSelected(String(nodes.data.label))}>
+      <InteractiveReactFlow nodes={baseNodes} edges={[]} fitView onNodeClick={(_, nodes) => setSelected(String(nodes.data.label))}>
         <Background />
         <Panel position="top-right" className="flow-panel">
           <button onClick={() => setSelected("reviewer")}>Reviewer</button>
         </Panel>
-      </ReactFlow>
+      </InteractiveReactFlow>
       <span className="flow-status">{selected} selected</span>
     </div>
   );

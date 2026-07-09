@@ -1,5 +1,6 @@
-import { Background, ReactFlow } from "@xyflow/react";
+import { Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 import { useMemo, useState } from "react";
 
 const nodes = [
@@ -24,9 +25,9 @@ export default function ReactFlowAnimatedEdgeExample() {
         {animated ? "애니메이션 중지" : "애니메이션 시작"}
       </button>
       <div className="flow-example">
-        <ReactFlow nodes={nodes} edges={edges} fitView>
+        <InteractiveReactFlow nodes={nodes} edges={edges} fitView>
           <Background />
-        </ReactFlow>
+        </InteractiveReactFlow>
       </div>
     </div>
   );

@@ -1,5 +1,12 @@
-import { Background, Handle, Position, ReactFlow, type Node, type NodeProps } from "@xyflow/react";
+import {
+  Background,
+  Handle,
+  Position,
+  type Node,
+  type NodeProps
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { InteractiveReactFlow } from "./shared/InteractiveReactFlow";
 
 type LimitNode = Node<{ label: string; limit?: boolean }, "limit">;
 
@@ -15,9 +22,9 @@ const nodeTypes = { limit: LimitCard };
 export default function ReactFlowConnectionLimitExample() {
   return (
     <div className="flow-example">
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
+      <InteractiveReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
         <Background />
-      </ReactFlow>
+      </InteractiveReactFlow>
     </div>
   );
 }
