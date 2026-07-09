@@ -86,10 +86,10 @@ API를 눈으로 확인할 때:
 실제 서비스 smoke:
 
 ```bash
-make aws-smoke
+make smoke
 ```
 
-PR에서 CI가 실패하면 merge하지 않는다.
+PR을 merge하기 전에 `make check`와 필요한 AWS smoke 결과를 남긴다.
 
 ## 리뷰에서 막는 경우
 

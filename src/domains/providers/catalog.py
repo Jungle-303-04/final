@@ -173,28 +173,14 @@ CATALOG: tuple[ProviderDefinition, ...] = (
     ),
     ProviderDefinition(
         category=ProviderCategory.DEPLOY,
-        key="github-actions",
-        label="GitHub Actions",
-        status=ProviderStatus.AVAILABLE,
-        adapter=".github/workflows/promote-dev.yml + .github/workflows/aws-cd.yml",
-        capabilities=("ci", "build", "promote", "deploy"),
-        credential_requirements=(
-            CredentialRequirement(
-                key="scm_write",
-                ref_prefixes=("github-actions-permissions",),
-                required_for=("promote",),
-                description="Repository workflow permission that allows the runner to push to main.",
-            ),
-        ),
-        config_keys=("AUTO_PROMOTE_DEV_TO_MAIN", "AWS_AUTO_DEPLOY"),
-    ),
-    ProviderDefinition(
-        category=ProviderCategory.DEPLOY,
         key="gitops-controller",
-        label="GitOps Controller",
+        label="External GitOps Controller",
         status=ProviderStatus.UNAVAILABLE,
         adapter=None,
-        unavailable_reason="GitOps controller adapter is unavailable",
+        unavailable_reason=(
+            "External Argo CD or Flux adapter is unavailable; "
+            "the built-in workflow-controller remains active"
+        ),
     ),
     ProviderDefinition(
         category=ProviderCategory.DEPLOY,
@@ -342,17 +328,17 @@ CATALOG: tuple[ProviderDefinition, ...] = (
         key="aws",
         label="AWS",
         status=ProviderStatus.AVAILABLE,
-        adapter="scripts/aws-up.sh + GitHub OIDC workflow",
-        capabilities=("eks", "ecr", "oidc_deploy"),
+        adapter="scripts/aws-up.sh + AWS credential chain",
+        capabilities=("eks", "ecr", "manual_deploy"),
         credential_requirements=(
             CredentialRequirement(
-                key="aws_role",
-                ref_prefixes=("github-oidc:", "env:"),
+                key="aws_credentials",
+                ref_prefixes=("aws-profile:", "env:"),
                 required_for=("deploy",),
-                description="OIDC role ARN or environment credential chain for AWS deployments.",
+                description="AWS profile or environment credential chain for manual deployments.",
             ),
         ),
-        config_keys=("AWS_REGION", "AWS_ROLE_ARN", "ECR_REPO"),
+        config_keys=("AWS_REGION", "AWS_PROFILE", "ECR_REPO"),
     ),
     ProviderDefinition(
         category=ProviderCategory.CLOUD,

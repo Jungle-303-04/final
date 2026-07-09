@@ -16,11 +16,6 @@ output "ecr_repository_urls" {
   value       = { for k, r in aws_ecr_repository.this : k => r.repository_url }
 }
 
-output "github_actions_role_arn" {
-  description = "GitHub 저장소 secret AWS_ROLE_ARN 에 넣을 값"
-  value       = aws_iam_role.github_actions_deploy.arn
-}
-
 output "kubeconfig_commands" {
   description = "생성 후 kubectl 연결 명령"
   value = [

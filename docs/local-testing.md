@@ -71,43 +71,20 @@ make local-smoke
 
 ## 6단계. 실제 서비스 검증은 AWS에서 한다
 
-서비스가 진짜로 붙는지는 AWS CD smoke로 확인한다.
+서비스가 진짜로 붙는지는 현재 운영 환경값을 명시한 뒤 smoke 스크립트로 직접 확인한다.
 
 ```bash
-make aws-smoke
+export BASE_URL="https://k8s.woonyong.org"
+export AUTH_EMAIL="<admin email>"
+export AUTH_PASSWORD="<admin password>"
+export SMOKE_CLUSTER_ID="<connected target cluster id>"
+make smoke
 ```
 
-직접 GitHub Actions를 호출해야 하면 아래를 쓴다.
-
-```bash
-/opt/homebrew/bin/gh workflow run aws-cd.yml \
-  --repo Jungle-303-04/final \
-  --ref main \
-  -f create_clusters=false \
-  -f ensure_ebs_csi=false \
-  -f bootstrap_admin=false \
-  -f register_targets=false \
-  -f run_smoke=true
-```
-
-실행 결과는 아래처럼 본다.
-
-```bash
-/opt/homebrew/bin/gh run list \
-  --repo Jungle-303-04/final \
-  --workflow aws-cd.yml \
-  --limit 5
-```
-
-새 run id를 확인한 뒤 아래처럼 기다린다.
-
-```bash
-/opt/homebrew/bin/gh run watch <run_id> \
-  --repo Jungle-303-04/final \
-  --exit-status
-```
-
-정상 기준은 `AWS CD / Test before deploy`, `AWS CD / Deploy to AWS EKS`, `Smoke test passed`가 모두 통과하는 것이다.
+이미지와 manifest까지 다시 배포해야 하면 먼저 `scripts/aws-up.sh`를 실행한다. 기존 EKS를
+사용할 때는 `CREATE_CLUSTERS=0`, `ENSURE_EBS_CSI=0`을 명시해 인프라 생성과 앱 배포를
+분리한다. 자세한 환경변수와 통과 기준은 [AWS 테스트 실행 기준](aws-testing-runbook.md)을
+따른다.
 
 ## 7단계. Bruno는 AWS profile을 기본으로 쓴다
 

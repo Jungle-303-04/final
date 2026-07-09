@@ -200,8 +200,8 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 서비스를 실제로 띄워 확인할 때는 AWS EKS smoke를 본다.
 
 ```bash
-make aws-smoke
+make smoke
 ```
 
-이 명령은 GitHub Actions의 `AWS CD` workflow를 `run_smoke=true`로 실행한다.
+이 명령은 현재 환경변수로 배포된 서비스와 내부 workflow를 직접 검증한다.
 통과 기준과 AWS 변수는 [AWS 테스트 실행 기준](../aws-testing-runbook.md)을 본다.

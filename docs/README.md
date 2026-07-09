@@ -107,8 +107,6 @@ subject, body, worker 연결이 필요하면 [이벤트 흐름](events.md)을 �
 
 AWS와 운영 명령을 확인할 때는 [운영/배포](operations-deployment.md)를 본다.
 
-GitHub Actions와 AWS CD 흐름은 [AWS CI/CD](aws-cicd.md)를 본다.
-
 로컬 smoke 실행 기준은 [로컬 테스트 실행 기준](local-testing.md)을 본다.
 
 실제 서비스 smoke 실행 기준은 [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
@@ -139,7 +137,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 `Bruno`를 찾을 때는 [Bruno API 테스트](api/README.md), [로컬 테스트 실행 기준](local-testing.md)을 본다.
 
-`AWS`를 찾을 때는 [AWS CI/CD](aws-cicd.md), [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
+`AWS`를 찾을 때는 [AWS 테스트 기준](aws-testing-runbook.md), [운영/배포](operations-deployment.md)를 본다.
 
 `continuation` 또는 `handover`를 찾을 때는 [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)과 repo root의 `HANDOVER.md`를 본다.
 
@@ -162,7 +160,6 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
-- [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [continuation-execution-plan-2026-07-07](continuation-execution-plan-2026-07-07.md)
@@ -274,7 +271,6 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [architecture-diagram](architecture-diagram.md)
 - [architecture](architecture.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
-- [aws-cicd](aws-cicd.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [cloudflare-waf-and-login](cloudflare-waf-and-login.md)
 - [event-graph-audit](event-graph-audit.md)
