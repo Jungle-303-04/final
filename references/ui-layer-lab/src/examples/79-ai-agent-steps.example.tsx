@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const steps = ["Read route table", "Open workflow logs", "Find failing assertion", "Suggest fix"];
+const steps = ["라우트 표 읽기", "워크플로 로그 열기", "실패 assertion 찾기", "수정안 제안"];
 
 export default function AiAgentStepsExample() {
   const [active, setActive] = useState(0);
@@ -17,8 +17,8 @@ export default function AiAgentStepsExample() {
           <strong>{step}</strong>
         </div>
       ))}
-      <button className="command-trigger" onClick={advance}>
-        Advance Agent
+      <button className="command-trigger stable-wide" onClick={advance} type="button">
+        다음 단계
       </button>
     </div>
   );

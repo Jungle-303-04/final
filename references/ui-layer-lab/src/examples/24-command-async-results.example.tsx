@@ -32,12 +32,12 @@ export default function CommandAsyncResultsExample() {
 
   return (
     <Command className="command-dialog inline-command">
-      <Command.Input value={search} onValueChange={setSearch} placeholder="Search repositories..." />
+      <Command.Input value={search} onValueChange={setSearch} placeholder="저장소를 검색하세요" />
       <Command.List>
-        {loading ? <div className="command-loading">Searching...</div> : null}
-        {!loading && results.length === 0 ? <Command.Empty>No repositories found.</Command.Empty> : null}
+        {loading ? <div className="command-loading">검색 중...</div> : null}
+        {!loading && results.length === 0 ? <Command.Empty>저장소가 없습니다.</Command.Empty> : null}
         {!loading ? (
-          <Command.Group heading="Repositories">
+          <Command.Group heading="저장소">
             {results.map((repo) => (
               <Command.Item key={repo}>{repo}</Command.Item>
             ))}

@@ -5,10 +5,10 @@ export default function AnimatedHeightRevealExample() {
 
   return (
     <div className="height-reveal-card">
-      <button className="command-trigger" onClick={() => setOpen((value) => !value)}>{open ? "Hide Detail" : "Reveal Detail"}</button>
+      <button className="command-trigger stable-wide" onClick={() => setOpen((value) => !value)} type="button">{open ? "상세 접기" : "상세 펼치기"}</button>
       <section className={open ? "height-reveal open" : "height-reveal"}>
-        <strong>Expanded job detail</strong>
-        <span>Shows logs, artifacts, and retry hints without leaving the current page.</span>
+        <strong>확장된 작업 상세</strong>
+        <span>현재 페이지를 떠나지 않고 로그, 아티팩트, 재시도 힌트를 보여줍니다.</span>
       </section>
     </div>
   );
