@@ -12,6 +12,8 @@ Pass --run-health-preflight to fail fast when existing release runs still need
 operator attention before a new release starts.
 Pass --policy-override-preflight to fail fast when existing release runs already
 used operator policy overrides that should be reviewed before another release.
+Pass --change-freeze-preflight to fail fast when existing release runs were
+evaluated during an active change freeze or used a freeze override.
 """
 
 from __future__ import annotations
@@ -236,6 +238,7 @@ def run_smoke(
     verification_preflight: bool = False,
     run_health_preflight: bool = False,
     policy_override_preflight: bool = False,
+    change_freeze_preflight: bool = False,
     args: argparse.Namespace | None = None,
 ) -> list[SmokeResult]:
     results: list[SmokeResult] = []
@@ -266,6 +269,10 @@ def run_smoke(
         if args is None:
             raise ValueError("policy override preflight arguments are required")
         results.extend(run_policy_override_preflight(client, summary, args))
+    if change_freeze_preflight:
+        if args is None:
+            raise ValueError("change freeze preflight arguments are required")
+        results.extend(run_change_freeze_preflight(client, summary, args))
     plan = build_demo_plan(applications)
     preview = client.request("POST", "/release-plans/preview", plan).get("preview", {})
     results.append(
@@ -438,6 +445,46 @@ def run_policy_override_preflight(
     return [
         SmokeResult(
             "release-runs.policy-override-preflight",
+            False,
+            "; ".join(detail_parts),
+        )
+    ]
+
+
+def run_change_freeze_preflight(
+    client: ApiClient,
+    summary: JsonMap,
+    args: argparse.Namespace,
+) -> list[SmokeResult]:
+    active_count = int_count(summary.get("active_change_freeze_runs"))
+    override_count = int_count(summary.get("change_freeze_override_runs"))
+    if active_count <= 0 and override_count <= 0:
+        return [
+            SmokeResult(
+                "release-runs.change-freeze-preflight",
+                True,
+                "no active change freeze or freeze override runs",
+            )
+        ]
+
+    params = {"plan_id": args.change_freeze_plan_id, "limit": args.change_freeze_run_limit}
+    detail_parts = [
+        format_counts(
+            {
+                "active_change_freeze_runs": active_count,
+                "change_freeze_override_runs": override_count,
+            }
+        )
+    ]
+    if active_count > 0:
+        active_runs = release_runs_for_filter(client, params, "active_change_freeze_only")
+        detail_parts.append(run_list_detail(active_count, active_runs, "active change freeze review"))
+    if override_count > 0:
+        override_runs = release_runs_for_filter(client, params, "change_freeze_override_only")
+        detail_parts.append(run_list_detail(override_count, override_runs, "change freeze override review"))
+    return [
+        SmokeResult(
+            "release-runs.change-freeze-preflight",
             False,
             "; ".join(detail_parts),
         )
@@ -637,6 +684,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=int(os.getenv("POLICY_OVERRIDE_PREFLIGHT_RUN_LIMIT", "20")),
     )
     parser.add_argument(
+        "--change-freeze-preflight",
+        action="store_true",
+        help="fail when existing release runs were evaluated during a change freeze",
+    )
+    parser.add_argument("--change-freeze-plan-id", default=os.getenv("CHANGE_FREEZE_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument(
+        "--change-freeze-run-limit",
+        type=int,
+        default=int(os.getenv("CHANGE_FREEZE_PREFLIGHT_RUN_LIMIT", "20")),
+    )
+    parser.add_argument(
         "--live-preflight",
         action="store_true",
         help="check live release readiness gates without starting or dispatching a run",
@@ -695,6 +753,7 @@ def main(argv: list[str]) -> int:
             verification_preflight=args.verification_preflight,
             run_health_preflight=args.run_health_preflight,
             policy_override_preflight=args.policy_override_preflight,
+            change_freeze_preflight=args.change_freeze_preflight,
             args=args,
         )
     except Exception as exc:

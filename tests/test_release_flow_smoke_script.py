@@ -27,6 +27,8 @@ class FakeClient:
         self.verification_pending_timeout_runs = 0
         self.policy_override_runs = 0
         self.policy_override_breakdown: dict[str, int] = {}
+        self.active_change_freeze_runs = 0
+        self.change_freeze_override_runs = 0
         self.attention_required_runs = 0
         self.stale_runs = 0
         self.failed_runs = 0
@@ -89,6 +91,8 @@ class FakeClient:
                 "verification_pending_timeout_runs": self.verification_pending_timeout_runs,
                 "policy_override_runs": self.policy_override_runs,
                 "policy_override_breakdown": self.policy_override_breakdown,
+                "active_change_freeze_runs": self.active_change_freeze_runs,
+                "change_freeze_override_runs": self.change_freeze_override_runs,
                 "last_run_status": None,
                 "recent_runs": [],
             }
@@ -99,6 +103,10 @@ class FakeClient:
                 return {"runs": [{"run_id": "run-verification-timeout", "status": "running"}]}
             if "policy_override_only=true" in path:
                 return {"runs": [{"run_id": "run-policy-override", "status": "running"}]}
+            if "active_change_freeze_only=true" in path:
+                return {"runs": [{"run_id": "run-active-freeze", "status": "running"}]}
+            if "change_freeze_override_only=true" in path:
+                return {"runs": [{"run_id": "run-freeze-override", "status": "running"}]}
             if "attention_only=true" in path:
                 return {"runs": [{"run_id": "run-needs-attention", "status": "failed"}]}
             if "stale_only=true" in path:
@@ -385,6 +393,53 @@ def test_smoke_policy_override_preflight_flags_override_runs() -> None:
     preflight = next(result for result in results if result.name == "release-runs.policy-override-preflight")
     assert "run-policy-override" in preflight.detail
     assert "Change freeze=1" in preflight.detail
+
+
+def test_smoke_change_freeze_preflight_passes_when_summary_is_clean() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--change-freeze-preflight"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        change_freeze_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs/summary" in paths
+    assert not any(path.startswith("/release-runs?") for path in paths)
+
+
+def test_smoke_change_freeze_preflight_flags_active_and_override_runs() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    client.active_change_freeze_runs = 1
+    client.change_freeze_override_runs = 1
+    args = smoke.parse_args(["--change-freeze-preflight", "--change-freeze-plan-id", "plan-1"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        change_freeze_preflight=True,
+        args=args,
+    )
+
+    assert not all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs?plan_id=plan-1&limit=20&active_change_freeze_only=true" in paths
+    assert "/release-runs?plan_id=plan-1&limit=20&change_freeze_override_only=true" in paths
+    preflight = next(result for result in results if result.name == "release-runs.change-freeze-preflight")
+    assert "active_change_freeze_runs=1" in preflight.detail
+    assert "change_freeze_override_runs=1" in preflight.detail
+    assert "run-active-freeze" in preflight.detail
+    assert "run-freeze-override" in preflight.detail
 
 
 def test_smoke_run_health_preflight_passes_when_summary_is_clean() -> None:
