@@ -114,6 +114,7 @@ class Evidence(EventBody):
     logs: list[JsonObject]
     traces: JsonObject
     object_ref: str
+    metadata: JsonObject = field(default_factory=dict)
     workspace_id: str = DEFAULT_WORKSPACE_ID
 
 
@@ -132,6 +133,7 @@ def compact_evidence_built_body(
             logs=[],
             traces={},
             object_ref=evidence.object_ref,
+            metadata={},
             workspace_id=evidence.workspace_id,
         ),
         correlation_id=correlation_id,
