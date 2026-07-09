@@ -20,7 +20,7 @@ def test_router_rejects_unregistered_subject() -> None:
     asyncio.run(run())
 
 
-class _FakeOutboxStore:
+class _StubOutboxStore:
     def __init__(self) -> None:
         self.sent: list[str] = []
 
@@ -38,7 +38,7 @@ class _BrokenPublisher:
 
 def test_relay_publish_failure_does_not_mark_sent() -> None:
     async def run() -> None:
-        store = _FakeOutboxStore()
+        store = _StubOutboxStore()
         relay = OutboxRelay(store, _BrokenPublisher(), "svc")
         with pytest.raises(RuntimeError):  # 발행 예외가 mark_events_sent 전에 터짐
             await relay.run_once()

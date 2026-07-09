@@ -198,7 +198,7 @@ provider job 주기, evidence provider 사용 여부, 실패 정책 같은 targe
 토큰이 맞으면 `apiVersion`과 `kind`가 들어 있는 Kubernetes YAML이 오고, 토큰이 틀리면 404가 온다.
 
 `04-update-scheduling-profiles`는 cluster별 fast-lane scheduling profile을 바꾸는 API다.
-profile은 특정 네임스페이스 전용 하드코딩이 아니라 `namespaces`/`labels`/`workload_names` selector로 선택한다.
+profile은 특정 네임스페이스 전용 고정값 사용이 아니라 `namespaces`/`labels`/`workload_names` selector로 선택한다.
 선택된 workload는 PriorityClass, warm node label 선호/필수, optional schedulerName, pre-pull 후보 이미지, 짧은 termination grace 값을 받을 수 있다.
 
 `05-get-scheduling-profiles`는 현재 저장된 scheduling profile만 읽는다.

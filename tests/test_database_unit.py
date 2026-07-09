@@ -209,16 +209,16 @@ def test_operational_indexes_do_not_duplicate_outbox_claim_index() -> None:
 def test_record_event_persists_causation_id() -> None:
     recorded: list[Any] = []
 
-    class FakeConnection:
+    class StubConnection:
         def execute(self, statement: Any) -> None:
             recorded.append(statement)
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(EventRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     repository.record_event(
         event(
@@ -238,24 +238,24 @@ def test_record_event_persists_causation_id() -> None:
 def test_event_claim_upsert_guards_fresh_processing_lease() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def first(self) -> None:
             return None
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(EventRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     repository.begin_event_processing(
         event("git.changed", "git-pull-worker", {}, correlation_id="corr-1"),
@@ -276,32 +276,32 @@ def test_event_claim_upsert_guards_fresh_processing_lease() -> None:
 
 
 def test_begin_event_processing_reports_blocked_when_fresh_claim_exists() -> None:
-    class FakeResult:
+    class StubResult:
         def __init__(self, row: dict[str, object] | None = None) -> None:
             self.row = row
 
-        def mappings(self) -> FakeResult:
+        def mappings(self) -> StubResult:
             return self
 
         def first(self) -> dict[str, object] | None:
             return self.row
 
-    class FakeConnection:
+    class StubConnection:
         def __init__(self) -> None:
             self.calls = 0
 
-        def execute(self, statement: Any) -> FakeResult:
+        def execute(self, statement: Any) -> StubResult:
             self.calls += 1
             if self.calls == 1:  # claim 거절(신선한 PROCESSING)
-                return FakeResult(None)
-            return FakeResult({"status": "processing", "attempts": 2})
+                return StubResult(None)
+            return StubResult({"status": "processing", "attempts": 2})
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(EventRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     record = repository.begin_event_processing(
         event("git.changed", "git-pull-worker", {}, correlation_id="corr-1"),
@@ -316,24 +316,24 @@ def test_begin_event_processing_reports_blocked_when_fresh_claim_exists() -> Non
 def test_outbox_claim_uses_skip_locked_lease_update() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
             return []
 
-    class FakeAsyncConnection:
-        async def execute(self, statement: Any) -> FakeResult:
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @asynccontextmanager
-    async def fake_async_connection():
-        yield FakeAsyncConnection()
+    async def stub_async_connection():
+        yield StubAsyncConnection()
 
     repository = object.__new__(OutboxRepository)
-    repository.async_connection = fake_async_connection  # type: ignore[method-assign]
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
 
     asyncio.run(repository.unsent_events(100, "api-gateway"))
 
@@ -349,24 +349,24 @@ def test_outbox_claim_uses_skip_locked_lease_update() -> None:
 def test_outbox_claim_without_source_omits_source_filter() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
             return []
 
-    class FakeAsyncConnection:
-        async def execute(self, statement: Any) -> FakeResult:
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @asynccontextmanager
-    async def fake_async_connection():
-        yield FakeAsyncConnection()
+    async def stub_async_connection():
+        yield StubAsyncConnection()
 
     repository = object.__new__(OutboxRepository)
-    repository.async_connection = fake_async_connection  # type: ignore[method-assign]
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
 
     asyncio.run(repository.unsent_events(100, None))
 
@@ -381,29 +381,29 @@ def test_outbox_claim_without_source_omits_source_filter() -> None:
 def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
+    class StubResult:
         def __init__(self, row: dict[str, object] | None = None) -> None:
             self.row = row
 
-        def mappings(self) -> FakeResult:
+        def mappings(self) -> StubResult:
             return self
 
         def first(self) -> dict[str, object] | None:
             return self.row
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
             if len(recorded) == 1:
-                return FakeResult({"event_id": "evt-1", "correlation_id": "corr-1"})
-            return FakeResult()
+                return StubResult({"event_id": "evt-1", "correlation_id": "corr-1"})
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(TargetAgentRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     result = repository.record_evidence_event_once(
         evidence_key="workspace-1:cluster-1:cluster-snapshot:window-1",
@@ -436,16 +436,16 @@ def test_evidence_event_record_stages_window_event_and_outbox_atomically() -> No
 def test_manifest_artifact_upsert_is_scoped_by_workspace() -> None:
     recorded: list[Any] = []
 
-    class FakeConnection:
+    class StubConnection:
         def execute(self, statement: Any) -> None:
             recorded.append(statement)
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     repository.record_manifest_artifact(
         {
@@ -490,24 +490,24 @@ def test_find_rendered_manifest_artifacts_scopes_cache_lookup_by_renderer_versio
         },
     ]
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
             return rows
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     result = repository.find_rendered_manifest_artifacts(
         workspace_id="workspace-a",
@@ -555,16 +555,16 @@ def test_workflow_status_ranks_never_allow_terminal_regression() -> None:
 def _capture_workflow_statements() -> tuple[Any, list[Any]]:
     recorded: list[Any] = []
 
-    class FakeConnection:
+    class StubConnection:
         def execute(self, statement: Any) -> None:
             recorded.append(statement)
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     return repository, recorded
 
 
@@ -573,26 +573,26 @@ def _capture_application_statements(
 ) -> tuple[Any, list[Any]]:
     recorded: list[Any] = []
 
-    class FakeResult:
+    class StubResult:
         def __init__(self, value: str | None = None) -> None:
             self.value = value
 
         def scalar_one_or_none(self) -> str | None:
             return self.value
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
             if len(recorded) == 1:
-                return FakeResult(existing_application_id)
-            return FakeResult()
+                return StubResult(existing_application_id)
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     return repository, recorded
 
 
@@ -751,21 +751,21 @@ def test_update_workflow_run_for_command_guards_status_transition() -> None:
 def test_workflow_approval_atomic_resolution_only_updates_open_rows() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
+    class StubResult:
         def first(self) -> tuple[str] | None:
             return ("approval-1",)
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     resolved = repository.resolve_workflow_approval_if_open(
         "approval-1", "workspace-1", "granted", "user-1", "granted", {}
@@ -816,16 +816,16 @@ def test_gitops_default_ids_are_workspace_scoped() -> None:
 def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
     recorded: list[Any] = []
 
-    class FakeConnection:
+    class StubConnection:
         def execute(self, statement: Any) -> None:
             recorded.append(statement)
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     payload = {
         "workspace_id": "workspace-b",
         "repo_ref": "org/checkout",
@@ -854,24 +854,24 @@ def test_gitops_registration_stores_workspace_scoped_default_ids() -> None:
 def test_application_deployment_bindings_match_manifest_when_app_name_drifted() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
             return []
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     repository.get_application = lambda workspace_id, application_id: {  # type: ignore[method-assign]
         "workspace_id": workspace_id,
         "application_id": application_id,
@@ -891,8 +891,8 @@ def test_application_deployment_bindings_match_manifest_when_app_name_drifted() 
 def test_gitops_poll_targets_join_active_repository_application_binding() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
@@ -914,17 +914,17 @@ def test_gitops_poll_targets_join_active_repository_application_binding() -> Non
                 }
             ]
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(RepoChangeRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     targets = repository.list_active_github_poll_targets("workspace-b", limit=20)
 
@@ -957,24 +957,24 @@ def test_gitops_poll_targets_join_active_repository_application_binding() -> Non
 def test_evidence_job_lease_uses_skip_locked_candidate_update() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def first(self) -> None:
             return None
 
-    class FakeAsyncConnection:
-        async def execute(self, statement: Any) -> FakeResult:
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @asynccontextmanager
-    async def fake_async_connection():
-        yield FakeAsyncConnection()
+    async def stub_async_connection():
+        yield StubAsyncConnection()
 
     repository = object.__new__(TargetAgentRepository)
-    repository.async_connection = fake_async_connection  # type: ignore[method-assign]
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
 
     asyncio.run(
         repository.lease_evidence_job(
@@ -1000,11 +1000,11 @@ def test_evidence_job_lease_uses_skip_locked_candidate_update() -> None:
 def test_evidence_job_completion_locks_one_job_before_update() -> None:
     recorded: list[Any] = []
 
-    class FakeResult:
+    class StubResult:
         def __init__(self, first_row: dict[str, object] | None = None) -> None:
             self.first_row = first_row
 
-        def mappings(self) -> FakeResult:
+        def mappings(self) -> StubResult:
             return self
 
         def first(self) -> dict[str, object] | None:
@@ -1017,15 +1017,15 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
                 "status": "completed",
             }
 
-    class FakeConnection:
+    class StubConnection:
         def __init__(self) -> None:
             self.calls = 0
 
-        def execute(self, statement: Any) -> FakeResult:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
             self.calls += 1
             if self.calls == 1:
-                return FakeResult(
+                return StubResult(
                     {
                         "job_id": "job-1",
                         "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-1",
@@ -1033,14 +1033,14 @@ def test_evidence_job_completion_locks_one_job_before_update() -> None:
                         "max_attempts": 3,
                     }
                 )
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(TargetAgentRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     result = repository.complete_evidence_job(
         workspace_id="workspace-1",
@@ -1071,24 +1071,24 @@ def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> Non
 
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
             return []
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(AgentCommandRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     assert repository.fail_expired_agent_commands() == []
 
@@ -1108,24 +1108,24 @@ def test_expire_stale_open_rca_incidents_closes_old_rows_atomically() -> None:
 
     recorded: list[Any] = []
 
-    class FakeResult:
-        def mappings(self) -> FakeResult:
+    class StubResult:
+        def mappings(self) -> StubResult:
             return self
 
         def all(self) -> list[dict[str, object]]:
             return []
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(DashboardRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     assert repository.expire_stale_open_rca_incidents(max_age_days=3, limit=100) == []
 
@@ -1246,7 +1246,7 @@ def test_domain_module_discovery_raises_nested_import_failure(monkeypatch) -> No
 
 
 def test_unit_of_work_or_null_uses_db_transaction_or_noop() -> None:
-    # unit_of_work 가 있으면 그 트랜잭션을 쓰고, 없으면(테스트 페이크 등) no-op 이어야 함
+    # unit_of_work 가 있으면 그 트랜잭션을 쓰고, 없으면(테스트 비실데이터 등) no-op 이어야 함
     class WithUow:
         def __init__(self) -> None:
             self.entered = 0
@@ -1269,21 +1269,21 @@ def test_mark_dead_letter_replayed_guards_open_status_atomically() -> None:
     # SELECT 후 갱신 사이의 동시 replay 경쟁 제거 — 열린 행만 원자 UPDATE 로 표시
     recorded: list[Any] = []
 
-    class FakeResult:
+    class StubResult:
         def first(self) -> None:
             return None  # 이미 replay 된 행 → 갱신 0건
 
-    class FakeConnection:
-        def execute(self, statement: Any) -> FakeResult:
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return FakeResult()
+            return StubResult()
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(DeadLetterRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
 
     replayed = repository.mark_dead_letter_replayed(7, "evt-replay-1")
 
@@ -1312,17 +1312,17 @@ class _SqlRecordingResult:
 def _repository_with_recorded_sql(
     repository_type: type, recorded: list[Any], rows: list[Any] | None = None
 ):
-    class FakeConnection:
+    class StubConnection:
         def execute(self, statement: Any, *args: Any, **kwargs: Any) -> _SqlRecordingResult:
             recorded.append(statement)
             return _SqlRecordingResult(rows)
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(repository_type)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     return repository
 
 

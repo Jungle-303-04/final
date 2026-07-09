@@ -289,7 +289,7 @@ async def deliver(call: Callable[[], Awaitable[Any]], ok: Callable[[Any], Any],
                   fail: Callable[[Exception], Any]) -> AsyncIterator[Any]
 ```
 외부 호출 1회 — 성공 시 `ok(결과)` body 1건, 예외 시 `fail(예외)` body 1건을 yield(try/except 를 한 곳에 모아 게이트웨이 핸들러는 선언만).
-- `src/packages/runtime/outbound.py :: Outbound` — `Protocol`: `async def post(self, path: str, body: dict[str, Any]) -> int` (테스트는 가짜로 교체).
+- `src/packages/runtime/outbound.py :: Outbound` — `Protocol`: `async def post(self, path: str, body: dict[str, Any]) -> int` (테스트는 테스트용 대역으로 교체).
 - `src/packages/runtime/outbound.py :: HttpOutbound` — stdlib `urllib` 기반 기본 어댑터.
   - 클래스 상수: `BASE_URL_ENV = "OUTBOUND_CALLBACK_BASE_URL"`, `DEFAULT_BASE_URL = "http://api-gateway:8000"`, `TIMEOUT_SECONDS_ENV = "OUTBOUND_HTTP_TIMEOUT_SECONDS"`, `TIMEOUT_SECONDS = int(env(..., "5"))`.
   - `__init__(base_url: str | None = None)` — 인자 우선, 없으면 env.

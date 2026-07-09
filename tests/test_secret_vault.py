@@ -16,7 +16,7 @@ from packages.security import (
 )
 
 
-class FakeSecretsManagerClient:
+class StubSecretsManagerClient:
     def __init__(self, response: dict[str, object]) -> None:
         self.response = response
         self.calls: list[dict[str, object]] = []
@@ -42,7 +42,7 @@ def test_routing_secret_vault_keeps_unprefixed_refs_env_compatible(monkeypatch) 
 
 
 def test_aws_secret_vault_reads_json_field_and_version_stage() -> None:
-    client = FakeSecretsManagerClient({"SecretString": '{"token": "ghs_123", "nested": {"x": 7}}'})
+    client = StubSecretsManagerClient({"SecretString": '{"token": "ghs_123", "nested": {"x": 7}}'})
     vault = AwsSecretsManagerSecretVault(client=client)
 
     value = vault.read_secret(SecretRef("aws-sm:/my-app/prod/github?stage=AWSPREVIOUS#token"))
@@ -52,14 +52,14 @@ def test_aws_secret_vault_reads_json_field_and_version_stage() -> None:
 
 
 def test_aws_secret_vault_returns_serialized_json_for_non_string_field() -> None:
-    client = FakeSecretsManagerClient({"SecretString": '{"nested": {"x": 7}}'})
+    client = StubSecretsManagerClient({"SecretString": '{"nested": {"x": 7}}'})
     vault = AwsSecretsManagerSecretVault(client=client)
 
     assert vault.read_secret(SecretRef("aws-sm:/my-app/prod/github#nested")) == '{"x": 7}'
 
 
 def test_aws_secret_vault_rejects_missing_field() -> None:
-    client = FakeSecretsManagerClient({"SecretString": '{"token": "ghs_123"}'})
+    client = StubSecretsManagerClient({"SecretString": '{"token": "ghs_123"}'})
     vault = AwsSecretsManagerSecretVault(client=client)
 
     with pytest.raises(SecretNotFound, match="secret field not found"):

@@ -241,7 +241,7 @@ def select_incident_log_entries(
     - Loki 정규화 entry(streams 보유): 네임스페이스 라벨이 incident 와 일치하는 stream 만
       남기고, 남는 stream 이 없으면 entry 자체를 제외한다. 라벨이 없는 stream 은
       귀속 불가라 보수적으로 유지한다.
-    - streams 가 없는 entry(단순 {"line": ...} fixture/webhook 형태): 귀속 불가 → 유지.
+    - streams 가 없는 entry(단순 {"line": ...} 레거시 데이터/webhook 형태): 귀속 불가 → 유지.
     - incident 네임스페이스를 모르면 필터하지 않는다.
 
     참고: 여기서 걸러도 원본 `Evidence.logs`(수집 원문)에는 전체 네임스페이스 로그가

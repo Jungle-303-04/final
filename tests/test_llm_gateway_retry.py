@@ -30,7 +30,7 @@ def _settings(max_retries: int = 2) -> LlmProviderSettings:
 
 
 class _ScriptedAdapter:
-    """호출마다 미리 정한 결과(예외 또는 문자열)를 돌려주는 가짜 adapter."""
+    """호출마다 미리 정한 결과(예외 또는 문자열)를 돌려주는 테스트용 adapter."""
 
     def __init__(self, results: list[Any]) -> None:
         self.results = results

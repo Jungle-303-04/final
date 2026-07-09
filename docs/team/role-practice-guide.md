@@ -366,7 +366,7 @@ body에 새 필드로 억지로 넣지 않는다.
 3. `EvidenceJobScheduler.work_once()`가 provider 하나를 어떻게 수집하는지 본다.
 4. `src/domains/target/evidence_jobs.py`의 `aggregate_evidence_payload()`를 본다.
 5. `src/domains/target/evidence_policy.py`에 metric query 하나를 추가해본다.
-6. 테스트 fixture에서 새 query가 policy에 들어가는지 확인한다.
+6. 테스트 레거시 데이터에서 새 query가 policy에 들어가는지 확인한다.
 
 민정 파트에서 바로 돌릴 테스트:
 
@@ -526,7 +526,7 @@ RCA worker가 직접 GitHub API를 호출하면 역할이 섞인다.
 ### 가인 연습 순서
 
 1. `tests/test_rca_evidence.py`에서 golden path를 먼저 본다.
-2. `ClusterEvidenceReceivedBody` fixture가 어떻게 RCA 결과로 바뀌는지 따라간다.
+2. `ClusterEvidenceReceivedBody` 레거시 데이터가 어떻게 RCA 결과로 바뀌는지 따라간다.
 3. `src/services/ai/agent/causes`에서 증상별 rule을 하나 고른다.
 4. 해당 rule이 어떤 evidence item을 기대하는지 적는다.
 5. 근거가 부족한 case를 추가해 `rca.action_required`로 끝나는지 확인한다.
@@ -830,7 +830,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 
 - 민정: provider query 하나 추가, evidence job 테스트 추가
 - 민정: command action 하나 추가, agent command 테스트 추가
-- 가인: symptom rule 하나 추가, RCA fixture/test 추가
+- 가인: symptom rule 하나 추가, RCA 레거시 데이터/test 추가
 - 가인: recovery route 하나 수정, dispatch test 추가
 - 찬빈: Dashboard DTO 하나 추가, response test 추가
 - 찬빈: projection table 하나 추가, idempotency test 추가

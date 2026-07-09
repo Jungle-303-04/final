@@ -60,7 +60,7 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
             )
         )
 
-    async def fake_query_loki(_client, log_query) -> dict[str, object]:
+    async def stub_query_loki(_client, log_query) -> dict[str, object]:
         return {
             "status": "success",
             "data": {
@@ -78,7 +78,7 @@ def test_loki_logs_are_normalized_into_agent_evidence_shape() -> None:
             },
         }
 
-    collector.providers["logs"].query = fake_query_loki
+    collector.providers["logs"].query = stub_query_loki
 
     logs = asyncio.run(collector.collect("logs"))["logs"]
     payload = {
@@ -114,7 +114,7 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
         )
     )
 
-    async def fake_query_tempo(_client, span_query) -> dict[str, object]:
+    async def stub_query_tempo(_client, span_query) -> dict[str, object]:
         return {
             "traces": [
                 {
@@ -127,7 +127,7 @@ def test_tempo_traces_are_normalized_into_agent_evidence_shape() -> None:
             ]
         }
 
-    collector.providers["traces"].query = fake_query_tempo
+    collector.providers["traces"].query = stub_query_tempo
 
     traces = asyncio.run(collector.collect("traces"))["traces"]
     payload = {

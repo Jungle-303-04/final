@@ -12,7 +12,7 @@ from packages.events.bus import RecordedEventClient, event_causation
 from packages.events.envelope import event
 
 
-class FakeEventPublisher:
+class StubEventPublisher:
     def __init__(self) -> None:
         self.published: list[EventEnvelope] = []
 
@@ -29,7 +29,7 @@ class FakeEventPublisher:
         return created
 
 
-class FakeEventRecorder:
+class StubEventRecorder:
     def __init__(self) -> None:
         self.recorded: list[EventEnvelope] = []
 
@@ -37,7 +37,7 @@ class FakeEventRecorder:
         self.recorded.append(evt)
 
 
-class FakeAgentCommandQueue:
+class StubAgentCommandQueue:
     def __init__(self) -> None:
         self.queued: list[tuple[str, dict[str, Any], str]] = []
 
@@ -76,8 +76,8 @@ def command_diff() -> dict[str, str]:
 
 def test_publish_and_record_uses_event_ports() -> None:
     async def run() -> None:
-        publisher = FakeEventPublisher()
-        recorder = FakeEventRecorder()
+        publisher = StubEventPublisher()
+        recorder = StubEventRecorder()
         client = RecordedEventClient(publisher, recorder)
         created = await client.emit(
             "command.requested", "test", {"cluster_id": "target-cluster-01"}, "corr-1"
@@ -91,8 +91,8 @@ def test_publish_and_record_uses_event_ports() -> None:
 
 def test_recorded_event_client_inherits_current_causation_id() -> None:
     async def run() -> None:
-        publisher = FakeEventPublisher()
-        recorder = FakeEventRecorder()
+        publisher = StubEventPublisher()
+        recorder = StubEventRecorder()
         client = RecordedEventClient(publisher, recorder)
         with event_causation("parent-event-1"):
             created = await client.emit(
@@ -107,7 +107,7 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
 
 def test_command_subscriber_emits_dispatch_chain() -> None:
     command = load_service("command/command-worker")
-    queue = FakeAgentCommandQueue()
+    queue = StubAgentCommandQueue()
     payload = CommandRequestedBody.from_body(
         {
             "cluster_id": "target-cluster-01",
@@ -138,7 +138,7 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
 
 def test_command_subscriber_rejects_noop_diff() -> None:
     command = load_service("command/command-worker")
-    queue = FakeAgentCommandQueue()
+    queue = StubAgentCommandQueue()
     diff = command_diff()
     diff["actual_image"] = diff["desired_image"]
     payload = CommandRequestedBody.from_body(

@@ -109,4 +109,4 @@ export function ApprovalCard({ approvalId, summary, resolved, compact }:
 - 승인 성공 시 chat 캐시(`['ai']` prefix)도 무효화해 대화 속 `approval_ref` 상태를 동기화한다.
 - run 상태 문자열은 `adaptRun` 이 대문자로 정규화한 값으로만 비교한다(실백엔드 step 이름 매핑 포함 — [shared/adapt](shared.md#어댑터-libadaptts)).
 - manifest 는 Git 이 원본 — 콘솔은 링크("manifest 수정 ↗")만 제공하고 직접 편집 UI 를 만들지 않는다.
-- 앱 연결은 `/applications/connect` 단일 호출로 수행한다. 프론트는 `namespace`/`environment`를 하드코딩하지 않고 manifest validation 결과와 선택 클러스터 환경에서 얻은 값이 있을 때만 보낸다.
+- 앱 연결은 `/applications/connect` 단일 호출로 수행한다. 프론트는 `namespace`/`environment`를 고정값 사용하지 않고 manifest validation 결과와 선택 클러스터 환경에서 얻은 값이 있을 때만 보낸다.

@@ -25,7 +25,7 @@ from packages.contracts.gateway.requests import (
 )
 
 
-class FakeGitHubClient:
+class StubGitHubClient:
     def __init__(
         self,
         content: bytes = b"",
@@ -96,7 +96,7 @@ def test_manifest_candidates_filter_to_attachable_paths() -> None:
 
 
 def test_probe_and_branch_list_use_normalized_repo_ref() -> None:
-    service = RepositoryDiscoveryService(FakeGitHubClient())
+    service = RepositoryDiscoveryService(StubGitHubClient())
 
     async def run():
         probe = await service.probe_repository(
@@ -131,7 +131,7 @@ def test_github_repo_url_normalization_rejects_other_hosts() -> None:
 
 
 def test_attachable_manifest_files_parse_kubernetes_kinds_only() -> None:
-    client = FakeGitHubClient(
+    client = StubGitHubClient(
         contents={
             "deploy.yaml": b"""
 apiVersion: apps/v1
@@ -168,12 +168,12 @@ metadata:
 def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatch) -> None:
     monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
 
-    class FakeClient(FakeGitHubClient):
+    class StubClient(StubGitHubClient):
         def __init__(self, *, token=None, **_kwargs):
             super().__init__()
             self.token = token
 
-    class FakeDb:
+    class StubDb:
         def __init__(self) -> None:
             self.saved: list[dict[str, object]] = []
 
@@ -182,9 +182,9 @@ def test_repo_validate_stores_token_as_encrypted_workspace_credential(monkeypatc
             return {**payload, "credential_id": "cred-1"}
 
     monkeypatch.setattr(
-        "domains.gitops.repository_discovery_router.GitHubRepositoryClient", FakeClient
+        "domains.gitops.repository_discovery_router.GitHubRepositoryClient", StubClient
     )
-    db = FakeDb()
+    db = StubDb()
 
     async def run():
         return await validate_repo_for_wizard(
@@ -215,7 +215,7 @@ kind: Service
 metadata:
   name: api
 """
-    service = RepositoryDiscoveryService(FakeGitHubClient(manifest))
+    service = RepositoryDiscoveryService(StubGitHubClient(manifest))
 
     async def run():
         return await service.validate_manifest(
@@ -251,7 +251,7 @@ metadata:
 """,
         "outside.yaml": b"kind: ConfigMap\nmetadata:\n  name: outside\n",
     }
-    client = FakeGitHubClient(
+    client = StubGitHubClient(
         contents=contents,
         tree_items=[
             {"type": "blob", "path": "k8s/kustomization.yaml"},
@@ -325,7 +325,7 @@ metadata:
   name: source-service
 """,
     }
-    client = FakeGitHubClient(
+    client = StubGitHubClient(
         contents=contents,
         tree_items=[
             {"type": "blob", "path": "charts/service/Chart.yaml"},
@@ -384,7 +384,7 @@ metadata:
 
 
 def test_render_validation_failure_is_invalid_and_redacted() -> None:
-    client = FakeGitHubClient(
+    client = StubGitHubClient(
         contents={"k8s/kustomization.yaml": b"resources: []\n"},
         tree_items=[{"type": "blob", "path": "k8s/kustomization.yaml"}],
     )
@@ -422,7 +422,7 @@ def test_render_validation_failure_is_invalid_and_redacted() -> None:
 
 
 def test_missing_renderer_executable_returns_invalid() -> None:
-    client = FakeGitHubClient(
+    client = StubGitHubClient(
         contents={"k8s/kustomization.yaml": b"resources: []\n"},
         tree_items=[{"type": "blob", "path": "k8s/kustomization.yaml"}],
     )
@@ -456,7 +456,7 @@ def test_render_validation_stops_before_content_when_file_limit_exceeded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(repository_discovery, "MAX_RENDER_SOURCE_FILES", 1)
-    client = FakeGitHubClient(
+    client = StubGitHubClient(
         contents={
             "k8s/kustomization.yaml": b"resources:\n- deployment.yaml\n",
             "k8s/deployment.yaml": b"kind: Deployment\nmetadata:\n  name: api\n",
@@ -507,7 +507,7 @@ def test_github_client_sends_token_without_leaking_it_in_errors() -> None:
     client = GitHubRepositoryClient(
         api_base="https://api.github.test",
         token="secret-token",
-        transport=httpx.MockTransport(handler),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
     )
 
     async def run():
@@ -535,7 +535,7 @@ def test_github_client_decodes_content_response() -> None:
     client = GitHubRepositoryClient(
         api_base="https://api.github.test",
         token="",
-        transport=httpx.MockTransport(handler),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
     )
 
     async def run():

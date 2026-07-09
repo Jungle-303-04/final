@@ -160,7 +160,7 @@ export const queryClient = new QueryClient({
 | `adaptInventoryResource` | `frontend/src/shared/lib/adapt.ts :: adaptInventoryResource` | `=> InventoryResource`. `status ?? health ?? 'unknown'`, `age = observed_at ?? created_at`, `raw = raw ?? summary` |
 | `adaptApplication` | `frontend/src/shared/lib/adapt.ts :: adaptApplication` | `=> Application`. `name ?? application_id`, `repo_ref ?? metadata.repo_ref`, `branch ?? default_branch ?? metadata.branch ?? 'main'` |
 | `adaptDeployment` | `frontend/src/shared/lib/adapt.ts :: adaptDeployment` | `=> Deployment`. `namespace ?? 'unknown'`, `name ?? app_name`, 수치 기본 0, `status ?? 'unknown'` |
-| `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. mock 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 비공개 `STEP_NAME_MAP` 으로 콘솔 단계 이름에 매핑한다(git→STARTED, render→RENDERING, diff→DIFFING, policy→POLICY_CHECKING, approval/safe_pr→WAITING_FOR_APPROVAL, apply→APPLYING, health→ROLLOUT_WAITING, 미등록 이름은 대문자화). `details.resource`(+`details.namespace` 접미)는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
+| `adaptRun` | `frontend/src/shared/lib/adapt.ts :: adaptRun` | `=> WorkflowRun`. `run_id ?? workflow_run_id`, `status` 는 `?? 'unknown'` 후 **대문자화**, `started_at ?? created_at`, `steps` 배열 아니면 `[]`, `approval_id ?? metadata.approval_id`. 각 step 은 `adaptRunStep`으로 정규화한다. legacy adapter 형태(`detail`이 있거나 `message/details`가 없음)는 그대로 통과하고, 실백엔드 형태(`name/status/message/details`)는 비공개 `STEP_NAME_MAP` 으로 콘솔 단계 이름에 매핑한다(git→STARTED, render→RENDERING, diff→DIFFING, policy→POLICY_CHECKING, approval/safe_pr→WAITING_FOR_APPROVAL, apply→APPLYING, health→ROLLOUT_WAITING, 미등록 이름은 대문자화). `details.resource`(+`details.namespace` 접미)는 `resource`, `details.changes[]`는 `changes`로 옮긴다. |
 | `adaptIncident` | `frontend/src/shared/lib/adapt.ts :: adaptIncident` | `=> Incident`. summary 우선순위: `root_cause`(단 `'unknown'` 제외) → `error_reason` → `current_subject` → `'인시던트'`. `incident_id ?? correlation_id`, `stage = current_subject ?? status`, `at = at ?? updated_at` |
 | `adaptIncidentDetail` | `frontend/src/shared/lib/adapt.ts :: adaptIncidentDetail` | `=> IncidentDetail`. `adaptIncident` 기반 + `status ?? stage ?? 'open'`, null 정규화(`''`→null), `confidence` 는 number 일 때만, evidence 배열은 `Array.isArray` 검사 후 `map(String)` |
 | `adaptConversationSummary` | `frontend/src/shared/lib/adapt.ts :: adaptConversationSummary` | `=> ConversationSummary`. `title ?? '대화'`, `status` 는 `'waiting'` 만 인정, 아니면 `'idle'` |
@@ -261,7 +261,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 
 ## 그래프 공통 (`flow/index.tsx`, `flow/flow.css`)
 
-모든 그래프 뷰는 이 모듈만 사용(노드 좌표 하드코딩 금지). `@xyflow/react` 스타일시트와 `flow.css` 를 import 한다.
+모든 그래프 뷰는 이 모듈만 사용(노드 좌표 고정값 사용 금지). `@xyflow/react` 스타일시트와 `flow.css` 를 import 한다.
 
 | 심볼 | 앵커 | 내용 |
 |---|---|---|
@@ -297,7 +297,7 @@ nivo 를 이 파일 밖으로 노출하지 않는다(교체 용이).
 ## 불변식·오류 (Invariants & Errors)
 
 - 뷰/컴포넌트에서 직접 `fetch` 금지 — `api/get/post/put/del` 만 사용(D5).
-- 색은 항상 토큰 변수·`toneColor` 경유. hex 하드코딩 금지.
+- 색은 항상 토큰 변수·`toneColor` 경유. hex 고정값 사용 금지.
 - nivo·`@xyflow/react`·`motion` 은 각각 `ui/charts.tsx`·`flow/`·`motion/` 밖으로 새 import 를 만들지 않는다.
 - zustand selector 에서 새 객체 생성 금지(무한 리렌더) — 파생값은 컴포넌트의 `useMemo` 로.
 - `startLive(workspaceId)` 는 workspace 기준 멱등 — 같은 workspace 에서 여러 번 호출해도 연결 1개, workspace 변경/해제 시 이전 연결과 재연결 타이머를 정리한다.

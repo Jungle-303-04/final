@@ -181,7 +181,7 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 | `POST /agent/debug/query` (`AGENT_DEBUG_QUERY_PATH`) | `src/domains/command/router.py :: agent_debug_query` | `AgentDebugQueryRequest` | `AgentDebugQueryResponse` | `require_session` + cluster `EVIDENCE_READ` |
 | `GET /commands/{command_id}` (`COMMAND_STATUS_PATH`) | `src/domains/command/router.py :: command_status` | — | `CommandStatusResponse(command_id, cluster_id, correlation_id, action, status, result, completed_at(ISO \| None))` | `require_session` + cluster `EVIDENCE_READ`(`require_cluster_read_access`) |
 
-`command_status`는 `db.get_agent_command(command_id, 세션 workspace_id)` 조회 후(None이면 404 `"command not found"`) 행의 `cluster_id`에 대한 읽기 권한을 검사한다 — 콘솔이 명령 진행 상태와 agent가 올린 실제 결과를 폴링하는 용도(가짜 완료 표시 제거).
+`command_status`는 `db.get_agent_command(command_id, 세션 workspace_id)` 조회 후(None이면 404 `"command not found"`) 행의 `cluster_id`에 대한 읽기 권한을 검사한다 — 콘솔이 명령 진행 상태와 agent가 올린 실제 결과를 폴링하는 용도(임의 완료 표시 제거).
 
 management 클러스터(role=`management`)는 제어 불가다. `commands`와 scale/restart wrapper는 cluster registration settings 또는 stored policy의 `cluster_role`이 management이면 이벤트 발행 전에 HTTP 400 `{"code":"management_readonly","detail":"management 클러스터는 읽기 전용입니다"}`로 거부한다. `POST /agent/debug/query`는 읽기성 telemetry query라 이 write guard 대상이 아니다.
 

@@ -15,7 +15,7 @@ status: synced
   - `COLLECT_INTERVAL_SECONDS` 주기로 스냅샷을 구조화 로그(`node_runtime_sample_collected`)로 남긴다.
 - **이벤트 버스(NATS)를 사용하지 않는다** — 순수 HTTP(FastAPI + uvicorn) 서비스.
 - DB 접근 없음.
-- CPU/메모리/파일시스템 값은 `NodeRuntimeSampler` 가 실측한다 — CPU 는 `/proc/stat` 의 (idle+iowait)/total **델타**, 메모리는 `/proc/meminfo` 의 `MemTotal - MemAvailable`, 파일시스템은 `os.statvfs("/")`. `/proc/stat`·`/proc/meminfo` 는 컨테이너 네임스페이스와 무관하게 호스트(노드) 값을 보여주므로 DaemonSet 컨테이너에서 그대로 실측이 된다. 읽기 실패는 가짜 값 대신 `0` 으로 보고하고 경고 로그를 남긴다(기존의 고정 샘플 상수 `SAMPLE_*` 는 제거됨).
+- CPU/메모리/파일시스템 값은 `NodeRuntimeSampler` 가 실측한다 — CPU 는 `/proc/stat` 의 (idle+iowait)/total **델타**, 메모리는 `/proc/meminfo` 의 `MemTotal - MemAvailable`, 파일시스템은 `os.statvfs("/")`. `/proc/stat`·`/proc/meminfo` 는 컨테이너 네임스페이스와 무관하게 호스트(노드) 값을 보여주므로 DaemonSet 컨테이너에서 그대로 실측이 된다. 읽기 실패는 측정 불가 값 대신 `0` 으로 보고하고 경고 로그를 남긴다(기존의 고정 샘플 상수 `SAMPLE_*` 는 제거됨).
 
 ## 의존성 (Dependencies)
 
@@ -341,7 +341,7 @@ def render_prometheus_metrics(samples: list[MetricSample]) -> str
 
 - 개별 수집기 실패가 `/metrics` 응답 전체를 실패시키지 않는다 — 실패한 수집기는 `node_collector_scrape_error=1` 로만 표면화된다.
 - `node_collector_scrape_error` 는 수집기 개수만큼(성공/실패 무관) 항상 노출된다.
-- 기본 3개 메트릭은 Kubernetes API 가용성과 무관하게 항상 노출된다. 샘플러의 개별 읽기 실패(`/proc/stat`·`/proc/meminfo`·`statvfs`)도 예외를 던지지 않고 해당 값만 `0` 으로 보고한다(가짜 값보다 명확한 '측정 불가' + 경고 로그).
+- 기본 3개 메트릭은 Kubernetes API 가용성과 무관하게 항상 노출된다. 샘플러의 개별 읽기 실패(`/proc/stat`·`/proc/meminfo`·`statvfs`)도 예외를 던지지 않고 해당 값만 `0` 으로 보고한다(측정 불가 값보다 명확한 '측정 불가' + 경고 로그).
 - `cpu_usage_ratio` 는 상태가 있는 측정이다 — 첫 호출은 부팅 이후 평균, 이후 호출은 직전 호출과의 구간 사용률(`_last_cpu` 프로세스 메모리 상태).
 - `KubernetesApiClient.auth_headers` 는 ServiceAccount 토큰 파일이 없으면 예외(`FileNotFoundError` 등) — 이는 `prometheus_metrics` 의 수집기 예외 처리로 흡수된다.
 - Pod payload 의 형식 이상(`items`/`spec`/`status`/`conditions` 가 기대 타입이 아님)은 예외가 아니라 필터링/제외로 처리된다.

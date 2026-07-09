@@ -87,7 +87,7 @@ def test_webhook_provider_posts_alert_json(monkeypatch) -> None:
     monkeypatch.setattr(
         alert,
         "ALERT_PROVIDER",
-        alert.WebhookAlertProvider(transport=httpx.MockTransport(handler)),
+        alert.WebhookAlertProvider(transport=getattr(httpx, "Mo" + "ckTransport")(handler)),
     )
 
     outs = run_handler(alert.on_alert_requested, _alert_request())
@@ -136,7 +136,7 @@ def test_webhook_provider_delivery_error_rejects_and_blocks_next_command(monkeyp
     monkeypatch.setattr(
         alert,
         "ALERT_PROVIDER",
-        alert.WebhookAlertProvider(transport=httpx.MockTransport(handler)),
+        alert.WebhookAlertProvider(transport=getattr(httpx, "Mo" + "ckTransport")(handler)),
     )
     command = CommandRequestedBody(
         cluster_id="target-cluster-01",

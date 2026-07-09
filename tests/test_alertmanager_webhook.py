@@ -33,7 +33,7 @@ def firing_payload() -> AlertmanagerWebhookRequest:
     )
 
 
-class FakeWebhookDb:
+class StubWebhookDb:
     def __init__(self, registered: bool = True, existing: dict | None = None) -> None:
         self.registered = registered
         self.existing = existing
@@ -70,7 +70,7 @@ def test_webhook_rejects_when_token_not_configured(monkeypatch) -> None:
                 "cluster-1",
                 "default",
                 EVENTS,
-                FakeWebhookDb(),
+                StubWebhookDb(),
             )
         )
     except HTTPException as exc:
@@ -89,7 +89,7 @@ def test_webhook_rejects_invalid_token(monkeypatch) -> None:
                 "cluster-1",
                 "default",
                 EVENTS,
-                FakeWebhookDb(),
+                StubWebhookDb(),
             )
         )
     except HTTPException as exc:
@@ -108,7 +108,7 @@ def test_webhook_rejects_unregistered_cluster(monkeypatch) -> None:
                 "ghost",
                 "default",
                 EVENTS,
-                FakeWebhookDb(registered=False),
+                StubWebhookDb(registered=False),
             )
         )
     except HTTPException as exc:
@@ -119,7 +119,7 @@ def test_webhook_rejects_unregistered_cluster(monkeypatch) -> None:
 
 def test_webhook_records_firing_alerts_as_cluster_evidence(monkeypatch) -> None:
     monkeypatch.setenv("ALERTMANAGER_WEBHOOK_TOKEN", "secret-token")
-    db = FakeWebhookDb()
+    db = StubWebhookDb()
 
     response = asyncio.run(
         alertmanager_webhook(
@@ -148,7 +148,7 @@ def test_webhook_records_firing_alerts_as_cluster_evidence(monkeypatch) -> None:
 
 def test_webhook_resolved_only_payload_does_not_open_incident(monkeypatch) -> None:
     monkeypatch.setenv("ALERTMANAGER_WEBHOOK_TOKEN", "secret-token")
-    db = FakeWebhookDb()
+    db = StubWebhookDb()
     payload = AlertmanagerWebhookRequest(
         alerts=[AlertmanagerAlert(status="resolved", fingerprint="abc")]
     )
@@ -165,7 +165,7 @@ def test_webhook_resolved_only_payload_does_not_open_incident(monkeypatch) -> No
 
 def test_webhook_repeat_notification_dedupes_via_evidence_window(monkeypatch) -> None:
     monkeypatch.setenv("ALERTMANAGER_WEBHOOK_TOKEN", "secret-token")
-    db = FakeWebhookDb(existing={"event_id": "evt-old", "correlation_id": "corr-old"})
+    db = StubWebhookDb(existing={"event_id": "evt-old", "correlation_id": "corr-old"})
 
     response = asyncio.run(
         alertmanager_webhook(

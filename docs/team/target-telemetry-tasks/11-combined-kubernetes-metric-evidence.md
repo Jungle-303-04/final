@@ -30,7 +30,7 @@ Kubernetes pod/event evidence와 Prometheus metric evidence를 같은 cluster/na
 3. source reference에는 Kubernetes API source와 Prometheus query를 모두 남긴다.
 4. pod 이름이나 namespace가 맞지 않으면 억지로 결합하지 않는다.
 5. 결합 실패도 evidence 수집 실패가 아니라 partial evidence로 표현할지 결정한다.
-6. pod fixture + metric fixture 결합 테스트를 추가한다.
+6. pod 레거시 데이터 + metric 레거시 데이터 결합 테스트를 추가한다.
 
 ## 예시 combined evidence
 

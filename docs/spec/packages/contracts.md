@@ -485,7 +485,7 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `CommandStartedResponse` | `accepted: bool`, `correlation_id: str` |
 | `CommandHeartbeatResponse` | `accepted: bool`, `correlation_id: str` |
 | `AgentDebugQueryResponse` | `accepted: bool`, `command_id: str`, `correlation_id: str` |
-| `CommandStatusResponse` | `command_id/cluster_id/correlation_id/action/status: str`, `result: dict[str, Any] = {}`, `completed_at: str \| None = None` — 콘솔이 명령 진행 상태·agent 실측 결과를 폴링(가짜 완료 표시 금지 계약) |
+| `CommandStatusResponse` | `command_id/cluster_id/correlation_id/action/status: str`, `result: dict[str, Any] = {}`, `completed_at: str \| None = None` — 콘솔이 명령 진행 상태·agent 실측 결과를 폴링(임의 완료 표시 금지 계약) |
 | `RcaTimelineItem` | `workspace_id: str`, `correlation_id: str`, `cluster_id/incident_id/evidence_ref: str \| None = None`, `current_subject: str`, `status: str`, `root_cause: str \| None = None`, `confidence: float \| None = None`, `supporting_evidence/missing_evidence: list[str] = []`, `action_route/command_id/pr_url/error_reason/updated_at: str \| None = None` |
 | `RcaTimelineResponse` | `items: list[RcaTimelineItem]` |
 | `RcaIncidentResponse` | `item: RcaTimelineItem` |

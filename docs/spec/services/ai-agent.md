@@ -149,7 +149,7 @@ class RecoveryPlanningPipeline:
 에이전트 kubernetes snapshot 요약(pods/events/services/endpoints)의 장애 신호를
 카탈로그(causes/catalog/*.yaml) symptom 어휘로 결정적으로 승격한다.
 계약: **명시 > 유도 > `"unknown"`** — `kubernetes["symptom"]` 이 명시돼 있으면
-(alertmanager/webhook, 테스트 fixture) 절대 덮지 않는다.
+(alertmanager/webhook, 테스트 레거시 데이터) 절대 덮지 않는다.
 
 신호 → symptom 유도 표(우선순위 순 — 근거 rationale 은 모듈 상수 주석):
 
@@ -174,7 +174,7 @@ class RecoveryPlanningPipeline:
   > `"Unknown"/"unknown"/None`.
 - 테스트: `tests/test_incident_symptom_derivation.py` —
   `src/samples/scenarios/faults/` 6개 장애 클래스(crashloop, oom, imagepull,
-  probe-fail, sched-fail, svc-selector) fixture 로 (a) symptom 유도, (b) 후보 계획,
+  probe-fail, sched-fail, svc-selector) 레거시 데이터 로 (a) symptom 유도, (b) 후보 계획,
   (c) crashloop → `rca.completed` golden path 를 검증.
 
 `src/services/ai/agent/pipeline/incident.py :: EvidenceBundler`

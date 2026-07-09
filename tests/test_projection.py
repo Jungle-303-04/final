@@ -34,17 +34,17 @@ def test_audit_appends_log_without_chaining() -> None:
     assert db.calls == [("append_audit_logs", ([audit_log_row(_evt("command.requested"))],))]
 
 
-def _repository_with_fake_connection(executed: list[tuple[Any, Any]]) -> AuditLogRepository:
-    class FakeConnection:
+def _repository_with_stub_connection(executed: list[tuple[Any, Any]]) -> AuditLogRepository:
+    class StubConnection:
         def execute(self, statement: Any, rows: Any = None) -> None:
             executed.append((statement, rows))
 
     @contextmanager
-    def fake_connection():
-        yield FakeConnection()
+    def stub_connection():
+        yield StubConnection()
 
     repository = object.__new__(AuditLogRepository)
-    repository.connection = fake_connection  # type: ignore[method-assign]
+    repository.connection = stub_connection  # type: ignore[method-assign]
     return repository
 
 
@@ -52,7 +52,7 @@ def test_append_audit_logs_bulk_inserts_in_single_statement() -> None:
     executed: list[tuple[Any, Any]] = []
     rows = [audit_log_row(_evt("a.b")), audit_log_row(_evt("c.d"))]
 
-    _repository_with_fake_connection(executed).append_audit_logs(rows)
+    _repository_with_stub_connection(executed).append_audit_logs(rows)
 
     # 행 수와 무관하게 executemany 스타일 한 문장으로 실행됨
     assert len(executed) == 1
@@ -61,7 +61,7 @@ def test_append_audit_logs_bulk_inserts_in_single_statement() -> None:
 
 def test_append_audit_logs_skips_empty_batch() -> None:
     executed: list[tuple[Any, Any]] = []
-    _repository_with_fake_connection(executed).append_audit_logs([])
+    _repository_with_stub_connection(executed).append_audit_logs([])
     assert executed == []
 
 
@@ -69,7 +69,7 @@ def test_append_audit_log_delegates_to_bulk_path() -> None:
     executed: list[tuple[Any, Any]] = []
     evt = _evt("command.requested")
 
-    _repository_with_fake_connection(executed).append_audit_log(evt)
+    _repository_with_stub_connection(executed).append_audit_log(evt)
 
     assert len(executed) == 1
     assert executed[0][1] == [audit_log_row(evt)]

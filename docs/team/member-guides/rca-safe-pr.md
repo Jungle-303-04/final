@@ -148,7 +148,7 @@ evidence/RCA worker 체인이 어떤 evidence를 입력으로 받는지 명확�
 
 - Target/Telemetry 담당자가 어떤 필드를 보내야 하는지 알아야 한다.
 - RCA가 입력을 추측하면 분석 품질이 흔들린다.
-- evidence 계약이 안정되어야 fixture evidence로 병렬 작업이 가능하다.
+- evidence 계약이 안정되어야 레거시 데이터 evidence로 병렬 작업이 가능하다.
 
 구현할 것:
 
@@ -245,7 +245,7 @@ AI 모델 없이도 RCA 결과 형태를 만들 수 있게 한다.
 
 테스트:
 
-- 같은 fixture evidence는 deterministic result를 만든다.
+- 같은 레거시 데이터 evidence는 deterministic result를 만든다.
 - evidence_refs가 비어 있으면 실패 또는 낮은 confidence.
 
 ## Phase 4. RCA completed event

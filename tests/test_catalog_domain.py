@@ -8,7 +8,7 @@ from domains.catalog.router import install_catalog_item, list_catalog_items
 from packages.contracts.gateway.requests import CatalogInstallRequest
 
 
-class FakeCatalogDb:
+class StubCatalogDb:
     def __init__(self) -> None:
         self.install_runs: list[dict[str, object]] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
@@ -78,7 +78,7 @@ def test_bootstrap_catalog_contains_initial_open_source_recipes() -> None:
 
 def test_catalog_list_route_returns_catalog_items() -> None:
     async def run():
-        return await list_catalog_items(current=current_session(), db=FakeCatalogDb())
+        return await list_catalog_items(current=current_session(), db=StubCatalogDb())
 
     response = asyncio.run(run())
 
@@ -86,7 +86,7 @@ def test_catalog_list_route_returns_catalog_items() -> None:
 
 
 def test_catalog_install_records_planned_run_and_requires_cluster_access() -> None:
-    db = FakeCatalogDb()
+    db = StubCatalogDb()
 
     async def run():
         return await install_catalog_item(

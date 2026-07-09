@@ -837,7 +837,7 @@ def test_user_selected_safe_pr_flow_emits_reviewable_patch(monkeypatch) -> None:
     assert not db.called("save_pull_request")
 
 
-def test_application_5xx_recovery_uses_review_patch_without_hardcoded_manifest(monkeypatch) -> None:
+def test_application_5xx_recovery_uses_review_patch_without_static_manifest(monkeypatch) -> None:
     monkeypatch.setenv("GITHUB_TOKEN", "token-1")
     monkeypatch.setenv("SCM_REPO", "project/repo")
     recovery_worker = load_service("ai/recovery-worker")

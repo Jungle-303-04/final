@@ -56,7 +56,7 @@ def test_severity_matching_is_ordered_and_defaults_unknown_to_warning() -> None:
 # ── 워커 라우팅 ────────────────────────────────────────────────
 
 
-class FakeWorkerDb:
+class StubWorkerDb:
     def __init__(self, channels: list[dict]) -> None:
         self.channels = channels
         self.requested: list[str] = []
@@ -66,7 +66,7 @@ class FakeWorkerDb:
         return self.channels
 
 
-class AsyncFakeWorkerDb(FakeWorkerDb):
+class AsyncStubWorkerDb(StubWorkerDb):
     async def list_alert_channels(self, workspace_id: str):
         return super().list_alert_channels(workspace_id)
 
@@ -83,12 +83,12 @@ def test_worker_routes_to_matching_channels(monkeypatch) -> None:
     module = load_alert_worker()
     sent: list[tuple[str, dict]] = []
 
-    async def fake_dispatch(alert, channel):
+    async def stub_dispatch(alert, channel):
         sent.append((str(channel["name"]), alert.to_body()))
         return module.dispatched_body(alert, channel=str(channel["name"]), mode="webhook")
 
-    monkeypatch.setattr(module, "dispatch_to_channel", fake_dispatch)
-    db = FakeWorkerDb(
+    monkeypatch.setattr(module, "dispatch_to_channel", stub_dispatch)
+    db = StubWorkerDb(
         [
             {"name": "ops-critical", "url": "http://hook-1", "min_severity": "critical"},
             {"name": "ops-all", "url": "http://hook-2", "min_severity": "info"},
@@ -107,12 +107,12 @@ def test_worker_accepts_async_channel_store(monkeypatch) -> None:
     module = load_alert_worker()
     sent: list[str] = []
 
-    async def fake_dispatch(alert, channel):
+    async def stub_dispatch(alert, channel):
         sent.append(str(channel["name"]))
         return module.dispatched_body(alert, channel=str(channel["name"]), mode="webhook")
 
-    monkeypatch.setattr(module, "dispatch_to_channel", fake_dispatch)
-    db = AsyncFakeWorkerDb([{"name": "async-ops", "url": "http://hook", "min_severity": "info"}])
+    monkeypatch.setattr(module, "dispatch_to_channel", stub_dispatch)
+    db = AsyncStubWorkerDb([{"name": "async-ops", "url": "http://hook", "min_severity": "info"}])
 
     bodies = run_handler(module, alert("critical"), db)
 
@@ -124,12 +124,12 @@ def test_worker_skips_channels_below_min_severity(monkeypatch) -> None:
     module = load_alert_worker()
     sent: list[str] = []
 
-    async def fake_dispatch(alert, channel):
+    async def stub_dispatch(alert, channel):
         sent.append(str(channel["name"]))
         return module.dispatched_body(alert, channel=str(channel["name"]), mode="webhook")
 
-    monkeypatch.setattr(module, "dispatch_to_channel", fake_dispatch)
-    db = FakeWorkerDb([{"name": "critical-only", "url": "http://hook", "min_severity": "critical"}])
+    monkeypatch.setattr(module, "dispatch_to_channel", stub_dispatch)
+    db = StubWorkerDb([{"name": "critical-only", "url": "http://hook", "min_severity": "critical"}])
 
     bodies = run_handler(module, alert("warning"), db)
 
@@ -146,7 +146,7 @@ def test_worker_rejects_when_all_channels_fail(monkeypatch) -> None:
         raise RuntimeError("hook down")
 
     monkeypatch.setattr(module, "dispatch_to_channel", failing_dispatch)
-    db = FakeWorkerDb([{"name": "ops", "url": "http://hook", "min_severity": "info"}])
+    db = StubWorkerDb([{"name": "ops", "url": "http://hook", "min_severity": "info"}])
 
     bodies = run_handler(module, alert("critical"), db)
 
@@ -164,7 +164,7 @@ def test_worker_without_channel_store_falls_back_to_provider() -> None:
 # ── 관리 API ──────────────────────────────────────────────────
 
 
-class FakeChannelDb:
+class StubChannelDb:
     def __init__(self) -> None:
         self.rows: dict[str, dict] = {}
 
@@ -200,7 +200,7 @@ ADMIN = SimpleNamespace(user_id="admin-1", workspace_id="workspace-1")
 
 def test_alert_channel_admin_crud_roundtrip() -> None:
     async def run() -> None:
-        db = FakeChannelDb()
+        db = StubChannelDb()
         created = await upsert_alert_channel(
             AlertChannelUpsertRequest(name="ops", url="https://hooks.example/x"), ADMIN, db
         )
@@ -219,7 +219,7 @@ def test_alert_channel_admin_crud_roundtrip() -> None:
 def test_alert_channel_delete_missing_is_404() -> None:
     async def run() -> None:
         try:
-            await delete_alert_channel("ghost", ADMIN, FakeChannelDb())
+            await delete_alert_channel("ghost", ADMIN, StubChannelDb())
         except HTTPException as exc:
             assert exc.status_code == 404
         else:
@@ -231,11 +231,11 @@ def test_alert_channel_delete_missing_is_404() -> None:
 def test_alert_channel_test_sends_real_validation_payload(monkeypatch) -> None:
     calls: list[tuple[str, AlertRequestedBody]] = []
 
-    async def fake_post(url: str, body: AlertRequestedBody) -> AlertDeliveryResult:
+    async def stub_post(url: str, body: AlertRequestedBody) -> AlertDeliveryResult:
         calls.append((url, body))
         return AlertDeliveryResult(delivered=True, status_code=204)
 
-    monkeypatch.setattr(alert_router, "post_alert_webhook", fake_post)
+    monkeypatch.setattr(alert_router, "post_alert_webhook", stub_post)
 
     async def run() -> None:
         response = await send_alert_channel_test(
@@ -258,10 +258,10 @@ def test_alert_channel_test_sends_real_validation_payload(monkeypatch) -> None:
 
 
 def test_alert_channel_test_returns_human_readable_failure(monkeypatch) -> None:
-    async def fake_post(_url: str, _body: AlertRequestedBody) -> AlertDeliveryResult:
+    async def stub_post(_url: str, _body: AlertRequestedBody) -> AlertDeliveryResult:
         return AlertDeliveryResult(delivered=False, error="timeout")
 
-    monkeypatch.setattr(alert_router, "post_alert_webhook", fake_post)
+    monkeypatch.setattr(alert_router, "post_alert_webhook", stub_post)
 
     async def run() -> None:
         response = await send_alert_channel_test(
@@ -277,7 +277,7 @@ def test_alert_channel_test_returns_human_readable_failure(monkeypatch) -> None:
 
 
 def test_alert_channel_upsert_missing_channel_is_404() -> None:
-    class MissingOnUpdateDb(FakeChannelDb):
+    class MissingOnUpdateDb(StubChannelDb):
         def upsert_alert_channel(self, payload: dict) -> dict:
             raise LookupError("not in workspace")
 

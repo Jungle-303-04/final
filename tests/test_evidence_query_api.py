@@ -32,7 +32,7 @@ class _SessionAuth:
 
 
 class QueryApiDb:
-    """호출 인자를 기록하고 대본 row 를 돌려주는 가짜 저장소."""
+    """호출 인자를 기록하고 대본 row 를 돌려주는 테스트용 저장소."""
 
     def __init__(
         self, evidence_rows: list[dict] | None = None, report_rows: list[dict] | None = None

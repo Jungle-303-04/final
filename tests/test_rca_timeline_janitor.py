@@ -5,7 +5,7 @@ import asyncio
 from conftest import load_service
 
 
-class FakeDb:
+class StubDb:
     def __init__(self) -> None:
         self.calls: list[dict[str, int]] = []
 
@@ -20,7 +20,7 @@ class FakeDb:
 
 def test_rca_timeline_janitor_expires_stale_open_incidents(monkeypatch) -> None:
     janitor = load_service("projection/rca-timeline-janitor")
-    db = FakeDb()
+    db = StubDb()
     monkeypatch.setenv("RCA_OPEN_INCIDENT_EXPIRE_DAYS", "5")
     monkeypatch.setenv("RCA_OPEN_INCIDENT_EXPIRE_LIMIT", "50")
 

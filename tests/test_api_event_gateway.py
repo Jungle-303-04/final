@@ -121,7 +121,7 @@ def test_api_event_gateway_retries_transient_outbox_lock() -> None:
 
 def test_nats_publish_uses_event_id_as_message_id_header() -> None:
     async def run() -> None:
-        class FakeJetStream:
+        class StubJetStream:
             def __init__(self) -> None:
                 self.published: list[dict[str, object]] = []
 
@@ -136,13 +136,13 @@ def test_nats_publish_uses_event_id_as_message_id_header() -> None:
                 )
 
         bus = NatsEventBus()
-        fake_js = FakeJetStream()
-        bus.js = fake_js
+        stub_js = StubJetStream()
+        bus.js = stub_js
         evt = event("cluster.evidence.received", "api-gateway", {}, "corr-1")
 
         await bus.publish_envelope(evt)
 
-        assert fake_js.published[0]["headers"][NATS_MSG_ID_HEADER] == evt.event_id
+        assert stub_js.published[0]["headers"][NATS_MSG_ID_HEADER] == evt.event_id
 
     asyncio.run(run())
 
@@ -175,7 +175,7 @@ def test_consumer_config_reads_env_overrides(monkeypatch) -> None:
 
 def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:
     async def run() -> None:
-        class FakeJetStream:
+        class StubJetStream:
             def __init__(self) -> None:
                 self.calls: list[dict[str, object]] = []
 
@@ -192,12 +192,12 @@ def test_subscribe_applies_consumer_config_to_pull_consumer() -> None:
                 return object()
 
         bus = NatsEventBus()
-        fake_js = FakeJetStream()
-        bus.js = fake_js
+        stub_js = StubJetStream()
+        bus.js = stub_js
 
         await bus.subscribe("command.requested", durable="command-worker")
 
-        call = fake_js.calls[0]
+        call = stub_js.calls[0]
         assert call["subject"] == "command.requested"
         assert call["durable"] == "command-worker"
         config = call["config"]

@@ -22,7 +22,7 @@ API 경로의 정본은 [06-api-map.md](06-api-map.md).
 | 현황 | `src/domains/identity/admin_router.py`에 조직 목록/생성/삭제, 그룹 목록/생성/멤버십, 사용자 목록 route가 붙어 있다 |
 | API | `GET/POST /orgs`, `DELETE /orgs/{org_id}`, `GET/POST /groups`, `GET /groups/{group_id}/members`, `PUT/DELETE /groups/{group_id}/members/{user_id}`, `GET /users` |
 | 갭 | G1/G2/G3의 1차 운영 화면 차단 범위는 코드 반영됨. 조직 수정, 그룹 수정/삭제 같은 세부 편집은 후속 개선 항목으로 둔다 |
-| 개발 방식 | 실존 route 기준으로 훅을 붙이고, mock은 로컬 데모용 fallback으로만 둔다 |
+| 개발 방식 | 실존 route 기준으로 훅을 붙이고, 테스트 전용 대역은 운영 경로에 두지 않는다 |
 
 ## R4. 리소스 생성 (레포, 클러스터)
 

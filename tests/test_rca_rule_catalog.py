@@ -1,4 +1,4 @@
-"""RCA 룰 카탈로그(YAML) 테스트 — 하드코딩 룰 세트와의 동작 동등성 + 로더 계약."""
+"""RCA 룰 카탈로그(YAML) 테스트 — 고정값 사용 룰 세트와의 동작 동등성 + 로더 계약."""
 
 from __future__ import annotations
 
@@ -147,7 +147,7 @@ EXPECTED_RULE_SNAPSHOT: dict[str, tuple[list[str], list[str]]] = {
 }
 
 
-def test_catalog_rules_match_previous_hardcoded_plan_snapshot() -> None:
+def test_catalog_rules_match_previous_static_plan_snapshot() -> None:
     """(a) 계약 스냅샷 — YAML 카탈로그가 현재 룰 계획을 유지해야 한다."""
     for symptom, (expected_candidates, expected_sources) in EXPECTED_RULE_SNAPSHOT.items():
         plan = plan_for(symptom)
@@ -200,7 +200,7 @@ def test_rca_rule_validate_route_reports_schema_errors() -> None:
 
 
 def test_catalog_oom_killed_candidate_keeps_full_field_parity() -> None:
-    """대표 후보(oom_killed)의 전체 필드가 하드코딩 시절 원문과 동일해야 한다."""
+    """대표 후보(oom_killed)의 전체 필드가 고정값 사용 시절 원문과 동일해야 한다."""
     plan = plan_for("CrashLoopBackOff")
     oom = plan.candidates[0]
 

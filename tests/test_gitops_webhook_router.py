@@ -3,7 +3,7 @@ from __future__ import annotations
 from domains.gitops.router import build_git_webhook_bodies
 
 
-class FakeWebhookDb:
+class StubWebhookDb:
     def list_active_github_poll_targets(self, limit: int = 500) -> list[dict[str, object]]:
         assert limit == 1000
         return [
@@ -44,7 +44,7 @@ def test_github_push_payload_fans_out_to_matching_binding_with_force(monkeypatch
         "repository": {"full_name": "jungle-303-04/final"},
     }
 
-    bodies = build_git_webhook_bodies(payload, db=FakeWebhookDb(), event_name="push")
+    bodies = build_git_webhook_bodies(payload, db=StubWebhookDb(), event_name="push")
 
     assert len(bodies) == 1
     body = bodies[0]
@@ -68,7 +68,7 @@ def test_github_merged_pr_payload_uses_merge_commit_sha(monkeypatch) -> None:
         },
     }
 
-    bodies = build_git_webhook_bodies(payload, db=FakeWebhookDb(), event_name="pull_request")
+    bodies = build_git_webhook_bodies(payload, db=StubWebhookDb(), event_name="pull_request")
 
     assert len(bodies) == 1
     assert bodies[0].commit_sha == "sha-main-merge"
@@ -85,7 +85,7 @@ def test_internal_webhook_payload_remains_backward_compatible() -> None:
         "cluster_id": "cluster-1",
     }
 
-    bodies = build_git_webhook_bodies(payload, db=FakeWebhookDb(), event_name="")
+    bodies = build_git_webhook_bodies(payload, db=StubWebhookDb(), event_name="")
 
     assert len(bodies) == 1
     assert bodies[0].commit_sha == "abc123"

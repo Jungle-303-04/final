@@ -20,7 +20,7 @@ from packages.contracts.gateway.requests import (
 from packages.contracts.gateway.responses import RepositoryManifestValidationResponse
 
 
-class FakeApplicationsDb:
+class StubApplicationsDb:
     def __init__(
         self,
         *,
@@ -148,7 +148,7 @@ def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="ws-1")
 
 
-class FakeRepositoryDiscovery:
+class StubRepositoryDiscovery:
     async def validate_manifest(
         self,
         payload: object,
@@ -169,7 +169,7 @@ class FakeRepositoryDiscovery:
 
 def test_list_applications_uses_accessible_application_ids() -> None:
     async def run():
-        return await list_applications(limit=50, current=current_session(), db=FakeApplicationsDb())
+        return await list_applications(limit=50, current=current_session(), db=StubApplicationsDb())
 
     response = asyncio.run(run())
 
@@ -177,7 +177,7 @@ def test_list_applications_uses_accessible_application_ids() -> None:
 
 
 def test_upsert_application_registers_repository_when_repo_ref_is_present() -> None:
-    db = FakeApplicationsDb()
+    db = StubApplicationsDb()
 
     async def run():
         return await upsert_application(
@@ -198,7 +198,7 @@ def test_upsert_application_registers_repository_when_repo_ref_is_present() -> N
 
 
 def test_connect_application_registers_repo_watch_binding_atomically() -> None:
-    db = FakeApplicationsDb()
+    db = StubApplicationsDb()
 
     async def run():
         return await connect_application(
@@ -214,7 +214,7 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
             ),
             current=current_session(),
             db=db,
-            discovery=FakeRepositoryDiscovery(),
+            discovery=StubRepositoryDiscovery(),
         )
 
     response = asyncio.run(run())
@@ -238,7 +238,7 @@ def test_connect_application_registers_repo_watch_binding_atomically() -> None:
 
 def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) -> None:
     monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", "local-test-key")
-    db = FakeApplicationsDb()
+    db = StubApplicationsDb()
 
     async def run():
         return await connect_application(
@@ -253,7 +253,7 @@ def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) 
             ),
             current=current_session(),
             db=db,
-            discovery=FakeRepositoryDiscovery(),
+            discovery=StubRepositoryDiscovery(),
         )
 
     asyncio.run(run())
@@ -266,7 +266,7 @@ def test_connect_application_stores_github_token_as_credential_ref(monkeypatch) 
 
 
 def test_connect_application_rejects_disconnected_cluster_before_write() -> None:
-    db = FakeApplicationsDb(connected_cluster_ids=set())
+    db = StubApplicationsDb(connected_cluster_ids=set())
 
     async def run():
         return await connect_application(
@@ -281,7 +281,7 @@ def test_connect_application_rejects_disconnected_cluster_before_write() -> None
             ),
             current=current_session(),
             db=db,
-            discovery=FakeRepositoryDiscovery(),
+            discovery=StubRepositoryDiscovery(),
         )
 
     with pytest.raises(Exception) as exc:
@@ -297,7 +297,7 @@ def test_connect_application_rejects_disconnected_cluster_before_write() -> None
 
 
 def test_connect_application_returns_422_for_invalid_source_type() -> None:
-    db = FakeApplicationsDb()
+    db = StubApplicationsDb()
 
     async def run():
         return await connect_application(
@@ -311,7 +311,7 @@ def test_connect_application_returns_422_for_invalid_source_type() -> None:
             ),
             current=current_session(),
             db=db,
-            discovery=FakeRepositoryDiscovery(),
+            discovery=StubRepositoryDiscovery(),
         )
 
     with pytest.raises(Exception) as exc:
@@ -323,7 +323,7 @@ def test_connect_application_returns_422_for_invalid_source_type() -> None:
 
 
 def test_upsert_application_deployment_requires_app_and_cluster_access() -> None:
-    db = FakeApplicationsDb()
+    db = StubApplicationsDb()
 
     async def run():
         return await upsert_application_deployment(
@@ -349,7 +349,7 @@ def test_upsert_application_deployment_requires_app_and_cluster_access() -> None
 
 
 def test_upsert_application_deployment_rejects_disconnected_cluster() -> None:
-    db = FakeApplicationsDb(connected_cluster_ids=set())
+    db = StubApplicationsDb(connected_cluster_ids=set())
 
     async def run():
         return await upsert_application_deployment(
@@ -369,7 +369,7 @@ def test_upsert_application_deployment_rejects_disconnected_cluster() -> None:
 
 
 def test_global_application_deployment_reports_mixed_disconnected_targets() -> None:
-    db = FakeApplicationsDb(
+    db = StubApplicationsDb(
         connected_cluster_ids={"cluster-1"},
         clusters=[
             {"workspace_id": "ws-1", "cluster_id": "cluster-1", "name": "cluster-1"},

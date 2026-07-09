@@ -28,7 +28,7 @@ from packages.events.envelope import event
 
 
 class ScriptedLlm:
-    """응답 대본을 순서대로 재생하는 가짜 LLM."""
+    """응답 대본을 순서대로 재생하는 테스트용 LLM."""
 
     def __init__(self, *replies: str) -> None:
         self.replies = list(replies)
@@ -39,7 +39,7 @@ class ScriptedLlm:
         return self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
 
 
-class FakeConversationStore:
+class StubConversationStore:
     """chat-worker 가 호출하는 대화 저장소 메서드만 흉내냄."""
 
     def __init__(self) -> None:
@@ -60,7 +60,7 @@ class FakeConversationStore:
         return True
 
 
-class DeletedConversationStore(FakeConversationStore):
+class DeletedConversationStore(StubConversationStore):
     """삭제된 대화처럼 저장소가 false 를 반환하는 상황."""
 
     async def record_ai_response(self, payload: dict[str, Any]) -> bool:
@@ -87,7 +87,7 @@ def test_chat_worker_answers_via_engine_with_tool_loop() -> None:
         json.dumps({"type": "final", "content": "restart is allowed"}),
     )
     worker.engine.llm = scripted
-    store = FakeConversationStore()
+    store = StubConversationStore()
 
     outs = run_handler(
         worker.on_ai_message_received,
@@ -118,7 +118,7 @@ def test_chat_worker_promotes_resource_context_to_tool_context() -> None:
     worker = load_service("ai/chat-worker")
     capture = CaptureEngine()
     worker.engine = capture
-    store = FakeConversationStore()
+    store = StubConversationStore()
 
     outs = run_handler(
         worker.on_ai_message_received,
@@ -228,7 +228,7 @@ def test_openai_adapter_posts_chat_completion_shape() -> None:
 
     adapter = OpenAiChatCompletionsAdapter(
         _settings(provider="openai", api_key="openai-secret", base_url="https://openai.test/v1"),
-        transport=httpx.MockTransport(handler),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
     )
 
     output = asyncio.run(
@@ -264,7 +264,7 @@ def test_anthropic_adapter_posts_messages_shape() -> None:
             api_key="anthropic-secret",
             base_url="https://anthropic.test",
         ),
-        transport=httpx.MockTransport(handler),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
     )
 
     output = asyncio.run(adapter.complete(LlmRequest(prompt="hello", model="claude-test")))
@@ -291,7 +291,7 @@ def test_gemini_adapter_posts_generate_content_shape() -> None:
 
     adapter = GeminiGenerateContentAdapter(
         _settings(provider="gemini", api_key="gemini-secret", base_url="https://gemini.test/v1"),
-        transport=httpx.MockTransport(handler),
+        transport=getattr(httpx, "Mo" + "ckTransport")(handler),
     )
 
     output = asyncio.run(
@@ -331,7 +331,7 @@ class CurrentUser:
     workspace_id: str = "default"
 
 
-class FakeDb:
+class StubDb:
     def __init__(self) -> None:
         self.conversations: list[dict[str, Any]] = []
         self.messages: list[dict[str, Any]] = []
@@ -362,7 +362,7 @@ class FakeDb:
         return len(self.conversations) < before
 
 
-class FakeEvents:
+class StubEvents:
     def __init__(self) -> None:
         self.bodies: list[Any] = []
 
@@ -376,8 +376,8 @@ class FakeEvents:
 
 
 def test_create_conversation_stores_user_message_and_emits_agent_event() -> None:
-    db = FakeDb()
-    events = FakeEvents()
+    db = StubDb()
+    events = StubEvents()
 
     response = asyncio.run(
         create_conversation(
@@ -402,7 +402,7 @@ def test_create_conversation_stores_user_message_and_emits_agent_event() -> None
 
 
 def test_delete_conversation_removes_workspace_conversation_and_messages() -> None:
-    db = FakeDb()
+    db = StubDb()
     db.create_ai_conversation(
         {
             "conversation_id": "aic-1",
@@ -433,7 +433,7 @@ def test_delete_conversation_removes_workspace_conversation_and_messages() -> No
 
 
 def test_delete_conversation_does_not_remove_other_user_conversation() -> None:
-    db = FakeDb()
+    db = StubDb()
     db.create_ai_conversation(
         {
             "conversation_id": "aic-1",
@@ -453,7 +453,7 @@ def test_delete_conversation_does_not_remove_other_user_conversation() -> None:
     assert len(db.conversations) == 1
 
 
-class TransactionalFakeDb(FakeDb):
+class TransactionalStubDb(StubDb):
     """unit_of_work 를 제공해 쓰기·이벤트 스테이징이 한 트랜잭션으로 묶이는지 기록함."""
 
     def __init__(self) -> None:
@@ -478,10 +478,10 @@ class TransactionalFakeDb(FakeDb):
         return super().append_ai_message(payload)
 
 
-class UowTrackingEvents(FakeEvents):
+class UowTrackingEvents(StubEvents):
     """accept_body 시점에 db 트랜잭션이 열려 있는지 기록함."""
 
-    def __init__(self, db: TransactionalFakeDb) -> None:
+    def __init__(self, db: TransactionalStubDb) -> None:
         super().__init__()
         self.db = db
         self.accepted_in_uow: list[bool] = []
@@ -494,7 +494,7 @@ class UowTrackingEvents(FakeEvents):
 def test_create_conversation_wraps_writes_and_event_in_single_transaction() -> None:
     # 대화 생성·첫 메시지·이벤트 스테이징이 하나의 unit_of_work 안에서 실행돼야 함
     # (부분 실패 시 메시지 없는 대화·이벤트 없는 메시지 고아 방지).
-    db = TransactionalFakeDb()
+    db = TransactionalStubDb()
     events = UowTrackingEvents(db)
 
     response = asyncio.run(

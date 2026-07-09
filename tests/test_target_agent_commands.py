@@ -66,7 +66,7 @@ def load_agent_module():
                 sys.modules[name] = previous_modules[name]
 
 
-class FakeKubernetesClient:
+class StubKubernetesClient:
     def __init__(self) -> None:
         self.patches: list[dict[str, object]] = []
 
@@ -78,7 +78,7 @@ class FakeKubernetesClient:
         return {"patched": True}
 
 
-class FakeCommandResultClient:
+class StubCommandResultClient:
     def __init__(self, *, fail_once: bool = False) -> None:
         self.fail_once = fail_once
         self.completed: list[dict[str, object]] = []
@@ -143,15 +143,15 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     applied: dict[str, object] = {}
 
-    async def fake_apply(manifest: dict[str, object], namespace: str) -> tuple[bool, str, dict]:
+    async def stub_apply(manifest: dict[str, object], namespace: str) -> tuple[bool, str, dict]:
         applied["manifest"] = manifest
         applied["namespace"] = namespace
         return True, "manifest applied", {}
 
-    agent.apply_kubernetes_manifest = fake_apply
+    agent.apply_kubernetes_manifest = stub_apply
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -199,7 +199,7 @@ def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> 
         agent_id="agent-1",
         result={"status": "completed", "cluster_id": "cluster-1"},
     )
-    client = FakeCommandResultClient(fail_once=True)
+    client = StubCommandResultClient(fail_once=True)
 
     assert asyncio.run(agent.flush_command_results_once(client)) is False
     assert agent.command_outbox.pending_count() == 1
@@ -233,7 +233,7 @@ def test_agent_routes_unknown_command_to_default_handler() -> None:
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(agent.execute_command({"action": "unknown.action", "payload": {}}))
@@ -247,7 +247,7 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -276,7 +276,7 @@ def test_kubernetes_scale_requires_approval_evidence() -> None:
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -304,7 +304,7 @@ def test_kubernetes_scale_exempts_approval_in_sandbox_environment() -> None:
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -331,7 +331,7 @@ def test_kubernetes_scale_rejects_namespace_outside_control_policy() -> None:
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -362,7 +362,7 @@ def test_kubernetes_scale_rejects_management_namespace_even_if_allowlisted(
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"
     agent.cluster_role = "target"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -391,7 +391,7 @@ def test_management_agent_ignores_write_command_before_kubernetes_call() -> None
     agent.cluster_id = "management-1"
     agent.agent_id = "agent-1"
     agent.cluster_role = "management"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
 
     result = asyncio.run(
@@ -419,7 +419,7 @@ def test_management_agent_policy_rejects_self_patch_if_top_guard_is_bypassed() -
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "management-1"
     agent.cluster_role = "management"
-    agent.kubernetes = FakeKubernetesClient()
+    agent.kubernetes = StubKubernetesClient()
     register_agent_commands(module, agent)
     registered = agent.command_registry.handlers[module.KUBERNETES_DEPLOYMENT_PATCH_ACTION]
     payload = module.KubernetesPatchPayload(

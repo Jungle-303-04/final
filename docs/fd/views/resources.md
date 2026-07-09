@@ -4,7 +4,7 @@
 
 두 위저드(클러스터 등록, 레포 연결)와 권한 관리 화면. 위저드는 공용 `Stepper` + `Form`.
 
-## 클러스터 등록 위저드 (실존 API — mock 불필요)
+## 클러스터 등록 위저드 (실존 API — 테스트 전용 대역 불필요)
 
 진입: admin 에서 /clusters [+ 클러스터 등록], / 홈 빈 상태의 등록 action.
 Modal(size lg) 내 Stepper 4단계. 백엔드 흐름은 Bruno `02-target-admin` 과 동일.

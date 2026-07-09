@@ -16,7 +16,7 @@ from domains.rca.events import (
 
 
 class _ScriptedJsonLlm:
-    """complete_json 대본 재생 가짜 LLM — 프롬프트를 기록함."""
+    """complete_json 대본 재생 테스트용 LLM — 프롬프트를 기록함."""
 
     def __init__(self, payload: Any) -> None:
         self.payload = payload
@@ -31,7 +31,7 @@ class _ScriptedJsonLlm:
 
 
 class _FailingJsonLlm:
-    """complete_json 이 항상 실패하는 가짜 LLM(JSON 파싱 실패/미설정 재현)."""
+    """complete_json 이 항상 실패하는 테스트용 LLM(JSON 파싱 실패/미설정 재현)."""
 
     def __init__(self, error: Exception) -> None:
         self.error = error

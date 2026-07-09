@@ -33,7 +33,7 @@ status: spec-ahead
 | 심볼 | 앵커 | 설명 |
 |---|---|---|
 | `app` | `src/services/ai/ai-fallback-worker/app.py :: app` | `App("ai-fallback-worker")` |
-| `llm_client` | `src/services/ai/ai-fallback-worker/app.py :: llm_client` | `build_llm_client()` — 모듈 전역(테스트가 가짜 LLM 으로 교체) |
+| `llm_client` | `src/services/ai/ai-fallback-worker/app.py :: llm_client` | `build_llm_client()` — 모듈 전역(테스트가 테스트용 LLM 으로 교체) |
 | `planner` | `src/services/ai/ai-fallback-worker/app.py :: planner` | `AiFallbackPlanner()` |
 | `on_ai_fallback_requested(evt)` | `src/services/ai/ai-fallback-worker/app.py :: on_ai_fallback_requested` | 유일한 핸들러 |
 

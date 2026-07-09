@@ -29,7 +29,7 @@ from domains.inventory.router import (
 from packages.contracts.gateway.requests import InventoryResource, InventorySnapshotRequest
 
 
-class FakeInventoryDb:
+class StubInventoryDb:
     def __init__(self, resources: list[dict[str, object]] | None = None) -> None:
         self.saved: dict[str, object] | None = None
         self.resources = resources or [inventory_resource("workload", "Deployment", "api")]
@@ -164,7 +164,7 @@ class FakeInventoryDb:
         return [{"resource_type": "workload", "health": "healthy", "count": 1}]
 
 
-class FakeInventoryEvents:
+class StubInventoryEvents:
     def __init__(self) -> None:
         self.accepted: list[object] = []
 
@@ -291,8 +291,8 @@ def test_duplicate_inventory_keys_are_deduped_last_wins_before_upsert() -> None:
 
 
 def test_inventory_snapshot_route_uses_agent_identity_scope() -> None:
-    db = FakeInventoryDb()
-    events = FakeInventoryEvents()
+    db = StubInventoryDb()
+    events = StubInventoryEvents()
 
     async def run():
         return await record_inventory_snapshot(
@@ -331,8 +331,8 @@ def test_inventory_snapshot_route_rejects_body_cluster_spoof() -> None:
         return await record_inventory_snapshot(
             InventorySnapshotRequest(cluster_id="other-cluster", agent_id="agent-1"),
             identity=ClusterAgentIdentity(workspace_id="ws-1", cluster_id="cluster-1"),
-            db=FakeInventoryDb(),
-            events=FakeInventoryEvents(),
+            db=StubInventoryDb(),
+            events=StubInventoryEvents(),
         )
 
     with pytest.raises(HTTPException) as exc:
@@ -348,7 +348,7 @@ def test_inventory_workloads_route_requires_inventory_access_and_filters() -> No
             namespace="default",
             limit=25,
             current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
-            db=FakeInventoryDb(),
+            db=StubInventoryDb(),
         )
 
     response = asyncio.run(run())
@@ -360,7 +360,7 @@ def test_inventory_workloads_route_requires_inventory_access_and_filters() -> No
 
 
 def test_inventory_resource_detail_returns_related_resources_and_events_without_raw() -> None:
-    db = FakeInventoryDb(
+    db = StubInventoryDb(
         [
             inventory_resource(
                 "service",
@@ -432,7 +432,7 @@ def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
         return await get_inventory_summary(
             "cluster-1",
             current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
-            db=FakeInventoryDb(),
+            db=StubInventoryDb(),
         )
 
     response = asyncio.run(run())

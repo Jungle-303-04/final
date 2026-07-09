@@ -41,7 +41,7 @@ def load_control_module():
                 sys.modules[name] = previous_modules[name]
 
 
-class FakePolicyClient:
+class StubPolicyClient:
     def __init__(self, policy: AgentPolicy | None) -> None:
         self.policy = policy
         self.policy_statuses: list[dict[str, Any]] = []
@@ -57,7 +57,7 @@ class FakePolicyClient:
         self.reconcile_statuses.append(status)
 
 
-class FakeApplier:
+class StubApplier:
     def __init__(self) -> None:
         self.applied: list[str] = []
         self.observed: list[str] = []
@@ -69,7 +69,7 @@ class FakeApplier:
         self.observed.append(resource.resource_id)
 
 
-class FailsOnceApplier(FakeApplier):
+class FailsOnceApplier(StubApplier):
     def __init__(self) -> None:
         super().__init__()
         self.failed = False
@@ -108,7 +108,7 @@ def test_policy_sync_applies_remote_scheduler_policy(tmp_path: Path) -> None:
         apply_policy=lambda policy: applied.append(policy) or {"ok": True},
         interval_seconds=10,
     )
-    client = FakePolicyClient(remote_policy)
+    client = StubPolicyClient(remote_policy)
 
     assert asyncio.run(sync.sync_once(client)) == "applied"
 
@@ -148,7 +148,7 @@ def test_policy_sync_merges_partial_provider_policy(tmp_path: Path) -> None:
         interval_seconds=10,
     )
 
-    assert asyncio.run(sync.sync_once(FakePolicyClient(remote_policy))) == "applied"
+    assert asyncio.run(sync.sync_once(StubPolicyClient(remote_policy))) == "applied"
 
     merged_policy = store.load_policy()
     assert merged_policy is not None
@@ -168,7 +168,7 @@ def test_policy_sync_reports_failed_payload_generation(tmp_path: Path) -> None:
         apply_policy=lambda _policy: (_ for _ in ()).throw(RuntimeError("apply failed")),
         interval_seconds=10,
     )
-    client = FakePolicyClient(remote_policy)
+    client = StubPolicyClient(remote_policy)
 
     assert asyncio.run(sync.sync_once(client)) == "failed"
 
@@ -192,7 +192,7 @@ def test_reconciler_rejects_user_workload_until_scope_is_enabled(tmp_path: Path)
         desired_state=DesiredStatePolicy(resources=[resource]),
     )
     store.save_policy(policy)
-    applier = FakeApplier()
+    applier = StubApplier()
     reconciler = control.DesiredStateReconciler(
         cluster_id="cluster-1",
         cluster_role="target",
@@ -227,7 +227,7 @@ def test_reconciler_applies_target_agent_owned_configmap(tmp_path: Path) -> None
         desired_state=DesiredStatePolicy(resources=[resource]),
     )
     store.save_policy(policy)
-    applier = FakeApplier()
+    applier = StubApplier()
     reconciler = control.DesiredStateReconciler(
         cluster_id="cluster-1",
         cluster_role="target",
@@ -294,7 +294,7 @@ def test_reconciler_observe_calls_resource_observer(tmp_path: Path) -> None:
             desired_state=DesiredStatePolicy(resources=[resource]),
         )
     )
-    applier = FakeApplier()
+    applier = StubApplier()
     reconciler = control.DesiredStateReconciler(
         cluster_id="cluster-1",
         cluster_role="target",

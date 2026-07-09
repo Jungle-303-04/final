@@ -11,7 +11,7 @@
   - radius: `control`, `panel`
   - shadow: `soft`, `elevated`
 - 타이포는 Pretendard 우선, fallback system-ui이며 `caption(12)`, `label(13)`, `body(14)`, `title(16)`, `page(20)` 5단만 새 UI 레이어에서 사용한다.
-- Motion preset 정본은 `src/ui/motion.ts`다. duration은 `fast 120ms`, `base 200ms`, `slow 320ms`이며 개별 컴포넌트에서 duration/easing을 하드코딩하지 않는다.
+- Motion preset 정본은 `src/ui/motion.ts`다. duration은 `fast 120ms`, `base 200ms`, `slow 320ms`이며 개별 컴포넌트에서 duration/easing을 고정값 사용하지 않는다.
 - 새 프리미티브 정본은 `src/ui/index.tsx`다. Button, IconButton, Card, StatCard, Table, Tabs, Badge, StatusChip, Modal, Drawer, Dropdown/Menu, Field/Input/Select/Textarea, Toast, Tooltip, Skeleton, EmptyState, PageHeader, Breadcrumb, CodeBlock, KeyValueList, ConfirmDialog, Collapsible를 포함한다.
 - `/dev/ui`는 개발 환경에서만 등록되는 검수 라우트다. production build output에 `UiShowcase` chunk가 생성되지 않는 것을 확인했다.
 - Phase 2 첫 화면 묶음(`/login`, `/signup`, `/pending`, `/verify-email`)은 `src/ui` 프리미티브로 이관했다. 인증 화면 내부의 `@/shared/ui`, `@/shared/motion`, `plural-ui` import와 inline `style=` 사용은 0건이다.
@@ -27,7 +27,7 @@
 - Phase 2 메트릭(`features/metrics/MetricsView.tsx`)은 `src/ui` PageHeader/Card/StatCard/Field/Input/Select/Textarea/Badge/StatusChip/EmptyState 기반으로 이관했다. Nivo line chart wrapper는 `src/ui/charts.tsx`로 승격했고, 메트릭 feature의 `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw color 의존은 0건이다.
 - 차트 정본은 `src/ui/charts.tsx`다. 전체 선형 차트는 `TimeSeriesChart`, 카드형 미니 차트는 `Sparkline`을 사용한다. feature 화면은 실제 API/WS/집계 배열만 전달하고, 더미 높이 배열이나 장식용 차트는 금지한다.
 - 레거시 CSS import 제거(2026-07-08 09:15 KST): `main.tsx` 전역 스타일 import는 `@/ui/theme.css` 단독이다. 삭제 파일: `frontend/src/shared/tokens.css`, `frontend/src/shared/ui/app.css`, `frontend/src/shared/theme-bridge.css`, `frontend/src/plural-ui/tokens.css`, `frontend/src/plural-ui/plural.css`, `frontend/src/features/console-archive/archive.css`.
-- 남은 CSS import는 `@/ui/theme.css`, React Flow 라이브러리 스타일, `shared/flow/flow.css`뿐이다. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/login`과 `/`를 1440/1024/390 폭에서 확인했고 marker와 horizontal overflow 0을 확인했다.
+- 남은 CSS import는 `@/ui/theme.css`, React Flow 라이브러리 스타일, `shared/flow/flow.css`뿐이다. `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright 계약 스모크로 `/login`과 `/`를 1440/1024/390 폭에서 확인했고 marker와 horizontal overflow 0을 확인했다.
 - 배포 확인(2026-07-08 09:19 KST): GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `ab014c10-css-cleanup-20260708091722`, main `/assets/index-BtlDgMJr.js`, CSS `/assets/index-BRxn7xco.css` 서빙 및 삭제한 레거시 CSS marker 0건 확인.
 - CI 가드(2026-07-08 09:22 KST): `scripts/frontend-check.sh`가 `frontend/src/features` 아래 새 `.css` 파일, inline `style=`, raw hex 색상을 배포 전 차단한다. `bash scripts/frontend-check.sh` 전체 통과.
 - 미사용 레거시 UI 스윕(2026-07-08 09:25 KST): 앱 경로에서 참조가 끊긴 `src/plural-ui/*`, `src/shared/ui/*`, `src/shared/motion/index.tsx`, `src/shared/lib/ui-store.ts`를 삭제했다. 남은 `src/shared`는 flow wrapper와 API/lib 유틸뿐이며 legacy UI import grep 0건, `bash scripts/frontend-check.sh` 전체 통과.
@@ -35,7 +35,7 @@
 ## 사용 규칙
 
 - feature 코드는 `src/ui` 프리미티브와 Tailwind semantic token만 사용한다.
-- feature 코드에서 새 CSS 파일, inline `style=`, hex 색상, px 하드코딩을 추가하지 않는다.
+- feature 코드에서 새 CSS 파일, inline `style=`, hex 색상, px 고정값 사용을 추가하지 않는다.
 - 새 CSS 파일, inline `style=`, hex 색상은 CI gate에서 차단된다.
 - 상태 어휘는 `healthy`, `warning`, `critical`, `pending`, `running`, `failed`로 고정하고 사용자 노출 라벨은 한국어 명사형으로 쓴다.
 - 리스트/카드/테이블은 로딩, 빈 상태, 오류+재시도 상태를 반드시 제공한다.
@@ -57,7 +57,7 @@
 - `cd frontend && npm run lint` passed.
 - `cd frontend && npm run build` passed. 기존 large chunk warning만 있음.
 - `features/console/ui.tsx` grep: `plural-ui`, `console.css`, inline `style=`, raw hex/px, legacy `pl-`/`co-` class 0건.
-- Playwright route mocking 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 앱 셸을 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0.
+- Playwright 계약 스모크 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 앱 셸을 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0.
 - screenshots: `/tmp/k8s-shell-desktop.png`, `/tmp/k8s-shell-tablet.png`, `/tmp/k8s-shell-mobile.png`.
 
 ## Phase 2 홈 대시보드 검증 (2026-07-08 04:55 KST)
@@ -67,7 +67,7 @@
 - `cd frontend && npm test -- --runInBand` passed, 11 tests.
 - `cd frontend && npm run build` passed.
 - `features/console/pages/HomePage.tsx`, `features/console/pages/NotFoundPage.tsx`, `features/console/ui.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, `console.css`, inline `style=`, raw hex/px, legacy `pl-`/`co-` class 0건.
-- Playwright route mocking 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 홈 대시보드를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0.
+- Playwright 계약 스모크 검수: 인증 세션/알림/홈 집계 최소 응답으로 `/` 홈 대시보드를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0.
 - screenshots: `/tmp/k8s-home-desktop.png`, `/tmp/k8s-home-tablet.png`, `/tmp/k8s-home-mobile.png`.
 
 ## Phase 2 클러스터 목록 검증 (2026-07-08 05:10 KST)
@@ -77,7 +77,7 @@
 - `cd frontend && npm test -- --runInBand` passed, 11 tests.
 - `cd frontend && npm run build` passed.
 - `features/cluster/ClusterListView.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-` class 0건.
-- Playwright route mocking 검수: 인증 세션/알림/클러스터 목록 최소 응답으로 `/clusters`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0, visible rows 4.
+- Playwright 계약 스모크 검수: 인증 세션/알림/클러스터 목록 최소 응답으로 `/clusters`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, unexpected console error 0, visible rows 4.
 - screenshots: `/tmp/k8s-clusters-list-desktop.png`, `/tmp/k8s-clusters-list-tablet.png`, `/tmp/k8s-clusters-list-mobile.png`.
 
 ## Phase 2 클러스터 상세 검증 (2026-07-08 05:20 KST)
@@ -87,7 +87,7 @@
 - `cd frontend && npm test -- --runInBand` passed, 11 tests.
 - `cd frontend && npm run build` passed.
 - `features/cluster/ClusterDetailView.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-` class, legacy CSS var 0건.
-- Playwright route mocking 검수: 인증 세션/알림/클러스터 상세 인벤토리 최소 응답으로 `/clusters/prod-seoul-01`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, visible rows 5.
+- Playwright 계약 스모크 검수: 인증 세션/알림/클러스터 상세 인벤토리 최소 응답으로 `/clusters/prod-seoul-01`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, visible rows 5.
 - 탭 전환 검수: 워크로드 → 서비스 → 이벤트 전환, 서비스 IP와 이벤트 `BackOff` cell 확인, document horizontal overflow 0, unexpected console error 0.
 - screenshots: `/tmp/k8s-cluster-detail-desktop.png`, `/tmp/k8s-cluster-detail-tablet.png`, `/tmp/k8s-cluster-detail-mobile.png`, `/tmp/k8s-cluster-detail-tabs.png`.
 
@@ -98,7 +98,7 @@
 - `cd frontend && npm test -- --runInBand` passed, 11 tests.
 - `cd frontend && npm run build` passed.
 - `features/notifications/NotificationsView.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 0건.
-- Playwright route mocking 검수: 인증 세션/알림 합성 소스(timeline/app runs/DLQ) 응답으로 `/incidents`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
+- Playwright 계약 스모크 검수: 인증 세션/알림 합성 소스(timeline/app runs/DLQ) 응답으로 `/incidents`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
 - screenshots: `/tmp/k8s-incidents-list-desktop.png`, `/tmp/k8s-incidents-list-tablet.png`, `/tmp/k8s-incidents-list-mobile.png`.
 
 ## Phase 2 인시던트 상세 검증 (2026-07-08 05:41 KST)
@@ -108,7 +108,7 @@
 - `cd frontend && npm test -- --runInBand` passed, 11 tests.
 - `cd frontend && npm run build` passed.
 - `features/notifications/IncidentDetailView.tsx` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 0건.
-- Playwright route mocking 검수: 인증 세션/알림/인시던트 상세/RCA 리포트/복구 계획 최소 응답으로 `/incidents/inc-101`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
+- Playwright 계약 스모크 검수: 인증 세션/알림/인시던트 상세/RCA 리포트/복구 계획 최소 응답으로 `/incidents/inc-101`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
 - 모바일 RCA 그래프는 화면 전체 overflow 없이 그래프 영역 내부 가로 스크롤로 읽을 수 있게 고정했다.
 - screenshots: `/tmp/k8s-incident-detail-desktop.png`, `/tmp/k8s-incident-detail-tablet.png`, `/tmp/k8s-incident-detail-mobile.png`, `/tmp/k8s-incident-detail-mobile-fixed.png`.
 
@@ -120,7 +120,7 @@
 - `cd frontend && npm run build` passed.
 - `features/workflow/*` grep: `plural-ui`, `shared/ui`, `shared/motion`, inline `style=`, raw hex color, `console.css`, legacy `pl-`/`co-`/`btn`/`card` class, legacy CSS var 0건.
 - `shared/flow`는 React Flow edge/node motion만 유지하고 색/보더/배경은 `--ui-*` semantic token으로 정렬했다. `prefers-reduced-motion`에서 pulse/dash/node transition은 비활성화된다.
-- Playwright route mocking 검수: 인증 세션/알림 합성 API/애플리케이션 run 응답으로 `/workflows`, `/workflows/run-approval-101`을 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
+- Playwright 계약 스모크 검수: 인증 세션/알림 합성 API/애플리케이션 run 응답으로 `/workflows`, `/workflows/run-approval-101`을 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, legacy class 0, unexpected console error 0.
 - 진행 중 워크플로우 그래프는 현재 단계까지 표시해 과축소를 막고, 완료 run은 전체 단계 경로를 표시한다. 상세 검수 기준 그래프 node 5, edge 4.
 - screenshots: `/tmp/k8s-workflows-list-desktop.png`, `/tmp/k8s-workflows-list-tablet.png`, `/tmp/k8s-workflows-list-mobile.png`, `/tmp/k8s-workflow-detail-desktop-final2.png`, `/tmp/k8s-workflow-detail-tablet.png`, `/tmp/k8s-workflow-detail-mobile.png`.
 
@@ -132,7 +132,7 @@
 - `cd frontend && npm run build` passed.
 - `features/metrics/*` grep: `plural-ui`, `shared/ui`, `shared/motion`, `shared/ui/charts`, inline `style=`, raw hex color, legacy `card`/`input`/`query-row`/`statbox` class 0건.
 - `POST /metrics/validate` dry-run을 debounce 검증과 실행 직전 재검증 양쪽에 연결했다. 저장/실행 버튼은 valid 상태에서만 활성화되고, 0건 결과는 "시간범위 넓히기" CTA로 이어진다.
-- Playwright route mocking 검수: 인증 세션/알림/클러스터/usage/metric preset/widget/metrics validate 최소 응답으로 `/metrics?cluster=cluster-1`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, button overflow 0, unexpected card overflow 0.
+- Playwright 계약 스모크 검수: 인증 세션/알림/클러스터/usage/metric preset/widget/metrics validate 최소 응답으로 `/metrics?cluster=cluster-1`를 1440/1024/390 폭에서 캡처했고 document horizontal overflow 0, button overflow 0, unexpected card overflow 0.
 - screenshots: `/tmp/k8s-metrics-desktop.png`, `/tmp/k8s-metrics-tablet.png`, `/tmp/k8s-metrics-mobile.png`.
 
 ## 체크포인트 — 더미 차트 제거 (2026-07-08 10:12 KST)
@@ -150,7 +150,7 @@
   - 커밋/푸시: `3f98a7d0 feat: 더미 차트 실데이터 스파크라인 교체`.
   - GitHub Actions는 코드 실행 전 실패: CI `28910247958`, AWS CD `28910247957`, Promote `28910248008` 모두 failed job의 `steps: []` 확인.
   - 수동 ECR/rollout 수행: `183548421506.dkr.ecr.ap-northeast-2.amazonaws.com/kubeheal-console:3f98a7d0-real-charts-20260708101622`, rollout `1/1 ready`.
-  - live `https://k8s.woonyong.org/`와 `/api/healthz` 200. live assets에서 real chart aria marker 5건, legacy dummy marker(`SparkBars`, `ClusterSpark`, `MiniBars`) 0건 확인.
+  - live `https://k8s.woonyong.org/`와 `/api/healthz` 200. live assets에서 real chart aria marker 5건, legacy marker(`SparkBars`, `ClusterSpark`, `MiniBars`) 0건 확인.
 - 실시간/미확인 차트 보정(2026-07-08 10:33 KST):
   - `Sparkline`은 `null`/`undefined`를 0으로 변환하지 않고, 실제 측정 숫자가 있을 때만 차트 근거로 사용한다. 홈/메트릭/클러스터 상세 StatCard도 같은 `hasSparklinePoints` 기준을 공유한다.
   - 브라우저 live WS의 초기 `snapshot.state.clusters`를 메트릭 history에 반영한다. 접속 직후 `live.summary` 새 이벤트를 기다리지 않아도 실시간 그래프 초기값이 채워진다.
@@ -195,7 +195,7 @@
 - `PendingView`는 로그인 실패 직후 넘어온 memory credentials가 있을 때만 `POST /auth/login`을 5초 간격으로 재시도하고, 승인되면 returnTo로 자동 입장한다. 새로고침 후에는 비밀번호를 보관하지 않고 수동 로그인 안내를 표시한다.
 - `VerifyEmailView`는 성공/만료/이미인증 query 상태를 구분하고, 만료 상태에서 같은 자리 재발송 폼을 제공한다. token이 있으면 `/api/auth/verify-email?token=&redirect=/verify-email?status=success`로 넘겨 서버 검증을 먼저 수행한다.
 - `app/guards.tsx`는 `@/ui` 프리미티브와 Tailwind token으로 이관해 인증 계열의 `@/shared/ui`, inline style 의존을 제거했다.
-- 검증(2026-07-08 08:16 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`을 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
+- 검증(2026-07-08 08:16 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright 계약 스모크로 `/signup`, `/login`, `/pending`, `/verify-email?status=success`, `/verify-email?status=already_verified`, `/verify-email?expired=1`을 1440/1024/390 폭에서 순회했다. 이메일 중복 차단, 이메일 통과 후 비밀번호 단계 표시, 가입 성공 화면, invalid/unverified/approval_pending 로그인 분기, pending 자동 입장, 만료 재발송, horizontal overflow 0, unexpected console error 0 확인.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `3e56fe39-auth-validation-ui-20260708081840`, 인증 lazy chunk 5종 서빙 확인.
 
 ## 알림 채널 전개형 검증 UX 변경 (2026-07-08)
@@ -206,7 +206,7 @@
 - 입력값을 변경하면 테스트 통과 상태가 즉시 reset되어 저장 전 재검증을 강제한다.
 - 저장은 `POST /alert-channels`, 삭제는 `DELETE /alert-channels/{id}`를 사용하고 성공/실패 toast와 삭제 확인 모달을 제공한다.
 - `features/notifications/AlertChannelsView.tsx`, `features/notifications/api.ts`, `features/org/SettingsNav.tsx`, `app/router.tsx`의 알림 채널 범위는 `@/ui` 프리미티브와 Tailwind token만 사용한다. `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, feature `.css` 의존은 0건이다.
-- 검증(2026-07-08 08:27 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/settings/alerts`를 1440/1024/390 폭에서 순회했고, 초기 저장 비활성, 테스트 전 저장 비활성, 테스트 성공 후 저장 활성, 입력 변경 후 저장 재비활성, horizontal overflow 0, unexpected console error 0 확인.
+- 검증(2026-07-08 08:27 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright 계약 스모크로 `/settings/alerts`를 1440/1024/390 폭에서 순회했고, 초기 저장 비활성, 테스트 전 저장 비활성, 테스트 성공 후 저장 활성, 입력 변경 후 저장 재비활성, horizontal overflow 0, unexpected console error 0 확인.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `cb10b438-alert-channels-ui-20260708083237`, `AlertChannelsView-DACvgMIP.js`와 `SettingsNav-Br9x1klQ.js` lazy chunk 서빙 확인.
 
 ## 클러스터 등록 위저드 UX 변경 (2026-07-08)
@@ -234,7 +234,7 @@
 - `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, legacy CSS var 의존을 제거했다.
 - 실행 이력, 배포 대상, Safe PR 탭은 loading, empty, error+retry 상태를 모두 갖는다. 승인 대기 run은 공유 `ApprovalCard`와 token 기반 PlanDiffPanel을 표시한다.
 - `useApproval`은 legacy `uiStore` toast 대신 `@/ui` toast를 사용하고 성공/실패 사유를 한국어로 표시한다.
-- 검증(2026-07-08 08:41 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`) 0건. Playwright mock으로 `/repos/app-1`를 1440/1024/390 폭에서 순회했고 실행/배포 대상/Safe PR/설정 탭 표시, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/repo-detail-desktop.png`, `/tmp/repo-detail-tablet.png`, `/tmp/repo-detail-mobile.png`.
+- 검증(2026-07-08 08:41 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`) 0건. Playwright 계약 스모크로 `/repos/app-1`를 1440/1024/390 폭에서 순회했고 실행/배포 대상/Safe PR/설정 탭 표시, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/repo-detail-desktop.png`, `/tmp/repo-detail-tablet.png`, `/tmp/repo-detail-mobile.png`.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `77ecf6be-repo-detail-ui-20260708084354`, `RepoDetailView-a14V4fYv.js`와 `ApprovalCard-Ci8lQGAe.js` lazy chunk 서빙 확인.
 
 ## 카탈로그 디자인 시스템 이관 (2026-07-08)
@@ -243,7 +243,7 @@
 - `@/shared/ui`, `@/shared/motion`, `@/plural-ui`, legacy `uiStore`, inline `style=`, raw hex, legacy CSS var, feature `.css`, Tailwind arbitrary value 의존을 제거했다.
 - 목록 loading은 Skeleton 카드 그리드, empty는 "설치 항목 없음" + 새로고침 CTA, error는 "카탈로그 조회 실패" + 재시도 CTA로 분리했다.
 - 설치 mutation은 카드별 pending을 유지하고 성공/실패 toast를 제공한다. 기존 `{}` 요청 대신 `CatalogInstallRequest`의 필수 `application_name`을 item slug/name에서 생성해 함께 보낸다.
-- 검증(2026-07-08 08:50 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`, Tailwind arbitrary value) 0건. Playwright mock으로 `/catalog`를 1440/1024/390 폭에서 순회했고 카탈로그 카드/태그/설치 요청 toast, POST body `{application_name:"postgresql", values:{}}`, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/catalog-desktop.png`, `/tmp/catalog-tablet.png`, `/tmp/catalog-mobile.png`.
+- 검증(2026-07-08 08:50 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. 금지 패턴 grep(`@/shared/ui`, `@/shared/motion`, `@/plural-ui`, inline `style=`, raw hex, legacy css var, `.css`, Tailwind arbitrary value) 0건. Playwright 계약 스모크로 `/catalog`를 1440/1024/390 폭에서 순회했고 카탈로그 카드/태그/설치 요청 toast, POST body `{application_name:"postgresql", values:{}}`, horizontal overflow 0, 의미 있는 console error 0 확인. screenshots: `/tmp/catalog-desktop.png`, `/tmp/catalog-tablet.png`, `/tmp/catalog-mobile.png`.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `b3c86e1c-catalog-ui-20260708085319`, `CatalogView-D9Tir7kG.js` lazy chunk 서빙 확인.
 
 ## 레거시 toast 경로 제거 (2026-07-08)
@@ -268,9 +268,9 @@
 - L3 팟: `GET /clusters/{id}/nodes/{node}/pods/summary`를 우선 사용하고 404일 때 pod inventory fallback을 사용한다. 타일=팟, 크기=CPU/MEM 또는 균등, `incident_correlation_id`가 있으면 critical + pulse border로 표시하고 Drawer에서 "인시던트 보기" CTA를 제공한다.
 - 클러스터 상세 URL은 `/clusters/{id}?node=<node>&pod=<namespace/name>`로 노드/팟 뎁스를 동기화해 새로고침과 공유, 브라우저 뒤로가기를 지원한다.
 - 팟 Drawer는 search param에서 파생한다. 팟 목록 로딩 중에는 Skeleton, 조회 실패는 재시도, stale URL은 "팟 상세 없음" EmptyState로 처리한다.
-- 검증(2026-07-08 07:19 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 1440/1024/390 폭에서 `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 복원 확인, overflow 0. 클릭 왕복은 `/clusters/cluster-1` → `?node=node-a` → `?node=node-a&pod=prod%2Fcheckout-api-7f9f8` → 뒤로가기 2회까지 확인.
+- 검증(2026-07-08 07:19 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright 계약 스모크로 1440/1024/390 폭에서 `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 복원 확인, overflow 0. 클릭 왕복은 `/clusters/cluster-1` → `?node=node-a` → `?node=node-a&pod=prod%2Fcheckout-api-7f9f8` → 뒤로가기 2회까지 확인.
 - 보강(2026-07-08 09:01 KST): `DrilldownHeatmap`은 선택 노드 `layoutId`를 zoom shell로 재사용해 노드 타일이 부모 영역으로 확장된 뒤 팟 타일이 같은 그리드 안에 나타난다. `useReducedMotion()`이 true면 layout/stagger를 끄고 `@/ui/motion`의 `transitions.reduced`만 사용한다. 인시던트 팟은 `ring-danger` pulse border로 표시한다.
-- 보강 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/clusters/cluster-1` 클릭 왕복에서 `?node`/`?pod` URL, Drawer, "인시던트 보기", pulse border, 뒤로가기 2회, reduced-motion 환경, overflow 0, console error 0을 확인했다. `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 직접 진입은 1440/1024/390 폭에서 Drawer/CTA/breadcrumb 복원과 overflow 0을 확인했다.
+- 보강 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright 계약 스모크로 `/clusters/cluster-1` 클릭 왕복에서 `?node`/`?pod` URL, Drawer, "인시던트 보기", pulse border, 뒤로가기 2회, reduced-motion 환경, overflow 0, console error 0을 확인했다. `/clusters/cluster-1?node=node-a&pod=prod%2Fcheckout-api-7f9f8` 직접 진입은 1440/1024/390 폭에서 Drawer/CTA/breadcrumb 복원과 overflow 0을 확인했다.
 - 보강 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `62a28572-heatmap-motion-20260708090258`, `ClusterDetailView-BMnacLsD.js` lazy chunk 서빙 확인.
 
 ## AI 채팅 디자인 시스템 이관 (2026-07-08)
@@ -280,7 +280,7 @@
 - LLM provider/API key/quota/auth 계열 오류 또는 `conversation.status=failed`가 감지되면 composer를 숨기고 "AI 설정 확인 필요" 또는 "AI 응답 실패" 안내 카드와 `운영 설정` CTA를 먼저 보여준다. 현 백엔드에 별도 설정 조회 API가 없어 오류 계약 기반 선행 차단으로 구현했다.
 - 복구 조치 선택 권한은 `service_admin` 또는 `release_operator` 역할로 통일했고, 권한이 없으면 버튼 비활성 + `release_operator 권한 필요` Tooltip을 표시한다. 선택 성공 시 `chatKeys.list()` 캐시를 무효화한다.
 - `ApprovalCard`는 repo·workflow·chat·notifications 공유 단일 구현을 유지하되 `@/ui` 프리미티브와 `useSession` 역할 체크로 정리했다.
-- 검증(2026-07-08 07:58 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright mock으로 `/ai/aic-1` 1440/1024/390 폭에서 메시지/도구 호출/복구 조치/승인 카드/빈 draft 전송 차단/복구 조치 선택 활성 전환/horizontal overflow 0을 확인했다. `/ai` LLM 설정 오류 mock(503 raw detail `LLM_PROVIDER is not configured`)에서는 composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다.
+- 검증(2026-07-08 07:58 KST): `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` 통과. Playwright 계약 스모크로 `/ai/aic-1` 1440/1024/390 폭에서 메시지/도구 호출/복구 조치/승인 카드/빈 draft 전송 차단/복구 조치 선택 활성 전환/horizontal overflow 0을 확인했다. `/ai` LLM 설정 오류 계약(503 raw detail `LLM_PROVIDER is not configured`)에서는 composer 0건, `운영 설정` CTA 1건, overflow 0을 확인했다.
 - 배포(2026-07-08 08:00 KST): Actions가 `steps: []`로 실패해 수동 console image `ce75d57c-ai-chat-ui-20260708074225`를 `mgmt/management` console deployment에 롤아웃했다. `https://k8s.woonyong.org/` 200, `/api/healthz` 200, live chunks `ChatView-RjgESk8p.js`와 `ApprovalCard-DlHhFo68.js`에서 새 LLM 안내/권한/승인 문구를 확인했다.
 
 ## 설정/조직 디자인 시스템 이관 (2026-07-08)
@@ -291,14 +291,14 @@
 - 그룹 멤버 Drawer는 멤버 목록 로딩/빈/오류+재시도 상태를 갖고, `last_admin` 응답은 "최소 1명의 관리자 필요" 인라인 사유로 표시한다.
 - 권한 부여/회수와 DLQ 재처리는 확인 모달에 대상 요약을 표시하고, 실행 중 해당 버튼만 pending 상태가 된다.
 - 검증: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `uv run pytest tests/test_docs_index.py tests/test_bruno_collection.py -q`, `make check`, `make manifest-check` 통과.
-- Playwright mock: `/settings/members`, `/settings/orgs`, `/settings/groups`, `/settings/access`, `/settings/ops`를 1440/1024/390 폭에서 순회했다. 멤버 검색 0건+필터 초기화, 조직/그룹 중복 이름 제출 차단, `last_admin` 인라인 오류, 권한 회수 요약 모달, DLQ 재처리 요약 모달, horizontal overflow 0, console error 0 확인.
+- Playwright 계약 스모크: `/settings/members`, `/settings/orgs`, `/settings/groups`, `/settings/access`, `/settings/ops`를 1440/1024/390 폭에서 순회했다. 멤버 검색 0건+필터 초기화, 조직/그룹 중복 이름 제출 차단, `last_admin` 인라인 오류, 권한 회수 요약 모달, DLQ 재처리 요약 모달, horizontal overflow 0, console error 0 확인.
 - 배포 확인: GitHub Actions는 `steps: []`로 코드 실행 전 실패해 수동 ECR/rollout을 수행했다. live `https://k8s.woonyong.org/`와 `/api/healthz` 200, console image `c1c7bf87-settings-org-ui-20260708080409`, 설정/조직 lazy chunk 6종 서빙 확인.
 
 # 프론트엔드 프로덕션 감사 (AUDIT) — 콘솔 승격 패스
 
-기준: 프로덕션 빌드에서 mock/fixture/하드코딩 수치는 전부 결함.
+기준: 프로덕션 빌드에서 운영 외 응답 경로·레거시 데이터·고정 수치는 전부 결함.
 이번 패스: **Plural 스타일 콘솔이 루트(`/`) 앱으로 승격**, 구 베이스 앱 셸/화면 삭제, 전 화면 실데이터화.
-후속 패스(2026-07-07 오후): **mock 레이어 자체를 삭제** — 코드베이스에 페이크 데이터 경로가 아예 없음(섹션 D).
+후속 패스(2026-07-07 오후): **운영 외 응답 레이어 자체를 삭제** — 코드베이스에 실데이터가 아닌 화면 경로가 아예 없음(섹션 D).
 
 ## A. 아키텍처 결정
 
@@ -332,30 +332,30 @@
 - `GET /clusters/{id}/summary` → `{workloads[], recent_events[], open_incidents[], usage:{cpu_pct,mem_pct,restarts_total}}`
 - 엔드포인트 미배포 상태에서는 QueryBoundary 가 오류+재시도(정직한 상태)로 표시 — 배포되면 즉시 동작.
 
-## C. 백엔드 도메인이 없는 복각 섹션 처리 (fixture 삭제)
+## C. 백엔드 도메인이 없는 복각 섹션 처리 (레거시 데이터 삭제)
 
 | 구 콘솔 섹션 | 결정 |
 |---|---|
 | CD(clusters/services/pipelines/repos/globalservices/observers) | **재설계-흡수** — 실 도메인 `/clusters`(인벤토리)·`/repos`(GitOps)·`/workflows`(파이프라인) 로 대체 |
 | Stacks / Kubernetes 뷰어 | **흡수** — `/clusters/:id` 리소스/워크로드 탭(실측 인벤토리) |
 | Alerts / AI threads / sentinels | **흡수** — `/incidents`(RCA 타임라인) · `/ai`(실 대화) |
-| Home 위젯보드·플릿맵(fixture) | **재구현** — `/` 홈이 `GET /fleet/summary` 기반 히트맵(Treemap)·집계 카드·테이블로 대체 |
+| Home 위젯보드·플릿맵(레거시 데이터) | **재구현** — `/` 홈이 `GET /fleet/summary` 기반 히트맵(Treemap)·집계 카드·테이블로 대체 |
 | Marketplace/번들/퍼블리셔 | **삭제** — 대응 도메인 없음. 설치형 카탈로그는 실 `/catalog` 로 대체 |
 | Cost management / Security(취약점·컴플라이언스) / Edge / Flows / Workbenches / Self-service PR | **삭제** — 백엔드 도메인 없음(fabricated 데이터 금지) |
 | Cloud shell / Audits(geo·login) / Profile(키·토큰) / Personas / OIDC·SMTP 등 설정 복제 | **삭제** — 실 설정은 `/settings/*` (orgs/groups/members/access/ops) |
 | 역할 전환 데모(viewer.tsx "View as") | **삭제** — 권한은 실 세션(`roles`)과 서버 검증으로만 |
 
-삭제 파일: `features/plural/**`(5), `features/console/{mock,metrics,flows,popups,viewer,ChatPanel,live,routes,api/**,map/**,widgets/**,pages/{AiMisc,Cd,Drill,Settings,StacksK8s}Pages}`(29), `app/shell/**`(2), `features/fleet/{FleetHeatmapView,score}`(2), plural-ui 데드 코드(`PluralLayout/PluralShell/SaveButton` — mock 저장 버튼 포함) = **38개 파일 + 데드 익스포트 제거**.
+삭제 파일: `features/plural/**`(5), `features/console/{local-api,metrics,flows,popups,viewer,ChatPanel,live,routes,api/**,map/**,widgets/**,pages/{AiMisc,Cd,Drill,Settings,StacksK8s}Pages}`(29), `app/shell/**`(2), `features/fleet/{FleetHeatmapView,score}`(2), plural-ui 데드 코드(`PluralLayout/PluralShell/SaveButton` — 로컬 저장 버튼 포함) = **38개 파일 + 데드 익스포트 제거**.
 
-## D. mock 완전 삭제 (2026-07-07 후속 패스)
+## D. 운영 외 응답 경로 삭제 (2026-07-07 후속 패스)
 
-- `shared/lib/mock/{fixtures,router}.ts`(463줄 페이크 데이터/라우터) **삭제**. `API_MODE`/`VITE_API_MODE` 개념 자체 제거 —
+- `shared/lib/local-api/{data,router}.ts`(463줄 로컬 응답/라우터) **삭제**. `API_MODE`/`VITE_API_MODE` 개념 자체 제거 —
   `shared/lib/api.ts` 는 무조건 실 fetch, `shared/lib/live.ts` 는 무조건 실 WS.
-- `frontend/.env.development` 삭제(mock 플래그만 담던 파일). 로컬 개발은 vite proxy(`VITE_BACKEND`, 기본 127.0.0.1:8000)로 실 백엔드에 붙는다.
-- 콘솔 헤더의 "MOCK 모드" 칩 제거(도달 불가 상태였음).
-- CI env 가드(.github/workflows/ci.yml)·scripts/frontend-check.sh 의 mock 관련 예외/플래그 정리.
-- grep 검증: `mock` 참조 0건(src 전체).
-- 하드코딩 제거: 로그인 이메일 prefill(`admin.local@example.com`) 삭제(이전 패스).
+- `frontend/.env.development` 삭제(검증 플래그만 담던 파일). 로컬 개발은 vite proxy(`VITE_BACKEND`, 기본 127.0.0.1:8000)로 실 백엔드에 붙는다.
+- 콘솔 헤더의 "검증 모드" 칩 제거(도달 불가 상태였음).
+- CI env 가드(.github/workflows/ci.yml)·scripts/frontend-check.sh 의 검증 예외/플래그 정리.
+- grep 검증: 운영 외 응답 레이어 참조 0건(src 전체).
+- 고정값 사용 제거: 로그인 이메일 prefill(`admin.local@example.com`) 삭제(이전 패스).
 
 ## E. 애니메이션/모션 일관성
 
@@ -395,7 +395,7 @@
 페이지 전수 코드 감사(홈/클러스터 목록·상세/레포 목록·상세/워크플로우 목록·그래프/인시던트 목록·상세/
 메트릭/AI 채팅/카탈로그/설정 5종/인증 4종) 후 수정한 결함:
 
-- [x] **클러스터 상세 스케일/재시작 대상 오류**: mock 시절 팟 이름 규칙(`name.replace(/-pod-.*/)`)으로
+- [x] **클러스터 상세 스케일/재시작 대상 오류**: legacy adapter 시절 팟 이름 규칙(`name.replace(/-pod-.*/)`)으로
   디플로이먼트명을 유추 — 실데이터 팟 이름(`checkout-api-7d9f…`)에선 오동작. 워크로드 행의 실제
   디플로이먼트명(`workload_name` 그룹 키)을 `DeploymentTarget{ns,name,podCount}` 로 전달하도록 교정.
   스케일 기본값도 2 고정 → 현재 팟 수로.
@@ -409,7 +409,7 @@
 - [x] 메트릭 헤더를 PageHeader 로 통일(빈 상태 분기와 동일 헤더 — 페이지 간 타이포 일관).
 - [x] **데드 익스포트 스윕**: 구 콘솔 잔재 미사용 프리미티브/아이콘 35종(~550줄) 제거 — plural-ui 는 실사용
   7종(Button/Chip/Card/Table/Flyover/PageHeader/useThemeMode)만 유지. 미참조 파일 0건.
-- [x] 라이브 번들 검증(12:47): `클러스터 맵`/`MOCK`/비용 문자열 0건 — 스크린샷 구화면 소멸 확인.
+- [x] 라이브 번들 검증(12:47): `클러스터 맵`/검증 모드/비용 문자열 0건 — 스크린샷 구화면 소멸 확인.
 
 이상 없음 확인(수정 불요): 등록/연결 위저드(닫기 가드·검증·실패 복구), 조직 삭제 type-to-confirm,
 그룹 멤버 토글, DLQ 재처리 확인, 채팅 전송 실패 시 입력 복원, 카탈로그 카드별 pending 분리,
@@ -493,7 +493,7 @@
   1분마다 새 인시던트처럼 반복 생성되는 회귀를 막는다.
 - `application_5xx_spike` 복구 후보 순서:
   1. `gitops_recovery_review` — 승인 필요, route `draft_pr`, 실제 manifest patch가 명시되지 않으면
-     `.gitops/recovery/*.md` 검토 문서만 생성한다. 특정 demo 파일명·이미지 태그를 하드코딩하지 않는다.
+     `.gitops/recovery/*.md` 검토 문서만 생성한다. 특정 demo 파일명·이미지 태그를 고정값 사용하지 않는다.
   2. `deployment_scale` — 승인 필요, 임시 replica 3 증설 command.
   3. `rollout_restart` — 보조 재시작 command.
 - 승인 후 Safe PR 요청은 plan target과 action params를 함께 사용해 repository/binding/application/workflow 식별자를

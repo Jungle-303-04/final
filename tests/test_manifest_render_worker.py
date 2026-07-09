@@ -178,7 +178,7 @@ def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
                 ]
             )
 
-    def fake_urlopen(req: object, timeout: float) -> Response:
+    def stub_urlopen(req: object, timeout: float) -> Response:
         calls.append(
             (
                 req.full_url,  # type: ignore[attr-defined]
@@ -188,7 +188,7 @@ def test_render_reads_manifest_from_github_commit(monkeypatch) -> None:
         )
         return Response()
 
-    monkeypatch.setattr(render.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(render.request, "urlopen", stub_urlopen)
 
     outs = run_handler(
         render.on_git_changed,
@@ -686,14 +686,14 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
         ),
     }
 
-    def fake_urlopen(req: object, timeout: float) -> Response:
+    def stub_urlopen(req: object, timeout: float) -> Response:
         url = req.full_url  # type: ignore[attr-defined]
         calls.append(url)
         return Response(responses[url])
 
     rendered_paths: list[Path] = []
 
-    def fake_run_render_command(command: list[str], error_prefix: str) -> str:
+    def stub_run_render_command(command: list[str], error_prefix: str) -> str:
         assert error_prefix == "kustomize render failed"
         source_path = Path(command[-1])
         rendered_paths.append(source_path)
@@ -716,8 +716,8 @@ def test_render_exports_kustomize_source_from_github_tree(monkeypatch) -> None:
             ]
         )
 
-    monkeypatch.setattr(render.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(render, "run_render_command", fake_run_render_command)
+    monkeypatch.setattr(render.request, "urlopen", stub_urlopen)
+    monkeypatch.setattr(render, "run_render_command", stub_run_render_command)
 
     outs = run_handler(
         render.on_git_changed,

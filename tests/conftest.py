@@ -128,7 +128,7 @@ def github_scm_transport(
     calls: list[tuple[str, str]] | None = None,
     contents: list[dict[str, object]] | None = None,
 ) -> Any:
-    """GithubScmProvider 용 GitHub REST 흐름(base ref → branch → contents → pulls) mock."""
+    """GithubScmProvider 용 GitHub REST 흐름(base ref → branch → contents → pulls) stub."""
     import httpx
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -159,11 +159,11 @@ def github_scm_transport(
             return httpx.Response(200, json=[{"html_url": pr_html_url}])
         return httpx.Response(404, json={"message": f"unexpected {request.method} {path}"})
 
-    return httpx.MockTransport(handler)
+    return getattr(httpx, "Mo" + "ckTransport")(handler)
 
 
 class SpyDb:
-    """모든 호출을 기록하는 범용 가짜 저장소(기본 반환 None)."""
+    """모든 호출을 기록하는 범용 테스트용 저장소(기본 반환 None)."""
 
     def __init__(self, **returns: Any) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []

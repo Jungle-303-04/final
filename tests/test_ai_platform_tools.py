@@ -18,8 +18,8 @@ load_domain_tools()
 load_file(ROOT / "src" / "services" / "ai" / "chat-worker" / "tools.py", "chat_worker_tools")
 
 
-class FakeDb:
-    """도구가 호출하는 읽기 메서드만 흉내내는 가짜 저장소."""
+class StubDb:
+    """도구가 호출하는 읽기 메서드만 흉내내는 테스트용 저장소."""
 
     async def list_rca_reports(self, workspace_id: str, *, limit: int = 5) -> list[dict]:
         self.rca_query = (workspace_id, limit)
@@ -86,7 +86,7 @@ class FakeDb:
 
 def make_context(db: Any = None) -> ToolContext:
     return ToolContext(
-        db=db or FakeDb(),
+        db=db or StubDb(),
         workspace_id="ws-1",
         cluster_id="cluster-1",
         resource_type="pod",
@@ -119,7 +119,7 @@ def test_load_domain_tools_is_idempotent() -> None:
 
 
 def test_list_recent_incidents_reads_rca_reports() -> None:
-    db = FakeDb()
+    db = StubDb()
     result = execute("list_recent_incidents", {"limit": 3}, db=db)
 
     assert db.rca_query == ("ws-1", 3)
@@ -129,7 +129,7 @@ def test_list_recent_incidents_reads_rca_reports() -> None:
 
 
 def test_get_conversation_summary_truncates_and_limits() -> None:
-    db = FakeDb()
+    db = StubDb()
     result = execute("get_conversation_summary", {"conversation_id": "aic-1", "limit": 999}, db=db)
 
     assert db.messages_query == ("ws-1", "aic-1", 20)  # 상한 clamp
@@ -139,7 +139,7 @@ def test_get_conversation_summary_truncates_and_limits() -> None:
 
 
 def test_get_inventory_resource_detail_reads_real_inventory_methods_without_raw() -> None:
-    db = FakeDb()
+    db = StubDb()
     result = execute("get_inventory_resource_detail", {}, db=db)
 
     assert db.inventory_query["cluster_id"] == "cluster-1"
@@ -153,7 +153,7 @@ def test_get_inventory_resource_detail_reads_real_inventory_methods_without_raw(
 
 
 def test_list_resource_rca_reports_filters_to_context_resource() -> None:
-    class RcaDb(FakeDb):
+    class RcaDb(StubDb):
         async def list_rca_reports(
             self, workspace_id: str, *, limit: int = 5
         ) -> list[dict[str, Any]]:

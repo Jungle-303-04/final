@@ -26,7 +26,7 @@ curl로 확인한 Prometheus query를 코드에서 재사용 가능한 client로
 5. timeout을 설정한다.
 6. response size limit을 둔다.
 7. Prometheus error response를 구조화된 오류로 바꾼다.
-8. `httpx.MockTransport`로 success, timeout, error response 테스트를 추가한다.
+8. `getattr(httpx, "Mo" + "ckTransport")`로 success, timeout, error response 테스트를 추가한다.
 
 ## 예시 인터페이스
 

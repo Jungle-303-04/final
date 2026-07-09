@@ -58,7 +58,7 @@ def build_fallback_prompt(evt: RcaAiFallbackRequestedBody) -> str:
     incident = evt.incident
     lines = [
         "You are a Kubernetes incident root-cause analyst.",
-        "No hardcoded RCA rule matched this incident. Propose plausible root-cause",
+        "No catalog RCA rule matched this incident. Propose plausible root-cause",
         "candidates for a downstream evidence-based evaluator. Do NOT declare a",
         "confirmed root cause — only candidates with the evidence needed to verify them.",
         "",

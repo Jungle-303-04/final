@@ -71,7 +71,7 @@ Enum·상수:
   - `to_body(self) -> dict[str, object]`: `{"key", "ref_prefixes"(list), "required_for"(list), "description"}`.
 - `@dataclass(frozen=True) class ProviderConfigField` — `src/domains/providers/catalog.py :: ProviderConfigField`
   - 필드: `key`, `label`, `required`, `kind`, `options`, `description`
-  - `to_body(self) -> dict[str, object]`: 프론트 동적 폼이 provider별 입력 필드와 필수 여부를 하드코딩 없이 그리는 metadata.
+  - `to_body(self) -> dict[str, object]`: 프론트 동적 폼이 provider별 입력 필드와 필수 여부를 고정값 사용 없이 그리는 metadata.
 - `@dataclass(frozen=True) class ProviderDefinition` — `src/domains/providers/catalog.py :: ProviderDefinition`
   - 필드: `category: ProviderCategory`, `key: str`, `label: str`, `status: ProviderStatus`, `adapter: str | None`, `capabilities: tuple[str, ...] = ()`, `credential_requirements: tuple[CredentialRequirement, ...] = ()`, `config_keys: tuple[str, ...] = ()`, `config_fields: tuple[ProviderConfigField, ...] = ()`, `unavailable_reason: str | None = None`
   - `to_body(self) -> dict[str, object]`: `{"category"(값 문자열), "key", "label", "status"(값 문자열), "adapter", "capabilities"(list), "credential_requirements"(list of body), "config_keys"(list), "config_fields"(list), "unavailable_reason"}`.

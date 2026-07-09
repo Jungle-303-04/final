@@ -165,7 +165,7 @@ def event_by_subject(events: list[Any], subject: str) -> Any:
     return next(event for event in events if event.__subject__ == subject)
 
 
-# fault 클래스별 snapshot fixture — src/samples/scenarios/faults/*.yaml 의 기대 증상 재현.
+# fault 클래스별 snapshot 레거시 데이터 — src/samples/scenarios/faults/*.yaml 의 기대 증상 재현.
 CRASHLOOP_SNAPSHOT = snapshot(
     pods=(
         pod(

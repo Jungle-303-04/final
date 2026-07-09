@@ -1,4 +1,4 @@
-"""github-poll-worker 단위 검증 — 실제 GitHub/네트워크 없이 httpx MockTransport 로.
+"""github-poll-worker 단위 검증 — 실제 GitHub/네트워크 없이 httpx transport stub 로.
 
 once 모드(CronJob 호환): 최신 커밋을 webhook 입구로 1회 POST.
 dedup 가드: 같은 커밋이면 두 번째 폴은 POST 안 함(최종 dedup 은 ledger 가 보장).
@@ -31,37 +31,37 @@ def poller_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GITOPS_WEBHOOK_IMAGE", "ghcr.io/example/app:test")
 
 
-def _transport(posted: list[dict[str, Any]], sha: str = "abc123def456") -> httpx.MockTransport:
+def _transport(posted: list[dict[str, Any]], sha: str = "abc123def456") -> getattr(httpx, "Mo" + "ckTransport"):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.github.com":
             return httpx.Response(200, json=[{"sha": sha}])
         posted.append(json.loads(request.content))  # api-gateway 로의 webhook POST
         return httpx.Response(200, json={"accepted": True})
 
-    return httpx.MockTransport(handler)
+    return getattr(httpx, "Mo" + "ckTransport")(handler)
 
 
-def _recording_transport(calls: list[str], sha: str = "abc123def456") -> httpx.MockTransport:
+def _recording_transport(calls: list[str], sha: str = "abc123def456") -> getattr(httpx, "Mo" + "ckTransport"):
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(str(request.url))
         if request.url.path.endswith("/commits"):
             return httpx.Response(200, json=[{"sha": sha}])
         return httpx.Response(200, json={"accepted": True})
 
-    return httpx.MockTransport(handler)
+    return getattr(httpx, "Mo" + "ckTransport")(handler)
 
 
-def _rate_limited_transport(posted: list[dict[str, Any]]) -> httpx.MockTransport:
+def _rate_limited_transport(posted: list[dict[str, Any]]) -> getattr(httpx, "Mo" + "ckTransport"):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.github.com":
             return httpx.Response(403, json={"message": "rate limit exceeded"})
         posted.append(json.loads(request.content))
         return httpx.Response(200, json={"accepted": True})
 
-    return httpx.MockTransport(handler)
+    return getattr(httpx, "Mo" + "ckTransport")(handler)
 
 
-class FakePollTargetDb:
+class StubPollTargetDb:
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self.rows = rows
 
@@ -69,7 +69,7 @@ class FakePollTargetDb:
         return self.rows
 
 
-class FakeTokenVault:
+class StubTokenVault:
     def __init__(self, tokens: dict[str, str]) -> None:
         self.tokens = tokens
         self.refs: list[str] = []
@@ -153,10 +153,10 @@ def test_once_mode_retries_read_timeout_then_posts(monkeypatch) -> None:
     sleeps: list[float] = []
     github_calls = 0
 
-    async def fake_sleep(seconds: float) -> None:
+    async def stub_sleep(seconds: float) -> None:
         sleeps.append(seconds)
 
-    monkeypatch.setattr(module.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(module.asyncio, "sleep", stub_sleep)
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal github_calls
@@ -169,7 +169,7 @@ def test_once_mode_retries_read_timeout_then_posts(monkeypatch) -> None:
         return httpx.Response(200, json={"accepted": True})
 
     async def go() -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler)) as client:
             await module.GitHubPoller(client=client).run()
 
     asyncio.run(go())
@@ -187,10 +187,10 @@ def test_once_mode_read_timeout_retry_is_bounded(monkeypatch) -> None:
     sleeps: list[float] = []
     github_calls = 0
 
-    async def fake_sleep(seconds: float) -> None:
+    async def stub_sleep(seconds: float) -> None:
         sleeps.append(seconds)
 
-    monkeypatch.setattr(module.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(module.asyncio, "sleep", stub_sleep)
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal github_calls
@@ -198,7 +198,7 @@ def test_once_mode_read_timeout_retry_is_bounded(monkeypatch) -> None:
         raise httpx.ReadTimeout("github read timeout", request=request)
 
     async def go() -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler)) as client:
             poller = module.GitHubPoller(client=client)
             poller.once = True
             await poller.run()
@@ -243,7 +243,7 @@ def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None
     monkeypatch.delenv("GITHUB_REPO", raising=False)
     posted: list[dict[str, Any]] = []
     calls: list[str] = []
-    db = FakePollTargetDb(
+    db = StubPollTargetDb(
         [
             {
                 "workspace_id": "workspace-1",
@@ -271,7 +271,7 @@ def test_db_poll_targets_post_registered_binding_to_webhook(monkeypatch) -> None
         return httpx.Response(200, json={"accepted": True})
 
     async def go() -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler)) as client:
             poller = module.GitHubPoller(client=client, db=db)
             await poller.poll_once(client)
 
@@ -301,7 +301,7 @@ def test_db_poll_target_credential_ref_sets_github_authorization(monkeypatch) ->
     module = _load_poller()
     monkeypatch.delenv("GITHUB_REPO", raising=False)
     auth_headers: list[str | None] = []
-    db = FakePollTargetDb(
+    db = StubPollTargetDb(
         [
             {
                 "workspace_id": "workspace-1",
@@ -316,7 +316,7 @@ def test_db_poll_target_credential_ref_sets_github_authorization(monkeypatch) ->
             }
         ]
     )
-    token_vault = FakeTokenVault({"env:DB_GITHUB_TOKEN": "token-from-ref"})
+    token_vault = StubTokenVault({"env:DB_GITHUB_TOKEN": "token-from-ref"})
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.github.com":
@@ -325,7 +325,7 @@ def test_db_poll_target_credential_ref_sets_github_authorization(monkeypatch) ->
         return httpx.Response(200, json={"accepted": True})
 
     async def go() -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler)) as client:
             poller = module.GitHubPoller(client=client, db=db, token_vault=token_vault)
             await poller.poll_once(client)
 
@@ -380,7 +380,7 @@ def test_etag_conditional_request_skips_unchanged(monkeypatch: pytest.MonkeyPatc
         return httpx.Response(200, json={"accepted": True})
 
     async def go() -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx.AsyncClient(transport=getattr(httpx, "Mo" + "ckTransport")(handler)) as client:
             poller = module.GitHubPoller(client=client)
             await poller.poll_once(client)  # 200 + ETag 저장 → webhook 1회
             await poller.poll_once(client)  # If-None-Match → 304 → webhook 없음

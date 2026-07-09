@@ -54,7 +54,7 @@ def now_iso() -> str                             # datetime.now(UTC).isoformat()
 
 ### `control.py` — 제어(쓰기) 명령 허용 네임스페이스 정책
 
-기존에 게이트웨이 검증·command-worker 정책 룰·cluster-agent 쓰기 가드 3곳에 각각 하드코딩돼 있던 "sandbox 만 허용"의 **단일 기준**. 매 호출 시 env 를 읽으므로 재기동 없이 반영된다(호출 빈도 대비 비용 무시 가능).
+기존에 게이트웨이 검증·command-worker 정책 룰·cluster-agent 쓰기 가드 3곳에 각각 고정값 사용돼 있던 "sandbox 만 허용"의 **단일 기준**. 매 호출 시 env 를 읽으므로 재기동 없이 반영된다(호출 빈도 대비 비용 무시 가능).
 
 - `src/packages/config/control.py :: CONTROL_ALLOWED_NAMESPACES_ENV` — `"CONTROL_ALLOWED_NAMESPACES"` (CSV; 기본은 `Sandbox.NAMESPACE` 하나 — env 미설정 시 기존 동작과 동일).
 - `src/packages/config/control.py :: CONTROL_NAMESPACE_DENIED_MESSAGE` — `"namespace is not allowed by control policy"` (3계층 공통 거부 사유 문구).

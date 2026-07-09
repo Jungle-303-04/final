@@ -32,7 +32,7 @@ def load_auth_module():
             sys.modules["settings"] = previous_settings
 
 
-class FakeUserStore:
+class StubUserStore:
     def __init__(self, users: dict[str, dict[str, Any]]) -> None:
         self.users = users
         self.organization_members: dict[str, dict[str, str]] = {}
@@ -104,7 +104,7 @@ class FakeUserStore:
         return any(member["role"] == "owner" for member in self.organization_members.values())
 
 
-class FakeSessionStore:
+class StubSessionStore:
     def __init__(self, auth_module) -> None:
         self.auth_module = auth_module
         self.sessions: dict[str, Any] = {}
@@ -183,7 +183,7 @@ def test_password_login_creates_session() -> None:
     async def run() -> None:
         auth = load_auth_module()
         password_hash = auth.hash_password("local-password")
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "id": "local-user",
@@ -195,7 +195,7 @@ def test_password_login_creates_session() -> None:
                 }
             }
         )
-        sessions = FakeSessionStore(auth)
+        sessions = StubSessionStore(auth)
         service = auth.PasswordAuthService(users, sessions)
 
         session = await service.login("local@example.com", "local-password", "127.0.0.1")
@@ -211,8 +211,8 @@ def test_password_login_creates_session() -> None:
 def test_password_signup_creates_pending_user_and_verification_token() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore({})
-        sessions = FakeSessionStore(auth)
+        users = StubUserStore({})
+        sessions = StubSessionStore(auth)
         service = auth.PasswordAuthService(users, sessions)
 
         challenge = await service.signup(
@@ -237,7 +237,7 @@ def test_password_signup_creates_pending_user_and_verification_token() -> None:
 def test_password_signup_assigns_member_even_after_bootstrap_admin() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "admin@example.com": {
                     "user_id": "admin-user",
@@ -249,7 +249,7 @@ def test_password_signup_assigns_member_even_after_bootstrap_admin() -> None:
                 }
             }
         )
-        sessions = FakeSessionStore(auth)
+        sessions = StubSessionStore(auth)
         service = auth.PasswordAuthService(users, sessions)
 
         await service.signup("member@example.com", "local-password", "local-password", "127.0.0.1")
@@ -264,7 +264,7 @@ def test_password_signup_assigns_member_even_after_bootstrap_admin() -> None:
 def test_password_signup_rejects_password_confirmation_mismatch() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        service = auth.PasswordAuthService(FakeUserStore({}), FakeSessionStore(auth))
+        service = auth.PasswordAuthService(StubUserStore({}), StubSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
             await service.signup(
@@ -279,7 +279,7 @@ def test_password_signup_rejects_password_confirmation_mismatch() -> None:
 def test_password_signup_rejects_duplicate_email() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "user_id": "local-user",
@@ -291,7 +291,7 @@ def test_password_signup_rejects_duplicate_email() -> None:
                 }
             }
         )
-        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+        service = auth.PasswordAuthService(users, StubSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
             await service.signup(
@@ -306,8 +306,8 @@ def test_password_signup_rejects_duplicate_email() -> None:
 def test_password_signup_rate_limit_blocks_before_user_lookup() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore({})
-        sessions = FakeSessionStore(auth)
+        users = StubUserStore({})
+        sessions = StubSessionStore(auth)
         sessions.block_rate_limit = True
         service = auth.PasswordAuthService(users, sessions)
 
@@ -324,7 +324,7 @@ def test_password_signup_rate_limit_blocks_before_user_lookup() -> None:
 def test_password_login_rate_limit_blocks_before_password_check() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "user_id": "local-user",
@@ -336,7 +336,7 @@ def test_password_login_rate_limit_blocks_before_password_check() -> None:
                 }
             }
         )
-        sessions = FakeSessionStore(auth)
+        sessions = StubSessionStore(auth)
         sessions.block_rate_limit = True
         service = auth.PasswordAuthService(users, sessions)
 
@@ -351,7 +351,7 @@ def test_password_login_rate_limit_blocks_before_password_check() -> None:
 def test_resend_verification_requires_pending_password_and_issues_new_token() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "user_id": "local-user",
@@ -363,7 +363,7 @@ def test_resend_verification_requires_pending_password_and_issues_new_token() ->
                 }
             }
         )
-        sessions = FakeSessionStore(auth)
+        sessions = StubSessionStore(auth)
         service = auth.PasswordAuthService(users, sessions)
 
         challenge = await service.resend_email_verification(
@@ -380,7 +380,7 @@ def test_resend_verification_requires_pending_password_and_issues_new_token() ->
 def test_password_login_rejects_pending_email_verification() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "user_id": "local-user",
@@ -392,7 +392,7 @@ def test_password_login_rejects_pending_email_verification() -> None:
                 }
             }
         )
-        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+        service = auth.PasswordAuthService(users, StubSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
             await service.login("local@example.com", "local-password", "127.0.0.1")
@@ -405,7 +405,7 @@ def test_password_login_rejects_pending_email_verification() -> None:
 def test_verify_email_activates_user_and_creates_session() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "user_id": "local-user",
@@ -417,7 +417,7 @@ def test_verify_email_activates_user_and_creates_session() -> None:
                 }
             }
         )
-        sessions = FakeSessionStore(auth)
+        sessions = StubSessionStore(auth)
         sessions.email_tokens["email-token-1"] = {
             "user_id": "local-user",
             "email": "local@example.com",
@@ -442,7 +442,7 @@ def test_verify_email_activates_user_and_creates_session() -> None:
 def test_verify_email_after_bootstrap_requires_admin_approval() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "member@example.com": {
                     "user_id": "member-user",
@@ -455,7 +455,7 @@ def test_verify_email_after_bootstrap_requires_admin_approval() -> None:
             }
         )
         users.organization_members["admin-user"] = {"workspace_id": "default", "role": "owner"}
-        sessions = FakeSessionStore(auth)
+        sessions = StubSessionStore(auth)
         sessions.email_tokens["email-token-1"] = {
             "user_id": "member-user",
             "email": "member@example.com",
@@ -478,7 +478,7 @@ def test_verify_email_after_bootstrap_requires_admin_approval() -> None:
 def test_password_login_rejects_pending_approval() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "user_id": "local-user",
@@ -490,7 +490,7 @@ def test_password_login_rejects_pending_approval() -> None:
                 }
             }
         )
-        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+        service = auth.PasswordAuthService(users, StubSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
             await service.login("local@example.com", "local-password", "127.0.0.1")
@@ -503,7 +503,7 @@ def test_password_login_rejects_pending_approval() -> None:
 def test_admin_approval_activates_member_in_workspace() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "member@example.com": {
                     "user_id": "member-user",
@@ -515,7 +515,7 @@ def test_admin_approval_activates_member_in_workspace() -> None:
                 }
             }
         )
-        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+        service = auth.PasswordAuthService(users, StubSessionStore(auth))
 
         user = await service.approve_user("member-user", "default")
 
@@ -529,7 +529,7 @@ def test_admin_approval_activates_member_in_workspace() -> None:
 def test_password_login_rejects_wrong_password() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        users = FakeUserStore(
+        users = StubUserStore(
             {
                 "local@example.com": {
                     "id": "local-user",
@@ -541,7 +541,7 @@ def test_password_login_rejects_wrong_password() -> None:
                 }
             }
         )
-        service = auth.PasswordAuthService(users, FakeSessionStore(auth))
+        service = auth.PasswordAuthService(users, StubSessionStore(auth))
 
         with pytest.raises(HTTPException) as exc:
             await service.login("local@example.com", "wrong-password", "127.0.0.1")
@@ -554,8 +554,8 @@ def test_password_login_rejects_wrong_password() -> None:
 def test_password_logout_deletes_session() -> None:
     async def run() -> None:
         auth = load_auth_module()
-        sessions = FakeSessionStore(auth)
-        service = auth.PasswordAuthService(FakeUserStore({}), sessions)
+        sessions = StubSessionStore(auth)
+        service = auth.PasswordAuthService(StubUserStore({}), sessions)
         session = await sessions.create_session("local-user", ["service_admin"])
 
         await service.logout(session.token)
