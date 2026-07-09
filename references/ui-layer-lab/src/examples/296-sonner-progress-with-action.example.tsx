@@ -6,14 +6,20 @@ export default function SonnerProgressWithActionExample() {
 
   function advance() {
     setProgress((value) => Math.min(100, value + 25));
-    toast.info("Upload progress updated", { description: "Artifact bundle is still available in the job tray." });
+    toast.info("업로드 진행률 갱신", {
+      description: "아티팩트 묶음은 작업 트레이에서 계속 확인할 수 있습니다.",
+      action: {
+        label: "작업 트레이 열기",
+        onClick: () => undefined
+      }
+    });
   }
 
   return (
     <div className="toast-state-card">
-      <strong>Artifact upload {progress}%</strong>
+      <strong aria-live="polite">아티팩트 업로드 {progress}%</strong>
       <div className="progress-track"><div style={{ width: `${progress}%` }} /></div>
-      <button className="command-trigger" onClick={advance}>Advance Upload</button>
+      <button className="command-trigger stable-wide" onClick={advance} type="button">업로드 진행</button>
     </div>
   );
 }
