@@ -1846,6 +1846,7 @@ function RunFilterField({
         <option value="unhealthy">Unhealthy</option>
         <option value="verification_failed">Verification failed</option>
         <option value="verification_pending_timeout">Verification timeout</option>
+        <option value="active_change_freeze">Active freeze</option>
         <option value="change_freeze_override">Freeze override</option>
         <option value="waiting_for_approval">Waiting approval</option>
       </select>
@@ -1884,7 +1885,7 @@ function RunSummary({
     { label: 'Verification failed', count: summary.verification_failed_runs ?? 0, filter: 'verification_failed' },
     { label: 'Verification timeout', count: summary.verification_pending_timeout_runs ?? 0, filter: 'verification_pending_timeout' },
     { label: 'Freeze override', count: summary.change_freeze_override_runs ?? 0, filter: 'change_freeze_override' },
-    { label: 'Active freeze', count: summary.active_change_freeze_runs ?? 0 },
+    { label: 'Active freeze', count: summary.active_change_freeze_runs ?? 0, filter: 'active_change_freeze' },
     { label: 'Stale', count: summary.stale_runs ?? 0, filter: 'stale' },
   ];
   return (
