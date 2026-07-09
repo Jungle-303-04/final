@@ -572,7 +572,7 @@ const supplementalExamples: ExampleCatalogEntry[] = [
     id: "react-flow-undo-redo",
     file: "230-react-flow-undo-redo.example.tsx",
     category: "flow-builder",
-    title: "플로우 Undo/Redo",
+    title: "플로우 되돌리기/다시 실행",
     description: "노드 편집 작업을 되돌리거나 다시 적용합니다.",
     motionIntent: "history 이동은 inspector와 graph 상태를 동시에 갱신합니다.",
     variantIds: ["react-flow-copy-paste", "react-flow-download-panel"]

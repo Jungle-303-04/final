@@ -6,9 +6,9 @@ export default function SonnerUndoStackExample() {
 
   function archive(item: string) {
     setArchived((items) => [...items, item]);
-    toast(`${item} archived`, {
+    toast(`${item} 보관됨`, {
       action: {
-        label: "Undo",
+        label: "되돌리기",
         onClick: () => setArchived((items) => items.filter((entry) => entry !== item))
       }
     });
@@ -16,8 +16,8 @@ export default function SonnerUndoStackExample() {
 
   return (
     <div className="toast-state-card">
-      <strong>{archived.length} archived</strong>
-      <button className="command-trigger" onClick={() => archive(`run-${archived.length + 1}`)}>Archive Run</button>
+      <strong>보관된 실행 {archived.length}개</strong>
+      <button className="command-trigger stable-wide" onClick={() => archive(`run-${archived.length + 1}`)} type="button">실행 보관</button>
     </div>
   );
 }
