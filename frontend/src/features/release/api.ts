@@ -112,6 +112,18 @@ export function useReleaseRunReport() {
   });
 }
 
+export function useReleaseRunReportExport() {
+  const { push } = useToast();
+  return useMutation({
+    mutationFn: (runId: string) => getBlob(`/release-runs/${encodeURIComponent(runId)}/report/export`),
+    onSuccess: (_blob, runId) => {
+      downloadBlob(_blob, `release-run-${safeFilename(runId)}.md`);
+      push({ tone: 'success', title: 'Run report downloaded', description: 'Release run report Markdown has been downloaded.' });
+    },
+    onError: err => push({ tone: 'danger', title: 'Report download failed', description: (err as Error).message || 'Please try again.' }),
+  });
+}
+
 export const useReleaseAudit = (planId?: string, runId?: string, eventType?: string) =>
   useQuery({
     queryKey: releaseKeys.audit(planId, runId, eventType),
@@ -185,6 +197,10 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+function safeFilename(value: string) {
+  return value.trim().replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 120) || 'report';
 }
 
 export function useReleaseReadiness() {

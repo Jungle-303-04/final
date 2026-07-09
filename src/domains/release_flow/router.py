@@ -241,6 +241,35 @@ async def get_release_run_report(
     return ReleaseRunReportResponse(report=release_run_report(run, public_events))
 
 
+@router.get(gateway_routes.RELEASE_RUN_REPORT_EXPORT_PATH)
+async def export_release_run_report(
+    run_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    audit_events = release_audit_events_for_current(
+        db,
+        current,
+        workspace_id,
+        plan_id=None,
+        run_id=run_id,
+        event_type=None,
+        limit=50,
+    )
+    report = release_run_report(run, [public_release_audit_event(event) for event in audit_events])
+    filename = f"release-run-{safe_release_report_filename(run_id)}.md"
+    return Response(
+        content=str(report.get("markdown") or ""),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get(gateway_routes.RELEASE_PLAN_PATH, response_model=ReleasePlanResponse)
 async def get_release_plan(
     plan_id: str,
@@ -3246,6 +3275,11 @@ def release_run_report_markdown(
                 f"- {event.get('event_type') or 'event'}: {event.get('message') or 'recorded'}{created_suffix}"
             )
     return "\n".join(lines)
+
+
+def safe_release_report_filename(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in value.strip())
+    return safe[:120] or "report"
 
 
 def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
