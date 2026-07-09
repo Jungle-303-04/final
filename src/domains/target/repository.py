@@ -476,6 +476,9 @@ class TargetAgentRepository(DatabaseConnection):
                         select(
                             table.c.job_id,
                             table.c.evidence_key,
+                            table.c.provider_key,
+                            table.c.source_id,
+                            table.c.window_start,
                             table.c.status,
                         ).where(
                             table.c.job_id == job_id,
@@ -515,7 +518,14 @@ class TargetAgentRepository(DatabaseConnection):
                         error=error or None,
                         updated_at=func.now(),
                     )
-                    .returning(table.c.job_id, table.c.evidence_key, table.c.status)
+                    .returning(
+                        table.c.job_id,
+                        table.c.evidence_key,
+                        table.c.provider_key,
+                        table.c.source_id,
+                        table.c.window_start,
+                        table.c.status,
+                    )
                 )
                 .mappings()
                 .one()

@@ -1243,3 +1243,48 @@ spec:
                 name: management-runtime-config
             - secretRef:
                 name: management-runtime-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-flow-worker
+  namespace: management
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: release-flow-worker
+  template:
+    metadata:
+      labels:
+        app: release-flow-worker
+    spec:
+      containers:
+        - name: worker
+          image: kubeheal-service:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          command: ["python", "src/services/projection/release-flow-worker/app.py"]
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/heartbeat')<30 else 1)"
+            initialDelaySeconds: 240
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: management-runtime-config
+            - secretRef:
+                name: management-runtime-secret

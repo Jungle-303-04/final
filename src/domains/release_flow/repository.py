@@ -1,0 +1,987 @@
+"""Release-flow repository."""
+
+from __future__ import annotations
+
+import hashlib
+import uuid
+from collections import defaultdict
+from collections.abc import Mapping
+
+from typing import Any
+
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from domains.gitops.models import WorkflowRun
+from domains.release_flow.execution import execution_profile
+from domains.release_flow.models import (
+    ReleasePlan,
+    ReleasePlanStep,
+    ReleaseRun,
+    ReleaseRunEvent,
+    ReleaseRunStep,
+)
+from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.storage.engine import DatabaseConnection, iso_or_none
+
+DEFAULT_RELEASE_PLAN_STATUS = "draft"
+DEFAULT_RELEASE_RUN_STATUS = "running"
+PENDING_STEP_STATUS = "pending"
+DISPATCHED_STEP_STATUS = "dispatched"
+RUNNING_STEP_STATUS = "running"
+WAITING_APPROVAL_STEP_STATUS = "waiting_for_approval"
+SUCCEEDED_STEP_STATUS = "succeeded"
+FAILED_STEP_STATUS = "failed"
+TERMINAL_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
+
+
+class ReleaseFlowRepository(DatabaseConnection):
+    def list_release_plans(self, workspace_id: str, *, limit: int = 100) -> list[JsonObject]:
+        table = ReleasePlan.__table__
+        step_table = ReleasePlanStep.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.updated_at.desc(), table.c.name.asc())
+            .limit(max(1, min(limit, 500)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+            plan_ids = [str(row["plan_id"]) for row in rows]
+            steps_by_plan: dict[str, list[JsonObject]] = defaultdict(list)
+            if plan_ids:
+                step_rows = (
+                    conn.execute(
+                        select(step_table)
+                        .where(
+                            step_table.c.workspace_id == workspace_id,
+                            step_table.c.plan_id.in_(plan_ids),
+                        )
+                        .order_by(step_table.c.plan_id.asc(), step_table.c.position.asc())
+                    )
+                    .mappings()
+                    .all()
+                )
+                for step_row in step_rows:
+                    steps_by_plan[str(step_row["plan_id"])].append(
+                        serialize_release_step(step_row)
+                    )
+        return [
+            serialize_release_plan(row, steps=steps_by_plan[str(row["plan_id"])]) for row in rows
+        ]
+
+    def get_release_plan(self, workspace_id: str, plan_id: str) -> JsonObject | None:
+        plan_table = ReleasePlan.__table__
+        step_table = ReleasePlanStep.__table__
+        plan_statement = (
+            select(plan_table)
+            .where(plan_table.c.workspace_id == workspace_id, plan_table.c.plan_id == plan_id)
+            .limit(1)
+        )
+        step_statement = (
+            select(step_table)
+            .where(step_table.c.workspace_id == workspace_id, step_table.c.plan_id == plan_id)
+            .order_by(step_table.c.position.asc())
+        )
+        with self.connection() as conn:
+            plan = conn.execute(plan_statement).mappings().first()
+            if plan is None:
+                return None
+            steps = conn.execute(step_statement).mappings().all()
+        return serialize_release_plan(plan, steps=[serialize_release_step(row) for row in steps])
+
+    def upsert_release_plan(self, payload: JsonObject) -> JsonObject:
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        plan_id = derive_release_plan_id({**payload, "workspace_id": workspace_id})
+        plan_table = ReleasePlan.__table__
+        insert = pg_insert(plan_table).values(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            name=str(payload["name"]),
+            description=str(payload.get("description", "")),
+            status=str(payload.get("status", DEFAULT_RELEASE_PLAN_STATUS)),
+            settings=dict(payload.get("settings", {})),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[plan_table.c.plan_id],
+            set_={
+                "name": insert.excluded.name,
+                "description": insert.excluded.description,
+                "status": insert.excluded.status,
+                "settings": insert.excluded.settings,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+            step_table = ReleasePlanStep.__table__
+            conn.execute(delete(step_table).where(step_table.c.plan_id == plan_id))
+            for index, raw_step in enumerate(payload.get("steps", [])):
+                if isinstance(raw_step, Mapping):
+                    conn.execute(
+                        pg_insert(ReleasePlanStep.__table__).values(
+                            **release_step_values(workspace_id, plan_id, raw_step, index)
+                        )
+                    )
+        return self.get_release_plan(workspace_id, plan_id) or {
+            **payload,
+            "workspace_id": workspace_id,
+            "plan_id": plan_id,
+        }
+
+    def list_release_runs(
+        self,
+        workspace_id: str,
+        *,
+        plan_id: str | None = None,
+        limit: int = 50,
+    ) -> list[JsonObject]:
+        table = ReleaseRun.__table__
+        statement = (
+            select(table)
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.created_at.desc())
+            .limit(max(1, min(limit, 200)))
+        )
+        if plan_id:
+            statement = statement.where(table.c.plan_id == plan_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self.get_release_run(workspace_id, str(row["run_id"])) or serialize_release_run(row) for row in rows]
+
+    def summarize_release_runs(
+        self,
+        workspace_id: str,
+        *,
+        plan_id: str | None = None,
+        recent: int = 10,
+    ) -> dict[str, Any]:
+        table = ReleaseRun.__table__
+        statement = (
+            select(
+                table.c.run_id,
+                table.c.plan_id,
+                table.c.status,
+            )
+            .where(table.c.workspace_id == workspace_id)
+            .order_by(table.c.created_at.desc())
+        )
+        if plan_id:
+            statement = statement.where(table.c.plan_id == plan_id)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        status_breakdown: dict[str, int] = defaultdict(int)
+        plan_breakdown: dict[str, int] = defaultdict(int)
+        for row in rows:
+            status_breakdown[str(row["status"])] += 1
+            plan_breakdown[str(row["plan_id"])] += 1
+        recent_runs = rows[:recent]
+        summary_runs = [
+            {
+                "run_id": str(item["run_id"]),
+                "plan_id": str(item["plan_id"]),
+                "status": str(item["status"]),
+            }
+            for item in recent_runs
+        ]
+        return {
+            "total_runs": len(rows),
+            "status_breakdown": dict(status_breakdown),
+            "plan_breakdown": dict(plan_breakdown),
+            "recent_runs": summary_runs,
+        }
+
+    def get_release_run(self, workspace_id: str, run_id: str) -> JsonObject | None:
+        run_table = ReleaseRun.__table__
+        step_table = ReleaseRunStep.__table__
+        event_table = ReleaseRunEvent.__table__
+        run_statement = (
+            select(run_table)
+            .where(run_table.c.workspace_id == workspace_id, run_table.c.run_id == run_id)
+            .limit(1)
+        )
+        step_statement = (
+            select(step_table)
+            .where(step_table.c.workspace_id == workspace_id, step_table.c.run_id == run_id)
+            .order_by(step_table.c.wave.asc(), step_table.c.created_at.asc())
+        )
+        event_statement = (
+            select(event_table)
+            .where(event_table.c.workspace_id == workspace_id, event_table.c.run_id == run_id)
+            .order_by(event_table.c.created_at.asc())
+        )
+        with self.connection() as conn:
+            run = conn.execute(run_statement).mappings().first()
+            if run is None:
+                return None
+            step_rows = conn.execute(step_statement).mappings().all()
+            workflow_ids = [
+                str(row["workflow_run_id"])
+                for row in step_rows
+                if row.get("workflow_run_id")
+            ]
+            workflows: dict[str, Mapping[str, Any]] = {}
+            if workflow_ids:
+                workflow_rows = (
+                    conn.execute(
+                        select(WorkflowRun.__table__).where(
+                            WorkflowRun.__table__.c.workflow_run_id.in_(workflow_ids)
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                workflows = {str(row["workflow_run_id"]): row for row in workflow_rows}
+            events = conn.execute(event_statement).mappings().all()
+        steps = [
+            serialize_release_run_step(row, workflow=workflows.get(str(row.get("workflow_run_id"))))
+            for row in step_rows
+        ]
+        return serialize_release_run(
+            run,
+            steps=steps,
+            events=[serialize_release_run_event(row) for row in events],
+        )
+
+    def create_release_run(self, payload: JsonObject) -> JsonObject:
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        run_id = derive_release_run_id(payload)
+        plan = mapping_value(payload.get("plan"))
+        preview = mapping_value(payload.get("preview"))
+        settings = dict(mapping_value(plan.get("settings")))
+        profile = execution_profile(plan)
+        settings.setdefault("runtime_mode", profile.runtime_mode)
+        settings.setdefault("provider_mode", profile.provider_mode)
+        plan_id = str(plan.get("plan_id") or derive_release_plan_id({**plan, "workspace_id": workspace_id}))
+        table = ReleaseRun.__table__
+        insert = pg_insert(table).values(
+            run_id=run_id,
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            plan_name=str(plan.get("name") or "Release plan"),
+            status=str(payload.get("status", DEFAULT_RELEASE_RUN_STATUS)),
+            current_wave=int(payload.get("current_wave", 1)),
+            total_waves=len(list_value(preview.get("waves"))),
+            started_by=payload.get("started_by"),
+            settings=settings,
+            github=github_release_metadata(plan),
+            rollback=rollback_metadata(plan),
+            health=release_health_summary([], preview),
+            updated_at=func.now(),
+        )
+        statement = insert.on_conflict_do_update(
+            index_elements=[table.c.run_id],
+            set_={
+                "status": insert.excluded.status,
+                "current_wave": insert.excluded.current_wave,
+                "total_waves": insert.excluded.total_waves,
+                "settings": insert.excluded.settings,
+                "github": insert.excluded.github,
+                "rollback": insert.excluded.rollback,
+                "health": insert.excluded.health,
+                "updated_at": func.now(),
+            },
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+            for step in release_run_steps_from_plan(workspace_id, run_id, plan, preview):
+                conn.execute(pg_insert(ReleaseRunStep.__table__).values(**step))
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        "release.started",
+                        "Release run created.",
+                        payload.get("started_by"),
+                        {
+                            "plan_id": plan_id,
+                            "plan_name": plan.get("name"),
+                            "total_waves": len(list_value(preview.get("waves"))),
+                            "approval_policy": settings.get("approval_policy"),
+                            "rollback_policy": settings.get("rollback_policy"),
+                            "execution_profile": profile.to_body(),
+                        },
+                    )
+                    )
+            )
+        return self.get_release_run(workspace_id, run_id) or {
+            "run_id": run_id,
+            "workspace_id": workspace_id,
+            "plan_id": plan_id,
+        }
+
+    def archive_release_plan(
+        self,
+        workspace_id: str,
+        plan_id: str,
+        *,
+        reason: str | None = None,
+    ) -> JsonObject | None:
+        table = ReleasePlan.__table__
+        values = {"status": "archived"}
+        if reason:
+            values["settings"] = table.c.settings.op("||")({"archive": {"reason": reason}})
+        statement = (
+            table.update()
+            .where(table.c.workspace_id == workspace_id, table.c.plan_id == plan_id)
+            .values(**values, updated_at=func.now())
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+        return self.get_release_plan(workspace_id, plan_id)
+
+    def has_active_release_runs(self, workspace_id: str, plan_id: str) -> bool:
+        table = ReleaseRun.__table__
+        statement = (
+            select(func.count())
+            .select_from(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.plan_id == plan_id,
+                table.c.status.not_in(TERMINAL_RUN_STATUSES),
+            )
+        )
+        with self.connection() as conn:
+            value = conn.execute(statement).scalar_one()
+            return int(value or 0) > 0
+
+    def delete_release_plan(self, workspace_id: str, plan_id: str) -> bool:
+        plan_table = ReleasePlan.__table__
+        plan_step_table = ReleasePlanStep.__table__
+        run_table = ReleaseRun.__table__
+        run_step_table = ReleaseRunStep.__table__
+        run_event_table = ReleaseRunEvent.__table__
+
+        with self.connection() as conn:
+            plan = conn.execute(
+                select(plan_table.c.plan_id)
+                .where(plan_table.c.workspace_id == workspace_id, plan_table.c.plan_id == plan_id)
+                .limit(1)
+            ).first()
+            if plan is None:
+                return False
+
+            run_ids = [
+                str(row["run_id"])
+                for row in conn.execute(
+                    select(run_table.c.run_id).where(
+                        run_table.c.workspace_id == workspace_id,
+                        run_table.c.plan_id == plan_id,
+                    )
+                ).all()
+            ]
+            if run_ids:
+                conn.execute(delete(run_event_table).where(run_event_table.c.run_id.in_(run_ids)))
+                conn.execute(delete(run_step_table).where(run_step_table.c.run_id.in_(run_ids)))
+                conn.execute(delete(run_table).where(run_table.c.run_id.in_(run_ids)))
+
+            conn.execute(delete(plan_step_table).where(plan_step_table.c.plan_id == plan_id))
+            conn.execute(delete(plan_table).where(plan_table.c.plan_id == plan_id))
+        return True
+
+    def delete_release_run(self, workspace_id: str, run_id: str) -> bool:
+        run_table = ReleaseRun.__table__
+        run_step_table = ReleaseRunStep.__table__
+        run_event_table = ReleaseRunEvent.__table__
+
+        with self.connection() as conn:
+            run = conn.execute(
+                select(run_table.c.run_id).where(
+                    run_table.c.workspace_id == workspace_id,
+                    run_table.c.run_id == run_id,
+                )
+            ).first()
+            if run is None:
+                return False
+            conn.execute(delete(run_event_table).where(run_event_table.c.run_id == run_id))
+            conn.execute(delete(run_step_table).where(run_step_table.c.run_id == run_id))
+            conn.execute(delete(run_table).where(run_table.c.run_id == run_id))
+        return True
+
+    def mark_release_run_step_dispatched(
+        self,
+        workspace_id: str,
+        run_id: str,
+        application_id: str,
+        *,
+        workflow_run_id: str,
+        event_id: str,
+        correlation_id: str,
+        actor: str | None = None,
+        details: JsonObject | None = None,
+    ) -> None:
+        step_table = ReleaseRunStep.__table__
+        where_clause = (
+            step_table.c.workspace_id == workspace_id,
+            step_table.c.run_id == run_id,
+            step_table.c.application_id == application_id,
+        )
+        merged_details = dict(details or {})
+        with self.connection() as conn:
+            existing_details = conn.execute(
+                select(step_table.c.details).where(*where_clause).limit(1)
+            ).scalar_one_or_none()
+            if isinstance(existing_details, dict):
+                merged_details = {**existing_details, **merged_details}
+            conn.execute(
+                step_table.update()
+                .where(*where_clause)
+                .values(
+                    status=DISPATCHED_STEP_STATUS,
+                    workflow_run_id=workflow_run_id,
+                    event_id=event_id,
+                    correlation_id=correlation_id,
+                    details=merged_details,
+                    updated_at=func.now(),
+                )
+            )
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        "wave.dispatched",
+                        f"Application {application_id} dispatched to GitOps.",
+                        actor,
+                        {
+                            "application_id": application_id,
+                            "workflow_run_id": workflow_run_id,
+                            "event_id": event_id,
+                            "correlation_id": correlation_id,
+                            **dict(details or {}),
+                        },
+                    )
+                )
+            )
+
+    def project_release_workflow_event(self, payload: JsonObject) -> JsonObject | None:
+        workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
+        workflow_run_id = str(payload.get("workflow_run_id") or "")
+        if not workflow_run_id:
+            return None
+
+        step_table = ReleaseRunStep.__table__
+        run_table = ReleaseRun.__table__
+        step_status = str(payload.get("step_status") or "")
+        health_status = str(payload.get("health_status") or "")
+        approval_id = str(payload.get("approval_id") or "")
+        event_type = str(payload.get("event_type") or "workflow.projected")
+        message = str(payload.get("message") or event_type)
+        details = dict(mapping_value(payload.get("details")))
+
+        with self.connection() as conn:
+            step_row = (
+                conn.execute(
+                    select(step_table)
+                    .where(
+                        step_table.c.workspace_id == workspace_id,
+                        step_table.c.workflow_run_id == workflow_run_id,
+                    )
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
+            if step_row is None:
+                return None
+
+            run_id = str(step_row["run_id"])
+            current_details = dict(step_row.get("details") or {})
+            current_health = dict(step_row.get("health") or {})
+            merged_details = merge_projection_details(current_details, details)
+            merged_health = current_health
+            if health_status:
+                merged_health = {**current_health, "status": health_status}
+
+            values: JsonObject = {
+                "details": merged_details,
+                "updated_at": func.now(),
+            }
+            if step_status:
+                values["status"] = step_status
+            if health_status:
+                values["health"] = merged_health
+            if approval_id:
+                values["approval_id"] = approval_id
+
+            conn.execute(
+                step_table.update()
+                .where(
+                    step_table.c.workspace_id == workspace_id,
+                    step_table.c.workflow_run_id == workflow_run_id,
+                )
+                .values(**values)
+            )
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        event_type,
+                        message,
+                        payload.get("actor"),
+                        {
+                            "workflow_run_id": workflow_run_id,
+                            "application_id": str(
+                                payload.get("application_id") or step_row["application_id"]
+                            ),
+                            **details,
+                        },
+                    )
+                )
+            )
+            step_rows = (
+                conn.execute(
+                    select(step_table).where(
+                        step_table.c.workspace_id == workspace_id,
+                        step_table.c.run_id == run_id,
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            run_row = (
+                conn.execute(
+                    select(run_table)
+                    .where(run_table.c.workspace_id == workspace_id, run_table.c.run_id == run_id)
+                    .limit(1)
+                )
+                .mappings()
+                .first()
+            )
+            if run_row is not None:
+                next_status = projected_release_status(run_row, step_rows)
+                conn.execute(
+                    run_table.update()
+                    .where(run_table.c.workspace_id == workspace_id, run_table.c.run_id == run_id)
+                    .values(
+                        status=next_status,
+                        health=release_health_summary([dict(row) for row in step_rows]),
+                        updated_at=func.now(),
+                    )
+                )
+        return self.get_release_run(workspace_id, run_id)
+
+    def update_release_run_status(
+        self,
+        workspace_id: str,
+        run_id: str,
+        status: str,
+        *,
+        current_wave: int | None = None,
+        actor: str | None = None,
+        message: str | None = None,
+        details: JsonObject | None = None,
+    ) -> JsonObject | None:
+        table = ReleaseRun.__table__
+        values: JsonObject = {"status": status, "updated_at": func.now()}
+        if current_wave is not None:
+            values["current_wave"] = current_wave
+        statement = (
+            table.update()
+            .where(table.c.workspace_id == workspace_id, table.c.run_id == run_id)
+            .values(**values)
+        )
+        with self.connection() as conn:
+            conn.execute(statement)
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        f"release.{status}",
+                        message or f"Release run marked {status}.",
+                        actor,
+                        details or {},
+                    )
+                )
+            )
+        return self.get_release_run(workspace_id, run_id)
+
+    def request_release_run_rollback(
+        self,
+        workspace_id: str,
+        run_id: str,
+        *,
+        actor: str | None,
+        reason: str,
+    ) -> JsonObject | None:
+        table = ReleaseRun.__table__
+        current = self.get_release_run(workspace_id, run_id)
+        if current is None:
+            return None
+        rollback = {
+            **dict(current.get("rollback") or {}),
+            "requested": True,
+            "requested_by": actor,
+            "reason": reason,
+        }
+        with self.connection() as conn:
+            conn.execute(
+                table.update()
+                .where(table.c.workspace_id == workspace_id, table.c.run_id == run_id)
+                .values(status="rollback_requested", rollback=rollback, updated_at=func.now())
+            )
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        "rollback.requested",
+                        "Rollback requested for release run.",
+                        actor,
+                        rollback,
+                    )
+                )
+            )
+        return self.get_release_run(workspace_id, run_id)
+
+
+def derive_release_plan_id(payload: JsonObject) -> str:
+    explicit = payload.get("plan_id")
+    if explicit:
+        return str(explicit)
+    raw = "|".join(
+        [
+            str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            str(payload.get("name", "")),
+        ]
+    )
+    return f"release-plan-{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+
+
+def derive_release_step_id(plan_id: str, payload: Mapping[str, Any], position: int) -> str:
+    explicit = payload.get("step_id")
+    if explicit:
+        return str(explicit)
+    raw = "|".join([plan_id, str(payload.get("application_id", "")), str(position)])
+    return f"release-step-{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+
+
+def derive_release_run_id(payload: JsonObject) -> str:
+    explicit = payload.get("run_id")
+    if explicit:
+        return str(explicit)
+    return f"release-run-{uuid.uuid4().hex[:24]}"
+
+
+def derive_release_run_step_id(run_id: str, application_id: str) -> str:
+    raw = f"{run_id}|{application_id}"
+    return f"release-run-step-{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+
+
+def derive_release_run_event_id(run_id: str, event_type: str) -> str:
+    raw = f"{run_id}|{event_type}|{uuid.uuid4().hex}"
+    return f"release-audit-{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
+
+
+def release_step_values(
+    workspace_id: str,
+    plan_id: str,
+    payload: Mapping[str, Any],
+    fallback_position: int,
+) -> JsonObject:
+    position = int(payload.get("position", fallback_position))
+    application_id = str(payload["application_id"])
+    name = str(payload.get("name") or application_id)
+    depends_on = payload.get("depends_on", [])
+    if not isinstance(depends_on, list):
+        depends_on = []
+    config = payload.get("config", {})
+    if not isinstance(config, Mapping):
+        config = {}
+    return {
+        "step_id": derive_release_step_id(plan_id, payload, position),
+        "workspace_id": workspace_id,
+        "plan_id": plan_id,
+        "application_id": application_id,
+        "name": name,
+        "position": position,
+        "depends_on": [str(item) for item in depends_on],
+        "config": dict(config),
+        "updated_at": func.now(),
+    }
+
+
+def release_run_steps_from_plan(
+    workspace_id: str,
+    run_id: str,
+    plan: Mapping[str, Any],
+    preview: Mapping[str, Any],
+) -> list[JsonObject]:
+    preview_by_app = {
+        str(item.get("application_id")): item
+        for item in list_value(preview.get("steps"))
+        if isinstance(item, Mapping)
+    }
+    profile = execution_profile(plan)
+    values: list[JsonObject] = []
+    for index, raw_step in enumerate(list_value(plan.get("steps"))):
+        if not isinstance(raw_step, Mapping):
+            continue
+        application_id = str(raw_step.get("application_id") or "")
+        if not application_id:
+            continue
+        preview_step = preview_by_app.get(application_id, {})
+        config = mapping_value(raw_step.get("config"))
+        wave = int_like(preview_step.get("wave"), 1)
+        values.append(
+            {
+                "run_step_id": derive_release_run_step_id(run_id, application_id),
+                "workspace_id": workspace_id,
+                "run_id": run_id,
+                "step_id": str(raw_step.get("step_id") or preview_step.get("step_id") or f"step-{index}"),
+                "application_id": application_id,
+                "name": str(raw_step.get("name") or preview_step.get("name") or application_id),
+                "wave": wave,
+                "status": PENDING_STEP_STATUS,
+                "workflow_run_id": None,
+                "approval_id": None,
+                "event_id": None,
+                "correlation_id": None,
+                "health": {
+                    "status": "pending",
+                    "path": str(config.get("health_check_path") or "/readyz"),
+                    "timeout_seconds": int_like(config.get("timeout_seconds"), 600),
+                },
+                "rollback": {
+                    "policy": str(mapping_value(plan.get("settings")).get("rollback_policy") or "manual"),
+                    "safe_pr_ready": str(mapping_value(plan.get("settings")).get("rollback_policy") or "") == "safe_pr",
+                },
+                "details": {
+                    "runtime_mode": profile.runtime_mode,
+                    "provider_mode": profile.provider_mode,
+                    "side_effects": profile.side_effects,
+                    "gate": str(preview_step.get("gate") or config.get("approval_gate") or "inherit"),
+                    "strategy": str(preview_step.get("strategy") or config.get("strategy") or "rolling"),
+                    "environment": str(preview_step.get("environment") or config.get("environment") or ""),
+                    "config": dict(config),
+                    "github": github_step_metadata(config),
+                },
+                "updated_at": func.now(),
+            }
+        )
+    return values
+
+
+def release_run_event_values(
+    workspace_id: str,
+    run_id: str,
+    event_type: str,
+    message: str,
+    actor: Any,
+    details: JsonObject,
+) -> JsonObject:
+    return {
+        "audit_id": derive_release_run_event_id(run_id, event_type),
+        "workspace_id": workspace_id,
+        "run_id": run_id,
+        "event_type": event_type,
+        "message": message,
+        "actor": str(actor) if actor is not None else None,
+        "details": dict(details),
+    }
+
+
+def github_release_metadata(plan: Mapping[str, Any]) -> JsonObject:
+    settings = mapping_value(plan.get("settings"))
+    steps = [step for step in list_value(plan.get("steps")) if isinstance(step, Mapping)]
+    tag = str(settings.get("release_tag") or settings.get("git_tag") or "").strip()
+    first_repo = ""
+    commits: list[JsonObject] = []
+    for step in steps:
+        config = mapping_value(step.get("config"))
+        item = github_step_metadata(config)
+        if item:
+            commits.append({**item, "application_id": str(step.get("application_id") or "")})
+            first_repo = first_repo or str(config.get("repo_ref") or "")
+    release_url = str(settings.get("release_url") or "")
+    if not release_url and tag and github_repo_ref_ok(first_repo):
+        release_url = f"https://github.com/{first_repo}/releases/tag/{tag}"
+    return {
+        "tag": tag,
+        "release_url": release_url,
+        "notes_url": str(settings.get("release_notes_url") or ""),
+        "commits": commits,
+    }
+
+
+def github_step_metadata(config: Mapping[str, Any]) -> JsonObject:
+    repo_ref = str(config.get("repo_ref") or "")
+    commit_sha = str(config.get("commit_sha") or "")
+    branch = str(config.get("branch") or "")
+    item: JsonObject = {"repo_ref": repo_ref, "branch": branch, "commit_sha": commit_sha}
+    if github_repo_ref_ok(repo_ref) and commit_sha:
+        item["commit_url"] = f"https://github.com/{repo_ref}/commit/{commit_sha}"
+    return item
+
+
+def github_repo_ref_ok(repo_ref: str) -> bool:
+    return repo_ref.count("/") == 1 and all(part.strip() for part in repo_ref.split("/"))
+
+
+def rollback_metadata(plan: Mapping[str, Any]) -> JsonObject:
+    settings = mapping_value(plan.get("settings"))
+    policy = str(settings.get("rollback_policy") or "manual")
+    return {
+        "policy": policy,
+        "requested": False,
+        "safe_pr_enabled": policy == "safe_pr",
+        "restart_last_successful_enabled": policy == "restart_last_successful",
+    }
+
+
+def release_health_summary(steps: list[JsonObject], _preview: Mapping[str, Any] | None = None) -> JsonObject:
+    if not steps:
+        return {"status": "pending", "healthy": 0, "unhealthy": 0, "pending": 0}
+    healthy = sum(1 for step in steps if mapping_value(step.get("health")).get("status") == "healthy")
+    unhealthy = sum(1 for step in steps if mapping_value(step.get("health")).get("status") == "unhealthy")
+    pending = len(steps) - healthy - unhealthy
+    status = "unhealthy" if unhealthy else "healthy" if pending == 0 else "progressing"
+    return {"status": status, "healthy": healthy, "unhealthy": unhealthy, "pending": pending}
+
+
+def serialize_release_plan(row: Mapping[str, Any], *, steps: list[JsonObject]) -> JsonObject:
+    item = dict(row)
+    item["settings"] = dict(item.get("settings") or {})
+    item["steps"] = steps
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
+def serialize_release_step(row: Mapping[str, Any]) -> JsonObject:
+    item = dict(row)
+    depends_on = item.get("depends_on", [])
+    item["depends_on"] = list(depends_on) if isinstance(depends_on, list) else []
+    item["config"] = dict(item.get("config") or {})
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
+def serialize_release_run(
+    row: Mapping[str, Any],
+    *,
+    steps: list[JsonObject] | None = None,
+    events: list[JsonObject] | None = None,
+) -> JsonObject:
+    item = dict(row)
+    item["settings"] = dict(item.get("settings") or {})
+    item["github"] = dict(item.get("github") or {})
+    item["rollback"] = dict(item.get("rollback") or {})
+    item["health"] = dict(item.get("health") or {})
+    item["steps"] = steps or []
+    item["events"] = events or []
+    if steps is not None:
+        item["health"] = release_health_summary(steps)
+        item["derived_status"] = derived_release_status(item, steps)
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
+def serialize_release_run_step(
+    row: Mapping[str, Any],
+    *,
+    workflow: Mapping[str, Any] | None = None,
+) -> JsonObject:
+    item = dict(row)
+    item["health"] = dict(item.get("health") or {})
+    item["rollback"] = dict(item.get("rollback") or {})
+    item["details"] = dict(item.get("details") or {})
+    if workflow:
+        workflow_status = str(workflow.get("status") or "")
+        item["workflow"] = {
+            "workflow_run_id": str(workflow.get("workflow_run_id") or ""),
+            "status": workflow_status,
+            "current_step": str(workflow.get("current_step") or ""),
+            "summary": workflow.get("summary"),
+            "updated_at": iso_or_none(workflow.get("updated_at")),
+        }
+        status_upper = workflow_status.upper()
+        if status_upper in {"SUCCEEDED", "COMPLETED"}:
+            item["status"] = "succeeded"
+            item["health"] = {**item["health"], "status": "healthy"}
+        elif status_upper in {"FAILED", "REJECTED"}:
+            item["status"] = "failed"
+            item["health"] = {**item["health"], "status": "unhealthy"}
+        elif workflow_status:
+            item["status"] = "running"
+            item["health"] = {**item["health"], "status": "progressing"}
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    item["updated_at"] = iso_or_none(item.get("updated_at"))
+    return item
+
+
+def serialize_release_run_event(row: Mapping[str, Any]) -> JsonObject:
+    item = dict(row)
+    item["details"] = dict(item.get("details") or {})
+    item["created_at"] = iso_or_none(item.get("created_at"))
+    return item
+
+
+def derived_release_status(run: Mapping[str, Any], steps: list[JsonObject]) -> str:
+    stored = str(run.get("status") or "")
+    if stored in TERMINAL_RUN_STATUSES or stored == "paused":
+        return stored
+    statuses = {str(step.get("status") or "") for step in steps}
+    if FAILED_STEP_STATUS in statuses:
+        return FAILED_STEP_STATUS
+    if steps and statuses <= {SUCCEEDED_STEP_STATUS}:
+        return SUCCEEDED_STEP_STATUS
+    if WAITING_APPROVAL_STEP_STATUS in statuses:
+        return WAITING_APPROVAL_STEP_STATUS
+    if RUNNING_STEP_STATUS in statuses or DISPATCHED_STEP_STATUS in statuses:
+        return "running"
+    return stored or "pending"
+
+
+def projected_release_status(
+    run: Mapping[str, Any],
+    steps: list[Mapping[str, Any]],
+) -> str:
+    stored = str(run.get("status") or "")
+    if stored in {"paused", "cancelled", "rollback_requested"}:
+        return stored
+    statuses = {str(step.get("status") or "") for step in steps}
+    if FAILED_STEP_STATUS in statuses:
+        return FAILED_STEP_STATUS
+    if steps and statuses <= {SUCCEEDED_STEP_STATUS}:
+        return SUCCEEDED_STEP_STATUS
+    if WAITING_APPROVAL_STEP_STATUS in statuses:
+        return WAITING_APPROVAL_STEP_STATUS
+    if RUNNING_STEP_STATUS in statuses or DISPATCHED_STEP_STATUS in statuses:
+        return "running"
+    return stored or "pending"
+
+
+def merge_projection_details(
+    current: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+) -> JsonObject:
+    merged = dict(current)
+    for key, value in incoming.items():
+        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = {**dict(merged[key]), **dict(value)}
+        else:
+            merged[key] = value
+    return merged
+
+
+def mapping_value(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def list_value(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def int_like(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default

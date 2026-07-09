@@ -120,6 +120,9 @@ class AgentEvidenceRequest(StrictModel):
     source_id: str | None = None
     window_start: str | None = None
     evidence_key: str | None = None
+    workflow_run_id: str | None = None
+    release_context: dict[str, Any] = Field(default_factory=dict)
+    collection_status: dict[str, Any] = Field(default_factory=dict)
     kubernetes: dict[str, Any] = Field(default_factory=dict)
     metrics: dict[str, Any] = Field(default_factory=dict)
     logs: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_EVIDENCE_LOG_ENTRIES)
@@ -138,6 +141,8 @@ class AgentEvidenceRequest(StrictModel):
                     "logs": self.logs,
                     "traces": self.traces,
                     "metadata": self.metadata,
+                    "release_context": self.release_context,
+                    "collection_status": self.collection_status,
                 },
                 default=str,
             ).encode()
@@ -335,7 +340,11 @@ class ApplicationUpsertRequest(StrictModel):
     repo_ref: str = Field(default="", max_length=240)
     repository_id: str = ""
     default_branch: str = DEFAULT_REPO_BRANCH
+    branch: str | None = Field(default=None, max_length=120)
     manifest_path: str = DEFAULT_MANIFEST_PATH
+    cluster_id: str | None = Field(default=None, max_length=160)
+    namespace: str = Sandbox.NAMESPACE
+    environment: str = DEFAULT_ENVIRONMENT
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -378,6 +387,39 @@ class DeploymentBindingUpsertRequest(StrictModel):
     resource_class: str = "application"
     deploy_policy: dict[str, Any] = Field(default_factory=dict)
     access_policy: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReleasePlanStepRequest(StrictModel):
+    step_id: str | None = None
+    application_id: str = Field(min_length=1, max_length=160)
+    name: str | None = Field(default=None, max_length=120)
+    position: int = Field(ge=0, le=200)
+    depends_on: list[str] = Field(default_factory=list, max_length=50)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReleasePlanUpsertRequest(StrictModel):
+    plan_id: str | None = Field(default=None, max_length=160)
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    status: Literal["draft", "active", "paused", "archived"] = "draft"
+    settings: dict[str, Any] = Field(default_factory=dict)
+    steps: list[ReleasePlanStepRequest] = Field(default_factory=list, max_length=200)
+
+
+class ReleaseRunActionRequest(StrictModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class ReleasePlanArchiveRequest(StrictModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class DiagnosticsRequest(StrictModel):
+    mode: Literal["yaml", "settings", "release_plan"] = "yaml"
+    content: str = Field(default="", max_length=1_000_000)
+    settings: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class CatalogInstallRequest(StrictModel):
@@ -490,6 +532,8 @@ class EvidenceJobScheduleRequest(StrictModel):
     source_id: str = "cluster-snapshot"
     window_start: str
     provider_keys: list[str] = Field(min_length=1)
+    release_context: dict[str, Any] = Field(default_factory=dict)
+    provider_policies: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class EvidenceJobResultRequest(StrictModel):

@@ -789,6 +789,58 @@ class WorkflowRunListResponse(StrictModel):
     runs: list[JsonMap]
 
 
+class ReleasePlanResponse(StrictModel):
+    plan: JsonMap
+
+
+class ReleasePlanListResponse(StrictModel):
+    plans: list[JsonMap]
+
+
+class ReleasePlanPreviewResponse(StrictModel):
+    preview: JsonMap
+
+
+class ReleaseRunResponse(StrictModel):
+    run: JsonMap
+
+
+class ReleaseRunListResponse(StrictModel):
+    runs: list[JsonMap]
+
+
+class ReleaseRunSummaryResponse(StrictModel):
+    total_runs: int
+    status_breakdown: dict[str, int] = Field(default_factory=dict)
+    plan_breakdown: dict[str, int] = Field(default_factory=dict)
+    recent_runs: list[JsonMap] = Field(default_factory=list)
+
+
+class ReleasePlanDispatchResponse(StrictModel):
+    accepted: bool
+    wave: int
+    events: list[JsonMap]
+    blockers: list[str] = Field(default_factory=list)
+    run: JsonMap | None = None
+
+
+class DiagnosticItem(StrictModel):
+    source: str
+    severity: str
+    message: str
+    code: str
+    line: int = 1
+    column: int = 1
+    end_line: int = 1
+    end_column: int = 2
+    path: str | None = None
+    action: str | None = None
+
+
+class DiagnosticsResponse(StrictModel):
+    diagnostics: list[DiagnosticItem]
+
+
 class CatalogItemListResponse(StrictModel):
     items: list[JsonMap]
 

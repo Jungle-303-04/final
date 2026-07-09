@@ -26,7 +26,11 @@ from domains.identity.dependencies import (
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
-from domains.target.events import ClusterDesiredStateChangedBody, TargetDesiredComponent
+from domains.target.events import (
+    ClusterDesiredStateChangedBody,
+    EvidenceJobUpdatedBody,
+    TargetDesiredComponent,
+)
 from domains.target.evidence_jobs import (
     DEFAULT_EVIDENCE_JOB_LEASE_SECONDS,
     DEFAULT_EVIDENCE_SOURCE_ID,
@@ -115,6 +119,7 @@ EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV = (
 EVIDENCE_JOB_POLL_SLEEP_SECONDS = int(env(EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV, "1"))
 NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
+RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
 AGENT_ONLINE_WINDOW_SECONDS_ENV = "AGENT_ONLINE_WINDOW_SECONDS"
 DEFAULT_AGENT_ONLINE_WINDOW_SECONDS = 120
 AGENT_STATUS_NEVER_CONNECTED = "never_connected"
@@ -1394,6 +1399,25 @@ async def evidence_job_result(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=EVIDENCE_JOB_NOT_FOUND)
 
     await db_call(touch_agent_seen, db, identity, payload.agent_id)
+    source_id = str(result.get("source_id") or "")
+    if source_id == RELEASE_WORKFLOW_FAILURE_SOURCE_ID:
+        await events.accept_body(
+            EvidenceJobUpdatedBody(
+                provider_key=str(result.get("provider_key") or ""),
+                status=str(result.get("status") or payload.status),
+                evidence_key=str(result["evidence_key"]),
+                workspace_id=identity.workspace_id,
+                cluster_id=identity.cluster_id,
+                source_id=source_id,
+                window_start=str(result.get("window_start") or "") or None,
+                evidence_emitted=False,
+                collection_status={
+                    "job_id": job_id,
+                    "reported_status": payload.status,
+                    "stored_status": str(result.get("status") or payload.status),
+                },
+            )
+        )
     kubernetes = payload.result.get("kubernetes")
     if payload.status == "completed" and isinstance(kubernetes, dict):
         await db_call(

@@ -1,0 +1,835 @@
+"""Release-flow management API."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+
+from domains.gitops.events import GitWebhookReceivedBody
+from domains.gitops.repository import derive_workflow_run_id
+from domains.identity.dependencies import (
+    require_cluster_access,
+    require_resource_access,
+    require_session,
+)
+from domains.release_flow.execution import (
+    dry_run_correlation_id,
+    dry_run_event_id,
+    execution_profile,
+    release_execution_blockers,
+)
+from domains.release_flow.preview import build_release_plan_preview
+from packages.config.constants import Sandbox, Target
+from packages.contracts.auth import Actor
+from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.requests import (
+    ReleasePlanArchiveRequest,
+    ReleasePlanUpsertRequest,
+    ReleaseRunActionRequest,
+)
+from packages.contracts.gateway.responses import (
+    ReleasePlanDispatchResponse,
+    ReleasePlanListResponse,
+    ReleasePlanPreviewResponse,
+    ReleasePlanResponse,
+    ReleaseRunListResponse,
+    ReleaseRunSummaryResponse,
+    ReleaseRunResponse,
+)
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    AccessResourceType,
+    Permission,
+)
+from packages.runtime.dependencies import get_db, get_events
+from packages.storage.engine import unit_of_work_or_null
+
+router = APIRouter()
+HTTP_NOT_FOUND = 404
+HTTP_CONFLICT = 409
+RELEASE_PLAN_NOT_FOUND = "release plan not found"
+RELEASE_RUN_NOT_FOUND = "release run not found"
+RELEASE_PLAN_BLOCKED = "release plan has blockers"
+RELEASE_RUN_BLOCKED = "release run cannot advance"
+TERMINAL_RELEASE_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
+BLOCKING_RUN_STATUSES = {"running", "paused", "rollback_requested", "waiting_for_approval"}
+
+
+@router.get(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanListResponse)
+async def list_release_plans(
+    limit: int = Query(default=100, ge=1, le=500),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    return ReleasePlanListResponse(plans=db.list_release_plans(workspace_id, limit=limit))
+
+
+@router.get(gateway_routes.RELEASE_RUNS_PATH, response_model=ReleaseRunListResponse)
+async def list_release_runs(
+    plan_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    runs = db.list_release_runs(workspace_id, plan_id=plan_id, limit=limit)
+    for run in runs:
+        require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    return ReleaseRunListResponse(runs=runs)
+
+
+@router.get(gateway_routes.RELEASE_RUN_SUMMARY_PATH, response_model=ReleaseRunSummaryResponse)
+async def summarize_release_runs(
+    plan_id: str | None = Query(default=None),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunSummaryResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    runs = db.list_release_runs(workspace_id, plan_id=plan_id, limit=200)
+    for run in runs:
+        require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    return ReleaseRunSummaryResponse(**release_run_summary_from_runs(runs))
+
+
+@router.get(gateway_routes.RELEASE_RUN_PATH, response_model=ReleaseRunResponse)
+async def get_release_run(
+    run_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    return ReleaseRunResponse(run=run)
+
+
+@router.get(gateway_routes.RELEASE_PLAN_PATH, response_model=ReleasePlanResponse)
+async def get_release_plan(
+    plan_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    plan = db.get_release_plan(workspace_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    require_plan_application_read_access(db, current, workspace_id, plan.get("steps", []))
+    return ReleasePlanResponse(plan=plan)
+
+
+@router.post(gateway_routes.RELEASE_PLAN_PREVIEW_PATH, response_model=ReleasePlanPreviewResponse)
+async def preview_release_plan(
+    payload: ReleasePlanUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanPreviewResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    body = {**payload.model_dump(), "workspace_id": workspace_id}
+    require_plan_application_read_access(db, current, workspace_id, body["steps"])
+    return ReleasePlanPreviewResponse(preview=build_release_plan_preview(body))
+
+
+@router.post(
+    gateway_routes.RELEASE_PLAN_DISPATCH_PATH,
+    response_model=ReleasePlanDispatchResponse,
+)
+async def dispatch_release_plan(
+    payload: ReleasePlanUpsertRequest,
+    wave: int = Query(default=1, ge=1, le=50),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> ReleasePlanDispatchResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    body = {**payload.model_dump(), "workspace_id": workspace_id}
+    require_plan_application_manage_access(db, current, workspace_id, body["steps"])
+    preview = build_release_plan_preview(body)
+    blockers = list(preview.get("blockers", []))
+    blockers.extend(
+        release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
+    )
+    if blockers:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_PLAN_BLOCKED, "blockers": blockers},
+        )
+    accepted_events, run = await _create_and_dispatch_release_run(
+        db,
+        workspace_id,
+        current,
+        events,
+        body,
+        preview,
+        wave,
+    )
+    return ReleasePlanDispatchResponse(
+        accepted=True,
+        wave=wave,
+        events=accepted_events,
+        run=run,
+    )
+
+
+@router.post(gateway_routes.RELEASE_PLAN_START_PATH, response_model=ReleaseRunResponse)
+async def start_release_plan(
+    payload: ReleasePlanUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> ReleaseRunResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    body = {**payload.model_dump(), "workspace_id": workspace_id}
+    require_plan_application_manage_access(db, current, workspace_id, body["steps"])
+    preview = build_release_plan_preview(body)
+    first_wave = first_preview_wave(preview)
+    blockers = list(preview.get("blockers", []))
+    blockers.extend(
+        release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
+    )
+    if blockers:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_PLAN_BLOCKED, "blockers": blockers},
+        )
+    _, run = await _create_and_dispatch_release_run(
+        db,
+        workspace_id,
+        current,
+        events,
+        body,
+        preview,
+        first_wave,
+    )
+    return ReleaseRunResponse(run=run)
+
+
+async def _create_and_dispatch_release_run(
+    db: Any,
+    workspace_id: str,
+    current: Any,
+    events: Any,
+    body: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    run = db.create_release_run(
+        {
+            "workspace_id": workspace_id,
+            "plan": body,
+            "preview": preview,
+            "started_by": current.user_id,
+        }
+    )
+    if run is None:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": "release run could not be created"},
+        )
+    run_id = str(run["run_id"])
+    accepted_events: list[dict[str, Any]] = []
+    try:
+        accepted_events = await dispatch_wave_steps(
+            body,
+            preview,
+            wave,
+            workspace_id,
+            current,
+            db,
+            events,
+            run_id=run_id,
+        )
+    except HTTPException:
+        if not accepted_events:
+            db.delete_release_run(workspace_id, run_id)
+        else:
+            db.update_release_run_status(
+                workspace_id,
+                run_id,
+                "failed",
+                actor=current.user_id,
+                message="Release run failed while dispatching",
+            )
+        raise
+    except Exception as exc:
+        if not accepted_events:
+            db.delete_release_run(workspace_id, run_id)
+        else:
+            db.update_release_run_status(
+                workspace_id,
+                run_id,
+                "failed",
+                actor=current.user_id,
+                message="Release run failed while dispatching",
+            )
+        raise HTTPException(
+            status_code=500,
+            detail={"message": f"release run dispatch failed: {str(exc)}"},
+        )
+    return accepted_events, db.get_release_run(workspace_id, run_id) or run
+
+
+@router.post(gateway_routes.RELEASE_PLAN_ARCHIVE_PATH, response_model=ReleasePlanResponse)
+async def archive_release_plan(
+    plan_id: str,
+    payload: ReleasePlanArchiveRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    plan = db.get_release_plan(workspace_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    require_plan_application_manage_access(db, current, workspace_id, plan.get("steps", []))
+    archived = db.archive_release_plan(workspace_id, plan_id, reason=payload.reason)
+    if archived is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    return ReleasePlanResponse(plan=archived)
+
+
+@router.delete(gateway_routes.RELEASE_PLAN_PATH)
+async def delete_release_plan(
+    plan_id: str,
+    force: bool = Query(default=False),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    plan = db.get_release_plan(workspace_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    require_plan_application_manage_access(db, current, workspace_id, plan.get("steps", []))
+    if not force and db.has_active_release_runs(workspace_id, plan_id):
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": "release plan has active runs",
+                "can_force_delete": True,
+            },
+        )
+    if not db.delete_release_plan(workspace_id, plan_id):
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    return Response(status_code=204)
+
+
+@router.delete(gateway_routes.RELEASE_RUN_PATH)
+async def delete_release_run(
+    run_id: str,
+    force: bool = Query(default=False),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_manage_access(db, current, workspace_id, run.get("steps", []))
+    if str(run.get("status") or "") in BLOCKING_RUN_STATUSES and not force:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": "release run is still active",
+                "can_force_delete": True,
+            },
+        )
+    if not db.delete_release_run(workspace_id, run_id):
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    return Response(status_code=204)
+
+
+@router.post(gateway_routes.RELEASE_RUN_ADVANCE_PATH, response_model=ReleaseRunResponse)
+async def advance_release_run(
+    run_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> ReleaseRunResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_manage_access(db, current, workspace_id, run.get("steps", []))
+    if str(run.get("status")) == "paused":
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_RUN_BLOCKED, "blockers": ["release run is paused"]},
+        )
+    current_wave = int_field(run, "current_wave", 1)
+    current_steps = [step for step in run.get("steps", []) if step.get("wave") == current_wave]
+    if current_steps and any(str(step.get("status")) != "succeeded" for step in current_steps):
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_RUN_BLOCKED,
+                "blockers": [f"wave {current_wave} is not healthy yet"],
+            },
+        )
+    next_wave = current_wave + 1
+    pending_steps = [step for step in run.get("steps", []) if step.get("wave") == next_wave]
+    if not pending_steps:
+        completed = db.update_release_run_status(
+            workspace_id,
+            run_id,
+            "succeeded",
+            actor=current.user_id,
+            message="All release waves completed.",
+        )
+        return ReleaseRunResponse(run=completed or run)
+    plan = release_plan_from_run(run, pending_steps)
+    preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
+    blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id)
+    if blockers:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_RUN_BLOCKED, "blockers": blockers},
+        )
+    await dispatch_wave_steps(
+        plan,
+        preview,
+        next_wave,
+        workspace_id,
+        current,
+        db,
+        events,
+        run_id=run_id,
+    )
+    advanced = db.update_release_run_status(
+        workspace_id,
+        run_id,
+        "running",
+        current_wave=next_wave,
+        actor=current.user_id,
+        message=f"Release run advanced to wave {next_wave}.",
+    )
+    return ReleaseRunResponse(run=advanced or db.get_release_run(workspace_id, run_id) or run)
+
+
+@router.post(gateway_routes.RELEASE_RUN_PAUSE_PATH, response_model=ReleaseRunResponse)
+async def pause_release_run(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunResponse:
+    return release_run_status_action(
+        run_id,
+        payload,
+        current,
+        db,
+        "paused",
+        "Release run paused.",
+        "release run is already terminal",
+    )
+
+
+@router.post(gateway_routes.RELEASE_RUN_RESUME_PATH, response_model=ReleaseRunResponse)
+async def resume_release_run(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunResponse:
+    return release_run_status_action(
+        run_id,
+        payload,
+        current,
+        db,
+        "running",
+        "Release run resumed.",
+        "release run is already terminal",
+    )
+
+
+@router.post(gateway_routes.RELEASE_RUN_ROLLBACK_PATH, response_model=ReleaseRunResponse)
+async def rollback_release_run(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    existing = db.get_release_run(workspace_id, run_id)
+    if existing is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    run_status = str(existing.get("status") or "")
+    if run_status in TERMINAL_RELEASE_RUN_STATUSES:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_RUN_BLOCKED,
+                "blockers": ["release run is already terminal"],
+            },
+        )
+    require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    run = db.request_release_run_rollback(
+        workspace_id,
+        run_id,
+        actor=current.user_id,
+        reason=payload.reason or "operator requested rollback",
+    )
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    return ReleaseRunResponse(run=run)
+
+
+@router.post(gateway_routes.RELEASE_RUN_CANCEL_PATH, response_model=ReleaseRunResponse)
+async def cancel_release_run(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunResponse:
+    return release_run_status_action(
+        run_id,
+        payload,
+        current,
+        db,
+        "cancelled",
+        "Release run cancelled.",
+        "operator requested cancel",
+    )
+
+
+@router.post(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanResponse)
+async def create_release_plan(
+    payload: ReleasePlanUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_plan_application_manage_access(db, current, workspace_id, payload.model_dump()["steps"])
+    body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
+    with unit_of_work_or_null(db):
+        plan = db.upsert_release_plan(body)
+    return ReleasePlanResponse(plan=plan)
+
+
+@router.put(gateway_routes.RELEASE_PLAN_PATH, response_model=ReleasePlanResponse)
+async def update_release_plan(
+    plan_id: str,
+    payload: ReleasePlanUpsertRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleasePlanResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    existing = db.get_release_plan(workspace_id, plan_id)
+    if existing is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
+    body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
+    require_plan_application_manage_access(db, current, workspace_id, body["steps"])
+    with unit_of_work_or_null(db):
+        plan = db.upsert_release_plan(body)
+    return ReleasePlanResponse(plan=plan)
+
+
+async def dispatch_wave_steps(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+    workspace_id: str,
+    current: Any,
+    db: Any,
+    events: Any,
+    *,
+    run_id: str | None = None,
+) -> list[dict[str, Any]]:
+    selected_steps = steps_for_wave(plan, preview, wave)
+    if not selected_steps:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_PLAN_BLOCKED, "blockers": [f"wave {wave} has no steps"]},
+        )
+
+    blockers = release_execution_blockers(plan, preview, wave, workspace_id=workspace_id)
+    if blockers:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_PLAN_BLOCKED, "blockers": blockers},
+        )
+
+    accepted_events: list[dict[str, Any]] = []
+    profile = execution_profile(plan)
+    for step in selected_steps:
+        application_id = str(step["application_id"])
+        application = db.get_application(workspace_id, application_id) or {}
+        request = dispatch_request_for_step(plan, step, application, workspace_id)
+        require_cluster_access(
+            db,
+            current,
+            workspace_id,
+            request.cluster_id,
+            Permission.DEPLOY_RUN.value,
+        )
+        if profile.side_effects:
+            accepted = await events.accept_body(
+                request,
+                actor=Actor(current.user_id, tuple(current.roles)),
+            )
+            event_id = accepted.event.event_id
+            correlation_id = accepted.event.correlation_id
+            event = accepted.event.to_dict()
+        else:
+            event_id = dry_run_event_id(run_id, application_id, wave)
+            correlation_id = dry_run_correlation_id(run_id, application_id, wave)
+            event = dry_run_event_body(request, event_id, correlation_id, profile.to_body())
+        accepted_events.append(
+            {
+                "event_id": event_id,
+                "correlation_id": correlation_id,
+                "event": event,
+            }
+        )
+        if run_id:
+            db.mark_release_run_step_dispatched(
+                workspace_id,
+                run_id,
+                application_id,
+                workflow_run_id=request.workflow_run_id,
+                event_id=event_id,
+                correlation_id=correlation_id,
+                actor=current.user_id,
+                details={
+                    "runtime_mode": profile.runtime_mode,
+                    "provider_mode": profile.provider_mode,
+                    "side_effects": profile.side_effects,
+                    "wave": wave,
+                    "cluster_id": request.cluster_id,
+                    "environment": request.environment,
+                    "manifest_path": request.manifest_path,
+                    "repo_ref": request.repo_ref,
+                    "branch": request.branch,
+                    "commit_sha": request.commit_sha,
+                },
+            )
+    return accepted_events
+
+
+def dry_run_event_body(
+    request: GitWebhookReceivedBody,
+    event_id: str,
+    correlation_id: str,
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "event_id": event_id,
+        "correlation_id": correlation_id,
+        "subject": "git.webhook.received",
+        "dry_run": True,
+        "execution_profile": profile,
+        "body": request.to_body(),
+    }
+
+
+def first_preview_wave(preview: dict[str, Any]) -> int:
+    waves = preview.get("waves")
+    if isinstance(waves, list) and waves and isinstance(waves[0], dict):
+        return int_field(waves[0], "wave", 1)
+    return 1
+
+
+def release_run_status_action(
+    run_id: str,
+    payload: ReleaseRunActionRequest,
+    current: Any,
+    db: Any,
+    status: str,
+    default_message: str,
+    terminal_block_message: str,
+) -> ReleaseRunResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    existing = db.get_release_run(workspace_id, run_id)
+    if existing is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    run_status = str(existing.get("status") or "")
+    if run_status in TERMINAL_RELEASE_RUN_STATUSES:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_RUN_BLOCKED, "blockers": [terminal_block_message]},
+        )
+    require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    run = db.update_release_run_status(
+        workspace_id,
+        run_id,
+        status,
+        actor=current.user_id,
+        message=payload.reason or default_message,
+    )
+    return ReleaseRunResponse(run=run or existing)
+
+
+def require_plan_application_manage_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+) -> None:
+    for step in steps:
+        application_id = str(step.get("application_id") or "")
+        if not application_id:
+            continue
+        require_resource_access(
+            db,
+            current,
+            workspace_id,
+            AccessResourceType.APPLICATION.value,
+            application_id,
+            Permission.DEPLOY_RUN.value,
+        )
+
+
+def release_plan_from_run(run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "plan_id": run.get("plan_id"),
+        "name": run.get("plan_name") or "Release run",
+        "settings": dict(run.get("settings") or {}),
+        "steps": [
+            {
+                "application_id": str(step["application_id"]),
+                "name": str(step.get("name") or step["application_id"]),
+                "position": index,
+                "depends_on": [],
+                "config": dict(dict(step.get("details") or {}).get("config") or {}),
+            }
+            for index, step in enumerate(steps)
+        ],
+    }
+
+
+def require_plan_application_read_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+) -> None:
+    for step in steps:
+        application_id = str(step.get("application_id") or "")
+        if not application_id:
+            continue
+        require_resource_access(
+            db,
+            current,
+            workspace_id,
+            AccessResourceType.APPLICATION.value,
+            application_id,
+            Permission.APPLICATION_READ.value,
+        )
+
+
+def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    status_breakdown: dict[str, int] = {}
+    plan_breakdown: dict[str, int] = {}
+    recent_runs: list[dict[str, str]] = []
+    for run in runs:
+        status = str(run.get("derived_status") or run.get("status") or "unknown")
+        plan_id = str(run.get("plan_id") or "")
+        status_breakdown[status] = status_breakdown.get(status, 0) + 1
+        if plan_id:
+            plan_breakdown[plan_id] = plan_breakdown.get(plan_id, 0) + 1
+        if len(recent_runs) < 10:
+            recent_runs.append(
+                {
+                    "run_id": str(run.get("run_id") or ""),
+                    "plan_id": plan_id,
+                    "status": status,
+                }
+            )
+    return {
+        "total_runs": len(runs),
+        "status_breakdown": status_breakdown,
+        "plan_breakdown": plan_breakdown,
+        "recent_runs": recent_runs,
+    }
+
+
+def steps_for_wave(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[dict[str, Any]]:
+    preview_steps = [
+        item for item in preview.get("steps", []) if isinstance(item, dict) and item.get("wave") == wave
+    ]
+    application_ids = {str(step.get("application_id")) for step in preview_steps}
+    return [
+        step
+        for step in plan.get("steps", [])
+        if isinstance(step, dict) and str(step.get("application_id")) in application_ids
+    ]
+
+
+def dispatch_request_for_step(
+    plan: dict[str, Any],
+    step: dict[str, Any],
+    application: dict[str, Any],
+    workspace_id: str,
+) -> GitWebhookReceivedBody:
+    config = step_config(step)
+    plan_settings = plan_settings_value(plan)
+    commit_sha = required_str(config, plan_settings, "commit_sha")
+    image = required_str(config, plan_settings, "image")
+    application_id = str(step["application_id"])
+    request_payload = {
+        "commit_sha": commit_sha,
+        "image": image,
+        "replicas": int_field(config, "replicas", int_field(application, "replicas", 2)),
+        "workspace_id": workspace_id,
+        "repo_ref": str(config.get("repo_ref") or application.get("repo_ref") or ""),
+        "branch": str(config.get("branch") or application.get("branch") or "main"),
+        "application_id": application_id,
+        "environment": str(config.get("environment") or first_environment(plan_settings) or "sandbox"),
+        "cluster_id": str(config.get("cluster_id") or application.get("cluster_id") or Target.DEFAULT_CLUSTER_ID),
+        "manifest_path": str(
+            config.get("manifest_path") or application.get("manifest_path") or "deploy.yaml"
+        ),
+        "force": True,
+    }
+    request_payload["workflow_run_id"] = derive_workflow_run_id(request_payload)
+    return GitWebhookReceivedBody(**request_payload)
+
+
+def step_config(step: dict[str, Any]) -> dict[str, Any]:
+    config = step.get("config", {})
+    return dict(config) if isinstance(config, dict) else {}
+
+
+def plan_settings_value(plan: dict[str, Any]) -> dict[str, Any]:
+    settings = plan.get("settings", {})
+    return dict(settings) if isinstance(settings, dict) else {}
+
+
+def required_str(
+    config: dict[str, Any],
+    settings: dict[str, Any],
+    field: str,
+) -> str:
+    value = str(config.get(field) or settings.get(field) or "").strip()
+    if not value:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_PLAN_BLOCKED,
+                "blockers": [f"{field} is required before dispatch"],
+            },
+        )
+    return value
+
+
+def int_field(values: dict[str, Any], field: str, fallback: int) -> int:
+    raw = values.get(field)
+    if isinstance(raw, bool):
+        return fallback
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return int(raw)
+    return fallback
+
+
+def first_environment(settings: dict[str, Any]) -> str:
+    order = settings.get("environment_order", [])
+    if isinstance(order, list) and order:
+        return str(order[0])
+    return Sandbox.NAMESPACE

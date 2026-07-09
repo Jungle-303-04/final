@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from packages.contracts.event_bus.bodies.base import EventBody, JsonObject
 from packages.contracts.event_bus.registry import event
@@ -116,3 +117,40 @@ class ClusterReconcileFailedBody(EventBody):
     message: str
     status: str = TargetReconcileStatus.FAILED.value
     workspace_id: str = DEFAULT_WORKSPACE_ID
+
+
+@event(EventSubject.EVIDENCE_JOB_UPDATED)
+@dataclass(frozen=True)
+class EvidenceJobUpdatedBody(EventBody):
+    """agent evidence job 상태 변경 알림."""
+
+    provider_key: str
+    status: str
+    evidence_key: str
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    cluster_id: str = ""
+    application_id: str = ""
+    evidence_emitted: bool = False
+    source_id: str | None = None
+    window_start: str | None = None
+    workflow_run_id: str = ""
+    correlation_id: str | None = None
+    release_context: dict[str, Any] = field(default_factory=dict)
+    collection_status: dict[str, Any] = field(default_factory=dict)
+
+
+@event(EventSubject.EVIDENCE_JOBS_QUEUED)
+@dataclass(frozen=True)
+class EvidenceJobsQueuedBody(EventBody):
+    """evidence job 큐잉 결과 반환."""
+
+    workspace_id: str
+    cluster_id: str
+    evidence_key: str
+    source_id: str
+    window_start: str
+    provider_keys: list[str]
+    queued: int
+    job_ids: list[str]
+    workflow_run_id: str | None = None
+    release_context: dict[str, Any] = field(default_factory=dict)

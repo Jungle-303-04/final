@@ -1,0 +1,1242 @@
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type SVGProps } from 'react';
+import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
+import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
+import type { editor as MonacoEditor } from 'monaco-editor';
+import { motion } from 'motion/react';
+import { useApplications } from '@/features/repo/api';
+import {
+  useAdvanceReleaseRun,
+  useDiagnostics,
+  useDispatchReleasePlan,
+  useCancelReleaseRun,
+  usePauseReleaseRun,
+  useReleasePlans,
+  useReleasePreview,
+  useReleaseRunSummary,
+  useDeleteReleasePlan,
+  useArchiveReleasePlan,
+  useDeleteReleaseRun,
+  useReleaseRuns,
+  useResumeReleaseRun,
+  useRollbackReleaseRun,
+  useSaveReleasePlan,
+  useStartReleasePlan,
+} from '@/features/release/api';
+import { Badge, Breadcrumb, Button, Card, EmptyState, Field, Tabs } from '@/ui';
+import { FlowCanvas, useAutoLayout, type FlowEdgeData } from '@/shared/flow';
+import type {
+  Application,
+  Diagnostic,
+  ReleasePlan,
+  ReleasePlanPreview,
+  ReleasePlanStep,
+  ReleaseRun,
+  ReleaseRunSummary,
+  Tone as ReleaseFlowTone,
+} from '@/shared/lib/types';
+import { fadeInUp } from '@/ui/motion';
+import './ReleaseFlowView.css';
+
+const BASELINE_YAML = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: sandbox
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: checkout-api
+  template:
+    metadata:
+      labels:
+        app: checkout-api
+    spec:
+      containers:
+        - name: checkout-api
+          image: ghcr.io/example/checkout-api:v1.4.2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+          resources:
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-api
+  namespace: sandbox
+spec:
+  selector:
+    app: checkout-api
+  ports:
+    - port: 80
+      targetPort: 8080
+`;
+
+const SAMPLE_YAML = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: sandbox
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: checkout-v2
+  template:
+    metadata:
+      labels:
+        app: checkout-v2
+    spec:
+      containers:
+        - name: checkout-api
+          image: ghcr.io/example/checkout-api:latest
+          securityContext:
+            privileged: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-api
+  namespace: sandbox
+spec:
+  selector:
+    app: checkout-v2
+  ports:
+    - port: 80
+      targetPort: 9000
+`;
+
+const DEFAULT_POLICY: Record<string, unknown> = {
+  runtime_mode: 'demo',
+  execution_mode: 'sequential_apply',
+  approval_policy: 'manual_each_step',
+  failure_policy: 'pause_for_operator',
+  rollback_policy: 'safe_pr',
+  default_strategy: 'rolling',
+  environment_order: ['sandbox', 'staging', 'production'],
+  concurrency: 1,
+  health_timeout_seconds: 600,
+  retry_attempts: 1,
+  require_diagnostics_pass: true,
+};
+
+const RUNTIME_MODES = [
+  ['demo', 'Demo mode'],
+  ['live', 'Live mode'],
+];
+const EXECUTION_MODES = [
+  ['preview_only', 'Preview only'],
+  ['manual_dispatch', 'Manual dispatch'],
+  ['sequential_apply', 'Sequential apply'],
+  ['promotion', 'Promotion path'],
+];
+const APPROVAL_POLICIES = [
+  ['auto_safe', 'Auto for safe diffs'],
+  ['manual_each_step', 'Manual every step'],
+  ['production_only', 'Manual for production'],
+  ['external_change_ticket', 'External ticket required'],
+];
+const FAILURE_POLICIES = [
+  ['stop_on_failure', 'Stop on failure'],
+  ['pause_for_operator', 'Pause for operator'],
+  ['continue_independent', 'Continue independent waves'],
+];
+const ROLLBACK_POLICIES = [
+  ['manual', 'Manual rollback'],
+  ['safe_pr', 'Safe PR rollback'],
+  ['restart_last_successful', 'Restart last healthy'],
+  ['disabled', 'Disabled'],
+];
+const STRATEGIES = [
+  ['rolling', 'Rolling'],
+  ['canary', 'Canary'],
+  ['blue_green', 'Blue/green'],
+];
+const STEP_GATES = [
+  ['inherit', 'Inherit plan policy'],
+  ['auto', 'Automatic'],
+  ['manual', 'Manual approval'],
+  ['safe_pr', 'Safe PR'],
+];
+
+type ReleaseNodeData = {
+  step: ReleasePlanStep;
+  app?: Application;
+  index: number;
+  selected: boolean;
+  tone: ReleaseFlowTone;
+  diagnostics: number;
+  wave?: number | null;
+  gate: string;
+  strategy: string;
+  environment: string;
+};
+
+type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+
+function buildIconProps({ size, ...props }: IconProps): IconProps {
+  const iconSize = size ?? 16;
+  return {
+    width: iconSize,
+    height: iconSize,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    className: 'shrink-0',
+    ...props,
+  };
+}
+
+function IconPlus(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function IconSave(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M5 3h9l5 5v13H5z" />
+      <path d="M9 3v6h6" />
+      <path d="M9 17h6" />
+    </svg>
+  );
+}
+
+function IconAlertTriangle(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M12 3L3 20h18L12 3z" />
+      <path d="M12 9v6" />
+      <path d="M12 18h.01" />
+    </svg>
+  );
+}
+
+function IconArrowUp(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M12 19V7" />
+      <path d="M6 13l6-6 6 6" />
+    </svg>
+  );
+}
+
+function IconArrowDown(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M12 5v12" />
+      <path d="M6 11l6 6 6-6" />
+    </svg>
+  );
+}
+
+function IconTrash(props: IconProps) {
+  return (
+    <svg {...buildIconProps(props)}>
+      <path d="M5 7h14" />
+      <path d="M8 7v11a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V7" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+function ReleaseStepNode({ data }: NodeProps<Node<ReleaseNodeData>>) {
+  const borderClass = data.tone === 'danger' ? 'release-node--error' : data.tone === 'warn' ? 'release-node--warn' : '';
+  return (
+    <div className={`release-node ${data.selected ? 'release-node--selected' : ''} ${borderClass}`}>
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+      <div className="release-node__title">
+        <span>{data.index + 1}. {data.step.name || data.app?.name || data.step.application_id}</span>
+        {data.diagnostics > 0 && <Badge tone={toUiTone(data.tone)}>{data.diagnostics}</Badge>}
+      </div>
+      <div className="release-node__meta">
+        <span>{data.app?.repo_ref ?? 'unknown repo'}</span>
+        <span>{data.environment} / {data.strategy} / {data.gate}</span>
+        <span>{data.wave ? `wave ${data.wave}` : 'wave pending'}</span>
+      </div>
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+    </div>
+  );
+}
+
+const nodeTypes = { release_step: ReleaseStepNode };
+type ReleaseEdge = Edge<FlowEdgeData>;
+
+export default function ReleaseFlowView() {
+  const appsQ = useApplications();
+  const plansQ = useReleasePlans();
+  const [plan, setPlan] = useState<ReleasePlan | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [yaml, setYaml] = useState(SAMPLE_YAML);
+  const [tab, setTab] = useState('plan');
+  const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
+  const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
+  const { data: releasePreviewData, isPending: releasePreviewPending, mutate: previewRelease } = useReleasePreview();
+  const runsQ = useReleaseRuns(plan?.plan_id);
+  const summaryQ = useReleaseRunSummary(plan?.plan_id);
+  const dispatchRelease = useDispatchReleasePlan();
+  const startRelease = useStartReleasePlan();
+  const advanceRun = useAdvanceReleaseRun();
+  const pauseRun = usePauseReleaseRun();
+  const resumeRun = useResumeReleaseRun();
+  const rollbackRun = useRollbackReleaseRun();
+  const cancelRun = useCancelReleaseRun();
+  const save = useSaveReleasePlan(plan?.plan_id);
+  const archivePlan = useArchiveReleasePlan(plan?.plan_id ?? '');
+  const deletePlan = useDeleteReleasePlan(plan?.plan_id ?? '');
+  const deleteRun = useDeleteReleaseRun();
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+
+  const apps = useMemo(() => appsQ.data ?? [], [appsQ.data]);
+  const appById = useMemo(() => new Map(apps.map(app => [app.application_id, app])), [apps]);
+  const selected = selectedStep(plan, selectedIndex);
+  const selectedNamespace = getString(selected?.config.namespace, 'sandbox');
+  const diagnosticPlan = useMemo(() => withDiagnosticDefaults(plan, apps), [apps, plan]);
+  const settingsBaselines = useMemo(() => settingsBaselinesFor(apps), [apps]);
+
+  useEffect(() => {
+    if (plan || plansQ.isPending || appsQ.isPending) return;
+    const existing = plansQ.data?.[0];
+    setPlan(existing ? normalizePlan(existing) : draftPlan(apps));
+  }, [apps, appsQ.isPending, plan, plansQ.data, plansQ.isPending]);
+
+  useEffect(() => {
+    if (!diagnosticPlan) return;
+    const timer = window.setTimeout(() => {
+      diagnosePlan({
+        mode: 'release_plan',
+        settings: diagnosticPlan,
+        context: { previous_settings_by_application: settingsBaselines },
+      });
+      previewRelease(diagnosticPlan);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [diagnosePlan, diagnosticPlan, previewRelease, settingsBaselines]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      diagnoseYaml({ mode: 'yaml', content: yaml, context: { namespace: selectedNamespace, previous_content: BASELINE_YAML } });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [diagnoseYaml, selectedNamespace, yaml]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const model = editor?.getModel();
+    if (!editor || !monaco || !model) return;
+    monaco.editor.setModelMarkers(model, 'myjob-yaml', markersFor(monaco, yamlDiagnosticsData?.diagnostics ?? []));
+  }, [yamlDiagnosticsData]);
+
+  const preview = releasePreviewData?.preview;
+  const raw = useMemo(
+    () => buildFlow(plan, apps, selectedIndex, planDiagnosticsData?.diagnostics ?? [], preview),
+    [apps, plan, planDiagnosticsData, preview, selectedIndex],
+  );
+  const { nodes, edges } = useAutoLayout(raw.nodes, raw.edges, 'LR');
+
+  const setPlanValue = (patch: Partial<ReleasePlan>) => setPlan(current => current ? { ...current, ...patch } : current);
+  const setPolicy = (patch: Record<string, unknown>) =>
+    setPlan(current => current ? { ...current, settings: { ...DEFAULT_POLICY, ...current.settings, ...patch } } : current);
+  const setStep = (index: number, patch: Partial<ReleasePlanStep>) =>
+    setPlan(current => current ? {
+      ...current,
+      steps: normalizeSteps(current.steps.map((step, i) => i === index ? { ...step, ...patch } : step)),
+    } : current);
+  const onMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+  };
+
+  return (
+    <motion.div variants={fadeInUp} initial="initial" animate="animate">
+      <Breadcrumb items={[{ label: 'Release flows' }]} />
+      <div className="release-flow__header">
+        <div>
+          <h1>Release flow</h1>
+          <p className="release-flow__hint">Plan multi-repo rollout order, gates, failure policy, and manifest risk before dispatch.</p>
+        </div>
+        <div className="release-flow__toolbar">
+          <select
+            className="input"
+            value={plan?.plan_id ?? '__draft__'}
+            onChange={e => {
+              const next = plansQ.data?.find(item => item.plan_id === e.target.value);
+              setPlan(next ? normalizePlan(next) : draftPlan(apps));
+              setSelectedIndex(0);
+            }}
+          >
+            <option value="__draft__">Draft plan</option>
+            {(plansQ.data ?? []).map(item => <option key={item.plan_id} value={item.plan_id}>{item.name}</option>)}
+          </select>
+          <Button onClick={() => { setPlan(draftPlan(apps)); setSelectedIndex(0); }}><IconPlus size={14} />New</Button>
+          <Button variant="primary" loading={save.isPending} disabled={!plan} onClick={() => plan && save.mutate(normalizePlan(plan), { onSuccess: d => setPlan(normalizePlan(d.plan)) })}><IconSave size={14} />Save</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!plan?.plan_id || archivePlan.isPending}
+            onClick={() => plan?.plan_id && archivePlan.mutate('Archived manually')}
+          >
+            Archive
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!plan?.plan_id || deletePlan.isPending}
+            onClick={() => {
+              if (!plan?.plan_id) return;
+              if (!window.confirm(`Delete plan "${plan.name}"?`)) return;
+              deletePlan.mutate(false, {
+                onSuccess: () => {
+                  setPlan(draftPlan(apps));
+                  setSelectedIndex(0);
+                },
+              });
+            }}
+          >
+            Delete
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!plan?.plan_id || deletePlan.isPending}
+            onClick={() => {
+              if (!plan?.plan_id) return;
+              if (!window.confirm(`Force delete plan "${plan.name}"? This also removes all release runs under it.`)) return;
+              deletePlan.mutate(true, {
+                onSuccess: () => {
+                  setPlan(draftPlan(apps));
+                  setSelectedIndex(0);
+                },
+              });
+            }}
+          >
+            Force delete
+          </Button>
+        </div>
+      </div>
+
+      {appsQ.isPending ? (
+        <Card title="Release plans" loading>
+          <p className="release-flow__hint">Loading applications and plans...</p>
+        </Card>
+      ) : appsQ.error ? (
+        <EmptyState title="릴리즈 플랜 정보를 불러오지 못했습니다" description={(appsQ.error as Error).message ?? '잠시 후 다시 시도해주세요'} />
+      ) : plan ? (
+        <>
+          <Tabs value={tab} onValueChange={setTab} items={[
+            { value: 'plan', label: 'Plan', count: planDiagnosticsData?.diagnostics.length },
+            { value: 'policy', label: 'Policy', count: preview?.blockers.length },
+            { value: 'yaml', label: 'YAML', count: yamlDiagnosticsData?.diagnostics.length },
+          ]} />
+
+          {tab === 'plan' && (
+            <div className="release-flow">
+              <Card title="Plan setup">
+                <Field label="Name"><input className="input" value={plan.name} onChange={e => setPlanValue({ name: e.target.value })} /></Field>
+                <Field label="Description"><textarea className="input" rows={3} value={plan.description} onChange={e => setPlanValue({ description: e.target.value })} /></Field>
+                <Field label="Status">
+                  <select className="input" value={plan.status} onChange={e => setPlanValue({ status: e.target.value as ReleasePlan['status'] })}>
+                    <option value="draft">draft</option>
+                    <option value="active">active</option>
+                    <option value="paused">paused</option>
+                    <option value="archived">archived</option>
+                  </select>
+                </Field>
+                <div className="release-flow__toolbar">
+                  <Button size="sm" onClick={() => addStep(plan, apps, setPlan)} disabled={apps.length === 0}><IconPlus size={13} />Step</Button>
+                </div>
+                <div className="release-flow__step-list">
+                  {plan.steps.map((step, i) => (
+                    <div key={`${step.application_id}-${i}`} className="release-flow__step-row">
+                      <button className="btn btn--ghost btn--sm" onClick={() => setSelectedIndex(i)}>{i + 1}. {step.name || appById.get(step.application_id)?.name || step.application_id}</button>
+                      <div className="release-flow__step-actions">
+                        <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => moveStep(plan, i, -1, setPlan, setSelectedIndex)} aria-label="Move up"><IconArrowUp size={13} /></Button>
+                        <Button size="sm" variant="ghost" disabled={i === plan.steps.length - 1} onClick={() => moveStep(plan, i, 1, setPlan, setSelectedIndex)} aria-label="Move down"><IconArrowDown size={13} /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => removeStep(plan, i, setPlan, setSelectedIndex)} aria-label="Remove"><IconTrash size={13} /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card title="Dependency graph" className="p-0">
+                <div className="release-flow__canvas">
+                  <FlowCanvas nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={id => setSelectedIndex(Number(id.replace('step-', '')) || 0)} />
+                </div>
+              </Card>
+
+              <div className="release-flow__stack">
+                <StepEditor
+                  plan={plan}
+                  selected={selected}
+                  selectedIndex={selectedIndex}
+                  apps={apps}
+                  appById={appById}
+                  setStep={setStep}
+                  setPlan={setPlan}
+                />
+                <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
+              </div>
+            </div>
+          )}
+
+          {tab === 'policy' && (
+            <div className="release-flow__policy">
+              <PolicyEditor plan={plan} setPolicy={setPolicy} />
+              <PreviewPanel
+                preview={preview}
+                loading={releasePreviewPending}
+                dispatching={dispatchRelease.isPending || startRelease.isPending}
+                onDispatch={wave => dispatchRelease.mutate({ plan: normalizePlan(plan), wave })}
+                onStart={() => startRelease.mutate(normalizePlan(plan))}
+              />
+              <RunPanel
+                runs={runsQ.data ?? []}
+                summary={summaryQ.data}
+                loading={runsQ.isPending}
+                busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || rollbackRun.isPending || cancelRun.isPending}
+                onAdvance={runId => advanceRun.mutate({ runId })}
+                onPause={runId => pauseRun.mutate({ runId, reason: 'operator paused release run' })}
+                onResume={runId => resumeRun.mutate({ runId, reason: 'operator resumed release run' })}
+                onRollback={runId => rollbackRun.mutate({ runId, reason: 'operator requested rollback from release flow' })}
+                onCancel={runId => cancelRun.mutate({ runId, reason: 'operator canceled release run' })}
+                onDelete={runId => deleteRun.mutate({ runId, force: false })}
+              />
+              <DiagnosticsPanel diagnostics={planDiagnosticsData?.diagnostics ?? []} />
+            </div>
+          )}
+
+          {tab === 'yaml' && (
+            <div className="release-flow__yaml">
+              <Card title="YAML editor" className="p-0">
+                <div className="release-flow__editor">
+                  <Editor
+                    height="460px"
+                    language="yaml"
+                    theme="vs-dark"
+                    value={yaml}
+                    onMount={onMount}
+                    onChange={value => setYaml(value ?? '')}
+                    options={{ minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, scrollBeyondLastLine: false, wordWrap: 'on', tabSize: 2 }}
+                  />
+                </div>
+              </Card>
+              <DiagnosticsPanel diagnostics={yamlDiagnosticsData?.diagnostics ?? []} />
+            </div>
+          )}
+        </>
+      ) : <EmptyState title="Preparing release plan" />}
+    </motion.div>
+  );
+}
+
+function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patch: Record<string, unknown>) => void }) {
+  const settings = { ...DEFAULT_POLICY, ...plan.settings };
+  return (
+    <Card title="Execution policy">
+      <div className="release-flow__form-grid">
+        <SelectField label="Runtime mode" value={getString(settings.runtime_mode, 'demo')} options={RUNTIME_MODES} onChange={value => setPolicy({ runtime_mode: value, provider_mode: value === 'live' ? 'live' : 'dry_run' })} />
+        <SelectField label="Execution mode" value={getString(settings.execution_mode)} options={EXECUTION_MODES} onChange={value => setPolicy({ execution_mode: value })} />
+        <SelectField label="Approval policy" value={getString(settings.approval_policy)} options={APPROVAL_POLICIES} onChange={value => setPolicy({ approval_policy: value })} />
+        <SelectField label="Failure policy" value={getString(settings.failure_policy)} options={FAILURE_POLICIES} onChange={value => setPolicy({ failure_policy: value })} />
+        <SelectField label="Rollback policy" value={getString(settings.rollback_policy)} options={ROLLBACK_POLICIES} onChange={value => setPolicy({ rollback_policy: value })} />
+        <SelectField label="Default strategy" value={getString(settings.default_strategy)} options={STRATEGIES} onChange={value => setPolicy({ default_strategy: value })} />
+        <Field label="Concurrency"><input className="input" type="number" min={1} max={20} value={getNumber(settings.concurrency, 1)} onChange={e => setPolicy({ concurrency: Number(e.target.value) })} /></Field>
+        <Field label="Health timeout seconds"><input className="input" type="number" min={30} max={3600} value={getNumber(settings.health_timeout_seconds, 600)} onChange={e => setPolicy({ health_timeout_seconds: Number(e.target.value) })} /></Field>
+        <Field label="Retry attempts"><input className="input" type="number" min={0} max={10} value={getNumber(settings.retry_attempts, 1)} onChange={e => setPolicy({ retry_attempts: Number(e.target.value) })} /></Field>
+        <Field label="Promotion path">
+          <input className="input" value={getStringArray(settings.environment_order).join(', ')} onChange={e => setPolicy({ environment_order: splitList(e.target.value) })} />
+        </Field>
+        <label className="release-flow__check">
+          <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />
+          Require diagnostics pass before dispatch
+        </label>
+      </div>
+    </Card>
+  );
+}
+
+function StepEditor({
+  plan,
+  selected,
+  selectedIndex,
+  apps,
+  appById,
+  setStep,
+  setPlan,
+}: {
+  plan: ReleasePlan;
+  selected?: ReleasePlanStep;
+  selectedIndex: number;
+  apps: Application[];
+  appById: Map<string, Application>;
+  setStep: (index: number, patch: Partial<ReleasePlanStep>) => void;
+  setPlan: Dispatch<SetStateAction<ReleasePlan | null>>;
+}) {
+  if (!selected) {
+    return <Card title="Step editor"><EmptyState icon={<IconAlertTriangle size={24} />} title="No step selected" /></Card>;
+  }
+  const config = selected.config;
+  const strategy = getString(config.strategy, getString(plan.settings.default_strategy, 'rolling'));
+  return (
+    <Card title="Step editor">
+      <Field label="Application">
+        <select className="input" value={selected.application_id} onChange={e => setStep(selectedIndex, { application_id: e.target.value, name: appById.get(e.target.value)?.name ?? e.target.value })}>
+          {apps.map(app => <option key={app.application_id} value={app.application_id}>{app.name} / {app.repo_ref}</option>)}
+        </select>
+      </Field>
+      <Field label="Step name"><input className="input" value={selected.name} onChange={e => setStep(selectedIndex, { name: e.target.value })} /></Field>
+      <div className="release-flow__form-grid release-flow__form-grid--compact">
+        <Field label="Branch"><input className="input" value={getString(config.branch, appById.get(selected.application_id)?.branch ?? 'main')} onChange={e => setStepConfig(selectedIndex, { branch: e.target.value }, setPlan)} /></Field>
+        <Field label="Manifest path"><input className="input" value={getString(config.manifest_path, appById.get(selected.application_id)?.manifest_path ?? 'deploy.yaml')} onChange={e => setStepConfig(selectedIndex, { manifest_path: e.target.value }, setPlan)} /></Field>
+        <Field label="Commit SHA"><input className="input" value={getString(config.commit_sha)} onChange={e => setStepConfig(selectedIndex, { commit_sha: e.target.value }, setPlan)} /></Field>
+        <Field label="Image"><input className="input" value={getString(config.image)} onChange={e => setStepConfig(selectedIndex, { image: e.target.value }, setPlan)} /></Field>
+        <Field label="Environment"><input className="input" value={getString(config.environment, firstEnvironment(plan))} onChange={e => setStepConfig(selectedIndex, { environment: e.target.value }, setPlan)} /></Field>
+        <Field label="Namespace"><input className="input" value={getString(config.namespace, 'sandbox')} onChange={e => setStepConfig(selectedIndex, { namespace: e.target.value }, setPlan)} /></Field>
+        <Field label="Replicas"><input className="input" type="number" min={0} value={getNumber(config.replicas, 2)} onChange={e => setStepConfig(selectedIndex, { replicas: Number(e.target.value) }, setPlan)} /></Field>
+        <SelectField label="Strategy" value={strategy} options={STRATEGIES} onChange={value => setStepConfig(selectedIndex, { strategy: value }, setPlan)} />
+        <SelectField label="Approval gate" value={getString(config.approval_gate, 'inherit')} options={STEP_GATES} onChange={value => setStepConfig(selectedIndex, { approval_gate: value }, setPlan)} />
+        <Field label="Canary percent"><input className="input" type="number" min={1} max={99} value={getNumber(config.canary_percent, strategy === 'canary' ? 20 : 0)} onChange={e => setStepConfig(selectedIndex, { canary_percent: Number(e.target.value) }, setPlan)} /></Field>
+        <Field label="Service name"><input className="input" value={getString(config.service_name)} onChange={e => setStepConfig(selectedIndex, { service_name: e.target.value }, setPlan)} /></Field>
+        <Field label="Health check path"><input className="input" value={getString(config.health_check_path, '/readyz')} onChange={e => setStepConfig(selectedIndex, { health_check_path: e.target.value }, setPlan)} /></Field>
+        <Field label="Timeout seconds"><input className="input" type="number" min={30} max={3600} value={getNumber(config.timeout_seconds, 600)} onChange={e => setStepConfig(selectedIndex, { timeout_seconds: Number(e.target.value) }, setPlan)} /></Field>
+        <Field label="Retry attempts"><input className="input" type="number" min={0} max={10} value={getNumber(config.retry_attempts, getNumber(plan.settings.retry_attempts, 1))} onChange={e => setStepConfig(selectedIndex, { retry_attempts: Number(e.target.value) }, setPlan)} /></Field>
+      </div>
+      <Field label="Dependencies">
+        <div className="release-flow__checkboxes">
+          {plan.steps.filter((_, i) => i !== selectedIndex).map(step => (
+            <label key={step.application_id}>
+              <input type="checkbox" checked={selected.depends_on.includes(step.application_id)} onChange={e => toggleDependency(selectedIndex, step.application_id, e.target.checked, setPlan)} />
+              {step.name || appById.get(step.application_id)?.name || step.application_id}
+            </label>
+          ))}
+        </div>
+      </Field>
+    </Card>
+  );
+}
+
+function SelectField({ label, value, options, onChange }: { label: string; value: string; options: string[][]; onChange: (value: string) => void }) {
+  return (
+    <Field label={label}>
+      <select className="input" value={value} onChange={e => onChange(e.target.value)}>
+        {options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </select>
+    </Field>
+  );
+}
+
+function PreviewPanel({
+  preview,
+  loading,
+  dispatching,
+  onDispatch,
+  onStart,
+}: {
+  preview?: ReleasePlanPreview;
+  loading: boolean;
+  dispatching: boolean;
+  onDispatch: (wave: number) => void;
+  onStart: () => void;
+}) {
+  if (loading && !preview) return <Card title="Execution preview"><p className="release-flow__hint">Calculating preview...</p></Card>;
+  if (!preview) return <Card title="Execution preview"><p className="release-flow__hint">No preview yet.</p></Card>;
+  const firstWave = preview.waves[0]?.wave ?? 1;
+  return (
+    <Card
+      title="Execution preview"
+      actions={<Badge tone={preview.executable ? 'success' : 'warning'}>{preview.executable ? 'ready' : 'blocked'}</Badge>}
+    >
+      <p className="release-flow__hint">{preview.summary}</p>
+      <div className="release-flow__toolbar release-flow__toolbar--preview">
+        <Button
+          size="sm"
+          variant="primary"
+          loading={dispatching}
+          disabled={!preview.executable || preview.waves.length === 0}
+          onClick={() => onDispatch(firstWave)}
+        >
+          Dispatch wave {firstWave}
+        </Button>
+        <Button
+          size="sm"
+          loading={dispatching}
+          disabled={!preview.executable || preview.waves.length === 0}
+          onClick={onStart}
+        >
+          Start tracked run
+        </Button>
+      </div>
+      {preview.blockers.length > 0 && (
+        <div className="release-flow__diag-list">
+          {preview.blockers.map(blocker => <div key={blocker} className="release-flow__diag release-flow__diag--warning">{blocker}</div>)}
+        </div>
+      )}
+      <div className="release-flow__waves">
+        {preview.waves.map(wave => (
+          <div key={wave.wave} className="release-flow__wave">
+            <strong>Wave {wave.wave}</strong>
+            <span>{wave.applications.join(' -> ')}</span>
+          </div>
+        ))}
+      </div>
+      <div className="release-flow__preview-list">
+        {preview.steps.map(step => (
+          <div key={step.step_id} className="release-flow__preview-row">
+            <b>{step.name}</b>
+            <span>{step.environment}</span>
+            <span>{step.strategy}</span>
+            <span>{step.gate}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RunPanel({
+  runs,
+  summary,
+  loading,
+  busy,
+  onAdvance,
+  onPause,
+  onResume,
+  onRollback,
+  onCancel,
+  onDelete,
+}: {
+  runs: ReleaseRun[];
+  summary?: ReleaseRunSummary;
+  loading: boolean;
+  busy: boolean;
+  onAdvance: (runId: string) => void;
+  onPause: (runId: string) => void;
+  onResume: (runId: string) => void;
+  onRollback: (runId: string) => void;
+  onCancel: (runId: string) => void;
+  onDelete: (runId: string, force?: boolean) => void;
+}) {
+  const latest = runs[0];
+  if (loading && !latest) return <Card title="Release runs"><p className="release-flow__hint">Loading release runs...</p></Card>;
+  if (!latest) {
+    return (
+      <Card title="Release runs">
+        <RunSummary summary={summary} />
+        <p className="release-flow__hint">No tracked release runs yet.</p>
+      </Card>
+    );
+  }
+  const status = latest.derived_status ?? latest.status;
+  const isTerminal = ['succeeded', 'failed', 'cancelled', 'rollback_requested'].includes(status);
+  const githubUrl = getString(latest.github.release_url);
+  const runtimeMode = getString(latest.settings.runtime_mode, getString(latest.settings.provider_mode, 'demo'));
+  const sideEffects = runtimeMode === 'live';
+  const canForceDelete = ['running', 'paused', 'rollback_requested', 'waiting_for_approval'].includes(status);
+  return (
+    <Card
+      title="Release run"
+      actions={
+        <>
+          <Badge tone={sideEffects ? 'danger' : 'info'}>{sideEffects ? 'Live mode' : 'Demo mode'}</Badge>
+          <Badge tone={toneForStatus(status)}>{status}</Badge>
+        </>
+      }
+    >
+      <RunSummary summary={summary} />
+      <div className="release-flow__run-head">
+        <div>
+          <strong>{latest.plan_name}</strong>
+          <p className="release-flow__hint">
+            Wave {latest.current_wave} of {latest.total_waves} | health {getString(latest.health.status, 'pending')} | {sideEffects ? 'real GitOps dispatch' : 'dry-run events only'}
+          </p>
+        </div>
+        <div className="release-flow__toolbar release-flow__toolbar--preview">
+          {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
+          <Button size="sm" loading={busy} disabled={busy || status === 'paused'} onClick={() => onAdvance(latest.run_id)}>Advance</Button>
+          {status === 'paused'
+            ? <Button size="sm" loading={busy} onClick={() => onResume(latest.run_id)}>Resume</Button>
+            : <Button size="sm" loading={busy} onClick={() => onPause(latest.run_id)}>Pause</Button>}
+          <Button size="sm" variant="ghost" loading={busy} onClick={() => onRollback(latest.run_id)}>Rollback</Button>
+          <Button size="sm" variant="ghost" loading={busy} disabled={busy || isTerminal} onClick={() => onCancel(latest.run_id)}>Cancel</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={busy}
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm(`Delete run ${shortId(latest.run_id)}?`)) return;
+              onDelete(latest.run_id, canForceDelete ? window.confirm('Run is active. Force delete?') : false);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+
+      <div className="release-flow__run-grid">
+        {latest.steps.map(step => (
+          <div key={step.run_step_id} className="release-flow__run-step">
+            <div>
+              <strong>Wave {step.wave} - {step.name}</strong>
+              <p className="release-flow__hint">{getString(step.details.environment)} / {getString(step.details.strategy)} / {getString(step.details.gate)}</p>
+            </div>
+            <Badge tone={toneForStatus(step.status)}>{step.status}</Badge>
+            <div className="release-flow__run-meta">
+              {step.workflow_run_id && <span>workflow {shortId(step.workflow_run_id)}</span>}
+              {getString(step.health.status) && <span>health {getString(step.health.status)}</span>}
+              {step.details.side_effects === false && <span>dry-run</span>}
+              {releaseStepMeta(step).map(item => <span key={item}>{item}</span>)}
+              {commitUrl(step) && <a href={commitUrl(step)} target="_blank" rel="noreferrer">commit</a>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="release-flow__timeline">
+        {latest.events.slice(-6).map(event => {
+          const meta = releaseEventMeta(event);
+          return (
+            <div key={event.audit_id} className="release-flow__timeline-row">
+              <span>{event.event_type}</span>
+              <strong>{event.message}</strong>
+              {(meta || event.actor) && <small>{meta || event.actor}</small>}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function RunSummary({ summary }: { summary?: ReleaseRunSummary }) {
+  if (!summary) return null;
+  const statuses = Object.entries(summary.status_breakdown).sort(([left], [right]) => left.localeCompare(right));
+  return (
+    <div className="release-flow__summary">
+      <div>
+        <span>Total runs</span>
+        <strong>{summary.total_runs}</strong>
+      </div>
+      {statuses.length > 0 ? statuses.map(([status, count]) => (
+        <div key={status}>
+          <span>{status}</span>
+          <strong>{count}</strong>
+        </div>
+      )) : (
+        <div>
+          <span>Status</span>
+          <strong>none</strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagnosticsPanel({ diagnostics }: { diagnostics: Diagnostic[] }) {
+  if (diagnostics.length === 0) {
+    return <Card title="Diagnostics"><p className="release-flow__hint">No warnings or errors right now.</p></Card>;
+  }
+  return (
+    <Card title={`Diagnostics ${diagnostics.length}`}>
+      <div className="release-flow__diag-list">
+        {diagnostics.map((diag, i) => (
+          <div key={`${diag.code}-${i}`} className={`release-flow__diag release-flow__diag--${diag.severity}`}>
+            <strong>{diag.message}</strong>
+            <div className="release-flow__diag-meta">
+              <span className="release-flow__hint">{diag.path ?? `${diag.line}:${diag.column}`}</span>
+              {diag.action && <span className="release-flow__action">{actionLabel(diag.action)}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function draftPlan(apps: Application[]): ReleasePlan {
+  const steps = apps.slice(0, 3).map((app, index) => ({
+    application_id: app.application_id,
+    name: app.name,
+    position: index,
+    depends_on: index === 0 ? [] : [apps[index - 1].application_id],
+    config: defaultStepConfig(app, index),
+  }));
+  return {
+    name: 'Service release flow',
+    description: 'Order multi-repo changes, gates, and rollout policy before dispatch.',
+    status: 'draft',
+    settings: { ...DEFAULT_POLICY },
+    steps,
+  };
+}
+
+function defaultStepConfig(app: Application, index: number): Record<string, unknown> {
+  return {
+    branch: app.branch,
+    manifest_path: app.manifest_path,
+    environment: index === 0 ? 'sandbox' : 'staging',
+    namespace: 'sandbox',
+    replicas: 2,
+    commit_sha: index === 0 ? 'abc1234' : 'def5678',
+    image: index === 0 ? 'ghcr.io/example/checkout-api:v1.4.3' : 'ghcr.io/example/cart-api:v2.1.0',
+    strategy: 'rolling',
+    approval_gate: 'inherit',
+    health_check_path: '/readyz',
+    timeout_seconds: 600,
+    retry_attempts: 1,
+  };
+}
+
+function selectedStep(plan: ReleasePlan | null, index = 0): ReleasePlanStep | undefined {
+  return plan?.steps[index] ?? plan?.steps[0];
+}
+
+function normalizePlan(plan: ReleasePlan): ReleasePlan {
+  return {
+    ...plan,
+    settings: { ...DEFAULT_POLICY, ...plan.settings },
+    steps: normalizeSteps(plan.steps.map((step, index) => ({
+      ...step,
+      name: step.name || step.application_id,
+      depends_on: step.depends_on ?? [],
+      config: { ...defaultStepConfigFromStep(step, index), ...step.config },
+    }))),
+  };
+}
+
+function defaultStepConfigFromStep(step: ReleasePlanStep, index: number): Record<string, unknown> {
+  return {
+    environment: index === 0 ? 'sandbox' : 'staging',
+    namespace: 'sandbox',
+    replicas: 2,
+    strategy: 'rolling',
+    approval_gate: 'inherit',
+    health_check_path: '/readyz',
+    timeout_seconds: 600,
+    retry_attempts: 1,
+    manifest_path: getString(step.config.manifest_path, 'deploy.yaml'),
+    branch: getString(step.config.branch, 'main'),
+    commit_sha: getString(step.config.commit_sha),
+    image: getString(step.config.image),
+  };
+}
+
+function normalizeSteps(steps: ReleasePlanStep[]): ReleasePlanStep[] {
+  return steps.map((step, index) => ({ ...step, position: index }));
+}
+
+function addStep(plan: ReleasePlan, apps: Application[], setPlan: Dispatch<SetStateAction<ReleasePlan | null>>) {
+  const existing = new Set(plan.steps.map(step => step.application_id));
+  const app = apps.find(candidate => !existing.has(candidate.application_id)) ?? apps[0];
+  if (!app) return;
+  setPlan({
+    ...plan,
+    steps: normalizeSteps([
+      ...plan.steps,
+      {
+        application_id: app.application_id,
+        name: app.name,
+        position: plan.steps.length,
+        depends_on: plan.steps.length ? [plan.steps[plan.steps.length - 1].application_id] : [],
+        config: defaultStepConfig(app, plan.steps.length),
+      },
+    ]),
+  });
+}
+
+function removeStep(plan: ReleasePlan, index: number, setPlan: Dispatch<SetStateAction<ReleasePlan | null>>, setSelectedIndex: Dispatch<SetStateAction<number>>) {
+  const removed = plan.steps[index]?.application_id;
+  const steps = plan.steps
+    .filter((_, i) => i !== index)
+    .map(step => ({ ...step, depends_on: step.depends_on.filter(dep => dep !== removed) }));
+  setPlan({ ...plan, steps: normalizeSteps(steps) });
+  setSelectedIndex(Math.max(0, index - 1));
+}
+
+function moveStep(plan: ReleasePlan, index: number, delta: number, setPlan: Dispatch<SetStateAction<ReleasePlan | null>>, setSelectedIndex: Dispatch<SetStateAction<number>>) {
+  const next = [...plan.steps];
+  const target = index + delta;
+  [next[index], next[target]] = [next[target], next[index]];
+  setPlan({ ...plan, steps: normalizeSteps(next) });
+  setSelectedIndex(target);
+}
+
+function setStepConfig(index: number, patch: Record<string, unknown>, setPlan: Dispatch<SetStateAction<ReleasePlan | null>>) {
+  setPlan(current => current ? {
+    ...current,
+    steps: current.steps.map((step, i) => i === index ? { ...step, config: { ...step.config, ...patch } } : step),
+  } : current);
+}
+
+function toggleDependency(index: number, dependency: string, checked: boolean, setPlan: Dispatch<SetStateAction<ReleasePlan | null>>) {
+  setPlan(current => current ? {
+    ...current,
+    steps: current.steps.map((step, i) => {
+      if (i !== index) return step;
+      const deps = new Set(step.depends_on);
+      if (checked) deps.add(dependency); else deps.delete(dependency);
+      return { ...step, depends_on: [...deps] };
+    }),
+  } : current);
+}
+
+function withDiagnosticDefaults(plan: ReleasePlan | null, apps: Application[]): ReleasePlan | null {
+  if (!plan) return null;
+  const appById = new Map(apps.map(app => [app.application_id, app]));
+  return normalizePlan({
+    ...plan,
+    steps: plan.steps.map(step => {
+      const app = appById.get(step.application_id);
+      return {
+        ...step,
+        config: {
+          repo_ref: app?.repo_ref,
+          branch: app?.branch,
+          manifest_path: app?.manifest_path,
+          ...step.config,
+        },
+      };
+    }),
+  });
+}
+
+function settingsBaselinesFor(apps: Application[]): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(apps.map(app => [app.application_id, {
+    repo_ref: app.repo_ref,
+    branch: app.branch,
+    manifest_path: app.manifest_path,
+    namespace: 'sandbox',
+    replicas: 2,
+  }]));
+}
+
+function actionLabel(action: string) {
+  if (action === 'approval_required') return 'approval';
+  if (action === 'safe_pr') return 'Safe PR';
+  if (action === 'confirm') return 'confirm';
+  return action;
+}
+
+type ReleaseUiTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+
+function toUiTone(tone: ReleaseFlowTone): ReleaseUiTone {
+  return tone === 'ok' ? 'success' : tone === 'warn' ? 'warning' : tone;
+}
+
+function toneForStatus(status: string): ReleaseUiTone {
+  const normalized = status.toLowerCase();
+  if (['succeeded', 'healthy', 'completed'].includes(normalized)) return 'success';
+  if (['failed', 'unhealthy', 'rollback_requested'].includes(normalized)) return 'danger';
+  if (['paused', 'pending', 'waiting_for_approval'].includes(normalized)) return 'warning';
+  if (['running', 'dispatched', 'progressing'].includes(normalized)) return 'info';
+  return 'neutral';
+}
+
+function shortId(value: string): string {
+  return value.replace(/^workflow-/, '').slice(0, 8);
+}
+
+function releaseStepMeta(step: ReleaseRun['steps'][number]): string[] {
+  const details = recordValue(step.details);
+  const evidence = recordValue(details.evidence);
+  const incident = recordValue(details.incident);
+  const evidenceBundle = recordValue(details.evidence_bundle);
+  const rca = recordValue(details.rca);
+  const recovery = recordValue(details.recovery);
+  const safePr = recordValue(details.safe_pr);
+  const command = recordValue(details.command);
+  const items: string[] = [];
+  const evidenceKey = getString(evidence.evidence_key);
+  const failedProviders = getStringArray(evidence.failed_providers);
+  const pendingProviders = getStringArray(evidence.pending_providers);
+  const symptom = getString(incident.symptom);
+  const missingEvidence = arrayValue(evidenceBundle.missing_evidence);
+  const rootCause = getString(rca.root_cause);
+  const reasonCode = getString(rca.reason_code);
+  if (evidenceKey) items.push(`evidence ${shortId(evidenceKey)}`);
+  if (failedProviders.length) items.push(`collection failed ${failedProviders.join(', ')}`);
+  if (pendingProviders.length) items.push(`collection pending ${pendingProviders.join(', ')}`);
+  if (symptom) items.push(`incident ${symptom}`);
+  if (typeof evidenceBundle.complete === 'boolean') {
+    items.push(evidenceBundle.complete ? 'evidence complete' : `missing ${missingEvidence.length}`);
+  }
+  if (rootCause) items.push(`RCA ${rootCause}`);
+  else if (reasonCode) items.push(`RCA ${reasonCode}`);
+  const recoveryRoute = getString(recovery.selected_route, getString(recovery.execution_route));
+  if (recoveryRoute) items.push(`recovery ${recoveryRoute}`);
+  if (getString(safePr.pr_url)) items.push('Safe PR created');
+  else if (getString(safePr.title)) items.push('Safe PR');
+  const commandStatus = getString(command.status);
+  if (commandStatus) items.push(`command ${commandStatus}`);
+  else if (getString(command.command_id)) items.push('command queued');
+  return items;
+}
+
+function releaseEventMeta(event: ReleaseRun['events'][number]): string {
+  const details = recordValue(event.details);
+  const evidence = recordValue(details.evidence);
+  const incident = recordValue(details.incident);
+  const evidenceBundle = recordValue(details.evidence_bundle);
+  const rca = recordValue(details.rca);
+  const recovery = recordValue(details.recovery);
+  const safePr = recordValue(details.safe_pr);
+  const command = recordValue(details.command);
+  const workflow = recordValue(details.workflow_projection);
+  const rootCause = getString(rca.root_cause);
+  if (rootCause) return `RCA ${rootCause}`;
+  const reasonCode = getString(rca.reason_code);
+  if (reasonCode) return `RCA ${reasonCode}`;
+  const candidateCount = getNumber(rca.candidate_count, -1);
+  if (candidateCount >= 0) return `${candidateCount} candidates`;
+  const symptom = getString(incident.symptom);
+  if (symptom) return `incident ${symptom}`;
+  const failedProviders = getStringArray(evidence.failed_providers);
+  if (failedProviders.length) return `collection failed ${failedProviders.join(', ')}`;
+  const pendingProviders = getStringArray(evidence.pending_providers);
+  if (pendingProviders.length) return `collection pending ${pendingProviders.join(', ')}`;
+  if (typeof evidenceBundle.complete === 'boolean') {
+    return evidenceBundle.complete ? 'evidence complete' : `missing ${arrayValue(evidenceBundle.missing_evidence).length}`;
+  }
+  const recoveryRoute = getString(recovery.selected_route, getString(recovery.execution_route));
+  if (recoveryRoute) return `recovery ${recoveryRoute}`;
+  const prUrl = getString(safePr.pr_url);
+  if (prUrl) return 'Safe PR created';
+  const safePrTitle = getString(safePr.title);
+  if (safePrTitle) return 'Safe PR requested';
+  const commandStatus = getString(command.status);
+  if (commandStatus) return `command ${commandStatus}`;
+  const commandId = getString(command.command_id);
+  if (commandId) return `command ${shortId(commandId)}`;
+  const evidenceKey = getString(evidence.evidence_key);
+  if (evidenceKey) return `evidence ${shortId(evidenceKey)}`;
+  const workflowRunId = getString(evidence.workflow_run_id, getString(workflow.workflow_run_id));
+  return workflowRunId ? `workflow ${shortId(workflowRunId)}` : '';
+}
+
+function commitUrl(step: ReleaseRun['steps'][number]): string {
+  const details = step.details ?? {};
+  const github = typeof details.github === 'object' && details.github ? details.github as Record<string, unknown> : {};
+  const direct = getString(github.commit_url);
+  if (direct) return direct;
+  const dispatch = details as Record<string, unknown>;
+  const repoRef = getString(dispatch.repo_ref);
+  const commitSha = getString(dispatch.commit_sha);
+  return repoRef && commitSha ? `https://github.com/${repoRef}/commit/${commitSha}` : '';
+}
+
+function buildFlow(
+  plan: ReleasePlan | null,
+  apps: Application[],
+  selectedIndex: number,
+  diagnostics: Diagnostic[],
+  preview?: ReleasePlanPreview,
+): { nodes: Node[]; edges: ReleaseEdge[] } {
+  if (!plan) return { nodes: [], edges: [] };
+  const appById = new Map(apps.map(app => [app.application_id, app]));
+  const stepByApp = new Map(plan.steps.map((step, i) => [step.application_id, `step-${i}`]));
+  const previewByApp = new Map((preview?.steps ?? []).map(step => [step.application_id, step]));
+  const nodes: Node[] = plan.steps.map((step, index) => {
+    const stepDiagnostics = diagnosticsForStep(diagnostics, index);
+    const tone: ReleaseFlowTone = stepDiagnostics.some(d => d.severity === 'error') ? 'danger' : stepDiagnostics.length ? 'warn' : 'neutral';
+    const previewStep = previewByApp.get(step.application_id);
+    return {
+      id: `step-${index}`,
+      type: 'release_step',
+      position: { x: 0, y: 0 },
+      data: {
+        step,
+        app: appById.get(step.application_id),
+        index,
+        selected: index === selectedIndex,
+        tone,
+        diagnostics: stepDiagnostics.length,
+        wave: previewStep?.wave,
+        gate: previewStep?.gate ?? getString(step.config.approval_gate, 'inherit'),
+        strategy: previewStep?.strategy ?? getString(step.config.strategy, getString(plan.settings.default_strategy, 'rolling')),
+        environment: previewStep?.environment ?? getString(step.config.environment, firstEnvironment(plan)),
+      },
+    };
+  });
+  const dependencyEdges: ReleaseEdge[] = plan.steps.flatMap((step, index) =>
+    step.depends_on.map(dep => ({
+      id: `dep-${dep}-${index}`,
+      source: stepByApp.get(dep) ?? `step-${Math.max(0, index - 1)}`,
+      target: `step-${index}`,
+      type: 'animated',
+      data: { tone: 'info' as const, active: true },
+    }))
+  );
+  const sequenceEdges: ReleaseEdge[] = dependencyEdges.length ? [] : plan.steps.slice(1).map((_, index) => ({
+    id: `seq-${index}`,
+    source: `step-${index}`,
+    target: `step-${index + 1}`,
+    type: 'animated',
+    data: { tone: 'neutral' as const },
+  }));
+  return { nodes, edges: [...dependencyEdges, ...sequenceEdges] };
+}
+
+function diagnosticsForStep(diagnostics: Diagnostic[], index: number): Diagnostic[] {
+  return diagnostics.filter(diag => diag.path?.includes(`steps[${index}]`) || diag.path === 'steps');
+}
+
+function markersFor(monaco: Monaco, diagnostics: Diagnostic[]): MonacoEditor.IMarkerData[] {
+  const severity = (diag: Diagnostic) => {
+    if (diag.severity === 'error') return monaco.MarkerSeverity.Error;
+    if (diag.severity === 'warning') return monaco.MarkerSeverity.Warning;
+    return monaco.MarkerSeverity.Info;
+  };
+  return diagnostics.map(diag => ({
+    severity: severity(diag),
+    message: diag.message,
+    code: diag.code,
+    source: diag.source,
+    startLineNumber: diag.line,
+    startColumn: diag.column,
+    endLineNumber: diag.end_line,
+    endColumn: diag.end_column,
+  }));
+}
+
+function getString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.length ? value : fallback;
+}
+
+function getNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+function splitList(value: string): string[] {
+  return value.split(',').map(item => item.trim()).filter(Boolean);
+}
+
+function firstEnvironment(plan: ReleasePlan): string {
+  return getStringArray(plan.settings.environment_order)[0] ?? 'sandbox';
+}
