@@ -52,6 +52,7 @@ FAILED_WORKFLOW_SUBJECTS = {
 }
 DEFAULT_RELEASE_FAILURE_EVIDENCE_PROVIDERS = ["kubernetes", "metrics", "logs", "traces"]
 RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
+RELEASE_VERIFICATION_SOURCE_ID = "post-deploy-verification"
 RELEASE_ALERT_EVENT_TYPES = {
     EventSubject.WORKFLOW_RUN_FAILED.value: ("critical", "release workflow failed"),
     EventSubject.APPROVAL_REQUESTED.value: ("warning", "release approval requested"),
@@ -83,12 +84,15 @@ def release_workflow_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     }
     step_status = step_status_for_subject(subject, payload)
     health_status = health_status_for_step_status(step_status)
+    verification_health_status = release_verification_health_status(subject, payload)
     approval_id = _first_string(payload, ("approval_id",))
     cluster_id = _first_string(payload, ("cluster_id",), ("evidence", "cluster_id"))
     if step_status:
         update["step_status"] = step_status
     if health_status:
         update["health_status"] = health_status
+    if verification_health_status:
+        update["health_status"] = verification_health_status
     if approval_id:
         update["approval_id"] = approval_id
     if cluster_id:
@@ -569,10 +573,14 @@ def subject_details(subject: str, payload: Mapping[str, Any]) -> JsonObject:
             "evidence": evidence_details(payload),
         }
     if subject == EventSubject.EVIDENCE_JOB_UPDATED.value:
-        return {
+        details = {
             "evidence": evidence_details(payload),
             "evidence_job": evidence_job_details(payload),
         }
+        verification_update = release_verification_job_projection(payload)
+        if verification_update:
+            details["release_guard"] = {"verification_jobs": {"jobs": [verification_update]}}
+        return details
     if subject == EventSubject.EVIDENCE_BUILT.value:
         return {"evidence": evidence_details(payload)}
     if subject == EventSubject.INCIDENT_DETECTED.value:
@@ -698,6 +706,50 @@ def evidence_job_details(payload: Mapping[str, Any]) -> JsonObject:
         "emitted_event_id": _first_string(payload, ("emitted_event_id",)),
         "emitted_correlation_id": _first_string(payload, ("emitted_correlation_id",)),
     }
+
+
+def release_verification_job_projection(payload: Mapping[str, Any]) -> JsonObject:
+    if not is_release_verification_update(payload):
+        return {}
+    status = _first_string(payload, ("status",), ("reported_status",)) or "updated"
+    result = mapping_value(payload.get("result")) or mapping_value(payload.get("collection_status"))
+    error = _first_string(payload, ("error",), ("reason",))
+    update: JsonObject = {
+        "job_id": _first_string(payload, ("job_id",)),
+        "kind": _first_string(payload, ("kind",), ("provider_key",)),
+        "status": status,
+        "reported_at": _first_string(payload, ("reported_at",), ("updated_at",)),
+        "evidence_key": _first_string(payload, ("evidence_key",), ("evidence", "evidence_key")),
+        "workflow_run_id": _workflow_run_id(payload),
+    }
+    if result:
+        update["result"] = dict(result)
+    if error:
+        update["error"] = error
+    return {key: value for key, value in update.items() if value not in (None, "", {})}
+
+
+def is_release_verification_update(payload: Mapping[str, Any]) -> bool:
+    source_id = _source_id(payload)
+    evidence_key = _first_string(payload, ("evidence_key",), ("evidence", "evidence_key"))
+    job_id = _first_string(payload, ("job_id",))
+    return (
+        source_id == RELEASE_VERIFICATION_SOURCE_ID
+        or evidence_key.endswith(RELEASE_VERIFICATION_SOURCE_ID)
+        or f":{RELEASE_VERIFICATION_SOURCE_ID}" in evidence_key
+        or job_id.startswith("release-verification-")
+    )
+
+
+def release_verification_health_status(subject: str, payload: Mapping[str, Any]) -> str | None:
+    if subject != EventSubject.EVIDENCE_JOB_UPDATED.value or not is_release_verification_update(payload):
+        return None
+    status = _first_string(payload, ("status",), ("reported_status",)).lower()
+    if status in {"failed", "error", "unhealthy"}:
+        return "unhealthy"
+    if status in {"completed", "succeeded", "passed", "healthy"}:
+        return "healthy"
+    return "progressing" if status in {"running", "pending", "queued"} else None
 
 
 def incident_details(payload: Mapping[str, Any]) -> JsonObject:
@@ -856,6 +908,8 @@ def _workflow_run_id(payload: Mapping[str, Any]) -> str:
         return workflow_run_id
     if _source_id(payload) == RELEASE_WORKFLOW_FAILURE_SOURCE_ID:
         return _first_string(payload, ("window_start",), ("evidence", "window_start"))
+    if is_release_verification_update(payload):
+        return _first_string(payload, ("workflow_run_id",), ("release_context", "workflow_run_id"))
     return ""
 
 

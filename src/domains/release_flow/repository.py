@@ -1173,11 +1173,91 @@ def merge_projection_details(
 ) -> JsonObject:
     merged = dict(current)
     for key, value in incoming.items():
-        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+        if key == "release_guard" and isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = merge_release_guard_projection(
+                mapping_value(merged.get(key)),
+                value,
+            )
+        elif isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
             merged[key] = {**dict(merged[key]), **dict(value)}
         else:
             merged[key] = value
     return merged
+
+
+def merge_release_guard_projection(
+    current: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+) -> JsonObject:
+    merged = dict(current)
+    for key, value in incoming.items():
+        if (
+            key == "verification_jobs"
+            and isinstance(value, Mapping)
+            and isinstance(merged.get(key), Mapping)
+        ):
+            merged[key] = merge_verification_jobs_projection(
+                mapping_value(merged.get(key)),
+                value,
+            )
+        elif isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = {**dict(merged[key]), **dict(value)}
+        else:
+            merged[key] = value
+    return merged
+
+
+def merge_verification_jobs_projection(
+    current: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+) -> JsonObject:
+    merged = dict(current)
+    updates = [
+        dict(item)
+        for item in list_value(incoming.get("jobs"))
+        if isinstance(item, Mapping)
+    ]
+    if not updates:
+        return {**merged, **dict(incoming)}
+    current_jobs = [
+        dict(item)
+        for item in list_value(current.get("jobs"))
+        if isinstance(item, Mapping)
+    ]
+    next_jobs = [merge_verification_job_update(job, updates) for job in current_jobs]
+    known_keys = {verification_job_match_key(job) for job in current_jobs}
+    for update in updates:
+        if verification_job_match_key(update) not in known_keys:
+            next_jobs.append(update)
+    merged.update(dict(incoming))
+    merged["jobs"] = next_jobs
+    merged["job_count"] = len(next_jobs)
+    merged["scheduled"] = bool(next_jobs)
+    return merged
+
+
+def merge_verification_job_update(
+    job: JsonObject,
+    updates: list[JsonObject],
+) -> JsonObject:
+    job_key = verification_job_match_key(job)
+    for update in updates:
+        if verification_job_match_key(update) == job_key:
+            return {**job, **update}
+    return job
+
+
+def verification_job_match_key(job: Mapping[str, Any]) -> str:
+    return (
+        str(job.get("job_id") or "")
+        or str(job.get("evidence_key") or "")
+        or ":".join(
+            [
+                str(job.get("application_id") or ""),
+                str(job.get("kind") or ""),
+            ]
+        )
+    )
 
 
 def mapping_value(value: Any) -> Mapping[str, Any]:
