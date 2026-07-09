@@ -3,7 +3,10 @@ import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
 import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { useConsolePath } from '@/features/console/ui';
 import { useApplications } from '@/features/repo/api';
+import { type AlertChannel, useAlertChannels } from '@/features/notifications/api';
 import {
   useAdvanceReleaseRun,
   useDiagnostics,
@@ -280,8 +283,10 @@ const nodeTypes = { release_step: ReleaseStepNode };
 type ReleaseEdge = Edge<FlowEdgeData>;
 
 export default function ReleaseFlowView() {
+  const pathFor = useConsolePath();
   const appsQ = useApplications();
   const plansQ = useReleasePlans();
+  const alertChannelsQ = useAlertChannels();
   const [plan, setPlan] = useState<ReleasePlan | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [yaml, setYaml] = useState(SAMPLE_YAML);
@@ -514,6 +519,12 @@ export default function ReleaseFlowView() {
                 onStart={() => startRelease.mutate(normalizePlan(plan))}
               />
               <ReadinessPanel readiness={releaseReadinessData} loading={releaseReadinessPending} />
+              <AlertChannelsPanel
+                channels={alertChannelsQ.data ?? []}
+                loading={alertChannelsQ.isPending}
+                error={alertChannelsQ.isError ? alertChannelsQ.error : null}
+                settingsHref={pathFor('/settings/alerts')}
+              />
               <RunPanel
                 runs={runsQ.data ?? []}
                 summary={summaryQ.data}
@@ -774,6 +785,75 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
             )}
           </div>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+function AlertChannelsPanel({
+  channels,
+  loading,
+  error,
+  settingsHref,
+}: {
+  channels: AlertChannel[];
+  loading: boolean;
+  error: Error | null;
+  settingsHref: string;
+}) {
+  if (loading && channels.length === 0) {
+    return <Card title="Release alerts"><p className="release-flow__hint">Loading alert channels...</p></Card>;
+  }
+  const enabled = channels.filter(channel => channel.enabled);
+  const critical = enabled.filter(channel => channel.min_severity === 'critical');
+  const warningOrLower = enabled.filter(channel => channel.min_severity !== 'critical');
+  const summaryTone = error ? 'warning' : enabled.length > 0 ? 'success' : 'warning';
+  return (
+    <Card
+      title="Release alerts"
+      actions={<Badge tone={summaryTone}>{error ? 'unavailable' : enabled.length > 0 ? `${enabled.length} enabled` : 'not configured'}</Badge>}
+    >
+      {error ? (
+        <p className="release-flow__hint">Alert channel settings require admin access or are temporarily unavailable.</p>
+      ) : (
+        <>
+          <div className="release-flow__summary">
+            <div>
+              <span>Total channels</span>
+              <strong>{channels.length}</strong>
+            </div>
+            <div>
+              <span>Enabled</span>
+              <strong>{enabled.length}</strong>
+            </div>
+            <div>
+              <span>Critical only</span>
+              <strong>{critical.length}</strong>
+            </div>
+            <div>
+              <span>Info/warning</span>
+              <strong>{warningOrLower.length}</strong>
+            </div>
+          </div>
+          {enabled.length > 0 ? (
+            <div className="release-flow__alert-list">
+              {enabled.slice(0, 4).map(channel => (
+                <div key={channel.channel_id} className="release-flow__alert-row">
+                  <div>
+                    <strong>{channel.name}</strong>
+                    <p>{channel.kind} / {channel.min_severity}</p>
+                  </div>
+                  <Badge tone={channel.min_severity === 'critical' ? 'danger' : channel.min_severity === 'warning' ? 'warning' : 'info'}>{channel.enabled ? 'enabled' : 'disabled'}</Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="release-flow__hint">No enabled alert channel is ready for release failure or approval events.</p>
+          )}
+        </>
+      )}
+      <div className="release-flow__toolbar release-flow__toolbar--preview">
+        <Link to={settingsHref}><Button size="sm" variant={enabled.length > 0 ? 'ghost' : 'primary'}>Alert settings</Button></Link>
       </div>
     </Card>
   );

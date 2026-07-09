@@ -255,6 +255,29 @@
   padding-left: 18px;
 }
 
+.release-flow__alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.release-flow__alert-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+}
+
+.release-flow__alert-row p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+
 .release-flow__run-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
