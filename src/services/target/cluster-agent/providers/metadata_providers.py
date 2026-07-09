@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from kubernetes_api import (
@@ -10,7 +12,6 @@ from kubernetes_api import (
     kubernetes_headers,
     service_account_token,
 )
-
 from queries import MetadataSnapshotQuery
 from telemetry_registry import telemetry
 
@@ -19,6 +20,14 @@ from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
 from providers.base import ConfigReader
+
+
+@dataclass(frozen=True)
+class MetadataQueryTarget:
+    """Describe the Deployment scope for one metadata query."""
+
+    namespace: str
+    deployment_name: str | None = None
 
 
 @telemetry.source(
@@ -57,12 +66,12 @@ class MetadataProvider:
     async def query(
         self,
         _client: httpx.AsyncClient,
-        _telemetry_query: MetadataSnapshotQuery,
+        telemetry_query: MetadataSnapshotQuery,
     ) -> JsonObject:
-        """Read current Deployment metadata from the target namespace."""
+        """Read current Deployment metadata from Kubernetes."""
         base_url = kubernetes_api_base_url()
         token = service_account_token()
-        namespace = TARGET_NAMESPACE
+        target = metadata_query_target(telemetry_query)
 
         if not base_url or not token:
             return {
@@ -74,29 +83,47 @@ class MetadataProvider:
         headers = kubernetes_headers(token)
 
         async with kubernetes_client(self.transport) as client:
-            deployments = await self.get_json(
-                client,
-                base_url,
-                headers,
-                f"/apis/apps/v1/namespaces/{namespace}/deployments",
-            )
-
             replicasets = await self.get_json(
                 client,
                 base_url,
                 headers,
-                f"/apis/apps/v1/namespaces/{namespace}/replicasets",
+                namespaced_apps_path(target.namespace, "replicasets"),
             )
+
+            if target.deployment_name:
+                deployment = await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    namespaced_apps_path(
+                        target.namespace,
+                        "deployments",
+                        target.deployment_name,
+                    ),
+                    allow_not_found=True,
+                )
+                change_context = specific_workload_change_context(
+                    deployment,
+                    items(replicasets),
+                )
+            else:
+                deployments = await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    namespaced_apps_path(target.namespace, "deployments"),
+                )
+                change_context = {
+                    "current_workload_snapshots": current_workload_snapshots(
+                        items(deployments),
+                        items(replicasets),
+                    )
+                }
 
         return {
             "cluster_id": self.cluster_id,
             "collected_at": datetime.now(UTC).isoformat(),
-            "change_context": {
-                "current_workload_snapshots": current_workload_snapshots(
-                    items(deployments),
-                    items(replicasets),
-                )
-            },
+            "change_context": change_context,
         }
 
     async def get_json(
@@ -105,9 +132,13 @@ class MetadataProvider:
         base_url: str,
         headers: dict[str, str],
         path: str,
+        *,
+        allow_not_found: bool = False,
     ) -> JsonObject:
         """Call one Kubernetes API path and return a JSON object."""
         response = await client.get(f"{base_url}{path}", headers=headers)
+        if allow_not_found and response.status_code == httpx.codes.NOT_FOUND:
+            return {}
         response.raise_for_status()
         payload = response.json()
 
@@ -126,7 +157,12 @@ class MetadataProvider:
         payload: JsonObject,
     ) -> None:
         """Normalize one metadata result and merge it into the bucket."""
-        results["change_context"] = self.normalize_payload(payload, telemetry_query)
+        change_context = object_or_empty(results.get("change_context"))
+        merge_change_context(
+            change_context,
+            self.normalize_payload(payload, telemetry_query),
+        )
+        results["change_context"] = change_context or empty_change_context()
 
     def build_response(self, results: JsonObject) -> JsonObject:
         """Return the finished metadata evidence bucket."""
@@ -143,16 +179,81 @@ class MetadataProvider:
         if not isinstance(change_context, dict):
             return empty_change_context()
 
-        snapshots = change_context.get("current_workload_snapshots", [])
+        snapshots = change_context.get("current_workload_snapshots")
+        snapshot = change_context.get("current_workload_snapshot")
+        normalized: JsonObject = {}
 
-        if not isinstance(snapshots, list):
-            snapshots = []
+        if isinstance(snapshots, list):
+            normalized["current_workload_snapshots"] = [
+                item for item in snapshots if isinstance(item, dict)
+            ]
 
-        return {
-            "current_workload_snapshots": [
-                snapshot for snapshot in snapshots if isinstance(snapshot, dict)
-            ],
-        }
+        if isinstance(snapshot, dict) and snapshot:
+            normalized["current_workload_snapshot"] = snapshot
+
+        return normalized or empty_change_context()
+
+
+def metadata_query_target(telemetry_query: MetadataSnapshotQuery) -> MetadataQueryTarget:
+    """Turn a metadata query string into a Deployment scope."""
+    query = telemetry_query.query.strip()
+    if not query or query in {"change_context", "current_workload_snapshots", "deployments"}:
+        return MetadataQueryTarget(namespace=TARGET_NAMESPACE)
+
+    parts = [part.strip() for part in query.split("/") if part.strip()]
+    if len(parts) == 2 and parts[0].lower() in {"deployment", "deployments"}:
+        return MetadataQueryTarget(namespace=TARGET_NAMESPACE, deployment_name=parts[1])
+    if len(parts) == 3 and parts[0].lower() in {"deployment", "deployments"}:
+        return MetadataQueryTarget(namespace=parts[1], deployment_name=parts[2])
+    if len(parts) == 2:
+        return MetadataQueryTarget(namespace=parts[0], deployment_name=parts[1])
+
+    return MetadataQueryTarget(namespace=TARGET_NAMESPACE)
+
+
+def namespaced_apps_path(
+    namespace: str,
+    resource: str,
+    name: str | None = None,
+) -> str:
+    """Build a Kubernetes apps/v1 namespaced API path."""
+    path = f"/apis/apps/v1/namespaces/{path_part(namespace)}/{path_part(resource)}"
+    if name:
+        path = f"{path}/{path_part(name)}"
+    return path
+
+
+def path_part(value: str) -> str:
+    """Escape one value for a Kubernetes API path."""
+    return quote(value, safe="")
+
+
+def specific_workload_change_context(
+    deployment: JsonObject,
+    replicasets: list[JsonObject],
+) -> JsonObject:
+    """Build a change context for one Deployment."""
+    if not deployment:
+        return empty_change_context()
+    return {
+        "current_workload_snapshot": current_workload_snapshot(
+            deployment,
+            replicasets,
+        ),
+    }
+
+
+def merge_change_context(target: JsonObject, source: JsonObject) -> None:
+    """Merge one normalized change context into another."""
+    snapshots = source.get("current_workload_snapshots")
+    if isinstance(snapshots, list):
+        target["current_workload_snapshots"] = snapshots
+
+    snapshot = source.get("current_workload_snapshot")
+    if isinstance(snapshot, dict) and snapshot:
+        if target.get("current_workload_snapshots") == []:
+            target.pop("current_workload_snapshots", None)
+        target["current_workload_snapshot"] = snapshot
 
 
 def empty_change_context() -> JsonObject:
