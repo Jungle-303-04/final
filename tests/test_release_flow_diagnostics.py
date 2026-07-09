@@ -257,11 +257,28 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         "rollback",
         "cancel",
     ]
-    assert {check["name"] for check in handoff["checks"]} == {"mode", "health", "attention", "rollback", "verification"}
+    assert {check["name"] for check in handoff["checks"]} == {
+        "mode",
+        "health",
+        "attention",
+        "rollback",
+        "verification",
+        "abort_criteria",
+    }
     assert handoff["verification"] == {
         "status": "passed",
         "message": "Post-deploy verification evidence is present (/readyz).",
         "evidence": ["/readyz"],
+        "override_reason": None,
+        "production_targets": ["checkout"],
+    }
+    assert handoff["abort_criteria"] == {
+        "status": "passed",
+        "message": (
+            "Rollback criteria are present "
+            "(rollback if checkout error rate exceeds 5% for 5 minutes)."
+        ),
+        "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
         "override_reason": None,
         "production_targets": ["checkout"],
     }
@@ -1926,6 +1943,11 @@ class ReleaseRunActionDb:
                                 "production_targets": ["checkout"],
                                 "health_check_paths": ["/readyz"],
                                 "verification_urls": [],
+                            },
+                            "abort_criteria": {
+                                "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
+                                "override_reason": None,
+                                "production_targets": ["checkout"],
                             },
                             "readiness": {
                                 "impact": {
