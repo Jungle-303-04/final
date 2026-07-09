@@ -486,6 +486,8 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert "Targets:" in report["markdown"]
     assert "checkout / cluster target / namespace sandbox / workflow workflow-checkout-1" in report["markdown"]
     assert "repo org/checkout / commit abc123 / manifest deploy/app.yaml" in report["markdown"]
+    assert "Approvals:" in report["markdown"]
+    assert "Checkout: approval-checkout-1 / granted / gate manual" in report["markdown"]
     assert "Checks:" in report["markdown"]
     assert "verification: passed" in report["markdown"]
     assert "Verification:" in report["markdown"]
@@ -524,6 +526,8 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
     assert "## Release run report: Checkout release" in body
     assert "Targets:" in body
     assert "checkout / cluster target / namespace sandbox" in body
+    assert "Approvals:" in body
+    assert "approval-checkout-1 / granted" in body
     assert "Checks:" in body
     assert "verification: passed" in body
     assert "Verification:" in body
@@ -2488,11 +2492,18 @@ class ReleaseRunActionDb:
                     "name": "Checkout",
                     "wave": 1,
                     "status": "succeeded",
+                    "approval_id": "approval-checkout-1",
                     "health": {"status": self.step_health_status},
                     "details": {
                         "cluster_id": "target",
                         "namespace": "sandbox",
                         "environment": "staging",
+                        "gate": "manual",
+                        "approval": {
+                            "approval_id": "approval-checkout-1",
+                            "decision": "granted",
+                            "reason": "SRE approved production rollout",
+                        },
                         "config": {
                             "repo_ref": "org/checkout",
                             "commit_sha": "abc123",

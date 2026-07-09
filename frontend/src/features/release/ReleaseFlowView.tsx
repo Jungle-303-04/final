@@ -1596,6 +1596,10 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
   if (targetLines.length > 0) {
     lines.push('', 'Targets:', ...targetLines);
   }
+  const approvalLines = releaseRunApprovalLines(run);
+  if (approvalLines.length > 0) {
+    lines.push('', 'Approvals:', ...approvalLines);
+  }
   if (handoff) {
     lines.push('', 'Operator handoff:', `- ${handoff.headline}`, `- Severity: ${handoff.severity}`);
     lines.push(...handoff.next_actions.slice(0, 5).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
@@ -1630,6 +1634,23 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
     lines.push(...run.events.slice(0, 8).map(event => `- ${event.event_type}: ${event.message || 'recorded'}${event.created_at ? ` (${event.created_at})` : ''}`));
   }
   return lines.join('\n');
+}
+
+function releaseRunApprovalLines(run: ReleaseRun): string[] {
+  return run.steps
+    .map(step => {
+      const approvalId = approvalIdForStep(step);
+      if (!approvalId) return '';
+      const details = recordValue(step.details);
+      const approval = recordValue(details.approval);
+      const decision = approvalDecisionForStep(step) ?? getString(approval.status, 'pending');
+      const reason = getString(approval.reason);
+      const gate = getString(details.gate, getString(approval.gate));
+      const suffix = [gate ? `gate ${gate}` : '', reason ? `reason ${reason}` : ''].filter(Boolean).join(' / ');
+      return `- ${step.name || step.application_id}: ${approvalId} / ${decision}${suffix ? ` / ${suffix}` : ''}`;
+    })
+    .filter(Boolean)
+    .slice(0, 12);
 }
 
 function releaseRunTimelineSummaryLines(events: ReleaseRun['events']): string[] {
