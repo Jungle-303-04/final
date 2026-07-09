@@ -774,6 +774,13 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
           "name": "checkout-api"
         },
         "deployment_labels": {},
+        "deployment_annotations": {
+          "ops.service/restarted-at": "2026-07-10T11:12:13Z"
+        },
+        "pod_template_annotations": {
+          "prometheus.io/path": "/metrics",
+          "prometheus.io/scrape": "true"
+        },
         "pod_template_labels": {},
         "managed_fields_managers": ["kubectl-client-side-apply"],
         "containers": [
@@ -810,6 +817,8 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
 | `change_context.current_workload_snapshot` | object | 특정 Deployment 1개의 현재 상태 요약이다. |
 | `change_context.current_workload_snapshots[].workload` | object | workload kind, namespace, name이다. 현재 kind는 `Deployment`다. |
 | `change_context.current_workload_snapshots[].deployment_labels` | object | Deployment metadata labels다. |
+| `change_context.current_workload_snapshots[].deployment_annotations` | object | 안전한 Deployment metadata annotations다. `last-applied-configuration`처럼 원문 manifest나 민감 key는 제외한다. |
+| `change_context.current_workload_snapshots[].pod_template_annotations` | object | 안전한 Pod template metadata annotations다. allowlist에 맞는 작은 값만 남긴다. |
 | `change_context.current_workload_snapshots[].pod_template_labels` | object | Pod template metadata labels다. |
 | `change_context.current_workload_snapshots[].managed_fields_managers` | list<string> | Deployment managedFields의 manager 이름 목록이다. |
 | `change_context.current_workload_snapshots[].containers[]` | list<object> | container name, image, readiness/liveness/startup probe 요약이다. |
@@ -818,7 +827,10 @@ target namespace의 모든 Deployment를 목록으로 보낸다.
 
 주의: `MetadataProvider.query()`의 내부 raw payload에는 `cluster_id`, `collected_at`도 있지만,
 `normalize_payload()` 결과 bucket에는 `change_context`만 남긴다.
-현재 provider는 Deployment annotations, Pod template annotations, raw spec, env/config/secret refs는 남기지 않는다.
+현재 provider는 안전한 Deployment/Pod template annotations만 남긴다.
+`kubectl.kubernetes.io/last-applied-configuration` 같은 원문 manifest annotation과
+secret/token/password/credential/private/authorization 이름이 들어간 annotation은 제외한다.
+raw spec, env/config/secret refs는 남기지 않는다.
 
 ## Evidence job 집계 규칙
 
@@ -869,7 +881,7 @@ Provider가 이미 보내는 값은 다음과 같다.
 | log line | `logs[].streams[].values[].line` |
 | trace search 결과 | `traces.results.*.traces` |
 | 현재 workload snapshot 목록 | `metadata.change_context.current_workload_snapshots[]` |
-| 현재 image/probe/labels/manager/revision 요약 | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `pod_template_labels`, `managed_fields_managers`, `replicaset_revisions` |
+| 현재 image/probe/labels/annotations/manager/revision 요약 | `metadata.change_context.current_workload_snapshots[].containers[]`, `deployment_labels`, `deployment_annotations`, `pod_template_labels`, `pod_template_annotations`, `managed_fields_managers`, `replicaset_revisions` |
 
 RCA가 판단하려면 다음 값은 파생해야 한다.
 
@@ -926,12 +938,12 @@ RCA evidence bundle builder는 다음 metadata evidence item을 만들 수 있�
 
 | 필요한 metadata | 현재 provider로 가능한지 | 보강 방향 |
 | --- | --- | --- |
-| target namespace Deployment별 현재 image/probe/labels/manager/ReplicaSet revision | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. |
+| target namespace Deployment별 현재 image/probe/labels/annotations/manager/ReplicaSet revision | 가능 | `change_context.current_workload_snapshots[]`를 쓴다. annotations는 안전한 key만 남긴다. |
 | 특정 Deployment 1개 snapshot | 가능 | `deployment/<name>` 또는 `deployment/<namespace>/<name>` query를 쓴다. |
 | recent git commit / deploy revision | 없음 | GitOps event, manifest render, SCM metadata 연결 |
 | rollback 가능 여부 / risk_level | 없음 | 배포 이력, policy, GitOps/CI/CD 상태 연결 |
 | previous/current image digest | 일부만 가능 | `containers[].image`는 현재 image tag만 제공한다. digest, rollout history, previous image가 필요하다. |
-| Deployment/Pod template annotations | 없음 | 필요한 key만 allowlist하거나 masking 기준을 추가한다. |
+| Deployment/Pod template annotations | 일부 가능 | `ops.service/*`, `prometheus.io/*`, `deployment.kubernetes.io/*`, `kubectl.kubernetes.io/*` 중 안전한 key만 남긴다. |
 | ConfigMap/Secret key reference | 불충분 | Pod spec env/envFrom/volumes, Secret/ConfigMap metadata summary 추가 |
 | resource requests/limits | 불충분 | Pod spec containers.resources summary 추가 |
 | imagePullSecrets | 불충분 | Pod spec imagePullSecrets summary 추가 |
