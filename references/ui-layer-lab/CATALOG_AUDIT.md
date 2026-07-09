@@ -21,16 +21,16 @@ The previous catalog exposed only 16 examples, with every category showing exact
 
 The remaining catalog work is quality curation, not hiding examples:
 
-- merge truly duplicate patterns into existing representatives;
-- promote unique patterns to representative examples when they teach a different UI or interaction;
-- archive near-duplicates under the closest representative;
+- merge only truly duplicate patterns into the closest exposed example;
+- keep unique patterns visible when they teach a different UI or interaction;
+- archive near-duplicates under the closest exposed example;
 - remove or rewrite low-quality examples that cannot meet interaction, theme, or localization standards.
 
 ## Minimum Gate For Completion
 
 - Runtime exposed count must equal the number of `.example.tsx` files.
 - Duplicate runtime ids must stay at 0.
-- React Flow representatives must support real node dragging and edge creation.
+- React Flow exposed examples must support real node dragging and edge creation where the pattern claims editability.
 - Code panels must be compact when closed and show source only when opened.
 - Light and dark mode must apply inside the preview content, not only the outer shell.
 - Mobile and desktop layouts must have no page-level horizontal overflow.
@@ -43,4 +43,5 @@ The remaining catalog work is quality curation, not hiding examples:
 - `npm run typecheck`: passed
 - `npm run build`: passed
 - `npm run visual-quality`: passed
-- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, data-viz search 55 -> 18, theme/code button delta 0, code panel closed height 65px, React Flow drag 105px, edge count 2 -> 3, English sample violations 0, mobile overflow 0
+- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, category counts 71 / 63 / 129 / 42 / 53 / 55 / 65 / 22, data-viz search 55 -> 18, theme/code button delta 0, code panel closed height 65px, code source visible under 100ms in the latest runs, light command preview `rgb(255, 255, 255)`, dark command preview `rgb(11, 11, 13)`, React Flow drag 105px, edge count 2 -> 3, source English matches 0, English sample violations 0, mobile overflow 0
+- Screenshots: `output/playwright/visual-light-command.png`, `output/playwright/visual-dark-command.png`, `output/playwright/visual-flow.png`, `output/playwright/visual-mobile.png`

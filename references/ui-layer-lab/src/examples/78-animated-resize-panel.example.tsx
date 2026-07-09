@@ -5,12 +5,12 @@ export default function AnimatedResizePanelExample() {
 
   return (
     <div className="resize-panel-demo">
-      <button className="command-trigger" onClick={() => setWide((value) => !value)}>
-        Toggle Panel
+      <button className="command-trigger stable-wide" onClick={() => setWide((value) => !value)} type="button">
+        패널 전환
       </button>
       <section className={wide ? "wide" : ""}>
-        <strong>{wide ? "Expanded context" : "Compact context"}</strong>
-        <span>Panel width and content density animate together.</span>
+        <strong>{wide ? "확장 컨텍스트" : "간단 컨텍스트"}</strong>
+        <span>패널 너비와 정보 밀도가 함께 전환됩니다.</span>
       </section>
     </div>
   );

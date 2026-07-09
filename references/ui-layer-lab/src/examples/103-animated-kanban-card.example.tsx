@@ -1,6 +1,10 @@
 import { useState } from "react";
 
-const lanes = ["Queued", "Running", "Review"];
+const lanes = [
+  { id: "queued", label: "대기" },
+  { id: "running", label: "실행 중" },
+  { id: "review", label: "검토" }
+];
 
 export default function AnimatedKanbanCardExample() {
   const [lane, setLane] = useState(0);
@@ -9,16 +13,16 @@ export default function AnimatedKanbanCardExample() {
     <div className="kanban-motion">
       <div className="segmented-row">
         {lanes.map((item, index) => (
-          <button className={lane === index ? "active" : ""} key={item} onClick={() => setLane(index)}>
-            {item}
+          <button className={lane === index ? "active" : ""} key={item.id} onClick={() => setLane(index)} type="button">
+            {item.label}
           </button>
         ))}
       </div>
       <div className="kanban-board">
         {lanes.map((item, index) => (
-          <section key={item}>
-            <strong>{item}</strong>
-            {lane === index ? <article className="moving-card">visual smoke</article> : null}
+          <section key={item.id}>
+            <strong>{item.label}</strong>
+            {lane === index ? <article className="moving-card">시각 점검</article> : null}
           </section>
         ))}
       </div>
