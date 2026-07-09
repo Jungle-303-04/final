@@ -840,6 +840,8 @@ class ReleaseRunSummaryResponse(StrictModel):
     status_breakdown: dict[str, int] = Field(default_factory=dict)
     plan_breakdown: dict[str, int] = Field(default_factory=dict)
     active_runs: int = 0
+    succeeded_runs: int = 0
+    cancelled_runs: int = 0
     attention_required_runs: int = 0
     failed_runs: int = 0
     paused_runs: int = 0

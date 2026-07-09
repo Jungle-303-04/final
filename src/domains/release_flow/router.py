@@ -2977,6 +2977,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     plan_breakdown: dict[str, int] = {}
     recent_runs: list[dict[str, Any]] = []
     active_runs = 0
+    succeeded_runs = 0
+    cancelled_runs = 0
     failed_runs = 0
     paused_runs = 0
     rollback_requested_runs = 0
@@ -2999,6 +3001,10 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
             plan_breakdown[plan_id] = plan_breakdown.get(plan_id, 0) + 1
         if status not in TERMINAL_RELEASE_RUN_STATUSES:
             active_runs += 1
+        if status == "succeeded":
+            succeeded_runs += 1
+        if status == "cancelled":
+            cancelled_runs += 1
         if status == "failed":
             failed_runs += 1
         if status == "paused":
@@ -3045,6 +3051,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "status_breakdown": status_breakdown,
         "plan_breakdown": plan_breakdown,
         "active_runs": active_runs,
+        "succeeded_runs": succeeded_runs,
+        "cancelled_runs": cancelled_runs,
         "attention_required_runs": attention_required_runs,
         "failed_runs": failed_runs,
         "paused_runs": paused_runs,
