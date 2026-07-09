@@ -2,9 +2,9 @@ import { Command } from "cmdk";
 import { useState } from "react";
 
 const approvals = [
-  { action: "Deploy preview", owner: "maintainer", state: "allowed" },
-  { action: "Push production", owner: "release lead", state: "approval required" },
-  { action: "Rotate secret", owner: "admin", state: "blocked" }
+  { action: "미리보기 배포", owner: "관리자", state: "허용됨" },
+  { action: "프로덕션 푸시", owner: "릴리스 담당", state: "승인 필요" },
+  { action: "시크릿 교체", owner: "운영 관리자", state: "차단됨" }
 ];
 
 export default function CommandApprovalMatrixExample() {
@@ -13,9 +13,9 @@ export default function CommandApprovalMatrixExample() {
   return (
     <div className="inline-command-layout">
       <Command className="command-dialog inline-command">
-        <Command.Input placeholder="Check action permission..." />
+        <Command.Input placeholder="액션 권한을 확인하세요" />
         <Command.List>
-          <Command.Group heading="Approval matrix">
+          <Command.Group heading="승인 행렬">
             {approvals.map((approval) => (
               <Command.Item key={approval.action} onSelect={() => setSelected(approval)}>
                 <span>{approval.action}</span>

@@ -30,10 +30,15 @@ async function runGate(url) {
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
   const catalog = await inspectCatalog();
+  const sourceEnglish = await inspectSourceEnglishGuard();
   const light = await inspectTheme(desktop, url, "light");
   const dark = await inspectTheme(desktop, url, "dark");
+  const navigation = await inspectNavigationAndSearch(desktop, url);
+  const stableControls = await inspectStableControls(desktop, url);
+  const visibleKorean = await inspectVisibleKoreanGuard(desktop, url);
   const codePanel = await inspectCodePanel(desktop);
   const flow = await inspectReactFlow(desktop, url);
+  const englishSamples = await inspectEnglishSamples(desktop, url);
   const mobileOverflow = await inspectMobile(mobile, url);
 
   await browser.close();
@@ -46,6 +51,22 @@ async function runGate(url) {
     counts.every((count) => count === 2) ? "카테고리 count가 2로 고정됨" : "",
     catalog.duplicateIds.length ? `중복 example id: ${catalog.duplicateIds.join(",")}` : "",
     exposedTotal !== catalog.exampleFiles ? `노출 수 ${exposedTotal}개가 파일 수 ${catalog.exampleFiles}개와 다름` : "",
+    sourceEnglish.matches.length ? `핵심 예제 영어 회귀: ${sourceEnglish.matches.join(", ")}` : "",
+    visibleKorean.forbiddenVisible.length ? `대표 화면 영어 노출: ${visibleKorean.forbiddenVisible.join(", ")}` : "",
+    navigation.activeHeading !== "데이터 시각화" ? `카테고리 전환 실패: ${navigation.activeHeading}` : "",
+    navigation.filteredCount <= 0 || navigation.filteredCount >= navigation.dataVizCount
+      ? `검색 필터 실패: ${navigation.dataVizCount}->${navigation.filteredCount}`
+      : "",
+    stableControls.themeWidthDelta > 1 || stableControls.themeHeightDelta > 1
+      ? `테마 토글 크기 변동: ${stableControls.themeWidthDelta}x${stableControls.themeHeightDelta}`
+      : "",
+    stableControls.codeWidthDelta > 1 || stableControls.codeHeightDelta > 1
+      ? `코드 토글 크기 변동: ${stableControls.codeWidthDelta}x${stableControls.codeHeightDelta}`
+      : "",
+    stableControls.themeBefore === stableControls.themeAfter
+      ? `테마 토글 상태 전환 실패: ${stableControls.themeBefore}->${stableControls.themeAfter}`
+      : "",
+    navigation.scrollDelta > 8 ? `카테고리 전환 scrollY 흔들림: ${navigation.scrollDelta}` : "",
     codePanel.closedPreExists ? "닫힌 코드 패널에 pre가 남음" : "",
     !codePanel.sourceVisible ? "코드 보기 후 source line 미표시" : "",
     codePanel.closedHeight > 72 ? `닫힌 코드 패널 높이 과대: ${codePanel.closedHeight}` : "",
@@ -53,6 +74,7 @@ async function runGate(url) {
     !dark.commandPreviewReadable ? `다크 모드 command preview 판독 실패: ${dark.commandPreviewBg}` : "",
     flow.dragDeltaX < 90 ? `React Flow 드래그 이동 부족: ${flow.dragDeltaX}` : "",
     flow.edgeDelta < 1 ? `React Flow edge 증가 없음: ${flow.edgeBefore}->${flow.edgeAfter}` : "",
+    englishSamples.violations.length ? `영어 UI 잔여: ${englishSamples.violations.join(" / ")}` : "",
     mobileOverflow > 1 ? `모바일 가로 overflow ${mobileOverflow}px` : ""
   ].filter(Boolean);
 
@@ -64,10 +86,15 @@ async function runGate(url) {
     categoryCounts: counts,
     exposedTotal,
     catalog,
+    sourceEnglish,
+    visibleKorean,
+    navigation,
+    stableControls,
     codePanel,
     light,
     dark,
     flow,
+    englishSamples,
     mobileOverflow,
     screenshots: {
       light: path.relative(root, path.join(outputDir, "visual-light-command.png")),
@@ -76,6 +103,47 @@ async function runGate(url) {
       mobile: path.relative(root, path.join(outputDir, "visual-mobile.png"))
     }
   };
+}
+
+async function inspectSourceEnglishGuard() {
+  const checks = [
+    {
+      file: "src/examples/01-command-basic.example.tsx",
+      fragments: ["Dashboard", "Repositories", "Search commands", "Type a command", "No results found", "Pages"]
+    },
+    {
+      file: "src/examples/392-animated-command-search-skeleton.example.tsx",
+      fragments: ["Search remote actions", "Loading remote actions", "Show Results", "Show Loading", "Remote"]
+    },
+    {
+      file: "src/examples/321-command-approval-matrix.example.tsx",
+      fragments: ["Deploy preview", "Push production", "Rotate secret", "Check action permission", "Approval matrix"]
+    },
+    {
+      file: "src/examples/323-command-recent-filter-pills.example.tsx",
+      fragments: ["failed", "mine", "visual", "deploy", "Apply filter", "Filters"]
+    },
+    {
+      file: "src/examples/403-job-command-palette-launch.example.tsx",
+      fragments: ["Run typecheck", "Build frontend", "Deploy preview", "No job launched", "Launch a job", "Jobs"]
+    },
+    {
+      file: "src/examples/420-react-flow-edge-health-filter.example.tsx",
+      fragments: ["Show all", "Failed edge", "edges visible"]
+    }
+  ];
+  const matches = [];
+
+  for (const check of checks) {
+    const source = await fs.readFile(path.join(root, check.file), "utf8");
+    for (const fragment of check.fragments) {
+      if (source.includes(fragment)) {
+        matches.push(`${check.file}:${fragment}`);
+      }
+    }
+  }
+
+  return { matches };
 }
 
 async function inspectCatalog() {
@@ -136,6 +204,74 @@ async function inspectCodePanel(page) {
   return { ...before, ...after, elapsedMs };
 }
 
+async function inspectNavigationAndSearch(page, url) {
+  await openCategory(page, url, "오버레이/명령");
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await page.getByRole("button", { name: /데이터 시각화/ }).click();
+  await page.waitForSelector('[data-active-category="data-viz"]');
+  const scrollAfter = await page.evaluate(() => window.scrollY);
+  const dataVizCount = await page.locator(".example-section").count();
+  const activeHeading = await page.evaluate(() => document.querySelector(".category-summary h2")?.textContent?.trim() ?? "");
+  const firstTitleBeforeSearch = await page.evaluate(() => document.querySelector(".example-section h3")?.textContent?.trim() ?? "");
+  const searchTerm = firstTitleBeforeSearch.split(/\s+/)[0] ?? "";
+  await page.locator("#example-search").fill(searchTerm);
+  await page.waitForTimeout(240);
+  const filteredCount = await page.locator(".example-section").count();
+  const firstFilteredTitle = await page.evaluate(() => document.querySelector(".example-section h3")?.textContent?.trim() ?? "");
+
+  return {
+    activeHeading,
+    firstTitleBeforeSearch,
+    searchTerm,
+    dataVizCount,
+    filteredCount,
+    firstFilteredTitle,
+    scrollDelta: Math.abs(scrollAfter - scrollBefore)
+  };
+}
+
+async function inspectStableControls(page, url) {
+  await openCategory(page, url, "오버레이/명령");
+  const themeButton = page.locator('[data-stable-control="theme-toggle"]').first();
+  const themeBeforeState = await page.evaluate(() => document.documentElement.dataset.theme ?? "");
+  const themeBefore = await themeButton.boundingBox();
+  await themeButton.click();
+  await page.waitForTimeout(120);
+  const themeAfter = await themeButton.boundingBox();
+  const themeAfterState = await page.evaluate(() => document.documentElement.dataset.theme ?? "");
+
+  const codeButton = page.locator('[data-testid="example-command-basic"] [data-stable-control="code-toggle"]').first();
+  const codeBefore = await codeButton.boundingBox();
+  await codeButton.click();
+  await page.getByText('import { Command } from "cmdk";').waitFor({ timeout: 5000 });
+  const codeAfter = await codeButton.boundingBox();
+
+  return {
+    themeWidthDelta: delta(themeBefore?.width, themeAfter?.width),
+    themeHeightDelta: delta(themeBefore?.height, themeAfter?.height),
+    themeBefore: themeBeforeState,
+    themeAfter: themeAfterState,
+    codeWidthDelta: delta(codeBefore?.width, codeAfter?.width),
+    codeHeightDelta: delta(codeBefore?.height, codeAfter?.height)
+  };
+}
+
+async function inspectVisibleKoreanGuard(page, url) {
+  await openCategory(page, url, "오버레이/명령");
+  await page.locator('[data-testid="example-command-basic"] [data-stable-control="command-open"]').click();
+  await page.waitForSelector('[data-testid="example-command-basic"] .command-dialog');
+  const text = await page.locator('[data-testid="example-command-basic"]').innerText();
+  const forbidden = ["Dashboard", "Repositories", "Search commands", "Type a command", "No results found", "Pages"];
+
+  return {
+    forbiddenVisible: forbidden.filter((fragment) => text.includes(fragment))
+  };
+}
+
+function delta(before = 0, after = 0) {
+  return Math.round(Math.abs(after - before) * 100) / 100;
+}
+
 async function inspectReactFlow(page, url) {
   await openCategory(page, url, "플로우 빌더");
   await page.waitForSelector('[data-testid="example-react-flow-workflow"]');
@@ -171,11 +307,44 @@ async function inspectReactFlow(page, url) {
   };
 }
 
+async function inspectEnglishSamples(page, url) {
+  const samples = [
+    ["오버레이/명령", "example-command-approval-matrix"],
+    ["오버레이/명령", "example-command-recent-filter-pills"],
+    ["모션/상태 전환", "example-animated-command-search-skeleton"],
+    ["작업 진행/로그", "example-job-command-palette-launch"],
+    ["플로우 빌더", "example-react-flow-edge-health-filter"]
+  ];
+  const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
+  const violations = [];
+
+  for (const [category, testId] of samples) {
+    await openCategory(page, url, category);
+    const locator = page.locator(`[data-testid="${testId}"]`);
+    await locator.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(180);
+    const text = compactText(await locator.innerText());
+    const match = text.match(forbidden);
+    if (match) {
+      violations.push(`${testId}: ${match[0]}`);
+    }
+  }
+
+  return {
+    checked: samples.length,
+    violations
+  };
+}
+
 async function inspectMobile(page, url) {
   await openCategory(page, url, "오버레이/명령");
   await page.waitForSelector(".docs-page");
   await page.screenshot({ path: path.join(outputDir, "visual-mobile.png"), fullPage: false });
   return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+}
+
+function compactText(value) {
+  return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
 async function openCategory(page, url, label) {
