@@ -170,6 +170,26 @@ def test_advance_release_run_blocks_when_verification_job_failed(monkeypatch) ->
     assert db.updated == []
 
 
+def test_advance_release_run_blocks_when_verification_job_timed_out(monkeypatch) -> None:
+    db = ReleaseRunActionDb(verification_job_status="timeout")
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.advance_release_run(
+                "release-run-1",
+                current=current,
+                db=db,
+                events=object(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert any("post-deploy verification kubernetes_health_check failed" in blocker for blocker in exc.value.detail["blockers"])
+    assert db.updated == []
+
+
 def test_rollback_release_run_checks_rollback_access_before_mutating(monkeypatch) -> None:
     db = ReleaseRunActionDb()
 
@@ -2061,6 +2081,26 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
             ],
         },
         {
+            "run_id": "run-verification-status-timeout",
+            "status": "running",
+            "steps": [
+                {
+                    "details": {
+                        "release_guard": {
+                            "verification_jobs": {
+                                "jobs": [
+                                    {
+                                        "job_id": "release-verification-status-timeout",
+                                        "status": "timeout",
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            ],
+        },
+        {
             "run_id": "run-verification-timeout",
             "status": "running",
             "steps": [
@@ -2103,7 +2143,7 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, verification_failed_only=True)
-    ] == ["run-verification-failed"]
+    ] == ["run-verification-failed", "run-verification-status-timeout"]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, verification_pending_timeout_only=True)
