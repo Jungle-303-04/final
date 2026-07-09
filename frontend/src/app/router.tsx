@@ -44,7 +44,10 @@ const consoleChildren = (basePath = '') => [
 ];
 
 const devRoutes = import.meta.env.DEV
-  ? [{ path: '/dev/ui', element: L(() => import('@/dev/UiShowcase')) }]
+  ? [
+      { path: '/dev/ui', element: L(() => import('@/dev/UiShowcase')) },
+      { path: '/dev/ui-layer-lab', element: L(() => import('@/dev/ui-layer-lab')) },
+    ]
   : [];
 
 export const router = createBrowserRouter([
