@@ -19,6 +19,8 @@ export type ReleaseRunFilter =
   | 'stale'
   | 'live'
   | 'failed'
+  | 'rollback_requested'
+  | 'unhealthy'
   | 'waiting_for_approval'
   | 'verification_failed'
   | 'verification_pending_timeout';
@@ -65,9 +67,12 @@ function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
   if (filter === 'attention') params.set('attention_only', 'true');
   if (filter === 'stale') params.set('stale_only', 'true');
   if (filter === 'live') params.set('live_only', 'true');
+  if (filter === 'unhealthy') params.set('unhealthy_only', 'true');
   if (filter === 'verification_failed') params.set('verification_failed_only', 'true');
   if (filter === 'verification_pending_timeout') params.set('verification_pending_timeout_only', 'true');
-  if (filter === 'failed' || filter === 'waiting_for_approval') params.set('status', filter);
+  if (filter === 'failed' || filter === 'rollback_requested' || filter === 'waiting_for_approval') {
+    params.set('status', filter);
+  }
   const query = params.toString();
   return `/release-runs${query ? `?${query}` : ''}`;
 }
