@@ -664,6 +664,9 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             <Field label="Approval reason">
               <input className="input" value={getString(settings.approval_reason)} onChange={e => setPolicy({ approval_reason: e.target.value })} />
             </Field>
+            <Field label="Approval granted at (UTC)">
+              <input className="input" type="datetime-local" value={toDateTimeLocalValue(getString(settings.approval_granted_at))} onChange={e => setPolicy({ approval_granted_at: fromDateTimeLocalValue(e.target.value) })} />
+            </Field>
           </>
         )}
         <label className="release-flow__check">
@@ -1805,6 +1808,16 @@ function markersFor(monaco: Monaco, diagnostics: Diagnostic[]): MonacoEditor.IMa
 
 function getString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.length ? value : fallback;
+}
+
+function toDateTimeLocalValue(value: string): string {
+  if (!value) return '';
+  return value.replace(/Z$/, '').slice(0, 16);
+}
+
+function fromDateTimeLocalValue(value: string): string {
+  if (!value) return '';
+  return `${value.length === 16 ? `${value}:00` : value}Z`;
 }
 
 function getNumber(value: unknown, fallback: number): number {

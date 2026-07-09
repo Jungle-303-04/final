@@ -194,6 +194,7 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["settings"]["provider_mode"] == "live"
     assert readiness_payload["settings"]["approval_granted_by"] == "release-operator"
     assert readiness_payload["settings"]["approval_reason"] == "live preflight approval evidence"
+    assert readiness_payload["settings"]["approval_granted_at"].endswith("Z")
     assert readiness_payload["settings"]["change_ticket"] == "CHG-PREFLIGHT"
     assert readiness_payload["settings"]["release_window_start"].endswith("Z")
     assert readiness_payload["settings"]["release_window_end"].endswith("Z")
