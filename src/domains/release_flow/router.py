@@ -217,6 +217,7 @@ async def dispatch_release_plan(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     body = {**payload.model_dump(), "workspace_id": workspace_id}
     require_plan_application_manage_access(db, current, workspace_id, body["steps"])
+    require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
     blockers = list(preview.get("blockers", []))
     blockers.extend(
@@ -262,6 +263,7 @@ async def start_release_plan(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     body = {**payload.model_dump(), "workspace_id": workspace_id}
     require_plan_application_manage_access(db, current, workspace_id, body["steps"])
+    require_no_active_release_run(db, workspace_id, body)
     preview = build_release_plan_preview(body)
     first_wave = first_preview_wave(preview)
     blockers = list(preview.get("blockers", []))
@@ -1046,6 +1048,21 @@ def require_plan_application_manage_access(
             AccessResourceType.APPLICATION.value,
             application_id,
             Permission.DEPLOY_RUN.value,
+        )
+
+
+def require_no_active_release_run(db: Any, workspace_id: str, plan: dict[str, Any]) -> None:
+    plan_id = str(plan.get("plan_id") or "").strip()
+    has_active = getattr(db, "has_active_release_runs", None)
+    if not plan_id or not callable(has_active):
+        return
+    if has_active(workspace_id, plan_id):
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={
+                "message": RELEASE_PLAN_BLOCKED,
+                "blockers": [f"Release plan {plan_id} already has an active run."],
+            },
         )
 
 

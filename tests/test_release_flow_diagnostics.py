@@ -37,6 +37,27 @@ def codes(items: list[DiagnosticItem]) -> set[str]:
     return {item.code for item in items}
 
 
+def release_plan_request(plan_id: str | None = None) -> release_router.ReleasePlanUpsertRequest:
+    return release_router.ReleasePlanUpsertRequest(
+        plan_id=plan_id,
+        name="Checkout release",
+        settings={"runtime_mode": "demo", "approval_policy": "auto_safe"},
+        steps=[
+            {
+                "application_id": "app-a",
+                "name": "Checkout",
+                "position": 0,
+                "config": {
+                    "branch": "main",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    )
+
+
 def test_release_run_summary_route_precedes_dynamic_run_route() -> None:
     paths = [
         route.path
@@ -137,6 +158,51 @@ def test_retry_release_run_blocks_when_retry_budget_is_exhausted(monkeypatch) ->
     assert exc.value.status_code == 409
     assert "retry budget exhausted" in exc.value.detail["blockers"][0]
     assert db.retry_marks == []
+    assert db.dispatched == []
+
+
+def test_start_release_plan_blocks_when_plan_has_active_run(monkeypatch) -> None:
+    db = ReleaseDispatchDb()
+    db.active_plan_ids.add("plan-a")
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    payload = release_plan_request(plan_id="plan-a")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.start_release_plan(
+                payload,
+                current=current,
+                db=db,
+                events=FailingEventGateway(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert any("already has an active run" in item for item in exc.value.detail["blockers"])
+    assert db.dispatched == []
+
+
+def test_dispatch_release_plan_blocks_when_plan_has_active_run(monkeypatch) -> None:
+    db = ReleaseDispatchDb()
+    db.active_plan_ids.add("plan-a")
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    payload = release_plan_request(plan_id="plan-a")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.dispatch_release_plan(
+                payload,
+                wave=1,
+                current=current,
+                db=db,
+                events=FailingEventGateway(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert any("already has an active run" in item for item in exc.value.detail["blockers"])
     assert db.dispatched == []
 
 
@@ -431,6 +497,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
 class ReleaseDispatchDb:
     def __init__(self) -> None:
         self.dispatched: list[dict[str, object]] = []
+        self.active_plan_ids: set[str] = set()
 
     def get_application(self, _workspace_id: str, _application_id: str) -> dict[str, object]:
         return {
@@ -442,6 +509,9 @@ class ReleaseDispatchDb:
 
     def mark_release_run_step_dispatched(self, *args: object, **kwargs: object) -> None:
         self.dispatched.append({"args": args, **kwargs})
+
+    def has_active_release_runs(self, _workspace_id: str, plan_id: str) -> bool:
+        return plan_id in self.active_plan_ids
 
 
 class MissingApplicationDispatchDb(ReleaseDispatchDb):
