@@ -295,6 +295,10 @@ def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
     assert db.recorded_events[0]["event_type"].startswith("release.notify.")
     assert db.recorded_events[0]["details"]["operator_action"] == "notify"
     assert db.recorded_events[0]["details"]["alert"]["severity"] == "warning"
+    assert db.recorded_events[0]["details"]["alert"]["cluster_id"] == "target"
+    assert db.recorded_events[0]["details"]["alert"]["namespace"] == "sandbox"
+    assert db.recorded_events[0]["details"]["alert"]["application_id"] == "checkout"
+    assert db.recorded_events[0]["details"]["alert"]["workflow_run_id"] == "release-run-1"
 
 
 def test_notify_release_run_attention_blocks_recent_duplicate(monkeypatch) -> None:
