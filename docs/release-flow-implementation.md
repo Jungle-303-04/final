@@ -121,6 +121,7 @@
 - run-scoped audit/export: 선택한 release run의 `run_id`로 audit 조회와 CSV export를 좁혀 사고 리뷰와 배포 증적 제출에 바로 사용
 - audit event filter/export: 선택한 run audit에서 workflow failure, approval, rollback, cancel, wave dispatch, evidence queued 같은 event type별 조회와 CSV export를 지원
 - audit prefix filter: `release.notify.*`처럼 동적 timestamp suffix가 붙는 audit event를 prefix 기준으로 조회/CSV export
+- audit row metadata: Audit 카드의 event row에도 notify severity/application, retry attempt, RCA/evidence meta를 같이 표시
 - attention alert: 선택한 attention/stale release run을 기존 `alert.requested` 파이프라인으로 수동 알림 요청
 - notify cooldown/audit: release notify는 `release.notify.<timestamp>` audit event를 남기고 최근 알림이 있으면 cooldown blocker로 반복 알림 폭주를 차단
 - notify cooldown handoff: notify cooldown 중에는 operator handoff의 notify next action과 UI Notify 버튼을 비활성화하고 남은 대기 사유를 표시
