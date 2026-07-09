@@ -16,12 +16,12 @@ const nodes: Array<StepNode | GroupNode> = [
     id: "quality",
     type: "group",
     position: { x: 120, y: 40 },
-    data: { label: "Quality stage" },
+    data: { label: "품질 단계" },
     style: { width: 520, height: 230 }
   },
-  step("typecheck", "Typecheck", "passed", 40, 80, "quality"),
-  step("visual", "Visual smoke", "failed", 280, 80, "quality"),
-  step("deploy", "Deploy", "waiting", 760, 120)
+  step("typecheck", "타입 검사", "통과", 40, 80, "quality"),
+  step("visual", "시각 스모크", "실패", 280, 80, "quality"),
+  step("deploy", "배포", "대기", 760, 120)
 ];
 
 const edges = [

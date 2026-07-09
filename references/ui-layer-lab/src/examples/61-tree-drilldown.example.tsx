@@ -1,11 +1,11 @@
 import { useState } from "react";
 
 const nodes = [
-  { id: "workflow", parent: "", label: "Workflow run" },
-  { id: "build", parent: "workflow", label: "Build job" },
-  { id: "smoke", parent: "workflow", label: "Visual smoke job" },
-  { id: "route", parent: "smoke", label: "Route check" },
-  { id: "screenshot", parent: "smoke", label: "Screenshot diff" }
+  { id: "workflow", parent: "", label: "워크플로 실행" },
+  { id: "build", parent: "workflow", label: "빌드 작업" },
+  { id: "smoke", parent: "workflow", label: "시각 스모크 작업" },
+  { id: "route", parent: "smoke", label: "라우트 검사" },
+  { id: "screenshot", parent: "smoke", label: "스크린샷 차이" }
 ];
 
 export default function TreeDrilldownExample() {
@@ -32,6 +32,7 @@ export default function TreeDrilldownExample() {
                 setSelected(node);
                 if (children) toggle(node.id);
               }}
+              type="button"
             >
               {children ? (open ? "-" : "+") : "·"} {node.label}
             </button>
@@ -46,7 +47,7 @@ export default function TreeDrilldownExample() {
       <div className="tree-panel">{render("")}</div>
       <aside className="detail-panel">
         <strong>{selected.label}</strong>
-        <span>ID: {selected.id}</span>
+        <span>식별자: {selected.id}</span>
       </aside>
     </div>
   );

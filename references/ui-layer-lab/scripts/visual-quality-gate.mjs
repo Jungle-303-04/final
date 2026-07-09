@@ -265,6 +265,74 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/103-animated-kanban-card.example.tsx",
       fragments: ['"Queued"', '"Running"', '"Review"', "visual smoke"]
+    },
+    {
+      file: "src/examples/03-assistant-drawer.example.tsx",
+      fragments: ["Why did the latest run fail", "Deploy Preview", "Open assistant", "AI Assistant", "Context:"]
+    },
+    {
+      file: "src/examples/05-job-log-drawer.example.tsx",
+      fragments: ["remote: Enumerating", "receiving objects", "resolving deltas", "checking workspace"]
+    },
+    {
+      file: "src/examples/11-react-flow-subflow.example.tsx",
+      fragments: ["Quality stage", "Typecheck", "Visual smoke", "Deploy", "passed", "failed", "waiting"]
+    },
+    {
+      file: "src/examples/18-animated-timeline.example.tsx",
+      fragments: ["Pull started", "Objects received", "Deltas resolved", "Workspace checked", "Ready"]
+    },
+    {
+      file: "src/examples/106-ai-selection-toolbar.example.tsx",
+      fragments: ["Select text to ask AI", "The visual smoke job failed", "Explain", "Missing route", "Fix"]
+    },
+    {
+      file: "src/examples/107-ai-context-chips.example.tsx",
+      fragments: ["current page", "git diff", "workflow log", "screenshot", "AI context"]
+    },
+    {
+      file: "src/examples/108-ai-sidecar-tabs.example.tsx",
+      fragments: ["The failure is caused", "Restore route", "What changed", "route-level regression"]
+    },
+    {
+      file: "src/examples/109-job-phase-ring.example.tsx",
+      fragments: ['name: "fetch"', 'name: "build"', 'name: "verify"', "Next Phase", "#fafafa", "#27272a"]
+    },
+    {
+      file: "src/examples/110-job-sla-alert.example.tsx",
+      fragments: ["SLA breached", "remaining", "Escalate if deploy"]
+    },
+    {
+      file: "src/examples/111-job-waterfall.example.tsx",
+      fragments: ['name: "install"', 'name: "typecheck"', 'name: "build"', 'name: "smoke"']
+    },
+    {
+      file: "src/examples/112-drilldown-metric-breakdown.example.tsx",
+      fragments: ["Latency rose after deploy", "Stable route checks", "Queue is draining slowly"]
+    },
+    {
+      file: "src/examples/113-drilldown-status-filters.example.tsx",
+      fragments: ['name: "preview"', '["all", "failed", "running", "success"]', "filtered.length} runs", "Filtered by"]
+    },
+    {
+      file: "src/examples/37-job-retry-failure.example.tsx",
+      fragments: ["visual smoke", ">Retry<"]
+    },
+    {
+      file: "src/examples/58-job-cancel-action.example.tsx",
+      fragments: [">Cancel<"]
+    },
+    {
+      file: "src/examples/61-tree-drilldown.example.tsx",
+      fragments: ["Workflow run", "Build job", "Visual smoke job", "Route check", "Screenshot diff", "ID:"]
+    },
+    {
+      file: "src/examples/122-command-result-preview.example.tsx",
+      fragments: ["Runs install", "Failed in visual-smoke", "Target registration", "Search everything", "Results"]
+    },
+    {
+      file: "src/examples/123-command-inline-actions.example.tsx",
+      fragments: ["Choose a row action", "Search runs", 'heading="Runs"', "Opening", "Retrying", ">Open<", ">Retry<"]
     }
   ];
   const matches = [];
@@ -454,7 +522,12 @@ async function inspectEnglishSamples(page, url) {
     ["오버레이/명령", "example-command-recent-filter-pills"],
     ["모션/상태 전환", "example-animated-command-search-skeleton"],
     ["작업 진행/로그", "example-job-command-palette-launch"],
-    ["플로우 빌더", "example-react-flow-edge-health-filter"]
+    ["플로우 빌더", "example-react-flow-edge-health-filter"],
+    ["AI 작업 레이어", "example-assistant-drawer"],
+    ["AI 작업 레이어", "example-ai-sidecar-tabs"],
+    ["작업 진행/로그", "example-job-sla-alert"],
+    ["드릴다운 탐색", "example-drilldown-status-filters"],
+    ["플로우 빌더", "example-react-flow-subflow"]
   ];
   const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
   const violations = [];

@@ -3,6 +3,11 @@ import { useEffect, useState } from "react";
 export default function JobCancelActionExample() {
   const [status, setStatus] = useState<"running" | "cancelled" | "success">("running");
   const [progress, setProgress] = useState(18);
+  const statusLabel = {
+    running: "실행 중",
+    cancelled: "취소됨",
+    success: "완료"
+  }[status];
 
   useEffect(() => {
     if (status !== "running") return;
@@ -25,9 +30,9 @@ export default function JobCancelActionExample() {
         <div style={{ width: `${progress}%` }} />
       </div>
       {status === "running" ? (
-        <button onClick={() => setStatus("cancelled")}>Cancel</button>
+        <button onClick={() => setStatus("cancelled")} type="button">취소</button>
       ) : (
-        <span>{status}</span>
+        <span>{statusLabel}</span>
       )}
     </div>
   );

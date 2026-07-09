@@ -1,9 +1,9 @@
 import { useState } from "react";
 const logs = [
-  "remote: Enumerating objects: 18",
-  "receiving objects: 100%",
-  "resolving deltas: 73%",
-  "checking workspace conflicts"
+  "원격 객체 18개 확인",
+  "객체 수신 100%",
+  "델타 해석 73%",
+  "작업공간 충돌 검사 중"
 ];
 
 export default function JobLogDrawerExample() {
@@ -11,7 +11,7 @@ export default function JobLogDrawerExample() {
 
   return (
     <div className="example-stack">
-      <button className="job-row" onClick={() => setOpen(true)}>
+      <button className="job-row" onClick={() => setOpen(true)} type="button">
         <span>git pull origin dev</span>
         <strong>64%</strong>
       </button>

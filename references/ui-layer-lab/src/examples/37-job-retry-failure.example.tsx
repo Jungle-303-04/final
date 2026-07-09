@@ -2,6 +2,12 @@ import { useState } from "react";
 
 export default function JobRetryFailureExample() {
   const [status, setStatus] = useState<"failed" | "queued" | "running" | "success">("failed");
+  const statusLabel = {
+    failed: "실패",
+    queued: "대기",
+    running: "실행 중",
+    success: "성공"
+  }[status];
 
   function retry() {
     setStatus("queued");
@@ -11,10 +17,10 @@ export default function JobRetryFailureExample() {
 
   return (
     <div className={`retry-card ${status}`}>
-      <strong>visual smoke</strong>
-      <span>{status}</span>
-      <button className="command-trigger" onClick={retry}>
-        Retry
+      <strong>시각 스모크</strong>
+      <span>{statusLabel}</span>
+      <button className="command-trigger stable-wide" onClick={retry} type="button">
+        다시 시도
       </button>
     </div>
   );
