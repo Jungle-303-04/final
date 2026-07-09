@@ -1720,6 +1720,7 @@ def release_dispatch_guard_snapshot(
     return {
         "runtime_mode": profile.runtime_mode,
         "side_effects": profile.side_effects,
+        "readiness": release_dispatch_readiness_snapshot(plan, preview, profile, wave),
         "change_management": {
             "change_ticket_present": any(
                 has_change_ticket(settings, step_config(step))
@@ -1805,6 +1806,93 @@ def release_dispatch_guard_snapshot(
             ],
         },
     }
+
+
+def release_dispatch_readiness_snapshot(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    profile: Any,
+    wave: int,
+) -> dict[str, Any]:
+    warning_checks = release_dispatch_readiness_warning_checks(plan, preview, wave)
+    return {
+        "ready": True,
+        "checked_wave": wave,
+        "summary": f"Dispatch guards passed for wave {wave}.",
+        "impact": release_readiness_impact(plan, preview, profile),
+        "selected_wave_steps": [
+            readiness_impact_step(step)
+            for step in preview.get("steps", [])
+            if isinstance(step, dict) and int_field(step, "wave", 0) == wave
+        ],
+        "warnings": [str(check["message"]) for check in warning_checks],
+        "next_actions": release_readiness_next_actions(warning_checks),
+    }
+
+
+def release_dispatch_readiness_warning_checks(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[dict[str, Any]]:
+    settings = plan_settings_value(plan)
+    retry_attempts = max(0, int_field(settings, "retry_attempts", 1))
+    checks: list[dict[str, Any]] = []
+    if release_production_change_ticket_bypassed(plan, preview, wave):
+        checks.append(
+            readiness_check(
+                "change.ticket",
+                "Change ticket",
+                "warning",
+                "Production change ticket gate is bypassed with an operator reason.",
+            )
+        )
+    if release_production_window_bypassed(plan, preview, wave):
+        checks.append(
+            readiness_check(
+                "release.window",
+                "Release window",
+                "warning",
+                "Production release window is bypassed with an operator reason.",
+            )
+        )
+    if release_production_runbook_bypassed(plan, preview, wave):
+        checks.append(
+            readiness_check(
+                "runbook.sop",
+                "Runbook",
+                "warning",
+                "Production runbook gate is bypassed with an operator reason.",
+            )
+        )
+    if release_diagnostics_bypassed(plan):
+        checks.append(
+            readiness_check(
+                "plan.diagnostics",
+                "Diagnostics gate",
+                "warning",
+                "Diagnostics gate is bypassed with an operator reason.",
+            )
+        )
+    if release_rollback_policy_bypassed(plan):
+        checks.append(
+            readiness_check(
+                "rollback.policy",
+                "Rollback policy",
+                "warning",
+                "Rollback policy is disabled with an operator reason.",
+            )
+        )
+    if retry_attempts <= 0:
+        checks.append(
+            readiness_check(
+                "retry.policy",
+                "Retry policy",
+                "warning",
+                "Failed waves cannot be retried automatically from this plan.",
+            )
+        )
+    return checks
 
 
 def release_dispatch_context_blockers(

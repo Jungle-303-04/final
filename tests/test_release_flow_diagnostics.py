@@ -3091,6 +3091,11 @@ def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch
     guard = db.dispatched[0]["details"]["release_guard"]
     assert guard["runtime_mode"] == "live"
     assert guard["side_effects"] is True
+    assert guard["readiness"]["ready"] is True
+    assert guard["readiness"]["checked_wave"] == 1
+    assert guard["readiness"]["impact"]["applications"] == ["app-a"]
+    assert guard["readiness"]["selected_wave_steps"][0]["application_id"] == "app-a"
+    assert guard["readiness"]["warnings"] == []
     assert guard["diagnostics"] == {
         "required": True,
         "bypassed": False,
@@ -3255,6 +3260,14 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
     }
     assert guard["release_window"]["production_targets"] == ["app-a"]
     assert guard["release_window"]["override_reason"] == "incident commander approved immediate release"
+    assert guard["readiness"]["warnings"] == [
+        "Production change ticket gate is bypassed with an operator reason.",
+        "Production release window is bypassed with an operator reason.",
+    ]
+    assert [action["check_id"] for action in guard["readiness"]["next_actions"]] == [
+        "change.ticket",
+        "release.window",
+    ]
     assert guard["runbook"] == {
         "url": "https://wiki.example.com/runbooks/storefront-release",
         "url_present": True,
@@ -3338,6 +3351,9 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
 
     assert accepted[0]["event_id"] == "evt-live"
     guard = db.dispatched[0]["details"]["release_guard"]
+    assert guard["readiness"]["impact"]["production_target_count"] == 1
+    assert guard["readiness"]["impact"]["production_targets"] == ["checkout"]
+    assert guard["readiness"]["selected_wave_steps"][0]["environment"] == "production"
     assert guard["change_management"]["change_ticket_present"] is True
     assert guard["release_window"]["production_targets"] == ["app-a"]
     assert guard["release_window"]["start"].endswith("Z")
