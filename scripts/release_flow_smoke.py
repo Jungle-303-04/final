@@ -137,6 +137,7 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
             "approval_granted": True,
             "approval_granted_by": args.live_approval_by,
             "approval_reason": args.live_approval_reason,
+            "approval_granted_at": args.live_approval_at or live_preflight_timestamp(),
             "change_ticket": args.live_change_ticket,
             "release_window_start": window_start,
             "release_window_end": window_end,
@@ -174,6 +175,10 @@ def live_preflight_window(args: argparse.Namespace) -> tuple[str, str]:
     start = (now - timedelta(minutes=15)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     end = (now + timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return start, end
+
+
+def live_preflight_timestamp() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def demo_step(app: JsonMap, index: int, selected: list[JsonMap]) -> JsonMap:
@@ -341,6 +346,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--live-window-start", default=os.getenv("LIVE_PREFLIGHT_WINDOW_START", ""))
     parser.add_argument("--live-window-end", default=os.getenv("LIVE_PREFLIGHT_WINDOW_END", ""))
+    parser.add_argument("--live-approval-at", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_AT", ""))
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
     parser.add_argument("--live-image", default=os.getenv("LIVE_PREFLIGHT_IMAGE", ""))
     parser.add_argument("--live-rollback-policy", default=os.getenv("LIVE_PREFLIGHT_ROLLBACK_POLICY", "safe_pr"))

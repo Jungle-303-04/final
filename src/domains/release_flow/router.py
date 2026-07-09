@@ -72,6 +72,9 @@ TERMINAL_RELEASE_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_r
 BLOCKING_RUN_STATUSES = {"running", "paused", "rollback_requested", "waiting_for_approval"}
 ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_ALERT_TEST_MAX_AGE_HOURS"
 DEFAULT_ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS = 24
+APPROVAL_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS"
+DEFAULT_APPROVAL_MAX_AGE_HOURS = 24
+APPROVAL_CLOCK_SKEW_MINUTES = 5
 
 
 @router.get(gateway_routes.RELEASE_PLANS_PATH, response_model=ReleasePlanListResponse)
@@ -1024,9 +1027,9 @@ def release_readiness_from_plan(
             "approval.evidence",
             "Approval evidence",
             "blocked" if approval_evidence_blockers else "passed",
-            "Production approval requires approver and reason evidence before live dispatch."
+            "Production approval requires approver, reason, and recent approval time before live dispatch."
             if approval_evidence_blockers
-            else "Approval evidence is complete for production live dispatch.",
+            else f"Approval evidence is complete and recent within {approval_max_age_label()}.",
             approval_evidence_blockers,
         ),
         readiness_check(
@@ -1247,11 +1250,24 @@ def release_production_approval_evidence_blockers(
             missing.append("approval_granted_by")
         if not release_approval_reason(settings, config):
             missing.append("approval_reason")
+        approval_time = release_approval_granted_at(settings, config)
+        if approval_time is None:
+            missing.append("approval_granted_at")
         if missing:
             label = str(step.get("name") or step.get("application_id") or "release step")
             blockers.append(
                 f"{label} targets production and requires approval evidence "
                 f"({', '.join(missing)}) before live dispatch."
+            )
+            continue
+        if approval_time and release_approval_is_in_future(approval_time):
+            label = str(step.get("name") or step.get("application_id") or "release step")
+            blockers.append(f"{label} targets production but approval evidence is in the future.")
+        elif approval_time and release_approval_is_expired(approval_time):
+            label = str(step.get("name") or step.get("application_id") or "release step")
+            blockers.append(
+                f"{label} targets production but approval evidence is older than "
+                f"{approval_max_age_label()}."
             )
     return blockers
 
@@ -1262,6 +1278,44 @@ def release_approval_granted_by(settings: dict[str, Any], config: dict[str, Any]
 
 def release_approval_reason(settings: dict[str, Any], config: dict[str, Any]) -> str:
     return str(config.get("approval_reason") or settings.get("approval_reason") or "").strip()
+
+
+def release_approval_granted_at(
+    settings: dict[str, Any],
+    config: dict[str, Any],
+) -> datetime | None:
+    return parse_release_window_time(config.get("approval_granted_at") or settings.get("approval_granted_at"))
+
+
+def release_approval_granted_at_label(settings: dict[str, Any]) -> str | None:
+    granted_at = parse_release_window_time(settings.get("approval_granted_at"))
+    return release_window_bound_label(granted_at) if granted_at else None
+
+
+def release_approval_is_expired(granted_at: datetime) -> bool:
+    age = datetime.now(timezone.utc) - granted_at.astimezone(timezone.utc)
+    return age > approval_max_age()
+
+
+def release_approval_is_in_future(granted_at: datetime) -> bool:
+    skew = timedelta(minutes=APPROVAL_CLOCK_SKEW_MINUTES)
+    return granted_at.astimezone(timezone.utc) > datetime.now(timezone.utc) + skew
+
+
+def approval_max_age() -> timedelta:
+    raw = os.getenv(APPROVAL_MAX_AGE_HOURS_ENV, str(DEFAULT_APPROVAL_MAX_AGE_HOURS)).strip()
+    try:
+        hours = float(raw)
+    except ValueError:
+        hours = float(DEFAULT_APPROVAL_MAX_AGE_HOURS)
+    return timedelta(hours=max(1.0, hours))
+
+
+def approval_max_age_label() -> str:
+    hours = approval_max_age().total_seconds() / 3600
+    if hours.is_integer():
+        return f"{int(hours)} hour(s)"
+    return f"{hours:.1f} hour(s)"
 
 
 def release_production_change_ticket_blockers(
@@ -1450,6 +1504,8 @@ def release_dispatch_guard_snapshot(
             ),
             "granted_by": str(settings.get("approval_granted_by") or "").strip() or None,
             "reason": str(settings.get("approval_reason") or "").strip() or None,
+            "granted_at": release_approval_granted_at_label(settings),
+            "max_age": approval_max_age_label(),
         },
         "release_window": {
             "start": release_window_bound_label(window_start) if window_start else None,

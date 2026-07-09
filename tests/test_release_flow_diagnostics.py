@@ -905,6 +905,7 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "production_change_override_reason": "emergency production fix approved",
                     "release_window_override_reason": "incident commander approved immediate release",
                 },
@@ -1037,6 +1038,62 @@ def test_release_readiness_blocks_production_live_without_approval_evidence(monk
     assert approval_check["status"] == "blocked"
 
 
+def test_release_readiness_blocks_stale_production_approval(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    monkeypatch.setenv("RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS", "1")
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_override_reason": "incident commander approved immediate release",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("approval evidence is older than 1 hour(s)" in item for item in response.blockers)
+    approval_check = next(check for check in response.checks if check["check_id"] == "approval.evidence")
+    assert approval_check["status"] == "blocked"
+
+
 def test_release_readiness_warns_when_production_release_window_is_bypassed(monkeypatch) -> None:
     monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
     monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
@@ -1064,6 +1121,7 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
                     "approval_granted": True,
                     "approval_granted_by": "lead@example.com",
                     "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
                     "change_ticket": "CHG-123",
                     "release_window_override_reason": "incident commander approved immediate release",
                 },
@@ -3003,6 +3061,7 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
+            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
             "production_change_override_reason": "emergency production fix approved",
             "release_window_override_reason": "incident commander approved immediate release",
         },
@@ -3077,6 +3136,7 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
             "approval_granted": True,
             "approval_granted_by": "lead@example.com",
             "approval_reason": "approved production release",
+            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
             "change_ticket": "CHG-123",
             "release_window_start": start.isoformat(),
             "release_window_end": end.isoformat(),
