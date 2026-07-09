@@ -24,7 +24,7 @@ body:json {
       {
         "profile_id": "checkout-fast",
         "enabled": true,
-        "description": "checkout 계열 시연 workload fast-lane",
+        "description": "checkout 계열 workload fast-lane",
         "selector": {
           "namespaces": [
             "sandbox",
@@ -37,13 +37,13 @@ body:json {
             "orders-api"
           ]
         },
-        "priority_class_name": "gitops-demo-fast",
+        "priority_class_name": "gitops-fast-lane",
         "priority_value": 100000,
         "preemption_policy": "PreemptLowerPriority",
         "placement_mode": "preferred",
         "node_selector": {},
         "preferred_node_labels": {
-          "workload-tier": "demo-fast"
+          "workload-tier": "fast-lane"
         },
         "tolerations": [],
         "pre_pull_images": [

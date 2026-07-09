@@ -386,6 +386,8 @@ def test_management_install_manifest_is_read_only() -> None:
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
+    assert "gitops-control-critical" in manifest
+    assert "gitops-fast-lane" not in manifest
 
 
 def test_static_management_agent_manifest_is_read_only() -> None:
@@ -433,7 +435,7 @@ def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
 
     assert 'name: "demo-api"' in manifest
     assert 'image: "ghcr.io/acme/demo-api:test"' in manifest
-    assert "priorityClassName: gitops-demo-fast" in manifest
+    assert "priorityClassName: gitops-fast-lane" in manifest
     assert "terminationGracePeriodSeconds: 1" in manifest
 
 
@@ -456,6 +458,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert response.install_manifest
     assert "kind: PriorityClass" in response.install_manifest
     assert "priorityClassName: gitops-control-critical" in response.install_manifest
+    assert "gitops-fast-lane" in response.install_manifest
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
     assert db.registered[0]["workspace_id"] == "default"
@@ -1037,9 +1040,9 @@ def test_cluster_scheduling_profiles_update_is_selector_based() -> None:
                     namespaces=["sandbox", "payments"],
                     labels={"app.kubernetes.io/part-of": "checkout"},
                 ),
-                priority_class_name="gitops-demo-fast",
+                priority_class_name="gitops-fast-lane",
                 placement_mode="preferred",
-                preferred_node_labels={"workload-tier": "demo-fast"},
+                preferred_node_labels={"workload-tier": "fast-lane"},
                 pre_pull_images=["ghcr.io/example/orders-api:v1"],
                 termination_grace_period_seconds=1,
             )
@@ -1060,7 +1063,7 @@ def test_cluster_scheduling_profiles_update_is_selector_based() -> None:
     assert response.scheduling["profiles"][0]["profile_id"] == "fast-lane"
     assert stored.generation == 4
     assert stored.scheduling.profiles[0].selector.namespaces == ["sandbox", "payments"]
-    assert stored.scheduling.profiles[0].preferred_node_labels == {"workload-tier": "demo-fast"}
+    assert stored.scheduling.profiles[0].preferred_node_labels == {"workload-tier": "fast-lane"}
 
 
 def test_cluster_scheduling_profile_requires_selector() -> None:

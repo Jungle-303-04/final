@@ -561,7 +561,7 @@ class SchedulingProfile(StrictModel):
     enabled: bool = True
     description: str = Field(default="", max_length=500)
     selector: SchedulingSelector = Field(default_factory=SchedulingSelector)
-    priority_class_name: str = Field(default="gitops-demo-fast", max_length=120)
+    priority_class_name: str = Field(default="gitops-fast-lane", max_length=120)
     priority_value: int = Field(default=100_000, ge=0, le=1_000_000_000)
     preemption_policy: Literal["PreemptLowerPriority", "Never"] = "PreemptLowerPriority"
     placement_mode: Literal["preferred", "required"] = "preferred"
