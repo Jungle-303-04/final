@@ -820,6 +820,10 @@ class ReleaseRunAlertResponse(StrictModel):
     run: JsonMap
 
 
+class ReleaseRunHandoffResponse(StrictModel):
+    handoff: JsonMap
+
+
 class ReleaseRunListResponse(StrictModel):
     runs: list[JsonMap]
 

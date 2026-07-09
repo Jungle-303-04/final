@@ -41,6 +41,7 @@ from packages.contracts.gateway.responses import (
     ReleaseReadinessResponse,
     ReleasePlanResponse,
     ReleaseRunAlertResponse,
+    ReleaseRunHandoffResponse,
     ReleaseRunListResponse,
     ReleaseRunSummaryResponse,
     ReleaseRunResponse,
@@ -173,6 +174,20 @@ async def get_release_run(
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
     require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
     return ReleaseRunResponse(run=run)
+
+
+@router.get(gateway_routes.RELEASE_RUN_HANDOFF_PATH, response_model=ReleaseRunHandoffResponse)
+async def get_release_run_handoff(
+    run_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseRunHandoffResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    run = db.get_release_run(workspace_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
+    require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
+    return ReleaseRunHandoffResponse(handoff=release_run_handoff(run))
 
 
 @router.get(gateway_routes.RELEASE_PLAN_PATH, response_model=ReleasePlanResponse)
@@ -1386,6 +1401,140 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
     }
+
+
+def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
+    status = str(run.get("derived_status") or run.get("status") or "unknown")
+    attention = run.get("attention") if isinstance(run.get("attention"), dict) else {}
+    health = run.get("health") if isinstance(run.get("health"), dict) else {}
+    rollback_policy = release_run_rollback_policy(run)
+    attention_reasons = release_attention_reasons(run)
+    stale = attention.get("stale") is True
+    live_side_effects = release_run_has_live_side_effects(run)
+    retryable = release_run_is_retryable(run)
+    terminal = status in TERMINAL_RELEASE_RUN_STATUSES
+    alertable = stale or attention.get("required") is True or bool(attention_reasons)
+    return {
+        "run_id": str(run.get("run_id") or ""),
+        "plan_id": str(run.get("plan_id") or ""),
+        "plan_name": str(run.get("plan_name") or "Release run"),
+        "status": status,
+        "headline": release_run_handoff_headline(run, status, alertable=alertable, stale=stale),
+        "severity": release_run_handoff_severity(status, alertable=alertable, stale=stale),
+        "current_wave": int(run.get("current_wave") or 0),
+        "total_waves": int(run.get("total_waves") or 0),
+        "live_side_effects": live_side_effects,
+        "attention_reasons": attention_reasons,
+        "next_actions": release_run_handoff_actions(
+            status,
+            terminal=terminal,
+            retryable=retryable,
+            alertable=alertable,
+            rollback_enabled=rollback_policy != "disabled",
+        ),
+        "checks": [
+            release_handoff_check(
+                "mode",
+                "warning" if live_side_effects else "info",
+                "Live side effects are enabled for this run." if live_side_effects else "Demo/dry-run mode is active.",
+            ),
+            release_handoff_check(
+                "health",
+                "blocked" if health.get("status") == "unhealthy" else "passed",
+                f"Health is {str(health.get('status') or 'unknown')}.",
+            ),
+            release_handoff_check(
+                "attention",
+                "warning" if alertable else "passed",
+                "; ".join(attention_reasons[:3]) if attention_reasons else "No operator attention reason is recorded.",
+            ),
+            release_handoff_check(
+                "rollback",
+                "blocked" if rollback_policy == "disabled" else "passed",
+                f"Rollback policy is {rollback_policy}.",
+            ),
+        ],
+        "last_event": release_run_last_event(run),
+    }
+
+
+def release_run_handoff_actions(
+    status: str,
+    *,
+    terminal: bool,
+    retryable: bool,
+    alertable: bool,
+    rollback_enabled: bool,
+) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    if terminal:
+        return [{"action": "review_audit", "label": "Review audit trail", "enabled": True}]
+    if status == "paused":
+        actions.append({"action": "resume", "label": "Resume when the blocker is cleared", "enabled": True})
+    elif status == "waiting_for_approval":
+        actions.append({"action": "approval", "label": "Review the pending approval", "enabled": True})
+    elif retryable:
+        actions.append({"action": "retry", "label": "Retry the failed or unhealthy wave", "enabled": True})
+    else:
+        actions.append({"action": "monitor", "label": "Monitor current wave health", "enabled": True})
+    if alertable:
+        actions.append({"action": "notify", "label": "Notify the release owner", "enabled": True})
+    actions.append({"action": "rollback", "label": "Request rollback if user impact is confirmed", "enabled": rollback_enabled})
+    actions.append({"action": "cancel", "label": "Cancel if the run should stop", "enabled": True})
+    return actions
+
+
+def release_handoff_check(name: str, status: str, message: str) -> dict[str, str]:
+    return {"name": name, "status": status, "message": message}
+
+
+def release_run_handoff_headline(
+    run: dict[str, Any],
+    status: str,
+    *,
+    alertable: bool,
+    stale: bool,
+) -> str:
+    plan_name = str(run.get("plan_name") or "Release run")
+    if stale:
+        return f"{plan_name} is stale and needs operator follow-up."
+    if alertable:
+        return f"{plan_name} needs operator attention."
+    return f"{plan_name} is {status}."
+
+
+def release_run_handoff_severity(status: str, *, alertable: bool, stale: bool) -> str:
+    if status in {"failed", "rollback_requested"} or stale:
+        return "danger"
+    if alertable or status in {"paused", "waiting_for_approval"}:
+        return "warning"
+    return "info"
+
+
+def release_run_is_retryable(run: dict[str, Any]) -> bool:
+    status = str(run.get("derived_status") or run.get("status") or "")
+    if status == "failed":
+        return True
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        health = step.get("health") if isinstance(step.get("health"), dict) else {}
+        if step.get("status") == "failed" or health.get("status") == "unhealthy":
+            return True
+    return False
+
+
+def release_run_last_event(run: dict[str, Any]) -> dict[str, Any] | None:
+    events = run.get("events") if isinstance(run.get("events"), list) else []
+    for event in reversed(events):
+        if isinstance(event, dict):
+            return {
+                "event_type": str(event.get("event_type") or ""),
+                "message": str(event.get("message") or ""),
+                "created_at": event.get("created_at"),
+            }
+    return None
 
 
 def release_attention_reasons(run: dict[str, Any]) -> list[str]:
