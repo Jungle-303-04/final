@@ -276,6 +276,7 @@ async def dispatch_release_plan(
     blockers.extend(release_production_window_blockers(body, preview, wave))
     blockers.extend(release_production_runbook_blockers(body, preview, wave))
     blockers.extend(release_production_owner_blockers(body, preview, wave))
+    blockers.extend(release_production_verification_blockers(body, preview, wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -331,6 +332,7 @@ async def start_release_plan(
     blockers.extend(release_production_window_blockers(body, preview, first_wave))
     blockers.extend(release_production_runbook_blockers(body, preview, first_wave))
     blockers.extend(release_production_owner_blockers(body, preview, first_wave))
+    blockers.extend(release_production_verification_blockers(body, preview, first_wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -530,6 +532,7 @@ async def advance_release_run(
     blockers.extend(release_production_window_blockers(plan, preview, next_wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, next_wave))
     blockers.extend(release_production_owner_blockers(plan, preview, next_wave))
+    blockers.extend(release_production_verification_blockers(plan, preview, next_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -648,6 +651,7 @@ async def retry_release_run(
     blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_owner_blockers(plan, preview, retry_wave))
+    blockers.extend(release_production_verification_blockers(plan, preview, retry_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -837,6 +841,7 @@ async def dispatch_wave_steps(
     blockers.extend(release_production_window_blockers(plan, preview, wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, wave))
     blockers.extend(release_production_owner_blockers(plan, preview, wave))
+    blockers.extend(release_production_verification_blockers(plan, preview, wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -960,6 +965,8 @@ def release_readiness_from_plan(
     runbook_blockers = release_production_runbook_blockers(plan, preview, first_wave)
     runbook_bypassed = release_production_runbook_bypassed(plan, preview, first_wave)
     owner_blockers = release_production_owner_blockers(plan, preview, first_wave)
+    verification_blockers = release_production_verification_blockers(plan, preview, first_wave)
+    verification_bypassed = release_production_verification_bypassed(plan, preview, first_wave)
     diagnostic_blockers = release_diagnostics_blockers(plan)
     diagnostic_bypassed = release_diagnostics_bypassed(plan)
     rollback_blockers = release_rollback_policy_blockers(plan)
@@ -1098,6 +1105,21 @@ def release_readiness_from_plan(
             if owner_blockers
             else "Release owner/on-call contact is present for the first executable wave.",
             owner_blockers,
+        ),
+        readiness_check(
+            "verification.plan",
+            "Post-deploy verification",
+            "blocked"
+            if verification_blockers
+            else "warning"
+            if verification_bypassed
+            else "passed",
+            "Production live release requires a health check path or verification URL."
+            if verification_blockers
+            else "Post-deploy verification gate is bypassed with an operator reason."
+            if verification_bypassed
+            else "Post-deploy verification evidence is present for the first executable wave.",
+            verification_blockers,
         ),
         readiness_check(
             "plan.diagnostics",
@@ -1649,6 +1671,74 @@ def release_owner_contact(settings: dict[str, Any], config: dict[str, Any]) -> s
     ).strip()
 
 
+def release_production_verification_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    override_reason = release_verification_override_reason(plan)
+    blockers: list[str] = []
+    for step in release_production_steps_for_wave(plan, preview, wave):
+        config = step_config(step)
+        if release_verification_evidence_present(settings, config) or override_reason:
+            continue
+        label = str(step.get("name") or step.get("application_id") or "release step")
+        blockers.append(
+            f"{label} targets production and requires health_check_path, "
+            "post_deploy_verification_url, or verification override reason before live dispatch."
+        )
+    return blockers
+
+
+def release_production_verification_bypassed(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    if not release_verification_override_reason(plan):
+        return False
+    settings = plan_settings_value(plan)
+    return any(
+        not release_verification_evidence_present(settings, step_config(step))
+        for step in release_production_steps_for_wave(plan, preview, wave)
+    )
+
+
+def release_verification_evidence_present(settings: dict[str, Any], config: dict[str, Any]) -> bool:
+    health_check_path = str(config.get("health_check_path") or settings.get("health_check_path") or "").strip()
+    verification_url = release_verification_url(settings, config)
+    return bool(health_check_path.startswith("/") or release_verification_url_is_valid(verification_url))
+
+
+def release_verification_url(settings: dict[str, Any], config: dict[str, Any]) -> str:
+    return str(
+        config.get("post_deploy_verification_url")
+        or config.get("verification_url")
+        or settings.get("post_deploy_verification_url")
+        or settings.get("verification_url")
+        or ""
+    ).strip()
+
+
+def release_verification_url_is_valid(value: str) -> bool:
+    normalized = value.lower()
+    return normalized.startswith("https://") or normalized.startswith("http://")
+
+
+def release_verification_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("verification_override_reason")
+        or settings.get("post_deploy_verification_override_reason")
+        or ""
+    ).strip()
+
+
 def release_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
     settings = plan_settings_value(plan)
     start = parse_release_window_time(settings.get("release_window_start"))
@@ -1779,6 +1869,27 @@ def release_dispatch_guard_snapshot(
                 for step in production_steps
             ],
         },
+        "verification": {
+            "evidence_present": any(
+                release_verification_evidence_present(settings, step_config(step))
+                for step in production_steps
+            ),
+            "override_reason": release_verification_override_reason(plan) or None,
+            "production_targets": [
+                str(step.get("application_id") or "")
+                for step in production_steps
+            ],
+            "health_check_paths": [
+                str(step_config(step).get("health_check_path") or settings.get("health_check_path") or "")
+                for step in production_steps
+                if str(step_config(step).get("health_check_path") or settings.get("health_check_path") or "").strip()
+            ],
+            "verification_urls": [
+                release_verification_url(settings, step_config(step))
+                for step in production_steps
+                if release_verification_url(settings, step_config(step))
+            ],
+        },
         "diagnostics": {
             "required": settings.get("require_diagnostics_pass") is not False,
             "bypassed": release_diagnostics_bypassed(plan),
@@ -1863,6 +1974,15 @@ def release_dispatch_readiness_warning_checks(
                 "Runbook",
                 "warning",
                 "Production runbook gate is bypassed with an operator reason.",
+            )
+        )
+    if release_production_verification_bypassed(plan, preview, wave):
+        checks.append(
+            readiness_check(
+                "verification.plan",
+                "Post-deploy verification",
+                "warning",
+                "Post-deploy verification gate is bypassed with an operator reason.",
             )
         )
     if release_diagnostics_bypassed(plan):

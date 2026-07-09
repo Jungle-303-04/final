@@ -54,6 +54,7 @@ def release_plan_request(plan_id: str | None = None) -> release_router.ReleasePl
                     "commit_sha": "abc123",
                     "image": "ghcr.io/example/app-a:v2",
                     "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
                 },
             }
         ],
@@ -872,6 +873,7 @@ def test_release_readiness_blocks_production_live_without_change_ticket(monkeypa
                             "approval_gate": "manual",
                             "commit_sha": "abc1234",
                             "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
                         },
                     }
                 ],
@@ -930,6 +932,7 @@ def test_release_readiness_warns_when_production_change_ticket_gate_is_bypassed(
                             "approval_gate": "manual",
                             "commit_sha": "abc1234",
                             "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
                         },
                     }
                 ],
@@ -984,6 +987,7 @@ def test_release_readiness_blocks_production_live_without_release_window(monkeyp
                             "approval_gate": "manual",
                             "commit_sha": "abc1234",
                             "image": "ghcr.io/example/checkout:v2",
+                            "health_check_path": "/readyz",
                         },
                     }
                 ],
@@ -1033,12 +1037,13 @@ def test_release_readiness_blocks_production_live_without_approval_evidence(monk
                         "name": "Checkout",
                         "position": 0,
                         "config": {
-                            "environment": "production",
-                            "approval_gate": "manual",
-                            "commit_sha": "abc1234",
-                            "image": "ghcr.io/example/checkout:v2",
-                        },
-                    }
+                        "environment": "production",
+                        "approval_gate": "manual",
+                        "commit_sha": "abc1234",
+                        "image": "ghcr.io/example/checkout:v2",
+                        "health_check_path": "/readyz",
+                    },
+                }
                 ],
             ),
             current=current,
@@ -1148,11 +1153,12 @@ def test_release_readiness_warns_when_production_release_window_is_bypassed(monk
                         "position": 0,
                         "config": {
                             "environment": "production",
-                            "approval_gate": "manual",
-                            "commit_sha": "abc1234",
-                            "image": "ghcr.io/example/checkout:v2",
-                        },
-                    }
+                        "approval_gate": "manual",
+                        "commit_sha": "abc1234",
+                        "image": "ghcr.io/example/checkout:v2",
+                        "health_check_path": "/readyz",
+                    },
+                }
                 ],
             ),
             current=current,
@@ -1280,6 +1286,122 @@ def test_release_readiness_blocks_production_live_without_owner_contact(monkeypa
     owner_action = next(action for action in response.next_actions if action["check_id"] == "owner.contact")
     assert owner_action["severity"] == "blocked"
     assert owner_action["label"] == "Resolve Owner contact"
+
+
+def test_release_readiness_blocks_production_live_without_verification_evidence(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_override_reason": "incident commander approved immediate release",
+                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is False
+    assert any("health_check_path" in item for item in response.blockers)
+    verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
+    assert verification_check["status"] == "blocked"
+
+
+def test_release_readiness_warns_when_production_verification_is_bypassed(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    db = ReleaseReadinessDb(
+        channels=[
+            {
+                "channel_id": "chan-warning",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    response = asyncio.run(
+        release_router.check_release_readiness(
+            release_router.ReleasePlanUpsertRequest(
+                name="Checkout production release",
+                settings={
+                    "runtime_mode": "live",
+                    "approval_policy": "auto_safe",
+                    "approval_granted": True,
+                    "approval_granted_by": "lead@example.com",
+                    "approval_reason": "approved production release",
+                    "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+                    "change_ticket": "CHG-123",
+                    "release_window_override_reason": "incident commander approved immediate release",
+                    "runbook_url": "https://wiki.example.com/runbooks/checkout-release",
+                    "release_owner": "checkout-release-team",
+                    "verification_override_reason": "synthetic monitor is temporarily owned by incident command",
+                },
+                steps=[
+                    {
+                        "application_id": "checkout",
+                        "name": "Checkout",
+                        "position": 0,
+                        "config": {
+                            "environment": "production",
+                            "approval_gate": "manual",
+                            "commit_sha": "abc1234",
+                            "image": "ghcr.io/example/checkout:v2",
+                        },
+                    }
+                ],
+            ),
+            current=SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=()),
+            db=db,
+        )
+    )
+
+    assert response.ready is True
+    verification_check = next(check for check in response.checks if check["check_id"] == "verification.plan")
+    assert verification_check["status"] == "warning"
+    verification_action = next(action for action in response.next_actions if action["check_id"] == "verification.plan")
+    assert verification_action["severity"] == "warning"
 
 
 def test_release_readiness_blocks_unregistered_application(monkeypatch) -> None:
@@ -2352,6 +2474,7 @@ def test_dispatch_wave_steps_blocks_unregistered_application(monkeypatch) -> Non
                     "commit_sha": "abc123",
                     "image": "ghcr.io/example/app-a:v2",
                     "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
                 },
             }
         ],
@@ -2864,6 +2987,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_change_ticket(monkey
                     "commit_sha": "abc123",
                     "image": "ghcr.io/example/app-a:v2",
                     "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
                 },
             }
         ],
@@ -2928,6 +3052,7 @@ def test_dispatch_wave_steps_blocks_production_live_without_release_window(monke
                     "commit_sha": "abc123",
                     "image": "ghcr.io/example/app-a:v2",
                     "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
                 },
             }
         ],
@@ -3028,6 +3153,76 @@ def test_dispatch_wave_steps_blocks_production_live_without_approval_evidence(mo
 
     assert raised.value.status_code == 409
     assert any("approval evidence" in blocker for blocker in raised.value.detail["blockers"])
+    assert events.calls == []
+    assert db.dispatched == []
+
+
+def test_dispatch_wave_steps_blocks_production_live_without_verification_evidence(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {
+            "runtime_mode": "live",
+            "approval_policy": "auto_safe",
+            "approval_granted": True,
+            "approval_granted_by": "lead@example.com",
+            "approval_reason": "approved production release",
+            "approval_granted_at": datetime.now(timezone.utc).isoformat(),
+            "change_ticket": "CHG-123",
+            "release_window_override_reason": "incident commander approved immediate release",
+            "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
+            "release_owner": "storefront-release-team",
+        },
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "environment": "production",
+                    "approval_gate": "manual",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(
+        channels=[
+            {
+                "channel_id": "chan-a",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            release_router.dispatch_wave_steps(
+                plan,
+                preview,
+                1,
+                "workspace-a",
+                current,
+                db,
+                events,
+                run_id="run-a",
+            )
+        )
+
+    assert raised.value.status_code == 409
+    assert any("post_deploy_verification_url" in blocker for blocker in raised.value.detail["blockers"])
     assert events.calls == []
     assert db.dispatched == []
 
@@ -3204,6 +3399,7 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
             "release_window_override_reason": "incident commander approved immediate release",
             "runbook_url": "https://wiki.example.com/runbooks/storefront-release",
             "release_owner": "storefront-release-team",
+            "verification_override_reason": "synthetic monitor is temporarily owned by incident command",
         },
         "steps": [
             {
@@ -3263,10 +3459,12 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
     assert guard["readiness"]["warnings"] == [
         "Production change ticket gate is bypassed with an operator reason.",
         "Production release window is bypassed with an operator reason.",
+        "Post-deploy verification gate is bypassed with an operator reason.",
     ]
     assert [action["check_id"] for action in guard["readiness"]["next_actions"]] == [
         "change.ticket",
         "release.window",
+        "verification.plan",
     ]
     assert guard["runbook"] == {
         "url": "https://wiki.example.com/runbooks/storefront-release",
@@ -3279,6 +3477,13 @@ def test_dispatch_wave_steps_records_production_change_override(monkeypatch) -> 
         "oncall_contact": None,
         "contact_present": True,
         "production_targets": ["app-a"],
+    }
+    assert guard["verification"] == {
+        "evidence_present": False,
+        "override_reason": "synthetic monitor is temporarily owned by incident command",
+        "production_targets": ["app-a"],
+        "health_check_paths": [],
+        "verification_urls": [],
     }
 
 
@@ -3316,6 +3521,7 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
                     "commit_sha": "abc123",
                     "image": "ghcr.io/example/app-a:v2",
                     "manifest_path": "deploy/app.yaml",
+                    "health_check_path": "/readyz",
                 },
             }
         ],
@@ -3355,6 +3561,8 @@ def test_dispatch_wave_steps_records_active_production_release_window(monkeypatc
     assert guard["readiness"]["impact"]["production_targets"] == ["checkout"]
     assert guard["readiness"]["selected_wave_steps"][0]["environment"] == "production"
     assert guard["change_management"]["change_ticket_present"] is True
+    assert guard["verification"]["health_check_paths"] == ["/readyz"]
+    assert guard["verification"]["evidence_present"] is True
     assert guard["release_window"]["production_targets"] == ["app-a"]
     assert guard["release_window"]["start"].endswith("Z")
     assert guard["release_window"]["end"].endswith("Z")
