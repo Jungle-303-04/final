@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from domains.alert.events import AlertRequestedBody
 from domains.target.evidence_policy import default_evidence_provider_policy
 from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
+from packages.contracts.gitops import DEFAULT_ENVIRONMENT
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.target import TARGET_NAMESPACE
 
@@ -50,6 +52,11 @@ FAILED_WORKFLOW_SUBJECTS = {
 }
 DEFAULT_RELEASE_FAILURE_EVIDENCE_PROVIDERS = ["kubernetes", "metrics", "logs", "traces"]
 RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
+RELEASE_ALERT_EVENT_TYPES = {
+    EventSubject.WORKFLOW_RUN_FAILED.value: ("critical", "release workflow failed"),
+    EventSubject.APPROVAL_REQUESTED.value: ("warning", "release approval requested"),
+    EventSubject.APPROVAL_REJECTED.value: ("critical", "release approval rejected"),
+}
 
 
 def release_workflow_update_from_event(evt: EventEnvelope) -> JsonObject | None:
@@ -139,6 +146,42 @@ def evidence_queued_update(
         "message": "RCA evidence jobs queued for failed workflow.",
         "details": {"evidence": dict(queued)},
     }
+
+
+def release_alert_request(
+    update: Mapping[str, Any],
+    projected: Mapping[str, Any] | None = None,
+) -> AlertRequestedBody | None:
+    event_type = str(update.get("event_type") or "")
+    if event_type not in RELEASE_ALERT_EVENT_TYPES:
+        return None
+    workflow_run_id = str(update.get("workflow_run_id") or "")
+    workspace_id = str(update.get("workspace_id") or DEFAULT_WORKSPACE_ID)
+    severity, reason = RELEASE_ALERT_EVENT_TYPES[event_type]
+    cluster_id = release_failure_cluster_id(update, projected, workflow_run_id) or Target.DEFAULT_CLUSTER_ID
+    namespace = release_failure_namespace(update, projected, workflow_run_id)
+    context = release_failure_context(
+        update,
+        projected,
+        workflow_run_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        workspace_id=workspace_id,
+    )
+    application_id = str(context.get("application_id") or "release")
+    environment = str(context.get("environment") or DEFAULT_ENVIRONMENT)
+    message = str(update.get("message") or reason)
+    return AlertRequestedBody(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        severity=severity,
+        application_id=application_id,
+        workflow_run_id=workflow_run_id,
+        environment=environment,
+        message=f"{application_id}: {message}",
+        reason=reason,
+    )
 
 
 def release_failure_cluster_id(

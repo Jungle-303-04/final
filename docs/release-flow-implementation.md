@@ -53,6 +53,7 @@
 - `GET /release-runs/summary`가 `/release-runs/{run_id}`에 가려지지 않도록 route 순서 테스트를 추가했다.
 - advance/rollback 같은 상태 변경 action은 권한 확인 후에만 상태를 바꾼다.
 - retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
+- workflow 실패, 승인 요청, 승인 거절은 `alert.requested`로 이어져 기존 alert-worker/log/webhook/channel 라우팅을 재사용한다.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
 
 ## 프론트에서 보이는 것
@@ -62,6 +63,7 @@
 - deterministic diagnostics와 YAML marker
 - release run 운영 요약: 전체 run 수, 상태별 run 수
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
+- 실패/승인대기/승인거절 운영 알림은 alert-worker가 설정된 채널로 전달
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`
