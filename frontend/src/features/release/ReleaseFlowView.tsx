@@ -656,6 +656,16 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
           <input type="checkbox" checked={Boolean(settings.approval_granted)} onChange={e => setPolicy({ approval_granted: e.target.checked })} />
           Approval granted for this plan
         </label>
+        {Boolean(settings.approval_granted) && (
+          <>
+            <Field label="Approval granted by">
+              <input className="input" value={getString(settings.approval_granted_by)} onChange={e => setPolicy({ approval_granted_by: e.target.value })} />
+            </Field>
+            <Field label="Approval reason">
+              <input className="input" value={getString(settings.approval_reason)} onChange={e => setPolicy({ approval_reason: e.target.value })} />
+            </Field>
+          </>
+        )}
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(settings.safe_pr_ready)} onChange={e => setPolicy({ safe_pr_ready: e.target.checked })} />
           Safe PR ready for this plan
