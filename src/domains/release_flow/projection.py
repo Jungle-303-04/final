@@ -208,7 +208,7 @@ def release_verification_alert_request(
     failed_jobs = [
         job
         for job in jobs
-        if str(job.get("status") or "").lower() in {"failed", "error", "unhealthy"}
+        if str(job.get("status") or "").lower() in {"failed", "error", "timeout", "unhealthy"}
     ]
     if not failed_jobs:
         return None
@@ -234,6 +234,7 @@ def release_verification_alert_request(
     kind = str(first_job.get("kind") or "verification")
     target = release_verification_alert_target(first_job)
     target_suffix = f" ({target})" if target else ""
+    status_label = release_verification_alert_status_label(first_job)
     return AlertRequestedBody(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
@@ -242,9 +243,14 @@ def release_verification_alert_request(
         application_id=application_id,
         workflow_run_id=workflow_run_id,
         environment=str(context.get("environment") or DEFAULT_ENVIRONMENT),
-        message=f"{application_id}: post-deploy verification {kind} failed{target_suffix}",
+        message=f"{application_id}: post-deploy verification {kind} {status_label}{target_suffix}",
         reason="release verification failed",
     )
+
+
+def release_verification_alert_status_label(job: Mapping[str, Any]) -> str:
+    status = str(job.get("status") or "").strip().lower()
+    return "timed out" if status == "timeout" else "failed"
 
 
 def release_verification_alert_target(job: Mapping[str, Any]) -> str:
@@ -809,7 +815,7 @@ def release_verification_health_status(subject: str, payload: Mapping[str, Any])
     if subject != EventSubject.EVIDENCE_JOB_UPDATED.value or not is_release_verification_update(payload):
         return None
     status = _first_string(payload, ("status",), ("reported_status",)).lower()
-    if status in {"failed", "error", "unhealthy"}:
+    if status in {"failed", "error", "timeout", "unhealthy"}:
         return "unhealthy"
     if status in {"completed", "succeeded", "passed", "healthy"}:
         return "healthy"

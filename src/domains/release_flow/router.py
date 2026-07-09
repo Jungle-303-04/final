@@ -72,7 +72,7 @@ RELEASE_RUN_BLOCKED = "release run cannot advance"
 TERMINAL_RELEASE_RUN_STATUSES = {"succeeded", "failed", "cancelled", "rollback_requested"}
 BLOCKING_RUN_STATUSES = {"running", "paused", "rollback_requested", "waiting_for_approval"}
 DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES = 15
-VERIFICATION_JOB_FAILED_STATUSES = {"failed", "error", "unhealthy"}
+VERIFICATION_JOB_FAILED_STATUSES = {"failed", "error", "timeout", "unhealthy"}
 VERIFICATION_JOB_PENDING_STATUSES = {"", "pending", "queued", "running"}
 RELEASE_NOTIFY_COOLDOWN_MINUTES_ENV = "RELEASE_FLOW_NOTIFY_COOLDOWN_MINUTES"
 DEFAULT_RELEASE_NOTIFY_COOLDOWN_MINUTES = 10
@@ -2772,7 +2772,7 @@ def release_verification_job_advance_blockers(
     blockers: list[str] = []
     for job in jobs:
         status = str(job.get("status") or "").lower()
-        if status in {"failed", "error", "unhealthy"}:
+        if status in VERIFICATION_JOB_FAILED_STATUSES:
             kind = str(job.get("kind") or "verification")
             blockers.append(
                 f"{name} post-deploy verification {kind} failed; resolve it before advancing wave {wave}."

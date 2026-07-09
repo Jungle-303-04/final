@@ -280,6 +280,38 @@ def test_release_verification_job_failure_builds_operational_alert() -> None:
     assert alert.message == "checkout: post-deploy verification http_probe failed"
 
 
+def test_release_verification_job_timeout_builds_operational_alert() -> None:
+    update = release_workflow_update_from_event(
+        _evt(
+            "evidence.job.updated",
+            {
+                "workspace_id": "workspace-a",
+                "workflow_run_id": "workflow-1",
+                "application_id": "checkout",
+                "cluster_id": "target",
+                "job_id": "release-verification-a",
+                "provider_key": "http_probe",
+                "status": "timeout",
+                "source_id": "post-deploy-verification",
+                "evidence_key": "plan-a:wave-1:checkout:post-deploy-verification",
+                "error": "verification timed out",
+                "result": {"elapsed_ms": 900000},
+            },
+        )
+    )
+
+    assert update is not None
+    assert update["health_status"] == "unhealthy"
+    jobs = update["details"]["release_guard"]["verification_jobs"]["jobs"]
+    assert jobs[0]["status"] == "timeout"
+    alert = release_alert_request(update)
+
+    assert alert is not None
+    assert alert.severity == "critical"
+    assert alert.reason == "release verification failed"
+    assert alert.message == "checkout: post-deploy verification http_probe timed out"
+
+
 def test_merge_projection_details_updates_existing_verification_job() -> None:
     current = {
         "release_guard": {
