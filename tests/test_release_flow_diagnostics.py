@@ -2235,6 +2235,81 @@ def test_dispatch_wave_steps_publishes_live_when_backend_gate_allows(monkeypatch
     assert accepted[0]["event"]["subject"] == "git.webhook.received"
     assert db.dispatched[0]["details"]["runtime_mode"] == "live"
     assert db.dispatched[0]["details"]["side_effects"] is True
+    guard = db.dispatched[0]["details"]["release_guard"]
+    assert guard["runtime_mode"] == "live"
+    assert guard["side_effects"] is True
+    assert guard["diagnostics"] == {
+        "required": True,
+        "bypassed": False,
+        "override_reason": None,
+        "blocking_count": 0,
+        "blocking_codes": [],
+    }
+    assert guard["alerts"]["validated_count"] == 1
+    assert guard["alerts"]["validated_channels"][0]["channel_id"] == "chan-a"
+
+
+def test_dispatch_wave_steps_records_diagnostics_override_reason(monkeypatch) -> None:
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_ENABLED", "1")
+    monkeypatch.setenv("RELEASE_FLOW_LIVE_WORKSPACES", "workspace-a")
+    plan = {
+        "plan_id": "plan-a",
+        "name": "storefront",
+        "settings": {
+            "runtime_mode": "live",
+            "approval_policy": "auto_safe",
+            "require_diagnostics_pass": False,
+            "diagnostics_override_reason": "approved emergency release",
+        },
+        "steps": [
+            {
+                "step_id": "step-a",
+                "application_id": "app-a",
+                "name": "checkout",
+                "config": {
+                    "repo_ref": "org/app-a",
+                    "branch": "main",
+                    "commit_sha": "abc123",
+                    "image": "ghcr.io/example/app-a:v2",
+                    "manifest_path": "deploy/app.yaml",
+                },
+            }
+        ],
+    }
+    preview = build_release_plan_preview(plan)
+    db = ReleaseDispatchDb(
+        channels=[
+            {
+                "channel_id": "chan-a",
+                "enabled": True,
+                "min_severity": "warning",
+                "last_test_status": "passed",
+                "last_tested_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    )
+    events = AcceptingEventGateway()
+    current = SimpleNamespace(user_id="user-a", roles=("operator",))
+    monkeypatch.setattr(release_router, "require_cluster_access", lambda *_args, **_kwargs: None)
+
+    accepted = asyncio.run(
+        release_router.dispatch_wave_steps(
+            plan,
+            preview,
+            1,
+            "workspace-a",
+            current,
+            db,
+            events,
+            run_id="run-a",
+        )
+    )
+
+    assert accepted[0]["event_id"] == "evt-live"
+    guard = db.dispatched[0]["details"]["release_guard"]
+    assert guard["diagnostics"]["required"] is False
+    assert guard["diagnostics"]["bypassed"] is True
+    assert guard["diagnostics"]["override_reason"] == "approved emergency release"
 
 
 def test_release_run_steps_capture_wave_health_and_github_metadata() -> None:

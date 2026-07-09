@@ -62,6 +62,7 @@
 - live release dispatch/start/advance/retry는 warning 이상 release event를 받을 수 있고 최근 검증 테스트가 통과한 enabled alert channel이 있어야 실제 GitOps 이벤트 발행을 허용한다. 최근 기준은 기본 24시간이며 `RELEASE_FLOW_ALERT_TEST_MAX_AGE_HOURS`로 조정할 수 있다.
 - live release dispatch/start/advance/retry는 `require_diagnostics_pass`가 켜져 있으면 deterministic release diagnostics의 error/warning이 없어야 실제 GitOps 이벤트 발행을 허용한다.
 - live release에서 `require_diagnostics_pass=false`로 diagnostics gate를 우회하려면 `diagnostics_override_reason`을 남겨야 한다.
+- live dispatch step/audit details에는 diagnostics gate, override reason, alert validation window, validated alert channel snapshot을 `release_guard`로 남긴다.
 - saved alert channel test results keep `last_tested_at`, status, detail, and HTTP status code so operators can see whether a channel was recently validated.
 - active run/plan 삭제는 기본 차단하고 `force=true`를 명시해야 한다.
 - release run timeline과 audit/export details는 password/token/secret/credential류 key를 `<redacted>`로 마스킹한다.
@@ -75,6 +76,7 @@
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
 - 실패/승인대기/승인거절 운영 알림은 alert-worker가 설정된 채널로 전달
 - release audit 조회와 CSV export
+- release dispatch guard snapshot: live 실행 시 diagnostics/alert gate 통과 근거를 run step details와 audit event details에 기록
 - release audit UI CSV export
 
 - release readiness 조회: preview blocker, dispatch 필수 입력값, live gate, diagnostics gate, alert channel, retry policy, audit/redaction 상태

@@ -811,6 +811,7 @@ async def dispatch_wave_steps(
 
     accepted_events: list[dict[str, Any]] = []
     profile = execution_profile(plan)
+    release_guard = release_dispatch_guard_snapshot(plan, db, workspace_id)
     for step in selected_steps:
         application_id = str(step["application_id"])
         application = db.get_application(workspace_id, application_id) or {}
@@ -861,6 +862,7 @@ async def dispatch_wave_steps(
                     "repo_ref": request.repo_ref,
                     "branch": request.branch,
                     "commit_sha": request.commit_sha,
+                    "release_guard": release_guard,
                 },
             )
     return accepted_events
@@ -1111,6 +1113,48 @@ def release_diagnostics_bypassed(plan: dict[str, Any]) -> bool:
     return settings.get("require_diagnostics_pass") is False and bool(
         release_diagnostics_override_reason(plan)
     )
+
+
+def release_dispatch_guard_snapshot(
+    plan: dict[str, Any],
+    db: Any,
+    workspace_id: str,
+) -> dict[str, Any]:
+    profile = execution_profile(plan)
+    settings = plan_settings_value(plan)
+    diagnostics = release_plan_diagnostics(plan) if profile.side_effects else []
+    blocking_diagnostics = [
+        diagnostic
+        for diagnostic in diagnostics
+        if diagnostic.severity in {"error", "warning"}
+    ]
+    validated_channels = release_validated_live_alert_channels(db, workspace_id)
+    live_channels = release_live_alert_channels(db, workspace_id)
+    return {
+        "runtime_mode": profile.runtime_mode,
+        "side_effects": profile.side_effects,
+        "diagnostics": {
+            "required": settings.get("require_diagnostics_pass") is not False,
+            "bypassed": release_diagnostics_bypassed(plan),
+            "override_reason": release_diagnostics_override_reason(plan) or None,
+            "blocking_count": len(blocking_diagnostics),
+            "blocking_codes": [str(diagnostic.code) for diagnostic in blocking_diagnostics],
+        },
+        "alerts": {
+            "validation_window": alert_channel_validation_window_label(),
+            "warning_capable_count": len(live_channels),
+            "validated_count": len(validated_channels),
+            "validated_channels": [
+                {
+                    "channel_id": str(channel.get("channel_id") or ""),
+                    "kind": str(channel.get("kind") or ""),
+                    "min_severity": str(channel.get("min_severity") or "warning"),
+                    "last_tested_at": channel.get("last_tested_at"),
+                }
+                for channel in validated_channels
+            ],
+        },
+    }
 
 
 def release_dispatch_context_blockers(
