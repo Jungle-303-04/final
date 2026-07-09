@@ -122,6 +122,7 @@
 - audit event filter/export: 선택한 run audit에서 workflow failure, approval, rollback, cancel, wave dispatch, evidence queued 같은 event type별 조회와 CSV export를 지원
 - attention alert: 선택한 attention/stale release run을 기존 `alert.requested` 파이프라인으로 수동 알림 요청
 - notify cooldown/audit: release notify는 `release.notify.<timestamp>` audit event를 남기고 최근 알림이 있으면 cooldown blocker로 반복 알림 폭주를 차단
+- notify cooldown handoff: notify cooldown 중에는 operator handoff의 notify next action과 UI Notify 버튼을 비활성화하고 남은 대기 사유를 표시
 - operator handoff: 선택한 release run의 headline, severity, 다음 조치, mode/health/attention/rollback/verification/verification job result/rollback criteria 체크를 한 번에 표시해 교대/온콜 인계를 빠르게 수행
 
 ## 검증
