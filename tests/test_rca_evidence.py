@@ -681,6 +681,51 @@ def test_evidence_bundle_adds_workload_snapshot_metadata_items() -> None:
     assert "change_context" not in metadata_items
 
 
+def test_evidence_bundle_adds_nested_workload_snapshot_metadata_items() -> None:
+    db = SpyDb()
+    payload = crashloop_payload(
+        metadata={
+            "change_context": {
+                "current_workload_snapshots": [
+                    {
+                        "workload": {
+                            "namespace": "sandbox",
+                            "kind": "Deployment",
+                            "name": "checkout-api",
+                        },
+                        "containers": [{"image": "repo/checkout:v2"}],
+                    }
+                ],
+                "current_workload_snapshot": {
+                    "workload": {
+                        "namespace": "sandbox",
+                        "kind": "Deployment",
+                        "name": "checkout-api",
+                    },
+                    "replicaset_revisions": [
+                        {"name": "checkout-api-abc123", "revision": "7"}
+                    ],
+                },
+            }
+        },
+    )
+
+    rca_events = run_to_rca(payload, db=db, correlation_id="corr-nested-workload-snapshot")
+
+    bundle = event_by_subject(rca_events, "evidence.bundle.built").evidence_bundle
+    metadata_items = {
+        item.name: item for item in bundle.items if item.source == "metadata"
+    }
+
+    assert metadata_items["current_workload_snapshots"].value["items"][0]["workload"][
+        "name"
+    ] == "checkout-api"
+    assert metadata_items["current_workload_snapshot"].value["replicaset_revisions"][
+        0
+    ]["revision"] == "7"
+    assert "change_context" not in metadata_items
+
+
 def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
     db = SpyDb()
     payload = crashloop_payload(
