@@ -25,6 +25,8 @@ class FakeClient:
         self.release_run_status = "running"
         self.verification_failed_runs = 0
         self.verification_pending_timeout_runs = 0
+        self.policy_override_runs = 0
+        self.policy_override_breakdown: dict[str, int] = {}
         self.attention_required_runs = 0
         self.stale_runs = 0
         self.failed_runs = 0
@@ -85,6 +87,8 @@ class FakeClient:
                 "stale_runs": self.stale_runs,
                 "verification_failed_runs": self.verification_failed_runs,
                 "verification_pending_timeout_runs": self.verification_pending_timeout_runs,
+                "policy_override_runs": self.policy_override_runs,
+                "policy_override_breakdown": self.policy_override_breakdown,
                 "last_run_status": None,
                 "recent_runs": [],
             }
@@ -93,6 +97,8 @@ class FakeClient:
                 return {"runs": [{"run_id": "run-verification-failed", "status": "running"}]}
             if "verification_pending_timeout_only=true" in path:
                 return {"runs": [{"run_id": "run-verification-timeout", "status": "running"}]}
+            if "policy_override_only=true" in path:
+                return {"runs": [{"run_id": "run-policy-override", "status": "running"}]}
             if "attention_only=true" in path:
                 return {"runs": [{"run_id": "run-needs-attention", "status": "failed"}]}
             if "stale_only=true" in path:
@@ -324,6 +330,61 @@ def test_smoke_verification_preflight_flags_failed_and_timed_out_runs() -> None:
     timed_out = next(result for result in results if result.name == "release-runs.verification-timeout")
     assert "run-verification-failed" in failed.detail
     assert "run-verification-timeout" in timed_out.detail
+
+
+def test_smoke_policy_override_preflight_passes_when_summary_is_clean() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--policy-override-preflight"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        policy_override_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/release-runs/summary" in paths
+    assert not any(path.startswith("/release-runs?") for path in paths)
+
+
+def test_smoke_policy_override_preflight_flags_override_runs() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    client.policy_override_runs = 1
+    client.policy_override_breakdown = {"Change freeze": 1}
+    args = smoke.parse_args(
+        [
+            "--policy-override-preflight",
+            "--policy-override-plan-id",
+            "plan-1",
+            "--policy-override-source",
+            "Change freeze",
+        ]
+    )
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        policy_override_preflight=True,
+        args=args,
+    )
+
+    assert not all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert (
+        "/release-runs?plan_id=plan-1&limit=20&policy_override_source=Change+freeze&policy_override_only=true"
+        in paths
+    )
+    preflight = next(result for result in results if result.name == "release-runs.policy-override-preflight")
+    assert "run-policy-override" in preflight.detail
+    assert "Change freeze=1" in preflight.detail
 
 
 def test_smoke_run_health_preflight_passes_when_summary_is_clean() -> None:
