@@ -805,10 +805,52 @@
   line-height: var(--line-button);
 }
 
+.small-heatmap-grid .heat-cell.value-sized {
+  display: grid;
+  align-content: space-between;
+  justify-items: start;
+  gap: 8px;
+  padding: 10px;
+  overflow: hidden;
+  text-align: left;
+  transition:
+    min-height var(--motion-duration-normal) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.heat-cell.value-sized > strong,
+.heat-cell.value-sized > span {
+  position: relative;
+  z-index: 1;
+}
+
+.heat-sparkline {
+  display: inline-flex;
+  align-items: end;
+  gap: 3px;
+  width: 100%;
+  min-height: 42px;
+}
+
+.heat-sparkline i {
+  display: block;
+  flex: 1;
+  min-width: 4px;
+  border-radius: 999px 999px 2px 2px;
+  background: color-mix(in srgb, var(--text) 54%, transparent);
+  transition: height var(--motion-duration-normal) var(--motion-ease-standard);
+}
+
 .ai-chat-card,
 .matrix-dashboard,
 .phase-ring-card,
 .resource-meter section,
+.parallel-lanes section,
+.compare-panel,
+.compare-panel section,
+.animated-stagger .stagger-row,
 .metric-bars button,
 .column-browser > div,
 .breadcrumb-drill .detail-panel,
@@ -822,9 +864,14 @@
 .matrix-dashboard button,
 .segmented-row button,
 .breadcrumb-drill nav button,
+.compare-panel select,
 .metric-bars button {
   color: var(--text);
   background: var(--panel-soft);
+}
+
+.compare-panel select {
+  border-color: var(--border);
 }
 
 .matrix-dashboard button.active,
@@ -968,6 +1015,11 @@
 .row-button[aria-pressed="true"] {
   border-color: var(--border-strong);
   background: var(--surface-raised);
+}
+
+.stable-branch-detail {
+  min-height: 156px;
+  align-content: start;
 }
 
 @media (max-width: 720px) {

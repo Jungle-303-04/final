@@ -1,8 +1,14 @@
 import { useState } from "react";
 
 const envs = {
-  preview: ["API_URL=/preview", "CACHE=warm"],
-  production: ["API_URL=/prod", "CACHE=hot"]
+  preview: {
+    label: "미리보기",
+    lines: ["API 주소=/미리보기", "캐시=예열"]
+  },
+  production: {
+    label: "프로덕션",
+    lines: ["API 주소=/프로덕션", "캐시=고온"]
+  }
 };
 
 export default function JobEnvironmentDiffExample() {
@@ -10,13 +16,12 @@ export default function JobEnvironmentDiffExample() {
 
   return (
     <div className="compare-panel">
-      <select value={env} onChange={(event) => setEnv(event.target.value as keyof typeof envs)}>
-        <option value="preview">preview</option>
-        <option value="production">production</option>
+      <select aria-label="비교할 환경 선택" value={env} onChange={(event) => setEnv(event.target.value as keyof typeof envs)}>
+        {Object.entries(envs).map(([value, item]) => <option key={value} value={value}>{item.label}</option>)}
       </select>
       <section>
-        <strong>{env}</strong>
-        {envs[env].map((line) => <code key={line}>{line}</code>)}
+        <strong>{envs[env].label}</strong>
+        {envs[env].lines.map((line) => <code key={line}>{line}</code>)}
       </section>
     </div>
   );
