@@ -6,6 +6,7 @@ import hashlib
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping
+from datetime import datetime, timezone
 
 from typing import Any
 
@@ -1068,6 +1069,7 @@ def derived_release_status(run: Mapping[str, Any], steps: list[JsonObject]) -> s
 def release_attention_summary(run: Mapping[str, Any], steps: list[JsonObject]) -> JsonObject:
     status = str(run.get("derived_status") or run.get("status") or "")
     health = mapping_value(run.get("health"))
+    stale = release_stale_summary(run, steps, status)
     reasons: list[str] = []
     if status == FAILED_STEP_STATUS:
         reasons.append("Release run has failed steps.")
@@ -1077,6 +1079,11 @@ def release_attention_summary(run: Mapping[str, Any], steps: list[JsonObject]) -
         reasons.append("Rollback has been requested for this release run.")
     elif status == "paused":
         reasons.append("Release run is paused by an operator.")
+    if stale["stale"]:
+        reasons.append(
+            "No release progress recorded for "
+            f"{stale['age_minutes']} minute(s); timeout is {stale['timeout_minutes']} minute(s)."
+        )
     if str(health.get("status") or "") == "unhealthy":
         reasons.append("Release health is unhealthy.")
     for step in steps:
@@ -1090,7 +1097,55 @@ def release_attention_summary(run: Mapping[str, Any], steps: list[JsonObject]) -
         if str(step_health.get("status") or "") == "unhealthy":
             reasons.append(f"{name} health is unhealthy.")
     unique_reasons = list(dict.fromkeys(reason for reason in reasons if reason))
-    return {"required": bool(unique_reasons), "reasons": unique_reasons[:6]}
+    return {"required": bool(unique_reasons), "reasons": unique_reasons[:6], **stale}
+
+
+def release_stale_summary(
+    run: Mapping[str, Any],
+    steps: list[JsonObject],
+    status: str,
+) -> JsonObject:
+    if status in TERMINAL_RUN_STATUSES or status == "paused":
+        return {"stale": False, "age_minutes": 0, "timeout_minutes": 0}
+    updated_at = datetime_value(run.get("updated_at") or run.get("created_at"))
+    if updated_at is None:
+        return {"stale": False, "age_minutes": 0, "timeout_minutes": 0}
+    timeout_seconds = release_timeout_seconds(run, steps)
+    age_seconds = max(0, int((datetime.now(timezone.utc) - updated_at).total_seconds()))
+    timeout_minutes = max(1, (timeout_seconds + 59) // 60)
+    age_minutes = (age_seconds + 59) // 60
+    return {
+        "stale": age_seconds > timeout_seconds,
+        "age_minutes": age_minutes,
+        "timeout_minutes": timeout_minutes,
+    }
+
+
+def release_timeout_seconds(run: Mapping[str, Any], steps: list[JsonObject]) -> int:
+    settings = mapping_value(run.get("settings"))
+    candidates = [int_like(settings.get("health_timeout_seconds"), 600)]
+    for step in steps:
+        health = mapping_value(step.get("health"))
+        details = mapping_value(step.get("details"))
+        config = mapping_value(details.get("config"))
+        candidates.append(int_like(health.get("timeout_seconds"), 0))
+        candidates.append(int_like(config.get("timeout_seconds"), 0))
+    return max(30, max(candidates))
+
+
+def datetime_value(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str) and value.strip():
+        raw = value.strip()
+        if raw.endswith("Z"):
+            raw = f"{raw[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
 
 
 def projected_release_status(

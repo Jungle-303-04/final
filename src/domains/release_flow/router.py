@@ -1203,6 +1203,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     waiting_for_approval_runs = 0
     live_runs = 0
     unhealthy_runs = 0
+    stale_runs = 0
     attention_required_runs = 0
     last_run_status = ""
     for run in runs:
@@ -1222,13 +1223,20 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
             rollback_requested_runs += 1
         if status == "waiting_for_approval":
             waiting_for_approval_runs += 1
-        if status in {"failed", "waiting_for_approval", "rollback_requested"}:
+        status_needs_attention = status in {"failed", "waiting_for_approval", "rollback_requested"}
+        if status_needs_attention:
             attention_required_runs += 1
         health = run.get("health") if isinstance(run.get("health"), dict) else {}
+        attention = run.get("attention") if isinstance(run.get("attention"), dict) else {}
+        if attention.get("stale") is True:
+            stale_runs += 1
+        health_needs_attention = health.get("status") == "unhealthy" and not status_needs_attention
         if health.get("status") == "unhealthy":
             unhealthy_runs += 1
-            if status not in {"failed", "waiting_for_approval", "rollback_requested"}:
+            if health_needs_attention:
                 attention_required_runs += 1
+        if attention.get("required") is True and not status_needs_attention and not health_needs_attention:
+            attention_required_runs += 1
         settings = run.get("settings") if isinstance(run.get("settings"), dict) else {}
         steps = run.get("steps") if isinstance(run.get("steps"), list) else []
         step_has_side_effects = any(
@@ -1259,6 +1267,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "waiting_for_approval_runs": waiting_for_approval_runs,
         "live_runs": live_runs,
         "unhealthy_runs": unhealthy_runs,
+        "stale_runs": stale_runs,
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
     }
