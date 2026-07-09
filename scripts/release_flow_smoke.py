@@ -8,6 +8,8 @@ The script never attempts live release dispatch. Pass --live-preflight only to
 check live readiness gates without starting or dispatching a release run.
 Pass --verification-preflight to fail fast when existing release runs already
 have failed or timed-out post-deploy verification jobs.
+Pass --run-health-preflight to fail fast when existing release runs still need
+operator attention before a new release starts.
 """
 
 from __future__ import annotations
@@ -230,6 +232,7 @@ def run_smoke(
     live_preflight: bool = False,
     alert_preflight: bool = False,
     verification_preflight: bool = False,
+    run_health_preflight: bool = False,
     args: argparse.Namespace | None = None,
 ) -> list[SmokeResult]:
     results: list[SmokeResult] = []
@@ -248,6 +251,10 @@ def run_smoke(
     results.append(SmokeResult("release-plans", isinstance(plans, list), f"{len(plans)} plan(s)"))
     summary = client.request("GET", "/release-runs/summary")
     results.append(SmokeResult("release-runs.summary", "total_runs" in summary, str(summary)))
+    if run_health_preflight:
+        if args is None:
+            raise ValueError("run health preflight arguments are required")
+        results.extend(run_release_health_preflight(client, summary, args))
     if verification_preflight:
         if args is None:
             raise ValueError("verification preflight arguments are required")
@@ -313,6 +320,47 @@ def run_smoke(
     return results
 
 
+def run_release_health_preflight(
+    client: ApiClient,
+    summary: JsonMap,
+    args: argparse.Namespace,
+) -> list[SmokeResult]:
+    counts = {
+        "attention_required_runs": int_count(summary.get("attention_required_runs")),
+        "stale_runs": int_count(summary.get("stale_runs")),
+        "failed_runs": int_count(summary.get("failed_runs")),
+        "rollback_requested_runs": int_count(summary.get("rollback_requested_runs")),
+        "waiting_for_approval_runs": int_count(summary.get("waiting_for_approval_runs")),
+        "unhealthy_runs": int_count(summary.get("unhealthy_runs")),
+    }
+    blocking = {name: count for name, count in counts.items() if count > 0}
+    if not blocking:
+        return [
+            SmokeResult(
+                "release-runs.run-health-preflight",
+                True,
+                "no existing release runs require operator attention",
+            )
+        ]
+
+    params = {"plan_id": args.run_health_plan_id, "limit": args.run_health_run_limit}
+    attention_runs = release_runs_for_filter(client, params, "attention_only")
+    details = [format_counts(blocking)]
+    if attention_runs:
+        details.append(run_list_detail(sum(blocking.values()), attention_runs, "operator attention"))
+    if counts["stale_runs"] > 0:
+        stale_runs = release_runs_for_filter(client, params, "stale_only")
+        if stale_runs:
+            details.append(run_list_detail(counts["stale_runs"], stale_runs, "stale-run follow-up"))
+    return [
+        SmokeResult(
+            "release-runs.run-health-preflight",
+            False,
+            "; ".join(details),
+        )
+    ]
+
+
 def run_verification_preflight(
     client: ApiClient,
     summary: JsonMap,
@@ -337,7 +385,7 @@ def run_verification_preflight(
             SmokeResult(
                 "release-runs.verification-failed",
                 False,
-                run_list_detail(failed_count, failed_runs),
+                run_list_detail(failed_count, failed_runs, "verification follow-up"),
             )
         )
     if timeout_count > 0:
@@ -346,7 +394,7 @@ def run_verification_preflight(
             SmokeResult(
                 "release-runs.verification-timeout",
                 False,
-                run_list_detail(timeout_count, timed_out_runs),
+                run_list_detail(timeout_count, timed_out_runs, "verification follow-up"),
             )
         )
     return results
@@ -367,7 +415,11 @@ def int_count(value: Any) -> int:
         return 0
 
 
-def run_list_detail(expected_count: int, runs: list[JsonMap]) -> str:
+def format_counts(counts: dict[str, int]) -> str:
+    return ", ".join(f"{name}={count}" for name, count in counts.items())
+
+
+def run_list_detail(expected_count: int, runs: list[JsonMap], action: str) -> str:
     labels = []
     for run in runs[:5]:
         labels.append(
@@ -380,7 +432,7 @@ def run_list_detail(expected_count: int, runs: list[JsonMap]) -> str:
             )
         )
     suffix = f": {', '.join(labels)}" if labels else ""
-    return f"{expected_count} run(s) require verification follow-up{suffix}"
+    return f"{expected_count} run(s) require {action}{suffix}"
 
 
 def run_alert_preflight(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]:
@@ -518,6 +570,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=int(os.getenv("VERIFICATION_PREFLIGHT_RUN_LIMIT", "20")),
     )
     parser.add_argument(
+        "--run-health-preflight",
+        action="store_true",
+        help="fail when existing release runs still require operator attention",
+    )
+    parser.add_argument("--run-health-plan-id", default=os.getenv("RUN_HEALTH_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument(
+        "--run-health-run-limit",
+        type=int,
+        default=int(os.getenv("RUN_HEALTH_PREFLIGHT_RUN_LIMIT", "20")),
+    )
+    parser.add_argument(
         "--live-preflight",
         action="store_true",
         help="check live release readiness gates without starting or dispatching a run",
@@ -574,6 +637,7 @@ def main(argv: list[str]) -> int:
             live_preflight=args.live_preflight,
             alert_preflight=args.alert_preflight,
             verification_preflight=args.verification_preflight,
+            run_health_preflight=args.run_health_preflight,
             args=args,
         )
     except Exception as exc:

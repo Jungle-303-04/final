@@ -190,6 +190,15 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py --verification-preflight
 ```
 
+기존 release run 중 실패, stale, rollback 요청, 승인 대기, unhealthy 상태처럼 운영자가 먼저 처리해야 하는 항목이 남아 있는지 확인하려면 `--run-health-preflight`를 붙인다. 이 모드는 `/release-runs/summary`의 운영 카운터를 보고 문제가 있으면 `GET /release-runs?attention_only=true`와 필요 시 `stale_only=true`로 대상 run을 조회한 뒤 smoke를 실패시킨다. 특정 plan만 좁히려면 `--run-health-plan-id`를 함께 쓴다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py --run-health-preflight
+```
+
 ## 아직 운영에서 추가하면 좋은 것
 - 실제 target cluster와 연결한 `live` end-to-end smoke test
 - 실패 run/DLQ/retry 지표를 대시보드나 알림 채널에 연결
