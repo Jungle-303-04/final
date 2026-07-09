@@ -3242,6 +3242,9 @@ def release_run_report_markdown(
     target_lines = release_run_report_target_lines(run)
     if target_lines:
         lines.extend(["", "Targets:", *target_lines])
+    approval_lines = release_run_report_approval_lines(run)
+    if approval_lines:
+        lines.extend(["", "Approvals:", *approval_lines])
     next_actions = handoff.get("next_actions") if isinstance(handoff.get("next_actions"), list) else []
     if next_actions:
         lines.extend(["", "Next actions:"])
@@ -3330,6 +3333,26 @@ def release_run_report_audit_summary_lines(audit_events: list[dict[str, Any]]) -
     ]
     for event_type, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:6]:
         lines.append(f"- {event_type}: {count}")
+    return lines
+
+
+def release_run_report_approval_lines(run: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    for step in steps[:12]:
+        if not isinstance(step, dict):
+            continue
+        details = step.get("details") if isinstance(step.get("details"), dict) else {}
+        approval = details.get("approval") if isinstance(details.get("approval"), dict) else {}
+        approval_id = str(step.get("approval_id") or approval.get("approval_id") or "").strip()
+        if not approval_id:
+            continue
+        decision = str(approval.get("decision") or approval.get("status") or "pending").strip() or "pending"
+        reason = str(approval.get("reason") or "").strip()
+        gate = str(details.get("gate") or approval.get("gate") or "").strip()
+        label = str(step.get("name") or step.get("application_id") or "step")
+        suffix = " / ".join(item for item in [f"gate {gate}" if gate else "", f"reason {reason}" if reason else ""] if item)
+        lines.append(f"- {label}: {approval_id} / {decision}{f' / {suffix}' if suffix else ''}")
     return lines
 
 
