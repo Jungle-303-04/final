@@ -6,6 +6,7 @@ import httpx
 from providers import (
     KubernetesSnapshotProvider,
     LokiLogsProvider,
+    MetadataProvider,
     PrometheusMetricsProvider,
     TelemetryProvider,
     TempoTracesProvider,
@@ -29,6 +30,7 @@ __all__ = [
     "EvidenceCollector",
     "KubernetesSnapshotProvider",
     "LokiLogsProvider",
+    "MetadataProvider",
     "PrometheusMetricsProvider",
     "TelemetryProvider",
     "TempoTracesProvider",
