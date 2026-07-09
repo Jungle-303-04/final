@@ -33,7 +33,7 @@ export function SidebarNav({
         ))}
       </nav>
       <div className="sidebar-footer">
-        <small>대표 예제만 노출하고 유사 변형은 archive로 묶었습니다.</small>
+        <small>가능한 많이 노출하되, 같은 패턴은 archive 후보로 계속 정리합니다.</small>
       </div>
     </aside>
   );

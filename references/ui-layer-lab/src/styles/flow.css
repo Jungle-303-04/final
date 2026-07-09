@@ -137,6 +137,17 @@
   font-weight: 800;
 }
 
+.flow-workflow-layout .flow-inspector {
+  grid-template-columns: 1fr;
+  align-content: start;
+  align-items: start;
+  min-height: 0;
+}
+
+.flow-workflow-layout .flow-inspector span {
+  white-space: normal;
+}
+
 .flow-panel {
   display: inline-flex;
   align-items: center;
