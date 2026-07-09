@@ -1196,7 +1196,7 @@ def require_plan_application_read_access(
 def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     status_breakdown: dict[str, int] = {}
     plan_breakdown: dict[str, int] = {}
-    recent_runs: list[dict[str, str]] = []
+    recent_runs: list[dict[str, Any]] = []
     active_runs = 0
     failed_runs = 0
     rollback_requested_runs = 0
@@ -1208,6 +1208,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     for run in runs:
         status = str(run.get("derived_status") or run.get("status") or "unknown")
         plan_id = str(run.get("plan_id") or "")
+        attention_reasons = release_attention_reasons(run)
         if not last_run_status:
             last_run_status = status
         status_breakdown[status] = status_breakdown.get(status, 0) + 1
@@ -1244,6 +1245,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
                     "run_id": str(run.get("run_id") or ""),
                     "plan_id": plan_id,
                     "status": status,
+                    "attention_reasons": attention_reasons,
                 }
             )
     return {
@@ -1260,6 +1262,14 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
     }
+
+
+def release_attention_reasons(run: dict[str, Any]) -> list[str]:
+    attention = run.get("attention") if isinstance(run.get("attention"), dict) else {}
+    reasons = attention.get("reasons") if isinstance(attention, dict) else []
+    if isinstance(reasons, list):
+        return [str(reason) for reason in reasons if str(reason).strip()]
+    return []
 
 
 def release_audit_events_for_current(

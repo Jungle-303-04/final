@@ -920,11 +920,14 @@ function RunPanel({
   const sideEffects = runtimeMode === 'live';
   const canForceDelete = ['running', 'paused', 'rollback_requested', 'waiting_for_approval'].includes(status);
   const canRetry = status === 'failed' || run.steps.some(step => step.health.status === 'unhealthy' || step.status === 'failed');
+  const attentionReasons = getStringArray(recordValue(run.attention).reasons);
+  const attentionRequired = Boolean(recordValue(run.attention).required) || attentionReasons.length > 0;
   return (
     <Card
       title="Release run"
       actions={
         <>
+          {attentionRequired && <Badge tone="warning">Needs attention</Badge>}
           <Badge tone={sideEffects ? 'danger' : 'info'}>{sideEffects ? 'Live mode' : 'Demo mode'}</Badge>
           <Badge tone={toneForStatus(status)}>{status}</Badge>
         </>
@@ -936,11 +939,20 @@ function RunPanel({
           <select className="input" value={run.run_id} onChange={e => setSelectedRunId(e.target.value)}>
             {runs.map(item => (
               <option key={item.run_id} value={item.run_id}>
-                {shortId(item.run_id)} / {item.derived_status ?? item.status} / wave {item.current_wave}
+                {shortId(item.run_id)} / {item.derived_status ?? item.status} / wave {item.current_wave}{recordValue(item.attention).required ? ' / attention' : ''}
               </option>
             ))}
           </select>
         </Field>
+      )}
+      {attentionReasons.length > 0 && (
+        <div className="release-flow__diag-list">
+          {attentionReasons.map(reason => (
+            <div key={reason} className="release-flow__diag release-flow__diag--warning">
+              {reason}
+            </div>
+          ))}
+        </div>
       )}
       <div className="release-flow__run-head">
         <div>

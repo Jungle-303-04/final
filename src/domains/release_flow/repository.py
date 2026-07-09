@@ -987,6 +987,7 @@ def serialize_release_run(
     if steps is not None:
         item["health"] = release_health_summary(steps)
         item["derived_status"] = derived_release_status(item, steps)
+        item["attention"] = release_attention_summary(item, steps)
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item
@@ -1062,6 +1063,34 @@ def derived_release_status(run: Mapping[str, Any], steps: list[JsonObject]) -> s
     if RUNNING_STEP_STATUS in statuses or DISPATCHED_STEP_STATUS in statuses:
         return "running"
     return stored or "pending"
+
+
+def release_attention_summary(run: Mapping[str, Any], steps: list[JsonObject]) -> JsonObject:
+    status = str(run.get("derived_status") or run.get("status") or "")
+    health = mapping_value(run.get("health"))
+    reasons: list[str] = []
+    if status == FAILED_STEP_STATUS:
+        reasons.append("Release run has failed steps.")
+    elif status == WAITING_APPROVAL_STEP_STATUS:
+        reasons.append("Release run is waiting for approval.")
+    elif status == "rollback_requested":
+        reasons.append("Rollback has been requested for this release run.")
+    elif status == "paused":
+        reasons.append("Release run is paused by an operator.")
+    if str(health.get("status") or "") == "unhealthy":
+        reasons.append("Release health is unhealthy.")
+    for step in steps:
+        name = str(step.get("name") or step.get("application_id") or "release step")
+        step_status = str(step.get("status") or "")
+        step_health = mapping_value(step.get("health"))
+        if step_status == FAILED_STEP_STATUS:
+            reasons.append(f"{name} failed.")
+        elif step_status == WAITING_APPROVAL_STEP_STATUS:
+            reasons.append(f"{name} is waiting for approval.")
+        if str(step_health.get("status") or "") == "unhealthy":
+            reasons.append(f"{name} health is unhealthy.")
+    unique_reasons = list(dict.fromkeys(reason for reason in reasons if reason))
+    return {"required": bool(unique_reasons), "reasons": unique_reasons[:6]}
 
 
 def projected_release_status(
