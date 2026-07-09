@@ -1592,6 +1592,10 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
   if (attentionReasons.length > 0) {
     lines.push('', 'Attention:', ...attentionReasons.map(reason => `- ${reason}`));
   }
+  const targetLines = releaseRunTargetLines(run);
+  if (targetLines.length > 0) {
+    lines.push('', 'Targets:', ...targetLines);
+  }
   if (handoff) {
     lines.push('', 'Operator handoff:', `- ${handoff.headline}`, `- Severity: ${handoff.severity}`);
     lines.push(...handoff.next_actions.slice(0, 5).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
@@ -1622,6 +1626,25 @@ function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): s
     lines.push(...run.events.slice(0, 8).map(event => `- ${event.event_type}: ${event.message || 'recorded'}${event.created_at ? ` (${event.created_at})` : ''}`));
   }
   return lines.join('\n');
+}
+
+function releaseRunTargetLines(run: ReleaseRun): string[] {
+  return run.steps.slice(0, 12).map(step => {
+    const details = recordValue(step.details);
+    const config = recordValue(details.config);
+    const dispatch = recordValue(details.dispatch);
+    const workflow = recordValue(step.workflow);
+    const values = [
+      step.application_id || step.name || 'application',
+      firstLabel('cluster', getString(details.cluster_id), getString(config.cluster_id), getString(dispatch.cluster_id)),
+      firstLabel('namespace', getString(details.namespace), getString(config.namespace), getString(dispatch.namespace)),
+      firstLabel('workflow', getString(step.workflow_run_id), getString(workflow.workflow_run_id), getString(dispatch.workflow_run_id)),
+      firstLabel('repo', getString(config.repo_ref), getString(dispatch.repo_ref)),
+      firstLabel('commit', getString(config.commit_sha), getString(dispatch.commit_sha)),
+      firstLabel('manifest', getString(config.manifest_path), getString(dispatch.manifest_path)),
+    ].filter(Boolean);
+    return `- ${values.join(' / ')}`;
+  });
 }
 
 function formatHandoffMarkdown(handoff: ReleaseRunHandoff): string {
@@ -2164,6 +2187,11 @@ function shortId(value: string): string {
 
 function firstReason(...reasons: string[]): string | undefined {
   return reasons.find(reason => reason.trim().length > 0);
+}
+
+function firstLabel(label: string, ...values: string[]): string {
+  const value = values.find(item => item.trim().length > 0);
+  return value ? `${label} ${value}` : '';
 }
 
 function releasePlanHasLiveSideEffects(plan: ReleasePlan | null): boolean {

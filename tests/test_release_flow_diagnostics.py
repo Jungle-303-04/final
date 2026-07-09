@@ -483,6 +483,9 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     }
     assert report["run_id"] == "release-run-1"
     assert "Release run report: Checkout release" in report["markdown"]
+    assert "Targets:" in report["markdown"]
+    assert "checkout / cluster target / namespace sandbox / workflow workflow-checkout-1" in report["markdown"]
+    assert "repo org/checkout / commit abc123 / manifest deploy/app.yaml" in report["markdown"]
     assert "Checks:" in report["markdown"]
     assert "verification: passed" in report["markdown"]
     assert "Verification:" in report["markdown"]
@@ -516,6 +519,8 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
     assert response.media_type == "text/markdown; charset=utf-8"
     assert response.headers["content-disposition"] == 'attachment; filename="release-run-release-run-1.md"'
     assert "## Release run report: Checkout release" in body
+    assert "Targets:" in body
+    assert "checkout / cluster target / namespace sandbox" in body
     assert "Checks:" in body
     assert "verification: passed" in body
     assert "Verification:" in body
@@ -2475,6 +2480,7 @@ class ReleaseRunActionDb:
             "steps": [
                 {
                     "application_id": "checkout",
+                    "name": "Checkout",
                     "wave": 1,
                     "status": "succeeded",
                     "health": {"status": self.step_health_status},
@@ -2482,6 +2488,11 @@ class ReleaseRunActionDb:
                         "cluster_id": "target",
                         "namespace": "sandbox",
                         "environment": "staging",
+                        "config": {
+                            "repo_ref": "org/checkout",
+                            "commit_sha": "abc123",
+                            "manifest_path": "deploy/app.yaml",
+                        },
                         "side_effects": True,
                         "release_guard": {
                             "verification": {
@@ -2573,6 +2584,13 @@ class ReleaseRunReportDb(ReleaseRunActionDb):
     def __init__(self) -> None:
         super().__init__()
         self.filters: dict[str, object] = {}
+
+    def get_release_run(self, workspace_id: str, run_id: str) -> dict[str, object]:
+        run = super().get_release_run(workspace_id, run_id)
+        steps = run.get("steps")
+        if isinstance(steps, list) and steps and isinstance(steps[0], dict):
+            steps[0]["workflow_run_id"] = "workflow-checkout-1"
+        return run
 
     def list_release_audit_events(
         self,

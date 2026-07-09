@@ -3239,6 +3239,9 @@ def release_run_report_markdown(
     attention_reasons = release_attention_reasons(run)
     if attention_reasons:
         lines.extend(["", "Attention:", *[f"- {reason}" for reason in attention_reasons]])
+    target_lines = release_run_report_target_lines(run)
+    if target_lines:
+        lines.extend(["", "Targets:", *target_lines])
     next_actions = handoff.get("next_actions") if isinstance(handoff.get("next_actions"), list) else []
     if next_actions:
         lines.extend(["", "Next actions:"])
@@ -3306,6 +3309,41 @@ def release_run_report_markdown(
                 f"- {event.get('event_type') or 'event'}: {event.get('message') or 'recorded'}{created_suffix}"
             )
     return "\n".join(lines)
+
+
+def release_run_report_target_lines(run: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    for step in steps[:12]:
+        if not isinstance(step, dict):
+            continue
+        details = step.get("details") if isinstance(step.get("details"), dict) else {}
+        config = details.get("config") if isinstance(details.get("config"), dict) else {}
+        dispatch = details.get("dispatch") if isinstance(details.get("dispatch"), dict) else {}
+        workflow = step.get("workflow") if isinstance(step.get("workflow"), dict) else {}
+        values = [
+            str(step.get("application_id") or step.get("name") or "application"),
+            f"cluster {details.get('cluster_id') or config.get('cluster_id') or dispatch.get('cluster_id')}"
+            if details.get("cluster_id") or config.get("cluster_id") or dispatch.get("cluster_id")
+            else "",
+            f"namespace {details.get('namespace') or config.get('namespace') or dispatch.get('namespace')}"
+            if details.get("namespace") or config.get("namespace") or dispatch.get("namespace")
+            else "",
+            f"workflow {step.get('workflow_run_id') or workflow.get('workflow_run_id') or dispatch.get('workflow_run_id')}"
+            if step.get("workflow_run_id") or workflow.get("workflow_run_id") or dispatch.get("workflow_run_id")
+            else "",
+            f"repo {config.get('repo_ref') or dispatch.get('repo_ref')}"
+            if config.get("repo_ref") or dispatch.get("repo_ref")
+            else "",
+            f"commit {config.get('commit_sha') or dispatch.get('commit_sha')}"
+            if config.get("commit_sha") or dispatch.get("commit_sha")
+            else "",
+            f"manifest {config.get('manifest_path') or dispatch.get('manifest_path')}"
+            if config.get("manifest_path") or dispatch.get("manifest_path")
+            else "",
+        ]
+        lines.append("- " + " / ".join(value for value in values if value))
+    return lines
 
 
 def safe_release_report_filename(value: str) -> str:
