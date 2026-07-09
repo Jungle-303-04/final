@@ -6,8 +6,8 @@ export default function AnimatedOptimisticRowExample() {
   return (
     <div className={saved ? "optimistic-row saved" : "optimistic-row"}>
       <strong>settings.json</strong>
-      <span>{saved ? "saved" : "dirty"}</span>
-      <button className="command-trigger" onClick={() => setSaved(true)}>Save</button>
+      <span aria-live="polite" className="stable-text-slot">{saved ? "저장됨" : "수정됨"}</span>
+      <button className="command-trigger stable-wide" onClick={() => setSaved(true)} type="button">저장</button>
     </div>
   );
 }
