@@ -150,6 +150,15 @@ AUTH_PASSWORD="<admin password>" \
 python scripts/release_flow_smoke.py --live-preflight
 ```
 
+알림 채널이 실제로 validation alert를 받을 수 있는지 확인하려면 `--alert-preflight`를 붙인다. 이 모드는 enabled alert channel 중 요청 severity를 받을 수 있는 채널을 골라 `/alert-channels/test`를 호출하므로, 실제 Slack/webhook/온콜 테스트 메시지가 발송될 수 있다.
+
+```bash
+API_BASE_URL="https://k8s.woonyong.org/api" \
+AUTH_EMAIL="<admin email>" \
+AUTH_PASSWORD="<admin password>" \
+python scripts/release_flow_smoke.py --alert-preflight
+```
+
 ## 아직 운영에서 추가하면 좋은 것
 - 실제 target cluster와 연결한 `live` end-to-end smoke test
 - 실패 run/DLQ/retry 지표를 대시보드나 알림 채널에 연결

@@ -85,6 +85,33 @@ class FakeClient:
                 "blockers": [],
                 "checks": [{"check_id": "live.dispatch_gate", "status": "passed"}],
             }
+        if path == "/alert-channels":
+            return {
+                "channels": [
+                    {
+                        "channel_id": "chan-release-warning",
+                        "name": "Release warning",
+                        "kind": "webhook",
+                        "url": "https://hooks.example/release",
+                        "min_severity": "warning",
+                        "enabled": True,
+                    },
+                    {
+                        "channel_id": "chan-critical",
+                        "name": "Critical only",
+                        "kind": "webhook",
+                        "url": "https://hooks.example/critical",
+                        "min_severity": "critical",
+                        "enabled": True,
+                    },
+                ]
+            }
+        if path == "/alert-channels/test":
+            return {
+                "valid": True,
+                "delivered": True,
+                "detail": "test alert delivered",
+            }
         if path == "/release-plans/start":
             self.release_run_status = "running"
             return {
@@ -139,6 +166,7 @@ def test_smoke_default_does_not_start_release_run() -> None:
     assert all(result.ok for result in results)
     assert ("POST", "/release-plans/start", None) not in client.calls
     assert [path for _method, path, _payload in client.calls].count("/release-plans/preview") == 1
+    assert "/alert-channels/test" not in [path for _method, path, _payload in client.calls]
 
 
 def test_smoke_demo_run_starts_and_fetches_tracked_run() -> None:
@@ -202,3 +230,28 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["steps"][0]["config"]["environment"] == "production"
     assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"
+
+
+def test_smoke_alert_preflight_tests_warning_capable_channel() -> None:
+    smoke = load_smoke_module()
+    client = FakeClient()
+    args = smoke.parse_args(["--alert-preflight"])
+
+    results = smoke.run_smoke(
+        client,
+        "ops@example.com",
+        "password",
+        demo_run=False,
+        alert_preflight=True,
+        args=args,
+    )
+
+    assert all(result.ok for result in results)
+    paths = [path for _method, path, _payload in client.calls]
+    assert "/alert-channels" in paths
+    assert paths.count("/alert-channels/test") == 1
+    payload = next(payload for _method, path, payload in client.calls if path == "/alert-channels/test")
+    assert payload is not None
+    assert payload["channel_id"] == "chan-release-warning"
+    assert payload["severity"] == "warning"
+    assert payload["message"] == "release-flow alert channel preflight"

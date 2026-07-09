@@ -217,6 +217,7 @@ def run_smoke(
     demo_run: bool,
     ops_rehearsal: bool = False,
     live_preflight: bool = False,
+    alert_preflight: bool = False,
     args: argparse.Namespace | None = None,
 ) -> list[SmokeResult]:
     results: list[SmokeResult] = []
@@ -289,7 +290,74 @@ def run_smoke(
                 ),
             )
         )
+    if alert_preflight:
+        if args is None:
+            raise ValueError("alert preflight arguments are required")
+        results.extend(run_alert_preflight(client, args))
     return results
+
+
+def run_alert_preflight(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]:
+    channels = client.request("GET", "/alert-channels").get("channels", [])
+    if not isinstance(channels, list):
+        raise ValueError("/alert-channels response did not contain a channels list")
+    selected = alert_preflight_channels(channels, args)
+    if not selected:
+        return [
+            SmokeResult(
+                "alert-channels.preflight",
+                False,
+                f"no enabled alert channel can receive {args.alert_severity} release events",
+            )
+        ]
+    results: list[SmokeResult] = []
+    for channel in selected:
+        payload = {
+            "channel_id": str(channel.get("channel_id") or ""),
+            "name": str(channel.get("name") or "release-flow alert preflight"),
+            "kind": str(channel.get("kind") or "webhook"),
+            "url": str(channel.get("url") or ""),
+            "min_severity": str(channel.get("min_severity") or "warning"),
+            "severity": args.alert_severity,
+            "message": args.alert_message,
+        }
+        response = client.request("POST", "/alert-channels/test", payload)
+        delivered = bool(response.get("delivered") or response.get("valid"))
+        detail = str(response.get("detail") or response)
+        results.append(
+            SmokeResult(
+                f"alert-channels.preflight.{payload['channel_id'] or payload['name']}",
+                delivered,
+                detail,
+            )
+        )
+    return results
+
+
+def alert_preflight_channels(channels: list[Any], args: argparse.Namespace) -> list[JsonMap]:
+    selected: list[JsonMap] = []
+    limit = max(1, int(args.alert_channel_limit))
+    for channel in channels:
+        if not isinstance(channel, dict):
+            continue
+        channel_id = str(channel.get("channel_id") or "")
+        if args.alert_channel_id and channel_id != args.alert_channel_id:
+            continue
+        if channel.get("enabled") is False:
+            continue
+        if not str(channel.get("url") or "").strip():
+            continue
+        min_severity = str(channel.get("min_severity") or "warning")
+        if severity_rank(args.alert_severity) < severity_rank(min_severity):
+            continue
+        selected.append(channel)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def severity_rank(value: str) -> int:
+    return {"info": 0, "warning": 1, "critical": 2}.get(value.strip().lower(), 1)
 
 
 def run_operator_rehearsal(client: ApiClient, run_id: str) -> list[SmokeResult]:
@@ -332,6 +400,26 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--password", default=os.getenv("AUTH_PASSWORD", ""))
     parser.add_argument("--timeout", type=float, default=float(os.getenv("SMOKE_TIMEOUT_SECONDS", "15")))
     parser.add_argument("--demo-run", action="store_true", help="create a tracked demo release run")
+    parser.add_argument(
+        "--alert-preflight",
+        action="store_true",
+        help="send a validation alert through enabled alert channels",
+    )
+    parser.add_argument("--alert-channel-id", default=os.getenv("ALERT_PREFLIGHT_CHANNEL_ID", ""))
+    parser.add_argument(
+        "--alert-channel-limit",
+        type=int,
+        default=int(os.getenv("ALERT_PREFLIGHT_CHANNEL_LIMIT", "1")),
+    )
+    parser.add_argument(
+        "--alert-severity",
+        choices=("info", "warning", "critical"),
+        default=os.getenv("ALERT_PREFLIGHT_SEVERITY", "warning"),
+    )
+    parser.add_argument(
+        "--alert-message",
+        default=os.getenv("ALERT_PREFLIGHT_MESSAGE", "release-flow alert channel preflight"),
+    )
     parser.add_argument(
         "--live-preflight",
         action="store_true",
@@ -378,6 +466,7 @@ def main(argv: list[str]) -> int:
             demo_run=args.demo_run,
             ops_rehearsal=args.ops_rehearsal,
             live_preflight=args.live_preflight,
+            alert_preflight=args.alert_preflight,
             args=args,
         )
     except Exception as exc:
