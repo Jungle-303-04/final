@@ -6,6 +6,8 @@ The default mode is read-only except for authenticated session creation. Pass
 --ops-rehearsal to also exercise safe operator actions against that demo run.
 The script never attempts live release dispatch. Pass --live-preflight only to
 check live readiness gates without starting or dispatching a release run.
+Pass --verification-preflight to fail fast when existing release runs already
+have failed or timed-out post-deploy verification jobs.
 """
 
 from __future__ import annotations
@@ -89,6 +91,11 @@ def normalize_base_url(value: str) -> str:
 
 def api_url(base_url: str, path: str) -> str:
     return f"{normalize_base_url(base_url)}/{path.lstrip('/')}"
+
+
+def query_path(path: str, params: dict[str, Any]) -> str:
+    query = urllib.parse.urlencode({key: value for key, value in params.items() if value not in (None, "")})
+    return f"{path}?{query}" if query else path
 
 
 def derive_api_base_url(args: argparse.Namespace) -> str:
@@ -222,6 +229,7 @@ def run_smoke(
     ops_rehearsal: bool = False,
     live_preflight: bool = False,
     alert_preflight: bool = False,
+    verification_preflight: bool = False,
     args: argparse.Namespace | None = None,
 ) -> list[SmokeResult]:
     results: list[SmokeResult] = []
@@ -240,6 +248,10 @@ def run_smoke(
     results.append(SmokeResult("release-plans", isinstance(plans, list), f"{len(plans)} plan(s)"))
     summary = client.request("GET", "/release-runs/summary")
     results.append(SmokeResult("release-runs.summary", "total_runs" in summary, str(summary)))
+    if verification_preflight:
+        if args is None:
+            raise ValueError("verification preflight arguments are required")
+        results.extend(run_verification_preflight(client, summary, args))
     plan = build_demo_plan(applications)
     preview = client.request("POST", "/release-plans/preview", plan).get("preview", {})
     results.append(
@@ -299,6 +311,76 @@ def run_smoke(
             raise ValueError("alert preflight arguments are required")
         results.extend(run_alert_preflight(client, args))
     return results
+
+
+def run_verification_preflight(
+    client: ApiClient,
+    summary: JsonMap,
+    args: argparse.Namespace,
+) -> list[SmokeResult]:
+    failed_count = int_count(summary.get("verification_failed_runs"))
+    timeout_count = int_count(summary.get("verification_pending_timeout_runs"))
+    if failed_count <= 0 and timeout_count <= 0:
+        return [
+            SmokeResult(
+                "release-runs.verification-preflight",
+                True,
+                "no failed or timed-out post-deploy verification jobs",
+            )
+        ]
+
+    params = {"plan_id": args.verification_plan_id, "limit": args.verification_run_limit}
+    results: list[SmokeResult] = []
+    if failed_count > 0:
+        failed_runs = release_runs_for_filter(client, params, "verification_failed_only")
+        results.append(
+            SmokeResult(
+                "release-runs.verification-failed",
+                False,
+                run_list_detail(failed_count, failed_runs),
+            )
+        )
+    if timeout_count > 0:
+        timed_out_runs = release_runs_for_filter(client, params, "verification_pending_timeout_only")
+        results.append(
+            SmokeResult(
+                "release-runs.verification-timeout",
+                False,
+                run_list_detail(timeout_count, timed_out_runs),
+            )
+        )
+    return results
+
+
+def release_runs_for_filter(client: ApiClient, params: dict[str, Any], filter_name: str) -> list[JsonMap]:
+    payload = dict(params)
+    payload[filter_name] = "true"
+    response = client.request("GET", query_path("/release-runs", payload))
+    runs = response.get("runs", [])
+    return [run for run in runs if isinstance(run, dict)] if isinstance(runs, list) else []
+
+
+def int_count(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def run_list_detail(expected_count: int, runs: list[JsonMap]) -> str:
+    labels = []
+    for run in runs[:5]:
+        labels.append(
+            str(
+                run.get("run_id")
+                or run.get("id")
+                or run.get("name")
+                or run.get("plan_id")
+                or "unknown-run"
+            )
+        )
+    suffix = f": {', '.join(labels)}" if labels else ""
+    return f"{expected_count} run(s) require verification follow-up{suffix}"
 
 
 def run_alert_preflight(client: ApiClient, args: argparse.Namespace) -> list[SmokeResult]:
@@ -425,6 +507,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=os.getenv("ALERT_PREFLIGHT_MESSAGE", "release-flow alert channel preflight"),
     )
     parser.add_argument(
+        "--verification-preflight",
+        action="store_true",
+        help="fail when existing release runs have failed or timed-out post-deploy verification jobs",
+    )
+    parser.add_argument("--verification-plan-id", default=os.getenv("VERIFICATION_PREFLIGHT_PLAN_ID", ""))
+    parser.add_argument(
+        "--verification-run-limit",
+        type=int,
+        default=int(os.getenv("VERIFICATION_PREFLIGHT_RUN_LIMIT", "20")),
+    )
+    parser.add_argument(
         "--live-preflight",
         action="store_true",
         help="check live release readiness gates without starting or dispatching a run",
@@ -480,6 +573,7 @@ def main(argv: list[str]) -> int:
             ops_rehearsal=args.ops_rehearsal,
             live_preflight=args.live_preflight,
             alert_preflight=args.alert_preflight,
+            verification_preflight=args.verification_preflight,
             args=args,
         )
     except Exception as exc:
