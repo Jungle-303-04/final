@@ -129,6 +129,47 @@ def test_advance_release_run_requires_manage_access(monkeypatch) -> None:
     assert db.updated
 
 
+def test_advance_release_run_blocks_when_verification_job_is_pending(monkeypatch) -> None:
+    db = ReleaseRunActionDb(verification_job_status="pending")
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.advance_release_run(
+                "release-run-1",
+                current=current,
+                db=db,
+                events=object(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert "post-deploy verification kubernetes_health_check is pending" in exc.value.detail["blockers"][0]
+    assert db.updated == []
+
+
+def test_advance_release_run_blocks_when_verification_job_failed(monkeypatch) -> None:
+    db = ReleaseRunActionDb(verification_job_status="failed", step_health_status="unhealthy")
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.advance_release_run(
+                "release-run-1",
+                current=current,
+                db=db,
+                events=object(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert any("health is unhealthy" in blocker for blocker in exc.value.detail["blockers"])
+    assert any("post-deploy verification kubernetes_health_check failed" in blocker for blocker in exc.value.detail["blockers"])
+    assert db.updated == []
+
+
 def test_rollback_release_run_checks_rollback_access_before_mutating(monkeypatch) -> None:
     db = ReleaseRunActionDb()
 
@@ -275,7 +316,7 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
                 "application_id": "checkout",
                 "name": "Checkout",
                 "kind": "kubernetes_health_check",
-                "status": "pending",
+                "status": "passed",
                 "evidence_key": "release-run-1:wave-1:checkout:post-deploy-verification",
                 "target": {
                     "cluster_id": "target",
@@ -1928,10 +1969,18 @@ class AcceptingEventGateway:
 
 
 class ReleaseRunActionDb:
-    def __init__(self, *, rollback_policy: str = "manual") -> None:
+    def __init__(
+        self,
+        *,
+        rollback_policy: str = "manual",
+        verification_job_status: str = "passed",
+        step_health_status: str = "healthy",
+    ) -> None:
         self.requested_rollback = False
         self.updated: list[dict[str, object]] = []
         self.rollback_policy = rollback_policy
+        self.verification_job_status = verification_job_status
+        self.step_health_status = step_health_status
 
     def get_release_run(self, _workspace_id: str, _run_id: str) -> dict[str, object]:
         return {
@@ -1948,6 +1997,7 @@ class ReleaseRunActionDb:
                     "application_id": "checkout",
                     "wave": 1,
                     "status": "succeeded",
+                    "health": {"status": self.step_health_status},
                     "details": {
                         "cluster_id": "target",
                         "namespace": "sandbox",
@@ -1970,7 +2020,7 @@ class ReleaseRunActionDb:
                                         "application_id": "checkout",
                                         "name": "Checkout",
                                         "kind": "kubernetes_health_check",
-                                        "status": "pending",
+                                        "status": self.verification_job_status,
                                         "evidence_key": "release-run-1:wave-1:checkout:post-deploy-verification",
                                         "target": {
                                             "cluster_id": "target",

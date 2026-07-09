@@ -57,6 +57,7 @@
 - plan/run 조회와 summary는 애플리케이션 read 권한을 확인한다.
 - `GET /release-runs/summary`가 `/release-runs/{run_id}`에 가려지지 않도록 route 순서 테스트를 추가했다.
 - advance/rollback 같은 상태 변경 action은 권한 확인 후에만 상태를 바꾼다.
+- advance는 현재 wave의 step status가 succeeded이고 post-deploy verification job이 passed/completed/healthy일 때만 다음 wave로 넘어간다. verification이 pending이거나 failed/unhealthy이면 차단한다.
 - retry는 현재 wave의 failed/unhealthy step만 다시 dispatch하고, plan/step의 `retry_attempts` 예산을 넘으면 차단한다.
 - workflow 실패, 승인 요청, 승인 거절은 `alert.requested`로 이어져 기존 alert-worker/log/webhook/channel 라우팅을 재사용한다.
 - post-deploy verification job 실패도 `alert.requested`로 이어져 배포 후 검증 실패를 운영 채널에 critical로 전달한다.
