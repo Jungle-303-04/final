@@ -1044,15 +1044,24 @@ function RunPanel({
   onNotify: (runId: string, reason: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
 }) {
+  const recentRunIds = useMemo(() => new Set((summary?.recent_runs ?? []).map(run => run.run_id)), [summary?.recent_runs]);
   useEffect(() => {
     if (runs.length === 0) {
-      if (selectedRunId) onSelectedRunIdChange('');
+      if (selectedRunId && runFilter === 'all' && !recentRunIds.has(selectedRunId)) onSelectedRunIdChange('');
       return;
     }
-    if (!selectedRunId || !runs.some(run => run.run_id === selectedRunId)) {
+    if (!selectedRunId) {
+      onSelectedRunIdChange(runs[0].run_id);
+      return;
+    }
+    if (runFilter === 'all' && !runs.some(run => run.run_id === selectedRunId) && !recentRunIds.has(selectedRunId)) {
       onSelectedRunIdChange(runs[0].run_id);
     }
-  }, [onSelectedRunIdChange, runs, selectedRunId]);
+  }, [onSelectedRunIdChange, recentRunIds, runFilter, runs, selectedRunId]);
+  const selectRecentRun = (runId: string) => {
+    onRunFilterChange('all');
+    onSelectedRunIdChange(runId);
+  };
   const selectedRun = selectedRunId ? runs.find(run => run.run_id === selectedRunId) : undefined;
   const run = selectedRun ?? runs[0];
   const handoffQ = useReleaseRunHandoff(run?.run_id);
@@ -1062,6 +1071,7 @@ function RunPanel({
       <Card title="Release runs">
         <RunSummary summary={summary} runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
         <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
+        <RecentRunShortcuts summary={summary} selectedRunId={selectedRunId} onSelect={selectRecentRun} />
         <p className="release-flow__hint">
           {runFilter === 'all' ? 'No tracked release runs yet.' : 'No release runs match this filter.'}
         </p>
@@ -1096,6 +1106,7 @@ function RunPanel({
     >
       <RunSummary summary={summary} runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
       <RunFilterField runFilter={runFilter} onRunFilterChange={onRunFilterChange} />
+      <RecentRunShortcuts summary={summary} selectedRunId={run.run_id} onSelect={selectRecentRun} />
       {runs.length > 1 && (
         <Field label="Inspect run">
           <select className="input" value={run.run_id} onChange={e => onSelectedRunIdChange(e.target.value)}>
@@ -1339,6 +1350,41 @@ function verificationJobSummary(job: { kind: string; status: string; target: Rec
   const statusCode = getString(result.status_code);
   const resultSuffix = error || (statusCode ? `HTTP ${statusCode}` : '');
   return `${job.kind} ${job.status}: ${target}${resultSuffix ? ` - ${resultSuffix}` : ''}`;
+}
+
+function RecentRunShortcuts({
+  summary,
+  selectedRunId,
+  onSelect,
+}: {
+  summary?: ReleaseRunSummary;
+  selectedRunId: string;
+  onSelect: (runId: string) => void;
+}) {
+  const recentRuns = (summary?.recent_runs ?? []).slice(0, 5);
+  if (recentRuns.length === 0) return null;
+  return (
+    <div className="release-flow__recent-runs" aria-label="Recent release runs">
+      {recentRuns.map(run => {
+        const reason = run.attention_reasons?.[0];
+        return (
+          <button
+            key={run.run_id}
+            type="button"
+            className="release-flow__recent-run"
+            aria-pressed={selectedRunId === run.run_id}
+            onClick={() => onSelect(run.run_id)}
+          >
+            <span>
+              <strong>{shortId(run.run_id)}</strong>
+              <small>{run.status}</small>
+            </span>
+            {reason && <em>{reason}</em>}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function RunFilterField({

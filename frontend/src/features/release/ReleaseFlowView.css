@@ -481,6 +481,64 @@ button.release-flow__summary-card[aria-pressed='true'] {
   font-size: var(--fs-md);
 }
 
+.release-flow__recent-runs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.release-flow__recent-run {
+  appearance: none;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.release-flow__recent-run:hover,
+.release-flow__recent-run:focus-visible {
+  border-color: var(--brand);
+}
+
+.release-flow__recent-run[aria-pressed='true'] {
+  border-color: var(--brand);
+  background: var(--surface-1);
+}
+
+.release-flow__recent-run span,
+.release-flow__recent-run strong,
+.release-flow__recent-run small,
+.release-flow__recent-run em {
+  display: block;
+}
+
+.release-flow__recent-run span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.release-flow__recent-run small,
+.release-flow__recent-run em {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+
+.release-flow__recent-run em {
+  margin-top: 4px;
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .release-flow__run-head p {
   margin: 4px 0 0;
 }
