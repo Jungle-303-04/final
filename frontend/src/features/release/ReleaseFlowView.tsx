@@ -640,6 +640,14 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             <Field label="Release window override reason">
               <input className="input" value={getString(settings.release_window_override_reason)} onChange={e => setPolicy({ release_window_override_reason: e.target.value })} />
             </Field>
+            <Field label="Runbook URL">
+              <input className="input" placeholder="https://wiki.example.com/release-runbook" value={getString(settings.runbook_url)} onChange={e => setPolicy({ runbook_url: e.target.value })} />
+            </Field>
+            {!getString(settings.runbook_url).trim() && (
+              <Field label="Runbook override reason">
+                <input className="input" value={getString(settings.runbook_override_reason)} onChange={e => setPolicy({ runbook_override_reason: e.target.value })} />
+              </Field>
+            )}
           </>
         )}
         <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>

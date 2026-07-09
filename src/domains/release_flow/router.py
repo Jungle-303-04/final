@@ -274,6 +274,7 @@ async def dispatch_release_plan(
     blockers.extend(release_production_approval_evidence_blockers(body, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(body, preview, wave))
     blockers.extend(release_production_window_blockers(body, preview, wave))
+    blockers.extend(release_production_runbook_blockers(body, preview, wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -327,6 +328,7 @@ async def start_release_plan(
     blockers.extend(release_production_approval_evidence_blockers(body, preview, first_wave))
     blockers.extend(release_production_change_ticket_blockers(body, preview, first_wave))
     blockers.extend(release_production_window_blockers(body, preview, first_wave))
+    blockers.extend(release_production_runbook_blockers(body, preview, first_wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -524,6 +526,7 @@ async def advance_release_run(
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, next_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, next_wave))
     blockers.extend(release_production_window_blockers(plan, preview, next_wave))
+    blockers.extend(release_production_runbook_blockers(plan, preview, next_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -640,6 +643,7 @@ async def retry_release_run(
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
+    blockers.extend(release_production_runbook_blockers(plan, preview, retry_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -827,6 +831,7 @@ async def dispatch_wave_steps(
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, wave))
     blockers.extend(release_production_window_blockers(plan, preview, wave))
+    blockers.extend(release_production_runbook_blockers(plan, preview, wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -947,6 +952,8 @@ def release_readiness_from_plan(
     change_ticket_bypassed = release_production_change_ticket_bypassed(plan, preview, first_wave)
     window_blockers = release_production_window_blockers(plan, preview, first_wave)
     window_bypassed = release_production_window_bypassed(plan, preview, first_wave)
+    runbook_blockers = release_production_runbook_blockers(plan, preview, first_wave)
+    runbook_bypassed = release_production_runbook_bypassed(plan, preview, first_wave)
     diagnostic_blockers = release_diagnostics_blockers(plan)
     diagnostic_bypassed = release_diagnostics_bypassed(plan)
     rollback_blockers = release_rollback_policy_blockers(plan)
@@ -1061,6 +1068,21 @@ def release_readiness_from_plan(
             if window_bypassed
             else "Release window requirements are satisfied for the first executable wave.",
             window_blockers,
+        ),
+        readiness_check(
+            "runbook.sop",
+            "Runbook",
+            "blocked"
+            if runbook_blockers
+            else "warning"
+            if runbook_bypassed
+            else "passed",
+            "Production live release requires an accessible runbook URL or operator override reason."
+            if runbook_blockers
+            else "Production runbook gate is bypassed with an operator reason."
+            if runbook_bypassed
+            else "Runbook/SOP evidence is present for the first executable wave.",
+            runbook_blockers,
         ),
         readiness_check(
             "plan.diagnostics",
@@ -1411,6 +1433,67 @@ def release_window_override_reason(plan: dict[str, Any]) -> str:
     ).strip()
 
 
+def release_production_runbook_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    settings = plan_settings_value(plan)
+    override_reason = release_runbook_override_reason(plan)
+    blockers: list[str] = []
+    for step in release_production_steps_for_wave(plan, preview, wave):
+        config = step_config(step)
+        url = release_runbook_url(settings, config)
+        if release_runbook_url_is_valid(url) or override_reason:
+            continue
+        label = str(step.get("name") or step.get("application_id") or "release step")
+        if url:
+            blockers.append(
+                f"{label} targets production and requires an http(s) runbook_url or runbook override reason."
+            )
+        else:
+            blockers.append(
+                f"{label} targets production and requires runbook_url or runbook override reason before live dispatch."
+            )
+    return blockers
+
+
+def release_production_runbook_bypassed(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    if not release_runbook_override_reason(plan):
+        return False
+    settings = plan_settings_value(plan)
+    return any(
+        not release_runbook_url_is_valid(release_runbook_url(settings, step_config(step)))
+        for step in release_production_steps_for_wave(plan, preview, wave)
+    )
+
+
+def release_runbook_url(settings: dict[str, Any], config: dict[str, Any]) -> str:
+    return str(config.get("runbook_url") or settings.get("runbook_url") or "").strip()
+
+
+def release_runbook_url_is_valid(value: str) -> bool:
+    normalized = value.lower()
+    return normalized.startswith("https://") or normalized.startswith("http://")
+
+
+def release_runbook_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("runbook_override_reason")
+        or settings.get("sop_override_reason")
+        or ""
+    ).strip()
+
+
 def release_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
     settings = plan_settings_value(plan)
     start = parse_release_window_time(settings.get("release_window_start"))
@@ -1511,6 +1594,18 @@ def release_dispatch_guard_snapshot(
             "start": release_window_bound_label(window_start) if window_start else None,
             "end": release_window_bound_label(window_end) if window_end else None,
             "override_reason": release_window_override_reason(plan) or None,
+            "production_targets": [
+                str(step.get("application_id") or "")
+                for step in production_steps
+            ],
+        },
+        "runbook": {
+            "url": str(settings.get("runbook_url") or "").strip() or None,
+            "url_present": any(
+                release_runbook_url_is_valid(release_runbook_url(settings, step_config(step)))
+                for step in production_steps
+            ),
+            "override_reason": release_runbook_override_reason(plan) or None,
             "production_targets": [
                 str(step.get("application_id") or "")
                 for step in production_steps

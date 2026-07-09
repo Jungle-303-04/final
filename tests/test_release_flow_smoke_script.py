@@ -198,6 +198,7 @@ def test_smoke_live_preflight_checks_readiness_without_starting_run() -> None:
     assert readiness_payload["settings"]["change_ticket"] == "CHG-PREFLIGHT"
     assert readiness_payload["settings"]["release_window_start"].endswith("Z")
     assert readiness_payload["settings"]["release_window_end"].endswith("Z")
+    assert readiness_payload["settings"]["runbook_url"].startswith("https://")
     assert readiness_payload["steps"][0]["config"]["environment"] == "production"
     assert readiness_payload["steps"][0]["config"]["namespace"] == "production"
     assert readiness_payload["steps"][0]["config"]["approval_gate"] == "manual"

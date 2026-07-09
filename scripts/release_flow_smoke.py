@@ -141,6 +141,7 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
             "change_ticket": args.live_change_ticket,
             "release_window_start": window_start,
             "release_window_end": window_end,
+            "runbook_url": args.live_runbook_url,
             "rollback_policy": args.live_rollback_policy,
             "require_diagnostics_pass": True,
         }
@@ -347,6 +348,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--live-window-start", default=os.getenv("LIVE_PREFLIGHT_WINDOW_START", ""))
     parser.add_argument("--live-window-end", default=os.getenv("LIVE_PREFLIGHT_WINDOW_END", ""))
     parser.add_argument("--live-approval-at", default=os.getenv("LIVE_PREFLIGHT_APPROVAL_AT", ""))
+    parser.add_argument(
+        "--live-runbook-url",
+        default=os.getenv("LIVE_PREFLIGHT_RUNBOOK_URL", "https://example.com/runbooks/release-flow"),
+    )
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
     parser.add_argument("--live-image", default=os.getenv("LIVE_PREFLIGHT_IMAGE", ""))
     parser.add_argument("--live-rollback-policy", default=os.getenv("LIVE_PREFLIGHT_ROLLBACK_POLICY", "safe_pr"))
