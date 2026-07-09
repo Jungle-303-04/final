@@ -442,6 +442,24 @@ def test_release_run_handoff_disables_notify_during_cooldown(monkeypatch) -> Non
     assert "already sent recently" in attention_check["message"]
 
 
+def test_release_run_handoff_explains_disabled_rollback_action(monkeypatch) -> None:
+    db = ReleaseRunActionDb(rollback_policy="disabled")
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.get_release_run_handoff(
+            "release-run-1",
+            current=current,
+            db=db,
+        )
+    )
+
+    rollback = next(action for action in response.handoff["next_actions"] if action["action"] == "rollback")
+    assert rollback["enabled"] is False
+    assert rollback["reason"] == "Rollback policy is disabled for this release run."
+
+
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)

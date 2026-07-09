@@ -3102,6 +3102,9 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
             alertable=alertable,
             rollback_enabled=rollback_policy != "disabled",
             notify_blocker=notify_blocker,
+            rollback_blocker="Rollback policy is disabled for this release run."
+            if rollback_policy == "disabled"
+            else None,
         ),
         "checks": [
             release_handoff_check(
@@ -3316,6 +3319,7 @@ def release_run_handoff_actions(
     alertable: bool,
     rollback_enabled: bool,
     notify_blocker: str | None = None,
+    rollback_blocker: str | None = None,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     if terminal:
@@ -3337,7 +3341,14 @@ def release_run_handoff_actions(
                 **({"reason": notify_blocker} if notify_blocker else {}),
             }
         )
-    actions.append({"action": "rollback", "label": "Request rollback if user impact is confirmed", "enabled": rollback_enabled})
+    actions.append(
+        {
+            "action": "rollback",
+            "label": "Request rollback if user impact is confirmed",
+            "enabled": rollback_enabled,
+            **({"reason": rollback_blocker} if rollback_blocker and not rollback_enabled else {}),
+        }
+    )
     actions.append({"action": "cancel", "label": "Cancel if the run should stop", "enabled": True})
     return actions
 
