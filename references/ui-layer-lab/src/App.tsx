@@ -51,7 +51,7 @@ export default function App() {
           <header className="page-header">
             <h1>UI 레이어 레퍼런스 랩</h1>
             <p>
-              현재 확보한 {registeredExamples.length}개 예제를 주제별로 최대한 노출하고, 같은 패턴만 archive 후보로 묶어 정리합니다.
+              현재 확보한 {registeredExamples.length}개 예제를 주제별로 최대한 노출하고, 같은 패턴만 정리 후보로 묶어 관리합니다.
               각 예제는 동작, 코드, 라이트/다크 품질을 계속 감사합니다.
             </p>
           </header>

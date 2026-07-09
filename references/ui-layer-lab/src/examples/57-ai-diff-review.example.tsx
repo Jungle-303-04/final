@@ -6,15 +6,15 @@ export default function AiDiffReviewExample() {
   return (
     <div className="diff-review">
       <section>
-        <strong>Before</strong>
-        <code>Run failed. Check logs.</code>
+        <strong>변경 전</strong>
+        <code>실행 실패. 로그를 확인하세요.</code>
       </section>
       <section className={accepted ? "accepted" : ""}>
-        <strong>AI Suggestion</strong>
-        <code>Visual smoke failed because /preview returned 404.</code>
+        <strong>AI 제안</strong>
+        <code>/preview가 404를 반환해 시각 스모크가 실패했습니다.</code>
       </section>
-      <button className="command-trigger" onClick={() => setAccepted(true)}>
-        Accept Suggestion
+      <button className="command-trigger stable-wide" onClick={() => setAccepted(true)} type="button">
+        제안 적용
       </button>
     </div>
   );

@@ -221,6 +221,50 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/105-animated-focus-ring.example.tsx",
       fragments: ["Logs", "Preview", "Focused", "Idle"]
+    },
+    {
+      file: "src/examples/56-ai-inline-rewrite.example.tsx",
+      fragments: ["Route smoke failed", "preview route", "Restore /preview", "The test failed"]
+    },
+    {
+      file: "src/examples/57-ai-diff-review.example.tsx",
+      fragments: ["Before", "Run failed", "AI Suggestion", "Visual smoke failed", "Accept Suggestion"]
+    },
+    {
+      file: "src/examples/68-react-flow-save-restore.example.tsx",
+      fragments: ['label: "Draft"', 'label: "Ship"', ">Save<", ">Restore<"]
+    },
+    {
+      file: "src/examples/84-job-floating-center.example.tsx",
+      fragments: ["Dashboard content", "Global work", "2 jobs running", "Close", "Pulling origin", "Show Job Center"]
+    },
+    {
+      file: "src/examples/85-drilldown-log-search.example.tsx",
+      fragments: ["install completed", "visual smoke failed", "matching lines", "Search stays"]
+    },
+    {
+      file: "src/examples/43-react-flow-node-toolbar.example.tsx",
+      fragments: ["Select me", "Open logs", "Focus", "Click the nodes"]
+    },
+    {
+      file: "src/examples/74-sonner-report-error.example.tsx",
+      fragments: ["Push failed", "origin rejected", "View logs", "Opening push logs", "Report Error"]
+    },
+    {
+      file: "src/examples/78-animated-resize-panel.example.tsx",
+      fragments: ["Toggle Panel", "Expanded context", "Compact context", "Panel width and content density"]
+    },
+    {
+      file: "src/examples/92-react-flow-update-node-data.example.tsx",
+      fragments: ['label: "Queued"', 'label: "Waiting"', 'label: "Running"', "Mark Running"]
+    },
+    {
+      file: "src/examples/94-react-flow-computing-flows.example.tsx",
+      fragments: ['label: "Input"', 'label: "Lint"', 'label: "Test"', 'label: "Ship"', "outgoing:", "none"]
+    },
+    {
+      file: "src/examples/103-animated-kanban-card.example.tsx",
+      fragments: ['"Queued"', '"Running"', '"Review"', "visual smoke"]
     }
   ];
   const matches = [];

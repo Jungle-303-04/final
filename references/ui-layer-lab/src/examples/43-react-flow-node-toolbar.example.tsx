@@ -4,8 +4,8 @@ import "@xyflow/react/dist/style.css";
 type ToolbarNode = Node<{ label: string }, "toolcard">;
 
 const nodes: ToolbarNode[] = [
-  { id: "1", type: "toolcard", position: { x: 0, y: 80 }, data: { label: "Select me" } },
-  { id: "2", type: "toolcard", position: { x: 260, y: 80 }, data: { label: "Open logs" } }
+  { id: "1", type: "toolcard", position: { x: 0, y: 80 }, data: { label: "검토 단계" } },
+  { id: "2", type: "toolcard", position: { x: 260, y: 80 }, data: { label: "로그 열기" } }
 ];
 
 const edges = [{ id: "1-2", source: "1", target: "2" }];
@@ -29,12 +29,12 @@ function ToolbarCard({ data }: NodeProps<ToolbarNode>) {
   return (
     <div className="flow-card">
       <NodeToolbar isVisible position={Position.Top}>
-        <button>Focus</button>
-        <button>Logs</button>
+        <button type="button">집중</button>
+        <button type="button">로그</button>
       </NodeToolbar>
       <Handle type="target" position={Position.Left} />
       <strong>{data.label}</strong>
-      <span>Click the nodes to show toolbar.</span>
+      <span>노드 위에서 바로 작업을 실행합니다.</span>
       <Handle type="source" position={Position.Right} />
     </div>
   );

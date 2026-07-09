@@ -5,22 +5,22 @@ export default function JobFloatingCenterExample() {
 
   return (
     <div className="fake-page">
-      <strong>Dashboard content</strong>
-      <p>Global work can stay visible above the current screen.</p>
+      <strong>대시보드 콘텐츠</strong>
+      <p>전역 작업 상태는 현재 화면 위에서 계속 확인할 수 있습니다.</p>
       {open ? (
         <section className="floating-job-center">
           <div className="drawer-header">
-            <strong>2 jobs running</strong>
-            <button onClick={() => setOpen(false)}>Close</button>
+            <strong>작업 2개 실행 중</strong>
+            <button onClick={() => setOpen(false)} type="button">닫기</button>
           </div>
           <div className="progress-track">
             <div style={{ width: "54%" }} />
           </div>
-          <span>Pulling origin and building preview...</span>
+          <span>원격 변경을 가져오고 미리보기를 빌드하는 중입니다.</span>
         </section>
       ) : (
-        <button className="command-trigger" onClick={() => setOpen(true)}>
-          Show Job Center
+        <button className="command-trigger stable-wide" onClick={() => setOpen(true)} type="button">
+          작업 센터 표시
         </button>
       )}
     </div>
