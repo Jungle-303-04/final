@@ -811,6 +811,7 @@ class ReleaseReadinessResponse(StrictModel):
     mode: str
     summary: str
     checks: list[JsonMap] = Field(default_factory=list)
+    impact: JsonMap = Field(default_factory=dict)
     next_actions: list[JsonMap] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

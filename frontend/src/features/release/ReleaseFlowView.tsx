@@ -848,6 +848,7 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
     return <Card title="Readiness"><p className="release-flow__hint">No readiness check yet.</p></Card>;
   }
   const badgeTone = readiness.ready ? (readiness.warnings.length ? 'warning' : 'success') : 'danger';
+  const impact = readiness.impact;
   const nextActions = readiness.next_actions ?? [];
   return (
     <Card
@@ -860,6 +861,36 @@ function ReadinessPanel({ readiness, loading }: { readiness?: ReleaseReadiness; 
       }
     >
       <p className="release-flow__hint">{readiness.summary}</p>
+      {impact && (
+        <div className="release-flow__impact">
+          <div className="release-flow__impact-grid">
+            <div>
+              <span>Applications</span>
+              <strong>{impact.applications.length || impact.total_steps}</strong>
+            </div>
+            <div>
+              <span>Environments</span>
+              <strong>{impact.environments.join(', ') || '-'}</strong>
+            </div>
+            <div>
+              <span>Waves</span>
+              <strong>{impact.total_waves}</strong>
+            </div>
+            <div>
+              <span>Production</span>
+              <strong>{impact.production_target_count}</strong>
+            </div>
+          </div>
+          <p>{impact.summary}</p>
+          {impact.first_wave_steps.length > 0 && (
+            <div className="release-flow__impact-steps">
+              {impact.first_wave_steps.slice(0, 4).map(step => (
+                <span key={step.step_id || `${step.application_id}-${step.name}`}>{step.name || step.application_id}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {nextActions.length > 0 && (
         <div className="release-flow__next-actions">
           {nextActions.map(action => (

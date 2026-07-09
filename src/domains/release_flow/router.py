@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import io
 import json
 import os
-from typing import Any
+from typing import Any, Iterable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -1164,6 +1164,7 @@ def release_readiness_from_plan(
         "mode": profile.runtime_mode,
         "summary": summary,
         "checks": checks,
+        "impact": release_readiness_impact(plan, preview, profile),
         "next_actions": release_readiness_next_actions(checks),
         "blockers": blockers,
         "warnings": warnings,
@@ -1184,6 +1185,91 @@ def readiness_check(
         "message": message,
         "blockers": blockers or [],
     }
+
+
+def release_readiness_impact(plan: dict[str, Any], preview: dict[str, Any], profile: Any) -> dict[str, Any]:
+    preview_steps = [step for step in preview.get("steps", []) if isinstance(step, dict)]
+    waves = sorted({int_field(step, "wave", 0) for step in preview_steps if int_field(step, "wave", 0) > 0})
+    applications = unique_non_empty(str(step.get("application_id") or "") for step in preview_steps)
+    environments = unique_non_empty(str(step.get("environment") or "") for step in preview_steps)
+    first_wave = waves[0] if waves else first_preview_wave(preview)
+    first_wave_steps = [
+        readiness_impact_step(step)
+        for step in preview_steps
+        if int_field(step, "wave", first_wave) == first_wave
+    ]
+    production_targets = [
+        {
+            "application_id": str(step.get("application_id") or ""),
+            "name": str(step.get("name") or step.get("application_id") or ""),
+            "environment": str(step_config(step).get("environment") or plan_settings_value(plan).get("environment") or ""),
+        }
+        for step in plan.get("steps", [])
+        if isinstance(step, dict) and release_step_targets_production(plan, step)
+    ]
+    production_labels = unique_non_empty(
+        str(item.get("name") or item.get("application_id") or "") for item in production_targets
+    )
+    return {
+        "summary": release_readiness_impact_summary(
+            len(preview_steps),
+            len(applications),
+            len(environments),
+            len(waves),
+            len(production_targets),
+            bool(getattr(profile, "side_effects", False)),
+        ),
+        "runtime_mode": str(getattr(profile, "runtime_mode", "")),
+        "live_side_effects": bool(getattr(profile, "side_effects", False)),
+        "total_steps": len(preview_steps),
+        "total_waves": len(waves),
+        "first_wave": first_wave,
+        "applications": applications,
+        "environments": environments,
+        "production_targets": production_labels,
+        "production_target_count": len(production_targets),
+        "first_wave_steps": first_wave_steps,
+    }
+
+
+def readiness_impact_step(step: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "step_id": str(step.get("step_id") or ""),
+        "application_id": str(step.get("application_id") or ""),
+        "name": str(step.get("name") or step.get("application_id") or ""),
+        "environment": str(step.get("environment") or ""),
+        "action": str(step.get("action") or ""),
+        "strategy": str(step.get("strategy") or ""),
+        "wave": int_field(step, "wave", 0) or None,
+    }
+
+
+def release_readiness_impact_summary(
+    step_count: int,
+    application_count: int,
+    environment_count: int,
+    wave_count: int,
+    production_target_count: int,
+    live_side_effects: bool,
+) -> str:
+    mode_label = "live" if live_side_effects else "dry-run"
+    production_label = f", {production_target_count} production target(s)" if production_target_count else ""
+    return (
+        f"{mode_label} impact covers {step_count} step(s), {application_count} application(s), "
+        f"{environment_count} environment(s), and {wave_count} wave(s){production_label}."
+    )
+
+
+def unique_non_empty(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
 
 
 def release_readiness_next_actions(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:

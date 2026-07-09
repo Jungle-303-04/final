@@ -219,6 +219,63 @@
   margin-top: 12px;
 }
 
+.release-flow__impact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+
+.release-flow__impact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.release-flow__impact-grid div {
+  min-width: 0;
+}
+
+.release-flow__impact-grid span,
+.release-flow__impact p {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+
+.release-flow__impact-grid span {
+  display: block;
+}
+
+.release-flow__impact-grid strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-flow__impact p {
+  margin: 0;
+}
+
+.release-flow__impact-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.release-flow__impact-steps span {
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--text-1);
+  font-size: var(--fs-xs);
+}
+
 .release-flow__next-actions {
   display: flex;
   flex-direction: column;
@@ -525,6 +582,7 @@
   .release-flow__run-head,
   .release-flow__handoff-head,
   .release-flow__handoff-grid,
+  .release-flow__impact-grid,
   .release-flow__run-grid,
   .release-flow__timeline-row {
     grid-template-columns: 1fr;
