@@ -86,6 +86,7 @@
 - release audit UI CSV export
 
 - release readiness 조회: preview blocker, dispatch 필수 입력값, live gate, diagnostics gate, alert channel, retry policy, audit/redaction 상태
+- release readiness next actions: `/release-readiness`가 blocked/warning 체크를 `next_actions`로 요약해서 운영자가 dispatch 전에 고칠 항목이나 검토할 항목을 바로 확인
 - release readiness app context: 등록 application, repo, branch, manifest path, cluster context 누락을 dispatch 전에 차단
 - live gate 입력: plan/step 단위 approval granted, change ticket, Safe PR URL/ready 값을 UI에서 설정
 - diagnostics override 입력: diagnostics gate를 끄는 경우 운영 사유를 UI에서 입력

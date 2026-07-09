@@ -31,7 +31,8 @@ export interface ReleasePreviewStep { step_id: string; application_id: string; n
 export interface ReleasePreviewWave { wave: number; step_ids: string[]; applications: string[] }
 export interface ReleasePlanPreview { plan_id?: string; executable: boolean; summary: string; waves: ReleasePreviewWave[]; steps: ReleasePreviewStep[]; blockers: string[] }
 export interface ReleaseReadinessCheck { check_id: string; name: string; status: 'passed'|'warning'|'blocked'|'info'|string; message: string; blockers: string[] }
-export interface ReleaseReadiness { ready: boolean; mode: string; summary: string; checks: ReleaseReadinessCheck[]; blockers: string[]; warnings: string[] }
+export interface ReleaseReadinessAction { action_id: string; check_id: string; label: string; severity: 'warning'|'blocked'|string; message: string; blockers: string[] }
+export interface ReleaseReadiness { ready: boolean; mode: string; summary: string; checks: ReleaseReadinessCheck[]; next_actions: ReleaseReadinessAction[]; blockers: string[]; warnings: string[] }
 export interface ReleaseRunStep { run_step_id: string; application_id: string; name: string; wave: number; status: string; workflow_run_id?: string; event_id?: string; correlation_id?: string; approval_id?: string | null; health: Record<string, unknown>; rollback: Record<string, unknown>; details: Record<string, unknown>; workflow?: Record<string, unknown> }
 export interface ReleaseRunEvent { audit_id: string; event_type: string; message: string; actor?: string; details: Record<string, unknown>; created_at?: string }
 export interface ReleaseAuditEvent extends ReleaseRunEvent { run_id: string; plan_id: string; plan_name: string; run_status: string; application_ids: string[] }
