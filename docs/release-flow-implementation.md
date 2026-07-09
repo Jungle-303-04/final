@@ -116,6 +116,7 @@
 - run filters: `GET /release-runs`와 UI에서 all/attention/stale/live/failed/waiting approval/verification failed 기준으로 run 목록을 빠르게 필터링
 - verification failed filter: post-deploy verification job이 failed/error/unhealthy인 run만 `verification_failed_only` API query와 UI 필터로 바로 조회
 - verification pending timeout: post-deploy verification job의 `queued_at`/`timeout_minutes`를 기록하고, 오래 pending/queued/running인 job을 summary, UI filter, handoff blocked check로 표시
+- verification timeout alert: timeout된 verification job이 있는 run의 수동 notify 알림을 critical로 올리고 job id/kind/경과 시간/timeout 기준을 메시지에 포함
 - run-scoped audit/export: 선택한 release run의 `run_id`로 audit 조회와 CSV export를 좁혀 사고 리뷰와 배포 증적 제출에 바로 사용
 - audit event filter/export: 선택한 run audit에서 workflow failure, approval, rollback, cancel, wave dispatch, evidence queued 같은 event type별 조회와 CSV export를 지원
 - attention alert: 선택한 attention/stale release run을 기존 `alert.requested` 파이프라인으로 수동 알림 요청
