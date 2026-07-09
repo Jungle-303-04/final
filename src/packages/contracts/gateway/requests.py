@@ -576,11 +576,7 @@ class SchedulingProfile(StrictModel):
     def require_explicit_selector(self) -> SchedulingProfile:
         if not self.enabled:
             return self
-        if (
-            self.selector.namespaces
-            or self.selector.labels
-            or self.selector.workload_names
-        ):
+        if self.selector.namespaces or self.selector.labels or self.selector.workload_names:
             return self
         raise ValueError("enabled scheduling profile requires at least one selector")
 
