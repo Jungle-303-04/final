@@ -13,10 +13,10 @@ export default function CommandEmptyStateExample() {
 
   return (
     <Command shouldFilter={false} className="command-dialog inline-command">
-      <Command.Input value={search} onValueChange={setSearch} placeholder="Search project..." />
+      <Command.Input value={search} onValueChange={setSearch} placeholder="프로젝트를 검색하세요" />
       <Command.List>
         {results.length > 0 ? (
-          <Command.Group heading="Projects">
+          <Command.Group heading="프로젝트">
             {results.map((project) => (
               <Command.Item key={project}>{project}</Command.Item>
             ))}
@@ -24,9 +24,9 @@ export default function CommandEmptyStateExample() {
         ) : (
           <Command.Empty>
             <div className="empty-state">
-              <strong>No project found</strong>
-              <span>Create a new project from this query.</span>
-              <button>Create "{search || "project"}"</button>
+              <strong>프로젝트가 없습니다</strong>
+              <span>이 검색어로 새 프로젝트를 만들 수 있습니다.</span>
+              <button type="button">"{search || "프로젝트"}" 만들기</button>
             </div>
           </Command.Empty>
         )}

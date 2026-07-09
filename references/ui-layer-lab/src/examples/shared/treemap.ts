@@ -107,14 +107,19 @@ function slice(
 
   const total = items.reduce((sum, item) => sum + item.weight, 0);
   let acc = 0;
-  let index = 0;
-  for (; index < items.length - 1; index += 1) {
-    if (acc + items[index].weight > total / 2 && index > 0) break;
+  let splitIndex = 1;
+  for (let index = 0; index < items.length; index += 1) {
+    if (index > 0 && acc + items[index].weight > total / 2) break;
     acc += items[index].weight;
+    splitIndex = index + 1;
+    if (splitIndex >= items.length) {
+      splitIndex = items.length - 1;
+      break;
+    }
   }
 
-  const first = items.slice(0, index + 1);
-  const second = items.slice(index + 1);
+  const first = items.slice(0, splitIndex);
+  const second = items.slice(splitIndex);
   const firstTotal = first.reduce((sum, item) => sum + item.weight, 0);
   const ratio = firstTotal / total;
 

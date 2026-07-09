@@ -15,11 +15,29 @@ const server = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port"
   cwd: root,
   stdio: ["ignore", "pipe", "pipe"]
 });
+let serverExited = false;
+let serverOutput = "";
+
+server.stdout.on("data", (chunk) => {
+  serverOutput = `${serverOutput}${chunk}`.slice(-6000);
+});
+server.stderr.on("data", (chunk) => {
+  serverOutput = `${serverOutput}${chunk}`.slice(-6000);
+});
+server.on("exit", (code, signal) => {
+  serverExited = true;
+  serverOutput = `${serverOutput}\n[vite-exit code=${code} signal=${signal}]`.slice(-6000);
+});
 
 try {
   await waitForServer(baseUrl);
   const result = await runGate(baseUrl);
   console.log(JSON.stringify(result, null, 2));
+} catch (error) {
+  if (error instanceof Error) {
+    error.message = `${error.message}\n\nVite output:\n${serverOutput}`;
+  }
+  throw error;
 } finally {
   server.kill("SIGTERM");
 }
@@ -54,6 +72,7 @@ async function runGate(url) {
     sourceEnglish.matches.length ? `핵심 예제 영어 회귀: ${sourceEnglish.matches.join(", ")}` : "",
     visibleKorean.forbiddenVisible.length ? `대표 화면 영어 노출: ${visibleKorean.forbiddenVisible.join(", ")}` : "",
     navigation.activeHeading !== "데이터 시각화" ? `카테고리 전환 실패: ${navigation.activeHeading}` : "",
+    !navigation.searchInputPresent ? "검색 입력을 찾지 못함" : "",
     navigation.filteredCount <= 0 || navigation.filteredCount >= navigation.dataVizCount
       ? `검색 필터 실패: ${navigation.dataVizCount}->${navigation.filteredCount}, term=${navigation.searchTerm}`
       : "",
@@ -130,6 +149,78 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/420-react-flow-edge-health-filter.example.tsx",
       fragments: ["Show all", "Failed edge", "edges visible"]
+    },
+    {
+      file: "src/examples/14-command-scrollable.example.tsx",
+      fragments: ["Search repositories", "No repositories found", "Repositories", "Repository", "healthy"]
+    },
+    {
+      file: "src/examples/20-sonner-types.example.tsx",
+      fragments: ["Default toast", "Saved successfully", "Warning", "Deploy failed", "Syncing repository"]
+    },
+    {
+      file: "src/examples/23-sonner-action.example.tsx",
+      fragments: ["Deployment failed", "Visual smoke did not pass", "Retry queued", "Show Action Toast"]
+    },
+    {
+      file: "src/examples/25-command-pages.example.tsx",
+      fragments: ["Search actions", ">← Back<", 'heading="Pages"', "AI Actions", "Git Actions", "Pull latest"]
+    },
+    {
+      file: "src/examples/35-sonner-loading-dismiss.example.tsx",
+      fragments: ["Running cluster sync", "Cluster sync completed", "Start Loading Toast"]
+    },
+    {
+      file: "src/examples/46-command-empty-state.example.tsx",
+      fragments: ["Search project", "Projects", "No project found", "Create a new project"]
+    },
+    {
+      file: "src/examples/47-command-value-preview.example.tsx",
+      fragments: ["Ask AI", "Open Logs", "Search action", "Actions", "Jump into the latest workflow log"]
+    },
+    {
+      file: "src/examples/48-command-filter-tags.example.tsx",
+      fragments: ["Open package.json", "Run typecheck", "Toggle dark mode", "Filter commands", "No commands found"]
+    },
+    {
+      file: "src/examples/53-animated-accordion.example.tsx",
+      fragments: ["Fetching origin", "Test run", "Uploading branch"]
+    },
+    {
+      file: "src/examples/54-animated-layout-switch.example.tsx",
+      fragments: ['"Command"', '"Overlay"', '"Compact"', '"Expand"', "Detailed state", "Collapsed"]
+    },
+    {
+      file: "src/examples/66-react-flow-edge-toolbar.example.tsx",
+      fragments: ["Failing Step", "Open Logs", 'action: "View"']
+    },
+    {
+      file: "src/examples/69-react-flow-animated-edge.example.tsx",
+      fragments: ["Queued", "Running", "Done", "Stop animation", "Start animation"]
+    },
+    {
+      file: "src/examples/97-command-quick-create.example.tsx",
+      fragments: ["Investigate deploy failure", "Search or create task", 'heading="Tasks"']
+    },
+    {
+      file: "src/examples/98-command-pinned-actions.example.tsx",
+      fragments: ["Ask AI", "Open Logs", "Run Tests", "Push Branch", "Pin important actions", 'heading="Pinned"']
+    },
+    {
+      file: "src/examples/99-command-density-toggle.example.tsx",
+      fragments: ["Open file", "Run check", "Summarize logs", "Search actions", '"Comfortable"', '"Dense"']
+    },
+    {
+      file: "src/examples/101-sonner-cancel-job.example.tsx",
+      fragments: ["Generating summary", 'label: "Cancel"', "Summary cancelled", "Start Summary"]
+    },
+    {
+      file: "src/examples/102-sonner-action-chain.example.tsx",
+      fragments: ["Branch pushed", "Open PR", "Pull request opened", "Push Branch"]
+    },
+    {
+      file: "src/examples/105-animated-focus-ring.example.tsx",
+      fragments: ["Logs", "Preview", "Focused", "Idle"]
     }
   ];
   const matches = [];
@@ -213,7 +304,14 @@ async function inspectNavigationAndSearch(page, url) {
   const dataVizCount = await page.locator(".example-section").count();
   const activeHeading = await page.evaluate(() => document.querySelector(".category-summary h2")?.textContent?.trim() ?? "");
   const searchTerm = "차트";
-  await page.locator("#example-search").fill(searchTerm);
+  const searchInputPresent = await page.evaluate(() => {
+    const input = document.querySelector("#example-search");
+    if (!(input instanceof HTMLInputElement)) return false;
+    return true;
+  });
+  if (searchInputPresent) {
+    await page.locator("#example-search").fill(searchTerm, { timeout: 5000 });
+  }
   await page.waitForTimeout(240);
   const filteredCount = await page.locator(".example-section").count();
   const firstFilteredTitle = await page.evaluate(() => document.querySelector(".example-section h3")?.textContent?.trim() ?? "");
@@ -221,6 +319,7 @@ async function inspectNavigationAndSearch(page, url) {
   return {
     activeHeading,
     searchTerm,
+    searchInputPresent,
     dataVizCount,
     filteredCount,
     firstFilteredTitle,
@@ -346,7 +445,10 @@ function compactText(value) {
 }
 
 async function openCategory(page, url, label) {
-  await page.goto(url, { waitUntil: "networkidle" });
+  if (serverExited) {
+    throw new Error(`Vite server exited before navigation.\n${serverOutput}`);
+  }
+  await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: new RegExp(label) }).click();
 }
 
@@ -354,6 +456,9 @@ async function waitForServer(url) {
   const deadline = Date.now() + 30_000;
   let lastError;
   while (Date.now() < deadline) {
+    if (serverExited) {
+      throw new Error(`Vite server exited before ready.\n${serverOutput}`);
+    }
     try {
       const response = await fetch(url);
       if (response.ok) return;
