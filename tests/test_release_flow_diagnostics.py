@@ -2180,6 +2180,22 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
                 }
             ],
         },
+        {
+            "run_id": "run-rollback-requested",
+            "status": "rollback_requested",
+            "steps": [],
+        },
+        {
+            "run_id": "run-unhealthy",
+            "status": "running",
+            "health": {"status": "unhealthy"},
+            "steps": [],
+        },
+        {
+            "run_id": "run-step-unhealthy",
+            "status": "running",
+            "steps": [{"health": {"status": "unhealthy"}}],
+        },
     ]
 
     assert [
@@ -2198,6 +2214,14 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
         run["run_id"]
         for run in release_router.filter_release_runs(runs, live_only=True)
     ] == ["run-live", "run-failed"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, status="rollback_requested")
+    ] == ["run-rollback-requested"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, unhealthy_only=True)
+    ] == ["run-unhealthy", "run-step-unhealthy"]
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, verification_failed_only=True)

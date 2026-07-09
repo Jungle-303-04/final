@@ -113,7 +113,8 @@
 - attention reasons: failed, waiting approval, rollback requested, paused, unhealthy run/step에서 `attention.required/reasons`를 파생해 API와 UI에서 왜 조치가 필요한지 바로 표시
 - stale run detection: active run의 `updated_at`이 `health_timeout_seconds` 또는 step timeout을 넘으면 stale attention reason과 `stale_runs` summary 카운터를 표시
 - verification failure summary: post-deploy verification job 실패가 있는 run 수를 `verification_failed_runs` summary 카운터와 UI card로 표시
-- run filters: `GET /release-runs`와 UI에서 all/attention/stale/live/failed/waiting approval/verification failed 기준으로 run 목록을 빠르게 필터링
+- run filters: `GET /release-runs`와 UI에서 all/attention/stale/live/failed/rollback requested/unhealthy/waiting approval/verification failed/verification timeout 기준으로 run 목록을 빠르게 필터링
+- unhealthy run filter: run health나 step health가 unhealthy인 run만 `unhealthy_only` API query와 UI 필터로 바로 조회
 - verification failed filter: post-deploy verification job이 failed/error/unhealthy인 run만 `verification_failed_only` API query와 UI 필터로 바로 조회
 - verification pending timeout: post-deploy verification job의 `queued_at`/`timeout_minutes`를 기록하고, 오래 pending/queued/running인 job을 summary, UI filter, handoff blocked check로 표시
 - verification timeout alert: timeout된 verification job이 있는 run의 수동 notify 알림을 critical로 올리고 job id/kind/경과 시간/timeout 기준을 메시지에 포함

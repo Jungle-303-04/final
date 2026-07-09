@@ -100,6 +100,7 @@ async def list_release_runs(
     attention_only: bool = Query(default=False),
     stale_only: bool = Query(default=False),
     live_only: bool = Query(default=False),
+    unhealthy_only: bool = Query(default=False),
     verification_failed_only: bool = Query(default=False),
     verification_pending_timeout_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
@@ -116,6 +117,7 @@ async def list_release_runs(
         attention_only=attention_only,
         stale_only=stale_only,
         live_only=live_only,
+        unhealthy_only=unhealthy_only,
         verification_failed_only=verification_failed_only,
         verification_pending_timeout_only=verification_pending_timeout_only,
     )
@@ -2837,6 +2839,7 @@ def filter_release_runs(
     attention_only: bool = False,
     stale_only: bool = False,
     live_only: bool = False,
+    unhealthy_only: bool = False,
     verification_failed_only: bool = False,
     verification_pending_timeout_only: bool = False,
 ) -> list[dict[str, Any]]:
@@ -2852,6 +2855,8 @@ def filter_release_runs(
         if stale_only and attention.get("stale") is not True:
             continue
         if live_only and not release_run_has_live_side_effects(run):
+            continue
+        if unhealthy_only and not release_run_has_unhealthy_health(run):
             continue
         if verification_failed_only and not release_run_has_failed_verification(run):
             continue
@@ -2879,6 +2884,19 @@ def release_run_has_failed_verification(run: dict[str, Any]) -> bool:
         if release_verification_job_status(job) in VERIFICATION_JOB_FAILED_STATUSES:
             return True
     return False
+
+
+def release_run_has_unhealthy_health(run: dict[str, Any]) -> bool:
+    health = run.get("health") if isinstance(run.get("health"), dict) else {}
+    if str(health.get("status") or "").strip().lower() == "unhealthy":
+        return True
+    steps = run.get("steps") if isinstance(run.get("steps"), list) else []
+    return any(
+        isinstance(step, dict)
+        and isinstance(step.get("health"), dict)
+        and str(step["health"].get("status") or "").strip().lower() == "unhealthy"
+        for step in steps
+    )
 
 
 def release_run_has_timed_out_verification(run: dict[str, Any]) -> bool:
