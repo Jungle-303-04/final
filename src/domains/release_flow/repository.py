@@ -710,6 +710,31 @@ class ReleaseFlowRepository(DatabaseConnection):
             )
         return self.get_release_run(workspace_id, run_id)
 
+    def record_release_run_event(
+        self,
+        workspace_id: str,
+        run_id: str,
+        event_type: str,
+        message: str,
+        *,
+        actor: str | None = None,
+        details: JsonObject | None = None,
+    ) -> JsonObject | None:
+        with self.connection() as conn:
+            conn.execute(
+                pg_insert(ReleaseRunEvent.__table__).values(
+                    **release_run_event_values(
+                        workspace_id,
+                        run_id,
+                        event_type,
+                        message,
+                        actor,
+                        details or {},
+                    )
+                )
+            )
+        return self.get_release_run(workspace_id, run_id)
+
     def mark_release_run_retry(
         self,
         workspace_id: str,

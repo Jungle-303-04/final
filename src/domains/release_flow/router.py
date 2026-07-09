@@ -74,6 +74,8 @@ BLOCKING_RUN_STATUSES = {"running", "paused", "rollback_requested", "waiting_for
 DEFAULT_RELEASE_VERIFICATION_TIMEOUT_MINUTES = 15
 VERIFICATION_JOB_FAILED_STATUSES = {"failed", "error", "unhealthy"}
 VERIFICATION_JOB_PENDING_STATUSES = {"", "pending", "queued", "running"}
+RELEASE_NOTIFY_COOLDOWN_MINUTES_ENV = "RELEASE_FLOW_NOTIFY_COOLDOWN_MINUTES"
+DEFAULT_RELEASE_NOTIFY_COOLDOWN_MINUTES = 10
 ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_ALERT_TEST_MAX_AGE_HOURS"
 DEFAULT_ALERT_CHANNEL_VALIDATION_MAX_AGE_HOURS = 24
 APPROVAL_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS"
@@ -781,19 +783,37 @@ async def notify_release_run_attention(
     if run is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
     require_plan_application_manage_access(db, current, workspace_id, run.get("steps", []))
+    blocker = release_notify_cooldown_blocker(run)
+    if blocker:
+        raise HTTPException(
+            status_code=HTTP_CONFLICT,
+            detail={"message": RELEASE_RUN_BLOCKED, "blockers": [blocker]},
+        )
+    reason = operator_action_reason(payload, "operator requested release run notification")
     alert = release_run_attention_alert_body(
         run,
         workspace_id,
-        reason=operator_action_reason(payload, "operator requested release run notification"),
+        reason=reason,
     )
     accepted = await events.accept_body(
         alert,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
+    event_type = f"release.notify.{release_window_bound_label(datetime.now(timezone.utc))}"
+    recorded = record_release_notify_event(
+        db,
+        workspace_id,
+        run_id,
+        event_type,
+        alert,
+        actor=current.user_id,
+        reason=reason,
+        accepted_event=accepted.event.to_dict(),
+    )
     return ReleaseRunAlertResponse(
         accepted=True,
         event=accepted.event.to_dict(),
-        run=run,
+        run=recorded or run,
     )
 
 
@@ -2416,6 +2436,72 @@ def release_run_status_action(
 def operator_action_reason(payload: ReleaseRunActionRequest, fallback: str) -> str:
     reason = str(payload.reason or "").strip()
     return reason or fallback
+
+
+def release_notify_cooldown_blocker(run: dict[str, Any]) -> str | None:
+    cooldown = release_notify_cooldown()
+    events = run.get("events") if isinstance(run.get("events"), list) else []
+    now = datetime.now(timezone.utc)
+    for event in reversed(events):
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("event_type") or "")
+        if not event_type.startswith("release.notify"):
+            continue
+        created_at = parse_release_window_time(event.get("created_at"))
+        if created_at is None:
+            continue
+        age = now - created_at.astimezone(timezone.utc)
+        if age < cooldown:
+            remaining_seconds = max(0, int((cooldown - age).total_seconds()))
+            remaining_minutes = max(1, (remaining_seconds + 59) // 60)
+            return (
+                "Release notification was already sent recently; "
+                f"wait about {remaining_minutes} minute(s) before notifying again."
+            )
+    return None
+
+
+def release_notify_cooldown() -> timedelta:
+    raw = os.getenv(RELEASE_NOTIFY_COOLDOWN_MINUTES_ENV, "").strip()
+    try:
+        minutes = float(raw) if raw else DEFAULT_RELEASE_NOTIFY_COOLDOWN_MINUTES
+    except ValueError:
+        minutes = DEFAULT_RELEASE_NOTIFY_COOLDOWN_MINUTES
+    return timedelta(minutes=max(1.0, minutes))
+
+
+def record_release_notify_event(
+    db: Any,
+    workspace_id: str,
+    run_id: str,
+    event_type: str,
+    alert: AlertRequestedBody,
+    *,
+    actor: str,
+    reason: str,
+    accepted_event: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not hasattr(db, "record_release_run_event"):
+        return None
+    return db.record_release_run_event(
+        workspace_id,
+        run_id,
+        event_type,
+        f"Release notification requested ({alert.severity}).",
+        actor=actor,
+        details={
+            "reason": reason,
+            "operator_action": "notify",
+            "alert": {
+                "severity": alert.severity,
+                "application_id": alert.application_id,
+                "message": alert.message,
+                "reason": alert.reason,
+            },
+            "accepted_event": accepted_event,
+        },
+    )
 
 
 def release_run_rollback_policy(run: dict[str, Any]) -> str:

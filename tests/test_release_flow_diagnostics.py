@@ -272,6 +272,32 @@ def test_notify_release_run_attention_emits_alert(monkeypatch) -> None:
     assert alert.application_id == "checkout"
     assert alert.reason == "release run needs attention"
     assert "page release owner" in alert.message
+    assert db.recorded_events[0]["event_type"].startswith("release.notify.")
+    assert db.recorded_events[0]["details"]["operator_action"] == "notify"
+    assert db.recorded_events[0]["details"]["alert"]["severity"] == "warning"
+
+
+def test_notify_release_run_attention_blocks_recent_duplicate(monkeypatch) -> None:
+    db = ReleaseRunActionDb(recent_notify_minutes=3)
+    events = AcceptingEventGateway()
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.notify_release_run_attention(
+                "release-run-1",
+                release_router.ReleaseRunActionRequest(reason="page release owner again"),
+                current=current,
+                db=db,
+                events=events,
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert "already sent recently" in exc.value.detail["blockers"][0]
+    assert events.calls == []
+    assert db.recorded_events == []
 
 
 def test_notify_release_run_attention_marks_verification_timeout_critical(monkeypatch) -> None:
@@ -2151,16 +2177,30 @@ class ReleaseRunActionDb:
         verification_queued_at: str | None = None,
         verification_timeout_minutes: int | None = None,
         step_health_status: str = "healthy",
+        recent_notify_minutes: int | None = None,
     ) -> None:
         self.requested_rollback = False
         self.updated: list[dict[str, object]] = []
+        self.recorded_events: list[dict[str, object]] = []
         self.rollback_policy = rollback_policy
         self.verification_job_status = verification_job_status
         self.verification_queued_at = verification_queued_at
         self.verification_timeout_minutes = verification_timeout_minutes
         self.step_health_status = step_health_status
+        self.recent_notify_minutes = recent_notify_minutes
 
     def get_release_run(self, _workspace_id: str, _run_id: str) -> dict[str, object]:
+        events: list[dict[str, object]] = []
+        if self.recent_notify_minutes is not None:
+            events.append(
+                {
+                    "event_type": "release.notify.previous",
+                    "created_at": (
+                        datetime.now(timezone.utc) - timedelta(minutes=self.recent_notify_minutes)
+                    ).isoformat(),
+                }
+            )
+        events.extend(self.recorded_events)
         return {
             "run_id": "release-run-1",
             "status": "running",
@@ -2170,6 +2210,7 @@ class ReleaseRunActionDb:
             "settings": {"rollback_policy": self.rollback_policy},
             "rollback": {"policy": self.rollback_policy},
             "attention": {"required": True, "reasons": ["Release run is paused by an operator."]},
+            "events": events,
             "steps": [
                 {
                     "application_id": "checkout",
@@ -2237,6 +2278,27 @@ class ReleaseRunActionDb:
 
     def update_release_run_status(self, *args: object, **kwargs: object) -> dict[str, object]:
         self.updated.append({"args": args, **kwargs})
+        return self.get_release_run("workspace-a", "release-run-1")
+
+    def record_release_run_event(
+        self,
+        _workspace_id: str,
+        _run_id: str,
+        event_type: str,
+        message: str,
+        *,
+        actor: str | None = None,
+        details: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        self.recorded_events.append(
+            {
+                "event_type": event_type,
+                "message": message,
+                "actor": actor,
+                "details": details or {},
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         return self.get_release_run("workspace-a", "release-run-1")
 
     def request_release_run_rollback(self, *args: object, **kwargs: object) -> dict[str, object]:
