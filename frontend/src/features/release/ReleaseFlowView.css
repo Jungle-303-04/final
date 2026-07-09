@@ -350,6 +350,10 @@
   font-size: var(--fs-xs);
 }
 
+.release-flow__approval {
+  grid-column: 1 / -1;
+}
+
 .release-flow__run-meta a {
   color: var(--brand);
 }

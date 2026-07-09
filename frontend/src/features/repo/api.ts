@@ -207,6 +207,7 @@ export function useApproval() {
       qc.invalidateQueries({ queryKey: repoKeys.apps() });
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'applications' });
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'ai' });
+      qc.invalidateQueries({ predicate: isReleaseQuery });
     },
     // 승인/거절 실패를 조용히 삼키지 않는다 — 사유(중복 처리·권한)를 그대로 노출
     onError: (err, v) => {
@@ -218,9 +219,17 @@ export function useApproval() {
       push({ tone: 'danger', title: `${action} 실패`, description: reason });
       // 이미 다른 곳에서 처리됐을 수 있으니 최신 상태로 동기화
       qc.invalidateQueries({ predicate: q => q.queryKey[0] === 'applications' });
+      qc.invalidateQueries({ predicate: isReleaseQuery });
     },
   });
 }
+
+function isReleaseQuery(q: { queryKey: readonly unknown[] }) {
+  return typeof q.queryKey[0] === 'string' && (
+    q.queryKey[0].startsWith('release-runs') || q.queryKey[0].startsWith('release-audit')
+  );
+}
+
 export const useCreateApplication = () => {
   const qc = useQueryClient();
   return useMutation({
