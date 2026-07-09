@@ -629,6 +629,19 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             <input className="input" value={getString(settings.production_change_override_reason)} onChange={e => setPolicy({ production_change_override_reason: e.target.value })} />
           </Field>
         )}
+        {getString(settings.runtime_mode, 'demo') === 'live' && (
+          <>
+            <Field label="Release window start">
+              <input className="input" placeholder="2026-07-10T09:00:00Z" value={getString(settings.release_window_start)} onChange={e => setPolicy({ release_window_start: e.target.value })} />
+            </Field>
+            <Field label="Release window end">
+              <input className="input" placeholder="2026-07-10T11:00:00Z" value={getString(settings.release_window_end)} onChange={e => setPolicy({ release_window_end: e.target.value })} />
+            </Field>
+            <Field label="Release window override reason">
+              <input className="input" value={getString(settings.release_window_override_reason)} onChange={e => setPolicy({ release_window_override_reason: e.target.value })} />
+            </Field>
+          </>
+        )}
         <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>
         <label className="release-flow__check">
           <input type="checkbox" checked={Boolean(settings.require_diagnostics_pass)} onChange={e => setPolicy({ require_diagnostics_pass: e.target.checked })} />

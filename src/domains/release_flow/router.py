@@ -268,6 +268,7 @@ async def dispatch_release_plan(
         release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
     )
     blockers.extend(release_production_change_ticket_blockers(body, preview, wave))
+    blockers.extend(release_production_window_blockers(body, preview, wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -319,6 +320,7 @@ async def start_release_plan(
         release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
     )
     blockers.extend(release_production_change_ticket_blockers(body, preview, first_wave))
+    blockers.extend(release_production_window_blockers(body, preview, first_wave))
     blockers.extend(release_diagnostics_blockers(body))
     blockers.extend(release_rollback_policy_blockers(body))
     blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
@@ -514,6 +516,7 @@ async def advance_release_run(
     preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
     blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id)
     blockers.extend(release_production_change_ticket_blockers(plan, preview, next_wave))
+    blockers.extend(release_production_window_blockers(plan, preview, next_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -628,6 +631,7 @@ async def retry_release_run(
     }
     blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id)
     blockers.extend(release_production_change_ticket_blockers(plan, preview, retry_wave))
+    blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -812,6 +816,7 @@ async def dispatch_wave_steps(
     blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
     blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, wave))
+    blockers.extend(release_production_window_blockers(plan, preview, wave))
     blockers.extend(release_diagnostics_blockers(plan))
     blockers.extend(release_rollback_policy_blockers(plan))
     blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
@@ -929,6 +934,8 @@ def release_readiness_from_plan(
     )
     change_ticket_blockers = release_production_change_ticket_blockers(plan, preview, first_wave)
     change_ticket_bypassed = release_production_change_ticket_bypassed(plan, preview, first_wave)
+    window_blockers = release_production_window_blockers(plan, preview, first_wave)
+    window_bypassed = release_production_window_bypassed(plan, preview, first_wave)
     diagnostic_blockers = release_diagnostics_blockers(plan)
     diagnostic_bypassed = release_diagnostics_bypassed(plan)
     rollback_blockers = release_rollback_policy_blockers(plan)
@@ -1019,6 +1026,21 @@ def release_readiness_from_plan(
             if change_ticket_bypassed
             else "Change ticket requirements are satisfied for the first executable wave.",
             change_ticket_blockers,
+        ),
+        readiness_check(
+            "release.window",
+            "Release window",
+            "blocked"
+            if window_blockers
+            else "warning"
+            if window_bypassed
+            else "passed",
+            "Production live release must run inside an approved release window."
+            if window_blockers
+            else "Production release window is bypassed with an operator reason."
+            if window_bypassed
+            else "Release window requirements are satisfied for the first executable wave.",
+            window_blockers,
         ),
         readiness_check(
             "plan.diagnostics",
@@ -1235,6 +1257,83 @@ def release_production_change_override_reason(plan: dict[str, Any]) -> str:
     ).strip()
 
 
+def release_production_window_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    if not release_production_steps_for_wave(plan, preview, wave):
+        return []
+    if release_window_override_reason(plan):
+        return []
+    start, end = release_window_bounds(plan)
+    if start is None or end is None:
+        return [
+            "Production live release requires release_window_start and release_window_end or a release window override reason."
+        ]
+    if end <= start:
+        return ["Production live release window end must be after the start time."]
+    now = datetime.now(timezone.utc)
+    if not (start <= now <= end):
+        return [
+            "Production live release is outside the approved release window "
+            f"({release_window_bound_label(start)} to {release_window_bound_label(end)} UTC)."
+        ]
+    return []
+
+
+def release_production_window_bypassed(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    return bool(release_production_steps_for_wave(plan, preview, wave)) and bool(
+        release_window_override_reason(plan)
+    )
+
+
+def release_window_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("release_window_override_reason")
+        or settings.get("change_window_override_reason")
+        or ""
+    ).strip()
+
+
+def release_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
+    settings = plan_settings_value(plan)
+    start = parse_release_window_time(settings.get("release_window_start"))
+    end = parse_release_window_time(settings.get("release_window_end"))
+    return start, end
+
+
+def parse_release_window_time(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = f"{raw[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    normalized = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return normalized.astimezone(timezone.utc)
+
+
+def release_window_bound_label(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def release_production_steps_for_wave(
     plan: dict[str, Any],
     preview: dict[str, Any],
@@ -1273,6 +1372,7 @@ def release_dispatch_guard_snapshot(
     validated_channels = release_validated_live_alert_channels(db, workspace_id)
     live_channels = release_live_alert_channels(db, workspace_id)
     production_steps = release_production_steps_for_wave(plan, preview, wave)
+    window_start, window_end = release_window_bounds(plan)
     return {
         "runtime_mode": profile.runtime_mode,
         "side_effects": profile.side_effects,
@@ -1286,6 +1386,15 @@ def release_dispatch_guard_snapshot(
                 for step in production_steps
             ],
             "production_override_reason": release_production_change_override_reason(plan) or None,
+        },
+        "release_window": {
+            "start": release_window_bound_label(window_start) if window_start else None,
+            "end": release_window_bound_label(window_end) if window_end else None,
+            "override_reason": release_window_override_reason(plan) or None,
+            "production_targets": [
+                str(step.get("application_id") or "")
+                for step in production_steps
+            ],
         },
         "diagnostics": {
             "required": settings.get("require_diagnostics_pass") is not False,
