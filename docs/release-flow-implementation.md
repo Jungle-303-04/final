@@ -37,6 +37,8 @@
 - `GET /release-runs`
 - `GET /release-runs/summary`
 - `GET /release-runs/{run_id}`
+- `GET /release-audit`
+- `GET /release-audit/export`
 - `POST /release-runs/{run_id}/advance`
 - `POST /release-runs/{run_id}/pause`
 - `POST /release-runs/{run_id}/resume`
@@ -64,6 +66,7 @@
 - release run 운영 요약: 전체 run 수, 상태별 run 수
 - 최신 run 상태, step 상태, GitHub/commit 링크, timeline 이벤트
 - 실패/승인대기/승인거절 운영 알림은 alert-worker가 설정된 채널로 전달
+- release audit 조회와 CSV export
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`

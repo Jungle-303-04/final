@@ -824,6 +824,10 @@ class ReleaseRunSummaryResponse(StrictModel):
     recent_runs: list[JsonMap] = Field(default_factory=list)
 
 
+class ReleaseAuditListResponse(StrictModel):
+    events: list[JsonMap] = Field(default_factory=list)
+
+
 class ReleasePlanDispatchResponse(StrictModel):
     accepted: bool
     wave: int
