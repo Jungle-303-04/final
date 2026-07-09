@@ -668,6 +668,17 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             <Field label="Release window override reason">
               <input className="input" value={getString(settings.release_window_override_reason)} onChange={e => setPolicy({ release_window_override_reason: e.target.value })} />
             </Field>
+            <Field label="Change freeze start">
+              <input className="input" placeholder="2026-07-10T18:00:00Z" value={getString(settings.change_freeze_start)} onChange={e => setPolicy({ change_freeze_start: e.target.value })} />
+            </Field>
+            <Field label="Change freeze end">
+              <input className="input" placeholder="2026-07-11T02:00:00Z" value={getString(settings.change_freeze_end)} onChange={e => setPolicy({ change_freeze_end: e.target.value })} />
+            </Field>
+            {(getString(settings.change_freeze_start).trim() || getString(settings.change_freeze_end).trim()) && (
+              <Field label="Change freeze override reason">
+                <input className="input" value={getString(settings.change_freeze_override_reason)} onChange={e => setPolicy({ change_freeze_override_reason: e.target.value })} />
+              </Field>
+            )}
             <Field label="Runbook URL">
               <input className="input" placeholder="https://wiki.example.com/release-runbook" value={getString(settings.runbook_url)} onChange={e => setPolicy({ runbook_url: e.target.value })} />
             </Field>

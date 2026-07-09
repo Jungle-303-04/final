@@ -342,6 +342,7 @@ async def dispatch_release_plan(
     blockers.extend(release_production_approval_evidence_blockers(body, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(body, preview, wave))
     blockers.extend(release_production_window_blockers(body, preview, wave))
+    blockers.extend(release_production_freeze_blockers(body, preview, wave))
     blockers.extend(release_production_runbook_blockers(body, preview, wave))
     blockers.extend(release_production_owner_blockers(body, preview, wave))
     blockers.extend(release_production_verification_blockers(body, preview, wave))
@@ -399,6 +400,7 @@ async def start_release_plan(
     blockers.extend(release_production_approval_evidence_blockers(body, preview, first_wave))
     blockers.extend(release_production_change_ticket_blockers(body, preview, first_wave))
     blockers.extend(release_production_window_blockers(body, preview, first_wave))
+    blockers.extend(release_production_freeze_blockers(body, preview, first_wave))
     blockers.extend(release_production_runbook_blockers(body, preview, first_wave))
     blockers.extend(release_production_owner_blockers(body, preview, first_wave))
     blockers.extend(release_production_verification_blockers(body, preview, first_wave))
@@ -601,6 +603,7 @@ async def advance_release_run(
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, next_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, next_wave))
     blockers.extend(release_production_window_blockers(plan, preview, next_wave))
+    blockers.extend(release_production_freeze_blockers(plan, preview, next_wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, next_wave))
     blockers.extend(release_production_owner_blockers(plan, preview, next_wave))
     blockers.extend(release_production_verification_blockers(plan, preview, next_wave))
@@ -721,6 +724,7 @@ async def retry_release_run(
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_window_blockers(plan, preview, retry_wave))
+    blockers.extend(release_production_freeze_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_owner_blockers(plan, preview, retry_wave))
     blockers.extend(release_production_verification_blockers(plan, preview, retry_wave))
@@ -930,6 +934,7 @@ async def dispatch_wave_steps(
     blockers.extend(release_production_approval_evidence_blockers(plan, preview, wave))
     blockers.extend(release_production_change_ticket_blockers(plan, preview, wave))
     blockers.extend(release_production_window_blockers(plan, preview, wave))
+    blockers.extend(release_production_freeze_blockers(plan, preview, wave))
     blockers.extend(release_production_runbook_blockers(plan, preview, wave))
     blockers.extend(release_production_owner_blockers(plan, preview, wave))
     blockers.extend(release_production_verification_blockers(plan, preview, wave))
@@ -1054,6 +1059,8 @@ def release_readiness_from_plan(
     change_ticket_bypassed = release_production_change_ticket_bypassed(plan, preview, first_wave)
     window_blockers = release_production_window_blockers(plan, preview, first_wave)
     window_bypassed = release_production_window_bypassed(plan, preview, first_wave)
+    freeze_blockers = release_production_freeze_blockers(plan, preview, first_wave)
+    freeze_bypassed = release_production_freeze_bypassed(plan, preview, first_wave)
     runbook_blockers = release_production_runbook_blockers(plan, preview, first_wave)
     runbook_bypassed = release_production_runbook_bypassed(plan, preview, first_wave)
     owner_blockers = release_production_owner_blockers(plan, preview, first_wave)
@@ -1175,6 +1182,21 @@ def release_readiness_from_plan(
             if window_bypassed
             else "Release window requirements are satisfied for the first executable wave.",
             window_blockers,
+        ),
+        readiness_check(
+            "change.freeze",
+            "Change freeze",
+            "blocked"
+            if freeze_blockers
+            else "warning"
+            if freeze_bypassed
+            else "passed",
+            "Production live release is inside a change freeze window."
+            if freeze_blockers
+            else "Production change freeze is bypassed with an operator reason."
+            if freeze_bypassed
+            else "No active production change freeze blocks this release.",
+            freeze_blockers,
         ),
         readiness_check(
             "runbook.sop",
@@ -1680,6 +1702,61 @@ def release_production_window_bypassed(
     )
 
 
+def release_production_freeze_blockers(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    if not release_production_steps_for_wave(plan, preview, wave):
+        return []
+    if release_freeze_override_reason(plan):
+        return []
+    start, end = release_freeze_window_bounds(plan)
+    has_any_bound = start is not None or end is not None
+    if not has_any_bound:
+        return []
+    if start is None or end is None:
+        return [
+            "Production change freeze requires both change_freeze_start and change_freeze_end or a change freeze override reason."
+        ]
+    if end <= start:
+        return ["Production change freeze end must be after the start time."]
+    now = datetime.now(timezone.utc)
+    if start <= now <= end:
+        return [
+            "Production live release is inside a change freeze window "
+            f"({release_window_bound_label(start)} to {release_window_bound_label(end)} UTC) "
+            "and requires a change_freeze_override_reason."
+        ]
+    return []
+
+
+def release_production_freeze_bypassed(
+    plan: dict[str, Any],
+    preview: dict[str, Any],
+    wave: int,
+) -> bool:
+    if not execution_profile(plan).side_effects:
+        return False
+    if not release_production_steps_for_wave(plan, preview, wave):
+        return False
+    if not release_freeze_override_reason(plan):
+        return False
+    start, end = release_freeze_window_bounds(plan)
+    return start is not None or end is not None
+
+
+def release_freeze_override_reason(plan: dict[str, Any]) -> str:
+    settings = plan_settings_value(plan)
+    return str(
+        settings.get("change_freeze_override_reason")
+        or settings.get("freeze_window_override_reason")
+        or ""
+    ).strip()
+
+
 def release_window_override_reason(plan: dict[str, Any]) -> str:
     settings = plan_settings_value(plan)
     return str(
@@ -2007,6 +2084,20 @@ def release_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, dateti
     return start, end
 
 
+def release_freeze_window_bounds(plan: dict[str, Any]) -> tuple[datetime | None, datetime | None]:
+    settings = plan_settings_value(plan)
+    start = parse_release_window_time(settings.get("change_freeze_start"))
+    end = parse_release_window_time(settings.get("change_freeze_end"))
+    return start, end
+
+
+def release_freeze_window_is_active(plan: dict[str, Any]) -> bool:
+    start, end = release_freeze_window_bounds(plan)
+    if start is None or end is None or end <= start:
+        return False
+    return start <= datetime.now(timezone.utc) <= end
+
+
 def parse_release_window_time(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -2068,6 +2159,7 @@ def release_dispatch_guard_snapshot(
     live_channels = release_live_alert_channels(db, workspace_id)
     production_steps = release_production_steps_for_wave(plan, preview, wave)
     window_start, window_end = release_window_bounds(plan)
+    freeze_start, freeze_end = release_freeze_window_bounds(plan)
     verification_jobs = release_verification_job_specs(plan, production_steps, wave)
     return {
         "runtime_mode": profile.runtime_mode,
@@ -2102,6 +2194,16 @@ def release_dispatch_guard_snapshot(
             "start": release_window_bound_label(window_start) if window_start else None,
             "end": release_window_bound_label(window_end) if window_end else None,
             "override_reason": release_window_override_reason(plan) or None,
+            "production_targets": [
+                str(step.get("application_id") or "")
+                for step in production_steps
+            ],
+        },
+        "change_freeze": {
+            "start": release_window_bound_label(freeze_start) if freeze_start else None,
+            "end": release_window_bound_label(freeze_end) if freeze_end else None,
+            "active": release_freeze_window_is_active(plan),
+            "override_reason": release_freeze_override_reason(plan) or None,
             "production_targets": [
                 str(step.get("application_id") or "")
                 for step in production_steps
@@ -2244,6 +2346,15 @@ def release_dispatch_readiness_warning_checks(
                 "Release window",
                 "warning",
                 "Production release window is bypassed with an operator reason.",
+            )
+        )
+    if release_production_freeze_bypassed(plan, preview, wave):
+        checks.append(
+            readiness_check(
+                "change.freeze",
+                "Change freeze",
+                "warning",
+                "Production change freeze is bypassed with an operator reason.",
             )
         )
     if release_production_runbook_bypassed(plan, preview, wave):
