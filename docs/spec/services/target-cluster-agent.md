@@ -316,7 +316,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 
 ### `evidence/` — 수집 오케스트레이션·잡 스케줄러
 
-`evidence/__init__.py` 재노출: `EvidenceCollector`, `EvidenceJobScheduler`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `MetadataProvider`, `PrometheusMetricsProvider`, `TelemetryProvider`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TempoTracesProvider`.
+`evidence/__init__.py` 재노출: `EvidenceCollector`, `EvidenceJobScheduler`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `PrometheusMetricsProvider`, `TelemetryProvider`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TempoTracesProvider`.
 
 #### `evidence/collector.py`
 
@@ -337,7 +337,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 
 ### `providers/` — 텔레메트리 소스별 수집기
 
-`providers/__init__.py`는 `pkgutil.iter_modules`로 `*_providers` 모듈을 자동 import한다(import 시 `@telemetry.source` 데코레이터가 레지스트리에 등록됨 — 새 소스 추가는 파일 1개 추가). 재노출: `ConfigReader`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `MetadataProvider`, `PrometheusMetricsProvider`, `ProviderResult`, `TelemetryProvider`, `TempoTracesProvider`.
+`providers/__init__.py`는 `pkgutil.iter_modules`로 `*_providers` 모듈을 자동 import한다(import 시 `@telemetry.source` 데코레이터가 레지스트리에 등록됨 — 새 소스 추가는 파일 1개 추가). 재노출: `ConfigReader`, `KubernetesSnapshotProvider`, `LokiLogsProvider`, `PrometheusMetricsProvider`, `ProviderResult`, `TelemetryProvider`, `TempoTracesProvider`.
 
 #### `providers/base.py`
 
@@ -348,7 +348,7 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 | `ConfigReader` | Protocol — `def __call__(self, name: str, default: str) -> str` | `src/services/target/cluster-agent/providers/base.py :: ConfigReader` |
 | `TelemetryProvider` | Protocol — 속성 `evidence_key: str`, `source: str`, `span_name: str`, `query_count_attribute: str`, `result_count_attribute: str`, `timeout_seconds: int`, `failure_message: str`, `queries: tuple[Any, ...]`; `@classmethod def from_config(cls, read_config: ConfigReader) -> TelemetryProvider`; `async def query(self, client: httpx.AsyncClient, telemetry_query: Any) -> JsonObject`; `def empty_results(self) -> Any`; `def append_result(self, results, telemetry_query, payload) -> None`; `def build_response(self, results) -> ProviderResult` | `src/services/target/cluster-agent/providers/base.py :: TelemetryProvider` |
 
-#### 등록된 소스 계약 (5종)
+#### 등록된 소스 계약 (4종)
 
 | source | evidence_key | query_type | range_query_type | empty_payload | 클래스 앵커 |
 |---|---|---|---|---|---|
@@ -356,7 +356,6 @@ manifest 고정 내용: `apiVersion: apps/v1`, `kind: DaemonSet`, labels `{app: 
 | `prometheus` | `metrics` | `PrometheusInstantQuery` | `PrometheusRangeQuery` | `dict` | `src/services/target/cluster-agent/providers/prometheus_providers.py :: PrometheusMetricsProvider` |
 | `loki` | `logs` | `LokiLogQuery` | — | `list` | `src/services/target/cluster-agent/providers/loki_providers.py :: LokiLogsProvider` |
 | `tempo` | `traces` | `OpenTelemetrySpanQuery` | — | `dict` | `src/services/target/cluster-agent/providers/tempo_providers.py :: TempoTracesProvider` |
-| `metadata` | `metadata` | `MetadataSnapshotQuery` | — | `dict` | `src/services/target/cluster-agent/providers/metadata_providers.py :: MetadataProvider` |
 
 #### `providers/kubernetes_providers.py`
 
@@ -404,26 +403,9 @@ def query_metadata(self, telemetry_query) -> JsonObject                # instant
 
 `TempoTracesProvider`: `span_name="tempo.collect"`, `timeout_seconds=TEMPO_TIMEOUT_SECONDS`, `failure_message="tempo trace collection failed"`. `__init__(self, base_url: str)`, `from_config`은 `read_config("TEMPO_BASE_URL", DEFAULT_TEMPO_BASE_URL)`. `append_result`: `results[query_name] = {"query": traceql, "traces": [...], "trace_count": n}`. `build_response`: `{"source": "tempo", "results": results}`.
 
-#### `providers/metadata_providers.py`
-
-`MetadataProvider`: `span_name="metadata.collect"`, `query_count_attribute="metadata.query_count"`, `result_count_attribute="metadata.result_count"`, `timeout_seconds=KUBERNETES_API_TIMEOUT_SECONDS`, `failure_message="metadata collection failed"`. `__init__(self, *, cluster_id: str, transport: httpx.AsyncBaseTransport | None = None)`, `from_config`은 `TARGET_CLUSTER_ID`를 읽는다.
-
-```python
-async def query(self, _client: httpx.AsyncClient, _telemetry_query: MetadataSnapshotQuery) -> JsonObject
-async def get_json(self, client, base_url, headers, path) -> JsonObject
-def empty_results(self) -> JsonObject
-def append_result(self, results: JsonObject, telemetry_query, payload: JsonObject) -> None
-def build_response(self, results: JsonObject) -> JsonObject
-def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
-```
-
-`query`: k8s API에서 target namespace의 Deployments와 ReplicaSets를 읽어 `{"change_context": {"current_workload_snapshots": [...]}}`를 만든다. API 미구성(`kubernetes_api_base_url()` 또는 ServiceAccount token 없음)이면 `current_workload_snapshots=[]`를 반환한다. raw spec은 보내지 않는다.
-
-모듈 함수(전부 public): `empty_change_context()`, `current_workload_snapshots(deployments, replicasets)`, `current_workload_snapshot(deployment, replicasets)`, `container_snapshot(container)`, `probe_snapshot(value)`, `managed_field_managers(deployment)`, `replicasets_for_deployment(deployment, replicasets)`, `is_owned_by_deployment(replicaset, deployment_uid, deployment_name)`, `replicaset_revision_snapshot(replicaset)`, `replicaset_revision_number(replicaset)`, `items(payload)`, `list_items(value)`, `metadata(item)`, `spec(item)`, `pod_template(deployment)`, `object_or_empty(value)`.
-
 ### `queries/` — 쿼리 정의·레지스트리·커맨드 페이로드
 
-`queries/__init__.py` 재노출: `KubernetesSnapshotQuery`, `LokiLogQuery`, `MetadataSnapshotQuery`, `OpenTelemetrySpanQuery`, `PrometheusInstantQuery`, `PrometheusRangeQuery`, `TelemetryQueryCommandPayload`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TelemetrySource`.
+`queries/__init__.py` 재노출: `KubernetesSnapshotQuery`, `LokiLogQuery`, `OpenTelemetrySpanQuery`, `PrometheusInstantQuery`, `PrometheusRangeQuery`, `TelemetryQueryCommandPayload`, `TelemetryQueryDefinition`, `TelemetryQueryRegistry`, `TelemetrySource`.
 
 #### `queries/payloads.py`
 
@@ -444,7 +426,6 @@ def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
 | `LokiLogQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `logql: str` | `src/services/target/cluster-agent/queries/registry.py :: LokiLogQuery` |
 | `OpenTelemetrySpanQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `traceql: str` | `src/services/target/cluster-agent/queries/registry.py :: OpenTelemetrySpanQuery` |
 | `KubernetesSnapshotQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `namespace: str` | `src/services/target/cluster-agent/queries/registry.py :: KubernetesSnapshotQuery` |
-| `MetadataSnapshotQuery` | `@dataclass(frozen=True)` — `query_name: str`, `description: str`, `query: str` | `src/services/target/cluster-agent/queries/registry.py :: MetadataSnapshotQuery` |
 
 `from_mapping` 검증: `source`/`name`/`query`는 비어 있지 않은 str 필수(`ValueError("telemetry query field must be a non-empty string: {key}")`), `range_seconds`/`step_seconds`는 선택적 양의 정수(`ValueError("telemetry query field must be a positive integer: {key}")`), `source`는 `telemetry.spec(source)`로 등록 여부 즉시 검증. `to_provider_query`: `range_seconds`가 있으면 `telemetry.range_query_type_for(source)` 사용(미지원 소스면 `ValueError("telemetry source does not support range query: ...")` — 현재 prometheus만 지원), 없으면 `telemetry.query_type_for(source)(name, description, query)`.
 
@@ -561,9 +542,9 @@ def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
    - env 로드: `MANAGEMENT_BASE_URL`(빈 값이면 `RuntimeError("MANAGEMENT_BASE_URL is required")`), `TARGET_CLUSTER_ID`, `WORKSPACE_ID`, `HOSTNAME`(agent_id), `EVIDENCE_INTERVAL_SECONDS`, `CLUSTER_ROLE`, `BOOTSTRAP_MODE`, OTEL 2종, worker counts 2종(`parse_provider_worker_counts`), failure policy, DB 경로 2종, sync/reconcile interval.
    - `configure_tracing(otel_service_name, otel_traces_endpoint)` → `self.tracer`.
    - `NodeCollectorManager.from_env`, `LiveSummaryPublisher.from_env` 생성.
-   - `providers` 미주입 시 기본 5종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`, `MetadataProvider.from_config(env)`.
+   - `providers` 미주입 시 기본 4종: `KubernetesSnapshotProvider(cluster_id, transport)`, `PrometheusMetricsProvider.from_config(env)`, `LokiLogsProvider.from_config(env)`, `TempoTracesProvider.from_config(env)`.
    - `TelemetryQueryRegistry`, `EvidenceCollector(providers, registry)`, `AgentControlStore`, `CommandResultOutbox`, `EvidenceJobScheduler`(source_id=`"cluster-snapshot"`, provider_keys=collector의 evidence_key들) 생성.
-   - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값(없으면 1), max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값(없으면 3), queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`. target role은 모든 provider를 기본 enabled로 시작하고, management role은 Kubernetes provider만 enabled로 시작한다.
+   - `build_default_policy()` — provider마다 `EvidenceProviderPolicy(interval_seconds=self.interval, min_workers=EVIDENCE_PROVIDER_WORKERS값(기본 1), max_workers=EVIDENCE_PROVIDER_MAX_WORKERS값(기본 2), queue_age_target_seconds=15)`, `EvidenceRuntimePolicy(failure_policy=...)`, `BootstrapPolicy(mode=...)`, 빈 `DesiredStatePolicy`. target role은 모든 provider를 기본 enabled로 시작하고, management role은 Kubernetes provider만 enabled로 시작한다.
    - `AgentPolicySync`, `DesiredStateReconciler`, `KubernetesApiClient`, `AgentCommandRegistry.from_instance(self, ..., default_handler=self.apply_default_command)` 생성 — 데코레이트된 6개 핸들러 자동 등록.
 3. `run()`: 주입된 client가 있으면 그대로, 없으면 `HttpManagementPlaneClient(base_url)`를 async context로 열어 `run_with_client`. finally에서 `close()`(두 SQLite store를 `suppress(Exception)`으로 닫음).
 4. `run_with_client(client)`:
@@ -642,11 +623,8 @@ def normalize_payload(self, payload: JsonObject, telemetry_query) -> JsonObject
 | `PrometheusMetricsProvider.query_range` | `GET {PROMETHEUS_BASE_URL}/api/v1/query_range` | `query=<promql>`, `start=now-range_seconds`(소수 3자리), `end=now`, `step=step_seconds or max(1, range_seconds//30)` (span `prometheus.query_range`) |
 | `LokiLogsProvider.query` | `GET {LOKI_BASE_URL}/loki/api/v1/query_range` | `query=<logql>`, `limit=LOKI_QUERY_LIMIT(20)` (span `loki.query_range`) |
 | `TempoTracesProvider.query` | `GET {TEMPO_BASE_URL}/api/search` | `q=<traceql>`, `limit=TEMPO_QUERY_LIMIT(20)` (span `tempo.search`) |
-| `MetadataProvider.query` | k8s API GET 2개: `/apis/apps/v1/namespaces/target/deployments`, `/apis/apps/v1/namespaces/target/replicasets` | Bearer SA 토큰. API 미구성 시 `{"change_context": {"current_workload_snapshots": []}}` 반환(HTTP 호출 없음) |
 
 Kubernetes 스냅샷 정규화(`normalize_payload`): raw 응답을 `{cluster{cluster_id, namespace, collected_at}, pods[], events[], nodes[], workloads[](Deployment/StatefulSet/DaemonSet/ReplicaSet 요약 통합), services[], endpoints[], provider_status{query_name: {status, namespace, reason, counts}}}` 요약으로 변환. pod 요약에는 `workload_key`(`"{ns}/{kind}/{name}"`), 컨테이너별 상태/restart(+ `last_state`/`last_state_reason`/`last_exit_code` — crashloop 중 waiting 이어도 직전 크래시의 종료 사유/exit code 보존), `waiting_reasons`/`terminated_reasons`(현재 terminated 와 lastState terminated 사유를 함께 승격 — OOMKilled/exit 137 판별 근거) 포함. 복수 쿼리 결과는 `merge_snapshot`으로 목록 concat + provider_status 병합.
-
-Metadata 정규화(`normalize_payload`): raw 응답의 `change_context.current_workload_snapshots`가 list이면 dict 항목만 보존하고, 아니면 `[]`로 대체한다. 각 Deployment snapshot은 `workload{kind, namespace, name}`, `deployment_labels`, `pod_template_labels`, `managed_fields_managers`, `containers[{name, image, readiness_probe, liveness_probe, startup_probe}]`, `replicaset_revisions[{name, revision}]`를 담는다. probe는 `path`, `port`, `timeout_seconds`, `period_seconds`, `failure_threshold`만 보존한다.
 
 ### span / otel
 
@@ -706,8 +684,8 @@ Metadata 정규화(`normalize_payload`): raw 응답의 `change_context.current_w
 | `EVIDENCE_INTERVAL_SECONDS` | int | `30` | provider 기본 수집 주기·윈도 크기 | `config.py` |
 | `AGENT_CONTROL_DB_PATH` | str | `/tmp/target-agent/agent-control.db` | 정책/reconcile SQLite 경로 | `config.py` |
 | `COMMAND_OUTBOX_DB_PATH` | str | `/tmp/target-agent/command-outbox.db` | 커맨드 결과 outbox SQLite 경로 | `config.py` |
-| `EVIDENCE_PROVIDER_WORKERS` | str | `kubernetes=1,metrics=1,logs=1,traces=1` | provider별 최소 워커 수 (`k=v,` 목록). 목록에 없는 provider는 코드에서 1로 fallback한다. | `config.py` |
-| `EVIDENCE_PROVIDER_MAX_WORKERS` | str | `kubernetes=2,metrics=2,logs=2,traces=2` | provider별 최대 워커 수(기본 정책의 max_workers). 목록에 없는 provider는 `build_default_policy`에서 3으로 fallback한다. | `config.py` |
+| `EVIDENCE_PROVIDER_WORKERS` | str | `kubernetes=1,metrics=1,logs=1,traces=1` | provider별 최소 워커 수 (`k=v,` 목록) | `config.py` |
+| `EVIDENCE_PROVIDER_MAX_WORKERS` | str | `kubernetes=2,metrics=2,logs=2,traces=2` | provider별 최대 워커 수(기본 정책의 max_workers) | `config.py` |
 | `EVIDENCE_FAILURE_POLICY` | str | `allow_partial` | 기본 정책의 `evidence.failure_policy` (`allow_partial`\|`strict`) | `config.py` |
 | `POLICY_SYNC_INTERVAL_SECONDS` | int | `15` | 정책 fetch 주기 | `config.py` |
 | `RECONCILE_INTERVAL_SECONDS` | int | `30` | desired state reconcile 주기 | `config.py` |

@@ -48,9 +48,7 @@ RCA는 provider가 보내준 evidence만 보고 symptom, root cause candidate, c
 
 ### 추가로 요청해야 할 것
 
-- probe spec은 `metadata` provider의 `current_workload_snapshots`에서 현재값을 일부 받을 수 있다.
-  다만 변경 여부를 판단하려면 이전 snapshot 또는 GitOps diff가 필요하다.
-  현재 수집하는 probe 필드는 다음과 같다.
+- probe spec
   - readinessProbe
   - livenessProbe
   - startupProbe
@@ -178,85 +176,34 @@ policy상 traces query는 존재한다.
 
 ### 현재 있는 것
 
-Metadata provider는 target namespace의 모든 Deployment를 조회해 현재 workload snapshot을 보낸다.
-이 값은 변경 판단 결과가 아니라 Kubernetes API에서 본 현재 상태다.
+일부 metadata는 Kubernetes object에서 얻을 수 있다.
 
-```json
-{
-  "metadata": {
-    "change_context": {
-      "current_workload_snapshots": [
-        {
-          "workload": {
-            "kind": "Deployment",
-            "namespace": "target",
-            "name": "my-app"
-          },
-          "deployment_labels": {},
-          "pod_template_labels": {},
-          "managed_fields_managers": [],
-          "containers": [
-            {
-              "name": "app",
-              "image": "example/app:v1",
-              "readiness_probe": {},
-              "liveness_probe": {},
-              "startup_probe": {}
-            }
-          ],
-          "replicaset_revisions": [
-            {
-              "name": "my-app-abc123",
-              "revision": "3"
-            }
-          ]
-        }
-      ]
-    }
-  }
-}
-```
-
-현재 payload에서 기대 가능한 정보:
-
-- workload kind / namespace / name
-- Deployment labels
-- Pod template labels
+- metadata.name
+- metadata.namespace
+- metadata.uid
+- labels
+- annotations 일부
+- ownerReferences
+- image
+- deployment revision annotation 일부
 - managedFields manager 일부
-- container name
-- 현재 image name/tag
-- readiness/liveness/startup probe 현재값
-- Deployment가 소유한 ReplicaSet name
-- ReplicaSet revision annotation
 
 ### 추가로 요청해야 할 것
 
 - git_sha
 - image_digest
 - helm revision
-- rollout revision과 Git commit/PR 연결 정보
+- rollout revision
 - recent manifest change
 - recent config/probe/resource change
 - actor/manager
 - rollback_available
 - risk_level
-- 이전 workload snapshot
-- GitOps diff
-- PR 번호
-- 배포한 사람
-- Deployment annotations 상세값
-- Pod template annotations 상세값
-- env/config refs
-- Secret 값이 아닌 Secret name/key reference
-- resource requests/limits
-- imagePullSecrets
 
 주의:
 
 - GitOps/CI/CD/SCM/배포 시스템과 연결이 필요할 수 있음
-- metadata provider가 보내는 값만으로는 "변경됨"을 확정하지 않는다. 현재값과 이전값을 비교해야 한다.
 - annotation, managedFields, env, Secret reference는 저장 범위와 마스킹 기준 필요
-- raw spec은 민감한 설정이 섞일 수 있으므로 기본 evidence로 보내지 않는다.
 
 ## 요약
 
