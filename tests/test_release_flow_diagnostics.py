@@ -2209,6 +2209,9 @@ def test_release_run_summary_counts_derived_statuses() -> None:
                                     "override_reason": "incident commander approved emergency hotfix",
                                     "production_targets": ["checkout"],
                                 },
+                                "runbook": {
+                                    "override_reason": "incident commander accepted runbook follow-up",
+                                },
                                 "verification_jobs": {
                                     "jobs": [
                                         {
@@ -2298,6 +2301,7 @@ def test_release_run_summary_counts_derived_statuses() -> None:
     assert summary["unhealthy_runs"] == 1
     assert summary["verification_failed_runs"] == 1
     assert summary["verification_pending_timeout_runs"] == 1
+    assert summary["policy_override_runs"] == 1
     assert summary["active_change_freeze_runs"] == 1
     assert summary["change_freeze_override_runs"] == 1
     assert summary["stale_runs"] == 1
@@ -2374,6 +2378,9 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
                             "change_freeze": {
                                 "active": True,
                                 "override_reason": "incident commander approved emergency hotfix",
+                            },
+                            "diagnostics": {
+                                "override_reason": "diagnostics temporarily waived by incident command",
                             }
                         }
                     }
@@ -2549,6 +2556,10 @@ def test_release_run_filter_supports_attention_stale_live_and_status() -> None:
     assert [
         run["run_id"]
         for run in release_router.filter_release_runs(runs, active_change_freeze_only=True)
+    ] == ["run-live"]
+    assert [
+        run["run_id"]
+        for run in release_router.filter_release_runs(runs, policy_override_only=True)
     ] == ["run-live"]
     assert [
         run["run_id"]

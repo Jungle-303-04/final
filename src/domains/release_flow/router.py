@@ -105,6 +105,7 @@ async def list_release_runs(
     unhealthy_only: bool = Query(default=False),
     verification_failed_only: bool = Query(default=False),
     verification_pending_timeout_only: bool = Query(default=False),
+    policy_override_only: bool = Query(default=False),
     active_change_freeze_only: bool = Query(default=False),
     change_freeze_override_only: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
@@ -125,6 +126,7 @@ async def list_release_runs(
         unhealthy_only=unhealthy_only,
         verification_failed_only=verification_failed_only,
         verification_pending_timeout_only=verification_pending_timeout_only,
+        policy_override_only=policy_override_only,
         active_change_freeze_only=active_change_freeze_only,
         change_freeze_override_only=change_freeze_override_only,
     )
@@ -3014,6 +3016,7 @@ def filter_release_runs(
     unhealthy_only: bool = False,
     verification_failed_only: bool = False,
     verification_pending_timeout_only: bool = False,
+    policy_override_only: bool = False,
     active_change_freeze_only: bool = False,
     change_freeze_override_only: bool = False,
 ) -> list[dict[str, Any]]:
@@ -3037,6 +3040,8 @@ def filter_release_runs(
         if verification_failed_only and not release_run_has_failed_verification(run):
             continue
         if verification_pending_timeout_only and not release_run_has_timed_out_verification(run):
+            continue
+        if policy_override_only and not release_run_has_policy_override(run):
             continue
         if active_change_freeze_only and not release_run_has_active_change_freeze(run):
             continue
@@ -3097,6 +3102,29 @@ def release_run_has_change_freeze_override(run: dict[str, Any]) -> bool:
 def release_run_has_active_change_freeze(run: dict[str, Any]) -> bool:
     freeze = release_run_change_freeze_snapshot(run)
     return freeze.get("active") is True
+
+
+RELEASE_GUARD_POLICY_OVERRIDE_PATHS = (
+    ("change_management", "production_override_reason"),
+    ("release_window", "override_reason"),
+    ("change_freeze", "override_reason"),
+    ("runbook", "override_reason"),
+    ("verification", "override_reason"),
+    ("abort_criteria", "override_reason"),
+    ("diagnostics", "override_reason"),
+    ("rollback", "override_reason"),
+)
+
+
+def release_run_has_policy_override(run: dict[str, Any]) -> bool:
+    guard = release_run_latest_guard(run)
+    for section_key, reason_key in RELEASE_GUARD_POLICY_OVERRIDE_PATHS:
+        section = guard.get(section_key)
+        if not isinstance(section, dict):
+            continue
+        if str(section.get(reason_key) or "").strip():
+            return True
+    return False
 
 
 def release_run_verification_jobs(run: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any], str]]:
@@ -3178,6 +3206,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     unhealthy_runs = 0
     verification_failed_runs = 0
     verification_pending_timeout_runs = 0
+    policy_override_runs = 0
     active_change_freeze_runs = 0
     change_freeze_override_runs = 0
     stale_runs = 0
@@ -3223,6 +3252,8 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         verification_pending_timed_out = release_run_has_timed_out_verification(run)
         if verification_pending_timed_out:
             verification_pending_timeout_runs += 1
+        if release_run_has_policy_override(run):
+            policy_override_runs += 1
         if release_run_has_active_change_freeze(run):
             active_change_freeze_runs += 1
         if release_run_has_change_freeze_override(run):
@@ -3259,6 +3290,7 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "unhealthy_runs": unhealthy_runs,
         "verification_failed_runs": verification_failed_runs,
         "verification_pending_timeout_runs": verification_pending_timeout_runs,
+        "policy_override_runs": policy_override_runs,
         "active_change_freeze_runs": active_change_freeze_runs,
         "change_freeze_override_runs": change_freeze_override_runs,
         "stale_runs": stale_runs,

@@ -29,6 +29,7 @@ export type ReleaseRunFilter =
   | 'waiting_for_approval'
   | 'verification_failed'
   | 'verification_pending_timeout'
+  | 'policy_override'
   | 'active_change_freeze'
   | 'change_freeze_override';
 
@@ -78,6 +79,7 @@ function releaseRunsPath(planId?: string, filter: ReleaseRunFilter = 'all') {
   if (filter === 'unhealthy') params.set('unhealthy_only', 'true');
   if (filter === 'verification_failed') params.set('verification_failed_only', 'true');
   if (filter === 'verification_pending_timeout') params.set('verification_pending_timeout_only', 'true');
+  if (filter === 'policy_override') params.set('policy_override_only', 'true');
   if (filter === 'active_change_freeze') params.set('active_change_freeze_only', 'true');
   if (filter === 'change_freeze_override') params.set('change_freeze_override_only', 'true');
   if (

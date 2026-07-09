@@ -855,6 +855,7 @@ class ReleaseRunSummaryResponse(StrictModel):
     unhealthy_runs: int = 0
     verification_failed_runs: int = 0
     verification_pending_timeout_runs: int = 0
+    policy_override_runs: int = 0
     active_change_freeze_runs: int = 0
     change_freeze_override_runs: int = 0
     stale_runs: int = 0
