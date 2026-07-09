@@ -1,6 +1,7 @@
 import { Background, Panel, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useState } from "react";
+import { flowEdgeFailed, flowEdgeHealthy } from "./shared/flowTheme";
 
 const nodes: Node[] = [
   { id: "1", position: { x: 120, y: 120 }, data: { label: "빌드" } },
@@ -9,8 +10,8 @@ const nodes: Node[] = [
 ];
 
 const allEdges: Edge[] = [
-  { id: "1-2", source: "1", target: "2", animated: true, style: { stroke: "#86efac" } },
-  { id: "2-3", source: "2", target: "3", animated: true, style: { stroke: "#f87171" }, label: "실패" }
+  { id: "1-2", source: "1", target: "2", animated: true, style: { stroke: flowEdgeHealthy } },
+  { id: "2-3", source: "2", target: "3", animated: true, style: { stroke: flowEdgeFailed }, label: "실패" }
 ];
 
 export default function ReactFlowEdgeHealthFilterExample() {

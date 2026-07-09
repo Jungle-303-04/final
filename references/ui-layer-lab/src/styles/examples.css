@@ -466,7 +466,7 @@
   overflow: hidden;
   border: 1px solid var(--panel);
   border-radius: 0;
-  color: #ffffff;
+  color: var(--accent-contrast);
   text-align: left;
   transition:
     left var(--motion-duration-slow) var(--motion-ease-emphasized),
@@ -478,15 +478,15 @@
 }
 
 .treemap-tile.is-good {
-  background: color-mix(in srgb, var(--green) 74%, #0f766e);
+  background: color-mix(in srgb, var(--green) 74%, var(--accent));
 }
 
 .treemap-tile.is-warning {
-  background: color-mix(in srgb, var(--orange) 68%, #713f12);
+  background: color-mix(in srgb, var(--orange) 68%, var(--accent));
 }
 
 .treemap-tile.is-danger {
-  background: color-mix(in srgb, var(--red) 70%, #7f1d1d);
+  background: color-mix(in srgb, var(--red) 70%, var(--accent));
 }
 
 .treemap-tile.is-disabled {

@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { chartBlue, chartGridStroke, chartMutedStroke, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { time: "09:00", requests: 18 },
@@ -18,10 +19,10 @@ export default function ChartAreaDefaultExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data}>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="time" stroke="#a1a1aa" />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="requests" name="요청" stroke="#93c5fd" fill="#93c5fd33" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="time" stroke={chartMutedStroke} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="requests" name="요청" stroke={chartBlue} fill={chartBlue} fillOpacity={0.2} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </section>

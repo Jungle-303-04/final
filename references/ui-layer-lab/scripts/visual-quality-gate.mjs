@@ -48,6 +48,7 @@ async function runGate(url) {
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
 
   const catalog = await inspectCatalog();
+  const designTokens = await inspectDesignTokenGuard();
   const sourceEnglish = await inspectSourceEnglishGuard();
   const light = await inspectTheme(desktop, url, "light");
   const dark = await inspectTheme(desktop, url, "dark");
@@ -69,6 +70,7 @@ async function runGate(url) {
     counts.every((count) => count === 2) ? "카테고리 count가 2로 고정됨" : "",
     catalog.duplicateIds.length ? `중복 example id: ${catalog.duplicateIds.join(",")}` : "",
     exposedTotal !== catalog.exampleFiles ? `노출 수 ${exposedTotal}개가 파일 수 ${catalog.exampleFiles}개와 다름` : "",
+    designTokens.violations.length ? `디자인 토큰 우회: ${designTokens.violations.join(" / ")}` : "",
     sourceEnglish.matches.length ? `핵심 예제 영어 회귀: ${sourceEnglish.matches.join(", ")}` : "",
     visibleKorean.forbiddenVisible.length ? `주요 화면 영어 노출: ${visibleKorean.forbiddenVisible.join(", ")}` : "",
     navigation.activeHeading !== "데이터 시각화" ? `카테고리 전환 실패: ${navigation.activeHeading}` : "",
@@ -105,6 +107,7 @@ async function runGate(url) {
     categoryCounts: counts,
     exposedTotal,
     catalog,
+    designTokens,
     sourceEnglish,
     visibleKorean,
     navigation,
@@ -995,6 +998,51 @@ async function inspectCatalog() {
     exampleFiles: files.length,
     duplicateIds
   };
+}
+
+async function inspectDesignTokenGuard() {
+  const scanRoots = ["src/examples", "src/components", "src/styles"];
+  const ignoredFiles = new Set(["src/styles/tokens.css", "src/styles/legacy-examples.css"]);
+  const supportedExtensions = new Set([".css", ".ts", ".tsx"]);
+  const checks = [
+    { pattern: /#[0-9a-fA-F]{3,8}\b|rgba?\(/, reason: "색상 직접 지정" },
+    { pattern: /font-size:\s*clamp\([^;]*vw/i, reason: "viewport 기반 폰트 크기" },
+    { pattern: /letter-spacing:\s*-[0-9.]+/, reason: "음수 letter-spacing" }
+  ];
+  const violations = [];
+
+  for (const scanRoot of scanRoots) {
+    const files = await collectFiles(path.join(root, scanRoot), supportedExtensions);
+    for (const filePath of files) {
+      const relativePath = path.relative(root, filePath);
+      if (ignoredFiles.has(relativePath)) continue;
+
+      const source = await fs.readFile(filePath, "utf8");
+      const lines = source.split("\n");
+      lines.forEach((line, index) => {
+        for (const check of checks) {
+          if (check.pattern.test(line)) {
+            violations.push(`${relativePath}:${index + 1}:${check.reason}`);
+          }
+        }
+      });
+    }
+  }
+
+  return { violations };
+}
+
+async function collectFiles(dir, supportedExtensions) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return collectFiles(entryPath, supportedExtensions);
+      return supportedExtensions.has(path.extname(entry.name)) ? [entryPath] : [];
+    })
+  );
+
+  return files.flat();
 }
 
 async function inspectTheme(page, url, theme) {

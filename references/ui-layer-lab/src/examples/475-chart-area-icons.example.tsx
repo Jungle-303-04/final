@@ -1,4 +1,5 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartGridStroke, chartMutedStroke, chartTextStroke, chartTooltipStyle } from "./shared/chartTheme";
 
 const data = [
   { channel: "AI", count: 42 },
@@ -17,11 +18,11 @@ export default function ChartAreaIconsExample() {
       </header>
       <ResponsiveContainer height={280} width="100%">
         <AreaChart data={data}>
-          <CartesianGrid stroke="#27272a" vertical={false} />
-          <XAxis dataKey="channel" stroke="#a1a1aa" tickLine={false} />
-          <YAxis stroke="#a1a1aa" />
-          <Tooltip contentStyle={{ background: "#111113", border: "1px solid #27272a", borderRadius: 12, color: "#fafafa" }} />
-          <Area dataKey="count" name="이벤트" stroke="#fafafa" fill="#fafafa24" isAnimationActive={false} />
+          <CartesianGrid stroke={chartGridStroke} vertical={false} />
+          <XAxis dataKey="channel" stroke={chartMutedStroke} tickLine={false} />
+          <YAxis stroke={chartMutedStroke} />
+          <Tooltip contentStyle={chartTooltipStyle} />
+          <Area dataKey="count" name="이벤트" stroke={chartTextStroke} fill={chartTextStroke} fillOpacity={0.14} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
       <div className="chart-legend">
