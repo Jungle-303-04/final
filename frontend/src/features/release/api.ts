@@ -1,12 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, del, post, put } from '@/shared/lib/api';
 import { useToast } from '@/ui';
-import type { Diagnostic, ReleasePlan, ReleasePlanDispatch, ReleasePlanPreview, ReleaseRun, ReleaseRunSummary } from '@/shared/lib/types';
+import type {
+  Diagnostic,
+  ReleaseAuditEvent,
+  ReleasePlan,
+  ReleasePlanDispatch,
+  ReleasePlanPreview,
+  ReleaseRun,
+  ReleaseRunSummary,
+} from '@/shared/lib/types';
 
 export const releaseKeys = {
   plans: () => ['release-plans'] as const,
   plan: (id: string) => ['release-plans', id] as const,
   runs: (planId?: string) => ['release-runs', planId ?? 'all'] as const,
+  audit: (planId?: string) => ['release-audit', planId ?? 'all'] as const,
 };
 
 export const diagnosticsKeys = {
@@ -41,6 +50,16 @@ export const useReleaseRunSummary = (planId?: string) =>
     queryKey: ['release-runs-summary', planId ?? 'all'] as const,
     queryFn: () => get<ReleaseRunSummary>(`/release-runs/summary${planId ? `?plan_id=${encodeURIComponent(planId)}` : ''}`),
     refetchInterval: 15_000,
+  });
+
+export const useReleaseAudit = (planId?: string) =>
+  useQuery({
+    queryKey: releaseKeys.audit(planId),
+    queryFn: () => get<{ events: ReleaseAuditEvent[] }>(
+      `/release-audit?limit=50${planId ? `&plan_id=${encodeURIComponent(planId)}` : ''}`,
+    ),
+    select: d => d.events,
+    refetchInterval: 30_000,
   });
 
 export function useSaveReleasePlan(planId?: string) {
@@ -182,5 +201,7 @@ function shortRun(runId: string) {
 }
 
 function isReleaseRunQuery(q: { queryKey: readonly unknown[] }) {
-  return typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('release-runs');
+  return typeof q.queryKey[0] === 'string' && (
+    q.queryKey[0].startsWith('release-runs') || q.queryKey[0].startsWith('release-audit')
+  );
 }

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -29,6 +32,7 @@ from packages.contracts.gateway.requests import (
     ReleaseRunActionRequest,
 )
 from packages.contracts.gateway.responses import (
+    ReleaseAuditListResponse,
     ReleasePlanDispatchResponse,
     ReleasePlanListResponse,
     ReleasePlanPreviewResponse,
@@ -91,6 +95,55 @@ async def summarize_release_runs(
     for run in runs:
         require_plan_application_read_access(db, current, workspace_id, run.get("steps", []))
     return ReleaseRunSummaryResponse(**release_run_summary_from_runs(runs))
+
+
+@router.get(gateway_routes.RELEASE_AUDIT_PATH, response_model=ReleaseAuditListResponse)
+async def list_release_audit(
+    plan_id: str | None = Query(default=None),
+    run_id: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ReleaseAuditListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    events = release_audit_events_for_current(
+        db,
+        current,
+        workspace_id,
+        plan_id=plan_id,
+        run_id=run_id,
+        event_type=event_type,
+        limit=limit,
+    )
+    return ReleaseAuditListResponse(events=[public_release_audit_event(event) for event in events])
+
+
+@router.get(gateway_routes.RELEASE_AUDIT_EXPORT_PATH)
+async def export_release_audit(
+    plan_id: str | None = Query(default=None),
+    run_id: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=1000),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> Response:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    events = release_audit_events_for_current(
+        db,
+        current,
+        workspace_id,
+        plan_id=plan_id,
+        run_id=run_id,
+        event_type=event_type,
+        limit=limit,
+    )
+    csv_body = release_audit_csv(public_release_audit_event(event) for event in events)
+    return Response(
+        content=csv_body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="release-audit.csv"'},
+    )
 
 
 @router.get(gateway_routes.RELEASE_RUN_PATH, response_model=ReleaseRunResponse)
@@ -915,6 +968,68 @@ def release_run_summary_from_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "last_run_status": last_run_status or None,
         "recent_runs": recent_runs,
     }
+
+
+def release_audit_events_for_current(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    *,
+    plan_id: str | None,
+    run_id: str | None,
+    event_type: str | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    events = db.list_release_audit_events(
+        workspace_id,
+        plan_id=plan_id,
+        run_id=run_id,
+        event_type=event_type,
+        limit=limit,
+    )
+    for event in events:
+        require_plan_application_read_access(db, current, workspace_id, event.get("_steps", []))
+    return events
+
+
+def public_release_audit_event(event: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in event.items() if key != "_steps"}
+
+
+def release_audit_csv(events: Any) -> str:
+    output = io.StringIO()
+    fields = [
+        "audit_id",
+        "created_at",
+        "plan_id",
+        "plan_name",
+        "run_id",
+        "run_status",
+        "event_type",
+        "actor",
+        "message",
+        "application_ids",
+        "details_json",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for event in events:
+        writer.writerow(
+            {
+                "created_at": event.get("created_at") or "",
+                "audit_id": event.get("audit_id") or "",
+                "plan_id": event.get("plan_id") or "",
+                "plan_name": event.get("plan_name") or "",
+                "run_id": event.get("run_id") or "",
+                "run_status": event.get("run_status") or "",
+                "event_type": event.get("event_type") or "",
+                "actor": event.get("actor") or "",
+                "message": event.get("message") or "",
+                "application_ids": ",".join(event.get("application_ids") or []),
+                "details_json": json.dumps(event.get("details") or {}, sort_keys=True),
+            }
+        )
+    return output.getvalue()
 
 
 def steps_for_wave(

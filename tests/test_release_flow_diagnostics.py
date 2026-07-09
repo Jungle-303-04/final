@@ -139,6 +139,69 @@ def test_retry_release_run_blocks_when_retry_budget_is_exhausted(monkeypatch) ->
     assert db.dispatched == []
 
 
+def test_release_audit_list_checks_read_access_and_hides_internal_steps(monkeypatch) -> None:
+    db = ReleaseAuditDb()
+    seen: list[tuple[str, str]] = []
+
+    def require_read(
+        _db: object,
+        _current: object,
+        workspace_id: str,
+        steps: list[dict[str, object]],
+    ) -> None:
+        seen.append((workspace_id, str(steps[0]["application_id"])))
+
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", require_read)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.list_release_audit(
+            plan_id="plan-a",
+            run_id=None,
+            event_type=None,
+            limit=10,
+            current=current,
+            db=db,
+        )
+    )
+
+    assert seen == [("workspace-a", "checkout")]
+    assert response.events[0]["audit_id"] == "audit-1"
+    assert response.events[0]["application_ids"] == ["checkout"]
+    assert "_steps" not in response.events[0]
+    assert db.filters == {"plan_id": "plan-a", "run_id": None, "event_type": None, "limit": 10}
+
+
+def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) -> None:
+    db = ReleaseAuditDb()
+    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    response = asyncio.run(
+        release_router.export_release_audit(
+            plan_id=None,
+            run_id="run-a",
+            event_type="workflow.run.failed",
+            limit=20,
+            current=current,
+            db=db,
+        )
+    )
+
+    body = response.body.decode()
+    assert response.media_type == "text/csv; charset=utf-8"
+    assert "audit-1" in body
+    assert "workflow.run.failed" in body
+    assert "checkout" in body
+    assert "_steps" not in body
+    assert db.filters == {
+        "plan_id": None,
+        "run_id": "run-a",
+        "event_type": "workflow.run.failed",
+        "limit": 20,
+    }
+
+
 def test_release_run_summary_counts_derived_statuses() -> None:
     summary = release_router.release_run_summary_from_runs(
         [
@@ -347,6 +410,44 @@ class ReleaseRetryDb:
         **_kwargs: object,
     ) -> None:
         self.dispatched.append(application_id)
+
+
+class ReleaseAuditDb:
+    def __init__(self) -> None:
+        self.filters: dict[str, object] = {}
+
+    def list_release_audit_events(
+        self,
+        _workspace_id: str,
+        *,
+        plan_id: str | None,
+        run_id: str | None,
+        event_type: str | None,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        self.filters = {
+            "plan_id": plan_id,
+            "run_id": run_id,
+            "event_type": event_type,
+            "limit": limit,
+        }
+        return [
+            {
+                "audit_id": "audit-1",
+                "workspace_id": "workspace-a",
+                "run_id": "run-a",
+                "plan_id": "plan-a",
+                "plan_name": "Checkout release",
+                "run_status": "failed",
+                "event_type": "workflow.run.failed",
+                "message": "checkout rollout failed",
+                "actor": "operator",
+                "details": {"reason": "rollout health failed"},
+                "application_ids": ["checkout"],
+                "created_at": "2026-07-09T10:00:00Z",
+                "_steps": [{"application_id": "checkout"}],
+            }
+        ]
 
 
 def test_yaml_diagnostics_reports_parser_location() -> None:

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import WorkflowRun
@@ -192,6 +192,75 @@ class ReleaseFlowRepository(DatabaseConnection):
             "plan_breakdown": dict(plan_breakdown),
             "recent_runs": summary_runs,
         }
+
+    def list_release_audit_events(
+        self,
+        workspace_id: str,
+        *,
+        plan_id: str | None = None,
+        run_id: str | None = None,
+        event_type: str | None = None,
+        limit: int = 200,
+    ) -> list[JsonObject]:
+        event_table = ReleaseRunEvent.__table__
+        run_table = ReleaseRun.__table__
+        step_table = ReleaseRunStep.__table__
+        statement = (
+            select(
+                event_table.c.audit_id,
+                event_table.c.workspace_id,
+                event_table.c.run_id,
+                event_table.c.event_type,
+                event_table.c.message,
+                event_table.c.actor,
+                event_table.c.details,
+                event_table.c.created_at,
+                run_table.c.plan_id,
+                run_table.c.plan_name,
+                run_table.c.status.label("run_status"),
+            )
+            .join(
+                run_table,
+                and_(
+                    event_table.c.workspace_id == run_table.c.workspace_id,
+                    event_table.c.run_id == run_table.c.run_id,
+                ),
+            )
+            .where(event_table.c.workspace_id == workspace_id)
+            .order_by(event_table.c.created_at.desc())
+            .limit(max(1, min(limit, 1000)))
+        )
+        if plan_id:
+            statement = statement.where(run_table.c.plan_id == plan_id)
+        if run_id:
+            statement = statement.where(event_table.c.run_id == run_id)
+        if event_type:
+            statement = statement.where(event_table.c.event_type == event_type)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+            run_ids = sorted({str(row["run_id"]) for row in rows})
+            steps_by_run: dict[str, list[JsonObject]] = defaultdict(list)
+            if run_ids:
+                step_rows = (
+                    conn.execute(
+                        select(step_table)
+                        .where(
+                            step_table.c.workspace_id == workspace_id,
+                            step_table.c.run_id.in_(run_ids),
+                        )
+                        .order_by(step_table.c.run_id.asc(), step_table.c.wave.asc())
+                    )
+                    .mappings()
+                    .all()
+                )
+                for step_row in step_rows:
+                    steps_by_run[str(step_row["run_id"])].append(
+                        serialize_release_run_step(step_row)
+                    )
+        return [
+            serialize_release_audit_event(row, steps=steps_by_run[str(row["run_id"])])
+            for row in rows
+        ]
 
     def get_release_run(self, workspace_id: str, run_id: str) -> JsonObject | None:
         run_table = ReleaseRun.__table__
@@ -959,6 +1028,22 @@ def serialize_release_run_event(row: Mapping[str, Any]) -> JsonObject:
     item = dict(row)
     item["details"] = dict(item.get("details") or {})
     item["created_at"] = iso_or_none(item.get("created_at"))
+    return item
+
+
+def serialize_release_audit_event(
+    row: Mapping[str, Any],
+    *,
+    steps: list[JsonObject],
+) -> JsonObject:
+    item = serialize_release_run_event(row)
+    item["plan_id"] = str(row.get("plan_id") or "")
+    item["plan_name"] = str(row.get("plan_name") or "")
+    item["run_status"] = str(row.get("run_status") or "")
+    item["application_ids"] = sorted(
+        {str(step.get("application_id") or "") for step in steps if step.get("application_id")}
+    )
+    item["_steps"] = steps
     return item
 
 
