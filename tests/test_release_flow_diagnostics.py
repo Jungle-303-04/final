@@ -15,6 +15,7 @@ from domains.diagnostics.router import (
     yaml_diagnostics,
 )
 from domains.release_flow import router as release_router
+from domains.release_flow.repository import release_audit_event_type_filter
 from domains.release_flow.execution import (
     dry_run_event_id,
     execution_profile,
@@ -596,6 +597,37 @@ def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) ->
         "run_id": "run-a",
         "event_type": "workflow.run.failed",
         "limit": 20,
+    }
+
+
+def test_release_audit_event_type_filter_supports_prefix() -> None:
+    assert release_audit_event_type_filter("workflow.run.failed") == ("workflow.run.failed", None)
+    assert release_audit_event_type_filter("release.notify.*") == (None, "release.notify.")
+    assert release_audit_event_type_filter("  release.retry.*  ") == (None, "release.retry.")
+    assert release_audit_event_type_filter("") == (None, None)
+
+
+def test_release_audit_accepts_notify_prefix_filter(monkeypatch) -> None:
+    db = ReleaseAuditDb()
+    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
+    asyncio.run(
+        release_router.list_release_audit(
+            plan_id="plan-a",
+            run_id=None,
+            event_type="release.notify.*",
+            limit=25,
+            current=current,
+            db=db,
+        )
+    )
+
+    assert db.filters == {
+        "plan_id": "plan-a",
+        "run_id": None,
+        "event_type": "release.notify.*",
+        "limit": 25,
     }
 
 

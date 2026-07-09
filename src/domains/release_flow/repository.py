@@ -237,7 +237,11 @@ class ReleaseFlowRepository(DatabaseConnection):
         if run_id:
             statement = statement.where(event_table.c.run_id == run_id)
         if event_type:
-            statement = statement.where(event_table.c.event_type == event_type)
+            exact, prefix = release_audit_event_type_filter(event_type)
+            if prefix:
+                statement = statement.where(event_table.c.event_type.like(f"{prefix}%"))
+            elif exact:
+                statement = statement.where(event_table.c.event_type == exact)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
             run_ids = sorted({str(row["run_id"]) for row in rows})
@@ -918,6 +922,15 @@ def release_run_event_values(
         "actor": str(actor) if actor is not None else None,
         "details": dict(details),
     }
+
+
+def release_audit_event_type_filter(value: str | None) -> tuple[str | None, str | None]:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None, None
+    if normalized.endswith("*"):
+        return None, normalized[:-1]
+    return normalized, None
 
 
 def github_release_metadata(plan: Mapping[str, Any]) -> JsonObject:
