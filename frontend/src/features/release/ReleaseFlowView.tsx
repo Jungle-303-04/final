@@ -1483,16 +1483,20 @@ function AuditPanel({
     >
       <AuditEventFilter value={eventType} onChange={onEventTypeChange} />
       <div className="release-flow__timeline">
-        {events.slice(0, 8).map(event => (
-          <div key={event.audit_id} className="release-flow__timeline-row">
-            <span>{event.event_type}</span>
-            <strong>{event.message}</strong>
-            <small>
-              {shortId(event.run_id)} / {event.run_status || 'unknown'}
-              {event.application_ids.length > 0 ? ` / ${event.application_ids.join(', ')}` : ''}
-            </small>
-          </div>
-        ))}
+        {events.slice(0, 8).map(event => {
+          const meta = releaseEventMeta(event);
+          return (
+            <div key={event.audit_id} className="release-flow__timeline-row">
+              <span>{event.event_type}</span>
+              <strong>{event.message}</strong>
+              <small>
+                {shortId(event.run_id)} / {event.run_status || 'unknown'}
+                {event.application_ids.length > 0 ? ` / ${event.application_ids.join(', ')}` : ''}
+                {meta ? ` / ${meta}` : ''}
+              </small>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
