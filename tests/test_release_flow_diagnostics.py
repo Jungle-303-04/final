@@ -383,6 +383,7 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         "rollback",
         "verification",
         "abort_criteria",
+        "change_freeze",
     }
     assert handoff["verification"] == {
         "status": "passed",
@@ -417,6 +418,15 @@ def test_get_release_run_handoff_summarizes_operator_next_actions(monkeypatch) -
         ),
         "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
         "override_reason": None,
+        "production_targets": ["checkout"],
+    }
+    assert handoff["change_freeze"] == {
+        "status": "warning",
+        "message": "Active change freeze was bypassed with an operator reason.",
+        "active": True,
+        "start": "2026-07-09T09:00:00Z",
+        "end": "2026-07-09T11:00:00Z",
+        "override_reason": "incident commander approved emergency hotfix",
         "production_targets": ["checkout"],
     }
 
@@ -495,6 +505,10 @@ def test_get_release_run_report_includes_redacted_audit_and_markdown(monkeypatch
     assert "job: release-verification-fixture passed" in report["markdown"]
     assert "Rollback criteria:" in report["markdown"]
     assert "rollback if checkout error rate exceeds 5% for 5 minutes" in report["markdown"]
+    assert "Change freeze:" in report["markdown"]
+    assert "Active change freeze was bypassed with an operator reason." in report["markdown"]
+    assert "2026-07-09T09:00:00Z to 2026-07-09T11:00:00Z" in report["markdown"]
+    assert "incident commander approved emergency hotfix" in report["markdown"]
     assert "Audit summary:" in report["markdown"]
     assert "Events in report: 1" in report["markdown"]
     assert "workflow.run.failed: 1" in report["markdown"]
@@ -533,6 +547,8 @@ def test_export_release_run_report_returns_markdown_attachment(monkeypatch) -> N
     assert "Verification:" in body
     assert "evidence: /readyz" in body
     assert "Rollback criteria:" in body
+    assert "Change freeze:" in body
+    assert "Active change freeze was bypassed with an operator reason." in body
     assert "Audit summary:" in body
     assert "workflow.run.failed: 1" in body
     assert "Recent audit:" in body
@@ -2680,6 +2696,13 @@ class ReleaseRunActionDb:
                             "abort_criteria": {
                                 "criteria": ["rollback if checkout error rate exceeds 5% for 5 minutes"],
                                 "override_reason": None,
+                                "production_targets": ["checkout"],
+                            },
+                            "change_freeze": {
+                                "start": "2026-07-09T09:00:00Z",
+                                "end": "2026-07-09T11:00:00Z",
+                                "active": True,
+                                "override_reason": "incident commander approved emergency hotfix",
                                 "production_targets": ["checkout"],
                             },
                             "readiness": {

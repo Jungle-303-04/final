@@ -3247,6 +3247,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
     notify_blocker = release_notify_cooldown_blocker(run)
     verification = release_run_handoff_verification(run)
     abort_criteria = release_run_handoff_abort_criteria(run)
+    change_freeze = release_run_handoff_change_freeze(run)
     return {
         "run_id": str(run.get("run_id") or ""),
         "plan_id": str(run.get("plan_id") or ""),
@@ -3260,6 +3261,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
         "attention_reasons": attention_reasons,
         "verification": verification,
         "abort_criteria": abort_criteria,
+        "change_freeze": change_freeze,
         "next_actions": release_run_handoff_actions(
             status,
             terminal=terminal,
@@ -3302,6 +3304,11 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
                 "abort_criteria",
                 str(abort_criteria.get("status") or "info"),
                 str(abort_criteria.get("message") or "No rollback criteria snapshot recorded."),
+            ),
+            release_handoff_check(
+                "change_freeze",
+                str(change_freeze.get("status") or "info"),
+                str(change_freeze.get("message") or "No change freeze snapshot recorded."),
             ),
         ],
         "last_event": release_run_last_event(run),
@@ -3396,6 +3403,16 @@ def release_run_report_markdown(
         lines.extend(f"- {item}" for item in criteria[:3])
         if abort_criteria.get("override_reason"):
             lines.append(f"- override: {abort_criteria.get('override_reason')}")
+    change_freeze = handoff.get("change_freeze") if isinstance(handoff.get("change_freeze"), dict) else {}
+    if change_freeze:
+        lines.extend(["", "Change freeze:", f"- {change_freeze.get('status') or 'info'}: {change_freeze.get('message') or 'No change freeze message.'}"])
+        if change_freeze.get("start") or change_freeze.get("end"):
+            lines.append(f"- window: {change_freeze.get('start') or '?'} to {change_freeze.get('end') or '?'}")
+        targets = change_freeze.get("production_targets") if isinstance(change_freeze.get("production_targets"), list) else []
+        if targets:
+            lines.append(f"- targets: {', '.join(str(item) for item in targets[:5])}")
+        if change_freeze.get("override_reason"):
+            lines.append(f"- override: {change_freeze.get('override_reason')}")
     audit_summary_lines = release_run_report_audit_summary_lines(audit_events)
     if audit_summary_lines:
         lines.extend(["", "Audit summary:", *audit_summary_lines])
@@ -3660,6 +3677,54 @@ def release_run_handoff_abort_criteria(run: dict[str, Any]) -> dict[str, Any]:
         "criteria": [],
         "override_reason": None,
         "production_targets": production_targets,
+    }
+
+
+def release_run_handoff_change_freeze(run: dict[str, Any]) -> dict[str, Any]:
+    guard = release_run_latest_guard(run)
+    freeze = guard.get("change_freeze") if isinstance(guard.get("change_freeze"), dict) else {}
+    readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
+    impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
+    production_targets = [
+        str(item)
+        for item in freeze.get("production_targets", [])
+        if str(item).strip()
+    ]
+    fallback_targets = impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else []
+    start = str(freeze.get("start") or "").strip() or None
+    end = str(freeze.get("end") or "").strip() or None
+    override_reason = str(freeze.get("override_reason") or "").strip() or None
+    active = freeze.get("active") is True
+    if not freeze:
+        return {
+            "status": "info",
+            "message": "No change freeze snapshot recorded.",
+            "active": False,
+            "start": None,
+            "end": None,
+            "override_reason": None,
+            "production_targets": fallback_targets,
+        }
+    if active and override_reason:
+        status = "warning"
+        message = "Active change freeze was bypassed with an operator reason."
+    elif active:
+        status = "blocked"
+        message = "Release is inside an active change freeze window."
+    elif start or end:
+        status = "passed"
+        message = "Change freeze window is not active for this run."
+    else:
+        status = "info"
+        message = "No change freeze window was configured."
+    return {
+        "status": status,
+        "message": message,
+        "active": active,
+        "start": start,
+        "end": end,
+        "override_reason": override_reason,
+        "production_targets": production_targets or fallback_targets,
     }
 
 
