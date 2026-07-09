@@ -7,9 +7,9 @@ export default function AnimatedReorderGridExample() {
 
   return (
     <div className="reorder-grid-demo">
-      <button className="command-trigger" onClick={() => setItems((value) => [...value.slice(1), value[0]])}>Rotate</button>
+      <button className="command-trigger stable-wide" onClick={() => setItems((value) => [...value.slice(1), value[0]])} type="button">순서 회전</button>
       <div className="focus-ring-grid">
-        {items.map((item) => <button className="active" key={item}>{item}<span>layout slot</span></button>)}
+        {items.map((item) => <button className="active" key={item} type="button">{item}<span>레이아웃 슬롯</span></button>)}
       </div>
     </div>
   );

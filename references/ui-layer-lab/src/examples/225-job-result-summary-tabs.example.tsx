@@ -1,19 +1,19 @@
 import { useState } from "react";
 
 const summaries = {
-  Passed: "18 checks passed.",
-  Failed: "1 visual smoke check failed.",
-  Skipped: "2 browser matrix jobs skipped."
+  통과: "검사 18개가 통과했습니다.",
+  실패: "시각 회귀 검사 1개가 실패했습니다.",
+  건너뜀: "브라우저 매트릭스 작업 2개를 건너뛰었습니다."
 };
 
 export default function JobResultSummaryTabsExample() {
-  const [tab, setTab] = useState<keyof typeof summaries>("Failed");
+  const [tab, setTab] = useState<keyof typeof summaries>("실패");
 
   return (
     <div className="route-transition">
       <div className="segmented-row">
         {Object.keys(summaries).map((item) => (
-          <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item as keyof typeof summaries)}>
+          <button aria-pressed={tab === item} className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item as keyof typeof summaries)} type="button">
             {item}
           </button>
         ))}

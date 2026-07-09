@@ -31,6 +31,7 @@ export default function AnimatedDragCardExample() {
   return (
     <div className="drag-stage" onMouseMove={move} onMouseUp={stopDragging} onMouseLeave={stopDragging}>
       <button
+        aria-label="카드를 드래그하거나 클릭해 위치를 이동"
         className={dragging ? "drag-card dragging" : "drag-card"}
         onMouseMove={move}
         onMouseDown={(event) => {
@@ -41,8 +42,9 @@ export default function AnimatedDragCardExample() {
         onMouseUp={stopDragging}
         onClick={nudge}
         style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
+        type="button"
       >
-        Drag me
+        드래그
         <span>{position.x}, {position.y}</span>
       </button>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const tabs = ["Summary", "Logs", "Artifacts"];
+const tabs = ["요약", "로그", "산출물"];
 
 export default function AnimatedSharedIndicatorExample() {
   const [active, setActive] = useState(0);
@@ -10,12 +10,12 @@ export default function AnimatedSharedIndicatorExample() {
       <div className="shared-tabs">
         <span style={{ transform: `translateX(${active * 100}%)` }} />
         {tabs.map((tab, index) => (
-          <button className={active === index ? "active" : ""} key={tab} onClick={() => setActive(index)}>
+          <button aria-pressed={active === index} className={active === index ? "active" : ""} key={tab} onClick={() => setActive(index)} type="button">
             {tab}
           </button>
         ))}
       </div>
-      <strong>{tabs[active]} selected</strong>
+      <strong>{tabs[active]} 선택됨</strong>
     </div>
   );
 }

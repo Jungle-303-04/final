@@ -9,14 +9,21 @@ export default function HeatmapSelectionSummaryExample() {
     <div className="heatmap-demo">
       <div className="small-heatmap-grid">
         {cells.map((value) => (
-          <button className={`heat-cell ${selected.includes(value) ? "selected" : value > 60 ? "hot" : value > 35 ? "warm" : "cool"}`} key={value} onClick={() => setSelected((items) => (items.includes(value) ? items.filter((item) => item !== value) : [...items, value]))}>
+          <button
+            aria-label={`값 ${value}`}
+            aria-pressed={selected.includes(value)}
+            className={`heat-cell ${selected.includes(value) ? "selected" : value > 60 ? "hot" : value > 35 ? "warm" : "cool"}`}
+            key={value}
+            onClick={() => setSelected((items) => (items.includes(value) ? items.filter((item) => item !== value) : [...items, value]))}
+            type="button"
+          >
             {value}
           </button>
         ))}
       </div>
       <aside className="detail-panel">
-        <strong>{selected.length} selected</strong>
-        <span>Total {selected.reduce((sum, value) => sum + value, 0)}</span>
+        <strong>선택 {selected.length}개</strong>
+        <span>합계 {selected.reduce((sum, value) => sum + value, 0)}</span>
       </aside>
     </div>
   );

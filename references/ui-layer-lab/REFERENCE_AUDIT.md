@@ -43,10 +43,10 @@
 
 - 첫 화면에서 완성된 디자인 시스템처럼 보인다.
 - light/dark theme가 모든 surface, code, chart, toast, React Flow에 적용된다.
-- 예제는 카테고리별 대표 패턴 + 옵션 토글 + 상태 전환 설명 + 코드로 구성된다.
+- 예제는 카테고리별 고유 패턴 + 옵션 토글 + 상태 전환 설명 + 코드로 구성된다.
 - raw source는 코드 보기를 눌렀을 때만 import한다.
-- 대표 예제는 keyboard/focus/aria/motion/reduced-motion까지 자동 검증한다.
-- 500개 파일을 모두 렌더링하지 않는다. 화면에는 대표 예제만 등록한다.
+- 핵심 예제는 keyboard/focus/aria/motion/reduced-motion까지 자동 검증한다.
+- 500개 파일은 모두 화면에 노출한다. catalog는 노출 제한이 아니라 수동 품질 metadata와 통합 후보 기록에만 사용한다.
 
 ## 대표 카테고리 구조
 
@@ -110,7 +110,7 @@ src/
     smoke.mjs
 ```
 
-첫 안정화 패스에서는 실제 파일 삭제보다 `catalog.ts`로 등록 범위를 줄인다. 이렇게 하면 기존 파일은 레퍼런스 원본으로 보존하면서도 앱 품질, 빌드 chunk, 한글화 범위를 제어할 수 있다. 이후 통합 완료된 파일은 `src/examples/_legacy/`로 이동하거나 삭제한다.
+첫 안정화 패스에서는 `registry.ts`가 모든 `.example.tsx` 파일을 노출하도록 유지한다. `catalog.ts`는 수동 설명, 검색어, 통합 후보 metadata를 보강하는 용도로만 쓰고, 중복은 같은 패턴을 숨기지 말고 실제 예제 품질을 통합하거나 `variantGroups`에 기록한다.
 
 ## Theme / Token 설계 초안
 
@@ -309,11 +309,11 @@ UI 패턴별 모션 계약:
 
 ## 중복 제거 계획
 
-1. `catalog.ts`를 만들어 화면 노출 예제를 500개에서 40-60개 대표 예제로 제한한다.
-2. 대표 예제는 각 카테고리별 4-8개만 둔다. 같은 패턴의 변형은 segmented control, tabs, toggle로 한 파일 안에 통합한다.
-3. 기존 중복 파일은 첫 패스에서 삭제하지 않고 registry 제외. 두 번째 패스에서 통합 완료된 파일을 `_legacy/` 이동 또는 삭제한다.
-4. 차트는 18개 개별 파일을 유지하지 않고 “통합 차트 패턴” 2-3개로 축소한다.
-5. animated는 66개 중 7개 유지, 17개 재작성, 40개 통합, 2개 삭제 후보로 처리한다.
+1. `registry.ts`는 모든 예제 파일을 노출한다. `catalog.ts`는 수동 metadata와 통합 후보만 기록한다.
+2. 카테고리별 수량 제한을 두지 않는다. 같은 패턴의 변형만 segmented control, tabs, toggle로 한 파일 안에 통합한다.
+3. 기존 중복 파일은 registry에서 숨기지 않는다. 통합이 끝난 뒤에만 `variantGroups`로 관계를 기록하거나 삭제 여부를 별도 검토한다.
+4. 차트는 값/상태/상호작용이 다른 예제를 유지하고, 단순 스타일 차이만 통합한다.
+5. animated는 숫자를 줄이는 대신 실제 모션, reduced motion, 높이 안정성, 버튼 크기 안정성을 만족하도록 재작성한다.
 
 삭제 후보:
 
@@ -337,7 +337,7 @@ UI 패턴별 모션 계약:
 - 275-animated-command-menu-enter-exit.example.tsx
 - 334-animated-modal-focus-trap.example.tsx
 - 392-animated-command-search-skeleton.example.tsx
-- 461-478 chart 계열 중 대표 2-3개
+- 461-478 chart 계열 중 단순 스타일 중복만 통합
 
 ## 한글화 기준
 
@@ -401,7 +401,7 @@ output/playwright/ui-layer-lab-reduced-motion.png
 
 ## 다음 구현 순서
 
-1. `catalog.ts`, `metadata.ts`, `registry.ts` 분리. 등록 예제를 대표 패턴으로 제한.
+1. `catalog.ts`, `metadata.ts`, `registry.ts` 책임 분리. 모든 예제 노출은 유지하고 catalog는 품질 metadata로 제한.
 2. `components/`로 `ExampleSection`, `CodePanel`, `LazyPreview`, `SidebarNav`, `SearchBar`, `ThemeToggle` 분리.
 3. `styles/`로 token/base/layout/viewer/primitives/motion/charts/flow 분리.
 4. theme toggle, localStorage, prefers-color-scheme, Sonner theme 연결.

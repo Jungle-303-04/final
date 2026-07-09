@@ -2,13 +2,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export default function SonnerDeepLinkToastExample() {
-  const [route, setRoute] = useState("/runs");
+  const [route, setRoute] = useState("/실행");
 
   function openToast() {
-    toast("Run finished", {
+    toast("실행이 완료되었습니다", {
       action: {
-        label: "Open",
-        onClick: () => setRoute("/runs/run-417/logs")
+        label: "열기",
+        onClick: () => setRoute("/실행/run-417/로그")
       }
     });
   }
@@ -16,8 +16,8 @@ export default function SonnerDeepLinkToastExample() {
   return (
     <div className="toast-state-card">
       <strong>{route}</strong>
-      <span>Toast action updates the active route preview.</span>
-      <button className="command-trigger" onClick={openToast}>Show Toast</button>
+      <span>토스트 액션이 현재 경로 미리보기를 갱신합니다.</span>
+      <button className="command-trigger stable-wide" onClick={openToast} type="button">토스트 보기</button>
     </div>
   );
 }

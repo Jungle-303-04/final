@@ -1,19 +1,19 @@
 import { useState } from "react";
 
 const views = {
-  Timeline: ["Queued", "Pulled", "Built"],
-  Files: ["App.tsx", "styles.css", "registry.ts"],
-  Review: ["2 comments", "1 suggestion", "0 blockers"]
+  타임라인: ["대기열 등록", "변경 가져옴", "빌드 완료"],
+  파일: ["App.tsx", "styles.css", "registry.ts"],
+  검토: ["댓글 2개", "제안 1개", "차단 0개"]
 };
 
 export default function AnimatedViewTransitionTabsExample() {
-  const [view, setView] = useState<keyof typeof views>("Timeline");
+  const [view, setView] = useState<keyof typeof views>("타임라인");
 
   return (
     <div className="route-transition">
       <div className="segmented-row">
         {Object.keys(views).map((item) => (
-          <button className={view === item ? "active" : ""} key={item} onClick={() => setView(item as keyof typeof views)}>
+          <button aria-pressed={view === item} className={view === item ? "active" : ""} key={item} onClick={() => setView(item as keyof typeof views)} type="button">
             {item}
           </button>
         ))}

@@ -7,18 +7,18 @@ export default function SonnerRateLimitExample() {
   function run() {
     setRemaining((value) => {
       if (value <= 1) {
-        toast.error("Rate limit reached", { description: "Try again after the current run finishes." });
+        toast.error("실행 제한에 도달했습니다", { description: "현재 실행이 끝난 뒤 다시 시도하세요." });
         return 0;
       }
-      toast.info(`${value - 1} attempts remaining`);
+      toast.info(`남은 시도 ${value - 1}회`);
       return value - 1;
     });
   }
 
   return (
     <div className="toast-state-card">
-      <strong>{remaining} attempts remaining</strong>
-      <button className="command-trigger" onClick={run}>Run Action</button>
+      <strong>남은 시도 {remaining}회</strong>
+      <button className="command-trigger stable-wide" onClick={run} type="button">액션 실행</button>
     </div>
   );
 }

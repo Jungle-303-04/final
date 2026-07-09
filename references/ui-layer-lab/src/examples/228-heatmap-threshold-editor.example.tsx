@@ -8,11 +8,11 @@ export default function HeatmapThresholdEditorExample() {
   return (
     <div className="threshold-heatmap">
       <label>
-        Hot threshold {threshold}
+        위험 임계값 {threshold}
         <input type="range" min="20" max="90" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
       </label>
       <div className="small-heatmap-grid">
-        {values.map((value) => <button className={`heat-cell ${value >= threshold ? "hot" : value > 35 ? "warm" : "cool"}`} key={value}>{value}</button>)}
+        {values.map((value) => <button aria-label={`값 ${value}`} className={`heat-cell ${value >= threshold ? "hot" : value > 35 ? "warm" : "cool"}`} key={value} type="button">{value}</button>)}
       </div>
     </div>
   );
