@@ -34,10 +34,13 @@ The remaining catalog work is quality curation, not hiding examples:
 - Code panels must be compact when closed and show source only when opened.
 - Light and dark mode must apply inside the preview content, not only the outer shell.
 - Mobile and desktop layouts must have no page-level horizontal overflow.
+- Category switching and search must not crash the app or move scroll position unexpectedly.
+- Stable controls must keep width and height across label/theme/code state changes.
+- High-priority visible English samples must stay translated unless they are technical names.
 
 ## Latest Gate
 
 - `npm run typecheck`: passed
 - `npm run build`: passed
 - `npm run visual-quality`: passed
-- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, code panel closed height 65px, React Flow drag 105px, edge count 2 -> 3, mobile overflow 0
+- Visual gate evidence: 500 exposed / 500 files, duplicate ids 0, data-viz search 55 -> 18, theme/code button delta 0, code panel closed height 65px, React Flow drag 105px, edge count 2 -> 3, English sample violations 0, mobile overflow 0
