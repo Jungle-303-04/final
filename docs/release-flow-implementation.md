@@ -110,6 +110,7 @@
 - readiness active run lock: 저장된 plan의 active run blocker를 실행 전 readiness에도 표시
 - operator action controls: pause/resume/retry/rollback/cancel 액션은 운영자 사유를 입력받아 audit details에 남기고, `rollback_policy=disabled` run은 rollback 요청을 409 blocker로 차단
 - run history selector: release run이 여러 개 쌓이면 최신 run뿐 아니라 이전 run의 상태, wave, timeline을 선택해서 확인하고 필요한 운영 액션을 수행
+- run deep link: 선택한 release run을 `run_id` query parameter로 보존하고 Copy link로 handoff/audit/timeline 컨텍스트를 공유
 - attention reasons: failed, waiting approval, rollback requested, paused, unhealthy run/step에서 `attention.required/reasons`를 파생해 API와 UI에서 왜 조치가 필요한지 바로 표시
 - stale run detection: active run의 `updated_at`이 `health_timeout_seconds` 또는 step timeout을 넘으면 stale attention reason과 `stale_runs` summary 카운터를 표시
 - verification failure summary: post-deploy verification job 실패가 있는 run 수를 `verification_failed_runs` summary 카운터와 UI card로 표시

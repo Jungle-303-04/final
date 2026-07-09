@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type SVGProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type SVGProps } from 'react';
 import Editor, { type Monaco, type OnMount } from '@monaco-editor/react';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import type { editor as MonacoEditor } from 'monaco-editor';
 import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useConsolePath } from '@/features/console/ui';
 import { useApplications } from '@/features/repo/api';
 import { ApprovalCard } from '@/features/repo/ApprovalCard';
@@ -303,15 +303,17 @@ type ReleaseEdge = Edge<FlowEdgeData>;
 
 export default function ReleaseFlowView() {
   const pathFor = useConsolePath();
+  const [sp, setSp] = useSearchParams();
+  const runIdParam = sp.get('run_id') ?? '';
   const appsQ = useApplications();
   const plansQ = useReleasePlans();
   const alertChannelsQ = useAlertChannels();
   const [plan, setPlan] = useState<ReleasePlan | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [yaml, setYaml] = useState(SAMPLE_YAML);
-  const [tab, setTab] = useState('plan');
+  const [tab, setTab] = useState(runIdParam ? 'policy' : 'plan');
   const [runFilter, setRunFilter] = useState<ReleaseRunFilter>('all');
-  const [selectedRunId, setSelectedRunId] = useState('');
+  const [selectedRunId, setSelectedRunId] = useState(runIdParam);
   const [auditEventType, setAuditEventType] = useState('');
   const { data: planDiagnosticsData, mutate: diagnosePlan } = useDiagnostics();
   const { data: yamlDiagnosticsData, mutate: diagnoseYaml } = useDiagnostics();
@@ -336,6 +338,15 @@ export default function ReleaseFlowView() {
   const deleteRun = useDeleteReleaseRun();
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
+  const previousRunIdParamRef = useRef(runIdParam);
+
+  const selectRunId = useCallback((runId: string) => {
+    setSelectedRunId(runId);
+    const next = new URLSearchParams(sp);
+    if (runId) next.set('run_id', runId);
+    else next.delete('run_id');
+    setSp(next, { replace: true, preventScrollReset: true });
+  }, [setSp, sp]);
 
   const apps = useMemo(() => appsQ.data ?? [], [appsQ.data]);
   const appById = useMemo(() => new Map(apps.map(app => [app.application_id, app])), [apps]);
@@ -343,6 +354,16 @@ export default function ReleaseFlowView() {
   const selectedNamespace = getString(selected?.config.namespace, 'sandbox');
   const diagnosticPlan = useMemo(() => withDiagnosticDefaults(plan, apps), [apps, plan]);
   const settingsBaselines = useMemo(() => settingsBaselinesFor(apps), [apps]);
+
+  useEffect(() => {
+    if (previousRunIdParamRef.current === runIdParam) return;
+    previousRunIdParamRef.current = runIdParam;
+    setSelectedRunId(runIdParam);
+    if (runIdParam) {
+      setRunFilter('all');
+      setTab('policy');
+    }
+  }, [runIdParam]);
 
   useEffect(() => {
     if (plan || plansQ.isPending || appsQ.isPending) return;
@@ -555,7 +576,7 @@ export default function ReleaseFlowView() {
                 runFilter={runFilter}
                 onRunFilterChange={setRunFilter}
                 selectedRunId={selectedRunId}
-                onSelectedRunIdChange={setSelectedRunId}
+                onSelectedRunIdChange={selectRunId}
                 loading={runsQ.isPending}
                 busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || notifyRun.isPending || deleteRun.isPending}
                 onAdvance={runId => advanceRun.mutate({ runId })}
@@ -1046,6 +1067,7 @@ function RunPanel({
 }) {
   const recentRunIds = useMemo(() => new Set((summary?.recent_runs ?? []).map(run => run.run_id)), [summary?.recent_runs]);
   useEffect(() => {
+    if (loading && runs.length === 0) return;
     if (runs.length === 0) {
       if (selectedRunId && runFilter === 'all' && !recentRunIds.has(selectedRunId)) onSelectedRunIdChange('');
       return;
@@ -1057,7 +1079,7 @@ function RunPanel({
     if (runFilter === 'all' && !runs.some(run => run.run_id === selectedRunId) && !recentRunIds.has(selectedRunId)) {
       onSelectedRunIdChange(runs[0].run_id);
     }
-  }, [onSelectedRunIdChange, recentRunIds, runFilter, runs, selectedRunId]);
+  }, [loading, onSelectedRunIdChange, recentRunIds, runFilter, runs, selectedRunId]);
   const selectRecentRun = (runId: string) => {
     onRunFilterChange('all');
     onSelectedRunIdChange(runId);
@@ -1137,6 +1159,7 @@ function RunPanel({
         </div>
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
+          <Button size="sm" variant="ghost" onClick={() => copyReleaseRunLink(run.run_id)}>Copy link</Button>
           <Button size="sm" loading={busy} disabled={busy || status === 'paused' || isTerminal} onClick={() => onAdvance(run.run_id)}>Advance</Button>
           <Button
             size="sm"
@@ -1350,6 +1373,21 @@ function verificationJobSummary(job: { kind: string; status: string; target: Rec
   const statusCode = getString(result.status_code);
   const resultSuffix = error || (statusCode ? `HTTP ${statusCode}` : '');
   return `${job.kind} ${job.status}: ${target}${resultSuffix ? ` - ${resultSuffix}` : ''}`;
+}
+
+function copyReleaseRunLink(runId: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('run_id', runId);
+  const link = url.toString();
+  const clipboard = window.navigator.clipboard;
+  if (clipboard?.writeText) {
+    void clipboard.writeText(link).then(
+      () => window.alert('Release run link copied.'),
+      () => window.prompt('Copy release run link', link),
+    );
+    return;
+  }
+  window.prompt('Copy release run link', link);
 }
 
 function RecentRunShortcuts({
