@@ -117,6 +117,48 @@ def test_rollback_release_run_checks_access_before_mutating(monkeypatch) -> None
     assert db.requested_rollback is False
 
 
+def test_rollback_release_run_blocks_when_policy_disabled(monkeypatch) -> None:
+    db = ReleaseRunActionDb(rollback_policy="disabled")
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            release_router.rollback_release_run(
+                "release-run-1",
+                release_router.ReleaseRunActionRequest(reason="rollback requested during incident"),
+                current=current,
+                db=db,
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert "rollback is disabled" in exc.value.detail["blockers"][0]
+    assert db.requested_rollback is False
+
+
+def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
+    db = ReleaseRunActionDb()
+    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+
+    current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
+    response = asyncio.run(
+        release_router.cancel_release_run(
+            "release-run-1",
+            release_router.ReleaseRunActionRequest(reason="bad canary metrics"),
+            current=current,
+            db=db,
+        )
+    )
+
+    assert response.run["run_id"] == "release-run-1"
+    assert db.updated[0]["message"] == "Release run cancelled."
+    assert db.updated[0]["details"] == {
+        "reason": "bad canary metrics",
+        "operator_action": "cancelled",
+    }
+
+
 def test_retry_release_run_dispatches_failed_wave_step(monkeypatch) -> None:
     db = ReleaseRetryDb()
     monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
@@ -591,9 +633,10 @@ class AcceptingEventGateway:
 
 
 class ReleaseRunActionDb:
-    def __init__(self) -> None:
+    def __init__(self, *, rollback_policy: str = "manual") -> None:
         self.requested_rollback = False
         self.updated: list[dict[str, object]] = []
+        self.rollback_policy = rollback_policy
 
     def get_release_run(self, _workspace_id: str, _run_id: str) -> dict[str, object]:
         return {
@@ -601,7 +644,8 @@ class ReleaseRunActionDb:
             "status": "running",
             "current_wave": 1,
             "total_waves": 1,
-            "settings": {},
+            "settings": {"rollback_policy": self.rollback_policy},
+            "rollback": {"policy": self.rollback_policy},
             "steps": [
                 {
                     "application_id": "checkout",

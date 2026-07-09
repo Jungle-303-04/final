@@ -534,11 +534,11 @@ export default function ReleaseFlowView() {
                 loading={runsQ.isPending}
                 busy={advanceRun.isPending || pauseRun.isPending || resumeRun.isPending || retryRun.isPending || rollbackRun.isPending || cancelRun.isPending || deleteRun.isPending}
                 onAdvance={runId => advanceRun.mutate({ runId })}
-                onPause={runId => pauseRun.mutate({ runId, reason: 'operator paused release run' })}
-                onResume={runId => resumeRun.mutate({ runId, reason: 'operator resumed release run' })}
-                onRetry={runId => retryRun.mutate({ runId, reason: 'operator retried failed release wave' })}
-                onRollback={runId => rollbackRun.mutate({ runId, reason: 'operator requested rollback from release flow' })}
-                onCancel={runId => cancelRun.mutate({ runId, reason: 'operator canceled release run' })}
+                onPause={(runId, reason) => pauseRun.mutate({ runId, reason })}
+                onResume={(runId, reason) => resumeRun.mutate({ runId, reason })}
+                onRetry={(runId, reason) => retryRun.mutate({ runId, reason })}
+                onRollback={(runId, reason) => rollbackRun.mutate({ runId, reason })}
+                onCancel={(runId, reason) => cancelRun.mutate({ runId, reason })}
                 onDelete={(runId, force) => deleteRun.mutate({ runId, force })}
               />
               <AuditPanel
@@ -885,11 +885,11 @@ function RunPanel({
   loading: boolean;
   busy: boolean;
   onAdvance: (runId: string) => void;
-  onPause: (runId: string) => void;
-  onResume: (runId: string) => void;
-  onRetry: (runId: string) => void;
-  onRollback: (runId: string) => void;
-  onCancel: (runId: string) => void;
+  onPause: (runId: string, reason: string) => void;
+  onResume: (runId: string, reason: string) => void;
+  onRetry: (runId: string, reason: string) => void;
+  onRollback: (runId: string, reason: string) => void;
+  onCancel: (runId: string, reason: string) => void;
   onDelete: (runId: string, force?: boolean) => void;
 }) {
   const latest = runs[0];
@@ -930,12 +930,51 @@ function RunPanel({
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
           <Button size="sm" loading={busy} disabled={busy || status === 'paused'} onClick={() => onAdvance(latest.run_id)}>Advance</Button>
-          <Button size="sm" loading={busy} disabled={busy || !canRetry} onClick={() => onRetry(latest.run_id)}>Retry</Button>
+          <Button
+            size="sm"
+            loading={busy}
+            disabled={busy || !canRetry}
+            onClick={() => withOperatorReason('Retry release wave', 'operator retried failed release wave', reason => onRetry(latest.run_id, reason))}
+          >
+            Retry
+          </Button>
           {status === 'paused'
-            ? <Button size="sm" loading={busy} onClick={() => onResume(latest.run_id)}>Resume</Button>
-            : <Button size="sm" loading={busy} onClick={() => onPause(latest.run_id)}>Pause</Button>}
-          <Button size="sm" variant="ghost" loading={busy} onClick={() => onRollback(latest.run_id)}>Rollback</Button>
-          <Button size="sm" variant="ghost" loading={busy} disabled={busy || isTerminal} onClick={() => onCancel(latest.run_id)}>Cancel</Button>
+            ? (
+              <Button
+                size="sm"
+                loading={busy}
+                onClick={() => withOperatorReason('Resume release run', 'operator resumed release run', reason => onResume(latest.run_id, reason))}
+              >
+                Resume
+              </Button>
+            )
+            : (
+              <Button
+                size="sm"
+                loading={busy}
+                onClick={() => withOperatorReason('Pause release run', 'operator paused release run', reason => onPause(latest.run_id, reason))}
+              >
+                Pause
+              </Button>
+            )}
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={busy}
+            disabled={busy || isTerminal || getString(latest.rollback.policy, getString(latest.settings.rollback_policy)) === 'disabled'}
+            onClick={() => withOperatorReason('Request rollback', 'operator requested rollback from release flow', reason => onRollback(latest.run_id, reason))}
+          >
+            Rollback
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={busy}
+            disabled={busy || isTerminal}
+            onClick={() => withOperatorReason('Cancel release run', 'operator canceled release run', reason => onCancel(latest.run_id, reason))}
+          >
+            Cancel
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -1319,6 +1358,13 @@ function shortId(value: string): string {
   return value.replace(/^workflow-/, '').slice(0, 8);
 }
 
+function withOperatorReason(title: string, fallback: string, submit: (reason: string) => void) {
+  const reason = window.prompt(`${title} reason`, fallback);
+  if (reason === null) return;
+  const normalized = reason.trim();
+  submit(normalized || fallback);
+}
+
 function releaseStepMeta(step: ReleaseRun['steps'][number]): string[] {
   const details = recordValue(step.details);
   const evidence = recordValue(details.evidence);
@@ -1383,6 +1429,8 @@ function approvalDecisionForStep(step: ReleaseRun['steps'][number]): 'granted' |
 
 function releaseEventMeta(event: ReleaseRun['events'][number]): string {
   const details = recordValue(event.details);
+  const actionReason = getString(details.reason);
+  if (actionReason) return actionReason;
   const evidence = recordValue(details.evidence);
   const incident = recordValue(details.incident);
   const evidenceBundle = recordValue(details.evidence_bundle);
