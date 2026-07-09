@@ -9,6 +9,7 @@ from packages.contracts.gateway.requests import (
     BootstrapPolicy,
     DesiredResource,
     DesiredStatePolicy,
+    SchedulingPolicy,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
@@ -62,12 +63,13 @@ def registration_workspace_id(registration: dict[str, Any] | None) -> str:
 
 
 def freeze_management_policy(policy: AgentPolicy) -> AgentPolicy:
-    """management 정책에서 제어/재조정 자원은 항상 비운다."""
+    """management 정책에서 제어/재조정/스케줄링 자원은 항상 비운다."""
     return policy.model_copy(
         update={
             "cluster_role": MANAGEMENT_CLUSTER_ROLE,
             "bootstrap": BootstrapPolicy(mode=MANAGEMENT_BOOTSTRAP_MODE, resources=[]),
             "desired_state": DesiredStatePolicy(resources=[]),
+            "scheduling": SchedulingPolicy(),
         },
     )
 
@@ -80,9 +82,13 @@ def has_write_or_command_policy(policy: AgentPolicy) -> bool:
     return bool(desired_resources(policy))
 
 
+def has_scheduling_policy(policy: AgentPolicy) -> bool:
+    return bool(policy.scheduling.profiles)
+
+
 def management_policy_update_is_forbidden(payload: AgentPolicy) -> bool:
     role_changed = (
         "cluster_role" in payload.model_fields_set
         and payload.cluster_role != MANAGEMENT_CLUSTER_ROLE
     )
-    return role_changed or has_write_or_command_policy(payload)
+    return role_changed or has_write_or_command_policy(payload) or has_scheduling_policy(payload)

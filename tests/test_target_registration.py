@@ -19,6 +19,7 @@ from domains.target.router import (
     apply_manifest_with_kubectl,
     cluster_connection_status,
     get_cluster_connection_status,
+    get_cluster_scheduling_profiles,
     install_manifest_by_token,
     list_clusters,
     register_target,
@@ -27,6 +28,7 @@ from domains.target.router import (
     target_registration_preflight,
     unregister_cluster,
     update_cluster_policy,
+    update_cluster_scheduling_profiles,
     validate_target_bootstrap_config,
     validate_target_install_providers,
 )
@@ -37,6 +39,9 @@ from packages.contracts.gateway.requests import (
     EvidenceJobScheduleRequest,
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
+    SchedulingPolicy,
+    SchedulingProfile,
+    SchedulingSelector,
     TargetPreflightRequest,
     TargetRegisterRequest,
 )
@@ -428,6 +433,8 @@ def test_target_install_manifest_can_include_explicit_sample_workload() -> None:
 
     assert 'name: "demo-api"' in manifest
     assert 'image: "ghcr.io/acme/demo-api:test"' in manifest
+    assert "priorityClassName: gitops-demo-fast" in manifest
+    assert "terminationGracePeriodSeconds: 1" in manifest
 
 
 def test_target_registration_records_cluster_and_returns_install_manifest() -> None:
@@ -447,6 +454,8 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert response.registered is True
     assert response.applied is False
     assert response.install_manifest
+    assert "kind: PriorityClass" in response.install_manifest
+    assert "priorityClassName: gitops-control-critical" in response.install_manifest
     assert db.registered[0]["cluster_id"] == "target-cluster-01"
     assert db.registered[0]["user_id"] == "local-user"
     assert db.registered[0]["workspace_id"] == "default"
@@ -854,6 +863,30 @@ def test_target_registration_preflight_accepts_new_ready_provider(monkeypatch) -
     assert response.errors == []
 
 
+def test_target_registration_preflight_tolerates_display_fields(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://k8s.woonyong.org")
+
+    async def run():
+        return await target_registration_preflight(
+            TargetPreflightRequest(
+                cluster_id="new-cluster",
+                name="테스트",
+                environment="dev",
+                cloud_provider="kind",
+                deploy_provider="manual-manifest",
+                provider_config={"local_provider": "kind", "kind_cluster_name": "new-cluster"},
+            ),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=FakePreflightDb(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.valid is True
+    assert response.errors == []
+
+
 def test_target_registration_preflight_requires_management_base_url(monkeypatch) -> None:
     monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
     monkeypatch.delenv("PUBLIC_MANAGEMENT_BASE_URL", raising=False)
@@ -994,6 +1027,97 @@ def test_cluster_policy_update_preserves_existing_unset_fields() -> None:
     assert merged.bootstrap.resources[0].resource_id == "target-agent-policy"
 
 
+def test_cluster_scheduling_profiles_update_is_selector_based() -> None:
+    db = FakePolicyDb(AgentPolicy(cluster_id="cluster-1", generation=3))
+    scheduling = SchedulingPolicy(
+        profiles=[
+            SchedulingProfile(
+                profile_id="fast-lane",
+                selector=SchedulingSelector(
+                    namespaces=["sandbox", "payments"],
+                    labels={"app.kubernetes.io/part-of": "checkout"},
+                ),
+                priority_class_name="gitops-demo-fast",
+                placement_mode="preferred",
+                preferred_node_labels={"workload-tier": "demo-fast"},
+                pre_pull_images=["ghcr.io/example/orders-api:v1"],
+                termination_grace_period_seconds=1,
+            )
+        ]
+    )
+
+    response = asyncio.run(
+        update_cluster_scheduling_profiles(
+            "cluster-1",
+            scheduling,
+            current=SimpleNamespace(workspace_id="default"),
+            db=db,
+        )
+    )
+
+    stored = AgentPolicy.model_validate(db.saved[-1])
+    assert response.accepted is True
+    assert response.scheduling["profiles"][0]["profile_id"] == "fast-lane"
+    assert stored.generation == 4
+    assert stored.scheduling.profiles[0].selector.namespaces == ["sandbox", "payments"]
+    assert stored.scheduling.profiles[0].preferred_node_labels == {"workload-tier": "demo-fast"}
+
+
+def test_cluster_scheduling_profile_requires_selector() -> None:
+    with pytest.raises(ValueError, match="selector"):
+        SchedulingProfile(profile_id="global-fast-lane")
+
+
+def test_cluster_scheduling_profiles_read_returns_policy_section() -> None:
+    db = FakePolicyDb(
+        AgentPolicy(
+            cluster_id="cluster-1",
+            scheduling=SchedulingPolicy(
+                profiles=[
+                    SchedulingProfile(
+                        profile_id="fast-lane",
+                        selector=SchedulingSelector(namespaces=["sandbox"]),
+                    )
+                ]
+            ),
+        )
+    )
+    db.can_access = lambda *_args: True  # type: ignore[attr-defined]
+
+    response = asyncio.run(
+        get_cluster_scheduling_profiles(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=db,
+        )
+    )
+
+    assert response.cluster_id == "cluster-1"
+    assert response.scheduling["profiles"][0]["selector"]["namespaces"] == ["sandbox"]
+
+
+def test_management_scheduling_profile_update_is_rejected() -> None:
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            update_cluster_scheduling_profiles(
+                "cluster-1",
+                SchedulingPolicy(
+                    profiles=[
+                        SchedulingProfile(
+                            profile_id="fast-lane",
+                            selector=SchedulingSelector(namespaces=["management"]),
+                        )
+                    ]
+                ),
+                current=SimpleNamespace(workspace_id="default"),
+                db=FakeManagementPolicyDb(),
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "management_readonly"
+
+
 def test_management_policy_update_rejects_write_policy() -> None:
     write_update = AgentPolicy(
         cluster_id="cluster-1",
@@ -1027,6 +1151,35 @@ def test_management_policy_update_rejects_write_policy() -> None:
     assert exc.value.detail["code"] == "management_readonly"
 
 
+def test_management_policy_update_rejects_scheduling_policy() -> None:
+    scheduling_update = AgentPolicy(
+        cluster_id="cluster-1",
+        generation=2,
+        cluster_role="management",
+        scheduling=SchedulingPolicy(
+            profiles=[
+                SchedulingProfile(
+                    profile_id="ops-fast",
+                    selector=SchedulingSelector(namespaces=["management"]),
+                )
+            ]
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            update_cluster_policy(
+                "cluster-1",
+                scheduling_update,
+                current=SimpleNamespace(workspace_id="default"),
+                db=FakeManagementPolicyDb(),
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == "management_readonly"
+
+
 def test_management_policy_update_allows_read_only_evidence_change() -> None:
     db = FakeManagementPolicyDb()
     read_only_update = AgentPolicy(
@@ -1050,6 +1203,7 @@ def test_management_policy_update_allows_read_only_evidence_change() -> None:
     assert merged.cluster_role == "management"
     assert merged.bootstrap.resources == []
     assert merged.desired_state.resources == []
+    assert merged.scheduling.profiles == []
     assert merged.evidence.providers["kubernetes"].interval_seconds == 90
 
 

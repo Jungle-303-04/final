@@ -99,6 +99,7 @@ CLUSTER_DEPLOYMENT_RESTART_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart"
 )
 CLUSTER_POLICY_PATH = "/clusters/{cluster_id}/policy"
+CLUSTER_SCHEDULING_PROFILES_PATH = "/clusters/{cluster_id}/scheduling-profiles"
 PROVIDERS_CATALOG_PATH = "/providers/catalog"
 PROVIDERS_CLUSTER_DISCOVERY_PATH = "/providers/cluster-discovery"
 PROVIDERS_VALIDATE_PATH = "/providers/validate"

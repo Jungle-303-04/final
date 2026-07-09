@@ -179,14 +179,22 @@ class InventorySnapshotRequest(StrictModel):
     usage: dict[str, Any] = Field(default_factory=dict)
 
 
-class TargetRegisterRequest(StrictModel):
+class TargetProviderSelectionRequest(StrictModel):
+    cluster_role: Literal["management", "target"] = "target"
+    management_base_url: str = ""
+    image: str = ""
+    apply: bool = False
+    kube_context: str | None = None
+    cloud_provider: str = "existing-k8s"
+    deploy_provider: str = "manual-manifest"
+    provider_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class TargetRegisterRequest(TargetProviderSelectionRequest):
     cluster_id: str | None = Field(default=None, max_length=253)
     name: str = DEFAULT_TARGET_NAME
     environment: str = DEFAULT_TARGET_ENVIRONMENT
-    cluster_role: Literal["management", "target"] = "target"
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    management_base_url: str = ""
-    image: str = ""
     prometheus_base_url: str = DEFAULT_PROMETHEUS_BASE_URL
     loki_base_url: str = DEFAULT_LOKI_BASE_URL
     tempo_base_url: str = DEFAULT_TEMPO_BASE_URL
@@ -208,11 +216,6 @@ class TargetRegisterRequest(StrictModel):
         pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
     )
     sample_workload_image: str | None = Field(default=None, min_length=1)
-    apply: bool = False
-    kube_context: str | None = None
-    cloud_provider: str = "existing-k8s"
-    deploy_provider: str = "manual-manifest"
-    provider_config: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _sample_workload_requires_explicit_config(self) -> TargetRegisterRequest:
@@ -226,16 +229,10 @@ class TargetRegisterRequest(StrictModel):
         return self
 
 
-class TargetPreflightRequest(StrictModel):
+class TargetPreflightRequest(TargetProviderSelectionRequest):
     cluster_id: str = Field(default="", max_length=253)
-    cluster_role: Literal["management", "target"] = "target"
-    cloud_provider: str = "existing-k8s"
-    deploy_provider: str = "manual-manifest"
-    provider_config: dict[str, Any] = Field(default_factory=dict)
-    apply: bool = False
-    kube_context: str | None = None
-    image: str = ""
-    management_base_url: str = ""
+    name: str | None = Field(default=None, max_length=120)
+    environment: str | None = Field(default=None, max_length=80)
 
 
 class CommandRequest(StrictModel):
@@ -546,6 +543,52 @@ class DesiredStatePolicy(StrictModel):
     resources: list[DesiredResource] = Field(default_factory=list)
 
 
+class SchedulingSelector(StrictModel):
+    namespaces: list[str] = Field(default_factory=list, max_length=50)
+    labels: dict[str, str] = Field(default_factory=dict)
+    workload_names: list[str] = Field(default_factory=list, max_length=100)
+
+
+class SchedulingToleration(StrictModel):
+    key: str = Field(min_length=1, max_length=120)
+    operator: Literal["Exists", "Equal"] = "Equal"
+    value: str = Field(default="", max_length=120)
+    effect: Literal["NoSchedule", "PreferNoSchedule", "NoExecute"] = "NoSchedule"
+
+
+class SchedulingProfile(StrictModel):
+    profile_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+    enabled: bool = True
+    description: str = Field(default="", max_length=500)
+    selector: SchedulingSelector = Field(default_factory=SchedulingSelector)
+    priority_class_name: str = Field(default="gitops-demo-fast", max_length=120)
+    priority_value: int = Field(default=100_000, ge=0, le=1_000_000_000)
+    preemption_policy: Literal["PreemptLowerPriority", "Never"] = "PreemptLowerPriority"
+    placement_mode: Literal["preferred", "required"] = "preferred"
+    node_selector: dict[str, str] = Field(default_factory=dict)
+    preferred_node_labels: dict[str, str] = Field(default_factory=dict)
+    tolerations: list[SchedulingToleration] = Field(default_factory=list, max_length=20)
+    pre_pull_images: list[str] = Field(default_factory=list, max_length=50)
+    termination_grace_period_seconds: int | None = Field(default=None, ge=0, le=300)
+    scheduler_name: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def require_explicit_selector(self) -> SchedulingProfile:
+        if not self.enabled:
+            return self
+        if (
+            self.selector.namespaces
+            or self.selector.labels
+            or self.selector.workload_names
+        ):
+            return self
+        raise ValueError("enabled scheduling profile requires at least one selector")
+
+
+class SchedulingPolicy(StrictModel):
+    profiles: list[SchedulingProfile] = Field(default_factory=list, max_length=50)
+
+
 class AgentPolicy(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     generation: int = Field(default=DEFAULT_AGENT_POLICY_GENERATION, ge=1)
@@ -553,6 +596,7 @@ class AgentPolicy(StrictModel):
     evidence: EvidenceRuntimePolicy = Field(default_factory=EvidenceRuntimePolicy)
     bootstrap: BootstrapPolicy = Field(default_factory=BootstrapPolicy)
     desired_state: DesiredStatePolicy = Field(default_factory=DesiredStatePolicy)
+    scheduling: SchedulingPolicy = Field(default_factory=SchedulingPolicy)
 
 
 class AgentPolicyResponse(StrictModel):

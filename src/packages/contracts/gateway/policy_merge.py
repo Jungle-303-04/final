@@ -24,6 +24,8 @@ def merge_agent_policy(base: AgentPolicy, incoming: AgentPolicy) -> AgentPolicy:
         payload["bootstrap"] = incoming.bootstrap.model_dump()
     if "desired_state" in incoming.model_fields_set:
         payload["desired_state"] = incoming.desired_state.model_dump()
+    if "scheduling" in incoming.model_fields_set:
+        payload["scheduling"] = incoming.scheduling.model_dump()
     return AgentPolicy.model_validate(payload)
 
 

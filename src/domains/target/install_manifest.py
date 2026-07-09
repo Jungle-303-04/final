@@ -16,6 +16,10 @@ from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 TARGET_INSTALL_RENDERER_ENV = "TARGET_INSTALL_RENDERER"
 TARGET_INSTALL_RENDERER_NATIVE = "native"
 TARGET_INSTALL_RENDERER_KUSTOMIZE = "kustomize"
+CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
+FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
+FAST_LANE_NODE_LABEL_KEY = "workload-tier"
+FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
 SUPPORTED_TARGET_INSTALL_RENDERERS = {
     TARGET_INSTALL_RENDERER_NATIVE,
     TARGET_INSTALL_RENDERER_KUSTOMIZE,
@@ -46,6 +50,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
         for block in [
             namespace_manifest(namespace),
             namespace_manifest(SANDBOX_NAMESPACE) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            priority_class_manifest(),
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -65,6 +70,28 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: {name}
+	"""
+
+
+def priority_class_manifest() -> str:
+    return f"""
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {CONTROL_PRIORITY_CLASS_NAME}
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "GitOps 제어 경로와 target agent를 일반 workload보다 먼저 스케줄링한다."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {FAST_LANE_PRIORITY_CLASS_NAME}
+value: 100000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "사용자가 선택한 fast-lane workload용 우선순위."
 """
 
 
@@ -281,6 +308,18 @@ spec:
       labels:
         app: {yaml_string(name)}
     spec:
+      priorityClassName: {FAST_LANE_PRIORITY_CLASS_NAME}
+      terminationGracePeriodSeconds: 1
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: {FAST_LANE_NODE_LABEL_KEY}
+                    operator: In
+                    values:
+                      - {FAST_LANE_NODE_LABEL_VALUE}
       containers:
         - name: {yaml_string(name)}
           image: {yaml_string(image)}
@@ -309,7 +348,18 @@ spec:
       labels:
         app: cluster-agent
     spec:
+      priorityClassName: {CONTROL_PRIORITY_CLASS_NAME}
       serviceAccountName: cluster-agent
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: {FAST_LANE_NODE_LABEL_KEY}
+                    operator: In
+                    values:
+                      - {FAST_LANE_NODE_LABEL_VALUE}
       containers:
         - name: cluster-agent
           image: {yaml_string(payload.image)}

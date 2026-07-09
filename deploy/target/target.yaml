@@ -19,6 +19,24 @@ kind: Namespace
 metadata:
   name: sandbox
 ---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gitops-control-critical
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "GitOps 제어 경로와 target agent를 일반 workload보다 먼저 스케줄링한다."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gitops-demo-fast
+value: 100000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "사용자가 선택한 fast-lane workload용 우선순위."
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -30,19 +48,19 @@ kind: ClusterRole
 metadata:
   name: cluster-agent-read
 rules:
-  # Read-only access to cluster objects used for evidence and command context.
+  # evidence와 command context에 필요한 클러스터 객체 읽기 권한만 둔다.
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
-  # Read-only access to workload controllers.
+  # workload controller도 읽기 권한만 둔다.
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
 ---
-# Bind the read-only ClusterRole above to the cluster-agent ServiceAccount.
+# 위 읽기 전용 ClusterRole을 cluster-agent ServiceAccount에 바인딩한다.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -56,7 +74,7 @@ subjects:
     name: cluster-agent
     namespace: target
 ---
-# Write permissions for target-agent owned resources only.
+# target-agent가 소유한 리소스에만 쓰기 권한을 둔다.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -94,8 +112,8 @@ metadata:
 data:
   owner: cluster-agent
 ---
-# Write permissions are scoped to sandbox only.
-# The agent can patch sandbox workloads/configmaps there without mutating target telemetry.
+# sandbox에만 쓰기 권한을 둔다.
+# agent는 target telemetry를 건드리지 않고 sandbox workload/configmap만 patch한다.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -106,7 +124,7 @@ rules:
     resources: ["daemonsets"]
     verbs: ["get", "list", "create", "update", "patch", "delete"]
 ---
-# Bind sandbox write permissions to the cluster-agent ServiceAccount.
+# sandbox 쓰기 권한을 cluster-agent ServiceAccount에 바인딩한다.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -163,7 +181,18 @@ spec:
       labels:
         app: cluster-agent
     spec:
+      priorityClassName: gitops-control-critical
       serviceAccountName: cluster-agent
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: workload-tier
+                    operator: In
+                    values:
+                      - demo-fast
       containers:
         - name: cluster-agent
           image: kubeheal-service:latest

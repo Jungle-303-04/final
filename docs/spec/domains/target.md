@@ -173,6 +173,8 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 | `GET /clusters/{cluster_id}` | `src/domains/target/router.py :: get_cluster` | path: `cluster_id` | `ClusterResponse` | `require_session` + `require_cluster_access(..., Permission.CLUSTER_READ)` |
 | `GET /clusters/{cluster_id}/connection-status` | `src/domains/target/router.py :: get_cluster_connection_status` | path: `cluster_id` | `ClusterConnectionStatusResponse` | `require_session` + `require_cluster_access(..., Permission.CLUSTER_READ)` |
 | `PUT /clusters/{cluster_id}/policy` | `src/domains/target/router.py :: update_cluster_policy` | path: `cluster_id`, body: `AgentPolicy` | `dict[str, Any]` (`{"accepted": True, "policy": <stored>}`) | `require_admin_session` |
+| `GET /clusters/{cluster_id}/scheduling-profiles` | `src/domains/target/router.py :: get_cluster_scheduling_profiles` | path: `cluster_id` | `SchedulingPolicyResponse` | `require_session` + `require_cluster_access(..., Permission.CLUSTER_READ)` |
+| `PUT /clusters/{cluster_id}/scheduling-profiles` | `src/domains/target/router.py :: update_cluster_scheduling_profiles` | path: `cluster_id`, body: `SchedulingPolicy` | `SchedulingPolicyResponse` | `require_admin_session`; management role은 400 `{code:"management_readonly"}` |
 | `GET /agent/policy` | `src/domains/target/router.py :: agent_policy` | query: `cluster_id: str`, `generation: int = 0` | `AgentPolicyResponse` | `require_cluster_agent` (per-cluster 토큰) |
 | `POST /agent/policy/status` | `src/domains/target/router.py :: agent_policy_status` | body: `AgentPolicyStatusRequest` | `dict[str, bool]` (`{"accepted": True}`) | `require_cluster_agent` |
 | `POST /agent/reconcile/status` | `src/domains/target/router.py :: agent_reconcile_status` | body: `AgentReconcileStatusRequest` | `dict[str, bool]` (`{"accepted": True}`) | `require_cluster_agent` |
@@ -186,8 +188,10 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 - `TargetRegisterRequest`: `cluster_id: str | None`(미지정 시 서버가 `<name-slug>-<4자리 난수>` 생성), `name`, `environment`, `workspace_id`, `management_base_url: str = ""`(클라이언트 생략 가능. 서버가 공개 URL env 로 정규화하며 최종 미해결 시 등록 422), `image: str = ""`(placeholder면 env 기본 이미지로 치환, 최종 미해결 시 등록 422), `prometheus_base_url`, `loki_base_url`, `tempo_base_url`, `otel_traces_endpoint`, `evidence_interval_seconds`(범위 제한), `control_namespaces: str = ""`(제어 쓰기 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만. 설치 manifest ConfigMap의 `CONTROL_ALLOWED_NAMESPACES`로 주입), `install_node_collector: bool = True`, `install_sample_workload: bool = False`, `sample_workload_name`(k8s name 패턴), `sample_workload_image`, `apply: bool = False`, `kube_context: str | None = None`, `cloud_provider: str = "existing-k8s"`, `deploy_provider: str = "manual-manifest"`, `provider_config: dict[str, Any] = {}`.
 - `TargetPreflightRequest`: `cluster_id`, `cloud_provider`, `deploy_provider`, `provider_config`, `apply`, `kube_context`, `image`, `management_base_url: str = ""`.
 - `TargetPreflightResponse`: `valid`, `duplicate_cluster_id`, `provider_ready`, `agent_install_status`, `connection_status`, `kube_context_allowed`, `errors`, `warnings`, `selected`, `last_agent_id`, `last_seen_at`.
-- `AgentPolicy`: `cluster_id`, `generation`(≥1), `cluster_role`(`"management"|"target"`), `evidence: EvidenceRuntimePolicy`(`failure_policy: "allow_partial"|"strict"`, `max_attempts`, `providers: dict[str, EvidenceProviderPolicy]`), `bootstrap: BootstrapPolicy`, `desired_state: DesiredStatePolicy`.
+- `AgentPolicy`: `cluster_id`, `generation`(≥1), `cluster_role`(`"management"|"target"`), `evidence: EvidenceRuntimePolicy`(`failure_policy: "allow_partial"|"strict"`, `max_attempts`, `providers: dict[str, EvidenceProviderPolicy]`), `bootstrap: BootstrapPolicy`, `desired_state: DesiredStatePolicy`, `scheduling: SchedulingPolicy`.
 - `EvidenceProviderPolicy`: `enabled: bool = True`, `interval_seconds`, `min_workers`, `max_workers`, `queue_age_target_seconds`, `queries: list[dict]`.
+- `SchedulingPolicy`: `profiles: list[SchedulingProfile]`. enabled profile은 `selector.namespaces`/`selector.labels`/`selector.workload_names` 중 하나 이상이 있어야 한다. 빈 selector로 클러스터 전체 workload를 빠른 lane에 넣는 실수를 막는다.
+- `SchedulingProfile`: `profile_id`, `enabled`, `selector`, `priority_class_name`, `priority_value`, `preemption_policy`, `placement_mode("preferred"|"required")`, `node_selector`, `preferred_node_labels`, `tolerations`, `pre_pull_images`, `termination_grace_period_seconds`, `scheduler_name`. `scheduler_name` 기본값은 `null`이며, 별도 scheduler가 내려갔을 때 Pending 고착을 막기 위해 명시 선택일 때만 사용한다.
 - `EvidenceJobScheduleRequest`: `source_id: str = "cluster-snapshot"`, `window_start: str`, `provider_keys: list[str]`(min_length=1).
 - `EvidenceJobResultRequest`: `agent_id: str`, `lease_id: str`, `status: Literal["completed","failed"]`, `result: dict = {}`, `error: str = ""`. `{"result": result}` 직렬화 크기가 `MAX_EVIDENCE_PAYLOAD_BYTES`(1MiB)를 넘으면 `evidence payload exceeds size limit` 검증 오류가 난다.
 - `TargetInstallResponse`: `registered: bool`, `cluster_id: str`, `status: str`(`pending_install`), `applied: bool`, `apply_output: str | None`, `install_manifest: str`, `agent_token: str`(원문 1회 반환, 서버는 해시만 저장), `install_command: str = ""`, `bootstrap_command: str = ""`, `bootstrap_steps: list[{label, command}] = []`, `connect_timeout_seconds`, `connect_expires_at`.
@@ -521,8 +525,42 @@ desired state 자체의 상태는 `TargetDesiredStateStatus.ACTIVE`(`"active"`) 
 
 ### 4. agent 정책 배포
 1. 관리자: `PUT /clusters/{cluster_id}/policy` — path와 body의 `cluster_id` 불일치 시 409. 기존 정책(없으면 `default_agent_policy`)에 `merge_agent_policy`로 머지 후 `upsert_cluster_policy`. generation이 기존 이하이면 `ValueError` → 409. registration settings 또는 기존 policy가 role=`management`이면 payload가 `cluster_role`을 명시적으로 `target`으로 바꾸거나 bootstrap/desired_state resources를 추가할 때만 HTTP 400 `{code:"management_readonly"}`로 거부한다. evidence provider 간격처럼 읽기 전용 수집 정책만 바꾸는 payload는 허용하되, 저장 직전 `freeze_management_policy`로 `cluster_role="management"`와 빈 write/command policy를 다시 강제한다.
-2. agent: `GET /agent/policy?cluster_id&generation=N` — 토큰 identity의 cluster_id와 다르면 403. 저장 정책이 없거나 `generation <= N`이면 `policy=None`(변경 없음), 아니면 전체 정책 반환.
-3. agent 보고: `POST /agent/policy/status`·`POST /agent/reconcile/status` — body의 `cluster_id`는 **항상 토큰 identity의 값으로 덮어써서** append-only 저장.
+2. 관리자: `PUT /clusters/{cluster_id}/scheduling-profiles` — 기존 policy의 generation을 1 증가시키고 `scheduling` 섹션만 교체한다. 특정 네임스페이스 이름에 고정하지 않고 profile selector로 적용 대상을 고른다. 예: `namespaces=["sandbox","payments"]`, `labels={"app.kubernetes.io/part-of":"checkout"}`, `workload_names=["orders-api"]`. `pre_pull_images`는 안전한 기본 경로에서는 후보 계약만 저장한다. 실제 사전 pull은 node pool warm capacity, `IfNotPresent`, 또는 별도 privileged image-puller/scheduler를 명시 선택했을 때 운영한다.
+3. agent: `GET /agent/policy?cluster_id&generation=N` — 토큰 identity의 cluster_id와 다르면 403. 저장 정책이 없거나 `generation <= N`이면 `policy=None`(변경 없음), 아니면 전체 정책 반환.
+4. agent 보고: `POST /agent/policy/status`·`POST /agent/reconcile/status` — body의 `cluster_id`는 **항상 토큰 identity의 값으로 덮어써서** append-only 저장.
+
+Scheduling profile 응답 예시:
+
+```json
+{
+  "accepted": true,
+  "cluster_id": "cluster-1",
+  "scheduling": {
+    "profiles": [
+      {
+        "profile_id": "checkout-fast",
+        "enabled": true,
+        "description": "checkout 계열 장애 시연 workload",
+        "selector": {
+          "namespaces": ["sandbox", "payments"],
+          "labels": {"app.kubernetes.io/part-of": "checkout"},
+          "workload_names": ["orders-api"]
+        },
+        "priority_class_name": "gitops-demo-fast",
+        "priority_value": 100000,
+        "preemption_policy": "PreemptLowerPriority",
+        "placement_mode": "preferred",
+        "node_selector": {},
+        "preferred_node_labels": {"workload-tier": "demo-fast"},
+        "tolerations": [],
+        "pre_pull_images": ["ghcr.io/example/orders-api:v1"],
+        "termination_grace_period_seconds": 1,
+        "scheduler_name": null
+      }
+    ]
+  }
+}
+```
 
 ### 5. 클러스터 연결 상태·목록
 `GET /clusters`는 `BLOCKED_TEST_CLUSTER_IDS`/`BLOCKED_TEST_CLUSTER_NAME_PARTS`에 걸리는 테스트 클러스터를 목록에서 제외하고, db가 `inventory_resource_counts`를 제공하면 `inventory_counts`로 합산한 `node_count`/`pod_count`(+`incident_count=0`)를 각 `ClusterSummary`에 채운다. `GET /clusters`·`GET /clusters/{id}`·`GET /clusters/{id}/connection-status`가 `cluster_agent_status`의 최신 행으로 판정:
