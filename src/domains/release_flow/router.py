@@ -3041,6 +3041,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
     retryable = release_run_is_retryable(run)
     terminal = status in TERMINAL_RELEASE_RUN_STATUSES
     alertable = stale or attention.get("required") is True or bool(attention_reasons)
+    notify_blocker = release_notify_cooldown_blocker(run)
     verification = release_run_handoff_verification(run)
     abort_criteria = release_run_handoff_abort_criteria(run)
     return {
@@ -3062,6 +3063,7 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
             retryable=retryable,
             alertable=alertable,
             rollback_enabled=rollback_policy != "disabled",
+            notify_blocker=notify_blocker,
         ),
         "checks": [
             release_handoff_check(
@@ -3076,8 +3078,9 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
             ),
             release_handoff_check(
                 "attention",
-                "warning" if alertable else "passed",
-                "; ".join(attention_reasons[:3]) if attention_reasons else "No operator attention reason is recorded.",
+                "blocked" if notify_blocker else "warning" if alertable else "passed",
+                notify_blocker
+                or ("; ".join(attention_reasons[:3]) if attention_reasons else "No operator attention reason is recorded."),
             ),
             release_handoff_check(
                 "rollback",
@@ -3274,6 +3277,7 @@ def release_run_handoff_actions(
     retryable: bool,
     alertable: bool,
     rollback_enabled: bool,
+    notify_blocker: str | None = None,
 ) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     if terminal:
@@ -3287,7 +3291,14 @@ def release_run_handoff_actions(
     else:
         actions.append({"action": "monitor", "label": "Monitor current wave health", "enabled": True})
     if alertable:
-        actions.append({"action": "notify", "label": "Notify the release owner", "enabled": True})
+        actions.append(
+            {
+                "action": "notify",
+                "label": "Notify the release owner",
+                "enabled": notify_blocker is None,
+                **({"reason": notify_blocker} if notify_blocker else {}),
+            }
+        )
     actions.append({"action": "rollback", "label": "Request rollback if user impact is confirmed", "enabled": rollback_enabled})
     actions.append({"action": "cancel", "label": "Cancel if the run should stop", "enabled": True})
     return actions

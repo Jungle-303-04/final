@@ -1077,6 +1077,8 @@ function RunPanel({
   const attentionRequired = Boolean(attention.required) || attentionReasons.length > 0;
   const stale = Boolean(attention.stale);
   const alertable = attentionRequired || stale;
+  const notifyAction = handoffQ.data?.next_actions.find(action => action.action === 'notify');
+  const notifyBlockedReason = notifyAction?.enabled === false ? getString(notifyAction.reason) : '';
   return (
     <Card
       title="Release run"
@@ -1172,7 +1174,8 @@ function RunPanel({
             size="sm"
             variant="ghost"
             loading={busy}
-            disabled={busy || !alertable}
+            disabled={busy || !alertable || Boolean(notifyBlockedReason)}
+            title={notifyBlockedReason || undefined}
             onClick={() => withOperatorReason('Notify release owner', 'operator requested release run notification', reason => onNotify(run.run_id, reason))}
           >
             Notify
@@ -1190,6 +1193,7 @@ function RunPanel({
             Delete
           </Button>
         </div>
+        {notifyBlockedReason && <p className="release-flow__hint">{notifyBlockedReason}</p>}
       </div>
 
       <div className="release-flow__run-grid">
@@ -1258,8 +1262,13 @@ function RunHandoffPanel({ handoff, loading }: { handoff?: ReleaseRunHandoff; lo
           <span className="release-flow__handoff-label">Next actions</span>
           <div className="release-flow__handoff-list">
             {handoff.next_actions.slice(0, 4).map(action => (
-              <span key={action.action} className={action.enabled ? '' : 'release-flow__handoff-disabled'}>
+              <span
+                key={action.action}
+                className={action.enabled ? '' : 'release-flow__handoff-disabled'}
+                title={action.reason}
+              >
                 {action.label}
+                {action.reason ? ` - ${action.reason}` : ''}
               </span>
             ))}
           </div>
