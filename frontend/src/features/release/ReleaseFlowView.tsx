@@ -1203,6 +1203,7 @@ function RunPanel({
         <div className="release-flow__toolbar release-flow__toolbar--preview">
           {githubUrl && <a href={githubUrl} target="_blank" rel="noreferrer"><Button size="sm">GitHub release</Button></a>}
           <Button size="sm" variant="ghost" onClick={() => copyReleaseRunLink(run.run_id)}>Copy link</Button>
+          <Button size="sm" variant="ghost" onClick={() => copyReleaseRunReport(run, handoffQ.data)}>Copy report</Button>
           <Button
             size="sm"
             loading={busy}
@@ -1542,6 +1543,48 @@ function copyHandoffMarkdown(handoff: ReleaseRunHandoff) {
   copyText(formatHandoffMarkdown(handoff), 'Operator handoff copied.', 'Copy operator handoff');
 }
 
+function copyReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff) {
+  copyText(formatReleaseRunReport(run, handoff), 'Release run report copied.', 'Copy release run report');
+}
+
+function formatReleaseRunReport(run: ReleaseRun, handoff?: ReleaseRunHandoff): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set('run_id', run.run_id);
+  const status = run.derived_status ?? run.status;
+  const attention = recordValue(run.attention);
+  const attentionReasons = getStringArray(attention.reasons);
+  const lines = [
+    `## Release run report: ${run.plan_name}`,
+    '',
+    `- Run: ${run.run_id}`,
+    `- Status: ${status}`,
+    `- Wave: ${run.current_wave} of ${run.total_waves}`,
+    `- Mode: ${releaseRunModeLabel(run)}`,
+    `- Health: ${getString(run.health.status, 'pending')}`,
+    `- Link: ${url.toString()}`,
+  ];
+  if (attentionReasons.length > 0) {
+    lines.push('', 'Attention:', ...attentionReasons.map(reason => `- ${reason}`));
+  }
+  if (handoff) {
+    lines.push('', 'Operator handoff:', `- ${handoff.headline}`, `- Severity: ${handoff.severity}`);
+    lines.push(...handoff.next_actions.slice(0, 5).map(action => `- ${action.enabled ? '[ ]' : '[blocked]'} ${action.label}${action.reason ? `: ${action.reason}` : ''}`));
+  }
+  lines.push('', 'Steps:');
+  lines.push(...run.steps.slice(0, 12).map(step => {
+    const health = getString(recordValue(step.health).status);
+    const details = [getString(step.details.environment), getString(step.details.strategy), getString(step.details.gate)]
+      .filter(Boolean)
+      .join(' / ');
+    return `- Wave ${step.wave} ${step.name}: ${step.status}${health ? `, health ${health}` : ''}${details ? ` (${details})` : ''}`;
+  }));
+  if (run.events.length > 0) {
+    lines.push('', 'Recent timeline:');
+    lines.push(...run.events.slice(0, 8).map(event => `- ${event.event_type}: ${event.message || 'recorded'}${event.created_at ? ` (${event.created_at})` : ''}`));
+  }
+  return lines.join('\n');
+}
+
 function formatHandoffMarkdown(handoff: ReleaseRunHandoff): string {
   const url = new URL(window.location.href);
   url.searchParams.set('run_id', handoff.run_id);
@@ -1586,6 +1629,11 @@ function copyReleaseRunLink(runId: string) {
   const url = new URL(window.location.href);
   url.searchParams.set('run_id', runId);
   copyText(url.toString(), 'Release run link copied.', 'Copy release run link');
+}
+
+function releaseRunModeLabel(run: ReleaseRun): string {
+  const runtimeMode = getString(run.settings.runtime_mode, getString(run.settings.provider_mode, 'demo'));
+  return runtimeMode === 'live' ? 'live side effects' : 'demo/dry-run';
 }
 
 function copyText(value: string, successMessage: string, fallbackTitle: string) {

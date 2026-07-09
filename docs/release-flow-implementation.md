@@ -144,6 +144,7 @@
 - notify audit metadata: notify audit details에 alert severity/cluster/namespace/application/workflow context를 남기고 timeline meta에서 빠르게 확인
 - operator handoff: 선택한 release run의 headline, severity, 다음 조치, mode/health/attention/rollback/verification/verification job result/rollback criteria 체크를 한 번에 표시해 교대/온콜 인계를 빠르게 수행
 - operator handoff copy: handoff panel 내용을 Markdown으로 복사해 같은 run 링크와 함께 채팅/이슈/교대 노트에 공유
+- run report copy: 선택한 release run의 상태, attention reason, handoff next action, step 상태, 최근 timeline을 Markdown으로 복사해 교대/사후 리뷰 노트에 공유
 
 ## 검증
 - `py -3 -m pytest -q tests/test_release_flow_diagnostics.py tests/test_release_flow_projection.py`
