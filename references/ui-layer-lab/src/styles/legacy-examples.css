@@ -2006,9 +2006,11 @@ kbd,
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  color: #e4e4e7;
-  background: #18181b;
+  color: var(--text);
+  background: var(--panel-soft);
   font-weight: 700;
+  line-height: var(--line-button);
+  white-space: nowrap;
 }
 
 .segmented-row,
@@ -2024,8 +2026,8 @@ kbd,
 .breadcrumb-drill nav button:hover,
 .tree-row.active,
 .flow-context-menu button:hover {
-  border-color: #52525b;
-  background: #27272a;
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
   color: var(--text);
 }
 
@@ -2813,7 +2815,7 @@ kbd,
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: #111113;
+  background: var(--panel-soft);
 }
 
 .filter-row {
@@ -2834,7 +2836,7 @@ kbd,
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 24px;
-  background: #0d0d10;
+  background: var(--panel);
 }
 
 .bottom-command-bar {
@@ -2845,8 +2847,8 @@ kbd,
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: #111113;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
   animation: panel-in 200ms ease both;
 }
 
@@ -2858,17 +2860,20 @@ kbd,
   outline: 0;
   padding: 0 12px;
   color: var(--text);
-  background: #09090b;
+  background: var(--panel);
 }
 
 .bottom-command-bar button,
 .swipe-row button {
+  min-width: var(--control-min-width);
   min-height: 42px;
   border: 1px solid var(--border);
   border-radius: 11px;
   color: var(--text);
-  background: #18181b;
+  background: var(--panel-soft);
   font-weight: 800;
+  line-height: var(--line-button);
+  white-space: nowrap;
 }
 
 .swipe-row {

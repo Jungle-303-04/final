@@ -333,6 +333,34 @@ async function inspectSourceEnglishGuard() {
     {
       file: "src/examples/123-command-inline-actions.example.tsx",
       fragments: ["Choose a row action", "Search runs", 'heading="Runs"', "Opening", "Retrying", ">Open<", ">Retry<"]
+    },
+    {
+      file: "src/examples/124-command-disabled-items.example.tsx",
+      fragments: ["Push branch", "Deploy production", "Open logs", "Search guarded actions", 'heading="Actions"', "locked", "ready"]
+    },
+    {
+      file: "src/examples/125-sonner-copy-action.example.tsx",
+      fragments: ["Command copied", "Copy again", "Copied to clipboard", "Copy Build Command"]
+    },
+    {
+      file: "src/examples/126-sonner-persistent-status.example.tsx",
+      fragments: ["Waiting for CI", "This toast stays until dismissed", "Show Persistent Status"]
+    },
+    {
+      file: "src/examples/127-sonner-multi-action.example.tsx",
+      fragments: ["Workflow failed", "Choose the next action", "Opening logs", "Retry queued", "Show Multi Action Toast"]
+    },
+    {
+      file: "src/examples/128-animated-filter-list.example.tsx",
+      fragments: ['"visual-smoke"', '"typecheck"', '"build"', '"failed"', '"running"', '"success"', '"all"']
+    },
+    {
+      file: "src/examples/129-animated-command-bar.example.tsx",
+      fragments: ["Toggle Bar", "Ask AI anything", "Send</button>"]
+    },
+    {
+      file: "src/examples/130-animated-swipe-list.example.tsx",
+      fragments: ["Review logs", "Fix route", "Rerun smoke", "Done</button>", "All clear"]
     }
   ];
   const matches = [];
@@ -527,7 +555,11 @@ async function inspectEnglishSamples(page, url) {
     ["AI 작업 레이어", "example-ai-sidecar-tabs"],
     ["작업 진행/로그", "example-job-sla-alert"],
     ["드릴다운 탐색", "example-drilldown-status-filters"],
-    ["플로우 빌더", "example-react-flow-subflow"]
+    ["플로우 빌더", "example-react-flow-subflow"],
+    ["오버레이/명령", "example-command-disabled-items"],
+    ["모션/상태 전환", "example-animated-filter-list"],
+    ["모션/상태 전환", "example-animated-command-bar"],
+    ["모션/상태 전환", "example-animated-swipe-list"]
   ];
   const forbidden = /\b(Open|Close|Show|Hide|Search|Loading|Current|Selected|Dashboard|Create|Cancel|Retry|Next|Previous|Expand|Collapse|Focus|Input|Logs|Answer|Status|Resources|Jobs|Steps|Command|Filter|Recent|Approval|Matrix|Launch|Health|Edge|Done|Running|Failed|Pending|Allowed|Blocked)\b/i;
   const violations = [];
