@@ -72,6 +72,38 @@ def test_release_run_summary_route_precedes_dynamic_run_route() -> None:
     )
 
 
+def test_release_plan_permission_helpers_use_separate_permissions(monkeypatch) -> None:
+    seen: list[tuple[str, str]] = []
+
+    def capture_access(
+        _db: object,
+        _current: object,
+        _workspace_id: str,
+        _resource_type: str,
+        resource_id: str,
+        action: str,
+    ) -> None:
+        seen.append((resource_id, action))
+
+    monkeypatch.setattr(release_router, "require_resource_access", capture_access)
+    current = SimpleNamespace(user_id="operator")
+    steps = [{"application_id": "checkout"}]
+
+    release_router.require_plan_application_plan_manage_access(object(), current, "workspace-a", steps)
+    release_router.require_plan_application_manage_access(object(), current, "workspace-a", steps)
+    release_router.require_plan_application_rollback_access(object(), current, "workspace-a", steps)
+    release_router.require_plan_application_cancel_access(object(), current, "workspace-a", steps)
+    release_router.require_plan_application_audit_access(object(), current, "workspace-a", steps)
+
+    assert seen == [
+        ("checkout", release_router.Permission.APPLICATION_MANAGE.value),
+        ("checkout", release_router.Permission.DEPLOY_RUN.value),
+        ("checkout", release_router.Permission.ROLLBACK_RUN.value),
+        ("checkout", release_router.Permission.RUNNER_JOB_CANCEL.value),
+        ("checkout", release_router.Permission.EVIDENCE_READ.value),
+    ]
+
+
 def test_advance_release_run_requires_manage_access(monkeypatch) -> None:
     db = ReleaseRunActionDb()
     seen: list[tuple[str, str]] = []
@@ -96,13 +128,13 @@ def test_advance_release_run_requires_manage_access(monkeypatch) -> None:
     assert db.updated
 
 
-def test_rollback_release_run_checks_access_before_mutating(monkeypatch) -> None:
+def test_rollback_release_run_checks_rollback_access_before_mutating(monkeypatch) -> None:
     db = ReleaseRunActionDb()
 
-    def deny_manage(*_args: object, **_kwargs: object) -> None:
+    def deny_rollback(*_args: object, **_kwargs: object) -> None:
         raise HTTPException(status_code=403, detail="denied")
 
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", deny_manage)
+    monkeypatch.setattr(release_router, "require_plan_application_rollback_access", deny_rollback)
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
     with pytest.raises(HTTPException) as exc:
@@ -121,7 +153,7 @@ def test_rollback_release_run_checks_access_before_mutating(monkeypatch) -> None
 
 def test_rollback_release_run_blocks_when_policy_disabled(monkeypatch) -> None:
     db = ReleaseRunActionDb(rollback_policy="disabled")
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    monkeypatch.setattr(release_router, "require_plan_application_rollback_access", lambda *_args: None)
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
     with pytest.raises(HTTPException) as exc:
@@ -141,7 +173,18 @@ def test_rollback_release_run_blocks_when_policy_disabled(monkeypatch) -> None:
 
 def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
     db = ReleaseRunActionDb()
-    monkeypatch.setattr(release_router, "require_plan_application_manage_access", lambda *_args: None)
+    seen_permissions: list[str] = []
+
+    def allow_permission(
+        _db: object,
+        _current: object,
+        _workspace_id: str,
+        _steps: list[dict[str, object]],
+        permission: str,
+    ) -> None:
+        seen_permissions.append(permission)
+
+    monkeypatch.setattr(release_router, "require_plan_application_permission_access", allow_permission)
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=("release_operator",))
     response = asyncio.run(
@@ -154,6 +197,7 @@ def test_cancel_release_run_records_operator_reason(monkeypatch) -> None:
     )
 
     assert response.run["run_id"] == "release-run-1"
+    assert seen_permissions == [release_router.Permission.RUNNER_JOB_CANCEL.value]
     assert db.updated[0]["message"] == "Release run cancelled."
     assert db.updated[0]["details"] == {
         "reason": "bad canary metrics",
@@ -316,7 +360,7 @@ def test_release_audit_list_checks_read_access_and_hides_internal_steps(monkeypa
     ) -> None:
         seen.append((workspace_id, str(steps[0]["application_id"])))
 
-    monkeypatch.setattr(release_router, "require_plan_application_read_access", require_read)
+    monkeypatch.setattr(release_router, "require_plan_application_audit_access", require_read)
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
     response = asyncio.run(
@@ -342,7 +386,7 @@ def test_release_audit_list_checks_read_access_and_hides_internal_steps(monkeypa
 
 def test_release_audit_export_returns_csv_without_internal_steps(monkeypatch) -> None:
     db = ReleaseAuditDb()
-    monkeypatch.setattr(release_router, "require_plan_application_read_access", lambda *_args: None)
+    monkeypatch.setattr(release_router, "require_plan_application_audit_access", lambda *_args: None)
 
     current = SimpleNamespace(workspace_id="workspace-a", user_id="operator", roles=())
     response = asyncio.run(

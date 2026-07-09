@@ -420,7 +420,7 @@ async def archive_release_plan(
     plan = db.get_release_plan(workspace_id, plan_id)
     if plan is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
-    require_plan_application_manage_access(db, current, workspace_id, plan.get("steps", []))
+    require_plan_application_plan_manage_access(db, current, workspace_id, plan.get("steps", []))
     archived = db.archive_release_plan(workspace_id, plan_id, reason=payload.reason)
     if archived is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
@@ -438,7 +438,7 @@ async def delete_release_plan(
     plan = db.get_release_plan(workspace_id, plan_id)
     if plan is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
-    require_plan_application_manage_access(db, current, workspace_id, plan.get("steps", []))
+    require_plan_application_plan_manage_access(db, current, workspace_id, plan.get("steps", []))
     if not force and db.has_active_release_runs(workspace_id, plan_id):
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -463,7 +463,7 @@ async def delete_release_run(
     run = db.get_release_run(workspace_id, run_id)
     if run is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_RUN_NOT_FOUND)
-    require_plan_application_manage_access(db, current, workspace_id, run.get("steps", []))
+    require_plan_application_cancel_access(db, current, workspace_id, run.get("steps", []))
     if str(run.get("status") or "") in BLOCKING_RUN_STATUSES and not force:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -700,7 +700,7 @@ async def rollback_release_run(
                 "blockers": ["release run is already terminal"],
             },
         )
-    require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    require_plan_application_rollback_access(db, current, workspace_id, existing.get("steps", []))
     rollback_policy = release_run_rollback_policy(existing)
     if rollback_policy == "disabled":
         raise HTTPException(
@@ -736,6 +736,7 @@ async def cancel_release_run(
         "cancelled",
         "Release run cancelled.",
         "release run is already terminal",
+        permission=Permission.RUNNER_JOB_CANCEL.value,
     )
 
 
@@ -775,7 +776,7 @@ async def create_release_plan(
     db: Any = Depends(get_db),
 ) -> ReleasePlanResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    require_plan_application_manage_access(db, current, workspace_id, payload.model_dump()["steps"])
+    require_plan_application_plan_manage_access(db, current, workspace_id, payload.model_dump()["steps"])
     body = {**payload.model_dump(), "workspace_id": workspace_id, "user_id": current.user_id}
     with unit_of_work_or_null(db):
         plan = db.upsert_release_plan(body)
@@ -794,7 +795,7 @@ async def update_release_plan(
     if existing is None:
         raise HTTPException(status_code=HTTP_NOT_FOUND, detail=RELEASE_PLAN_NOT_FOUND)
     body = {**payload.model_dump(), "plan_id": plan_id, "workspace_id": workspace_id}
-    require_plan_application_manage_access(db, current, workspace_id, body["steps"])
+    require_plan_application_plan_manage_access(db, current, workspace_id, body["steps"])
     with unit_of_work_or_null(db):
         plan = db.upsert_release_plan(body)
     return ReleasePlanResponse(plan=plan)
@@ -1644,6 +1645,8 @@ def release_run_status_action(
     status: str,
     default_message: str,
     terminal_block_message: str,
+    *,
+    permission: str = Permission.DEPLOY_RUN.value,
 ) -> ReleaseRunResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     existing = db.get_release_run(workspace_id, run_id)
@@ -1655,7 +1658,13 @@ def release_run_status_action(
             status_code=HTTP_CONFLICT,
             detail={"message": RELEASE_RUN_BLOCKED, "blockers": [terminal_block_message]},
         )
-    require_plan_application_manage_access(db, current, workspace_id, existing.get("steps", []))
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        existing.get("steps", []),
+        permission,
+    )
     reason = operator_action_reason(payload, default_message)
     run = db.update_release_run_status(
         workspace_id,
@@ -1736,6 +1745,82 @@ def require_plan_application_manage_access(
     workspace_id: str,
     steps: list[dict[str, Any]],
 ) -> None:
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        steps,
+        Permission.DEPLOY_RUN.value,
+    )
+
+
+def require_plan_application_plan_manage_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+) -> None:
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        steps,
+        Permission.APPLICATION_MANAGE.value,
+    )
+
+
+def require_plan_application_rollback_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+) -> None:
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        steps,
+        Permission.ROLLBACK_RUN.value,
+    )
+
+
+def require_plan_application_cancel_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+) -> None:
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        steps,
+        Permission.RUNNER_JOB_CANCEL.value,
+    )
+
+
+def require_plan_application_audit_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+) -> None:
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        steps,
+        Permission.EVIDENCE_READ.value,
+    )
+
+
+def require_plan_application_permission_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    steps: list[dict[str, Any]],
+    permission: str,
+) -> None:
     for step in steps:
         application_id = str(step.get("application_id") or "")
         if not application_id:
@@ -1746,7 +1831,7 @@ def require_plan_application_manage_access(
             workspace_id,
             AccessResourceType.APPLICATION.value,
             application_id,
-            Permission.DEPLOY_RUN.value,
+            permission,
         )
 
 
@@ -1838,18 +1923,13 @@ def require_plan_application_read_access(
     workspace_id: str,
     steps: list[dict[str, Any]],
 ) -> None:
-    for step in steps:
-        application_id = str(step.get("application_id") or "")
-        if not application_id:
-            continue
-        require_resource_access(
-            db,
-            current,
-            workspace_id,
-            AccessResourceType.APPLICATION.value,
-            application_id,
-            Permission.APPLICATION_READ.value,
-        )
+    require_plan_application_permission_access(
+        db,
+        current,
+        workspace_id,
+        steps,
+        Permission.APPLICATION_READ.value,
+    )
 
 
 def filter_release_runs(
@@ -2122,7 +2202,7 @@ def release_audit_events_for_current(
         limit=limit,
     )
     for event in events:
-        require_plan_application_read_access(db, current, workspace_id, event.get("_steps", []))
+        require_plan_application_audit_access(db, current, workspace_id, event.get("_steps", []))
     return events
 
 

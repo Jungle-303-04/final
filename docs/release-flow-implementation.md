@@ -53,7 +53,7 @@
 ## 실서비스 안전장치
 - 기본값은 `demo` 모드라 실제 GitOps 이벤트를 발행하지 않는다.
 - `live` 모드는 `RELEASE_FLOW_LIVE_ENABLED=1`과 `RELEASE_FLOW_LIVE_WORKSPACES` allow-list를 통과해야 한다.
-- plan 생성/수정/삭제/dispatch/run action은 `DEPLOY_RUN` 권한을 요구한다.
+- plan 생성/수정/삭제는 `application.manage`, dispatch/start/advance/retry/pause/resume/notify는 `deploy.run`, rollback은 `rollback.run`, cancel/run delete는 `runner_job.cancel`, audit/export는 `evidence.read` 권한을 요구한다.
 - plan/run 조회와 summary는 애플리케이션 read 권한을 확인한다.
 - `GET /release-runs/summary`가 `/release-runs/{run_id}`에 가려지지 않도록 route 순서 테스트를 추가했다.
 - advance/rollback 같은 상태 변경 action은 권한 확인 후에만 상태를 바꾼다.
