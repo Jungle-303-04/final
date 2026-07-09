@@ -259,6 +259,7 @@ async def dispatch_release_plan(
     blockers.extend(
         release_execution_blockers(body, preview, wave, workspace_id=workspace_id)
     )
+    blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -306,6 +307,7 @@ async def start_release_plan(
     blockers.extend(
         release_execution_blockers(body, preview, first_wave, workspace_id=workspace_id)
     )
+    blockers.extend(release_live_alert_channel_blockers(body, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -497,6 +499,7 @@ async def advance_release_run(
     plan = release_plan_from_run(run, pending_steps)
     preview = {"steps": [{"application_id": step["application_id"], "wave": next_wave} for step in pending_steps]}
     blockers = release_execution_blockers(plan, preview, next_wave, workspace_id=workspace_id)
+    blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -607,6 +610,7 @@ async def retry_release_run(
         ]
     }
     blockers = release_execution_blockers(plan, preview, retry_wave, workspace_id=workspace_id)
+    blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -787,6 +791,7 @@ async def dispatch_wave_steps(
 
     blockers = release_dispatch_context_blockers(plan, selected_steps, db, workspace_id)
     blockers.extend(release_execution_blockers(plan, preview, wave, workspace_id=workspace_id))
+    blockers.extend(release_live_alert_channel_blockers(plan, db, workspace_id))
     if blockers:
         raise HTTPException(
             status_code=HTTP_CONFLICT,
@@ -898,6 +903,7 @@ def release_readiness_from_plan(
         workspace_id=workspace_id,
     )
     alert_channels = enabled_alert_channels(db, workspace_id)
+    alert_blockers = release_live_alert_channel_blockers(plan, db, workspace_id)
     retry_attempts = max(0, int_field(plan_settings_value(plan), "retry_attempts", 1))
 
     checks = [
@@ -949,10 +955,11 @@ def release_readiness_from_plan(
         readiness_check(
             "alerts.enabled_channels",
             "Alert channels",
-            "passed" if alert_channels else "warning",
+            "blocked" if alert_blockers else "passed" if alert_channels else "warning",
             f"{len(alert_channels)} enabled alert channel(s) can receive release events."
             if alert_channels
             else "No enabled alert channel is configured for release failure or approval events.",
+            alert_blockers,
         ),
         readiness_check(
             "retry.policy",
@@ -1075,6 +1082,20 @@ def enabled_alert_channels(db: Any, workspace_id: str) -> list[dict[str, Any]]:
             if isinstance(channel, dict) and channel.get("enabled", True)
         ]
     return [channel for channel in channels if isinstance(channel, dict)]
+
+
+def release_live_alert_channel_blockers(
+    plan: dict[str, Any],
+    db: Any,
+    workspace_id: str,
+) -> list[str]:
+    if not execution_profile(plan).side_effects:
+        return []
+    if enabled_alert_channels(db, workspace_id):
+        return []
+    return [
+        "Live release dispatch requires at least one enabled alert channel before real GitOps events can be published."
+    ]
 
 
 def release_run_status_action(
