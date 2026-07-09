@@ -159,6 +159,8 @@ def build_live_preflight_plan(applications: list[JsonMap], args: argparse.Namesp
             "approval_gate": "manual",
         }
     )
+    if args.live_verification_url:
+        config["post_deploy_verification_url"] = args.live_verification_url
     step["config"] = config
     plan.update(
         {
@@ -450,6 +452,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--live-oncall-contact",
         default=os.getenv("LIVE_PREFLIGHT_ONCALL_CONTACT", "release-oncall@example.com"),
     )
+    parser.add_argument("--live-verification-url", default=os.getenv("LIVE_PREFLIGHT_VERIFICATION_URL", ""))
     parser.add_argument("--live-commit-sha", default=os.getenv("LIVE_PREFLIGHT_COMMIT_SHA", ""))
     parser.add_argument("--live-image", default=os.getenv("LIVE_PREFLIGHT_IMAGE", ""))
     parser.add_argument("--live-rollback-policy", default=os.getenv("LIVE_PREFLIGHT_ROLLBACK_POLICY", "safe_pr"))

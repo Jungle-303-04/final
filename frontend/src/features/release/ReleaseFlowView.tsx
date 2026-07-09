@@ -654,6 +654,9 @@ function PolicyEditor({ plan, setPolicy }: { plan: ReleasePlan; setPolicy: (patc
             <Field label="On-call contact">
               <input className="input" placeholder="oncall@example.com or #release-oncall" value={getString(settings.oncall_contact)} onChange={e => setPolicy({ oncall_contact: e.target.value })} />
             </Field>
+            <Field label="Verification override reason">
+              <input className="input" value={getString(settings.verification_override_reason)} onChange={e => setPolicy({ verification_override_reason: e.target.value })} />
+            </Field>
           </>
         )}
         <Field label="Safe PR URL"><input className="input" value={getString(settings.safe_pr_url)} onChange={e => setPolicy({ safe_pr_url: e.target.value, safe_pr_ready: Boolean(e.target.value.trim()) })} /></Field>
@@ -745,6 +748,7 @@ function StepEditor({
         <Field label="Canary percent"><input className="input" type="number" min={1} max={99} value={getNumber(config.canary_percent, strategy === 'canary' ? 20 : 0)} onChange={e => setStepConfig(selectedIndex, { canary_percent: Number(e.target.value) }, setPlan)} /></Field>
         <Field label="Service name"><input className="input" value={getString(config.service_name)} onChange={e => setStepConfig(selectedIndex, { service_name: e.target.value }, setPlan)} /></Field>
         <Field label="Health check path"><input className="input" value={getString(config.health_check_path, '/readyz')} onChange={e => setStepConfig(selectedIndex, { health_check_path: e.target.value }, setPlan)} /></Field>
+        <Field label="Verification URL"><input className="input" placeholder="https://status.example.com/checkout" value={getString(config.post_deploy_verification_url)} onChange={e => setStepConfig(selectedIndex, { post_deploy_verification_url: e.target.value }, setPlan)} /></Field>
         <Field label="Timeout seconds"><input className="input" type="number" min={30} max={3600} value={getNumber(config.timeout_seconds, 600)} onChange={e => setStepConfig(selectedIndex, { timeout_seconds: Number(e.target.value) }, setPlan)} /></Field>
         <Field label="Retry attempts"><input className="input" type="number" min={0} max={10} value={getNumber(config.retry_attempts, getNumber(plan.settings.retry_attempts, 1))} onChange={e => setStepConfig(selectedIndex, { retry_attempts: Number(e.target.value) }, setPlan)} /></Field>
       </div>
