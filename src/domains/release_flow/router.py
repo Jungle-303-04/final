@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, timedelta, timezone
+import hashlib
 import io
 import json
 import os
@@ -1732,9 +1733,8 @@ def release_production_verification_bypassed(
 
 
 def release_verification_evidence_present(settings: dict[str, Any], config: dict[str, Any]) -> bool:
-    health_check_path = str(config.get("health_check_path") or settings.get("health_check_path") or "").strip()
     verification_url = release_verification_url(settings, config)
-    return bool(health_check_path.startswith("/") or release_verification_url_is_valid(verification_url))
+    return bool(release_health_check_path(settings, config) or release_verification_url_is_valid(verification_url))
 
 
 def release_verification_url(settings: dict[str, Any], config: dict[str, Any]) -> str:
@@ -1759,6 +1759,86 @@ def release_verification_override_reason(plan: dict[str, Any]) -> str:
         or settings.get("post_deploy_verification_override_reason")
         or ""
     ).strip()
+
+
+def release_verification_job_specs(
+    plan: dict[str, Any],
+    production_steps: list[dict[str, Any]],
+    wave: int,
+) -> list[dict[str, Any]]:
+    settings = plan_settings_value(plan)
+    jobs: list[dict[str, Any]] = []
+    for step in production_steps:
+        config = step_config(step)
+        application_id = str(step.get("application_id") or "").strip()
+        name = str(step.get("name") or application_id or "release step")
+        health_path = release_health_check_path(settings, config)
+        verification_url = release_verification_url(settings, config)
+        if health_path:
+            jobs.append(
+                {
+                    "job_id": release_verification_job_id(plan, wave, application_id, "health", health_path),
+                    "application_id": application_id,
+                    "name": name,
+                    "kind": "kubernetes_health_check",
+                    "status": "pending",
+                    "evidence_key": release_verification_evidence_key(plan, wave, application_id),
+                    "target": {
+                        "cluster_id": str(config.get("cluster_id") or settings.get("cluster_id") or ""),
+                        "namespace": str(config.get("namespace") or settings.get("namespace") or ""),
+                        "service_name": str(config.get("service_name") or config.get("service") or application_id),
+                        "path": health_path,
+                    },
+                }
+            )
+        if verification_url:
+            jobs.append(
+                {
+                    "job_id": release_verification_job_id(plan, wave, application_id, "http", verification_url),
+                    "application_id": application_id,
+                    "name": name,
+                    "kind": "http_probe",
+                    "status": "pending",
+                    "evidence_key": release_verification_evidence_key(plan, wave, application_id),
+                    "target": {"url": verification_url},
+                }
+            )
+    return jobs
+
+
+def release_health_check_path(settings: dict[str, Any], config: dict[str, Any]) -> str:
+    value = str(config.get("health_check_path") or settings.get("health_check_path") or "").strip()
+    return value if value.startswith("/") else ""
+
+
+def release_verification_job_id(
+    plan: dict[str, Any],
+    wave: int,
+    application_id: str,
+    kind: str,
+    target: str,
+) -> str:
+    raw = ":".join(
+        [
+            str(plan.get("plan_id") or plan.get("name") or "release-plan"),
+            str(wave),
+            application_id,
+            kind,
+            target,
+        ]
+    )
+    return f"release-verification-{hashlib.sha256(raw.encode()).hexdigest()[:20]}"
+
+
+def release_verification_evidence_key(plan: dict[str, Any], wave: int, application_id: str) -> str:
+    return ":".join(
+        [
+            str(plan.get("plan_id") or plan.get("name") or "release-plan"),
+            f"wave-{wave}",
+            application_id,
+            "post-deploy-verification",
+        ]
+    )
 
 
 def release_production_abort_criteria_blockers(
@@ -1886,6 +1966,7 @@ def release_dispatch_guard_snapshot(
     live_channels = release_live_alert_channels(db, workspace_id)
     production_steps = release_production_steps_for_wave(plan, preview, wave)
     window_start, window_end = release_window_bounds(plan)
+    verification_jobs = release_verification_job_specs(plan, production_steps, wave)
     return {
         "runtime_mode": profile.runtime_mode,
         "side_effects": profile.side_effects,
@@ -1968,6 +2049,11 @@ def release_dispatch_guard_snapshot(
                 for step in production_steps
                 if release_verification_url(settings, step_config(step))
             ],
+        },
+        "verification_jobs": {
+            "scheduled": profile.side_effects and bool(verification_jobs),
+            "job_count": len(verification_jobs) if profile.side_effects else 0,
+            "jobs": verification_jobs if profile.side_effects else [],
         },
         "abort_criteria": {
             "criteria": [
@@ -2740,16 +2826,24 @@ def release_run_handoff(run: dict[str, Any]) -> dict[str, Any]:
 def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
     guard = release_run_latest_guard(run)
     verification = guard.get("verification") if isinstance(guard.get("verification"), dict) else {}
+    verification_jobs = guard.get("verification_jobs") if isinstance(guard.get("verification_jobs"), dict) else {}
     readiness = guard.get("readiness") if isinstance(guard.get("readiness"), dict) else {}
     impact = readiness.get("impact") if isinstance(readiness.get("impact"), dict) else {}
     health_paths = [str(item) for item in verification.get("health_check_paths", []) if str(item).strip()]
     verification_urls = [str(item) for item in verification.get("verification_urls", []) if str(item).strip()]
     production_targets = [str(item) for item in verification.get("production_targets", []) if str(item).strip()]
+    jobs = [
+        dict(item)
+        for item in verification_jobs.get("jobs", [])
+        if isinstance(item, dict)
+    ]
     if not verification:
         return {
             "status": "info",
             "message": "No verification snapshot recorded.",
             "evidence": [],
+            "jobs": jobs,
+            "job_count": len(jobs),
             "override_reason": None,
             "production_targets": impact.get("production_targets") if isinstance(impact.get("production_targets"), list) else [],
         }
@@ -2760,6 +2854,8 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "status": "passed",
             "message": f"Post-deploy verification evidence is present ({', '.join(evidence[:2])}).",
             "evidence": evidence,
+            "jobs": jobs,
+            "job_count": len(jobs),
             "override_reason": override_reason,
             "production_targets": production_targets,
         }
@@ -2768,6 +2864,8 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
             "status": "warning",
             "message": "Post-deploy verification was bypassed with an operator reason.",
             "evidence": [],
+            "jobs": jobs,
+            "job_count": len(jobs),
             "override_reason": override_reason,
             "production_targets": production_targets,
         }
@@ -2775,6 +2873,8 @@ def release_run_handoff_verification(run: dict[str, Any]) -> dict[str, Any]:
         "status": "blocked",
         "message": "Post-deploy verification evidence is missing.",
         "evidence": [],
+        "jobs": jobs,
+        "job_count": len(jobs),
         "override_reason": None,
         "production_targets": production_targets,
     }
